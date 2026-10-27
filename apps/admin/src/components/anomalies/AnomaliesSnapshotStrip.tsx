@@ -5,7 +5,7 @@
  *          first step (PageFirstStep, P3).
  */
 
-import { PageStatus } from '../ui'
+import { Btn, PageStatus } from '../ui'
 import type { AnomaliesStats } from './AnomaliesStatsTypes'
 import { pluralizeWithCount } from '../../lib/format'
 import { anomaliesNoMetricsHint } from '../../lib/humanPageHints'
@@ -18,6 +18,8 @@ interface Props {
   statLabels?: Record<string, string>
   /** Opens the metrics tab: the first step while no metric has arrived. */
   onAddMetrics?: () => void
+  /** Opens the spikes list: the one action while any wait. */
+  onReview?: () => void
 }
 
 function spikesSentence(stats: AnomaliesStats): string {
@@ -27,13 +29,20 @@ function spikesSentence(stats: AnomaliesStats): string {
   return `${pluralizeWithCount(stats.openAnomalies, 'unusual spike')} to confirm or dismiss${release}.`
 }
 
-export function AnomaliesSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, onAddMetrics }: Props) {
+export function AnomaliesSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, onAddMetrics, onReview }: Props) {
   return (
     <PageStatus
       ariaLabel="Unusual spikes status"
       tone={stats.releaseRegressionOpen > 0 || stats.highScoreOpen > 0 ? 'danger' : stats.openAnomalies > 0 ? 'warn' : 'ok'}
       sentence={spikesSentence(stats)}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      action={
+        onReview && stats.openAnomalies > 0 ? (
+          <Btn size="sm" variant="primary" onClick={onReview}>
+            Confirm or dismiss
+          </Btn>
+        ) : undefined
+      }
       metrics={[
         {
           label: statLabels?.open ?? 'Spikes to review',

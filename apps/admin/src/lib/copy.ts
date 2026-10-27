@@ -273,7 +273,7 @@ const COPY: CopyRegistry = {
     '/inventory': {
       title: 'User stories',
       description:
-        'Banner + INVENTORY SNAPSHOT first — Summary for posture, User stories, Gates, Discovery, or Yaml tabs.',
+        'Every page of your app and what users do on it, with broken actions in red.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         verified: 'Verified',
@@ -286,31 +286,31 @@ const COPY: CopyRegistry = {
         discovery: 'Open Discovery',
         proposal: 'Review proposal',
         stories: 'View stories',
-        gates: 'Open Gates',
-        tree: 'Open Tree',
+        gates: 'Show code checks',
+        tree: 'Show all actions',
         refresh: 'Refresh',
       },
       tabLabels: {
         overview: 'Summary',
         stories: 'User stories',
-        tree: 'Tree',
-        gates: 'Gates',
-        synthetic: 'Synthetic',
-        drift: 'Drift',
+        tree: 'All actions',
+        gates: 'Code checks',
+        synthetic: 'Live probes',
+        drift: 'Out of sync',
         discovery: 'Discovery',
-        yaml: 'Yaml',
+        yaml: 'Map file',
       },
       help: {
         title: 'About user stories',
         whatIsIt:
-          "Your app's user-story map — pages, actions, and verification status derived from gates, crawler, and synthetic probes.",
+          "Your app's map: each page, what users do on it, and whether each action still works, from code checks, the crawler and live probes.",
         useCases: [
-          'Brand banner = no inventory yet — start on Discovery or paste YAML',
-          'Red banner = regressed actions — fix on User stories tab',
-          'Amber banner = open gate findings — review on Gates tab',
+          'No map yet: click Turn on discovery',
+          'Red actions: they stopped working or have no code behind them yet',
+          'Open code findings: review them on the Code checks tab',
         ],
         howToUse:
-          'Overview for posture. User stories for the card map. Gates for findings. Discovery for SDK observe → propose → accept.',
+          'User stories leads with each page and its actions. Code checks lists findings. Discovery drafts the map from what the SDK sees.',
       },
     },
     '/query': {
@@ -661,29 +661,29 @@ const COPY: CopyRegistry = {
     '/lessons': {
       title: 'Lessons',
       description:
-        'Banner + LESSONS SNAPSHOT first — Summary for posture, Lessons for promoted rules, Clusters to promote, Query Sim to preview injection.',
+        'Bugs that keep coming back, how many reports each has, and the rule Mushi suggests for it.',
       sections: { snapshot: 'Summary' },
       statLabels: {
-        activeLessons: 'Active lessons',
+        activeLessons: 'Rules in use',
         critical: 'Critical',
-        candidates: 'Candidates',
-        promoted: 'Promoted clusters',
-        reportsClustered: 'Reports clustered',
-        highCoherence: 'High coherence',
+        candidates: 'Ready to promote',
+        promoted: 'Patterns made rules',
+        reportsClustered: 'Reports grouped',
+        highCoherence: 'Strong patterns',
       },
       actionLabels: {
         setup: 'Go to Setup',
         reports: 'Open Reports',
-        clusters: 'Review clusters',
-        lessons: 'Review lessons',
-        query: 'Try query sim',
+        clusters: 'Review recurring patterns',
+        lessons: 'Review rules in use',
+        query: 'Try a change',
         refresh: 'Refresh',
       },
       tabLabels: {
         overview: 'Summary',
-        lessons: 'Lessons',
-        clusters: 'Clusters',
-        query: 'Query Sim',
+        lessons: 'Rules in use',
+        clusters: 'Recurring patterns',
+        query: 'Try a change',
       },
       help: {
         title: 'About lessons',
@@ -778,10 +778,10 @@ const COPY: CopyRegistry = {
         'Whether your API routes or database tables changed since the last scan, and which change can break a caller.',
       sections: { snapshot: 'Summary' },
       statLabels: {
-        openFindings: 'Open findings',
-        critical: 'Critical',
+        openFindings: 'Changes to review',
+        critical: 'Serious',
         warnings: 'Warnings',
-        snapshots: 'Snapshots',
+        snapshots: 'Scans',
         contractEdges: 'Routes and tables tracked',
         surfaces: 'Surfaces',
       },
@@ -796,19 +796,19 @@ const COPY: CopyRegistry = {
       },
       tabLabels: {
         overview: 'Summary',
-        findings: 'Findings',
-        snapshots: 'Snapshots',
-        scanner: 'Scanner',
+        findings: 'Changes',
+        snapshots: 'Scans',
+        scanner: 'Run a scan',
       },
       help: {
-        title: 'About contract drift',
-        whatIsIt: 'The drift-walker builds a contract snapshot then walks every route — finding API endpoints, inventory nodes, or DB columns that diverged from each other.',
+        title: 'About schema changes',
+        whatIsIt: 'Each scan reads your API routes, your app map and your database tables, and compares them with the scan before. A change that can break a caller (a removed route, a dropped column) is marked serious.',
         useCases: [
-          'Find API endpoints present in inventory but missing in OpenAPI spec',
-          'Detect DB columns expected by the FE but removed from the schema',
-          'Promote high-severity findings to candidate lessons',
+          'Find an API route your app calls that no longer exists',
+          'Catch a database column the frontend reads that was dropped',
+          'Turn a serious change into a lesson so it is not repeated',
         ],
-        howToUse: 'Run a scan from the Scanner tab, then review findings. Dismiss false positives to train the sampler.',
+        howToUse: 'Run a scan from the Run a scan tab, then review the changes. Dismiss the ones that are fine; Mushi checks those routes less often.',
       },
     },
     '/experiments': {
@@ -840,13 +840,13 @@ const COPY: CopyRegistry = {
       },
       help: {
         title: 'About experiments',
-        whatIsIt: 'Compare two or more versions of a screen and see which one more users finish. Mushi assigns users through the SDK and tells you when a winner is clear (statistically: CUPED variance reduction, mSPRT always-valid p-values and SRM checks).',
+        whatIsIt: 'Compare two or more versions of a screen and see which one more users finish. Mushi splits your users through the SDK and tells you when one version is clearly ahead.',
         useCases: [
           'Test button copy, colour, or layout variants',
           'Measure impact of a new feature on conversion rate',
-          'Use bandit mode for fast exploration with small samples',
+          'Send more users to the winning version while the test runs, when you have few users',
         ],
-        howToUse: 'Create an experiment, add versions, start it. The SDK assigns users via mushi.experiment(). Check the result at any time: the test (mSPRT) does not cry wolf when you peek.',
+        howToUse: 'Create an experiment, add versions, start it. The SDK assigns users via mushi.experiment(). Check the result at any time: looking early does not fake a winner.',
       },
     },
     '/anomalies': {
@@ -855,11 +855,11 @@ const COPY: CopyRegistry = {
         'Metrics that jumped far outside their normal range, and whether the jump started with a release.',
       sections: { snapshot: 'Summary' },
       statLabels: {
-        open: 'Open',
-        releaseRegressions: 'Release regressions',
+        open: 'Spikes to review',
+        releaseRegressions: 'After a release',
         highScore: 'High score',
         autoReported: 'Auto-reported',
-        metricPoints: 'Metric points',
+        metricPoints: 'Metrics watched',
         dismissed: 'Dismissed',
       },
       actionLabels: {
@@ -872,19 +872,19 @@ const COPY: CopyRegistry = {
       },
       tabLabels: {
         overview: 'Summary',
-        anomalies: 'Anomalies',
+        anomalies: 'Spikes',
         metrics: 'Metrics',
-        detect: 'Detect',
+        detect: 'Check now',
       },
       help: {
-        title: 'About anomaly detection',
-        whatIsIt: 'Send numeric metrics (error rate, latency, conversion) and run detectors for spikes and release regressions. Confirmed regressions can auto-open bug reports.',
+        title: 'About unusual spikes',
+        whatIsIt: 'Send any number your app tracks (error rate, latency, sign-ups). Mushi checks them every hour, draws each one with your releases on it, and opens a bug report when a spike starts right after a release.',
         useCases: [
-          'Detect crash-rate spikes after a release',
-          'Flag latency regressions against rolling baseline',
-          'Auto-open a bug report when a regression is confirmed',
+          'See a crash-rate jump that started with a release',
+          'Notice latency creeping up after a deploy',
+          'Get a bug report opened for a confirmed regression',
         ],
-        howToUse: 'Add metric data in the Metrics tab, then run detection or wait for the hourly cron. Confirm or dismiss each finding.',
+        howToUse: 'Send some values from the Metrics tab, then click Check now or wait for the hourly check. Confirm a real spike or dismiss noise under its chart.',
       },
     },
     '/cost': {
@@ -1301,7 +1301,7 @@ const COPY: CopyRegistry = {
     '/judge': {
       title: 'Triage grading',
       description:
-        'Banner + JUDGE SNAPSHOT first — then Overview for posture, Trend for 12w chart, Evaluations for per-report grades.',
+        'Whether you can trust Mushi’s diagnoses: how often a second AI agrees with them, and the worst recent disagreements.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         week: 'This week',
@@ -1329,11 +1329,11 @@ const COPY: CopyRegistry = {
       help: {
         title: 'About triage grading',
         whatIsIt:
-          "A second LLM independently grades the classifier's output on every report — was the category right, was the severity right, was the affected component right, and were the repro steps usable. We chart those scores over time so you can tell if the model is improving.",
+          "A second AI grades each diagnosis Mushi makes: was the category right, the severity, the part of the app, and were the steps to reproduce usable. The chart shows how often it agrees, week by week, so you can tell whether to trust a diagnosis before you merge its fix.",
         useCases: [
-          'See whether judge scores are improving week-over-week',
-          'Find classifier prompts that produce consistently low scores so you can rewrite them',
-          'Catch a regression in the classifier before bad review decisions ship',
+          'See whether the diagnoses are getting better or worse week by week',
+          'Read the worst recent disagreements before merging their fixes',
+          'Find the AI prompts that keep scoring low so they can be rewritten',
         ],
         howToUse:
           'Click any prompt row in the leaderboard to filter Recent evaluations to just that version. Click any low-score row to inspect the original report and the judge\u2019s reasoning.',
@@ -1380,7 +1380,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/integrations': {
-      title: 'Where fixed bugs go',
+      title: 'Integrations',
       description: 'Connect Sentry, Langfuse, GitHub, and routing destinations so Mushi closes the loop in tools your team already uses.',
       sections: {
         platforms: 'Connected services',
@@ -1590,7 +1590,7 @@ const COPY: CopyRegistry = {
     },
     '/drift': {
       title: 'Schema changes',
-      description: 'Where the live app no longer matches its declared routes and API.',
+      description: 'Whether your API routes or database tables changed since the last scan.',
     },
     '/experiments': {
       title: 'Experiments',
@@ -1598,7 +1598,7 @@ const COPY: CopyRegistry = {
     },
     '/anomalies': {
       title: 'Unusual spikes',
-      description: 'Unusual spikes in reports, errors or AI spend, and what caused them.',
+      description: 'Metrics that jumped outside their normal range, drawn with your releases.',
     },
     '/cost': {
       title: 'AI spend',

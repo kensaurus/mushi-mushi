@@ -69,6 +69,8 @@ export interface TokenAbilities {
   pullRequests: Ability
   actions: Ability
   secrets: Ability
+  /** Editing `.github/workflows/*`: GitHub refuses those commits without it (the one-click CI cost fixes). */
+  workflows: Ability
 }
 
 export type TokenSource = 'app' | 'pat_classic' | 'pat_fine_grained' | 'platform' | 'none'
@@ -78,9 +80,14 @@ const ABILITY_WORDS: Record<keyof TokenAbilities, { verb: string; permission: st
   pullRequests: { verb: 'open pull requests', permission: 'Pull requests: Read and write' },
   actions: { verb: 're-run CI', permission: 'Actions: Read and write' },
   secrets: { verb: 'write CI secrets', permission: 'Secrets: Read and write' },
+  workflows: { verb: 'edit workflow files', permission: 'Workflows: Read and write' },
 }
 
-/** Needed for fixes to reach a PR and for CI re-runs. Secrets are optional: Mushi hands out copy-paste commands instead. */
+/**
+ * Needed for fixes to reach a PR and for CI re-runs. Secrets are optional:
+ * Mushi hands out copy-paste commands instead. Workflows are optional: only
+ * the one-click CI cost fix PRs edit workflow files.
+ */
 const CORE: Array<keyof TokenAbilities> = ['contents', 'pullRequests', 'actions']
 
 /** Every ability here is a write; an App permission of `read` means it cannot. */
@@ -94,13 +101,14 @@ function level(v: unknown): Ability {
  * (GET /repos/:o/:r with the token) says whether this repo is in it.
  */
 export function abilitiesFromInstallation(permissions: Record<string, unknown> | null, reachable: boolean | null): TokenAbilities {
-  if (reachable === false) return { contents: 'no', pullRequests: 'no', actions: 'no', secrets: 'no' }
-  if (!permissions) return { contents: 'unknown', pullRequests: 'unknown', actions: 'unknown', secrets: 'unknown' }
+  if (reachable === false) return { contents: 'no', pullRequests: 'no', actions: 'no', secrets: 'no', workflows: 'no' }
+  if (!permissions) return { contents: 'unknown', pullRequests: 'unknown', actions: 'unknown', secrets: 'unknown', workflows: 'unknown' }
   return {
     contents: level(permissions.contents),
     pullRequests: level(permissions.pull_requests),
     actions: level(permissions.actions),
     secrets: level(permissions.secrets),
+    workflows: level(permissions.workflows),
   }
 }
 
@@ -108,14 +116,16 @@ export function abilitiesFromInstallation(permissions: Record<string, unknown> |
  * A classic personal access token: GitHub lists its scopes in
  * `X-OAuth-Scopes` on any answer. `repo` covers contents, pull requests,
  * Actions re-runs and repository secrets; with neither `repo` nor
- * `public_repo` it can only read public repos.
+ * `public_repo` it can only read public repos. Editing workflow files needs
+ * the separate `workflow` scope on top.
  */
 export function abilitiesFromClassicScopes(header: string, reachable: boolean): TokenAbilities {
-  if (!reachable) return { contents: 'no', pullRequests: 'no', actions: 'no', secrets: 'no' }
+  if (!reachable) return { contents: 'no', pullRequests: 'no', actions: 'no', secrets: 'no', workflows: 'no' }
   const scopes = new Set(header.split(',').map((s) => s.trim()).filter(Boolean))
-  if (scopes.has('repo')) return { contents: 'yes', pullRequests: 'yes', actions: 'yes', secrets: 'yes' }
-  if (scopes.has('public_repo')) return { contents: 'yes', pullRequests: 'yes', actions: 'unknown', secrets: 'no' }
-  return { contents: 'no', pullRequests: 'no', actions: 'no', secrets: 'no' }
+  const workflows: Ability = scopes.has('workflow') ? 'yes' : 'no'
+  if (scopes.has('repo')) return { contents: 'yes', pullRequests: 'yes', actions: 'yes', secrets: 'yes', workflows }
+  if (scopes.has('public_repo')) return { contents: 'yes', pullRequests: 'yes', actions: 'unknown', secrets: 'no', workflows }
+  return { contents: 'no', pullRequests: 'no', actions: 'no', secrets: 'no', workflows: 'no' }
 }
 
 /** HTTP status of a harmless read, or null when it did not answer in time. */
@@ -129,11 +139,12 @@ export interface ReadProbes {
 /**
  * A fine-grained token has no scope header, and its write permissions cannot
  * be seen without writing. So a read that works proves only `read_only`; a
- * 403 or 404 proves the permission is missing.
+ * 403 or 404 proves the permission is missing. Workflows has no read of its
+ * own to try, so it stays `unknown`.
  */
 export function abilitiesFromReadProbes(p: ReadProbes): TokenAbilities {
   const one = (s: number | null): Ability => (s === null ? 'unknown' : s >= 200 && s < 300 ? 'read_only' : s === 403 || s === 404 ? 'no' : 'unknown')
-  return { contents: one(p.contents), pullRequests: one(p.pullRequests), actions: one(p.actions), secrets: one(p.secrets) }
+  return { contents: one(p.contents), pullRequests: one(p.pullRequests), actions: one(p.actions), secrets: one(p.secrets), workflows: 'unknown' }
 }
 
 export interface RepoAccessInput {
@@ -204,19 +215,26 @@ export function githubAccessGap(input: RepoAccessInput): SetupGap {
       : a.secrets === 'no'
         ? " It can't write CI secrets; Mushi gives you copy-paste commands for those instead."
         : ''
+  const workflowsLine =
+    a.workflows === 'yes'
+      ? ' It can edit workflow files, so one-click CI cost fixes can open their pull request.'
+      : a.workflows === 'no'
+        ? ` It can't edit workflow files (${ABILITY_WORDS.workflows.permission}), so one-click CI cost fixes fail until you add it.`
+        : ''
+  const extra = `${secretsLine}${workflowsLine}`
   if (missing.length) {
     const list = missing.map((k) => `${ABILITY_WORDS[k].verb} (${ABILITY_WORDS[k].permission})`).join(', ')
-    return { ...base, status: 'gap', summary: `${who} in ${input.repo} can't ${list}. Those steps fail until you add it.${secretsLine}` }
+    return { ...base, status: 'gap', summary: `${who} in ${input.repo} can't ${list}. Those steps fail until you add it.${extra}` }
   }
   if (unproven.length) {
     const list = orList(unproven.map((k) => ABILITY_WORDS[k].verb))
     return {
       ...base,
       status: 'unknown',
-      summary: `${who} in ${input.repo} can read, but Mushi can't tell whether it may ${list} without writing, and it never writes to check.${secretsLine}`,
+      summary: `${who} in ${input.repo} can read, but Mushi can't tell whether it may ${list} without writing, and it never writes to check.${extra}`,
     }
   }
-  return { ...base, status: 'ok', summary: `${who} in ${input.repo} can ${can.join(', ')}.${secretsLine}` }
+  return { ...base, status: 'ok', summary: `${who} in ${input.repo} can ${can.join(', ')}.${extra}` }
 }
 
 // ── Review follow-ups ───────────────────────────────────────────────────────

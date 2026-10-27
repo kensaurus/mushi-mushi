@@ -21,8 +21,8 @@
  *
  *          Both paths go through `fetchLatestCheckRun` which collapses the
  *          matrix of check-runs into a single worst-wins conclusion, so the
- *          PDCA receipt's "Check" stage is honest (red stays red even if a
- *          later retry passed).
+ *          PDCA receipt's "Check" stage is honest (a check re-run green
+ *          replaces its red run, as on GitHub; report 9e2ec6f0).
  *
  *          A head that is red, or still queued / running 10 min after the
  *          PR opened, also gets its jobs read (Plan 022): they go to ci_jobs

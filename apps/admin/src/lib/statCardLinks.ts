@@ -97,20 +97,6 @@ export const settingsLinks = {
 
 // Every target below must be a real route / tab / element id:
 // statCardLinks.test.ts checks them (QA bugs 130, 131).
-export const onboardingLinks = {
-  required: '/onboarding?tab=steps',
-  sdk: '/onboarding?tab=sdk',
-  reports: '/reports',
-  optional: '/onboarding?tab=steps',
-} as const
-
-export const billingLinks = {
-  plan: '/billing?tab=plans',
-  reportsPeriod: '/billing?tab=overview',
-  fixesPeriod: '/fixes',
-  llmCogs: '/cost',
-} as const
-
 export const mcpLinks = {
   activeKeys: '/mcp?tab=setup',
   mcpRead: '/mcp?tab=setup',
@@ -118,15 +104,6 @@ export const mcpLinks = {
   sdkOnly: '/mcp?tab=setup',
   tools: '/mcp?tab=catalog',
   endpoint: '/mcp?tab=setup',
-} as const
-
-export const connectLinks = {
-  github: '/integrations/config',
-  sdk: '/connect#connect-sdk',
-  sdkVersion: '/connect',
-  mcpConnected: '/mcp?tab=setup',
-  mcpUnused: '/mcp?tab=setup',
-  tools: '/mcp?tab=catalog',
 } as const
 
 export const rewardsLinks = {
@@ -279,15 +256,6 @@ export const lessonsLinks = {
   promoted: '/lessons?tab=clusters',
   reportsClustered: '/reports',
   highCoherence: '/lessons?tab=clusters',
-} as const
-
-export const marketplaceLinks = {
-  catalog: '/marketplace?tab=browse',
-  installed: '/marketplace?tab=installed',
-  deliveries7d: '/marketplace?tab=deliveries',
-  successRate: '/marketplace?tab=deliveries',
-  failing: '/marketplace?tab=deliveries',
-  neverDelivered: '/marketplace?tab=installed',
 } as const
 
 export const notificationsLinks = {

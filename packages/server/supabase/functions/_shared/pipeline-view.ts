@@ -21,7 +21,9 @@
  */
 
 import { RESOLVED_REPORT_STATUSES } from './fix-report-truth.ts'
-import { ciHeadState, type CiJobForRepair } from './review-followup.ts'
+import { ciHeadState, followupTrigger, FOLLOWUP_REASONS, type CiHeadState, type CiJobForRepair, type PriorFollowup } from './review-followup.ts'
+import { localHandoff } from './local-followup.ts'
+import { parseCheckNameList } from './merge-queue.ts'
 
 export const PIPELINE_STAGES = [
   { id: 'reported', label: 'Reported' },
@@ -47,6 +49,10 @@ export type PipelineAction =
   | 'remove'
   | 'close'
   | 'followup'
+  /** Close the report with a reason (the console's report dismiss route). */
+  | 'dismiss'
+  /** Put a report a local worker could not run (the machine failed, ADR 0048) back in its lane. Item ids are work_claims ids. */
+  | 'requeue'
 
 export type GroupTone = 'stuck' | 'moving' | 'done'
 
@@ -69,6 +75,12 @@ export interface PipelineItem {
   failingChecks: string[]
   review: { verdict: string | null; summary: string | null; findings: string[] } | null
   queueDetail: string | null
+  /**
+   * The group's actions the server already knows it would refuse for this
+   * item, each with the reason it would give (69fcafcb). The console shows
+   * them disabled with that reason. {} when every action can be tried.
+   */
+  blocked: Partial<Record<PipelineAction, string>>
 }
 
 export interface PipelineGroup {
@@ -123,6 +135,8 @@ export interface AttemptRow {
   created_at: string
   completed_at: string | null
   merged_at: string | null
+  /** Why the run ended without a PR (fix-worker, or a cloud agent's own verdict). */
+  failure_category?: string | null
 }
 
 export interface ReviewRow {
@@ -134,6 +148,10 @@ export interface ReviewRow {
   error: string | null
   completed_at: string | null
   created_at: string
+  /** When the review was last asked for (a re-review moves it; created_at does not). */
+  queued_at?: string | null
+  /** The commit the verdict is about. */
+  head_sha?: string | null
 }
 
 export interface QueueRow {
@@ -153,6 +171,26 @@ export interface FollowupRow {
   fix_attempt_id: string
   status: string
   kind: string | null
+  id?: string
+  head_sha_before?: string | null
+  cursor_agent_id?: string | null
+}
+
+/**
+ * What the server's action routes check before they act, read once per
+ * pipeline read, so an action the server would refuse is shown disabled
+ * with its reason instead of failing on click (69fcafcb). Absent: the read
+ * failed, and every action stays offered.
+ */
+export interface ActionFacts {
+  /** Per app: cloud follow-ups can start an agent now (setting on and a usable Cursor key); `why` when not. */
+  cloud: Map<string, { ready: boolean; enabled: boolean; why: string | null }>
+  /** Per fix: its cloud follow-up rows (fix_review_followups), for the cloud trigger's rules. */
+  prior: Map<string, PriorFollowup[]>
+  /** Per fix: the heads of earlier follow-up rounds, cloud and local (roundHeadsFor). */
+  roundHeads: Map<string, string[]>
+  /** Apps whose GitHub token was refused a workflow re-run since the app's settings last changed. */
+  rerunRefused: Set<string>
 }
 
 export interface EventRow {
@@ -181,6 +219,9 @@ export interface PipelineInput {
   events?: EventRow[]
   /** Apps whose organization has review follow-ups on; their CI-red and fix-first groups drop the setting link. */
   followupsOn?: Set<string>
+  /** CI jobs were read (a failed read leaves CI-dependent actions offered). */
+  ciReadable?: boolean
+  actionFacts?: ActionFacts
 }
 
 // ── Thresholds ──────────────────────────────────────────────────────────────
@@ -214,6 +255,8 @@ export const FOLLOWUPS_SETTING = {
 }
 /** Spend-down (ADR 0028) is the server's automatic dispatcher; its on/off switch per Cursor key. */
 export const DISPATCH_SETTING = { label: 'Cursor keys and spend-down', to: '/credits#cursor-fix-bugs' }
+/** Local workers (ADR 0048): their lanes, queues and runs. */
+export const WORKERS_SETTING = { label: 'Local workers', to: '/pipeline?tab=workers' }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -297,9 +340,128 @@ export function latestReviews(rows: ReviewRow[]): Map<string, ReviewRow> {
  */
 export function failedChecksFromDetail(detail: string | null): string[] {
   const d = detail ?? ''
-  const m = d.match(/^(?:CI failed|Members failed CI):\s*(.+?)\.?\s*$/i) ?? d.match(/^CI fails on its own commit \((.+?)\)/i)
+  // Names are quoted since 2026-10-27 (checkNameList); older rows list them bare.
+  const m =
+    d.match(/^(?:CI failed|Members failed CI):\s*(.+?)\.(?:\s+[A-Z].*)?\s*$/is) ??
+    d.match(/^(?:CI failed|Members failed CI):\s*(.+?)\.?\s*$/is) ??
+    d.match(/^CI fails on its own commit \((.+)\)(?= and |\.)/i)
   if (!m) return []
-  return m[1].split(',').map((s) => s.trim()).filter(Boolean)
+  return parseCheckNameList(m[1])
+}
+
+// ── Agent failures and action availability ──────────────────────────────────
+
+type AgentFailureKind = 'person' | 'nothing' | 'error'
+
+/** The cloud agent's own no-PR verdicts (fix-report-truth.ts AGENT_VERDICT_CATEGORIES). */
+function agentFailureKind(category: string | null | undefined): AgentFailureKind {
+  const c = (category ?? '').toLowerCase()
+  if (c === 'needs_human') return 'person'
+  if (c === 'already_fixed' || c === 'not_actionable' || c === 'wrong_repo') return 'nothing'
+  return 'error'
+}
+
+/**
+ * The "agent failed" groups by why. Together they are the Agent failed count
+ * (apps/admin/src/lib/countDefinitions.ts); `agent_failed` keeps the agent
+ * errors, which a new run may clear.
+ */
+const AGENT_FAILED_GROUPS: Record<AgentFailureKind, { id: string; text: string }> = {
+  person: { id: 'agent_failed_person', text: 'the agent says a person must do it, no PR opened' },
+  nothing: { id: 'agent_failed_nothing', text: 'the agent found nothing to change in the code' },
+  error: { id: 'agent_failed', text: 'the agent failed, no PR opened' },
+}
+
+const NO_PR = 'This fix has no pull request.'
+const RERUN_REFUSED_REASON =
+  'The GitHub token cannot re-run workflows: give it Actions: Read and write (fine-grained token) or the workflow scope, in the GitHub connection.'
+
+interface BlockContext {
+  attempt: AttemptRow
+  review: ReviewRow | null
+  queue: QueueRow | null
+  ciJobs: Map<string, CiJobForRepair[]>
+  ciReadable: boolean
+  facts: ActionFacts
+}
+
+/**
+ * Why the server would refuse a follow-up (Opus findings or a CI repair) for
+ * this PR, in the words api/routes/pipeline.ts sendFollowup answers with, or
+ * null when it may go through. Same predicates: the cloud trigger when cloud
+ * follow-ups can run for the app, else the local lanes' hand-off rules.
+ */
+function followupBlock(kind: 'findings' | 'ci_repair', ctx: BlockContext): string | null {
+  const { attempt: a, review: rv, facts } = ctx
+  if (!rv) return 'This PR has no review yet; re-run the review first.'
+  const cloud = facts.cloud.get(a.project_id)
+  if (!cloud) return null
+  let ci: CiHeadState | null = null
+  if (kind === 'ci_repair' && rv.head_sha) {
+    if (!ctx.ciReadable) return null
+    ci = ciHeadState(ctx.ciJobs.get(rv.head_sha) ?? [])
+  }
+  const head = rv.head_sha ?? null
+  if (cloud.ready) {
+    const decision = followupTrigger({
+      review: { status: rv.status, verdict: rv.verdict, head_sha: head },
+      attempt: { pr_url: a.pr_url, pr_state: a.pr_state, merged_at: a.merged_at, agent: a.agent },
+      prior: facts.prior.get(a.id) ?? [],
+      ci,
+    })
+    return decision.queue ? null : `Not queued. ${FOLLOWUP_REASONS[decision.reason]}`
+  }
+  const handoff = localHandoff({
+    kind,
+    attempt: a,
+    review: { status: rv.status, verdict: rv.verdict, head_sha: head, findings: Array.isArray(rv.findings) ? rv.findings.length : 0 },
+    roundHeads: facts.roundHeads.get(a.id) ?? [],
+    cloudFollowupsOn: cloud.enabled,
+    ciCodeRed: kind === 'ci_repair' ? ci?.state === 'code_failure' : undefined,
+  })
+  return handoff.ok ? null : `${cloud.why}, and the local mushi work lanes cannot take it: ${handoff.message}`
+}
+
+/** Per action of a group: the refusal the server would give for this item, from facts it already has. */
+function blockedActions(actions: readonly PipelineAction[], ctx: BlockContext): Partial<Record<PipelineAction, string>> {
+  const { attempt: a, queue: q, facts } = ctx
+  const active = q && ACTIVE_QUEUE.has(q.state) ? q : null
+  const out: Partial<Record<PipelineAction, string>> = {}
+  for (const action of actions) {
+    let why: string | null = null
+    switch (action) {
+      case 'ci_repair':
+      case 'followup':
+        why = followupBlock(action === 'ci_repair' ? 'ci_repair' : 'findings', ctx)
+        break
+      case 'rerun_ci':
+        why = !a.pr_url ? 'This fix has no pull request to test.' : facts.rerunRefused.has(a.project_id) ? RERUN_REFUSED_REASON : null
+        break
+      case 'remove':
+        why = active ? null : 'Not in the merge queue.'
+        break
+      case 'conflict_agent': {
+        const cloud = facts.cloud.get(a.project_id)
+        if (!active) why = 'Not in the merge queue.'
+        else if ((active.conflict_agents ?? 0) >= CONFLICT_AGENT_CAP) why = `Both conflict agents (${CONFLICT_AGENT_CAP} of ${CONFLICT_AGENT_CAP}) were used on this PR. Update the branch, or resolve it on GitHub.`
+        else if (active.state !== 'resolving' && active.state !== 'blocked') why = 'Only a conflicted PR gets a conflict agent.'
+        else if (cloud && !cloud.ready) why = `Needs a person: resolve the conflict on GitHub (${a.pr_url ?? 'the pull request'}). ${cloud.why}, so no conflict agent can run.`
+        break
+      }
+      case 'update_branch':
+      case 'mark_ready':
+      case 'close':
+        why = a.pr_url ? null : NO_PR
+        break
+      case 'dismiss':
+        why = a.report_id ? null : 'No report to close.'
+        break
+      default:
+        break
+    }
+    if (why) out[action] = why
+  }
+  return out
 }
 
 // ── Group builder ───────────────────────────────────────────────────────────
@@ -396,6 +558,7 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       failingChecks: [],
       review: rv ? { verdict: rv.verdict, summary: clip(rv.summary, 400), findings: findingLines(rv.findings) } : null,
       queueDetail: q?.detail ?? null,
+      blocked: {},
       ...extra,
     }
   }
@@ -434,7 +597,9 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
         const stuck = age(now, a.created_at) > AGENT_STUCK_MS
         groups.add(stuck ? 'agent_slow' : 'agent_running', { stage: 'pr', tone: stuck ? 'stuck' : 'moving', noun: ['fix', 'fixes'], text: stuck ? 'agent still running after 6 hours' : 'agent writing the fix', actions: [] }, itemOf(a, a.created_at))
       } else if (a.status === 'failed' && age(now, a.created_at) <= RECENT_MS && isAgentFailedReport(a)) {
-        groups.add('agent_failed', { stage: 'pr', tone: 'stuck', noun: REPORT, text: 'the agent failed, no PR opened', actions: [] }, itemOf(a, a.completed_at ?? a.created_at, { lastError: clip(a.error) }))
+        // The agent's own verdict is an answer a re-run repeats; an error is not (fix-report-truth.ts).
+        const kind = agentFailureKind(a.failure_category)
+        groups.add(AGENT_FAILED_GROUPS[kind].id, { stage: 'pr', tone: 'stuck', noun: REPORT, text: AGENT_FAILED_GROUPS[kind].text, actions: ['dismiss'] }, itemOf(a, a.completed_at ?? a.created_at, { lastError: clip(a.error) }))
       }
       continue
     }
@@ -474,14 +639,16 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
     // 3. The review.
     if (!rv || (rv.status !== 'completed' && rv.status !== 'skipped')) {
       const failed = rv?.status === 'failed'
-      const stuck = failed || age(now, rv?.created_at ?? a.created_at) > REVIEW_STUCK_MS
+      // A re-review keeps the row: age it from the last request, not from the first review (7426815e).
+      const askedAt = rv ? (rv.queued_at ?? rv.created_at) : a.created_at
+      const stuck = failed || age(now, askedAt) > REVIEW_STUCK_MS
       groups.add(failed ? 'review_failed' : stuck ? 'review_slow' : 'review_running', {
         stage: 'review',
         tone: stuck ? 'stuck' : 'moving',
         noun: PR,
         text: failed ? 'the review failed' : rv ? (stuck ? 'review not finished after 2 hours' : 'Opus is reviewing') : stuck ? 'never reviewed' : 'waiting for a review',
         actions: stuck ? ['re_review'] : [],
-      }, itemOf(a, rv?.created_at ?? a.created_at, { lastError: clip(rv?.error) }))
+      }, itemOf(a, askedAt, { lastError: clip(rv?.error) }))
       continue
     }
     if (rv.verdict === 'hold') {
@@ -604,6 +771,7 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       failingChecks: [],
       review: null,
       queueDetail: null,
+      blocked: {},
     }
     if (r.status === 'new' || r.status === 'queued' || r.status === 'pending') {
       const failed = !!r.processing_error
@@ -628,6 +796,24 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
   }
 
   const all = groups.build()
+  if (input.actionFacts) {
+    const attemptsById = new Map(input.attempts.map((a) => [a.id, a]))
+    const queueById = new Map(input.queue.map((q) => [q.fix_attempt_id, q]))
+    for (const g of all) {
+      for (const item of g.items) {
+        const a = attemptsById.get(item.id)
+        if (!a) continue
+        item.blocked = blockedActions(g.actions, {
+          attempt: a,
+          review: reviews.get(a.id) ?? null,
+          queue: queueById.get(a.id) ?? null,
+          ciJobs: input.ciJobs,
+          ciReadable: input.ciReadable !== false,
+          facts: input.actionFacts,
+        })
+      }
+    }
+  }
   // The follow-ups link helps only where they are off (held / conflict groups say "off" outright and keep it).
   if (input.followupsOn) {
     for (const g of all) {
@@ -681,6 +867,8 @@ export interface DispatcherInput {
   jobs: Array<{ project_id: string; created_at: string }>
   /** fix attempts of the last 7 days: who opened them and when. */
   attempts: Array<{ project_id: string; agent: string | null; status: string; created_at: string }>
+  /** Registered local worker lanes (ADR 0048), with whether their machine is online. */
+  lanes?: Array<{ project_id: string; online: boolean; paused: boolean; drain: boolean; stop_at: string | null; mode: string; model: string | null }>
 }
 
 export interface DispatcherStatus {
@@ -690,7 +878,16 @@ export interface DispatcherStatus {
   /** Who opened fixes in the last 7 days. */
   opener: 'server' | 'local' | 'both' | 'nobody'
   server: { agentKeys: number; offKeys: number; dispatches24h: number; dispatches48h: number; lastAt: string | null }
-  local: { runs24h: number; running: number; lastAt: string | null }
+  local: {
+    runs24h: number
+    running: number
+    lastAt: string | null
+    /** Registered lanes for this app, and those whose machine is online and that take new reports. */
+    lanes: number
+    lanesActive: number
+    /** The models those lanes run (null = the agent's default). */
+    models: string[]
+  }
   /** Plain words when auto-fix is on but the server cannot or does not dispatch. */
   problem: string | null
 }
@@ -720,16 +917,26 @@ export function buildDispatchers(input: DispatcherInput): DispatcherStatus[] {
     const dispatches48h = jobs.filter((j) => within(j.created_at, 48 * HOUR)).length
     const server = { agentKeys, offKeys: keys.length - agentKeys, dispatches24h, dispatches48h, lastAt: serverTimes[serverTimes.length - 1] ?? null }
     const localTimes = localAttempts.map((a) => a.created_at).sort()
+    // Registered lanes, not inferred from runs (ADR 0048): one that is online,
+    // not paused or draining, before its stop date and fixing new reports.
+    const lanes = (input.lanes ?? []).filter((l) => l.project_id === p.id)
+    const taking = lanes.filter((l) => l.online && !l.paused && !l.drain && l.mode === 'fix' && !(l.stop_at && Date.parse(l.stop_at) <= now))
     const local = {
       runs24h: localAttempts.filter((a) => within(a.created_at, 24 * HOUR)).length,
       running: localAttempts.filter((a) => a.status === 'running' || a.status === 'pending').length,
       lastAt: localTimes[localTimes.length - 1] ?? null,
+      lanes: lanes.length,
+      lanesActive: taking.length,
+      models: [...new Set(lanes.map((l) => l.model ?? 'default'))].sort(),
     }
     const byServer = serverAttempts.length > 0 || jobs.length > 0
-    const byLocal = localAttempts.length > 0
+    const byLocal = localAttempts.length > 0 || taking.length > 0
     const autofixOn = input.autofixOn.has(p.id)
     let problem: string | null = null
-    if (autofixOn && agentKeys === 0) {
+    if (autofixOn && agentKeys === 0 && taking.length > 0) {
+      // A local worker lane takes this app's reports: nothing is left unopened.
+      problem = null
+    } else if (autofixOn && agentKeys === 0) {
       problem = `Auto-fix is on but has no agent key${keys.length ? ` (${keys.length} Cursor key${keys.length === 1 ? '' : 's'} off or spend-down off)` : ''}; ${dispatches48h} dispatches in 48h`
     } else if (autofixOn && dispatches48h === 0) {
       problem = 'Auto-fix has an agent key but dispatched nothing in 48h'
@@ -766,7 +973,13 @@ export function dispatcherGroup(dispatchers: DispatcherStatus[], now: Date): Pip
     lastEventLabel: d.server.lastAt ? 'last server dispatch' : null,
     failingChecks: [],
     review: null,
-    queueDetail: d.local.lastAt ? `Local mushi work lanes opened ${d.local.runs24h} in 24h (${d.local.running} running).` : 'No local lane either: nobody opens fixes.',
+    blocked: {},
+    queueDetail:
+      d.local.lanes > 0
+        ? `${plural(d.local.lanes, 'local worker lane')} registered, none taking new reports (offline, paused, draining or past its stop date).`
+        : d.local.lastAt
+          ? `Local mushi work lanes opened ${d.local.runs24h} in 24h (${d.local.running} running).`
+          : 'No local lane either: nobody opens fixes.',
   }))
   items.sort((a, b) => a.since.localeCompare(b.since))
   return {
@@ -868,6 +1081,7 @@ export function intakeGroup(summary: IntakeSummary | null, names: Map<string, st
       lastEventLabel: a.lastAt ? 'last rejected' : null,
       failingChecks: [],
       review: null,
+      blocked: {},
       queueDetail: a.sdkPackages.length ? `Sent by ${a.sdkPackages.join(', ')}.` : null,
     }))
   return {
@@ -938,4 +1152,60 @@ export function summarizeTrains(rows: TrainRow[], perRepo = 60): TrainSummary[] 
       }
     })
     .sort((a, b) => b.failed - a.failed || a.repo.localeCompare(b.repo))
+}
+
+// ── Local worker runs the machine stopped (ADR 0048) ────────────────────────
+
+/** A work_claims row that ended on an infra failure and was not put back on its own. */
+export interface InfraClaimRow {
+  id: string
+  project_id: string
+  report_id: string
+  lane_id: string
+  outcome: string | null
+  detail: string | null
+  claimed_at: string
+  finished_at: string | null
+}
+
+/**
+ * Reports a local worker could not run because of the machine (a lost lease,
+ * a clone permission, a hook refusing under load), already put back once on
+ * their own: a person decides whether to queue them again ("Requeue").
+ * Item ids are claim ids; never counted against the report.
+ */
+export function localInfraGroup(claims: InfraClaimRow[], titles: Map<string, string>, laneNames: Map<string, string>): PipelineGroup | null {
+  if (claims.length === 0) return null
+  const items: PipelineItem[] = claims
+    .map((cl) => ({
+      id: cl.id,
+      projectId: cl.project_id,
+      reportId: cl.report_id,
+      title: titles.get(cl.report_id) ?? `Report ${cl.report_id.slice(0, 8)}`,
+      repo: null,
+      prNumber: null,
+      prUrl: null,
+      queueId: null,
+      since: cl.finished_at ?? cl.claimed_at,
+      lastError: clip(cl.detail) ?? (cl.outcome === 'lease_expired' ? 'The worker stopped renewing its lease.' : 'The machine failed, not the code.'),
+      lastEventAt: cl.finished_at,
+      lastEventLabel: `local lane ${laneNames.get(cl.lane_id) ?? cl.lane_id.slice(0, 8)}`,
+      failingChecks: [],
+      review: null,
+      queueDetail: null,
+      // Requeue's refusals (a viewer, a revoked lane) come from the route's own checks.
+      blocked: {},
+    }))
+    .sort((a, b) => a.since.localeCompare(b.since))
+  return {
+    id: 'local_infra',
+    stage: 'pr',
+    tone: 'stuck',
+    label: `${plural(items.length, 'report')}: a local worker's machine stopped the run again (not the code); requeue to try once more`,
+    count: items.length,
+    oldestAt: items[0]?.since ?? null,
+    actions: ['requeue'],
+    settings: WORKERS_SETTING,
+    items: items.slice(0, MAX_ITEMS_PER_GROUP),
+  }
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Streamdown } from 'streamdown'
 import {
@@ -25,9 +25,15 @@ import { openCodebaseChatStream, type CodebaseChatMessage } from '../../lib/expl
 import { applyAskError, askErrorMessage } from '../../lib/exploreChatErrors'
 import { apiErrorMessage } from '../../lib/humanizeApiError'
 import { useToast } from '../../lib/toast'
+import { usePageData } from '../../lib/usePageData'
+import { bugQuestions } from '../../lib/fixFirst'
+import type { ReportRow } from '../reports/types'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { ExploreUnderstandEmpty } from './ExploreUnderstandEmpty'
 import type { AskSeed, CodebaseCitation, CodebaseUnderstandError } from './exploreUnderstandTypes'
+
+/** Open bugs the suggested questions are about (the same read as Bugs' "Fix first"). */
+const OPEN_REPORTS_PATH = '/v1/admin/reports?status=open&sort=created_at&dir=desc&limit=200'
 
 const STARTER_QUESTIONS = [
   'How does authentication work in this repo?',
@@ -74,6 +80,13 @@ export function ExploreChatPanel({
   onCitationClick,
 }: Props) {
   const toast = useToast()
+  // The first suggestions ask about this app's worst open bugs, so Code map
+  // starts from what is broken (console journeys 2026-10-27).
+  const openReports = usePageData<{ reports: ReportRow[] }>(OPEN_REPORTS_PATH)
+  const starters = useMemo(
+    () => [...bugQuestions(openReports.data?.reports ?? []), ...STARTER_QUESTIONS].slice(0, 4),
+    [openReports.data],
+  )
   const [threadId, setThreadId] = useState<string | undefined>()
   const [threads, setThreads] = useState<ChatThreadRow[]>([])
   const [threadsLoading, setThreadsLoading] = useState(false)
@@ -403,7 +416,7 @@ export function ExploreChatPanel({
               . Usage (model · tokens · cost) appears under each answer.
             </p>
             <div className="flex flex-wrap gap-2">
-              {STARTER_QUESTIONS.map((q) => (
+              {starters.map((q) => (
                 <button
                   key={q}
                   type="button"

@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { isIntegrationsBannerVisible } from './integrationsExplainer'
 import { QA_PROVIDER_DEFINITIONS } from './qaProviderGuide'
 import { isReportsBannerVisible, TRIAGE_SEVERITY_DEFINITIONS } from './reportsExplainer'
 import { INBOX_PDCA_STAGES } from './inboxExplainer'
@@ -14,17 +13,8 @@ import { isCodeHealthGuideExpanded, CODE_HEALTH_METRIC_DEFINITIONS } from './cod
 import { isFixesGuideExpanded, FIX_LIFECYCLE_STAGES } from './fixesExplainer'
 import { isProjectsGuideExpanded, PROJECTS_HEALTH_SIGNALS } from './projectsExplainer'
 import { isHealthGuideExpanded, HEALTH_PROBE_TABS } from './healthExplainer'
-import { isOnboardingGuideExpanded } from './onboardingExplainer'
 import { isRewardsGuideExpanded, REWARDS_ECONOMY_CONCEPTS } from './rewardsExplainer'
 import { PDCA_STAGES } from './pdca'
-
-describe('integrationsExplainer', () => {
-  it('shows banner when no project or not healthy', () => {
-    expect(isIntegrationsBannerVisible('no_project', false)).toBe(true)
-    expect(isIntegrationsBannerVisible('incomplete', true)).toBe(true)
-    expect(isIntegrationsBannerVisible('healthy', true)).toBe(false)
-  })
-})
 
 describe('qaProviderGuide', () => {
   it('resolves known providers', () => {
@@ -123,13 +113,6 @@ describe('healthExplainer', () => {
   it('defines LLM tab', () => {
     expect(HEALTH_PROBE_TABS.find((t) => t.id === 'llm')?.label).toMatch(/LLM/)
     expect(isHealthGuideExpanded('llm_errors')).toBe(true)
-  })
-})
-
-describe('onboardingExplainer', () => {
-  it('expands until setup done', () => {
-    expect(isOnboardingGuideExpanded({ setupDone: false, hasAnyProject: true })).toBe(true)
-    expect(isOnboardingGuideExpanded({ setupDone: true, hasAnyProject: true })).toBe(false)
   })
 })
 

@@ -42,6 +42,7 @@ import { HeroSearch } from '../components/illustrations/HeroIllustrations'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { NotificationsStatusBanner } from '../components/notifications/NotificationsStatusBanner'
 import { NotificationsSnapshotStrip } from '../components/notifications/NotificationsSnapshotStrip'
+import { ReporterUpdateFunnel } from '../components/notifications/ReporterUpdateFunnel'
 import { NotificationsReadout } from '../components/notifications/NotificationsReadout'
 import { ReporterOutboxPanel } from '../components/notifications/ReporterOutboxPanel'
 import { ReporterChannelsCard } from '../components/notifications/ReporterChannelsCard'
@@ -384,6 +385,10 @@ export function NotificationsPage() {
           },
         ]}
       />
+
+      {stats.notificationsEnabled && stats.funnel && stats.funnel.told > 0 && activeTab === 'overview' ? (
+        <ReporterUpdateFunnel funnel={stats.funnel} />
+      ) : null}
 
       {!ux.hideTabs && (
       <SegmentedControl

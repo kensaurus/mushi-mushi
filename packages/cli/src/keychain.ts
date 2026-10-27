@@ -68,7 +68,6 @@ function getEntryClass(): (new (service: string, account: string) => any) | null
 /**
  * Return true when the OS keychain path is enabled (default) and the
  * native module loaded without error.
- * @internal Exported for tests only.
  */
 export function isKeychainEnabled(): boolean {
   if (process.env['MUSHI_NO_KEYCHAIN']) return false
@@ -82,12 +81,16 @@ export function isKeychainEnabled(): boolean {
  *          keychain is unavailable (caller must fall through to file storage).
  */
 export function trySaveKeyToKeychain(apiKey: string, profile = 'default'): boolean {
+  return saveSecret(accountName(profile), apiKey)
+}
+
+function saveSecret(account: string, apiKey: string): boolean {
   if (!apiKey) return false
   const EntryClass = getEntryClass()
   if (!EntryClass) return false
   try {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-    const entry = new EntryClass(KEYCHAIN_SERVICE, accountName(profile))
+    const entry = new EntryClass(KEYCHAIN_SERVICE, account)
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
     entry.setPassword(apiKey)
     return true
@@ -103,11 +106,15 @@ export function trySaveKeyToKeychain(apiKey: string, profile = 'default'): boole
  * @returns The stored key string, or null if absent / unavailable.
  */
 export function tryLoadKeyFromKeychain(profile = 'default'): string | null {
+  return loadSecret(accountName(profile))
+}
+
+function loadSecret(account: string): string | null {
   const EntryClass = getEntryClass()
   if (!EntryClass) return null
   try {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-    const entry = new EntryClass(KEYCHAIN_SERVICE, accountName(profile))
+    const entry = new EntryClass(KEYCHAIN_SERVICE, account)
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
     const key = entry.getPassword() as string | null
     return key && key.length > 0 ? key : null
@@ -122,11 +129,15 @@ export function tryLoadKeyFromKeychain(profile = 'default'): string | null {
  * @internal Exported for tests only.
  */
 export function tryDeleteKeyFromKeychain(profile = 'default'): void {
+  deleteSecret(accountName(profile))
+}
+
+function deleteSecret(account: string): void {
   const EntryClass = getEntryClass()
   if (!EntryClass) return
   try {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-    const entry = new EntryClass(KEYCHAIN_SERVICE, accountName(profile))
+    const entry = new EntryClass(KEYCHAIN_SERVICE, account)
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
     entry.deletePassword()
   } catch {
@@ -152,4 +163,24 @@ export function syncKeychainAfterKeyChange(apiKey: string, profile = 'default'):
   if (trySaveKeyToKeychain(apiKey, profile) && tryLoadKeyFromKeychain(profile) === apiKey) return 'updated'
   tryDeleteKeyFromKeychain(profile)
   return 'removed'
+}
+
+/**
+ * The local worker's key (`mushi work --daemon`, scope worker:run, ADR 0048)
+ * under its own account, so it never takes the place of a profile's CLI key
+ * (account `api-key:<profile>`). Same fallbacks: null / false when the
+ * keychain is unavailable, and the caller uses its 0600 file instead.
+ */
+const WORKER_KEY_ACCOUNT = 'worker-key'
+
+export function trySaveWorkerKey(key: string): boolean {
+  return saveSecret(WORKER_KEY_ACCOUNT, key)
+}
+
+export function tryLoadWorkerKey(): string | null {
+  return loadSecret(WORKER_KEY_ACCOUNT)
+}
+
+export function tryDeleteWorkerKey(): void {
+  deleteSecret(WORKER_KEY_ACCOUNT)
 }

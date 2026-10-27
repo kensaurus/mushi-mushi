@@ -222,6 +222,18 @@ export function deployEvidence(doc: Document, workflowPath?: string): string | n
   return null
 }
 
+/**
+ * The refusals the advisor can predict from the file alone, so a rule offers
+ * the one-click fix only where the worker would make it: deploy evidence
+ * (add_concurrency and weekly_cron refuse) and a required-looking job
+ * (ignore_docs_paths refuses). Both null when the YAML does not parse.
+ */
+export function predictableRefusals(yaml: string, workflowPath?: string): { deploy: string | null; requiredLooking: string | null } {
+  const doc = parseDocument(yaml)
+  if (doc.errors.length > 0 || !isMap(doc.get('jobs', true))) return { deploy: null, requiredLooking: null }
+  return { deploy: deployEvidence(doc, workflowPath), requiredLooking: requiredLookingJob(doc) }
+}
+
 /** The status check names a job reports (its `name:`, else its id; a matrix adds ` (…)`). */
 function checkNameMatches(check: string, jobName: string): boolean {
   return check === jobName || check.startsWith(`${jobName} (`) || check.endsWith(` / ${jobName}`)

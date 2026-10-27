@@ -168,6 +168,7 @@ import { loadFixRecipeBlock } from '../_shared/fix-recipe-block.ts';
 import { PRIOR_ATTEMPTS_MAX, priorAttemptsBlock } from '../_shared/prior-attempts.ts';
 import type { FollowupFinding } from '../_shared/review-followup.ts';
 import { sanitizeForLLM } from '../_shared/sanitize.ts';
+import { reportHasActiveWorkClaim } from '../_shared/work-claims.ts';
 
 const SYSTEM_PROMPT = `You are a senior staff engineer fixing one specific bug report.
 
@@ -287,6 +288,27 @@ Deno.serve(
       reportId: dispatch.report_id,
     });
     tagLangfuseTrace(trace.id);
+
+    // ---- 1b. A local worker holds the report (ADR 0048) ----------------------
+    // dispatchFixForReport and spend-down already skip a claimed report; this
+    // is the last check before an agent starts, for a claim taken between
+    // the dispatch and now. An unreadable lease counts as held.
+    const held = await reportHasActiveWorkClaim(db, dispatch.report_id);
+    if (held !== false) {
+      const reason = held
+        ? 'Skipped: a local worker (mushi work --daemon) holds this report right now.'
+        : 'Skipped: could not read the local worker lease; the next dispatch tries again.';
+      await db
+        .from('fix_dispatch_jobs')
+        .update({ status: 'skipped', error: reason, finished_at: new Date().toISOString() })
+        .eq('id', dispatch.id);
+      log.info('job.skipped_local_claim', { dispatchId: dispatch.id, reportId: dispatch.report_id, held });
+      await trace.end();
+      return new Response(JSON.stringify({ ok: true, skipped: true, reason }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
     // ---- 2. Resolve requested agent + insert fix_attempts row ----------------
     // V5.3 §2.10: the fix-worker is the REST/LLM dispatch path (one of the

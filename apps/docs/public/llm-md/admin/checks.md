@@ -4,16 +4,29 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/checks
 
 ---
 title: Checks
-description: The Checks page lists every automatic check on this app. Each card opens that check, with the same live count the sidebar shows.
+description: The Checks page shows every automatic check on this app with its state, when it last ran and its open count, failing checks first.
 ---
 
 # Checks
 
 **Route:** `/checks`
 
-Every automatic check on this app, in one place. This page is a launcher: open a card to see that check's findings. A chip on the card is the sidebar's live count or status for it. A Pro pill means the check needs a plan upgrade.
+Is my app OK, and which check is red? Every automatic check on this app, in one grid, failing checks first. A sentence at the top names the checks that need you, with one button to open the first.
 
-## App checks
+Each card has a dot and a state:
+
+| Dot | State | Meaning |
+| --- | --- | --- |
+| Red | Failed | The last run failed or could not finish. |
+| Amber | N findings | The check ran and found something to fix. |
+| Green | Pass | A finished run was read and found nothing. Shown with when it last ran. |
+| Grey | Not run yet, Not set up, Status unavailable | Never a pass. Not set up comes with a Set up link. |
+
+A Pro pill means the check needs a plan upgrade. AI prompts and CI runners are Labs: their cards appear once you turn them on in Settings → Labs.
+
+## The checks
+
+### App checks
 
 Is the app itself sound: scheduled tests, user stories, audits, its blueprint, design tokens and content, plus Mushi’s own health.
 
@@ -28,7 +41,7 @@ Is the app itself sound: scheduled tests, user stories, audits, its blueprint, d
 | Design system | `/design` | Design tokens, contrast pairs, type scale and off-token code. Token and rule edits open a draft pull request. |
 | [Content checks](/admin/content) | `/content` | AI-generated and user-submitted content flagged as wrong or low quality. |
 
-## AI quality
+### AI quality
 
 How good the AI's triage is: grading, lessons learned and the prompts behind it.
 

@@ -58,7 +58,9 @@ function Connect({ bill }: { bill: CiBill }) {
           personal account, <span className="font-medium text-fg">Administration: read</span> for an organization. Mushi reads the bill once a day.
         </li>
         <li className="min-w-0">
-          Or, on a machine where <code className="mushi-code-inline">gh</code> is signed in as the account that pays:
+          Or, on a machine where <code className="mushi-code-inline">gh</code> is signed in as the account that pays, give that login billing access
+          once (it has none by default) and upload the bill:
+          <CodeValue value="gh auth refresh -s user" className="mt-1" />
           <CodeValue value="mushi runner bill --push" className="mt-1" />
         </li>
       </ol>

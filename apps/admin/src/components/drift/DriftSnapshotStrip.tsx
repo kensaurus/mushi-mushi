@@ -5,7 +5,7 @@
  *          the page's one first step (PageFirstStep, P3).
  */
 
-import { PageStatus } from '../ui'
+import { Btn, PageStatus } from '../ui'
 import type { DriftStats } from './DriftStatsTypes'
 import { pluralizeWithCount } from '../../lib/format'
 import { driftLinks } from '../../lib/statCardLinks'
@@ -17,6 +17,8 @@ interface Props {
   statLabels?: Record<string, string>
   /** Opens the scanner: the first step on a project never scanned. */
   onFirstScan?: () => void
+  /** Opens the list of changes: the one action while any wait. */
+  onReview?: () => void
 }
 
 function driftSentence(stats: DriftStats): string {
@@ -26,13 +28,20 @@ function driftSentence(stats: DriftStats): string {
   return `${pluralizeWithCount(stats.openFindings, 'change')} to your API or database since the baseline${critical}.`
 }
 
-export function DriftSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, onFirstScan }: Props) {
+export function DriftSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, onFirstScan, onReview }: Props) {
   return (
     <PageStatus
       ariaLabel="Schema changes status"
       tone={stats.criticalOpen > 0 ? 'danger' : stats.openFindings > 0 ? 'warn' : 'ok'}
       sentence={driftSentence(stats)}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      action={
+        onReview && stats.openFindings > 0 ? (
+          <Btn size="sm" variant="primary" onClick={onReview}>
+            Review changes
+          </Btn>
+        ) : undefined
+      }
       metrics={[
         {
           label: statLabels?.openFindings ?? 'Changes to review',

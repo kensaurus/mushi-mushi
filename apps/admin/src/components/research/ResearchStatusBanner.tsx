@@ -102,7 +102,7 @@ export function ResearchStatusBanner({ stats, onTab, onAttach, onRefresh, refres
     return (
       <StatusBannerShell
         tone="warn"
-        title={`${stats.unattachedSnippets} snippet${stats.unattachedSnippets === 1 ? '' : 's'} awaiting attach`}
+        title={`${stats.unattachedSnippets} finding${stats.unattachedSnippets === 1 ? '' : 's'} not attached to a bug yet`}
         subtitle={stats.topPriorityLabel}
         action={
           onAttach ? (

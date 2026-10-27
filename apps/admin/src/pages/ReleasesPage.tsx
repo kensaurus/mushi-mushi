@@ -1,10 +1,12 @@
 /**
  * FILE: apps/admin/src/pages/ReleasesPage.tsx
- * PURPOSE: Release management — banner + RELEASES SNAPSHOT + tabs:
- *          Drafts | Published | New draft | Batch | App stores, readout at the foot.
+ * PURPOSE: Release management — status, then "What you shipped" (a timeline
+ *          of the app's releases with the fixes in each and how many
+ *          reporters were told), then tabs: Drafts | Published | New draft |
+ *          Batch | App stores, readout at the foot.
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
@@ -37,6 +39,7 @@ import { ReleasesSnapshotStrip } from '../components/releases/ReleasesSnapshotSt
 import { ReleasesProvenanceReadout } from '../components/releases/ReleasesProvenanceReadout'
 import { AutoReleaseCard } from '../components/releases/AutoReleaseCard'
 import { ReleaseBatchTab } from '../components/releases/ReleaseBatchTab'
+import { ReleaseTimeline, type TimelineRelease } from '../components/releases/ReleaseTimeline'
 import {
   InlineProof,
   SignalChip,
@@ -217,6 +220,14 @@ function ReleaseDrawer({
   const { data: detailData } = usePageData<Release>(`/v1/admin/releases/${release.id}`)
   const credits = detailData?.credits ?? []
   const detailRelease = detailData ?? release
+  // The list row carries no changelog text, so the editor starts empty; fill
+  // it from the detail read unless the user has already typed (saving the
+  // empty editor used to overwrite the draft's changelog).
+  const [bodyTouched, setBodyTouched] = useState(false)
+  const detailBody = detailData?.body_md
+  useEffect(() => {
+    if (!bodyTouched && typeof detailBody === 'string') setBody(detailBody)
+  }, [detailBody, bodyTouched])
   const ticketCount = fulfilledTicketIds.length
 
   /** Returns null on success, or a plain-English reason. */
@@ -347,7 +358,10 @@ function ReleaseDrawer({
             </label>
             <textarea
               value={body}
-              onChange={(e) => setBody(e.target.value)}
+              onChange={(e) => {
+                setBodyTouched(true)
+                setBody(e.target.value)
+              }}
               className="h-56 w-full resize-y rounded-lg border border-edge-subtle bg-surface px-3 py-2 font-mono text-sm text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
             />
           </div>
@@ -357,7 +371,7 @@ function ReleaseDrawer({
           <div>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-fg-secondary">Changelog</h3>
             <pre className="mushi-code-block mushi-code-body max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg border border-code-surface-border p-3 text-sm">
-              {release.body_md}
+              {detailRelease.body_md}
             </pre>
           </div>
         )}
@@ -602,6 +616,7 @@ export function ReleasesPage() {
   const drafts = allReleases.filter((r) => r.status === 'draft')
   const published = allReleases.filter((r) => r.status === 'published')
   const listReleases = activeTab === 'drafts' ? drafts : published
+  const [timelineOpen, setTimelineOpen] = useState<TimelineRelease | null>(null)
 
   const setActiveTab = useCallback(
     (tab: ReleasesTabId) => {
@@ -725,6 +740,16 @@ export function ReleasesPage() {
           },
         ]}
       />
+
+      {activeProjectId && stats.totalReleases > 0 ? <ReleaseTimeline onOpen={setTimelineOpen} /> : null}
+      {timelineOpen && (
+        <ReleaseDrawer
+          release={{ ...timelineOpen, project_id: activeProjectId ?? '', body_md: '', updated_at: timelineOpen.created_at }}
+          onClose={() => setTimelineOpen(null)}
+          onPublished={reloadAll}
+          canEdit={canEditProject}
+        />
+      )}
 
       {!ux.hideTabs && (
       <SegmentedControl<ReleasesTabId>

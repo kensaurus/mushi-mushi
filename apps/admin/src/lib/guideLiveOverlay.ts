@@ -334,46 +334,6 @@ export function exploreTabOverlay(
   return { posture: 'clear', metric: 'Ready' }
 }
 
-/** Onboarding step overlay. */
-export function onboardingStepOverlay(
-  stepId: string,
-  stats: {
-    requiredComplete: number
-    requiredTotal: number
-    sdkInstalled: boolean
-    reportCount: number
-    nextStepId: string | null
-    /** Steps GET /v1/admin/setup marks complete (canonical ids). */
-    completedStepIds?: readonly string[]
-  },
-  optional = false,
-): WorkflowStageOverlay {
-  if (optional) {
-    return { posture: 'info', metric: 'Optional' }
-  }
-  if (stepId === stats.nextStepId) {
-    return { posture: 'open', metric: 'Next', actionLine: 'Complete this step to continue setup.' }
-  }
-  if (stepId === 'first_report_received' && stats.reportCount > 0) {
-    return { posture: 'ok', metric: pluralizeWithCount(stats.reportCount, 'report') }
-  }
-  // Each row follows its own step. Without this every required row read
-  // "Pending" until all were done (mushi-demo at 3/4, 2026-10-26).
-  if (stats.completedStepIds?.includes(stepId)) {
-    return { posture: 'ok', metric: 'Done' }
-  }
-  if (stats.requiredComplete >= stats.requiredTotal) {
-    return { posture: 'clear', metric: 'Done' }
-  }
-  if (stepId === 'sdk_installed' && stats.sdkInstalled) {
-    return { posture: 'ok', metric: 'Installed' }
-  }
-  if (stepId === 'first_report_received' && stats.reportCount > 0) {
-    return { posture: 'ok', metric: pluralizeWithCount(stats.reportCount, 'report') }
-  }
-  return { posture: 'clear', metric: 'Pending' }
-}
-
 /** Skills pipeline mode overlay. */
 export function skillsModeOverlay(
   modeId: string,

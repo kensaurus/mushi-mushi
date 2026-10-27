@@ -8,9 +8,9 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { QueryStatusBanner } from '../components/query/QueryStatusBanner'
-import { QueryGuide } from '../components/query/QueryGuide'
 import { QuerySnapshotStrip } from '../components/query/QuerySnapshotStrip'
 import { QueryReadout } from '../components/query/QueryReadout'
+import { QUERY_TABS, resolveQueryTab } from '../components/query/queryTabs'
 import { QueryCopyButton } from '../components/query/QueryCopyButton'
 import { QueryResultsTable } from '../components/query/QueryResultsTable'
 import { HistoryItem, TeamItem } from '../components/query/QueryHistoryPanel'
@@ -125,32 +125,6 @@ GROUP BY severity
 ORDER BY count DESC
 LIMIT 100`
 
-const QUERY_TABS: Array<{ id: QueryTabId; label: string; description: string }> = [
-  {
-    id: 'overview',
-    label: 'Overview',
-    description: 'Run health, snapshot KPIs, and query posture for the active project.',
-  },
-  {
-    id: 'ask',
-    label: 'Ask',
-    description: 'Natural-language or raw SQL composer with live results and prompt library.',
-  },
-  {
-    id: 'history',
-    label: 'History',
-    description: 'Saved pins, recent runs, and teammate queries — rerun with one click.',
-  },
-  {
-    id: 'schema',
-    label: 'Schema',
-    description: 'Approved read-only tables and columns — use $1 for project_id in raw SQL.',
-  },
-]
-
-function isQueryTab(value: string | null): value is QueryTabId {
-  return QUERY_TABS.some((t) => t.id === value)
-}
 
 export function QueryPage() {
   const copy = usePageCopy('/query')
@@ -158,7 +132,7 @@ export function QueryPage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   const tabParam = searchParams.get('tab')
-  const activeTab: QueryTabId = isQueryTab(tabParam) ? tabParam : 'overview'
+  const activeTab = resolveQueryTab(tabParam)
   const activeTabMeta = QUERY_TABS.find((t) => t.id === activeTab) ?? QUERY_TABS[0]
 
   const statsPath = activeProjectId ? '/v1/admin/query/stats' : null
@@ -218,7 +192,7 @@ export function QueryPage() {
   const setActiveTab = useCallback(
     (id: QueryTabId) => {
       const next = new URLSearchParams(searchParams)
-      if (id === 'overview') next.delete('tab')
+      if (id === 'ask') next.delete('tab')
       else next.set('tab', id)
       setSearchParams(next, { replace: true, preventScrollReset: true })
     },
@@ -337,7 +311,6 @@ export function QueryPage() {
 
   const tabOptions = useMemo(
     () => [
-      { id: 'overview' as const, label: 'Overview' },
       {
         id: 'ask' as const,
         label: 'Ask',
@@ -349,6 +322,7 @@ export function QueryPage() {
         count: saved.length + recent.length > 0 ? saved.length + recent.length : undefined,
       },
       { id: 'schema' as const, label: 'Schema' },
+      { id: 'overview' as const, label: 'Overview' },
     ],
     [stats.runs24h, saved.length, recent.length],
   )
@@ -407,9 +381,11 @@ export function QueryPage() {
         helpUseCases={copy?.help?.useCases ?? []}
         helpHowToUse={copy?.help?.howToUse ?? 'Use the Ask tab to run queries. History pins favorites. Schema lists approved tables.'}
       >
-        <Badge className={stats.errors24h > 0 ? CHIP_TONE.dangerSubtle : stats.runs24h > 0 ? CHIP_TONE.okSubtle : CHIP_TONE.infoSubtle}>
-          {stats.errors24h > 0 ? `${stats.errors24h} FAIL 24H` : stats.runs24h > 0 ? `${stats.runs24h} RUNS 24H` : 'READY'}
-        </Badge>
+        {stats.errors24h > 0 || stats.runs24h > 0 ? (
+          <Badge className={stats.errors24h > 0 ? CHIP_TONE.dangerSubtle : CHIP_TONE.okSubtle}>
+            {stats.errors24h > 0 ? `${stats.errors24h} failed today` : `${stats.runs24h} asked today`}
+          </Badge>
+        ) : null}
       </PageHeaderBar>
 
       <PagePosture
@@ -438,10 +414,6 @@ export function QueryPage() {
                 statLabels={copy?.statLabels}
               />
             ),
-          },
-          {
-            priority: POSTURE_PRIORITY.guide,
-            children: <QueryGuide errors24h={stats.errors24h} />,
           },
         ]}
       />

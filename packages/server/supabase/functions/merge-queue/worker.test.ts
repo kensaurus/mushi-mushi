@@ -177,7 +177,7 @@ test('a hold blocks; failed CI blocks with the check names', async () => {
   const red = setup(row())
   const out2 = await processRow(red.db, row(), deps({ checks: () => Promise.resolve({ pending: 0, failed: ['required'] }) }))
   assertEquals(out2, 'blocked')
-  assertEquals(String(lastState(red.writes)?.detail).startsWith('CI failed: required.'), true)
+  assertEquals(String(lastState(red.writes)?.detail).startsWith('CI failed: "required".'), true)
 })
 
 test('a conflict starts one Cursor agent on the PR branch; at the cap it needs a person', async () => {

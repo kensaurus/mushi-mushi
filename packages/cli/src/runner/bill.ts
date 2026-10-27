@@ -113,7 +113,7 @@ export async function fetchActionsUsage(
       error:
         ownerType === 'Organization'
           ? `GitHub refused ${owner}'s bill (${res.status}): you need to be an organization owner or billing manager, and a fine-grained token needs Administration: read.`
-          : `GitHub refused ${owner}'s bill (${res.status}): use a token for ${owner} itself (\`gh auth login\` as ${owner}); a fine-grained token needs Plan: read.`,
+          : `GitHub refused ${owner}'s bill (${res.status}): use a token for ${owner} itself (\`gh auth login\` as ${owner}). A classic token, which is what gh makes, needs the user scope: run \`gh auth refresh -s user\`. A fine-grained token needs Plan: read.`,
     }
   }
   if (res.status !== 200) return { error: `GitHub answered ${res.status} to the billing read.` }

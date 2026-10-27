@@ -20,7 +20,7 @@
  *          the tester marketplace (tester portal, public marketplace and
  *          roadmap, submission and redemption review, Tremendous webhook),
  *          the per-app Home, setup gaps and the release batch (console ops
- *          plan P1).
+ *          plan P1), and local workers (`mushi work --daemon`, ADR 0048).
  */
 
 import { Hono } from 'npm:hono@4'
@@ -54,6 +54,7 @@ import { registerTesterMarketplaceRoutes } from '../api/routes/tester-marketplac
 import { registerProjectHomeRoutes } from '../api/routes/project-home.ts'
 import { registerSetupGapsRoutes } from '../api/routes/setup-gaps.ts'
 import { registerReleaseBatchRoutes } from '../api/routes/release-batch.ts'
+import { registerWorkRoutes } from '../api/routes/work.ts'
 
 ensureSentry('api-ext')
 
@@ -89,6 +90,7 @@ registerTesterMarketplaceRoutes(app)
 registerProjectHomeRoutes(app)
 registerSetupGapsRoutes(app)
 registerReleaseBatchRoutes(app)
+registerWorkRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 
