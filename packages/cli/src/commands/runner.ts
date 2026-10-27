@@ -1,16 +1,21 @@
 /**
  * FILE: packages/cli/src/commands/runner.ts
- * PURPOSE: `mushi runner status|compare|heartbeat|hooks install|add|audit`
+ * PURPOSE: `mushi runner status|compare|bill|placement|fix|heartbeat|hooks install|add|audit`
  *          (Plan 022, ADR 0033 / 0037): where your tests run, why a fix waits
  *          to land, and what each place costs.
  *
  *          - status     the CI view in the terminal (GET /v1/admin/ci/overview)
  *          - compare    cost and speed per repo × runner class, what-ifs
  *                       (GET /v1/admin/ci/compare; read-only)
+ *          - bill       what GitHub actually charged, read with your own gh
+ *                       login; --push uploads it (POST /v1/admin/ci/bill)
  *          - placement  where each repo's CI runs, the dry run of a change,
  *                       and a request for one (ADR 0037: only LINUX_RUNNER /
  *                       RUNNER_<WORKFLOW>; an owner or admin approves and
  *                       runs it in the console)
+ *          - fix        open a draft PR that applies one CI cost fix to a
+ *                       workflow (POST /v1/admin/ci/cost-fixes, ADR 0047);
+ *                       fix-status shows it and, after the merge, the saving
  *          - heartbeat  this machine's memory, swap, load and runner services
  *                       (POST /v1/ingest/runner, kind heartbeat)
  *          - hooks      job hooks that report each job's memory peak and OOM
@@ -54,7 +59,9 @@ import { HOOKS_DIR_NAME, hookScript, mergeRunnerEnv } from '../runner/hooks.js'
 import { collectHeartbeat, detectPlatform, hashHostId, nodeHostIO, readMachineId, UnsupportedHostError, type HostIO } from '../runner/host.js'
 import { renderOverview, type CiOverview } from '../runner/overview.js'
 import { renderCompare, type CiCompare } from '../runner/compare.js'
+import { fetchActionsUsage, isGithubLogin, lookupOwner, parseMonth, renderBill, summarizeBill } from '../runner/bill.js'
 import { renderPlacement, renderPreview, type PlacementPreviewView, type PlacementView } from '../runner/placement.js'
+import { COST_FIX_KINDS, renderCostFix, waitForCostFix, type CostFixJob } from '../runner/cost-fix.js'
 import { assertNotCliKey, defaultRunnerKeyLabel, resolveRunnerKey, RUNNER_KEY_CREDENTIAL, RUNNER_KEY_PATH } from '../runner/key.js'
 
 const HEARTBEAT_INTERVAL_MS = 120_000
@@ -121,6 +128,16 @@ export function __setRunnerDeps(next: Partial<RunnerDeps>): () => void {
   return () => {
     deps = prev
   }
+}
+
+/** GITHUB_TOKEN, else `gh auth token`. Never printed. */
+function githubTokenForBill(): string {
+  const fromEnv = process.env['GITHUB_TOKEN']?.trim()
+  if (fromEnv) return fromEnv
+  const r = deps.gh(['auth', 'token'])
+  const token = r.ok ? r.stdout.trim() : ''
+  if (!token) throw new MushiCliError('E_INVALID_INPUT', 'No GitHub login on this machine.', 'Run `gh auth login`, or set GITHUB_TOKEN to a token that can read your billing.')
+  return token
 }
 
 function hostIdOrThrow(): string {
@@ -286,6 +303,69 @@ prices (dated), your plan's included minutes, and your electricity figures
       for (const line of renderCompare(result.data)) console.log(line)
     })
 
+  runner
+    .command('bill')
+    .description('What GitHub actually charged for Actions this month, per repo (read with your own gh login)')
+    .option('--month <yyyy-mm>', 'Month to read (default: this month, UTC)')
+    .option('--owner <login>', 'GitHub user or organization whose bill to read (default: you)')
+    .option('--push', 'Upload the month to Mushi, so the console shows the real bill')
+    .option('--project-id <id>', 'Project to upload to with --push (defaults to the configured project)')
+    .option('--project <id>', 'Same as --project-id')
+    .option('--json', 'Machine-readable JSON output')
+    .addHelpText('after', `
+Reads GitHub's billing usage API with GITHUB_TOKEN, or the token of \`gh auth
+login\`. The token stays on this machine and is never printed. A personal
+account's bill needs your own login (fine-grained tokens: Plan read); an
+organization's needs an owner or billing manager (Administration read).
+
+Net is what GitHub charged; public repos and your plan's included minutes show
+as discount. Copilot and other products are left out. With --push, the month's
+Actions items go to POST /v1/admin/ci/bill for the configured project; the
+owner must own one of the project's repositories.`)
+    .action(async (opts: { month?: string; owner?: string; push?: boolean; projectId?: string; project?: string; json?: boolean }) => {
+      const when = parseMonth(opts.month)
+      if (!when) throw new MushiCliError('E_INVALID_INPUT', '--month must look like 2026-10.')
+      if (opts.owner !== undefined && !isGithubLogin(opts.owner)) throw new MushiCliError('E_INVALID_INPUT', '--owner must be a GitHub user or organization name.')
+      const config = opts.push ? requireConfig() : null
+      const token = githubTokenForBill()
+      const signal = getAbortSignal()
+      const fetchFn: (url: string, init: RequestInit) => Promise<Response> = (url, init) => fetch(url, { ...init, signal })
+      const who = await lookupOwner(fetchFn, token, opts.owner)
+      if ('error' in who) throw new MushiCliError('E_API_ERROR', who.error)
+      const usage = await fetchActionsUsage(fetchFn, token, who.owner, who.ownerType, when.year, when.month)
+      if ('error' in usage) throw new MushiCliError('E_API_ERROR', usage.error)
+      const summary = summarizeBill(who.owner, who.ownerType, when.year, when.month, usage.items)
+
+      let pushed: unknown = null
+      if (opts.push && config) {
+        const raw = opts.projectId ?? opts.project ?? config.projectId
+        const body = {
+          ...(raw ? { projectId: requireUuid(raw, 'project id') } : {}),
+          owner: who.owner,
+          ownerType: who.ownerType,
+          year: when.year,
+          month: when.month,
+          items: usage.items,
+        }
+        const result = await apiCall<{ owner: string; month: string; rows: number; netUsd: number }>('/v1/admin/ci/bill', config, { method: 'POST', body: JSON.stringify(body) }, { timeoutMs: 60_000 })
+        if (!result.ok) die(result)
+        pushed = result.data
+      }
+
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify({ ...summary, incomplete: usage.incomplete, ...(pushed ? { pushed } : {}) }, null, 2))
+        return
+      }
+      for (const line of renderBill(summary)) console.log(line)
+      if (usage.incomplete) console.log('  ! GitHub returned more than one page of usage; part of the month may be missing.')
+      if (pushed) {
+        const p = pushed as { rows: number; month: string }
+        console.log(`\nUploaded ${p.rows} day × repo × SKU rows for ${p.month}. The console's CI page shows them now.`)
+      } else if (!opts.json) {
+        console.log('\nRun again with --push to show this bill in the Mushi console.')
+      }
+    })
+
   const placement = runner
     .command('placement')
     .description('Where each repo\'s CI runs, and changing it through one runner variable with approval (ADR 0037)')
@@ -376,6 +456,81 @@ prices (dated), your plan's included minutes, and your electricity figures
         return
       }
       console.log(`Requested revert ${result.data.id} of ${result.data.revertOf} (${result.data.status}). An owner or admin approves and runs it in the console.`)
+    })
+
+  runner
+    .command('fix')
+    .description('Open a draft PR that applies one CI cost fix to a workflow (ADR 0047): add_concurrency, skip_drafts, weekly_cron or ignore_docs_paths')
+    .requiredOption('--repo <owner/repo>', 'Repository connected to the project')
+    .requiredOption('--workflow <path>', 'Workflow file, e.g. .github/workflows/ci.yml')
+    .requiredOption('--kind <kind>', `The fix: ${COST_FIX_KINDS.join(', ')}`)
+    .option('--project-id <id>', 'Project ID (defaults to the configured project)')
+    .option('--project <id>', 'Same as --project-id')
+    .option('--wait', 'Wait (up to 2 minutes) until the pull request is open, and print its link')
+    .option('--json', 'Machine-readable JSON output')
+    .addHelpText('after', `
+The PR is a draft: nothing changes until you review it, mark it ready and merge
+it. After the merge, \`mushi runner fix-status <jobId>\` (or the console's CI
+page) shows the billed minutes per day saved, measured against the 14 days
+before. Writing a workflow file needs the GitHub App's "Workflows: Read and
+write" permission (or a token with the workflow scope).`)
+    .action(async (opts: { repo: string; workflow: string; kind: string; projectId?: string; project?: string; wait?: boolean; json?: boolean }) => {
+      const config = requireConfig()
+      if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(opts.repo)) throw new MushiCliError('E_INVALID_INPUT', '--repo must be owner/repo.')
+      if (!/^\.github\/workflows\/[A-Za-z0-9._/-]+\.ya?ml$/.test(opts.workflow) || opts.workflow.includes('..')) {
+        throw new MushiCliError('E_INVALID_INPUT', '--workflow must be a file under .github/workflows/, e.g. .github/workflows/ci.yml.')
+      }
+      if (!(COST_FIX_KINDS as readonly string[]).includes(opts.kind)) {
+        throw new MushiCliError('E_INVALID_INPUT', `--kind must be one of: ${COST_FIX_KINDS.join(', ')}.`)
+      }
+      const raw = opts.projectId ?? opts.project ?? config.projectId
+      if (!raw) throw new MushiCliError('E_INVALID_INPUT', 'Pass --project-id (or configure a project).')
+      const body = { projectId: requireUuid(raw, 'project id'), repo: opts.repo, workflowPath: opts.workflow, kind: opts.kind }
+      const result = await apiCall<{ job: CostFixJob }>('/v1/admin/ci/cost-fixes', config, { method: 'POST', body: JSON.stringify(body) })
+      if (!result.ok) die(result)
+      let job = result.data.job
+      if (opts.wait) job = await waitForCostFix(job, config)
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(job, null, 2))
+        return
+      }
+      for (const line of renderCostFix(job)) console.log(line)
+    })
+
+  runner
+    .command('fix-status [jobId]')
+    .description('CI cost fixes: one by id (its state, its PR, and after the merge the measured saving), or the project\'s recent ones')
+    .option('--project-id <id>', 'Project ID for the list (defaults to the configured project)')
+    .option('--project <id>', 'Same as --project-id')
+    .option('--json', 'Machine-readable JSON output')
+    .action(async (jobId: string | undefined, opts: { projectId?: string; project?: string; json?: boolean }) => {
+      const config = requireConfig()
+      if (jobId) {
+        const result = await apiCall<{ job: CostFixJob }>(`/v1/admin/ci/cost-fixes/${requireUuid(jobId, 'job id')}`, config)
+        if (!result.ok) die(result)
+        if (outputIsJson(opts.json)) {
+          console.log(JSON.stringify(result.data.job, null, 2))
+          return
+        }
+        for (const line of renderCostFix(result.data.job)) console.log(line)
+        return
+      }
+      const raw = opts.projectId ?? opts.project ?? config.projectId
+      if (!raw) throw new MushiCliError('E_INVALID_INPUT', 'Pass a job id, or --project-id (or configure a project).')
+      const result = await apiCall<{ jobs: CostFixJob[] }>(`/v1/admin/ci/cost-fixes?project_id=${encodeURIComponent(requireUuid(raw, 'project id'))}`, config)
+      if (!result.ok) die(result)
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(result.data.jobs, null, 2))
+        return
+      }
+      if (result.data.jobs.length === 0) {
+        console.log('No CI cost fixes yet. Open one with: mushi runner fix --repo <owner/repo> --workflow <path> --kind <kind>')
+        return
+      }
+      for (const job of result.data.jobs) {
+        for (const line of renderCostFix(job)) console.log(line)
+        console.log(`  job ${job.id}\n`)
+      }
     })
 
   runner

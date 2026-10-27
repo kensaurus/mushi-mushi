@@ -287,14 +287,12 @@ export function PromptLabPage() {
                 stats={promptLabStats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                dataset={{ total: data.dataset.total, labelled: data.dataset.labelled }}
                 bestIsBuiltIn={data.prompts.some(
                   (p) =>
                     p.project_id == null &&
                     p.stage === promptLabStats.bestStage &&
                     p.version === promptLabStats.bestVersion,
                 )}
-                hint="Active prompts, candidates, best judge score, and eval dataset coverage."
               />
             ),
           },

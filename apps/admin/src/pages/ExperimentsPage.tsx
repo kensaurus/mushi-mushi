@@ -143,7 +143,6 @@ export function ExperimentsPage() {
   // Every mode lands on the work tab that matches the posture (list, or New when empty); the URL wins.
   const rawTab = searchParams.get('tab')
   const activeTab: ExperimentsTabId = explicitExperimentsTab(rawTab) ?? resolveQuickExperimentsRedirect(stats, null) ?? 'experiments'
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const {
     data: expData,
@@ -281,6 +280,8 @@ export function ExperimentsPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            // Empty page: the snapshot below is its one first step (P3).
+            show: stats.topPriority !== 'no_experiments',
             children: (
               <ExperimentsStatusBanner
                 stats={stats}
@@ -299,9 +300,8 @@ export function ExperimentsPage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'EXPERIMENTS SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
+                onCreate={() => setActiveTab('new')}
               />
             ),
           },
@@ -551,7 +551,7 @@ function NewExperimentForm({ projectId, onCreated, onCancel }: { projectId: stri
         </label>
         <label className="flex items-center gap-2 text-sm text-fg">
           <input type="checkbox" checked={form.bandit_enabled} onChange={(e) => set('bandit_enabled', e.target.checked)} className="h-4 w-4" />
-          Enable Thompson Sampling bandit (auto-shifts traffic to winning variant)
+          Send more users to the version that is winning (Thompson sampling)
         </label>
       </div>
 

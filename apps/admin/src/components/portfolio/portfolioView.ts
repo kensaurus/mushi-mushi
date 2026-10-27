@@ -31,18 +31,18 @@ export function radarLabel(r: PortfolioRadarColumn, unreadable: readonly Portfol
     return { text: 'Risk checks: not fully read', tone: 'warnSubtle', hint: 'Not every risk check result could be read for this app, so its risks are unknown. This is not a pass. Refresh in a minute.' }
   }
   if (r.status === 'never_run' || !r.checkedAt) {
-    return { text: 'Risk checks: not run yet', tone: 'neutral', hint: 'The daily risk checks (expiring domain, store rules, privacy link, unused keys) have not run for this app yet. This is not a pass. Run them from its Recipe page.' }
+    return { text: 'Risk checks: not run yet', tone: 'neutral', hint: 'The daily risk checks (expiring domain, store rules, privacy link, unused keys) have not run for this app yet. This is not a pass. Run them from its App blueprint page.' }
   }
   if (r.status === 'nothing_to_check') {
     return { text: 'Risk checks: nothing to check', tone: 'neutral', hint: 'The risk checks ran, but this app declares no store ids, domains or privacy link to check. Add a store block to the mushi.recipe.json file at your repo root.' }
   }
   if (r.status === 'error') {
     const n = r.errored > 0 ? ` ${r.errored} check${r.errored === 1 ? '' : 's'} could not run.` : ''
-    return { text: 'Risk checks failed', tone: 'danger', hint: `The last risk check could not finish.${n} This is not a pass. Run it again from the Recipe page.` }
+    return { text: 'Risk checks failed', tone: 'danger', hint: `The last risk check could not finish.${n} This is not a pass. Run it again from the App blueprint page.` }
   }
   const total = r.open.error + r.open.warn
-  if (r.open.error > 0) return { text: `${total} risk${total === 1 ? '' : 's'} to fix`, tone: 'dangerSubtle', hint: `${r.open.error} serious, ${r.open.warn} to look at. Open the Recipe page for each fix.` }
-  if (r.open.warn > 0) return { text: `${total} risk${total === 1 ? '' : 's'} to look at`, tone: 'warnSubtle', hint: `${r.open.warn} to look at. Open the Recipe page for each fix.` }
+  if (r.open.error > 0) return { text: `${total} risk${total === 1 ? '' : 's'} to fix`, tone: 'dangerSubtle', hint: `${r.open.error} serious, ${r.open.warn} to look at. Open the App blueprint page for each fix.` }
+  if (r.open.warn > 0) return { text: `${total} risk${total === 1 ? '' : 's'} to look at`, tone: 'warnSubtle', hint: `${r.open.warn} to look at. Open the App blueprint page for each fix.` }
   const extra = r.unchecked > 0 ? ` ${r.unchecked} check${r.unchecked === 1 ? '' : 's'} could not decide and ${r.unchecked === 1 ? 'is' : 'are'} not counted as passing.` : ''
   return { text: 'No risks found', tone: 'okSubtle', hint: `The last risk check found nothing to fix.${extra}` }
 }

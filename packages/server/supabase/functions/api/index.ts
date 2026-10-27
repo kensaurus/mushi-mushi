@@ -810,6 +810,10 @@ forwardToApiExt([
 forwardToApiExt(['/v1/admin/projects/:id/vulnerabilities', '/v1/admin/projects/:id/vulnerabilities/*']);
 // sdk-health.ts: SDK problems and their fix tasks; deploy size limit, 2026-10-26.
 forwardToApiExt(['/v1/admin/projects/:id/sdk-health', '/v1/admin/projects/:id/sdk-health/tasks']);
+// project-home.ts: the per-app Home in one call; deploy size limit, 2026-10-27.
+forwardToApiExt(['/v1/admin/projects/:id/home', '/v1/admin/projects/:id/home/thumbnail']);
+// setup-gaps.ts and release-batch.ts (console ops plan P1, read-only); deploy size limit, 2026-10-27.
+forwardToApiExt(['/v1/admin/setup-gaps', '/v1/admin/release-batch']);
 
 registerA2ATaskRoutes(app);
 

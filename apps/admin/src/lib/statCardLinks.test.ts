@@ -144,3 +144,48 @@ describe('ssoLinks', () => {
     }
   })
 })
+
+/**
+ * Report c0dc93ec: screen readers heard "Go to Health · LLM", "Drift",
+ * "Anomalies", "Intelligence", "Iterate" and "Repo" — names those pages lost
+ * in the October navigation pass. Labels now come from the nav registry.
+ */
+import * as allLinks from './statCardLinks'
+import { statDestinationLabel, statLinkLabel } from './statCardLinks'
+
+describe('statDestinationLabel', () => {
+  const RETIRED = /\b(Health|LLM|Drift|Anomalies|Intelligence|Iterate|Repo|Judge|Codebase|BYOK|Inbox|Dashboard|Query|Marketplace|Notifications|QA Coverage|Cron)\b/
+
+  it('never names a retired page or tab for any stat-card link', () => {
+    const groups = Object.entries(allLinks).filter(([name]) => name.endsWith('Links')) as Array<[string, Record<string, string>]>
+    expect(groups.length).toBeGreaterThan(10)
+    for (const [, group] of groups) {
+      for (const to of Object.values(group)) {
+        expect(statDestinationLabel(to), to).not.toMatch(RETIRED)
+      }
+    }
+  })
+
+  it('reads hub views and retired routes as the view they open', () => {
+    expect(statDestinationLabel('/health?view=schema')).toBe('Schema changes')
+    expect(statDestinationLabel('/drift?tab=findings')).toBe('Schema changes · Changes')
+    expect(statDestinationLabel('/cost?tab=breakdown')).toBe('AI spend · Breakdown')
+    expect(statDestinationLabel('/repo?tab=branches')).toBe('Pull requests')
+    expect(statDestinationLabel('/repo?tab=branches&status=ci_failed')).toBe('Pull requests · Failing CI')
+    expect(statDestinationLabel('/judge?tab=evaluations')).toBe('Triage grading · Grades')
+    expect(statDestinationLabel('/fixes?tab=attempts&status=failed')).toBe('Fixes · All fixes: Stopped')
+  })
+
+  it('says "Show" for a tab or filter of the page or hub view the user is on', () => {
+    expect(statLinkLabel('/judge?tab=trend', '/judge')).toBe('Show Trend')
+    expect(statLinkLabel('/judge?tab=trend', '/fixes')).toBe('Go to Triage grading · Trend')
+    expect(statLinkLabel('/team?view=billing', '/team')).toBe('Go to Billing')
+    expect(statLinkLabel('/team?view=billing&tab=plans', '/team?view=billing')).toBe('Show Plans')
+    // A retired route is the hub view it opens: on /health?view=schema the
+    // Drift links are the same page.
+    expect(statLinkLabel('/drift?tab=findings', '/health?view=schema')).toBe('Show Changes')
+    expect(statLinkLabel('/drift?tab=findings', '/health')).toBe('Go to Schema changes · Changes')
+    // The filter is named, not just the tab.
+    expect(statLinkLabel('/fixes?tab=attempts&status=failed', '/fixes')).toBe('Show All fixes: Stopped')
+  })
+})

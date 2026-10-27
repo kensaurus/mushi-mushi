@@ -1,95 +1,66 @@
 /**
  * FILE: AnomaliesSnapshotStrip.tsx
- * PURPOSE: Anomaly detection KPI strip using MetricStrip — replaces hand-rolled grid on AnomaliesPage.
+ * PURPOSE: Unusual spikes status: did a metric jump, and did it start with a
+ *          release (PageStatus, P1). With no metric data it is the page's one
+ *          first step (PageFirstStep, P3).
  */
 
-import { Section, StatCard, SnapshotSectionHint } from '../ui'
-import { MetricStrip } from '../MetricStrip'
+import { PageStatus } from '../ui'
 import type { AnomaliesStats } from './AnomaliesStatsTypes'
-import {
-  openAnomaliesTooltip,
-  openAnomaliesDetail,
-  releaseRegressionTooltip,
-  releaseRegressionDetail,
-  highScoreTooltip,
-  highScoreDetail,
-  autoReportedTooltip,
-  autoReportedDetail,
-  metricPointsTooltip,
-  metricPointsDetail,
-  dismissedAnomaliesTooltip,
-  dismissedAnomaliesDetail,
-} from '../../lib/statTooltips/anomalies'
+import { pluralizeWithCount } from '../../lib/format'
+import { anomaliesNoMetricsHint } from '../../lib/humanPageHints'
 import { anomaliesLinks } from '../../lib/statCardLinks'
 
 interface Props {
   stats: AnomaliesStats
   statsFetchedAt: string | null
   statsValidating?: boolean
-  sectionTitle?: string
-  hint?: string
   statLabels?: Record<string, string>
+  /** Opens the metrics tab: the first step while no metric has arrived. */
+  onAddMetrics?: () => void
 }
 
-export function AnomaliesSnapshotStrip({
-  stats,
-  statsFetchedAt,
-  statsValidating,
-  sectionTitle = 'ANOMALIES SNAPSHOT',
-  hint,
-  statLabels,
-}: Props) {
+function spikesSentence(stats: AnomaliesStats): string {
+  if (stats.metricPointCount === 0) return 'No metric data yet.'
+  if (stats.openAnomalies === 0) return `No unusual spikes across ${pluralizeWithCount(stats.distinctMetrics, 'metric')}.`
+  const release = stats.releaseRegressionOpen > 0 ? `; ${stats.releaseRegressionOpen} started right after a release` : ''
+  return `${pluralizeWithCount(stats.openAnomalies, 'unusual spike')} to confirm or dismiss${release}.`
+}
+
+export function AnomaliesSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, onAddMetrics }: Props) {
   return (
-    <Section title={sectionTitle} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-      {hint ? <SnapshotSectionHint text={hint} /> : null}
-      <MetricStrip cols={6} ariaLabel="Anomalies snapshot">
-        <StatCard
-          label={statLabels?.open ?? 'Open'}
-          value={stats.openAnomalies}
-          accent={stats.openAnomalies > 0 ? 'text-warn' : 'text-ok'}
-          tooltip={openAnomaliesTooltip(stats)}
-          detail={openAnomaliesDetail(stats)}
-          to={anomaliesLinks.open}
-        />
-        <StatCard
-          label={statLabels?.releaseRegressions ?? 'Release regressions'}
-          value={stats.releaseRegressionOpen}
-          accent={stats.releaseRegressionOpen > 0 ? 'text-danger' : undefined}
-          tooltip={releaseRegressionTooltip(stats)}
-          detail={releaseRegressionDetail()}
-          to={anomaliesLinks.releaseRegressions}
-        />
-        <StatCard
-          label={statLabels?.highScore ?? 'High score'}
-          value={stats.highScoreOpen}
-          accent={stats.highScoreOpen > 0 ? 'text-danger' : undefined}
-          tooltip={highScoreTooltip(stats)}
-          detail={highScoreDetail()}
-          to={anomaliesLinks.highScore}
-        />
-        <StatCard
-          label={statLabels?.autoReported ?? 'Auto-reported'}
-          value={stats.autoReported}
-          tooltip={autoReportedTooltip(stats)}
-          detail={autoReportedDetail()}
-          to={anomaliesLinks.autoReported}
-        />
-        <StatCard
-          label={statLabels?.metricPoints ?? 'Metric points'}
-          value={stats.metricPointCount}
-          tooltip={metricPointsTooltip(stats)}
-          detail={metricPointsDetail(stats)}
-          to={anomaliesLinks.metricPoints}
-        />
-        <StatCard
-          label={statLabels?.dismissed ?? 'Dismissed'}
-          value={stats.dismissedAnomalies}
-          accent={stats.dismissedAnomalies > 0 ? 'text-fg-muted' : undefined}
-          tooltip={dismissedAnomaliesTooltip(stats)}
-          detail={dismissedAnomaliesDetail()}
-          to={anomaliesLinks.dismissed}
-        />
-      </MetricStrip>
-    </Section>
+    <PageStatus
+      ariaLabel="Unusual spikes status"
+      tone={stats.releaseRegressionOpen > 0 || stats.highScoreOpen > 0 ? 'danger' : stats.openAnomalies > 0 ? 'warn' : 'ok'}
+      sentence={spikesSentence(stats)}
+      freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      metrics={[
+        {
+          label: statLabels?.open ?? 'Spikes to review',
+          value: stats.openAnomalies,
+          tone: stats.openAnomalies > 0 ? 'warn' : 'neutral',
+          hint: 'Metric values far outside their normal range that nobody has confirmed or dismissed.',
+          to: anomaliesLinks.open,
+        },
+        {
+          label: statLabels?.releaseRegressions ?? 'After a release',
+          value: stats.releaseRegressionOpen,
+          tone: stats.releaseRegressionOpen > 0 ? 'danger' : 'neutral',
+          hint: 'Spikes that started right after a release: the likeliest to be a regression.',
+          to: anomaliesLinks.releaseRegressions,
+        },
+        {
+          label: statLabels?.metricPoints ?? 'Metrics watched',
+          value: stats.distinctMetrics,
+          hint: 'Different metrics your app sends (error rate, latency, conversion…).',
+          to: anomaliesLinks.metricPoints,
+        },
+      ]}
+      empty={{
+        title: 'No metric data yet',
+        sentence: anomaliesNoMetricsHint(),
+        action: onAddMetrics ? { label: 'Add metrics', onClick: onAddMetrics } : { label: 'Add metrics', to: '/health?view=spikes&tab=metrics' },
+      }}
+    />
   )
 }

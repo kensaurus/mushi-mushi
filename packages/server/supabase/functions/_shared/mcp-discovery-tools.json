@@ -977,6 +977,151 @@
       },
       "returnsUntrusted": true
     },
+    "get_ci_bill": {
+      "title": "Real GitHub Actions bill",
+      "description": "Return what GitHub actually charged for Actions, read from GitHub's billing usage API by the CI collector once a day (or pushed with `mushi runner bill --push`). Unlike get_ci_costs, these money figures are measured, not estimated. Returns { window, previousWindow, provenance: \"measured\", currency: \"USD\", available, repoScoped (true when you are not a member of the organization: only your projects' repos are shown), unavailableReason (why there is no bill and how to connect one), owners [{ owner, ownerType, lastOkAt, lastAttemptAt, lastError, lastSource (api | cli), coveredFrom }], month { label, grossUsd, discountUsd, netUsd } (this calendar month so far), totals { grossUsd, discountUsd, netUsd, minutes }, previousTotals and change { netUsd, netPct } (null unless Mushi holds the whole previous period), windowComplete, byRepo [{ repo, netUsd, grossUsd, discountUsd, minutes }], bySku, byDay (every day of the window), dataThrough, agentShare { share, billedMinutes, agentBilledMinutes, branches, provenance: \"estimated\" } (paid GitHub-hosted minutes on Mushi agent branches, from the jobs Mushi recorded) }. Net is what was charged; public repos and included minutes show as discount. Optional projectId (default: the configured project; an account-level key with none reads every project) and days (1-90, default 30). Read-only.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Real GitHub Actions bill",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project; omitted with an account-level key, every project you can read (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "days": {
+            "description": "Window in days (default 30)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 90
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "window": {},
+          "previousWindow": {},
+          "provenance": {
+            "description": "measured: from GitHub's bill",
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "repoScoped": {
+            "description": "Only your projects' repos: you are not a member of the organization",
+            "type": "boolean"
+          },
+          "unavailableReason": {
+            "description": "Why there is no bill, and how to connect one",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "owners": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            }
+          },
+          "month": {
+            "description": "This calendar month so far: grossUsd, discountUsd, netUsd",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": {}
+          },
+          "totals": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": {}
+          },
+          "previousTotals": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "change": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "windowComplete": {
+            "type": "boolean"
+          },
+          "byRepo": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            }
+          },
+          "bySku": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            }
+          },
+          "byDay": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            }
+          },
+          "dataThrough": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "agentShare": {
+            "description": "Paid minutes on Mushi agent branches (estimated)",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": {}
+      },
+      "returnsUntrusted": true
+    },
     "get_ci_costs": {
       "title": "CI cost and speed",
       "description": "Return what this project's CI costs and how fast it runs on GitHub-hosted runners versus your own machines (Plan 022, ADR 0037). Rows per repo × runner class [{ repo, runnerClass (github_hosted | self_hosted | unknown = never picked up), os, labels, runner, machine, jobs, expired, queueP50s, queueP95s, runP50s, runP95s, prPassRate (pull-request jobs only), infraRate, rawMinutes, billedMinutes (each job rounded up to a whole minute), rerunJobs, tinyJobs, monthCost, costBasis (github_list | github_public_free | github_larger_unpriced | self_hosted | unknown), currency }]; repos with visibility (public repos run GitHub-hosted minutes free); accounts per GitHub owner (plan, includedMinutes, monthMinutes, monthListCost, monthCost after included minutes); machines (busyHours as the union of job intervals, busyShare, monthEnergyCost and monthWearCost from the organization's own figures); speed factors (only passed jobs that ran on both classes, at least 5 each, with sample sizes); whatIfs for moving a workflow (minutes moved, jobs that stay and why, speed, cost delta, target wait and busy share, warnings); explain (re-runs, tiny jobs, expired jobs, pinned-to-GitHub jobs with their YAML reason, main and Dependabot runs that always use GitHub); advice with evidence; fields says which numbers are measured and which estimated; rates gives GitHub's list prices and the date they were read. Optional projectId (default: the configured project; an account-level key with none reads every project) and days (1-30, default 30). lowConfidence is true under 7 days of data. Returns { window, dataDays, lowConfidence, source, sourceNote, rates, fields, settings, repos, rows, accounts, machines, speed, whatIfs, explain, advice }. Read-only: it changes nothing on GitHub. Every money figure is an estimate.",
@@ -3856,6 +4001,54 @@
         ],
         "additionalProperties": false
       }
+    },
+    "open_ci_cost_fix": {
+      "title": "Open a CI cost fix PR (draft)",
+      "description": "Open a DRAFT pull request that applies one CI cost fix to one workflow file (ADR 0047), the fix a CI advice item offers as autofix (get_ci_overview / get_ci_costs advice[].autofix { kind, projectId, repo, workflowPath }). kind: add_concurrency (a concurrency group that cancels superseded pull request runs, never a push), skip_drafts (ready_for_review added to the pull_request types and every job skips drafts), weekly_cron (a schedule that fires more than weekly runs once a week), ignore_docs_paths (paths-ignore for docs-only changes, Markdown, docs/, license and issue templates, on pull_request and push; refused when a job looks like a required check, because a skipped workflow never reports and the PR could not merge). The repo must be connected to the project. Mushi reads the workflow from the default branch, edits only that file (comments kept), opens the PR as a draft with a conventional ci: title, and records the workflow's billed minutes per day for the 14 days before; nothing changes until a person reviews, readies and merges it. The job runs in the background: read it again with the job id (GET /v1/admin/ci/cost-fixes/{id}, or `mushi runner fix-status`); after the merge it shows the saving measured per day. Writing a workflow file needs the GitHub App's Workflows: Read and write permission or a token with the workflow scope. Confirm with the user first. Returns { job: { id, status (queued | running | pr_opened | no_change | refused | failed), summary, errorCode, error, prUrl, baseline, measured, saving } }, or an error (REPO_NOT_IN_PROJECT, PR_ALREADY_OPEN with the job, COST_FIX_IN_PROGRESS, RATE_LIMITED: 10 an hour per project). Write.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Open a CI cost fix PR (draft)",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "repo": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]+\\/[A-Za-z0-9._-]+$",
+            "description": "owner/repo, connected to the project"
+          },
+          "workflowPath": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "^\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml$",
+            "description": "The workflow file, e.g. .github/workflows/ci.yml"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "add_concurrency",
+              "skip_drafts",
+              "weekly_cron",
+              "ignore_docs_paths"
+            ],
+            "description": "The fix (advice[].autofix.kind)"
+          }
+        },
+        "required": [
+          "repo",
+          "workflowPath",
+          "kind"
+        ]
+      },
+      "returnsUntrusted": true
     },
     "propose_portfolio_change": {
       "title": "Fix once across apps (draft PRs)",

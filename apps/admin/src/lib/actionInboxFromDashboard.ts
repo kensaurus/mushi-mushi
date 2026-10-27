@@ -9,6 +9,7 @@ import { computeNextBestAction } from './useNextBestAction'
 import type { PageAction } from '../components/PageActionBar'
 import type { DashboardData } from '../components/dashboard/types'
 import type { InboxStats } from '../components/inbox/types'
+import { stoppedTitle } from './countDefinitions'
 
 /**
  * Counters from `/v1/admin/inbox/stats`, the source the banner and the "do
@@ -134,7 +135,7 @@ export function buildInboxCards(
         failedFixes > 0
           ? {
               tone: 'do',
-              title: `Auto-fix stopped on ${failedFixes} report${failedFixes === 1 ? '' : 's'}`,
+              title: stoppedTitle(failedFixes),
               reason: 'Read why the last attempt stopped, then retry or fix it in your editor.',
               primary: { kind: 'link', to: '/fixes?tab=attempts&status=failed', label: 'See why it stopped' },
             }

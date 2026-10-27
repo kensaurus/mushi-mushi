@@ -1,142 +1,62 @@
 /**
- * FIXES SNAPSHOT — posture strip backed by /v1/admin/fixes/stats.
+ * FIXES STATUS — one sentence and three numbers from /v1/admin/fixes/stats
+ * (PageStatus, P1). Every number counts REPORTS from their current state
+ * (lib/countDefinitions.ts), so "Stopped" here is Home's "Auto-fix stopped".
  */
 
-import { Link } from 'react-router-dom'
-import { Section, StatCard, SnapshotSectionHint } from '../ui'
-import { MetricStrip } from '../MetricStrip'
+import { PageStatus } from '../ui'
 import type { FixesStats } from './FixesStatsTypes'
-import {
-  completedDetail,
-  completedTooltip,
-  failedDetail,
-  failedTooltip,
-  inProgressDetail,
-  inProgressTooltip,
-  prsCiPassingDetail,
-  prsCiPassingTooltip,
-  prsOpenDetail,
-  prsOpenTooltip,
-  totalAttemptsDetail,
-  totalAttemptsTooltip,
-} from '../../lib/statTooltips/fixes'
+import { COUNT_HINTS, stoppedTitle } from '../../lib/countDefinitions'
+import { pluralizeWithCount } from '../../lib/format'
 import { fixesLinks } from '../../lib/statCardLinks'
-import { usePlainStatTooltips } from '../../lib/usePlainStatTooltips'
 
 interface Props {
   stats: FixesStats
   statsFetchedAt: string | null
   statsValidating?: boolean
-  description?: string
-  sectionTitle?: string
-  statLabels?: Record<string, string>
-  hideLinks?: boolean
-  /** Quick mode: show 4 headline stats instead of 6. */
-  compact?: boolean
 }
 
-export function FixesSnapshotStrip({
-  stats,
-  statsFetchedAt,
-  statsValidating,
-  description,
-  sectionTitle = 'FIXES SNAPSHOT',
-  statLabels,
-  hideLinks = false,
-  compact = false,
-}: Props) {
-  const plainOpts = usePlainStatTooltips()
-  const inFlight = stats.inProgress + stats.inflightDispatches
+function fixesSentence(stats: FixesStats, inFlight: number): string {
+  if (stats.totalAttempts === 0 && inFlight === 0) return 'No fixes in the last 30 days.'
+  const parts: string[] = []
+  if (stats.failed > 0) parts.push(stoppedTitle(stats.failed))
+  if (stats.prsOpen > 0) parts.push(`${pluralizeWithCount(stats.prsOpen, 'PR')} waiting for review or merge`)
+  if (inFlight > 0) parts.push(`${pluralizeWithCount(inFlight, 'fix', 'fixes')} running`)
+  if (parts.length === 0) return `${pluralizeWithCount(stats.completed, 'report')} fixed in the last 30 days; nothing waiting.`
+  const sentence = parts.join('; ')
+  return `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`
+}
 
+export function FixesSnapshotStrip({ stats, statsFetchedAt, statsValidating }: Props) {
+  const inFlight = stats.inProgress + stats.inflightDispatches
   return (
-    <Section
-      title={sectionTitle}
+    <PageStatus
+      ariaLabel="Fixes status"
+      tone={stats.failed > 0 ? 'danger' : inFlight > 0 ? 'info' : stats.prsOpen > 0 ? 'warn' : 'ok'}
+      sentence={fixesSentence(stats, inFlight)}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
-    >
-      <SnapshotSectionHint text={description} />
-      <MetricStrip
-        cols={compact ? 4 : 6}
-        ariaLabel="Fix pipeline snapshot"
-        className={compact ? '' : 'sm:grid-cols-3'}
-      >
-        {!compact ? (
-          <StatCard
-            label={statLabels?.totalAttempts ?? 'Attempts (30d)'}
-            value={stats.totalAttempts}
-            tooltip={totalAttemptsTooltip(stats, plainOpts)}
-            detail={totalAttemptsDetail()}
-            to={fixesLinks.totalAttempts}
-          />
-        ) : null}
-        {!compact ? (
-          <StatCard
-            label={statLabels?.completed ?? 'Fixed'}
-            value={stats.completed}
-            accent="text-ok"
-            tooltip={completedTooltip(stats)}
-            detail={completedDetail(stats)}
-            to={fixesLinks.completed}
-          />
-        ) : null}
-        <StatCard
-          label={statLabels?.failed ?? 'Failed'}
-          value={stats.failed}
-          accent={stats.failed > 0 ? 'text-danger' : 'text-ok'}
-          tooltip={failedTooltip(stats, plainOpts)}
-          detail={failedDetail(stats)}
-          to={fixesLinks.failed}
-        />
-        <StatCard
-          label={statLabels?.inProgress ?? 'In flight'}
-          value={inFlight}
-          accent={inFlight > 0 ? 'text-info' : undefined}
-          tooltip={inProgressTooltip(stats)}
-          detail={inProgressDetail()}
-          to={fixesLinks.inProgress}
-        />
-        <StatCard
-          label={statLabels?.prsOpen ?? 'PRs open'}
-          value={stats.prsOpen}
-          tooltip={prsOpenTooltip(stats)}
-          detail={prsOpenDetail()}
-          to={fixesLinks.prsOpen}
-        />
-        {compact ? (
-          <StatCard
-            label={statLabels?.totalAttempts ?? 'Fixes (30 days)'}
-            value={stats.totalAttempts}
-            accent={stats.totalAttempts > 0 ? 'text-fg' : undefined}
-            tooltip={totalAttemptsTooltip(stats, plainOpts)}
-            detail={totalAttemptsDetail()}
-            to={fixesLinks.totalAttempts}
-          />
-        ) : (
-          <StatCard
-            label={statLabels?.prsCiPassing ?? 'CI passing'}
-            value={stats.prsCiPassing}
-            accent={stats.prsCiPassing > 0 ? 'text-ok' : undefined}
-            tooltip={prsCiPassingTooltip(stats)}
-            detail={prsCiPassingDetail()}
-            to={fixesLinks.prsCiPassing}
-          />
-        )}
-      </MetricStrip>
-      {!hideLinks ? (
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-2xs text-fg-muted">
-          <Link to="/reports" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
-            Source reports →
-          </Link>
-          <Link to="/judge" className="hover:text-fg underline-offset-2 hover:underline">
-            Judge scores →
-          </Link>
-          <Link to="/releases" className="hover:text-fg underline-offset-2 hover:underline">
-            Releases →
-          </Link>
-          <Link to="/integrations/config" className="hover:text-fg underline-offset-2 hover:underline">
-            Integrations →
-          </Link>
-        </div>
-      ) : null}
-    </Section>
+      metrics={[
+        {
+          label: 'Stopped',
+          value: stats.failed,
+          tone: stats.failed > 0 ? 'danger' : 'neutral',
+          hint: COUNT_HINTS.stopped,
+          to: fixesLinks.failed,
+        },
+        {
+          label: 'PRs open',
+          value: stats.prsOpen,
+          hint: COUNT_HINTS.prOpen,
+          to: fixesLinks.prsOpen,
+        },
+        {
+          label: 'Fixed',
+          value: stats.completed,
+          tone: stats.completed > 0 ? 'ok' : 'neutral',
+          hint: COUNT_HINTS.fixed,
+          to: fixesLinks.completed,
+        },
+      ]}
+    />
   )
 }
