@@ -2,6 +2,10 @@
  * FILE: apps/admin/src/pages/ExperimentsPage.tsx
  * PURPOSE: A/B experiment console — banner + EXPERIMENTS SNAPSHOT + tabs:
  *          Experiments | New, readout at the foot.
+ *
+ * Variant name and weight inputs take their accessible name from Input's
+ * own label (aria-label on rows after the first). Input already renders
+ * the label element, so a wrapping label leaves those fields unnamed.
  */
 
 import { useState, useCallback, useMemo } from 'react'
@@ -562,16 +566,25 @@ function NewExperimentForm({ projectId, onCreated, onCancel }: { projectId: stri
         <h3 className="text-sm font-medium text-fg">Variants</h3>
         {variants.map((v, i) => (
           // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+          // Input renders the <label>. A wrapping label is the one axe reads, and
+          // it was empty, so these fields failed wcag2a. Later rows use aria-label.
           <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
-            <label className="block space-y-1">
-              {i === 0 && <span className="text-xs text-fg-muted">Name</span>}
-              <Input value={v.name} onChange={(e) => setVariants((vs) => vs.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} />
-            </label>
-            <label className="block space-y-1">
-              {i === 0 && <span className="text-xs text-fg-muted">Weight (0–1)</span>}
-              <Input type="number" step={0.1} min={0} max={1} value={v.traffic_weight}
-                onChange={(e) => setVariants((vs) => vs.map((x, j) => j === i ? { ...x, traffic_weight: e.target.value } : x))} />
-            </label>
+            <Input
+              label={i === 0 ? 'Name' : undefined}
+              aria-label={i === 0 ? undefined : `Variant ${i + 1} name`}
+              value={v.name}
+              onChange={(e) => setVariants((vs) => vs.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+            />
+            <Input
+              label={i === 0 ? 'Weight (0–1)' : undefined}
+              aria-label={i === 0 ? undefined : `Variant ${i + 1} weight (0–1)`}
+              type="number"
+              step={0.1}
+              min={0}
+              max={1}
+              value={v.traffic_weight}
+              onChange={(e) => setVariants((vs) => vs.map((x, j) => j === i ? { ...x, traffic_weight: e.target.value } : x))}
+            />
             {i >= 2 && (
               <Btn size="sm" variant="ghost" onClick={() => setVariants((vs) => vs.filter((_, j) => j !== i))}>✕</Btn>
             )}
