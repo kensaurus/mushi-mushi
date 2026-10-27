@@ -136,7 +136,7 @@ export function isDestructiveLabel(label: string): boolean {
  * subscribes, signs out or signs in with a third-party account.
  */
 const FRESH_EYES_REFUSED_RE =
-  /\b(delete|remove|destroy|erase|revoke|disconnect|uninstall|pay|purchase|buy|checkout|subscribe|upgrade|charge|log ?out|sign ?out|cancel (?:plan|subscription))\b|\b(?:continue|sign ?(?:in|up)|log ?in|connect) (?:with|using|via) (?:google|github|apple|microsoft|facebook|gitlab|twitter|x|discord)\b/i
+  /\b(delete|remove|destroy|erase|revoke|disconnect|uninstall|pay|purchase|buy|checkout|subscribe|upgrade|charge|invite|log ?out|sign ?out|cancel (?:plan|subscription))\b|\b(?:continue|sign ?(?:in|up)|log ?in|connect) (?:with|using|via) (?:google|github|apple|microsoft|facebook|gitlab|twitter|x|discord)\b/i
 
 /** Pure: should a fresh-eyes run refuse to click an element with this label? */
 export function isFreshEyesRefusedLabel(label: string): boolean {

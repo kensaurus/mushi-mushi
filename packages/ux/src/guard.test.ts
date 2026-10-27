@@ -97,7 +97,7 @@ describe('isDestructiveLabel', () => {
 })
 
 describe('isFreshEyesRefusedLabel', () => {
-  it.each(['Delete project', 'Revoke key', 'Upgrade to Pro', 'Checkout', 'Sign out', 'Continue with GitHub', 'Sign in with Google', 'Log in with Apple', 'Subscribe'])(
+  it.each(['Delete project', 'Revoke key', 'Upgrade to Pro', 'Checkout', 'Sign out', 'Continue with GitHub', 'Sign in with Google', 'Log in with Apple', 'Subscribe', 'Invite teammate', 'Send invite'])(
     'refuses %s',
     (label) => expect(isFreshEyesRefusedLabel(label)).toBe(true),
   )

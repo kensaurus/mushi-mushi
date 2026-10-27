@@ -58,6 +58,10 @@ describe('synthetic identity', () => {
     expect(fillValue('Hi {{name}}', identity)).toBe('Hi Fresh Eyes 1')
     expect(fillValue('{{email}}', null)).toBeNull()
     expect(fillValue('My first app', null)).toBe('My first app')
+    // An email address the model made up is never typed: it would be a real person's, or an unflagged account.
+    expect(fillValue('bob@gmail.com', identity)).toBeNull()
+    expect(fillValue('contact me at bob@example.org please', null)).toBeNull()
+    expect(fillValue('{{email}}', identity)).toBe(identity.email)
     // Repeated calls must not depend on regex state.
     expect(fillValue('{{email}}', identity)).toBe(identity.email)
     expect(fillValue('{{email}}', null)).toBeNull()

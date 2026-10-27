@@ -63,6 +63,29 @@ export async function sweepSyntheticAccounts(db: CleanupDb, now: Date, warn: (ms
     }
     const personIds = (people.data ?? []).map((p) => p.id)
 
+    // Decide before deleting anything: an organization someone else joined or
+    // built in keeps the account and everything in it, and the sweep says so.
+    const orgs = (await db.from('organizations').select('id').eq('owner_id', uid)) as Res<Array<{ id: string }>>
+    if (orgs.error) {
+      fail('organizations', orgs.error)
+      continue
+    }
+    const orgIds = (orgs.data ?? []).map((o) => o.id)
+    let alone: string[] = []
+    if (orgIds.length) {
+      const members = (await db.from('organization_members').select('organization_id, user_id').in('organization_id', orgIds)) as Res<Array<{ organization_id: string; user_id: string }>>
+      const others = (await db.from('projects').select('organization_id, owner_id').in('organization_id', orgIds)) as Res<Array<{ organization_id: string | null; owner_id: string | null }>>
+      if (members.error || others.error) {
+        fail('organization_members', (members.error ?? others.error)!)
+        continue
+      }
+      alone = orgsOwnedAlone(orgs.data ?? [], members.data ?? [], others.data ?? [], uid)
+      if (alone.length < orgIds.length) {
+        fail('organizations_shared', { message: `${orgIds.length - alone.length} organization(s) have other members or projects` })
+        continue
+      }
+    }
+
     // 1. product events about it
     if (personIds.length) {
       const r = (await db.from('product_events').delete().in('end_user_id', personIds)) as Res<unknown>
@@ -93,25 +116,7 @@ export async function sweepSyntheticAccounts(db: CleanupDb, now: Date, warn: (ms
     }
 
     // 3. organizations it alone owns
-    const orgs = (await db.from('organizations').select('id').eq('owner_id', uid)) as Res<Array<{ id: string }>>
-    if (orgs.error) {
-      fail('organizations', orgs.error)
-      continue
-    }
-    const orgIds = (orgs.data ?? []).map((o) => o.id)
-    if (orgIds.length) {
-      const members = (await db.from('organization_members').select('organization_id, user_id').in('organization_id', orgIds)) as Res<Array<{ organization_id: string; user_id: string }>>
-      const others = (await db.from('projects').select('organization_id, owner_id').in('organization_id', orgIds)) as Res<Array<{ organization_id: string | null; owner_id: string | null }>>
-      if (members.error || others.error) {
-        fail('organization_members', (members.error ?? others.error)!)
-        continue
-      }
-      const alone = orgsOwnedAlone(orgs.data ?? [], members.data ?? [], others.data ?? [], uid)
-      if (alone.length < orgIds.length) {
-        // Someone else joined or built there: keep the account so the org's owner survives, and say so.
-        fail('organizations_shared', { message: `${orgIds.length - alone.length} organization(s) have other members or projects` })
-        continue
-      }
+    if (alone.length) {
       const r = (await db.from('organizations').delete().in('id', alone)) as Res<unknown>
       if (r.error) {
         fail('organizations_delete', r.error)

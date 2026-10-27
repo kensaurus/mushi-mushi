@@ -27,7 +27,7 @@ import { join, resolve } from 'node:path'
 import type { Page } from 'playwright'
 import { openSession, waitForContent, type BrowserSession } from './capture.js'
 import { DEFAULT_CURSOR_REVIEW_MODEL, firstJson } from './checker.js'
-import { blank, describeAction, normalizeMessage, onSite, parseAction, perform, signalKey, snapshotOf, watch, type ExploreAction, type Signal } from './explore.js'
+import { blank, describeAction, normalizeMessage, onSite, parseAction, perform, REFUSED_VALUE, signalKey, snapshotOf, watch, type ExploreAction, type Signal } from './explore.js'
 import { isCaptchaUrl, isFreshEyesRefusedLabel, requestRefusal, type AllowRule } from './guard.js'
 import { pagePath, type AuditFinding } from './audit.js'
 import { run } from './proc.js'
@@ -72,8 +72,16 @@ export interface Identity {
 const PLACEHOLDER_RE = /\{\{\s*(email|password|name)\s*\}\}/gi
 const HAS_PLACEHOLDER_RE = /\{\{\s*(email|password|name)\s*\}\}/i
 
-/** @internal Exported for tests only. Pure: the value to type: placeholders filled from the identity; null when one is needed and there is none. */
+/** An email address the model typed itself: a real person's, or one that would make an unflagged account. */
+const LITERAL_EMAIL_RE = /[^\s@{}]+@[^\s@{}]+\.[a-z]{2,}/i
+
+/**
+ * @internal Exported for tests only. Pure: the value to type: placeholders
+ * filled from the identity; null when one is needed and there is none, or
+ * when the model typed an email address of its own.
+ */
 export function fillValue(value: string, identity: Identity | null): string | null {
+  if (LITERAL_EMAIL_RE.test(value.replace(PLACEHOLDER_RE, ''))) return null
   if (!HAS_PLACEHOLDER_RE.test(value)) return value
   if (!identity) return null
   return value.replace(PLACEHOLDER_RE, (_, k: string) => {
@@ -673,7 +681,8 @@ export async function runFreshEyes(opts: FreshEyesOptions): Promise<FreshEyesRes
   const apiHosts = appOrigins.map((o) => new URL(o).host)
   const dryRun = !!opts.dryRun
   const browser = await (opts.session?.() ??
-    openSession({ headless: true, allow: opts.allow, policy: dryRun ? { writes: 'read-only' } : { writes: 'same-origin', appOrigins } }))
+    // Writes only with a synthetic identity to write as: a run with no account stays read-only.
+    openSession({ headless: true, allow: opts.allow, policy: !dryRun && opts.identity ? { writes: 'same-origin', appOrigins } : { writes: 'read-only' } }))
   const result: FreshEyesResult = {
     runId,
     dir,
@@ -717,7 +726,7 @@ export async function runFreshEyes(opts: FreshEyesOptions): Promise<FreshEyesRes
     // Replay each measured candidate from a fresh, signed-out page, without the model.
     for (const c of candidates.values()) {
       const confirmed = await replayCandidate(browser, base, c, identities.get(c.session) ?? null)
-      progress(`  ${confirmed ? 'confirmed' : 'not reproduced'}: ${candidateKey(c)}`)
+      progress(redact(`  ${confirmed ? 'confirmed' : 'not reproduced'}: ${candidateKey(c)}`, identities.get(c.session) ?? null))
       if (confirmed) result.findings.push(redact(measuredFinding(c, { start: opts.url, goal: opts.goal, hasAccount: result.hasAccount, sessions: [...c.sessions].sort((a, b) => a - b) }), identities.get(c.session) ?? null))
     }
     result.findings.push(...agreedOpinions(result.sessions, { goal: opts.goal, hasAccount: result.hasAccount }))
@@ -748,6 +757,7 @@ interface SessionCtx {
 
 async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
   const { index, identity, browser, opts, base } = x
+  const say = (line: string) => x.progress(redact(line, identity))
   const session: FreshEyesSession = { index, outcome: 'stalled', stall: null, ttfvSeconds: null, appSeconds: 0, readSeconds: 0, modelSeconds: 0, backtracks: 0, steps: [], opinions: [] }
   const ctx = await browser.freshContext()
   await likeARealBrowser(ctx, base.origin)
@@ -772,7 +782,8 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
   const shoot = async (n: number): Promise<string | undefined> => {
     const name = `s${index}-step${String(n).padStart(2, '0')}.png`
     try {
-      writeFileSync(join(x.dir, 'shots', name), await page.screenshot({ animations: 'disabled', caret: 'hide' }))
+      // Typed credentials stay off the screenshots the console shows.
+      writeFileSync(join(x.dir, 'shots', name), await page.screenshot({ animations: 'disabled', caret: 'hide', mask: [page.locator('input[type=password], input[type=email], input[autocomplete=email], input[autocomplete=username]')] }))
       return name
     } catch {
       return undefined
@@ -823,7 +834,8 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
         session.outcome = 'reached'
         break
       }
-      const snapshot = await snapshotOf(page)
+      // A filled field shows its value in the snapshot: the model gets the placeholders back, never the values.
+      const snapshot = redact(await snapshotOf(page), identity)
       const tAsk = performance.now()
       const answer = await x.ask(
         freshEyesPrompt({ goal: opts.goal, snapshot, done: session.steps.slice(1).map((s) => s.action), step: n, maxSteps: x.maxSteps, hasAccount: !!identity }),
@@ -832,7 +844,7 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
       const modelMs = since(tAsk)
       const parsed = parseFreshAction(answer.text)
       if (!parsed) {
-        x.progress(`  step ${n}: no usable action (${(answer.error ?? answer.text ?? '').slice(0, 80)})`)
+        say(`  step ${n}: no usable action (${(answer.error ?? answer.text ?? '').slice(0, 80)})`)
         session.modelSeconds += modelMs / 1000
         if (++unusable >= 3) {
           stall(n, 'error', `The model gave no usable action three times: ${(answer.error ?? '').slice(0, 120)}`)
@@ -864,7 +876,7 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
       }
       if (action.action === 'done') {
         doneClaims++
-        x.progress(`  step ${n}: the visitor thinks the goal is reached; the goal check says no`)
+        say(`  step ${n}: the visitor thinks the goal is reached; the goal check says no`)
         if (doneClaims >= 2) {
           stall(n, 'model_gave_up', 'The visitor believed the goal was reached, but the goal check did not pass.')
           session.opinions.push({ category: 'confusing', why: 'I thought I was done here.', screen, step: n })
@@ -877,22 +889,23 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
       const refusal = await perform(page, action, isFreshEyesRefusedLabel, (v) => fillValue(v, identity))
       const appMs = since(tAct)
       const step: FreshEyesStep = { n, action: describeFresh(action), path: '', screen: '', modelMs, appMs, readMs: 0, outcome: 'ok', ...(opinion ? { opinion } : {}) }
-      if (refusal) {
+      // What the guard refused during the action (a payment page, a third-party sign-in), even when the click itself then failed.
+      const refusedRequests = browser.guard.blocked
+        .slice(blockedBefore)
+        .map((r) => requestRefusal(r.method, r.url, true))
+        .filter((r): r is string => !!r)
+      if (refusal && !refusedRequests.length) {
         step.outcome = refusal.startsWith('refused') ? 'refused' : 'failed'
         step.note = refusal
         if (refusal.startsWith('refused')) x.refused.push(refusal)
         await record(step)
-        if (refusal === 'refused: no test account to type') {
+        if (refusal === REFUSED_VALUE && !identity) {
           stall(n, 'signup_wall', 'The visitor reached a form that needs an account and the run has none.')
           x.addCandidate({ kind: 'wall', screen, detail: 'The visitor tried to sign in or sign up; the run has no account.', steps: [...actions], session: index })
           break
         }
         continue
       }
-      const refusedRequests = browser.guard.blocked
-        .slice(blockedBefore)
-        .map((b) => requestRefusal(b.method, b.url, true))
-        .filter((r): r is string => !!r)
       if (refusedRequests.length) {
         step.outcome = 'blocked'
         step.note = `refused: ${refusedRequests[0]}`
@@ -931,7 +944,7 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
         step.requirements = [...new Set([...(step.requirements ?? []), ...found.map((r) => r.kind)])]
         for (const r of found) x.addCandidate({ kind: 'external', requirement: r.kind, evidence: r.evidence, screen: afterScreen, steps: [...actions], session: index })
       }
-      x.progress(`  step ${n}: ${step.action}${step.note ? ` (${step.note})` : ''} [app ${(appMs / 1000).toFixed(1)} s, model ${(modelMs / 1000).toFixed(0)} s]`)
+      say(`  step ${n}: ${step.action}${step.note ? ` (${step.note})` : ''} [app ${(appMs / 1000).toFixed(1)} s, model ${(modelMs / 1000).toFixed(0)} s]`)
       await record(step)
 
       // A CLI setup step: the terminal runner does it without the model, once a session.
@@ -942,7 +955,7 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
           const res = await opts.terminal({ ...values, dir: join(x.dir, 'terminal', `s${index}`) })
           for (const ph of res.phases) {
             session.steps.push({ n: session.steps.length, action: `Terminal: ${ph.name}`, path, screen: afterScreen, modelMs: 0, appMs: ph.ms, readMs: 0, outcome: 'terminal', note: ph.detail.slice(0, 200) })
-            x.progress(`  terminal ${ph.name}: ${ph.ok ? 'ok' : 'failed'} in ${(ph.ms / 1000).toFixed(1)} s`)
+            say(`  terminal ${ph.name}: ${ph.ok ? 'ok' : 'failed'} in ${(ph.ms / 1000).toFixed(1)} s`)
           }
           if (!res.ok) {
             const failed = res.phases.find((p) => !p.ok)

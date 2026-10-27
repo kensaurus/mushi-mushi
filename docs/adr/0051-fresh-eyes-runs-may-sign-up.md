@@ -42,18 +42,26 @@ and model-free replay.
 - **Writes only on the app's own origins.** Guard mode `writes: 'same-origin'`
   lets non-GET requests reach the start URL's origin and the hosts given as
   the app's (`--app-host`, e.g. the Supabase project). Everything else stays
-  read-only. The default stays read-only, and `--dry-run` forces it.
-- **Always refused, in every mode, for every method:** payment hosts, third-
-  party OAuth and sign-in hosts (Google, GitHub, Apple, Microsoft, and
-  `auth/v1/authorize?provider=`), and captcha hosts. A captcha is never
-  solved: the session stops there and reports it. The public sign-up, OTP and
-  password-recovery endpoints (`auth/v1/signup|otp|recover`) are never
-  called, even on the app's own origin: a run never creates an account through
-  the public form. Elements labelled delete, remove, revoke, pay, checkout,
-  subscribe, sign out or "continue with Google/GitHub/Apple" are never clicked.
+  read-only. The default stays read-only; `--dry-run`, and any run with no
+  synthetic identity to write as, keep it read-only.
+- **Always refused, in every mode:** any write to, and any page navigation
+  into, a payment host or a third-party sign-in host (Google, GitHub, Apple,
+  Microsoft); a third-party sign-in started through the app
+  (`auth/v1/authorize?provider=`, any method); and the public sign-up, OTP,
+  magic-link and password-recovery calls (`auth/v1/signup|otp|recover`), even
+  on the app's own origin, so a run never creates an account through the
+  public form. Scripts and images from those hosts (Stripe.js) still load. A
+  captcha is detected, never solved: the session stops there and reports it.
+  Elements whose label reads as delete, remove, revoke, pay, checkout,
+  upgrade, subscribe, invite, sign out or "continue with Google/GitHub/Apple"
+  are never clicked, checked on the element the click resolves to and on the
+  focused element before Enter or Space. An email address the model types
+  itself (not `{{email}}`) is never typed.
 - **Synthetic identity.** The model types placeholders (`{{email}}`,
   `{{password}}`, `{{name}}`); code substitutes the values. Real values never
-  reach the prompt, the timeline, the console sync or the logs. Without an
+  reach the prompt (a filled field's value is redacted from the snapshot), the
+  timeline, the console sync or the logs, and credential fields are masked in
+  screenshots. Without an
   account the run stops at the sign-up wall and files that as its finding.
 - **Synthetic accounts (Mushi only).** `POST /v1/admin/fresh-eyes/test-account`
   (an operator, `MUSHI_OPERATOR_USER_IDS`; never a synthetic account) creates
@@ -63,8 +71,10 @@ and model-free replay.
   and lifecycle email already excludes; server product events for it are not
   written. The daily `retention-sweep` deletes it once it is 24 h old, with
   the projects and organizations it alone owns (an organization someone else
-  joined keeps its account, and the sweep says so). Other apps can pass their own test account; a
-  hosted "test sign-up hook" for them is not built.
+  joined keeps its account and everything in it, and the sweep says so). Other
+  apps pass their own test account (`MUSHI_FRESH_EYES_EMAIL` /
+  `MUSHI_FRESH_EYES_PASSWORD`); a hosted "test sign-up hook" for them is not
+  built.
 - **Time is the app's time.** Each step records the model's think time and the
   app's time (action, navigation, settle) apart. Time to first value is the
   app time to the success check plus a reading-time estimate for each new

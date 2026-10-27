@@ -120,12 +120,13 @@ export function runSnapshot(r: FreshEyesResult, status: 'running' | 'done' | 'fa
     ttfv_seconds: r.ttfvSeconds,
     steps: r.steps,
     reached: r.reached,
-    stalled_at: r.stalledAt,
-    findings: r.findings.map((f) => ({ fingerprint: f.fingerprint, severity: f.severity, basis: f.basis, summary: f.summary.slice(0, 300), sessions: f.sessions })),
-    sessions: r.sessions.map((s) => ({
+    stalled_at: r.stalledAt ? { ...r.stalledAt, screen: r.stalledAt.screen.slice(0, 300) } : null,
+    // The console keeps at most 50 findings and 20 signals a step: a noisy page must not fail the whole sync.
+    findings: r.findings.slice(0, 50).map((f) => ({ fingerprint: f.fingerprint, severity: f.severity, basis: f.basis, summary: f.summary.slice(0, 300), sessions: f.sessions })),
+    sessions: r.sessions.slice(0, 10).map((s) => ({
       index: s.index,
       outcome: s.outcome,
-      stall: s.stall,
+      stall: s.stall ? { ...s.stall, screen: s.stall.screen.slice(0, 300), detail: s.stall.detail.slice(0, 300) } : null,
       ttfv_seconds: s.ttfvSeconds,
       app_seconds: s.appSeconds,
       read_seconds: s.readSeconds,
@@ -144,8 +145,8 @@ export function runSnapshot(r: FreshEyesResult, status: 'running' | 'done' | 'fa
         opinion: st.opinion ?? null,
         backtrack: !!st.backtrack,
         dead_end: !!st.deadEnd,
-        requirements: st.requirements ?? [],
-        signals: st.signals ?? [],
+        requirements: [...new Set(st.requirements ?? [])].slice(0, 4),
+        signals: [...new Set(st.signals ?? [])].slice(0, 20),
         shot: st.shot ?? null,
       })),
     })),

@@ -192,11 +192,31 @@ async function target(page: Page, role: string, name: string) {
   return page.getByRole(role as AriaRole, { name }).first()
 }
 
+/** What perform returns when fillValue refuses a value. */
+export const REFUSED_VALUE = 'refused: a test run types only its own test account'
+
+/** The accessible label an element reads as, best effort: aria-label, its text, its value or title. */
+async function accessibleLabel(loc: Awaited<ReturnType<typeof target>>): Promise<string> {
+  return loc
+    .evaluate((el) => {
+      const h = el as HTMLElement
+      const labelled = h.getAttribute('aria-labelledby')
+      const byId = labelled ? labelled.split(/\s+/).map((id) => document.getElementById(id)?.innerText ?? '').join(' ') : ''
+      return (h.getAttribute('aria-label') || byId || h.innerText || h.getAttribute('value') || h.getAttribute('title') || '').trim().slice(0, 200)
+    }, undefined, { timeout: 3000 })
+    .catch(() => '')
+}
+
 /**
  * Run one action. Returns a reason when it was refused or could not run.
  * `refuse` decides which labels are never clicked (fresh-eyes may submit and
  * send, discovery may not); `fillValue` turns a typed value into what is
  * actually typed (fresh-eyes substitutes its synthetic identity).
+ *
+ * The label is checked twice: as the model wrote it, and as the element the
+ * locator resolved to reads (a role and name match by substring, so "project"
+ * could land on "Delete project"). Enter and Space are checked against the
+ * focused element, since they press it.
  */
 export async function perform(
   page: Page,
@@ -208,21 +228,35 @@ export async function perform(
     switch (a.action) {
       case 'click': {
         if (refuse(a.name)) return `refused: "${a.name}" reads as destructive`
-        await (await target(page, a.role, a.name)).click({ timeout: 5000 })
+        const loc = await target(page, a.role, a.name)
+        const resolved = await accessibleLabel(loc)
+        if (resolved && refuse(resolved)) return `refused: "${resolved.slice(0, 80)}" reads as destructive`
+        await loc.click({ timeout: 5000 })
         break
       }
       case 'fill': {
         const value = fillValue(a.value)
-        if (value === null) return 'refused: no test account to type'
+        if (value === null) return REFUSED_VALUE
         await (await target(page, a.role, a.name)).fill(value, { timeout: 5000 })
         break
       }
       case 'select':
         await (await target(page, a.role, a.name)).selectOption({ label: a.value }, { timeout: 5000 })
         break
-      case 'press':
+      case 'press': {
+        if (a.key === 'Enter' || a.key === 'Space') {
+          const focused = await page
+            .evaluate(() => {
+              const el = document.activeElement as HTMLElement | null
+              if (!el || el === document.body) return ''
+              return (el.getAttribute('aria-label') || el.innerText || el.getAttribute('value') || el.getAttribute('title') || '').trim().slice(0, 200)
+            })
+            .catch(() => '')
+          if (focused && refuse(focused)) return `refused: "${focused.slice(0, 80)}" reads as destructive`
+        }
         await page.keyboard.press(a.key === 'Space' ? ' ' : a.key)
         break
+      }
       case 'back':
         await page.goBack({ timeout: 15_000 })
         break

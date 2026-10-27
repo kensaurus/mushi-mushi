@@ -115,12 +115,17 @@ describe('sweepSyntheticAccounts', () => {
       synthetic_accounts: [{ user_id: U, expires_at: '2026-10-28T01:00:00.000Z' }],
       organizations: [{ id: 'o1', owner_id: U }],
       organization_members: [{ organization_id: 'o1', user_id: U }, { organization_id: 'o1', user_id: REAL }],
+      projects: [{ id: 'p-shared', owner_id: U, organization_id: 'o1' }],
+      product_events: [{ id: 9, end_user_id: null, properties: { project_id: 'p-shared' } }],
     })
     const stats = await sweepSyntheticAccounts(db as unknown as CleanupDb, NOW, (m, ctx) => warnings.push(`${m}:${String(ctx.step)}`))
     expect(stats.accounts_deleted).toBe(0)
     expect(stats.failed).toBe(1)
     expect(deleted).toEqual([])
     expect(db.tables.organizations).toHaveLength(1)
+    // Nothing in it was deleted before the check: another member may work there.
+    expect(db.tables.projects!.map((p) => p.id)).toEqual(['p-shared'])
+    expect(db.tables.product_events).toHaveLength(1)
     expect(warnings).toEqual(['synthetic_account_cleanup_failed:organizations_shared'])
   })
 

@@ -277,7 +277,7 @@ export function registerFreshEyesRoutes(app: Hono<{ Variables: Variables }>): vo
     if (!access.allowed) return jsonError(c, 'FORBIDDEN', 'Not a member of this project', 403)
     const { data: run, error } = await db
       .from('ux_runs')
-      .select('id, local_run_id, status, model, goal, start_url, timeline, ttfv_seconds, steps, reached, stalled_at, findings, dry_run, has_account, started_at, finished_at')
+      .select('id, local_run_id, status, model, goal, start_url, timeline, ttfv_seconds, steps, reached, stalled_at, findings, dry_run, has_account, counts, started_at, finished_at')
       .eq('project_id', projectId)
       .eq('local_run_id', localRunId)
       .eq('kind', 'fresh_eyes')

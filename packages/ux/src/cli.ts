@@ -471,7 +471,7 @@ program
   .option('--allow <rule>', 'Allow a non-GET request that only reads (repeatable)', collect, [])
   .option('--out <dir>', 'Where the timeline, screenshots and result go')
   .option('--sync', 'Mirror the run to the console (UX runs → Fresh eyes)')
-  .option('--file', `File confirmed findings as Mushi reports (at most 15 a run, deduped)`)
+  .option('--file', 'File confirmed findings as Mushi reports (at most 15 a run, deduped); mirrors the run to the console too')
   .option('--dry-run', 'Read-only, no account, nothing synced or filed: tests up to the sign-up wall')
   .action(
     async (o: {
@@ -527,7 +527,8 @@ program
       )
       console.log(`${result.findings.length} finding(s), ${result.blocked} request(s) blocked. Timeline: ${timeline}`)
       for (const w of result.warnings) console.warn(w)
-      if (o.sync && cfg && !o.dryRun) {
+      // Findings are filed against the synced run, so --file syncs it too.
+      if ((o.sync || o.file) && cfg && !o.dryRun) {
         const err = await syncFreshEyes(cfg, result, null)
         console.log(err ? `Console sync failed: ${err}` : 'Synced to the console (UX runs → Fresh eyes).')
       }

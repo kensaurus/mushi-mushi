@@ -59,9 +59,9 @@ async function startFixture(otherOrigin: string): Promise<Fixture> {
     if (path === '/') {
       return send(200, html('Acme', `<h1>Acme explains your bugs</h1><p>Sign in to see why your app broke, in plain words, with a fix ready for your editor. It takes about a minute.</p><a href="/login">Get started</a> <a href="/pricing">Pricing</a> <button id="copy">Copy the install line</button>`, "document.getElementById('copy').onclick = () => navigator.clipboard.writeText('npm i acme')"))
     }
-    if (path === '/pricing') return send(200, html('Pricing', `<h1>Pricing</h1><p>Free for one app, more when you grow.</p><a href="https://checkout.stripe.com/c/pay/cs_test_1">Upgrade</a> <a href="/">Home</a>`))
+    if (path === '/pricing') return send(200, html('Pricing', `<h1>Pricing</h1><p>Free for one app, more when you grow.</p><a href="https://checkout.stripe.com/c/pay/cs_test_1">Upgrade</a> <a href="https://checkout.stripe.com/c/pay/cs_test_2">See plans</a> <a href="/">Home</a>`))
     if (path === '/login' && method === 'GET') {
-      return send(200, html('Sign in', `<h1>Sign in to Acme</h1><a href="https://github.com/login/oauth/authorize?client_id=1">Continue with GitHub</a><form method="post" action="/api/session"><label>Email <input type="email" name="email"></label><label>Password <input type="password" name="password"></label><button type="submit">Sign in</button></form>`))
+      return send(200, html('Sign in', `<h1>Sign in to Acme</h1><a href="https://github.com/login/oauth/authorize?client_id=1">Continue with GitHub</a> <a href="https://github.com/login/oauth/authorize?client_id=2">More ways in</a><form method="post" action="/api/session"><label>Email <input type="email" name="email"></label><label>Password <input type="password" name="password"></label><button type="submit">Sign in</button></form>`))
     }
     if (path === '/api/session' && method === 'POST') {
       const w = writes.at(-1)!
@@ -69,7 +69,7 @@ async function startFixture(otherOrigin: string): Promise<Fixture> {
       return send(303, '', ok ? { location: '/dashboard', 'set-cookie': 'sid=1; Path=/' } : { location: '/login' })
     }
     if (path === '/dashboard') {
-      return send(200, html('Dashboard', `<h1>Welcome to your dashboard</h1><p>Create your first app to get a report and its diagnosis.</p><button id="create">Create app</button>`, `fetch('${otherOrigin}/collect', { method: 'POST', body: 'x' }).catch(() => {})
+      return send(200, html('Dashboard', `<h1>Welcome to your dashboard</h1><p>Create your first app to get a report and its diagnosis.</p><button id="create">Create app</button> <button id="del" onclick="fetch('/api/projects/1', { method: 'DELETE' })">Delete project</button>`, `fetch('${otherOrigin}/collect', { method: 'POST', body: 'x' }).catch(() => {})
 document.getElementById('create').onclick = async () => { await fetch('/api/apps', { method: 'POST', body: '{}' }); location.href = '/reports/1' }`))
     }
     if (path === '/api/apps' && method === 'POST') {
@@ -83,24 +83,32 @@ document.getElementById('create').onclick = async () => { await fetch('/api/apps
 }
 
 /** A scripted visitor: reads the snapshot and the steps so far, like the model would. */
-function scriptedAsk(feelingOnLanding: (session: number) => boolean): FreshAsk {
+function scriptedAsk(feelingOnLanding: (session: number) => boolean, prompts: string[] = []): FreshAsk {
   return async (prompt, dir) => {
+    prompts.push(prompt)
     const snap = prompt.split('<snapshot>')[1]?.split('</snapshot>')[0] ?? ''
     const did = prompt.split('<snapshot>')[0] ?? ''
     const session = Number(/[\\/]s(\d+)-\d+$/.exec(dir)?.[1] ?? '1')
     const noAccount = prompt.includes('You have no account yet')
     const j = (o: object) => ({ text: JSON.stringify(o) })
     if (snap.includes('Why it broke')) return j({ action: 'done' })
-    if (snap.includes('Create app')) return j({ action: 'click', role: 'button', name: 'Create app' })
+    if (snap.includes('Create app')) {
+      // "project" resolves to "Delete project": the resolved label is checked, not only the words the model used.
+      if (!did.includes('Click the button "project"')) return j({ action: 'click', role: 'button', name: 'project' })
+      return j({ action: 'click', role: 'button', name: 'Create app' })
+    }
     if (snap.includes('Sign in to Acme')) {
       if (noAccount) return j({ action: 'stuck', reason: 'needs an account' })
       if (!did.includes('Continue with GitHub')) return j({ action: 'click', role: 'link', name: 'Continue with GitHub' })
+      if (!did.includes('More ways in')) return j({ action: 'click', role: 'link', name: 'More ways in' })
       if (!did.includes('{{email}}')) return j({ action: 'fill', role: 'textbox', name: 'Email', value: '{{email}}' })
       if (!did.includes('{{password}}')) return j({ action: 'fill', role: 'textbox', name: 'Password', value: '{{password}}' })
       return j({ action: 'click', role: 'button', name: 'Sign in' })
     }
     if (snap.includes('Pricing') && snap.includes('Upgrade')) {
-      return did.includes('Upgrade') ? j({ action: 'click', role: 'link', name: 'Home' }) : j({ action: 'click', role: 'link', name: 'Upgrade' })
+      if (!did.includes('Upgrade')) return j({ action: 'click', role: 'link', name: 'Upgrade' })
+      if (!did.includes('See plans')) return j({ action: 'click', role: 'link', name: 'See plans' })
+      return j({ action: 'click', role: 'link', name: 'Home' })
     }
     if (snap.includes('Acme explains your bugs')) {
       const feeling = feelingOnLanding(session) ? { feeling: 'unclear_copy', why: 'What is a diagnosis?' } : {}
@@ -140,6 +148,7 @@ afterAll(async () => {
 describe('fresh-eyes on a local app', () => {
   it('signs in with the synthetic identity, writes only to the app, and reaches the goal', async () => {
     const dir = out()
+    const prompts: string[] = []
     const result = await runFreshEyes({
       url: `${app.url}/`,
       goal: 'see why my app broke',
@@ -147,10 +156,13 @@ describe('fresh-eyes on a local app', () => {
       sessions: 2,
       steps: 15,
       identity: async () => IDENTITY,
-      ask: scriptedAsk(() => true),
+      ask: scriptedAsk(() => true, prompts),
       outDir: dir,
     })
     expect(result.reached).toBe(2)
+    // The model never sees the real values, though the filled fields show them in the snapshot.
+    expect(prompts.some((p) => p.includes('{{email}}'))).toBe(true)
+    expect(prompts.some((p) => p.includes(IDENTITY.email) || p.includes(IDENTITY.password))).toBe(false)
     expect(result.ttfvSeconds).toBeGreaterThan(0)
     // The app got the real values; the record keeps only placeholders.
     expect(app.writes.some((w) => w.path === '/api/session' && w.body.includes(encodeURIComponent(IDENTITY.password)))).toBe(true)
@@ -164,6 +176,13 @@ describe('fresh-eyes on a local app', () => {
     const steps = result.sessions.flatMap((s) => s.steps)
     expect(steps.some((s) => s.action.includes('Continue with GitHub') && (s.outcome === 'refused' || s.outcome === 'blocked'))).toBe(true)
     expect(steps.some((s) => s.action.includes('Upgrade') && s.outcome === 'refused')).toBe(true)
+    // Neutral labels that lead to a payment page or a third-party sign-in are stopped by the network guard.
+    expect(steps.filter((s) => s.action.includes('See plans')).every((s) => s.outcome === 'blocked')).toBe(true)
+    expect(steps.filter((s) => s.action.includes('More ways in')).every((s) => s.outcome === 'blocked' && s.requirements?.includes('third_party_account'))).toBe(true)
+    expect(steps.some((s) => s.action.includes('See plans'))).toBe(true)
+    // "project" resolved to "Delete project" and was refused; the delete never reached the app.
+    expect(steps.some((s) => s.action === 'Click the button "project"' && s.outcome === 'refused')).toBe(true)
+    expect(app.writes.some((w) => w.method === 'DELETE')).toBe(false)
     expect(result.sessions.every((s) => s.steps.every((st) => st.modelMs >= 0 && st.appMs >= 0))).toBe(true)
     // The copy button works in a browser that grants the clipboard, as a person's does.
     expect(result.findings.some((f) => /clipboard/i.test(f.summary))).toBe(false)
@@ -171,6 +190,22 @@ describe('fresh-eyes on a local app', () => {
     const opinions = result.findings.filter((f) => f.basis === 'opinion')
     expect(opinions).toHaveLength(1)
     expect(opinions[0]!.sessions).toEqual([1, 2])
+  }, 240_000)
+
+  it('not a dry run but no account: still writes nothing', async () => {
+    const before = app.writes.length
+    const result = await runFreshEyes({
+      url: `${app.url}/`,
+      goal: 'see why my app broke',
+      success: { url: '/reports/*', text: 'Why it broke' },
+      sessions: 1,
+      steps: 10,
+      ask: scriptedAsk(() => false),
+      outDir: out(),
+    })
+    expect(result.hasAccount).toBe(false)
+    expect(app.writes.length).toBe(before)
+    expect(result.stalledAt?.reason).toBe('signup_wall')
   })
 
   it('with no account writes nothing and stops at the sign-in wall, a confirmed finding', async () => {
