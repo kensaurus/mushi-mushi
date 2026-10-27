@@ -156,6 +156,8 @@ export function MetricTimeline({ points, markers = [], dots = [], title, formatV
         <span>{shortDate(scale.t0)}</span>
         <span>{shortDate(scale.t1)}</span>
       </div>
+      {/* A table ignores sr-only's 1px width; the div holds it so the page never scrolls sideways. */}
+      <div className="sr-only">
       <ChartAccessibleSummary
         caption={title}
         columns={[
@@ -169,6 +171,7 @@ export function MetricTimeline({ points, markers = [], dots = [], title, formatV
           ...shownDots.map((d) => ({ when: new Date(time(d.ts)).toLocaleString(), what: d.label, value: formatValue(d.value) })),
         ]}
       />
+      </div>
     </figure>
   )
 }
