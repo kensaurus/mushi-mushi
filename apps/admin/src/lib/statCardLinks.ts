@@ -4,6 +4,9 @@
  *          a KPI strip into the page that owns that metric.
  */
 
+import { NAV_REGISTRY } from './navRegistry'
+import { HEALTH_HUB, HOME_HUB, TEAM_HUB, legacyHubRoutes, type PageHub } from './pageHubs'
+
 /* ── Dashboard ─────────────────────────────────────────────────────────── */
 
 /* ── Fixes ─────────────────────────────────────────────────────────────── */
@@ -296,85 +299,77 @@ export const notificationsLinks = {
   lastMessage: '/notifications?tab=inbox',
 } as const
 
-const PAGE_LABELS: Record<string, string> = {
-  dashboard: 'Dashboard',
-  inbox: 'Inbox',
-  reports: 'Reports',
-  fixes: 'Fixes',
-  health: 'Health',
-  graph: 'Graph',
-  cost: 'LLM Cost',
-  billing: 'Billing',
-  releases: 'Releases',
-  repo: 'Repo',
-  judge: 'Judge',
-  integrations: 'Integrations',
-  settings: 'Settings',
-  onboarding: 'Setup',
-  mcp: 'MCP',
-  rewards: 'Rewards',
-  explore: 'Codebase',
-  lessons: 'Lessons',
-  anomalies: 'Anomalies',
-  drift: 'Drift',
-  experiments: 'Experiments',
-  feedback: 'Feedback',
-  'qa-coverage': 'QA Coverage',
-  query: 'Query',
-  research: 'Research',
-  storage: 'Storage',
-  sso: 'SSO',
-  users: 'Users',
-  audit: 'Audit',
-  compliance: 'Compliance',
-  intelligence: 'Intelligence',
-  iterate: 'Iterate',
-  marketplace: 'Marketplace',
-  inventory: 'Inventory',
-  notifications: 'Notifications',
-  sdk: 'SDK Setup',
-  'anti-gaming': 'Anti-gaming',
-}
+/**
+ * Page names come from the nav registry and the hub views (lib/pageHubs), so
+ * a renamed page is renamed here too. Before this, a hand-kept map told
+ * screen readers "Go to Health · LLM", "Drift", "Anomalies", "Intelligence",
+ * "Iterate" and "Repo" years after those pages were renamed (report c0dc93ec).
+ */
+const PAGE_LABEL_BY_PATH: ReadonlyMap<string, string> = new Map(
+  NAV_REGISTRY.filter((e) => !e.path.includes('?')).map((e) => [e.path, e.label] as const),
+)
 
+/** `/drift` → "Schema changes": a retired route reads as the view it opens now. */
+const LEGACY_VIEW_LABEL: ReadonlyMap<string, string> = new Map(
+  legacyHubRoutes().map((r) => [r.path, r.hub.views.find((v) => v.id === r.viewId)?.label ?? r.hub.path] as const),
+)
+
+const HUBS_BY_PATH: ReadonlyMap<string, PageHub> = new Map([HOME_HUB, HEALTH_HUB, TEAM_HUB].map((h) => [h.path, h] as const))
+
+/** Tab ids as the pages name them, in plain words. Unknown ids are title-cased. */
 const TAB_LABELS: Record<string, string> = {
   overview: 'Overview',
   queue: 'Queue',
   severity: 'Severity',
-  attempts: 'Attempts',
-  pipeline: 'Pipeline',
-  llm: 'LLM',
-  cron: 'Cron',
+  attempts: 'All fixes',
+  pipeline: 'In flight',
+  llm: 'AI calls',
+  cron: 'Background jobs',
   activity: 'Activity',
-  explore: 'Explore',
+  explore: 'Map',
   backend: 'Backend',
   breakdown: 'Breakdown',
-  log: 'Raw log',
+  log: 'Log',
   drafts: 'Drafts',
   published: 'Published',
-  branches: 'Branches',
-  scores: 'Scores',
-  disagreements: 'Disagreements',
+  branches: 'Pull requests',
+  evaluations: 'Grades',
+  trend: 'Trend',
   prompts: 'Prompts',
   platform: 'Platform',
   routing: 'Routing',
-  byok: 'BYOK keys',
-  sdk: 'SDK widget',
+  byok: 'AI keys',
+  sdk: 'SDK & connection',
   general: 'General',
-  setup: 'Checklist',
+  setup: 'Setup',
   keys: 'API keys',
-  tools: 'Tools',
+  tools: 'Web tools',
   contributors: 'Contributors',
   rules: 'Rules',
   tiers: 'Tiers',
   quests: 'Quests',
   plans: 'Plans',
-  inbox: 'Inbox',
-  anomalies: 'Findings',
+  inbox: 'Received',
+  anomalies: 'Spikes',
   metrics: 'Metrics',
   findings: 'Findings',
-  snapshots: 'Snapshots',
+  snapshots: 'Scans',
   scanner: 'Scanner',
   loop: 'Loop',
+  history: 'History',
+  search: 'Search',
+  catalog: 'Catalog',
+  clusters: 'Patterns',
+  lessons: 'Lessons',
+  runs: 'Runs',
+  experiments: 'Experiments',
+  reports: 'Reports',
+  stories: 'Stories',
+  deliveries: 'Deliveries',
+  installed: 'Installed',
+  browse: 'Browse',
+  usage: 'Usage',
+  configure: 'Configure',
 }
 
 function titleCase(slug: string): string {
@@ -384,23 +379,59 @@ function titleCase(slug: string): string {
     .join(' ')
 }
 
-/** Human label for a StatCard link target — used in hover "Go to …" copy. */
-export function statDestinationLabel(to: string): string {
-  const [pathname, search = ''] = to.split('?')
-  const pageKey = pathname.replace(/^\//, '').split('/')[0] ?? ''
-  const page = PAGE_LABELS[pageKey] ?? titleCase(pageKey)
+/** The page (or hub view) a link target opens, in the sidebar's words. */
+function pageLabelFor(pathname: string, params: URLSearchParams): string {
+  const hub = HUBS_BY_PATH.get(pathname)
+  const viewId = params.get('view')
+  if (hub && viewId) {
+    const view = hub.views.find((v) => v.id === viewId)
+    if (view) return view.label
+  }
+  return (
+    LEGACY_VIEW_LABEL.get(pathname) ??
+    PAGE_LABEL_BY_PATH.get(pathname) ??
+    PAGE_LABEL_BY_PATH.get(`/${pathname.replace(/^\//, '').split('/')[0]}`) ??
+    titleCase(pathname.replace(/^\//, '').split('/')[0] ?? '')
+  )
+}
 
-  const params = new URLSearchParams(search)
+/** Human label for a link target — used in "Go to …" copy and aria-labels. */
+export function statDestinationLabel(to: string): string {
+  const [rawPath, search = ''] = to.split('?')
+  const pathname = (rawPath.split('#')[0] || '/').replace(/\/$/, '') || '/'
+  const params = new URLSearchParams(search.split('#')[0])
+  const page = pageLabelFor(pathname, params)
+
   const tab = params.get('tab')
   if (tab) {
     const tabLabel = TAB_LABELS[tab] ?? titleCase(tab)
-    return `${page} · ${tabLabel}`
+    return tabLabel === page ? page : `${page} · ${tabLabel}`
   }
 
   const status = params.get('status')
-  if (status) {
-    return `${page} · ${titleCase(status)}`
-  }
+  if (status) return `${page} · ${titleCase(status.replace(/_/g, '-'))}`
 
   return page
+}
+
+/**
+ * The link's verb and destination as seen from the page the user is on: a
+ * link to another tab of the same page reads "Show Trend", not
+ * "Go to Triage grading · Trend".
+ */
+export function statLinkLabel(to: string, currentPathname: string | null): string {
+  const [rawPath, search = ''] = to.split('?')
+  const target = (rawPath.split('#')[0] || '/').replace(/\/$/, '') || '/'
+  const here = (currentPathname ?? '').replace(/\/$/, '') || '/'
+  if (currentPathname != null && target === here) {
+    const params = new URLSearchParams(search.split('#')[0])
+    const tab = params.get('tab')
+    if (tab) return `Show ${TAB_LABELS[tab] ?? titleCase(tab)}`
+    const view = params.get('view')
+    const hub = HUBS_BY_PATH.get(target)
+    const viewLabel = view && hub ? hub.views.find((v) => v.id === view)?.label : null
+    if (viewLabel) return `Show ${viewLabel}`
+    return 'Show the list'
+  }
+  return `Go to ${statDestinationLabel(to)}`
 }

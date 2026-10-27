@@ -1126,3 +1126,29 @@ export const CORE_NAV_PATHS: readonly string[] = [
   '/team',
   '/settings',
 ]
+
+const SECTION_BY_STAGE: Record<PdcaStageId, NavSectionId> = {
+  plan: 'plan',
+  do: 'do',
+  check: 'check',
+  act: 'act',
+}
+
+/**
+ * A stage chip in the user's words: the cycle step it belongs to (ADR 0027),
+ * e.g. "Verify", "step 4", never "PDCA stage: Check".
+ */
+export function cycleStepForStage(stage: PdcaStageId): { step: number; title: string; hint: string } {
+  const meta = NAV_SECTION_META[SECTION_BY_STAGE[stage]]
+  return { step: meta.step ?? 0, title: meta.title, hint: meta.hint }
+}
+
+/** Words for the header's stage chip: cycle step number, title and hint. */
+export function stageChipCopy(chip: 'overview' | PdcaStageId): { glyph: string; label: string; hint: string; ariaLabel: string } {
+  if (chip === 'overview') {
+    const hint = 'Everything that needs you across your bugs, fixes and releases.'
+    return { glyph: '∞', label: 'Overview', hint, ariaLabel: `Overview: ${hint}` }
+  }
+  const { step, title, hint } = cycleStepForStage(chip)
+  return { glyph: String(step), label: title, hint, ariaLabel: `Step ${step}: ${title}. ${hint}` }
+}

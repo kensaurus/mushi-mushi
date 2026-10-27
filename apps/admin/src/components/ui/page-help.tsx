@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import type { ReactNode, ReactEventHandler } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath } from '../../lib/pdca';
+import { stageChipCopy } from '../../lib/navRegistry';
 import { PAGE_FLOW_LINKS, flowLinkBlurb, resolveFlowPath, type PageFlowLink } from '../../lib/pageLinks';
 import { navIconForPath } from '../../lib/pageNavIcons';
 import { HelpBulletList, HelpRichText } from '../HelpRichText';
@@ -87,23 +88,22 @@ function AutoPdcaChip() {
   const chip = chipForPath(pathname)
   if (!chip) return null
   const meta = chip === 'overview' ? PDCA_OVERVIEW_CHIP : PDCA_STAGES[chip]
-  const ariaLabel = chip === 'overview'
-    ? `Overview: ${meta.hint}`
-    : `PDCA stage: ${meta.label}. ${meta.hint}`
+  // Colours from the stage; words from the cycle step the sidebar shows (ADR 0027).
+  const copy = stageChipCopy(chip)
   return (
-    <Tooltip content={meta.hint}>
+    <Tooltip content={copy.hint}>
       <span
         role="img"
         className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-2xs uppercase tracking-wider cursor-help ${meta.tintBg} ${meta.tintBorder} ${meta.text}`}
-        aria-label={ariaLabel}
+        aria-label={copy.ariaLabel}
       >
         <span
           className={`inline-flex h-3.5 w-3.5 items-center justify-center rounded-sm font-semibold text-3xs ${meta.badgeBg} ${meta.badgeFg}`}
           aria-hidden="true"
         >
-          {meta.letter}
+          {copy.glyph}
         </span>
-        {meta.label}
+        {copy.label}
       </span>
     </Tooltip>
   )
@@ -293,16 +293,38 @@ export function PageHelpBanner({
         </div>
       </div>
     </details>
-    {visibleLinks.length > 0 && (
-      <nav aria-label="Related pages" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-2xs text-fg-muted">
-        <span>Related:</span>
-        {visibleLinks.map((l) => (
-          <Link key={l.to} to={l.to} title={flowLinkBlurb(l)} className="text-fg-secondary underline decoration-edge underline-offset-2 hover:text-fg">
-            {l.label}
-          </Link>
-        ))}
-      </nav>
-    )}
+    <RelatedLinksRow links={visibleLinks} />
+    </div>
+  )
+}
+
+function RelatedLinksRow({ links }: { links: PageFlowLink[] }) {
+  if (links.length === 0) return null
+  return (
+    <nav aria-label="Related pages" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-2xs text-fg-muted">
+      <span>Related:</span>
+      {links.map((l) => (
+        <Link key={l.to} to={l.to} title={flowLinkBlurb(l)} className="text-fg-secondary underline decoration-edge underline-offset-2 hover:text-fg">
+          {l.label}
+        </Link>
+      ))}
+    </nav>
+  )
+}
+
+/**
+ * The "Related:" row on its own, for a page whose help sits in the header
+ * popover. It stays visible under the content: the owner could not find the
+ * cross-links while they sat inside the closed help (2026-10-08).
+ */
+export function PageRelatedRow({ relatedLinks, flowPath }: { relatedLinks?: PageFlowLink[]; flowPath?: string }) {
+  const { pathname } = useLocation()
+  const routeKey = resolveFlowPath(flowPath ?? pathname)
+  const links = (relatedLinks ?? PAGE_FLOW_LINKS[routeKey] ?? []).filter((l) => l.to.split('#')[0] !== pathname)
+  if (links.length === 0) return null
+  return (
+    <div className="mb-3 w-full min-w-0">
+      <RelatedLinksRow links={links} />
     </div>
   )
 }

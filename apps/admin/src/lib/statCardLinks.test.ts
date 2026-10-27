@@ -144,3 +144,39 @@ describe('ssoLinks', () => {
     }
   })
 })
+
+/**
+ * Report c0dc93ec: screen readers heard "Go to Health · LLM", "Drift",
+ * "Anomalies", "Intelligence", "Iterate" and "Repo" — names those pages lost
+ * in the October navigation pass. Labels now come from the nav registry.
+ */
+import * as allLinks from './statCardLinks'
+import { statDestinationLabel, statLinkLabel } from './statCardLinks'
+
+describe('statDestinationLabel', () => {
+  const RETIRED = /\b(Health|LLM|Drift|Anomalies|Intelligence|Iterate|Repo|Judge|Codebase|BYOK|Inbox|Dashboard|Query|Marketplace|Notifications|QA Coverage|Cron)\b/
+
+  it('never names a retired page or tab for any stat-card link', () => {
+    const groups = Object.entries(allLinks).filter(([name]) => name.endsWith('Links')) as Array<[string, Record<string, string>]>
+    expect(groups.length).toBeGreaterThan(10)
+    for (const [, group] of groups) {
+      for (const to of Object.values(group)) {
+        expect(statDestinationLabel(to), to).not.toMatch(RETIRED)
+      }
+    }
+  })
+
+  it('reads hub views and retired routes as the view they open', () => {
+    expect(statDestinationLabel('/health?view=schema')).toBe('Schema changes')
+    expect(statDestinationLabel('/drift?tab=findings')).toBe('Schema changes · Findings')
+    expect(statDestinationLabel('/cost?tab=breakdown')).toBe('AI spend · Breakdown')
+    expect(statDestinationLabel('/repo?tab=branches')).toBe('Pull requests')
+    expect(statDestinationLabel('/judge?tab=evaluations')).toBe('Triage grading · Grades')
+  })
+
+  it('says "Show" for a tab of the page the user is on', () => {
+    expect(statLinkLabel('/judge?tab=trend', '/judge')).toBe('Show Trend')
+    expect(statLinkLabel('/judge?tab=trend', '/fixes')).toBe('Go to Triage grading · Trend')
+    expect(statLinkLabel('/team?view=billing', '/team')).toBe('Show Billing')
+  })
+})
