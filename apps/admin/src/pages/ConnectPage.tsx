@@ -24,12 +24,11 @@ import { SDK_HEALTH_ANCHOR } from '../lib/sdkHealth'
 import { CliSetupGuide } from '../components/CliSetupGuide'
 import { EMPTY_MCP_STATS, type McpStats } from '../components/mcp/types'
 import { ConnectStudio } from '../components/connect/ConnectStudio'
-import { ConnectSnapshotStrip } from '../components/connect/ConnectSnapshotStrip'
+import { ConnectStatusPills } from '../components/connect/ConnectStatusPills'
 import { SectionAnchorNav } from '../components/connect/SectionAnchorNav'
 import { GithubConnectionCard } from '../components/connect/GithubConnectionCard'
 import { UpdateCenter } from '../components/connect/UpdateCenter'
 import { McpStatusBanner } from '../components/mcp/McpStatusBanner'
-import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { useConnectUx } from '../lib/connectModeUx'
 import { LINK_ACCENT } from '../lib/chipTone'
 import { useDispatchPreflight } from '../lib/useDispatchPreflight'
@@ -170,8 +169,6 @@ export function ConnectPage() {
   const projectsFeed = usePageData<ProjectsPayload>('/v1/admin/projects')
   const mcpStatsQuery = usePageData<McpStats>('/v1/admin/mcp/stats')
   const mcpStats = mcpStatsQuery.data ?? EMPTY_MCP_STATS
-  const statsFetchedAt = mcpStatsQuery.lastFetchedAt
-  const statsValidating = projectsFeed.isValidating || mcpStatsQuery.isValidating
   const preflight = useDispatchPreflight(activeProjectId)
 
   useEffect(() => {
@@ -201,9 +198,6 @@ export function ConnectPage() {
   }, [feedError])
 
   const fallbackGithubRepoUrl = project?.primary_repo?.repo_url ?? null
-  const githubCheck = preflight.checks.find((c) => c.key === 'github')
-  const githubRepoUrl = preflight.repoUrl ?? fallbackGithubRepoUrl
-  const githubConnected = Boolean(githubRepoUrl) && (githubCheck?.ready ?? Boolean(githubRepoUrl))
   // SDK keys only: an MCP or CLI key's heartbeat is not the app checking in.
   const sdkLastSeenAt = latestHeartbeatAt(project?.api_keys?.filter((k) => isSdkKeyScopes(k.scopes)))
   const sdkConnected = sdkLastSeenAt != null
@@ -261,38 +255,19 @@ export function ConnectPage() {
         }
       />
 
-      <PagePosture
-        slots={[
-          {
-            priority: POSTURE_PRIORITY.status,
-            show: mcpStats.topPriority === 'endpoint_mismatch' || mcpStats.topPriority === 'never_connected',
-            children: (
-              <McpStatusBanner stats={mcpStats} plainBanner />
-            ),
-          },
-          {
-            priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: !connectUx.hideConnectSnapshot,
-            children: (
-              <ConnectSnapshotStrip
-                githubConnected={githubConnected}
-                githubRepoUrl={githubRepoUrl}
-                sdkConnected={sdkConnected}
-                sdkLastSeenAt={sdkLastSeenAt}
-                sdkVersion={project?.sdk_version ?? null}
-                sdkLatestVersion={project?.sdk_latest_version ?? null}
-                sdkStatus={project?.sdk_status ?? null}
-                mcpStats={mcpStats}
-                statsFetchedAt={statsFetchedAt}
-                statsValidating={statsValidating}
-                compact={connectUx.compactSnapshot}
-                hideLinks={connectUx.hideSnapshotLinks}
-                loading={snapshotLoading}
-              />
-            ),
-          },
-        ]}
+      {/* Heartbeat, version and editor in three pills (Connect page intent). */}
+      <ConnectStatusPills
+        sdkLastSeenAt={sdkLastSeenAt}
+        sdkVersion={project?.sdk_version ?? null}
+        sdkLatestVersion={project?.sdk_latest_version ?? null}
+        sdkStatus={project?.sdk_status ?? null}
+        mcpStats={mcpStats}
+        loading={snapshotLoading}
       />
+
+      {mcpStats.topPriority === 'endpoint_mismatch' || mcpStats.topPriority === 'never_connected' ? (
+        <McpStatusBanner stats={mcpStats} plainBanner />
+      ) : null}
 
       <SectionAnchorNav sections={visibleSections} ariaLabel="Connect page sections" />
 

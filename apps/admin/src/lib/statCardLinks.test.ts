@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { connectLinks, fixesLinks, judgeLinks, mcpLinks, repoLinks, researchLinks, settingsLinks, ssoLinks } from './statCardLinks'
+import { fixesLinks, judgeLinks, mcpLinks, repoLinks, researchLinks, settingsLinks, ssoLinks } from './statCardLinks'
 
 import { resolveMcpTab } from './mcpPageHelpers'
 import { mintMcpKeyHref } from '../components/mcp/McpStatusBanner'
@@ -18,7 +18,6 @@ import { isScopePresetId, SCOPE_PRESETS } from '../components/projects/project-m
 // Required/Optional cards to a tab that does not exist, the MCP "Tools" card
 // to ?tab=tools (rendered Overview), and /connect "SDK live" to a missing
 // anchor. Every group E stat-card link must land somewhere real.
-const CONNECT_SECTION_IDS = ['connect-studio', 'connect-github', 'connect-sdk', 'connect-native-ci', 'connect-update']
 
 function parse(href: string) {
   const url = new URL(href, 'https://console.example')
@@ -27,18 +26,13 @@ function parse(href: string) {
 
 describe('stat card links land on real tabs and anchors', () => {
   it('MCP tool cards open the catalog, not Overview', () => {
-    for (const href of [mcpLinks.tools, connectLinks.tools]) {
+    for (const href of [mcpLinks.tools]) {
       const { path, tab } = parse(href)
       expect(path).toBe('/mcp')
       expect(resolveMcpTab(tab)).toBe('catalog')
     }
   })
 
-  it('connect "SDK live" scrolls to a section that exists', () => {
-    const { path, hash } = parse(connectLinks.sdk)
-    expect(path).toBe('/connect')
-    expect(CONNECT_SECTION_IDS).toContain(hash)
-  })
 })
 
 // QA bug 132: "Mint MCP key" opened /projects on Overview with "SDK ingest" preselected.

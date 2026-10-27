@@ -106,15 +106,6 @@ export const mcpLinks = {
   endpoint: '/mcp?tab=setup',
 } as const
 
-export const connectLinks = {
-  github: '/integrations/config',
-  sdk: '/connect#connect-sdk',
-  sdkVersion: '/connect',
-  mcpConnected: '/mcp?tab=setup',
-  mcpUnused: '/mcp?tab=setup',
-  tools: '/mcp?tab=catalog',
-} as const
-
 export const rewardsLinks = {
   contributors30d: '/rewards?tab=contributors',
   points30d: '/rewards?tab=overview',
