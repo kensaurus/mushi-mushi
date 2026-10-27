@@ -80,7 +80,9 @@ function NarrativeStage({ stage, isCurrent, connector }: NarrativeStageProps) {
     ? `border-ok/40 bg-ok-muted/15`
     : isCurrent
       ? `${meta.tintBorder} ${meta.tintBg} ring-2 ring-offset-1 ring-offset-surface ${meta.ring}`
-      : 'border-edge-subtle bg-surface-raised/30 opacity-75'
+      // No opacity fade: later stages (Check, Act) are uppercase gray labels,
+      // and opacity-75 dropped them under 4.5:1. The quiet border is enough.
+      : 'border-edge-subtle bg-surface-raised/30'
   const badge = stage.state === 'done'
     ? 'bg-ok text-ok-fg'
     : isCurrent
