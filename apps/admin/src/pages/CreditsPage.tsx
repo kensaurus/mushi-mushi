@@ -14,10 +14,10 @@
 import { Link } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PageLoadError } from '../components/PageLoadError'
-import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { Callout, Section } from '../components/ui'
+import { Section } from '../components/ui'
 import { IconCost } from '../components/icons'
 import { CursorLevers } from '../components/credits/CursorLevers'
+import { CreditCountdowns } from '../components/credits/CreditCountdowns'
 import { FirecrawlLevers, type FirecrawlBalance } from '../components/credits/FirecrawlLevers'
 import { SkillRunsCard } from '../components/credits/SkillRunsCard'
 import { LocalWorkerModels } from '../components/credits/LocalWorkerModels'
@@ -26,7 +26,6 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useNow } from '../lib/useNow'
 import { useScrollToHash } from '../lib/useScrollToHash'
-import { expiryLabel } from '../lib/creditPlan'
 import type { SpendDownResponse } from '../components/settings/spendDown'
 import type { ReviewFollowupsResponse } from '../components/settings/reviewFollowups'
 
@@ -69,16 +68,6 @@ export function CreditsPage() {
   })
 
   const error = spendDown.error ?? credits.error
-  // The one-line answer the page opens with: is anything spending what expires soonest?
-  const soonest = [...cursorKeys].filter((k) => k.creditsExpireAt).sort((a, b) => String(a.creditsExpireAt).localeCompare(String(b.creditsExpireAt)))[0]
-  const idleKeys = cursorKeys.filter((k) => k.creditsExpireAt && !k.enabled)
-  const posture = !spendDown.data
-    ? null
-    : idleKeys.length > 0
-      ? { tone: 'warn' as const, text: `${idleKeys.length} Cursor key${idleKeys.length === 1 ? ' has' : 's have'} an expiry date but spend-down is off. Turn it on below so the credits fix bugs.` }
-      : soonest
-        ? { tone: 'info' as const, text: `Spend-down is on for every Cursor key with an expiry date; the soonest ${expiryLabel(soonest.creditsExpireAt, now) ?? 'expires soon'}.` }
-        : null
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-credits">
       <PageHeaderBar
@@ -89,20 +78,16 @@ export function CreditsPage() {
         helpWhatIsIt="Cursor and Firecrawl credits that lapse at the end of a period are worth more spent. This page lists each place Mushi can spend them on your apps, with a switch for each: Cursor fixes open bugs, answers review findings and runs skills that improve an app round by round; Firecrawl checks your live sites for broken pages that become bug reports."
         helpHowToUse="Turn on what you want, top to bottom. Every fix still opens a draft pull request for you to review, inside each app's auto-fix limits. The full settings for each switch are linked from its row."
       />
-      <PagePosture
-        slots={[
-          {
-            id: 'credits-status',
-            priority: POSTURE_PRIORITY.status,
-            show: posture != null,
-            children: posture ? (
-              <Callout tone={posture.tone} label="Expiring credits">
-                {posture.text}
-              </Callout>
-            ) : null,
-          },
-        ]}
-      />
+      {/* First: one countdown per expiring key, and the one switch that matters. */}
+      {!spendDown.error && (
+        <CreditCountdowns
+          keys={spendDown.data ? cursorKeys : null}
+          balance={balance}
+          canManageOrg={followups.data?.canManage === true}
+          now={now}
+          onChanged={() => spendDown.reload()}
+        />
+      )}
       {error && <PageLoadError error={error} resource="credit settings" endpoint="/v1/admin/byok/spend-down" onRetry={() => { spendDown.reload(); credits.reload() }} />}
 
       <Section title="Cursor: fix bugs" id="cursor-fix-bugs">

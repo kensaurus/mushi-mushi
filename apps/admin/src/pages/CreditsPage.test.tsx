@@ -198,6 +198,23 @@ describe('CreditsPage', () => {
   })
 })
 
+describe('expiry countdown on /credits', () => {
+  it('opens on one card per expiring key, soonest first, and turns spend-down on from the status line', async () => {
+    await render()
+    const cards = Array.from(host.querySelectorAll('[aria-label="Credits by expiry date"] > li'))
+    expect(cards.map((c) => c.textContent)).toEqual([
+      expect.stringContaining('Cursor · hirose'),
+      expect.stringContaining('Firecrawl'),
+    ])
+    expect(cards[0].textContent).toContain('Expires Oct 28')
+    expect(cards[0].textContent).toContain('Spend-down is off, so nothing is spending these credits.')
+    expect(cards[1].textContent).toContain('64,175 credits left until the reset.')
+    const turnOn = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Turn on spend-down')!
+    await act(async () => turnOn.click())
+    expect(state.calls).toContainEqual({ path: '/v1/admin/byok/keys/k1/spend-down', method: 'PATCH', body: { enabled: true } })
+  })
+})
+
 describe('site audit on /credits', () => {
   it('shows the last run, counts audits in the pace, and turns one on or runs it now', async () => {
     await render()
