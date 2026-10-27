@@ -101,8 +101,8 @@ export function SiteAuditControl({ projectId, name, audit, openFindings, url, fi
         <div className="flex flex-wrap items-center gap-2">
           <Toggle
             label={
-              !on && audit
-                ? `Audit links, accessibility and translations ${cadencePhrase(audit.cadence_days)}`
+              !on
+                ? `Audit links, accessibility and translations ${cadencePhrase(audit?.cadence_days ?? 7)}`
                 : 'Audit links, accessibility and translations'
             }
             checked={on}

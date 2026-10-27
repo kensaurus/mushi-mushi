@@ -1,9 +1,9 @@
 /**
  * @vitest-environment jsdom
  *
- * Site audit row on /credits: the switch still names a stored cadence while
- * the audit is off, the cost line is a cap, and the cadence control is
- * actually disabled while a save is in flight.
+ * Site audit row on /credits: the switch names weekly before an audit row
+ * exists and a stored cadence while the audit is off, the cost line is a
+ * cap, and the cadence control is actually disabled while a save is in flight.
  */
 
 import { act, createElement } from 'react'
@@ -81,6 +81,12 @@ describe('SiteAuditControl', () => {
     const sw = host.querySelector('[role="switch"]')
     return (sw?.closest('label')?.textContent ?? '').replace(/\s+/g, ' ').trim()
   }
+
+  it('names weekly on the switch before an audit row exists', async () => {
+    await render(null)
+    expect(switchLabel()).toBe('Audit links, accessibility and translations weekly')
+    expect(host.querySelector('[aria-label="How often to audit"]')).toBeNull()
+  })
 
   it('keeps the stored cadence in the switch label while the audit is off', async () => {
     const cases: Array<[number, string]> = [
