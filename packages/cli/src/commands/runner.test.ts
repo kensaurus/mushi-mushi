@@ -103,6 +103,80 @@ describe('mushi runner status', () => {
   })
 })
 
+describe('mushi runner compare', () => {
+  const COMPARE = {
+    window: { days: 30 }, dataDays: 2.1, lowConfidence: true, source: 'sql', sourceNote: null,
+    rates: { fetchedAt: '2026-10-22', usdPerMinute: { linux: 0.006, windows: 0.01, macos: 0.062 } },
+    repos: [{ repo: 'acme/api', visibility: 'private' }],
+    rows: [{ repo: 'acme/api', runnerClass: 'github_hosted', labels: ['ubuntu-latest'], jobs: 12, queueP95s: 3, runP50s: 220, prPassRate: 0.9, billedMinutes: 48, monthCost: 4.5, costBasis: 'github_list', currency: 'USD' }],
+    accounts: [], machines: [], speed: [], whatIfs: [], advice: [],
+  }
+
+  it('reads the configured project for 30 days and prints estimated costs with the price date', async () => {
+    const run = await runCli(registerRunnerCommands, ['runner', 'compare'], () => okReply(COMPARE))
+    expect(run.calls[0]!.path).toBe(`/v1/admin/ci/compare?project_id=${TEST_PROJECT_ID}&days=30`)
+    expect(run.calls[0]!.method ?? 'GET').toBe('GET')
+    expect(run.stdout).toContain('Low confidence')
+    expect(run.stdout).toContain('GitHub list prices from 2026-10-22')
+    expect(run.stdout).toMatch(/acme\/api \(private\)\s+GitHub-hosted \(ubuntu-latest\)/)
+    expect(run.stdout).toContain('$4.50')
+  })
+
+  it('--all --json prints the payload; a bad window is refused before any call', async () => {
+    const run = await runCli(registerRunnerCommands, ['runner', 'compare', '--all', '--days', '7', '--json'], () => okReply(COMPARE))
+    expect(run.calls[0]!.path).toBe('/v1/admin/ci/compare?days=7')
+    expect(JSON.parse(run.stdout)).toEqual(COMPARE)
+    const bad = await runCli(registerRunnerCommands, ['runner', 'compare', '--days', '0'])
+    expect(bad.error?.message).toMatch(/1 to 30/)
+    expect(bad.calls).toEqual([])
+  })
+})
+
+describe('mushi runner placement', () => {
+  const REQ = '33333333-4444-4555-8666-777777777777'
+
+  it('show reads the configured project', async () => {
+    const run = await runCli(registerRunnerCommands, ['runner', 'placement', 'show'], () => okReply({ policy: null, repos: [] }))
+    expect(run.calls[0]!.path).toBe(`/v1/admin/ci/placement?project_id=${TEST_PROJECT_ID}`)
+    expect(run.stdout).toContain('Where CI runs')
+  })
+
+  it('preview POSTs the change and changes nothing; --remove sends null', async () => {
+    const preview = { repo: 'acme/api', variable: 'LINUX_RUNNER', current: { exists: false, value: null, updatedAt: null }, next: { value: 'kensaurus-local', target: { kind: 'self_hosted', label: 'kensaurus-local' } }, jobs: { moves: [], stays: [] }, warnings: [], blocked: null }
+    const run = await runCli(registerRunnerCommands, ['runner', 'placement', 'preview', '--repo', 'acme/api', '--value', 'kensaurus-local'], () => okReply(preview))
+    expect(run.calls[0]!.path).toBe('/v1/admin/ci/placement/preview')
+    expect(run.calls[0]!.method).toBe('POST')
+    expect(run.calls[0]!.body).toEqual({ projectId: TEST_PROJECT_ID, repo: 'acme/api', variable: 'LINUX_RUNNER', value: 'kensaurus-local' })
+    expect(run.stdout).toContain('acme/api: vars.LINUX_RUNNER not set → “kensaurus-local”')
+    const del = await runCli(registerRunnerCommands, ['runner', 'placement', 'preview', '--repo', 'acme/api', '--remove', '--variable', 'RUNNER_E2E'], () => okReply(preview))
+    expect(del.calls[0]!.body).toMatchObject({ variable: 'RUNNER_E2E', value: null })
+  })
+
+  it('request asks with a reason and says who approves; bad flags are refused before any call', async () => {
+    const run = await runCli(registerRunnerCommands, ['runner', 'placement', 'request', '--repo', 'acme/api', '--value', 'kensaurus-local', '--reason', 'save minutes'], () =>
+      okReply({ id: REQ, status: 'pending_approval', preview: { repo: 'acme/api', variable: 'LINUX_RUNNER', next: { value: 'kensaurus-local', target: { kind: 'self_hosted', label: 'kensaurus-local' } } } }))
+    expect(run.calls[0]!.path).toBe('/v1/admin/ci/placement/requests')
+    expect(run.calls[0]!.body).toMatchObject({ reason: 'save minutes' })
+    expect(run.stdout).toContain(`Requested ${REQ} (pending_approval)`)
+    for (const argv of [
+      ['runner', 'placement', 'request', '--repo', 'acme/api'],
+      ['runner', 'placement', 'request', '--repo', 'acme/api', '--value', 'x', '--remove'],
+      ['runner', 'placement', 'preview', '--repo', 'not-a-repo', '--value', 'x'],
+    ]) {
+      const bad = await runCli(registerRunnerCommands, argv)
+      expect(bad.calls).toEqual([])
+      expect(bad.error).toBeTruthy()
+    }
+  })
+
+  it('revert asks for the reverse of a change that ran', async () => {
+    const run = await runCli(registerRunnerCommands, ['runner', 'placement', 'revert', REQ], () => okReply({ id: 'new-id', status: 'pending_approval', revertOf: REQ }))
+    expect(run.calls[0]!.path).toBe(`/v1/admin/ci/placement/requests/${REQ}/revert`)
+    expect(run.calls[0]!.method).toBe('POST')
+    expect(run.stdout).toContain(`Requested revert new-id of ${REQ}`)
+  })
+})
+
 describe('mushi runner heartbeat', () => {
   it('--dry-run prints the body and sends nothing; the raw machine id never appears', async () => {
     const run = await runCli(registerRunnerCommands, ['runner', 'heartbeat', '--dry-run'])

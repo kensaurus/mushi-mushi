@@ -10,6 +10,12 @@
  *                     (projects least recently collected go first, each gets
  *                     an even share). Then deletes ci_jobs and
  *                     ci_runner_job_samples older than 30 days.
+ *   settleStaleLiveJobs — after both: re-reads, one job at a time, every
+ *                     job still stored as queued or running that no read has
+ *                     refreshed in 10 min. A run's later attempts list only
+ *                     their own jobs (`filter=latest`), and a busy repo pushes
+ *                     a run out of the newest 30 before it finishes, so
+ *                     without this a finished job read "Running 9 h".
  *   liveSyncProjects — the overview's `refresh=1`: queued and running runs,
  *                     plus runs that finished in the last 15 min, at most
  *                     once a minute per project (ci_claim_live_sync, atomic)
@@ -29,7 +35,13 @@
 
 import {
   ciGithub,
+  ciJobRow,
   collectRunJobs,
+  fetchJobAnnotations,
+  fetchJobResult,
+  fetchRepoVisibility,
+  needsAnnotations,
+  upsertCiJobs,
   listRepoRunners,
   listRunsByStatus,
   listRunsUpdatedSince,
@@ -38,6 +50,7 @@ import {
   type CiGithub,
   type GhRun,
 } from './ci-jobs.ts'
+import { evaluateWatch, type WatchJob } from './ci-placement.ts'
 
 // deno-lint-ignore no-explicit-any
 type Db = { from: (table: string) => any; rpc: (fn: string, args: Record<string, unknown>) => any }
@@ -49,15 +62,34 @@ export const LIVE_SYNC_CALLS_PER_REQUEST = 12
 export const LIVE_SYNC_MIN_INTERVAL_S = 60
 export const LIVE_SYNC_FINISHED_WINDOW_MS = 15 * 60_000
 export const CI_RETENTION_DAYS = 30
+/** A queued or running row no read refreshed for this long is re-read by id. */
+export const STALE_LIVE_JOB_MS = 10 * 60_000
+/** GitHub calls per collector tick for stale live jobs, on top of the main budget. */
+export const SETTLE_CALLS_PER_TICK = 20
+/** The same during a live sync, so the page a person is looking at heals itself. */
+export const SETTLE_CALLS_PER_LIVE_SYNC = 4
+const LIVE_JOB_STATUSES = ['queued', 'in_progress', 'waiting', 'requested', 'pending']
 /** A runner list GitHub refused is asked again after this long. */
 export const RUNNER_PERMISSION_RECHECK_MS = 24 * 60 * 60_000
+/** A repo's visibility is read again after this long (one call per repo a day). */
+export const VISIBILITY_RECHECK_MS = 24 * 60 * 60_000
 
 export type PermissionState = 'ok' | 'missing' | 'unknown'
+export type RepoVisibility = 'public' | 'private' | 'unknown'
 export interface RepoPermissions {
   jobs: PermissionState
   runners: PermissionState
   checkedAt?: string
   runnersCheckedAt?: string
+  /**
+   * Repo visibility from GET /repos/{o}/{r} (Metadata: read), read once a day.
+   * Public repos run standard GitHub-hosted minutes free; private repos pay
+   * after the plan's included minutes (Plan 022 Phase 7).
+   */
+  visibility?: RepoVisibility
+  visibilityCheckedAt?: string
+  /** The repo owner's login: GitHub's included minutes are per owner account. */
+  owner?: string
 }
 
 export interface CollectorDeps {
@@ -144,7 +176,7 @@ async function collectRepo(
   prior: RepoPermissions | undefined,
   now: Date,
   opts: { mode: 'collect' | 'live' },
-): Promise<{ jobs?: PermissionState; runners?: PermissionState; stored: number; error: string | null }> {
+): Promise<{ jobs?: PermissionState; runners?: PermissionState; visibility?: { value: RepoVisibility; owner: string | null }; stored: number; error: string | null }> {
   let runs: GhRun[] = []
   let jobsState: PermissionState | undefined
   if (opts.mode === 'collect') {
@@ -185,6 +217,14 @@ async function collectRepo(
     }
   }
 
+  // Visibility once a day, after the runner list, and only with budget to spare.
+  let visibility: { value: RepoVisibility; owner: string | null } | undefined
+  const visibilityDue = !prior?.visibilityCheckedAt || now.getTime() - Date.parse(prior.visibilityCheckedAt) >= VISIBILITY_RECHECK_MS
+  if (opts.mode === 'collect' && visibilityDue && gh.budget.remaining > 1) {
+    const v = await fetchRepoVisibility(gh, binding.repo)
+    if (v.status !== 0) visibility = { value: v.visibility, owner: v.owner }
+  }
+
   const due = await runsToRead(db, binding.projectId, binding.repo, runs)
   const out = await collectRunJobs(db, gh, {
     projectId: binding.projectId,
@@ -194,17 +234,29 @@ async function collectRepo(
     now,
     maxAnnotationCalls: opts.mode === 'live' ? 1 : 3,
   })
-  return { jobs: jobsState, runners: runnersState, stored: out.rows.length, error: out.error }
+  return { jobs: jobsState, runners: runnersState, visibility, stored: out.rows.length, error: out.error }
 }
 
-function mergePermissions(prior: RepoPermissions | undefined, got: { jobs?: PermissionState; runners?: PermissionState }, now: Date): RepoPermissions {
+function mergePermissions(
+  prior: RepoPermissions | undefined,
+  got: { jobs?: PermissionState; runners?: PermissionState; visibility?: { value: RepoVisibility; owner: string | null } },
+  now: Date,
+): RepoPermissions {
   const nowIso = now.toISOString()
-  return {
+  const out: RepoPermissions = {
     jobs: got.jobs ?? prior?.jobs ?? 'unknown',
     runners: got.runners ?? prior?.runners ?? 'unknown',
     checkedAt: got.jobs ? nowIso : prior?.checkedAt,
     runnersCheckedAt: got.runners ? nowIso : prior?.runnersCheckedAt,
   }
+  // A failed read (403/5xx → unknown) keeps the last known visibility.
+  const visibility = got.visibility && got.visibility.value !== 'unknown' ? got.visibility.value : prior?.visibility
+  if (visibility) out.visibility = visibility
+  const checked = got.visibility ? nowIso : prior?.visibilityCheckedAt
+  if (checked) out.visibilityCheckedAt = checked
+  const owner = got.visibility?.owner ?? prior?.owner
+  if (owner) out.owner = owner
+  return out
 }
 
 export interface CollectorSummary {
@@ -213,7 +265,11 @@ export interface CollectorSummary {
   calls: number
   stored: number
   skippedForBudget: number
+  /** Stale queued / running jobs re-read by id this tick. */
+  settled: number
   deleted: { jobs: number | null; samples: number | null }
+  /** CI placement watches updated this tick (ADR 0037). */
+  watches: number
 }
 
 export async function runCiCollector(db: Db, deps: CollectorDeps, opts: { projectIds?: string[]; calls?: number } = {}): Promise<CollectorSummary> {
@@ -231,7 +287,7 @@ export async function runCiCollector(db: Db, deps: CollectorDeps, opts: { projec
 
   let remaining = opts.calls ?? COLLECTOR_CALLS_PER_TICK
   const share = Math.max(COLLECTOR_MIN_CALLS_PER_PROJECT, Math.ceil(remaining / Math.max(1, order.length)))
-  const summary: CollectorSummary = { projects: 0, repos: 0, calls: 0, stored: 0, skippedForBudget: 0, deleted: { jobs: null, samples: null } }
+  const summary: CollectorSummary = { projects: 0, repos: 0, calls: 0, stored: 0, skippedForBudget: 0, settled: 0, deleted: { jobs: null, samples: null }, watches: 0 }
   const tokens = new Map<string, string | null>()
 
   for (const projectId of order) {
@@ -273,8 +329,140 @@ export async function runCiCollector(db: Db, deps: CollectorDeps, opts: { projec
     )
   }
 
+  summary.settled = await settleStaleLiveJobs(db, deps, { calls: SETTLE_CALLS_PER_TICK, now, bindings, tokens })
+  summary.watches = await runPlacementWatches(db, now).catch(() => 0)
   summary.deleted = await deleteExpiredCiRows(db, now)
   return summary
+}
+
+interface StaleLiveRow {
+  project_id: string
+  repo: string
+  job_id: number
+  run_id: number
+  event: string | null
+  pr_number: number | null
+}
+
+/**
+ * Re-read, by job id, jobs still stored as queued or running that no read
+ * refreshed in STALE_LIVE_JOB_MS, oldest first, within `calls` GitHub calls.
+ * `GET /actions/jobs/{id}` answers for any run attempt. The run's event and
+ * PR number are not on that answer, so they are kept from the stored row.
+ * A job GitHub no longer has (404, its run was deleted) is closed as
+ * cancelled with that reason, so it stops reading "Running" and stops coming
+ * back to the head of this queue.
+ */
+export async function settleStaleLiveJobs(
+  db: Db,
+  deps: CollectorDeps,
+  opts: { calls: number; now: Date; projectIds?: readonly string[]; bindings?: RepoBinding[]; tokens?: Map<string, string | null> },
+): Promise<number> {
+  if (opts.calls <= 0) return 0
+  let q = db
+    .from('ci_jobs')
+    .select('project_id, repo, job_id, run_id, event, pr_number')
+    .in('status', LIVE_JOB_STATUSES)
+    .lt('updated_at', new Date(opts.now.getTime() - STALE_LIVE_JOB_MS).toISOString())
+  if (opts.projectIds) q = q.in('project_id', opts.projectIds)
+  const { data, error } = await q.order('updated_at', { ascending: true }).limit(opts.calls)
+  if (error || !data?.length) return 0
+
+  const rows = data as StaleLiveRow[]
+  const bindings = opts.bindings ?? (await boundRepos(db, [...new Set(rows.map((r) => r.project_id))]))
+  const tokens = opts.tokens ?? new Map<string, string | null>()
+  let remaining = opts.calls
+  const fresh = []
+  const gone: StaleLiveRow[] = []
+  for (const stale of rows) {
+    if (remaining <= 0) break
+    const binding = bindings.find((b) => b.projectId === stale.project_id && b.repo === stale.repo)
+    if (!binding) continue
+    const tokenKey = `${binding.projectId}|${binding.installationId ?? ''}`
+    if (!tokens.has(tokenKey)) tokens.set(tokenKey, await deps.resolveToken(db, binding.projectId, binding.installationId))
+    const token = tokens.get(tokenKey)
+    if (!token) continue
+    const gh = ciGithub(token, remaining, deps.fetchImpl)
+    const res = await fetchJobResult(gh, stale.repo, stale.job_id)
+    if (res.status === 404) {
+      remaining -= gh.budget.used
+      gone.push(stale)
+      continue
+    }
+    const job = res.status === 200 ? res.body : null
+    let annotations: string[] | null = null
+    if (job && needsAnnotations(job) && gh.budget.remaining > 0) annotations = await fetchJobAnnotations(gh, job.check_run_url)
+    remaining -= gh.budget.used
+    if (!job) continue
+    const row = ciJobRow({ projectId: stale.project_id, repo: stale.repo, job, annotations, source: 'poll', now: opts.now })
+    if (!row) continue
+    row.event = row.event ?? stale.event
+    row.pr_number = row.pr_number ?? stale.pr_number
+    fresh.push(row)
+  }
+  for (const g of gone) {
+    await db
+      .from('ci_jobs')
+      .update({
+        status: 'completed',
+        conclusion: 'cancelled',
+        ci_kind: 'cancelled',
+        infra: false,
+        infra_detail: 'GitHub no longer has this job; its run was deleted.',
+        updated_at: opts.now.toISOString(),
+      })
+      .eq('project_id', g.project_id)
+      .eq('repo', g.repo)
+      .eq('job_id', g.job_id)
+  }
+  if (fresh.length === 0) return gone.length
+  const stored = await upsertCiJobs(db, fresh)
+  return (stored.error ? 0 : fresh.length) + gone.length
+}
+
+/**
+ * After a CI placement change ran (ADR 0037): look at the next jobs that read
+ * the variable, in ci_jobs (no GitHub call), and mark each open watch ok,
+ * alert (a job asked for another label or waited over 30 min) or expired.
+ * Before the ci_placement_watches table exists this does nothing.
+ */
+export async function runPlacementWatches(db: Db, now: Date): Promise<number> {
+  const { data, error } = await db
+    .from('ci_placement_watches')
+    .select('id, project_id, repo, jobs, expected_labels, started_at, status')
+    .eq('status', 'watching')
+    .order('started_at', { ascending: true })
+    .limit(50)
+  if (error || !Array.isArray(data)) return 0
+  let updated = 0
+  for (const w of data as Array<{ id: string; project_id: string | null; repo: string; jobs: Array<{ workflow: string; job: string }> | null; expected_labels: string[] | null; started_at: string }>) {
+    let q = db
+      .from('ci_jobs')
+      .select('workflow_name, job_name, runner_labels, queue_seconds, gh_created_at, head_branch, html_url')
+      .eq('repo', w.repo)
+      .gte('gh_created_at', w.started_at)
+      .order('gh_created_at', { ascending: true })
+      .limit(300)
+    if (w.project_id) q = q.eq('project_id', w.project_id)
+    const { data: jobs, error: jobsErr } = await q
+    if (jobsErr) continue
+    const r = evaluateWatch({ jobs: w.jobs ?? [], expectedLabels: w.expected_labels ?? [], startedAt: w.started_at }, (jobs ?? []) as WatchJob[], now)
+    await db
+      .from('ci_placement_watches')
+      .update({
+        status: r.status,
+        jobs_seen: r.jobsSeen,
+        unexpected: r.unexpected.length,
+        slow: r.slow.length,
+        detail: { unexpected: r.unexpected.slice(0, 10), slow: r.slow.slice(0, 10) },
+        last_checked_at: now.toISOString(),
+        updated_at: now.toISOString(),
+      })
+      .eq('id', w.id)
+      .eq('status', 'watching')
+    updated++
+  }
+  return updated
 }
 
 /** Retention: ci_jobs and ci_runner_job_samples are kept 30 days. */
@@ -325,6 +513,11 @@ export async function liveSyncProjects(db: Db, deps: CollectorDeps, projectIds: 
       remaining -= gh.budget.used
       result.calls += gh.budget.used
     }
+  }
+
+  // Heal jobs this page would show as running long after they finished.
+  if (result.synced.length > 0) {
+    await settleStaleLiveJobs(db, deps, { calls: SETTLE_CALLS_PER_LIVE_SYNC, now, projectIds: result.synced, bindings }).catch(() => 0)
   }
 
   const states = await readStates(db, projectIds)

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 /**
  * FILE: packages/cli/src/index.ts
  * PURPOSE: @mushi-mushi/cli entry point — registers command groups and dispatches via parseAsync.
@@ -50,6 +50,8 @@ import { registerDesignCommands } from './commands/design.js'
 import { registerUxCommands } from './commands/ux.js'
 import { registerUxRunsCommands } from './commands/ux-runs.js'
 import { registerRunnerCommands } from './commands/runner.js'
+import { registerVerifyCommands } from './commands/verify.js'
+import { registerWorkCommands } from './commands/work.js'
 import { setGlobalOutputFormat } from './cli-shared.js'
 import { printAndExit } from './errors.js'
 
@@ -145,6 +147,8 @@ registerDesignCommands(program)
 registerUxCommands(program)
 registerUxRunsCommands(program)
 registerRunnerCommands(program)
+registerVerifyCommands(program)
+registerWorkCommands(program)
 // Registered last so buildCommandTree() sees every command above when the
 // action runs (Commander builds the tree during these synchronous calls;
 // the action itself only executes later, at parseAsync() time).

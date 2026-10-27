@@ -72,7 +72,13 @@
   --color-sev-medium: oklch(0.88 0.17 100);
   --color-warn-fg: oklch(0.18 0.04 55);
   --color-warn-muted: oklch(0.30 0.06 55);
-  --color-danger: oklch(0.65 0.22 25);
+  /* 2026-10-24: dark danger was oklch(0.65 0.22 25) — under 4.5:1 on
+     surface-overlay. L 0.72 clears AA, but chroma 0.22 is outside sRGB, so
+     browsers gamut-map it and the painted contrast is not the computed one.
+     Chroma 0.17 stays inside sRGB at the same L and hue and still clears
+     4.5:1 on surface, raised, overlay, and for danger-fg on the fill.
+     Contrast and gamut: packages/server/src/__tests__/danger-contrast.test.ts. */
+  --color-danger: oklch(0.72 0.17 25);
   --color-danger-fg: oklch(0.16 0.04 25);
   --color-danger-muted: oklch(0.28 0.06 25);
   --color-info: oklch(0.68 0.16 240);

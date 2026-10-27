@@ -2,48 +2,47 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Part of the Mushi Mushi monorepo — plain-English bug comprehension for vibe coders.
+Copies the bugs your users report through Mushi into Sentry, so they show up
+next to your Sentry errors, and marks them resolved when Mushi applies a fix.
 
-
-Reference Mushi Mushi plugin: mirror critical user-reported bugs into Sentry,
-and resolve the matching Sentry issue when Mushi applies a fix.
-
-Mushi already _consumes_ Sentry data via the Seer poller / webhook (see
-`packages/server/.../sentry-seer-poll`); this plugin is the complementary
-**outbound** bridge so user reports show up next to telemetry-only errors
-in Sentry.
-
-## Install
+**Do you need this package?** Only for that copy into Sentry. On Mushi Cloud,
+Sentry errors flowing *into* Mushi, and resolving the linked Sentry issue
+when a Mushi fix merges, are built in: connect Sentry on the
+**Integrations** page of the console.
 
 ```bash
 npm i @mushi-mushi/plugin-sentry
+export MUSHI_PLUGIN_SECRET=...   # the signing secret you set when installing "Sentry Mirror"
+export SENTRY_DSN=...            # project DSN, used for the store endpoint
+export SEVERITY_THRESHOLD=high   # optional; default `high`
+npx -p @mushi-mushi/plugin-sentry mushi-plugin-sentry   # POST /mushi/webhook on PORT (default 3000)
 ```
 
-## Run as a stand-alone server
+Then install **Sentry Mirror** from the console's **Marketplace** page and
+set its webhook URL to `https://<your-host>/mushi/webhook`.
+
+Docs: https://kensaur.us/mushi-mushi/docs/plugins/sentry
+
+Optional, to resolve the Sentry issue on `fix.applied` and attach reports as
+User Feedback:
 
 ```bash
-MUSHI_PLUGIN_SECRET=...        # set when the plugin is installed in Mushi admin
-SENTRY_DSN=...                 # project DSN — used for the store endpoint
-SEVERITY_THRESHOLD=high        # optional; default `high`
-
-# Optional: enable auto-resolve on `fix.applied`
-SENTRY_AUTH_TOKEN=...          # org auth token with event:admin + project:read
-SENTRY_ORG_SLUG=acme
-SENTRY_PROJECT_SLUG=web
-
-PORT=3000                      # optional
-npx mushi-plugin-sentry
+export SENTRY_AUTH_TOKEN=...     # org auth token with event:admin + project:read
+export SENTRY_ORG_SLUG=acme
+export SENTRY_PROJECT_SLUG=web
+export MARK_IN_PROGRESS=true     # also send an event on fix.proposed
 ```
 
-Then in the Mushi admin Marketplace install the **Sentry Mirror** plugin and
-point its `webhook_url` at `https://your-host/mushi/webhook`.
-
 ## Programmatic usage
+
+```bash
+npm i @mushi-mushi/plugin-sentry @mushi-mushi/plugin-sdk express
+```
 
 ```ts
 import { createSentryPlugin } from '@mushi-mushi/plugin-sentry'
 import express from 'express'
-import { expressMiddleware } from '@mushi-mushi/plugin-sdk'
+import { expressMiddleware } from '@mushi-mushi/plugin-sdk/express'
 
 const handler = createSentryPlugin({
   sentryDsn: process.env.SENTRY_DSN!,
@@ -89,4 +88,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 70 edge functions · 486 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 76 edge functions · 510 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

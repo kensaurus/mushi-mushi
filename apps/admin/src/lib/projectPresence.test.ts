@@ -4,6 +4,7 @@ import {
   forgetHasAnyProject,
   readRememberedHasAnyProject,
   rememberHasAnyProject,
+  statsWithProjectPresence,
 } from './projectPresence'
 
 describe('projectPresence (console audit 2026-10-20, B1)', () => {
@@ -39,5 +40,37 @@ describe('projectPresence (console audit 2026-10-20, B1)', () => {
   it('reads a value another tab wrote', () => {
     window.localStorage.setItem('mushi:has_any_project', '0')
     expect(readRememberedHasAnyProject()).toBe(false)
+  })
+
+  describe('statsWithProjectPresence', () => {
+    const empty = { hasAnyProject: false, projectCount: 0, label: 'none' }
+
+    it('no data and nothing remembered assumes a project exists', () => {
+      expect(statsWithProjectPresence(null, empty)).toEqual({ ...empty, hasAnyProject: true })
+      expect(statsWithProjectPresence(undefined, empty)).toEqual({ ...empty, hasAnyProject: true })
+    })
+
+    it('no data keeps a remembered "no projects"', () => {
+      rememberHasAnyProject(false)
+      expect(statsWithProjectPresence(null, empty)).toEqual({ ...empty, hasAnyProject: false })
+    })
+
+    it('a resolved payload wins, including hasAnyProject: false', () => {
+      rememberHasAnyProject(true)
+      expect(statsWithProjectPresence({ ...empty, hasAnyProject: false, projectCount: 4 }, empty)).toEqual({
+        ...empty,
+        hasAnyProject: false,
+        projectCount: 4,
+      })
+    })
+
+    it('partial data is merged over empty', () => {
+      const partial = { hasAnyProject: true, projectCount: 2 } as typeof empty
+      expect(statsWithProjectPresence(partial, empty)).toEqual({
+        hasAnyProject: true,
+        projectCount: 2,
+        label: 'none',
+      })
+    })
   })
 })

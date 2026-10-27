@@ -11,6 +11,16 @@
  *          It is the only connector that proposes file edits; the PR itself
  *          is opened by the recipe-change worker as a draft.
  *
+ *          Act (ADR 0037): set_actions_variable / delete_actions_variable,
+ *          for the allowlisted runner variables only (LINUX_RUNNER,
+ *          RUNNER_<WORKFLOW>). act() checks the approved hash, the allowlist,
+ *          the organization's CI policy (fresh repo visibility from GitHub,
+ *          runners from ci_runners) and a compare-and-set on the variable's
+ *          value and updated_at (409 VARIABLE_MOVED), then writes. Legacy-
+ *          backed: the token is the project's stored token, else its
+ *          organization's (never the App installation, which has no
+ *          Variables permission, and never the platform token).
+ *
  * config: { owner, repo, defaultBranchHint?, migrationsDir?, billingCatalogPath? }  readCredential: the token.
  */
 
@@ -21,7 +31,21 @@ import { isWritablePath, type RecipeManifest } from '../recipe-schema.ts'
 import { parseSupabaseAuthConfig, type DeclaredAuthSettings } from '../supabase-config-toml.ts'
 import { failureOfStatus, fetchJson, statusReason, vendorError } from './http-util.ts'
 import { parseBillingCatalog, type BillingCatalog } from '../monetization/catalog.ts'
-import { ConnectorError, notConnected, type ConnectorContext, type DriftFinding, type FileEdit, type RecipeConnector } from './types.ts'
+import { ConnectorError, notConnected, type ApprovedConnectorAction, type ConnectorActionResult, type ConnectorContext, type DriftFinding, type FileEdit, type RecipeConnector } from './types.ts'
+import { canonicalJson } from './canonical.ts'
+import { sha256Hex } from './jwt.ts'
+import {
+  normalizePolicy,
+  payloadProblem,
+  PLACEMENT_ACTIONS,
+  policyVerdictAll,
+  targetsOf,
+  variableMatches,
+  type PlacementPayload,
+  type PolicyRow,
+  type RunnerSeen,
+  type VariableState,
+} from '../ci-placement.ts'
 
 const API = 'https://api.github.com'
 /** Deployment environments read per snapshot (two list calls each). */
@@ -50,11 +74,13 @@ function decode(b64: string): string {
 export const githubConnector: RecipeConnector = {
   kind: 'github',
   title: 'GitHub',
-  capabilities: ['snapshot', 'drift', 'propose'],
+  capabilities: ['snapshot', 'drift', 'propose', 'act'],
   requiredScopes: {
     snapshot: ['contents:read', 'actions:read', 'secrets:read (names only)', 'metadata:read'],
     propose: ['contents:write', 'pull_requests:write'],
+    act: ['variables:write (LINUX_RUNNER and RUNNER_<WORKFLOW> only)'],
   },
+  actions: PLACEMENT_ACTIONS,
   credentialNote: 'Uses the GitHub token already connected to this project. Mushi reads files, runs and secret NAMES, never secret values, and writes only draft pull requests.',
   async probe(ctx) {
     const r = repoOf(ctx)
@@ -102,25 +128,33 @@ export const githubConnector: RecipeConnector = {
     })) : []
 
     // Estimated minutes for up to 10 completed runs (GitHub closed the usage APIs).
+    // Self-hosted jobs cost GitHub nothing, and neither does a public repository
+    // on standard GitHub-hosted runners: both bill 0.
+    const isPublic = info.body?.private === false
     for (const run of runs.filter((x) => x.status === 'completed').slice(0, 10)) {
       const jobs = await gh(ctx, `/repos/${r.owner}/${r.repo}/actions/runs/${run.run_id}/jobs?per_page=100`)
       if (jobs.status !== 200) continue
-      const est = estimateRunMinutes(((jobs.body?.jobs ?? []) as Array<Record<string, any>>).map((j) => ({ started_at: j.started_at ?? null, completed_at: j.completed_at ?? null, labels: j.labels ?? [], runner_name: j.runner_name ?? null })))
-      Object.assign(run, { est_billable_minutes: est.minutes, runner_breakdown: est.breakdown })
+      const est = estimateRunMinutes(((jobs.body?.jobs ?? []) as Array<Record<string, any>>).map((j) => ({ started_at: j.started_at ?? null, completed_at: j.completed_at ?? null, labels: j.labels ?? [], runner_name: j.runner_name ?? null, runner_group_name: j.runner_group_name ?? null })))
+      Object.assign(run, { est_billable_minutes: isPublic ? 0 : est.minutes, runner_breakdown: est.breakdown, self_hosted_minutes: est.selfHostedMinutes })
     }
 
     // A list GitHub refused (no secrets scope, 403) is "not checked", never "empty":
     // actionsNamesComplete says whether both lists were read.
-    const listNames = async (base: string): Promise<string[] | null> => {
+    // variableNames keeps the repo's Actions variable names apart (the CI cost
+    // advice reads `vars.LINUX_RUNNER`); null when that list was refused.
+    let variableNames: string[] | null = null
+    const listNames = async (base: string, keepVariables = false): Promise<string[] | null> => {
       const out: string[] = []
       for (const kind of ['secrets', 'variables'] as const) {
         const res = await gh(ctx, `${base}/${kind}?per_page=100`)
         if (res.status !== 200) return null
-        for (const s of (res.body?.[kind] ?? []) as Array<{ name?: unknown }>) if (typeof s.name === 'string') out.push(s.name)
+        const names = ((res.body?.[kind] ?? []) as Array<{ name?: unknown }>).map((s) => s.name).filter((n): n is string => typeof n === 'string')
+        if (keepVariables && kind === 'variables') variableNames = names
+        out.push(...names)
       }
       return out
     }
-    const repoNames = await listNames(`/repos/${r.owner}/${r.repo}/actions`)
+    const repoNames = await listNames(`/repos/${r.owner}/${r.repo}/actions`, true)
     const names = repoNames ?? []
     const actionsNamesComplete = repoNames !== null
 
@@ -181,7 +215,7 @@ export const githubConnector: RecipeConnector = {
         env: { summary: { actionsNames: names.length } },
       },
       resources: [{ kind: 'repo', externalId: `${r.owner}/${r.repo}`, role: 'source' }],
-      facts: { branch, headSha, headCommittedAt, workflowFiles, runs, actionsNames: names, actionsNamesComplete, environmentNames, migrationsDir: migDir, migrationFiles, supabaseAuth, billingCatalog },
+      facts: { branch, headSha, headCommittedAt, repoPrivate: typeof info.body?.private === 'boolean' ? info.body.private : null, workflowFiles, runs, actionsNames: names, actionsNamesComplete, variableNames, environmentNames, migrationsDir: migDir, migrationFiles, supabaseAuth, billingCatalog },
       cursor: runs[0]?.run_id ? String(runs[0].run_id) : undefined,
     }
   },
@@ -198,6 +232,9 @@ export const githubConnector: RecipeConnector = {
     ]
     return out.map((d) => ({ gate: d.gate, ruleId: d.ruleId, severity: d.severity, message: d.message, filePath: d.filePath ?? null, suggestedFix: d.suggestedFix }))
   },
+  async act(ctx, action: ApprovedConnectorAction): Promise<ConnectorActionResult> {
+    return actOnRunnerVariable(ctx, action)
+  },
   async proposeChange(_ctx, change): Promise<FileEdit[]> {
     // The GitHub connector carries the edits other connectors propose. A
     // denied path (workflows, env files, lockfiles, generated exports, paths
@@ -212,4 +249,103 @@ export const githubConnector: RecipeConnector = {
       return check.ok ? [{ path: check.path, content: x.content }] : []
     })
   },
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Act: runner variables (ADR 0037)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const VARIABLES_PERMISSION =
+  'The GitHub token Mushi uses for this project cannot change Actions variables. Store a fine-grained token with "Variables: Read and write" on this repository (or a classic token with the repo scope) in the project settings. The Mushi GitHub App does not have that permission.'
+
+/** `owner/repo` as a URL path, each segment encoded. */
+function repoPath(repo: string): string {
+  return repo.split('/').map(encodeURIComponent).join('/')
+}
+
+async function ghWrite(ctx: ConnectorContext, token: string, method: 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<number> {
+  const res = await ctx.fetch(`${API}${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'mushi-mushi-ci', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  return res.status
+}
+
+/** A repo variable as GitHub has it now; null when GitHub refused to say. */
+export async function readActionsVariable(
+  ctx: Pick<ConnectorContext, 'fetch'>,
+  token: string,
+  repo: string,
+  name: string,
+): Promise<{ status: number; state: VariableState | null }> {
+  const res = await ctx.fetch(`${API}/repos/${repoPath(repo)}/actions/variables/${encodeURIComponent(name)}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'mushi-mushi-ci' },
+  })
+  if (res.status === 404) return { status: 404, state: { exists: false, value: null, updatedAt: null } }
+  if (res.status !== 200) return { status: res.status, state: null }
+  const body = (await res.json().catch(() => null)) as { value?: unknown; updated_at?: unknown } | null
+  return { status: 200, state: { exists: true, value: typeof body?.value === 'string' ? body.value : '', updatedAt: typeof body?.updated_at === 'string' ? body.updated_at : null } }
+}
+
+async function actOnRunnerVariable(ctx: ConnectorContext, action: ApprovedConnectorAction): Promise<ConnectorActionResult> {
+  if (await sha256Hex(canonicalJson(action.payload)) !== action.payloadSha256) return { ok: false, detail: 'The payload does not match what was approved.' }
+  const problem = payloadProblem(action.payload, action.action)
+  if (problem) return { ok: false, code: 'VARIABLE_NOT_ALLOWED', status: 403, detail: problem }
+  const p = action.payload as unknown as PlacementPayload
+  const token = ctx.writeCredential ?? ctx.readCredential
+  if (!token) return { ok: false, code: 'NO_GITHUB_TOKEN', status: 409, detail: 'No GitHub token is stored for this project.' }
+
+  // The repo must still be bound to the project the request was made for.
+  if (!ctx.projectId) return { ok: false, code: 'REPO_NOT_IN_PROJECT', status: 403, detail: 'This change names no project.' }
+  const { data: bindings, error: bindErr } = await ctx.db.from('project_repos').select('repo_url').eq('project_id', ctx.projectId)
+  if (bindErr) return { ok: false, code: 'POLICY_UNREADABLE', status: 409, detail: 'Mushi could not read the project\'s repositories, so it did not change anything.' }
+  const bound = ((bindings ?? []) as Array<{ repo_url: string | null }>).some((b) => {
+    const m = /github\.com\/([^/\s]+)\/([^/\s#?]+?)(?:\.git)?\/?$/i.exec(b.repo_url ?? '')
+    return !!m && `${m[1]}/${m[2]}`.toLowerCase() === p.repo.toLowerCase()
+  })
+  if (!bound) return { ok: false, code: 'REPO_NOT_IN_PROJECT', status: 403, detail: `${p.repo} is no longer connected to this project. Nothing was changed.` }
+
+  // Policy again, at execution, with the repo's visibility as GitHub says now.
+  const { data: policyRow, error: policyErr } = await ctx.db.from('ci_runner_policies').select('*').eq('organization_id', ctx.organizationId).maybeSingle()
+  if (policyErr && !/does not exist|schema cache|PGRST205|42P01/i.test(`${policyErr.code ?? ''} ${policyErr.message ?? ''}`)) {
+    return { ok: false, code: 'POLICY_UNREADABLE', status: 409, detail: 'Mushi could not read your CI policy, so it did not change anything.' }
+  }
+  const policy = normalizePolicy((policyRow as PolicyRow | null) ?? null)
+  const info = await gh(ctx, `/repos/${repoPath(p.repo)}`)
+  const visibility = info.status === 200 && typeof info.body?.private === 'boolean' ? (info.body.private ? 'private' : 'public') : 'unknown'
+  // This project's runners only: another tenant binding the same repo must not change the verdict.
+  const { data: runnerRows, error: runnersErr } = await ctx.db.from('ci_runners').select('runner_name, status, busy, labels, kind').eq('project_id', ctx.projectId).eq('repo', p.repo)
+  if (runnersErr) return { ok: false, code: 'POLICY_UNREADABLE', status: 409, detail: 'Mushi could not read this repo\'s runners, so it did not change anything.' }
+  const fallbacks = p.fallbackLabels ?? (action.action === 'delete_actions_variable' ? p.expectedLabels : [])
+  const verdict = policyVerdictAll(policy, { repo: p.repo, visibility, targets: targetsOf(p.value, fallbacks), runners: (runnerRows ?? []) as RunnerSeen[] })
+  if (!verdict.allowed) return { ok: false, code: verdict.code ?? 'POLICY_REFUSED', status: 403, detail: verdict.reason ?? 'Your CI agreement refuses this change.' }
+
+  // Compare-and-set: the variable must be exactly what the person saw.
+  const now = await readActionsVariable(ctx, token, p.repo, p.name)
+  if (now.status === 403) return { ok: false, code: 'GITHUB_VARIABLES_PERMISSION', status: 403, detail: VARIABLES_PERMISSION }
+  if (!now.state) return { ok: false, detail: statusReason('GitHub', now.status) }
+  if (!variableMatches(p.expected, now.state)) {
+    return {
+      ok: false,
+      code: 'VARIABLE_MOVED',
+      status: 409,
+      detail: `${p.name} changed after the preview (now ${now.state.exists ? `“${now.state.value}”` : 'not set'}). Preview again and ask for a fresh approval.`,
+    }
+  }
+
+  let status: number
+  if (action.action === 'delete_actions_variable') status = await ghWrite(ctx, token, 'DELETE', `/repos/${repoPath(p.repo)}/actions/variables/${encodeURIComponent(p.name)}`)
+  else if (now.state.exists) status = await ghWrite(ctx, token, 'PATCH', `/repos/${repoPath(p.repo)}/actions/variables/${encodeURIComponent(p.name)}`, { name: p.name, value: p.value })
+  else status = await ghWrite(ctx, token, 'POST', `/repos/${repoPath(p.repo)}/actions/variables`, { name: p.name, value: p.value })
+  if (status === 403) return { ok: false, code: 'GITHUB_VARIABLES_PERMISSION', status: 403, detail: VARIABLES_PERMISSION }
+  if (status === 404 || status === 409) return { ok: false, code: 'VARIABLE_MOVED', status: 409, detail: `${p.name} changed while Mushi was writing it. Preview again.` }
+  if (status < 200 || status >= 300) return { ok: false, detail: statusReason('GitHub', status) }
+
+  const after = await readActionsVariable(ctx, token, p.repo, p.name)
+  return {
+    ok: true,
+    detail: action.action === 'delete_actions_variable' ? `Removed ${p.name} from ${p.repo}.` : `Set ${p.name} to “${p.value}” on ${p.repo}.`,
+    result: { repo: p.repo, name: p.name, previous: now.state, next: after.state ?? { exists: p.value !== null, value: p.value, updatedAt: null } },
+  }
 }

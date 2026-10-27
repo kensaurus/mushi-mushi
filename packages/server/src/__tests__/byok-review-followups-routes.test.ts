@@ -231,6 +231,14 @@ describe('PATCH review-followups', () => {
     expect(db.table('organizations').find((o) => o.id === ORG)).toMatchObject({ review_followup_key_id: HIROSE, review_followup_daily_limit: 40 })
   })
 
+  it('an organization owner sets and clears the escalation model (ADR 0032 amendment)', async () => {
+    const { app } = setup()
+    const set = await app.call('PATCH', PATH, { escalationModel: 'claude-opus-5-5' })
+    expect(set.body.data).toMatchObject({ settings: { escalationModel: 'claude-opus-5-5' } })
+    const cleared = await app.call('PATCH', PATH, { escalationModel: '' })
+    expect(cleared.body.data).toMatchObject({ settings: { escalationModel: null } })
+  })
+
   it('members, viewers and API keys may not change it', async () => {
     state.orgRole = 'member'
     let { app } = setup()
@@ -257,6 +265,7 @@ describe('PATCH review-followups', () => {
     expect((await app.call('PATCH', PATH, { keyId: OPENAI })).body.error?.code).toBe('KEY_NOT_ALLOWED')
     expect((await app.call('PATCH', PATH, { keyId: 'nope' })).body.error?.code).toBe('INVALID_KEY_ID')
     expect((await app.call('PATCH', PATH, { model: 'bad id!' })).body.error?.code).toBe('INVALID_CURSOR_MODEL')
+    expect((await app.call('PATCH', PATH, { escalationModel: 'bad id!' })).body.error?.code).toBe('INVALID_CURSOR_MODEL')
     expect((await app.call('PATCH', PATH, { dailyLimit: 0 })).status).toBe(400)
     expect((await app.call('PATCH', PATH, { dailyLimit: 201 })).status).toBe(400)
     expect((await app.call('PATCH', PATH, {})).status).toBe(400)

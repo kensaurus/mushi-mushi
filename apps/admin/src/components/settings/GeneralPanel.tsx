@@ -8,7 +8,9 @@
  *            Daily limits     crawl pages / runs, test generations
  *            Feedback widget  "Bug reports by Mushi" line
  *          Loads + saves `/v1/admin/settings`; secrets come back masked with
- *          a `<column>_set` flag and are never sent back.
+ *          a `<column>_set` flag and are never sent back. The Slack row's
+ *          "can send" state also reads `slackCanPost` from settings stats
+ *          (passed in) plus the row's own channel, webhook, and bot flags.
  */
 
 import { useMemo, useState } from 'react'
@@ -16,6 +18,9 @@ import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
 import { Btn, Input, SecretInput, SelectField, ErrorAlert, Checkbox, ResultChip } from '../ui'
+import { ClaudeModelSelect } from './ClaudeModelSelect'
+import { SettingDefaultActions } from './SettingDefaultActions'
+import { effectiveModelId } from '../../lib/claudeModels'
 import { BrandIcon } from '../ui/BrandIcon'
 import { IconGit, IconGauge, IconJudge, IconCost, IconChat } from '../icons'
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
@@ -41,6 +46,7 @@ import { LifecycleEmailsToggle } from './LifecycleEmailsToggle'
 import { useByokPool } from './ByokPoolContext'
 import { providerStatusView } from './keyStatus'
 import { SettingsList, SettingsRow, type RowStatusValue } from './SettingsRow'
+import { slackAlertStatus, slackCanOfferTest } from './slackAlertStatus'
 
 /** Tri-state select values for `widget_brand_footer` (null = plan default). */
 type BrandFooterChoice = 'default' | 'on' | 'off'
@@ -66,6 +72,8 @@ interface ProjectSettings {
   /** Server flags beside masked secrets: the value itself never reaches the console. */
   sentry_webhook_secret_set?: boolean
   slack_webhook_url_set?: boolean
+  /** True when this project's Slack bot token is stored. The token itself never arrives. */
+  slack_bot_token_ref_set?: boolean
   sentry_consume_user_feedback?: boolean
   stage2_model?: string
   /** Quick check (Stage 1) model. Claude ids only; the server rejects others. */
@@ -92,17 +100,10 @@ interface ProjectSettings {
 /** Where a scoped Supabase access token is created. */
 const SUPABASE_TOKENS_URL = 'https://supabase.com/dashboard/account/tokens'
 const DEFAULT_BRANCH_TEMPLATE = 'bugfix/MUSHI-{reportId}-{category}'
-/** Column defaults of project_settings.stage1_model / judge_model. */
-const STAGE1_DEFAULT = 'claude-haiku-4-5-20251001'
-const JUDGE_DEFAULT = 'claude-sonnet-5-5'
-/** fix-worker resolves retired ids (the column default claude-opus-4-1) to Sonnet 5.5. */
-const FIX_DEFAULT = 'claude-sonnet-5-5'
-const FIX_CHOICES = ['claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-5-5']
-function fixModelChoice(stored: string | undefined): string {
-  return stored && FIX_CHOICES.includes(stored) ? stored : FIX_DEFAULT
-}
+/** The model each job really runs: column defaults and retired ids resolve like the server does. */
+const eff = effectiveModelId
 
-export function GeneralPanel() {
+export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
   const toast = useToast()
   const entitlements = useEntitlements()
   const { data, loading, error, reload } = usePageData<ProjectSettings>('/v1/admin/settings')
@@ -139,10 +140,10 @@ export function GeneralPanel() {
         { current: settings.sentry_dsn ?? '', saved: saved.sentry_dsn ?? '' },
         { current: settings.sentry_webhook_secret ?? '', saved: saved.sentry_webhook_secret ?? '' },
         { current: settings.sentry_consume_user_feedback ?? true, saved: saved.sentry_consume_user_feedback ?? true },
-        { current: settings.stage2_model ?? 'claude-sonnet-5-5', saved: saved.stage2_model ?? 'claude-sonnet-5-5' },
-        { current: settings.stage1_model ?? STAGE1_DEFAULT, saved: saved.stage1_model ?? STAGE1_DEFAULT },
-        { current: settings.judge_model ?? JUDGE_DEFAULT, saved: saved.judge_model ?? JUDGE_DEFAULT },
-        { current: fixModelChoice(settings.claude_default_model), saved: fixModelChoice(saved.claude_default_model) },
+        { current: eff(settings.stage2_model, 'diagnosis'), saved: eff(saved.stage2_model, 'diagnosis') },
+        { current: eff(settings.stage1_model, 'quick_check'), saved: eff(saved.stage1_model, 'quick_check') },
+        { current: eff(settings.judge_model, 'judge'), saved: eff(saved.judge_model, 'judge') },
+        { current: eff(settings.claude_default_model, 'fix'), saved: eff(saved.claude_default_model, 'fix') },
         { current: settings.stage1_confidence_threshold ?? 0.85, saved: saved.stage1_confidence_threshold ?? 0.85 },
         { current: settings.dedup_threshold ?? 0.82, saved: saved.dedup_threshold ?? 0.82 },
         { current: settings.crawl_max_pages_per_day ?? 150, saved: saved.crawl_max_pages_per_day ?? 150 },
@@ -174,14 +175,17 @@ export function GeneralPanel() {
   if (error) return <ErrorAlert message={`Couldn't load your settings: ${error}`} onRetry={reload} />
 
   // ── Statuses: what is saved, and what Mushi has actually confirmed ──────────
-  const slackSaved = Boolean(saved.slack_channel_id) || saved.slack_webhook_url_set === true
-  const slackStatus: RowStatusValue = !slackSaved
-    ? { state: 'not_connected', detail: 'Add a channel ID below to get bug alerts in Slack.' }
-    : slackTest?.ok
-      ? { state: 'working', detail: 'Test message sent just now.' }
-      : slackTest
-        ? { state: 'attention', detail: "The test message didn't arrive. Check the channel ID and that the Mushi bot is in the channel." }
-        : { state: 'checking', detail: 'Saved. Send a test message to check it.' }
+  // A channel id alone cannot post. slackCanPost covers an org or operator
+  // bot that this project's settings row does not list.
+  const slackInput = {
+    channelId: saved.slack_channel_id,
+    webhookSet: saved.slack_webhook_url_set === true,
+    botSet: saved.slack_bot_token_ref_set === true,
+    canPost: slackCanPost,
+    tested: slackTest,
+  }
+  const slackStatus: RowStatusValue = slackAlertStatus(slackInput)
+  const canTestSlack = slackCanOfferTest(slackInput)
 
   const sentryDsnSaved = Boolean(saved.sentry_dsn)
   const sentryStatus: RowStatusValue = !sentryDsnSaved
@@ -216,7 +220,7 @@ export function GeneralPanel() {
           purpose="Posts each new bug with Triage and Fix buttons. Fix progress replies in the same thread."
           status={slackStatus}
           action={
-            slackSaved ? (
+            canTestSlack ? (
               <Btn size="sm" variant="ghost" loading={testingSlack} onClick={() => void testSlack()}>
                 Send test message
               </Btn>
@@ -380,84 +384,59 @@ export function GeneralPanel() {
           title="Triage model"
           purpose="The AI model that decides each bug's severity and category."
         >
-          <SelectField
-            label="Model"
+          <ClaudeModelSelect
+            role="diagnosis"
             helpId="settings.general.stage2_model"
-            value={settings.stage2_model ?? 'claude-sonnet-5-5'}
-            onChange={(e) => update({ stage2_model: e.target.value })}
-          >
-            <optgroup label="Anthropic (current generation)">
-              <option value="claude-sonnet-5-5">Claude Sonnet 5.5 — recommended default</option>
-              <option value="claude-haiku-5-5">Claude Haiku 5.5 — lowest cost</option>
-              <option value="claude-opus-4-7">Claude Opus 4.7 — frontier reasoning (2026-Q2)</option>
-              <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — previous default</option>
-              <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fast / cheap</option>
-            </optgroup>
-            <optgroup label="OpenAI fallback">
-              <option value="gpt-5.4">GPT-5.4</option>
-              <option value="gpt-5.4-mini">GPT-5.4-mini</option>
-            </optgroup>
-            <optgroup label="Legacy (cost review only)">
-              <option value="claude-opus-4-6">Claude Opus 4.6</option>
-              <option value="gpt-4.1">GPT-4.1</option>
-            </optgroup>
-          </SelectField>
-          <SettingsChangeHint
-            current={settings.stage2_model ?? 'claude-sonnet-5-5'}
-            saved={saved.stage2_model ?? 'claude-sonnet-5-5'}
+            value={settings.stage2_model}
+            onChange={(id) => update({ stage2_model: id })}
+            extraOptions={
+              <optgroup label="OpenAI fallback">
+                <option value="gpt-5.4">GPT-5.4</option>
+                <option value="gpt-5.4-mini">GPT-5.4-mini</option>
+                <option value="gpt-4.1">GPT-4.1 (legacy)</option>
+              </optgroup>
+            }
           />
+          <SettingsChangeHint current={eff(settings.stage2_model, 'diagnosis')} saved={eff(saved.stage2_model, 'diagnosis')} />
         </SettingsRow>
         <SettingsRow
           icon={<IconCost size={16} />}
           title="Quick check model"
           purpose="The fast first pass that sorts easy bugs and filters noise before the triage model."
         >
-          <SelectField
-            label="Model"
+          <ClaudeModelSelect
+            role="quick_check"
             helpId="settings.general.stage1_model"
-            value={settings.stage1_model ?? STAGE1_DEFAULT}
-            onChange={(e) => update({ stage1_model: e.target.value })}
-          >
-            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — default</option>
-            <option value="claude-haiku-5-5">Claude Haiku 5.5 — lowest cost</option>
-          </SelectField>
-          <SettingsChangeHint current={settings.stage1_model ?? STAGE1_DEFAULT} saved={saved.stage1_model ?? STAGE1_DEFAULT} />
+            value={settings.stage1_model}
+            onChange={(id) => update({ stage1_model: id })}
+          />
+          <SettingsChangeHint current={eff(settings.stage1_model, 'quick_check')} saved={eff(saved.stage1_model, 'quick_check')} />
         </SettingsRow>
         <SettingsRow
           icon={<IconJudge size={16} />}
           title="Judge model"
           purpose="The model that double-checks a sample of triage results on the Judge page."
         >
-          <SelectField
-            label="Model"
+          <ClaudeModelSelect
+            role="judge"
             helpId="settings.general.judge_model"
-            value={settings.judge_model ?? JUDGE_DEFAULT}
-            onChange={(e) => update({ judge_model: e.target.value })}
-          >
-            <option value="claude-sonnet-5-5">Claude Sonnet 5.5 — default</option>
-            <option value="claude-haiku-5-5">Claude Haiku 5.5 — lowest cost</option>
-          </SelectField>
-          <SettingsChangeHint current={settings.judge_model ?? JUDGE_DEFAULT} saved={saved.judge_model ?? JUDGE_DEFAULT} />
+            value={settings.judge_model}
+            onChange={(id) => update({ judge_model: id })}
+          />
+          <SettingsChangeHint current={eff(settings.judge_model, 'judge')} saved={eff(saved.judge_model, 'judge')} />
         </SettingsRow>
         <SettingsRow
           icon={<IconGit size={16} />}
           title="Fix model"
           purpose="The model Mushi's own fix agent writes fixes with. Fixes cost the most of any AI call."
         >
-          <SelectField
-            label="Model"
+          <ClaudeModelSelect
+            role="fix"
             helpId="settings.general.fix_model"
-            value={fixModelChoice(settings.claude_default_model)}
-            onChange={(e) => update({ claude_default_model: e.target.value })}
-          >
-            <option value="claude-sonnet-5-5">Claude Sonnet 5.5 — default</option>
-            <option value="claude-haiku-5-5">Claude Haiku 5.5 — lowest cost</option>
-            <option value="claude-opus-5-5">Claude Opus 5.5 — hardest bugs</option>
-          </SelectField>
-          <SettingsChangeHint
-            current={fixModelChoice(settings.claude_default_model)}
-            saved={fixModelChoice(saved.claude_default_model)}
+            value={settings.claude_default_model}
+            onChange={(id) => update({ claude_default_model: id })}
           />
+          <SettingsChangeHint current={eff(settings.claude_default_model, 'fix')} saved={eff(saved.claude_default_model, 'fix')} />
         </SettingsRow>
         <SettingsRow
           icon={<IconGauge size={16} />}
@@ -469,6 +448,12 @@ export function GeneralPanel() {
             helpId="settings.general.stage1_confidence_threshold"
             value={settings.stage1_confidence_threshold ?? 0.85}
             onChange={(v) => update({ stage1_confidence_threshold: v })}
+          />
+          <SettingDefaultActions
+            id="stage1-confidence"
+            current={settings.stage1_confidence_threshold ?? 0.85}
+            defaultValue={0.85}
+            onApply={(v) => update({ stage1_confidence_threshold: v })}
           />
           <SettingsChangeHint
             current={settings.stage1_confidence_threshold ?? 0.85}
@@ -486,6 +471,12 @@ export function GeneralPanel() {
             helpId="settings.general.dedup_threshold"
             value={settings.dedup_threshold ?? 0.82}
             onChange={(v) => update({ dedup_threshold: v })}
+          />
+          <SettingDefaultActions
+            id="dedup"
+            current={settings.dedup_threshold ?? 0.82}
+            defaultValue={0.82}
+            onApply={(v) => update({ dedup_threshold: v })}
           />
           <SettingsChangeHint current={settings.dedup_threshold ?? 0.82} saved={saved.dedup_threshold ?? 0.82} kind="number" />
         </SettingsRow>
@@ -513,6 +504,12 @@ export function GeneralPanel() {
           <p className="text-xs text-fg-muted">
             Example: <code className="font-mono">{branchExample}</code>
           </p>
+          <SettingDefaultActions
+            id="fix-branch"
+            current={settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE}
+            defaultValue={DEFAULT_BRANCH_TEMPLATE}
+            onApply={(v) => update({ fix_branch_template: v })}
+          />
           <SettingsChangeHint
             current={settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE}
             saved={saved.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE}
@@ -534,6 +531,12 @@ export function GeneralPanel() {
             value={settings.crawl_max_pages_per_day ?? 150}
             onChange={(v) => update({ crawl_max_pages_per_day: v })}
           />
+          <SettingDefaultActions
+            id="crawl-pages"
+            current={settings.crawl_max_pages_per_day ?? 150}
+            defaultValue={150}
+            onApply={(v) => update({ crawl_max_pages_per_day: v })}
+          />
           <SettingsChangeHint current={settings.crawl_max_pages_per_day ?? 150} saved={saved.crawl_max_pages_per_day ?? 150} kind="number" />
         </SettingsRow>
         <SettingsRow icon={<IconCost size={16} />} title="Crawls per day" purpose="How many separate crawls of your app may start.">
@@ -545,6 +548,12 @@ export function GeneralPanel() {
             value={settings.crawl_max_runs_per_day ?? 8}
             onChange={(v) => update({ crawl_max_runs_per_day: v })}
           />
+          <SettingDefaultActions
+            id="crawl-runs"
+            current={settings.crawl_max_runs_per_day ?? 8}
+            defaultValue={8}
+            onApply={(v) => update({ crawl_max_runs_per_day: v })}
+          />
           <SettingsChangeHint current={settings.crawl_max_runs_per_day ?? 8} saved={saved.crawl_max_runs_per_day ?? 8} kind="number" />
         </SettingsRow>
         <SettingsRow icon={<IconCost size={16} />} title="Tests written per day" purpose="How many browser tests Mushi may write from your user stories.">
@@ -555,6 +564,12 @@ export function GeneralPanel() {
             step={1}
             value={settings.tdd_max_gens_per_day ?? 20}
             onChange={(v) => update({ tdd_max_gens_per_day: v })}
+          />
+          <SettingDefaultActions
+            id="tdd-gens"
+            current={settings.tdd_max_gens_per_day ?? 20}
+            defaultValue={20}
+            onApply={(v) => update({ tdd_max_gens_per_day: v })}
           />
           <SettingsChangeHint current={settings.tdd_max_gens_per_day ?? 20} saved={saved.tdd_max_gens_per_day ?? 20} kind="number" />
         </SettingsRow>

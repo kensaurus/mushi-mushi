@@ -34,13 +34,44 @@ export const ALWAYS_IGNORE = [
   '**/*.d.ts', '**/*.min.*', '**/*.map', '**/*.generated.*', '**/android/**', '**/ios/**',
 ]
 
+/**
+ * Files that DEFINE the design system's values (a theme's custom properties,
+ * a chart palette, a tokens module). Every literal in them is the source of a
+ * token, not a value off the tokens, so the literal scan never reads them:
+ * judging them only produces false positives, and an agent sent to "fix" them
+ * would break the design system (2026-10-22: 315 of the mushi-mushi console's
+ * 411 off-token colour findings were in four such files). A recipe replaces
+ * this list with `design.literalScan.tokenDefinitions` (an empty list scans
+ * them again); token files the recipe declares in `design.tokens` are always
+ * skipped (tokenFilePaths).
+ */
+export const DEFAULT_TOKEN_DEFINITION_GLOBS: readonly string[] = [
+  '**/theme-tokens.css',
+  '**/base-and-density.css',
+  '**/vizTokens.ts',
+  '**/tokens.ts',
+  '**/tokens.css',
+  '**/*.tokens.json',
+]
+
+/** The token-definition globs a scan skips: the recipe's own list when it declares one, else the defaults. */
+export function tokenDefinitionGlobs(manifest: DesignScanManifest | null): string[] {
+  const declared = manifest?.design?.literalScan?.tokenDefinitions
+  return Array.isArray(declared) ? [...declared] : [...DEFAULT_TOKEN_DEFINITION_GLOBS]
+}
+
+/** True when the literal scan skips this file as a token definition. */
+export function isTokenDefinitionFile(path: string | null | undefined, manifest: DesignScanManifest | null): boolean {
+  return !!path && matchAny(path, tokenDefinitionGlobs(manifest))
+}
+
 /** The part of mushi.recipe.json a scan reads. */
 export interface DesignScanManifest {
   design?: NonNullable<DesignRulesManifest['design']> & {
     tokens?: ReadonlyArray<{ path: string; role: 'source' | 'export'; generator?: string }>
     directions?: readonly DeclaredDirection[]
     components?: { globs?: readonly string[] }
-    literalScan?: { globs?: readonly string[]; ignore?: readonly string[] }
+    literalScan?: { globs?: readonly string[]; ignore?: readonly string[]; tokenDefinitions?: readonly string[] }
     contrast?: readonly ContrastPairDecl[]
   }
 }
@@ -64,7 +95,7 @@ export function selectScanFiles(
 ): { files: string[]; matched: number; truncated: boolean } {
   const declared = manifest?.design?.literalScan?.globs
   const globs = declared && declared.length > 0 ? [...declared] : DEFAULT_SCAN_GLOBS
-  const ignore = [...ALWAYS_IGNORE, ...(manifest?.design?.literalScan?.ignore ?? [])]
+  const ignore = [...ALWAYS_IGNORE, ...tokenDefinitionGlobs(manifest), ...(manifest?.design?.literalScan?.ignore ?? [])]
   const matched = entries
     .filter((e) => matchAny(e.path, globs) && !matchAny(e.path, ignore) && !excludePaths.includes(e.path) && e.size <= limits.maxFileBytes)
     .sort((a, b) => (a.path < b.path ? -1 : 1))

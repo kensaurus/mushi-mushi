@@ -1,6 +1,6 @@
 # 0032. Review follow-ups: a "fix first" agent PR goes back to a new Cursor agent once, with the Opus findings
 
-Status: Proposed Date: 2026-10-21
+Status: Accepted (2026-10-26) Date: 2026-10-21. Accepted 2026-10-26 by team-lead (Claude) under the owner's explicit delegation ("decide for me please"); live in production since 2026-10-22.
 
 Related: migration `20261021063310_review_followups.sql`, ADR
 [0031](0031-universal-ai-keys-serve-every-app-their-owner-owns.md) (universal keys), `_shared/review-followup.ts`,
@@ -212,3 +212,240 @@ with `prUrl`), `workOnCurrentBranch: true` pushes to the PR's head branch,
   app's auto-fix daily limit gives both room.
 - The scoreboard answers the owner's question directly: of the fix_first
   PRs sent back, how many became merge.
+
+## Amendment (2026-10-22): CI repair for "merge" PRs whose CI fails on the code
+
+Status: Accepted 2026-10-26 by team-lead (Claude) under the owner's explicit delegation ("decide for me please").
+
+Related: migration `20261022100000_review_followup_ci_repair.sql`
+(`fix_review_followups.kind`), `_shared/review-followup.ts` (`ciHeadState`,
+`extractCiLogExcerpt`, `buildCiRepairPrompt`), `_shared/ci-jobs.ts`
+(`fetchJobLogTail`), `review-followup/` (discovery and dispatch), ADR
+[0033](0033-ci-runners-are-visible-and-infra-failures-are-not-code-failures.md).
+
+### Context
+
+On 2026-10-22, 16 open agent PRs had an Opus `merge` verdict on their head
+while CI on that head had failed with a real code failure (lint, typecheck,
+build or a test; not a lost or missing runner). Follow-ups only ran on
+`fix_first`, and nothing else sent a PR back (`fix_attempts.repair_attempts`
+is never written), so the reviewer's best PRs sat red until a person fixed
+CI by hand.
+
+### Decision
+
+- **Trigger.** A completed `merge` review of the PR's current head earns one
+  follow-up of kind `ci_repair` when CI on that head fails on the code. CI
+  is read from `ci_jobs` (Plan 022): per job (workflow + job name) the latest
+  attempt decides, so a re-run that passed clears it. Only `failure` and
+  `timed_out` on a live runner count (`ci_kind = 'code_failure'`, not
+  infra). A lost runner, a job no runner picked up (ADR 0033), an approval
+  (`action_required`) and a broken workflow file (`startup_failure`) never
+  do. A code failure wins over a running sibling job. While CI still runs or
+  has not been read, nothing is queued (discovery) or the row waits
+  (`ci_pending`, dispatch); green or infra-only CI skips the row
+  (`ci_not_failing`).
+- **Same rules as every follow-up.** Same table, the same unique (fix
+  attempt, head) key (one follow-up per head, whatever its kind), at most 2
+  per PR counting both kinds, cloud-agent PRs on the agent's own branch
+  only, the organization's switch, key, model and daily limit, the app's
+  auto-fix caps (`checkAutofixBudget`), the claim token, the 6-hour cancel
+  and the re-review with force after a push. `hold` still never gets one.
+- **Prompt.** "Make CI green without weakening tests": the failing check
+  names (at most 5), their failed steps, and a log excerpt of the first 3
+  (`GET /actions/jobs/{id}/logs`, streamed, the last 256 KB kept, at most 8
+  MB read). The excerpt keeps the lines around errors (else the last
+  lines), at most 60 lines and 3,000 characters. The log is output of
+  agent-written code, so it is screened like a finding: a line that reads
+  as an instruction to a model or names a secret or the environment is
+  dropped (counted in `findings_dropped`), every URL becomes `[url]`, and
+  the text is scrubbed (`sanitizeForLLM`), capped and fenced
+  (`<ci_failure>`, `<ci_check>`, `<ci_log>`). The instructions forbid
+  deleting, skipping or loosening tests, lowering thresholds, suppression
+  comments (`@ts-ignore`, `eslint-disable`, …), lockfile or CI-config edits,
+  and say to change nothing and explain when the check fails for a reason
+  outside the PR (it also fails on the base branch, or needs a secret, a
+  runner or a person). The ADR 0032 safety rules apply unchanged.
+- **Trace.** The row's `kind` is `ci_repair`; the fix event reads "CI repair
+  dispatched" with the check names in its payload; the log line
+  `review-followup.dispatched` carries `kind`. The push is reviewed again
+  by Opus as before, so a repair that weakened a test meets the review.
+
+### Rejected
+
+- **A separate table or worker.** CI repair is a follow-up with another
+  prompt; sharing the table keeps one per head, one cap per PR, one claim
+  path and one scoreboard.
+- **Acting on `fix_attempts.ci_infra` alone.** It holds the latest verdict
+  without its head commit; `ci_jobs` is per head and per attempt.
+- **Repairing on any red check.** An infra stop has nothing for an agent to
+  fix (ADR 0033), and an approval or a workflow-file error is not code.
+
+### Consequences
+
+- A merge-verdict PR with red CI costs at most two more agent runs and two
+  more reviews, inside the same caps as the rest.
+- A check that fails on the base branch too (seen on 2026-10-22: "Compare
+  @mushi-mushi/* to npm latest", "Paired migration") still costs one run
+  whose agent should report it and change nothing; a base-branch comparison
+  is left for later.
+- Before the migration is applied, CI repairs are not queued (the insert
+  names the new column); findings follow-ups are unaffected.
+
+## Amendment (2026-10-23): the last round can run on a stronger model
+
+### Context
+
+Plan and review already run on the strongest model (Claude writes the
+diagnosis, Opus reviews every agent PR, ADR 0030); the edits run on a cheaper
+Cursor model (Grok 4.7 on the dogfood apps). On 2026-10-23 the owner's Cursor
+account still had Opus usage days before it expired, while 35 fix_first PRs
+sat open across the apps. A PR's second follow-up happens only when the first
+did not satisfy the reviewer: the case where a stronger model is worth its
+price.
+
+### Decision
+
+- `organizations.review_followup_escalation_model` (nullable Cursor model
+  spec). When set, a PR's last follow-up round (`FOLLOWUP_MAX_PER_PR`, the
+  round after one Cursor accepted) runs on it; earlier rounds keep
+  `review_followup_model`, else the app's Cursor model
+  (`followupModelSpec`, `_shared/review-followup.ts`).
+- The escalation model is checked against the key's model list like the
+  other; one the key cannot run waits, never falls back.
+- The dispatched event says "last round on the escalation model" and its
+  payload carries `escalated: true`, so the scoreboard can compare rounds.
+- Nothing else changes: still two rounds per PR, never on hold.
+
+### Rejected
+
+- **Escalating on hold.** Rejected above; a stronger model does not make an
+  owner decision.
+- **Opus for every round.** It spends the expensive model on edits the
+  cheaper one already gets merged (mushi-mushi: 16 of 20 Grok PRs "merge" in
+  the week to 2026-10-23).
+
+### Consequences
+
+- With the setting empty, behaviour is unchanged.
+- When a better model ships, it becomes the escalation model with no code
+  change (ADR 0039).
+
+## Amendment (2026-10-24): follow-ups for pull requests a local agent opened
+
+### Context
+
+`mushi work` (2026-10-24) opens pull requests from a local Cursor CLI agent
+(`fix_attempts.agent = 'mcp'`). Opus reviews them like any other, but the
+follow-up worker only starts Cloud agents on cloud-agent PRs, so a local PR
+that got "fix first" waited for a person. On 2026-10-24 all three of the first
+batch did, while the Cloud keys were used up and local runs were the only
+fixing path.
+
+### Decision
+
+- `POST /v1/admin/fixes/:id/local-followup` (`mcp:write`, members) claims one
+  round for a local fix: the latest review is a completed `fix_first`, its
+  commit is the PR's live head (read from GitHub), the head branch is in the
+  base repo, at most `FOLLOWUP_MAX_PER_PR` rounds, once per head
+  (`_shared/local-followup.ts`). The findings go through the same
+  `screenFindings` and `buildFollowupPrompt` (with `local: true`: leave the
+  change uncommitted). The claim is a `followup` fix event with dedupe key
+  `local-followup:<fix>:<head>`, so two CLIs cannot run the same round.
+- `GET /v1/admin/projects/:id/local-followups` lists the local fixes waiting
+  for one; `POST …/local-followup/done` records pushed or no change and, on a
+  push, queues the review again (the webhook does too).
+- `mushi work --followups` runs the agent in a worktree of the PR branch with
+  the stripped environment, commits, and pushes fast-forward only.
+- No `fix_review_followups` rows: those carry Cursor agent ids the worker polls.
+
+### Rejected
+
+- **The CLI screening findings itself.** It would copy the safety screen into
+  a second place; the server stays the one place that decides what reaches an
+  agent.
+- **Cloud agents on local PRs.** The local route exists so an account's
+  allowance can be spent without its GitHub touching the repo.
+
+### Consequences
+
+- Local PRs get the same two rounds as cloud ones, started from the CLI.
+- Running it on a schedule is BL-119.
+
+
+## Amendment (2026-10-25): local follow-ups also take cloud-agent PRs while cloud follow-ups are off
+
+### Context
+
+On 2026-10-25 about 25 open cloud-agent PRs across six apps had an Opus
+"fix first" and nothing could act on them: the Cursor keys that opened them
+were deleted, cloud review follow-ups were off for both teams, and the local
+route refused them as `NOT_LOCAL`.
+
+### Decision
+
+- `localFollowupAllowedFor(agent, cloudFollowupsOn)`: a local follow-up may
+  work on a `cursor_cloud` or `github_cloud_agent` PR when the project's
+  organization has `review_followup_enabled` off. When it is on, the cloud
+  worker keeps those PRs and the route says so.
+- The round limit counts both workers: local claims and cloud rounds whose
+  agent started (`fix_review_followups.cursor_agent_id`), so a PR still gets
+  at most `FOLLOWUP_MAX_PER_PR` rounds.
+- The same rules otherwise: the reviewed head is the live head, no forks,
+  screened findings, fast-forward push.
+
+### Rejected
+
+- **Turning cloud follow-ups on.** They need a Cursor key whose GitHub can
+  reach the repo; the remaining key's cannot.
+
+### Consequences
+
+- Turning cloud follow-ups on later hands those PRs back to the cloud worker,
+  which counts only its own rounds; a PR could then get up to two more.
+
+## Amendment (2026-10-26): local lanes take a CI repair a person hands over
+
+### Context
+
+On 2026-10-26 the console's "Send to CI repair" refused all 17 PRs it was
+sent: cloud follow-ups were off, by design. The only Cursor key that could
+run cloud agents belongs to another person, and the owner does not run that
+person's cloud agents on these repos. The local `mushi work --followups`
+lanes ran fine, but they only took "fix first" findings, so a PR approved
+for merge with red CI had no path except a person.
+
+### Decision
+
+- The console's CI repair, and its new "Send to follow-up", go to the cloud
+  worker when the app's organization has follow-ups on and a Cursor key
+  serves the app. Otherwise they go to the local lanes, checked by the same
+  rules the lane's claim uses (`localHandoff`): an open PR, a completed
+  review of its current commit, under the round limits; for a CI repair a
+  "merge" verdict and CI failing on the code; for findings a "fix first" with
+  findings.
+- A CI repair hand-off is a `followup` fix event with the dedupe key
+  `local-ci-repair-request:<fix>:<head>`. The local list offers that PR as
+  `kind: 'ci_repair'` only at that head and only while CI there still fails
+  on the code. The claim returns the cloud worker's CI-repair prompt (failing
+  checks, screened log excerpts) under the same per-head claim row, so the
+  CLI runs it unchanged. A local CI repair is always asked for, never
+  automatic.
+- Conflicts stay cloud-only: the CLI pushes a commit only when the working
+  tree changed, and merging the base branch in leaves it clean. Without a
+  cloud agent the console says a person resolves the conflict on GitHub.
+
+### Rejected
+
+- **Listing every merge-approved red PR for the local lanes automatically.**
+  A lane would spend its runs on PRs nobody looked at; the request keeps a
+  person in the loop.
+- **Teaching the CLI to merge the base branch.** That is a separate change to
+  the push path; the console names the PR for a person instead.
+
+### Consequences
+
+- No CLI release is needed: the lanes already run whatever prompt the claim
+  returns. Their log and commit message still say "finding(s)" and "address
+  the Opus review" for a CI repair.
+

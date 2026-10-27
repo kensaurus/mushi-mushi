@@ -23,6 +23,7 @@ const SKIP_ROUTES = new Set([
   'signup',
   'reset-password',
   'invite',
+  'email', // public reporter email links (Plan 018), not a console page
   'tester',
   'console', // redirect alias
   'fine-tuning', // redirect → prompt-lab

@@ -312,6 +312,17 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Do',
   },
   {
+    id: 'nav:pipeline',
+    path: '/pipeline',
+    label: 'Pipeline',
+    sectionId: 'do',
+    pdcaStage: 'do',
+    iconKey: 'pipeline',
+    paletteDescription: 'Every bug from report to deploy as one picture: what is stuck where, why, and one-click fixes.',
+    paletteKeywords: ['pipeline', 'stuck', 'funnel', 'release train', 'merge queue', 'ci red', 'conflict', 'triage', 'retry', 'blocked'],
+    paletteGroup: 'Do',
+  },
+  {
     id: 'nav:repo',
     path: '/repo',
     label: 'Pull requests',
@@ -559,6 +570,16 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Act',
   },
   // ── Account ───────────────────────────────────────────────────────────────
+  {
+    id: 'nav:credits',
+    path: '/credits',
+    label: 'Spend credits',
+    sectionId: 'workspace',
+    iconKey: 'cost',
+    paletteDescription: 'Expiring Cursor and Firecrawl credits, and a switch for every way Mushi can spend them finding and fixing bugs.',
+    paletteKeywords: ['credits', 'spend credits', 'spend down', 'spend-down', 'expiring credits', 'cursor credits', 'firecrawl credits', 'usage', 'site watch', 'follow-ups', 'budget'],
+    paletteGroup: 'Workspace',
+  },
   {
     id: 'nav:settings',
     path: '/settings',

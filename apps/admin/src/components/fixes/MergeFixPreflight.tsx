@@ -16,6 +16,7 @@ import { Btn, Checkbox, Input } from '../ui'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { FixCiFeedback } from './FixCiFeedback'
 import { FixReviewSummary } from './FixReviewSummary'
+import { FixGateChecklist } from './FixGateChecklist'
 import type { CiInfraVerdict } from '../../lib/ciTypes'
 
 interface Props {
@@ -201,6 +202,10 @@ export function MergeFixPreflight({
               rerunning={rerunning}
               onRerun={() => void handleRerun()}
             />
+          </div>
+
+          <div className="mt-2">
+            <FixGateChecklist fixId={fixId} />
           </div>
 
           {reviewPending && (

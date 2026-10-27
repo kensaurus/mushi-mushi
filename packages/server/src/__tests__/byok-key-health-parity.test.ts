@@ -124,3 +124,13 @@ describe('key status parity: console rows ⇄ server counts', () => {
     expect(server).toEqual(client)
   })
 })
+
+it('a Cursor key used up for its plan reads as attention on both sides (2026-10-24)', () => {
+  const k = pool('c1', { provider_slug: 'cursor', exhausted_until: iso(6 * H) })
+  expect(byokKeyHealth({ ...k, exhausted_until: k.exhausted_until }, [k], NOW)).toBe('attention')
+  expect(keyStatusView(k, { pool: [k], now: NOW }).state).toBe('attention')
+  expect(keyStatusView(k, { pool: [k], now: NOW }).label).toBe('Used up')
+  const back = pool('c2', { provider_slug: 'cursor', exhausted_until: iso(-H) })
+  expect(byokKeyHealth(back, [back], NOW)).toBe('working')
+})
+

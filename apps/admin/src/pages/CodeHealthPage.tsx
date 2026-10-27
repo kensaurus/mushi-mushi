@@ -12,6 +12,9 @@
  *  1. Summary scorecard — error/warn count, max LOC, latest bundle KB
  *  2. Bundle-size trends — bar sparkline per bundle.* metric
  *  3. God-file findings — list of files over the LOC budget
+ *
+ * Above them, KnownHolesCard: known holes in the dependencies and runtime,
+ * read from the repo by vuln-watch (ADR 0038), not pushed from CI.
  */
 
 import { useMemo, useCallback, useEffect } from 'react'
@@ -39,7 +42,8 @@ import {
 import { CodeHealthStatusBanner, isCodeHealthStatusBannerCritical } from '../components/code-health/CodeHealthStatusBanner'
 import { CodeHealthReadout } from '../components/code-health/CodeHealthReadout'
 import { CodeHealthGuide } from '../components/code-health/CodeHealthGuide'
-import { CHIP_TONE } from '../lib/chipTone'
+import { KnownHolesCard } from '../components/code-health/KnownHolesCard'
+import { CHIP_TONE, LINK_ACCENT } from '../lib/chipTone'
 
 // ── Types (mirrors code-health.ts response shapes) ────────────────────────────
 
@@ -479,6 +483,9 @@ export function CodeHealthPage() {
       />
 
       <div className="flex w-full min-w-0 flex-col gap-6">
+        {/* Independent of the CI-pushed code-health data: read from the repo by vuln-watch (ADR 0038). */}
+        <KnownHolesCard projectId={projectId} />
+
         {error && <PageLoadError error={error} code={errorCode} resource="code-health data" onRetry={reload} />}
 
         {loading && !codeHealth && (
@@ -511,7 +518,7 @@ export function CodeHealthPage() {
             <Card className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
               <p className="text-xs text-fg-secondary">
                 Backend schema &amp; API contract checks live on{' '}
-                <Link to="/fullstack-audit" className="text-accent hover:underline">
+                <Link to="/fullstack-audit" className={LINK_ACCENT}>
                   Full-Stack Audit
                 </Link>
                 .

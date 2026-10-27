@@ -1,5 +1,63 @@
 # @mushi-mushi/cli
 
+## 0.34.1
+
+### Patch Changes
+
+- 271abb8: The npm pages link to each package's docs page, and their commands, flags and rule names match the current release. The eslint plugin and inventory packages describe what you get instead of internal pipeline names.
+- 15ba9ce: `mushi work` writes commit messages that commitlint's config-conventional accepts: body lines are wrapped at 100 characters and never start like a footer (`token:`), so a long agent summary no longer fails a repo's commit hook and loses the follow-up.
+- 15ba9ce: `mushi work` no longer stops with "The Cursor CLI is not signed in" when `cursor-agent status` is only slow or unclear, as happened with several `mushi work` lanes on one machine. The sign-in check now waits up to 90 s, asks a second time when the first answer is not "signed in", and stops only on a clear "not logged in". A timeout or unclear answer prints a warning and the run continues. A missing `cursor-agent` now says it is not installed instead of "not signed in".
+
+## 0.34.0
+
+### Minor Changes
+
+- 863ccf9: `mushi work` registers each run in Mushi when the local agent starts and marks it running, so the console's Fixes page counts it in flight for the whole run, not only after the agent finishes. Every way a run ends closes that record exactly once. Ctrl-C or SIGTERM (for example `systemctl stop`) ends the agent, closes the record as "mushi work stopped by …" within a few seconds and never commits or pushes a half-done change; a stopped or reaped run starts no 7-day retry cooldown. CLI commands can now register cleanups that run on SIGINT/SIGTERM before the process exits (8 s budget; a second signal exits at once).
+- 60c5359: Add `mushi work`: fix reports with the Cursor CLI on your own machine. The agent only edits a worktree; the command commits, pushes and opens the draft pull request with your own git and gh, registers the fix in Mushi and queues the Opus review.
+
+### Patch Changes
+
+- af68d85: `list_gate_findings` and `mushi audit findings --gate` accept `portfolio_radar_vulns`: known holes in your dependencies and runtime, matched by exact version against OSV.dev (ADR 0038). `get_radar` and `mushi radar show` list the two new rules, `known_vulnerable_dependency` and `runtime_end_of_life`.
+- 863ccf9: The `reason` of `transition_status` and the `note` of `reopen_report` and `mushi reports triage/resolve/reopen/dismiss --note` are kept as a team note on the report (the console's internal Triage note, never sent to the reporter). They were dropped before.
+- 7314cc5: `mushi work` keeps the commit subject (the PR title, MUSHI suffix included) within 72 characters, so repos whose commitlint enforces `subject-max-length` / `header-max-length` accept the commit instead of losing the agent's change.
+- 972ac1f: `mushi work` skips a report for 7 days after its local run ended without a pull request (`--report` still runs it), says "timed out after 30 min" instead of "exited 143", and tells the agent to fix the first of several named pages completely rather than run out of time on all of them.
+- 3d73196: `mushi work --followups` fixes the Opus "fix first" findings on pull requests `mushi work` opened. Mushi checks the round and sends only the findings that pass its safety screen. The local agent fixes them on the PR's branch, `mushi work` pushes, and Opus reviews the new commit. Each PR gets at most 2 rounds, as cloud-agent PRs do.
+- 2939281: `mushi work` tries the worktree install twice, and when a commit hook fails only because a package is not installed (`ERR_MODULE_NOT_FOUND`), it installs and commits again instead of losing the agent's change.
+- 11bca54: `mushi work` installs the worktree's dependencies from its lockfile (pnpm, npm or yarn) before the agent starts. The agent can then run the project's tests, and commit hooks that import a package no longer fail with ERR_MODULE_NOT_FOUND. A failed install is logged and the run goes on.
+- 3d73196: `mushi work` keeps going when one report fails. If a commit hook, push or `gh pr create` fails after the agent made a change, the change is kept in its worktree, the fix is marked failed with the reason, and the error shows the end of the command's output, where the failure is. The command still exits 1 when any report failed.
+- be9fb01: `mushi work` redoes a report whose earlier pull request was closed without merging: it works on the next free branch name (`…-2`) instead of skipping the report because the old branch is still on origin. An open or merged pull request still skips it.
+- f10339f: `mushi work` removes a worktree folder an earlier run left behind even when git no longer lists it as a worktree (a killed run), instead of failing `git worktree add` on that report every run.
+- 2939281: `mushi work` stops when the reports it is given belong to another app than `--project`. An API key bound to one app answers with that app's reports whatever `--project` says, so the agent would have "fixed" them in the wrong repo. The error names both apps and the `mushi login --project-id` command to run.
+
+## 0.33.0
+
+### Minor Changes
+
+- 6c0155f: New `mushi runner` commands (ADR 0033): see where your tests run and why a fix waits to land.
+
+  - `mushi runner status` shows your machines, runners (online, busy, offline, memory, out-of-memory kills), how long jobs wait and run, how many failures were the test machine and how many were code, and what to do first.
+  - `mushi runner heartbeat` sends this machine's memory, swap, load and runner services every 2 minutes (`--once` for a timer, `--dry-run` to see the JSON). The machine id is hashed; no file contents, environment values or process arguments are sent.
+  - `mushi runner hooks install --dir <runner>` adds GitHub job hooks that report each job's memory peak and out-of-memory kills. They always exit 0 and never fail a job.
+  - `mushi runner add --repo owner/name` sets this machine up as a GitHub Actions runner with safe defaults: private repos only, one job per runner, a dedicated non-admin user, a memory cap, its own label, a checked download, and optional `--block-lan` and `--wsl-isolate`. `--dry-run` prints the whole plan.
+  - `mushi runner key` creates a runner key (scope `runner:write`) and saves it without printing it. The heartbeat and the job hooks only ever use a runner key: a CI job can read the hook's key file, and if it steals a runner key all it can do is send fake numbers. Your CLI key never goes on a runner. `hooks install` and `add` create one for you unless `MUSHI_RUNNER_KEY` is set.
+  - `mushi runner audit` lists the self-hosted runners on your repos and flags ones Mushi did not set up, any named like the Shai-Hulud backdoor, weak fork approval and `pull_request_target` workflows.
+
+- 897e79d: `mushi runner compare` shows what your CI costs and how fast it runs, per repo: GitHub-hosted versus your own machines, included minutes per GitHub account, speed factors, what-ifs and advice (ADR 0037). Read-only; money is always marked as an estimate. On WSL2, `mushi runner heartbeat` now also sends a hash of the VM's boot id so distros on one PC count as one machine for electricity.
+- b9c7667: `mushi runner placement show|preview|request|revert` (ADR 0037): see where each repo's CI runs and which runner variables its workflows read, dry-run a change (what moves, what stays and why, the target runners, cost, your CI policy's verdict), and ask for it. Nothing changes until a team owner or admin approves and runs it in the console.
+- 51407d0: Verified merge from the terminal (ADR 0035): an agent's fix merges on its own only with proof.
+
+  - `mushi fixes verify <fixId>` shows the gates for the fix PR's current head, each as a mark, a word, a label and what to do: Opus review, CI, a test that fails without the fix and passes with it, no tests weakened, a small change, and a second review. It also shows whether Mushi merged it and any regression after the merge, with the revert PR. `--rerun` re-checks the gates first; `--json` prints the payload.
+  - `mushi verify workflow` prints the `mushi-verify` GitHub workflow filled in with your project's runner labels and test command, or writes it with `--out .github/workflows/mushi-verify.yml`.
+
+- 9a492e4: File a report by hand. `mushi reports file --title --description [--severity] [--component] [--project]` and the new MCP write tool `file_report` add a free-form report to an app's queue, for a bug you found yourself or a backlog item you want an agent to fix. The report goes through the same triage as a user report, so it gets a diagnosis and can then be sent to `mushi fix` or `dispatch_fix`. Severity and component are hints that triage may refine. It needs a key with the `mcp:write` scope; each app takes at most 30 filed reports an hour, and viewers cannot file.
+
+  `mushi design dispatch-findings [--max-files N]` sends the latest design scan's findings to an agent, one report per file and a few files per call, skipping token-definition files (the console's "Send findings to agent").
+
+### Patch Changes
+
+- 148ba7f: `mushi project create` still writes the same `.env.local`, `.cursor/mcp.json`, and saved CLI config. Those writes now go through one helper so the unit tests can check the merge.
+- 32daae2: AI keys can now be used by all your apps: a key added in the console defaults to "All my apps" and serves every app in every organization you own, after each app's own key and its organization's key. `list_byok_keys` and `mushi keys list` show each key's scope (project, organization or universal). `add_byok_key` and `mushi keys add` still add a key to one app; organization and all-apps keys are added in the console.
+
 ## 0.32.0
 
 ### Minor Changes

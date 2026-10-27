@@ -1,9 +1,9 @@
 // Tests for the upload selection and compaction in deploy-edge-function.mjs.
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 
@@ -135,5 +135,30 @@ describe('readVerifyJwtFromConfig', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+})
+
+// Supabase answers HTTP 413 ("Function source code exceeds the maximum
+// deployment size (5 MB)") on a size it measures itself. `api` deployed at
+// 4,559,475 compacted upload bytes and failed at 4,639,303 (#571,
+// 2026-10-22). Stay under the last size known to deploy, so CI fails here
+// instead of the deploy failing after merge. Over budget: move a
+// self-contained route group to `api-ext` (see _shared/edge-proxy.ts).
+const API_UPLOAD_BUDGET_BYTES = 4_540_000
+
+describe('api upload size', () => {
+  it('stays under the last size known to deploy', () => {
+    const root = fileURLToPath(new URL('../', import.meta.url))
+    const fnDir = join(root, 'packages/server/supabase/functions/api')
+    const walk = (d) => readdirSync(d).flatMap((n) => {
+      const p = join(d, n)
+      return statSync(p).isDirectory() ? walk(p) : [p]
+    })
+    const files = functionUploadFiles(functionUploadRoots(walk(fnDir), join(fnDir, 'index.ts')))
+    const bytes = files.reduce((n, f) => n + compactSource(ts, relative(root, f), readFileSync(f)).length, 0)
+    assert.ok(
+      bytes < API_UPLOAD_BUDGET_BYTES,
+      `api uploads ${bytes} bytes (budget ${API_UPLOAD_BUDGET_BYTES}); move a route group to api-ext`,
+    )
   })
 })

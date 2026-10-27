@@ -144,6 +144,10 @@ export interface ConnectorActionResult {
   ok: boolean
   detail: string
   result?: Record<string, unknown>
+  /** A stable refusal code (VARIABLE_MOVED, POLICY_NO_PAID_HOSTED, …); the route answers it with `status`. */
+  code?: string
+  /** HTTP status for a refusal that is not the vendor failing (default 502). */
+  status?: 403 | 409
 }
 
 export interface RecipeConnector {

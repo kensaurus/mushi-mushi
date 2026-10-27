@@ -13,7 +13,8 @@ This section is for **maintainers** running Mushi Cloud or shipping the open-sou
 SDK packages — not for app developers integrating the SDK. If you are integrating
 Mushi into your app, start at [Quickstart](/quickstart) instead.
 
-  Mushi is **OSS-first**: the hosted product runs the exact same code in this repo.
+  Mushi is **OSS-first**: the hosted product runs the same code as this repo, plus its own
+  tuning data (prompts and scoring weights kept as configuration).
   Self-hosters can reuse every deploy path described here. See [Self-hosting](/self-hosting).
 
 ## What lives here

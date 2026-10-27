@@ -50,6 +50,7 @@ import { runInBackground } from '../../_shared/background.ts';
 import { claimTenantRateLimit } from '../../_shared/tenant-observability.ts';
 import { enqueueFixReview, loadFixReview, loadFixReviewRow } from '../../_shared/fix-review-db.ts';
 import { gatedMergePullRequest } from '../../_shared/gated-merge.ts';
+import { loadFixVerification } from '../../_shared/fix-verify-db.ts';
 import { canonicalPrUrl, parsePullRequestUrl } from '../../_shared/pr-substance.ts';
 import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
 import { loadRecentFixTruths, loadReportFixTruths, reportTitle } from '../../_shared/fix-report-truth-load.ts';
@@ -110,6 +111,9 @@ async function movePrimaryRepo(
     .eq('project_id', projectId);
   return error ?? null;
 }
+
+/** Report statuses a newly opened fix PR moves to `fixing` (never fixed, resolved, verified or dismissed). */
+const OPEN_FOR_FIXING = ['new', 'pending', 'submitted', 'queued', 'classified', 'grouped', 'triaged', 'in_progress', 'reopened'];
 
 export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/admin/query/stats', jwtAuth, async (c) => {
@@ -692,6 +696,21 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       db as unknown as Parameters<typeof loadReportFixTruths>[0],
       fixes.map((f) => f.report_id as string),
     );
+    // The latest completed Opus verdict per attempt (ADR 0030), so /fixes can
+    // list the open PRs the review already said to merge. A read failure
+    // leaves it null: the list still loads.
+    const verdicts = new Map<string, string>();
+    if (fixes.length > 0) {
+      const { data: reviews } = await db
+        .from('fix_reviews')
+        .select('fix_attempt_id, verdict, created_at')
+        .in('fix_attempt_id', fixes.map((f) => f.id as string))
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false });
+      for (const r of (reviews ?? []) as Array<{ fix_attempt_id: string; verdict: string | null }>) {
+        if (r.verdict && !verdicts.has(r.fix_attempt_id)) verdicts.set(r.fix_attempt_id, r.verdict);
+      }
+    }
     const enriched = fixes.map((f) => {
       const t = loaded.truths.get(f.report_id as string);
       const report = loaded.reports.get(f.report_id as string);
@@ -706,6 +725,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         is_latest_attempt: t ? t.latestAttemptId === f.id : null,
         retryable: t ? t.retryable && t.latestAttemptId === f.id : false,
         credential_block: t && t.latestAttemptId === f.id ? t.credential : null,
+        review_verdict: verdicts.get(f.id as string) ?? null,
       };
     });
 
@@ -1286,7 +1306,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       }
       if (!fix) {
         const events = pendingDispatchEvents(job);
-        return c.json({ ok: true, data: { fix: null, dispatch: job, events, review: toPublicReview(null), source: 'synthesized' } });
+        return c.json({ ok: true, data: { fix: null, dispatch: job, events, review: toPublicReview(null), verification: null, source: 'synthesized' } });
       }
     }
 
@@ -1319,7 +1339,12 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // ADR 0030: the Opus review verdict (or "not reviewed") rides on the timeline.
     // fix_attempts.commit_sha follows the PR head on push (webhooks-github-indexer),
     // so a verdict about an older commit shows as stale here.
-    const review = await loadFixReview(db, fix.id, (fix.commit_sha as string | null) ?? null);
+    // ADR 0035: the merge gates for the current head, the automatic-merge
+    // outcome and any regression after a Mushi merge.
+    const [review, verification] = await Promise.all([
+      loadFixReview(db, fix.id, (fix.commit_sha as string | null) ?? null),
+      loadFixVerification(db, fix.id, (fix.commit_sha as string | null) ?? null),
+    ]);
 
     if (storedEvents && storedEvents.length > 0) {
       const events = mergeStoredFixTimeline(
@@ -1333,11 +1358,11 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           status: (e.status ?? undefined) as FixTimelineEvent['status'],
         })),
       );
-      return c.json({ ok: true, data: { fix, dispatch, events, review, base_branch: baseBranch, source: 'fix_events' } });
+      return c.json({ ok: true, data: { fix, dispatch, events, review, verification, base_branch: baseBranch, source: 'fix_events' } });
     }
 
     const events = synthesizeFixTimeline(dispatch ?? null, fix);
-    return c.json({ ok: true, data: { fix, dispatch, events, review, base_branch: baseBranch, source: 'synthesized' } });
+    return c.json({ ok: true, data: { fix, dispatch, events, review, verification, base_branch: baseBranch, source: 'synthesized' } });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1913,6 +1938,15 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           })
           .eq('id', fix.report_id)
           .in('project_id', projectIds);
+        // A PR is open for it: the report is being fixed, as the cloud paths
+        // set it (fix-worker, agent-adapters). Only from an open status, so a
+        // late PATCH never moves a fixed or dismissed report back.
+        await db
+          .from('reports')
+          .update({ status: 'fixing', processing_error: null })
+          .eq('id', fix.report_id)
+          .in('project_id', projectIds)
+          .in('status', OPEN_FOR_FIXING);
         try {
           dispatchPluginEventDetached(db, fix.project_id, 'fix.applied', {
             report: { id: fix.report_id },

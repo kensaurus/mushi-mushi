@@ -11,6 +11,9 @@ export const LLM_PRICING_PER_M_TOKENS: Record<string, { in: number; out: number 
   // Anthropic — 5.x generation (Claude API list prices, 2026-09-25). A
   // server-side refusal fallback from Sonnet 5.5 is served (and billed) as
   // `claude-sonnet-5`, so that row must exist too.
+  // Fable 5.1 / 5: $10 / $50 per MTok (platform.claude.com/docs/en/models/overview, read 2026-10-22).
+  'claude-fable-5-1':            { in: 10.00, out: 50.00 },
+  'claude-fable-5':              { in: 10.00, out: 50.00 },
   'claude-sonnet-5-5':           { in: 2.00, out: 10.00 },
   'claude-sonnet-5':             { in: 2.00, out: 10.00 },
   'claude-opus-5-5':             { in: 4.00, out: 20.00 },

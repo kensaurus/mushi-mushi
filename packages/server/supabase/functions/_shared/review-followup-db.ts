@@ -23,6 +23,8 @@ import {
   FOLLOWUP_MODELS_CACHE_MS,
   FOLLOWUP_SCOREBOARD_DAYS,
   followupTrigger,
+  type CiHeadState,
+  type CiJobForRepair,
   type FollowupReason,
   type FollowupScoreRow,
   type PriorFollowup,
@@ -49,11 +51,13 @@ export interface FollowupSettings {
   offReason: string | null
   keyId: string | null
   model: string | null
+  /** The model for a PR's last follow-up round (ADR 0032 amendment, 2026-10-23); null = the same model. */
+  escalationModel: string | null
   dailyLimit: number
 }
 
 export const FOLLOWUP_SETTINGS_COLUMNS =
-  'id, review_followup_enabled, review_followup_enabled_at, review_followup_off_reason, review_followup_key_id, review_followup_model, review_followup_daily_limit'
+  'id, review_followup_enabled, review_followup_enabled_at, review_followup_off_reason, review_followup_key_id, review_followup_model, review_followup_escalation_model, review_followup_daily_limit'
 
 export function followupSettingsFromRow(row: Record<string, unknown> | null | undefined): FollowupSettings {
   const limit = Number(row?.review_followup_daily_limit)
@@ -64,6 +68,10 @@ export function followupSettingsFromRow(row: Record<string, unknown> | null | un
     offReason: typeof row?.review_followup_off_reason === 'string' ? row.review_followup_off_reason : null,
     keyId: typeof row?.review_followup_key_id === 'string' ? row.review_followup_key_id : null,
     model: typeof row?.review_followup_model === 'string' && row.review_followup_model.trim() ? row.review_followup_model.trim() : null,
+    escalationModel:
+      typeof row?.review_followup_escalation_model === 'string' && row.review_followup_escalation_model.trim()
+        ? row.review_followup_escalation_model.trim()
+        : null,
     dailyLimit: Number.isInteger(limit) && limit > 0 ? limit : FOLLOWUP_DEFAULT_DAILY_LIMIT,
   }
 }
@@ -143,7 +151,7 @@ export type FollowupKey =
       /** 'pool': a byok_keys row (key_id set); 'legacy': the app's Integrations key. Stored as key_kind. */
       source: 'pool' | 'legacy'
     }
-  | { ok: false; reason: Extract<FollowupReason, 'no_cursor_key' | 'key_not_allowed' | 'platform_key' | 'key_removed'> }
+  | { ok: false; reason: Extract<FollowupReason, 'no_cursor_key' | 'key_not_allowed' | 'platform_key' | 'key_removed' | 'key_used_up'> }
 
 async function vaultSecret(db: SupabaseClient, secretId: string | null | undefined): Promise<string | null> {
   if (!secretId) return null
@@ -179,7 +187,7 @@ export async function cursorKeyById(
   const ownerColumn = await ownerUserColumnReady(db)
   const { data, error } = await db
     .from('byok_keys')
-    .select(withOwnerUserColumn('id, provider_slug, project_id, organization_id, status, vault_secret_id', ownerColumn))
+    .select(withOwnerUserColumn('id, provider_slug, project_id, organization_id, status, vault_secret_id, exhausted_until', ownerColumn))
     .eq('id', keyId)
     .maybeSingle()
   const key = data as
@@ -191,6 +199,7 @@ export async function cursorKeyById(
         owner_user_id?: string | null
         status: string
         vault_secret_id: string | null
+        exhausted_until?: string | null
       }
     | null
   if (error || !key || key.provider_slug !== 'cursor') return { ok: false, reason: 'key_not_allowed' }
@@ -207,6 +216,10 @@ export async function cursorKeyById(
   }
   if (!allowed && !opts.skipScopeCheck) return { ok: false, reason: 'key_not_allowed' }
   if (opts.requireActive !== false && key.status !== 'active') return { ok: false, reason: 'no_cursor_key' }
+  // A used-up key (byok_keys.exhausted_until) starts no new agent; polling a run it started still works.
+  if (opts.requireActive !== false && key.exhausted_until && Date.parse(key.exhausted_until) > Date.now()) {
+    return { ok: false, reason: 'key_used_up' }
+  }
   const apiKey = await vaultSecret(db, key.vault_secret_id)
   if (!apiKey) return { ok: false, reason: 'no_cursor_key' }
   return { ok: true, apiKey, keyId: key.id, cacheKey: `key:${key.id}`, source: 'pool' }
@@ -295,6 +308,8 @@ export async function enqueueReviewFollowup(
     prior?: PriorFollowup[]
     /** Check the organization has follow-ups on first (the agent-pr-review hook); discovery filters before. */
     requireEnabled?: boolean
+    /** CI on the reviewed head; a "merge" review queues a CI repair only on a code failure. */
+    ci?: CiHeadState | null
   },
   now: Date = new Date(),
 ): Promise<{ queued: boolean; reason?: FollowupReason; error?: string }> {
@@ -308,7 +323,7 @@ export async function enqueueReviewFollowup(
       if (error) return { queued: false, error: error.message }
       prior = (data ?? []) as PriorFollowup[]
     }
-    const decision = followupTrigger({ review: input.review, attempt: input.attempt, prior })
+    const decision = followupTrigger({ review: input.review, attempt: input.attempt, prior, ci: input.ci ?? null })
     if (!decision.queue) return { queued: false, reason: decision.reason }
     const at = now.toISOString()
     const { data, error } = await db
@@ -323,6 +338,9 @@ export async function enqueueReviewFollowup(
           head_sha_before: input.review.head_sha,
           status: 'queued',
           queued_at: at,
+          // The column defaults to 'findings'; written only for a CI repair, so
+          // findings follow-ups keep working before migration 20261022100000.
+          ...(decision.kind === 'ci_repair' ? { kind: 'ci_repair' } : {}),
         },
         { onConflict: 'fix_attempt_id,head_sha_before', ignoreDuplicates: true },
       )
@@ -335,6 +353,36 @@ export async function enqueueReviewFollowup(
 }
 
 const IN_CHUNK = 100
+
+export const CI_REPAIR_JOB_COLUMNS =
+  'project_id, head_sha, job_id, job_name, workflow_name, run_id, run_attempt, repo, status, conclusion, ci_kind, infra, gh_created_at, steps'
+
+/**
+ * The `ci_jobs` rows (Plan 022) of these heads, grouped by head. Throws on a
+ * read error so callers wait instead of reading "no CI" as "not failing".
+ */
+export async function ciJobsForHeads(
+  db: SupabaseClient,
+  projectIds: string[],
+  heads: string[],
+): Promise<Map<string, CiJobForRepair[]>> {
+  const out = new Map<string, CiJobForRepair[]>()
+  const unique = [...new Set(heads.filter(Boolean))]
+  if (projectIds.length === 0 || unique.length === 0) return out
+  for (let i = 0; i < unique.length; i += IN_CHUNK) {
+    const { data, error } = await db
+      .from('ci_jobs')
+      .select(CI_REPAIR_JOB_COLUMNS)
+      .in('project_id', projectIds)
+      .in('head_sha', unique.slice(i, i + IN_CHUNK))
+      .limit(2000)
+    if (error) throw new Error(`CI jobs read failed: ${error.message}`)
+    for (const row of (data ?? []) as Array<CiJobForRepair & { head_sha: string }>) {
+      out.set(row.head_sha, [...(out.get(row.head_sha) ?? []), row])
+    }
+  }
+  return out
+}
 
 /**
  * The follow-ups of these apps created in the last `days` days, for the

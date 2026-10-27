@@ -1,7 +1,16 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 import * as core from '@actions/core'
+import {
+  capFindings,
+  judgeGateRuns,
+  lintFindingsFromEslintReport,
+  missingLintReport,
+  parseGatesInput,
+  readGateRuns,
+  type LintFinding,
+} from './gates.js'
 
 /**
  * Wave G2 — GitHub Action entrypoint.
@@ -199,29 +208,51 @@ async function main(): Promise<void> {
       break
     }
     case 'gates': {
-      // Mushi v2: run all gates against the current commit and post a single
+      // Mushi v2: run the gates against the current commit and post a single
       // composite GitHub status.
       //
-      // Gates 1 + 2 (lint) run inside this Action's checkout; Gates 3–8
-      // are server-side and reachable via /v1/admin/inventory.
-      // The Action then reads back the consolidated gate_runs and
-      // sets a single pass/fail on the calling workflow.
+      // Gates 1 + 2 (dead_handler, mock_leak) are lint gates: their findings
+      // come from the customer's ESLint JSON report (eslint-report input,
+      // eslint-plugin-mushi-mushi rules). The other gates run server-side via
+      // /v1/admin/inventory. The Action reads back the gate runs and sets a
+      // single pass/fail on the calling workflow.
       const commitSha = core.getInput('commit-sha') || process.env.GITHUB_SHA || ''
       const prNumber = core.getInput('pr-number') || ''
-      const gatesArg = core.getInput('gates') || 'all'
-      const gates =
-        gatesArg === 'all'
-          ? ['dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim', 'orphan_endpoint', 'unknown_call']
-          : gatesArg.split(',').map((g) => g.trim()).filter(Boolean)
+      const parsed = parseGatesInput(core.getInput('gates') || 'all')
+      if ('error' in parsed) {
+        core.setFailed(parsed.error)
+        break
+      }
+      const { gates } = parsed
+      const reportPath = core.getInput('eslint-report') || undefined
+      const missing = missingLintReport(gates, reportPath)
+      if (missing) {
+        core.setFailed(missing)
+        break
+      }
+      let findings: LintFinding[] | undefined
+      if (reportPath) {
+        const { readFileSync } = await import('node:fs')
+        try {
+          const repoRoot = core.getInput('repo-root') || process.env.GITHUB_WORKSPACE || process.cwd()
+          findings = lintFindingsFromEslintReport(JSON.parse(readFileSync(reportPath, 'utf8')), repoRoot)
+        } catch (err) {
+          core.setFailed(`could not read eslint-report ${reportPath}: ${(err as Error).message}`)
+          break
+        }
+        core.info(`eslint-report: ${findings.length} dead-handler / mock-leak finding(s)`)
+        const capped = capFindings(findings)
+        if (capped.dropped > 0) core.warning(`eslint-report: sending the first ${capped.findings.length} findings (errors first); ${capped.dropped} left out.`)
+        findings = capped.findings
+      }
 
       const body = {
         commit_sha: commitSha || undefined,
         pr_number: prNumber ? Number(prNumber) : undefined,
         gates,
+        ...(findings ? { findings } : {}),
       }
-      const res = await api<{
-        runs: Array<{ gate: string; status: string; findings_count: number }>
-      }>(
+      const res = await api<unknown>(
         endpoint,
         apiKey,
         projectId,
@@ -237,20 +268,27 @@ async function main(): Promise<void> {
         core.setFailed(`gates run failed: ${res.error?.code ?? 'unknown'} ${res.error?.message ?? ''}`)
         break
       }
-      const runs = res.data?.runs ?? []
-      const failed = runs.filter((r) => r.status === 'fail')
-      const warned = runs.filter((r) => r.status === 'warn')
+      const runs = readGateRuns(res.data)
+      if (!runs) {
+        core.setFailed('gates run answered without gate results; nothing was checked.')
+        break
+      }
+      const verdict = judgeGateRuns(runs, gates)
       const summary = runs
         .map((r) => `${gateGlyph(r.status)} ${r.gate} (${r.findings_count})`)
         .join(' · ')
       core.info(`Mushi gates: ${summary}`)
-      if (failed.length > 0) {
+      for (const s of verdict.skipped) core.warning(`Mushi gate ${s.gate} skipped: ${s.reason}`)
+      if (verdict.failed.length > 0 || verdict.missing.length > 0) {
         core.setFailed(
-          `Mushi gate failures: ${failed.map((r) => r.gate).join(', ')}. ` +
-            `View details on /inventory in the admin console.`,
+          [
+            verdict.failed.length > 0 ? `Mushi gate failures: ${verdict.failed.join(', ')}.` : '',
+            verdict.missing.length > 0 ? `No result for: ${verdict.missing.join(', ')}.` : '',
+            'View details on /inventory in the admin console.',
+          ].filter(Boolean).join(' '),
         )
-      } else if (warned.length > 0) {
-        core.warning(`Mushi gate warnings: ${warned.map((r) => r.gate).join(', ')}.`)
+      } else if (verdict.warned.length > 0) {
+        core.warning(`Mushi gate warnings: ${verdict.warned.join(', ')}.`)
       }
       break
     }
@@ -297,17 +335,17 @@ async function main(): Promise<void> {
     }
     case 'auth-bootstrap': {
       // Mushi v2.1 — refresh the crawler cookie via the scripted-auth
-      // runner. We don't run Playwright inside this Action's process
-      // (browsers add ~600 MB to the image); instead we invoke the
+      // runner. Playwright is not bundled into this Action; we invoke the
       // published @mushi-mushi/inventory-auth-runner via `npx`. The
-      // runner POSTs the cookie back to the settings endpoint we
-      // expose; this Action just orchestrates.
+      // runner PATCHes the session cookie to
+      // /v1/admin/inventory/:projectId/settings; this Action just
+      // orchestrates.
       //
-      // The bin name (`mushi-mushi-auth`) intentionally differs from
-      // the unscoped package name (`inventory-auth-runner`), so we use
-      // `-p <package> <bin>` instead of the bare `npx <package>` form
-      // — the bare form would fail with `command not found` because
-      // npx tries to invoke a bin that matches the unscoped name.
+      // `-p <package> <bin>` names the bin (`mushi-mushi-auth`)
+      // explicitly. A bare `npx @mushi-mushi/inventory-auth-runner` would
+      // also run it today, because npm runs a package's only bin whatever
+      // its name; naming it keeps the call stable if the package ever
+      // ships a second bin.
       const cmd = `npx --yes -p @mushi-mushi/inventory-auth-runner mushi-mushi-auth refresh`
       core.info(`mushi auth-bootstrap → ${cmd}`)
       const env = {
@@ -327,7 +365,7 @@ async function main(): Promise<void> {
     }
     default:
       core.setFailed(
-        `unknown command: ${command}. Expected trigger-judge | dispatch-fix | check-coverage | query | gates | discover-api | discovery-status | propose | auth-bootstrap.`,
+        `unknown command: ${command}. Expected trigger-judge | dispatch-fix | check-coverage | query | gates | discover-api | spec-drift | discovery-status | propose | auth-bootstrap.`,
       )
   }
 }

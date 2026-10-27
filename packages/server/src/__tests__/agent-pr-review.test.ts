@@ -62,6 +62,8 @@ vi.mock('../../supabase/functions/_shared/agent-adapters.ts', () => ({
 
 import {
   pickFairBatch,
+  pickReviewModel,
+  readReviewSettings,
   REVIEW_MAX_TRIES,
   REVIEW_RETRY_BACKOFF_MS,
   runAgentPrReview,
@@ -467,7 +469,8 @@ describe('fairness', () => {
       { id: 'c1', project_id: 'C' },
       { id: 'd1', project_id: 'D' },
     ]
-    expect(pickFairBatch(rows).map((r) => r.id)).toEqual(['a1', 'b1', 'c1'])
+    expect(pickFairBatch(rows).map((r) => r.id)).toEqual(['a1', 'b1', 'c1', 'd1'])
+    expect(pickFairBatch(rows, 3).map((r) => r.id)).toEqual(['a1', 'b1', 'c1'])
   })
 
   it('reviews a re-queued PR before older first reviews, still one per project', async () => {
@@ -477,7 +480,7 @@ describe('fairness', () => {
       queue: [row('first-a', 'A'), row('first-b', 'B'), row('first-c', 'C'), row('first-d', 'D')],
     })
     const s = await runAgentPrReview(db, {}, deps())
-    expect(s.results.map((r) => r.reviewId)).toEqual(['again-a', 'first-b', 'first-c'])
+    expect(s.results.map((r) => r.reviewId)).toEqual(['again-a', 'first-b', 'first-c', 'first-d'])
     const reads = findQueries(queries, 'fix_reviews', 'select').filter((q) => hasFilter(q, 'eq', 'status'))
     expect(reads.some((q) => hasFilter(q, 'not', 'verdict'))).toBe(true)
     expect(reads.some((q) => hasFilter(q, 'is', 'verdict'))).toBe(true)
@@ -525,5 +528,52 @@ describe('backfill', () => {
     expect(queuedIds).toEqual(['fa-50', 'fa-51', 'fa-52', 'fa-53', 'fa-54'])
     const pages = findQueries(queries, 'fix_attempts', 'select').filter((q) => hasFilter(q, 'in', 'agent'))
     expect(pages).toHaveLength(2)
+  })
+})
+
+describe('the reviewer model is a setting (owner yardstick: better models, better Mushi)', () => {
+  it('picks the project model, then the platform env, then the code default', () => {
+    expect(pickReviewModel('claude-opus-6-0', 'claude-opus-5-6')).toBe('claude-opus-6-0')
+    expect(pickReviewModel(null, 'claude-opus-5-6')).toBe('claude-opus-5-6')
+    expect(pickReviewModel('  ', undefined)).toBe('claude-opus-5-5')
+    expect(pickReviewModel(undefined, '')).toBe('claude-opus-5-5')
+  })
+
+  it('falls back to the default for a retired or non-Claude id', () => {
+    expect(pickReviewModel('claude-3-opus-20240229', null)).toBe('claude-opus-5-5')
+    expect(pickReviewModel('gpt-5.4', null)).toBe('claude-opus-5-5')
+  })
+
+  it('sends the project model to the call and records it as the model used', async () => {
+    const { db } = scripted({ settings: { agent_pr_review_enabled: true, agent_pr_review_model: 'claude-opus-6-0' } })
+    let sent = ''
+    const d = deps({
+      platformModel: null,
+      callModel: async (input) => {
+        sent = input.model
+        return { object: HOLD, usage: { promptTokens: 1, completionTokens: 1 } }
+      },
+    })
+    const summary = await runAgentPrReview(db, {}, d)
+    expect(summary.results[0]).toMatchObject({ outcome: 'completed' })
+    expect(sent).toBe('claude-opus-6-0')
+  })
+
+  it('reads again without the new column, so a project that turned reviews off stays off', async () => {
+    const calls: string[] = []
+    const fake = {
+      from: () => ({
+        select: (columns: string) => {
+          calls.push(columns)
+          const result = columns.includes('agent_pr_review_model')
+            ? { data: null, error: { code: '42703', message: 'column project_settings.agent_pr_review_model does not exist' } }
+            : { data: { agent_pr_review_enabled: false }, error: null }
+          return { eq: () => ({ maybeSingle: async () => result }) }
+        },
+      }),
+    }
+    const settings = await readReviewSettings(fake as never, 'p1')
+    expect(settings).toEqual({ enabled: false, model: null })
+    expect(calls).toEqual(['agent_pr_review_enabled, agent_pr_review_model', 'agent_pr_review_enabled'])
   })
 })

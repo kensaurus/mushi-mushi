@@ -1,26 +1,38 @@
 ---
 title: Jira Cloud
-description: Two-way sync between Mushi reports and Jira Cloud issues — create issues on classification, sync status, and comment fix summaries when fixes land.
+description: Open Jira Cloud issues from Mushi bug reports and keep their status in step — set it up on the Integrations page, or self-host the Jira plugin.
 ---
 
 # Jira Cloud plugin
 
-Bidirectional sync between Mushi reports and Jira Cloud issues — creates issues on `report.classified`, syncs status, and comments fix summaries on `fix.applied`.
+Opens a Jira issue for each Mushi bug report and keeps it in step as the
+report moves to fixed.
 
-## Setup
+## Setup (Mushi Cloud, no code)
 
-1. In Mushi: **Marketplace → Jira Cloud → Install**.
-2. Complete OAuth 2.0 (3LO) with your Atlassian app (`read:jira-work`, `write:jira-work`, `offline_access`).
-3. Map project key, issue type, and label defaults in the plugin config.
+1. At **id.atlassian.com → Security → API tokens**, create an API token.
+2. In the Mushi console: open the **Integrations** page, find **Jira**, and
+   enter your Jira base URL (e.g. `https://acme.atlassian.net`), the
+   Atlassian email that owns the token, the token, and the project key
+   (e.g. `BUG`).
+3. Click **Save**, then **Test connection**.
 
-## Package
+Mushi opens and resolves the Jira issues itself; you do not need the npm package.
 
-[`@mushi-mushi/plugin-jira`](https://www.npmjs.com/package/@mushi-mushi/plugin-jira) — see the npm README for OAuth helpers and webhook receiver examples.
+## Self-hosted plugin
 
-## Events
+[`@mushi-mushi/plugin-jira`](https://www.npmjs.com/package/@mushi-mushi/plugin-jira)
+is a library for doing the same from your own server with Jira OAuth 2.0
+(3LO): `buildAuthorizeUrl`, `exchangeCode`, `refreshTokens` and
+`createJiraPluginHandler`. See its README for the code. The console's
+Marketplace has no Jira listing, so it only receives events from a Mushi
+server you run yourself, once you add a `plugin_registry` row for it.
 
 | Event | Action |
 | --- | --- |
-| `report.classified` | Create or update Jira issue with Mushi metadata |
-| `report.status_changed` | Transition Jira issue status |
-| `fix.applied` | Comment with fix PR link |
+| `report.created` | Create a Jira issue under `jiraProjectKey`, labelled with category and severity |
+| `report.status_changed` | Run the Jira transition from `statusToTransition` (defaults: pending/classified/grouped → To Do, fixing → In Progress, fixed/dismissed → Done) |
+| `fix.applied` | Comment with the fix PR link or summary |
+
+The report → issue mapping is kept in memory, so after a restart status
+changes and fix comments for older reports are skipped.

@@ -43,8 +43,6 @@ export function confidenceSegmentFilled(pct: number, index: number): boolean {
 }
 
 export const CONFIDENCE_SEGMENT_COUNT = CONFIDENCE_SEGMENTS
-/** @deprecated Prefer `CONFIDENCE_SEGMENT_COUNT` — alias for cell components. */
-export const confidenceSegmentCount = CONFIDENCE_SEGMENT_COUNT
 
 const SEVERITY_LEVELS: SeverityTrafficKey[] = SEVERITY_TRAFFIC_ORDER.filter(
   (k) => k !== 'unscored',
@@ -56,9 +54,7 @@ export function severityActiveIndex(severity: string | null | undefined): number
   return idx >= 0 ? idx : null
 }
 
-const SEVERITY_LEVEL_KEYS = SEVERITY_LEVELS
-/** @deprecated Prefer `SEVERITY_LEVEL_KEYS` — alias for cell components. */
-export const severityLevelKeys = SEVERITY_LEVEL_KEYS
+export const SEVERITY_LEVEL_KEYS = SEVERITY_LEVELS
 
 export type BlastIntensity = 'idle' | 'low' | 'medium' | 'high' | 'critical'
 

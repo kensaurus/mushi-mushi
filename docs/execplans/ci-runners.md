@@ -160,6 +160,23 @@ read; writes are service role only.
   wait"); README depth section. The hero stays the diagnosis (VISION §2.1,
   ADR 0016) unless the owner supersedes ADR 0016.
 
+- [ ] **Phase 7 — cost and speed, then placement (ADR 0037).**
+  - 7a (read-only): hosted vs self-hosted from `runner_group_name`; dated
+    rate table in `ci-minutes.ts`; repo visibility in `ci_collector_state`;
+    WSL2 heartbeats carry a hashed VM id; `ci_cost_settings` and
+    `ci_runner_comparison` (migration `20261022050303_ci_cost_compare`);
+    `_shared/ci-runs-on.ts`, `ci-cost.ts`, `ci-compare.ts`; cost rules in
+    `ci-advisor.ts`; `GET /v1/admin/ci/compare`, `GET/PUT
+    /v1/admin/ci/cost-settings`; console "Cost and speed" on `/ci` and
+    Settings → CI cost; MCP `get_ci_costs`; CLI `mushi runner compare`.
+  - 7b (control): `ci_runner_policies`; workflow parsing and the dry-run
+    preview (`ci-placement.ts`); `set_actions_variable` /
+    `delete_actions_variable` connector actions for allowlisted names only,
+    request → approve → execute with compare-and-set; post-change watch and
+    revert; MCP `request_ci_placement_change`; CLI `mushi runner placement`
+    (migration `20261022052438_ci_placement`). The verify workflow generator
+    reads the repo's lockfile, local setup action and runner variable.
+
 ## Verification
 
 - Unit: classifier on real job shapes (OOM-cancelled glot job 2026-10-21,

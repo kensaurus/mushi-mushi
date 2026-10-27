@@ -73,6 +73,9 @@ interface Props {
   /** Dispatch readiness for the active project, fetched once at the page
    *  level and shared across every row's preflight popover. */
   preflight?: PreflightState
+  /** All apps: this row belongs to another app, so the shared checklist
+   *  must not be shown. Replaces `dispatch_block` while set. */
+  dispatchScopeNote?: string | null
 }
 
 function ReportRowViewInner({
@@ -92,6 +95,7 @@ function ReportRowViewInner({
   onDismiss,
   onDispatchFix,
   preflight,
+  dispatchScopeNote = null,
 }: Props) {
   const activeProjectId = useActiveProjectId()
   const stagger = useStaggeredAppear({ stepMs: 18, max: 12 })
@@ -314,10 +318,10 @@ function ReportRowViewInner({
                   blastRadius={blastRadius}
                   confidence={row.confidence}
                   onConfirm={onDispatchFix}
-                  blockReason={row.dispatch_block ?? null}
+                  blockReason={dispatchScopeNote ?? row.dispatch_block ?? null}
                   onOpenDetail={onOpen}
-                  preflight={preflight}
-                  repoUrl={preflight?.repoUrl ?? null}
+                  preflight={dispatchScopeNote ? undefined : preflight}
+                  repoUrl={dispatchScopeNote ? null : preflight?.repoUrl ?? null}
                 />
               </span>
             ) : closedAction ? (

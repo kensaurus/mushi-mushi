@@ -17,7 +17,6 @@ import { registerBillingChangePlanRoutes } from './routes/billing-change-plan.ts
 import { registerDoctorRoutes } from './routes/doctor.ts';
 import { registerBillingProjectsQueueGraphRoutes } from './routes/billing-projects-queue-graph.ts';
 import { registerCodebaseRoutes } from './routes/codebase.ts';
-import { registerCodebaseUnderstandRoutes } from './routes/codebase-understand.ts';
 import { registerRepoDigestRoutes } from './routes/repo-digest.ts';
 import { registerRepoDiagramRoutes } from './routes/repo-diagram.ts';
 import {
@@ -27,7 +26,6 @@ import {
 import { registerEnterpriseIntegrationsRoutes } from './routes/enterprise-integrations.ts';
 import { registerFixDispatchRoutes } from './routes/fix-dispatch.ts';
 import { registerMigrationProgressRoutes } from './routes/migration-progress.ts';
-import { registerModernizationHealthSuperRoutes } from './routes/modernization-health-super.ts';
 import { registerOrganizationRoutes } from './routes/organizations.ts';
 import { registerPublicRoutes } from './routes/public.ts';
 import { registerQueryFixesRepoRoutes } from './routes/query-fixes-repo.ts';
@@ -36,7 +34,6 @@ import { registerSettingsResearchRoutes } from './routes/settings-research.ts';
 import { registerA2ATaskRoutes } from './routes/a2a-tasks.ts';
 import { registerOpenApiRoute } from './routes/openapi.ts';
 import { registerSchemaRoutes } from './routes/schemas.ts';
-import { registerQaCoverageRoutes } from './routes/qa-coverage.ts';
 import { registerRewardsRoutes } from './routes/rewards.ts';
 import { registerEraseSubjectRoutes } from './routes/erase-subject.ts';
 import { registerCliAuthRoutes } from './routes/cli-auth.ts';
@@ -55,15 +52,12 @@ import { registerExperimentsRoutes } from './routes/experiments.ts';
 import { registerAnomaliesRoutes } from './routes/anomalies.ts';
 import { registerCostsRoutes } from './routes/costs.ts';
 import { registerEvolutionRoutes } from './routes/evolution.ts';
-import { registerTesterMarketplaceRoutes } from './routes/tester-marketplace.ts';
 import { registerCommunityRoutes } from './routes/community.ts';
 import { registerPublishedAppsRoutes } from './routes/published-apps.ts';
 import { registerDbAdvisorsRoutes } from './routes/db-advisors.ts';
 import { registerContentQualityRoutes } from './routes/content-quality.ts';
 import { registerFeatureBoardRoutes } from './routes/feature-board.ts';
 import { registerBackendRoutes } from './routes/backend.ts';
-import { registerFullstackAuditRoutes } from './routes/fullstack-audit.ts';
-import { registerSkillsRoutes } from './routes/skills.ts';
 import { registerCodeHealthRoutes } from './routes/code-health.ts';
 import { registerRecipeRoutes } from './routes/recipe.ts';
 import { registerPortfolioRoutes } from './routes/portfolio.ts';
@@ -82,7 +76,6 @@ import { registerStoreReviewIntakeRoutes } from './routes/store-review-intake.ts
 import { registerWorkspaceNavMetaRoutes } from './routes/workspace-nav-meta.ts';
 import { registerActivationRoutes } from './routes/activation.ts';
 import { registerSdkUpgradeRoutes } from './routes/sdk-upgrade.ts';
-import { registerUxRunsRoutes } from './routes/ux-runs.ts';
 import { registerPullRequestRoutes } from './routes/pull-requests.ts';
 import { registerUxCloudRoutes } from './routes/ux-cloud.ts';
 import { registerProjectGroupRoutes } from './routes/project-groups.ts';
@@ -98,6 +91,7 @@ import { registerTelegramAdminRoutes } from './routes/telegram-admin.ts';
 import { registerIntakeVoiceRoutes } from './routes/intake-voice.ts';
 import { registerPushRoutes } from './routes/push.ts';
 import { registerSentryImportRoutes } from './routes/sentry-import.ts';
+import { registerReportFileRoutes } from './routes/report-file.ts';
 
 ensureSentry('api');
 
@@ -598,7 +592,24 @@ registerFixDispatchRoutes(app);
 
 registerCodebaseRoutes(app);
 
-registerCodebaseUnderstandRoutes(app);
+forwardToApiExt([
+  // Codebase Atlas (codebase-understand.ts); deploy size limit, 2026-10-22.
+  '/v1/admin/projects/:id/codebase/analyze',
+  '/v1/admin/projects/:id/codebase/analyze/:jobId',
+  '/v1/admin/projects/:id/codebase/chat',
+  '/v1/admin/projects/:id/codebase/chat/stream',
+  '/v1/admin/projects/:id/codebase/chat/threads',
+  '/v1/admin/projects/:id/codebase/chat/threads/:threadId',
+  '/v1/admin/projects/:id/codebase/chat/threads/:threadId/messages',
+  '/v1/admin/projects/:id/codebase/domains',
+  '/v1/admin/projects/:id/codebase/impact',
+  '/v1/admin/projects/:id/codebase/knowledge/graph',
+  '/v1/admin/projects/:id/codebase/settings',
+  '/v1/admin/projects/:id/codebase/summary',
+  '/v1/admin/projects/:id/codebase/tour',
+  '/v1/admin/projects/:id/codebase/wiki/sources',
+  '/v1/admin/projects/:id/codebase/wiki/sources/:sourceId/retry',
+]);
 
 registerRepoDigestRoutes(app);
 
@@ -608,7 +619,19 @@ registerReportsDashboardRoutes(app);
 
 registerSettingsResearchRoutes(app);
 
-registerModernizationHealthSuperRoutes(app);
+forwardToApiExt([
+  // Modernization, health history, entitlements, super-admin metrics
+  // (modernization-health-super.ts); deploy size limit, 2026-10-22.
+  '/v1/admin/entitlements',
+  '/v1/admin/health/history',
+  '/v1/admin/health/integration/:kind',
+  '/v1/admin/modernization',
+  '/v1/admin/modernization/:id/dismiss',
+  '/v1/admin/modernization/:id/dispatch',
+  '/v1/super-admin/metrics',
+  '/v1/super-admin/users',
+  '/v1/super-admin/users/:id',
+]);
 
 registerBillingProjectsQueueGraphRoutes(app);
 
@@ -641,7 +664,18 @@ registerDoctorRoutes(app);
 
 forwardToApiExt(['/v1/admin/inventory', '/v1/admin/inventory/*']);
 
-registerQaCoverageRoutes(app);
+forwardToApiExt([
+  // qa-coverage.ts; deploy size limit, 2026-10-22.
+  '/v1/admin/projects/:pid/platform-rollup',
+  '/v1/admin/projects/:pid/qa-coverage',
+  '/v1/admin/projects/:pid/qa-coverage-summary',
+  '/v1/admin/projects/:pid/qa-coverage/stats',
+  '/v1/admin/projects/:pid/qa-stories',
+  '/v1/admin/projects/:pid/qa-stories/:sid',
+  '/v1/admin/projects/:pid/qa-stories/:sid/run',
+  '/v1/admin/projects/:pid/qa-stories/:sid/runs',
+  '/v1/admin/projects/:pid/qa-stories/:sid/runs/:rid/evidence',
+]);
 
 registerRewardsRoutes(app);
 
@@ -671,14 +705,51 @@ registerExperimentsRoutes(app);
 registerAnomaliesRoutes(app);
 registerCostsRoutes(app);
 registerEvolutionRoutes(app);
-registerTesterMarketplaceRoutes(app);
+// tester-marketplace.ts (tester portal, public marketplace and roadmap,
+// submission and redemption review, Tremendous webhook); deploy size limit,
+// 2026-10-26. Exact /v1/tester/* paths: community.ts serves others there.
+forwardToApiExt([
+  '/v1/public/marketplace/*',
+  '/v1/public/roadmap/*',
+  '/v1/me/tester-status',
+  '/v1/tester/enroll',
+  '/v1/tester/me',
+  '/v1/tester/kyc',
+  '/v1/tester/export',
+  '/v1/tester/delete',
+  '/v1/tester/wallet',
+  '/v1/tester/wallet/*',
+  '/v1/tester/apps',
+  '/v1/tester/apps/*',
+  '/v1/tester/submissions',
+  '/v1/admin/tester-submissions',
+  '/v1/admin/tester-submissions/*',
+  '/v1/admin/tester-redemptions/*',
+  '/v1/webhooks/tremendous',
+]);
 registerCommunityRoutes(app);
 registerPublishedAppsRoutes(app);
 registerDbAdvisorsRoutes(app);
 registerContentQualityRoutes(app);
 registerFeatureBoardRoutes(app);
 registerBackendRoutes(app);
-registerFullstackAuditRoutes(app);
+forwardToApiExt([
+  // fullstack-audit.ts; deploy size limit, 2026-10-22.
+  '/v1/admin/fullstack-audit/stats',
+  '/v1/admin/projects/:id/audit',
+]);
+// site-audit.ts (ADR 0040); deploy size limit, 2026-10-23.
+forwardToApiExt(['/v1/admin/projects/:id/site-audit', '/v1/admin/projects/:id/site-audit/run']);
+// merge-queue.ts (ADR 0041); deploy size limit, 2026-10-23.
+forwardToApiExt(['/v1/admin/merge-queue', '/v1/admin/merge-queue/:id', '/v1/admin/projects/:id/release-settings']);
+// pipeline.ts (console /pipeline); deploy size limit, 2026-10-26.
+forwardToApiExt(['/v1/admin/pipeline', '/v1/admin/pipeline/actions']);
+
+forwardToApiExt(['/v1/admin/projects/:id/local-followups', '/v1/admin/fixes/:id/local-followup', '/v1/admin/fixes/:id/local-followup/done']);
+// skill-runs.ts (ADR 0042); deploy size limit, 2026-10-23.
+forwardToApiExt(['/v1/admin/skill-runs', '/v1/admin/projects/:id/skill-runs', '/v1/admin/projects/:id/skill-runs/:runId/stop']);
+// search-rank.ts; deploy size limit, 2026-10-23.
+forwardToApiExt(['/v1/admin/projects/:id/search-ranks', '/v1/admin/projects/:id/search-ranks/run']);
 registerCodeHealthRoutes(app);
 registerRecipeRoutes(app);
 registerPortfolioRoutes(app);
@@ -695,10 +766,21 @@ registerPortfolioFunnelRoutes(app);
 registerSpendLedgerRoutes(app);
 registerStoreReviewIntakeRoutes(app);
 registerWorkspaceNavMetaRoutes(app);
-registerSkillsRoutes(app);
+// Agent skills (skills.ts); deploy size limit, 2026-10-22.
+forwardToApiExt(['/v1/admin/skills', '/v1/admin/skills/*']);
+// Claude models the app's Anthropic key can use (anthropic-models.ts), for the settings model pickers.
+forwardToApiExt(['/v1/admin/byok/anthropic/models']);
 registerSdkUpgradeRoutes(app);
 registerUxCloudRoutes(app);
-registerUxRunsRoutes(app);
+forwardToApiExt([
+  // ux-runs.ts; deploy size limit, 2026-10-22.
+  '/v1/admin/projects/:pid/ux-runs',
+  '/v1/admin/projects/:pid/ux-runs/:runId',
+  '/v1/admin/projects/:pid/ux-runs/:runId/merge',
+  '/v1/admin/projects/:pid/ux-runs/:runId/pull-request',
+  '/v1/admin/projects/:pid/ux-runs/:runId/surfaces/:key/report',
+  '/v1/admin/projects/:pid/ux-runs/:runId/uploads',
+]);
 registerPullRequestRoutes(app);
 registerProjectGroupRoutes(app);
 registerBootstrapRoutes(app);
@@ -713,8 +795,21 @@ registerTelegramAdminRoutes(app);
 registerIntakeVoiceRoutes(app);
 registerPushRoutes(app);
 registerSentryImportRoutes(app);
+registerReportFileRoutes(app);
 // CI runners you can see (Plan 022): runner ingest, CI overview, re-run tests.
 forwardToApiExt(['/v1/admin/ci/*', '/v1/ingest/runner', '/v1/admin/fixes/:id/ci/rerun', '/v1/admin/projects/:id/runner-key']);
+// Verified fixes (Plan 024, ADR 0035): settings, gates, re-check, the verify workflow.
+forwardToApiExt([
+  '/v1/admin/projects/:id/verify-settings',
+  '/v1/admin/fixes/:id/verification',
+  '/v1/admin/fixes/:id/verify',
+  '/v1/admin/projects/:id/verify-workflow',
+  '/v1/admin/projects/:id/verify-workflow/pr',
+]);
+// Known holes in dependencies and the runtime (ADR 0038).
+forwardToApiExt(['/v1/admin/projects/:id/vulnerabilities', '/v1/admin/projects/:id/vulnerabilities/*']);
+// sdk-health.ts: SDK problems and their fix tasks; deploy size limit, 2026-10-26.
+forwardToApiExt(['/v1/admin/projects/:id/sdk-health', '/v1/admin/projects/:id/sdk-health/tasks']);
 
 registerA2ATaskRoutes(app);
 

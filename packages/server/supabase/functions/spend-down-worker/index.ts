@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 /**
  * spend-down-worker — Supabase Edge Function (verify_jwt = false, internal)
  *
@@ -46,9 +46,14 @@ import { checkAutofixBudget, type AutofixBudgetCheck, type AutofixBudgetSettings
 import { dispatchFixForReport, type DispatchResult } from '../_shared/dispatch.ts'
 import {
   SPEND_DOWN_REDISPATCH_COOLDOWN_DAYS,
+  SPEND_DOWN_STOP_AUTOFIX_OFF,
+  SPEND_DOWN_STOP_NO_REPORT,
   projectCapacity,
+  SPEND_DOWN_MAX_OPEN_PER_PROJECT,
   rankSpendDownCandidates,
   reportsWithNoRetryVerdict,
+  reportsToRetryAfterKeyLimit,
+  reportsToRetryAfterHold,
   remainingToday,
   SPEND_DOWN_CANDIDATE_COLUMNS,
   spendDownCandidateFromReport,
@@ -170,13 +175,15 @@ function utcDayStart(now: Date): string {
 async function candidatesFor(db: SupabaseClient, projectId: string, now: Date): Promise<SpendDownCandidate[]> {
   const { data: reports, error } = await db
     .from('reports')
-    .select(SPEND_DOWN_CANDIDATE_COLUMNS)
+    .select(`${SPEND_DOWN_CANDIDATE_COLUMNS}, status`)
     .eq('project_id', projectId)
-    .in('status', ['classified', 'reopened'])
+    .in('status', ['classified', 'reopened', 'fixing'])
     .order('created_at', { ascending: false })
     .limit(60)
   if (error) throw new Error(`spend-down: reports read failed: ${error.message}`)
-  const rows = ((reports ?? []) as Array<SpendDownCandidate & SpendDownEvidenceRow>).map(spendDownCandidateFromReport)
+  const raw = (reports ?? []) as Array<SpendDownCandidate & SpendDownEvidenceRow & { status: string }>
+  const fixing = new Set(raw.filter((r) => r.status === 'fixing').map((r) => r.id))
+  const rows = raw.map(spendDownCandidateFromReport)
   if (rows.length === 0) return []
 
   const since = new Date(now.getTime() - SPEND_DOWN_REDISPATCH_COOLDOWN_DAYS * 86_400_000).toISOString()
@@ -191,14 +198,41 @@ async function candidatesFor(db: SupabaseClient, projectId: string, now: Date): 
 
   const { data: attempts, error: attemptsErr } = await db
     .from('fix_attempts')
-    .select('report_id, failure_category, created_at')
+    .select('id, report_id, failure_category, error, created_at')
     .eq('project_id', projectId)
     .in('report_id', rows.map((r) => r.id))
   if (attemptsErr) throw new Error(`spend-down: fix attempts read failed: ${attemptsErr.message}`)
-  const settled = reportsWithNoRetryVerdict(
-    (attempts ?? []) as Array<{ report_id: string; failure_category: string | null; created_at: string }>,
+  const attemptRows = (attempts ?? []) as Array<{ id: string; report_id: string; failure_category: string | null; error: string | null; created_at: string }>
+  const settled = reportsWithNoRetryVerdict(attemptRows)
+  // A dispatch the pinned key could not run (usage limit, or the key was
+  // already unusable) started no agent: the next tick may send it again.
+  const keyLimited = reportsToRetryAfterKeyLimit(attemptRows, now)
+  // A report still `fixing` is picked only when its PR was held (with what the
+  // held attempt did in the new prompt); an open PR that waits to merge is not.
+  const held = await heldRetries(db, attemptRows.filter((a) => fixing.has(a.report_id)), now)
+  return rankSpendDownCandidates(
+    rows.filter((r) =>
+      fixing.has(r.id) ? held.has(r.id) : (!recentlyDispatched.has(r.id) || keyLimited.has(r.id)) && !settled.has(r.id),
+    ),
   )
-  return rankSpendDownCandidates(rows.filter((r) => !recentlyDispatched.has(r.id) && !settled.has(r.id)))
+}
+
+/** Reports among these attempts whose newest PR the Opus review held (reportsToRetryAfterHold). */
+async function heldRetries(db: SupabaseClient, attempts: Array<{ id: string; report_id: string; created_at: string }>, now: Date): Promise<Set<string>> {
+  if (!attempts.length) return new Set()
+  const { data, error } = await db
+    .from('fix_reviews')
+    .select('fix_attempt_id, verdict, completed_at')
+    .in('fix_attempt_id', attempts.map((a) => a.id))
+    .eq('status', 'completed')
+    .order('completed_at', { ascending: false })
+  if (error) throw new Error(`spend-down: fix reviews read failed: ${error.message}`)
+  const latest = new Map<string, string>()
+  for (const r of (data ?? []) as Array<{ fix_attempt_id: string; verdict: string }>) {
+    if (!latest.has(r.fix_attempt_id)) latest.set(r.fix_attempt_id, r.verdict)
+  }
+  const heldIds = new Set([...latest].filter(([, v]) => v === 'hold').map(([id]) => id))
+  return reportsToRetryAfterHold(attempts, heldIds, now)
 }
 
 async function openCloudAttempts(db: SupabaseClient, projectId: string): Promise<number> {
@@ -314,15 +348,16 @@ export async function runSpendDownForKey(
         openCloudAttempts: await openCloudAttempts(db, projectId),
         autofixDispatchesToday: budget.dispatchesToday,
         autofixMaxPerDay: budget.maxDispatchesPerDay,
+        maxConcurrent: (s.autofix_max_concurrent as number | null) ?? null,
       }),
     )
     if (capacity <= 0) {
-      if (!probe) outcome.stopped = 'Three fixes already running'
+      if (!probe) outcome.stopped = `${(s.autofix_max_concurrent as number | null) ?? SPEND_DOWN_MAX_OPEN_PER_PROJECT} running already (the app's limit)`
       continue
     }
     const candidates = await candidatesFor(db, projectId, now)
     if (candidates.length === 0) {
-      if (!probe) outcome.stopped = 'No open report to fix'
+      if (!probe) outcome.stopped = SPEND_DOWN_STOP_NO_REPORT
       continue
     }
     for (const report of candidates) {
@@ -340,7 +375,7 @@ export async function runSpendDownForKey(
         remaining--
         if (probe) outcome.probe = true
       } else if (res.code === 'AUTOFIX_DISABLED') {
-        if (!probe) outcome.stopped = 'Auto-fix is off'
+        if (!probe) outcome.stopped = SPEND_DOWN_STOP_AUTOFIX_OFF
         break
       }
     }

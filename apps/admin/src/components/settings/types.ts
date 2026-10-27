@@ -22,6 +22,13 @@ export interface SettingsStats {
   projectName: string | null
   updatedAt: string | null
   slackConfigured: boolean
+  /**
+   * Alerts can actually be posted: a webhook, or a channel plus a bot
+   * (this project, its organization, or the operator env bot). Servers that
+   * only sent `slackConfigured` omit it; `false` means a saved Slack setting
+   * still cannot send.
+   */
+  slackCanPost?: boolean
   sentryConfigured: boolean
   reporterNotificationsEnabled: boolean
   stage2Model: string | null

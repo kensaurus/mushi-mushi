@@ -1,0 +1,17 @@
+{
+  "id": "d1b1f3fd-995a-4066-88ab-8ce4f6960654",
+  "issueUrl": "https://radar-api.service.newrelic.com/accounts/3401234/issues/d1b1f3fd-995a-4066-88ab-8ce4f6960654?notifier=WEBHOOK",
+  "title": "Error percentage > 5.0 for at least 5 minutes on 'checkout-api'",
+  "priority": "CRITICAL",
+  "impactedEntities": ["checkout-api"],
+  "totalIncidents": 1,
+  "state": "ACTIVATED",
+  "trigger": "STATE_CHANGE",
+  "isCorrelated": false,
+  "createdAt": 1761470400000,
+  "updatedAt": 1761470400000,
+  "sources": ["newrelic"],
+  "alertPolicyNames": ["Golden signals"],
+  "alertConditionNames": ["High error percentage"],
+  "workflowName": "Payments on-call"
+}

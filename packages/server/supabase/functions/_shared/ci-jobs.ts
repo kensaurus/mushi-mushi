@@ -184,6 +184,18 @@ export async function listRepoRunners(gh: CiGithub, repo: string): Promise<{ sta
   return { status: 'unknown', runners: [] }
 }
 
+/**
+ * The repo's visibility (`GET /repos/{o}/{r}`, Metadata: read). Public repos
+ * run standard GitHub-hosted minutes free; private repos pay after the plan's
+ * included minutes. 'unknown' when GitHub did not answer 200.
+ */
+export async function fetchRepoVisibility(gh: CiGithub, repo: string): Promise<{ status: number; visibility: 'public' | 'private' | 'unknown'; owner: string | null; ownerType: string | null }> {
+  const res = await ghRequest<{ private?: boolean; visibility?: string; owner?: { login?: string; type?: string } }>(gh, `${API}/repos/${repo}`)
+  if (res.status !== 200 || !res.body) return { status: res.status, visibility: 'unknown', owner: null, ownerType: null }
+  const v = typeof res.body.private === 'boolean' ? (res.body.private ? 'private' : 'public') : res.body.visibility === 'public' ? 'public' : res.body.visibility ? 'private' : 'unknown'
+  return { status: res.status, visibility: v, owner: res.body.owner?.login ?? null, ownerType: res.body.owner?.type ?? null }
+}
+
 /** POST rerun-failed-jobs for a run. 201 = queued; 403 = the token cannot write Actions. */
 export async function rerunFailedJobs(gh: CiGithub, repo: string, runId: number): Promise<number> {
   const res = await ghRequest<unknown>(gh, `${API}/repos/${repo}/actions/runs/${runId}/rerun-failed-jobs`, 'POST')
@@ -383,6 +395,16 @@ export async function noteRunnersFromJobs(db: Db, rows: CiJobRow[], now: Date): 
       .eq('repo', x.repo)
       .eq('runner_name', x.runner_name)
       .or(`last_job_at.is.null,last_job_at.lt.${x.at}`)
+    // A runner first stored as unknown (before the runner-group rule) learns its kind.
+    if (x.kind !== 'unknown') {
+      await db
+        .from('ci_runners')
+        .update({ kind: x.kind, updated_at: nowIso })
+        .eq('project_id', x.project_id)
+        .eq('repo', x.repo)
+        .eq('runner_name', x.runner_name)
+        .eq('kind', 'unknown')
+    }
   }
 }
 
@@ -515,6 +537,61 @@ export async function refreshFixCiInfra(
 
 /** One job by id (`GET /actions/jobs/{id}`); an Actions check run's id is its job id. */
 export async function fetchJob(gh: CiGithub, repo: string, jobId: number): Promise<GhJob | null> {
+  const res = await fetchJobResult(gh, repo, jobId)
+  return res.status === 200 ? res.body : null
+}
+
+/** The same with GitHub's status, so a caller can tell "gone" (404) from "not now". */
+export async function fetchJobResult(gh: CiGithub, repo: string, jobId: number): Promise<GhResult<GhJob>> {
   const res = await ghRequest<GhJob>(gh, `${API}/repos/${repo}/actions/jobs/${jobId}`)
-  return res.status === 200 && res.body && typeof res.body.id === 'number' ? res.body : null
+  if (res.status === 200 && !(res.body && typeof res.body.id === 'number')) return { status: 502, body: null }
+  return res
+}
+
+/** The tail of a job log a CI repair reads; the rest is discarded while streaming. */
+export const JOB_LOG_TAIL_BYTES = 256 * 1024
+/** Never stream more than this much of one log. */
+const JOB_LOG_MAX_STREAM_BYTES = 8 * 1024 * 1024
+
+/**
+ * The last `maxBytes` of a job's log (`GET /actions/jobs/{id}/logs`, which
+ * redirects to a short-lived download URL; Actions: read). Streams and keeps
+ * only the tail, stopping after 8 MB. Null when the log cannot be read (no
+ * Actions: read, expired logs, budget spent).
+ */
+export async function fetchJobLogTail(gh: CiGithub, repo: string, jobId: number, maxBytes = JOB_LOG_TAIL_BYTES): Promise<string | null> {
+  if (!REPO_RE.test(repo) || !Number.isSafeInteger(jobId) || jobId <= 0) return null
+  if (gh.budget.remaining <= 0) return null
+  gh.budget.remaining--
+  gh.budget.used++
+  const doFetch = gh.fetchImpl ?? ((u: string, init: RequestInit) => fetchWithTimeout(u, init))
+  const res = await doFetch(`${API}/repos/${repo}/actions/jobs/${jobId}/logs`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${gh.token}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'mushi-mushi-ci',
+    },
+  })
+  if (res.status !== 200 || !res.body) return null
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let tail = ''
+  let read = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done || !value) break
+      read += value.byteLength
+      tail = (tail + decoder.decode(value, { stream: true })).slice(-maxBytes)
+      if (read >= JOB_LOG_MAX_STREAM_BYTES) {
+        await reader.cancel().catch(() => undefined)
+        break
+      }
+    }
+  } catch {
+    return tail || null
+  }
+  return tail
 }

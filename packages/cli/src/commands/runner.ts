@@ -1,9 +1,16 @@
 /**
  * FILE: packages/cli/src/commands/runner.ts
- * PURPOSE: `mushi runner status|heartbeat|hooks install|add|audit` (Plan 022,
- *          ADR 0033): where your tests run and why a fix waits to land.
+ * PURPOSE: `mushi runner status|compare|heartbeat|hooks install|add|audit`
+ *          (Plan 022, ADR 0033 / 0037): where your tests run, why a fix waits
+ *          to land, and what each place costs.
  *
  *          - status     the CI view in the terminal (GET /v1/admin/ci/overview)
+ *          - compare    cost and speed per repo × runner class, what-ifs
+ *                       (GET /v1/admin/ci/compare; read-only)
+ *          - placement  where each repo's CI runs, the dry run of a change,
+ *                       and a request for one (ADR 0037: only LINUX_RUNNER /
+ *                       RUNNER_<WORKFLOW>; an owner or admin approves and
+ *                       runs it in the console)
  *          - heartbeat  this machine's memory, swap, load and runner services
  *                       (POST /v1/ingest/runner, kind heartbeat)
  *          - hooks      job hooks that report each job's memory peak and OOM
@@ -46,6 +53,8 @@ import {
 import { HOOKS_DIR_NAME, hookScript, mergeRunnerEnv } from '../runner/hooks.js'
 import { collectHeartbeat, detectPlatform, hashHostId, nodeHostIO, readMachineId, UnsupportedHostError, type HostIO } from '../runner/host.js'
 import { renderOverview, type CiOverview } from '../runner/overview.js'
+import { renderCompare, type CiCompare } from '../runner/compare.js'
+import { renderPlacement, renderPreview, type PlacementPreviewView, type PlacementView } from '../runner/placement.js'
 import { assertNotCliKey, defaultRunnerKeyLabel, resolveRunnerKey, RUNNER_KEY_CREDENTIAL, RUNNER_KEY_PATH } from '../runner/key.js'
 
 const HEARTBEAT_INTERVAL_MS = 120_000
@@ -243,6 +252,130 @@ export function registerRunnerCommands(program: Command): void {
         return
       }
       for (const line of renderOverview(result.data)) console.log(line)
+    })
+
+  runner
+    .command('compare')
+    .description('What CI costs and how fast it runs, per repo: GitHub-hosted vs your own machines, with what-ifs (estimated)')
+    .option('--project-id <id>', 'Project ID (defaults to the configured project)')
+    .option('--project <id>', 'Same as --project-id')
+    .option('--all', 'Every project your key can read (account-level key)')
+    .option('--days <n>', 'Window in days (1-30)', '30')
+    .option('--json', 'Machine-readable JSON output')
+    .addHelpText('after', `
+Read-only: nothing is changed on GitHub. Wait and run times are measured from
+GitHub's job times; billed minutes and money are estimated from GitHub's list
+prices (dated), your plan's included minutes, and your electricity figures
+(console: Settings → CI cost).`)
+    .action(async (opts: { projectId?: string; project?: string; all?: boolean; days: string; json?: boolean }) => {
+      const config = requireConfig()
+      const days = Number(opts.days)
+      if (!Number.isInteger(days) || days < 1 || days > 30) {
+        throw new MushiCliError('E_INVALID_INPUT', '--days must be a whole number from 1 to 30.')
+      }
+      const qs = new URLSearchParams()
+      const raw = opts.all ? undefined : (opts.projectId ?? opts.project ?? config.projectId)
+      if (raw) qs.set('project_id', requireUuid(raw, 'project id'))
+      qs.set('days', String(days))
+      const result = await apiCall<CiCompare>(`/v1/admin/ci/compare?${qs}`, config, {}, { timeoutMs: 60_000 })
+      if (!result.ok) die(result)
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(result.data, null, 2))
+        return
+      }
+      for (const line of renderCompare(result.data)) console.log(line)
+    })
+
+  const placement = runner
+    .command('placement')
+    .description('Where each repo\'s CI runs, and changing it through one runner variable with approval (ADR 0037)')
+
+  const placementBody = (opts: { projectId?: string; project?: string; repo: string; variable: string; value?: string; remove?: boolean }, config: CliConfig) => {
+    if (!opts.remove && !opts.value) throw new MushiCliError('E_INVALID_INPUT', 'Pass --value <runner label>, or --remove to delete the variable.')
+    if (opts.remove && opts.value) throw new MushiCliError('E_INVALID_INPUT', 'Pass either --value or --remove, not both.')
+    if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(opts.repo)) throw new MushiCliError('E_INVALID_INPUT', '--repo must be owner/repo.')
+    const raw = opts.projectId ?? opts.project ?? config.projectId
+    if (!raw) throw new MushiCliError('E_INVALID_INPUT', 'Pass --project-id (or configure a project).')
+    return { projectId: requireUuid(raw, 'project id'), repo: opts.repo, variable: opts.variable, value: opts.remove ? null : (opts.value as string) }
+  }
+
+  placement
+    .command('show')
+    .description('Each repo: the runner variables its workflows read and their values, the CI agreement, runner labels, pending requests')
+    .option('--project-id <id>', 'Project ID (defaults to the configured project)')
+    .option('--project <id>', 'Same as --project-id')
+    .option('--json', 'Machine-readable JSON output')
+    .action(async (opts: { projectId?: string; project?: string; json?: boolean }) => {
+      const config = requireConfig()
+      const raw = opts.projectId ?? opts.project ?? config.projectId
+      if (!raw) throw new MushiCliError('E_INVALID_INPUT', 'Pass --project-id (or configure a project).')
+      const result = await apiCall<PlacementView>(`/v1/admin/ci/placement?project_id=${encodeURIComponent(requireUuid(raw, 'project id'))}`, config, {}, { timeoutMs: 60_000 })
+      if (!result.ok) die(result)
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(result.data, null, 2))
+        return
+      }
+      for (const line of renderPlacement(result.data)) console.log(line)
+    })
+
+  const placementAction = (verb: 'preview' | 'request') =>
+    async (opts: { projectId?: string; project?: string; repo: string; variable: string; value?: string; remove?: boolean; reason?: string; json?: boolean }) => {
+      const config = requireConfig()
+      const body = { ...placementBody(opts, config), ...(verb === 'request' && opts.reason ? { reason: opts.reason.slice(0, 500) } : {}) }
+      const path = verb === 'preview' ? '/v1/admin/ci/placement/preview' : '/v1/admin/ci/placement/requests'
+      const result = await apiCall<PlacementPreviewView | { id: string; status: string; preview: PlacementPreviewView; next?: string }>(path, config, { method: 'POST', body: JSON.stringify(body) }, { timeoutMs: 60_000 })
+      if (!result.ok) die(result)
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(result.data, null, 2))
+        return
+      }
+      if (verb === 'preview') {
+        for (const line of renderPreview(result.data as PlacementPreviewView)) console.log(line)
+        return
+      }
+      const r = result.data as { id: string; status: string; preview: PlacementPreviewView; next?: string }
+      for (const line of renderPreview(r.preview)) console.log(line)
+      console.log(`\nRequested ${r.id} (${r.status}). ${r.next ?? 'An owner or admin approves and runs it in the console.'}`)
+    }
+
+  const changeOptions = (cmd: Command): Command =>
+    cmd
+      .requiredOption('--repo <owner/repo>', 'Repository connected to the project')
+      .option('--variable <name>', 'LINUX_RUNNER or RUNNER_<WORKFLOW>', 'LINUX_RUNNER')
+      .option('--value <label>', 'The runner label jobs should ask for')
+      .option('--remove', 'Remove the variable (jobs use the workflow\'s fallback, usually GitHub-hosted)')
+      .option('--project-id <id>', 'Project ID (defaults to the configured project)')
+      .option('--project <id>', 'Same as --project-id')
+      .option('--json', 'Machine-readable JSON output')
+
+  changeOptions(
+    placement
+      .command('preview')
+      .description('Dry run: what would move, what stays and why, the target runners, cost, the CI agreement\'s verdict. Changes nothing'),
+  ).action(placementAction('preview'))
+
+  changeOptions(
+    placement
+      .command('request')
+      .description('Ask for the change. Nothing changes until an owner or admin approves and runs it in the console'),
+  )
+    .option('--reason <text>', 'Why, shown to the approver')
+    .action(placementAction('request'))
+
+  placement
+    .command('revert <requestId>')
+    .description('Ask to undo a change that ran (it needs its own approval in the console)')
+    .option('--json', 'Machine-readable JSON output')
+    .action(async (requestId: string, opts: { json?: boolean }) => {
+      const config = requireConfig()
+      const id = requireUuid(requestId, 'request id')
+      const result = await apiCall<{ id: string; status: string; revertOf: string }>(`/v1/admin/ci/placement/requests/${id}/revert`, config, { method: 'POST' })
+      if (!result.ok) die(result)
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(result.data, null, 2))
+        return
+      }
+      console.log(`Requested revert ${result.data.id} of ${result.data.revertOf} (${result.data.status}). An owner or admin approves and runs it in the console.`)
     })
 
   runner

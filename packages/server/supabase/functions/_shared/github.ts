@@ -210,6 +210,8 @@ export interface PullRequestSnapshot {
   mergedAt?: string | null
   /** Current head commit; CI runs against this, not the first fix commit. */
   headSha?: string | null
+  /** GitHub's `mergeable_state` (`clean`, `behind`, `blocked`, `dirty`, …); null while GitHub computes it. */
+  mergeableState?: string | null
   /**
    * The base repository as GitHub names it now (`base.repo`). A renamed repo
    * still answers under its old URL, so the id and current full name are the
@@ -286,6 +288,7 @@ export async function fetchPullRequest(
     merged_at?: string | null
     head?: { sha?: string }
     base?: BaseRepoBody
+    mergeable_state?: string | null
   }
   return {
     number: body.number ?? pullNumber,
@@ -296,8 +299,31 @@ export async function fetchPullRequest(
     closedAt: body.closed_at ?? null,
     mergedAt: body.merged_at ?? null,
     headSha: body.head?.sha ?? null,
+    mergeableState: body.mergeable_state ?? null,
     ...baseRepoOf(body.base),
   }
+}
+
+/**
+ * GitHub's "Update branch": merges the base into the PR branch. True when
+ * GitHub accepted it (202); false on a conflict or any other refusal. Pinned
+ * to the head the caller saw, so a newer push is never merged over.
+ */
+export async function updatePullRequestBranch(
+  token: string,
+  ref: GithubRepoRef,
+  pullNumber: number,
+  expectedHeadSha: string | null,
+): Promise<boolean> {
+  const res = await fetchWithTimeout(
+    `https://api.github.com/repos/${ref.owner}/${ref.repo}/pulls/${pullNumber}/update-branch`,
+    {
+      method: 'PUT',
+      headers: { ...githubAuthHeaders(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify(expectedHeadSha ? { expected_head_sha: expectedHeadSha } : {}),
+    },
+  ).catch(() => null)
+  return res?.status === 202
 }
 
 export async function fetchPullRequestDetails(
@@ -494,6 +520,39 @@ export async function fetchLatestCheckRun(
   if (!res.ok) throw new Error(`check-runs fetch ${res.status}`)
   const body = await res.json() as { check_runs?: CheckRunLike[] }
   return collapseCheckRuns(body.check_runs ?? [])
+}
+
+/**
+ * Names of the check runs that failed (failure / timed_out) on the latest
+ * commit of `gitRef` (a branch name or a SHA), with `filter=latest`. Advisory
+ * runs (Copilot review) are left out. Null when the list cannot be read.
+ * The CI-repair follow-up (ADR 0032 amendment) uses it to leave alone a
+ * check that is red on the base branch too.
+ */
+export async function fetchFailingCheckNames(
+  token: string,
+  ref: GithubRepoRef,
+  gitRef: string,
+): Promise<Set<string> | null> {
+  const res = await fetchWithTimeout(
+    `https://api.github.com/repos/${ref.owner}/${ref.repo}/commits/${encodeURIComponent(gitRef)}/check-runs?per_page=100&filter=latest`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    },
+  )
+  if (!res.ok) return null
+  const body = (await res.json().catch(() => null)) as { check_runs?: CheckRunLike[] } | null
+  if (!body || !Array.isArray(body.check_runs)) return null
+  return new Set(
+    body.check_runs
+      .filter((r) => !isAdvisoryCheckRun(r) && (r.conclusion === 'failure' || r.conclusion === 'timed_out'))
+      .map((r) => String(r.name ?? ''))
+      .filter(Boolean),
+  )
 }
 
 export interface CheckRunLike {

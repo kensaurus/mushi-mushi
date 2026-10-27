@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 import { chromium, type Page } from '@playwright/test'
 import pixelmatch from 'pixelmatch'
 import { PNG } from 'pngjs'
@@ -338,6 +338,8 @@ function compareScreenshots(before: Buffer, after: Buffer): number {
     const height = Math.min(img1.height, img2.height)
 
     const diff = new PNG({ width, height })
+    // 0.1 is pixelmatch's per-pixel distance (v8 OKLab; 1 = black vs white),
+    // not the share-of-pixels cutoff applied to the returned ratio.
     const numDiffPixels = pixelmatch(
       img1.data, img2.data, diff.data,
       width, height,

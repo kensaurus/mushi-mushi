@@ -1,12 +1,11 @@
 GNU AFFERO GENERAL PUBLIC LICENSE
 Version 3, 19 November 2007
 
-Copyright (c) 2026 Kenji Sakuramoto
+Copyright (c) 2026 Kenji Sakuramoto / Kensaurus 合同会社
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+the Free Software Foundation, version 3 of the License only.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,18 +17,23 @@ modified version of this software as a service (SaaS), you must make the
 complete source of the modified version available to the users of that service
 under this license.
 
-The full AGPLv3 license text is available at:
-https://www.gnu.org/licenses/agpl-3.0.html
+The full license text is in LICENSES/AGPL-3.0-only.txt at the root of this
+repository, and at https://www.gnu.org/licenses/agpl-3.0.html.
 
 SPDX-License-Identifier: AGPL-3.0-only
 
 ---
 
 Applies to: packages/server  packages/agents  packages/verify
+(and, under their own LICENSE files with the same terms, apps/admin and
+apps/testers). Everything under packages/server/ee/ is NOT covered by this
+file; see packages/server/ee/LICENSE.
 
 The SDK packages (packages/core, packages/web, packages/react, packages/vue,
 packages/svelte, packages/angular, packages/react-native, packages/capacitor,
 packages/node, packages/cli, packages/mcp, packages/plugin-*, packages/adapters,
-packages/marketing-ui, packages/brand, packages/inventory-schema) remain MIT.
+packages/marketing-ui, packages/inventory-schema) and the code and tokens in
+packages/brand remain MIT. See the root LICENSE file for the MIT text.
 
-See the root LICENSE file for the MIT text covering the SDK packages.
+For a commercial license that removes copyleft obligations when offering Mushi
+as a hosted service to third parties, see COMMERCIAL-LICENSE.md at the repo root.
