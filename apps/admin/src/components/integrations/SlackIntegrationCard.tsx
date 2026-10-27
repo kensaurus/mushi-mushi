@@ -19,8 +19,8 @@ import { HealthSparkline } from './HealthSparkline'
 import type { HealthRow } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { ConnectionStatus } from '../ui/ConnectionStatus'
-import { connectionFromProbe, newestProbe, probeFromTestSend, type ProbeLike } from '../../lib/integrationConnection'
-import { SLACK_VERIFIED_FRESH_MS } from '../settings/slackAlertStatus'
+import { newestProbe, probeFromTestSend, type ProbeLike } from '../../lib/integrationConnection'
+import { slackCardConnection } from './slackConnection'
 
 
 /** Remembered for the tab's session so "Add to Slack" isn't offered again after it said no. */
@@ -279,25 +279,13 @@ export function SlackIntegrationCard({
     }
   }
 
-  const probed = connectionFromProbe({
-    configured: true,
+  const connection = slackCardConnection({
+    slackConfigured,
+    canPost,
+    channelId,
     probe: newestProbe(latestProbe, localProbe),
-    staleAfterMs: SLACK_VERIFIED_FRESH_MS,
+    installUnavailable,
   })
-  const connection = !slackConfigured
-    ? {
-        state: 'not_connected' as const,
-        detail: installUnavailable
-          ? "One-click Slack install isn't set up on this server. Paste an incoming webhook URL below to get alerts."
-          : 'Add Mushi to a Slack workspace to get alerts.',
-      }
-    : !canPost && !channelId
-      ? { state: 'attention' as const, detail: 'Pick a channel below so Mushi knows where to post.' }
-      : !canPost
-        ? { state: 'attention' as const, detail: 'No Slack bot can post to this channel yet.' }
-        : probed.state === 'checking'
-          ? { state: 'checking' as const, detail: 'Connected, but no test message sent yet.' }
-          : probed
   const connectionAction =
     installUnavailable && !slackConfigured
       ? { label: 'Use a webhook URL', onClick: () => setWebhookOpen(true) }
@@ -374,7 +362,7 @@ export function SlackIntegrationCard({
         </div>
       </div>
 
-      <div title={probed.raw && probed.raw !== connection.detail ? probed.raw : undefined}>
+      <div title={connection.raw && connection.raw !== connection.detail ? connection.raw : undefined}>
         <ConnectionStatus
           state={testingSlack ? 'checking' : connection.state}
           label={testingSlack ? 'Sending a test…' : undefined}

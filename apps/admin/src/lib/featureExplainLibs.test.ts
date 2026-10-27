@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { isIntegrationsBannerVisible } from './integrationsExplainer'
 import { QA_PROVIDER_DEFINITIONS } from './qaProviderGuide'
 import { isReportsBannerVisible, TRIAGE_SEVERITY_DEFINITIONS } from './reportsExplainer'
 import { INBOX_PDCA_STAGES } from './inboxExplainer'
@@ -17,14 +16,6 @@ import { isHealthGuideExpanded, HEALTH_PROBE_TABS } from './healthExplainer'
 import { isOnboardingGuideExpanded } from './onboardingExplainer'
 import { isRewardsGuideExpanded, REWARDS_ECONOMY_CONCEPTS } from './rewardsExplainer'
 import { PDCA_STAGES } from './pdca'
-
-describe('integrationsExplainer', () => {
-  it('shows banner when no project or not healthy', () => {
-    expect(isIntegrationsBannerVisible('no_project', false)).toBe(true)
-    expect(isIntegrationsBannerVisible('incomplete', true)).toBe(true)
-    expect(isIntegrationsBannerVisible('healthy', true)).toBe(false)
-  })
-})
 
 describe('qaProviderGuide', () => {
   it('resolves known providers', () => {

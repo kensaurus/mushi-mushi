@@ -15,7 +15,6 @@ import { apiFetch } from '../lib/supabase'
 import { Link } from 'react-router-dom'
 import { DisclosurePanel, Panel, PanelSectionLabel } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
-import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { usePageData } from '../lib/usePageData'
 import { useMergedErrors } from '../lib/useMergedErrors'
@@ -48,9 +47,8 @@ import {
   type RoutingIntegration,
   type RoutingProviderDef,
 } from '../components/integrations/types'
-import { IntegrationStatusBanner } from '../components/integrations/IntegrationStatusBanner'
+import { ConnectionGrid } from '../components/integrations/ConnectionGrid'
 import { IntegrationsProvenanceReadout } from '../components/integrations/IntegrationsProvenanceReadout'
-import { isIntegrationsBannerVisible } from '../lib/integrationsExplainer'
 import { usePageCopy } from '../lib/copy'
 import { draftFromSaved, platformSaveBody } from '../lib/platformIntegrationForm'
 import { readIntegrationOAuthReturn } from '../lib/integrationOAuthReturn'
@@ -458,39 +456,19 @@ export function IntegrationsPage() {
         }
       />
 
-      <PagePosture
-        slots={[
-          {
-            priority: POSTURE_PRIORITY.status,
-            show:
-              !loading &&
-              isIntegrationsBannerVisible(stats.topPriority, stats.hasAnyProject ?? setup.hasAnyProject),
-            children: (
-              <IntegrationStatusBanner
-                stats={stats}
-                projectName={stats.projectName ?? null}
-                plainBanner={false}
-              />
-            ),
-          },
-          {
-            priority: POSTURE_PRIORITY.guide,
-            show: Boolean(activeProjectId && stats.projectId),
-            children: (
-              <IntegrationsProvenanceReadout
-                stats={stats}
-                githubRepoUrl={
-                  typeof platform?.github?.github_repo_url === 'string'
-                    ? platform.github.github_repo_url
-                    : null
-                }
-                fetchedAt={statsQuery.lastFetchedAt}
-                validating={statsQuery.isValidating}
-              />
-            ),
-          },
-        ]}
-      />
+      {/* Which tools are connected, what's broken, and the fix (Integrations page intent). */}
+      {setup.hasAnyProject ? (
+        <ConnectionGrid
+          platform={platformQuery.data ?? null}
+          history={history}
+          slack={{
+            configured: Boolean(settingsQuery.data?.slackConfigured),
+            canPost: Boolean(settingsQuery.data?.slackCanPost),
+            channelId: settingsQuery.data?.slackChannelId ?? null,
+          }}
+          linearConnected={linearConnected}
+        />
+      ) : null}
 
       {!setup.hasAnyProject && (
         <NextStep
@@ -714,6 +692,16 @@ export function IntegrationsPage() {
           })}
         </div>
       </Panel>
+
+      {/* Where each credential comes from (project, team or server), at the foot. */}
+      {activeProjectId && stats.projectId ? (
+        <IntegrationsProvenanceReadout
+          stats={stats}
+          githubRepoUrl={typeof platform?.github?.github_repo_url === 'string' ? platform.github.github_repo_url : null}
+          fetchedAt={statsQuery.lastFetchedAt}
+          validating={statsQuery.isValidating}
+        />
+      ) : null}
 
       <p className="text-2xs text-fg-muted">
         Related:{' '}
