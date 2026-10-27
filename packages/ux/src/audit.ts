@@ -21,7 +21,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { captureSurface, openSession } from './capture.js'
-import { askApi, askClaudeCode } from './checker.js'
+import { askApi, askClaudeCode, askCursor } from './checker.js'
 import { discover } from './discover.js'
 import type { AllowRule } from './guard.js'
 import { contentShare, cropTop } from './image.js'
@@ -31,9 +31,9 @@ import type { SyncConfig } from './sync.js'
 import { VIEWPORTS, type ProbeResult, type Surface, type Viewport } from './types.js'
 
 /** @internal Exported for tests only. */
-export type FindingKind = 'axe' | 'overflow' | 'console' | 'cls' | 'visual'
+export type FindingKind = 'axe' | 'overflow' | 'layout' | 'console' | 'cls' | 'visual' | 'explore'
 type FindingSeverity = 'high' | 'medium' | 'low'
-export type ReviewVia = 'claude-code' | 'anthropic-api' | 'none'
+export type ReviewVia = 'claude-code' | 'anthropic-api' | 'cursor' | 'none'
 
 export interface AuditFinding {
   /** sha1 of (path, screen key, kind, rule), 16 hex. */
@@ -49,6 +49,8 @@ export interface AuditFinding {
   evidence: string[]
   expected: string
   doneWhen: string
+  /** The report's footer line; default: the read-only audit. */
+  foundBy?: string
 }
 
 type ScreenRef = Pick<Surface, 'key' | 'path' | 'label'>
@@ -62,7 +64,7 @@ const REVIEW_MAX_HEIGHT = 2400
 export const AUDIT_FILE_CAP = 15
 const AUDIT_DEDUPE_DAYS = 14
 
-/** @internal Exported for tests only. Pure: a path without its query: `/reports?project=…` is one page however it was opened. */
+/** Pure: a path without its query: `/reports?project=…` is one page however it was opened. */
 export function pagePath(path: string): string {
   const q = path.search(/[?#]/)
   return q < 0 ? path : path.slice(0, q)
@@ -135,6 +137,34 @@ export function findingsFromProbes(screen: ScreenRef, viewport: Viewport, probes
         evidence: [`document scrollWidth exceeds the ${viewport.width}px viewport (${viewport.name})`],
         expected: `Everything fits the ${viewport.width}px width; wide content (tables, code) scrolls inside its own box.`,
         doneWhen: `${where} has no horizontal page scroll.`,
+      }),
+    )
+  }
+  const overlaps = (probes.layout ?? []).filter((i) => i.kind === 'overlap')
+  if (overlaps.length) {
+    out.push(
+      finding(screen, viewport.name, {
+        kind: 'layout',
+        rule: 'overlapping-boxes',
+        severity: 'medium',
+        summary: `${overlaps.length} element${overlaps.length === 1 ? '' : 's'} drawn on top of another at ${viewport.width}px wide`,
+        evidence: overlaps.slice(0, 4).map((i) => `${viewport.name}: ${i.selector} ${i.detail}`),
+        expected: 'Cards, rows and controls sit side by side or stack; none covers another.',
+        doneWhen: `${where} has no in-flow element overlapping its sibling.`,
+      }),
+    )
+  }
+  const outgrown = (probes.layout ?? []).filter((i) => i.kind === 'outgrows')
+  if (outgrown.length) {
+    out.push(
+      finding(screen, viewport.name, {
+        kind: 'layout',
+        rule: 'control-outgrows-container',
+        severity: 'medium',
+        summary: `${outgrown.length} control${outgrown.length === 1 ? '' : 's'} too big for ${outgrown.length === 1 ? 'its' : 'their'} space at ${viewport.width}px wide`,
+        evidence: outgrown.slice(0, 4).map((i) => `${viewport.name}: ${i.selector} ${i.detail}`),
+        expected: 'Each button fits inside its container on one or two lines, with its whole label visible.',
+        doneWhen: `${where} has no button or link that sticks out of its container, wraps past two lines or cuts its label off.`,
       }),
     )
   }
@@ -286,7 +316,7 @@ export function reportBodyFor(f: AuditFinding, baseUrl: string): AuditReportBody
     `Expected: ${f.expected}`,
     `Done when: ${f.doneWhen}`,
     '',
-    `Found by mushi-ux audit (read-only, cached signed-in session). ${auditMarker(f.fingerprint)}`,
+    `${f.foundBy ?? 'Found by mushi-ux audit (read-only, cached signed-in session).'} ${auditMarker(f.fingerprint)}`,
   ].join('\n')
   return { title, description: description.slice(0, 10_000), severity: f.severity, component: new URL(url).pathname.slice(0, 200) }
 }
@@ -389,7 +419,12 @@ async function reviewScreen(input: {
   mkdirSync(input.dir, { recursive: true })
   images.forEach((png, i) => writeFileSync(join(input.dir, names[i]), png))
   const prompt = REVIEW_PROMPT(screenName(input.screen.label), names)
-  const a = input.via === 'claude-code' ? await askClaudeCode(prompt, input.dir, input.model) : await askApi(prompt, images, input.model, input.client ?? new Anthropic(), names)
+  const a =
+    input.via === 'claude-code'
+      ? await askClaudeCode(prompt, input.dir, input.model)
+      : input.via === 'cursor'
+        ? await askCursor(prompt, input.dir, input.model)
+        : await askApi(prompt, images, input.model, input.client ?? new Anthropic(), names)
   if (a.error || !a.text) return { findings: [], error: a.error ?? 'No answer.' }
   return { findings: visualFindingsFrom(a.text, input.screen) }
 }
@@ -429,8 +464,7 @@ export interface AuditResult {
 const DEFAULT_MAX_SCREENS = 30
 
 /**
- * @internal Exported for tests only.
- * Requests an audit lets through on top of `--allow`: a cached session
+ * Requests an audit (and explore) lets through on top of `--allow`: a cached session
  * renewing itself writes no app data, and without it a signed-in app boots
  * blank (Supabase refreshes its access token with this POST; 25 were blocked
  * on the first console audit, 2026-10-24).

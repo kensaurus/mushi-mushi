@@ -57,4 +57,22 @@ export interface ProbeResult {
   consoleErrors: string[]
   /** Cumulative layout shift observed while the surface settled. */
   cls: number
+  /**
+   * Boxes that collide or stick out of their container. Absent in runs
+   * captured before 2026-10-26.
+   */
+  layout?: LayoutIssue[]
+}
+
+export interface LayoutIssue {
+  /**
+   * `overlap`: two in-flow siblings drawn on top of each other.
+   * `outgrows`: a control wider than its container, sticking past its edge,
+   * wrapping past two lines or cutting its own label off.
+   */
+  kind: 'overlap' | 'outgrows'
+  /** Short CSS-ish name of the element, with its text. */
+  selector: string
+  /** What was measured, in px. */
+  detail: string
 }

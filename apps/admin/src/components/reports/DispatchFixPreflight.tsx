@@ -255,6 +255,12 @@ export function DispatchFixPreflight({
             </li>
           </ul>
 
+          {blockReason ? (
+            <p className="mt-2 text-2xs text-fg-secondary" data-testid="dispatch-block-reason">
+              {blockReason}
+            </p>
+          ) : null}
+
           {preflight && (
             <PreflightChecklist
               loading={preflight.loading}

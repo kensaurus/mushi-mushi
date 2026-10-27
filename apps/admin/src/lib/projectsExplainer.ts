@@ -39,6 +39,7 @@ export function isProjectsGuideExpanded(topPriority: string | undefined): boolea
     topPriority === 'no_projects' ||
     topPriority === 'never_ingested' ||
     topPriority === 'no_sdk_heartbeat' ||
+    topPriority === 'sdk_missing' ||
     topPriority === 'partial_ingest'
   )
 }

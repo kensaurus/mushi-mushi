@@ -68,7 +68,12 @@ const FIELD_ENV_VAR: Partial<Record<PlatformField, string>> = {
   linear_api_key_ref: 'LINEAR_API_KEY',
 }
 
-/** Fields present in organization_integration_settings (mirrors the migration columns). */
+/**
+ * Fields present in organization_integration_settings (mirrors the migration
+ * columns). One select reads them all, so a name the table lacks fails the
+ * whole read and every org default is lost: `slack_bot_token_ref` sat here
+ * from 2026-06-19 to 2026-10-26 with no such column (Slack is per project).
+ */
 const ORG_FIELDS: PlatformField[] = [
   'sentry_org_slug',
   'sentry_auth_token_ref',
@@ -80,7 +85,6 @@ const ORG_FIELDS: PlatformField[] = [
   'cursor_api_key_ref',
   'cursor_default_model',
   'claude_api_key_ref',
-  'slack_bot_token_ref',
   // Linear — org-level defaults (webhook secret / actor token are project-scoped only)
   'linear_api_key_ref',
   'linear_access_token_ref',

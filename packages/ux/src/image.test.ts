@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, expect, it } from 'vitest'
 import { PNG } from 'pngjs'
-import { dHash, hammingHex, pixelDiff } from './image.js'
+import { changeRegions, dHash, hammingHex, pixelDiff } from './image.js'
 
 const encodePng = (png: PNG): Buffer => PNG.sync.write(png)
 
@@ -35,7 +35,36 @@ describe('pixelDiff', () => {
     // a is padded white, so only b's black bottom band differs.
     expect(d.changedPixels).toBe(40 * 10)
   })
+
+  it('keeps threshold 0.1 on the v8 scale (1 is black vs white)', () => {
+    // OKLab replaced YIQ. These are the pairs YIQ mis-scored (pixelmatch#127)
+    // and the gray steps both metrics agree on, so 0.1 is not retuned.
+    const flat = (rgb: [number, number, number]) => rgba(4, 4, rgb)
+    const clear = pixelDiff(flat([39, 44, 92]), flat([39, 44, 14]))
+    expect(clear.changedPixels).toBe(16)
+    const png = PNG.sync.read(clear.diffPng)
+    // Real diffs stay pure red; anti-aliasing stays yellow and is ignored below.
+    expect([png.data[0], png.data[1], png.data[2]]).toEqual([255, 0, 0])
+    expect(pixelDiff(flat([0, 254, 252]), flat([47, 254, 252])).changedPixels).toBe(0)
+    expect(pixelDiff(flat([128, 128, 128]), flat([140, 140, 140])).changedPixels).toBe(0)
+    expect(pixelDiff(flat([128, 128, 128]), flat([160, 160, 160])).changedPixels).toBe(16)
+  })
 })
+
+function flatPng(width: number, height: number, rgb: [number, number, number]): PNG {
+  const png = new PNG({ width, height })
+  for (let i = 0; i < png.data.length; i += 4) {
+    png.data[i] = rgb[0]
+    png.data[i + 1] = rgb[1]
+    png.data[i + 2] = rgb[2]
+    png.data[i + 3] = 255
+  }
+  return png
+}
+
+function rgba(width: number, height: number, rgb: [number, number, number]): Buffer {
+  return encodePng(flatPng(width, height, rgb))
+}
 
 describe('dHash', () => {
   it('puts near-identical screens within a few bits and different ones far apart', () => {
@@ -66,5 +95,10 @@ describe('change regions', () => {
   it('finds nothing when nothing changed', () => {
     const page = solid(100, 100, () => 200)
     expect(pixelDiff(page, page).regions).toEqual([])
+  })
+
+  it('reads only pure red as a change, so anti-alias yellow is ignored', () => {
+    expect(changeRegions(flatPng(32, 32, [255, 255, 0]))).toEqual([])
+    expect(changeRegions(flatPng(32, 32, [255, 0, 0]))).toHaveLength(1)
   })
 })

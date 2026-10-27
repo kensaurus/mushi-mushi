@@ -1,7 +1,7 @@
 /**
  * Minimal in-memory stand-in for the supabase-js query builder, covering the
  * subset the voice-inbox modules use: from().select/insert/update/upsert/delete
- * with eq / not-in / ilike / order / limit / range / maybeSingle / single, `count`
+ * with eq / not-in / like / ilike / order / limit / range / maybeSingle / single, `count`
  * (with or without `head`), plus rpc(). `failRead` makes a table's reads fail.
  *
  * Filters on JSON paths use the PostgREST `col->>key` spelling. Unique keys
@@ -16,6 +16,11 @@ export type Row = Record<string, unknown>
 interface FakeDbOptions {
   /** table → columns that form a unique key (insert conflicts return 23505). */
   uniques?: Record<string, string[]>
+  /**
+   * table → a partial unique index (`CREATE UNIQUE INDEX … WHERE …`): rows for
+   * which `where` holds may not share `keys`; an insert that would returns 23505.
+   */
+  partialUniques?: Record<string, { keys: string[]; where: (row: Row) => boolean }>
   rpc?: (fn: string, args: Record<string, unknown>) => unknown
   /** Make an rpc fail as PostgREST does (e.g. PGRST202 for a function that is not applied yet); null lets it run. */
   rpcError?: (fn: string) => { code: string; message: string } | null
@@ -201,9 +206,16 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
   }
   /** `ilike(col, '%x%')`: case-insensitive LIKE (`%` any run, `_` one character, `\` escapes). */
   ilike(key: string, pattern: string): this {
+    return this.likeFilter(key, pattern, 'is')
+  }
+  /** Case-sensitive LIKE, as in Postgres. */
+  like(key: string, pattern: string): this {
+    return this.likeFilter(key, pattern, 's')
+  }
+  private likeFilter(key: string, pattern: string, flags: string): this {
     const source = pattern.replace(/\\(.)|([%_])|([^%_\\]+)/g, (_m, esc: string, wild: string, lit: string) =>
       esc !== undefined ? esc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : wild === '%' ? '.*' : wild === '_' ? '.' : lit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-    const re = new RegExp(`^${source}$`, 'is')
+    const re = new RegExp(`^${source}$`, flags)
     this.filters.push((r) => re.test(String(readPath(r, key) ?? '')))
     return this
   }
@@ -285,6 +297,10 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
         for (const item of items) {
           if (uniques && rows.some((r) => uniques.every((k) => r[k] === item[k]))) {
             return { data: null, error: { code: '23505', message: `duplicate key on ${this.table}` } }
+          }
+          const partial = this.db.options.partialUniques?.[this.table]
+          if (partial && partial.where(item) && rows.some((r) => partial.where(r) && partial.keys.every((k) => r[k] === item[k]))) {
+            return { data: null, error: { code: '23505', message: `duplicate key on ${this.table} (partial unique index)` } }
           }
           if (this.db.options.autoId && item.id === undefined) item.id = crypto.randomUUID()
           rows.push({ ...item })

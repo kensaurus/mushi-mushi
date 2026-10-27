@@ -2,7 +2,8 @@
  * FILE: packages/server/supabase/functions/_shared/local-followup.ts
  * PURPOSE: Review follow-ups for pull requests a LOCAL agent opened through
  *          `mushi work` (fix_attempts.agent = 'mcp'), ADR 0032 amendment
- *          2026-10-24. The review-followup worker only starts Cursor Cloud
+ *          2026-10-24, and for cloud-agent PRs while the team's cloud
+ *          follow-ups are off (amendment 2026-10-25). The review-followup worker only starts Cursor Cloud
  *          agents on cloud-agent PRs; a local PR that Opus said "fix first"
  *          about otherwise waits for a person. Here the CLI asks for one round,
  *          the server checks the same rules (the PR's live head is the reviewed
@@ -18,33 +19,72 @@ import { FOLLOWUP_MAX_PER_PR } from './review-followup.ts'
 /** fix_attempts.agent for a fix made outside Mushi's cloud agents (`mushi work`, `submit_fix_result`). */
 export const LOCAL_FIX_AGENT = 'mcp'
 
+/**
+ * Cloud-agent PRs a local agent may also follow up, but only while the
+ * organization's cloud review follow-ups are off: then nothing else ever
+ * works on their "fix first" findings (ADR 0032 amendment 2026-10-25).
+ */
+export const CLOUD_FIX_AGENTS: readonly string[] = ['cursor_cloud', 'github_cloud_agent']
+
+/** Pure: whether a local follow-up may work on a fix this agent made. */
+export function localFollowupAllowedFor(agent: string | null, cloudFollowupsOn: boolean): boolean {
+  if (agent === LOCAL_FIX_AGENT) return true
+  return !cloudFollowupsOn && agent != null && CLOUD_FIX_AGENTS.includes(agent)
+}
+
 /** fix_events.dedupe_key of a claimed local round: one per (fix, reviewed head). */
 export function localFollowupDedupe(fixAttemptId: string, headSha: string): string {
   return `local-followup:${fixAttemptId}:${headSha}`
+}
+
+/**
+ * fix_events.dedupe_key of a person's hand-off of a CI repair to the local
+ * lanes (console /pipeline), at the head it was asked for. The list offers a
+ * `ci_repair` round only at a head with this request: CI repair on a local
+ * lane is asked for, never automatic.
+ */
+export function localCiRepairRequestDedupe(fixAttemptId: string, headSha: string): string {
+  return `local-ci-repair-request:${fixAttemptId}:${headSha}`
+}
+
+/** fix_events.dedupe_key of a head whose findings the safety screen dropped entirely (not a round). */
+export function localFollowupSkipDedupe(fixAttemptId: string, headSha: string): string {
+  return `local-followup-skip:${fixAttemptId}:${headSha}`
 }
 
 export interface LocalFollowupInput {
   attempt: { agent: string | null; pr_url: string | null; merged_at: string | null; pr_state: string | null } | null
   review: { status: string; verdict: string | null; head_sha: string | null } | null
   livePr: { open: boolean; headSha: string | null; headRef: string | null; headRepoId: number | null; baseRepoId: number | null } | null
-  /** Heads a local round was already claimed for on this fix. */
+  /** Heads a follow-up round (local, or a cloud agent that started) already ran for on this fix. */
   roundHeads: readonly string[]
+  /** The organization's cloud review follow-ups (`organizations.review_followup_enabled`). */
+  cloudFollowupsOn: boolean
+  /** A person handed a CI repair at the live head to the local lanes (localCiRepairRequestDedupe). */
+  ciRepairRequested?: boolean
+  /** CI on the live head fails on the code (ciHeadState: code_failure). */
+  ciCodeRed?: boolean
 }
 
+/** What a local round does: fix the Opus findings, or make CI green (ADR 0032 amendment 2026-10-22). */
+export type LocalFollowupKind = 'findings' | 'ci_repair'
+
 export type LocalFollowupGate =
-  | { ok: true; headSha: string; branch: string; round: number }
+  | { ok: true; headSha: string; branch: string; round: number; kind: LocalFollowupKind }
   | { ok: false; status: 404 | 409 | 503; code: string; message: string }
 
 /** Whether one local follow-up round may start now, and if not, exactly why. */
 export function localFollowupGate(input: LocalFollowupInput): LocalFollowupGate {
   const { attempt, review, livePr } = input
   if (!attempt) return { ok: false, status: 404, code: 'NOT_FOUND', message: 'Fix not found.' }
-  if (attempt.agent !== LOCAL_FIX_AGENT) {
+  if (!localFollowupAllowedFor(attempt.agent, input.cloudFollowupsOn)) {
     return {
       ok: false,
       status: 409,
       code: 'NOT_LOCAL',
-      message: `This fix was made by ${attempt.agent ?? 'an unknown agent'}; Mushi's review follow-up worker handles cloud-agent pull requests itself.`,
+      message: input.cloudFollowupsOn && attempt.agent != null && CLOUD_FIX_AGENTS.includes(attempt.agent)
+        ? `This fix was made by ${attempt.agent}, and review follow-ups are on for this team: Mushi's follow-up worker handles it.`
+        : `This fix was made by ${attempt.agent ?? 'an unknown agent'}; local follow-ups only work on local and cloud-agent pull requests.`,
     }
   }
   if (!attempt.pr_url) return { ok: false, status: 409, code: 'NO_PR', message: 'This fix has no pull request.' }
@@ -59,7 +99,12 @@ export function localFollowupGate(input: LocalFollowupInput): LocalFollowupGate 
       message: review ? 'The Opus review of this pull request is still running; try again when it finishes.' : 'This pull request has no Opus review yet.',
     }
   }
-  if (review.status !== 'completed' || review.verdict !== 'fix_first') {
+  // A CI repair: Opus said merge, CI fails on the code, and a person asked for it.
+  const ciRepair = review.status === 'completed' && review.verdict === 'merge' && input.ciRepairRequested === true
+  if (ciRepair && input.ciCodeRed === false) {
+    return { ok: false, status: 409, code: 'CI_NOT_FAILING', message: 'CI on the reviewed commit is not failing on the code any more: nothing to repair.' }
+  }
+  if (!ciRepair && (review.status !== 'completed' || review.verdict !== 'fix_first')) {
     return {
       ok: false,
       status: 409,
@@ -94,5 +139,46 @@ export function localFollowupGate(input: LocalFollowupInput): LocalFollowupGate 
       message: `${input.roundHeads.length} follow-up rounds already ran on this pull request (the limit is ${FOLLOWUP_MAX_PER_PR}); a person decides what happens next.`,
     }
   }
-  return { ok: true, headSha: livePr.headSha, branch: livePr.headRef, round: input.roundHeads.length + 1 }
+  return { ok: true, headSha: livePr.headSha, branch: livePr.headRef, round: input.roundHeads.length + 1, kind: ciRepair ? 'ci_repair' : 'findings' }
+}
+
+export interface LocalHandoffInput {
+  kind: LocalFollowupKind
+  attempt: { agent: string | null; pr_url: string | null; merged_at: string | null; pr_state: string | null; commit_sha: string | null }
+  review: { status: string; verdict: string | null; head_sha: string | null; findings: number } | null
+  roundHeads: readonly string[]
+  cloudFollowupsOn: boolean
+  /** For ci_repair: CI on the head fails on the code. */
+  ciCodeRed?: boolean
+}
+
+/**
+ * Pure: whether the local `mushi work --followups` lanes can take this PR now,
+ * from stored rows (the lane's claim re-checks GitHub live). The console's
+ * hand-off answers with this instead of a cloud refusal.
+ */
+export function localHandoff(input: LocalHandoffInput): { ok: true; headSha: string } | { ok: false; message: string } {
+  const { attempt, review } = input
+  if (!localFollowupAllowedFor(attempt.agent, input.cloudFollowupsOn)) {
+    return { ok: false, message: `Made by ${attempt.agent ?? 'an unknown agent'}: the local lanes only follow up their own and cloud-agent pull requests.` }
+  }
+  if (!attempt.pr_url || attempt.merged_at || attempt.pr_state === 'merged' || attempt.pr_state === 'closed') {
+    return { ok: false, message: 'The pull request is not open.' }
+  }
+  if (!review || review.status !== 'completed' || !review.head_sha) return { ok: false, message: 'Its Opus review has not finished yet.' }
+  if (attempt.commit_sha && attempt.commit_sha !== review.head_sha) {
+    return { ok: false, message: 'The pull request has a newer commit than its review; wait for that review.' }
+  }
+  if (input.kind === 'findings') {
+    if (review.verdict !== 'fix_first') return { ok: false, message: `The latest Opus review says "${review.verdict ?? 'no verdict'}", not "fix first".` }
+    if (review.findings === 0) return { ok: false, message: 'The "fix first" review lists no findings to fix.' }
+  } else {
+    if (review.verdict !== 'merge') return { ok: false, message: `CI repair follows a "merge" review; this one says "${review.verdict ?? 'no verdict'}".` }
+    if (input.ciCodeRed === false) return { ok: false, message: 'CI on its commit is not failing on the code (green, running, or stopped on the test machine).' }
+  }
+  if (input.roundHeads.includes(review.head_sha)) return { ok: false, message: `A follow-up already ran for ${review.head_sha.slice(0, 7)}.` }
+  if (input.roundHeads.length >= FOLLOWUP_MAX_PER_PR) {
+    return { ok: false, message: `Both follow-up rounds were used on this pull request; a person decides what happens next.` }
+  }
+  return { ok: true, headSha: review.head_sha }
 }

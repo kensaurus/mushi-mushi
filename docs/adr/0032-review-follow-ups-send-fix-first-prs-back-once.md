@@ -1,6 +1,6 @@
 # 0032. Review follow-ups: a "fix first" agent PR goes back to a new Cursor agent once, with the Opus findings
 
-Status: Proposed Date: 2026-10-21
+Status: Accepted (2026-10-26) Date: 2026-10-21. Accepted 2026-10-26 by team-lead (Claude) under the owner's explicit delegation ("decide for me please"); live in production since 2026-10-22.
 
 Related: migration `20261021063310_review_followups.sql`, ADR
 [0031](0031-universal-ai-keys-serve-every-app-their-owner-owns.md) (universal keys), `_shared/review-followup.ts`,
@@ -215,7 +215,7 @@ with `prUrl`), `workOnCurrentBranch: true` pushes to the PR's head branch,
 
 ## Amendment (2026-10-22): CI repair for "merge" PRs whose CI fails on the code
 
-Status: Proposed
+Status: Accepted 2026-10-26 by team-lead (Claude) under the owner's explicit delegation ("decide for me please").
 
 Related: migration `20261022100000_review_followup_ci_repair.sql`
 (`fix_review_followups.kind`), `_shared/review-followup.ts` (`ciHeadState`,
@@ -372,3 +372,91 @@ fixing path.
 - Local PRs get the same two rounds as cloud ones, started from the CLI.
 - Running it on a schedule is BL-119.
 
+
+## Amendment (2026-10-25): local follow-ups also take cloud-agent PRs while cloud follow-ups are off
+
+### Context
+
+On 2026-10-25 about 25 open cloud-agent PRs across six apps had an Opus
+"fix first" and nothing could act on them: the Cursor keys that opened them
+were deleted, cloud review follow-ups were off for both teams, and the local
+route refused them as `NOT_LOCAL`.
+
+### Decision
+
+- `localFollowupAllowedFor(agent, cloudFollowupsOn)`: a local follow-up may
+  work on a `cursor_cloud` or `github_cloud_agent` PR when the project's
+  organization has `review_followup_enabled` off. When it is on, the cloud
+  worker keeps those PRs and the route says so.
+- The round limit counts both workers: local claims and cloud rounds whose
+  agent started (`fix_review_followups.cursor_agent_id`), so a PR still gets
+  at most `FOLLOWUP_MAX_PER_PR` rounds.
+- The same rules otherwise: the reviewed head is the live head, no forks,
+  screened findings, fast-forward push.
+
+### Rejected
+
+- **Turning cloud follow-ups on.** They need a Cursor key whose GitHub can
+  reach the repo; the remaining key's cannot.
+
+### Consequences
+
+- Turning cloud follow-ups on later hands those PRs back to the cloud worker,
+  which counts only its own rounds; a PR could then get up to two more.
+
+## Amendment (2026-10-26): local lanes take a CI repair a person hands over
+
+### Context
+
+On 2026-10-26 the console's "Send to CI repair" refused all 17 PRs it was
+sent: cloud follow-ups were off, by design. The only Cursor key that could
+run cloud agents belongs to another person, and the owner does not run that
+person's cloud agents on these repos. The local `mushi work --followups`
+lanes ran fine, but they only took "fix first" findings, so a PR approved
+for merge with red CI had no path except a person.
+
+### Decision
+
+- The console's CI repair, and its new "Send to follow-up", go to the cloud
+  worker when the app's organization has follow-ups on and a Cursor key
+  serves the app. Otherwise they go to the local lanes, checked by the same
+  rules the lane's claim uses (`localHandoff`): an open PR, a completed
+  review of its current commit, under the round limits; for a CI repair a
+  "merge" verdict and CI failing on the code; for findings a "fix first" with
+  findings.
+- A CI repair hand-off is a `followup` fix event with the dedupe key
+  `local-ci-repair-request:<fix>:<head>`. The local list offers that PR as
+  `kind: 'ci_repair'` only at that head and only while CI there still fails
+  on the code. The claim returns the cloud worker's CI-repair prompt (failing
+  checks, screened log excerpts) under the same per-head claim row, so the
+  CLI runs it unchanged. A local CI repair is always asked for, never
+  automatic.
+- Conflicts stay cloud-only: the CLI pushes a commit only when the working
+  tree changed, and merging the base branch in leaves it clean. Without a
+  cloud agent the console says a person resolves the conflict on GitHub.
+
+### Rejected
+
+- **Listing every merge-approved red PR for the local lanes automatically.**
+  A lane would spend its runs on PRs nobody looked at; the request keeps a
+  person in the loop.
+- **Teaching the CLI to merge the base branch.** That is a separate change to
+  the push path; the console names the PR for a person instead.
+
+### Consequences
+
+- No CLI release is needed: the lanes already run whatever prompt the claim
+  returns. Their log and commit message still say "finding(s)" and "address
+  the Opus review" for a CI repair.
+
+
+## Amendment (2026-10-27): a local conflict lane may push a merge commit
+
+Recorded in ADR [0049](0049-local-conflict-lane.md) (Accepted, owner
+delegation). A local worker lane in `conflicts` mode may push one merge commit
+to an agent PR's branch: the base branch merged into the head Mushi saw, with
+only the files git stopped on changed, committed with the hooks and pushed
+fast-forward only from the machine's own git and `gh`. It counts against ADR
+0041's cap of 2 conflict agents per PR, together with cloud agents, and its new
+head is re-reviewed like any other push. This also answers the 2026-10-26
+amendment's rejected "teaching the CLI to merge the base branch".

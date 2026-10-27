@@ -16,7 +16,14 @@
  *          projects without their own repo inherit.
  *
  *          Pure apart from the injected client, so the vitest suite can run it.
+ *
+ * DEPENDENCIES:
+ * - _shared/error-codes.ts — isTransientDbConnectionError (which lookups are
+ *   worth one retry) and dbDiagnosticMessage (keep a gateway HTML page out of
+ *   the thrown message).
  */
+
+import { dbDiagnosticMessage, isTransientDbConnectionError } from '../_shared/error-codes.ts'
 
 // deno-lint-ignore no-explicit-any
 type Db = { from: (table: string) => any }
@@ -48,6 +55,15 @@ function isStatementTimeout(err: DbError | null | undefined): boolean {
   return !!err && (err.code === '57014' || /statement timeout/i.test(err.message ?? ''))
 }
 
+/**
+ * Worth one more attempt: a statement timeout (the database stalled for the
+ * whole 8 s) or a transient connection failure — a pooler reset, or a gateway
+ * that answered with an HTML error page instead of the row (MUSHI-9d390abc).
+ */
+function isWorthOneRetry(err: DbError | null | undefined): boolean {
+  return isStatementTimeout(err) || isTransientDbConnectionError(err)
+}
+
 /** Escape LIKE wildcards; repo names may contain `_`. */
 function likeLiteral(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`)
@@ -75,15 +91,21 @@ export async function projectIdsForRepo(db: Db, fullName: string | null | undefi
   // These tables hold a few rows each, so a statement timeout here means the
   // database was stalled for the whole 8 s, not a slow query: try that lookup
   // once more before failing a delivery GitHub will not resend on its own
-  // (MUSHI-MUSHI-SERVER-2X).
+  // (MUSHI-MUSHI-SERVER-2X). A transient gateway or pooler failure gets the
+  // same one retry (MUSHI-9d390abc).
   const results = await Promise.all(
-    first.map((res, i) => (isStatementTimeout(res.error) ? lookup(sources[i]) : res)),
+    first.map((res, i) => (isWorthOneRetry(res.error) ? lookup(sources[i]) : res)),
   )
   const ids = new Set<string>()
   const orgIds = new Set<string>()
   results.forEach((res: QueryResult, i) => {
     const { table, column } = sources[i]
-    if (res.error) throw new RepoLookupError(`${table}.${column} lookup failed: ${res.error.message}`, res.error)
+    if (res.error) {
+      throw new RepoLookupError(
+        `${table}.${column} lookup failed: ${dbDiagnosticMessage(res.error.message)}`,
+        res.error,
+      )
+    }
     for (const row of res.data ?? []) {
       if (!isRepoUrl(row[column], fullName)) continue
       if (typeof row.project_id === 'string') ids.add(row.project_id)
@@ -92,7 +114,9 @@ export async function projectIdsForRepo(db: Db, fullName: string | null | undefi
   })
   if (orgIds.size > 0) {
     const res: QueryResult = await db.from('projects').select('id').in('organization_id', [...orgIds])
-    if (res.error) throw new RepoLookupError(`projects lookup failed: ${res.error.message}`, res.error)
+    if (res.error) {
+      throw new RepoLookupError(`projects lookup failed: ${dbDiagnosticMessage(res.error.message)}`, res.error)
+    }
     for (const row of res.data ?? []) if (typeof row.id === 'string') ids.add(row.id)
   }
   return [...ids]

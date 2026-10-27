@@ -3,10 +3,11 @@
  * PURPOSE: Mistake clusters + learning rules (lessons) management.
  *   Phase 1d of the closed-loop evolution plan.
  *
- *   Tabs:
- *     Lessons      — promoted learning rules table, retire/restore, test query
- *     Clusters     — raw mistake clusters; promote manually, view members
- *     Query Sim    — paste a diff, see what rules would be injected (lessons.query)
+ *   Tabs (ids in brackets, unchanged for links):
+ *     Recurring patterns [clusters] — bugs that keep coming back, most reports
+ *                                     first, each with its suggested rule and Promote
+ *     Rules in use [lessons]        — promoted rules, retire/restore
+ *     Try a change [query]          — paste a diff, see which rules apply (lessons.query)
  */
 
 import { useState, useCallback, useMemo } from 'react'
@@ -113,10 +114,12 @@ function SeverityBadge({ severity }: { severity: string }) {
 // ─── Tab bar (URL-driven) ─────────────────────────────────────
 
 // No Overview tab: the banner states the posture and the readout sits at the page foot.
+// Recurring patterns first: they are what the page asks you to act on.
+// Ids are unchanged (?tab=clusters, ?tab=lessons, ?tab=query keep working).
 const TABS: Array<{ id: LessonsTabId; label: string; description: string }> = [
-  { id: 'lessons',  label: 'Lessons',   description: 'Promoted learning rules — encoded mistake memory for your codebase.' },
-  { id: 'clusters', label: 'Clusters',  description: 'Vector-clustered groups of similar bug reports awaiting promotion.' },
-  { id: 'query',    label: 'Query Sim', description: 'Paste a diff and preview which rules would be injected by lessons.query.' },
+  { id: 'clusters', label: 'Recurring patterns', description: 'Bugs that keep coming back with the same cause, each with a suggested rule.' },
+  { id: 'lessons',  label: 'Rules in use', description: 'Rules Mushi follows when it diagnoses and fixes a new report.' },
+  { id: 'query',    label: 'Try a change', description: 'Paste a change and see which rules would apply to it.' },
 ]
 
 /** The tab named in the URL, or null so quickstart can pick one. */
@@ -177,8 +180,8 @@ function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canE
       <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
         <div>
           <p className="text-sm text-fg-muted">
-            Promoted learning rules derived from clustered bug reports.
-            Injected into PR review context via the <code className="text-xs bg-surface-overlay px-1 rounded font-mono border border-edge/40">lessons.query</code> MCP tool.
+            Rules learned from bugs that kept coming back. Mushi follows them when it diagnoses and fixes a new report,
+            and your editor can read them with the <code className="text-xs bg-surface-overlay px-1 rounded font-mono border border-edge/40">lessons.query</code> MCP tool.
           </p>
         </div>
         <SegmentedControl
@@ -197,7 +200,7 @@ function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canE
         <EmptyState
           icon={<IconIntelligence className="w-8 h-8" />}
           title="No lessons yet"
-          description="Lessons are promoted automatically when a mistake cluster reaches coherence ≥ 0.75 and has ≥ 3 reports. Run the mistake-clusterer function or submit more reports."
+          description="A rule is made when 3 or more reports share one cause and read alike. More reports bring the first one."
         />
       )}
 
@@ -213,10 +216,10 @@ function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canE
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
                   <SeverityBadge severity={lesson.severity} />
-                  <span className="text-xs text-fg-faint">freq: {lesson.frequency}</span>
+                  <span className="text-xs text-fg-faint">seen {lesson.frequency} {lesson.frequency === 1 ? 'time' : 'times'}</span>
                   {lesson.mistake_clusters?.name && (
                     <span className="text-xs text-fg-faint">
-                      cluster: {lesson.mistake_clusters.name}
+                      from: {lesson.mistake_clusters.name}
                     </span>
                   )}
                   {lesson.retired_at && (
@@ -228,7 +231,7 @@ function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canE
                 </p>
                 {lesson.anti_pattern && (
                   <p className="text-xs text-fg-muted mt-1 line-clamp-1">
-                    Anti-pattern: {lesson.anti_pattern}
+                    Avoid: {lesson.anti_pattern}
                   </p>
                 )}
               </div>
@@ -266,7 +269,7 @@ function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canE
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <SeverityBadge severity={selectedLesson.severity} />
-              <span className="text-xs text-fg-faint">frequency: {selectedLesson.frequency}</span>
+              <span className="text-xs text-fg-faint">seen {selectedLesson.frequency} {selectedLesson.frequency === 1 ? 'time' : 'times'}</span>
             </div>
             <div>
               <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">Rule</h3>
@@ -276,7 +279,7 @@ function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canE
             </div>
             {selectedLesson.anti_pattern && (
               <div>
-                <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">Anti-pattern</h3>
+                <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">What to avoid</h3>
                 <p className="text-sm text-fg-secondary">{selectedLesson.anti_pattern}</p>
               </div>
             )}
@@ -288,14 +291,11 @@ function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canE
             )}
             {selectedLesson.cluster_id && (
               <div>
-                <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">Cluster</h3>
-                <p className="text-xs font-mono text-fg-faint">{selectedLesson.cluster_id}</p>
-                {selectedLesson.mistake_clusters && (
-                  <div className="mt-1 text-xs text-fg-muted">
-                    Coherence: {((selectedLesson.mistake_clusters.judge_coherence_score ?? 0) * 100).toFixed(0)}%
-                    · Size: {selectedLesson.mistake_clusters.cluster_size} reports
-                  </div>
-                )}
+                <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">Learned from</h3>
+                <p className="text-xs text-fg-secondary">
+                  {selectedLesson.mistake_clusters?.name ?? 'A recurring pattern'}
+                  {selectedLesson.mistake_clusters ? ` · ${selectedLesson.mistake_clusters.cluster_size} reports` : ''}
+                </p>
               </div>
             )}
             <div className="pt-2 flex gap-2">
@@ -321,6 +321,18 @@ function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canE
 
 // ─── Clusters tab ─────────────────────────────────────────────
 
+/** Promote can only succeed with 3+ reports and a suggested rule to promote. */
+function canPromote(c: Cluster): boolean {
+  return c.status === 'candidate' && c.cluster_size >= 3 && !!c.suggested_rule
+}
+
+function clusterStatusWord(c: Cluster): string {
+  if (c.status === 'promoted') return 'Rule in use'
+  if (c.status === 'retired') return 'Retired'
+  if (canPromote(c)) return 'Ready to promote'
+  return c.cluster_size >= 3 ? 'No rule suggested yet' : 'Still growing'
+}
+
 function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; canEditProject: boolean }) {
   const [statusFilter, setStatusFilter] = useState<'all' | 'candidate' | 'promoted'>('candidate')
   const { data, loading, error, reload } = usePageData<{ data: Cluster[]; meta: { total: number } }>(
@@ -329,7 +341,9 @@ function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; can
   const [promoting, setPromoting] = useState<string | null>(null)
   const toast = useToast()
 
-  const clusters = listRows(data)
+  // Most reports first: the pattern costing you the most time leads.
+  const clusters = [...listRows(data)].sort((a, b) => b.cluster_size - a.cluster_size)
+  const firstReady = clusters.find((c) => canPromote(c))
 
   const handlePromote = useCallback(async (cluster: Cluster) => {
     if (!cluster.suggested_rule) {
@@ -364,14 +378,14 @@ function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; can
     <div>
       <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
         <p className="text-sm text-fg-muted">
-          Vector-clustered groups of similar bug reports. Candidates with ≥ 3 reports and coherence ≥ 0.75 auto-promote to lessons every 6 hours.
+          Bugs that keep coming back with the same cause. Promote one and its suggested rule becomes a rule Mushi follows on every new report. Strong patterns are promoted for you every 6 hours.
         </p>
         <SegmentedControl
           value={statusFilter}
           onChange={(v) => setStatusFilter(v as typeof statusFilter)}
           options={[
-            { id: 'candidate', label: 'Candidates' },
-            { id: 'promoted', label: 'Promoted' },
+            { id: 'candidate', label: 'Not a rule yet' },
+            { id: 'promoted', label: 'Already rules' },
             { id: 'all', label: 'All' },
           ]}
         />
@@ -382,8 +396,8 @@ function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; can
       {!loading && clusters.length === 0 && (
         <EmptyState
           icon={<IconShield className="w-8 h-8" />}
-          title="No clusters yet"
-          description="Clusters form automatically as bug reports accumulate. Submit reports or trigger the mistake-clusterer function."
+          title="No recurring patterns yet"
+          description="Patterns form by themselves once several reports share one cause. Nothing to do until then."
         />
       )}
 
@@ -398,33 +412,33 @@ function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; can
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
                   <Badge
-                    className={cluster.status === 'promoted' ? CHIP_TONE.okSubtle : cluster.status === 'candidate' ? CHIP_TONE.warnSubtle : 'bg-surface-overlay text-fg-secondary'}
+                    className={cluster.status === 'promoted' ? CHIP_TONE.okSubtle : canPromote(cluster) ? CHIP_TONE.warnSubtle : 'bg-surface-overlay text-fg-secondary'}
                   >
-                    {cluster.status}
+                    {clusterStatusWord(cluster)}
                   </Badge>
-                  <span className="text-xs text-fg-muted">{cluster.cluster_size} reports</span>
-                  {cluster.judge_coherence_score !== null && (
-                    <span className="text-xs text-fg-muted">
-                      coherence: {(cluster.judge_coherence_score * 100).toFixed(0)}%
-                    </span>
-                  )}
+                  <span className="text-xs font-semibold tabular-nums text-fg">
+                    {cluster.cluster_size} {cluster.cluster_size === 1 ? 'report' : 'reports'}
+                  </span>
                 </div>
                 <p className="text-sm font-medium text-fg">
-                  {cluster.name ?? <span className="text-fg-faint italic">Unnamed cluster</span>}
+                  {cluster.name ?? <span className="text-fg-faint italic">Unnamed pattern</span>}
                 </p>
-                {cluster.suggested_rule && (
-                  <p className="text-xs text-fg-muted mt-1 line-clamp-2">
-                    Suggested rule: {cluster.suggested_rule}
+                {cluster.suggested_rule ? (
+                  <p className="mt-1.5 border-l-2 border-brand/40 pl-2 text-xs text-fg-secondary" data-testid="suggested-rule">
+                    <span className="text-fg-muted">Suggested rule: </span>
+                    {cluster.suggested_rule}
                   </p>
+                ) : (
+                  <p className="mt-1 text-xs text-fg-faint">A rule is suggested once a few more reports arrive.</p>
                 )}
                 <p className="text-xs text-fg-faint mt-1">
                   Last seen: <RelativeTime value={cluster.last_seen_at} />
                 </p>
               </div>
-              {cluster.status === 'candidate' && cluster.cluster_size >= 3 && (
+              {canPromote(cluster) && (
                 <Btn
                   size="sm"
-                  variant="ghost"
+                  variant={cluster.id === firstReady?.id ? 'primary' : 'ghost'}
                   loading={promoting === cluster.id}
                   disabled={promoting !== null || !canEditProject}
                   title={canEditProject ? undefined : 'Viewers can read clusters but cannot promote them.'}
@@ -588,7 +602,6 @@ export function LessonsPage() {
   // Every mode lands on the work tab that matches the posture; the URL wins.
   const postureTab = resolveQuickLessonsTab(stats)
   const activeTab: LessonsTabId = explicitLessonsTab(tabParam) ?? (postureTab === 'overview' ? 'lessons' : postureTab)
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const setActiveTab = useCallback(
     (tab: LessonsTabId) => {
@@ -621,10 +634,10 @@ export function LessonsPage() {
     route: '/lessons',
     title: projectName ? `Lessons · ${projectName}` : 'Lessons',
     summary: statsLoading
-      ? 'Loading lesson memory…'
+      ? 'Loading lessons…'
       : stats.activeLessons === 0 && stats.candidateClusters === 0
-        ? 'No clusters or lessons yet'
-        : `${stats.activeLessons} active · ${stats.candidateClusters} candidate clusters`,
+        ? 'No lessons or recurring patterns yet'
+        : `${stats.activeLessons} in use · ${stats.candidateClusters} recurring patterns`,
     criticalCount: stats.criticalLessons,
     questions: stats.activeLessons > 0
       ? [
@@ -659,13 +672,13 @@ export function LessonsPage() {
         projectScope={stats.projectName ?? projectName ?? undefined}
 
         helpTitle={copy?.help?.title ?? 'About Lessons'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Lessons are the institutional memory of your project — named classes of bugs that have recurred ≥ 3 times, been judged coherent by the LLM judge, and promoted to permanent rules.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Rules learned from bugs that keep coming back: once 3 or more reports share one cause, Mushi suggests a rule, and a promoted rule guides every new diagnosis and fix.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Inject relevant lessons into PR review context via the lessons.query MCP tool',
           'Test what rules a diff would trigger using the Query Sim tab',
           'Export active lessons to .mushi/lessons.json for offline CI use',
         ]}
-        helpHowToUse={copy?.help?.howToUse ?? 'Browse promoted lessons, retire obsolete ones, or run mushi sync-lessons to sync to your repo. Clusters auto-promote when coherence ≥ 0.75 and size ≥ 3.'}
+        helpHowToUse={copy?.help?.howToUse ?? 'Promote a recurring pattern to turn its suggested rule into a rule in use. Retire a rule that no longer applies, or run mushi sync-lessons to copy the rules into your repo.'}
       >
         {!ux.hideOverviewChrome && (
           <Btn size="sm" variant="ghost" onClick={reloadStats} loading={statsValidating}>
@@ -678,6 +691,9 @@ export function LessonsPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            // The status sentence below says how things stand; the banner is
+            // only for a workspace with no project yet.
+            show: !stats.hasAnyProject,
             children: (
               <LessonsStatusBanner
                 stats={stats}
@@ -696,8 +712,6 @@ export function LessonsPage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'LESSONS SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
               />
             ),

@@ -58,7 +58,7 @@ import {
 } from '../../_shared/github.ts'
 import { liveSyncProjects, type CollectorDeps } from '../../_shared/ci-collector.ts'
 import { buildCiOverview, loadCiOverviewRows } from '../../_shared/ci-overview.ts'
-import { ciGithub, listRunsForHeadSha, rerunFailedJobs, type CiGithub } from '../../_shared/ci-jobs.ts'
+import { ciGithub, listRunsForHeadSha, rerunFailedJobs, RERUN_REFUSED_DEDUPE_PREFIX, type CiGithub } from '../../_shared/ci-jobs.ts'
 import { callerCanAccessProject, callerProjectIds, jsonError } from '../shared.ts'
 import { denyViewerWrite } from '../viewer-gate.ts'
 import type { Variables } from '../types.ts'
@@ -532,6 +532,20 @@ async function rerunFixCi(c: Context, deps: CiRouteDeps): Promise<Response> {
     }
     if (status === 403) {
       if (rerun.length > 0) break
+      // Remembered so /pipeline stops offering Re-run CI for this app until its GitHub settings change (69fcafcb).
+      const at = deps.now().toISOString()
+      const { error: refusedErr } = await db.from('fix_events').insert({
+        fix_attempt_id: a.id,
+        project_id: a.project_id,
+        kind: 'ci_started',
+        status: 'fail',
+        label: 'Re-run refused: the GitHub token cannot re-run workflows',
+        detail: 'Give the token Actions: Read and write (fine-grained token) or the workflow scope.',
+        at,
+        dedupe_key: `${RERUN_REFUSED_DEDUPE_PREFIX}${a.id}:${at}`,
+        payload: { rerunRefused: 'actions_write', by: userId },
+      })
+      if (refusedErr) clog.warn('ci rerun refusal fix_event insert failed (non-fatal)', { fixId: a.id, err: refusedErr.message })
       return jsonError(c, 'GITHUB_ACTIONS_WRITE_MISSING', 'The GitHub token Mushi uses cannot re-run workflows. Give it Actions: Read and write (fine-grained token) or the workflow scope.', 403)
     }
     if (status === 409) {

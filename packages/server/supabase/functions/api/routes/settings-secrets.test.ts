@@ -4,7 +4,10 @@ import {
   dereferenceMaybeVault,
   isSecretSettingsColumn,
   maskSettingsRow,
+  integrationSecretHint,
+  isIntegrationSecretPlaceholder,
   planSecretSettingWrite,
+  SAVED_SECRET_LABEL,
   SECRET_MASK,
   settingsSecretName,
   storeSettingsSecret,
@@ -75,6 +78,7 @@ Deno.test('planSecretSettingWrite: clear, skip round-trips, reject foreign refs,
   assertEquals(planSecretSettingWrite('   ', stored), { action: 'skip' })
   assertEquals(planSecretSettingWrite('…cret', stored), { action: 'skip' })
   assertEquals(planSecretSettingWrite(SECRET_MASK, stored), { action: 'skip' })
+  assertEquals(planSecretSettingWrite(SAVED_SECRET_LABEL, stored), { action: 'skip' })
   // The General panel saves the whole row: its own stored ref comes back unchanged.
   assertEquals(planSecretSettingWrite(stored, stored), { action: 'skip' })
   // A ref the server did not store for this row is never accepted from a client.
@@ -85,6 +89,16 @@ Deno.test('planSecretSettingWrite: clear, skip round-trips, reject foreign refs,
   assertEquals(planSecretSettingWrite('vault://x', null), { action: 'reject' })
   assertEquals(planSecretSettingWrite(42, stored), { action: 'skip' })
   assertEquals(planSecretSettingWrite('  whsec_new  ', stored), { action: 'store', value: 'whsec_new' })
+})
+
+Deno.test('integrationSecretHint shows Saved for a vault ref and a key tail otherwise', () => {
+  const ref = `vault://mushi/integration/${PROJECT}/sentry/sentry_auth_token_ref`
+  assertEquals(integrationSecretHint(ref), 'Saved')
+  assertEquals(integrationSecretHint('sntrys_live_token_value'), '…alue')
+  assertEquals(integrationSecretHint(null), '****')
+  assertEquals(isIntegrationSecretPlaceholder('Saved'), true)
+  assertEquals(isIntegrationSecretPlaceholder('…ab12'), true)
+  assertEquals(isIntegrationSecretPlaceholder('sntrys_live'), false)
 })
 
 Deno.test('isSecretSettingsColumn covers credential columns and spares ids, hints and timestamps', () => {

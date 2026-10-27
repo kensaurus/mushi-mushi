@@ -92,7 +92,6 @@ export function IntelligencePage() {
   const ux = useIntelligenceUx()
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = resolveIntelligenceTab(searchParams.get('tab'))
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
@@ -394,7 +393,7 @@ export function IntelligencePage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-intelligence">
       <PageHeaderBar
-        title={copy?.title ?? 'Bug Intelligence'}
+        title={copy?.title ?? 'Weekly insights'}
         projectScope={stats.projectName ?? projectName ?? undefined}
 
         helpTitle={copy?.help?.title ?? 'About Bug Intelligence'}
@@ -485,8 +484,6 @@ export function IntelligencePage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'INTELLIGENCE SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
               />
             ),
@@ -533,7 +530,7 @@ export function IntelligencePage() {
                 <RecommendedAction
                   tone="urgent"
                   title="Fix generation before retrying"
-                  description={stats.lastJobError ?? 'Check BYOK LLM keys in Settings, then retry generation.'}
+                  description={stats.lastJobError ?? 'Check your AI keys in Settings, then try again.'}
                   cta={{ label: 'Open Pipeline', to: '/intelligence?tab=pipeline' }}
                 />
               )}

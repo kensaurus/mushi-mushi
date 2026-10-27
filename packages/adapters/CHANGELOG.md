@@ -1,5 +1,14 @@
 # @mushi-mushi/adapters
 
+## 0.2.10
+
+### Patch Changes
+
+- 15ba9ce: The Honeycomb and New Relic adapters now read the payloads those tools send by default. Honeycomb's trigger webhook names the trigger `id` (not `trigger_id`). A New Relic workflow's default payload (`id`, `title`, `issueUrl`, `priority: "CRITICAL"`, `impactedEntities`, `alertConditionNames`, `alertPolicyNames`) used to produce a report titled only "New Relic incident" with no severity or link; it now carries the title, severity (CRITICAL / HIGH / MEDIUM / LOW), component, condition, policy and issue link. The older fields still work. Datadog, Honeycomb, New Relic and Grafana/Loki now have tests built on sample payloads.
+- 271abb8: The npm pages now open with what the package does, how to install it, a short example that matches the current API, and a link to its docs page. The examples that named options or functions the SDKs no longer have are corrected.
+- Updated dependencies [271abb8]
+  - @mushi-mushi/core@1.33.3
+
 ## 0.2.9
 
 ### Patch Changes

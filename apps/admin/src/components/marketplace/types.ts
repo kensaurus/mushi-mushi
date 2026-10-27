@@ -151,4 +151,31 @@ export function pluginWebhookUrlError(raw: string): string | null {
   return null
 }
 
+/**
+ * A subscribed event in words. Zapier Bridge subscribes to "*", which the
+ * catalog card showed as a lone asterisk (report fb35c525).
+ */
+export function pluginEventLabel(event: string): string {
+  if (event === '*') return 'All events'
+  const prefix = event.match(/^([a-z_]+)\.\*$/)?.[1]
+  if (prefix) return `All ${prefix.replace(/_/g, ' ')} events`
+  return event
+}
+
+export type PluginHealthTone = 'ok' | 'warn' | 'danger' | 'neutral'
+
+/** One installed plugin's delivery health, in words. */
+export function pluginHealth(
+  plugin: Pick<InstalledPlugin, 'is_active' | 'last_delivery_at' | 'last_delivery_status'>,
+  stats?: ReliabilityStats,
+): { tone: PluginHealthTone; label: string } {
+  if (!plugin.is_active) return { tone: 'neutral', label: 'Paused' }
+  if (plugin.last_delivery_status === 'error' || plugin.last_delivery_status === 'timeout') {
+    return { tone: 'danger', label: plugin.last_delivery_status === 'timeout' ? 'Last delivery timed out' : 'Last delivery failed' }
+  }
+  if (!plugin.last_delivery_at) return { tone: 'warn', label: 'Nothing sent yet' }
+  if (stats && stats.error > 0) return { tone: 'warn', label: 'Delivering, with some failures' }
+  return { tone: 'ok', label: 'Delivering' }
+}
+
 export const STATUS_FILTER_OPTIONS = ['', 'ok', 'error', 'timeout', 'skipped', 'pending']

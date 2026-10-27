@@ -111,6 +111,33 @@ describe('projectIdsForRepo', () => {
     expect(findQueries(stalled.queries, 'project_repos')).toHaveLength(2)
   })
 
+  it('retries a gateway HTML page once and keeps the page out of the message (MUSHI-9d390abc)', async () => {
+    const gatewayHtml = {
+      message: '<!DOCTYPE html><html><head><title>supabase.co | 502: Bad gateway</title></head><body>cloudflare</body></html>',
+      code: '502',
+    }
+    let repoCalls = 0
+    const { db } = createFakeDb((q) => {
+      if (q.table !== 'project_repos') return { data: [] }
+      repoCalls++
+      return repoCalls === 1
+        ? { data: null, error: gatewayHtml }
+        : { data: [{ project_id: 'p-repos', repo_url: 'https://github.com/acme/app' }] }
+    })
+    expect(await projectIdsForRepo(db, 'acme/app')).toEqual(['p-repos'])
+    expect(repoCalls).toBe(2)
+
+    const stalled = createFakeDb((q) => (q.table === 'project_repos' ? { data: null, error: gatewayHtml } : { data: [] }))
+    const err = await projectIdsForRepo(stalled.db, 'acme/app').catch((e: unknown) => e)
+    expect(findQueries(stalled.queries, 'project_repos')).toHaveLength(2)
+    expect((err as Error).message).toBe(
+      'project_repos.repo_url lookup failed: [upstream gateway error] supabase.co | 502: Bad gateway',
+    )
+    expect((err as Error).message).not.toContain('<!DOCTYPE')
+    // The untouched PostgREST error still rides along, so the route answers 503.
+    expect(isTransientDbConnectionError((err as RepoLookupError).dbError)).toBe(true)
+  })
+
   it('does not retry other read errors', async () => {
     const { db, queries } = createFakeDb(() => ({ data: null, error: { message: 'boom', code: '42703' } }))
     await expect(projectIdsForRepo(db, 'acme/app')).rejects.toThrow(/boom/)

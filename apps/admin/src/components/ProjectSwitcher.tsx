@@ -42,6 +42,7 @@ import { useToast } from '../lib/toast'
 import { ProjectFavicon } from './ProjectFavicon'
 import { ErrorAlert } from './ui'
 import { ProjectHeartbeatStrip } from './ProjectHeartbeatStrip'
+import { sdkHealthHref } from '../lib/sdkHealth'
 import { ProjectSnapshotMeta } from './ProjectSnapshotMeta'
 import { faviconSourceFromProject } from '../lib/resolveProjectDomain'
 import { useProjectSnapshots } from '../lib/useProjectSnapshots'
@@ -303,22 +304,42 @@ export function ProjectSwitcher() {
     }
   }, [creating])
 
-  if (setup.loading) {
-    return <HeaderContextChipSkeleton label="Loading project" />
-  }
   if (!setup.data) {
     // The fetch failed and nothing is cached: say so and offer a retry
     // instead of a skeleton that never resolves (B1, 2026-10-20).
-    return setup.error ? (
-      <HeaderContextChip
-        label="Projects unavailable"
-        trailing={<span className="text-fg-faint">Retry</span>}
-        onClick={() => setup.reload()}
-        title={`Could not load your projects: ${setup.error}. Click to retry.`}
-      />
-    ) : (
-      <HeaderContextChipSkeleton label="Loading project" />
-    )
+    if (setup.error) {
+      return (
+        <HeaderContextChip
+          label="Projects unavailable"
+          trailing={<span className="text-fg-faint">Retry</span>}
+          onClick={() => setup.reload()}
+          title={`Could not load your projects: ${setup.error}. Click to retry.`}
+        />
+      )
+    }
+    // All apps is already known from the URL or storage. Waiting on
+    // /v1/admin/setup to label the chip left it greyed on "Loading project"
+    // for as long as that list took (and for good, if the fetch never settled).
+    if (scopeMode === 'all') {
+      // Clickable while the list is in flight: a fetch that never settles
+      // (the reported grey pill) must still offer a retry. aria-busy is left
+      // off so the control is not skipped as unavailable.
+      return (
+        <HeaderContextChip
+          data-testid="project-switcher-chip"
+          aria-label="Project: All apps — switch project"
+          title="All apps. The app list is still loading. Click to try again."
+          onClick={() => setup.reload()}
+          label={
+            <span className="inline-flex items-center gap-1.5 min-w-0">
+              <AllAppsGlyph size={14} />
+              <span className="truncate">All apps</span>
+            </span>
+          }
+        />
+      )
+    }
+    return <HeaderContextChipSkeleton label="Loading project" />
   }
   if (setup.data.projects.length === 0) {
     return (
@@ -502,7 +523,7 @@ export function ProjectSwitcher() {
             {shownProjects.map((p) => {
               const isActive = !allApps && p.project_id === active.project_id
               return (
-                <li key={p.project_id}>
+                <li key={p.project_id} className="relative">
                   <button
                     type="button"
                     role="option"
@@ -538,14 +559,18 @@ export function ProjectSwitcher() {
                       </div>
                       {isActive && <span className="shrink-0 text-2xs text-brand">✓</span>}
                     </div>
-                    <div className="flex justify-end">
-                      <ProjectHeartbeatStrip
-                        project={p}
-                        adminEndpointHost={setup.data?.admin_endpoint_host}
-                        placement="corner"
-                      />
-                    </div>
+                    {/* Room for the SDK readout, a link that cannot sit inside this button. */}
+                    <div aria-hidden className="h-3" />
                   </button>
+                  <div className="absolute bottom-2 right-2.5">
+                    <ProjectHeartbeatStrip
+                      project={p}
+                      adminEndpointHost={setup.data?.admin_endpoint_host}
+                      placement="corner"
+                      to={sdkHealthHref(p.project_id)}
+                      onNavigate={() => setOpen(false)}
+                    />
+                  </div>
                 </li>
               )
             })}

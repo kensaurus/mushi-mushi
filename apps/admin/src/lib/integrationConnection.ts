@@ -8,8 +8,12 @@
  * classifyPlatformConnection, so the page banner agrees with the cards):
  *   - "Working" needs a recent passing check, never just saved credentials.
  *   - A failing check shows what failed, in words, never a raw code or JSON.
- *   - A connection that receives events (Sentry alerts) is not working until
- *     one event has arrived: a passing API probe proves only the token.
+ *   - Sentry without automatic import is not working until an alert arrives:
+ *     a passing API probe proves only the token.
+ *   - Automatic import (polling) plus a fresh passing probe is working only
+ *     when a poll has finished within the last three 15-minute intervals.
+ *     No run yet, or an older run, needs attention.
+ *     A rejected webhook still needs attention. A webhook is only a faster path.
  */
 
 import { connectionStateFrom, type ConnectionState } from '../components/ui/ConnectionStatus'
@@ -90,6 +94,21 @@ function verifiedDetail(at: string): string {
   return `Verified ${formatRelative(at)}`
 }
 
+/**
+ * sentry-seer-poll runs every 15 minutes. Three intervals without a finished
+ * run means the import stalled. Must match SENTRY_AUTO_IMPORT_STALE_MS in
+ * packages/server/supabase/functions/_shared/setup-signals.ts.
+ */
+const SENTRY_AUTO_IMPORT_STALE_MS = 3 * 15 * 60 * 1000
+
+/** True when the last auto-import finished within SENTRY_AUTO_IMPORT_STALE_MS. */
+function autoImportRunFresh(lastRunAt: string | null, now: number): boolean {
+  if (!lastRunAt) return false
+  const at = Date.parse(lastRunAt)
+  if (!Number.isFinite(at)) return false
+  return now - at <= SENTRY_AUTO_IMPORT_STALE_MS
+}
+
 /** State for an outbound integration checked by probes or test sends. */
 export function connectionFromProbe(input: {
   configured: boolean
@@ -136,9 +155,11 @@ export function sentryConnection(input: {
   deliveriesFailed?: boolean
   /**
    * The card's "Import new Sentry issues automatically" toggle (polling, no
-   * webhook). It changes what the waiting state tells you to do; the state
-   * itself stays "attention" until an alert arrives, as the server's
-   * classifyPlatformConnection counts it, so the banner and card agree.
+   * webhook). With a fresh passing probe, no rejected delivery, and a poll
+   * that finished within SENTRY_AUTO_IMPORT_STALE_MS, that is Working — the
+   * same rule as classifyPlatformConnection, so the banner and the card agree.
+   * A missing or older last run is attention: the token probe does not prove
+   * the import is running. A webhook is optional and only makes imports faster.
    */
   autoImport?: { enabled: boolean; lastRunAt: string | null }
   now?: number
@@ -151,22 +172,9 @@ export function sentryConnection(input: {
       : { state: 'checking', detail: 'Checking for Sentry events…' }
   }
   const d = input.latestDelivery
-  if (!d) {
-    const auto = input.autoImport
-    if (auto?.enabled) {
-      return {
-        state: 'attention',
-        detail: auto.lastRunAt
-          ? `Connected — importing new Sentry issues automatically (last run ${formatRelative(auto.lastRunAt)}). For alerts within seconds, also add the receive URL below as a webhook in a Sentry alert rule.`
-          : 'Connected — importing new Sentry issues automatically; the first run is due soon. For alerts within seconds, also add the receive URL below as a webhook in a Sentry alert rule.',
-      }
-    }
-    return {
-      state: 'attention',
-      detail: 'Connected — waiting for the first event. Turn on "Import new Sentry issues automatically" below (no webhook needed), or add the receive URL below as a webhook in a Sentry alert rule.',
-    }
-  }
-  if (d.outcome !== 'accepted') {
+  // A rejected delivery is a broken webhook (bad secret, bad signature).
+  // Polling does not hide that: the chip and the banner stay on attention.
+  if (d && d.outcome !== 'accepted') {
     return {
       state: 'attention',
       detail: `The last Sentry event was rejected ${formatRelative(d.created_at)}${
@@ -175,7 +183,30 @@ export function sentryConnection(input: {
       raw: d.error_message ?? undefined,
     }
   }
-  return { state: 'working', detail: `Last event received ${formatRelative(d.created_at)}` }
+  if (d) return { state: 'working', detail: `Last event received ${formatRelative(d.created_at)}` }
+  const auto = input.autoImport
+  if (auto?.enabled) {
+    const now = input.now ?? Date.now()
+    const webhookHint =
+      'For alerts within seconds, also add the receive URL below as a webhook in a Sentry alert rule.'
+    if (!autoImportRunFresh(auto.lastRunAt, now)) {
+      const at = auto.lastRunAt ? Date.parse(auto.lastRunAt) : NaN
+      return {
+        state: 'attention',
+        detail: Number.isFinite(at)
+          ? `Automatic import last ran ${formatRelative(auto.lastRunAt!)}, which is past the 15-minute check. ${webhookHint}`
+          : `Automatic import is on, but no check has finished yet. A stalled poll is not a working import. ${webhookHint}`,
+      }
+    }
+    return {
+      state: 'working',
+      detail: `Connected — importing new Sentry issues automatically (last run ${formatRelative(auto.lastRunAt!)}). ${webhookHint}`,
+    }
+  }
+  return {
+    state: 'attention',
+    detail: 'Connected — waiting for the first event. Turn on "Import new Sentry issues automatically" below (no webhook needed), or add the receive URL below as a webhook in a Sentry alert rule.',
+  }
 }
 
 /**

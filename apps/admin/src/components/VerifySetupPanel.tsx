@@ -58,7 +58,8 @@ export function VerifySetupPanel({
   const location = useLocation()
   const onCopilotPage =
     location.pathname.startsWith('/setup-copilot') ||
-    (location.pathname.startsWith('/onboarding') && new URLSearchParams(location.search).get('tab') === 'copilot')
+    (location.pathname.startsWith('/onboarding') &&
+      ['diagnose', 'copilot'].includes(new URLSearchParams(location.search).get('tab') ?? ''))
   const setup = useSetupStatus(projectId)
   const project = setup.data?.projects.find((p) => p.project_id === projectId)
   const [dispatchLoading, setDispatchLoading] = useState(false)
@@ -150,7 +151,7 @@ export function VerifySetupPanel({
           </p>
         </div>
         {!onCopilotPage && (
-          <Link to={`/onboarding?tab=copilot&project=${projectId}`} className="text-xs text-accent hover:underline">
+          <Link to={`/onboarding?tab=diagnose&project=${projectId}`} className="text-xs text-accent hover:underline">
             Open Setup Copilot →
           </Link>
         )}

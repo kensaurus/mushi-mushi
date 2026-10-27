@@ -24,6 +24,7 @@ import {
   type ChecksView,
 } from '../_shared/merge-queue.ts'
 import { isCursorKeyLimitError } from '../_shared/spend-down.ts'
+import { conflictRowAfterRun, conflictSlotBack } from '../_shared/work-modes.ts'
 
 const log = rootLog.child('merge-queue')
 const LEASE_MS = 4 * 60_000
@@ -43,10 +44,12 @@ export interface QueueRow {
   cursor_agent_id: string | null
   agent_started_at: string | null
   agent_head_sha: string | null
+  /** A local worker lane holds the conflict (ADR 0049); absent before migration 20261027180000. */
+  local_claim_id?: string | null
 }
 
 const ROW_COLUMNS =
-  'id, train_id, fix_attempt_id, project_id, repo, pr_number, state, detail, head_sha, queued_by, conflict_agents, cursor_agent_id, agent_started_at, agent_head_sha, queued_at, claimed_until'
+  'id, train_id, fix_attempt_id, project_id, repo, pr_number, state, detail, head_sha, queued_by, conflict_agents, cursor_agent_id, agent_started_at, agent_head_sha, local_claim_id, queued_at, updated_at, claimed_until'
 
 /** Everything that talks to GitHub, Cursor or the merge path; index.ts wires the live ones. */
 export interface MergeQueueDeps {
@@ -67,7 +70,7 @@ export interface MergeQueueDeps {
   agentDone: (apiKey: string, agentId: string) => Promise<{ done: boolean; result: string | null }>
   requeueReview: typeof requeueReviewForNewHead
   /** Release trains (ADR 0044); absent → every app merges PR by PR. */
-  train?: Omit<TrainDeps, 'pull' | 'checks' | 'updateBranch' | 'finalize' | 'requeueReview' | 'now'>
+  train?: Omit<TrainDeps, 'pull' | 'checks' | 'updateBranch' | 'ready' | 'finalize' | 'requeueReview' | 'now'>
 }
 
 export interface AttemptRow {
@@ -126,6 +129,12 @@ export async function processRow(db: SupabaseClient, row: QueueRow, deps: MergeQ
     return 'removed'
   }
   const head = pull.headSha ?? null
+
+  // A local worker lane holds the conflict (ADR 0049): wait for its push, or
+  // free the row when its claim ended without freeing it (the daemon died).
+  if (row.state === 'resolving' && row.local_claim_id) {
+    return localConflict(db, row, row.local_claim_id, attempt, head, deps, set, now)
+  }
 
   // A conflict agent is working: wait for its push, or give up after a while.
   if (row.state === 'resolving' && row.cursor_agent_id) {
@@ -282,6 +291,59 @@ export async function processRow(db: SupabaseClient, row: QueueRow, deps: MergeQ
   }
 }
 
+async function localConflict(
+  db: SupabaseClient,
+  row: QueueRow,
+  claimId: string,
+  attempt: AttemptRow,
+  head: string | null,
+  deps: MergeQueueDeps,
+  set: (p: Record<string, unknown>) => Promise<void>,
+  now: () => Date,
+): Promise<string> {
+  const at = now().toISOString()
+  if (head && head !== row.agent_head_sha) {
+    // The lane pushed its merge; its done call may still be on its way. Whoever
+    // frees the row first (here or POST /v1/worker/claims/:id/done) re-queues the review.
+    const { data: moved } = await db
+      .from('fix_merge_queue')
+      .update({ state: 'waiting', detail: 'A local worker pushed a merge; checking it.', head_sha: head, local_claim_id: null, updated_at: at, claimed_until: null })
+      .eq('id', row.id)
+      .eq('local_claim_id', claimId)
+      .eq('state', 'resolving')
+      .select('id')
+    if (moved && (moved as unknown[]).length > 0) {
+      await event(db, row, 'ok', 'Conflict resolved by a local worker', `New head ${head.slice(0, 7)}; the queue continues.`, `mq-resolved:${row.id}:${head}`)
+      await deps.requeueReview(db, { fixAttemptId: attempt.id, projectId: attempt.project_id, reportId: attempt.report_id, prUrl: attempt.pr_url }, head, now())
+    }
+    return 'resolved'
+  }
+  const { data, error } = await db.from('work_claims').select('id, status, lease_until, outcome, failure_kind, detail').eq('id', claimId).maybeSingle()
+  const claim = data as { status: string; lease_until: string; outcome: string | null; failure_kind: string | null; detail: string | null } | null
+  // Unreadable, or still working inside its lease: wait.
+  if (error || (claim && claim.status === 'active' && Date.parse(claim.lease_until) > now().getTime())) {
+    await set({})
+    return 'resolving_local'
+  }
+  let outcome = claim?.outcome ?? 'lease_expired'
+  let failureKind = claim?.failure_kind ?? 'infra'
+  if (!claim || claim.status === 'active') {
+    outcome = 'lease_expired'
+    failureKind = 'infra'
+    if (claim) {
+      await db
+        .from('work_claims')
+        .update({ status: 'expired', outcome: 'lease_expired', failure_kind: 'infra', finished_at: at, updated_at: at, detail: 'The worker stopped renewing its lease (it was stopped, lost its network or crashed).' })
+        .eq('id', claimId)
+        .eq('status', 'active')
+    }
+  }
+  const patch: Record<string, unknown> = { ...conflictRowAfterRun({ outcome, failureKind, detail: claim?.detail ?? 'its lease ran out', headAfter: null, laneName: 'a local lane' }), updated_at: at, claimed_until: null }
+  if (conflictSlotBack(outcome, failureKind) && row.conflict_agents > 0) patch.conflict_agents = row.conflict_agents - 1
+  await db.from('fix_merge_queue').update(patch).eq('id', row.id).eq('local_claim_id', claimId).eq('state', 'resolving')
+  return 'blocked'
+}
+
 async function resolve(
   db: SupabaseClient,
   row: QueueRow,
@@ -368,6 +430,35 @@ export function queueOrder(a: { state: string; queued_at: string; pr_number: num
   return (IN_PROGRESS[a.state] ?? 9) - (IN_PROGRESS[b.state] ?? 9) || (a.queued_at ?? '').localeCompare(b.queued_at ?? '') || a.pr_number - b.pr_number
 }
 
+/** Conflict agents running at once in one train repo: each agent's push runs that repo's CI. */
+export const CONFLICT_AGENTS_PER_REPO = 2
+
+/**
+ * A train app's `resolving` rows (ADR 0044) get their own pass, because the
+ * train tick holds the repo on every tick: the single-PR loop skipped them,
+ * and from 2026-10-24 to 10-26 fourteen glot.it rows sat in `resolving` with
+ * no agent ever started. Every running agent is polled; new ones start,
+ * oldest first, while fewer than CONFLICT_AGENTS_PER_REPO run in the repo;
+ * the rest wait their turn and say how many are ahead.
+ */
+export function pickConflictRows<T extends { repo: string; cursor_agent_id: string | null; local_claim_id?: string | null; state: string; queued_at: string; pr_number: number }>(
+  rows: T[],
+): { work: T[]; inLine: Array<{ row: T; ahead: number }> } {
+  const work: T[] = []
+  const inLine: Array<{ row: T; ahead: number }> = []
+  const byRepo = new Map<string, T[]>()
+  for (const r of rows) byRepo.set(r.repo, [...(byRepo.get(r.repo) ?? []), r])
+  for (const repoRows of byRepo.values()) {
+    // A local worker's conflict (ADR 0049) runs as an agent too: its push runs CI.
+    const running = repoRows.filter((r) => r.cursor_agent_id || r.local_claim_id)
+    const waiting = repoRows.filter((r) => !r.cursor_agent_id && !r.local_claim_id).sort(queueOrder)
+    const free = Math.max(0, CONFLICT_AGENTS_PER_REPO - running.length)
+    work.push(...running, ...waiting.slice(0, free))
+    waiting.slice(free).forEach((row, i) => inLine.push({ row, ahead: running.length + free + i }))
+  }
+  return { work, inLine }
+}
+
 export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, projectId?: string): Promise<Record<string, number>> {
   const now = deps.now ?? (() => new Date())
   const nowIso = now().toISOString()
@@ -375,12 +466,12 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
   if (projectId) q = q.eq('project_id', projectId)
   const { data, error } = await q.order('queued_at', { ascending: true }).limit(500)
   if (error) throw new Error(`merge-queue read failed: ${error.message}`)
-  const all = (data ?? []) as Array<QueueRow & { claimed_until: string | null; queued_at: string; train_id: string | null }>
+  const all = (data ?? []) as Array<QueueRow & { claimed_until: string | null; queued_at: string; updated_at: string | null; train_id: string | null }>
   // A row leased by a tick still running holds its repo.
   const repos = new Set<string>(all.filter((r) => r.claimed_until && r.claimed_until >= nowIso).map((r) => r.repo))
   let rows = all.filter((r) => !r.claimed_until || r.claimed_until < nowIso).sort(queueOrder)
   const tally: Record<string, number> = {}
-  let trainResolving = new Set<string>()
+  let conflictRows: typeof rows = []
 
   // Release trains (ADR 0044): apps in train mode batch their approved PRs;
   // only express fixes (security advisories, critical bugs) merge alone.
@@ -407,7 +498,7 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
         const { data: att } = await db.from('fix_attempts').select('id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, repo_id, summary').eq('id', lead.fix_attempt_id).maybeSingle()
         const token = att ? await deps.token(db, att as AttemptRow) : null
         outcome = token
-          ? await runTrainTick(db, { repo, projectId: lead.project_id, token, rows: repoRows, settings: trainProjects.get(lead.project_id)! }, { ...deps.train, pull: deps.pull, checks: deps.checks, updateBranch: deps.updateBranch, finalize: deps.finalize, requeueReview: deps.requeueReview, now })
+          ? await runTrainTick(db, { repo, projectId: lead.project_id, token, rows: repoRows, settings: trainProjects.get(lead.project_id)! }, { ...deps.train, pull: deps.pull, checks: deps.checks, updateBranch: deps.updateBranch, ready: deps.ready, finalize: deps.finalize, requeueReview: deps.requeueReview, now })
           : 'no_token'
       } catch (err) {
         log.warn('release train tick failed', { repo, err: err instanceof Error ? err.message : String(err) })
@@ -418,8 +509,9 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
     }
     // Train apps keep two things on the single-PR path: express fixes, and
     // PRs a conflict agent is resolving (the train marked them `resolving`).
-    rows = rows.filter((r) => !trainProjects.has(r.project_id) || express.has(r.id) || r.state === 'resolving')
-    trainResolving = new Set(rows.filter((r) => trainProjects.has(r.project_id) && !express.has(r.id)).map((r) => r.id))
+    // The latter do not share the repo's one-row slot the train just took.
+    conflictRows = rows.filter((r) => trainProjects.has(r.project_id) && !express.has(r.id) && r.state === 'resolving')
+    rows = rows.filter((r) => !trainProjects.has(r.project_id) || express.has(r.id))
   }
   // One active row per repo, then some blocked re-checks.
   const picked: QueueRow[] = []
@@ -436,14 +528,22 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
     repos.add(r.repo)
     picked.push(r)
   }
-  for (const row of picked) {
+  const { work: conflictWork, inLine } = pickConflictRows(conflictRows)
+  for (const { row, ahead } of inLine) {
+    const detail = `Conflicts with the base branch; waits for a free conflict agent (${ahead} ahead in this repo), then rides a release train.`
+    if (row.detail !== detail) await db.from('fix_merge_queue').update({ detail, updated_at: nowIso }).eq('id', row.id)
+  }
+  const trainResolving = new Set(conflictWork.map((r) => r.id))
+  for (const row of [...picked, ...conflictWork]) {
     const until = new Date(now().getTime() + LEASE_MS).toISOString()
-    const { data: claimed } = await db
+    // Compare-and-set on the local claim too: a lane that claimed the row after
+    // this tick read it (ADR 0049) wins, and this tick leaves the row alone.
+    const lease = db
       .from('fix_merge_queue')
       .update({ claimed_until: until })
       .eq('id', row.id)
       .or(`claimed_until.is.null,claimed_until.lt.${nowIso}`)
-      .select('id')
+    const { data: claimed } = await (row.local_claim_id ? lease.eq('local_claim_id', row.local_claim_id) : lease.is('local_claim_id', null)).select('id')
     if (!claimed || (claimed as unknown[]).length === 0) continue
     let outcome: string
     try {

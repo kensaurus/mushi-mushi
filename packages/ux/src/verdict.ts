@@ -110,6 +110,8 @@ function whatRose(before: ProbeResult, now: ProbeResult): string[] {
   const out: string[] = []
   if (now.smallTargets > before.smallTargets) out.push(`tap targets under 24 px ${before.smallTargets} → ${now.smallTargets}`)
   if (now.cls > CLS_GOOD && now.cls > before.cls) out.push(`layout shift ${before.cls} → ${now.cls}`)
+  const boxes = (p: ProbeResult) => p.layout?.length ?? 0
+  if (boxes(now) > boxes(before)) out.push(`overlapping or oversized boxes ${boxes(before)} → ${boxes(now)}`)
   const was = new Map(before.axe.map((v) => [v.id, v.count]))
   for (const v of now.axe) {
     if (v.count > (was.get(v.id) ?? 0)) out.push(`${v.id} ${was.get(v.id) ?? 0} → ${v.count} element(s)`)

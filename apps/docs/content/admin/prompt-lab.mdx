@@ -11,6 +11,14 @@ import { Callout } from 'nextra/components'
 
 **Route:** `/prompt-lab`
 
+AI prompts is a Lab: turn it on in Settings → Labs to list it in the sidebar. The page
+works by URL either way.
+
+**First on the page:** **Versions and their grades**, one row per AI step (Fast
+filter, Diagnosis, Grading, Fix writer, …) with the version in use, the best version
+being tested, their grades, and a verdict: ahead (consider promoting), behind, or
+waiting for grades. A row opens that step's editing table.
+
 > **Scenario:** Your fix-worker has been generating patches that touch the wrong file
 > 20% of the time. You suspect the Stage 1 classifier is mislabelling the component
 > field — so the fix agent is looking at the wrong area of the codebase. You want to

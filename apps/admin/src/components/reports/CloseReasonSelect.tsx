@@ -4,16 +4,22 @@
  *          with the exact message the reporter will see underneath.
  */
 
-import { closeReasonNotice, QUICK_CLOSE_REASONS } from '../../lib/closeReasons'
+import { QUICK_CLOSE_REASONS, closeReasonNotice, closeReasonsFor } from '../../lib/closeReasons'
 
 interface Props {
   value: string
   onChange: (value: string) => void
   /** Reports being closed, for the "Each reporter sees" wording. */
   count?: number
+  /** `reports.source`. Omitted on a bulk close, which can mix sources. */
+  source?: string | null
 }
 
-export function CloseReasonSelect({ value, onChange, count = 1 }: Props) {
+export function CloseReasonSelect({ value, onChange, count = 1, source }: Props) {
+  // A bulk close passes no source: one reason has to fit every row, so a
+  // false alarm (one check, no human reporter) stays off that list.
+  const reasons =
+    source === undefined ? QUICK_CLOSE_REASONS : closeReasonsFor(source).filter((r) => !r.needsGroup)
   return (
     <div className="mt-3 space-y-1.5">
       <label className="block text-xs font-medium text-fg-secondary" htmlFor="close-reason">
@@ -26,7 +32,7 @@ export function CloseReasonSelect({ value, onChange, count = 1 }: Props) {
         className="w-full rounded-sm border border-edge-subtle bg-surface-raised px-2 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
       >
         <option value="">No reason</option>
-        {QUICK_CLOSE_REASONS.map((r) => (
+        {reasons.map((r) => (
           <option key={r.value} value={r.value}>
             {r.label}
           </option>

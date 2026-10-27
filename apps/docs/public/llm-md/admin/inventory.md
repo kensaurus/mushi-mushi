@@ -21,26 +21,38 @@ two diverge.
 
 ## What you see
 
-Three nested layers:
+With no map yet, the page is one step: **Turn on discovery** (it opens the
+Discovery tab with the SDK snippet). Writing the map file by hand is the
+other way in.
 
-1. **Truth-layer summary** across the top — verified / unwired /
-   regressed counts rolled up across every story in the project.
-2. **Story cards** — one per top-level user story (`signup`, `pricing`,
-   `dashboard`, …) with per-story counts and a **⋯** menu for runs scoped
-   to that story.
-3. **Action drawer** — click any element / action to inspect the
-   `expected_outcome` block, the last walk, and the raw YAML.
+Once the map exists:
 
-## Run gates / Run crawler
+1. **Status sentence** across the top: how many actions are broken (stopped
+   working, or no code behind them yet) and how many a test proves, with
+   **Check every action** and **Crawl the app**.
+2. **Your app, page by page**: one card per page with what a user can do
+   on it. Broken actions are red and sort first; pages with a broken
+   action come first.
+3. **Story cards**: one per user story (`signup`, `pricing`, …) with
+   per-story counts and a **⋯** menu for runs scoped to that story.
+4. **Action drawer**: click any action to inspect its `expected_outcome`,
+   the last walk and its history.
 
-The action row under the page header has one **Run gates** and one
-**Run crawler** for the whole project. Both short-circuit to the same code
-path the GitHub Action uses ([`@mushi-mushi/mcp-ci`](/sdks/mcp-ci)):
+The tabs are **User stories**, **All actions** (the page × element table),
+**Code checks** (open findings, `?tab=gates`), **Live probes**
+(`?tab=synthetic`), **Out of sync** (`?tab=drift`), **Discovery** and
+**Map file** (`?tab=yaml`). The `?tab=` ids are unchanged, so old links work.
 
-- **Run gates** — runs all five gates against the current branch and
-  posts the composite check back to your most recent open PR.
-- **Run crawler** — crawls every page in the inventory and reconciles it
-  with `inventory.yaml`. Differences land in the *Drift* tab.
+## Check every action / Crawl the app
+
+The status line has one **Check every action** and one **Crawl the app**
+for the whole project. Both short-circuit to the same code path the GitHub
+Action uses ([`@mushi-mushi/mcp-ci`](/sdks/mcp-ci)):
+
+- **Check every action** runs all five code checks against the current
+  branch and posts the composite check back to your most recent open PR.
+- **Crawl the app** crawls every page in the map and reconciles it with
+  `inventory.yaml`. Differences land in the *Out of sync* tab.
 
 To run just one story, open the **⋯** menu on its card:
 

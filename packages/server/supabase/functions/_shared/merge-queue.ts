@@ -37,6 +37,23 @@ export interface ChecksView {
   pending: number
   /** Names of check runs that failed on the head. */
   failed: string[]
+  /** Names of check runs that finished and were not skipped. Absent: not read. */
+  ran?: string[]
+}
+
+/**
+ * Whether a head's failed checks are the base branch's, not its own: at
+ * least one also fails on the base, and every other one fails there too or
+ * did not run there. The second rule sees through aggregator jobs: glot.it's
+ * `gate` fails whenever a job it needs fails, but on main it is skipped, so
+ * comparing names alone blamed the members for main's red npm audit
+ * (2026-10-26).
+ */
+export function failuresOnBase(failed: string[], base: ChecksView): boolean {
+  const baseFailed = new Set(base.failed)
+  if (!failed.some((n) => baseFailed.has(n))) return false
+  const ran = base.ran ? new Set(base.ran) : null
+  return failed.every((n) => baseFailed.has(n) || (ran !== null && !ran.has(n)))
 }
 
 export type QueueStep =
@@ -65,7 +82,7 @@ export function nextQueueStep(pr: PullView, checks: ChecksView): QueueStep {
   if (s === 'behind') return { do: 'update' }
   if (pr.mergeable == null || s === 'unknown') return { do: 'wait', reason: 'GitHub is still working out whether it can merge.' }
   if (checks.failed.length) {
-    return { do: 'blocked', reason: `CI failed: ${checks.failed.slice(0, 4).join(', ')}. A CI-repair agent may fix it (review follow-ups); the queue looks again after each push.` }
+    return { do: 'blocked', reason: `CI failed: ${checkNameList(checks.failed)}. A CI-repair agent may fix it (review follow-ups); the queue looks again after each push.` }
   }
   if (checks.pending > 0) return { do: 'wait', reason: `CI is running (${checks.pending} check${checks.pending === 1 ? '' : 's'} left).` }
   if (s === 'clean' || s === 'unstable' || s === 'has_hooks') return { do: 'merge' }
@@ -105,15 +122,63 @@ export function reviewRefusal(
   return { state: 'blocked', detail: message, requeueReview: false }
 }
 
-/** The check runs of a head, reduced to what `nextQueueStep` reads. */
-export function checksView(runs: Array<{ name?: string; status?: string; conclusion?: string | null }>): ChecksView {
+/**
+ * The check runs of a head, reduced to what `nextQueueStep` reads. A name
+ * that ran more than once counts by its newest run: a draft's CI stops on
+ * purpose ("Draft PRs run no CI") and runs again on the same commit once
+ * the PR is marked ready, so the old stop must not read as a failure.
+ */
+export function checksView(runs: Array<{ id?: number; name?: string; status?: string; conclusion?: string | null; started_at?: string | null }>): ChecksView {
+  const newest = new Map<string, (typeof runs)[number]>()
+  runs.forEach((r, i) => {
+    const key = r.name ?? `#${i}`
+    const prev = newest.get(key)
+    const later = !prev || (r.started_at ?? '') > (prev.started_at ?? '') || ((r.started_at ?? '') === (prev.started_at ?? '') && (r.id ?? 0) > (prev.id ?? 0))
+    if (later) newest.set(key, r)
+  })
   let pending = 0
   const failed: string[] = []
-  for (const r of runs) {
+  const ran: string[] = []
+  for (const r of newest.values()) {
     if (r.status !== 'completed') pending++
-    else if (r.conclusion && ['failure', 'timed_out', 'action_required', 'startup_failure'].includes(r.conclusion)) failed.push(r.name ?? 'a check')
+    else {
+      if (r.conclusion && ['failure', 'timed_out', 'action_required', 'startup_failure'].includes(r.conclusion)) failed.push(r.name ?? 'a check')
+      if (r.conclusion !== 'skipped') ran.push(r.name ?? 'a check')
+    }
   }
-  return { pending, failed }
+  return { pending, failed, ran }
+}
+
+/**
+ * Check names for a queue or train `detail`, each in double quotes:
+ * `"Lint, typecheck, build, doctor", "pgTAP RLS suite"`. Names contain
+ * commas, so a bare ", " list could not be read back (report 7426815e).
+ */
+export function checkNameList(names: string[], max = 4): string {
+  return names.slice(0, max).map((n) => `"${n.replace(/"/g, "'")}"`).join(', ')
+}
+
+/**
+ * The names in a list `checkNameList` wrote. Rows written before 2026-10-27
+ * joined bare names with ", "; those are split there and pieces put back
+ * together while a parenthesis is open, or when a lower-case piece follows a
+ * capitalised one ("Lint, typecheck, build, doctor" is one check).
+ */
+export function parseCheckNameList(list: string): string[] {
+  const quoted = [...list.matchAll(/"([^"]*)"/g)].map((m) => m[1].trim()).filter(Boolean)
+  if (quoted.length > 0) return quoted
+  const out: string[] = []
+  let depth = 0
+  for (const raw of list.split(',')) {
+    const piece = raw.trim()
+    if (!piece) continue
+    const prev = out[out.length - 1]
+    const continues = prev !== undefined && (depth > 0 || (/^[a-z]/.test(piece) && /^[A-Z]/.test(prev)))
+    if (continues) out[out.length - 1] = `${prev}, ${piece}`
+    else out.push(piece)
+    depth = Math.max(0, depth + (piece.match(/\(/g)?.length ?? 0) - (piece.match(/\)/g)?.length ?? 0))
+  }
+  return out
 }
 
 /** The task a Cursor agent gets for a conflicting PR. Pure text; no report content goes in. */

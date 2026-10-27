@@ -78,10 +78,10 @@ const LEDGER_REASON_LABEL: Record<string, string> = {
   bonus: 'Bonus points',
 }
 
-function MilestoneBar({ ytd, threshold, cap, kycCleared }: {
+export function MilestoneBar({ ytd, threshold, cap, kycCleared }: {
   ytd: number; threshold: number; cap: number; kycCleared: boolean
 }) {
-  const thresholdPct = (threshold / cap) * 100
+  const thresholdPct = Math.min(100, Math.max(0, (threshold / cap) * 100))
   const ytdPct = Math.min(100, (ytd / cap) * 100)
   const overThreshold = ytd >= threshold
 
@@ -117,15 +117,24 @@ function MilestoneBar({ ytd, threshold, cap, kycCleared }: {
         />
         {/* KYC gate marker */}
         <div
-          className="absolute inset-y-0 w-0.5 bg-edge"
+          className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-edge"
           style={{ left: `${thresholdPct}%` }}
           title={`KYC required at $${threshold}`}
         />
       </div>
-      <div className="flex justify-between text-2xs text-fg-faint mt-1.5">
-        <span>$0</span>
-        <span className="text-warn/80">${threshold} · KYC gate</span>
-        <span>${cap} annual cap</span>
+      {/* The gate caption tracks the marker, so it cannot sit in the justify-between row. */}
+      <div className="relative text-2xs text-fg-faint mt-1.5">
+        <div className="flex justify-between">
+          <span>$0</span>
+          <span>${cap} annual cap</span>
+        </div>
+        <span
+          data-testid="kyc-gate-label"
+          className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-warn/80"
+          style={{ left: `${thresholdPct}%` }}
+        >
+          ${threshold} · KYC gate
+        </span>
       </div>
     </div>
   )

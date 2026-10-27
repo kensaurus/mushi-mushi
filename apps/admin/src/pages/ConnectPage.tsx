@@ -19,15 +19,17 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { usePageCopy } from '../lib/copy'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { SdkNativeConnectivityCard } from '../components/SdkNativeConnectivityCard'
+import { SdkHealthPanel } from '../components/SdkHealthPanel'
+import { SDK_HEALTH_ANCHOR } from '../lib/sdkHealth'
 import { CliSetupGuide } from '../components/CliSetupGuide'
 import { EMPTY_MCP_STATS, type McpStats } from '../components/mcp/types'
 import { ConnectStudio } from '../components/connect/ConnectStudio'
-import { ConnectSnapshotStrip } from '../components/connect/ConnectSnapshotStrip'
+import { ConnectStatusPills } from '../components/connect/ConnectStatusPills'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { SectionAnchorNav } from '../components/connect/SectionAnchorNav'
 import { GithubConnectionCard } from '../components/connect/GithubConnectionCard'
 import { UpdateCenter } from '../components/connect/UpdateCenter'
 import { McpStatusBanner } from '../components/mcp/McpStatusBanner'
-import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { useConnectUx } from '../lib/connectModeUx'
 import { LINK_ACCENT } from '../lib/chipTone'
 import { useDispatchPreflight } from '../lib/useDispatchPreflight'
@@ -42,7 +44,9 @@ import {
 } from '../components/icons'
 import type { SdkStatus } from '../components/SdkVersionBadge'
 import { isExpoReporterProject } from '../lib/projectMushiEnv'
-import { latestHeartbeatAt } from '../lib/heartbeat'
+import { isSdkKeyScopes, latestHeartbeatAt } from '../lib/heartbeat'
+import { mintMcpKeyHref } from '../components/mcp/McpStatusBanner'
+import { useScrollToHash } from '../lib/useScrollToHash'
 
 interface ProjectRepoLite {
   repo_url: string | null
@@ -61,6 +65,7 @@ interface ProjectRow {
   api_keys?: Array<{
     is_active: boolean
     last_seen_at?: string | null
+    scopes?: string[] | null
   }>
 }
 
@@ -78,6 +83,7 @@ interface ProjectsPayload {
 const CONNECT_SECTIONS = [
   { id: 'connect-studio', label: 'Studio' },
   { id: 'connect-github', label: 'GitHub' },
+  { id: SDK_HEALTH_ANCHOR, label: 'SDK health' },
   { id: 'connect-sdk', label: 'Bug capture' },
   { id: 'connect-native-ci', label: 'Native CI' },
   { id: 'connect-update', label: 'Update' },
@@ -124,24 +130,19 @@ function ProjectFallbackNote({
   return card ? <Card>{note}</Card> : note
 }
 
+function isNativeProject(project: ProjectRow | null): boolean {
+  const nativePkgs = ['@mushi-mushi/react-native', '@mushi-mushi/capacitor']
+  return Boolean(project?.sdk_package && nativePkgs.some((p) => project.sdk_package?.includes(p)))
+}
+
 function NativeCiSection({
   project,
-  projectPending,
-  projectMissing,
-  feedError,
   showSectionDescriptions,
 }: {
   project: ProjectRow | null
-  projectPending: boolean
-  projectMissing: boolean
-  feedError: string | null
   showSectionDescriptions: boolean
 }) {
-  const nativePkgs = ['@mushi-mushi/react-native', '@mushi-mushi/capacitor']
-  const isNativeProject = Boolean(
-    project?.sdk_package && nativePkgs.some((p) => project.sdk_package?.includes(p)),
-  )
-  if (!isNativeProject && project) return null
+  if (!project || !isNativeProject(project)) return null
 
   return (
     <div id="connect-native-ci" className="scroll-mt-chrome">
@@ -149,16 +150,7 @@ function NativeCiSection({
         <SectionDescription when={showSectionDescriptions}>
           Detects missing compile-time env vars and can sync them to GitHub Actions.
         </SectionDescription>
-        {project ? (
-          <SdkNativeConnectivityCard projectId={project.id} projectSlug={project.slug} />
-        ) : (
-          <ProjectFallbackNote
-            card
-            pending={projectPending}
-            missing={projectMissing}
-            hasError={Boolean(feedError)}
-          />
-        )}
+        <SdkNativeConnectivityCard projectId={project.id} projectSlug={project.slug} />
       </Section>
     </div>
   )
@@ -178,8 +170,6 @@ export function ConnectPage() {
   const projectsFeed = usePageData<ProjectsPayload>('/v1/admin/projects')
   const mcpStatsQuery = usePageData<McpStats>('/v1/admin/mcp/stats')
   const mcpStats = mcpStatsQuery.data ?? EMPTY_MCP_STATS
-  const statsFetchedAt = mcpStatsQuery.lastFetchedAt
-  const statsValidating = projectsFeed.isValidating || mcpStatsQuery.isValidating
   const preflight = useDispatchPreflight(activeProjectId)
 
   useEffect(() => {
@@ -209,24 +199,23 @@ export function ConnectPage() {
   }, [feedError])
 
   const fallbackGithubRepoUrl = project?.primary_repo?.repo_url ?? null
-  const githubCheck = preflight.checks.find((c) => c.key === 'github')
-  const githubRepoUrl = preflight.repoUrl ?? fallbackGithubRepoUrl
-  const githubConnected = Boolean(githubRepoUrl) && (githubCheck?.ready ?? Boolean(githubRepoUrl))
-  const sdkConnected = latestHeartbeatAt(project?.api_keys) != null
+  // SDK keys only: an MCP or CLI key's heartbeat is not the app checking in.
+  const sdkLastSeenAt = latestHeartbeatAt(project?.api_keys?.filter((k) => isSdkKeyScopes(k.scopes)))
+  const sdkConnected = sdkLastSeenAt != null
+  const snapshotLoading = (projectsFeed.loading && !project) || mcpStatsQuery.loading
+  // A fresh load of /connect#connect-sdk-health ran the layout's hash scroll
+  // before the sections above had their height, and stayed at the top.
+  useScrollToHash(!projectsFeed.loading && !mcpStatsQuery.loading)
+  // An app that only has SDK keys is set up correctly; MCP is an optional extra for the editor.
+  const mcpOptional = mcpStats.topPriority === 'report_only_keys' || mcpStats.topPriority === 'no_mcp_key'
   const setupStatus = useSetupStatus(activeProjectId)
   const nextSetupStep = nextRequiredSetupStep(
     setupStatus.activeProject ?? { steps: [], required_total: 0, required_complete: 0, total: 0, complete: 0, done: false, report_count: 0, fix_count: 0, merged_fix_count: 0, project_id: '', project_name: '', project_slug: '', created_at: '' },
   )
   const requiredSetupDone = setupStatus.selectors.done
 
-  const visibleSections = CONNECT_SECTIONS.filter((s) => {
-    if (s.id !== 'connect-native-ci') return true
-    const nativePkgs = ['@mushi-mushi/react-native', '@mushi-mushi/capacitor']
-    return (
-      !project ||
-      Boolean(project.sdk_package && nativePkgs.some((p) => project.sdk_package?.includes(p)))
-    )
-  })
+  // Native CI shows once the project has loaded and is a native app, so the tab never appears and then vanishes.
+  const visibleSections = CONNECT_SECTIONS.filter((s) => s.id !== 'connect-native-ci' || isNativeProject(project))
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-connect">
@@ -267,34 +256,28 @@ export function ConnectPage() {
         }
       />
 
+      {/* Heartbeat, version and editor in three pills (Connect page intent). */}
       <PagePosture
         slots={[
           {
+            id: 'connect-pills',
             priority: POSTURE_PRIORITY.status,
-            show: mcpStats.topPriority !== 'healthy' && mcpStats.topPriority !== 'no_project',
             children: (
-              <McpStatusBanner stats={mcpStats} plainBanner />
-            ),
-          },
-          {
-            priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: !connectUx.hideConnectSnapshot,
-            children: (
-              <ConnectSnapshotStrip
-                githubConnected={githubConnected}
-                githubRepoUrl={githubRepoUrl}
-                sdkConnected={sdkConnected}
-                sdkLastSeenAt={latestHeartbeatAt(project?.api_keys)}
+              <ConnectStatusPills
+                sdkLastSeenAt={sdkLastSeenAt}
                 sdkVersion={project?.sdk_version ?? null}
                 sdkLatestVersion={project?.sdk_latest_version ?? null}
                 sdkStatus={project?.sdk_status ?? null}
                 mcpStats={mcpStats}
-                statsFetchedAt={statsFetchedAt}
-                statsValidating={statsValidating}
-                compact={connectUx.compactSnapshot}
-                hideLinks={connectUx.hideSnapshotLinks}
+                loading={snapshotLoading}
               />
             ),
+          },
+          {
+            id: 'connect-mcp-problem',
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: mcpStats.topPriority === 'endpoint_mismatch' || mcpStats.topPriority === 'never_connected',
+            children: <McpStatusBanner stats={mcpStats} plainBanner />,
           },
         ]}
       />
@@ -306,6 +289,15 @@ export function ConnectPage() {
           projectId={project?.id ?? activeProjectId}
           projectName={project?.name}
         />
+        {mcpOptional && project ? (
+          <p className="mt-2 text-xs text-fg-muted" data-testid="connect-mcp-optional">
+            Optional: to let your editor's coding agent read this app's reports, add an MCP key with mcp:read. Your SDK
+            key only sends bug reports, which is all the app needs.{' '}
+            <Link to={mintMcpKeyHref(project.id)} className={LINK_ACCENT}>
+              Add an MCP key
+            </Link>
+          </p>
+        ) : null}
       </div>
 
       {!sdkConnected && !feedError ? (
@@ -351,6 +343,24 @@ export function ConnectPage() {
             </Section>
           </div>
 
+          <div id={SDK_HEALTH_ANCHOR} className="scroll-mt-chrome">
+            <Section title="SDK health">
+              <SectionDescription when={showSectionDescriptions}>
+                Problems that stop bug reports from arriving, each with a fix.
+              </SectionDescription>
+              {project ? (
+                <SdkHealthPanel projectId={project.id} />
+              ) : (
+                <ProjectFallbackNote
+                  card
+                  pending={projectPending}
+                  missing={projectMissing}
+                  hasError={Boolean(feedError)}
+                />
+              )}
+            </Section>
+          </div>
+
           <div id="connect-sdk" className="scroll-mt-chrome">
             <Section title="Bug capture SDK">
               <SectionDescription when={showSectionDescriptions}>
@@ -372,7 +382,7 @@ export function ConnectPage() {
                     Code Health only, not the in-app band.
                   </p>
                   <Link
-                    to={`/onboarding?tab=copilot&project=${project.id}`}
+                    to={`/onboarding?tab=diagnose&project=${project.id}`}
                     className={`mt-2 inline-block text-xs ${LINK_ACCENT}`}
                   >
                     Open Setup Copilot → CI &amp; store builds
@@ -396,13 +406,7 @@ export function ConnectPage() {
             </Section>
           </div>
 
-          <NativeCiSection
-            project={project}
-            projectPending={projectPending}
-            projectMissing={projectMissing}
-            feedError={feedError}
-            showSectionDescriptions={showSectionDescriptions}
-          />
+          <NativeCiSection project={project} showSectionDescriptions={showSectionDescriptions} />
         </div>
 
         <div className="space-y-6 min-w-0 xl:sticky xl:top-4">

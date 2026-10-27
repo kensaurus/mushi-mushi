@@ -61,6 +61,7 @@ import {
   buildFollowupPrompt,
   CI_LOG_EXCERPT_MAX_CHARS,
   ciHeadState,
+  isDraftGuardStop,
   extractCiLogExcerpt,
   expireIfStale,
   FOLLOWUP_MAX_PER_PR,
@@ -1216,6 +1217,20 @@ describe('CI repair: rules', () => {
     const merge = { review, attempt, prior: [] }
     expect(followupTrigger({ ...merge, ci: { state: 'infra', failing: [] } })).toEqual({ queue: false, reason: 'ci_not_failing' })
     expect(followupTrigger({ ...merge, ci: { state: 'pending', failing: [] } })).toEqual({ queue: false, reason: 'ci_pending' })
+  })
+
+  it('reads a draft run stopped by the host gate as pending, never as a code failure to repair', () => {
+    const draftGate = ciJob({ job_name: 'CI Gate', steps: [{ name: 'Draft PRs run no CI', conclusion: 'failure' }, { name: 'Gate', conclusion: 'skipped' }] })
+    expect(isDraftGuardStop(draftGate as never)).toBe(true)
+    expect(ciHeadState([draftGate] as never)).toEqual({ state: 'pending', failing: [] })
+    expect(followupTrigger({ review, attempt, prior: [], ci: ciHeadState([draftGate] as never) })).toEqual({ queue: false, reason: 'ci_pending' })
+    // A real failure in another job on the same head still counts, without the guard.
+    const real = ciHeadState([draftGate, ciJob({ job_id: 7009, job_name: 'Typecheck' })] as never)
+    expect(real.state).toBe('code_failure')
+    expect(real.failing.map((f) => f.name)).toEqual(['Typecheck'])
+    // A job that failed in a real step is not the guard, even if the guard step also failed.
+    expect(isDraftGuardStop(ciJob({ steps: [{ name: 'Draft PRs run no CI', conclusion: 'failure' }, { name: 'Typecheck', conclusion: 'failure' }] }) as never)).toBe(false)
+    expect(isDraftGuardStop(ciJob({ conclusion: 'success', steps: [{ name: 'Draft PRs run no CI', conclusion: 'success' }] }) as never)).toBe(false)
   })
 
   it('a check that also fails on the base branch is not counted; all of them on the base means no repair', () => {

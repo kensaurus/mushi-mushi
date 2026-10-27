@@ -43,6 +43,8 @@ export { getConnectClientEmoji } from './connect/clientEmoji'
 export { ConnectClientIcon, renderConnectClientIcon } from './connect/clientIcons'
 export type { ConnectClientIconProps } from './connect/clientIcons'
 
+export { LoopPipeline } from './pipeline/LoopPipeline'
+
 export { MushiCanvas } from './canvas/MushiCanvas'
 export {
   reportSample,

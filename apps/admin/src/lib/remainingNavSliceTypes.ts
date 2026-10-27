@@ -22,6 +22,8 @@ export interface MarketplaceNavSlice {
 export interface SettingsNavSlice {
   byokKeysFailing: number
   byokKeysUntested: number
+  /** Keys that stop working within 7 days (servers before 2026-10-25 omit it). */
+  byokKeysExpiring?: number
   byokKeysConfigured: number
   slackConfigured: boolean
   githubRepoConfigured: boolean
@@ -68,6 +70,8 @@ export interface IntegrationsNavSlice {
   platformConnected: number
   platformTotal: number
   routingPaused: number
+  /** Same count the Integrations banner titles as "need attention". */
+  platformAttention?: number
 }
 
 export interface FeatureBoardNavSlice {

@@ -1,7 +1,8 @@
 /**
  * FILE: apps/admin/src/components/ci/CiSections.tsx
  * PURPOSE: The read-only sections of /ci under the queue and map:
- *          "Speed it up" advice (one card per rule, ciAdvice.ts), slowest
+ *          "Speed it up" advice (one card per rule, ciAdvice.ts; "Open fix PR"
+ *          where Mushi can edit the workflow, CiCostFixButton), slowest
  *          jobs and steps in full with bars against the slowest, and recent
  *          test machine failures with links to GitHub. Plain words throughout.
  */
@@ -13,6 +14,8 @@ import { Badge, Card, CodeChip, CopyButton, DataTableCell, DataTableHead, MiniIn
 import { IconExternalLink, IconInfo } from '../icons'
 import { CiJobOutcomeChip } from './CiJobOutcomeChip'
 import { CI_OUTCOME_STYLE } from './ciOutcome'
+import { CiCostFixButton, costFixKey, useCostFixJobs } from './CiCostFixButton'
+import type { CiCostFixJob } from '../../lib/ciCostFix'
 
 const SEVERITY: Record<CiAdvice['severity'], { tone: BadgeTone; label: string }> = {
   high: { tone: 'dangerSubtle', label: 'High' },
@@ -20,7 +23,7 @@ const SEVERITY: Record<CiAdvice['severity'], { tone: BadgeTone; label: string }>
   low: { tone: 'neutral', label: 'Low' },
 }
 
-function AdviceCard({ group }: { group: CiAdviceGroup }) {
+function AdviceCard({ group, jobs }: { group: CiAdviceGroup; jobs: Map<string, CiCostFixJob> }) {
   const sev = SEVERITY[group.severity]
   return (
     <Card className="flex flex-col gap-2 p-3">
@@ -64,11 +67,20 @@ function AdviceCard({ group }: { group: CiAdviceGroup }) {
           <CopyButton value={fix} label="Copy the fix" />
         </div>
       ))}
+      {group.fixable.length > 0 && (
+        <div className="flex flex-col gap-2 border-t border-edge-subtle pt-2" aria-label="Fix with a pull request">
+          <p className="text-2xs text-fg-muted">Or let Mushi open it as a draft pull request for you to review:</p>
+          {group.fixable.map((f) => (
+            <CiCostFixButton key={f.key} fixable={f} initialJob={jobs.get(costFixKey(f.autofix)) ?? null} />
+          ))}
+        </div>
+      )}
     </Card>
   )
 }
 
 export function CiAdviceList({ advice }: { advice: CiAdvice[] }) {
+  const jobs = useCostFixJobs(advice.flatMap((a) => (a.autofix ? [a.autofix.projectId] : [])))
   if (advice.length === 0) {
     return <p className="text-xs text-fg-muted">Nothing to speed up right now: no rule found a slow spot in this window.</p>
   }
@@ -76,7 +88,7 @@ export function CiAdviceList({ advice }: { advice: CiAdvice[] }) {
     <ul className="flex flex-col gap-2" data-testid="ci-advice">
       {groupCiAdvice(advice).map((g) => (
         <li key={g.key}>
-          <AdviceCard group={g} />
+          <AdviceCard group={g} jobs={jobs} />
         </li>
       ))}
     </ul>
