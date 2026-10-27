@@ -352,7 +352,7 @@ your CLI key. The agent gets neither key.
 | Command | Flags |
 | --- | --- |
 | `mushi work --daemon` | `--worker-config ` (default `~/.config/mushi/worker.json`) |
-| `mushi worker install` | `--lanes-conf `, `--clone-root `, or one lane: `--lane`, `--project`, `--repo-dir`, `--model`; `--endpoint`, `--key-stdin`, `--no-service`, `--yes`, `--dry-run` |
+| `mushi worker install` | `--lanes-conf `, `--clone-root `, or one lane: `--lane`, `--project`, `--repo-dir`, `--model`; `--stop-at ` (every lane's stop date on first registration), `--cursor-account ` (spend only that Cursor account), `--endpoint`, `--key-stdin`, `--no-service`, `--yes`, `--dry-run` |
 | `mushi worker status` | `--project `, `--json` |
 | `mushi worker revoke` | `--yes` |
 

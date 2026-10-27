@@ -908,7 +908,7 @@ lease every dispatcher reads). Migration `20261027150000_local_workers.sql`.
 | Route | Auth | Role |
 | --- | --- | --- |
 | `POST /v1/worker/heartbeat` | `worker:run` key only | Register the machine and its lanes, renew leases; answers only each lane's closed settings (paused, concurrency, model, mode, stop_at, drain, prune_own) and the host guards (max_agents, min_free_mem_gb, gh_floor) |
-| `POST /v1/worker/claim` | `worker:run` key only | The lane's queue first, then classified/reopened reports ranked as `pickReports` does; never a report with an active claim or an in-flight cloud dispatch; returns the report, fix packet and earlier reviews |
+| `POST /v1/worker/claim` | `worker:run` key only | The lane's queue first, then classified/reopened reports ranked as `pickReports` does; never a report with an active claim, an in-flight cloud dispatch, a live run or an open PR; returns the report, fix packet and earlier reviews |
 | `POST /v1/worker/claims/:id/renew` / `…/done` | `worker:run` key only | Extend the lease; record the outcome with an infra/code split (infra requeues once a week, then /pipeline `requeue`) |
 | `POST /v1/worker/revoke` | `worker:run` key only | The key revokes itself |
 | `GET /v1/admin/work/lanes` | `adminOrApiKey(mcp:read)` | Hosts, lanes, queues, recent runs (`mushi worker status`, the /pipeline Workers tab) |
@@ -920,7 +920,7 @@ lease every dispatcher reads). Migration `20261027150000_local_workers.sql`.
 | --- | --- |
 | `work_hosts` / `work_lanes` / `work_queue` / `work_claims` | Machines (sha256 host id, as `ci_runner_hosts`), lanes (one app on one machine; clones stay local), queues, and the 45-minute lease (one active claim per report). RLS service role only |
 | `worker:run` scope | Reaches `/v1/worker/*`, the local follow-up routes, report filing (`queue.laneId`, own lanes only) and `POST/PATCH /v1/admin/fixes` + `POST /v1/admin/fixes/:id/review` only on its own active claim (`workerClaimDenial`). Never merge, settings or keys; mcp:write does not imply it |
-| Lease checks | `dispatchFixForReport`, `POST /v1/admin/fixes/dispatch`, spend-down's candidates, `fix-worker` before an agent starts, `skill-runs` (waits). A claim counts while `status = 'active' AND lease_until > now()`; a failed read skips the report; a missing table means no claims |
+| Lease checks | `dispatchFixForReport`, `POST /v1/admin/fixes/dispatch`, spend-down's candidates, `fix-worker` before an agent starts, `skill-runs` (waits). A claim counts while `status = 'active' AND lease_until > now()`; a failed read skips the report; a missing table (42P01 / PGRST205) means no claims |
 
 ## Per-app Home (Oct 2026)
 

@@ -73,7 +73,7 @@ The **Workers** tab shows your local workers: machines that run `mushi work --da
 | --- | --- |
 | **Machines** | Each registered machine: online or offline, its last heartbeat, what it is doing now (working, idle, waiting for memory, for the GitHub quota, for the Cursor sign-in, or for a free agent slot), and its guards: how many agents may run at once, the free-memory floor and the GitHub API floor. The machine's owner changes the guards or revokes it. |
 | **Lanes** | One app on one machine: its model, mode (fix reports, or review follow-ups only), how many reports it runs at once, paused or not, its stop date, and drain (finish what runs, take nothing new). |
-| **Queue** | Reports the lane takes first, in order. Move a report up or down, or remove it. A report already being fixed somewhere else is skipped until it is free. |
+| **Queue** | Reports the lane takes first, in order. Move a report up or down, remove it, or paste report ids (one or many) into **Add reports by id**. A report already being fixed somewhere else waits in the queue until it is free. |
 | **Recent runs** | The last 7 days: runs, PRs opened, no change, timeouts, errors, and failures of the machine (infra) kept apart from failures of the code. |
 
 A lane change reaches the machine at its next heartbeat, within a minute. The machine opens no port: it asks Mushi for its settings, and the settings are values (a model id, a number, a date), never a command or a path. Viewers can read this tab but cannot change it.
