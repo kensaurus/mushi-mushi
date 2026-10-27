@@ -291,7 +291,7 @@ const KIND_WHY: Record<CiCostFixKind, string> = {
   weekly_cron:
     'This schedule ran more often than once a week, whether or not anything changed. It now runs once a week; the old schedule is above, so you can put it back if something depends on it.',
   ignore_docs_paths:
-    'A pull request or push that only changes Markdown files or `docs/` ran every job here. Now it skips this workflow.',
+    'A pull request or push that only changes docs (Markdown, `docs/`, the license or issue templates) ran every job here. Now it skips this workflow.',
 }
 
 export function costFixPrTitle(kind: CiCostFixKind, workflowPath: string): string {

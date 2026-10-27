@@ -60,7 +60,7 @@ Some advice is one edit to one workflow file. Those cards have an **Open fix PR*
 | Cancel superseded runs | A `concurrency` group. A new push to a pull request cancels the run it replaces. Pushes, manual and scheduled runs always finish. Mushi refuses on a workflow that deploys or releases. |
 | Skip drafts | `ready_for_review` is added to the `pull_request` types, and every job skips draft pull requests. A job whose check your branch requires keeps running and fails at a first step named "Draft PRs run no CI": a skipped required check reads as passing, and a draft must never merge untested. |
 | Run the schedule weekly | A schedule that runs more than once a week runs once a week, at the same hour. Mushi refuses on a workflow that deploys or releases, because some daily schedules roll out releases on purpose. |
-| Skip docs-only changes | `paths-ignore` for Markdown files and `docs/` on `pull_request` and `push`. Mushi refuses when the workflow produces a required check, or a job looks like one: a skipped workflow never reports, so the pull request could not merge. It also refuses when a trigger already lists `paths`. |
+| Skip docs-only changes | `paths-ignore` for Markdown files, `docs/`, the license and issue templates on `pull_request` and `push`. Mushi refuses when the workflow produces a required check, or a job looks like one: a skipped workflow never reports, so the pull request could not merge. It also refuses when a trigger already lists `paths`. |
 
 Mushi reads which checks your default branch requires (branch protection and rulesets). When it cannot, it refuses the draft and docs fixes rather than guess.
 

@@ -69,10 +69,12 @@ export interface CostFixOptions {
 /** GitHub's `pull_request` activity types when a workflow names none. */
 export const DEFAULT_PR_TYPES = ['opened', 'synchronize', 'reopened'] as const
 /**
- * The docs-only paths `ignore_docs_paths` adds. The one list: the ci-advisor
- * rule `missing_path_filter` imports it, so advice and fix agree.
+ * The docs-only paths `ignore_docs_paths` adds: the same files the CI cost
+ * view counts as a docs-only change (`DOCS_ONLY_PATHS`, ci-bill's
+ * `_shared/ci-jobs.ts`). The ci-advisor rule `missing_path_filter` imports
+ * this list, so advice, classifier and fix agree.
  */
-export const DOCS_PATHS_IGNORE = ['**/*.md', 'docs/**'] as const
+export const DOCS_PATHS_IGNORE = ['**/*.md', '**/*.mdx', 'docs/**', 'LICENSE*', '.github/ISSUE_TEMPLATE/**'] as const
 export const DRAFT_CONDITION = 'github.event.pull_request.draft != true'
 /** The step a required job fails at on a draft (exact name: Mushi's CI readers match it). */
 export const DRAFT_GUARD_STEP_NAME = 'Draft PRs run no CI'
@@ -591,7 +593,7 @@ function ignoreDocsPaths(doc: Document, yaml: string, opts: CostFixOptions): Cos
     if (isMap(current) && current.has('paths')) {
       return refuse(
         yaml,
-        `The \`${event}\` trigger already lists \`paths\`, and GitHub does not allow \`paths\` and \`paths-ignore\` on the same event. Add \`!**/*.md\` and \`!docs/**\` to its \`paths\` by hand instead.`,
+        `The \`${event}\` trigger already lists \`paths\`, and GitHub does not allow \`paths\` and \`paths-ignore\` on the same event. Add the docs paths to its \`paths\` as exclusions (\`!**/*.md\`, \`!docs/**\`…) by hand instead.`,
       )
     }
   }
@@ -614,6 +616,6 @@ function ignoreDocsPaths(doc: Document, yaml: string, opts: CostFixOptions): Cos
   return {
     changed: true,
     yaml: render(doc, yaml),
-    summary: `A ${added.join(' or ')} that only changes Markdown files or \`docs/\` no longer runs this workflow.`,
+    summary: `A ${added.join(' or ')} that only changes docs (Markdown, \`docs/\`, the license or issue templates) no longer runs this workflow.`,
   }
 }

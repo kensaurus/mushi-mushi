@@ -231,9 +231,10 @@ describe('ignore_docs_paths', () => {
   it('adds paths-ignore to pull_request and push, quoted, and keeps branch filters', () => {
     const out = applyCiCostFix('ignore_docs_paths', CI, NONE)
     const wf = parse(out.yaml)
-    expect(wf.on.pull_request).toEqual({ branches: ['main'], 'paths-ignore': ['**/*.md', 'docs/**'] })
-    expect(wf.on.push).toEqual({ branches: ['main'], 'paths-ignore': ['**/*.md', 'docs/**'] })
-    expect(out.yaml).toContain("paths-ignore: ['**/*.md', 'docs/**']")
+    const DOCS = ['**/*.md', '**/*.mdx', 'docs/**', 'LICENSE*', '.github/ISSUE_TEMPLATE/**']
+    expect(wf.on.pull_request).toEqual({ branches: ['main'], 'paths-ignore': DOCS })
+    expect(wf.on.push).toEqual({ branches: ['main'], 'paths-ignore': DOCS })
+    expect(out.yaml).toContain("paths-ignore: ['**/*.md', '**/*.mdx', 'docs/**', 'LICENSE*', '.github/ISSUE_TEMPLATE/**']")
     expect(out.summary).toContain('pull_request or push')
   })
 
@@ -260,8 +261,9 @@ describe('ignore_docs_paths', () => {
     }
   })
 
-  it('exports the docs path list once, for the advisor rule to import', () => {
-    expect([...DOCS_PATHS_IGNORE]).toEqual(['**/*.md', 'docs/**'])
+  it('exports the docs path list once, the same files the CI cost view counts as docs-only', () => {
+    // Same values as DOCS_ONLY_PATHS (ci-bill's _shared/ci-jobs.ts); the advisor rule imports this one.
+    expect([...DOCS_PATHS_IGNORE]).toEqual(['**/*.md', '**/*.mdx', 'docs/**', 'LICENSE*', '.github/ISSUE_TEMPLATE/**'])
   })
 
   it('refuses when a job is a required check, so a docs-only PR never gets stuck', () => {
