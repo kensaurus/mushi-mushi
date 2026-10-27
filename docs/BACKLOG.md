@@ -8,6 +8,7 @@ regenerating it.** Plans stay the source of truth for their own detail
 parked work is visible in one place.
 
 - **Last regenerated:** 2026-10-27 (fourth run; delta against 2026-10-17 below)
+- **Added 2026-10-27 (per-app Home):** BL-135, parts the Home redesign left out.
 - **Delta 2026-10-27:** 12 new (BL-123..BL-130 from the scan; BL-131..BL-134 host-repo follow-ups from the 2026-10-26 CI cost rollout) · 0 closed · 0 newly stale · 0 moved to verify-done (BL-011, BL-013, BL-040, BL-041, BL-068, BL-069, BL-071, BL-079, BL-096, BL-098, BL-099, BL-107, BL-108, BL-115, BL-121 re-checked in code: still open)
 - **Added 2026-10-20 (PR #504, spend-down):** BL-087..BL-091, parked parts of ADR 0028. Closed BL-089 on 2026-10-22.
 - **Added 2026-10-21 (agent PR review):** BL-095, a parked part of ADR 0030.
@@ -20,7 +21,7 @@ parked work is visible in one place.
 - **Added 2026-10-23 (site audit, ADR 0040):** BL-116..BL-117, parked parts of the site audit.
 - **Added 2026-10-24 (local fix worker, `mushi work`):** BL-118..BL-119, parked parts of the local worker.
 - **Delta 2026-10-17:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 74 · **Recently closed:** 24 (BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 75 · **Recently closed:** 24 (BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
@@ -29,13 +30,13 @@ parked work is visible in one place.
 | tech-debt | 16 |
 | known-bug | 3 |
 | decision-needed | 12 |
-| unfinished-feature | 25 |
+| unfinished-feature | 26 |
 | dependency | 2 |
 | needs-triage | 1 |
 
 | Status | Open |
 |---|---|
-| relevant | 71 |
+| relevant | 72 |
 | verify-done | 3 |
 | stale (propose removal) | 0 |
 
@@ -162,6 +163,7 @@ parked work is visible in one place.
 | BL-132 | tech-debt | tsumagoi: two file pairs differ only in letter case (`StayGuide.tsx` / `stayGuide.ts`, `Hud.tsx` / `hud.ts`), so its pre-push hook cannot pass on a Windows checkout (PR #929 was pushed from Linux for this). Rename them in tsumagoi's next batch, on its own PR with the deploy watched (a live inn) | relevant | med | tsumagoi repo; owner handoff `ci-cost-2026-10-26.md` | — |
 | BL-133 | tech-debt | yen-yen: workflow lint (actionlint) fails on every workflow PR because `shellcheck` is not installed on the self-hosted runner; a local run of the same linter is clean. Install shellcheck in the runner setup (owner) | relevant | low | yen-yen repo; owner handoff `ci-cost-2026-10-26.md` | — |
 | BL-134 | tech-debt | Host repos run advisory crons daily (security scans, OTA checks, store reviews); the owner's CI cost rule says advisory crons run weekly. Move them in each repo's next batch, except crons that drive a staged OTA rollout on purpose. The CI page's new `cron_too_frequent` rule will list them | relevant | low | owner rule `ci-cost-discipline.md` §2 and §9; owner handoff `ci-cost-2026-10-26.md` | — |
+| BL-135 | unfinished-feature | Per-app Home (2026-10-27) left out: Needs you does not list Cursor credits about to expire (`byok_keys.credits_expire_at`, needs the key-owner filter per app); `GET /v1/admin/projects/:id/home` has no MCP tool or `mushi` command (surface-parity `jwt-only`); a page's bug badge opens the 14-day report list because reports cannot be filtered by page URL | relevant | low | `packages/server/supabase/functions/api/routes/project-home.ts`; `apps/admin/src/components/home/SitemapCard.tsx`; `scripts/surface-parity.json` | — |
 
 ---
 

@@ -60,7 +60,7 @@ const COPY: CopyRegistry = {
   quickstart: {
     '/dashboard': {
       title: 'Home',
-      description: 'What needs your attention right now — waiting bugs, fixes in progress, and setup steps left.',
+      description: 'How your app is doing: is it up, what needs you, and what is shipping.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         backlog: 'Waiting',
@@ -81,14 +81,14 @@ const COPY: CopyRegistry = {
       help: {
         title: 'About your home screen',
         whatIsIt:
-          'A single place to see whether bugs are waiting, fixes are running, or setup still needs a step — before opening Reports or Fixes.',
+          'One page per app: whether it is up, what needs you, what is shipping, and which pages have bugs.',
         useCases: [
           'Start every session here to see what actually needs you',
-          'Jump straight to the worst backlog or failed fix',
-          'Finish setup when charts are still empty',
+          'Check the site is up and CI on main is green',
+          'Finish setup while the grey lights say what to connect',
         ],
         howToUse:
-          'Read the colored banner at the top — yellow means unread help, green means you have opened it. Click the action button to continue.',
+          'Every number opens the list it counts. A grey light is not connected yet; its button says how to connect it.',
       },
     },
     '/inbox': {
@@ -1146,7 +1146,7 @@ const COPY: CopyRegistry = {
     },
     '/dashboard': {
       title: 'Home',
-      description: 'Live workspace snapshot — banner and KPI strip tell you what needs action before you drill into loop, metrics, or health.',
+      description: 'How your app is doing right now: health, what needs you, the next release, and your busiest pages.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         backlog: 'Backlog',
@@ -1172,15 +1172,15 @@ const COPY: CopyRegistry = {
       help: {
         title: 'About your home screen',
         whatIsIt:
-          'A live picture of bugs your users hit, fixes Mushi drafted, quality scores, and what shipped — in Overview, Loop, Metrics, and Health tabs.',
+          'One page per app: is it up, erroring or slow; what needs you; what is shipping and what is waiting; which pages have bugs; and who can reach it.',
         useCases: [
-          'Glance at the status banner to see backlog, failures, or integration issues',
-          'Use Loop tab for the interactive flow canvas with live counts',
-          'Use Metrics for 14-day charts and the inbox queue',
-          'Use Health for connection checks and automated test coverage on the active project',
+          'Check the four lights: site up, errors today, SDK sending, CI on main',
+          'Clear the few things that need you, most costly first',
+          'See how far fixes have got toward a release, and how many bugs wait by severity',
+          'Compare this week with last week',
         ],
         howToUse:
-          'Plan = review new reports. Do = fix drafts and PRs. Check = quality scores before merge. Act = merged fixes and lessons. The canvas shows counts and where things are stuck — expand “About this page” for details.',
+          'Every number opens the list it counts. A grey light is not connected yet; its button says how to connect it. "How this works" at the bottom explains what Mushi does with a bug.',
       },
     },
     '/reports': {
@@ -1630,7 +1630,7 @@ const COPY: CopyRegistry = {
     },
     '/dashboard': {
       title: 'Home',
-      description: 'Where your bug-fix loop is stuck today, and the next thing to do.',
+      description: 'Your app at a glance: health, what needs you, the release, pages and access.',
     },
     '/reports': {
       title: 'Bugs',

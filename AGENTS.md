@@ -129,7 +129,7 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `webhooks-linear-agent` | Linear AgentSessionEvent webhooks (acknowledge within 10s; may dispatch fix-worker) |
 | `reporter-notify-fanout` | Email / push for a developer reply to a reporter; enqueued by the `report_comments` trigger, which stays the in-app writer (Plan 018) |
 
-Also: **`api`** (Hono REST router), **`api-ext`** (the overflow half of the admin API: `api` forwards the CI runner, verified-fix, inventory, Ask Mushi, Codebase Atlas, modernization / super-admin, agent-skills, QA coverage, full-stack audit, UX-run, pipeline and tester-marketplace paths there with the caller's headers, because `api` hit Supabase's 5 MB deployment size limit on 2026-10-21 and again on 2026-10-22 (tester marketplace moved 2026-10-26); public URLs are unchanged, `_shared/edge-proxy.ts`; `scripts/deploy-edge-function.test.mjs` holds `api` under the last upload size known to deploy) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
+Also: **`api`** (Hono REST router), **`api-ext`** (the overflow half of the admin API: `api` forwards the CI runner, verified-fix, inventory, Ask Mushi, Codebase Atlas, modernization / super-admin, agent-skills, QA coverage, full-stack audit, UX-run, pipeline, tester-marketplace and per-app Home paths there with the caller's headers, because `api` hit Supabase's 5 MB deployment size limit on 2026-10-21 and again on 2026-10-22 (tester marketplace moved 2026-10-26); public URLs are unchanged, `_shared/edge-proxy.ts`; `scripts/deploy-edge-function.test.mjs` holds `api` under the last upload size known to deploy) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
 
 ---
 
@@ -889,6 +889,28 @@ Full precedence: [`docs/SDK_RUNTIME_CONFIG.md`](docs/SDK_RUNTIME_CONFIG.md).
 | Readiness probe | `GET /health/ready` in `api/routes/discovery.ts` (DB-aware) |
 | Standalone healthz | `GET /functions/v1/healthz` — unauthenticated `{status, db, version}` edge function |
 | LLM transient retry before key rotation | `_shared/llm-failover.ts` |
+
+---
+
+## Per-app Home (Oct 2026)
+
+Console Home → Today (`apps/admin/src/pages/DashboardPage.tsx`, sections in
+`apps/admin/src/components/home/*`) reads one call, served by `api-ext`
+(`api/routes/project-home.ts`; decisions in `_shared/project-home.ts`):
+
+| Route | Auth | Role |
+| --- | --- | --- |
+| `GET /v1/admin/projects/:id/home` | `jwtAuth` (members) | App card, four health lights (site up from `site_watches` / `site_watch_pages` / `synthetic_runs`; errors today from reports (the report list's UTC calendar days, so the count matches `/reports?days=1`); SDK sending from SDK key heartbeats; CI on main from `ci_jobs`, infra stops amber per ADR 0033), Needs you (≤5, pipeline groups reused from `readPipeline`), release stations + tickets waiting by severity, page map (`session_page_views`, report URLs, broken pages), week vs last week, access (repo, members, SDK freshness, key labels and last use only), grouped activity. Each section reads with its own deadline and reports `ok` / `not_connected` (with a connect hint) / `error`; counts are exact |
+| `POST /v1/admin/projects/:id/home/thumbnail` | `jwtAuth` (non-viewers) | Screenshot of the live site (Firecrawl `/v2/scrape` `screenshot`) on the project's own Firecrawl key only (409 `FIRECRAWL_KEY_REQUIRED` on the platform key); one per app per 10 min (429) |
+
+| Object | Role |
+| --- | --- |
+| `project_home_thumbnails` | One row per app: `storage_path`, `page_url`, `captured_at`, `last_attempt_at` (conditional-update capture claim), `last_error`. Members read, service role writes. Migration `20261027120000_project_home_thumbnails.sql` |
+| `app-thumbnails` bucket | Private, png / jpeg / webp ≤5 MB, one object per app (`<project_id>/home.<ext>`), read through 1-hour signed URLs. Firecrawl's hosted URL is never stored (`_shared/home-thumbnail.ts`) |
+
+Opening Home captures a new screenshot in the background only while the
+app's live-site watch is on, with its own Firecrawl key, and the last
+capture is over 7 days old (at most one try a day).
 
 ---
 
