@@ -12,7 +12,7 @@
  *          manifest and the surface-parity check keep reading them.
  *
  *          Routes here: CI runners, placement and the real bill (Plan 022), CI cost fix PRs
- *          (ADR 0047), inventory, Ask Mushi,
+ *          (ADR 0047) and their one-PR-per-repo bundles, inventory, Ask Mushi,
  *          verified fixes (Plan 024), known holes in dependencies (ADR 0038),
  *          the merge queue (ADR 0041), skill runs (ADR 0042), local review
  *          follow-ups for `mushi work` PRs (ADR 0032 amendment 2026-10-24),
@@ -32,6 +32,7 @@ import { registerCiRoutes } from '../api/routes/ci.ts'
 import { registerCiPlacementRoutes } from '../api/routes/ci-placement.ts'
 import { registerCiBillRoutes } from '../api/routes/ci-bill.ts'
 import { registerCiCostFixRoutes } from '../api/routes/ci-cost-fix.ts'
+import { registerCiCostFixBundleRoutes } from '../api/routes/ci-cost-fix-bundle.ts'
 import { registerInventoryRoutes } from '../api/routes/inventory.ts'
 import { registerAskMushiRoutes } from '../api/routes/ask-mushi.ts'
 import { registerVerifyRoutes } from '../api/routes/verify.ts'
@@ -70,6 +71,7 @@ registerCiRoutes(app)
 registerCiPlacementRoutes(app)
 registerCiBillRoutes(app)
 registerCiCostFixRoutes(app)
+registerCiCostFixBundleRoutes(app)
 registerVerifyRoutes(app)
 registerCodebaseUnderstandRoutes(app)
 registerModernizationHealthSuperRoutes(app)

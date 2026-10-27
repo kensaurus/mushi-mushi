@@ -8,6 +8,11 @@
  * with `{ jobId }`; a GET of a job still queued after two minutes fires it
  * again, and a run that died while `running` is reclaimed after 10 minutes.
  *
+ * With `{ bundleId }` it runs a bundle instead: several fixes for one repo in
+ * ONE draft PR (`_shared/ci-cost-fix-bundle.ts`, POST
+ * /v1/admin/ci/cost-fix-bundles, "Apply to every app"). A job that belongs to
+ * a bundle is never run on its own.
+ *
  * Auth: `requireServiceRoleAuth`.
  */
 
@@ -16,6 +21,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { getServiceClient } from '../_shared/db.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { runCiCostFixJob } from '../_shared/ci-cost-fix-runner.ts'
+import { runCiCostFixBundle } from '../_shared/ci-cost-fix-bundle.ts'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -29,9 +35,17 @@ app.post('/ci-cost-fix-worker', async (c) => {
   const unauthorized = requireServiceRoleAuth(c.req.raw)
   if (unauthorized) return unauthorized
 
-  const body = (await c.req.json().catch(() => ({}))) as { jobId?: unknown }
+  const body = (await c.req.json().catch(() => ({}))) as { jobId?: unknown; bundleId?: unknown }
+  if (typeof body.bundleId === 'string') {
+    if (!UUID_RE.test(body.bundleId)) return c.json({ ok: false, error: 'bundleId must be a uuid' }, 400)
+    const result = await runCiCostFixBundle(getServiceClient(), body.bundleId)
+    if (!result.ok) {
+      return c.json({ ok: false, error: result.error, ...('code' in result ? { code: result.code, data: { items: result.items } } : {}) }, result.status === 'skipped' ? 409 : 200)
+    }
+    return c.json({ ok: true, data: result })
+  }
   const jobId = typeof body.jobId === 'string' ? body.jobId : ''
-  if (!UUID_RE.test(jobId)) return c.json({ ok: false, error: 'jobId (uuid) required' }, 400)
+  if (!UUID_RE.test(jobId)) return c.json({ ok: false, error: 'jobId or bundleId (uuid) required' }, 400)
 
   const result = await runCiCostFixJob(getServiceClient(), jobId)
   if (!result.ok) {
