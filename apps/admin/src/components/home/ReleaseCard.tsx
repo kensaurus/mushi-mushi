@@ -1,26 +1,18 @@
 /**
  * FILE: apps/admin/src/components/home/ReleaseCard.tsx
  * PURPOSE: What is shipping and what is waiting, as pictures:
- *            - five stations (fix ready → CI → in train → merged → deployed)
- *              with the count at each and how many are stuck, the same
- *              stages and counts as /pipeline;
- *            - the release train on the tracks (or the last one) and the
- *              version last seen live;
+ *            - the release stations and the train on the tracks
+ *              (components/release/ReleaseStations, shared with Fixes) and
+ *              the version last seen live;
  *            - open bugs waiting for a fix as one bar by severity.
  */
 
 import { Link } from 'react-router-dom'
-import { Badge, RelativeTime, Section, Skeleton } from '../ui'
+import { RelativeTime, Section, Skeleton } from '../ui'
+import { ReleaseStations, ReleaseTrainLine } from '../release/ReleaseStations'
 import { SEVERITIES, SEVERITY_LABEL, type HomeRelease, type HomeSection, type SeverityKey } from '../../lib/projectHome'
 import { severityTrafficBg } from '../../lib/severityTraffic'
 import { HomeSectionBody } from './HomeSectionBody'
-
-const TRAIN_STATE: Record<string, string> = {
-  building: 'is being built',
-  testing: 'is running CI',
-  merged: 'merged',
-  failed: 'failed CI',
-}
 
 /** The traffic-light fill for a severity ("not rated yet" is the palette's unscored grey). */
 function severityBar(s: SeverityKey): string {
@@ -38,17 +30,10 @@ export function ReleaseCard({ section, projectId }: { section: HomeSection<HomeR
       <HomeSectionBody section={section} what="the release" notConnectedText="Connect your GitHub repo to see fixes move toward a release.">
         {(r) => (
           <div className="space-y-4">
-            <Stations stations={r.stations} href={pipelineHref} />
+            <ReleaseStations stations={r.stations} href={pipelineHref} />
             <div className="grid gap-2 text-xs text-fg-secondary sm:grid-cols-2">
               <p>
-                {r.train ? (
-                  <Link to={pipelineHref} className="hover:underline">
-                    {r.train.active ? 'Train' : 'Last train'}
-                    {r.train.prNumber ? ` #${r.train.prNumber}` : ''} with {r.train.members} {r.train.members === 1 ? 'fix' : 'fixes'} {TRAIN_STATE[r.train.state] ?? r.train.state}
-                  </Link>
-                ) : (
-                  <span className="text-fg-muted">No release train this week.</span>
-                )}
+                <ReleaseTrainLine train={r.train} href={pipelineHref} />
               </p>
               <p className="sm:text-right">
                 {r.lastDeploy ? (
@@ -65,38 +50,6 @@ export function ReleaseCard({ section, projectId }: { section: HomeSection<HomeR
         )}
       </HomeSectionBody>
     </Section>
-  )
-}
-
-function Stations({ stations, href }: { stations: HomeRelease['stations']; href: string }) {
-  return (
-    <div>
-      <ol className="grid grid-cols-5" aria-label="Fixes on their way to a release" data-testid="home-release-stations">
-        {stations.map((s, i) => (
-          <li key={s.id} className="relative flex min-w-0 flex-col items-center gap-1 px-0.5 text-center">
-            {/* The track to the next station, from this circle's centre to the next one's. */}
-            {i < stations.length - 1 && <span aria-hidden className="absolute left-1/2 top-4 h-px w-full bg-edge" />}
-            <Link
-              to={href}
-              aria-label={`${s.label}: ${s.count}${s.stuck ? `, ${s.stuck} stuck` : ''}`}
-              className={`relative flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold tabular-nums ${
-                s.stuck > 0
-                  ? 'border-danger/50 bg-danger-muted text-danger-foreground'
-                  : s.count === 0
-                    ? 'border-edge-subtle bg-surface text-fg-faint'
-                    : s.id === 'merged' || s.id === 'deployed'
-                      ? 'border-ok/40 bg-ok-muted text-ok-foreground'
-                      : 'border-edge bg-surface-overlay text-fg'
-              }`}
-            >
-              {s.count}
-            </Link>
-            <span className="w-full truncate text-2xs text-fg-secondary">{s.label}</span>
-            {s.stuck > 0 && <Badge tone="dangerSubtle">{s.stuck} stuck</Badge>}
-          </li>
-        ))}
-      </ol>
-    </div>
   )
 }
 
