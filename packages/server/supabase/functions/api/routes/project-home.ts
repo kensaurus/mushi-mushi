@@ -379,11 +379,13 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
         }),
       )
       const identity = resolveProjectSdkIdentity(observations[0], stamped[0])
-      let latest: { version: string; deprecated: boolean } | null = null
-      for (const row of catalog) {
-        if (row.package !== identity.sdk_package) continue
-        if (!latest || compareSemver(row.version, latest.version) > 0) latest = { version: row.version, deprecated: !!row.deprecated }
-      }
+      // The catalogue keeps history: the highest semver of this package is the latest.
+      const latest = catalog
+        .filter((row) => row.package === identity.sdk_package)
+        .reduce<{ version: string; deprecated: boolean } | null>(
+          (best, row) => (!best || compareSemver(row.version, best.version) > 0 ? { version: row.version, deprecated: !!row.deprecated } : best),
+          null,
+        )
       const status = resolveSdkFreshnessStatus({ sdkPackage: identity.sdk_package, sdkVersion: identity.sdk_version, catalogVersion: latest?.version ?? null, catalogDeprecated: !!latest?.deprecated })
       const keyList: Array<{ label: string; kind: KeyKind; lastUsedAt: string | null; createdAt: string }> = keys.ok
         ? keys.value
