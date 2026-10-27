@@ -6,6 +6,7 @@ import {
   heartbeatStateFromTimestamp,
   isLiveKey,
   freshestHeartbeatKey,
+  hasSdkCheckIn,
   latestHeartbeatAt,
 } from './heartbeat'
 
@@ -128,5 +129,23 @@ describe('latestHeartbeatAt / freshestHeartbeatKey', () => {
   it('returns null for no keys', () => {
     expect(latestHeartbeatAt(undefined)).toBeNull()
     expect(latestHeartbeatAt([])).toBeNull()
+  })
+})
+
+describe('hasSdkCheckIn', () => {
+  it('ignores an MCP key seen 17 days ago when the SDK key was never used', () => {
+    expect(
+      hasSdkCheckIn([
+        { is_active: true, scopes: ['mcp:read'], last_seen_at: ago(17 * 24 * 3_600_000) },
+        { is_active: true, scopes: ['report:write'], last_seen_at: null },
+      ]),
+    ).toBe(false)
+  })
+
+  it('is true only for an SDK key that has checked in', () => {
+    expect(hasSdkCheckIn([{ is_active: true, scopes: ['report:write'], last_seen_at: ago(60_000) }])).toBe(true)
+    expect(
+      hasSdkCheckIn([{ is_active: true, scopes: ['report:write', 'mcp:read'], last_seen_at: ago(60_000) }]),
+    ).toBe(false)
   })
 })
