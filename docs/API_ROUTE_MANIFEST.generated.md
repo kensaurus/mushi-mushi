@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-27 · **772** routes.
+> Generated: 2026-10-27 · **773** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -13,7 +13,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | `jwtAuth` | 397 |
 | `jwtOrApiKey` | 3 |
 | `public` | 61 |
-| `unknown` | 50 |
+| `unknown` | 51 |
 
 ## Routes by path
 
@@ -788,6 +788,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/webhooks/tremendous` | `public` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | POST | `/v1/worker/claim` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
 | POST | `/v1/worker/claims/:id/done` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
+| POST | `/v1/worker/claims/:id/findings` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
 | POST | `/v1/worker/claims/:id/renew` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
 | POST | `/v1/worker/heartbeat` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
 | POST | `/v1/worker/revoke` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |

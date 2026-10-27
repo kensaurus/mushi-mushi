@@ -307,9 +307,17 @@ every lane on the machine. A lane is one app and one clone of its repo.
 Every minute it sends a heartbeat. The answer holds each lane's settings, set
 in the console: its model, mode, how many reports at once, paused, drain and a
 stop date, plus the machine's guards (agents at once, a free-memory floor, a
-GitHub API floor). The daemon then runs review follow-ups first, and claims
-reports: the lane's queue first, then the worst open reports. While a lane
-holds a report, no cloud agent is sent to it. Every outcome goes back to
+GitHub API floor). The daemon then works by each lane's mode:
+
+| Mode | What the lane does |
+| --- | --- |
+| `fix` | Runs review follow-ups first, then claims reports: the lane's queue first, then the worst open reports |
+| `followups` | Review follow-ups only |
+| `conflicts` | Merges the base branch into a merge-queue PR of the clone's repository at the commit Mushi saw; the agent may change only the conflicted files; refused on a leftover marker or any other change; commits with your hooks and pushes the merge, fast-forward only |
+| `audit` | A model (read-only) proposes bugs for one screen with the line, the code there and a check; the machine runs the check itself and files only what reproduces; a second model may only veto |
+| `skill` | Only the rounds of skill runs started with this lane on Spend credits |
+
+While a lane holds a report, no cloud agent is sent to it. Every outcome goes back to
 Mushi; a failure of the machine (a clone permission, the network, a hook that
 timed out under load) is kept apart from a failure of the code and never
 counts against the report.
@@ -340,8 +348,11 @@ stay on your machine), stores a worker key in the OS keychain (or
 `~/.config/mushi/worker.key`, mode 0600, where there is none), and writes the
 service: a systemd user unit (`mushi-worker.service`) on Linux and WSL2, a
 scheduled task that starts at logon on Windows. From `lanes.conf`, `queue` and
-`fix` become `fix`, `off` becomes a paused lane, and the profile column is
-dropped: one worker key serves every app.
+`fix` become `fix`, `followups`, `conflicts`, `audit` and `skill` stay as they
+are, `off` becomes a paused lane, and the profile column is dropped: one worker
+key serves every app. The heartbeat names each lane's repository (`owner/name`
+from its `origin` remote) so a conflicts lane takes only that repository's
+PRs; the clone's path never leaves the machine.
 
 The worker key has the scope `worker:run`: it can take reports for its lanes,
 record their fixes and file reports, and nothing else. It cannot merge, change
