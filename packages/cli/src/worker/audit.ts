@@ -109,8 +109,8 @@ export function nextScreen(state: AuditState, screens: readonly string[]): { scr
   return { screen: screens[0]!, state: next }
 }
 
-/** @internal Exported for tests only. */
-export function proposePrompt(screen: string, pass: number): string {
+/** The proposing model's task for one screen. */
+function proposePrompt(screen: string, pass: number): string {
   const focus = pass === 1 ? 'bugs a real user would notice' : 'small rough edges a careful user would notice (polish pass)'
   return `You are auditing one screen of this app as its most careful user. Screen file: ${screen}. Read it and only the files it imports directly (at most 8 files); do not explore the rest of the repo and do not run commands. Answer within a few minutes.
 Find up to ${MAX_FINDINGS_PER_SCREEN} ${focus}, each CONCRETE and visible to a user: wrong or missing data, text in the wrong language, numbers that contradict each other, a broken empty, loading or error state, a control that does nothing, text that overflows, missing feedback after an action, an accessibility gap (unlabelled control, tiny target, contrast).
@@ -123,8 +123,8 @@ Rules: no style opinions, no refactors, no "consider"; nothing that needs CI, se
 Answer with ONLY this JSON: {"findings":[{"title":"short, the user's view","severity":"high|medium|low","file":"path","line":123,"rule":"short-slug","quote":"exact code on that line","user_impact":"what the user sees","fix":"smallest change","done_when":"observable check","check":{...}}]}`
 }
 
-/** @internal Exported for tests only. */
-export function vetoPrompt(f: FindingBody): string {
+/** The second model's task: veto or not, never confirm. */
+function vetoPrompt(f: FindingBody): string {
   return `A program reproduced this claimed user-visible problem in the repository with a deterministic check. Your only job is to veto it if it is wrong: the check proves the wrong thing, the behaviour is intended, it is not visible to users, or it is a style opinion. Read the code before you answer.
 Finding: ${JSON.stringify({ title: f.title, file: f.file, line: f.line, code: f.evidenceLine, userImpact: f.userImpact, fix: f.fix, check: f.check.summary })}
 Answer with ONLY this JSON: {"veto":true|false,"reason":"one sentence"}`
