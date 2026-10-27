@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  countFixesForArea,
   credentialFailureProvider,
   deriveReportFixTruth,
   deriveReportFixTruths,
@@ -141,6 +142,23 @@ describe('deriveReportFixTruth precedence', () => {
     expect(t).toMatchObject({ state: 'failed', retryable: true, credential: null })
   })
 
+  it("an agent's own no-PR verdict is failed but not retryable: a new run gives the same answer", () => {
+    for (const failure_category of ['needs_human', 'already_fixed', 'wrong_repo', 'not_actionable']) {
+      const t = deriveReportFixTruth({
+        reportId: 'r',
+        report: { id: 'r', status: 'classified' },
+        attempts: [{ ...base, status: 'failed', failure_category, error: 'Agent says this needs a person: pick a copy.' }],
+      })
+      expect(t).toMatchObject({ state: 'failed', retryable: false })
+    }
+    const api = deriveReportFixTruth({
+      reportId: 'r',
+      report: { id: 'r', status: 'classified' },
+      attempts: [{ ...base, status: 'failed', failure_category: 'cursor_api_error', error: 'Cursor 500' }],
+    })
+    expect(api.retryable).toBe(true)
+  })
+
   it('a dismissed report never counts, and a reopened one ignores its old merge', () => {
     const merged = { ...base, status: 'completed', pr_url: 'u', pr_number: 9, pr_state: 'merged', merged_at: 'x' }
     expect(deriveReportFixTruth({ reportId: 'r', report: { id: 'r', status: 'dismissed' }, attempts: [{ ...base, status: 'failed' }] }).state).toBe('resolved')
@@ -172,6 +190,25 @@ describe('reportTitle', () => {
     expect(reportTitle({ summary: '  Audio breaks ', description: 'x' })).toBe('Audio breaks')
     expect(reportTitle({ summary: null, description: 'a'.repeat(90) })).toBe(`${'a'.repeat(80)}…`)
     expect(reportTitle(null)).toBeNull()
+  })
+})
+
+describe('countFixesForArea', () => {
+  it('counts open and merged PRs in that area, not failed attempts or other areas', () => {
+    const failed = Array.from({ length: 95 }, (_, i) => ({
+      component: 'Checkout',
+      state: 'failed' as const,
+      mergedPrNumber: null,
+      id: i,
+    }))
+    const counts = countFixesForArea('Checkout', [
+      ...failed,
+      { component: ' Checkout ', state: 'pr_open', mergedPrNumber: null },
+      { component: 'Checkout', state: 'resolved', mergedPrNumber: 8 },
+      { component: 'Billing', state: 'pr_open', mergedPrNumber: null },
+      { component: 'Checkout', state: 'in_flight', mergedPrNumber: null },
+    ])
+    expect(counts).toEqual({ drafted: 1, merged: 1 })
   })
 })
 

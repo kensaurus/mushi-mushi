@@ -12,6 +12,8 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "1.33.3",
+      "1.33.2",
       "1.33.1",
       "1.33.0"
     ],
@@ -19,11 +21,15 @@
     "packages": [
       {
         "name": "@mushi-mushi/core",
-        "version": "1.33.1"
+        "version": "1.33.3"
+      },
+      {
+        "name": "@mushi-mushi/react",
+        "version": "1.33.3"
       },
       {
         "name": "@mushi-mushi/web",
-        "version": "1.33.1"
+        "version": "1.33.3"
       }
     ]
   },
@@ -1017,6 +1023,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "1.3.4",
       "1.3.3",
       "1.3.2",
       "1.3.1",
@@ -1026,7 +1033,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/node",
-        "version": "1.3.3"
+        "version": "1.3.4"
       },
       {
         "name": "@mushi-mushi/web",
@@ -1084,6 +1091,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "1.1.4",
       "1.1.3",
       "1.1.2",
       "1.1.1",
@@ -1118,7 +1126,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/capacitor",
-        "version": "1.1.3"
+        "version": "1.1.4"
       },
       {
         "name": "@mushi-mushi/core",
@@ -1143,6 +1151,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "1.0.4",
       "1.0.3",
       "1.0.2",
       "1.0.1",
@@ -1165,7 +1174,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/angular",
-        "version": "1.0.3"
+        "version": "1.0.4"
       },
       {
         "name": "@mushi-mushi/capacitor",
@@ -1185,15 +1194,76 @@
       },
       {
         "name": "@mushi-mushi/svelte",
-        "version": "1.0.3"
+        "version": "1.0.4"
       },
       {
         "name": "@mushi-mushi/vue",
-        "version": "1.0.3"
+        "version": "1.0.4"
       },
       {
         "name": "@mushi-mushi/web",
         "version": "1.0.0"
+      }
+    ]
+  },
+  {
+    "majorMinor": "0.34",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.34.1",
+      "0.34.0"
+    ],
+    "highlights": [],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.34.1"
+      }
+    ]
+  },
+  {
+    "majorMinor": "0.33",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.33.0"
+    ],
+    "highlights": [],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.33.0"
+      }
+    ]
+  },
+  {
+    "majorMinor": "0.32",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.32.0"
+    ],
+    "highlights": [],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.32.0"
+      }
+    ]
+  },
+  {
+    "majorMinor": "0.31",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.31.0"
+    ],
+    "highlights": [],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.31.0"
       }
     ]
   },
@@ -1232,6 +1302,10 @@
       {
         "name": "@mushi-mushi/cli",
         "version": "0.29.2"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
+        "version": "0.29.2"
       }
     ]
   },
@@ -1246,6 +1320,10 @@
     "packages": [
       {
         "name": "@mushi-mushi/cli",
+        "version": "0.28.0"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
         "version": "0.28.0"
       }
     ]
@@ -1288,6 +1366,10 @@
       {
         "name": "@mushi-mushi/cli",
         "version": "0.27.1"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
+        "version": "0.27.0"
       }
     ]
   },
@@ -1384,7 +1466,7 @@
       },
       {
         "name": "@mushi-mushi/react-native",
-        "version": "0.24.3"
+        "version": "0.24.4"
       }
     ]
   },
@@ -2250,7 +2332,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
-        "version": "0.9.0"
+        "version": "0.9.1"
       },
       {
         "name": "@mushi-mushi/react",
@@ -2275,6 +2357,11 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.8.10",
+      "0.8.9",
+      "0.8.8",
+      "0.8.7",
+      "0.8.6",
       "0.8.5",
       "0.8.4",
       "0.8.3",
@@ -2351,7 +2438,7 @@
       },
       {
         "name": "mushi-mushi",
-        "version": "0.8.5"
+        "version": "0.8.10"
       }
     ]
   },
@@ -2485,6 +2572,9 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.6.10",
+      "0.6.9",
+      "0.6.8",
       "0.6.7",
       "0.6.6",
       "0.6.5",
@@ -2559,7 +2649,7 @@
       },
       {
         "name": "@mushi-mushi/mcp-ci",
-        "version": "0.6.7"
+        "version": "0.6.8"
       },
       {
         "name": "@mushi-mushi/node",
@@ -2567,7 +2657,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-cursor-cloud",
-        "version": "0.6.2"
+        "version": "0.6.3"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -2575,7 +2665,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.6.5"
+        "version": "0.6.10"
       },
       {
         "name": "mushi-mushi",
@@ -2719,6 +2809,7 @@
     "pending": false,
     "versions": [
       "0.4.6",
+      "0.4.5",
       "0.4.4",
       "0.4.3",
       "0.4.2",
@@ -2790,7 +2881,7 @@
       },
       {
         "name": "@mushi-mushi/inventory-schema",
-        "version": "0.4.3"
+        "version": "0.4.5"
       },
       {
         "name": "@mushi-mushi/mcp",
@@ -2930,7 +3021,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-linear",
-        "version": "0.3.3"
+        "version": "0.3.4"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -2958,7 +3049,7 @@
       },
       {
         "name": "eslint-plugin-mushi-mushi",
-        "version": "0.3.5"
+        "version": "0.3.6"
       }
     ]
   },
@@ -2967,6 +3058,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.2.14",
       "0.2.13",
       "0.2.12",
       "0.2.11",
@@ -3035,7 +3127,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/adapters",
-        "version": "0.2.9"
+        "version": "0.2.10"
       },
       {
         "name": "@mushi-mushi/angular",
@@ -3071,7 +3163,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-jira",
-        "version": "0.2.9"
+        "version": "0.2.10"
       },
       {
         "name": "@mushi-mushi/plugin-linear",
@@ -3079,7 +3171,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-pagerduty",
-        "version": "0.2.10"
+        "version": "0.2.11"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -3087,15 +3179,15 @@
       },
       {
         "name": "@mushi-mushi/plugin-sentry",
-        "version": "0.2.13"
+        "version": "0.2.14"
       },
       {
         "name": "@mushi-mushi/plugin-slack-app",
-        "version": "0.2.11"
+        "version": "0.2.12"
       },
       {
         "name": "@mushi-mushi/plugin-zapier",
-        "version": "0.2.10"
+        "version": "0.2.11"
       },
       {
         "name": "@mushi-mushi/react",
@@ -3110,12 +3202,16 @@
         "version": "0.2.3"
       },
       {
+        "name": "@mushi-mushi/ux",
+        "version": "0.2.1"
+      },
+      {
         "name": "@mushi-mushi/vue",
         "version": "0.2.3"
       },
       {
         "name": "@mushi-mushi/wasm-classifier",
-        "version": "0.2.4"
+        "version": "0.2.5"
       },
       {
         "name": "@mushi-mushi/web",
@@ -3132,6 +3228,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.1.8",
       "0.1.7",
       "0.1.6",
       "0.1.5",
@@ -3157,7 +3254,7 @@
       },
       {
         "name": "@mushi-mushi/inventory-auth-runner",
-        "version": "0.1.5"
+        "version": "0.1.6"
       },
       {
         "name": "@mushi-mushi/mcp",
@@ -3165,27 +3262,27 @@
       },
       {
         "name": "@mushi-mushi/plugin-bugsnag",
-        "version": "0.1.7"
+        "version": "0.1.8"
       },
       {
         "name": "@mushi-mushi/plugin-crashlytics",
-        "version": "0.1.7"
+        "version": "0.1.8"
       },
       {
         "name": "@mushi-mushi/plugin-discord",
-        "version": "0.1.7"
+        "version": "0.1.8"
       },
       {
         "name": "@mushi-mushi/plugin-github-issues",
-        "version": "0.1.7"
+        "version": "0.1.8"
       },
       {
         "name": "@mushi-mushi/plugin-msteams",
-        "version": "0.1.7"
+        "version": "0.1.8"
       },
       {
         "name": "@mushi-mushi/plugin-rollbar",
-        "version": "0.1.7"
+        "version": "0.1.8"
       },
       {
         "name": "@mushi-mushi/react",

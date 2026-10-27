@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 /**
  * FILE: packages/mcp/src/clients.ts
  * PURPOSE: Shared, pure (React-free) client registry + install-config builders for
@@ -57,7 +57,7 @@ import { MUSHI_ICON_PNG_URL } from './branding.js'
  * editor launch. Synced to package.json by `scripts/sync-mcp-pin.mjs` — never
  * hand-edit the version.
  */
-export const MCP_PIN_SPEC = '@mushi-mushi/mcp@0.26.1'
+export const MCP_PIN_SPEC = '@mushi-mushi/mcp@0.29.2'
 
 const PIN_SPEC_RE = /^@mushi-mushi\/mcp@\d+\.\d+\.\d+$/
 

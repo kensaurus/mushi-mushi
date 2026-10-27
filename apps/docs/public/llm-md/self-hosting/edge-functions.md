@@ -65,6 +65,7 @@ npx supabase functions deploy test-gen-from-report --no-verify-jwt
 npx supabase functions deploy telegram-webhook --no-verify-jwt
 npx supabase functions deploy cursor-webhook --no-verify-jwt
 npx supabase functions deploy agent-status-poll --no-verify-jwt
+npx supabase functions deploy agent-pr-review --no-verify-jwt
 npx supabase functions deploy recipe-collector --no-verify-jwt
 npx supabase functions deploy radar-scan --no-verify-jwt
 npx supabase functions deploy operator-digest --no-verify-jwt
@@ -97,6 +98,7 @@ For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `r
 | `telegram-webhook` | Telegram Bot API | Voice-note inbox: secret-token auth, `/start ` project binding, transcript + inline-keyboard confirmation |
 | `cursor-webhook` | Cursor Cloud Agent (v0 callback) | Receives `statusChange` callbacks, writes `fix_attempts.pr_url`, notifies |
 | `agent-status-poll` | cron (`5-55/5`) | Polls open Cursor / GitHub cloud-agent runs and closes them (PR URL, failure) |
+| `agent-pr-review` | cron (`3-53/10`) + re-run route | Reviews each cloud-agent PR with Claude Opus 5.5 on the project's Anthropic key; a "hold" blocks merging from Mushi without an override |
 
 The remaining workers (billing, retention, SDK upgrade, skill-sync, rewards payout, …) live alongside these. Full list: `ls packages/server/supabase/functions/` or `pnpm docs-stats`.
 

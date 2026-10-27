@@ -1,6 +1,8 @@
 # 0024. The live-site watch files broken pages as reports
 
-Status: Accepted (owner, 2026-10-10) Date: 2026-10-10
+Status: Accepted (owner, 2026-10-10); filing rule amended by
+[ADR 0029](0029-site-watch-files-a-page-only-after-a-second-failure.md)
+Date: 2026-10-10
 
 Related: migration `20261010190000_site_watch.sql`,
 `_shared/site-watch.ts`, `site-watch-poll/index.ts`,
@@ -82,5 +84,11 @@ a normal page with status 404.
   This passes ADR 0017's drift test: a hole found before a user hits it.
 - Only public pages are crawled. Pages behind sign-in are not checked; the
   QA story runner covers those flows.
+- One observation was not enough (measured 2026-10-20): 9 of 23 site-watch
+  reports sent to coding agents were pages that were fine, captured before
+  they settled or passed by a judge that failed open, each stamped with a
+  0×0 viewport. ADR 0029 makes a broken page a suspect that files only after
+  a second failure (a confirm scrape, or two checks in a row for measured
+  failures), and drops the viewport.
 - Firecrawl's monitor API is a dependency. A monitor deleted on Firecrawl's
   side marks the watch `error`, and turning it on again creates a new one.

@@ -9,26 +9,33 @@ description: Run npx mushi-mushi, ship, and turn your first user-reported bug in
 
 # Incident loop
 
-  **Today:** classification in seconds; a paste-ready fix prompt on the report page, or the fix brief via MCP tools. **Target:** sub-10-second end-to-end diagnosis. MCP needs a Mushi account + project key — not a separate OpenAI/Anthropic key.
+- A user reports a bug in your live app. Mushi explains it in plain English.
+- Your editor pulls the diagnosis and a ready fix prompt over MCP.
+- Your AI applies the fix; you review and ship. No extra AI key needed.
 
 ## No MCP? Copy the fix prompt
 
-Open the report in the console and click **Copy fix prompt** under **Fix it with
-your coding agent**. You get one self-contained prompt (diagnosis, suggested fix,
-repro steps, page and browser, the key console lines, likely files, and what
-"done" means), ready to paste into Claude Code, Cursor, Codex or Windsurf. No
-MCP or editor setup is needed. The steps below are the MCP route, which lets
-the agent pull context and close the report itself.
+Open the report in the console and click **Copy fix prompt** (under **Fix it
+with your coding agent**). Paste it into Claude Code, Cursor, Codex or Windsurf.
 
-## Prerequisites
+What the fix prompt contains
 
-1. A Mushi project + API key ([credentials](/concepts/credentials))
-2. At least one report (SDK capture, test report from `npx mushi-mushi`, or Sentry inbound)
-3. MCP wired into Cursor — [MCP quickstart](/quickstart/mcp) or **Connect & Update → Add to Cursor**. The key it creates can read and write by default; the agent needs write access to mark the report fixed.
+One self-contained prompt: the diagnosis, the suggested fix, repro steps, page
+and browser, the key console lines, likely files, and what "done" means. No MCP
+or editor setup is needed. The steps below are the MCP route, which lets the
+agent fetch the details and close the report itself.
 
-## Step 1 — Capture or pick a report
+## Before you start
 
-**New project:**
+- A Mushi project and API key ([credentials](/concepts/credentials)).
+- At least one report: from the SDK, the test report `npx mushi-mushi` offers, or a Sentry alert.
+- MCP connected to your editor ([MCP quickstart](/quickstart/mcp)). The agent needs write access to mark the report fixed; the default key has it.
+
+## The loop
+
+### Capture or pick a report
+
+New project:
 
 ```bash
 npx mushi-mushi
@@ -36,27 +43,37 @@ npx mushi-mushi
 mushi connect --wait
 ```
 
-**Existing report:** open Admin → Reports and copy a report UUID, or ask the agent: *"list recent mushi reports"*.
+Existing report: open **Reports** in the console and copy its ID, or ask the agent *"list recent mushi reports"*.
 
-## Step 2 — Pull fix context
+**You'll see:** a report ID, and the report in the console with a plain-English title.
+
+### Pull the fix context
 
 In Cursor, ask:
 
 > Use Mushi MCP: call `get_fix_context` for report `` and summarize the root cause in plain English.
 
-`get_fix_context` returns classification, repro steps, blast radius, and inventory spec context in one payload — plus a **`fixPrompt`**: a paste-ready, agent-ready fix brief composed server-side (diagnosis + reproduction + suggested fix + relevant code hints). No second LLM key required to build it. For most bugs you can paste `fixPrompt` straight into Cursor and skip to [Step 4](#step-4--paste-and-ship); Step 3 below adds blast-radius and similar-bug context when you want a deeper plan.
+`get_fix_context` returns the classification, repro steps, blast radius and a
+**`fixPrompt`**: a paste-ready fix brief built on the server. For most bugs you
+can paste `fixPrompt` straight into Cursor and skip to the last step.
 
-## Step 3 — Generate the fix prompt
+**You'll see:** the root cause in plain English, and a `fixPrompt` you can paste.
+
+### Get a deeper fix plan (optional)
 
 Run the MCP prompt **`summarize_report_for_fix`** with the same report ID, or ask:
 
 > Run the Mushi prompt `summarize_report_for_fix` for report ``. Give me a paste-ready Cursor prompt to fix it.
 
-The prompt orchestrates `get_fix_context`, `get_blast_radius`, and `get_similar_bugs` into a structured fix plan.
+It combines `get_fix_context`, `get_blast_radius` and `get_similar_bugs` into one plan.
 
-## Step 4 — Paste and ship
+### Paste and ship
 
-Copy the agent's output into a new Cursor chat (or continue in the same thread) and ask it to implement the fix. Optionally dispatch a draft PR later via `dispatch_fix` when GitHub is linked.
+Paste the agent's output into a Cursor chat (or keep going in the same thread)
+and ask it to implement the fix. When GitHub is linked, `dispatch_fix` can open
+a draft PR instead.
+
+**You'll see:** the code change in your editor, ready to review and commit.
 
 ## Troubleshooting
 

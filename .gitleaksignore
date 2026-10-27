@@ -92,3 +92,18 @@ fe9eab0773f9f2d4e9ab1da178592d728b5e1680:packages/mcp/scripts/test-all-tools-yen
 # `TEST-FIXTURE-NOT-A-REAL-KEY`; this fingerprint pins the historical commit
 # c7aabee7 so PR-range scans stop flagging the already-audited finding.
 c7aabee71020ee3e873370e96a4649610036fef3:packages/core/src/unload-transport.test.ts:generic-api-key:58
+
+# Universal AI keys (PR #539): a made-up Firecrawl key ('fc-' + 32 hex digits
+# counting up) passed to a stubbed POST /v1/admin/byok/keys whose fetch and
+# Vault are faked. It never authenticated against Firecrawl. Replaced in the
+# working tree by 'fc-FAKE-universal-0001'; these fingerprints pin the two
+# historical commits so PR-range scans stop flagging the audited fixture.
+51497d71dead5007e69872e7df5bb056d44074ad:packages/server/src/__tests__/byok-universal-routes.test.ts:generic-api-key:138
+a6079623f9b4b675b1a4489b183d23a516ef3d55:packages/server/src/__tests__/byok-universal-routes.test.ts:generic-api-key:150
+
+# adapters Honeycomb test fixture (2026-10-26): `hny-trigger-secret-91c2` is a
+# made-up webhook signing secret the Honeycomb adapter test uses to sign its
+# recorded trigger payload. It never authenticated against Honeycomb. The
+# working tree carries an inline gitleaks:allow marker; this fingerprint pins
+# the commit that added it so PR-range scans stop flagging the audited fixture.
+76497989c82fc2f560a25a2fcd34d230b1754ca0:packages/adapters/src/__tests__/honeycomb.test.ts:generic-api-key:13

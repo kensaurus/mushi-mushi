@@ -1,6 +1,7 @@
 /**
  * FILE: cursorModelSpec.test.ts
- * PURPOSE: The spend-down and Integrations pickers write a Cursor model spec
+ * PURPOSE: The spend-down, Integrations, and review follow-up pickers write a
+ *          Cursor model spec
  *          (`id` or `id?param=value`) and reopen a saved spec on the same controls.
  */
 

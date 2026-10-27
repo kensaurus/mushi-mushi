@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import {
   LANDING_WHAT_THIS_IS,
   LANDING_HERO,
-  LANDING_HERO_CTAS,
+  LANDING_HERO_START,
   LANDING_SIXTY_SECOND,
   LANDING_HOW_IT_WORKS,
   LANDING_PILLARS,
@@ -62,29 +62,29 @@ describe('landing cinematic copy SSOT', () => {
     expect(LANDING_OPERATOR.teamHref).toContain('github.com/kensaurus/mushi-mushi')
   })
 
-  it('ships hero CTAs for signup (same tab), connecting an editor, and the terminal path', () => {
-    expect(LANDING_HERO_CTAS.map((c) => c.id)).toEqual(['landing-hero', 'landing-connect', 'landing-terminal'])
-    expect(LANDING_HERO_CTAS.map((c) => c.kind)).toEqual(['primary', 'secondary', 'ghost'])
-
-    const [signup, connect, terminal] = LANDING_HERO_CTAS
-    expect(signup?.href).toBe(`${ADMIN_DEMO_BASE}/signup?src=landing-hero`)
-    expect(signup?.external).toBe(true)
-    expect(signup?.sameTab).toBe(true)
-    // /connect is the editor picker, so the button says so (it used to promise a demo).
-    expect(connect?.href).toBe('/connect')
-    expect(connect?.label).not.toMatch(/demo/i)
-    expect(terminal?.href).toBe('/quickstart/incident-loop')
+  it('starts in one click from the hero: console signup, Add to Cursor, and the npx command', () => {
+    const { console: signup, cursor, npx, more } = LANDING_HERO_START
+    // `landing-hero` stays on signup so the funnel keeps its history.
+    expect(signup.id).toBe('landing-hero')
+    expect(signup.href).toBe(`${ADMIN_DEMO_BASE}/signup?src=landing-hero`)
+    expect(cursor.id).toBe('landing-hero-cursor')
+    expect(npx.cmd).toBe('npx mushi-mushi')
+    expect(more.href).toBe('/connect')
+    // Three actions, three jobs: no two share an id.
+    expect(new Set([signup.id, cursor.id, npx.id, more.id]).size).toBe(4)
   })
 
-  it('explains the product in three steps that mirror the console cycle', () => {
+  it('explains getting started in three steps, each ending in what you should see', () => {
     expect(LANDING_HOW_IT_WORKS.steps.map((s) => s.title)).toEqual([
-      'Install in one click',
-      'Your users report bugs',
-      'Mushi diagnoses it and opens a fix you review',
+      'Install',
+      'Send a first report',
+      'Get your first fix',
     ])
+    for (const step of LANDING_HOW_IT_WORKS.steps) expect(step.check.length).toBeGreaterThan(0)
     const landing = readFileSync(join(__dirname, '..', 'content', 'index.mdx'), 'utf8')
-    // Right under the hero, before anything else.
-    expect(landing.indexOf('<LandingInstallStrip')).toBeGreaterThan(landing.indexOf('<CinematicEditorialHero'))
+    // The pipeline and the three steps sit right under the hero, before anything else.
+    expect(landing.indexOf('<LoopPipeline')).toBeGreaterThan(landing.indexOf('<CinematicEditorialHero'))
+    expect(landing.indexOf('<LandingInstallStrip')).toBeGreaterThan(landing.indexOf('<LoopPipeline'))
     expect(landing.indexOf('<LandingInstallStrip')).toBeLessThan(landing.indexOf('<OssTrustStrip'))
   })
 

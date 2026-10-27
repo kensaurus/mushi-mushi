@@ -67,6 +67,63 @@ describe.skipIf(!enabled)('probes ignore what is not the app', () => {
     expect(p.smallTargets).toBe(1)
   })
 
+  it('measures overlapping boxes and controls that outgrow their container, not deliberate layers', async () => {
+    const page = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage()
+    try {
+      await page.setContent(`<!doctype html><html lang="en"><head><style>
+  body { font: 16px/20px sans-serif; margin: 16px }
+  .row { display: flex; width: 200px; overflow: hidden }
+  .row button { flex: none; width: 260px }
+  .cards { height: 60px }
+  .card { height: 100px; border: 1px solid }
+  .narrow { width: 90px; font-size: 16px; line-height: 20px; padding: 4px }
+  .stack img { width: 32px; height: 32px; display: inline-block }
+  .stack > div { display: inline-block; width: 32px; height: 32px; margin-left: -12px; background: #ccc }
+  .badge-host { position: relative; width: 100px; height: 40px }
+  .badge { position: absolute; top: 0; right: 0; width: 20px; height: 20px }
+  .scroller { display: flex; width: 120px; overflow-x: auto }
+  .scroller button { flex: none; width: 200px }
+</style></head><body>
+  <div class="row"><button>Open in console</button></div>
+  <div class="cards" style="display:flex;flex-direction:column;height:60px"><div class="card" style="flex:none">A</div><div class="card" style="flex:none;margin-top:-80px;">B</div></div>
+  <div class="cards2"><div class="card" style="height:60px">C</div><div class="card" style="height:60px;position:relative">D</div></div>
+  <button class="narrow">Connect your GitHub repository now</button>
+  <div class="stack"><div></div><div></div><div></div></div>
+  <div class="badge-host"><div style="height:40px">E</div><span class="badge">3</span></div>
+  <div class="scroller"><button>Scrolls inside</button></div>
+</body></html>`)
+      const p = await runProbes(page, [])
+      const issues = p.layout ?? []
+      const outgrows = issues.filter((i) => i.kind === 'outgrows').map((i) => i.selector)
+      expect(outgrows).toContain('button "Open in console"')
+      expect(outgrows).toContain('button.narrow "Connect your GitHub repository now"')
+      expect(outgrows).not.toContain('button "Scrolls inside"')
+      // Negative margins (card B, the avatar stack) and the absolute badge are deliberate.
+      expect(issues.filter((i) => i.kind === 'overlap')).toEqual([])
+    } finally {
+      await page.context().close()
+    }
+  })
+
+  it('flags in-flow siblings drawn over each other', async () => {
+    const page = await (await browser.newContext()).newPage()
+    try {
+      await page.setContent(`<!doctype html><html lang="en"><body style="margin:16px">
+  <div style="display:grid;grid-template-columns:200px 200px;gap:0">
+    <div class="tile" style="width:300px;height:80px;background:#eee">glot.it</div>
+    <div class="tile" style="height:80px;background:#ddd">yen-yen</div>
+  </div>
+</body></html>`)
+      const p = await runProbes(page, [])
+      const overlap = (p.layout ?? []).filter((i) => i.kind === 'overlap')
+      expect(overlap).toHaveLength(1)
+      expect(overlap[0].selector).toBe('div.tile "yen-yen"')
+      expect(overlap[0].detail).toMatch(/^overlaps div\.tile "glot\.it" by 100×80px$/)
+    } finally {
+      await page.context().close()
+    }
+  })
+
   it('waits for skeleton placeholders marked only by their animation (glot.it /words)', async () => {
     const page = await (await browser.newContext()).newPage()
     try {

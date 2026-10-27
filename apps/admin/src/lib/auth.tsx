@@ -6,6 +6,7 @@ import { authRedirectUrl, detectRecoveryFromUrl } from './authRedirect'
 import { notifySignOut, subscribeAuthBroadcast } from './authBroadcast'
 import { signInWithPasskey as signInWithPasskeyApi } from './passkeys'
 import { upsertAccount } from './accountSessions'
+import { syncLabsFromAccount } from './labs'
 import {
   completeSignupAttribution,
   stashSignupMeta,
@@ -119,6 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session) {
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
           upsertAccount(session, true)
+          syncLabsFromAccount(session.user.user_metadata?.mushi_labs)
         } else if (event === 'TOKEN_REFRESHED') {
           upsertAccount(session, false)
         }

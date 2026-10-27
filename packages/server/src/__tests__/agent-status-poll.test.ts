@@ -169,6 +169,47 @@ describe('runAgentStatusPoll — transitions', () => {
     expect(findQueries(queries, 'reports', 'update')[0].payload).toMatchObject({ fix_pr_url: 'https://github.com/o/r/pull/7', status: 'fixing' })
     expect(mocks.notifyTeamFixEvent).toHaveBeenCalledTimes(1)
     expect(mocks.notifyTeamFixEvent.mock.calls[0][3]).toBe('fix_pr_opened')
+    // ADR 0030: the accepted PR is queued for the Opus review, once per attempt.
+    const queued = findQueries(queries, 'fix_reviews', 'upsert')
+    expect(queued).toHaveLength(1)
+    expect(queued[0].payload).toMatchObject({ fix_attempt_id: 'fa-1', status: 'queued', pr_url: 'https://github.com/o/r/pull/7', repo: 'o/r', pr_number: 7 })
+  })
+
+  it('stores a vendor PR URL in one spelling, and does not attach one that is not a GitHub PR (ADR 0030)', async () => {
+    const slash = pollDb([attempt()])
+    await runAgentStatusPoll(slash.db, {
+      now: NOW,
+      adapterFor: () => fakeAdapter(async () => ({ status: 'completed', prUrl: 'https://github.com/O/R/pull/7/?x=1' })),
+    })
+    const prWrite = findQueries(slash.queries, 'fix_attempts', 'update').find((q) => (q.payload as { pr_url?: string }).pr_url)!
+    expect(prWrite.payload).toMatchObject({ pr_url: 'https://github.com/o/r/pull/7', pr_number: 7 })
+
+    const bad = pollDb([attempt()])
+    const summary = await runAgentStatusPoll(bad.db, {
+      now: NOW,
+      adapterFor: () => fakeAdapter(async () => ({ status: 'completed', prUrl: 'https://evil.example/o/r/pull/7' })),
+    })
+    expect(summary.prOpened).toBe(0)
+    expect(findQueries(bad.queries, 'fix_attempts', 'update').some((q) => (q.payload as { pr_url?: string }).pr_url)).toBe(false)
+    expect(findQueries(bad.queries, 'fix_reviews')).toHaveLength(0)
+  })
+
+  it('a PR that only adds notes, or a run that ends without a PR, queues no review', async () => {
+    const noPr = pollDb([attempt()])
+    await runAgentStatusPoll(noPr.db, { now: NOW, adapterFor: () => fakeAdapter(async () => ({ status: 'completed' })) })
+    expect(findQueries(noPr.queries, 'fix_reviews')).toHaveLength(0)
+
+    mocks.resolveProjectGithubToken.mockResolvedValue('ghs_x')
+    mocks.fetchPullRequestFiles.mockResolvedValue({
+      files: [{ filename: 'NEEDS_INVESTIGATION.md', status: 'added', additions: 5, deletions: 0, patch: '+notes' }],
+      complete: true,
+    })
+    const notes = pollDb([attempt()])
+    await runAgentStatusPoll(notes.db, {
+      now: NOW,
+      adapterFor: () => fakeAdapter(async () => ({ status: 'completed', prUrl: 'https://github.com/o/r/pull/7' })),
+    })
+    expect(findQueries(notes.queries, 'fix_reviews')).toHaveLength(0)
   })
 
   it('failed: attempt + job failed, team notified fix_failed', async () => {

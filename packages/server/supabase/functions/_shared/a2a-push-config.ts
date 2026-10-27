@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 /**
  * FILE: packages/server/supabase/functions/_shared/a2a-push-config.ts
  * PURPOSE: Parse the A2A push-notification configuration a client sends on

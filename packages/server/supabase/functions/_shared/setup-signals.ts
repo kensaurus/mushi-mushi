@@ -21,6 +21,7 @@
 
 import type { getServiceClient } from './db.ts'
 import { isOperatorUser } from './operator-gate.ts'
+import { universalKeysByOrg } from './byok-scope.ts'
 
 type Db = ReturnType<typeof getServiceClient>
 
@@ -155,7 +156,7 @@ export async function loadIntegrationSignals(
 
   const projects = (projectsRes.data ?? []) as Array<{ id: string; organization_id: string | null; owner_id: string | null }>
   const orgIds = [...new Set(projects.map((p) => p.organization_id).filter((v): v is string => Boolean(v)))]
-  const [orgRes, orgByokRes] = orgIds.length
+  const [orgRes, orgByokRes, universalByOrg] = orgIds.length
     ? await Promise.all([
         db
           .from('organization_integration_settings')
@@ -167,8 +168,15 @@ export async function loadIntegrationSignals(
           .select('organization_id, status, test_status')
           .in('organization_id', orgIds)
           .eq('provider_slug', 'anthropic'),
+        // So does a universal key of one of its owners (ADR 0031).
+        universalKeysByOrg<{ owner_user_id: string; status: string | null; test_status: string | null }>(
+          db as never,
+          orgIds,
+          'status, test_status',
+          'anthropic',
+        ),
       ])
-    : [{ data: [] }, { data: [] }]
+    : [{ data: [] }, { data: [] }, new Map<string, Array<{ status: string | null; test_status: string | null }>>()]
 
   const settingsBy = new Map<string, ProjectIntegrationRow>()
   for (const r of (settingsRes.data ?? []) as Array<ProjectIntegrationRow & { project_id: string }>) {
@@ -210,6 +218,7 @@ export async function loadIntegrationSignals(
         anthropicPoolKeys: [
           ...(byokBy.get(pid) ?? []),
           ...(p?.organization_id ? orgByokBy.get(p.organization_id) ?? [] : []),
+          ...(p?.organization_id ? universalByOrg.get(p.organization_id) ?? [] : []),
         ],
         env,
         operatorProject: isOperatorUser(p?.owner_id ?? null),
@@ -348,6 +357,19 @@ export interface ProjectSetupSignals extends IntegrationSignals {
   indexedFileCount: number
 }
 
+/**
+ * A key an SDK uses: it sends reports (`report:write`) and carries no MCP
+ * scope. CLI and MCP keys (`mcp:*`, often with `report:write` too), runner and
+ * voice keys belong to agents and tools, not to an SDK in the app; counting
+ * their calls made a project with no SDK read "SDK 17d ago" (mushi-demo's
+ * read-only demo key, called by curl, 2026-10-26).
+ */
+export function isSdkKey(scopes: readonly string[] | null | undefined): boolean {
+  const s = scopes ?? []
+  return s.includes('report:write') && !s.some((x) => x.startsWith('mcp:'))
+}
+
+
 /** Freshest heartbeat across key rows, compared as instants. */
 export function freshestHeartbeat(
   keys: ReadonlyArray<{
@@ -389,60 +411,52 @@ export async function loadProjectSetupSignals(
 
   const [
     keysRes,
-    recentReportsRes,
     qaRes,
-    observationsRes,
     integrationSignals,
     counts,
   ] = await Promise.all([
     db
       .from('project_api_keys')
-      .select('project_id, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host')
+      .select('project_id, scopes, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host')
       .in('project_id', projectIds)
       .eq('is_active', true),
-    // Recent reports feed only the "a real SDK sent this" platform signal.
-    db
-      .from('reports')
-      .select('project_id, environment')
-      .in('project_id', projectIds)
-      .order('created_at', { ascending: false })
-      .limit(500),
     db
       .from('qa_stories')
       .select('project_id')
       .in('project_id', projectIds)
       .eq('last_run_status', 'passed'),
-    // The curated SDK observation (heartbeat / report / repo scan): the same
-    // source the Connect page's SDK version reads.
-    db.from('project_sdk_observations').select('project_id').in('project_id', projectIds),
     loadIntegrationSignals(db, projectIds),
     loadProjectCounts(db, projectIds),
   ])
 
-  const keysBy = new Map<string, Array<Record<string, string | null>>>()
-  for (const k of (keysRes.data ?? []) as Array<Record<string, string | null> & { project_id: string }>) {
+  type KeyRow = {
+    project_id: string
+    scopes?: string[] | null
+    last_seen_at?: string | null
+    last_seen_origin?: string | null
+    last_seen_user_agent?: string | null
+    last_seen_endpoint_host?: string | null
+  }
+  const keysBy = new Map<string, KeyRow[]>()
+  for (const k of (keysRes.data ?? []) as KeyRow[]) {
     const list = keysBy.get(k.project_id) ?? []
     list.push(k)
     keysBy.set(k.project_id, list)
   }
-  const sdkReportSignal = new Set<string>()
-  for (const r of (recentReportsRes.data ?? []) as Array<{ project_id: string; environment: unknown }>) {
-    const env = (r.environment ?? {}) as Record<string, unknown>
-    const platform = typeof env.platform === 'string' ? env.platform : ''
-    if (platform && platform !== 'mushi-admin') sdkReportSignal.add(r.project_id)
-  }
   const qaPassing = new Set((qaRes.data ?? []).map((q: { project_id: string }) => q.project_id))
-  const observed = new Set((observationsRes.data ?? []).map((o: { project_id: string }) => o.project_id))
 
   for (const pid of projectIds) {
     const keys = keysBy.get(pid) ?? []
-    const heartbeat = freshestHeartbeat(keys)
+    const heartbeat = freshestHeartbeat(keys.filter((k) => isSdkKey(k.scopes)))
     const count = counts.get(pid)
     out.set(pid, {
       ...(integrationSignals.get(pid) ?? { hasGithub: false, hasSentry: false, hasByok: false, hasSlack: false }),
       hasKey: keys.length > 0,
       heartbeat,
-      hasSdk: Boolean(heartbeat) || sdkReportSignal.has(pid) || observed.has(pid),
+      // Only an SDK-key check-in. A report with a platform (test reports,
+      // site audits) or a repo-scan observation marked apps that had never
+      // checked in as set up (lets-talk, mushi-demo: "4/4 setup", 2026-10-26).
+      hasSdk: Boolean(heartbeat),
       reportCount: count?.reports ?? 0,
       fixCount: count?.fixes ?? 0,
       mergedFixCount: count?.mergedFixes ?? 0,

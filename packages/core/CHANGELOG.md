@@ -1,5 +1,17 @@
 # @mushi-mushi/core
 
+## 1.33.3
+
+### Patch Changes
+
+- 271abb8: The npm pages now open with what the package does, how to install it, a short example that matches the current API, and a link to its docs page. The examples that named options or functions the SDKs no longer have are corrected.
+
+## 1.33.2
+
+### Patch Changes
+
+- a546d41: Read `import.meta.env` through a local `ImportMeta` type. Vite, Next, Nuxt, and Expo variable resolution is unchanged.
+
 ## 1.33.1
 
 ### Patch Changes

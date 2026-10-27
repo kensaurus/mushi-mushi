@@ -45,6 +45,8 @@ export interface TruthAttempt {
   pr_state?: string | null
   merged_at?: string | null
   check_run_conclusion?: string | null
+  /** CI verdict for the PR head (Plan 022): an infra stop buckets as `ci_infra`. */
+  ci_infra?: unknown
   failure_category?: string | null
   error?: string | null
   created_at?: string | null
@@ -81,6 +83,13 @@ export interface ReportFixTruth {
   /** Failure breakdown key for a `failed` report, else null. */
   failureBucket: string | null
 }
+
+/**
+ * A cloud agent's no-PR verdicts (`NO_PR_CATEGORIES` in cloud-agent-no-pr.ts,
+ * kept here so this file imports nothing else): the agent's answer, not a
+ * failure a new run clears.
+ */
+const AGENT_VERDICT_CATEGORIES: ReadonlySet<string> = new Set(['already_fixed', 'wrong_repo', 'not_actionable', 'needs_human'])
 
 function ts(a: TruthAttempt): number {
   const t = Date.parse(a.created_at ?? a.started_at ?? '')
@@ -167,10 +176,14 @@ export function deriveReportFixTruth(input: {
     }
   }
   // A rejected key is cleared by a working key, not by retrying the same
-  // run. Any other hard failure (status = failed) can be retried; skipped
-  // runs, closed PRs and red CI need a person to decide first.
+  // run. Any other hard failure (status = failed) can be retried, except an
+  // agent's own verdict (it read the code and said it needs a person, was
+  // fixed already, is in another repo, or is not code): the same run gives
+  // the same answer, so a retry only spends credits. Skipped runs, closed
+  // PRs and red CI need a person to decide first.
   const latestStatus = (latest.status ?? '').toLowerCase()
-  const retryable = credential ? credential.keyHealthy === true : latestStatus === 'failed'
+  const agentVerdict = AGENT_VERDICT_CATEGORIES.has((latest.failure_category ?? '').toLowerCase())
+  const retryable = credential ? credential.keyHealthy === true : latestStatus === 'failed' && !agentVerdict
 
   return {
     ...base,
@@ -225,6 +238,34 @@ export interface FixTruthSummary {
   fixed: number
   /** Failed reports by cause, most common first. */
   failureBreakdown: Array<{ category: string; count: number }>
+}
+
+/**
+ * Drafted and merged fixes for one product area (a report's `component`).
+ *
+ * Drafted is a report in that area whose current state is an open or draft
+ * PR. Merged is a report in that area with a merged PR. Failed and in-flight
+ * attempts are not drafted: counting every project attempt made the reports
+ * banner say "N more drafted" for the inbox's report total.
+ */
+export function countFixesForArea(
+  component: string,
+  rows: ReadonlyArray<{
+    component?: string | null
+    state: ReportFixState
+    mergedPrNumber: number | null
+  }>,
+): { drafted: number; merged: number } {
+  const want = component.trim()
+  let drafted = 0
+  let merged = 0
+  if (!want) return { drafted, merged }
+  for (const row of rows) {
+    if ((row.component ?? '').trim() !== want) continue
+    if (row.mergedPrNumber != null) merged += 1
+    else if (row.state === 'pr_open') drafted += 1
+  }
+  return { drafted, merged }
 }
 
 export function summarizeFixTruths(truths: Iterable<ReportFixTruth>): FixTruthSummary {

@@ -37,15 +37,22 @@ interface BadgeProps {
   children: ReactNode
   className?: string
   title?: string
+  /**
+   * Accessible name for chips whose visible text is an abbreviation or glyph
+   * ("↑ v1.33.1"). Callers passed this before it was declared, and it was
+   * dropped on the floor — the chip had no accessible name at all.
+   */
+  'aria-label'?: string
   /** WCAG-safe tinted chip — pairs muted bg with *-foreground text via chipTone.ts */
   tone?: BadgeTone
 }
 
-export function Badge({ children, className = '', title, tone }: BadgeProps) {
+export function Badge({ children, className = '', title, tone, 'aria-label': ariaLabel }: BadgeProps) {
   const toneClass = tone ? CHIP_TONE[tone] : ''
   return (
     <span
       title={title}
+      aria-label={ariaLabel}
       className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-2xs leading-tight font-medium ${toneClass} ${className}`.trim()}
     >
       {children}
@@ -536,13 +543,17 @@ export function FreshnessPill({ at, isValidating, channel, className = '' }: Fre
       className={`inline-flex items-center gap-1.5 rounded-full border bg-surface-overlay px-1.5 py-0.5 text-3xs leading-tight text-fg-muted shadow-sm ${ringClass} ${className}`}
     >
       <span aria-hidden="true" className={`inline-block h-1.5 w-1.5 rounded-full ${dotClass}`} />
-      {at ? (
-        <span className="tabular-nums">
+      {/* The box is sized for a settled "x minutes ago" from the first paint:
+          the pill sits in a wrapping header actions row, so growing from "—"
+          to the timestamp used to re-wrap the row and drop the page by a
+          line (layout shift). */}
+      <span className="inline-block text-right tabular-nums" style={{ minWidth: '4.5rem' }}>
+        {at ? (
           <RelativeTime value={at} className="cursor-default" />
-        </span>
-      ) : (
-        <span>{isValidating ? 'Loading…' : '—'}</span>
-      )}
+        ) : (
+          isValidating ? 'Loading…' : '—'
+        )}
+      </span>
     </span>
   )
 }

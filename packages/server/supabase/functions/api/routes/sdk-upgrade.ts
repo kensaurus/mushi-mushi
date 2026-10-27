@@ -45,16 +45,10 @@ import {
   UPGRADE_BRANCH_PREFIX,
 } from '../../_shared/sdk-upgrade-gates.ts'
 import { parseGithubRepoUrl } from '../../_shared/github.ts'
-import { mergeGithubPullRequest, type MergeMethod } from '../../_shared/fix-merge.ts'
-import {
-  resolveProjectGithubToken,
-  type GithubRepoRef,
-  fetchPullRequestDetails,
-  fetchLatestCheckRun,
-  fetchLatestWorkflowRunForSha,
-  fetchLatestDeploymentStatusForSha,
-  normalizeDeployStatus,
-} from '../../_shared/github.ts'
+import type { MergeMethod } from '../../_shared/fix-merge.ts'
+import { gatedMergePullRequest } from '../../_shared/gated-merge.ts'
+import { resolveProjectGithubToken, type GithubRepoRef } from '../../_shared/github.ts'
+import { syncSdkReleaseJob, type SdkReleaseJob } from '../../_shared/sdk-release-sync.ts'
 
 function scheduleSdkUpgradeRun(jobId: string): void {
   const run = runSdkUpgradeJob(jobId).catch((err) => {
@@ -477,7 +471,36 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
 
     await db.from('sdk_upgrade_jobs').update({ release_status: 'merging' }).eq('id', jobId)
 
-    const result = await mergeGithubPullRequest(token, ref, prNumber, { mergeMethod })
+    // ADR 0030: the one gated merge, like every merge path. An SDK upgrade PR
+    // is normally not a fix PR and passes, but the gate is what guarantees
+    // that, not this route's assumptions about where pr_url came from.
+    let outcome
+    try {
+      outcome = await gatedMergePullRequest(db, {
+        projectId,
+        token,
+        ref,
+        number: prNumber,
+        override: false,
+        overrideReason: null,
+        confirmPendingReview: false,
+        authMethod: c.get('authMethod') as string | undefined,
+        role: access.role,
+        merge: { mergeMethod },
+      })
+    } catch (err) {
+      await db.from('sdk_upgrade_jobs')
+        .update({ release_status: 'pr_opened', merge_error: (err as Error).message.slice(0, 500) })
+        .eq('id', jobId)
+      return c.json({ ok: false, error: { code: 'MERGE_FAILED', message: (err as Error).message.slice(0, 200) } }, 502)
+    }
+    if (!outcome.ok) {
+      await db.from('sdk_upgrade_jobs')
+        .update({ release_status: 'pr_opened', merge_error: outcome.message })
+        .eq('id', jobId)
+      return c.json({ ok: false, error: { code: outcome.code, message: outcome.message } }, outcome.status)
+    }
+    const result = outcome.result
 
     if (!result.merged) {
       await db.from('sdk_upgrade_jobs')
@@ -524,86 +547,26 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
     // New release-cockpit columns added by migration 20260618124500
     const job = rawJob as Record<string, unknown> & typeof rawJob
     const prUrl = job.pr_url as string | null
-    const existingPrState = job['pr_state'] as string | null
-    const existingReleaseStatus = job['release_status'] as string | null
-    const existingMergedAt = job['merged_at'] as string | null
-    const existingCommitSha = job.commit_sha as string | null
-
     if (!prUrl) return c.json({ ok: false, error: { code: 'NO_PR', message: 'Nothing to sync (no PR)' } }, 400)
 
     const token = await resolveProjectGithubToken(db, projectId)
     if (!token) return c.json({ ok: false, error: { code: 'GH_NOT_CONNECTED', message: 'GitHub not connected' } }, 422)
 
-    // Parse PR URL: https://github.com/owner/repo/pull/123
-    const prUrlMatch = prUrl.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/)
-    if (!prUrlMatch) return c.json({ ok: false, error: { code: 'INVALID_PR_URL', message: 'Could not parse PR URL' } }, 400)
-    const [, owner, repo, prNumberStr] = prUrlMatch
-    const prNumber = parseInt(prNumberStr, 10)
-    const ref: GithubRepoRef = { owner, repo }
-
-    const pr = await fetchPullRequestDetails(token, ref, prNumber).catch(() => null)
-    const prState = pr?.state ?? existingPrState ?? null
-    const commitSha = pr?.headSha ?? existingCommitSha ?? null
-
-    const [checks, workflow, deploy] = await Promise.all([
-      commitSha ? fetchLatestCheckRun(token, ref, commitSha).catch(() => null) : Promise.resolve(null),
-      commitSha ? fetchLatestWorkflowRunForSha(token, ref, pr?.baseRef ?? null, commitSha).catch(() => null) : Promise.resolve(null),
-      commitSha ? fetchLatestDeploymentStatusForSha(token, ref, commitSha).catch(() => null) : Promise.resolve(null),
-    ])
-
-    // A PR merged directly on GitHub reports state='closed' + merged=true — the
-    // `merged` flag is authoritative (GitHub never returns state='merged').
-    const isMerged = pr?.merged === true || prState === 'merged' || Boolean(existingMergedAt)
-    const deployState = deploy ? normalizeDeployStatus(deploy.state) : null
-
-    // Derive release_status from authoritative GitHub facts
-    let releaseStatus: string = existingReleaseStatus ?? 'pr_opened'
-    if (isMerged) {
-      if (deployState === 'success') releaseStatus = 'deployed'
-      else if (deployState === 'failure') releaseStatus = 'failed'
-      else if (checks?.conclusion === 'success') releaseStatus = 'deploying'
-      else releaseStatus = 'merged'
-    } else if (prState === 'closed') {
-      releaseStatus = 'failed'
-    } else if (prState === 'open') {
-      if (checks?.conclusion === 'failure') releaseStatus = 'blocked'
-      else if (pr?.mergeable === true && pr?.mergeableState === 'clean' && checks?.conclusion === 'success') {
-        releaseStatus = 'ready_to_merge'
-      } else {
-        releaseStatus = 'pr_opened'
-      }
+    // A failed GitHub read answers 502 and stores nothing, so the console
+    // keeps the last known CI state instead of "not checked yet".
+    const result = await syncSdkReleaseJob(db, token, job as unknown as SdkReleaseJob, { workflow: true })
+    if (!result.ok) {
+      const status = result.code === 'INVALID_PR_URL' ? 400 : result.code === 'GITHUB_UNAVAILABLE' ? 502 : 500
+      return c.json({ ok: false, error: { code: result.code, message: result.message } }, status)
     }
 
-    const now = new Date().toISOString()
-    // Persist only the columns whose GitHub fetch succeeded so a transient
-    // failure never wipes last-known deploy state back to 'unknown'.
-    const { error: updErr } = await db.from('sdk_upgrade_jobs').update({
-      pr_state: isMerged ? 'merged' : prState,
-      check_run_status: checks?.status ?? null,
-      check_run_conclusion: checks?.conclusion ?? null,
-      check_run_updated_at: now,
-      release_status: releaseStatus,
-      ...(isMerged && !existingMergedAt ? { merged_at: now } : {}),
-      ...(deploy
-        ? {
-            deploy_status: deployState,
-            deploy_url: deploy.environmentUrl ?? null,
-            deploy_environment: deploy.environment ?? null,
-            deploy_updated_at: now,
-          }
-        : {}),
-      ...(commitSha && commitSha !== existingCommitSha ? { commit_sha: commitSha } : {}),
-    }).eq('id', jobId)
-    if (updErr) {
-      return c.json({ ok: false, error: { code: 'SYNC_PERSIST_FAILED', message: updErr.message } }, 500)
-    }
-
+    const { pr, checks, workflow, deploy } = result.github
     return c.json({
       ok: true,
       data: {
         jobId,
-        releaseStatus,
-        prState: isMerged ? 'merged' : prState,
+        releaseStatus: result.releaseStatus,
+        prState: result.prState,
         prMergeable: pr?.mergeable ?? null,
         prMergeableState: pr?.mergeableState ?? null,
         checkRunStatus: checks?.status ?? null,
@@ -611,7 +574,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
         workflowStatus: workflow?.status ?? null,
         workflowConclusion: workflow?.conclusion ?? null,
         workflowUrl: workflow?.htmlUrl ?? null,
-        deployStatus: deployState,
+        deployStatus: result.deployState,
         deployUrl: deploy?.environmentUrl ?? null,
         deployEnvironment: deploy?.environment ?? null,
       },

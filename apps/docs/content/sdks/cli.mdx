@@ -117,6 +117,7 @@ mushi reports reopen <id>
 mushi reports dismiss <id>
 mushi reports reply <id> "Thanks — we're on it"
 mushi reports search "checkout button"
+mushi reports file --title "…" --description "…" [--severity high] [--component checkout]
 
 mushi lessons list
 mushi lessons show <id>
@@ -138,6 +139,22 @@ mushi sentry import --query "level:error" --cursor <next>   # next page, printed
 
 It needs the Sentry org slug, project slug and an auth token with `event:read`
 and `project:read` (console: **Integrations → Sentry**).
+
+### File a report yourself
+
+For a bug you found yourself, or a backlog item you want an agent to fix,
+`mushi reports file` adds a report to the app's queue. It goes through the same
+triage as a user report, so it gets a diagnosis and can be sent to `mushi fix`.
+
+```bash
+mushi reports file --title "Checkout adds tax twice" \
+  --description "Cart with 2 items shows the tax line twice on /checkout. Done when the total matches the cart."
+mushi reports file --title "Bump sharp to 0.34" --description "..." --severity low --component build --project <uuid>
+```
+
+`--severity` (critical, high, medium, low) and `--component` are hints that
+triage may refine. It needs a key with the `mcp:write` scope; each app takes at
+most 30 filed reports an hour. The MCP tool is `file_report`.
 
 ### Reporter updates held for review
 
@@ -200,6 +217,11 @@ mushi fixes merge <fixId>
 mushi fixes merge <fixId> --method squash   # default
 mushi fixes merge <fixId> --method merge
 mushi fixes merge <fixId> --json
+
+# The verified-merge gates for the PR's current head (ADR 0035)
+mushi fixes verify <fixId>
+mushi fixes verify <fixId> --rerun   # re-check now, then show
+mushi fixes verify <fixId> --json
 ```
 
 **Merge prerequisites:** the fix attempt must be `completed` with an open PR (`pr_url`
@@ -208,6 +230,100 @@ console). Requires GitHub App or PAT connected and an API key with `mcp:write`.
 
 When merge succeeds, the report moves to **Fixed**, the reporter gets notified, and
 `fix.applied` webhooks fire — identical to merging on GitHub or via the admin console.
+
+### `mushi work`
+
+Fix reports with a coding agent on your own machine instead of a cloud agent.
+The agent (the Cursor CLI, `cursor-agent`, signed in to any Cursor account)
+only edits a worktree of your repo; `mushi work` commits, pushes and opens the
+draft pull request with **your** local credentials. So you can spend a Cursor
+account's allowance without that account's GitHub ever touching your repo.
+
+```bash
+# Show which reports it would take (worst first, none with a run or PR already live)
+mushi work --repo-dir ~/code/my-app --dry-run
+
+# Fix up to 3 reports, one at a time
+mushi work --repo-dir ~/code/my-app --max 3
+
+# One report, a chosen model
+mushi work --repo-dir ~/code/my-app --report <reportId> --model gpt-5
+```
+
+For each report it:
+
+1. Reads Mushi's fix packet and what earlier attempts did (their Opus review
+   findings), as data the agent must not take as instructions.
+2. Creates a worktree from `origin/<default branch>` on
+   `bugfix/MUSHI-<reportId>-local-cursor` and runs `cursor-agent -p` in it
+   (30 minutes at most), after installing the worktree's dependencies from
+   its lockfile (pnpm, npm or yarn) so the agent can run the tests and your
+   commit hooks work. The agent's environment has no credentials, and
+   version control inside it cannot reach the remote.
+3. With changes: commits, pushes, opens a draft PR with `Mushi report: <id>`,
+   registers the fix attempt (like the MCP tool `submit_fix_result`) and
+   queues the Opus review, so the PR follows the same review and release
+   train as a cloud agent's. Without changes: records the agent's
+   `Mushi verdict:` on the attempt.
+
+A report whose local run ended without a pull request in the last 7 days
+(a timeout, no change, or a verdict) is skipped; pass `--report <id>` to run
+it anyway. The agent has 30 minutes, so a report that names several pages is
+fixed one page at a time: split broad reports into one page or cause each.
+
+When Opus says "fix first" on one of these pull requests, run
+`mushi work --followups`. Mushi checks the round (the reviewed commit is still
+the PR's head, at most 2 rounds per PR), sends only the findings that pass its
+safety screen, and the agent fixes them in a worktree of the PR's branch.
+`mushi work` commits and pushes to that branch, and Opus reviews the new
+commit. Cloud-agent pull requests get the same follow-up from Mushi itself.
+
+```bash
+# Which pull requests are waiting for a follow-up
+mushi work --repo-dir ~/code/my-app --followups --dry-run
+
+# Run them
+mushi work --repo-dir ~/code/my-app --followups --model grok-4.7-xhigh
+```
+
+| Flag | Description |
+| --- | --- |
+| `--repo-dir <path>` | A clone of the app repo; only worktrees are created in it |
+| `--max <n>` | Reports per run (default 3, at most 10) |
+| `--report <id>` | Work on this report only |
+| `--followups` | Fix the Opus "fix first" findings on pull requests `mushi work` opened, and push to them |
+| `--model <id>` | Model for the agent (`cursor-agent --list-models`) |
+| `--keep` | Keep the worktree afterwards |
+| `--dry-run` | Show the plan; change nothing |
+
+Needs `cursor-agent` and `gh` signed in, and an API key with `mcp:write`.
+
+### `mushi verify`
+
+The `mushi-verify` workflow that proves an agent's fix with a test that fails
+without it, filled in with your project's runner labels and test command. Full
+guide: [Verified merge](/admin/verified-merge).
+
+```bash
+mushi verify workflow                                           # print it
+mushi verify workflow --out .github/workflows/mushi-verify.yml  # write it
+mushi verify workflow --project <projectId> --json
+```
+
+### `mushi runner`
+
+Where your tests run and why a fix waits to land. Full guide: [CI runners](/operating/ci-runners).
+
+```bash
+mushi runner status [--days 7] [--refresh] [--all] [--json]   # machines, runners, wait times, test machine vs code failures
+mushi runner compare [--days 30] [--all] [--json]             # what CI costs and how fast it runs: GitHub-hosted vs your machines (estimated)
+mushi runner placement show|preview|request|revert          # where each repo's CI runs; change one runner variable with approval (ADR 0037)
+mushi runner key                                  # a runner key (can only report runner health), saved, never printed
+mushi runner heartbeat [--once] [--dry-run]       # send this machine's memory, swap, load and runner services
+mushi runner hooks install --dir <runner folder>  # per-job memory peak and out-of-memory kills
+mushi runner add --repo owner/name --dry-run      # set this machine up as a runner, safe defaults
+mushi runner audit [--repo owner/name | --all]    # list self-hosted runners and flag the odd ones
+```
 
 ---
 
@@ -485,6 +601,9 @@ Spend-down mode starts `--window-days` (default 14) before the credits expire
 and dispatches the best open reports of the apps the key already pays for,
 inside each app's auto-fix limits. A key shared by the whole organization is
 changed by an owner or admin in the console (Settings, AI keys, Cursor).
+It pauses an app on its own when that app's recent agent pull requests review
+poorly, then sends one test fix a day until they recover
+([agent PR review](/concepts/agent-pr-review#spend-down-and-its-safety-stop)).
 
 ---
 

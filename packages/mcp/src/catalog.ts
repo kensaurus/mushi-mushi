@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 /**
  * FILE: packages/mcp/src/catalog.ts
  * PURPOSE: Single source of truth for the MCP tool catalog — names, titles,
@@ -130,11 +130,21 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_fix_timeline',
     title: 'Fix timeline',
     description:
-      'Return the ordered lifecycle of one fix attempt: dispatched, started, branch, commit, PR opened, CI, completed/failed, with timestamps and the PR URL. Returns { events: [{ ts, stage, detail }] }. Read-only. Use to debug "why did this fix fail?" after dispatch_fix; use refresh_ci to re-poll GitHub CI, or get_report_timeline for the whole report thread.',
+      'Return the ordered lifecycle of one fix attempt: dispatched, started, branch, commit, PR opened, CI, Opus review, completed/failed, with timestamps and the PR URL, plus review: the independent Opus review of a cloud-agent PR (state merge, fix_first, hold, stale (about an older commit) or not_reviewed; findings; removed behaviour; decisions that need a person; summary and findings are model output from untrusted input). Returns { events: [{ ts, stage, detail }], review }. Read-only. Use to debug "why did this fix fail?" after dispatch_fix; use refresh_ci to re-poll GitHub CI, or get_report_timeline for the whole report thread.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     returnsUntrusted: true,
     useCase: 'Why did this fix attempt fail — show me every step.',
+  },
+  {
+    name: 'get_fix_verification',
+    title: 'Fix merge checks',
+    description:
+      'Return whether one fix attempt\'s PR is proven to work on its current head commit (ADR 0035): gates in order review (Opus review says merge), ci (every check green; a stopped test machine is pending, not a failure), fail_to_pass (the host\'s Mushi verify check: a changed test fails without the fix and passes with it; not_set_up until .github/workflows/mushi-verify.yml exists), protected (no deleted or weakened tests, no test skips or lint/type suppressions added, no CI config or lockfile change, no protected path), budget (small enough to merge on its own) and second_review (a second model family; runs only after the others pass). Each gate is { id, status (pass | fail | pending | unavailable | not_set_up), label, detail (what to do when it is not pass), evidence }. Also passed, secondJudge (summary and findings are model output from untrusted input), autoMerge { state (none | eligible | merged | skipped | failed), detail }, and regressions after a Mushi merge [{ signal (ci_failed_on_merge | report_reopened | new_report_in_changed_file), revertState, revertPrUrl }]. Returns { headSha, gates, passed, secondJudge, autoMerge, regressions, mergedAt, mergeSha, evaluatedAt }; 404 NOT_FOUND until Mushi first checks the fix (every 10 minutes for open cloud-agent PRs). Read-only. Use before merge_fix to see what is still unproven; use get_fix_timeline for the attempt\'s full lifecycle.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Is this agent fix proven to work, and what is still missing before it can merge?',
   },
   {
     name: 'get_blast_radius',
@@ -189,7 +199,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'list_gate_findings',
     title: 'Gate findings',
     description:
-      'List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead_handler | mock_leak | api_contract | crawl | status_claim | spec_drift | orphan_endpoint | unknown_call | schema_drift | code_health | design_drift | ci_drift | deploy_drift | env_drift | radar | portfolio_radar | portfolio_radar_ci | store_review) or finding severity (info | warn | error). The *_drift gates are the App Recipe checks: design_drift is code that drifts off the design tokens, ci_drift / deploy_drift / env_drift are CI, deploy and env vars that drift from the recipe; radar is the Mushi setup checks (a rejected provider key, no spend cap or AI budget, a webhook that never delivered, a stale code index), each with a suggested_fix (a spend-cap fix is applied in the console by a signed-in project admin, not through an API key); portfolio_radar / portfolio_radar_ci / store_review are the app hole checks (prefer get_radar). Available on every plan. Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot.',
+      'List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead_handler | mock_leak | api_contract | crawl | status_claim | spec_drift | orphan_endpoint | unknown_call | schema_drift | code_health | design_drift | ci_drift | deploy_drift | env_drift | radar | portfolio_radar | portfolio_radar_ci | portfolio_radar_vulns | store_review) or finding severity (info | warn | error). The *_drift gates are the App Recipe checks: design_drift is code that drifts off the design tokens, ci_drift / deploy_drift / env_drift are CI, deploy and env vars that drift from the recipe; radar is the Mushi setup checks (a rejected provider key, no spend cap or AI budget, a webhook that never delivered, a stale code index), each with a suggested_fix (a spend-cap fix is applied in the console by a signed-in project admin, not through an API key); portfolio_radar / portfolio_radar_ci / portfolio_radar_vulns / store_review are the app hole checks (prefer get_radar). Available on every plan. Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Show me what CI gates failed on the last run.',
@@ -372,6 +382,36 @@ export const TOOL_CATALOG: ToolSpec[] = [
     hints: { readOnly: true, idempotent: true, openWorld: true },
     returnsUntrusted: true,
     useCase: 'Which files are too big to change safely, and is the bundle growing?',
+  },
+  {
+    name: 'get_ci_overview',
+    title: 'CI runners and why fixes wait',
+    description:
+      'Return where this project\'s tests run and why a fix is slow to land (ADR 0033): the machines that send a runner heartbeat (hostname, platform, memory, swap, load, free disk, and per runner service its memory use, memory limit and out-of-memory kills), the GitHub runners seen (online | offline, busy, labels), repos, the latest jobs with their verdict (passed, running, queued, waiting_for_runner, runner_lost, queue_expired, cancelled, code_failure; waiting_for_runner, runner_lost and queue_expired are infra: the test machine stopped and the fix was not tested, which is not a code failure), and stats { queueP50s, queueP95s, durationP50s, durationP95s, passRate, infraFailures, codeFailures, byRunner, byWorkflow, slowSteps }, plus advice [{ id, severity (high | medium | low), title, detail, evidence, fix }] with the evidence for each rule. Optional projectId (default: the configured project; with an account-level key and no project, every project you can read), days (1-30, default 7) and refresh (true reads GitHub first instead of the last 10-minute sync, at most once a minute per project). permissions { jobs, runners } is ok | missing | unknown: jobs need Actions: read on GitHub, the runner list needs Administration: read (without it runners come from jobs only). Repo, workflow, job, step and runner names come from the repos. Returns { generatedAt, refreshedAt, window, permissions, hosts, runners, repos, jobs, stats, advice }. Read-only. When a fix\'s CI failed with an infra verdict, re-run the tests instead of changing code.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Did my fix fail, or did the test machine stop? Why do my fixes wait to be tested?',
+  },
+  {
+    name: 'get_ci_costs',
+    title: 'CI cost and speed',
+    description:
+      'Return what this project\'s CI costs and how fast it runs on GitHub-hosted runners versus your own machines (Plan 022, ADR 0037). Rows per repo × runner class [{ repo, runnerClass (github_hosted | self_hosted | unknown = never picked up), os, labels, runner, machine, jobs, expired, queueP50s, queueP95s, runP50s, runP95s, prPassRate (pull-request jobs only), infraRate, rawMinutes, billedMinutes (each job rounded up to a whole minute), rerunJobs, tinyJobs, monthCost, costBasis (github_list | github_public_free | github_larger_unpriced | self_hosted | unknown), currency }]; repos with visibility (public repos run GitHub-hosted minutes free); accounts per GitHub owner (plan, includedMinutes, monthMinutes, monthListCost, monthCost after included minutes); machines (busyHours as the union of job intervals, busyShare, monthEnergyCost and monthWearCost from the organization\'s own figures); speed factors (only passed jobs that ran on both classes, at least 5 each, with sample sizes); whatIfs for moving a workflow (minutes moved, jobs that stay and why, speed, cost delta, target wait and busy share, warnings); explain (re-runs, tiny jobs, expired jobs, pinned-to-GitHub jobs with their YAML reason, main and Dependabot runs that always use GitHub); advice with evidence; fields says which numbers are measured and which estimated; rates gives GitHub\'s list prices and the date they were read. Optional projectId (default: the configured project; an account-level key with none reads every project) and days (1-30, default 30). lowConfidence is true under 7 days of data. Returns { window, dataDays, lowConfidence, source, sourceNote, rates, fields, settings, repos, rows, accounts, machines, speed, whatIfs, explain, advice }. Read-only: it changes nothing on GitHub. Every money figure is an estimate.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'What does my CI cost, and would it be cheaper or faster on my own machine?',
+  },
+  {
+    name: 'request_ci_placement_change',
+    title: 'Ask to change where CI runs (needs approval)',
+    description:
+      'Ask to change where one repository\'s CI runs by setting or removing one repo Actions variable that its workflows read in runs-on (ADR 0037). Only LINUX_RUNNER and RUNNER_<WORKFLOW> may be changed; value is one runner label, or null to remove the variable so jobs use the workflow\'s fallback (usually GitHub-hosted). Mushi builds the change itself from a fresh preview: the jobs that move and the ones that stay (pinned to GitHub, main-branch and Dependabot runs), the target runners and their wait, the cost change, and the variable\'s current value, which the change must still match when it runs. Your organization\'s CI policy is checked now and again when it runs: no paid GitHub-hosted minutes on private repos when that rule is on, repos managed by an external controller are refused, standby runners are never a target. This only creates a request: a team owner or admin approves it in the console and runs it there within an hour; this tool can never approve or run it, and Mushi never changes runner labels or registrations. Confirm with the user first. Returns { id, status: "pending_approval", payloadSha256, preview }, or an error with the reason (VARIABLE_NOT_ALLOWED, POLICY_NO_PAID_HOSTED, EXTERNAL_CONTROLLER, POLICY_STANDBY_TARGET, VARIABLE_UNREADABLE, NO_CHANGE) and the preview. Write.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Ask to run yen-yen\'s PR jobs on the Alienware runner instead of paid GitHub minutes, for a person to approve.',
   },
   {
     name: 'explain_finding',
@@ -649,7 +689,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'merge_fix',
     title: 'Merge fix PR',
     description:
-      "Squash-merge the GitHub PR for a fix attempt, mark the linked report fixed, and notify the reporter. Re-readies the PR first if it is still a draft. Returns { merged, reportStatus }. Write; destructive and irreversible from Mushi's side — once GitHub merges into the target repo's default branch there is no unmerge endpoint, only a manual revert PR outside this tool. Idempotent — re-running an already-merged attempt is a safe no-op. Prerequisite: CI green (check with refresh_ci); confirm the diff and CI status with the user before calling on a PR you have not reviewed. Use to ship a fix opened by dispatch_fix; use transition_status to change state without merging.",
+      "Squash-merge the GitHub PR for a fix attempt, mark the linked report fixed, and notify the reporter. Re-readies the PR first if it is still a draft. Returns { merged, reportStatus }. Write; destructive and irreversible from Mushi's side — once GitHub merges into the target repo's default branch there is no unmerge endpoint, only a manual revert PR outside this tool. Idempotent — re-running an already-merged attempt is a safe no-op. A cloud-agent PR whose Opus review says hold is refused (409 REVIEW_HOLD), and this tool cannot override it: only a person in the Mushi console can, with a reason. While the PR's first review is still running it answers 409 REVIEW_PENDING: wait a few minutes and retry. Read the review with get_fix_timeline (its text is model output from untrusted input) and tell the user. Prerequisite: CI green (check with refresh_ci); confirm the diff and CI status with the user before calling on a PR you have not reviewed. Use to ship a fix opened by dispatch_fix; use transition_status to change state without merging.",
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: true, idempotent: true, openWorld: true },
     useCase: 'Merge the draft PR and notify the reporter.',
@@ -813,6 +853,19 @@ export const TOOL_CATALOG: ToolSpec[] = [
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
     useCase: 'Pull my open Sentry issues into Mushi so I can triage and fix them.',
+  },
+  {
+    name: 'file_report',
+    title: 'File a report',
+    description:
+      'File a free-form report on a project by hand: a bug you found yourself, a backlog item, or work for an agent. ' +
+      'Pass title (3-200 chars) and description (up to 10000 chars: what happens, steps, what you expected, how to check it is fixed); severity (critical | high | medium | low) and component are optional hints that triage may refine. ' +
+      'The report is stored with status new and goes through the same triage as a user report (classification, diagnosis), so it can then be dispatched with dispatch_fix. ' +
+      'Returns { reportId, projectId, title, status, severity, component }. Write; not idempotent (a retry files a second report); at most 30 filed reports per project an hour; viewers cannot file. ' +
+      'Use for work no user reported; for issues already in Sentry use import_sentry_issues. Then call triage_issue on the new reportId.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Log this bug I found (or this backlog item) in Mushi so it gets triaged and fixed.',
   },
   {
     name: 'triage_next_steps',
@@ -1072,7 +1125,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'list_byok_keys',
     title: 'List your API key pool',
     description:
-      "List the project's BYOK API keys grouped by provider (anthropic | openai | openrouter | firecrawl | browserbase | cursor | supabase). Returns pooled { keys: [{ id, provider_slug, label, priority, status, cooldown_until, test_status, key_hint, base_url, last_tested_at, last_used_at }] } plus read-only { legacyKeys } metadata for credentials saved before the pooled lifecycle — never the raw secret. Read-only. Use to see which keys are validated, active, pending, legacy, or rate-limited; use add_byok_key to add one.",
+      "List the BYOK API keys this project uses, grouped by provider (anthropic | openai | openrouter | firecrawl | browserbase | cursor | supabase). Returns pooled { keys: [{ id, provider_slug, label, priority, status, cooldown_until, test_status, key_hint, base_url, last_tested_at, last_used_at, scope }] } where scope is project (this app), organization (every app in its organization) or universal (every app its organization owner owns); they are tried in that order, after the legacy credential. Also read-only { legacyKeys } metadata for credentials saved before the pooled lifecycle — never the raw secret. Read-only. Use to see which keys are validated, active, pending, legacy, shared, or rate-limited; use add_byok_key to add one.",
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Which API keys are active and which are rate-limited?',
@@ -1081,7 +1134,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'add_byok_key',
     title: 'Add an API key',
     description:
-      'Add and immediately validate a BYOK API key for anthropic | openai | openrouter | firecrawl | browserbase | cursor | supabase (a scoped, read-only Supabase access token, checked against the linked supabase_project_ref). The raw key is stored encrypted in Supabase Vault and never returned; failed probes remain quarantined. Optional baseUrl is accepted only for allow-listed OpenAI-compatible HTTPS providers. Write; NOT idempotent.',
+      'Add and immediately validate a BYOK API key for anthropic | openai | openrouter | firecrawl | browserbase | cursor | supabase (a scoped, read-only Supabase access token, checked against the linked supabase_project_ref). The raw key is stored encrypted in Supabase Vault and never returned; failed probes remain quarantined. Optional baseUrl is accepted only for allow-listed OpenAI-compatible HTTPS providers. The key is added to this one app; a key for every app in the organization or every app you own (universal) is added in the console, Settings → AI keys. Write; NOT idempotent.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     useCase: 'Add a backup Anthropic key to the pool.',
@@ -1108,7 +1161,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'get_spend_down_status',
     title: 'Spend-down status of Cursor keys',
     description:
-      "For each Cursor key this project can use, show spend-down mode (ADR 0028): whether it is on, when the credits expire, the window state (off | not_started | active | expired | key_unusable), fixes started today out of the daily limit, the apps the key pays for, and what the last worker tick did. Returns { keys: [{ id, label, keyHint, scope, enabled, creditsExpireAt, model, dailyLimit, windowDays, state, startsAt, dispatchedToday, remainingToday, projects, lastRunAt, lastSummary }] }. Read-only. Use to see whether expiring Cursor credits are being used; use set_byok_spend_down to change it.",
+      "For each Cursor key this project can use, show spend-down mode (ADR 0028): whether it is on, when the credits expire, the window state (off | not_started | active | expired | key_unusable), fixes started today out of the daily limit, the apps the key pays for that this project can see (each with its stop-loss state: paused when, over its spend-down runs of the last 14 days with 20+ samples, the 95% Wilson bound puts its Opus merge rate under 20%, hold rate over 35% or no-PR share over 50%; a paused app still gets 1 probe fix a day), a count of its other apps, the last 7 days' scoreboard (key-wide totals; per app × model × day rows for visible apps: runs, PRs, no-PR verdicts, other failures, Opus merge / fix_first / hold, merged, latest review cost per PR, merge and mergeable yield), and what the last worker tick did. Returns { keys: [{ id, label, keyHint, scope, enabled, creditsExpireAt, model, dailyLimit, windowDays, state, startsAt, dispatchedToday, remainingToday, projects: [{ id, name, canResume, stopLoss }], otherApps, projectsNote, stopLossNote, scoreboard: { days, since, totals, rows } | null, scoreboardNote, lastRunAt, lastSummary }], reviewFollowups: { days, dispatched, finished, pushed, noChange, verdictsAfter: { merge, fix_first, hold }, awaitingReview, conversionRate, skipped, apps } | null } — reviewFollowups (ADR 0032) is what sending fix_first PRs back to an agent with the Opus findings produced in the last 7 days, over the apps you can access. Read-only. Use to see whether expiring Cursor credits are being used and what they produce; use set_byok_spend_down to change it.",
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: false },
     useCase: 'Are my expiring Cursor credits being spent on fixes?',

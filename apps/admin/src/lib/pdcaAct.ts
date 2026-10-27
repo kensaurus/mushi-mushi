@@ -11,7 +11,7 @@
 
 import type { StageStamp } from './pdcaStamp'
 
-export type ActBlocker = 'pr_closed' | 'ci_failed' | 'needs_review'
+export type ActBlocker = 'pr_closed' | 'ci_failed' | 'ci_infra' | 'needs_review'
 
 export interface ActFixSignals {
   pr_url?: string | null
@@ -20,6 +20,8 @@ export interface ActFixSignals {
   status?: string | null
   check_run_conclusion?: string | null
   review_passed?: boolean | null
+  /** ADR 0033: set when the test machine, not the code, stopped CI. */
+  ci_infra?: { infra: boolean; kind?: string } | null
 }
 
 const CI_HARD_FAIL = new Set(['failure', 'timed_out', 'cancelled', 'action_required'])
@@ -29,6 +31,8 @@ export function actBlocker(fix: ActFixSignals | null | undefined): ActBlocker | 
   if (!fix?.pr_url) return null
   if (fix.merged_at || fix.pr_state === 'merged' || fix.status === 'merged') return null
   if (fix.pr_state === 'closed') return 'pr_closed'
+  // The machine stopped or never came: the fix is untested, not failing.
+  if (fix.ci_infra?.infra) return 'ci_infra'
   if (CI_HARD_FAIL.has((fix.check_run_conclusion ?? '').toLowerCase())) return 'ci_failed'
   if (fix.review_passed === false) return 'needs_review'
   return null
@@ -37,12 +41,14 @@ export function actBlocker(fix: ActFixSignals | null | undefined): ActBlocker | 
 export const ACT_BLOCKER_STAMP: Record<ActBlocker, StageStamp> = {
   pr_closed: 'failed',
   ci_failed: 'blocked',
+  ci_infra: 'blocked',
   needs_review: 'blocked',
 }
 
 export const ACT_BLOCKER_COPY: Record<ActBlocker, string> = {
   pr_closed: 'PR closed without merge — dispatch a new fix or close the report',
   ci_failed: 'Blocked: CI failed — fix the checks before merging',
+  ci_infra: 'Not tested: the test machine stopped — re-run the tests before merging',
   needs_review: 'Needs review — the agent flagged this fix; read the PR before merging',
 }
 
@@ -50,6 +56,7 @@ export const ACT_BLOCKER_COPY: Record<ActBlocker, string> = {
 export const ACT_BLOCKER_LINK_LABEL: Record<ActBlocker, string> = {
   pr_closed: 'View closed PR',
   ci_failed: 'View failing checks',
+  ci_infra: 'View checks',
   needs_review: 'Review PR',
 }
 
@@ -57,6 +64,7 @@ export const ACT_BLOCKER_LINK_LABEL: Record<ActBlocker, string> = {
 export function fixFailureBucket(fix: ActFixSignals & { failure_category?: string | null }): string {
   if (fix.failure_category) return fix.failure_category
   if (fix.pr_state === 'closed') return 'pr_closed_unmerged'
+  if (fix.pr_url && fix.ci_infra?.infra) return 'ci_infra'
   if (fix.pr_url && fix.status === 'completed') return 'ci_failed'
   return 'unknown'
 }

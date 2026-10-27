@@ -1,0 +1,22 @@
+{
+  "version": "v0.1.0",
+  "name": "Slow checkout requests",
+  "id": "mH9UsEVi4W2",
+  "trigger_description": "P95 duration of POST /api/checkout over 1500 ms",
+  "status": "TRIGGERED",
+  "alert_type": "on_change",
+  "summary": "Triggered: Slow checkout requests",
+  "description": "production environment:\nCurrent value greater than threshold value (1500) for http.route",
+  "operator": "greater than",
+  "threshold": 1500,
+  "result_url": "https://ui.honeycomb.io/acme/environments/production/datasets/checkout-api/result/7Zx3uQ/a/2kPq9?utm_content=view_graph&utm_medium=Trigger&utm_source=webhook",
+  "result_groups": [
+    { "Group": { "http.route": "/api/checkout" }, "Result": 1873.4 },
+    { "Group": { "http.route": "/api/cart" }, "Result": 212.9 }
+  ],
+  "result_groups_triggered": [
+    { "Group": { "http.route": "/api/checkout" }, "Result": 1873.4 }
+  ],
+  "trigger_url": "https://ui.honeycomb.io/acme/environments/production/datasets/checkout-api/triggers/mH9UsEVi4W2?utm_content=edit_trigger&utm_medium=Trigger&utm_source=webhook",
+  "is_test": false
+}

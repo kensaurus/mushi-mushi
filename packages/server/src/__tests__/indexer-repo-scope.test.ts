@@ -10,6 +10,8 @@
  *
  *          index.ts imports Deno globals, so its wiring is asserted at the
  *          source level; the resolver itself runs for real on a fake client.
+ *          A hosted-gateway "Project not specified." on one of those reads
+ *          stays on the transient path (503, no Sentry).
  */
 
 import { describe, it, expect } from 'vitest'
@@ -17,6 +19,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { createFakeDb, findQueries } from './__stubs__/fake-query-recorder.ts'
 import { isRepoUrl, projectIdsForRepo, RepoLookupError } from '../../supabase/functions/webhooks-github-indexer/repo-projects.ts'
+import { isTransientDbConnectionError } from '../../supabase/functions/_shared/error-codes.ts'
 
 describe('isRepoUrl', () => {
   it('matches the repository case-insensitively, with or without .git or a trailing slash', () => {
@@ -77,6 +80,68 @@ describe('projectIdsForRepo', () => {
   it('throws on a read error so GitHub redelivers', async () => {
     const { db, queries } = createFakeDb(() => ({ data: null, error: { message: 'boom' } }))
     await expect(projectIdsForRepo(db, 'acme/app')).rejects.toThrow(/boom/)
+  })
+
+  it('a gateway "Project not specified" on github_repo_url is the transient class the route answers 503 for', async () => {
+    const gateway = { message: 'Project not specified.', code: 'PGRST' }
+    const { db } = createFakeDb((q) => {
+      const column = String(q.filters.find((f) => f.method === 'ilike')?.args[0])
+      if (q.table === 'project_settings' && column === 'github_repo_url') return { data: null, error: gateway }
+      return { data: [] }
+    })
+    const err = await projectIdsForRepo(db, 'acme/app').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(RepoLookupError)
+    expect((err as Error).message).toBe('project_settings.github_repo_url lookup failed: Project not specified.')
+    expect(isTransientDbConnectionError((err as RepoLookupError).dbError)).toBe(true)
+  })
+
+  it('retries a lookup once on a statement timeout, then reports a second one (MUSHI-MUSHI-SERVER-2X)', async () => {
+    const timeout = { message: 'canceling statement due to statement timeout', code: '57014' }
+    let repoCalls = 0
+    const { db } = createFakeDb((q) => {
+      if (q.table !== 'project_repos') return { data: [] }
+      repoCalls++
+      return repoCalls === 1 ? { data: null, error: timeout } : { data: [{ project_id: 'p-repos', repo_url: 'https://github.com/acme/app' }] }
+    })
+    expect(await projectIdsForRepo(db, 'acme/app')).toEqual(['p-repos'])
+    expect(repoCalls).toBe(2)
+
+    const stalled = createFakeDb((q) => (q.table === 'project_repos' ? { data: null, error: timeout } : { data: [] }))
+    await expect(projectIdsForRepo(stalled.db, 'acme/app')).rejects.toThrow(/project_repos\.repo_url lookup failed: canceling statement/)
+    expect(findQueries(stalled.queries, 'project_repos')).toHaveLength(2)
+  })
+
+  it('retries a gateway HTML page once and keeps the page out of the message (MUSHI-9d390abc)', async () => {
+    const gatewayHtml = {
+      message: '<!DOCTYPE html><html><head><title>supabase.co | 502: Bad gateway</title></head><body>cloudflare</body></html>',
+      code: '502',
+    }
+    let repoCalls = 0
+    const { db } = createFakeDb((q) => {
+      if (q.table !== 'project_repos') return { data: [] }
+      repoCalls++
+      return repoCalls === 1
+        ? { data: null, error: gatewayHtml }
+        : { data: [{ project_id: 'p-repos', repo_url: 'https://github.com/acme/app' }] }
+    })
+    expect(await projectIdsForRepo(db, 'acme/app')).toEqual(['p-repos'])
+    expect(repoCalls).toBe(2)
+
+    const stalled = createFakeDb((q) => (q.table === 'project_repos' ? { data: null, error: gatewayHtml } : { data: [] }))
+    const err = await projectIdsForRepo(stalled.db, 'acme/app').catch((e: unknown) => e)
+    expect(findQueries(stalled.queries, 'project_repos')).toHaveLength(2)
+    expect((err as Error).message).toBe(
+      'project_repos.repo_url lookup failed: [upstream gateway error] supabase.co | 502: Bad gateway',
+    )
+    expect((err as Error).message).not.toContain('<!DOCTYPE')
+    // The untouched PostgREST error still rides along, so the route answers 503.
+    expect(isTransientDbConnectionError((err as RepoLookupError).dbError)).toBe(true)
+  })
+
+  it('does not retry other read errors', async () => {
+    const { db, queries } = createFakeDb(() => ({ data: null, error: { message: 'boom', code: '42703' } }))
+    await expect(projectIdsForRepo(db, 'acme/app')).rejects.toThrow(/boom/)
+    expect(findQueries(queries, 'project_repos')).toHaveLength(1)
   })
 
   it('keeps the PostgREST error on the throw, so the route can classify it (MUSHI-MUSHI-SERVER-2S)', async () => {

@@ -58,3 +58,18 @@ export function queueStatusLabel(value: string): string {
   const words = value.replace(/[_-]+/g, ' ').trim()
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : value
 }
+
+const STAGE_LABELS: Record<string, string> = {
+  stage1: 'Fast filter',
+  stage2: 'Classify',
+  judge: 'Judge',
+  'fix-suggestion': 'Fix suggestion',
+}
+
+/** Human label for a pipeline stage; unknown values read as words, never raw ids. */
+export function queueStageLabel(value: string): string {
+  const known = STAGE_LABELS[value]
+  if (known) return known
+  const words = value.replace(/[_-]+/g, ' ').trim()
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : value
+}

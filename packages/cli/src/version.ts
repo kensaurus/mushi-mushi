@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 /**
  * FILE: packages/cli/src/version.ts
  * PURPOSE: Single source of truth for the CLI version at runtime.
@@ -21,4 +21,4 @@ export const MUSHI_CLI_VERSION: string =
  * setup refreshes the pin. Synced to packages/mcp/package.json by
  * `scripts/sync-mcp-pin.mjs` — never hand-edit the version.
  */
-export const MUSHI_MCP_PIN_SPEC = '@mushi-mushi/mcp@0.26.1'
+export const MUSHI_MCP_PIN_SPEC = '@mushi-mushi/mcp@0.29.2'

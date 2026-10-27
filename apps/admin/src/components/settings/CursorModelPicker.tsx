@@ -1,9 +1,11 @@
 /**
  * FILE: apps/admin/src/components/settings/CursorModelPicker.tsx
- * PURPOSE: Model picker for spend-down and Integrations (BL-090). Loads
- *          GET /v1/admin/byok/cursor/models and writes a spec string.
- *          keyId asks for that Cursor account; omit it to use the key the
- *          app would use. A failed or empty list falls back to the text field.
+ * PURPOSE: Cursor model picker for spend-down and Integrations (BL-090) and
+ *          review follow-ups (ADR 0032). Loads
+ *          GET /v1/admin/byok/cursor/models and writes a spec string
+ *          (`id` or `id?param=value&…`). keyId asks for that Cursor account;
+ *          omit it to use the key the app would use. A failed or empty list
+ *          falls back to the text field.
  */
 
 import { useState } from 'react'
@@ -21,7 +23,7 @@ import {
 interface Props {
   value: string
   onChange: (spec: string) => void
-  /** byok_keys id. Omit on Integrations, where the app's own key is used. */
+  /** byok_keys id. Omit to use the key the app would use. */
   keyId?: string
   label?: string
   /** When false, the parent already shows the label. The control keeps aria-label. */

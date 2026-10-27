@@ -19,7 +19,8 @@
         "scripts/cloudflare/*.mjs!",
         "scripts/marketing/*.mjs!",
         "scripts/cloudfront-*.js!",
-        "scripts/vendor/*.js!"
+        "scripts/vendor/*.js!",
+        ".github/actions/*/*.mjs!"
       ],
       "project": [
         "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts,mdx}!",

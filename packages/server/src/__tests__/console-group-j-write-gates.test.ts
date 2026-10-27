@@ -129,6 +129,12 @@ describe('super-admin user detail (bug 53)', () => {
   it('entitlements expose the caller project role for UI write gates', () => {
     expect(routeSlice(src, "app.get('/v1/admin/entitlements'")).toMatch(/projectRole,/)
   })
+
+  it('metrics gateway HTML goes through dbError, not a raw Sentry log', () => {
+    const metrics = routeSlice(src, "app.get('/v1/super-admin/metrics'")
+    expect(metrics).toMatch(/return dbError\(c, error\)/)
+    expect(metrics).not.toMatch(/super_admin_metrics_failed/)
+  })
 })
 
 describe('support tickets list (bug 311)', () => {

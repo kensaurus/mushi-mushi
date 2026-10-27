@@ -3,13 +3,13 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_117 configuration knobs across 19 sections · last regenerated 2026-10-20._
+_120 configuration knobs across 19 sections · last regenerated 2026-10-27._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
 ## Contents
 
-- [Settings → General](#settings-general) (13)
+- [Settings → General](#settings-general) (14)
 - [Settings → AI keys (BYOK)](#settings-ai-keys-byok-) (4)
 - [Settings → Web tools (Firecrawl)](#settings-web-tools-firecrawl-) (4)
 - [Settings → SDK & connection (debug logging)](#settings-sdk-connection-debug-logging-) (1)
@@ -26,7 +26,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 - [Billing](#billing) (6)
 - [Onboarding](#onboarding) (2)
 - [MCP install](#mcp-install) (1)
-- [SDK install card](#sdk-install-card) (14)
+- [SDK install card](#sdk-install-card) (16)
 - [Settings → Page-aware assistant](#settings-page-aware-assistant) (5)
 
 ## Settings → General
@@ -125,6 +125,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `claude-sonnet-5-5`
 
+**Recommended** — `claude-opus-5-5`. The diagnosis reads code and logs to find a root cause: the agentic coding and knowledge work Opus 5.5 is built for, and Anthropic suggests starting most workloads there. It costs about twice Sonnet 5.5 ($4 / $20 against $2 / $10 per million tokens), once per report that reaches diagnosis. Sources: [Anthropic: Models overview](https://platform.claude.com/docs/en/models/overview), [Anthropic: Choosing a model](https://platform.claude.com/docs/en/about-claude/models/choosing-a-model) (read 2026-10-22).
+
 **Where it lives** — table `project_settings.stage2_model` · endpoint `PATCH /v1/admin/settings` · read by `classify-report edge function`
 
 **When to change** — Stay on Sonnet 5.5 unless cost is biting (drop to Haiku) or you're finding misses on subtle pattern reports (try Opus on a small slice via Prompt Lab first).
@@ -141,7 +143,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **How it works** — Stage 1 reads each new report, filters spam and test noise, and sorts the easy bugs. Only reports it is unsure about go on to the triage model. Haiku 4.5 is the default; Haiku 5.5 costs a tenth as much per token. Only Claude models are accepted, because Stage 1 calls Claude first and OpenAI only as a fallback.
 
-**Default** — `claude-haiku-4-5-20251001`
+**Default** — `claude-haiku-4-5 (stored as claude-haiku-4-5-20251001, the same model)`
+
+**Recommended** — `claude-haiku-5-5`. The quick check sorts every report: high-volume classification, which Anthropic positions Haiku for. Haiku 5.5 costs a tenth of Haiku 4.5 ($0.10 / $0.50 against $1 / $5 per million tokens). Sources: [Anthropic: Models overview](https://platform.claude.com/docs/en/models/overview), [Anthropic: Choosing a model](https://platform.claude.com/docs/en/about-claude/models/choosing-a-model) (read 2026-10-22).
 
 **Where it lives** — table `project_settings.stage1_model` · endpoint `PATCH /v1/admin/settings` · read by `fast-filter edge function`
 
@@ -161,6 +165,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `claude-sonnet-5-5`
 
+**Recommended** — `claude-sonnet-5-5`. Never the model it grades: judges score text they find more probable higher (self-preference). With diagnosis on Opus 5.5, Sonnet 5.5 grades it from outside at half the price. Sources: [Adaline: LLM-as-a-judge reliability and bias (2026-04-08)](https://www.adaline.ai/blog/llm-as-a-judge-reliability-bias), [Future AGI: Evaluating LLM judge bias mitigation (2026)](https://futureagi.com/blog/evaluating-llm-judge-bias-mitigation-2026/) (read 2026-10-22).
+
 **Where it lives** — table `project_settings.judge_model` · endpoint `PATCH /v1/admin/settings` · read by `judge-batch edge function`
 
 **When to change** — Pick Haiku 5.5 when cost matters more than an independent second opinion.
@@ -179,11 +185,33 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `claude-sonnet-5-5`
 
+**Recommended** — `claude-opus-5-5`. Writing a fix is agentic coding, which Anthropic recommends Opus 5.5 for. A fix that fails review costs another run, so the stronger model is usually cheaper per merged fix. Sources: [Anthropic: Choosing a model](https://platform.claude.com/docs/en/about-claude/models/choosing-a-model) (read 2026-10-22).
+
 **Where it lives** — table `project_settings.claude_default_model` · endpoint `PATCH /v1/admin/settings` · read by `fix-worker edge function`
 
 **When to change** — Pick Haiku 5.5 when fixes are the bulk of your AI spend; review its draft pull requests a little more closely.
 
 **Learn more** — [Architecture overview](https://kensaur.us/mushi-mushi/docs/concepts/architecture)
+
+### Review cloud agent pull requests
+
+<a id="settings-general-agent-pr-review"></a>
+
+`settings.general.agent_pr_review`
+
+**Summary** — On by default. Claude Opus 5.5 reviews every pull request a cloud coding agent (Cursor, GitHub) opens as a fix, and a "hold" verdict stops Mushi from merging it until you override.
+
+**How it works** — When a Cursor Cloud or GitHub cloud agent finishes with a pull request, Mushi sends the bug report, the pull request description, its CI state and the diff (up to about 100,000 characters; for a larger diff, the file list and the biggest changes) to Claude Opus 5.5 on your own Anthropic key. The review checks whether the change fixes the bug, what it breaks or removes, decisions it took on its own, whether its tests prove the fix, and security. It answers merge, fix first or hold, adds the result to the fix timeline and posts one comment on the pull request. Merging from the console, the CLI or merge_fix refuses a hold; a project member can merge anyway from the console with a reason. New commits are reviewed again, and the last verdict applies until that review finishes. Without an Anthropic key the review is skipped and the fix shows "Review skipped". A review usually costs $0.05 to $0.20 on your key, at most about $0.90 with retries.
+
+**Default** — `true (on; needs an Anthropic key)`
+
+**Recommended** — `on`. On 2026-10-21 the review said hold on 41% of agent PRs and fix first on 32%; without it those would reach merge on a green CI alone. Sources: [ADR 0035: verified fixes (live data, 2026-10-21)](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0035-verified-fixes-merge-on-proof-not-on-a-verdict.md), [ADR 0030: agent PR review gate](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0030-agent-pr-review-gate.md) (read 2026-10-22).
+
+**Where it lives** — table `project_settings.agent_pr_review_enabled` · endpoint `PATCH /v1/admin/settings` · read by `agent-pr-review edge function`, `POST /v1/admin/fixes/:id/merge (the hold gate reads fix_reviews)`
+
+**When to change** — Leave it on while cloud agents open pull requests for you, especially in spend-down mode. Turn it off only if another reviewer already checks every agent pull request before it merges.
+
+**Learn more** — [Agent PR review](https://kensaur.us/mushi-mushi/docs/concepts/agent-pr-review)
 
 ### Noise filter confidence
 
@@ -369,6 +397,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `5` · range `1 – 50`
 
+**Recommended** — `5`. Each scraped page costs one Firecrawl credit ($0.001 to $0.005 by plan), and the first few results carry most of the signal. Raise it only when answers cite pages the search missed. Sources: [Firecrawl: Pricing (1 credit per scraped page)](https://www.firecrawl.dev/pricing) (read 2026-10-22).
+
 **Where it lives** — table `project_settings.firecrawl_max_pages_per_call` · endpoint `PUT /v1/admin/byok/firecrawl` · read by `_shared/firecrawl.ts firecrawlSearch (api Research search, fix-worker)`, `fix-worker edge function`
 
 **When to change** — Raise to 10–15 when fix-augmentation is consistently hitting the cap and the judge isn't getting enough context. Lower to 2–3 once your Firecrawl bill becomes the noisy line item.
@@ -384,6 +414,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **How it works** — After a report is classified, Mushi takes its error message (the Sentry error line or the first console error), removes IDs, URLs and long numbers, and sends what is left (plus the runtime name, such as node) to Firecrawl: its developer index of GitHub issues, pull requests, READMEs and docs first, then a search limited to github.com and stackoverflow.com. The top results appear on the report as "Others who hit this". It runs once per report and again when someone presses Search again, only for reports with a real exception, and needs a Firecrawl key (yours, or Mushi's shared one). The same setting lets a fix dispatch with little code context send the report summary (or the first 200 characters of its description) to find related fixes. About 2-5 Firecrawl credits per lookup.
 
 **Default** — `false (nothing is sent)`
+
+**Recommended** — `off for apps whose error messages can hold personal data; on otherwise`. It sends the scrubbed error message to a third party. Data minimisation says send only what the purpose needs. Sources: [GDPR Article 5: data minimisation and storage limitation](https://gdpr-info.eu/art-5-gdpr/) (read 2026-10-22).
 
 **Where it lives** — table `project_settings.known_issues_search_enabled` · endpoint `PATCH /v1/admin/settings` · read by `classify-report edge function (_shared/known-issues.ts)`, `POST /v1/admin/reports/:id/known-issues (Search again)`, `fix-worker edge function (web search for fix context)`
 
@@ -467,6 +499,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `SDK send-only (report:write only)`
 
+**Recommended** — `report:write only for SDK keys`. A key in an app bundle can be read by anyone. Least privilege: give it only what it must do, which for the SDK is sending reports. Sources: [NIST CSRC glossary: least privilege (SP 800-53 Rev. 5)](https://csrc.nist.gov/glossary/term/least_privilege) (read 2026-10-22).
+
 **Where it lives** — table `project_api_keys.scopes (text[])` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `POST /v1/reports (api route)`, `mcp server (@mushi-mushi/mcp)`
 
 **When to change** — Pick `SDK send-only` for keys you ship inside a browser bundle. Pick `MCP read-only` for safely letting an agent browse reports. Only pick `MCP read + write` for trusted local clients with an audit trail.
@@ -514,6 +548,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **How it works** — Mutating MCP tools (`dispatch_fix`, `transition_status`, `merge_fix`, `reopen_report`, etc.) gate on this scope. Add it sparingly — anything an LLM can call from a paste-able key, an attacker with the same key can call too.
 
 **Default** — `disabled by default`
+
+**Recommended** — `off unless the agent must change things`. Least privilege: an editor agent that only reads bugs needs mcp:read; add mcp:write when it should triage, dispatch or merge. Sources: [NIST CSRC glossary: least privilege (SP 800-53 Rev. 5)](https://csrc.nist.gov/glossary/term/least_privilege) (read 2026-10-22).
 
 **Where it lives** — table `project_api_keys.scopes (text[])` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `mcp server (@mushi-mushi/mcp)`
 
@@ -1049,6 +1085,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `3600 (1 hour)` · range `60 – 604800 (7 days)`
 
+**Recommended** — `3600 (1 hour) or less`. A signed link works for anyone who holds it until it expires, so keep it as short as your viewers need. AWS caps console-made links at 12 hours and SDK-made ones at 7 days. Sources: [AWS: Presigned URLs (expiration, bearer tokens)](https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html) (read 2026-10-22).
+
 **Where it lives** — table `project_storage_settings.signed_url_ttl_secs` · endpoint `PUT /v1/admin/storage/:projectId` · read by `_shared/storage.ts adapter (every signed URL it mints)`
 
 **When to change** — Drop to 5–15 minutes for high-sensitivity data. Bump up to a day if your team works asynchronously and copies links into long-running threads.
@@ -1135,6 +1173,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `365 (1 year)`
 
+**Recommended** — `365`. A year covers regression checks on the same bug; storage limitation says keep personal data no longer than the purpose needs. Sources: [GDPR Article 5: data minimisation and storage limitation](https://gdpr-info.eu/art-5-gdpr/) (read 2026-10-22).
+
 **Where it lives** — table `project_retention_policies.reports_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `retention-sweep edge function`, `mushi-soc2-retention-sweep cron (mushi_apply_retention)`, `soc2-evidence edge function`
 
 **When to change** — Lower to 90 for GDPR-tight projects. Raise to 730+ for regulated industries that need multi-year audit history.
@@ -1150,6 +1190,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **How it works** — Independent of the reports retention. The nightly `mushi_apply_retention()` cron deletes `audit_logs` rows older than this window unless the project is on legal hold. Most regulators want 1–7 years of audit even on 90-day data.
 
 **Default** — `730 (2 years)`
+
+**Recommended** — `730 (never below 365)`. Audit trails are what an incident review and an assessor read. PCI DSS 10.5.1 asks for at least 12 months of history with the last 3 months immediately available. Sources: [AWS PCI DSS maturity model: requirement 10.5.1](https://pci-maturitymodel.security.aws.dev/en/recommendation/r10.2/) (read 2026-10-22).
 
 **Where it lives** — table `project_retention_policies.audit_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `mushi-soc2-retention-sweep cron (mushi_apply_retention)`, `soc2-evidence edge function`
 
@@ -1167,6 +1209,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `365 (1 year)`
 
+**Recommended** — `365 (never below)`. This is a security audit log of AI-key changes, the trail an incident review reads. PCI DSS 10.5.1 asks for at least 12 months of audit history with the last 3 months immediately available. Sources: [AWS PCI DSS maturity model: requirement 10.5.1](https://pci-maturitymodel.security.aws.dev/en/recommendation/r10.2/) (read 2026-10-22).
+
 **Where it lives** — table `project_retention_policies.byok_audit_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `mushi-soc2-retention-sweep cron (mushi_apply_retention)`
 
 **When to change** — Keep it at least as long as your audit log retention, so you can still show who changed an AI key during an audit window.
@@ -1182,6 +1226,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **How it works** — The nightly retention-sweep deletes this project’s LLM call records (llm_invocations) older than this many days, once a retention policy is saved for the project. Projects with no saved policy keep their records. At least 35 days are always kept, because the AI budget, the auto-fix spend limit and billing read the last 30 days of these records. A legal hold stops the deletes.
 
 **Default** — `90`
+
+**Recommended** — `90`. LLM call records hold prompts built from bug reports, which can include personal data. Storage limitation favours the shortest window your cost and quality reviews need. Sources: [GDPR Article 5: data minimisation and storage limitation](https://gdpr-info.eu/art-5-gdpr/) (read 2026-10-22).
 
 **Where it lives** — table `project_retention_policies.llm_traces_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `retention-sweep edge function`
 
@@ -1318,6 +1364,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **How it works** — A weighted random pick (`prompt-ab.ts`) routes each request to a prompt version based on its `traffic_percentage`. The percentages should sum to 100 across active versions of a stage; the helper normalises if they don't. Live changes apply within seconds — no deploy required.
 
 **Default** — `0% on new versions`
+
+**Recommended** — `5% first, then raise`. Canary a new prompt on a small share of traffic and compare before raising it. The Google SRE Workbook works through a 5% canary population as its example. Sources: [Google SRE Workbook: Canarying releases](https://sre.google/workbook/canarying-releases/) (read 2026-10-22).
 
 **Where it lives** — table `prompt_versions.traffic_percentage` · endpoint `POST /v1/admin/prompt-lab/prompts` · read by `_shared/prompt-ab.ts (fast-filter, classify-report, fix-worker, judge-batch and other LLM stages)`
 
@@ -1783,6 +1831,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `on (headers/timing only)`
 
+**Recommended** — `on, headers and timing only`. Request and response bodies are where passwords, tokens and personal data travel. Sentry keeps bodies opt-in for the same reason. Sources: [Sentry: Session Replay privacy](https://docs.sentry.io/platforms/javascript/session-replay/privacy/) (read 2026-10-22).
+
 **When to change** — Disable on apps with PII-laden API traffic (medical, financial). Enable bodies temporarily when investigating a hard-to-repro API bug.
 
 ### Capture performance
@@ -1825,6 +1875,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `on-report`
 
+**Recommended** — `on-report`. Capture a screenshot only when someone files a report, not continuously. Data minimisation: collect what the purpose needs. Sources: [GDPR Article 5: data minimisation and storage limitation](https://gdpr-info.eu/art-5-gdpr/) (read 2026-10-22).
+
 **When to change** — Stay on `on-report` for most apps. Switch to `auto` for hard-to-repro intermittent bugs. Switch to `off` for HIPAA-style apps where any screenshot is a privacy risk.
 
 ### Screenshot privacy caption
@@ -1839,11 +1891,31 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `on (default caption)`
 
+**Recommended** — `on`. The caption reminds the reporter to remove anything private before sending, which keeps capture on for apps with sensitive screens. Sources: [GDPR Article 5: data minimisation and storage limitation](https://gdpr-info.eu/art-5-gdpr/) (read 2026-10-22).
+
 **Where it lives** — table `project_settings.sdk_screenshot_sensitive_hint` · endpoint `PUT /v1/admin/projects/:id/sdk-config` · read by `api edge function (GET /v1/sdk/config)`, `@mushi-mushi/web widget`, `@mushi-mushi/react-native widget`
 
 **When to change** — Keep on for any app that captures screenshots — it is the reporter's chance to catch PII. Customize the copy to match your tone or compliance wording. Turn off only when screenshots are disabled or never contain user data.
 
 **Learn more** — [Screenshot preview docs](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md)
+
+### Use this key for
+
+<a id="byok-key-scope"></a>
+
+`byok.key_scope`
+
+**Summary** — Where a key is used: all your apps (universal), every app in this organization, or this app only. New keys default to all your apps.
+
+**How it works** — All my apps: one key for every app in every organization you own, so you add it once even when your apps live in several organizations. It reaches only organizations where you are an owner, never one you only administer or belong to, and only you can change or remove it. This organization: every app in it; owners and admins manage it. This app only: nothing else uses it. Each app tries its keys in this order: its own key, its old single key from before key pools, its organization's key, its owners' all-apps keys (by priority when an organization has several owners), then Mushi's own key. Change a key's scope from its row; each change is recorded in the key audit log. Supabase access tokens always stay with one app.
+
+**Default** — `All my apps (when you own this app’s organization); otherwise this organization for owners and admins, else this app`
+
+**Where it lives** — table `byok_keys.project_id | organization_id | owner_user_id (exactly one)` · endpoint `POST /v1/admin/byok/keys (scope), PATCH /v1/admin/byok/keys/:keyId/scope` · read by `every AI and web call through _shared/byok.ts resolveLlmKeys`, `resolveCursorApiKey`, `spend-down-worker`, `agent-pr-review`
+
+**When to change** — Keep "All my apps" when one account pays for every app you own. Pick "This organization" when a team shares the bill, and "This app only" when one app must bill to its own account.
+
+**Learn more** — [ADR 0031](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0031-universal-ai-keys-serve-every-app-their-owner-owns.md)
 
 ### Spend down expiring credits
 
@@ -1853,15 +1925,33 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Before a Cursor key's credits expire, Mushi sends open bugs to Cursor on its own so the credits fix something instead of lapsing.
 
-**How it works** — From the start date (the expiry minus the days you pick) until the expiry, the spend-down worker runs every 30 minutes. It picks the apps this key already pays for (its own app, or for a shared key every app without a Cursor key of its own), takes the open reports not tried in the last week, best first by severity, judge score and a named component, and dispatches them as automatic Cursor fixes. It stops at your fixes-per-day number, at three fixes running per app, and at each app's auto-fix limits. Every fix opens a draft pull request; nothing merges. The model is chosen from that Cursor account's list; leave it empty to keep each app's own model.
+**How it works** — From the start date (the expiry minus the days you pick) until the expiry, the spend-down worker runs every 10 minutes. It picks the apps this key already pays for (its own app, or for a shared key every app without a Cursor key of its own), takes the open reports not tried in the last week, best first by severity, judge score and a named component, and dispatches them as automatic Cursor fixes. The model is chosen from that Cursor account's list; leave it empty to keep each app's own model. It stops at your fixes-per-day number, at three fixes running per app, and at each app's auto-fix limits. It also pauses an app whose spend reliably is not producing mergeable work: looking at its spend-down runs of the last 14 days, with at least 20 to go on, its Opus "merge" rate is clearly under 20%, its "hold" rate clearly over 35%, or clearly over half its runs end without a pull request. A paused app still gets one fix a day as a probe. It resumes when newer runs bring it back above 25% merge, under 30% hold and under 45% without a pull request, when two probes in a row get "merge", when the old runs pass 14 days, or when an owner or admin presses Resume. Every fix opens a draft pull request; nothing merges. The section shows what the last 7 days bought: runs, pull requests, mergeable, merged, and the Opus review cost (the latest review of each pull request). When every app has nothing left to send (each open report was tried in the last week or the agent said it needs a person), the section says so and links to the reports, the live-site watch and QA stories, where new work comes from.
 
 **Default** — `off; 10 fixes a day; starts 14 days before expiry`
 
-**Where it lives** — table `byok_keys.spend_down_enabled, credits_expire_at, spend_down_model, spend_down_daily_limit, spend_down_window_days` · endpoint `PATCH /v1/admin/byok/keys/:keyId/spend-down` · read by `spend-down-worker edge function (cron :28 and :58)`, `GET /v1/admin/byok/spend-down`, `MCP get_spend_down_status`, `mushi keys spend-down`
+**Where it lives** — table `byok_keys.spend_down_enabled, credits_expire_at, spend_down_model, spend_down_daily_limit, spend_down_window_days` · endpoint `PATCH /v1/admin/byok/keys/:keyId/spend-down` · read by `spend-down-worker edge function (cron every 10 minutes, :08 to :58)`, `GET /v1/admin/byok/spend-down`, `MCP get_spend_down_status`, `mushi keys spend-down`, `radar rule spend_down_idle`
 
 **When to change** — Turn it on when a Cursor plan's included usage or a credit grant is about to expire unused. Raise the app's auto-fix daily limit under Settings, Spend limits, if you want more than three fixes a day on one app. Leave it off on a key you pay for per use.
 
 **Learn more** — [ADR 0028](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0028-spend-down-expiring-agent-credits.md)
+
+### Review follow-ups
+
+<a id="byok-review-followups"></a>
+
+`byok.review_followups`
+
+**Summary** — When the Opus review of an agent's pull request says "fix first", Mushi sends it back to a new Cursor agent once with the review's findings, and Opus reviews the push.
+
+**How it works** — Off until an organization owner or admin turns it on; turning it on also picks up the last 3 days of "fix first" reviews. Every 10 minutes the review-followup worker looks for "fix first" reviews of the latest commit of pull requests a Mushi cloud agent opened (never a person's pull request, a fork, or a branch the agent did not create). For each, it starts a new Cursor agent on that pull request's branch with the report's summary and diagnosis and every finding about a file the pull request changed (findings that read as instructions to the agent, or whose fix carries a foreign URL or a shell command, are never sent), asking it to fix exactly those, add or adjust tests, run them and push to the same branch, or to explain why a finding is wrong. One follow-up per reviewed commit and two per pull request; never on a "hold" (that needs a person) or a "merge"; never on a closed or merged pull request; never when the app's auto-fix is off. Each follow-up counts against the app's auto-fix daily limit and the organization's follow-ups per day. Before each one, the model is checked against the Cursor key's model list (read at most once an hour); a model the key cannot run waits instead of dispatching. "Last round model" (optional) runs a pull request's second follow-up, the one that happens only after the first did not satisfy the reviewer, on a stronger model such as Opus while the first stays on the cheaper one. When the agent pushes, Opus reviews the new commit, and the scoreboard shows the verdict after.
+
+**Default** — `off; the key and model each app's fixes use; 30 a day` · range `1-200 a day`
+
+**Where it lives** — table `organizations.review_followup_enabled, review_followup_key_id, review_followup_model, review_followup_escalation_model, review_followup_daily_limit` · endpoint `PATCH /v1/admin/byok/review-followups` · read by `review-followup edge function (cron every 10 minutes, :06 to :56)`, `GET /v1/admin/byok/review-followups`, `GET /v1/admin/byok/spend-down (reviewFollowups)`, `MCP get_spend_down_status`
+
+**When to change** — Pick a key when one Cursor account's credits should pay for every app's follow-ups (for example credits about to expire). Pick a model the reviews say writes mergeable fixes. Turn it off if follow-ups keep ending with no change pushed.
+
+**Learn more** — [ADR 0032](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0032-review-follow-ups-send-fix-first-prs-back-once.md)
 
 ### Framework tab
 

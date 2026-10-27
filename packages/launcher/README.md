@@ -10,6 +10,13 @@ Plain-English diagnosis + a paste-ready fix, right inside Cursor and Claude Code
 
 One `npx` command. Works with React, Next.js, Vue, Nuxt, Svelte, SvelteKit, Angular, React Native, Expo, Capacitor, and vanilla JS.
 
+```bash
+npx mushi-mushi                      # the setup wizard
+npx mushi-mushi setup --ide cursor   # then connect your editor (any other command goes to @mushi-mushi/cli)
+```
+
+[Launcher docs](https://kensaur.us/mushi-mushi/docs/sdks/launcher)
+
 [![npm](https://img.shields.io/npm/v/mushi-mushi?color=cb3837&label=mushi-mushi)](https://www.npmjs.com/package/mushi-mushi)
 [![npm downloads](https://img.shields.io/npm/dm/mushi-mushi?color=cb3837&label=downloads)](https://www.npmjs.com/package/mushi-mushi)
 [![License](https://img.shields.io/npm/l/mushi-mushi?color=blue)](https://github.com/kensaurus/mushi-mushi/blob/master/LICENSE)
@@ -43,19 +50,20 @@ Founders, PMs, designers: see the [plain-language overview in the GitHub README]
 npx mushi-mushi
 ```
 
-The wizard detects your framework, installs the right SDK, writes env vars to `.env.local` (with the right prefix — `NEXT_PUBLIC_`, `NUXT_PUBLIC_`, or `VITE_`), and prints the snippet to paste into your app. **Non-destructive**: never overwrites existing env vars, never edits your source.
+The wizard detects your framework, installs the right SDK, writes env vars to `.env.local` (with the right prefix for your framework, such as `NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`, `EXPO_PUBLIC_`, `REACT_APP_` or `PUBLIC_`, or bare `MUSHI_*` names for servers and bare React Native), and prints the snippet to paste into your app. **Non-destructive**: never overwrites existing env vars, never edits your source.
 
 ```tsx
-// After the wizard runs (React example):
-import { MushiProvider } from '@mushi-mushi/react';
+// After the wizard runs (React + Vite example, src/main.tsx):
+import { MushiProvider } from '@mushi-mushi/react'
 
-export function App({ children }) {
-  return (
-    <MushiProvider config={{ projectId: 'proj_xxx', apiKey: 'mushi_xxx' }}>
-      {children}
-    </MushiProvider>
-  );
-}
+createRoot(document.getElementById('root')!).render(
+  <MushiProvider config={{
+    projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+    apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+  }}>
+    <App />
+  </MushiProvider>
+)
 ```
 
 That's it. Your users now have a shake-to-report button (or a floating widget). Reports land in [your admin console](https://kensaur.us/mushi-mushi/), classified by an LLM within seconds.
@@ -64,11 +72,11 @@ That's it. Your users now have a shake-to-report button (or a floating widget). 
 
 ## What you get
 
-- **Shake-to-report widget** — Shadow-DOM, zero CSS conflicts. Ships with screenshot, console ring, network ring, route + intent capture, and an offline queue.
+- **Bug report widget** — Shadow-DOM, zero CSS conflicts. Ships with screenshot, console ring, network ring, route + intent capture, and an offline queue.
 - **AI-classified reports** — 2-stage pipeline (Haiku fast-filter → Sonnet deep + vision + RAG) tags each report with category, severity, confidence, and the component path. Stage 2 streams partial results to the admin UI as tokens arrive.
 - **Dedup by meaning, not by string** — pgvector knowledge graph collapses duplicate reports across users, routes, and deploys so your queue isn't a noise storm.
 - **Bidirectional inventory (v2)** — opt in to `capture: { discoverInventory: true }` and the SDK quietly observes routes, `data-testid`s, and outbound API paths in production. Claude drafts an `inventory.yaml` of user stories + pages + actions for you to accept — most teams will never hand-author one.
-- **Five pre-release gates (v2)** — `mushi-mushi/no-dead-handler`, `mushi-mushi/no-mock-leak`, inventory drift, agentic-failure detection, synthetic walk health. One composite GitHub status check via the [Mushi Mushi CI Gate Action](https://github.com/kensaurus/mushi-mushi/tree/master/packages/mcp-ci).
+- **Pre-release checks (v2)** — the ESLint rules `mushi-mushi/no-dead-handler` and `mushi-mushi/no-mock-leak` catch empty handlers and leftover mock data; the [Mushi Mushi CI Gate Action](https://github.com/kensaurus/mushi-mushi/tree/master/packages/mcp-ci) runs the server-side gates (API contract, status claims, orphan endpoints, unknown calls) on a PR and fails the step when one fails.
 - **Spec-traced fixes (v2.10)** — every dispatched fix carries the inventory `Action` it's meant to repair, the `expected_outcome` contract is rendered into the LLM prompt, a deterministic `validateAgainstSpec` gate fires before the PR opens, and a targeted synthetic probe runs the moment the PR lands.
 - **One-click "Dispatch fix"** — agentic orchestrator opens a GitHub PR with a screenshot diff and a Playwright replay. Sandbox-pluggable (`e2b`, `modal`, `cloudflare`, or your own).
 - **Standards-first integrator** — W3C `traceparent` end-to-end, Standard Webhooks signing on every outbound delivery, RFC-draft `Idempotency-Key` middleware, OAuth 2.0 Dynamic Client Registration, OTLP/HTTP+JSON BYOK exporter. You bring your own observability stack — Mushi never marks up tokens.
@@ -82,7 +90,7 @@ That's it. Your users now have a shake-to-report button (or a floating widget). 
 | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | **A solo dev / small team** shipping a consumer app | You already have Sentry for crashes — but users drop off over _friction_, not exceptions. Mushi captures "this button doesn't do anything". |
 | **A PM or designer** living in the admin            | Triage, severity, component ownership, and PR status — all in one dark-mode console. No reading stack traces.                               |
-| **An AI-native team** already using Cursor / Claude | MCP tools expose the whole loop to your agent. `get_recent_reports`, `classify`, `dispatch_fix` — the same primitives your teammates use.   |
+| **An AI-native team** already using Cursor / Claude | MCP tools expose the whole loop to your agent. `get_recent_reports`, `triage_issue`, `dispatch_fix` — the same primitives your teammates use.   |
 | **An enterprise** needing SOC 2 + residency         | Region-pinned data (US / EU / JP / SELF), SAML SSO, audit-log ingest, DSAR workflow, HMAC-signed plugin webhooks.                           |
 
 ---
@@ -208,7 +216,7 @@ npx @mushi-mushi/cli init
 
 ```bash
 npx mushi-mushi --framework next               # skip framework detection
-npx mushi-mushi --project-id proj_xxx --api-key mushi_xxx
+npx mushi-mushi --project-id <project-uuid> --api-key mushi_xxx
 npx mushi-mushi --skip-install                 # print the install command, don't run it
 npx mushi-mushi --skip-test-report             # don't offer to send a test report
 npx mushi-mushi --cwd apps/web                 # run inside a monorepo sub-package
@@ -223,11 +231,11 @@ npx mushi-mushi --help
 <details>
 <summary><b>Troubleshooting</b></summary>
 
-- **Wrong framework detected?** Pass `--framework <id>`. Valid values: `next, react, vue, nuxt, svelte, sveltekit, angular, expo, react-native, capacitor, vanilla`.
+- **Wrong framework detected?** Pass `--framework <id>`. Valid values: `next, react, cra, remix, astro, solid, vue, nuxt, svelte, sveltekit, angular, expo, react-native, capacitor, express, fastify, hono, vanilla`.
 - **Monorepo?** `cd` into the package first, or pass `--cwd apps/web`.
 - **Stale `npx` cache?** `npm cache clean --force` or `npx mushi-mushi@latest`.
-- **Non-interactive terminal (CI)?** Pass `--yes --project-id proj_xxx --api-key mushi_xxx`. The wizard exits with a clear error instead of hanging.
-- **Node version too old?** Requires Node ≥ 20. Upgrade at [nodejs.org](https://nodejs.org/).
+- **Non-interactive terminal (CI)?** Pass `--yes --project-id <project-uuid> --api-key mushi_xxx`. The wizard exits with a clear error instead of hanging.
+- **Node version too old?** Requires Node 20.19 or newer. Upgrade at [nodejs.org](https://nodejs.org/).
 - **Full stack traces on error?** `DEBUG=mushi npx mushi-mushi`.
 
 </details>
@@ -237,8 +245,8 @@ npx mushi-mushi --help
 
 - Credentials passed via `--api-key` are visible to other users on the same machine via `ps -ef`. Use the interactive prompt on shared hosts.
 - `~/.config/mushi/config.json` (the credentials cache) is written with mode `0o600` on Unix; legacy `~/.mushirc` auto-migrates on first load.
-- The wizard rejects pasted secrets containing CR/LF/NUL to prevent `.env` injection.
-- All prompts validate format: `proj_[A-Za-z0-9_-]{10,}` and `mushi_[A-Za-z0-9_-]{10,}`.
+- The wizard strips CR/LF/NUL from pasted secrets to prevent `.env` injection.
+- Prompts validate format: the project ID is a UUID (or `proj_` + 10 or more characters), and the API key starts with `mushi_` or `mush_pk_` followed by 10 or more characters.
 - This release ships with [npm provenance](https://docs.npmjs.com/generating-provenance-statements) — verify with `npm audit signatures`.
 
 </details>
@@ -251,7 +259,7 @@ Mushi is a CLI launcher — it spawns one `npm install` and appends a small mult
 | Scanner            | What it shows                                 | What it actually means                                                                                                                                                                                                           |
 | ------------------ | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **npm provenance** | ✅ Signed by `kensaurus/mushi-mushi @ master` | Cryptographic Sigstore attestation — `npm audit signatures` will verify this build came from this exact commit on this exact CI workflow.                                                                                        |
-| **Socket.dev**     | Score + a few low-signal alerts               | Alerts are expected and benign: `child_process.spawn` (used to invoke `npm install`), `process.env` (read `DEBUG`, `npm_config_*`), URL strings (printed in help text). All visible in `src/index.ts` — ~150 LOC, easy to audit. |
+| **Socket.dev**     | Score + a few low-signal alerts               | Alerts are expected and benign: `child_process` (used to invoke `npm install` and to forward other commands to `@mushi-mushi/cli`), `process.env` (read `DEBUG`, `npm_config_*`), URL strings (printed in help text). The launcher is `src/index.ts`, about 120 lines; the wizard it runs is `src/init.ts` in `@mushi-mushi/cli`. |
 | **Bundlephobia**   | ❌ EntryPointError                            | **Expected.** This is a CLI (`bin` only — no `main`/`module`/`exports`), so there is no importable bundle to measure. Bundlephobia only works for libraries you `import`.                                                        |
 | **Snyk Advisor**   | Health score (lower right after publish)      | Snyk's crawler often lags by 1–2 weeks for new public packages — score corrects itself once it picks up the actual `package.json` (repository links, downloads, repo activity).                                                  |
 
@@ -263,7 +271,7 @@ If something looks off to you, [open an issue](https://github.com/kensaurus/mush
 
 ## Power-user CLI
 
-`mushi-mushi` is just the setup wizard. For day-to-day triage install the full CLI:
+`mushi-mushi` runs the setup wizard and forwards any other command to `@mushi-mushi/cli` (`npx mushi-mushi reports list` works). For day-to-day triage, install the full CLI to get a `mushi` command:
 
 ```bash
 npm i -g @mushi-mushi/cli
@@ -326,4 +334,4 @@ All apps live under [kensaur.us](https://kensaur.us).
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 66 edge functions · 474 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 76 edge functions · 509 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

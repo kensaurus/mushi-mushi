@@ -25,6 +25,8 @@ import {
   SAFE_INTERNAL_MESSAGE,
   dbDiagnosticMessage,
   isHtmlGatewayDbMessage,
+  dbErrorFingerprint,
+  dbFailureMessage,
   isTransientDbConnectionError,
 } from '../_shared/error-codes.ts';
 
@@ -50,6 +52,10 @@ import {
  *   metadata.parsed.event = "db_transient_error"
  * An HTML gateway page answers 503 with SAFE_INTERNAL_MESSAGE. The raw page
  * is never the client message, the log line, or the Sentry exception text.
+ *
+ * A statement timeout (57014) stays an exception: it is a slow query, not
+ * an outage. It is fingerprinted by SQLSTATE + route so it does not merge
+ * with every other failure thrown from this function.
  */
 export function dbError(
   c: Context,
@@ -58,10 +64,10 @@ export function dbError(
     | null
     | undefined,
 ): Response {
+  const requestId = c.get('requestId') as string | undefined;
   if (isTransientDbConnectionError(err)) {
     // Do NOT report transient pooler/network failures as Sentry exceptions —
     // they are infrastructure noise, not app bugs. Route to Supabase Logs.
-    const requestId = c.get('requestId') as string | undefined;
     const gateway = isHtmlGatewayDbMessage(err?.message);
     console.warn(
       JSON.stringify({
@@ -83,8 +89,27 @@ export function dbError(
     return jsonError(c, 'DB_ERROR', gateway ? SAFE_INTERNAL_MESSAGE : SAFE_DB_MESSAGE, gateway ? 503 : 500);
   }
 
-  const diagnostic = dbErrorDiagnostic(err);
-  const captured = err instanceof Error && err.message === diagnostic ? err : new Error(diagnostic);
+  const diagnostic = dbFailureMessage(err);
+  // The Sentry issue webhook that filed this kept only the exception title.
+  // An empty message became "Error" at this frame and the code was lost.
+  console.error(
+    JSON.stringify({
+      ts: new Date().toISOString(),
+      level: 'error',
+      scope: 'mushi:api:db',
+      event: 'db_error',
+      msg: 'database error',
+      path: c.req.path,
+      method: c.req.method,
+      ...(requestId ? { requestId } : {}),
+      db_code: err?.code ?? 'unknown',
+      err_message: diagnostic.slice(0, 500),
+    }),
+  );
+  const captured =
+    err instanceof Error && err.message === diagnostic
+      ? err
+      : Object.assign(new Error(diagnostic), { name: 'DbError' });
   reportError(captured, {
     tags: {
       path: c.req.path,
@@ -97,15 +122,9 @@ export function dbError(
       pg_details: dbErrorDetail(err?.details),
       pg_hint: dbErrorDetail(err?.hint),
     },
+    fingerprint: dbErrorFingerprint(err?.code, c.req.path),
   });
   return jsonError(c, 'DB_ERROR', SAFE_DB_MESSAGE, 500);
-}
-
-/** Exception text for a non-transient DB error. HTML never becomes the message. */
-function dbErrorDiagnostic(err: { message?: string } | null | undefined): string {
-  const raw = err?.message ?? '';
-  if (isHtmlGatewayDbMessage(raw)) return dbDiagnosticMessage(raw);
-  return raw || 'Unknown DB error';
 }
 
 function dbErrorDetail(value: string | null | undefined): string | null {
@@ -306,7 +325,7 @@ export async function userCanAccessProject(
     .select('id, owner_id, organization_id')
     .eq('id', projectId)
     .maybeSingle();
-  if (projectErr) throw new ProjectAccessReadError('projects', projectErr.message);
+  if (projectErr) throw new ProjectAccessReadError('projects', projectErr);
   if (!project) return { allowed: false, role: null };
 
   // 1. Direct ownership wins immediately — owner has full rights regardless
@@ -321,7 +340,7 @@ export async function userCanAccessProject(
       .eq('organization_id', project.organization_id)
       .eq('user_id', userId)
       .maybeSingle();
-    if (orgErr) throw new ProjectAccessReadError('organization_members', orgErr.message);
+    if (orgErr) throw new ProjectAccessReadError('organization_members', orgErr);
     const role = (orgMembership?.role as 'owner' | 'admin' | 'member' | 'viewer' | undefined) ?? null;
     if (role) return { allowed: true, role };
   }
@@ -334,7 +353,7 @@ export async function userCanAccessProject(
     .eq('project_id', projectId)
     .eq('user_id', userId)
     .maybeSingle();
-  if (memberErr) throw new ProjectAccessReadError('project_members', memberErr.message);
+  if (memberErr) throw new ProjectAccessReadError('project_members', memberErr);
   const projRole = (projectMembership?.role as 'owner' | 'admin' | 'member' | 'viewer' | undefined) ?? null;
   if (projRole) return { allowed: true, role: projRole };
 

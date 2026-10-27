@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 /**
  * mushi-mushi-auth — CLI entrypoint for the scripted auth runner.
  *
@@ -11,7 +11,10 @@
  * Usage:
  *   $ MUSHI_API_KEY=… MUSHI_PROJECT=… \
  *     TEST_USER_EMAIL=qa@example.com TEST_USER_PASSWORD=… \
- *     npx mushi-mushi-auth refresh [--debug]
+ *     npx mushi-mushi-auth refresh [--debug] [--inventory <path>]
+ *
+ * `--inventory` (or MUSHI_INVENTORY_FILE) names the local inventory.yaml;
+ * a `js:` login script resolves against its folder. Default: ./inventory.yaml.
  */
 
 import { refresh } from './index.js'
@@ -19,6 +22,9 @@ import { refresh } from './index.js'
 const args = process.argv.slice(2)
 const command = args[0] ?? 'refresh'
 const debug = args.includes('--debug')
+const inventoryFlag = args.indexOf('--inventory')
+const inventoryFile =
+  (inventoryFlag >= 0 ? args[inventoryFlag + 1] : undefined) ?? process.env.MUSHI_INVENTORY_FILE
 
 const apiKey = process.env.MUSHI_API_KEY
 const projectId = process.env.MUSHI_PROJECT
@@ -40,7 +46,7 @@ if (command !== 'refresh') {
 }
 
 try {
-  const result = await refresh({ apiEndpoint: apiEndpoint.replace(/\/$/, ''), apiKey, projectId, debug })
+  const result = await refresh({ apiEndpoint: apiEndpoint.replace(/\/$/, ''), apiKey, projectId, debug, inventoryFile })
   console.warn(`✓ Auth refreshed: cookie '${result.cookieName}' captured for domain '${result.domain}'.`)
 } catch (err) {
   console.error('✗ Auth refresh failed:', err instanceof Error ? err.message : String(err))

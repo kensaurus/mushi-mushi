@@ -29,18 +29,24 @@ type StatsResponse = ReportStatusStats
 interface Props {
   status: string
   severity: string
+  /** `enumeration` counts every app (All apps). Default is the pinned app. */
+  scope?: 'enumeration' | 'project'
   onSetFilter: (key: string, value: string) => void
 }
 
 
-export function ReportsQuickFilters({ status, severity, onSetFilter }: Props) {
+export function ReportsQuickFilters({ status, severity, scope = 'project', onSetFilter }: Props) {
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const activeProjectSignal = useActiveProjectSignal()
 
   const load = useCallback(async () => {
-    const res = await apiFetch<StatsResponse>('/v1/admin/stats')
+    const res = await apiFetch<StatsResponse>('/v1/admin/stats', { scope })
     if (res.ok && res.data) setStats(res.data)
-  }, [activeProjectSignal])
+  }, [activeProjectSignal, scope])
+
+  useEffect(() => {
+    setStats(null)
+  }, [scope])
 
   useEffect(() => {
     void load()

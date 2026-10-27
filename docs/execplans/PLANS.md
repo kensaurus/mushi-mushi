@@ -227,10 +227,10 @@ Add Helm chart region awareness and operator documentation for multi-region depl
 Ship unit tests, CLI extract, CLI README updates, and framework adapter hooks from the CHANGELOG `pending` section.
 
 ### Deliverables
-- [ ] `packages/web/src/lifecycle-hooks.test.ts` — **Not shipped as a dedicated file.** Hooks `beforeSendFeedback` / `onCrashedLastRun` exist in `packages/web/src/mushi.ts` and are listed in presets (`packages/core/src/presets.test.ts`); drop/modify/throw/timeout contract tests were never added.
+- [x] `packages/web/src/lifecycle-hooks.test.ts` — `beforeSendFeedback` drop / modify / throw / 2s timeout, and `onCrashedLastRun` (first run, unclean exit, `pagehide` clean, thrown hook).
 - [x] `packages/web/src/rewards.test.ts` — `initRewards`, `updateRewardsUser`, `enqueue`, `flush`, `teardown` unit-tested.
 - [x] `packages/cli/src/project-bootstrap.ts` — `mushi project create` logic (shipped as `project-bootstrap.ts`, not `project-create.ts`; wired from `packages/cli/src/commands/project.ts`).
-- [ ] `packages/cli/src/project-create.test.ts` — **Not shipped.** No dedicated unit tests for `.env.local` / MCP merge / `saveConfig` at this path.
+- [x] `packages/cli/src/project-create.test.ts` — `persistProjectCreate` covers `.env.local` merge, `.cursor/mcp.json` merge, and `saveConfig`.
 - [x] `packages/cli/README.md` — `mushi project create` and `mushi nudge` commands documented (synced Jul 2026 docs pass).
 - [x] `packages/react/src/hooks.ts` — `usePulseTrigger`, `useBeforeSendFeedback`, `useOnCrashedLastRun` added.
 - [x] `packages/vue/src/index.ts` — `usePulseTrigger`, `useOnCrashedLastRun` composables added.
@@ -540,9 +540,9 @@ spec-conformance matrix, and burndown live in
       JWT pattern catches Conduit's non-Bearer scheme).
 - Verified: core 192 tests, web 225 tests, typecheck 47/47 green.
 
-### Phase 2 — Conduit fixture matrix + dogfood harness `COMPLETE` (except CI gate, 2026-09-12 audit)
+### Phase 2 — Conduit fixture matrix + dogfood harness `COMPLETE`
 - [x] Vendored `examples/realworld/` + `conduit-journey.spec.ts` + `pnpm e2e:realworld` shipped in `76ec9325` (#340).
-- [ ] `MUSHI_REALWORLD=1` CI job never landed (no workflow references it) — tracked under Plan 017 P0.
+- [x] `MUSHI_REALWORLD=1` CI job: `.github/workflows/e2e-realworld.yml` (path-filtered pull request, daily cron `15 5 * * *`, `workflow_dispatch`).
 Vendored `examples/realworld/` (express backend + react-vite + hash-router
 frontends), non-interactive `mushi init` wiring, `conduit-journey.spec.ts`
 capture→ingest assertions, MCP fix-loop dogfood step, `MUSHI_REALWORLD=1`
@@ -645,3 +645,33 @@ A local, npm-installed loop that maps a running app's pages, tabs and dialogs in
 - [ ] Phase 3: Home / App health / Team page hubs with redirects and one setup path are built; the single `NextStep` component waits on an owner decision (see ux-loop.md)
 - [x] Phase 4: cloud mode on the host's GitHub Actions (`--agent cursor-cloud`, `.github/actions/ux-loop`, "Run in the cloud"); live dispatch and Cursor run owed
 - [x] Phase 5: A/B outline (in ux-loop.md; not built)
+
+---
+
+## Plan 022 — CI runners you can see (2026-10-21) `IN PROGRESS`
+
+Infra vs code CI verdicts in the fix loop, `ci_jobs` / `ci_runners` collection,
+host heartbeat and job hooks, the `/ci` runner map with a speed advisor, and
+`mushi runner add`. Full plan: [`ci-runners.md`](ci-runners.md); decision:
+[ADR 0033](../adr/0033-ci-runners-are-visible-and-infra-failures-are-not-code-failures.md).
+
+---
+
+## Plan 023 — Verifiably local (2026-10-21) `PLANNED`
+
+`MUSHI_LOCAL_ONLY` egress allowlist with a self-test, local models and
+embeddings, `GITHUB_API_URL`, SMTP, a local fix agent (`mushi agent serve`),
+and a compose profile with no route out but an allowlisting proxy. Full
+plan: [`local-only.md`](local-only.md); decision:
+[ADR 0034](../adr/0034-verifiably-local-mode.md).
+
+---
+
+## Plan 024 — Verified fixes (2026-10-21) `IN PROGRESS`
+
+Agent PRs merge on their own only with proof: a fail-to-pass test run by
+the host's `mushi-verify` workflow on its own (or self-hosted) runners, no
+weakened tests, a diff budget, CI green, and two model families that may
+veto but never approve; then a 72-hour regression watch that opens a revert
+PR. Full plan: [`verified-fixes.md`](verified-fixes.md); decision:
+[ADR 0035](../adr/0035-verified-fixes-merge-on-proof-not-on-a-verdict.md).

@@ -23,6 +23,10 @@ import { PageHeaderBar } from '../components/PageHeaderBar';
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture';
 import { GeneralPanel } from '../components/settings/GeneralPanel';
 import { SpendLimitsPanel } from '../components/settings/SpendLimitsPanel';
+import { AgentPrReviewCard } from '../components/settings/AgentPrReviewCard';
+import { VerifiedMergeCard } from '../components/settings/VerifiedMergeCard';
+import { CiCostSettingsCard } from '../components/settings/CiCostSettingsCard';
+import { CiPolicyCard } from '../components/settings/CiPolicyCard';
 import { SETTINGS_TAB_DESCRIPTIONS, SETTINGS_TAB_LABELS } from '../lib/settingsTabExplainer';
 import { ByokPanel } from '../components/settings/ByokPanel';
 import { FirecrawlPanel } from '../components/settings/FirecrawlPanel';
@@ -73,6 +77,7 @@ import {
   sdkDetail,
   sdkTooltip,
 } from '../lib/statTooltips/settings';
+import { slackStatLabel } from '../components/settings/slackAlertStatus';
 import { settingsLinks } from '../lib/statCardLinks';
 import { useRealtimeReload } from '../lib/realtime';
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton';
@@ -138,6 +143,10 @@ function SettingsPageBody({
     isValidating,
   } = usePageData<SettingsStats>(statsPath);
   const stats = { ...EMPTY_SETTINGS_STATS, ...statsData };
+  // The same read GeneralPanel makes (concurrent reads share one request):
+  // the cards below it wait for it, so its growth never pushes them.
+  const generalSettings = usePageData<unknown>(active === 'general' ? '/v1/admin/settings' : null);
+  const generalLoaded = !generalSettings.loading;
 
   const pool = useByokPool(byokEnabled);
   const keySummary: KeySummary | null = useMemo(() => {
@@ -310,8 +319,20 @@ function SettingsPageBody({
       >
         {active === 'general' && (
           <>
-            <GeneralPanel />
-            <SpendLimitsPanel />
+            <GeneralPanel slackCanPost={stats.slackCanPost} />
+            {/* The General panel grows from a ~320px skeleton to ~3,600px when
+                its settings land; cards rendered below it were pushed off
+                screen (layout shift 0.53, measured 2026-10-24). They mount once
+                it has loaded, below the fold, where growth moves nothing. */}
+            {generalLoaded && (
+              <>
+                <SpendLimitsPanel />
+                <AgentPrReviewCard projectId={activeProjectId} />
+                <VerifiedMergeCard projectId={activeProjectId} />
+                <CiCostSettingsCard projectId={activeProjectId} />
+                <CiPolicyCard projectId={activeProjectId} />
+              </>
+            )}
           </>
         )}
         {active === 'byok' && <ByokPanel />}
@@ -365,9 +386,7 @@ function SettingsPageBody({
               <StatCard
                 label={copy?.statLabels?.routing ?? 'Alerts'}
                 value={
-                  [stats.slackConfigured && 'Slack', stats.sentryConfigured && 'Sentry']
-                    .filter(Boolean)
-                    .join(' · ') || 'None'
+                  [slackStatLabel(stats), stats.sentryConfigured && 'Sentry'].filter(Boolean).join(' · ') || 'None'
                 }
                 tooltip={routingTooltip(stats)}
                 detail={routingDetail()}

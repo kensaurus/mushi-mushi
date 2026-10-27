@@ -312,6 +312,17 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Do',
   },
   {
+    id: 'nav:pipeline',
+    path: '/pipeline',
+    label: 'Pipeline',
+    sectionId: 'do',
+    pdcaStage: 'do',
+    iconKey: 'pipeline',
+    paletteDescription: 'Every bug from report to deploy as one picture: what is stuck where, why, and one-click fixes.',
+    paletteKeywords: ['pipeline', 'stuck', 'funnel', 'release train', 'merge queue', 'ci red', 'conflict', 'triage', 'retry', 'blocked'],
+    paletteGroup: 'Do',
+  },
+  {
     id: 'nav:repo',
     path: '/repo',
     label: 'Pull requests',
@@ -416,6 +427,18 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     iconKey: 'pipeline',
     paletteDescription: 'What this app is built from — database, design system, routes, CI, deploy, env and integrations — and what changed.',
     paletteKeywords: ['recipe', 'app recipe', 'blueprint', 'stack', 'design system', 'tokens', 'gates', 'ci', 'deploy', 'env', 'integrations', 'manifest', 'mushi.recipe.json'],
+    paletteGroup: 'Check',
+  },
+  {
+    id: 'nav:ci',
+    path: '/ci',
+    label: 'CI runners',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'system-health',
+    iconKey: 'gauge',
+    paletteDescription: 'Where your tests run, how long they wait for a machine, and what slows your fixes down.',
+    paletteKeywords: ['ci', 'ci runners', 'runners', 'self-hosted', 'github actions', 'actions', 'queue', 'build queue', 'test machine', 'runner', 'slow ci', 'jobs'],
     paletteGroup: 'Check',
   },
   {
@@ -547,6 +570,16 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Act',
   },
   // ── Account ───────────────────────────────────────────────────────────────
+  {
+    id: 'nav:credits',
+    path: '/credits',
+    label: 'Spend credits',
+    sectionId: 'workspace',
+    iconKey: 'cost',
+    paletteDescription: 'Expiring Cursor and Firecrawl credits, and a switch for every way Mushi can spend them finding and fixing bugs.',
+    paletteKeywords: ['credits', 'spend credits', 'spend down', 'spend-down', 'expiring credits', 'cursor credits', 'firecrawl credits', 'usage', 'site watch', 'follow-ups', 'budget'],
+    paletteGroup: 'Workspace',
+  },
   {
     id: 'nav:settings',
     path: '/settings',

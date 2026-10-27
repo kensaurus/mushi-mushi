@@ -5,7 +5,8 @@
  *          still spends, a provider key that stopped working, a store key
  *          missing a permission, keys nobody used for 90 days, a secret key in
  *          the built bundle, paid features with no off switch, and AI
- *          providers with no spending limit.
+ *          providers with no spending limit, and a Cursor spend-down key that
+ *          is inside its window and dispatched nothing (ADR 0028).
  *
  * Pure: every function takes rows the loader (operator.ts) or the host CI
  * already read. No I/O. Like every radar detector, a rule whose inputs are
@@ -14,6 +15,14 @@
  * "declared" wherever the answer comes from the owner, not the provider.
  */
 
+import {
+  spendDownIdleReasons,
+  spendDownWindow,
+  todaysSpendDownTick,
+  type SpendDownIdleReason,
+  type SpendDownKey,
+  type SpendDownTick,
+} from '../spend-down.ts'
 import type { DetectorResult, RadarFinding } from './types.ts'
 
 const DAY = 86_400_000
@@ -581,6 +590,81 @@ export function evaluateProviderLimits(uses: readonly ProviderUse[], limits: Rea
   }
   if (findings.length > 0) return { ruleId, state: 'finding', reason: `${plural(findings.length, 'provider')} without a declared limit or close to it.`, findings }
   return { ruleId, state: 'ok', reason: `A monthly limit is declared for ${[...byProvider.keys()].map((p) => PROVIDER_LIMIT_PAGES[p].vendor).join(' and ')}, and spend is under ${Math.round(LIMIT_ALERT_SHARE * 100)}% of it where Mushi can see spend.`, findings: [] }
+}
+
+// ── spend_down_idle (ADR 0028) ───────────────────────────────────────────────
+
+/** One Cursor key this project can use, with the facts the status route already shows. */
+export interface SpendDownRadarKey {
+  id: string
+  label: string | null
+  key: SpendDownKey
+  servedProjectIds: readonly string[]
+  dispatchedToday: number
+  lastSummary: SpendDownTick | null
+  /** Set when `no_app` is because another key of the same scope pays first. */
+  idleNote?: string | null
+}
+
+const IDLE_WHY: Record<SpendDownIdleReason, string> = {
+  no_app: 'no app uses this key (each app has its own Cursor key, auto-fix is off, or no repo is linked)',
+  autofix_off: 'auto-fix is off',
+  reports_settled: 'every open report is already settled',
+}
+
+/**
+ * A Cursor key with spend-down on, inside its window, that dispatched nothing.
+ * Same facts as the console status line and `get_spend_down_status`: no app
+ * it is first pick for, auto-fix off, or every open report settled. A key
+ * that already dispatched today, or whose last tick hit a cap, is not a finding.
+ */
+export function evaluateSpendDownIdle(keys: readonly SpendDownRadarKey[], now: Date): DetectorResult {
+  const ruleId = 'spend_down_idle' as const
+  if (keys.length === 0) {
+    return { ruleId, state: 'unknown', reason: 'No Cursor key this app can use has spend-down on, so there is nothing to check.', findings: [] }
+  }
+  const findings: RadarFinding[] = []
+  let active = 0
+  let awaitingTick = false
+  for (const row of keys) {
+    const state = spendDownWindow(row.key, now).state
+    if (state !== 'active') continue
+    active++
+    const reasons = spendDownIdleReasons({
+      state,
+      servedProjectIds: row.servedProjectIds,
+      dispatchedToday: row.dispatchedToday,
+      lastSummary: row.lastSummary,
+      now,
+    })
+    if (!reasons) {
+      if (row.dispatchedToday === 0 && row.servedProjectIds.length > 0 && todaysSpendDownTick(row.lastSummary, now) == null) awaitingTick = true
+      continue
+    }
+    const name = row.label?.trim() || 'unnamed'
+    const outranked = reasons.includes('no_app') && !!row.idleNote
+    const needsSetup = !outranked && (reasons.includes('no_app') || reasons.includes('autofix_off'))
+    const why = (r: SpendDownIdleReason) => (r === 'no_app' && row.idleNote ? row.idleNote : IDLE_WHY[r])
+    let fix = 'Nothing is left for this key to fix. Reports an agent already settled (already fixed, wrong repo) stay settled; a new open report is picked up on the next tick.'
+    if (outranked) fix = 'Nothing to change on this key. It pays for those apps when the one ahead of it runs out or is removed.'
+    else if (needsSetup) fix = 'Turn auto-fix on for an app this key already pays for and link that app\'s repo (Settings → General). Spend-down only dispatches where this key is the resolver\'s first pick.'
+    findings.push({
+      ruleId,
+      severity: 'warn',
+      message: `Spend-down is on for the Cursor key "${name}" and inside its window, but it dispatched nothing: ${reasons.map(why).join(', and ')}.`,
+      target: name,
+      fix,
+      evidence: { keyId: row.id, reasons, dispatchedToday: row.dispatchedToday, servedProjects: row.servedProjectIds.length },
+    })
+  }
+  if (findings.length > 0) {
+    return { ruleId, state: 'finding', reason: `${plural(findings.length, 'Cursor key')} with spend-down on dispatched nothing inside the window.`, findings }
+  }
+  if (active === 0) return { ruleId, state: 'ok', reason: 'Spend-down is on, and no such key is inside its window.', findings: [] }
+  if (awaitingTick) {
+    return { ruleId, state: 'unknown', reason: 'Spend-down is inside its window, but the worker has not reported a tick yet, so Mushi cannot tell whether it dispatched.', findings: [] }
+  }
+  return { ruleId, state: 'ok', reason: 'Every spend-down key inside its window dispatched today, or the last tick was waiting on a cap rather than sitting idle.', findings: [] }
 }
 
 // ── key_in_client_bundle (host CI) ──────────────────────────────────────────

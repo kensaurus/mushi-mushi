@@ -472,7 +472,9 @@ if (widgetHexHits.length > 0) {
 // ── Raw hex guard (admin src only) ───────────────────────────────────────
 // SVG/canvas surfaces should read @theme viz-* tokens via readVizToken().
 // Allowlist with // mushi-mushi-allowlist: <reason> on the preceding line.
-const HEX_RE = /#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})\b/g
+// Not after a word character, `}` or `]`: `owner/repo#789` and `${repo}#789`
+// are issue references, not colours (a mushi work commit, 2026-10-24).
+const HEX_RE = /(?<![\w}\]])#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})\b/g
 const hexHits = []
 
 for (const file of files) {

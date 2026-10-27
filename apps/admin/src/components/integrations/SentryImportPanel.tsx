@@ -144,7 +144,9 @@ export function SentryImportPanel({ sentryProjects, onImported, showHeading = tr
           ))}
         </p>
       ) : null}
-      <div className="flex flex-wrap items-end gap-2">
+      {/* items-start, not items-end: the input grows a line when it shows the
+          "at most 10 issues" error, which would drop the button below the row. */}
+      <div className="flex flex-wrap items-start gap-2">
         <div className="flex-1 min-w-48">
           <Input
             aria-label="Sentry issue ids"
@@ -189,7 +191,14 @@ export function SentryImportPanel({ sentryProjects, onImported, showHeading = tr
             </SelectField>
           </div>
         ) : null}
-        <Btn size="sm" onClick={runImport} loading={running} disabled={!projectId || tooMany}>
+        <Btn
+          size="sm"
+          // mushi-mushi-allowlist: field row is text-sm line-height + py-1.5 + 1px borders (2.125rem); no height token matches
+          className="h-[2.125rem] shrink-0"
+          onClick={runImport}
+          loading={running}
+          disabled={!projectId || tooMany}
+        >
           {importLabel}
         </Btn>
       </div>

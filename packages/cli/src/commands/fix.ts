@@ -1,6 +1,6 @@
 import type { Command } from 'commander';
 import { loadConfig, type CliConfig } from '../config.js';
-import { apiCall, requireUuid } from '../cli-shared.js';
+import { apiCall, outputIsJson, requireConfig, requireUuid } from '../cli-shared.js';
 import { MushiCliError } from '../errors.js';
 
 /** `owner/name` of a GitHub repo URL, lower-cased; null when it is not one. */
@@ -50,6 +50,59 @@ async function resolveTargetRepoId(repo: string, cfg: CliConfig): Promise<string
       : `${repo} matches ${matches.length} linked repos; pass the repo id`,
     `linked repos: ${names}`,
   );
+}
+
+/** GET /v1/admin/fixes/:id/verification (Plan 024, ADR 0035). */
+interface CliVerification {
+  headSha: string | null
+  gates: Array<{ id: string; status: string; label: string; detail: string }>
+  passed: boolean
+  autoMerge?: { state: string; detail: string | null } | null
+  regressions?: Array<Record<string, unknown>>
+}
+
+const GATE_MARK: Record<string, [string, string]> = {
+  pass: ['✓', 'pass'],
+  fail: ['✗', 'fail'],
+  pending: ['…', 'pending'],
+  unavailable: ['–', 'unavailable'],
+  not_set_up: ['○', 'not set up'],
+}
+
+const AUTO_MERGE_WORDS: Record<string, string> = {
+  none: 'not merged by Mushi',
+  eligible: 'eligible, waiting for the next run',
+  merged: 'merged by Mushi',
+  skipped: 'skipped',
+  failed: 'failed',
+}
+
+const SIGNAL_WORDS: Record<string, string> = {
+  ci_failed_on_merge: 'CI failed on the merge commit',
+  report_reopened: 'the report was reopened',
+  new_report_in_changed_file: 'a new report names a file this fix changed',
+}
+
+/** The gate checklist as lines: glyph, word, label, then what to do. */
+function renderVerification(v: CliVerification): string[] {
+  const lines = [`Head ${v.headSha ? v.headSha.slice(0, 7) : 'unknown'}: ${v.passed ? 'every gate passes' : 'not verified yet'}`]
+  for (const g of v.gates ?? []) {
+    const [glyph, word] = GATE_MARK[g.status] ?? ['?', g.status]
+    lines.push(`  ${glyph} ${word.padEnd(11)} ${g.label}`)
+    if (g.detail && g.status !== 'pass') lines.push(`                ${g.detail}`)
+  }
+  const am = v.autoMerge
+  if (am) lines.push(`Automatic merge: ${AUTO_MERGE_WORDS[am.state] ?? am.state}${am.detail ? `. ${am.detail}` : ''}`)
+  for (const r of v.regressions ?? []) {
+    const signal = String(r['signal'] ?? '')
+    const revertUrl = (r['revertPrUrl'] ?? r['revert_pr_url']) as string | null | undefined
+    const revertState = String(r['revertState'] ?? r['revert_state'] ?? 'none')
+    const detail = typeof r['detail'] === 'string' && r['detail'] ? `: ${r['detail']}` : ''
+    lines.push(`Regression: ${SIGNAL_WORDS[signal] ?? signal}${detail}`)
+    if (revertUrl) lines.push(`  Revert PR: ${revertUrl}`)
+    else if (revertState === 'not_safe') lines.push('  No revert PR: later commits changed the same files. Revert by hand.')
+  }
+  return lines
 }
 
 export function registerFixCommands(program: Command): void {
@@ -284,11 +337,22 @@ fixes
     'GitHub merge method: squash (default), merge, or rebase',
     'squash',
   )
+  .option(
+    '--override',
+    'Not available here: the CLI signs in with an API key, and only a person in the Mushi console can override an Opus "hold" (with a reason)',
+  )
   .option('--json', 'Machine-readable JSON output')
-  .action(async (fixId: string, opts: { method: string; json?: boolean }) => {
+  .action(async (fixId: string, opts: { method: string; override?: boolean; json?: boolean }) => {
     const config = loadConfig()
     if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
     if (!config.endpoint) { console.error('No endpoint configured. Run `mushi init`'); process.exit(1) }
+
+    if (opts.override) {
+      console.error(
+        'Overriding an Opus "hold" needs a person in the Mushi console: open the fix, read the findings, and choose Merge anyway with a reason. The CLI signs in with an API key, which cannot override (ADR 0030).',
+      )
+      process.exit(1)
+    }
 
     const method = opts.method as 'squash' | 'merge' | 'rebase'
     if (!['squash', 'merge', 'rebase'].includes(method)) {
@@ -301,6 +365,7 @@ fixes
       alreadyMerged?: boolean
       reportId?: string
       reportStatus?: string | null
+      review?: { state: string; label: string; overridden: boolean }
     }>(`/v1/admin/fixes/${fixId}/merge`, config, {
       method: 'POST',
       body: JSON.stringify({ mergeMethod: method }),
@@ -311,6 +376,9 @@ fixes
         console.log(JSON.stringify({ ok: false, error: result.error }, null, 2))
       } else {
         console.error('Merge failed:', result.error.message)
+        if (result.error.code === 'REVIEW_HOLD') {
+          console.error(`Read the review: mushi fixes review ${fixId} --show. To merge anyway, override the hold in the Mushi console (with a reason).`)
+        }
       }
       process.exit(1)
     }
@@ -326,6 +394,99 @@ fixes
     } else {
       console.log(`Merged successfully. Report status: ${data.reportStatus ?? 'fixed'}`)
     }
+    if (data.review) {
+      console.log(`${data.review.label}${data.review.overridden ? ' (overridden)' : ''}`)
+    }
+  })
+
+interface CliFixReview {
+  state: string
+  label: string
+  summary: string | null
+  reason: string | null
+  findings: Array<{ severity: string; file: string; line: number | null; issue: string; suggested_fix: string }>
+  removesBehavior: string[]
+  needsHumanDecision: string | null
+  commentUrl: string | null
+}
+
+function printReview(review: CliFixReview): void {
+  console.log(review.label)
+  if (review.reason) console.log(review.reason)
+  if (review.summary) console.log(`\n${review.summary}`)
+  for (const f of review.findings) {
+    const where = f.file === '(general)' ? '' : ` ${f.file}${f.line ? `:${f.line}` : ''}`
+    console.log(`  - ${f.severity}${where}: ${f.issue} Fix: ${f.suggested_fix}`)
+  }
+  for (const r of review.removesBehavior) console.log(`  - removes: ${r}`)
+  if (review.needsHumanDecision) console.log(`Needs your decision: ${review.needsHumanDecision}`)
+  if (review.commentUrl) console.log(`On GitHub: ${review.commentUrl}`)
+}
+
+fixes
+  .command('review <fixId>')
+  .description('Re-run the Opus review of a fix PR (ADR 0030), or show the current one with --show')
+  .option('--show', 'Show the current review instead of starting a new one')
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (fixId: string, opts: { show?: boolean; json?: boolean }) => {
+    const config = loadConfig()
+    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
+    if (!config.endpoint) { console.error('No endpoint configured. Run `mushi init`'); process.exit(1) }
+
+    const result = opts.show
+      ? await apiCall<{ review?: CliFixReview }>(`/v1/admin/fixes/${fixId}/timeline`, config)
+      : await apiCall<{ review?: CliFixReview }>(`/v1/admin/fixes/${fixId}/review`, config, { method: 'POST' })
+    if (!result.ok) {
+      if (opts.json) console.log(JSON.stringify({ ok: false, error: result.error }, null, 2))
+      else console.error(opts.show ? 'Could not read the review:' : 'Review not started:', result.error.message)
+      process.exit(1)
+    }
+    const review = result.data?.review
+    if (opts.json) {
+      console.log(JSON.stringify({ ok: true, review: review ?? null }, null, 2))
+      return
+    }
+    if (!opts.show) console.log('Review queued. It takes a few minutes; check with --show.')
+    if (review) printReview(review)
+  })
+
+fixes
+  .command('verify <fixId>')
+  .description("Show the verified-merge gates for a fix PR's current head (ADR 0035), or re-check them with --rerun")
+  .option('--rerun', 'Re-check the gates now, then show them')
+  .option('--json', 'Machine-readable JSON output')
+  .addHelpText('after', `
+Gates: Opus review, CI, a test that fails without the fix, no tests weakened,
+a small change, and a second review. Mushi merges on its own only when every
+gate passes and Verified merge is on for the project.
+Docs: https://kensaur.us/mushi-mushi/docs/admin/verified-merge`)
+  .action(async (fixId: string, opts: { rerun?: boolean; json?: boolean }) => {
+    requireUuid(fixId, 'fixId')
+    const config = requireConfig()
+    const json = outputIsJson(opts.json)
+    if (opts.rerun) {
+      const started = await apiCall(`/v1/admin/fixes/${fixId}/verify`, config, { method: 'POST' })
+      if (!started.ok) {
+        if (json) console.log(JSON.stringify({ ok: false, error: started.error }, null, 2))
+        else console.error('Re-check not started:', started.error.message)
+        process.exit(1)
+      }
+    }
+    const result = await apiCall<CliVerification>(`/v1/admin/fixes/${fixId}/verification`, config)
+    if (!result.ok) {
+      if (json) console.log(JSON.stringify({ ok: false, error: result.error }, null, 2))
+      else console.error('Could not read the verification:', result.error.message)
+      process.exit(1)
+    }
+    if (json) {
+      console.log(JSON.stringify({ ok: true, verification: result.data ?? null }, null, 2))
+      return
+    }
+    if (!result.data) {
+      console.log('No verification for this fix yet. Mushi checks open agent PRs every 10 minutes after their review.')
+      return
+    }
+    for (const line of renderVerification(result.data)) console.log(line)
   })
 
 fixes
@@ -364,6 +525,33 @@ fixes
       ? new Date(data.check_run_updated_at).toISOString()
       : '—'
     console.log(`CI status: ${status} · conclusion: ${conclusion} · updated: ${updated}`)
+  })
+
+fixes
+  .command('rerun-ci <fixId>')
+  .description('Re-run the failed or cancelled CI runs on a fix PR\'s latest commit (for example after the test machine stopped)')
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (fixId: string, opts: { json?: boolean }) => {
+    const config = loadConfig()
+    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
+    if (!config.endpoint) { console.error('No endpoint configured. Run `mushi init`'); process.exit(1) }
+
+    const result = await apiCall<{ rerun?: Array<{ runId: number }>; headSha?: string }>(
+      `/v1/admin/fixes/${fixId}/ci/rerun`,
+      config,
+      { method: 'POST' },
+    )
+    if (!result.ok) {
+      if (opts.json) console.log(JSON.stringify({ ok: false, error: result.error }, null, 2))
+      else console.error('Re-run failed:', result.error.message)
+      process.exit(1)
+    }
+    const runs = result.data?.rerun ?? []
+    if (opts.json) {
+      console.log(JSON.stringify({ ok: true, ...result.data }, null, 2))
+      return
+    }
+    console.log(`Re-ran ${runs.length} run${runs.length === 1 ? '' : 's'}: ${runs.map((r) => `#${r.runId}`).join(', ')}`)
   })
 
 }

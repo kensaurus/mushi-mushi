@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  confirmBaseRef,
   fetchRepoTreeWithBranchFallback,
   resolveBranchForConnect,
   type FetchLike,
@@ -141,6 +142,43 @@ describe('resolveBranchForConnect (repo connect)', () => {
   })
 })
 
+describe('confirmBaseRef (cloud agent launch)', () => {
+  // Cursor 400 "Failed to verify existence of branch 'main' in repository
+  // kensaurus/help-her-take-photo" (Mushi report e5bc15c7).
+  const base = { owner: 'kensaurus', repo: 'mushi-mushi', token: 't' }
+
+  it("swaps a stored branch GitHub does not have for the repo's default", async () => {
+    const gh = fakeGithub({ [REPO]: [200, { default_branch: 'master' }] })
+    expect(await confirmBaseRef({ ...base, branch: 'main', fetchImpl: gh.fetchImpl })).toEqual({
+      branch: 'master',
+      correctedFrom: 'main',
+    })
+  })
+
+  it('keeps a stored branch that exists, with one call', async () => {
+    const gh = fakeGithub({ [`${REPO}/branches/main`]: [200, { name: 'main' }] })
+    expect(await confirmBaseRef({ ...base, branch: 'main', fetchImpl: gh.fetchImpl })).toEqual({
+      branch: 'main',
+      correctedFrom: null,
+    })
+    expect(gh.calls).toHaveLength(1)
+  })
+
+  it('keeps the stored branch when GitHub cannot be asked', async () => {
+    expect((await confirmBaseRef({ ...base, token: null, branch: 'main' })).branch).toBe('main')
+    const forbidden = fakeGithub({ [`${REPO}/branches/main`]: [403, {}] })
+    expect(await confirmBaseRef({ ...base, branch: 'main', fetchImpl: forbidden.fetchImpl })).toEqual({
+      branch: 'main',
+      correctedFrom: null,
+    })
+    expect(forbidden.calls).toHaveLength(1)
+    const inaccessible = fakeGithub({})
+    expect((await confirmBaseRef({ ...base, branch: 'main', fetchImpl: inaccessible.fetchImpl })).correctedFrom).toBeNull()
+    const throws: FetchLike = () => Promise.reject(new Error('fetch failed'))
+    expect((await confirmBaseRef({ ...base, branch: 'main', fetchImpl: throws })).branch).toBe('main')
+  })
+})
+
 describe('isCodebaseIndexFailing (GitHub probe signal)', () => {
   it('flags the live mushi-mushi row: error and no successful index since June', () => {
     expect(
@@ -196,6 +234,13 @@ describe('wiring', () => {
     expect(read('api/routes/query-fixes-repo.ts')).toMatch(/resolveBranchForConnect\(/)
     expect(read('api/routes/project-codebase.ts')).not.toMatch(/body\.default_branch \?\? 'main'/)
     expect(read('api/routes/query-fixes-repo.ts')).not.toMatch(/default_branch: body\.defaultBranch \?\? 'main'/)
+  })
+
+  it('the cloud agent dispatch launches on a confirmed base branch', () => {
+    const src = read('fix-worker/index.ts')
+    const cloud = src.slice(src.indexOf('async function dispatchToCloudAgent('))
+    expect(cloud).toMatch(/confirmBaseRef\(\{/)
+    expect(cloud.slice(0, cloud.indexOf('\n}\n'))).not.toMatch(/baseRef: repo\.defaultBranch/)
   })
 
   it('the GitHub probe degrades on a failing index', () => {

@@ -6,7 +6,10 @@
  *   V1  Removing a pool key called vault_delete_secret({ secret_id }), but
  *       that function takes a secret NAME. PostgREST had no such signature,
  *       so every removed pool key left its secret in Vault. Pool rows keep
- *       the id, so they now call vault_delete_secret_by_id.
+ *       the id, so they now call vault_delete_secret_if_unused (migration
+ *       20261021051628), which keeps a secret something else still uses:
+ *       on live data a pool row shared its secret with the project's legacy
+ *       byok_<provider>_key_ref, which the resolver uses (review 2026-10-21).
  *   E1  An optional "expires on" date for a key (Supabase tokens have one
  *       that no API returns): validated, stored in byok_keys.expires_at,
  *       listed back, and editable on an existing key.
@@ -15,6 +18,8 @@
  *
  * No real Vault, network or key: every value is an obvious fake.
  */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
@@ -101,8 +106,18 @@ function seed(pool: Array<Record<string, unknown>> = []) {
           vault[id] = String(args.secret_value)
           return id
         }
-        if (fn === 'vault_delete_secret_by_id') {
-          delete vault[String(args.secret_id)]
+        if (fn === 'vault_delete_secret_if_unused') {
+          // Mirrors private.vault_secret_in_use: any byok_keys row, or any
+          // *_ref column holding the bare id or vault://<id>, keeps it.
+          const id = String(args.secret_id)
+          const refs = new Set([id, `vault://${id}`])
+          const inUse =
+            db.table('byok_keys').some((k: Record<string, unknown>) => k.vault_secret_id === id) ||
+            [...db.table('project_settings'), ...db.table('organization_integration_settings')].some((row: Record<string, unknown>) =>
+              Object.entries(row).some(([col, v]) => col.endsWith('_ref') && refs.has(String(v))),
+            )
+          if (inUse) return 0
+          delete vault[id]
           return 1
         }
         return null
@@ -122,8 +137,8 @@ async function call(method: string, path: string, body?: unknown) {
   return { status: res.status, json: (await res.json()) as Record<string, any> }
 }
 
-describe('V1: removing a pool key deletes its Vault secret by id', () => {
-  it('calls vault_delete_secret_by_id with the stored secret id', async () => {
+describe('V1: removing a pool key deletes its Vault secret by id, unless something else uses it', () => {
+  it('calls vault_delete_secret_if_unused with the stored secret id', async () => {
     seed([POOL_ROW])
     vault[POOL_ROW.vault_secret_id] = 'sbp_FAKE-0001'
 
@@ -131,11 +146,54 @@ describe('V1: removing a pool key deletes its Vault secret by id', () => {
 
     expect(status).toBe(200)
     expect(db.tables.byok_keys).toHaveLength(0)
-    expect(rpc('vault_delete_secret_by_id')).toEqual([
-      { fn: 'vault_delete_secret_by_id', args: { secret_id: POOL_ROW.vault_secret_id } },
+    expect(rpc('vault_delete_secret_if_unused')).toEqual([
+      { fn: 'vault_delete_secret_if_unused', args: { secret_id: POOL_ROW.vault_secret_id } },
     ])
+    // Never the unchecked delete.
+    expect(rpc('vault_delete_secret_by_id')).toHaveLength(0)
     expect(rpc('vault_delete_secret')).toHaveLength(0)
     expect(vault[POOL_ROW.vault_secret_id]).toBeUndefined()
+  })
+
+  it("keeps a secret the project's legacy key ref still points at (yen-yen, 2026-10-21)", async () => {
+    seed([POOL_ROW])
+    vault[POOL_ROW.vault_secret_id] = 'sbp_FAKE-0001'
+    ;(db.table('project_settings')[0] as Record<string, unknown>).byok_anthropic_key_ref = `vault://${POOL_ROW.vault_secret_id}`
+
+    const { status } = await call('DELETE', `/v1/admin/byok/keys/${KEY_ID}`)
+
+    expect(status).toBe(200)
+    expect(db.tables.byok_keys).toHaveLength(0)
+    expect(rpc('vault_delete_secret_by_id')).toHaveLength(0)
+    expect(vault[POOL_ROW.vault_secret_id]).toBe('sbp_FAKE-0001')
+  })
+})
+
+describe('private.vault_secret_in_use (migration 20261021051628)', () => {
+  const sql = readFileSync(
+    resolve(__dirname, '../../supabase/migrations/20261021051628_byok_keys_universal_scope.sql'),
+    'utf-8',
+  )
+  const fn = (name: string) => sql.slice(sql.indexOf(`create or replace function ${name}(`), sql.indexOf('$$;', sql.indexOf(`create or replace function ${name}(`)))
+
+  it('counts byok_keys rows and every *_ref column of project_settings and organization_integration_settings, bare or vault://', () => {
+    const helper = fn('private.vault_secret_in_use')
+    expect(helper).toContain('from public.byok_keys k where k.vault_secret_id = p_secret_id')
+    expect(helper).toContain("c.table_name in ('project_settings', 'organization_integration_settings')")
+    expect(helper).toContain("c.column_name like '%\\_ref' escape '\\'")
+    expect(helper).toContain("using p_secret_id::text, 'vault://' || p_secret_id::text")
+    expect(helper).toContain('security definer')
+    expect(helper).toContain("set search_path = ''")
+  })
+
+  it('the trigger and the route RPC both ask it before deleting, and the trigger only warns on a missing privilege', () => {
+    expect(fn('public.vault_delete_secret_if_unused')).toContain('private.vault_secret_in_use(secret_id)')
+    const trigger = fn('private.byok_keys_delete_vault_secret')
+    expect(trigger).toContain('not private.vault_secret_in_use(old.vault_secret_id)')
+    expect(trigger).toContain('exception when insufficient_privilege then')
+    expect(trigger).toContain('raise warning')
+    expect(sql).toContain('grant execute on function public.vault_delete_secret_if_unused(uuid) to service_role;')
+    expect(sql).toContain('revoke all on function private.vault_secret_in_use(uuid) from public, anon, authenticated;')
   })
 })
 
@@ -291,5 +349,39 @@ describe('K1: settings stats count keys like the console rows', () => {
     )
     const { json } = await call('GET', '/v1/admin/settings/stats')
     expect(json.data).toMatchObject({ byokKeysPassing: 1, byokKeysFailing: 0 })
+  })
+})
+
+describe('settings stats tell Slack "saved" apart from "can send"', () => {
+  it('a channel id alone is saved but cannot post', async () => {
+    seed()
+    Object.assign(db.table('project_settings')[0], { slack_channel_id: 'C123' })
+    const { status, json } = await call('GET', '/v1/admin/settings/stats')
+    expect(status).toBe(200)
+    expect(json.data).toMatchObject({ slackConfigured: true, slackCanPost: false })
+  })
+
+  it('a webhook, or a bot plus a channel, can post', async () => {
+    seed()
+    Object.assign(db.table('project_settings')[0], {
+      slack_webhook_url: 'https://hooks.slack.com/services/T/B/x',
+    })
+    const webhook = await call('GET', '/v1/admin/settings/stats')
+    expect(webhook.json.data).toMatchObject({ slackConfigured: true, slackCanPost: true })
+
+    seed()
+    Object.assign(db.table('project_settings')[0], {
+      slack_channel_id: 'C123',
+      slack_bot_token_ref: 'vault://bot',
+    })
+    const bot = await call('GET', '/v1/admin/settings/stats')
+    expect(bot.json.data).toMatchObject({ slackConfigured: true, slackCanPost: true })
+  })
+
+  it('a bot token without a channel cannot post', async () => {
+    seed()
+    Object.assign(db.table('project_settings')[0], { slack_bot_token_ref: 'vault://bot' })
+    const { json } = await call('GET', '/v1/admin/settings/stats')
+    expect(json.data).toMatchObject({ slackConfigured: true, slackCanPost: false })
   })
 })

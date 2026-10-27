@@ -6,9 +6,23 @@
 import { describe, expect, it } from 'vitest'
 import {
   dbDiagnosticMessage,
+  dbErrorFingerprint,
+  dbFailureMessage,
   isTransientDbConnectionError,
+  isTransientGatewayStatus,
   logDbFailure,
 } from '../../supabase/functions/_shared/error-codes.ts'
+
+describe('isTransientGatewayStatus (MUSHI-MUSHI-SERVER-2R)', () => {
+  it('treats a failed fetch, gateway 502-504 and Cloudflare 520-527 as transient', () => {
+    expect([0, 502, 503, 504, 520, 522, 525, 527].every(isTransientGatewayStatus)).toBe(true)
+  })
+  it('keeps a PostgREST answer, a 500 and a client error reportable', () => {
+    expect([200, 201, 400, 401, 404, 409, 500, 501, 519, 528].some(isTransientGatewayStatus)).toBe(false)
+    expect(isTransientGatewayStatus(null)).toBe(false)
+    expect(isTransientGatewayStatus(undefined)).toBe(false)
+  })
+})
 
 const assertEquals = (actual: unknown, expected: unknown) => expect(actual).toBe(expected)
 
@@ -86,8 +100,16 @@ describe('isTransientDbConnectionError', () => {
       false,
     )
     // Pool exhaustion / statement timeout are real capacity signals — keep paging.
+    // A timeout whose text also contains a doctype is still a coded SQLSTATE.
     assertEquals(isTransientDbConnectionError({ message: 'too many connections', code: '53300' }), false)
     assertEquals(isTransientDbConnectionError({ message: 'canceling statement due to statement timeout', code: '57014' }), false)
+    assertEquals(
+      isTransientDbConnectionError({
+        message: 'canceling statement due to statement timeout <!DOCTYPE html>',
+        code: '57014',
+      }),
+      false,
+    )
   })
 
   // ── Genuine connection-family SQLSTATEs ARE transient ─────────────────────────
@@ -99,6 +121,28 @@ describe('isTransientDbConnectionError', () => {
   })
 
   // ── PostgREST schema-cache reload (MUSHI-MUSHI-SERVER-1M) ─────────────────────
+
+  it('hosted gateway "Project not specified." is transient, including a bare PGRST code', () => {
+    // postgrest-js keeps a non-JSON gateway body as { message } (no code).
+    assertEquals(isTransientDbConnectionError({ message: 'Project not specified.' }), true)
+    assertEquals(isTransientDbConnectionError({ message: 'Project not specified', code: null }), true)
+    assertEquals(
+      isTransientDbConnectionError({
+        message: 'Bad request - please check your parameters: Project not specified.',
+        code: null,
+      }),
+      true,
+    )
+    // `PGRST` is 5 letters, so it looks like a SQLSTATE. It is the PostgREST
+    // prefix, not a class, and must not hide this gateway body.
+    assertEquals(isTransientDbConnectionError({ message: 'Project not specified.', code: 'PGRST' }), true)
+  })
+
+  it('a real SQLSTATE or a different sentence containing those words is NOT transient', () => {
+    assertEquals(isTransientDbConnectionError({ message: 'Project not specified.', code: 'P0001' }), false)
+    assertEquals(isTransientDbConnectionError({ message: 'the project not specified in the payload', code: null }), false)
+    assertEquals(isTransientDbConnectionError({ message: 'column missing', code: 'PGRST' }), false)
+  })
 
   it('PGRST002 (schema cache reload) is transient, by code or by its message', () => {
     const message = 'Could not query the database for the schema cache. Retrying.'
@@ -144,6 +188,33 @@ describe('isTransientDbConnectionError', () => {
     assertEquals(isTransientDbConnectionError({ message: 'connection refused', code: null }), false)
   })
 
+  // ── Supabase API gateway "Project not specified." (MUSHI 89ac1103) ─────────
+  // Plain-text 400 from the hosted gateway when the host has no project ref.
+  // webhook_audit_log.project_id is nullable and is not part of the insert.
+
+  it('Supabase gateway "Project not specified." is transient when it has no SQLSTATE', () => {
+    assertEquals(isTransientDbConnectionError({ message: 'Project not specified.', code: null }), true)
+    assertEquals(isTransientDbConnectionError({ message: 'Project not specified.\n' }), true)
+    assertEquals(
+      isTransientDbConnectionError({
+        message: 'Bad request - please check your parameters: Project not specified.',
+        code: '',
+      }),
+      true,
+    )
+  })
+
+  it('a real RAISE or a longer "project" message is NOT the gateway error', () => {
+    assertEquals(
+      isTransientDbConnectionError({ message: 'Project not specified.', code: 'P0001' }),
+      false,
+    )
+    assertEquals(
+      isTransientDbConnectionError({ message: 'project not specified for this row', code: null }),
+      false,
+    )
+  })
+
   // ── Null / shape safety ───────────────────────────────────────────────────────
 
   it('null / undefined / empty errors are not transient', () => {
@@ -163,6 +234,31 @@ describe('dbDiagnosticMessage', () => {
     expect(dbDiagnosticMessage(message)).not.toContain('<')
     expect(dbDiagnosticMessage('502 Bad Gateway')).toBe('[upstream gateway error] 502 Bad Gateway')
     expect(dbDiagnosticMessage('column missing')).toBe('column missing')
+  })
+})
+
+describe('dbFailureMessage / dbErrorFingerprint', () => {
+  it('keeps a real message, and falls through empty message to details then code', () => {
+    expect(dbFailureMessage({ message: 'canceling statement due to statement timeout', code: '57014' })).toBe(
+      'canceling statement due to statement timeout',
+    )
+    expect(dbFailureMessage({ message: '  ', code: '57014', details: 'process 1' })).toBe('process 1')
+    expect(dbFailureMessage({ message: '', code: 'XX000' })).toBe('Unknown DB error (XX000)')
+    expect(dbFailureMessage(null)).toBe('Unknown DB error (unknown)')
+  })
+
+  it('never puts a gateway HTML page in the exception text', () => {
+    expect(
+      dbFailureMessage({ message: '<!DOCTYPE html><title>502 Bad Gateway</title><script>x()</script>', code: '42703' }),
+    ).toBe('[upstream gateway error] 502 Bad Gateway')
+    expect(dbFailureMessage({ message: '', code: '57014', details: '<html><body>oops</body></html>' })).not.toContain('<')
+  })
+
+  it('folds uuids and long numeric ids into the fingerprint', () => {
+    const path = '/v1/admin/projects/1000000a-0000-4000-8000-000000000000/reports/42'
+    expect(dbErrorFingerprint('57014', path)).toEqual(['db-error', '57014', '/v1/admin/projects/:id/reports/:n'])
+    expect(dbErrorFingerprint('  ', '/v1/admin/reports')).toEqual(['db-error', 'unknown', '/v1/admin/reports'])
+    expect(dbErrorFingerprint(null, '')).toEqual(['db-error', 'unknown', 'unknown'])
   })
 })
 
@@ -189,6 +285,14 @@ describe('logDbFailure', () => {
     const logger = spyLogger()
     expect(logDbFailure(logger, 'Failed to fetch qa_stories', { message: 'x', code: 'PGRST002' })).toBe(true)
     expect(logger.calls[0].level).toBe('warn')
+  })
+
+  it('a gateway "Project not specified." is a warn, not a Sentry error', () => {
+    const logger = spyLogger()
+    const err = { message: 'Project not specified.', code: null as string | null }
+    expect(logDbFailure(logger, 'audit insert failed', err, { scope: 'webhook-middleware', err: err.message })).toBe(true)
+    expect(logger.calls[0].level).toBe('warn')
+    expect(logger.calls[0].meta).toMatchObject({ transient: true, scope: 'webhook-middleware' })
   })
 
   it('a real error, a statement timeout, or a missing error object stays an error', () => {

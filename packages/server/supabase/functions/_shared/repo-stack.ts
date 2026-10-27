@@ -1,9 +1,10 @@
 /**
  * FILE: repo-stack.ts
- * PURPOSE: Read a repo's bundler (Expo, Vite, Next.js) from its package.json
- *          files at the default-branch head, so the Mushi env names a check
- *          expects, or that CI-secret sync writes, are the ones the app's
- *          bundler really inlines (EXPO_PUBLIC_, VITE_, NEXT_PUBLIC_).
+ * PURPOSE: Read a repo's bundler (Expo, Vite, Next.js, Nuxt) from its
+ *          package.json files at the default-branch head, so the Mushi env
+ *          names a check expects, or that CI-secret sync writes, are the
+ *          ones the app's bundler really inlines (EXPO_PUBLIC_, VITE_,
+ *          NEXT_PUBLIC_, NUXT_PUBLIC_).
  *
  * Shared by the recipe env check (api/routes/recipe.ts) and the CI-secret
  * diagnostic and sync (api/routes/project-ci-secrets.ts).

@@ -9,6 +9,7 @@ import {
   fetchPullRequest,
   markPullRequestReady,
   parseGithubRepoUrl,
+  updatePullRequestBranch,
   type GithubRepoRef,
 } from './github.ts';
 import { log } from './logger.ts';
@@ -49,8 +50,17 @@ export async function mergeGithubPullRequest(
   token: string,
   ref: GithubRepoRef,
   pullNumber: number,
-  opts?: { mergeMethod?: MergeMethod; commitTitle?: string; commitMessage?: string },
-): Promise<{ merged: boolean; alreadyMerged: boolean; sha?: string; message?: string; mergedAt?: string | null }> {
+  opts?: {
+    mergeMethod?: MergeMethod
+    commitTitle?: string
+    commitMessage?: string
+    /**
+     * The head commit the caller checked (ADR 0030: the reviewed commit).
+     * GitHub refuses the merge with 409 when the PR's head is no longer it.
+     */
+    sha?: string | null
+  },
+): Promise<{ merged: boolean; alreadyMerged: boolean; sha?: string; message?: string; mergedAt?: string | null; headMoved?: boolean; behind?: boolean }> {
   const pr = await fetchPullRequest(token, ref, pullNumber);
   if (pr?.draft) {
     const ready = await markPullRequestReady(token, ref, pullNumber);
@@ -77,6 +87,7 @@ export async function mergeGithubPullRequest(
         merge_method: opts?.mergeMethod ?? 'squash',
         commit_title: opts?.commitTitle,
         commit_message: opts?.commitMessage,
+        ...(opts?.sha ? { sha: opts.sha } : {}),
       }),
     },
   );
@@ -96,10 +107,36 @@ export async function mergeGithubPullRequest(
       // When GitHub actually merged it earlier, keep that time (finalizeFixMerge).
       return { merged: true, alreadyMerged: true, message: msg, mergedAt: after?.mergedAt ?? pr?.mergedAt ?? null };
     }
+    // A repo that requires branches to be up to date refuses a PR that is
+    // behind its base with "N of N required status checks are expected",
+    // which says nothing about the cause (the console showed it raw,
+    // 2026-10-24). Update the branch, as the merge queue does, and say so.
+    if (after?.mergeableState === 'behind') {
+      const updated = await updatePullRequestBranch(token, ref, pullNumber, after.headSha ?? null);
+      return {
+        merged: false,
+        alreadyMerged: false,
+        behind: true,
+        message: updated
+          ? 'The branch was behind the base branch, and this repo requires branches to be up to date before merging. Mushi updated it with the base branch; CI runs again. Merge once the checks pass.'
+          : 'The branch is behind the base branch, and this repo requires branches to be up to date before merging. Update the branch on GitHub (it may have conflicts), then merge once the checks pass.',
+      };
+    }
     return { merged: false, alreadyMerged: false, message: msg };
   }
 
   if (res.status === 409) {
+    const body = await res.json().catch(() => ({})) as { message?: string };
+    // GitHub answers 409 "Head branch was modified" when `sha` no longer
+    // matches the PR head: new commits arrived after the check.
+    if (opts?.sha && /head branch was modified|sha/i.test(body.message ?? '')) {
+      return {
+        merged: false,
+        alreadyMerged: false,
+        headMoved: true,
+        message: 'The pull request got new commits after it was checked. Nothing was merged; review the new commits first.',
+      };
+    }
     return {
       merged: false,
       alreadyMerged: false,
@@ -149,7 +186,7 @@ export async function finalizeFixMerge(
      * Which path saw the merge, recorded on the usage event. Defaults to
      * console_merge when an admin acted (actorUserId), otherwise system.
      */
-    source?: 'console_merge' | 'github_webhook' | 'ci_sync' | 'fixing_reconcile';
+    source?: 'console_merge' | 'github_webhook' | 'ci_sync' | 'fixing_reconcile' | 'verified_auto_merge' | 'merge_queue';
   },
 ): Promise<{ justMerged: boolean; reportStatus: string | null }> {
   const nowDate = new Date();
@@ -349,7 +386,7 @@ export async function finalizeFixMerge(
 export async function finalizeFixClosedUnmerged(
   db: Db,
   attempt: FixAttemptMergeRow,
-  meta: { prNumber?: number | null; closedAt?: string | null; source: 'ci_sync' | 'webhook' },
+  meta: { prNumber?: number | null; closedAt?: string | null; source: 'ci_sync' | 'webhook' | 'console' },
 ): Promise<{ justClosed: boolean; reportStatus: string | null }> {
   const { data: closedRow, error: closeErr } = await db
     .from('fix_attempts')
