@@ -893,7 +893,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     label: 'Setup copilot',
     sectionId: 'start',
     iconKey: 'terminal',
-    // The Diagnose tab of /onboarding now (Plan 021): opens /onboarding?tab=copilot.
+    // The Diagnose tab of /onboarding now (Plan 021): opens /onboarding?tab=diagnose.
     inSidebar: false,
     paletteDescription: 'Diagnose setup: SDK heartbeat, version and fix dispatch for one project, with copy-paste commands.',
     paletteKeywords: ['setup', 'copilot', 'verify', 'dispatch', 'guided', 'diagnose'],

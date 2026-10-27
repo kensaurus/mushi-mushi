@@ -394,7 +394,7 @@ export function ConnectPage() {
                     Code Health only, not the in-app band.
                   </p>
                   <Link
-                    to={`/onboarding?tab=copilot&project=${project.id}`}
+                    to={`/onboarding?tab=diagnose&project=${project.id}`}
                     className={`mt-2 inline-block text-xs ${LINK_ACCENT}`}
                   >
                     Open Setup Copilot → CI &amp; store builds

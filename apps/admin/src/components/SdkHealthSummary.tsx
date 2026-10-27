@@ -61,7 +61,7 @@ import {
 } from '../lib/projectMushiEnv'
 import { sdkPlatformHintFromUserAgent, sdkOriginKind } from '../lib/sdkClientPlatform'
 import { CHIP_TONE } from '../lib/chipTone'
-import { SDK_COLD_MS, SDK_HEALTHY_MS, freshestHeartbeatKey } from '../lib/heartbeat'
+import { SDK_COLD_MS, SDK_HEALTHY_MS, freshestHeartbeatKey, isSdkKeyScopes } from '../lib/heartbeat'
 
 // Heartbeat columns mirror the server-side select in
 // routes/billing-projects-queue-graph.ts on /v1/admin/projects.
@@ -200,12 +200,23 @@ export function diagnoseKey(
   }
 }
 
-function summarizeCardStatus(
+/**
+ * Active keys an SDK in the app uses. An MCP or CLI key's calls (the demo's
+ * read-only key, called by curl) are not the app's SDK: counting them told a
+ * never-installed app it went "Cold, removed from a deploy" (report fe489587).
+ * Rows without scopes (an older API) count, as before.
+ */
+export function activeSdkKeys<T extends Pick<SdkHealthApiKey, 'is_active' | 'scopes'>>(apiKeys: readonly T[]): T[] {
+  return apiKeys.filter((k) => k.is_active && (k.scopes == null || isSdkKeyScopes(k.scopes)))
+}
+
+/** @internal Exported for tests. */
+export function summarizeCardStatus(
   apiKeys: SdkHealthApiKey[],
   adminHost: string | null,
   env: ProjectMushiEnvVars = mushiEnvVarsForProjectSlug(null),
 ): CardStatus {
-  const active = apiKeys.filter((k) => k.is_active)
+  const active = activeSdkKeys(apiKeys)
   if (active.length === 0) return 'no-key'
 
   // Aggregate the per-key diagnostic into one card-level severity. Order
@@ -657,7 +668,7 @@ export function SdkHealthSummary({
 
   const tone = STATUS_TONE[status]
   const playbook = buildPlaybook(envVars, projectSlug)[status]
-  const activeKeys = apiKeys.filter((k) => k.is_active)
+  const activeKeys = activeSdkKeys(apiKeys)
   const freshest = freshestHeartbeatKey(activeKeys)
 
   async function sendTestReport() {
@@ -837,7 +848,7 @@ export function SdkHealthSummary({
           <span aria-hidden="true" className="ml-1.5">{open ? '▴' : '▾'}</span>
         </Btn>
         <Link
-          to={isExpoReporterProject(projectSlug) ? '/onboarding?tab=copilot' : '/onboarding'}
+          to={isExpoReporterProject(projectSlug) ? '/onboarding?tab=diagnose' : '/onboarding'}
           className="text-2xs text-fg-muted hover:text-fg underline-offset-2 hover:underline ml-auto"
         >
           {isExpoReporterProject(projectSlug) ? 'Setup Copilot →' : 'Setup guide →'}
