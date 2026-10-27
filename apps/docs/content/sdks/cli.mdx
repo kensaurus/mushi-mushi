@@ -493,6 +493,23 @@ mushi repo diagram unpublish --yes
 of exactly what the preview showed, so a diagram that changed in between is
 refused. A private repo can only be published from the console.
 
+### Clean up branches and pull requests
+
+```bash
+mushi repo cleanup show [--stale-days 14]       # branches and fix PRs Mushi opened that can go, with why and the commit
+mushi repo cleanup request delete-branches --repo owner/app [--keys branch:a,branch:b]
+mushi repo cleanup request close-prs --repo owner/app [--keys pr:12]
+mushi repo cleanup request auto-delete --repo owner/app   # turn on GitHub's "Automatically delete head branches"
+mushi repo cleanup restore <itemId>…            # bring back a branch Mushi deleted, at the commit it kept
+```
+
+Only branches and pull requests Mushi itself opened are listed: a branch whose
+pull request merged or closed and that still points at that pull request's last
+commit, or an open fix PR that a newer fix replaced, that the Opus review held,
+or that got no new commit for 14 days. The CLI only asks. A team owner or admin
+approves the exact list in the console (Repo → Clean up) within an hour, and
+Mushi checks every item again before it deletes or closes anything.
+
 ---
 
 ## Releases

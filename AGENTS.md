@@ -130,7 +130,7 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `webhooks-linear-agent` | Linear AgentSessionEvent webhooks (acknowledge within 10s; may dispatch fix-worker) |
 | `reporter-notify-fanout` | Email / push for a developer reply to a reporter; enqueued by the `report_comments` trigger, which stays the in-app writer (Plan 018) |
 
-Also: **`api`** (Hono REST router), **`api-ext`** (the overflow half of the admin API: `api` forwards the CI runner, verified-fix, inventory, Ask Mushi, Codebase Atlas, modernization / super-admin, agent-skills, QA coverage, full-stack audit, UX-run, pipeline, tester-marketplace, per-app Home, setup-gaps, release-batch and local-worker (`work.ts`: `/v1/worker/*`, `/v1/admin/work/*`) paths there with the caller's headers, because `api` hit Supabase's 5 MB deployment size limit on 2026-10-21 and again on 2026-10-22 (tester marketplace moved 2026-10-26); public URLs are unchanged, `_shared/edge-proxy.ts`; `scripts/deploy-edge-function.test.mjs` holds `api` under the last upload size known to deploy) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
+Also: **`api`** (Hono REST router), **`api-ext`** (the overflow half of the admin API: `api` forwards the CI runner, verified-fix, inventory, Ask Mushi, Codebase Atlas, modernization / super-admin, agent-skills, QA coverage, full-stack audit, UX-run, pipeline, tester-marketplace, per-app Home, setup-gaps, release-batch, local-worker (`work.ts`: `/v1/worker/*`, `/v1/admin/work/*`) and repo clean-up (`repo-housekeeping.ts`, ADR 0051) paths there with the caller's headers, because `api` hit Supabase's 5 MB deployment size limit on 2026-10-21 and again on 2026-10-22 (tester marketplace moved 2026-10-26); public URLs are unchanged, `_shared/edge-proxy.ts`; `scripts/deploy-edge-function.test.mjs` holds `api` under the last upload size known to deploy) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
 
 ---
 
@@ -289,7 +289,7 @@ Live App URL
 | Group | Commands |
 | --- | --- |
 | **Setup & account** | `mushi init`, `mushi setup`, `mushi connect`, `mushi login`, `mushi upgrade`, `mushi reset`, `mushi whoami`, `mushi status`, `mushi doctor`, `mushi ping`, `mushi test` (synthetic report through ingest), `mushi migrate` (suggests a migration guide), `mushi completion`, `mushi nudge`, `mushi profile list/current/use` |
-| **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit`, `mushi radar scan/show`, `mushi recipe init/check/show/sources/change`, `mushi store pull/reviews/reviews-pull/reviews-set`, `mushi repo digest/diagram`, `mushi code-health show/stats`, `mushi design settings/set/dispatch-findings` |
+| **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit`, `mushi radar scan/show`, `mushi recipe init/check/show/sources/change`, `mushi store pull/reviews/reviews-pull/reviews-set`, `mushi repo digest/cleanup/diagram`, `mushi code-health show/stats`, `mushi design settings/set/dispatch-findings` |
 | **Reports & lessons** | `mushi reports list/show/search/triage/file/…`, `mushi lessons list/show`, `mushi sync-lessons`, `mushi feedback board`, `mushi sentry import`, `mushi outbox list/edit/release/discard` |
 | **Fixes & releases** | `mushi fix`, `mushi fixes tail/refresh-ci/rerun-ci/merge/review/verify`, `mushi work` (a local Cursor CLI agent; you push and open the PR; `--followups` fixes Opus "fix first" findings on those PRs, and on cloud-agent PRs while cloud follow-ups are off), `mushi work --daemon` and `mushi worker install/status/revoke` (a local worker the console steers, ADR 0048; lanes fix reports, run follow-ups, resolve merge-queue conflicts (ADR 0049), audit the code (ADR 0050) or run skill-run rounds), `mushi console watch <reportId>`, `mushi releases draft/list/show/edit/publish/delete/stats/auto-release/calendar` |
 | **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve/run`, `mushi stories map`, `mushi ux discover/login/run/open` (local UX loop, `@mushi-mushi/ux`, ADR 0020), `mushi ux-runs list/show/file` |
@@ -923,6 +923,39 @@ lease every dispatcher reads). Migration `20261027150000_local_workers.sql`.
 | `code_audit_keys` | Code-read audit findings already filed (ADR 0050): one row per app and file + rule + evidence hash; the unique key makes filing race-proof. Service role only |
 | `worker:run` scope | Reaches `/v1/worker/*`, the local follow-up routes, report filing (`queue.laneId`, own lanes only) and `POST/PATCH /v1/admin/fixes` + `POST /v1/admin/fixes/:id/review` only on its own active claim (`workerClaimDenial`). Never merge, settings or keys; mcp:write does not imply it |
 | Lease checks | `dispatchFixForReport`, `POST /v1/admin/fixes/dispatch`, spend-down's candidates, `fix-worker` before an agent starts, `skill-runs` (waits). A claim counts while `status = 'active' AND lease_until > now()`; a failed read skips the report; a missing table (42P01 / PGRST205) means no claims |
+
+## Repo clean-up (Oct 2026)
+
+Repo → Clean up (ADR 0051, console ops plan P4) does from the console what the
+owner did by hand on 2026-10-27: delete merged or closed PR branches, close
+superseded agent PRs, turn on GitHub's automatic branch deletion. Only what
+Mushi recorded (fix attempts, release trains, UX runs, SDK upgrades, CI cost
+fixes), never a branch picked by name. Routes in `api/routes/repo-housekeeping.ts`
+(served by `api-ext`); rules in `_shared/repo-housekeeping.ts`; reads in
+`_shared/repo-housekeeping-load.ts`; the executor in
+`_shared/repo-housekeeping-run.ts` (injected into `executeConnectorAction` only
+by api-ext; the org connector-action routes in `api` answer `USE_REPO_CLEANUP`
+and leave the approval unclaimed). Migration `20261027183000_repo_housekeeping_items.sql`.
+
+| Route | Auth | Role |
+| --- | --- | --- |
+| `GET /v1/admin/projects/:id/repo-cleanup` | `adminOrApiKey(mcp:read)` | Per bound repo: branch candidates (recorded PR merged/closed, tip = that PR's last commit), fix-PR candidates (superseded, Opus hold at the head, no new commit for `staleDays` 7–90, default 14), kept items with the reason, the `delete_branch_on_merge` setting, recent clean-ups with per-item results, restorable branches, the race note. Stops under 300 GitHub calls left |
+| `POST /v1/admin/projects/:id/repo-cleanup/requests` | `adminOrApiKey(mcp:write)`, non-viewers, 5 an hour per app | `{ action: delete_branches \| close_prs \| set_delete_branch_on_merge, repo, keys?, staleDays?, reason? }`: rebuilds the preview and stores exactly the chosen candidates (≤ 50) as a legacy-backed GitHub `connector_actions` row. Nothing changes on GitHub |
+| `POST /v1/admin/projects/:id/repo-cleanup/restore` | `adminOrApiKey(mcp:write)`, non-viewers | `{ itemIds }`: a `restore_branches` request for branches Mushi deleted, at the commit it kept |
+| `POST …/repo-cleanup/requests/:actionId/approve\|reject\|execute` | console JWT, owner/admin | The shared connector-action approve (hash-matched, 1 h) and execute (single use). Execute refuses before the claim when the app ran 5 clean-ups in the last hour; answers 202 while a long run goes on |
+
+At run time every item is checked again on fresh GitHub reads: the default
+branch, a protected branch, the head or base of an open PR, a running Mushi
+row and a moved tip are refused; a PR whose head moved, that merged or closed,
+or that rides a release train is refused. The branch and its commit are
+written to `repo_housekeeping_items` before the delete (no row, no delete); the
+delete is GraphQL `updateRefs` with `beforeOid`, else re-read then REST
+`DELETE` (`method = 'reread'`). `close_prs` runs `_shared/fix-close.ts`, the
+same close as /pipeline (team note on the report). One `org_audit_events` row
+per item (`repo_cleanup.<action>.<outcome>`, the person who ran it). Token: the
+project's (else organization's) stored GitHub token only; Contents and Pull
+requests write, Administration write for the setting. CLI: `mushi repo cleanup
+show|request|restore`.
 
 ## Per-app Home (Oct 2026)
 
