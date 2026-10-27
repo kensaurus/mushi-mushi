@@ -34,7 +34,8 @@ import { requeueReviewForNewHead } from '../_shared/fix-review-db.ts';
 import { canonicalPrUrl } from '../_shared/pr-substance.ts';
 import { classifyIndexerError } from '../_shared/sweep-error-classifier.ts';
 import { fetchRepoTreeWithBranchFallback, lookupBranchHeadSha } from '../_shared/github-branch.ts';
-import { fetchLatestCheckRun, isAdvisoryCheckRun, parseGithubRepoUrl, resolveProjectGithubToken as resolveCiGithubToken } from '../_shared/github.ts';
+import { isAdvisoryCheckRun, parseGithubRepoUrl, resolveProjectGithubToken as resolveCiGithubToken } from '../_shared/github.ts';
+import { applyHeadCheckRollup, type HeadCheckDb } from '../_shared/check-run-head.ts';
 import {
   ciGithub,
   ciJobRow,
@@ -601,23 +602,13 @@ async function handleCheckRun(
   // A failed or cancelled run of a workflow GitHub already replaced stays on
   // the check-run list; storing it said "CI failed" while mergeStateStatus
   // was CLEAN (report 9e2ec6f0). The timeline event below still records this
-  // delivery.
-  let status = eventStatus;
-  let conclusion = eventConclusion;
-  let rolledUp = false;
+  // delivery. A green rollup clears a stale ci_infra flag.
   const full = repoFullName(payload.repository?.full_name);
   const ghRef = full ? parseGithubRepoUrl(`https://github.com/${full}`) : null;
+  let token: string | null = null;
   if (ghRef && headSha) {
     try {
-      const token = await resolveCiGithubToken(db, attempt.project_id, payload.installation?.id ?? null);
-      if (token) {
-        const snapshot = await fetchLatestCheckRun(token, ghRef, headSha);
-        if (snapshot) {
-          rolledUp = true;
-          status = (snapshot.status ?? '').toLowerCase();
-          conclusion = (snapshot.conclusion ?? '').toLowerCase();
-        }
-      }
+      token = await resolveCiGithubToken(db, attempt.project_id, payload.installation?.id ?? null);
     } catch (err) {
       log.warn('check_run rollup read failed (non-fatal)', {
         headSha,
@@ -625,35 +616,34 @@ async function handleCheckRun(
       });
     }
   }
+  const { head, infra } = await applyHeadCheckRollup(db as unknown as HeadCheckDb, [attempt.id], 'one', {
+    eventStatus,
+    eventConclusion,
+    token,
+    ref: ghRef,
+    sha: headSha ?? null,
+    onRollupError: (err) => log.warn('check_run rollup read failed (non-fatal)', {
+      headSha,
+      err: err instanceof Error ? err.message : String(err),
+    }),
+    // A cancelled / failed job may be the machine, not the code (Plan 022,
+    // ADR 0033): read the job and its annotations (two calls at most) before
+    // telling the timeline "CI failed". Skip that when the head's rollup is
+    // already green — this delivery is an older run GitHub no longer scores.
+    classifyInfra: (stored): Promise<FixCiInfra | null> => {
+      const eventResolvedNow = eventConclusion.length > 0;
+      const eventRed = eventConclusion === 'cancelled' || eventConclusion === 'failure';
+      const storedRed = stored.conclusion === 'cancelled' || stored.conclusion === 'failure';
+      if (!(eventResolvedNow && eventRed && (!stored.rolledUp || storedRed))) return Promise.resolve(null);
+      return classifyCheckRunJob(db, {
+        projectId: attempt.project_id,
+        repo: payload.repository?.full_name ?? null,
+        checkRunId: run.id ?? null,
+        installationId: payload.installation?.id ?? null,
+      });
+    },
+  });
   const eventResolved = eventConclusion.length > 0;
-  const eventRed = eventConclusion === 'cancelled' || eventConclusion === 'failure';
-  const storedRed = conclusion === 'cancelled' || conclusion === 'failure';
-
-  // A cancelled / failed job may be the machine, not the code (Plan 022,
-  // ADR 0033): read the job and its annotations (two calls at most) before
-  // telling the timeline "CI failed". Skip that when the head's rollup is
-  // already green — this delivery is an older run GitHub no longer scores.
-  const infra =
-    eventResolved && eventRed && (!rolledUp || storedRed)
-      ? await classifyCheckRunJob(db, {
-          projectId: attempt.project_id,
-          repo: payload.repository?.full_name ?? null,
-          checkRunId: run.id ?? null,
-          installationId: payload.installation?.id ?? null,
-        })
-      : null;
-  const greenRollup = rolledUp && (conclusion === 'success' || conclusion === 'neutral' || conclusion === 'skipped');
-
-  await db
-    .from('fix_attempts')
-    .update({
-      check_run_status: status || null,
-      check_run_conclusion: conclusion || null,
-      check_run_updated_at: new Date().toISOString(),
-      ...(greenRollup ? { ci_infra: null } : {}),
-      ...(infra ? { ci_infra: infra } : {}),
-    })
-    .eq('id', attempt.id);
 
   await emitFixEvent(db, {
     fix_attempt_id: attempt.id,
@@ -672,7 +662,7 @@ async function handleCheckRun(
   });
 
   return new Response(
-    JSON.stringify({ ok: true, fix_attempt_id: attempt.id, ci: conclusion || status }),
+    JSON.stringify({ ok: true, fix_attempt_id: attempt.id, ci: head.conclusion || head.status }),
     { status: 200, headers: { 'Content-Type': 'application/json' } },
   );
 }
