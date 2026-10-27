@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseHeartbeatAnswer, parseHostGuards, parseLaneVerbs, validateWorkerConfig } from './protocol.js'
+import { parseClaim, parseHeartbeatAnswer, parseHostGuards, parseLaneVerbs, validateWorkerConfig } from './protocol.js'
 import { hostGate, memAvailableGb, pastStop } from './guards.js'
 import { parseLanesConf, systemdUnit, windowsTaskArgs } from './install.js'
 
@@ -107,6 +107,11 @@ glot             glot      glot.it      542b34e0-019e-41fe-b900-7b637717bb86   c
       { name: 'glot', projectId: '542b34e0-019e-41fe-b900-7b637717bb86', repoDir: '/home/mushi-agent/.cache/mushi-work/glot.it', initial: { model: 'claude-opus-5-5-medium', mode: 'fix', paused: true } },
     ])
   })
+  it('imports the P3 modes as they are', () => {
+    for (const mode of ['conflicts', 'audit', 'skill'] as const) {
+      expect(parseLanesConf(`a default c ${P1} m ${mode}`, '/r')[0]!.initial).toEqual({ model: 'm', mode })
+    }
+  })
   it('refuses a clone that is a path and an unknown mode', () => {
     expect(() => parseLanesConf(`a default ../etc ${P1} m fix`, '/r')).toThrow(/folder name/)
     expect(() => parseLanesConf(`a default c ${P1} m shell`, '/r')).toThrow(/mode/)
@@ -121,5 +126,49 @@ glot             glot      glot.it      542b34e0-019e-41fe-b900-7b637717bb86   c
     expect(windowsTaskArgs({ node: 'C:\\Program Files\\nodejs\\node.exe', cli: 'C:\\m\\index.js' })).toEqual([
       '/Create', '/TN', 'Mushi worker', '/SC', 'ONLOGON', '/RL', 'LIMITED', '/F', '/TR', '"C:\\Program Files\\nodejs\\node.exe" C:\\m\\index.js work --daemon',
     ])
+  })
+})
+
+describe('the claim a lane accepts (P3)', () => {
+  const ID = '8000000a-0000-4000-8000-000000000000'
+  const Q = '9000000a-0000-4000-8000-000000000000'
+  const conflict = (over: Record<string, unknown> = {}) => ({
+    id: ID,
+    kind: 'conflict',
+    model: 'grok-4.7-xhigh-fast',
+    conflict: { queueId: Q, repo: 'kensaurus/glot.it', prNumber: 7, headRef: 'cursor/mushi-fix-7', headSha: 'c'.repeat(40), prUrl: 'https://github.com/kensaurus/glot.it/pull/7', ...over },
+  })
+
+  it('takes the new modes, and still refuses anything else', () => {
+    for (const mode of ['conflicts', 'audit', 'skill']) expect(parseLaneVerbs({ ...CFG, mode }).ok, mode).toBe(true)
+    expect(parseLaneVerbs({ ...CFG, mode: 'ux' }).ok).toBe(false)
+  })
+
+  it('a claim without a kind is a fix claim from an older server', () => {
+    const r = parseClaim({ id: ID, model: null, report: { id: P1, summary: 'x' } })
+    expect(r.ok && r.value.kind).toBe('fix')
+    expect(parseClaim({ id: ID, model: null }).ok).toBe(false)
+  })
+
+  it('a conflict claim names a PR of a repository, a plain branch and the head Mushi saw', () => {
+    const r = parseClaim(conflict())
+    expect(r.ok && r.value.kind === 'conflict' && r.value.conflict).toMatchObject({ repo: 'kensaurus/glot.it', prNumber: 7, headRef: 'cursor/mushi-fix-7' })
+  })
+
+  it('refuses a branch that reads as an option or escapes refs/heads, a short sha and a bad repo', () => {
+    for (const headRef of ['--upload-pack=sh', '-x', '../main', 'a..b', 'refs//x', 'a@{1}', 'feature/', 'x y', 'x;rm']) {
+      expect(parseClaim(conflict({ headRef })).ok, headRef).toBe(false)
+    }
+    expect(parseClaim(conflict({ headSha: 'abc123' })).ok).toBe(false)
+    expect(parseClaim(conflict({ repo: '/home/u/glot' })).ok).toBe(false)
+    expect(parseClaim(conflict({ prNumber: 0 })).ok).toBe(false)
+  })
+
+  it('an audit claim carries only models and a count; an unknown kind is refused', () => {
+    const r = parseClaim({ id: ID, kind: 'audit', model: 'grok-4.7-xhigh-fast', audit: { reviewModel: 'claude-opus-5-5-medium', findingsLeft: 12 } })
+    expect(r.ok && r.value.kind === 'audit' && r.value.audit).toEqual({ reviewModel: 'claude-opus-5-5-medium', findingsLeft: 12 })
+    expect(parseClaim({ id: ID, kind: 'audit', model: null, audit: { reviewModel: '--x' } }).ok).toBe(false)
+    expect(parseClaim({ id: ID, kind: 'shell', model: null }).ok).toBe(false)
+    expect(parseClaim({ id: ID, kind: 'fix', model: '--yolo', report: { id: P1 } }).ok).toBe(false)
   })
 })

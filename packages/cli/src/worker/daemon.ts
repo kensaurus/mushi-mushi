@@ -11,9 +11,13 @@
  *            2. the guards run here (worker/guards.ts): free memory, the
  *               GitHub API quota, the Cursor sign-in, one agent cap for the
  *               whole host, each lane's stop date;
- *            3. a lane runs review follow-ups first, then claims a report
- *               (its queue first, then the ranked ones) and runs `mushi work`'s
- *               own workOne on it in its clone;
+ *            3. a lane runs review follow-ups first, then claims by its mode:
+ *               `fix` a report (its queue first, then the ranked ones) and runs
+ *               `mushi work`'s own workOne on it in its clone; `skill` only the
+ *               skill-run rounds in its queue (ADR 0042 amendment); `conflicts`
+ *               a merge-queue conflict of its clone's repository
+ *               (worker/conflicts.ts, ADR 0049); `audit` one screen of a
+ *               code-read audit (worker/audit.ts, ADR 0050);
  *            4. every outcome goes back (POST /v1/worker/claims/:id/done), with
  *               an infra/code split so a broken machine never counts against
  *               a report.
@@ -46,8 +50,11 @@ import {
   type WorkOutcome,
 } from '../commands/work.js'
 import { CURSOR_CONFIRM_GRACE_MS, hostGate, memAvailableGb, pastStop, type MachineReadings } from './guards.js'
+import { auditPass } from './audit.js'
+import { repoOfRemote, resolveConflict } from './conflicts.js'
 import {
   loadWorkerConfig,
+  parseClaim,
   parseHeartbeatAnswer,
   WORKER_KEY_PATH,
   type HostGuards,
@@ -78,6 +85,19 @@ export interface DaemonDeps {
   host: { hostId: string; hostname: string; platform: 'linux' | 'wsl2' | 'macos' | 'windows'; version: string }
   /** Called after a run ends, so the loop ticks again soon. */
   wake?: () => void
+  /** P3 modes; default to the real runners. */
+  resolveConflict?: typeof resolveConflict
+  auditPass?: typeof auditPass
+  /** owner/name of each lane's clone (its origin remote), by lane name; sent so conflict claims match the clone. */
+  repos?: ReadonlyMap<string, string>
+}
+
+/** What a P3 run reports back (conflicts and audit). */
+interface JobOutcome {
+  result: string
+  failureKind?: 'infra' | 'code'
+  detail: string
+  headAfter?: string
 }
 
 interface ClaimFromServer {
@@ -160,6 +180,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
           projectId: l.local.projectId,
           status: { state: l.state, ...counts, agentMin: Math.round(agentMs / 60_000), last: l.last },
           ...(l.local.initial ? { initial: l.local.initial } : {}),
+          ...(deps.repos?.get(l.local.name) ? { repo: deps.repos.get(l.local.name) } : {}),
         }
       }),
       claims: lanes.flatMap((l) => [...l.running.keys()]),
@@ -216,6 +237,55 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     pending.add(run)
   }
 
+  /** A conflict or audit run: the same lease, counters and done call as a fix run. */
+  function startJob(lane: LaneRuntime, claimId: string, label: string, job: (signal: AbortSignal) => Promise<JobOutcome>): void {
+    const ac = new AbortController()
+    lane.running.set(claimId, ac)
+    lane.state = 'working'
+    const t0 = deps.now()
+    say(lane, label)
+    const run = (async () => {
+      let out: JobOutcome
+      try {
+        out = await job(ac.signal)
+      } catch (err) {
+        out = { result: 'failed', failureKind: 'infra', detail: err instanceof Error ? err.message : String(err) }
+      }
+      lane.counters.runs++
+      lane.counters.agentMs += deps.now() - t0
+      if (out.result === 'pushed') lane.counters.pushes++
+      if (out.result === 'timeout') lane.counters.timeouts++
+      if (out.result === 'failed') lane.counters.errors++
+      lane.last = `${out.result}: ${out.detail}`.slice(0, 160)
+      say(lane, `  → ${out.result}: ${out.detail}`)
+      const done = await deps.call<{ requeued: boolean }>(`/v1/worker/claims/${claimId}/done`, {
+        method: 'POST',
+        body: JSON.stringify({
+          outcome: out.result,
+          failureKind: out.result === 'failed' || out.result === 'timeout' ? (out.failureKind ?? 'code') : null,
+          detail: out.detail.slice(0, 1000),
+          ...(out.headAfter ? { headAfter: out.headAfter } : {}),
+        }),
+      })
+      if (!done.ok) say(lane, `  outcome not recorded: ${done.error.code} ${done.error.message}`)
+    })()
+      .catch((err: unknown) => say(lane, `  run error: ${err instanceof Error ? err.message : String(err)}`))
+      .finally(() => {
+        lane.running.delete(claimId)
+        pending.delete(run)
+        deps.wake?.()
+      })
+    pending.add(run)
+  }
+
+  /** Hand a claim back the lane cannot use (a kind it did not ask for, or one this CLI cannot read). */
+  async function giveBack(lane: LaneRuntime, claimId: string | null, why: string): Promise<void> {
+    once(`giveback:${lane.local.name}:${why}`, lane, `claim refused: ${why}`)
+    if (claimId) {
+      await deps.call(`/v1/worker/claims/${claimId}/done`, { method: 'POST', body: JSON.stringify({ outcome: 'skipped', failureKind: null, detail: `The worker could not use this claim: ${why}`.slice(0, 1000) }) })
+    }
+  }
+
   function startFollowup(lane: LaneRuntime, f: LocalFollowupCandidate): void {
     lane.followup = true
     const t0 = deps.now()
@@ -261,8 +331,10 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
       lane.state = lane.running.size || lane.followup ? 'draining' : 'paused'
       return
     }
-    // Follow-ups first, as lane-v4 did: they finish PRs already open.
-    if (now >= lane.nextFollowupAt && !lane.followup && agents() < g.max_agents) {
+    // Follow-ups first, as lane-v4 did: they finish PRs already open. Conflict
+    // and audit lanes open no PRs of their own, so they take none.
+    const takesFollowups = c.mode === 'fix' || c.mode === 'followups' || c.mode === 'skill'
+    if (takesFollowups && now >= lane.nextFollowupAt && !lane.followup && agents() < g.max_agents) {
       const listed = await deps.call<{ fixes: LocalFollowupCandidate[] }>(`/v1/admin/projects/${lane.local.projectId}/local-followups`)
       if (listed.ok && listed.data.fixes.length > 0) startFollowup(lane, listed.data.fixes[0]!)
       else {
@@ -270,12 +342,12 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
         if (!listed.ok) say(lane, `follow-ups not read: ${listed.error.code} ${listed.error.message}`)
       }
     }
-    if (c.mode !== 'fix') {
+    if (c.mode === 'followups') {
       lane.state = lane.followup ? 'working' : 'idle'
       return
     }
     while (!stopped && lane.running.size < c.concurrency && agents() < g.max_agents && now >= lane.nextClaimAt) {
-      const r = await deps.call<{ claim: ClaimFromServer | null; reason?: string }>('/v1/worker/claim', { method: 'POST', body: JSON.stringify({ laneId: lane.serverId }) })
+      const r = await deps.call<{ claim: unknown; reason?: string }>('/v1/worker/claim', { method: 'POST', body: JSON.stringify({ laneId: lane.serverId }) })
       if (refusedByKey(r)) {
         stopAll(`the server refused this worker's key (${(r as { error: { code: string } }).error.code}); it was revoked or lost access`)
         return
@@ -294,7 +366,31 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
         return
       }
       lane.counters.idle = 0
-      startRun(lane, r.data.claim)
+      const parsed = parseClaim(r.data.claim)
+      const claimId = typeof (r.data.claim as { id?: unknown }).id === 'string' ? ((r.data.claim as { id: string }).id) : null
+      if (!parsed.ok) {
+        await giveBack(lane, claimId, parsed.message)
+        lane.nextClaimAt = now + BACKOFF_MS
+        return
+      }
+      const k = parsed.value
+      const model = k.model ?? lane.config?.model ?? undefined
+      if (k.kind === 'fix' && (c.mode === 'fix' || c.mode === 'skill')) {
+        startRun(lane, k.raw as unknown as ClaimFromServer)
+      } else if (k.kind === 'conflict' && c.mode === 'conflicts') {
+        const t = k.conflict
+        startJob(lane, k.id, `conflict ${t.repo}#${t.prNumber} (${t.headRef} at ${t.headSha.slice(0, 7)})`, (signal) =>
+          (deps.resolveConflict ?? resolveConflict)(t, { repoDir: lane.local.repoDir, model, log: (l) => say(lane, l.trim()), signal }),
+        )
+      } else if (k.kind === 'audit' && c.mode === 'audit') {
+        startJob(lane, k.id, `audit pass (${k.audit.findingsLeft} finding(s) left this hour)`, (signal) =>
+          (deps.auditPass ?? auditPass)(api, k.id, { repoDir: lane.local.repoDir, laneName: lane.local.name, model, reviewModel: k.audit.reviewModel, log: (l) => say(lane, l.trim()), signal }),
+        )
+      } else {
+        await giveBack(lane, k.id, `a ${k.kind} claim for a lane in ${c.mode} mode`)
+        lane.nextClaimAt = now + BACKOFF_MS
+        return
+      }
     }
     if (lane.running.size || lane.followup) lane.state = 'working'
     else if (agents() >= g.max_agents) lane.state = 'slot-wait'
@@ -465,9 +561,14 @@ export async function runDaemon(opts: { configPath?: string } = {}): Promise<voi
   // The machine is ready before the first claim: gh can push, every clone is a git repo.
   const gh = await runProc('gh', ['auth', 'status'], { timeoutMs: 30_000 })
   if (gh.code !== 0) throw new MushiCliError('E_AUTH_MISSING', 'gh is not signed in on this machine.', 'Run: gh auth login')
+  const repos = new Map<string, string>()
   for (const lane of cfg.lanes) {
     const g = await runProc('git', ['rev-parse', '--git-dir'], { cwd: lane.repoDir, timeoutMs: 30_000 })
     if (g.code !== 0) throw new MushiCliError('E_INVALID_INPUT', `Lane ${lane.name}: ${lane.repoDir} is not a git clone.`, `git clone <repo> ${lane.repoDir}`)
+    // Which repository the clone is: conflict claims (ADR 0049) offer only its PRs.
+    const origin = await runProc('git', ['remote', 'get-url', 'origin'], { cwd: lane.repoDir, timeoutMs: 30_000 })
+    const repo = origin.code === 0 ? repoOfRemote(origin.stdout) : null
+    if (repo) repos.set(lane.name, repo)
   }
 
   const conf: CliConfig = { apiKey: key, endpoint }
@@ -484,6 +585,7 @@ export async function runDaemon(opts: { configPath?: string } = {}): Promise<voi
     log: (l) => process.stdout.write(`${l}\n`),
     host: { hostId, hostname: nodeHostIO.hostname.split('.')[0]!.slice(0, 80) || 'host', platform, version: MUSHI_CLI_VERSION },
     wake: () => wake(),
+    repos,
   })
   onInterrupt((signal) => daemon.shutdown(signal))
   process.stdout.write(`mushi worker: ${cfg.lanes.length} lane(s) on ${platform}; heartbeat every ${HEARTBEAT_MS / 1000} s. Stop with Ctrl-C or systemctl --user stop mushi-worker.\n`)

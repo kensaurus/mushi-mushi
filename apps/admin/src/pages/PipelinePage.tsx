@@ -98,7 +98,8 @@ export function PipelinePage() {
     const d = lanesPage.data
     if (!d || !Array.isArray(d.hosts) || !Array.isArray(d.lanes)) return []
     const mine = new Set(d.hosts.filter((h) => h.mine && !h.revoked).map((h) => h.id))
-    return d.lanes.filter((l) => mine.has(l.hostId))
+    // Only lanes that fix reports take a sent report (a conflicts, audit or skill lane would not).
+    return d.lanes.filter((l) => mine.has(l.hostId) && l.config.mode === 'fix')
   }, [lanesPage.data])
   const now = useNow(30_000)
   const toast = useToast()
@@ -126,7 +127,15 @@ export function PipelinePage() {
   usePublishPageContext({
     route: '/pipeline',
     title: 'Pipeline',
-    summary: data ? `${stuckTotal} items stuck across ${stages.filter((s) => s.stuck > 0).length} stages` : page.error ? "The pipeline couldn't load" : 'Loading the pipeline',
+    // The Workers tab never loads the pipeline, so it must not say it is loading it.
+    summary:
+      tab === 'workers'
+        ? 'Local workers'
+        : data
+          ? `${stuckTotal} items stuck across ${stages.filter((s) => s.stuck > 0).length} stages`
+          : page.error
+            ? "The pipeline couldn't load"
+            : 'Loading the pipeline',
     questions: ['Why are my fixes not merging?', 'Which PRs are stuck, and why?', 'Why do my release trains keep failing?'],
   })
 

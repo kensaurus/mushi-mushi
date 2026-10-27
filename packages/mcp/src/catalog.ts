@@ -434,6 +434,36 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Stop glot.it\'s CI from running on draft agent PRs: open the skip-drafts fix for ci.yml as a draft PR to review.',
   },
   {
+    name: 'preview_ci_cost_fix_rollout',
+    title: 'Preview CI cost fixes for every app',
+    description:
+      'Preview \'Apply to every app\' for the CI cost fixes (ADR 0047 amendment): every CI advice item that carries an autofix, across the apps this key may change (viewers\' apps are left out), grouped per app and repo, so each repo can get ONE draft pull request (one CI run) for all its fixes. Per repo { projectId, projectName, repo, items [{ key, workflowPath, kind (add_concurrency | skip_drafts | weekly_cron | ignore_docs_paths), title, evidence, monthSavingUsd (estimated USD per 30 days, null when Mushi cannot price it), state (ready | pr_open | in_progress), prUrl }], readyItems, monthSavingUsd (the ready items\' priced saving), unpricedItems, block (set when Mushi already knows the repo\'s GitHub access cannot edit workflow files: GITHUB_WORKFLOWS_WRITE_MISSING, from the setup check or the last attempt) }, largest saving first, plus totals, caps { reposPerRequest: 10, itemsPerRepo: 20 } and partial (set when part of the advice could not be read). Optional projectId limits it to one app; an account-level key with none reads every app. Read-only: it changes nothing. Open them with apply_ci_cost_fix_rollout.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Which CI cost fixes can Mushi open across all my apps, and what would each repo save?',
+  },
+  {
+    name: 'apply_ci_cost_fix_rollout',
+    title: 'Open CI cost fixes for every app (one draft PR per repo)',
+    description:
+      'Open the CI cost fixes from preview_ci_cost_fix_rollout as ONE draft pull request per repo (ADR 0047 amendment), so each repo runs CI once for all its fixes instead of once per fix. repos: [{ projectId, repo, items: [{ workflowPath, kind }] }], at most 10 repos and 20 items each (pass the preview\'s ready items). Mushi rebuilds the advice itself and opens only items it still advises (evidence and saving come from the server), skips an edit whose PR is still open or that is being opened, and counts each repo once against its project\'s 10 CI fix PRs an hour. In each repo it reads every workflow once, applies the kinds in turn with the same refusals as open_ci_cost_fix, and opens one draft PR with a ci: title whose body lists each change and each refusal; a refused item is never dropped, and when every item is refused no PR is opened. Nothing changes until a person reviews, readies and merges the PR. Needs the GitHub App\'s Workflows: Read and write permission (or a token with the workflow scope). Confirm with the user first. Returns { queued, results [{ projectId, repo, status (queued | skipped | error), bundleId, jobs, skipped [{ workflowPath, kind, code (NOT_ADVISED | PR_ALREADY_OPEN | COST_FIX_IN_PROGRESS), message, prUrl }], error { code (NOT_FOUND | FORBIDDEN | REPO_NOT_IN_PROJECT | RATE_LIMITED | COST_FIX_IN_PROGRESS | MIGRATION_PENDING), message } }] }. Follow each bundle with get_ci_cost_fix_bundle. Write.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Open every advised CI cost fix across my apps, one reviewed draft PR per repo.',
+  },
+  {
+    name: 'get_ci_cost_fix_bundle',
+    title: 'CI cost fix bundle (one PR, several fixes)',
+    description:
+      'Read one CI cost fix bundle (one draft PR for several fixes in one repo, from apply_ci_cost_fix_rollout) by its bundleId: { bundle: { id, projectId, repo, status (queued | running | pr_opened | nothing_opened | failed), prUrl, prNumber, items (each fix: workflowPath, kind, status, summary, error, prUrl, baseline, measured, saving), measuredUsdPerMonth (after the merge: the saving measured per workflow, each workflow once) } }. After the merge it reads GitHub once and stores the minutes per day since. Read-only on GitHub.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Did the CI fix PR for glot.it open, which fixes were refused, and what did it save after the merge?',
+  },
+  {
     name: 'explain_finding',
     title: 'Explain one finding',
     description:

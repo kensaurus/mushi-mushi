@@ -488,6 +488,21 @@
     "path": "/v1/admin/ci/bill?project_id={projectId}&days={days|30}",
     "hints": { "destructive": false, "idempotent": true }
   },
+  "preview_ci_cost_fix_rollout": {
+    "scope": "mcp:read",
+    "description": "Every CI cost fix Mushi can open across the apps you may change, grouped per repo with the estimated saving; one draft PR per repo.",
+    "method": "GET",
+    "path": "/v1/admin/ci/cost-fix-rollout?project_id={projectId}",
+    "hints": { "destructive": false, "idempotent": true }
+  },
+  "get_ci_cost_fix_bundle": {
+    "scope": "mcp:read",
+    "description": "One CI cost fix bundle: its draft PR, each fix's state or refusal, and the saving measured after the merge.",
+    "method": "GET",
+    "path": "/v1/admin/ci/cost-fix-bundles/{bundleId}",
+    "required": ["bundleId"],
+    "hints": { "destructive": false, "idempotent": true }
+  },
   "get_fix_verification": {
     "scope": "mcp:read",
     "description": "Merge checks for a fix's current PR head: Opus review, CI, fail-to-pass proof, weakened tests, size, second review; automatic merge state and regressions.",

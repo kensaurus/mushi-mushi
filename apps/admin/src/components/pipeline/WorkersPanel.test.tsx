@@ -5,7 +5,9 @@
  * GET /v1/admin/work/lanes; pausing a lane sends only `paused`; moving a
  * queue item sends the whole new order; the empty state shows the install
  * command; "Send to my local worker" appends to the only lane; the pipeline's
- * Requeue posts local worker run ids as claimIds.
+ * Requeue posts local worker run ids as claimIds. P3 modes: the mode menu
+ * offers all five, an audit lane sets its veto model, and a conflict or audit
+ * run shows as text (it holds no report).
  */
 
 import { act, createElement } from 'react'
@@ -172,6 +174,58 @@ ${ids[1]} ${ids[0]}`)
     expect(q('workers-first-step')!.textContent).toContain('No local worker yet')
     expect(q('workers-empty')!.textContent).toContain('mushi worker install --lane my-app')
     expect(q('workers-empty')!.textContent).toContain('--lanes-conf')
+  })
+})
+
+describe('lane modes (P3)', () => {
+  it('offers the five modes and saves only the mode', async () => {
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    const select = q('worker-lane-l1-mode') as HTMLSelectElement
+    expect([...select.options].map((o) => o.value)).toEqual(['fix', 'followups', 'conflicts', 'audit', 'skill'])
+    await act(async () => {
+      select.value = 'conflicts'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(state.calls).toEqual([{ path: '/v1/admin/work/lanes/l1', method: 'PATCH', body: { mode: 'conflicts' } }])
+  })
+
+  it('an audit lane sets its veto model; a conflict and an audit run show as text, with their counts', async () => {
+    const data = fixture()
+    const lane = data.lanes[0]!
+    lane.config.mode = 'audit'
+    lane.repo = 'kensaurus/glot.it'
+    lane.active = [{ claimId: 'c8', kind: 'conflict', reportId: null, title: 'Merge conflict on kensaurus/glot.it#7', since: '2026-10-27T11:50:00Z', leaseUntil: '2026-10-27T12:35:00Z', fromQueue: false }]
+    lane.recent = [{ claimId: 'c3', kind: 'audit', reportId: null, title: 'Code-read audit pass', outcome: 'filed', failureKind: null, prUrl: null, detail: 'src/a.tsx: 1 filed', claimedAt: '2026-10-27T11:00:00Z', finishedAt: '2026-10-27T11:10:00Z', autoRequeued: false }]
+    lane.counts7d = { ...lane.counts7d, runs: 3, filed: 1 }
+    state.data = data
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    const card = q('worker-lane-l1')!
+    expect(card.textContent).toContain('(kensaurus/glot.it)')
+    expect(card.textContent).toContain('3 screens read, 1 with findings filed')
+    expect(q('worker-lane-l1-mode-hint')!.textContent).toMatch(/files only those its own check reproduces/)
+    expect(card.querySelector('a[href="/reports/null"]')).toBeNull()
+    expect(card.textContent).toContain('Merge conflict on kensaurus/glot.it#7')
+    expect(q('worker-lane-l1-recent')!.textContent).toContain('Filed findings')
+    // An audit lane finds its own work: no queue to fill.
+    expect(q('worker-lane-l1-queue')).toBeNull()
+    expect(q('worker-lane-l1-add')).toBeNull()
+
+    const input = q('worker-lane-l1-review-model') as HTMLInputElement
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+      set.call(input, 'claude-opus-5-5-medium')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await click(q('worker-lane-l1-review-model-save'))
+    expect(state.calls).toEqual([{ path: '/v1/admin/work/lanes/l1', method: 'PATCH', body: { review_model: 'claude-opus-5-5-medium' } }])
+  })
+
+  it('"Send to my local worker" offers only lanes that fix reports', async () => {
+    const data = fixture()
+    data.lanes[0]!.config.mode = 'conflicts'
+    state.data = data
+    await render(createElement(SendToWorkerButton, { projectId: 'p1', reportIds: ['r7'] }))
+    expect(q('send-to-worker')).toBeNull()
   })
 })
 

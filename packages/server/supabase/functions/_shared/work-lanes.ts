@@ -13,7 +13,12 @@
  *          each side refuses anything else.
  */
 
-export const LANE_MODES = ['fix', 'followups'] as const
+/**
+ * What a lane does (ADR 0048; P3 modes: ADR 0049 conflicts, ADR 0050 audit,
+ * ADR 0042 amendment skill). An older daemon refuses a mode it does not know
+ * and leaves that lane idle.
+ */
+export const LANE_MODES = ['fix', 'followups', 'conflicts', 'audit', 'skill'] as const
 export type LaneMode = (typeof LANE_MODES)[number]
 
 /** The verbs a heartbeat answers with, per lane. Nothing else ever leaves the server for a lane. */
@@ -118,6 +123,35 @@ export function laneConfigFromRow(row: {
   }
 }
 
+/**
+ * What the console may change on a lane: the seven verbs, plus `review_model`
+ * (an audit lane's optional veto model, ADR 0050). `review_model` is not a
+ * heartbeat verb: it travels in the audit claim, so a daemon that predates it
+ * never sees an unknown key.
+ */
+export type LaneSettings = Partial<LaneConfig> & { review_model?: string | null }
+
+export function parseLaneSettings(raw: unknown): Parsed<LaneSettings> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, message: 'Lane settings must be an object.' }
+  const { review_model: reviewModel, ...rest } = raw as Record<string, unknown>
+  const out: LaneSettings = {}
+  if (reviewModel !== undefined) {
+    if (reviewModel !== null && (typeof reviewModel !== 'string' || !MODEL_RE.test(reviewModel))) {
+      return { ok: false, message: 'review_model must be a model id (letters, digits, ".", "_", ":", "-") or null for no veto pass.' }
+    }
+    out.review_model = reviewModel as string | null
+  }
+  if (Object.keys(rest).length === 0) {
+    return reviewModel === undefined ? { ok: false, message: `Send at least one of ${[...LANE_VERBS, 'review_model'].join(', ')}.` } : { ok: true, value: out }
+  }
+  const verbs = parseLaneVerbs(rest, { partial: true })
+  if (!verbs.ok) return verbs
+  return { ok: true, value: { ...verbs.value, ...out } }
+}
+
+/** owner/name of a GitHub repository, as a lane's clone names it (a value, never a path). */
+export const REPO_RE = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/
+
 /** Host-wide guards the daemon applies on the machine, from the server (defaults are lane-v4's). */
 export const HOST_GUARD_KEYS = ['max_agents', 'min_free_mem_gb', 'gh_floor'] as const
 export interface HostGuards {
@@ -173,6 +207,8 @@ export interface HeartbeatLane {
   status: Record<string, string | number>
   /** Settings the machine proposes for a lane it registers (lanes.conf import); used only when the lane is new. */
   initial: Partial<LaneConfig>
+  /** owner/name of the lane's clone (its origin remote); null from a daemon that predates P3. */
+  repo: string | null
 }
 
 export interface Heartbeat {
@@ -230,7 +266,8 @@ export function parseHeartbeat(raw: unknown): Parsed<Heartbeat> {
       if (!p.ok) return { ok: false, message: `Lane "${name}": ${p.message}` }
       initial = p.value
     }
-    lanes.push({ name, projectId: l.projectId.toLowerCase(), status: cleanStatus(l.status), initial })
+    if (l.repo != null && (typeof l.repo !== 'string' || !REPO_RE.test(l.repo))) return { ok: false, message: `Lane "${name}": repo must be owner/name.` }
+    lanes.push({ name, projectId: l.projectId.toLowerCase(), status: cleanStatus(l.status), initial, repo: typeof l.repo === 'string' ? l.repo.toLowerCase() : null })
   }
   const claims = (Array.isArray(b.claims) ? b.claims : []).filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)).slice(0, 50)
   const status = cleanStatus(b.status)
@@ -256,6 +293,7 @@ export function laneClaimBlock(cfg: LaneConfig, activeClaims: number, now: Date)
   if (cfg.drain) return 'The lane is draining: it finishes what runs and takes nothing new.'
   if (cfg.stop_at && Date.parse(cfg.stop_at) <= now.getTime()) return `The lane stopped at ${cfg.stop_at} (its stop date).`
   if (cfg.mode === 'followups') return 'The lane only works review follow-ups.'
+  // conflicts, audit and skill claim through the same route; what they may take is decided there.
   if (activeClaims >= cfg.concurrency) return `The lane already runs ${activeClaims} of ${cfg.concurrency}.`
   return null
 }
@@ -338,7 +376,12 @@ export async function claimFirstFree<T extends { id: string }>(
 
 // ── How a claim ends ────────────────────────────────────────────────────────
 
-export const CLAIM_OUTCOMES = ['pr_opened', 'no_change', 'verdict', 'timeout', 'skipped', 'stopped', 'failed'] as const
+/**
+ * How a run ended. `pushed` and `refused` are conflict runs (ADR 0049: a merge
+ * commit pushed, or the worker's own checks refused the agent's result);
+ * `filed` is an audit run that filed at least one reproduced finding (ADR 0050).
+ */
+export const CLAIM_OUTCOMES = ['pr_opened', 'no_change', 'verdict', 'timeout', 'skipped', 'stopped', 'failed', 'pushed', 'refused', 'filed'] as const
 export type ClaimOutcome = (typeof CLAIM_OUTCOMES)[number]
 export const FAILURE_KINDS = ['infra', 'code'] as const
 export type FailureKind = (typeof FAILURE_KINDS)[number]
@@ -352,6 +395,8 @@ export interface ClaimDone {
   fixId: string | null
   prUrl: string | null
   detail: string | null
+  /** A conflict run's pushed merge commit. */
+  headAfter: string | null
 }
 
 export function parseClaimDone(raw: unknown): Parsed<ClaimDone> {
@@ -366,8 +411,10 @@ export function parseClaimDone(raw: unknown): Parsed<ClaimDone> {
   const fixId = typeof b.fixId === 'string' && UUID_RE.test(b.fixId) ? b.fixId : null
   const prUrl = typeof b.prUrl === 'string' && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(b.prUrl) ? b.prUrl : null
   if (b.outcome === 'pr_opened' && !prUrl) return { ok: false, message: 'A pr_opened outcome needs prUrl (https://github.com/<owner>/<repo>/pull/<n>).' }
+  const headAfter = typeof b.headAfter === 'string' && /^[0-9a-f]{40}$/.test(b.headAfter) ? b.headAfter : null
+  if (b.outcome === 'pushed' && !headAfter) return { ok: false, message: 'A pushed outcome needs headAfter, the 40-hex sha of the merge commit.' }
   const detail = typeof b.detail === 'string' ? b.detail.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').slice(0, 1000) : null
-  return { ok: true, value: { outcome: b.outcome as ClaimOutcome, failureKind: failureKind as FailureKind | null, fixId, prUrl, detail } }
+  return { ok: true, value: { outcome: b.outcome as ClaimOutcome, failureKind: failureKind as FailureKind | null, fixId, prUrl, detail, headAfter } }
 }
 
 /** True when this infra failure may put the report back in the queue on its own (no automatic requeue in the window). */

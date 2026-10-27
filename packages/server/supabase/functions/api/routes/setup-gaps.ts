@@ -34,6 +34,7 @@ import {
   abilitiesFromInstallation,
   abilitiesFromReadProbes,
   autofixKeyGap,
+  clearRepoAbilities,
   countByStatus,
   createTtlCache,
   deployGap,
@@ -41,6 +42,7 @@ import {
   forAudience,
   githubAccessGap,
   noRepoGap,
+  rememberRepoAbilities,
   SETUP_GAPS_CACHE_MS,
   slackGap,
   sortGaps,
@@ -81,6 +83,7 @@ const cache = createTtlCache<ProjectGaps>(SETUP_GAPS_CACHE_MS)
 /** @internal Tests reset the per-isolate cache between cases. */
 export function clearSetupGapsCache(): void {
   cache.clear()
+  clearRepoAbilities()
 }
 
 interface RepoRow {
@@ -204,7 +207,9 @@ async function githubGaps(db: Db, projectId: string, deps: SetupGapsDeps): Promi
     repos.slice(0, MAX_REPOS).map(async (r) => {
       const name = `${r.ref.owner}/${r.ref.repo}`
       try {
-        return githubAccessGap(await within(probeRepo(db, projectId, r.ref, r.installationId, deps), `GitHub check of ${name}`))
+        const access = await within(probeRepo(db, projectId, r.ref, r.installationId, deps), `GitHub check of ${name}`)
+        if (access.abilities) rememberRepoAbilities(projectId, name, access.abilities, deps.now().getTime())
+        return githubAccessGap(access)
       } catch (err) {
         return githubAccessGap({ projectId, repo: name, source: 'app', abilities: null, readError: why(err) })
       }

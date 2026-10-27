@@ -4982,7 +4982,7 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP<br/>126 tools / 8 resources / 4 prompts"]
+    MCP["MCP — both stdio AND Streamable HTTP<br/>129 tools / 8 resources / 4 prompts"]
     REST["REST /v1/admin/*<br/>OpenAPI 3.1 at /openapi.json<br/>adminOrApiKey({ scope: 'mcp:read|write' })"]
     A2A["A2A v1.0.0 /v1/a2a/tasks<br/>create / get / cancel / SSE subscribe"]
     AGUI["AG-UI v0.4 SSE<br/>fix dispatch stream<br/>API key OR JWT"]
@@ -5030,7 +5030,7 @@ your client:
 }
 ```
 
-The full tool catalog (126 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (129 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
 [`MCP tools reference`](/sdks/mcp-tools). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
@@ -5206,7 +5206,7 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 126 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 129 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
 | **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |
@@ -7047,9 +7047,17 @@ every lane on the machine. A lane is one app and one clone of its repo.
 Every minute it sends a heartbeat. The answer holds each lane's settings, set
 in the console: its model, mode, how many reports at once, paused, drain and a
 stop date, plus the machine's guards (agents at once, a free-memory floor, a
-GitHub API floor). The daemon then runs review follow-ups first, and claims
-reports: the lane's queue first, then the worst open reports. While a lane
-holds a report, no cloud agent is sent to it. Every outcome goes back to
+GitHub API floor). The daemon then works by each lane's mode:
+
+| Mode | What the lane does |
+| --- | --- |
+| `fix` | Runs review follow-ups first, then claims reports: the lane's queue first, then the worst open reports |
+| `followups` | Review follow-ups only |
+| `conflicts` | Merges the base branch into a merge-queue PR of the clone's repository at the commit Mushi saw; the agent may change only the conflicted files; refused on a leftover marker or any other change; commits with your hooks and pushes the merge, fast-forward only |
+| `audit` | A model (read-only) proposes bugs for one screen with the line, the code there and a check; the machine runs the check itself and files only what reproduces; a second model may only veto |
+| `skill` | Only the rounds of skill runs started with this lane on Spend credits |
+
+While a lane holds a report, no cloud agent is sent to it. Every outcome goes back to
 Mushi; a failure of the machine (a clone permission, the network, a hook that
 timed out under load) is kept apart from a failure of the code and never
 counts against the report.
@@ -7080,8 +7088,11 @@ stay on your machine), stores a worker key in the OS keychain (or
 `~/.config/mushi/worker.key`, mode 0600, where there is none), and writes the
 service: a systemd user unit (`mushi-worker.service`) on Linux and WSL2, a
 scheduled task that starts at logon on Windows. From `lanes.conf`, `queue` and
-`fix` become `fix`, `off` becomes a paused lane, and the profile column is
-dropped: one worker key serves every app.
+`fix` become `fix`, `followups`, `conflicts`, `audit` and `skill` stay as they
+are, `off` becomes a paused lane, and the profile column is dropped: one worker
+key serves every app. The heartbeat names each lane's repository (`owner/name`
+from its `origin` remote) so a conflicts lane takes only that repository's
+PRs; the clone's path never leaves the machine.
 
 The worker key has the scope `worker:run`: it can take reports for its lanes,
 record their fixes and file reports, and nothing else. It cannot merge, change
@@ -7221,6 +7232,23 @@ mushi repo diagram unpublish --yes
 `publish` shows where the page will go before it publishes. It sends the hash
 of exactly what the preview showed, so a diagram that changed in between is
 refused. A private repo can only be published from the console.
+
+### Clean up branches and pull requests
+
+```bash
+mushi repo cleanup show [--stale-days 14]       # branches and fix PRs Mushi opened that can go, with why and the commit
+mushi repo cleanup request delete-branches --repo owner/app [--keys branch:a,branch:b]
+mushi repo cleanup request close-prs --repo owner/app [--keys pr:12]
+mushi repo cleanup request auto-delete --repo owner/app   # turn on GitHub's "Automatically delete head branches"
+mushi repo cleanup restore <itemId>…            # bring back a branch Mushi deleted, at the commit it kept
+```
+
+Only branches and pull requests Mushi itself opened are listed: a branch whose
+pull request merged or closed and that still points at that pull request's last
+commit, or an open fix PR that a newer fix replaced, that the Opus review held,
+or that got no new commit for 14 days. The CLI only asks. A team owner or admin
+approves the exact list in the console (Repo → Clean up) within an hour, and
+Mushi checks every item again before it deletes or closes anything.
 
 ---
 
@@ -8396,7 +8424,7 @@ read the contract before drafting a fix.
 ```
 
 See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
-on npm for the full **126-tool** catalog and
+on npm for the full **129-tool** catalog and
 [Connecting your orchestrator](/concepts/orchestrator-interop) for the
 non-MCP surfaces (REST, A2A, AG-UI SSE).
 
@@ -17437,6 +17465,20 @@ Writing a workflow file needs the GitHub App's **Workflows: Read and write** per
 
 From the terminal, run `mushi runner fix --repo <owner/repo> --workflow .github/workflows/ci.yml --kind skip_drafts`, and follow it with `mushi runner fix-status`. In your editor, use the MCP tool `open_ci_cost_fix`.
 
+## Apply to every app
+
+Every pull request runs CI once, and each run costs minutes. So when a repo has several fixes, it's cheaper to open them as **one** pull request. **Apply to every app**, next to the advice list, does that for all your apps at once:
+
+1. **Preview.** Mushi lists every fix it can open in the apps you may change, grouped by repo, with the estimated saving per fix and per repo. A fix whose pull request is still open, or is being opened, can't be picked again. Mushi can't price every fix: those say "not priced", never $0. A repo where Mushi already knows its GitHub access can't edit workflow files starts unticked, with the reason. Mushi knows this from the setup check or the last attempt.
+2. **Pick and confirm.** Tick the fixes you want, then confirm once. Mushi opens at most 10 repos at a time and 20 fixes per repo. Each repo counts once against its app's 10 CI fix pull requests an hour.
+3. **Results.** Each repo gets **one draft pull request** with a `ci:` title. The body lists every change with what it changed and why, plus the workflow's minutes over the last 14 days. Each fix keeps the refusals above. A fix Mushi refused is listed in the pull request and in the result, never dropped. When Mushi refuses every fix in a repo, it opens no pull request there and says why.
+
+Before opening anything, Mushi rebuilds the advice. It opens only fixes it still advises, so a stale preview can't open something the advice no longer says.
+
+After the merge, Mushi measures each changed workflow once, even when two fixes changed the same file. The saving isn't counted twice.
+
+From the terminal, run `mushi runner fix --all` to preview and `mushi runner fix --all --apply` to open. Follow each repo with `mushi runner fix-status --bundle `. In your editor, use the MCP tools `preview_ci_cost_fix_rollout`, `apply_ci_cost_fix_rollout` and `get_ci_cost_fix_bundle`.
+
 ## When nothing has reported in
 
 The page stays empty until GitHub reports a job for this app's repositories, or a machine that runs your tests reports in. On that machine, run:
@@ -18023,9 +18065,10 @@ Each Cursor key shows its hint, label and expiry ("expires Oct 28 (6 days)").
 
 A **skill run** applies one skill from your synced skills catalog to one part of one app, for a few rounds, on that app's own Cursor key. Pick:
 
-- **App** and **Skill**: only skills whose result an agent can measure and that need no product decision are offered, such as accessibility, layouts at every width, loading/empty/error states, page UX, readability, forms, native feel, one design system, translations, SEO, performance, bundle size, error handling, dead code and unit tests. Under the picker, the page says what each round measures.
+- **App** and **Skill**: only skills whose result an agent can measure and that need no product decision are offered, such as accessibility, layouts at every width, loading/empty/error states, page UX, readability, forms, native feel, one design system, translations, SEO, performance, bundle size, error handling, dead code, unit tests and the parked-work register (BACKLOG.md, measured by what it adds and closes). Under the picker, the page says what each round measures.
 - **What to work on**: a part of the app, such as "the /settings pages", "the checkout flow" or "src/components/cards". A run never works outside it.
 - **Rounds at most** (1 to 5) and **Merge each round when Opus approves and CI passes** (on by default).
+- **Run on**, when you have a [local worker](pipeline#workers) lane for the app in fix or skill mode: Cursor in the cloud, or that lane on your machine. A round for a lane waits in its queue and never goes to the cloud.
 
 Each round is a report that spend-down sends to Cursor with the skill's instructions. The agent measures first, makes the changes in that part only, and opens a pull request with the numbers before and after. Opus reviews it like any fix. With merging on, an approved round goes into the [merge queue](fixes#merge-when-ready), and the next round builds on what merged. A run ends when the agent finds nothing left to change or after its last round. It stops when the agent says the rest needs your decision, when you dismiss a round, or when you press **Stop**. Each app can have up to 5 runs going.
 
@@ -20838,7 +20881,7 @@ Wire Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected
 your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
-The live **Catalog** tab mirrors the server registry (**126 tools**, 8 resources, 4 prompts).
+The live **Catalog** tab mirrors the server registry (**129 tools**, 8 resources, 4 prompts).
 
 ---
 
@@ -21429,9 +21472,19 @@ The **Workers** tab shows your local workers: machines that run `mushi work --da
 | Part | What it shows |
 | --- | --- |
 | **Machines** | Each registered machine: online or offline, its last heartbeat, what it is doing now (working, idle, waiting for memory, for the GitHub quota, for the Cursor sign-in, or for a free agent slot), and its guards: how many agents may run at once, the free-memory floor and the GitHub API floor. The machine's owner changes the guards or revokes it. |
-| **Lanes** | One app on one machine: its model, mode (fix reports, or review follow-ups only), how many reports it runs at once, paused or not, its stop date, and drain (finish what runs, take nothing new). |
+| **Lanes** | One app on one machine: its model, mode, how many it runs at once, paused or not, its stop date, and drain (finish what runs, take nothing new). An audit lane also has a second model that may only veto a finding. |
 | **Queue** | Reports the lane takes first, in order. Move a report up or down, remove it, or paste report ids (one or many) into **Add reports by id**. A report already being fixed somewhere else waits in the queue until it is free. |
 | **Recent runs** | The last 7 days: runs, PRs opened, no change, timeouts, errors, and failures of the machine (infra) kept apart from failures of the code. |
+
+A lane's **mode** says what it does:
+
+| Mode | What the lane does |
+| --- | --- |
+| Fix reports and follow-ups | Its queue first, then the worst open reports; a draft PR for each |
+| Review follow-ups only | Fixes what Opus asked for on PRs a local agent opened |
+| Resolve merge conflicts | Merges the base branch into this repository's PRs that wait in the merge queue for a conflict agent. The agent may change only the conflicted files; anything else is refused. It counts toward the 2 conflict agents a PR may have, cloud and local together |
+| Audit the code, screen by screen | A model proposes bugs; the machine files only those its own check reproduces, at most 12 an hour per app, into a fix lane for the same app on that machine |
+| Run skill runs | Only the rounds of skill runs started on Spend credits with **Run on** set to this lane |
 
 A lane change reaches the machine at its next heartbeat, within a minute. The machine opens no port: it asks Mushi for its settings, and the settings are values (a model id, a number, a date), never a command or a path. Viewers can read this tab but cannot change it.
 

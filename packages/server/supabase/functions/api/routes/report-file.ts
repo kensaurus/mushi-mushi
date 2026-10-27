@@ -72,7 +72,7 @@ export function registerReportFileRoutes(app: Hono<{ Variables: Variables }>): v
         userId,
         apiKeyId: isWorkerOnlyKey(c) ? (c.get('apiKeyId') as string | undefined) ?? '' : null,
       })
-      if ('error' in found) return c.json({ ok: false, error: { code: 'LANE_NOT_FOUND', message: found.error } }, found.status)
+      if ('error' in found) return c.json({ ok: false, error: { code: found.status === 409 ? 'LANE_MODE' : 'LANE_NOT_FOUND', message: found.error } }, found.status)
       lane = found.lane
     }
 

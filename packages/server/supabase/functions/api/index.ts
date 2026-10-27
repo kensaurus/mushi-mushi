@@ -816,6 +816,8 @@ forwardToApiExt(['/v1/admin/projects/:id/home', '/v1/admin/projects/:id/home/thu
 forwardToApiExt(['/v1/admin/setup-gaps', '/v1/admin/release-batch']);
 // work.ts: local workers (`mushi work --daemon`, ADR 0048); deploy size limit, 2026-10-27.
 forwardToApiExt(['/v1/worker/*', '/v1/admin/work/*']);
+// repo-housekeeping.ts (ADR 0051, console ops plan P4): repo clean-up from /repo; deploy size limit, 2026-10-27.
+forwardToApiExt(['/v1/admin/projects/:id/repo-cleanup', '/v1/admin/projects/:id/repo-cleanup/*']);
 
 registerA2ATaskRoutes(app);
 
