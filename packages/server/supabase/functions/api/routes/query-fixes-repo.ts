@@ -55,6 +55,7 @@ import { canonicalPrUrl, parsePullRequestUrl } from '../../_shared/pr-substance.
 import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
 import { loadRecentFixTruths, loadReportFixTruths, reportTitle } from '../../_shared/fix-report-truth-load.ts';
 import { resolveUserDisplays } from '../../_shared/user-display.ts';
+import { isWorkerOnlyKey, workerClaimDenial } from '../../_shared/work-claims.ts';
 import {
   fetchPullRequest,
   installationIdForAttempt,
@@ -670,7 +671,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       .select(
         // cursor_* / claude_workflow_run_url / check_run_updated_at feed the
         // agent badges, links, artifacts gallery and "CI synced" (QA #89).
-        'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, ci_infra, check_run_updated_at, pr_state, merged_at, error, spec_validation_warnings, inventory_action_node_id, failure_category, cursor_agent_id, cursor_artifacts, claude_workflow_run_url',
+        'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, review_reasoning, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, ci_infra, check_run_updated_at, pr_state, merged_at, error, spec_validation_warnings, inventory_action_node_id, failure_category, cursor_agent_id, cursor_artifacts, claude_workflow_run_url',
         { count: 'exact' },
       )
       .in('project_id', projectIds)
@@ -699,16 +700,18 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // The latest completed Opus verdict per attempt (ADR 0030), so /fixes can
     // list the open PRs the review already said to merge. A read failure
     // leaves it null: the list still loads.
-    const verdicts = new Map<string, string>();
+    // head_sha: the commit the verdict is about, so a review of an older
+    // commit never reads as "ready to merge" (console countDefinitions).
+    const verdicts = new Map<string, { verdict: string; headSha: string | null }>();
     if (fixes.length > 0) {
       const { data: reviews } = await db
         .from('fix_reviews')
-        .select('fix_attempt_id, verdict, created_at')
+        .select('fix_attempt_id, verdict, head_sha, created_at')
         .in('fix_attempt_id', fixes.map((f) => f.id as string))
         .eq('status', 'completed')
         .order('created_at', { ascending: false });
-      for (const r of (reviews ?? []) as Array<{ fix_attempt_id: string; verdict: string | null }>) {
-        if (r.verdict && !verdicts.has(r.fix_attempt_id)) verdicts.set(r.fix_attempt_id, r.verdict);
+      for (const r of (reviews ?? []) as Array<{ fix_attempt_id: string; verdict: string | null; head_sha: string | null }>) {
+        if (r.verdict && !verdicts.has(r.fix_attempt_id)) verdicts.set(r.fix_attempt_id, { verdict: r.verdict, headSha: r.head_sha ?? null });
       }
     }
     const enriched = fixes.map((f) => {
@@ -725,14 +728,17 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         is_latest_attempt: t ? t.latestAttemptId === f.id : null,
         retryable: t ? t.retryable && t.latestAttemptId === f.id : false,
         credential_block: t && t.latestAttemptId === f.id ? t.credential : null,
-        review_verdict: verdicts.get(f.id as string) ?? null,
+        review_verdict: verdicts.get(f.id as string)?.verdict ?? null,
+        review_head_sha: verdicts.get(f.id as string)?.headSha ?? null,
       };
     });
 
     return c.json({ ok: true, data: { fixes: enriched, total: count ?? enriched.length, offset: queryOffset } });
   });
 
-  app.post('/v1/admin/fixes', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+  // A local worker's key (worker:run, ADR 0048) records fixes too, but only on
+  // a report its host holds an active claim on (workerClaimDenial).
+  app.post('/v1/admin/fixes', adminOrApiKey({ scope: ['mcp:write', 'worker:run'] }), async (c) => {
     // withIdempotency: submit_fix_result (MCP) sends a stable derived
     // Idempotency-Key so a retried call must not insert a second
     // fix_attempts row — the wrapper was opt-in and this route never opted
@@ -753,6 +759,8 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
 
     if (!report)
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
+    const unclaimed = await workerClaimDenial(c, db, report.id);
+    if (unclaimed) return unclaimed;
 
     const { data: fix, error } = await db
       .from('fix_attempts')
@@ -1131,7 +1139,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
   // Anthropic key, so viewers cannot start one, a review already queued or
   // running is a 409, and each fix is limited to 3 re-runs an hour.
   // ---------------------------------------------------------------------------
-  app.post('/v1/admin/fixes/:id/review', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+  app.post('/v1/admin/fixes/:id/review', adminOrApiKey({ scope: ['mcp:write', 'worker:run'] }), async (c) => {
     const fixId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -1148,6 +1156,8 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403);
     }
+    const unclaimed = await workerClaimDenial(c, db, attempt.report_id);
+    if (unclaimed) return unclaimed;
     if (!attempt.pr_url) {
       return c.json({ ok: false, error: { code: 'NO_PR', message: 'This fix has no pull request to review' } }, 409);
     }
@@ -1831,12 +1841,17 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     return c.json({ ok: true, data: { events: events.slice(0, limit) } });
   });
 
-  app.patch('/v1/admin/fixes/:id', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+  app.patch('/v1/admin/fixes/:id', adminOrApiKey({ scope: ['mcp:write', 'worker:run'] }), async (c) => {
     const fixId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const body = await c.req.json();
     const db = getServiceClient();
     const projectIds = await callerProjectIds(c, db, userId);
+    if (isWorkerOnlyKey(c)) {
+      const { data: target } = await db.from('fix_attempts').select('report_id').eq('id', fixId).in('project_id', projectIds).maybeSingle();
+      const unclaimed = await workerClaimDenial(c, db, (target as { report_id?: string | null } | null)?.report_id);
+      if (unclaimed) return unclaimed;
+    }
 
     const allowed: Record<string, boolean> = {
       status: true,

@@ -10,30 +10,35 @@ import { Callout } from 'nextra/components'
 Automatically dispatches a [Cursor Cloud Agent](https://cursor.com/docs/cloud-agent) run when a qualifying Mushi event fires. The agent investigates the issue in your codebase, drafts a fix, and opens a signed PR — posting the link back into the Mushi Fixes view without any human in the loop.
 
 <Callout type="info">
-The **Cursor Cloud Agent** plugin is a first-party Mushi plugin (slug: `cursor-cloud-agent`). Unlike standard webhook plugins, it calls the Cursor REST API directly — there is no outbound webhook URL to configure.
+The **Cursor Cloud Agent** plugin is a first-party Mushi plugin (slug: `cursor-cloud-agent`). Unlike standard webhook plugins, Mushi calls the Cursor REST API directly — it never posts to the webhook URL in the install form.
 </Callout>
+
+You do not need the npm package
+[`@mushi-mushi/plugin-cursor-cloud`](https://www.npmjs.com/package/@mushi-mushi/plugin-cursor-cloud)
+for any of this. Mushi calls Cursor itself; the package is only for running
+the same dispatch from your own server.
 
 ## Prerequisites
 
-- A [Cursor](https://cursor.com) account with an API key (Settings → API).
-- Your GitHub integration configured in [Admin → Integrations](/admin/integrations) — the Cursor agent needs repo access to open PRs.
+- A [Cursor](https://cursor.com) account with an API key (cursor.com/dashboard/integrations → API Keys).
+- GitHub connected on the console's **Integrations** page — the agent needs your repo URL to open PRs.
 
 ## Setup
 
-1. Go to **Admin → Marketplace**.
-2. Find **Cursor Cloud Agent** → click **Install**.
-3. Fill in the configuration fields:
+1. On the **Integrations** page, open the **Cursor Cloud** card and paste
+   your Cursor API key (`crsr_…`). Optionally set a default model (default
+   `composer-2.5`) and whether Cursor opens PRs (default on). **Test
+   connection** checks the key.
+2. That is enough to send a report to Cursor by hand (**Send to Cursor** on a
+   report, or `mushi fix <reportId> --agent cursor_cloud`).
+3. To start agents automatically, go to **Marketplace → Cursor Cloud Agent →
+   Install**. The form asks for a webhook URL and signing secret like every
+   listing, but Mushi does not call that URL for this plugin; it calls
+   Cursor directly with the key from step 1. Keep the subscribed events
+   (`report.classified`, `qa_story.failed`, `fix.requested`) or narrow them.
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| **API Key** | ✓ | Your Cursor API key (`cur_…`) — stored in the Supabase Vault; never echoed to the UI |
-| **Workspace ID** | ✓ | Your Cursor workspace ID (`ws_…`) — find it at cursor.com/settings |
-| **Model** | — | `composer-2.5` (default) or `composer-latest` |
-| **Auto-create PRs** | — | When enabled, Cursor opens a signed draft PR automatically (default: enabled) |
-| **Max iterations** | — | Retired and ignored: one dispatch is one Cursor run |
-
-4. Click **Install**.
-5. Click **Test** to send a test event and confirm delivery.
+Automatic runs on `report.classified` start only for **critical** reports;
+the install form has no setting to change that.
 
 ## Behaviour
 
@@ -45,7 +50,7 @@ The **Cursor Cloud Agent** plugin is a first-party Mushi plugin (slug: `cursor-c
 | `skill_pipeline.step.dispatched` | When a skill pipeline run in `cloud` mode advances to a step | Runs the step's pre-composed context packet as a Cursor Cloud agent prompt, stores the `agentId` on the step row, and checks the step in via the API |
 
 <Callout type="info">
-For `skill_pipeline.step.dispatched`, the agent dispatches even when the marketplace plugin is not installed — credentials are read from **Integrations → Cursor Cloud**. Set `repoUrl` in the plugin config so the cloud agent knows which repository to operate on; without it the step is skipped with a warning.
+For `skill_pipeline.step.dispatched`, the agent dispatches even when the marketplace plugin is not installed — credentials are read from the **Cursor Cloud** card on the Integrations page, and the repository from your GitHub connection. Without a GitHub repo URL the step is marked failed.
 </Callout>
 
 ## Fixes view integration
@@ -58,9 +63,11 @@ Once the agent run terminates, the [Fixes page](/admin/fixes) shows:
 
 ## Common tasks
 
-### Limiting dispatch to critical reports only
+### Which reports start an agent
 
-The Cursor Cloud Agent plugin dispatches on every `report.classified` event. To restrict to `p0`/`p1` reports, use the severity gating in the plugin install form — select only the severities you want to trigger a dispatch.
+On `report.classified`, the plugin starts an agent only for critical
+reports. To stop automatic runs for triaged reports entirely, remove
+`report.classified` from the plugin's subscribed events.
 
 ### Triggering manually
 
@@ -90,7 +97,7 @@ Navigate to **Admin → Fixes** → find the `cursor_cloud` row → expand the f
 
 ## Related pages
 
-- [Admin → Integrations → Cursor Cloud](/admin/integrations) — configure the Cursor API key and workspace ID
+- [Admin → Integrations → Cursor Cloud](/admin/integrations) — configure the Cursor API key and default model
 - [Admin → Fixes](/admin/fixes) — view Cursor agent runs, badges, and artifact galleries
 - [Concepts → Fix orchestrator](/concepts/fix-orchestrator) — how the orchestrator selects and dispatches agents
 - [Concepts → Connecting your orchestrator](/concepts/orchestrator-interop) — MCP, CLI, REST, and A2A dispatch surfaces

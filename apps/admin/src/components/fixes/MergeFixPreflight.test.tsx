@@ -77,9 +77,9 @@ describe('MergeFixPreflight — Opus review gate', () => {
   let root: Root
   const onMerged = vi.fn()
 
-  async function open() {
+  async function open(extra: { prState?: string; agent?: string } = {}) {
     await act(async () =>
-      root.render(createElement(MergeFixPreflight, { fixId: 'fix-1', prUrl: 'https://github.com/a/b/pull/1', prNumber: 1, onMerged })),
+      root.render(createElement(MergeFixPreflight, { fixId: 'fix-1', prUrl: 'https://github.com/a/b/pull/1', prNumber: 1, onMerged, ...extra })),
     )
     await act(async () => button('Merge PR in console').click())
   }
@@ -188,5 +188,22 @@ describe('MergeFixPreflight — Opus review gate', () => {
     expect(mocks.apiFetch).toHaveBeenCalledWith('/v1/admin/fixes/fix-1/review', { method: 'POST' })
     expect(document.body.textContent).toContain('Review in progress')
     expect([...document.body.querySelectorAll('button')].some((b) => b.textContent?.includes('Re-run review'))).toBe(false)
+  })
+
+  it('calls an open PR "PR", and only a draft "draft PR" (report 9831ade8)', async () => {
+    respond(NOT_REVIEWED)
+    await open({ prState: 'open', agent: 'mcp' })
+    const dialog = document.body.querySelector('[role="dialog"]')!
+    expect(dialog.textContent).toContain('Merge PR #1')
+    expect(dialog.textContent).not.toContain('draft')
+    // A fix from the person's own lane: the cloud-agent gate line is not shown.
+    expect(document.body.querySelector('[data-testid="fix-gate-local"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="fix-gate-unchecked"]')).toBeNull()
+  })
+
+  it('keeps "draft" for a draft PR', async () => {
+    respond(NOT_REVIEWED)
+    await open({ prState: 'draft', agent: 'cursor_cloud' })
+    expect(document.body.querySelector('[role="dialog"]')!.textContent).toContain('Merge draft PR #1')
   })
 })

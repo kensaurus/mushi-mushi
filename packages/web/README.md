@@ -27,6 +27,8 @@ Mushi.init({
 
 A launcher appears in the corner. That is the whole integration. On React, Vue, Svelte, Angular, React Native or Capacitor, use the framework package instead: [`react`](https://npmjs.com/package/@mushi-mushi/react) · [`vue`](https://npmjs.com/package/@mushi-mushi/vue) · [`svelte`](https://npmjs.com/package/@mushi-mushi/svelte) · [`angular`](https://npmjs.com/package/@mushi-mushi/angular) · [`react-native`](https://npmjs.com/package/@mushi-mushi/react-native) · [`capacitor`](https://npmjs.com/package/@mushi-mushi/capacitor).
 
+Docs: [Web SDK reference](https://kensaur.us/mushi-mushi/docs/sdks/web)
+
 ## What's inside
 
 | | |
@@ -37,7 +39,7 @@ A launcher appears in the corner. That is the whole integration. On React, Vue, 
 | **Privacy** | A built-in PII scrubber, selector masking for screenshots, and opt-in session replay. |
 | **Stays out of the way** | Zero-size host with `pointer-events: none`, keyboard-first, respects reduced motion. |
 | **Runtime config** | Change the widget from the console without a deploy. Values you set in code win. |
-| **Size** | CI caps the core bundle at 89.5 KB gzipped (105 KB uncompressed). Screenshot markup and the Your reports views load only when used. |
+| **Size** | CI caps the core bundle at 90.5 KB gzipped (105 KB uncompressed). Screenshot markup and the Your reports views load only when used. |
 
 ## Recipes
 

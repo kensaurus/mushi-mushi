@@ -81,7 +81,8 @@ function seed(reports: Row[], health: Row[] = [], extra: Record<string, Row[]> =
       fix_attempts: [],
       llm_invocations: [],
       classification_evaluations: [],
-      project_api_keys: [{ id: 'k1', project_id: P, is_active: true, last_seen_at: iso(60_000) }],
+      // The app's SDK key (report:write only) checked in a minute ago.
+      project_api_keys: [{ id: 'k1', project_id: P, is_active: true, scopes: ['report:write'], last_seen_at: iso(60_000) }],
       projects: [{ id: P, name: 'glot.it' }],
       ...extra,
     },

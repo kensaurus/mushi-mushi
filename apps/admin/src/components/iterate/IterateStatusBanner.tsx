@@ -102,7 +102,7 @@ export function IterateStatusBanner({ stats, onTab, onRefresh, refreshing, plain
     return (
       <StatusBannerShell
         tone="brand"
-        title={plainBanner ? 'No improvement runs yet' : `No PDCA runs on ${projectLabel}`}
+        title={`No improvement runs on ${projectLabel}`}
         subtitle={stats.topPriorityLabel}
         action={
           onTab ? (
@@ -118,7 +118,7 @@ export function IterateStatusBanner({ stats, onTab, onRefresh, refreshing, plain
   return (
     <StatusBannerShell
       tone="ok"
-      title={plainBanner ? 'Improvement pipeline idle' : `PDCA pipeline idle on ${projectLabel}`}
+      title={`No improvement runs going on ${projectLabel}`}
       subtitle={
         <>
           {stats.topPriorityLabel}

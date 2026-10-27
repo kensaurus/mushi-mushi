@@ -7,6 +7,8 @@
  *              - membership / permission gate
  *              - autofix_enabled gate
  *              - in-flight dedupe (project_id, report_id)
+ *              - the local-worker lease (ADR 0048): a report a
+ *                `mushi work --daemon` lane holds is not dispatched
  *              - inserting the fix_dispatch_jobs row
  *              - fire-and-forget invoke of the fix-worker
  *
@@ -21,6 +23,7 @@ import { notifyTeamFixEvent } from './team-notify.ts'
 import { featureRequestDispatchBlock } from './report-category.ts'
 import { fixDispatchResolvedBlock } from './fix-report-truth.ts'
 import type { DispatchTrigger } from './autofix-budget.ts'
+import { reportHasActiveWorkClaim } from './work-claims.ts'
 
 export interface DispatchResult {
   ok: boolean
@@ -156,6 +159,16 @@ export async function dispatchFixForReport(input: DispatchInput): Promise<Dispat
       message: 'A fix dispatch is already in progress for this report',
       dispatchId: existing[0].id,
     }
+  }
+
+  // A local worker's lease (ADR 0048): its agent is on this report now. An
+  // unreadable lease is not read as "free".
+  const held = await reportHasActiveWorkClaim(db, input.reportId)
+  if (held) {
+    return { ok: false, code: 'ALREADY_DISPATCHED', message: 'A local worker (mushi work) is working on this report right now' }
+  }
+  if (held === null) {
+    return { ok: false, code: 'DISPATCH_FAILED', message: 'Could not check whether a local worker holds this report. Try again in a minute.' }
   }
 
   const { data: job, error: insertErr } = await db
