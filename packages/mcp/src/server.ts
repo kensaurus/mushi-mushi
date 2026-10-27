@@ -4642,6 +4642,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('list_qa_story_runs', TDD_TOOL_CATALOG),
       annotations: annotationsFor('list_qa_story_runs', TDD_TOOL_CATALOG),
       inputSchema: z.object({
+        // `project_id` is not a second field. registerTool wraps this schema
+        // with acceptSnakeCaseAliases, which calls normalizeArgAliases
+        // (arg-aliases.ts) and renames project_id to projectId before zod.
         projectId: z
           .string()
           .optional()
@@ -4677,6 +4680,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('get_qa_story_run', TDD_TOOL_CATALOG),
       annotations: annotationsFor('get_qa_story_run', TDD_TOOL_CATALOG),
       inputSchema: z.object({
+        // `project_id` is not a second field. registerTool wraps this schema
+        // with acceptSnakeCaseAliases, which calls normalizeArgAliases
+        // (arg-aliases.ts) and renames project_id to projectId before zod.
         projectId: z
           .string()
           .optional()

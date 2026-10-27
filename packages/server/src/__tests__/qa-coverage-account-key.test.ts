@@ -5,10 +5,10 @@
  *
  * list_qa_story_runs / get_qa_story_run call this route. jwtOrApiKey delegates
  * to apiKeyAuth, which refuses org-scoped keys, so an account connection got
- * no runs. This mounts the real adminOrApiKey gate.
+ * no runs. This mounts the real adminOrApiKey gate. GET already required
+ * mcp:read there, and mcp:write implies it, so a project key that only lists
+ * mcp:write still reads. Other routes are checked by calling them.
  */
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
@@ -27,10 +27,12 @@ const RUN = '4000000a-0000-4000-8000-000000000000'
 const ACCOUNT_KEY = 'mushi_test_qa_account_key_0001' // gitleaks:allow
 const PROJECT_KEY = 'mushi_test_qa_project_key_0001' // gitleaks:allow
 const WRITE_ONLY_KEY = 'mushi_test_qa_report_key_0001' // gitleaks:allow
+const PROJECT_WRITE_KEY = 'mushi_test_qa_mcp_write_key_001' // gitleaks:allow
 
 let accountHash = ''
 let projectHash = ''
 let reportHash = ''
+let projectWriteHash = ''
 let app: Hono
 
 beforeAll(async () => {
@@ -40,6 +42,7 @@ beforeAll(async () => {
   accountHash = await hashApiKey(ACCOUNT_KEY)
   projectHash = await hashApiKey(PROJECT_KEY)
   reportHash = await hashApiKey(WRITE_ONLY_KEY)
+  projectWriteHash = await hashApiKey(PROJECT_WRITE_KEY)
   const routes = await import('../../supabase/functions/api/routes/qa-coverage.ts')
   app = new Hono()
   routes.registerQaCoverageRoutes(app as never)
@@ -101,6 +104,20 @@ function seed(extra: Record<string, Array<Record<string, unknown>>> = {}): void 
         browser_seen_at: null,
         projects: null,
       },
+      {
+        id: '5000000d-0000-4000-8000-000000000000',
+        key_hash: projectWriteHash,
+        key_prefix: 'mushi_test',
+        project_id: PID,
+        is_org_scoped: false,
+        allowed_project_ids: null,
+        is_active: true,
+        scopes: ['mcp:write'],
+        owner_user_id: OWNER,
+        last_seen_origin: null,
+        browser_seen_at: null,
+        projects: { name: 'glot' },
+      },
     ],
     ...extra,
   })
@@ -153,6 +170,15 @@ describe('GET qa story runs with an account key', () => {
     expect(body.error).toMatchObject({ code: 'INSUFFICIENT_SCOPE' })
   })
 
+  it('lets a project key with only mcp:write read runs', async () => {
+    // jwtOrApiKey already required mcp:read on GET, and mcp:write implies it
+    // (keyGrantsAnyScope). adminOrApiKey({ scope: 'mcp:read' }) uses that same
+    // rule, so a project key that never listed mcp:read still reads runs.
+    const { status, body } = await getRuns(PID, PROJECT_WRITE_KEY)
+    expect(status).toBe(200)
+    expect(body.data?.runs?.map((r) => r.id)).toEqual([RUN])
+  })
+
   it('does not let an account key start a run', async () => {
     seed()
     const res = await app.request(`/v1/admin/projects/${PID}/qa-stories/${STORY}/run`, {
@@ -164,16 +190,43 @@ describe('GET qa story runs with an account key', () => {
     expect(body.error?.code).toBe('ORG_KEY_NOT_ALLOWED')
   })
 
-  it('leaves every other QA route on its previous gate', () => {
-    const src = readFileSync(resolve(__dirname, '../../supabase/functions/api/routes/qa-coverage.ts'), 'utf8')
-    const regs = [...src.matchAll(/app\.(get|post|patch|delete)\(\s*'([^']+)',\s*([^,\n]+)/g)]
-    expect(regs.length).toBeGreaterThanOrEqual(9)
-    const runs = regs.find((m) => m[2].endsWith('/qa-stories/:sid/runs'))
-    expect(runs?.[3]).toContain("adminOrApiKey({ scope: 'mcp:read' })")
-    for (const m of regs) {
-      if (m[2].endsWith('/qa-stories/:sid/runs')) continue
-      expect(m[3], m[2]).not.toContain('adminOrApiKey')
+  it('leaves every other QA route on its previous gate', async () => {
+    // Ask each route with the account key. jwtAuth has no Bearer and answers
+    // 401. jwtOrApiKey sees the key and refuses an account key. adminOrApiKey
+    // would let this key through, so a gate swap fails here without parsing
+    // the route file.
+    seed()
+    const jwtOnly = [
+      ['GET', `/v1/admin/projects/${PID}/qa-coverage/stats`],
+      ['GET', `/v1/admin/projects/${PID}/qa-coverage-summary`],
+      ['GET', `/v1/admin/projects/${PID}/qa-stories/${STORY}`],
+      ['POST', `/v1/admin/projects/${PID}/qa-stories`],
+      ['PATCH', `/v1/admin/projects/${PID}/qa-stories/${STORY}`],
+      ['DELETE', `/v1/admin/projects/${PID}/qa-stories/${STORY}`],
+      ['GET', `/v1/admin/projects/${PID}/qa-stories/${STORY}/runs/${RUN}/evidence`],
+      ['GET', `/v1/admin/projects/${PID}/platform-rollup`],
+    ] as const
+    for (const [method, url] of jwtOnly) {
+      const res = await app.request(url, { method, headers: { 'X-Mushi-Api-Key': ACCOUNT_KEY } })
+      const body = await res.json() as { error?: { code?: string } }
+      expect(res.status, url).toBe(401)
+      expect(body.error?.code, url).toBe('MISSING_AUTH')
     }
-    expect(regs.find((m) => m[2].endsWith('/run'))?.[3]).toContain('jwtOrApiKey')
+
+    const keyOrJwt = [
+      ['GET', `/v1/admin/projects/${PID}/qa-coverage`],
+      ['POST', `/v1/admin/projects/${PID}/qa-stories/${STORY}/run`],
+    ] as const
+    for (const [method, url] of keyOrJwt) {
+      const res = await app.request(url, { method, headers: { 'X-Mushi-Api-Key': ACCOUNT_KEY } })
+      const body = await res.json() as { error?: { code?: string } }
+      expect(res.status, url).toBe(403)
+      expect(body.error?.code, url).toBe('ORG_KEY_NOT_ALLOWED')
+    }
+
+    const coverage = await app.request(`/v1/admin/projects/${PID}/qa-coverage`, {
+      headers: { 'X-Mushi-Api-Key': PROJECT_KEY },
+    })
+    expect(coverage.status).toBe(200)
   })
 })
