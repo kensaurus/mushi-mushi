@@ -73,6 +73,7 @@ With `--steps` (on by default in the studio) the agent first plans 2–5 small c
 | `mushi-ux discover --url <url>` | List the screens, change nothing |
 | `mushi-ux audit --url <live url> --profile-dir <dir>` | Find UX bugs on signed-in screens and file them as Mushi reports (below) |
 | `mushi-ux explore --url <live url> --profile-dir <dir>` | Let a model use the signed-in app like a careless user; file the errors a replay confirms (below) |
+| `mushi-ux fresh-eyes --url <landing> --goal "<text>"` | Try one goal as a first-time visitor; time the path and file what stops them (below) |
 | `mushi-ux login --url <url>` | Sign in once, in a visible browser |
 | `mushi-ux models` / `mushi-ux skills` | What `--model` and `--skill` accept |
 | `mushi-ux open <runId>` | The local dashboard for a past run |
@@ -119,6 +120,23 @@ mushi-ux explore --url https://example.com/admin \
 - Actions come from a closed set (click, fill, select, press, back, forward, reload, scroll, resize); anything labelled like delete, revoke or sign out is refused, and the write guard still blocks every write request.
 - A finding is a console error, an uncaught error, a 5xx from the app (or an `--api-host`), or a blank page after an action. It is filed only when replaying the steps without the model shows it again, with the steps as the repro.
 - `--file` and `--dry-run` work as for the audit, sharing its 14-day ledger.
+
+## Fresh eyes: a first-time visitor
+
+`mushi-ux fresh-eyes` tries one goal the way a stranger would: from the landing page, signed out, with a model that has never seen the product and reads only what is on screen. The model only picks the next action; code times the path and decides what stopped it.
+
+```bash
+mushi-ux fresh-eyes --url https://example.com --goal "get my first report" --dry-run
+mushi-ux fresh-eyes --url https://example.com --goal "get my first report" \
+  --success-url "/reports/*" --success-text "Why it broke" --sessions 3 --sync --file
+```
+
+- **Time to first value** is the app's wait (each action, navigation and settle) plus reading time for each new screen (238 words a minute, at most a minute a screen), until the goal check passes: `--success-url`, `--success-text`, `--success-selector` or `--success-api` (all given must hold). The model's think time is recorded but never counted.
+- **Measured findings**, filed once a replay of the steps without the model shows them again: console and page errors, a 5xx, a blank page, a dead end, a sign-in it cannot pass, a captcha (never solved), a step that needs an inbox, an API key, a terminal or another account. **Opinions** ("confusing", "unclear copy", "too many choices", giving up) are filed only when 2 of the sessions (`--sessions`, default 3) name the same screen.
+- **Writes** reach only the start URL's origin and `--app-host` hosts. Payments, third-party sign-in, public sign-up endpoints (`/auth/v1/signup`, OTP, recovery) and anything labelled delete, revoke, upgrade or sign out are refused in every mode. `--dry-run` writes nothing, uses no account and files nothing.
+- **Accounts:** the model types `{{email}}` and `{{password}}`; code fills in `MUSHI_FRESH_EYES_EMAIL` / `MUSHI_FRESH_EYES_PASSWORD` (your app's test account) or, for Mushi itself, `--mint-account` (an operator key; the account is flagged synthetic and deleted after a day). The real values never reach the prompt, the timeline or the console.
+- **Terminal setup:** `--terminal` runs a CLI setup step itself when a screen asks for a terminal: a sample app in a temp folder, the setup command (`--setup-command`, `{projectId}` and `{apiKey}` filled from the screen), one report through the widget, each phase timed.
+- Output: `timeline.md` (each step, its screenshot, app wait and reading time, where it stalled), `result.json` and `shots/`. `--out <dir>` chooses the folder. `--sync` mirrors the run to the console's UX runs → Fresh eyes tab.
 
 ## On GitHub Actions
 

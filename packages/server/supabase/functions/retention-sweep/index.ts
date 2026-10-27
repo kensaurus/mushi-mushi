@@ -55,6 +55,7 @@ import { listPlans, type PricingPlan } from '../_shared/plans.ts'
 import { resolveProjectRetention } from '../_shared/retention-policy.ts'
 import { firstRealReportId, type OldestReportRow } from '../_shared/first-report.ts'
 import { sweepSyntheticAccounts, type CleanupDb } from '../_shared/fresh-eyes-cleanup.ts'
+import { freshEyesShotPath } from '../_shared/fresh-eyes.ts'
 
 // Ambient `Deno` so the file type-checks under both Deno (real Edge Function
 // runtime) and Node/Vitest (the unit tests for `deleteOldReportsBatch`).
@@ -102,10 +103,11 @@ const handler = async (req: Request): Promise<Response> => {
     const traces = await sweepLlmTraces(db)
     const uxCaptures = await sweepUxCaptures(db)
     // Fresh-eyes test accounts past their 24 h (ADR 0051).
+    const freshEyesShots = await sweepFreshEyesShots(db)
     const synthetic = await sweepSyntheticAccounts(db as unknown as CleanupDb, new Date(), (msg, ctx) => rlog.warn(msg, ctx))
 
     await cron.finish({
-      rowsAffected: totalDeleted + voice.audio_deleted + voice.sessions_expired + traces.deleted + uxCaptures.deleted + synthetic.accounts_deleted,
+      rowsAffected: totalDeleted + voice.audio_deleted + voice.sessions_expired + traces.deleted + uxCaptures.deleted + freshEyesShots.deleted + synthetic.accounts_deleted,
       metadata: {
         llm_traces_deleted: traces.deleted,
         projects_swept: stats.length,
@@ -114,6 +116,7 @@ const handler = async (req: Request): Promise<Response> => {
         voice_audio_deleted: voice.audio_deleted,
         voice_sessions_expired: voice.sessions_expired,
         ux_captures_deleted: uxCaptures.deleted,
+        fresh_eyes_shots_deleted: freshEyesShots.deleted,
         synthetic_accounts_deleted: synthetic.accounts_deleted,
         synthetic_cleanup_failed: synthetic.failed,
       },
@@ -129,6 +132,7 @@ const handler = async (req: Request): Promise<Response> => {
         voice,
         llm_traces: traces,
         ux_captures: uxCaptures,
+        fresh_eyes_shots: freshEyesShots,
         synthetic_accounts: synthetic,
       },
     })
@@ -619,6 +623,61 @@ export async function sweepUxCaptures(db: ReturnType<typeof getServiceClient>): 
         .update(legacy ? { thumb_before: null, thumb_after: null, thumb_diff: null, thumbs: {} } : { thumbs: {} })
         .in('id', rows.map((s) => s.id))
       if (clearErr) rlog.warn('ux_capture_clear_failed', { project_id: row.project_id, table, err: clearErr.message })
+      stats.deleted += paths.length
+    }
+  }
+  return stats
+}
+
+interface FreshEyesShotRow {
+  id: string
+  counts: Record<string, unknown> | null
+  timeline: Array<{ steps?: Array<{ shot?: string | null }> }> | null
+}
+
+/**
+ * Fresh-eyes screenshots (ADR 0051) live under <project>/<run>/fresh-eyes/
+ * in the same bucket, named in the run's timeline. Removed after the same
+ * window as the loop's; the run keeps its timeline and is marked
+ * counts.shots_cleared so it is not listed again.
+ */
+export async function sweepFreshEyesShots(db: ReturnType<typeof getServiceClient>): Promise<{ deleted: number }> {
+  const stats = { deleted: 0 }
+  const { data: settingsRows, error: settingsErr } = await db.from('project_settings').select('project_id, ux_capture_retention_days')
+  const settings = settingsRows as UxSettingsRow[] | null
+  if (settingsErr) {
+    rlog.warn('fresh_eyes_settings_failed', { err: settingsErr.message })
+    return stats
+  }
+  for (const row of settings ?? []) {
+    const days = Math.max(1, Number(row.ux_capture_retention_days ?? 30))
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+    const { data: runRows, error } = await db
+      .from('ux_runs')
+      .select('id, counts, timeline')
+      .eq('project_id', row.project_id)
+      .eq('kind', 'fresh_eyes')
+      .lt('started_at', cutoff)
+      .is('counts->>shots_cleared', null)
+      .limit(UX_CAPTURE_BATCH)
+    if (error) {
+      rlog.warn('fresh_eyes_select_failed', { project_id: row.project_id, err: error.message })
+      continue
+    }
+    const runs = runRows as FreshEyesShotRow[] | null
+    for (const run of runs ?? []) {
+      const paths = [...new Set((run.timeline ?? []).flatMap((s) => (s.steps ?? []).map((st) => (st.shot ? freshEyesShotPath(row.project_id, run.id, st.shot) : null))))].filter(
+        (p): p is string => !!p,
+      )
+      if (paths.length) {
+        const { error: rmErr } = await db.storage.from(UX_CAPTURES_BUCKET).remove(paths)
+        if (rmErr) {
+          rlog.warn('fresh_eyes_remove_failed', { project_id: row.project_id, count: paths.length, err: rmErr.message })
+          continue
+        }
+      }
+      const { error: markErr } = await db.from('ux_runs').update({ counts: { ...(run.counts ?? {}), shots_cleared: true } }).eq('id', run.id)
+      if (markErr) rlog.warn('fresh_eyes_mark_failed', { run_id: run.id, err: markErr.message })
       stats.deleted += paths.length
     }
   }

@@ -498,7 +498,11 @@ program
       const given: SuccessCheck = { url: o.successUrl, text: o.successText, selector: o.successSelector, api: o.successApi }
       const success = hasSuccessCheck(given) ? given : (preset?.success ?? {})
       const cfg = o.sync || o.file || o.mintAccount ? syncConfigFromEnv() : null
-      for (const k of ['MUSHI_API_KEY', 'MUSHI_PROJECT_ID', 'MUSHI_API_ENDPOINT']) delete process.env[k]
+      // Another app's own test account, from the environment (never a flag: it would sit in shell history).
+      const email = process.env.MUSHI_FRESH_EYES_EMAIL?.trim()
+      const password = process.env.MUSHI_FRESH_EYES_PASSWORD
+      const appAccount = email && password ? { email, password } : null
+      for (const k of ['MUSHI_API_KEY', 'MUSHI_PROJECT_ID', 'MUSHI_API_ENDPOINT', 'MUSHI_FRESH_EYES_EMAIL', 'MUSHI_FRESH_EYES_PASSWORD']) delete process.env[k]
       if ((o.sync || o.mintAccount) && !cfg && !o.dryRun) throw new Error('--sync and --mint-account need MUSHI_API_KEY and MUSHI_PROJECT_ID (run through `mushi ux`, which passes your login).')
       if (o.dryRun && o.mintAccount) console.warn('--dry-run: no account is minted; the run stops at the sign-up wall.')
       const result = await runFreshEyes({
@@ -512,7 +516,7 @@ program
         allow: o.allow,
         dryRun: o.dryRun,
         outDir: o.out,
-        identity: o.mintAccount && cfg ? () => mintTestAccount(cfg) : undefined,
+        identity: o.mintAccount && cfg ? () => mintTestAccount(cfg) : appAccount ? async () => appAccount : undefined,
         terminal: o.terminal ? (v) => runTerminalSetup({ ...v, setupCommand: o.setupCommand }) : undefined,
         onProgress: (m) => process.stderr.write(`  ${m}\n`),
       })

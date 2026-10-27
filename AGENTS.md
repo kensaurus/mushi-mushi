@@ -1034,6 +1034,21 @@ Plan 017 (`docs/execplans/dead-code-voice-agent-loop.md`, ADRs 0007–0013).
 - **Web Push**: `_shared/web-push.ts` (`@pushforge/builder`, host allowlist), `api/routes/push.ts`; secrets `VAPID_*`.
 - **Dead-code gate**: knip@6 baselines in `docs/execplans/knip-baseline/`, ratchets in the `build` job (`check:residue`; `check:env-source-parity` fails the build when a source read is missing from every `.env.example`).
 
+## Fresh-eyes runs (Oct 27 2026)
+
+ADR 0051. `mushi ux fresh-eyes --url <landing> --goal "<text>"` (`packages/ux/src/fresh-eyes.ts`, `fresh-eyes-terminal.ts`, `fresh-eyes-report.ts`): a model that has never seen the product tries one goal, signed out; code times app wait plus reading (never model think time) to a code-defined goal check and files measured stalls after a model-free replay, opinions only when 2 sessions agree.
+
+| Object | Role |
+| --- | --- |
+| Guard `writes: 'same-origin'` | `guard.ts`: writes only to the app's origins; payments, third-party sign-in and the public `auth/v1` sign-up, OTP and recovery calls refused in every mode |
+| `POST /v1/admin/fresh-eyes/test-account` | api-ext, operator only (`MUSHI_OPERATOR_USER_IDS`, account-level key or session): confirmed synthetic Mushi account, password returned once |
+| `synthetic_accounts` | service role only; also listed in `operator_users`; `emitProductEvent` skips them (`is_synthetic_subject`); `retention-sweep` deletes them after 24 h |
+| `ux_runs.kind = 'fresh_eyes'` | timeline, `ttfv_seconds`, steps, `stalled_at`; `PUT/GET /v1/admin/projects/:pid/fresh-eyes[/:runId]`, `…/uploads`, `…/findings` (`reports.source = 'fresh_eyes'`) |
+| `metric_series` | `fresh_eyes.ttfv_seconds`, `fresh_eyes.steps`, one row each per finished run |
+| Console | UX runs → Fresh eyes tab; Home "First-time setup" light once a run exists |
+
+Operator guide: [`docs/operators/fresh-eyes.md`](docs/operators/fresh-eyes.md). "Run now" from the console through a `ux` worker lane is BL-138.
+
 ## ExecPlans
 
 Detailed, phase-by-phase implementation plans live in
