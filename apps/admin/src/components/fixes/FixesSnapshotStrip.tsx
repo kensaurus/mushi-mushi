@@ -23,7 +23,8 @@ function fixesSentence(stats: FixesStats, inFlight: number, ready: number): stri
   if (stats.totalAttempts === 0 && inFlight === 0) return 'No fixes in the last 30 days.'
   const parts: string[] = []
   if (ready > 0) parts.push(`${pluralizeWithCount(ready, 'fix PR')} ready to merge`)
-  if (stats.failed > 0) parts.push(stoppedTitle(stats.failed))
+  // "Auto-fix stopped…" starts the sentence only when nothing comes before it.
+  if (stats.failed > 0) parts.push(parts.length ? stoppedTitle(stats.failed).replace(/^Auto/, 'auto') : stoppedTitle(stats.failed))
   if (stats.prsOpen > ready) parts.push(`${pluralizeWithCount(stats.prsOpen - ready, 'other PR')} waiting for review or CI`)
   if (inFlight > 0) parts.push(`${pluralizeWithCount(inFlight, 'fix', 'fixes')} running`)
   if (parts.length === 0) return `${pluralizeWithCount(stats.completed, 'report')} fixed in the last 30 days; nothing waiting.`

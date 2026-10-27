@@ -993,6 +993,7 @@ export function FixesPage() {
         <>
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <SegmentedControl<StatusBucket>
+              scrollable
               ariaLabel="Filter fix attempts by status"
               value={statusBucket}
               options={STATUS_BUCKETS.map((b) => ({ id: b.id, label: b.label, count: bucketCounts[b.id] }))}
