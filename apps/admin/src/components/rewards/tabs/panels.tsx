@@ -1,6 +1,10 @@
 /**
  * FILE: panels.tsx
  * PURPOSE: Rewards tab panel implementations extracted from RewardsPage.
+ *
+ * The 24h activity feed's green counts use text-ok (light token must clear
+ * WCAG AA on surface-overlay; see ok-contrast.test.ts). The feed list is a
+ * focusable region so keyboard users can scroll it.
  */
 
 import { useState, useCallback, useMemo, useRef } from 'react'
@@ -269,7 +273,14 @@ export function OverviewTab() {
         {recentEvents.length === 0 ? (
           <EmptyState title="No events in last 24 hours" description="Activity events will appear here as SDK clients send data." />
         ) : (
-          <div className="max-h-64 overflow-y-auto divide-y divide-edge-subtle text-xs">
+          <div
+            role="region"
+            aria-label="Activity in the last 24 hours"
+            tabIndex={0}
+            className="max-h-64 overflow-y-auto divide-y divide-edge-subtle text-xs rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+          >
+            {/* Scrolls once the feed grows; focusable so keyboard users can
+                scroll it (axe scrollable-region-focusable). */}
             {recentEvents.map((ev) => {
               const rejected = !!ev.rejected_reason
               return (

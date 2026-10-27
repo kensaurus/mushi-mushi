@@ -202,7 +202,14 @@ html[data-theme="light"] {
   --color-brand-foreground: oklch(0.48 0.16 80);
   --color-lime-foreground: oklch(0.28 0.12 128);
 
-  --color-ok:            oklch(0.48 0.19 155);
+  /* 2026-10-28: light ok was oklch(0.48 0.19 155). Chroma 0.19 is outside
+     sRGB, and the channel-clamped green is 4.39:1 on surface-overlay —
+     under WCAG AA 4.5:1. That is the accepted count and the green points
+     in the rewards activity feed (text-ok on bg-surface-overlay). Same
+     lightness and hue, chroma 0.11 stays inside sRGB: 5.59:1 on surface,
+     6.10:1 on raised, 4.88:1 on overlay, 6.02:1 for ok-fg on the fill.
+     Contrast and gamut: packages/server/src/__tests__/ok-contrast.test.ts. */
+  --color-ok:            oklch(0.48 0.11 155);
   --color-ok-fg:         oklch(0.99 0.02 155);
   --color-ok-muted:      oklch(0.93 0.06 155);
   --color-lime:          oklch(0.46 0.22 128);
