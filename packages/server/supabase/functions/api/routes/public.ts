@@ -6,6 +6,7 @@ import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.t
 import { AguiEmitter } from '../../_shared/agui.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
+import { fetchLatestCheckRun, parseGithubRepoUrl, resolveProjectGithubToken } from '../../_shared/github.ts';
 import { pickHighestVersion } from '../../_shared/sdk-version-compare.ts';
 import { unverifiedGithubInstallsAllowed } from '../../_shared/github-install-trust.ts';
 import { reportError } from '../../_shared/sentry.ts';
@@ -1036,9 +1037,35 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       );
     }
 
+    // One delivery is one check. The report page reads the head's rollup:
+    // an older failed run of the same workflow must not stick as "CI failed"
+    // after GitHub's merge state is CLEAN (report 9e2ec6f0).
+    let checkStatus = checkRun.status ?? null;
+    let checkConclusion = checkRun.conclusion ?? null;
+    const ghRef = parseGithubRepoUrl(`https://github.com/${repo.full_name}`);
+    const installationId = (payload.installation as { id?: unknown } | undefined)?.id;
+    if (ghRef && verifiedProjectId && checkRun.head_sha) {
+      try {
+        const token = await resolveProjectGithubToken(
+          db,
+          verifiedProjectId,
+          typeof installationId === 'number' ? installationId : null,
+        );
+        if (token) {
+          const snapshot = await fetchLatestCheckRun(token, ghRef, checkRun.head_sha);
+          if (snapshot) {
+            checkStatus = snapshot.status;
+            checkConclusion = snapshot.conclusion;
+          }
+        }
+      } catch (err) {
+        log.warn('github webhook check rollup failed', { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
     const updates = {
-      check_run_status: checkRun.status ?? null,
-      check_run_conclusion: checkRun.conclusion ?? null,
+      check_run_status: checkStatus,
+      check_run_conclusion: checkConclusion,
       check_run_updated_at: new Date().toISOString(),
     };
 

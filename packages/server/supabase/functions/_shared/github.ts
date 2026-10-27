@@ -511,26 +511,18 @@ export interface CheckRunSnapshot {
  *     > skipped > success), mirroring GitHub's own UI badge colouring.
  *   - A run a later re-run of the same check replaced is left out first
  *     (currentCheckRuns), as GitHub's merge state does.
+ *   - Check runs from an older Actions run of the same workflow are left
+ *     out too. GitHub scores only the newest run per workflow; the list
+ *     still includes the older one (report 9e2ec6f0).
  */
 export async function fetchLatestCheckRun(
   token: string,
   ref: GithubRepoRef,
   commitSha: string,
 ): Promise<CheckRunSnapshot | null> {
-  const res = await fetchWithTimeout(
-    `https://api.github.com/repos/${ref.owner}/${ref.repo}/commits/${commitSha}/check-runs?per_page=100`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    },
-  )
-  if (res.status === 404) return null
-  if (!res.ok) throw new Error(`check-runs fetch ${res.status}`)
-  const body = await res.json() as { check_runs?: CheckRunLike[] }
-  return collapseCheckRuns(body.check_runs ?? [])
+  const runs = await listCheckRuns(token, ref, commitSha, 'throw')
+  if (!runs) return null
+  return collapseCheckRuns(await withoutSupersededWorkflowRunsFromGithub(token, ref, commitSha, runs))
 }
 
 /**
@@ -545,21 +537,11 @@ export async function fetchFailingCheckNames(
   ref: GithubRepoRef,
   gitRef: string,
 ): Promise<Set<string> | null> {
-  const res = await fetchWithTimeout(
-    `https://api.github.com/repos/${ref.owner}/${ref.repo}/commits/${encodeURIComponent(gitRef)}/check-runs?per_page=100&filter=latest`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    },
-  )
-  if (!res.ok) return null
-  const body = (await res.json().catch(() => null)) as { check_runs?: CheckRunLike[] } | null
-  if (!body || !Array.isArray(body.check_runs)) return null
+  const listed = await listCheckRuns(token, ref, gitRef, 'null')
+  if (!listed) return null
+  const runs = await withoutSupersededWorkflowRunsFromGithub(token, ref, gitRef, listed)
   return new Set(
-    currentCheckRuns(body.check_runs)
+    currentCheckRuns(runs)
       .filter((r) => !isAdvisoryCheckRun(r) && (r.conclusion === 'failure' || r.conclusion === 'timed_out'))
       .map((r) => String(r.name ?? ''))
       .filter(Boolean),
@@ -575,10 +557,153 @@ export interface CheckRunLike {
   /** For Actions jobs: .../actions/runs/<run id>/job/<job id>. */
   details_url?: string | null
   app?: { id?: number | null; slug?: string | null } | null
+  check_suite?: { id?: number | null } | null
+}
+
+/** One Actions workflow run on a commit, as `actions/runs?head_sha=` returns it. */
+export interface WorkflowRunOnHead {
+  id: number
+  workflow_id: number | null
+  /** Latest check suite of this run. Older attempts keep their own suite id. */
+  check_suite_id: number | null
+  created_at: string | null
 }
 
 function actionsRunId(r: CheckRunLike): string | null {
   return r.details_url?.match(/\/actions\/runs\/(\d+)/)?.[1] ?? null
+}
+
+function actionsRunNumericId(r: CheckRunLike): number | null {
+  const s = actionsRunId(r)
+  if (!s) return null
+  const n = Number(s)
+  return Number.isSafeInteger(n) && n > 0 ? n : null
+}
+
+const COMMIT_SHA_RE = /^[0-9a-f]{7,64}$/i
+
+async function listCheckRuns(
+  token: string,
+  ref: GithubRepoRef,
+  gitRef: string,
+  onError: 'throw' | 'null',
+): Promise<CheckRunLike[] | null> {
+  const res = await fetchWithTimeout(
+    `https://api.github.com/repos/${ref.owner}/${ref.repo}/commits/${encodeURIComponent(gitRef)}/check-runs?per_page=100&filter=latest`,
+    { headers: githubAuthHeaders(token) },
+  )
+  if (res.status === 404) return null
+  if (!res.ok) {
+    if (onError === 'throw') throw new Error(`check-runs fetch ${res.status}`)
+    return null
+  }
+  const body = (await res.json().catch(() => null)) as { check_runs?: CheckRunLike[] } | null
+  if (!body || typeof body !== 'object') {
+    if (onError === 'throw') throw new Error('check-runs fetch invalid')
+    return null
+  }
+  if (!Array.isArray(body.check_runs)) return onError === 'throw' ? [] : null
+  return body.check_runs
+}
+
+/**
+ * Workflow run ids that are not the newest run of their workflow on this
+ * commit. GitHub's merge box scores only that newest run. An older run
+ * (a cancelled duplicate, a failed run replaced by a re-run that started
+ * before the failure was recorded) stays on the check-run list forever.
+ */
+export function supersededWorkflowRunIds(runs: readonly WorkflowRunOnHead[]): Set<number> {
+  const newest = new Map<number, WorkflowRunOnHead>()
+  const dead = new Set<number>()
+  for (const run of runs) {
+    if (!Number.isSafeInteger(run.id) || run.id <= 0) continue
+    const wf = run.workflow_id
+    if (wf == null || !Number.isSafeInteger(wf) || wf <= 0) continue
+    const prev = newest.get(wf)
+    if (!prev) {
+      newest.set(wf, run)
+      continue
+    }
+    if (prev.id === run.id) continue
+    if (workflowRunIsNewer(run, prev)) {
+      dead.add(prev.id)
+      newest.set(wf, run)
+    } else {
+      dead.add(run.id)
+    }
+  }
+  return dead
+}
+
+function workflowRunIsNewer(a: WorkflowRunOnHead, b: WorkflowRunOnHead): boolean {
+  const ta = Date.parse(a.created_at ?? '')
+  const tb = Date.parse(b.created_at ?? '')
+  if (Number.isFinite(ta) && Number.isFinite(tb) && ta !== tb) return ta > tb
+  return a.id > b.id
+}
+
+/**
+ * Drop check runs that belong to an older Actions run of the same workflow.
+ * A check with no Actions run id is kept (another app, or a run we could
+ * not place). Two different workflows that share a job name both stay.
+ */
+export function withoutSupersededWorkflowRuns<T extends CheckRunLike>(
+  checks: readonly T[],
+  runs: readonly WorkflowRunOnHead[],
+): T[] {
+  const deadRuns = supersededWorkflowRunIds(runs)
+  if (deadRuns.size === 0) return [...checks]
+  const deadSuites = new Set<number>()
+  for (const run of runs) {
+    if (deadRuns.has(run.id) && run.check_suite_id != null && run.check_suite_id > 0) deadSuites.add(run.check_suite_id)
+  }
+  return checks.filter((c) => {
+    const runId = actionsRunNumericId(c)
+    if (runId != null && deadRuns.has(runId)) return false
+    const suite = c.check_suite?.id
+    if (typeof suite === 'number' && deadSuites.has(suite)) return false
+    return true
+  })
+}
+
+async function listWorkflowRunsForHead(token: string, ref: GithubRepoRef, sha: string): Promise<WorkflowRunOnHead[] | null> {
+  if (!COMMIT_SHA_RE.test(sha)) return null
+  try {
+    const res = await fetchWithTimeout(
+      `https://api.github.com/repos/${ref.owner}/${ref.repo}/actions/runs?${new URLSearchParams({ head_sha: sha, per_page: '100' })}`,
+      { headers: githubAuthHeaders(token) },
+    )
+    if (!res.ok) return null
+    const body = (await res.json().catch(() => null)) as { workflow_runs?: unknown } | null
+    if (!body || !Array.isArray(body.workflow_runs)) return null
+    const out: WorkflowRunOnHead[] = []
+    for (const raw of body.workflow_runs) {
+      if (!raw || typeof raw !== 'object') continue
+      const r = raw as { id?: unknown; workflow_id?: unknown; check_suite_id?: unknown; created_at?: unknown }
+      if (typeof r.id !== 'number' || !Number.isSafeInteger(r.id) || r.id <= 0) continue
+      out.push({
+        id: r.id,
+        workflow_id: typeof r.workflow_id === 'number' && r.workflow_id > 0 ? r.workflow_id : null,
+        check_suite_id: typeof r.check_suite_id === 'number' && r.check_suite_id > 0 ? r.check_suite_id : null,
+        created_at: typeof r.created_at === 'string' ? r.created_at : null,
+      })
+    }
+    return out
+  } catch {
+    return null
+  }
+}
+
+/** Check runs minus older Actions runs of the same workflow. A failed runs read keeps every check. */
+async function withoutSupersededWorkflowRunsFromGithub<T extends CheckRunLike>(
+  token: string,
+  ref: GithubRepoRef,
+  sha: string,
+  checks: readonly T[],
+): Promise<T[]> {
+  const workflows = await listWorkflowRunsForHead(token, ref, sha)
+  if (!workflows) return [...checks]
+  return withoutSupersededWorkflowRuns(checks, workflows)
 }
 
 /**
