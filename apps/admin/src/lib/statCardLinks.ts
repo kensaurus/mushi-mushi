@@ -281,15 +281,6 @@ export const lessonsLinks = {
   highCoherence: '/lessons?tab=clusters',
 } as const
 
-export const marketplaceLinks = {
-  catalog: '/marketplace?tab=browse',
-  installed: '/marketplace?tab=installed',
-  deliveries7d: '/marketplace?tab=deliveries',
-  successRate: '/marketplace?tab=deliveries',
-  failing: '/marketplace?tab=deliveries',
-  neverDelivered: '/marketplace?tab=installed',
-} as const
-
 export const notificationsLinks = {
   total: '/notifications?tab=inbox',
   unread: '/notifications?tab=inbox&show=unread',
