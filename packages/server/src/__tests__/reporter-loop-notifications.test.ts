@@ -204,6 +204,22 @@ describe('status transitions', () => {
     expect(fake.table('reporter_notifications')).toHaveLength(0)
   })
 
+  it('a false alarm tells nobody and awards no points', async () => {
+    const { awardPoints } = await import('../../supabase/functions/_shared/reputation.ts')
+    vi.mocked(awardPoints).mockClear()
+    const silent = db({ reporter_report_follows: [follow] })
+    await statusNotify.notifyReportStatusTransition(silent as never, {
+      projectId: PROJECT,
+      reportId: REPORT,
+      reporterTokenHash: 'site-audit',
+      previousStatus: 'classified',
+      newStatus: 'dismissed',
+      closedReason: 'false_alarm',
+    })
+    expect(silent.table('reporter_notifications')).toHaveLength(0)
+    expect(awardPoints).not.toHaveBeenCalled()
+  })
+
   describe('duplicate close — exactly one notice', () => {
     const CANONICAL = 'r-canonical'
     const grouped = {

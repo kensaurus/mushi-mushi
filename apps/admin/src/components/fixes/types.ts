@@ -39,6 +39,8 @@ export interface FixAttempt {
   summary?: string;
   rationale?: string;
   review_passed?: boolean;
+  /** The agent's own reason when it flagged the fix (GET /v1/admin/fixes). */
+  review_reasoning?: string | null;
   error?: string;
   started_at: string;
   completed_at?: string;
@@ -88,6 +90,8 @@ export interface FixAttempt {
   credential_block?: { provider: string; keyHealthy: boolean | null } | null;
   /** Latest completed Opus review verdict of this PR (GET /v1/admin/fixes, ADR 0030); null when not reviewed. */
   review_verdict?: 'merge' | 'fix_first' | 'hold' | null;
+  /** The commit that verdict is about; a different head means the verdict is stale. */
+  review_head_sha?: string | null;
 }
 
 export interface DispatchJob {

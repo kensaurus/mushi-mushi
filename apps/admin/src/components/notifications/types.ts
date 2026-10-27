@@ -23,6 +23,13 @@ type NotificationTopPriority =
   | 'no_messages'
   | 'healthy'
 
+/** Bug reports whose reporter was told, opened an update, and replied after it. */
+export interface ReporterFunnel {
+  told: number
+  opened: number
+  replied: number
+}
+
 export interface NotificationStats {
   hasAnyProject: boolean
   projectId: string | null
@@ -35,6 +42,8 @@ export interface NotificationStats {
   byType: Record<string, number>
   notificationsEnabled: boolean
   fixFailedCount: number
+  /** Null (or absent on an older server) when the replies could not be read. */
+  funnel?: ReporterFunnel | null
   topPriority: NotificationTopPriority
   topPriorityLabel: string | null
   topPriorityTo: string | null

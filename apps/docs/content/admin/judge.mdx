@@ -8,9 +8,19 @@ description: The Judge page scores how well Mushi's plain-English reads match re
 
 # Fix quality scores
 
+**Route:** `/judge` (sidebar: Triage grading)
+
 The Judge page shows how well Mushi's plain-English reads match reality over time.
 If classification quality is slipping — or a new prompt is ready to promote — you'll
 see it here before bad reads reach your queue.
+
+**First on the page:** one sentence with this week's score and how often the grader
+disagreed **in the last 14 days** (the window is named; an older server without it
+gets "so far", all time), with **See disagreements**. Under it, **How often the grader
+agrees** draws the weekly agreement share for 12 weeks, and **Worst disagreements,
+last 14 days** lists the 3 lowest-scored disagreements with the grader's reason and a
+link to each report. `GET /v1/admin/judge/stats` returns `recentWindowDays`,
+`recentEvaluations`, `recentDisagreements` and `agreementWeeks` for this.
 
 ---
 

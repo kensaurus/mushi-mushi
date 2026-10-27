@@ -11,6 +11,9 @@ description: The Content quality page queues AI-generated copy, release notes an
 
 **Route:** `/content`
 
+With nothing open and no filter from a link, the page is its empty state with
+**Show past issues**; the filter row appears once there is something to filter.
+
 > **Scenario:** AI-generated copy, release notes, or knowledge snippets scored
 > poorly or got user flags — you need a queue of fixable assets.
 

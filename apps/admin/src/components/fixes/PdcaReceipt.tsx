@@ -14,7 +14,7 @@ import { Link } from 'react-router-dom'
 import { PDCA_ORDER, PDCA_STAGES, type PdcaStageId } from '../../lib/pdca'
 import { isFixMerged } from '../../lib/mergeFix'
 import { STAMP_VISUAL, type StageStamp } from '../../lib/pdcaStamp'
-import { ACT_BLOCKER_COPY, ACT_BLOCKER_LINK_LABEL, ACT_BLOCKER_STAMP, actBlocker } from '../../lib/pdcaAct'
+import { ACT_BLOCKER_COPY, ACT_BLOCKER_LINK_LABEL, ACT_BLOCKER_STAMP, actBlocker, agentFlaggedFix } from '../../lib/pdcaAct'
 import type { FixAttempt } from './types'
 import type { FixTimelineEvent } from '../FixGitGraph'
 
@@ -163,7 +163,7 @@ function buildReceipts(
   else if (ciConclusion === 'failure' || ciConclusion === 'timed_out') checkStamp = 'failed'
   else if (ciResolved || hasPr) checkStamp = 'pending'
   else if (isFailed && !hasPr) checkStamp = 'idle'
-  const reviewSuffix = fix.review_passed === false ? ' · agent flagged for review' : ''
+  const reviewSuffix = agentFlaggedFix(fix) ? ' · agent flagged for review' : ''
   const checkProof = ciConclusion
     ? `CI: ${ciConclusion.replace(/_/g, ' ')}${reviewSuffix}`
     : hasPr

@@ -1,101 +1,69 @@
 /**
  * FILE: ResearchSnapshotStrip.tsx
- * PURPOSE: Research corpus KPI strip using MetricStrip — replaces hand-rolled grid on ResearchPage.
+ * PURPOSE: Research status: web searches about your bugs and what is not yet
+ *          attached to one (PageStatus, P1). Once web search works and nothing
+ *          was searched, it is the page's one first step (P3).
  */
 
-import { Section, StatCard, SnapshotSectionHint } from '../ui'
-import { MetricStrip } from '../MetricStrip'
+import { PageStatus } from '../ui'
 import type { ResearchStats } from './ResearchStatsTypes'
-import {
-  sessionsTooltip,
-  sessionsDetail,
-  snippetsTooltip,
-  snippetsDetail,
-  attachedTooltip,
-  attachedDetail,
-  unattachedSnippetsTooltip,
-  unattachedSnippetsDetail,
-  firecrawlTooltip,
-  firecrawlDetail,
-  domainsTooltip,
-  domainsDetail,
-} from '../../lib/statTooltips/research'
+import { pluralizeWithCount } from '../../lib/format'
 import { researchLinks } from '../../lib/statCardLinks'
 
 interface Props {
   stats: ResearchStats
   statsFetchedAt: string | null
   statsValidating?: boolean
-  sectionTitle?: string
-  hint?: string
   statLabels?: Record<string, string>
+  /** Opens the search box: the first step once web search is set up. */
+  onSearch?: () => void
 }
 
-export function ResearchSnapshotStrip({
-  stats,
-  statsFetchedAt,
-  statsValidating,
-  sectionTitle = 'RESEARCH SNAPSHOT',
-  hint,
-  statLabels,
-}: Props) {
+function researchSentence(stats: ResearchStats): string {
+  if (!stats.firecrawlReady) return 'Web search is not set up yet.'
+  if (stats.sessions === 0) return 'No searches yet.'
+  const unattached =
+    stats.unattachedSnippets > 0 ? `; ${pluralizeWithCount(stats.unattachedSnippets, 'finding')} not attached to a bug yet` : ''
+  return `${pluralizeWithCount(stats.sessions, 'search', 'searches')}, ${pluralizeWithCount(stats.snippets, 'finding')} saved${unattached}.`
+}
+
+export function ResearchSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, onSearch }: Props) {
   return (
-    <Section title={sectionTitle} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-      {hint ? <SnapshotSectionHint text={hint} /> : null}
-      <MetricStrip cols={6} ariaLabel="Research snapshot">
-        <StatCard
-          label={statLabels?.sessions ?? 'Sessions'}
-          value={stats.sessions}
-          tooltip={sessionsTooltip(stats)}
-          detail={sessionsDetail()}
-          to={researchLinks.sessions}
-        />
-        <StatCard
-          label={statLabels?.snippets ?? 'Snippets'}
-          value={stats.snippets}
-          tooltip={snippetsTooltip(stats)}
-          detail={snippetsDetail()}
-          to={researchLinks.snippets}
-        />
-        <StatCard
-          label={statLabels?.attached ?? 'Attached'}
-          value={stats.attached}
-          accent={stats.attached > 0 ? 'text-ok' : undefined}
-          tooltip={attachedTooltip(stats)}
-          detail={attachedDetail()}
-          to={researchLinks.attached}
-        />
-        <StatCard
-          label={statLabels?.unattached ?? 'Unattached'}
-          value={stats.unattachedSnippets}
-          accent={stats.unattachedSnippets > 0 ? 'text-warn' : undefined}
-          tooltip={unattachedSnippetsTooltip(stats)}
-          detail={unattachedSnippetsDetail()}
-          to={researchLinks.unattached}
-        />
-        <StatCard
-          label={statLabels?.firecrawl ?? 'Firecrawl'}
-          value={stats.firecrawlReady ? 'Ready' : stats.firecrawlConfigured ? 'Test' : 'Setup'}
-          accent={
-            stats.firecrawlReady
-              ? 'text-ok'
-              : stats.firecrawlConfigured
-                ? 'text-warn'
-                : undefined
-          }
-          tooltip={firecrawlTooltip(stats)}
-          detail={firecrawlDetail(stats)}
-          to={researchLinks.firecrawl}
-        />
-        <StatCard
-          label={statLabels?.domains ?? 'Domains'}
-          value={stats.allowedDomainsCount}
-          accent={stats.allowedDomainsCount > 0 ? 'text-info' : undefined}
-          tooltip={domainsTooltip(stats)}
-          detail={domainsDetail(stats)}
-          to={researchLinks.domains}
-        />
-      </MetricStrip>
-    </Section>
+    <PageStatus
+      ariaLabel="Research status"
+      tone={!stats.firecrawlReady ? 'warn' : stats.unattachedSnippets > 0 ? 'info' : 'ok'}
+      sentence={researchSentence(stats)}
+      freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      metrics={[
+        {
+          label: statLabels?.sessions ?? 'Searches',
+          value: stats.sessions,
+          hint: 'Web searches run from this page or from a bug.',
+          to: researchLinks.sessions,
+        },
+        {
+          label: statLabels?.attached ?? 'Attached to a bug',
+          value: stats.attached,
+          hint: 'Findings saved on a bug, where its diagnosis and fix can use them.',
+          to: researchLinks.attached,
+        },
+        {
+          label: statLabels?.unattached ?? 'Not attached',
+          value: stats.unattachedSnippets,
+          tone: stats.unattachedSnippets > 0 ? 'warn' : 'neutral',
+          hint: 'Saved findings no bug uses yet.',
+          to: researchLinks.unattached,
+        },
+      ]}
+      empty={
+        stats.firecrawlReady
+          ? {
+              title: 'No searches yet',
+              sentence: 'Search the web for an error message to see whether others hit it and how they fixed it.',
+              action: onSearch ? { label: 'Run first search', onClick: onSearch } : { label: 'Run first search', to: '/research?tab=search' },
+            }
+          : undefined
+      }
+    />
   )
 }

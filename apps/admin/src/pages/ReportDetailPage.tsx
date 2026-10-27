@@ -1,9 +1,19 @@
+/**
+ * FILE: apps/admin/src/pages/ReportDetailPage.tsx
+ * PURPOSE: One report in the admin console — diagnosis first, then triage,
+ *          evidence, and the reply thread.
+ *
+ * The shareable skill link is skillTriagePermalink (project + skill). Each
+ * recommended skill shows a truncated preview of that URL (full value in the
+ * title and the copy button tooltip) beside a small copy button. Section
+ * icons distinguish console logs from the two timelines.
+ */
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useNow } from '../lib/useNow'
 import { useParams, useNavigate, useSearchParams as useReactSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { isValidProjectId, setActiveProjectIdSnapshot } from '../lib/activeProject'
-import { reportDetailPath } from '../lib/reportUrl'
+import { reportDetailPath, skillTriagePermalink } from '../lib/reportUrl'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
@@ -17,6 +27,7 @@ import {
   Badge,
   Callout,
   InfoHint,
+  CopyButton,
 } from '../components/ui'
 import { DetailSkeleton } from '../components/skeletons/DetailSkeleton'
 import { EditorialErrorState } from '../components/EditorialErrorState'
@@ -39,11 +50,14 @@ import {
   IconNetwork,
   IconHealth,
   IconSkills,
+  IconClock,
+  IconStory,
 } from '../components/icons'
 import { ReportDetailHeader } from '../components/report-detail/ReportDetailHeader'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { FixCiFeedback } from '../components/fixes/FixCiFeedback'
+import { ReportFixActions } from '../components/report-detail/ReportFixActions'
 import { ReportTriageBar } from '../components/report-detail/ReportTriageBar'
 import { ReportPdcaStory } from '../components/report-detail/ReportPdcaStory'
 import { ReportDiagnosisGraph } from '../components/report-detail/ReportDiagnosisGraph'
@@ -71,6 +85,7 @@ import { ReportRelatedFooter } from '../components/report-detail/ReportRelatedFo
 import { RegressionChain } from '../components/report-detail/RegressionChain'
 import { DiagnosisFixHero } from '../components/report-detail/DiagnosisFixHero'
 import { GenerateTestButton } from '../components/report-detail/GenerateTestButton'
+import { SendToWorkerButton } from '../components/pipeline/SendToWorkerButton'
 import { SentryContextPanel } from '../components/report-detail/SentryContextPanel'
 import { ReportReplayPlayer } from '../components/report-detail/ReportReplayPlayer'
 import { AgentTracePanel } from '../components/report-detail/AgentTracePanel'
@@ -89,7 +104,6 @@ import type { SdkStatus } from '../components/SdkVersionBadge'
 import { CHIP_TONE } from '../lib/chipTone'
 import { shortReporterKey } from '../lib/reporterKey'
 import { PageLoadError } from '../components/PageLoadError'
-import { appUrl } from '../lib/appPath'
 import { humanizeApiError } from '../lib/humanizeApiError'
 import { reportHasCodeLocation } from '../lib/reportCodeLocation'
 import { useConfirmedDispatch } from '../components/report-detail/useConfirmedDispatch'
@@ -308,8 +322,24 @@ interface ReportDetailViewProps {
   onReload: () => void
 }
 
+/**
+ * On-screen form of a triage permalink. Drops the origin and keeps the report
+ * path plus the query, so ?project= and the skill stay readable. The full
+ * absolute URL stays on the element's title and in the copy button tooltip.
+ */
+function previewTriageUrl(url: string): string {
+  try {
+    const parsed = new URL(url)
+    const pathAndQuery = `${parsed.pathname}${parsed.search}`
+    if (!parsed.origin || pathAndQuery.length >= url.length) return url
+    return `…${pathAndQuery}`
+  } catch {
+    return url
+  }
+}
+
 // ── Recommended Skills section ────────────────────────────────────────────────
-function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
+export function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
   const { push } = useToast()
   // Memoize addToast so it has a stable identity — an inline arrow would be
   // re-created on every render and invalidate the startPipeline useCallback.
@@ -382,40 +412,53 @@ function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
           </select>
         </div>
 
-        {displaySkills.map((skill) => (
-          <div
-            key={skill.slug}
-            className={[
-              'flex items-start gap-3 p-2.5 rounded-lg border',
-              preselectedSlug === skill.slug
-                ? 'border-brand bg-brand/5'
-                : 'border-edge-subtle bg-surface-overlay',
-            ].join(' ')}
-          >
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-fg">{skill.title || skill.slug}</p>
-              <p className="text-2xs font-mono text-fg-muted">{skill.slug}</p>
-              <p className="text-2xs text-fg-muted mt-0.5">{skill.rationale}</p>
-            </div>
-            <Btn
-              type="button"
-              variant="primary"
-              size="sm"
-              onClick={() => startPipeline(skill.slug)}
-              loading={startingSlug === skill.slug}
-              className="flex-shrink-0"
+        {displaySkills.map((skill) => {
+          // This skill's URL, including ?project=, so a shared link opens the
+          // report's app instead of the recipient's previous one (NN/g #5).
+          const triageHref = skillTriagePermalink(report.id, projectId, skill.slug)
+          return (
+            <div
+              key={skill.slug}
+              className={[
+                'flex items-start gap-3 p-2.5 rounded-lg border',
+                preselectedSlug === skill.slug
+                  ? 'border-brand bg-brand/5'
+                  : 'border-edge-subtle bg-surface-overlay',
+              ].join(' ')}
             >
-              {startingSlug === skill.slug ? 'Starting…' : 'Run pipeline →'}
-            </Btn>
-          </div>
-        ))}
-
-        <p className="text-2xs text-fg-muted mt-1">
-          Share triage link:{' '}
-          <code className="font-mono text-brand">
-            {appUrl(`/reports/${report.id}?skill=${displaySkills[0]?.slug ?? ''}`)}
-          </code>
-        </p>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-fg">{skill.title || skill.slug}</p>
+                <p className="text-2xs font-mono text-fg-muted">{skill.slug}</p>
+                <p className="text-2xs text-fg-muted mt-0.5">{skill.rationale}</p>
+                <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1 text-2xs text-fg-muted">
+                  <span className="shrink-0">Share triage link</span>
+                  <code
+                    className="min-w-0 break-all font-mono text-brand"
+                    title={triageHref}
+                    data-testid={`skill-triage-url-${skill.slug}`}
+                  >
+                    {previewTriageUrl(triageHref)}
+                  </code>
+                  <CopyButton
+                    value={triageHref}
+                    label={`Copy triage link for ${skill.title || skill.slug}: ${triageHref}`}
+                    size="sm"
+                  />
+                </p>
+              </div>
+              <Btn
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={() => startPipeline(skill.slug)}
+                loading={startingSlug === skill.slug}
+                className="flex-shrink-0"
+              >
+                {startingSlug === skill.slug ? 'Starting…' : 'Run pipeline →'}
+              </Btn>
+            </div>
+          )
+        })}
       </div>
     </Section>
   )
@@ -453,11 +496,14 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
   const isDispatchBusy = dispatchState.status === 'queueing' || dispatchState.status === 'queued' || dispatchState.status === 'running'
   // Every dispatch control on this page (triage bar, recommendation CTA and
   // its retries) goes through this one gate + confirm.
+  const mergeTarget = latestFix && canMergeFix(latestFix) ? latestFix : null
+  const openFixPr = useMemo(() => (mergeTarget ? { number: mergeTarget.pr_number } : null), [mergeTarget])
   const confirmed = useConfirmedDispatch({
     report,
     preflight,
     repoChoice,
     busy: isDispatchBusy,
+    openPr: openFixPr,
     dispatch,
   })
   const { request: requestDispatch, block: dispatchBlockState } = confirmed
@@ -487,7 +533,6 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
     dispatchState.status !== 'completed'
 
   const reporterShort = report.reporter_token_hash ? shortReporterKey(report.reporter_token_hash) : 'unknown'
-  const mergeTarget = latestFix && canMergeFix(latestFix) ? latestFix : null
 
   const handleMerged = useCallback(
     (reportStatus: string | null) => {
@@ -559,6 +604,13 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         ]}
       />
 
+      {/* Where the open fix PR is stuck, its failing checks, and only the actions the server would take. */}
+      {latestFix?.pr_url && !latestFix.merged_at && latestFix.pr_state !== 'merged' && latestFix.pr_state !== 'closed' ? (
+        <div className="mb-3">
+          <ReportFixActions fixId={latestFix.id} onChanged={onReload} />
+        </div>
+      ) : null}
+
       <ReportDetailHeader report={report} reporterShort={reporterShort} />
 
       <RegressionChain report={report} className="mb-3" />
@@ -570,6 +622,8 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <GenerateTestButton report={report} />
+        {/* Hidden unless you have a local worker lane for this app (ADR 0048). */}
+        <SendToWorkerButton projectId={report.project_id} reportIds={[report.id]} data-testid="report-send-to-worker" />
       </div>
 
       {/* The one Plan → Do → Check → Act progress display (REPORT D): the
@@ -617,6 +671,8 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
             ciUpdatedAt={mergeTarget.check_run_updated_at}
             ciInfra={mergeTarget.ci_infra}
             projectId={report.project_id}
+            prState={mergeTarget.pr_state}
+            agent={mergeTarget.agent}
             onMerged={handleMerged}
           />
         </div>
@@ -754,11 +810,12 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           )}
         </Section>
 
-        <Section title="Unified timeline" icon={<IconTerminal />}>
+        {/* Clock and story, not the console glyph: these lists were indistinguishable (NN/g #6). */}
+        <Section title="Unified timeline" icon={<IconClock />}>
           <UnifiedTimelineCard reportId={report.id} />
         </Section>
 
-        <Section title="Repro timeline" icon={<IconTerminal />}>
+        <Section title="Repro timeline" icon={<IconStory />}>
           <TimelineCard report={report} />
         </Section>
       </div>

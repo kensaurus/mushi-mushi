@@ -175,7 +175,10 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
 
     const resolved = await resolveOwnedProject(c, db, userId, {
       noProjectResponse: () =>
-        c.json({ ok: true, data: { keyMintedAt: null, firstDiagnosisAt: null, ms: null } }),
+        c.json({
+          ok: true,
+          data: { keyMintedAt: null, firstDiagnosisAt: null, ms: null, firstReportId: null, testDiagnosisAt: null },
+        }),
     });
     if ('response' in resolved) return resolved.response;
     const pid = resolved.project.id;
@@ -194,7 +197,7 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
       // with the same predicate as first_report_received.
       db
         .from('reports')
-        .select('created_at, custom_metadata')
+        .select('id, created_at, custom_metadata')
         .eq('project_id', pid)
         .not('stage1_classification', 'is', null)
         .order('created_at', { ascending: true })
@@ -202,11 +205,16 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
     ]);
 
     const keyMintedAt = (firstKeyRes.data?.created_at as string | null) ?? null;
-    const firstReal = ((firstDiagnosisRes.data ?? []) as Array<{
+    const classified = (firstDiagnosisRes.data ?? []) as Array<{
+      id: string;
       created_at: string;
       custom_metadata: Record<string, unknown> | null;
-    }>).find((row) => !isNotFirstReportSource(row.custom_metadata));
+    }>;
+    const firstReal = classified.find((row) => !isNotFirstReportSource(row.custom_metadata));
     const firstDiagnosisAt = firstReal?.created_at ?? null;
+    // A test or seed report that was diagnosed, so Set up can say the
+    // pipeline works while it waits for one from the app (report 9b7624e6).
+    const testDiagnosisAt = classified.find((row) => isNotFirstReportSource(row.custom_metadata))?.created_at ?? null;
 
     let ms: number | null = null;
     if (keyMintedAt && firstDiagnosisAt) {
@@ -215,7 +223,10 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
       ms = delta >= 0 ? delta : null;
     }
 
-    return c.json({ ok: true, data: { keyMintedAt, firstDiagnosisAt, ms } });
+    return c.json({
+      ok: true,
+      data: { keyMintedAt, firstDiagnosisAt, ms, firstReportId: firstReal?.id ?? null, testDiagnosisAt },
+    });
   });
 
   // =================================================================================
@@ -302,6 +313,7 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
         last_sdk_origin: string | null;
         last_sdk_user_agent: string | null;
         last_sdk_endpoint_host: string | null;
+        last_sdk_key_label: string | null;
       };
     }
 
@@ -365,6 +377,7 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
             last_sdk_origin: heartbeat?.last_seen_origin ?? null,
             last_sdk_user_agent: heartbeat?.last_seen_user_agent ?? null,
             last_sdk_endpoint_host: heartbeat?.last_seen_endpoint_host ?? null,
+            last_sdk_key_label: heartbeat?.key_label ?? null,
           },
         },
         {

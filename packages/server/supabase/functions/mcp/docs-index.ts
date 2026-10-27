@@ -39,7 +39,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/",
     markdown: "index.md",
     keywords: ["know", "ai-built", "app", "broke", "fix", "ready"],
-    headings: ["The problem it solves", "A real example from our own sites", "What this is (and is not)", "Where it stands today", "This is what a diagnosis looks like", "See it in action", "Get started", "Install it in your app"],
+    headings: ["What happens to a bug", "The problem it solves", "A real example from our own sites", "What this is (and is not)", "This is what a diagnosis looks like", "See it in action", "Spend less on CI", "Get started"],
     excerpt: "Your AI shipped it. Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional.",
   },
   {
@@ -102,8 +102,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/checks",
     markdown: "admin/checks.md",
     keywords: ["admin", "checks"],
-    headings: ["App checks", "AI quality"],
-    excerpt: "The Checks page lists every automatic check on this app. Each card opens that check, with the same live count the sidebar shows.",
+    headings: ["The checks", "App checks", "AI quality"],
+    excerpt: "The Checks page shows every automatic check on this app with its state, when it last ran and its open count, failing checks first.",
   },
   {
     title: "CI runners",
@@ -111,7 +111,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/ci",
     markdown: "admin/ci.md",
     keywords: ["admin", "ci", "runners"],
-    headings: ["Test machine or your code", "Queue and wait", "Runner map", "What would make fixes land sooner", "When nothing has reported in", "Related pages"],
+    headings: ["Test machine or your code", "Queue and wait", "Runner map", "What would make fixes land sooner", "Your real bill", "Cost advice that reads your workflows", "Fix it in one PR", "When nothing has reported in"],
     excerpt: "The console CI runners page shows where tests run, how long they wait for a machine, and whether a red check was your code or the test machine.",
   },
   {
@@ -183,8 +183,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/dashboard",
     markdown: "admin/dashboard.md",
     keywords: ["admin", "dashboard"],
-    headings: ["What to look for first", "Flow canvas", "KPI tiles (14-day window)", "Charts row (14 days)", "Triage queue", "Insights row", "Common tasks", "Morning check (2 minutes)"],
-    excerpt: "The Mushi dashboard answers whether anything broke since your last release — new reports, overnight fix runs and pipeline health on one screen.",
+    headings: ["App card", "Health lights", "Needs you", "Release", "Pages", "Access and details", "This week vs last week", "Recent activity"],
+    excerpt: "Home in the Mushi console shows how one app is doing — is it up, what needs you, what is shipping, which pages have bugs and who can reach it.",
   },
   {
     title: "Design system",
@@ -286,13 +286,13 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "The Knowledge graph page draws your project's bugs, components and fixes as an interactive graph, so you can see which areas cluster problems.",
   },
   {
-    title: "Integration health",
+    title: "Mushi health",
     url: docUrl("/admin/health"),
     route: "/admin/health",
     markdown: "admin/health.md",
-    keywords: ["admin", "health", "integration"],
+    keywords: ["admin", "health"],
     headings: ["Time window", "LLM health summary", "Provider probes", "Cron job health", "Recent LLM calls log", "Recommended actions", "Related pages"],
-    excerpt: "The Integration health page monitors Mushi's LLM pipelines, cron jobs and provider connections so you catch a degraded integration early.",
+    excerpt: "The Mushi health page shows whether Mushi itself is working (its AI calls, background jobs and provider connections), so you catch a degraded integration early.",
   },
   {
     title: "To-do",
@@ -327,7 +327,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/inventory",
     markdown: "admin/inventory.md",
     keywords: ["admin", "inventory", "user", "stories"],
-    headings: ["What you see", "Run gates / Run crawler", "SDK-driven discovery", "Surface mode in the graph", "Five gates", "Watch your live site", "Synthetic monitor", "Spec traceability — every fix carries the originating Action"],
+    headings: ["What you see", "Check every action / Crawl the app", "SDK-driven discovery", "Surface mode in the graph", "Five gates", "Watch your live site", "Synthetic monitor", "Spec traceability — every fix carries the originating Action"],
     excerpt: "The User stories page manages your inventory.yaml — every page, action and story your app should have — and shows which of them the gates cover.",
   },
   {
@@ -354,7 +354,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/lessons",
     markdown: "admin/lessons.md",
     keywords: ["admin", "lessons"],
-    headings: ["The lifecycle: how a report becomes a rule", "Tab: Lessons", "When to retire a lesson", "Tab: Clusters", "Tab: Query Sim", "Common tasks", "Reviewing new candidates (weekly)", "After fixing a recurring bug"],
+    headings: ["The lifecycle: how a report becomes a rule", "Tab: Recurring patterns (?tab=clusters)", "Tab: Rules in use (?tab=lessons)", "When to retire a lesson", "Tab: Try a change (?tab=query)", "Common tasks", "Reviewing new patterns (weekly)", "After fixing a recurring bug"],
     excerpt: "The Lessons page turns repeat fixes into rules — when the same root cause keeps returning, Mushi records it so your editor sees it on the next PR.",
   },
   {
@@ -417,7 +417,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/pipeline",
     markdown: "admin/pipeline.md",
     keywords: ["admin", "pipeline"],
-    headings: ["Stages", "Who opens fixes", "Stuck groups", "Release trains", "Intake and deploys"],
+    headings: ["Stages", "Who opens fixes", "Stuck groups", "Release trains", "Intake and deploys", "Workers", "Send to my local worker", "Create a worker key"],
     excerpt: "The console Pipeline page shows every bug from report to deploy, where it is stuck and why, with one-click fixes.",
   },
   {
@@ -498,7 +498,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/releases",
     markdown: "admin/releases.md",
     keywords: ["admin", "releases"],
-    headings: ["What it generates", "Creating a release", "Release automatically when you ship", "Release entry fields", "SDK surface", "Related pages"],
+    headings: ["What it generates", "Creating a release", "Release automatically when you ship", "Batch tab: what ships next", "Release entry fields", "SDK surface", "Related pages"],
     excerpt: "The Releases page drafts a changelog for each version from the fixes that shipped, crediting the users whose reports led to each fix.",
   },
   {
@@ -1389,7 +1389,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart",
     markdown: "quickstart/index.md",
     keywords: ["quickstart", "fix", "first", "bug", "60", "seconds", "choose", "stack"],
-    headings: ["What you need", "The fastest way: one command", "Start here (editor first)", "Pick your stack", "How do I install the SDK?", "Troubleshooting"],
+    headings: ["Install", "Send your first report", "Get your first fix", "Pick your framework", "Keys and settings", "Troubleshooting"],
     excerpt: "Install Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.",
   },
   {
@@ -1425,7 +1425,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart/cli-console-loop",
     markdown: "quickstart/cli-console-loop.md",
     keywords: ["quickstart", "cli-console-loop", "cli", "console", "loop", "setup"],
-    headings: ["Which CLI command?", "Browser sign-in flow (recommended)", "What happens in the terminal", "What happens in the browser", "How sign-in reliability works", "1. Run the wizard", "2. Approve in the browser", "3. Pick or create a project"],
+    headings: ["Set up in five steps", "1. Run the wizard", "2. Approve in the browser", "3. Pick or create a project", "4. SDK installed", "5. Wire Cursor MCP (optional but recommended)", "Which CLI command?", "Browser sign-in flow (recommended)"],
     excerpt: "How npx mushi-mushi creates a project, mints an SDK key and installs the SDK through browser sign-in, and how to recover when the setup loop fails.",
   },
   {
@@ -1443,7 +1443,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart/incident-loop",
     markdown: "quickstart/incident-loop.md",
     keywords: ["quickstart", "incident-loop", "incident", "loop", "bug", "fix", "prompt"],
-    headings: ["No MCP? Copy the fix prompt", "Prerequisites", "Step 1 — Capture or pick a report", "Step 2 — Pull fix context", "Step 3 — Generate the fix prompt", "Step 4 — Paste and ship", "Troubleshooting", "See also"],
+    headings: ["No MCP? Copy the fix prompt", "Before you start", "The loop", "Capture or pick a report", "Pull the fix context", "Get a deeper fix plan (optional)", "Paste and ship", "Troubleshooting"],
     excerpt: "Run npx mushi-mushi, ship, and turn your first user-reported bug into a plain-English diagnosis and a paste-ready fix for Cursor or Claude Code.",
   },
   {
@@ -1461,7 +1461,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart/mcp",
     markdown: "quickstart/mcp.md",
     keywords: ["quickstart", "mcp", "server", "bug", "fixing", "cursor", "claude", "code"],
-    headings: ["OAuth login (recommended — no keys to copy)", "One-liner setup (recommended)", "Claude Code plugin", "Smithery (hosted MCP)", "Manual setup: Cursor", "Manual setup: Claude Desktop", "Hosted Streamable HTTP transport (no subprocess)", "Available tools"],
+    headings: ["Connect in three steps", "Add the Mushi server", "Sign in", "Ask your editor", "How sign-in works (OAuth, no keys to copy)", "One-liner setup (recommended)", "Claude Code plugin", "Smithery (hosted MCP)"],
     excerpt: "Set up the Mushi MCP server with npx mushi-mushi setup — read bug reports, get fix context, and dispatch fixes from Cursor, Claude Code, or Codex.",
   },
   {

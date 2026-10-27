@@ -29,11 +29,15 @@ export function isSecretConfigured(value: unknown): boolean {
   return s.length > 0
 }
 
-/** Turn a masked GET value, vault ref, or plaintext into a display hint. */
+/**
+ * Turn a masked GET value, vault ref, or plaintext into a display hint.
+ * A vault ref (or the old `…_ref` tail of its name) is "Saved" — never the
+ * reference name. A real key hint (`…ab12`) is kept.
+ */
 export function normalizeSecretHint(raw: unknown, fieldName?: string): string | null {
   if (!isSecretConfigured(raw)) return null
   const s = String(raw).trim()
-  if (s.startsWith('vault://')) return null
+  if (s === 'Saved' || s.startsWith('vault://') || s.endsWith('_ref')) return 'Saved'
   if (/^•+$/.test(s)) return null
   if (s.includes('…') || s.startsWith('…')) return s
   if (s.length > 12 && !s.startsWith('•')) return maskSecret(s)

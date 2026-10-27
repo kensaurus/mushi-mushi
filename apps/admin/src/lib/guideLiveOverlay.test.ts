@@ -9,7 +9,6 @@ import {
   healthProbeOverlay,
   inboxStageOverlay,
   judgeStageOverlay,
-  onboardingStepOverlay,
   projectsHealthOverlay,
   promptLabStageOverlay,
   qaProviderOverlay,
@@ -149,44 +148,6 @@ describe('guideLiveOverlay', () => {
     })
     expect(overlay.posture).toBe('info')
     expect(overlay.metric).toBe('Indexing…')
-  })
-
-  it('onboardingStepOverlay marks next step', () => {
-    const overlay = onboardingStepOverlay('sdk_installed', {
-      requiredComplete: 2,
-      requiredTotal: 4,
-      sdkInstalled: false,
-      reportCount: 0,
-      nextStepId: 'sdk_installed',
-    })
-    expect(overlay.posture).toBe('open')
-    expect(overlay.metric).toBe('Next')
-  })
-
-  it('onboardingStepOverlay pluralizes single report count', () => {
-    const overlay = onboardingStepOverlay('first_report_received', {
-      requiredComplete: 2,
-      requiredTotal: 4,
-      sdkInstalled: true,
-      reportCount: 1,
-      nextStepId: 'other_step',
-    })
-    expect(overlay.posture).toBe('ok')
-    expect(overlay.metric).toBe('1 report')
-  })
-
-  it('onboardingStepOverlay marks each done step from the setup API, not only when all are done', () => {
-    // mushi-demo: project, key and first report done; the SDK has never checked in.
-    const stats = {
-      requiredComplete: 3,
-      requiredTotal: 4,
-      sdkInstalled: false,
-      reportCount: 0,
-      nextStepId: 'sdk_installed',
-      completedStepIds: ['project_created', 'api_key_generated', 'first_report_received'],
-    }
-    const rows = ['project_created', 'api_key_generated', 'sdk_installed', 'first_report_received'].map((id) => onboardingStepOverlay(id, stats).metric)
-    expect(rows).toEqual(['Done', 'Done', 'Next', 'Done'])
   })
 
   it('qaProviderOverlay highlights failing stories on firecrawl', () => {

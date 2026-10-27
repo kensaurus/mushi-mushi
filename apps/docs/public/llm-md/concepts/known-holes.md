@@ -17,8 +17,8 @@ bug: in plain English, with the upgrade that fixes it.
 
 ## What Mushi checks
 
-Once a day (05:25 UTC), and when you press **Check now** on **App health →
-Code**, Mushi reads your primary repo at the head of the default branch:
+Once a day (05:25 UTC), and when you press **Check now** on **Mushi health →
+Code size**, Mushi reads your primary repo at the head of the default branch:
 
 | What | Files | Matched against |
 | --- | --- | --- |
@@ -103,8 +103,8 @@ uses to read the repo).
 
 ## Where to see it
 
-- **Console:** App health → Code → *Known holes in your dependencies*, and the
-  filed reports in the normal queue.
+- **Console:** Full-stack audit → *Known holes in your dependencies* (Mushi health → Code
+  size links there), and the filed reports in the normal queue.
 - **Editor (MCP):** `get_radar` (rules `known_vulnerable_dependency` and
   `runtime_end_of_life`), `list_gate_findings` with gate
   `portfolio_radar_vulns`, `run_radar` to check again.

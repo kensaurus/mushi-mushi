@@ -68,7 +68,7 @@ export function NewRunForm({ projectId, projectName, onCreated }: Props) {
   return (
     <Card className="max-w-2xl space-y-5 p-6">
       <div className="space-y-1">
-        <h2 className="text-sm font-semibold text-fg">Queue a PDCA run</h2>
+        <h2 className="text-sm font-semibold text-fg">Start an improvement run</h2>
         <p className="text-2xs text-fg-muted text-pretty">
           The runner fetches the target URL, loops producer → critic until the target score is met or max
           iterations{projectName ? ` for ${projectName}` : ''}.

@@ -2,6 +2,8 @@
 
 /**
  * Diagnosis loop cards — once-in-view stagger (native scroll, no pin).
+ * A close-up of the pipeline's Triaged step, so it is titled as one; the
+ * whole loop is <LoopPipeline /> under the hero.
  */
 import { motion } from 'motion/react'
 import { LANDING_PILLARS } from '@/lib/landing-copy'
@@ -20,7 +22,7 @@ export function DiagnosisScrollStage() {
     >
       <LandingStaggerItem>
         <h2 id="landing-diagnosis-heading" className="landing-section-title">
-          What happens after a user reports something
+          Inside triage: what Mushi does with each report
         </h2>
       </LandingStaggerItem>
 

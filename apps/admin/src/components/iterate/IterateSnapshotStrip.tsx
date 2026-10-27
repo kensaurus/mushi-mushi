@@ -1,106 +1,49 @@
 /**
  * FILE: IterateSnapshotStrip.tsx
- * PURPOSE: PDCA iterate KPI strip using MetricStrip — replaces hand-rolled grid on IteratePage.
+ * PURPOSE: Improvement runs status (PageStatus, P1). With no runs it is the
+ *          page's one first step (PageFirstStep, P3) instead of six zeros.
  */
 
-import { Section, StatCard, SnapshotSectionHint } from '../ui'
-import { MetricStrip } from '../MetricStrip'
+import { PageStatus } from '../ui'
 import type { IterateStats } from './IterateStatsTypes'
-import {
-  totalRunsTooltip,
-  totalRunsDetail,
-  activeRunsTooltip,
-  activeRunsDetail,
-  succeededRunsTooltip,
-  succeededRunsDetail,
-  failedRunsTooltip,
-  failedRunsDetail,
-  avgScoreTooltip,
-  avgScoreDetail,
-  iterationsTooltip,
-  iterationsDetail,
-} from '../../lib/statTooltips/iterate'
+import { pluralizeWithCount } from '../../lib/format'
 import { iterateLinks } from '../../lib/statCardLinks'
-import { usePlainStatTooltips } from '../../lib/usePlainStatTooltips'
 
 interface Props {
   stats: IterateStats
   statsFetchedAt: string | null
   statsValidating?: boolean
-  sectionTitle?: string
-  hint?: string
   statLabels?: Record<string, string>
 }
 
-export function IterateSnapshotStrip({
-  stats,
-  statsFetchedAt,
-  statsValidating,
-  sectionTitle = 'PDCA SNAPSHOT',
-  hint,
-  statLabels,
-}: Props) {
-  const plainOpts = usePlainStatTooltips()
-  const sectionLabel = plainOpts.plainLanguage ? 'Improvement loop snapshot' : 'PDCA snapshot'
+function iterateSentence(stats: IterateStats, active: number): string {
+  const parts = [`${pluralizeWithCount(stats.total, 'improvement run')}`]
+  const detail: string[] = []
+  if (active > 0) detail.push(`${active} running`)
+  if (stats.succeeded > 0) detail.push(`${stats.succeeded} passed`)
+  if (stats.failed > 0) detail.push(`${stats.failed} failed`)
+  if (stats.avgFinalScorePct != null) detail.push(`average score ${stats.avgFinalScorePct}%`)
+  return `${parts[0]}${detail.length ? `: ${detail.join(', ')}` : ''}.`
+}
 
+export function IterateSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels }: Props) {
+  const active = stats.running + stats.queued
   return (
-    <Section title={sectionTitle} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-      {hint ? <SnapshotSectionHint text={hint} /> : null}
-      <MetricStrip cols={6} ariaLabel={sectionLabel}>
-        <StatCard
-          label={statLabels?.total ?? 'Total runs'}
-          value={stats.total}
-          tooltip={totalRunsTooltip(stats, plainOpts)}
-          detail={totalRunsDetail(plainOpts)}
-          to={iterateLinks.total}
-        />
-        <StatCard
-          label={statLabels?.active ?? 'Active'}
-          value={stats.running + stats.queued}
-          accent={stats.running + stats.queued > 0 ? 'text-warn' : undefined}
-          tooltip={activeRunsTooltip(stats, plainOpts)}
-          detail={activeRunsDetail(stats)}
-          to={iterateLinks.active}
-        />
-        <StatCard
-          label={statLabels?.succeeded ?? 'Succeeded'}
-          value={stats.succeeded}
-          accent={stats.succeeded > 0 ? 'text-ok' : undefined}
-          tooltip={succeededRunsTooltip(stats, plainOpts)}
-          detail={succeededRunsDetail()}
-          to={iterateLinks.succeeded}
-        />
-        <StatCard
-          label={statLabels?.failed ?? 'Failed'}
-          value={stats.failed}
-          accent={stats.failed > 0 ? 'text-danger' : undefined}
-          tooltip={failedRunsTooltip(stats, plainOpts)}
-          detail={failedRunsDetail()}
-          to={iterateLinks.failed}
-        />
-        <StatCard
-          label={statLabels?.avgScore ?? 'Avg score'}
-          value={stats.avgFinalScorePct != null ? `${stats.avgFinalScorePct}%` : '—'}
-          accent={
-            stats.avgFinalScorePct != null && stats.avgFinalScorePct >= 70
-              ? 'text-ok'
-              : stats.avgFinalScorePct != null
-                ? 'text-warn'
-                : undefined
-          }
-          tooltip={avgScoreTooltip(stats)}
-          detail={avgScoreDetail(stats)}
-          to={iterateLinks.avgScore}
-        />
-        <StatCard
-          label={statLabels?.iterations ?? 'Iterations'}
-          value={stats.totalIterations}
-          accent={stats.totalIterations > 0 ? 'text-info' : undefined}
-          tooltip={iterationsTooltip(stats, plainOpts)}
-          detail={iterationsDetail()}
-          to={iterateLinks.iterations}
-        />
-      </MetricStrip>
-    </Section>
+    <PageStatus
+      ariaLabel="Improvement runs status"
+      tone={stats.failed > 0 ? 'warn' : active > 0 ? 'info' : 'ok'}
+      sentence={iterateSentence(stats, active)}
+      freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      metrics={[
+        { label: statLabels?.active ?? 'Running', value: active, tone: active > 0 ? 'info' : 'neutral', to: iterateLinks.active },
+        { label: statLabels?.succeeded ?? 'Passed', value: stats.succeeded, tone: stats.succeeded > 0 ? 'ok' : 'neutral', to: iterateLinks.succeeded },
+        { label: statLabels?.failed ?? 'Failed', value: stats.failed, tone: stats.failed > 0 ? 'danger' : 'neutral', to: iterateLinks.failed },
+      ]}
+      empty={{
+        title: 'No improvement runs yet',
+        sentence: 'Give Mushi one page of your app: an AI drafts a change and a second AI critiques it until it passes.',
+        action: { label: 'Start a run', to: '/iterate?tab=new' },
+      }}
+    />
   )
 }

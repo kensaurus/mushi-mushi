@@ -96,6 +96,17 @@ export function keyStatusView(
   const now = context.now ?? Date.now()
   const provider = context.providerName ?? 'the provider'
 
+  // A key someone turned off is a choice, not a problem: it never asks for
+  // attention, even once it expires (console journeys 2026-10-27).
+  if (key.status === 'disabled') {
+    return {
+      state: 'not_connected',
+      label: 'Turned off',
+      detail: "You turned this key off, so Mushi won't use it.",
+      action: key.test_status === 'ok' ? 'enable' : 'test',
+    }
+  }
+
   if (isLegacyKey(key) && hasWorkingPoolKey(context.pool, key.provider_slug, now)) {
     return {
       state: 'attention',
@@ -121,15 +132,6 @@ export function keyStatusView(
           detail: `Expired on ${formatDay(expiresAt!)} — replace it with a new key.`,
           action: 'replace',
         }
-  }
-
-  if (key.status === 'disabled') {
-    return {
-      state: 'not_connected',
-      label: 'Turned off',
-      detail: "You turned this key off, so Mushi won't use it.",
-      action: key.test_status === 'ok' ? 'enable' : 'test',
-    }
   }
 
   if (key.test_status === 'error_auth' || key.status === 'auth_failed') {
@@ -209,7 +211,10 @@ export function keyStatusView(
 
 export interface KeySummary {
   working: number
+  /** Keys that stop something working. A replaced key is counted in `replaced` instead. */
   attention: number
+  /** Broken or old keys another working key already replaced: tidy-up, never a banner. */
+  replaced: number
   expiring: number
   checking: number
   off: number
@@ -222,11 +227,14 @@ export function summarizeKeys(
   legacy: readonly LegacyKey[],
   now = Date.now(),
 ): KeySummary {
-  const summary: KeySummary = { working: 0, attention: 0, expiring: 0, checking: 0, off: 0, total: 0 }
+  const summary: KeySummary = { working: 0, attention: 0, replaced: 0, expiring: 0, checking: 0, off: 0, total: 0 }
   for (const key of [...pool, ...legacy]) {
-    const { state } = keyStatusView(key, { pool, now })
+    const { state, action } = keyStatusView(key, { pool, now })
     summary.total += 1
     if (state === 'working') summary.working += 1
+    // "Remove it, another key is working": nothing is broken, so the page
+    // banner and tab badge stay quiet; the row still offers Remove.
+    else if (state === 'attention' && action === 'remove') summary.replaced += 1
     else if (state === 'attention') summary.attention += 1
     else if (state === 'expiring') summary.expiring += 1
     else if (state === 'checking') summary.checking += 1
@@ -254,7 +262,10 @@ export function providerStatusView(
     return { state: 'not_connected', detail: options.emptyDetail, action: null }
   }
   const views = keys.map((k) => keyStatusView(k, { pool, now, providerName: options.providerName }))
-  const problems = views.filter((v) => v.state === 'attention').length
+  // Keys another working key already replaced are tidy-up, not a problem:
+  // the provider reads Working, as the page banner and badge do.
+  const problems = views.filter((v) => v.state === 'attention' && v.action !== 'remove').length
+  const replaced = views.filter((v) => v.state === 'attention' && v.action === 'remove').length
   const working = views.find((v) => v.state === 'working')
   if (working) {
     if (problems > 0) {
@@ -265,7 +276,10 @@ export function providerStatusView(
       }
     }
     const expiring = views.find((v) => v.state === 'expiring')
-    return expiring ?? working
+    if (expiring) return expiring
+    return replaced > 0
+      ? { ...working, detail: `${working.detail} · ${replaced === 1 ? '1 old key' : `${replaced} old keys`} to remove below` }
+      : working
   }
   const order: ConnectionState[] = ['attention', 'expiring', 'checking', 'not_connected']
   for (const state of order) {

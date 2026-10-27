@@ -473,6 +473,7 @@ export function registerWorkspaceNavMetaRoutes(
             'totalStories',
             'failingStories',
             'pendingRuns',
+            'lastRunAt',
             'topPriority',
           ])
         : null,
@@ -550,6 +551,7 @@ export function registerWorkspaceNavMetaRoutes(
         'errorCount',
         'warnCount',
         'failedGateCount',
+        'lastRunAt',
         'topPriority',
       ]),
       dashboard: pick(byPath['/v1/admin/dashboard/stats'], [
@@ -589,12 +591,24 @@ export function registerWorkspaceNavMetaRoutes(
         'openFindings',
         'stub',
         'total',
+        'hasInventory',
+        'lastGateRunAt',
         'topPriority',
       ]),
       health: pick(byPath['/v1/admin/health/stats'], [
         'cronErrorCount',
         'redCount',
         'amberCount',
+        'lastLlmCallAt',
+        'topPriority',
+      ]),
+      // Judge stats are already fetched for the disagreement counter
+      // (include=counts). The checks page reads the run, not only the count.
+      judge: pick(byPath['/v1/admin/judge/stats'], [
+        'lastEvalAt',
+        'disagreementCount',
+        'totalEvaluations',
+        'staleHours',
         'topPriority',
       ]),
       fixes: pick(byPath['/v1/admin/fixes/stats'], [
@@ -664,6 +678,7 @@ export function registerWorkspaceNavMetaRoutes(
         'platformConnected',
         'platformTotal',
         'routingPaused',
+        'platformAttention',
       ]),
       featureBoard: pick(byPath['/v1/admin/feature-board/stats'], [
         'openCount',
