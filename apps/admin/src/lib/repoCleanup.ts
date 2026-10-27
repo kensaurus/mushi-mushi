@@ -6,7 +6,7 @@
 
 import type { BadgeTone } from '../components/ui'
 
-export interface CleanupBranch {
+interface CleanupBranch {
   key: string
   branch: string
   headSha: string
@@ -43,7 +43,7 @@ export interface CleanupRepo {
   truncated: boolean
 }
 
-export type CleanupActionName = 'delete_branches' | 'close_prs' | 'set_delete_branch_on_merge' | 'restore_branches'
+type CleanupActionName = 'delete_branches' | 'close_prs' | 'set_delete_branch_on_merge' | 'restore_branches'
 export type CleanupStatus = 'pending_approval' | 'approved' | 'rejected' | 'executing' | 'executed' | 'failed' | 'expired'
 
 export interface CleanupItemResult {
@@ -71,7 +71,7 @@ export interface CleanupAction {
   error: string | null
 }
 
-export interface RestorableItem {
+interface RestorableItem {
   id: string
   repo: string
   branch: string
