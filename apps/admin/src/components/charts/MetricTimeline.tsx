@@ -3,7 +3,8 @@
  * PURPOSE: One metric over time with what happened around it: a dashed
  *          vertical line per release, and a dot on each spike (red while it
  *          waits for you, grey once confirmed or dismissed). Used by Mushi
- *          health → Unusual spikes and → Schema changes, so "did this start
+ *          health → Unusual spikes and → Schema changes (release lines grey,
+ *          so they never read as a red spike), so "did this start
  *          with a release?" is answered by looking, not by reading tiles.
  *
  *          One series, one y-axis. The line is an SVG polyline; markers and
@@ -97,7 +98,7 @@ export function MetricTimeline({ points, markers = [], dots = [], title, formatV
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-fg-muted">
           {shownMarkers.length > 0 ? (
             <span className="inline-flex items-center gap-1">
-              <span aria-hidden="true" className="inline-block h-3 border-l border-dashed border-brand" />
+              <span aria-hidden="true" className="inline-block h-3 border-l border-dashed border-fg-muted" />
               Release
             </span>
           ) : null}
@@ -123,7 +124,7 @@ export function MetricTimeline({ points, markers = [], dots = [], title, formatV
         <div className="relative min-w-0 flex-1" style={{ height }} role="img" aria-label={`${title}: ${sorted.length} points, ${shownMarkers.length} releases, ${shownDots.length} spikes`}>
           <svg viewBox={`0 0 ${VIEW_W} 100`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
             <line x1="0" y1="100" x2={VIEW_W} y2="100" className="stroke-edge-subtle" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-            <polyline points={line} fill="none" className="stroke-brand" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+            <polyline points={line} fill="none" className="stroke-fg-secondary" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           </svg>
           {shownMarkers.map((m) => (
             <span
@@ -135,7 +136,7 @@ export function MetricTimeline({ points, markers = [], dots = [], title, formatV
               className="absolute inset-y-0 w-3 -translate-x-1/2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
               style={{ left: `${scale.x(m.ts)}%` }}
             >
-              <span aria-hidden="true" className="absolute inset-y-0 left-1/2 border-l border-dashed border-brand/70" />
+              <span aria-hidden="true" className="absolute inset-y-0 left-1/2 border-l border-dashed border-fg-muted" />
             </span>
           ))}
           {shownDots.map((d) => (
