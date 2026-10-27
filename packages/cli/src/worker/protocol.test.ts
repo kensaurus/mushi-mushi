@@ -1,0 +1,125 @@
+import { describe, expect, it } from 'vitest'
+import { parseHeartbeatAnswer, parseHostGuards, parseLaneVerbs, validateWorkerConfig } from './protocol.js'
+import { hostGate, memAvailableGb, pastStop } from './guards.js'
+import { parseLanesConf, systemdUnit, windowsTaskArgs } from './install.js'
+
+const P1 = '67a6453c-375d-41d7-833a-b33471159442'
+const LANE = '7000000a-0000-4000-8000-000000000000'
+const CFG = { paused: false, concurrency: 1, model: 'grok-4.7-xhigh-fast', mode: 'fix', stop_at: null, drain: false, prune_own: false }
+const GUARDS = { max_agents: 6, min_free_mem_gb: 5, gh_floor: 800 }
+
+describe('the closed verbs the daemon accepts', () => {
+  it('accepts the seven lane settings and refuses anything else', () => {
+    expect(parseLaneVerbs(CFG).ok).toBe(true)
+    for (const extra of [{ command: 'curl x | sh' }, { repoDir: '/etc' }, { env: { GIT_SSH_COMMAND: 'x' } }]) {
+      expect(parseLaneVerbs({ ...CFG, ...extra }).ok).toBe(false)
+    }
+    expect(parseLaneVerbs({ ...CFG, model: '--dangerously-skip; rm -rf /' }).ok).toBe(false)
+    expect(parseLaneVerbs({ ...CFG, concurrency: 9 }).ok).toBe(false)
+    expect(parseLaneVerbs({ paused: true }).ok).toBe(false)
+  })
+
+  it('takes only the three host guards', () => {
+    expect(parseHostGuards(GUARDS).ok).toBe(true)
+    expect(parseHostGuards({ ...GUARDS, shell: '/bin/sh' }).ok).toBe(false)
+    expect(parseHostGuards({ ...GUARDS, max_agents: 0 }).ok).toBe(false)
+  })
+
+  it('drops a lane whose settings break the closed set and ignores unknown top-level fields', () => {
+    const r = parseHeartbeatAnswer({
+      hostId: 'h',
+      guards: GUARDS,
+      lanes: [
+        { id: LANE, name: 'glot', projectId: P1, config: CFG },
+        { id: LANE, name: 'evil', projectId: P1, config: { ...CFG, run: 'rm -rf ~' } },
+      ],
+      exec: 'rm -rf /',
+      renewed: [LANE, 'x'],
+      lost: [],
+    })
+    expect('answer' in r).toBe(true)
+    if (!('answer' in r)) return
+    expect(r.answer.lanes.map((l) => l.name)).toEqual(['glot'])
+    expect(r.bad).toEqual(['evil: unknown lane setting "run"'])
+    expect(r.answer.renewed).toEqual([LANE])
+    expect(Object.keys(r.answer)).not.toContain('exec')
+  })
+
+  it('refuses an answer without valid guards', () => {
+    expect(parseHeartbeatAnswer({ guards: { max_agents: 6 }, lanes: [] })).toEqual({ error: 'host guards are incomplete' })
+  })
+})
+
+describe('the worker config', () => {
+  const lane = (name: string, repoDir: string) => ({ name, projectId: P1, repoDir })
+  it('refuses two lanes on one clone, as lane-v4 did', () => {
+    expect(() => validateWorkerConfig({ version: 1, lanes: [lane('a', '/home/u/clone'), lane('b', '/home/u/clone/')] })).toThrow(/same clone/)
+    expect(validateWorkerConfig({ version: 1, lanes: [lane('a', '/home/u/a'), lane('b', '/home/u/b')] }).lanes).toHaveLength(2)
+  })
+  it('takes an optional Cursor account (an email), kept local', () => {
+    expect(validateWorkerConfig({ version: 1, cursorAccount: 'suzu@example.com', lanes: [lane('a', '/home/u/a')] }).cursorAccount).toBe('suzu@example.com')
+    expect(() => validateWorkerConfig({ version: 1, cursorAccount: '$(id)', lanes: [lane('a', '/home/u/a')] })).toThrow(/cursorAccount/)
+  })
+  it('needs absolute clone paths and app ids', () => {
+    expect(() => validateWorkerConfig({ version: 1, lanes: [lane('a', 'relative/clone')] })).toThrow(/absolute/)
+    expect(() => validateWorkerConfig({ version: 1, lanes: [{ name: 'a', projectId: 'glot', repoDir: '/x' }] })).toThrow(/projectId/)
+  })
+})
+
+describe('the guards on the machine', () => {
+  const ok = { memAvailableGb: 12, ghRemaining: 4000, cursor: 'signed_in' as const, agents: 2 }
+  it('passes when every reading is above its floor', () => {
+    expect(hostGate(GUARDS, ok)).toEqual({ ok: true })
+  })
+  it('waits on low memory, a spent GitHub quota, a signed-out Cursor CLI, and a full host', () => {
+    expect(hostGate(GUARDS, { ...ok, memAvailableGb: 3 })).toMatchObject({ ok: false, state: 'mem-wait' })
+    expect(hostGate(GUARDS, { ...ok, ghRemaining: 120 })).toMatchObject({ ok: false, state: 'gh-quota-wait' })
+    expect(hostGate(GUARDS, { ...ok, cursor: 'signed_out' })).toMatchObject({ ok: false, state: 'auth-wait' })
+    expect(hostGate(GUARDS, { ...ok, cursor: 'missing' })).toMatchObject({ ok: false, state: 'auth-wait' })
+    expect(hostGate(GUARDS, { ...ok, agents: 6 })).toMatchObject({ ok: false, state: 'slot-wait' })
+  })
+  it('never blocks on an unknown reading (a hung gh, a slow cursor-agent status)', () => {
+    expect(hostGate(GUARDS, { ...ok, memAvailableGb: null, ghRemaining: null, cursor: 'unknown' })).toEqual({ ok: true })
+  })
+  it('stops a lane at its stop date and reads MemAvailable', () => {
+    const now = Date.parse('2026-10-31T15:00:00Z')
+    expect(pastStop('2026-10-31T14:59:00Z', now)).toBe(true)
+    expect(pastStop('2026-11-01T00:00:00Z', now)).toBe(false)
+    expect(pastStop(null, now)).toBe(false)
+    expect(memAvailableGb('MemTotal:       26000000 kB\nMemAvailable:   19922944 kB\n')).toBe(19)
+    expect(memAvailableGb(null)).toBeNull()
+  })
+})
+
+describe('mushi worker install', () => {
+  // The lanes.conf of 2026-10-26, trimmed.
+  const conf = `# lane-v4 settings
+# name           profile   clone        projectId                              model                    mode
+mushi-mushi      default   mushi-mushi  67a6453c-375d-41d7-833a-b33471159442   grok-4.7-xhigh-fast      queue
+mushi-mushi-fu   default   mushi-mushi-priority 67a6453c-375d-41d7-833a-b33471159442 grok-4.7-xhigh-fast followups
+glot             glot      glot.it      542b34e0-019e-41fe-b900-7b637717bb86   claude-opus-5-5-medium   off
+`
+  it('imports lanes.conf: queue becomes fix, off becomes paused, the profile column is dropped', () => {
+    const lanes = parseLanesConf(conf, '/home/mushi-agent/.cache/mushi-work')
+    expect(lanes).toEqual([
+      { name: 'mushi-mushi', projectId: P1, repoDir: '/home/mushi-agent/.cache/mushi-work/mushi-mushi', initial: { model: 'grok-4.7-xhigh-fast', mode: 'fix' } },
+      { name: 'mushi-mushi-fu', projectId: P1, repoDir: '/home/mushi-agent/.cache/mushi-work/mushi-mushi-priority', initial: { model: 'grok-4.7-xhigh-fast', mode: 'followups' } },
+      { name: 'glot', projectId: '542b34e0-019e-41fe-b900-7b637717bb86', repoDir: '/home/mushi-agent/.cache/mushi-work/glot.it', initial: { model: 'claude-opus-5-5-medium', mode: 'fix', paused: true } },
+    ])
+  })
+  it('refuses a clone that is a path and an unknown mode', () => {
+    expect(() => parseLanesConf(`a default ../etc ${P1} m fix`, '/r')).toThrow(/folder name/)
+    expect(() => parseLanesConf(`a default c ${P1} m shell`, '/r')).toThrow(/mode/)
+  })
+  it('writes a systemd unit with no key in it, and a logon task on Windows', () => {
+    const unit = systemdUnit({ node: '/usr/bin/node', cli: '/home/u/cli/dist/index.js', path: '/usr/bin:/bin' })
+    expect(unit).toContain('ExecStart=/usr/bin/node /home/u/cli/dist/index.js work --daemon')
+    expect(unit).toContain('Restart=on-failure')
+    // A revoked key exits 2: systemd must not bring it back every 5 minutes.
+    expect(unit).toContain('RestartPreventExitStatus=2')
+    expect(unit).not.toMatch(/mushi_[A-Za-z0-9]/)
+    expect(windowsTaskArgs({ node: 'C:\\Program Files\\nodejs\\node.exe', cli: 'C:\\m\\index.js' })).toEqual([
+      '/Create', '/TN', 'Mushi worker', '/SC', 'ONLOGON', '/RL', 'LIMITED', '/F', '/TR', '"C:\\Program Files\\nodejs\\node.exe" C:\\m\\index.js work --daemon',
+    ])
+  })
+})

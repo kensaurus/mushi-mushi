@@ -9,10 +9,55 @@ description: How npx mushi-mushi creates a project, mints an SDK key and install
 
 # CLI ↔ console setup loop
 
-The fastest path from zero to a working SDK is `npx mushi-mushi` — the wizard
-handles project creation, key minting, and SDK installation in one command with
-**no copy-paste**. This page explains the full flow and how to recover when
-something goes wrong.
+- `npx mushi-mushi` does the whole setup: sign-in, project, API key and SDK install.
+- You never paste a key. You click **Approve** in the browser and the terminal carries on.
+- Something stuck? See [Troubleshooting](#troubleshooting) and the manual fallback below.
+
+## Set up in five steps
+
+### 1. Run the wizard
+
+```bash
+npx mushi-mushi
+```
+
+The wizard auto-detects your framework (Next.js, React, Vue, Expo, …).
+
+**You'll see:** a box with a verification code, and a browser tab opening.
+
+### 2. Approve in the browser
+
+A browser tab opens at `/cli-auth?code=XXXX-XXXX`. Click **Approve CLI connection**.
+The browser waits until your terminal claims the token, then shows connected — no
+copy-paste needed.
+
+**You'll see:** "CLI connected — switch back to your terminal" in the browser.
+
+### 3. Pick or create a project
+
+The wizard lists your existing projects. Choose one or enter a name to create a
+new project. The SDK API key is minted automatically.
+
+### 4. SDK installed
+
+The wizard installs the SDK package and writes your `.env.local` with
+`MUSHI_PROJECT_ID`, `MUSHI_API_KEY`, and `MUSHI_API_ENDPOINT`.
+
+**You'll see:** a next-steps checklist in the terminal, and the three settings in `.env.local`.
+
+### 5. Wire Cursor MCP (optional but recommended)
+
+```bash
+mushi connect --write-env --wire-ide --wait
+```
+
+This writes `.cursor/mcp.json` and waits for the first SDK heartbeat to confirm
+the connection is live.
+
+**You'll see:** the first heartbeat confirmed in the terminal once your app runs with the SDK.
+
+The rest of this page explains each command, how sign-in works, and how to
+recover when it fails.
 
 ## Which CLI command?
 
@@ -127,39 +172,6 @@ run the wizard again.
 
 **Re-running the wizard:** If credentials are already saved, the CLI validates
 them with `GET /v1/sync/whoami` before reinstalling anything.
-
-### 1. Run the wizard
-
-```bash
-npx mushi-mushi
-```
-
-The wizard auto-detects your framework (Next.js, React, Vue, Expo, …).
-
-### 2. Approve in the browser
-
-A browser tab opens at `/cli-auth?code=XXXX-XXXX`. Click **Approve CLI connection**.
-The browser waits until your terminal claims the token, then shows connected — no
-copy-paste needed.
-
-### 3. Pick or create a project
-
-The wizard lists your existing projects. Choose one or enter a name to create a
-new project. The SDK API key is minted automatically.
-
-### 4. SDK installed
-
-The wizard installs the SDK package and writes your `.env.local` with
-`MUSHI_PROJECT_ID`, `MUSHI_API_KEY`, and `MUSHI_API_ENDPOINT`.
-
-### 5. Wire Cursor MCP (optional but recommended)
-
-```bash
-mushi connect --write-env --wire-ide --wait
-```
-
-This writes `.cursor/mcp.json` and waits for the first SDK heartbeat to confirm
-the connection is live.
 
 ## Console URLs
 

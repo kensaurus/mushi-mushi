@@ -4,7 +4,8 @@
 // Admin (console JWT, or an API key — adminOrApiKey; a project-bound key
 // only reaches its own project's releases):
 //   GET  /v1/admin/releases/stats       — posture banner (mcp:read)
-//   GET  /v1/admin/releases             — list releases for a project (mcp:read)
+//   GET  /v1/admin/releases             — list releases for a project (mcp:read);
+//                                          ?credits=1 adds credit_summary { credited, told }
 //   POST /v1/admin/releases/draft       — trigger release-builder edge function (mcp:write)
 //   GET  /v1/admin/releases/auto-release — automatic draft blocking auto-release (mcp:read)
 //   GET  /v1/admin/releases/:id         — release detail with credits (mcp:read)
@@ -37,6 +38,7 @@ import { log } from '../../_shared/logger.ts'
 import { reporterKey } from '../../_shared/reporter-token.ts'
 import { publishRelease } from '../../_shared/release-publish.ts'
 import { findOpenAutoDraft } from '../../_shared/auto-release.ts'
+import { loadReleaseCreditSummaries } from '../../_shared/release-credit-summary.ts'
 import { denyViewerWrite } from '../viewer-gate.ts'
 
 async function assertReleaseRowAccess(
@@ -377,6 +379,16 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
 
     const { data, count, error } = await query
     if (error) return dbError(c, error)
+    // The console timeline asks for "N of M reporters told" per release. A
+    // failed credit read leaves the summary out (the console says unknown),
+    // never zeros.
+    if (c.req.query('credits') === '1' && data && data.length > 0) {
+      const summaries = await loadReleaseCreditSummaries(db, data.map((r) => r.id as string))
+      if (summaries) {
+        const withCredits = data.map((r) => ({ ...r, credit_summary: summaries.get(r.id as string) ?? { credited: 0, told: 0 } }))
+        return c.json({ ok: true, data: withCredits, meta: { total: count ?? 0, limit, offset } })
+      }
+    }
     return c.json({ ok: true, data, meta: { total: count ?? 0, limit, offset } })
   })
 

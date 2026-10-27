@@ -315,7 +315,7 @@ describe('projectCapacity', () => {
   })
 })
 
-function seed(extra: Record<string, unknown[]> = {}) {
+function seed(extra: Record<string, unknown[]> = {}, opts: NonNullable<Parameters<typeof makeFakeDb>[1]> = {}) {
   return makeFakeDb(
     {
       projects: [
@@ -342,7 +342,7 @@ function seed(extra: Record<string, unknown[]> = {}) {
       fix_attempts: [],
       ...extra,
     },
-    { autoId: true },
+    { autoId: true, ...opts },
   )
 }
 
@@ -451,6 +451,28 @@ describe('runSpendDownForKey', () => {
     })
     expect(calls.map((c) => c.reportId)).toEqual(['limited', 'unusable'])
     expect(calls[0].metadata).toMatchObject({ spend_down_key_id: 'k1' })
+  })
+
+  it('skips a report a local worker holds, until its lease runs out (ADR 0048)', async () => {
+    const claim = (id: string, leaseUntil: string) => ({ id, report_id: 'r1', project_id: P1, status: 'active', lease_until: leaseUntil })
+    const run = async (db: ReturnType<typeof seed>) => {
+      const calls: Array<Record<string, unknown>> = []
+      await worker.runSpendDownForKey(db as never, key(), { now: NOW, checkBudget: allowAll, dispatch: async (i) => (calls.push(i as never), { ok: true }) })
+      return calls.map((c) => c.reportId)
+    }
+    expect(await run(seed({ work_claims: [claim('held', '2026-10-20T09:30:00Z')] }))).toEqual(['r2'])
+    // A dead worker's lease that ran out blocks nobody, even before anything marks it expired.
+    expect(await run(seed({ work_claims: [claim('stale', '2026-10-20T08:00:00Z')] }))).toEqual(['r1', 'r2'])
+  })
+
+  it('skips the app for the tick when the leases cannot be read, and goes on when the table is not there yet', async () => {
+    const run = async (failRead: (t: string) => string | { code: string; message: string } | null) => {
+      const calls: Array<Record<string, unknown>> = []
+      await worker.runSpendDownForKey(seed({}, { failRead }) as never, key(), { now: NOW, checkBudget: allowAll, dispatch: async (i) => (calls.push(i as never), { ok: true }) })
+      return calls.map((c) => c.reportId)
+    }
+    expect(await run((t) => (t === 'work_claims' ? 'connection reset' : null))).toEqual([])
+    expect(await run((t) => (t === 'work_claims' ? { code: '42P01', message: 'relation "work_claims" does not exist' } : null))).toEqual(['r1', 'r2'])
   })
 
   it('never picks a report whose last run the agent settled as already fixed or wrong repo', async () => {

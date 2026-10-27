@@ -32,7 +32,7 @@ export function ResearchReadout({ stats, fetchedAt, isValidating }: Props) {
 
   const rows: DetailRowItem[] = [
     {
-      label: 'Firecrawl BYOK',
+      label: 'Firecrawl key',
       value: stats.firecrawlReady
         ? `Ready${stats.firecrawlKeyHint ? ` · ${stats.firecrawlKeyHint}` : ''}`
         : stats.firecrawlConfigured

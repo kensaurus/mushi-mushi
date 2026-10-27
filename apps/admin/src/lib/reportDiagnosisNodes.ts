@@ -6,6 +6,7 @@
 
 import { reportDiagnosisView } from './reportDiagnosis'
 import { humanizeFixError } from './humanizeFixError'
+import { CLOSE_REASONS } from './closeReasons'
 import { DIAGNOSIS_ANCHORS, NEEDS_LOOK_BELOW, headline, type DiagnosisNode } from './reportDiagnosisModel'
 import type { ReportDetail, ReportFixAttempt } from '../components/report-detail/types'
 
@@ -369,9 +370,14 @@ export function fixNodes(report: ReportDetail, diagnosisReady: boolean): Diagnos
   const status = (report.status ?? '').toLowerCase()
   const latest = nodes[0]
   let next: Pick<DiagnosisNode, 'title' | 'detail' | 'why' | 'state'> | null = null
+  // A closed report ends on the decision, never on "retry" (report f5575c9e).
+  const closedLabel = CLOSE_REASONS.find((r) => r.value === report.closed_reason)?.label
+  const needsPerson = attempts[0]?.failure_category === 'needs_human'
   if (status === 'verified') next = { title: 'Verified in production', detail: 'loop closed', why: 'The fix shipped and the bug did not come back.', state: 'done' }
+  else if (status === 'dismissed') next = { title: closedLabel ? `Closed: ${closedLabel}` : 'Closed', detail: 'decision', why: 'Someone closed this report, so nothing runs on it. Reopen it from the triage bar if it comes back.', state: 'done' }
   else if (status === 'fixed' || latest?.state === 'done') next = { title: 'Check it in production', detail: 'next step', why: 'The fix merged. Watch for the bug to come back; Mushi reopens the report if it does.', state: 'open' }
   else if (latest?.state === 'ok') next = { title: 'Review and merge the pull request', detail: 'next step', why: 'Read the diff and the CI result, then merge from the Fixes page or GitHub.', state: 'open' }
+  else if (latest?.state === 'failed' && needsPerson) next = { title: 'A person decides this one', detail: 'next step', why: 'The agent said this needs a decision, not a code change. Decide it yourself, or close it as "Not a code bug" in the triage bar; a retry would stop the same way.', state: 'open' }
   else if (latest?.state === 'failed') next = { title: 'Check the weak spots, then retry', detail: 'next step', why: 'Look at the marked nodes first: a vague component or missing repro steps usually stop the agent. Fix those in the triage bar, then dispatch again or paste the fix prompt into your editor.', state: 'open' }
   else if (!latest && diagnosisReady && status !== 'dismissed') next = { title: 'Fix it: dispatch or paste the prompt', detail: 'next step', why: 'Copy the fix prompt into your coding agent, or dispatch a cloud agent from "Fix it with your coding agent".', state: 'open' }
   if (next) nodes.push({ id: 'next', lane: 'fix', confidence: null, needsLook: false, source: 'status · fix_attempts', anchor: DIAGNOSIS_ANCHORS.diagnosis, ...next })
