@@ -1,6 +1,6 @@
 # 0041. Merge when ready: a server-side merge queue for approved fix PRs
 
-Status: Accepted Date: 2026-10-23
+Status: Accepted Date: 2026-10-23 (amended 2026-10-24 by ADR [0044](0044-release-trains-batch-approved-fixes.md): by default approved PRs now ride release trains; one PR at a time stays as `release_mode = 'each'` and the express lane)
 
 Related: ADR [0030](0030-agent-pr-review-gate.md) (Opus PR review gate), ADR
 [0032](0032-review-follow-ups-send-fix-first-prs-back-once.md) (review follow-ups), ADR

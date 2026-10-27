@@ -1,24 +1,35 @@
 /**
  * @vitest-environment jsdom
  *
- * /credits ("Spend credits"): each Cursor key's spend-down as a switch, review
- * follow-ups with their models, the Firecrawl balance and what the site
- * watches use before it resets, and a site watch switch per app.
+ * /credits ("Spend credits"): each Cursor key's spend-down as a switch, the
+ * model it runs on, review follow-ups with their models, the Firecrawl
+ * balance and what the site watches use before it resets, and a site watch
+ * switch per app.
  */
 
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { SpendDownKeyStatus } from '../components/settings/spendDown'
 
 const state = vi.hoisted(() => ({
   calls: [] as Array<{ path: string; method: string; body: unknown }>,
   watches: {} as Record<string, unknown>,
   audits: {} as Record<string, unknown>,
   ranks: {} as Record<string, unknown>,
+  skillRuns: {
+    skills: [
+      { slug: 'audit-accessibility', label: 'Accessibility (WCAG 2.2 AA)', measure: 'axe-core violations on each page in scope', inCatalog: true },
+      { slug: 'audit-responsive', label: 'Layouts at every width', measure: 'horizontal scroll at 360 px', inCatalog: true },
+    ],
+    runs: [
+      { id: 'run1', project_id: 'p2', skill_slug: 'audit-accessibility', scope: 'the booking flow', rounds_max: 3, round: 2, auto_merge: true, status: 'active', stop_reason: null, current_report_id: 'rep2', history: [{ round: 1, reportId: 'rep1', outcome: 'merged', prUrl: 'https://github.com/o/r/pull/9' }], created_at: '2026-10-23T09:00:00Z', updated_at: '2026-10-23T10:00:00Z' },
+    ],
+  } as unknown,
 }))
 
-const KEY = {
+const KEY: SpendDownKeyStatus = {
   id: 'k1',
   label: 'hirose',
   keyHint: 'crsr_e76…c203',
@@ -80,6 +91,12 @@ vi.mock('../lib/supabase', async (importOriginal) => ({
     if (method === 'GET' && path.endsWith('/site-audit')) {
       const pid = path.split('/')[4]
       return { ok: true, data: state.audits[pid] ?? { audit: null, findings: [] } }
+    }
+    if (method === 'GET' && path === '/v1/admin/skill-runs') {
+      return { ok: true, data: state.skillRuns }
+    }
+    if (method === 'POST' && path.endsWith('/skill-runs')) {
+      return { ok: true, data: { run: { id: 'run2' } } }
     }
     return { ok: true, data: {} }
   },
@@ -171,6 +188,7 @@ describe('CreditsPage', () => {
     // The page opens with the one thing to do: a key with an expiry date is not spending down.
     expect(host.textContent).toContain('1 Cursor key has an expiry date but spend-down is off.')
     expect(host.textContent).toContain('expires Oct 28 (6 days)')
+    expect(host.textContent).toContain("Runs on each app's Cursor model")
     expect(host.textContent).toContain('Rounds run on Grok 4.7 (Extra high); the last round on Claude Opus 5.5.')
     await act(async () => toggle('Fix open bugs before the credits expire').click())
     expect(state.calls).toContainEqual({ path: '/v1/admin/byok/keys/k1/spend-down', method: 'PATCH', body: { enabled: true } })
@@ -259,6 +277,33 @@ describe('site audit on /credits', () => {
   })
 })
 
+describe('skill runs on /credits', () => {
+  it('lists runs with their round, and starts one on the chosen app, skill and part of the app', async () => {
+    await render()
+    expect(host.textContent).toContain('Cursor: improve your apps with skills')
+    expect(host.textContent).toContain('tsumagoi · Accessibility (WCAG 2.2 AA) · the booking flow')
+    expect(host.textContent).toContain('Round 2 of 3 · 1 merged')
+    expect(host.textContent).toContain('Each round measures axe-core violations on each page in scope')
+    const setValue = (el: HTMLInputElement | HTMLSelectElement, value: string) => {
+      const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype
+      Object.getOwnPropertyDescriptor(proto, 'value')!.set!.call(el, value)
+      el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }))
+    }
+    const selects = Array.from(host.querySelectorAll('select'))
+    const appSelect = selects.find((s) => Array.from(s.options).some((o) => o.textContent === 'tsumagoi'))!
+    const skillSelect = selects.find((s) => Array.from(s.options).some((o) => o.value === 'audit-responsive'))!
+    const scope = host.querySelector('input[placeholder^="e.g. the /settings pages"]') as HTMLInputElement
+    await act(async () => {
+      setValue(appSelect, 'p3')
+      setValue(skillSelect, 'audit-responsive')
+      setValue(scope, 'the chat screens')
+    })
+    const start = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Start skill run')!
+    await act(async () => start.click())
+    expect(state.calls).toContainEqual({ path: '/v1/admin/projects/p3/skill-runs', method: 'POST', body: { skillSlug: 'audit-responsive', scope: 'the chat screens', rounds: 3, autoMerge: true } })
+  })
+})
+
 describe('search rank on /credits', () => {
   it('shows each keyword\'s rank and its change, and saves edited keywords', async () => {
     await render()
@@ -272,6 +317,27 @@ describe('search rank on /credits', () => {
     const save = Array.from(rows[1].querySelectorAll('button')).find((b) => b.textContent?.includes('Save'))!
     await act(async () => save.click())
     expect(state.calls).toContainEqual({ path: '/v1/admin/projects/p2/search-ranks', method: 'PUT', body: { keywords: '嬬恋 車中泊 @JP\nTsumagoi camping' } })
+  })
+})
+
+describe('Cursor key model on /credits', () => {
+  it('names the model spend-down runs on, and links to Settings to change it', async () => {
+    const { CursorLevers } = await import('../components/credits/CursorLevers')
+    const key = (id: string, model: string | null): SpendDownKeyStatus => ({ ...KEY, id, model, state: 'active', enabled: true, dispatchedToday: 3 })
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(CursorLevers, {
+        spendDown: { projectId: 'p1', keys: [key('k1', 'claude-opus-5-5?effort=high&context=1m'), key('k2', null)] },
+        followups: null,
+        now: new Date('2026-10-23T02:00:00Z'),
+        onChanged: () => {},
+      })))
+    })
+    const text = host.textContent ?? ''
+    expect(text).toContain('Spending down: 3 of 30 fixes today')
+    expect(text).toContain('on Claude Opus 5.5 (High, 1M)')
+    expect(text).toContain("each app's Cursor model")
+    const changes = Array.from(host.querySelectorAll('a')).filter((a) => a.textContent === 'Change')
+    expect(changes.map((a) => a.getAttribute('href'))).toEqual(['/settings?tab=byok', '/settings?tab=byok'])
   })
 })
 

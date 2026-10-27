@@ -12,11 +12,14 @@
  *          the console status line reports, for the radar rule
  *          `spend_down_idle`.
  *
- *          "Already serves" follows the resolver order exactly (ADR 0023,
- *          extended by ADR 0031): an app's own key is that app's; a shared key
- *          serves the organization's apps that have no Cursor key of their
- *          own; a universal key serves the apps of the organizations its owner
- *          owns that have neither.
+ *          "Already serves" follows the resolver order (ADR 0023, ADR 0031):
+ *          an app's own key is that app's; a shared key serves the
+ *          organization's apps that have no Cursor key of their own; a
+ *          universal key serves the apps of the organizations its owner owns
+ *          that have neither. A quota hold is the exception: spend-down will
+ *          not run that key, so it must not stay the first pick. A re-test
+ *          (the daily probe, or the pool once its cooldown has passed) sets
+ *          the status back to active; until then the next key pays.
  *
  *          Cursor has no API for remaining credit, so the limit is a count of
  *          dispatches, not dollars. Open reports rank by severity, the judge
@@ -88,6 +91,94 @@ export function reportsWithNoRetryVerdict(
   return out
 }
 
+/** Cursor refused to start an agent because the account ran out (no agent ran, nothing was spent). */
+// Cursor's create call answers `usage_limit_exceeded` / "On-demand usage is
+// required"; a run that hits the limit later fails with prose such as "You've
+// hit your usage limit". Match both, never a rate limit (429 backs off).
+const KEY_LIMIT_RE = /usage_limit_exceeded|on-demand usage is required|\b(?:hit|reached|exceeded) (?:your|the) (?:usage|plan|monthly)[ -]?limit|\busage limit (?:reached|exceeded)\b/i
+
+/** A fix failure that is the Cursor account's usage limit (see KEY_LIMIT_RE). */
+export function isCursorKeyLimitError(message: string | null | undefined): boolean {
+  return KEY_LIMIT_RE.test(message ?? '')
+}
+const KEY_LIMIT_MAX_RETRIES = 2
+
+/**
+ * The pinned spend-down key was already unusable when fix-worker ran (used
+ * up, not active, out of scope, no secret). No agent started. The message is
+ * the one `cursorKeyPinned` throws; fix-worker stores it as
+ * `cursor_api_error` so the next tick can send the report again.
+ */
+const PINNED_KEY_UNUSABLE_RE = /spend-down cursor key is not usable/i
+
+export function isSpendDownPinnedKeyUnavailable(message: string | null | undefined): boolean {
+  return PINNED_KEY_UNUSABLE_RE.test(message ?? '')
+}
+
+/**
+ * Reports whose latest dispatch the pinned key could not run — Cursor's
+ * usage limit, or the key was already unusable — at most twice: the next
+ * spend-down tick sends them again. The key is marked used up before a
+ * limit error is thrown, so that tick pins a different key. A 30-minute
+ * wait left the report inside the 7-day cooldown while the next key was
+ * already first. On 2026-10-23 a key switched to a model its account had
+ * used up refused 47 reports in an hour, and that cooldown then kept them
+ * from the keys that still had credits.
+ */
+export function reportsToRetryAfterKeyLimit(
+  attempts: Array<{ report_id: string; failure_category: string | null; error?: string | null; created_at: string }>,
+  now: Date,
+): Set<string> {
+  const byReport = new Map<string, Array<{ failure_category: string | null; error?: string | null; created_at: string }>>()
+  for (const a of attempts) byReport.set(a.report_id, [...(byReport.get(a.report_id) ?? []), a])
+  const out = new Set<string>()
+  for (const [id, list] of byReport) {
+    const sorted = [...list].sort((x, y) => (x.created_at < y.created_at ? 1 : -1))
+    const latest = sorted[0]
+    const limited = (a: { failure_category: string | null; error?: string | null }) =>
+      a.failure_category === 'cursor_api_error' &&
+      (isCursorKeyLimitError(a.error) || isSpendDownPinnedKeyUnavailable(a.error))
+    if (!limited(latest)) continue
+    // A timestamp ahead of this tick has not happened yet.
+    if (Date.parse(latest.created_at) > now.getTime()) continue
+    if (sorted.filter(limited).length > KEY_LIMIT_MAX_RETRIES) continue
+    out.add(id)
+  }
+  return out
+}
+
+/** A report whose PR Opus held may run again after this long (ADR 0028 amendment, 2026-10-24). */
+export const HELD_RETRY_AFTER_MS = 12 * 3_600_000
+/** Attempts per report, counting the held ones, after which spend-down stops retrying it. */
+export const HELD_MAX_ATTEMPTS = 3
+
+/**
+ * Reports whose newest attempt opened a PR that the Opus review held, at
+ * least 12 hours ago, with fewer than HELD_MAX_ATTEMPTS attempts: spend-down
+ * may run a new agent on them although the report is still `fixing` and
+ * inside the 7-day cooldown. The new agent's prompt carries what the held
+ * attempt did and why it was held (_shared/prior-attempts.ts), so it does not
+ * start from the same theory. On 2026-10-24, 126 reports sat held while the
+ * Cursor keys idled on "No open report to fix".
+ */
+export function reportsToRetryAfterHold(
+  attempts: Array<{ id: string; report_id: string; created_at: string }>,
+  heldAttemptIds: ReadonlySet<string>,
+  now: Date,
+): Set<string> {
+  const byReport = new Map<string, Array<{ id: string; created_at: string }>>()
+  for (const a of attempts) byReport.set(a.report_id, [...(byReport.get(a.report_id) ?? []), a])
+  const out = new Set<string>()
+  for (const [id, list] of byReport) {
+    if (list.length >= HELD_MAX_ATTEMPTS) continue
+    const latest = list.reduce((x, y) => (y.created_at > x.created_at ? y : x))
+    if (!heldAttemptIds.has(latest.id)) continue
+    if (now.getTime() - Date.parse(latest.created_at) < HELD_RETRY_AFTER_MS) continue
+    out.add(id)
+  }
+  return out
+}
+
 const DAY_MS = 86_400_000
 
 export function spendDownWindow(key: SpendDownKey, now: Date): SpendDownWindow {
@@ -130,11 +221,42 @@ export interface CursorPoolKey {
   priority: number | null
   status: string
   test_status: string | null
+  /** Cursor refused this key for its plan's usage limit until then: new agents go to the next key. */
+  exhausted_until?: string | null
 }
 
-/** Rows the resolver will use (byok.ts byokPoolCandidates); cooldowns are transient and ignored here. */
-function usableForResolver(k: CursorPoolKey): boolean {
-  return (k.status === 'active' || k.status === 'quota_exhausted') && (k.test_status === 'ok' || k.test_status === 'error_quota')
+/**
+ * Rows a new spend-down dispatch can bill to this key. Matches the resolver
+ * for a new agent (byok pool plus cursorKeyForNewWork), with one exception:
+ * `status` quota_exhausted is not a first pick. The LLM pool keeps that row
+ * so a 429 can re-enter after its cooldown, but spend-down will not run the
+ * key (`spendDownWindow` is `key_unusable` unless status is active). Leaving
+ * it first orphans the apps: this key does not dispatch, and the next one
+ * never becomes first. A key Cursor refused for its plan limit
+ * (`exhausted_until`) hands its apps over the same way, until that time
+ * passes.
+ *
+ * An active key whose last probe was `error_quota` stays. That code is any
+ * HTTP 429 ("rate-limited or out of quota"), not only the plan limit, and
+ * the probe that means the plan limit also sets `status` to quota_exhausted.
+ * Dropping `active` + `error_quota` here would idle the key until someone
+ * re-tested it. The cooldown and `exhausted_until` already cover a transient
+ * 429.
+ *
+ * `quota_exhausted` stays out until something writes `status` back to
+ * `active`, not until `exhausted_until` passes. A probe or a 429 often sets
+ * `quota_exhausted` with `cooldown_until` and no `exhausted_until`. Treating
+ * that row as usable once `exhausted_until` is absent or past would make it
+ * the first pick again while `spendDownWindow` is still `key_unusable`, and
+ * the apps would have no key. A re-test restores it: the daily key probe
+ * writes `active` on HTTP 2xx (`outcomeFromProbe` in byok-health.ts), and
+ * the LLM pool's `reactivateKey` does the same once `cooldown_until` has
+ * passed. A manual re-test does too.
+ */
+function usableForResolver(k: CursorPoolKey, nowMs: number): boolean {
+  if (k.exhausted_until && Date.parse(k.exhausted_until) > nowMs) return false
+  if (k.status !== 'active') return false
+  return k.test_status === 'ok' || k.test_status === 'error_quota'
 }
 
 /**
@@ -148,6 +270,7 @@ function usableForResolver(k: CursorPoolKey): boolean {
 export function firstCursorKeyFor(
   project: Pick<SpendDownProject, 'id' | 'organization_id' | 'has_legacy_key' | 'org_owner_ids'>,
   keys: CursorPoolKey[],
+  nowMs: number = Date.now(),
 ): string | 'legacy' | 'tie' | null {
   const pick = (rows: CursorPoolKey[]): string | 'tie' | null => {
     if (rows.length === 0) return null
@@ -155,10 +278,15 @@ export function firstCursorKeyFor(
     if (sorted.length > 1 && (sorted[0].priority ?? 100) === (sorted[1].priority ?? 100)) return 'tie'
     return sorted[0].id
   }
-  const usable = keys.filter(usableForResolver)
+  const usable = keys.filter((k) => usableForResolver(k, nowMs))
   const own = usable.filter((k) => k.project_id === project.id)
   if (own.length > 0) return pick(own)
-  if (project.has_legacy_key) return 'legacy'
+  // Like the resolver, an app with pool keys of its own never falls back to
+  // its legacy Integrations key, also when those keys are used up: the next
+  // pick is its organization's, then a universal key (2026-10-24: hirose's
+  // keys used up on glot.it and mushi-mushi left both apps unserved).
+  const hasOwnPoolKeys = keys.some((k) => k.project_id === project.id)
+  if (project.has_legacy_key && !hasOwnPoolKeys) return 'legacy'
   if (!project.organization_id) return null
   const shared = usable.filter((k) => !k.project_id && k.organization_id === project.organization_id)
   if (shared.length > 0) return pick(shared)
@@ -181,6 +309,49 @@ export function spendDownProjectIds(
     .filter((p) => p.autofix_enabled && p.has_repo)
     .filter((p) => firstCursorKeyFor(p, keys) === key.id)
     .map((p) => p.id)
+}
+
+/**
+ * Why this key pays for no app: another key of the same scope is the
+ * resolver's first pick for every app that could be served. Same scope is
+ * the same organization, or — for universal keys, which all have a null
+ * organization — the same owner. A winner with no owner, or another owner's
+ * universal key, is not named: that label would show up on this user's card.
+ * Null when the idle reason is an app's own key, a legacy key, a tie,
+ * auto-fix off, or no repo — those stay the generic "no app uses this key"
+ * line. The name is the winner's label.
+ */
+export function spendDownOutrankNote(
+  keyId: string,
+  projects: SpendDownProject[],
+  keys: Array<CursorPoolKey & { label?: string | null }>,
+  nowMs: number = Date.now(),
+): string | null {
+  const mine = keys.find((k) => k.id === keyId)
+  if (!mine || mine.project_id) return null
+  const eligible = projects.filter((p) => p.autofix_enabled && p.has_repo)
+  if (eligible.length === 0) return null
+  let winnerId: string | null = null
+  for (const project of eligible) {
+    const winner = firstCursorKeyFor(project, keys, nowMs)
+    if (winner === keyId || typeof winner !== 'string') return null
+    if (winnerId == null) winnerId = winner
+    else if (winnerId !== winner) return null
+  }
+  if (!winnerId) return null
+  const winner = keys.find((k) => k.id === winnerId)
+  if (!winner || winner.project_id) return null
+  if ((winner.organization_id ?? null) !== (mine.organization_id ?? null)) return null
+  // Universal keys share a null organization_id, so that check alone would
+  // name another owner's key on this card. Same owner only; a missing owner
+  // is not a match.
+  if (!winner.organization_id && !mine.organization_id) {
+    if (!winner.owner_user_id || winner.owner_user_id !== mine.owner_user_id) return null
+  }
+  if ((winner.priority ?? 100) >= (mine.priority ?? 100)) return null
+  const name = (typeof winner.label === 'string' ? winner.label.trim() : '') || 'Another key'
+  const priority = winner.priority ?? 100
+  return `${name} pays for these apps first (priority ${priority}); this key takes over when ${name} runs out or is removed`
 }
 
 /**
@@ -336,14 +507,21 @@ export function projectCapacity(args: {
   openCloudAttempts: number
   autofixDispatchesToday: number
   autofixMaxPerDay: number | null
+  /** project_settings.autofix_max_concurrent: fewer agents at once where the app's CI is slow or shared. */
+  maxConcurrent?: number | null
 }): number {
-  const byConcurrency = SPEND_DOWN_MAX_OPEN_PER_PROJECT - args.openCloudAttempts
+  const byConcurrency = (args.maxConcurrent ?? SPEND_DOWN_MAX_OPEN_PER_PROJECT) - args.openCloudAttempts
   const byAutofixCap =
     args.autofixMaxPerDay == null ? Number.POSITIVE_INFINITY : args.autofixMaxPerDay - args.autofixDispatchesToday
   return Math.max(0, Math.min(args.remainingForKey, byConcurrency, byAutofixCap))
 }
 
-/** dispatch_metadata for a spend-down dispatch; `trigger: 'automatic'` keeps the auto-fix caps on. */
+/**
+ * dispatch_metadata for a spend-down dispatch; `trigger: 'automatic'` keeps
+ * the auto-fix caps on. `spend_down_key_id` is the key this run is billed to:
+ * fix-worker passes it to the Cursor adapter, which uses that key instead of
+ * resolving the pool again (the pool still returns a quota-held row).
+ */
 export function spendDownDispatchMetadata(
   key: Pick<SpendDownKey, 'id' | 'spend_down_model'>,
   opts: { probe?: boolean } = {},

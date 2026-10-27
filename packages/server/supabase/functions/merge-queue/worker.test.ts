@@ -116,6 +116,7 @@ function deps(over: Partial<MergeQueueDeps> = {}): MergeQueueDeps {
     requeueReview: () => Promise.reject(new Error('unexpected requeue')),
     createAgent: () => Promise.reject(new Error('unexpected agent')),
     agentDone: () => Promise.resolve({ done: false, result: null }),
+    behindBy: () => Promise.resolve(0),
     ...over,
   }
 }
@@ -171,12 +172,12 @@ test('a hold blocks; failed CI blocks with the check names', async () => {
     merge: (() => Promise.resolve({ ok: false, status: 409, code: 'REVIEW_HOLD', message: 'Opus said hold.', review: { verdict: 'hold', stale: false, rerunning: false } })) as never,
   }))
   assertEquals(out, 'blocked')
-  assertEquals(lastState(held.writes)?.detail, 'Opus said hold.')
+  assertEquals(String(lastState(held.writes)?.detail).includes('only you can override a hold'), true)
 
   const red = setup(row())
   const out2 = await processRow(red.db, row(), deps({ checks: () => Promise.resolve({ pending: 0, failed: ['required'] }) }))
   assertEquals(out2, 'blocked')
-  assertEquals(lastState(red.writes)?.detail, 'CI failed: required.')
+  assertEquals(String(lastState(red.writes)?.detail).startsWith('CI failed: required.'), true)
 })
 
 test('a conflict starts one Cursor agent on the PR branch; at the cap it needs a person', async () => {
@@ -247,4 +248,75 @@ test('a repo keeps working on the PR already in progress when a whole app was qu
   }))
   // o/r: the waiting PR #9, not a tie-broken queued one; o/s: held by the leased row.
   assertEquals(seen, [9])
+})
+
+test('a PR held on red CI is updated when its base moved, and stays held when it did not', async () => {
+  const red = { pending: 0, failed: ['gate'] }
+  const moved = setup(row({ state: 'blocked' }))
+  let updated = 0
+  const out = await processRow(moved.db, row({ state: 'blocked' }), deps({
+    checks: () => Promise.resolve(red),
+    pull: () => Promise.resolve(pull({ mergeableState: 'blocked' })),
+    behindBy: () => Promise.resolve(3),
+    updateBranch: () => (updated++, Promise.resolve({ ok: true, conflict: false })),
+  }))
+  assertEquals([out, updated, lastState(moved.writes)?.state], ['updated', 1, 'waiting'])
+
+  const same = setup(row({ state: 'blocked' }))
+  const out2 = await processRow(same.db, row({ state: 'blocked' }), deps({
+    checks: () => Promise.resolve(red),
+    pull: () => Promise.resolve(pull({ mergeableState: 'blocked' })),
+    behindBy: () => Promise.resolve(0),
+  }))
+  assertEquals([out2, lastState(same.writes)?.state], ['blocked', 'blocked'])
+})
+
+test('in a train app, conflicting PRs get agents even though the train holds the repo; two at a time', async () => {
+  // 2026-10-24 to 10-26: the train tick held glot.it every tick, so 14 rows sat in `resolving` with no agent.
+  const at = (m: number) => `2026-10-23T08:0${m}:00Z`
+  const rows = [
+    row({ id: 'q', state: 'queued', pr_number: 5 }),
+    row({ id: 'r1', state: 'resolving', pr_number: 7 }),
+    row({ id: 'r2', state: 'resolving', pr_number: 8 }),
+    row({ id: 'r3', state: 'resolving', pr_number: 9 }),
+  ].map((r, i) => ({ ...r, queued_at: at(i), claimed_until: null }))
+  const { db, writes } = fakeDb({ fix_attempts: [{ ...attempt }], fix_merge_queue: rows, fix_events: [], project_settings: [{ project_id: 'p1', release_mode: 'train' }] })
+  const started: string[] = []
+  const unused = () => Promise.reject(new Error('no train should be built'))
+  await runMergeQueue(db, deps({
+    pull: (_t, _r, n) => Promise.resolve(n === 5 ? pull({ state: 'closed' }) : pull({ mergeable: false, mergeableState: 'dirty' })),
+    createAgent: ((_k: string, input: Row) => (started.push(String(input.name)), Promise.resolve({ agentId: 'a' }))) as never,
+    train: { branchSha: unused, createBranch: unused, mergeInto: unused, openPr: unused, closePr: unused, deleteBranch: unused, mergeMethod: unused, trainMerge: unused } as never,
+  }))
+  assertEquals(started, ['Mushi merge conflict #7', 'Mushi merge conflict #8'])
+  const r3 = writes.filter((w) => w.table === 'fix_merge_queue' && w.value.id === 'r3').at(-1)?.value
+  assertEquals(String(r3?.detail).startsWith('Conflicts with the base branch; waits for a free conflict agent (2 ahead'), true)
+})
+
+test('in a train app, a conflict no agent may take stays blocked with the reason instead of flapping', async () => {
+  const rows = [row({ id: 'q', state: 'queued', pr_number: 5 })].map((r) => ({ ...r, queued_at: '2026-10-23T08:00:00Z', claimed_until: null }))
+  const { db, writes } = fakeDb({ fix_attempts: [{ ...attempt }], fix_merge_queue: rows, fix_events: [], project_settings: [{ project_id: 'p1', release_mode: 'train' }] })
+  const unused = () => Promise.reject(new Error('no train should be built'))
+  let clock = new Date('2026-10-23T09:00:00Z')
+  const d = deps({
+    now: () => clock,
+    pull: () => Promise.resolve(pull({ mergeable: false, mergeableState: 'dirty' })),
+    cursorKey: () => Promise.resolve({ ok: false, reason: 'Review follow-ups are off.' }),
+    createAgent: () => Promise.reject(new Error('must not start')),
+    train: { branchSha: unused, createBranch: unused, mergeInto: unused, openPr: unused, closePr: unused, deleteBranch: unused, mergeMethod: unused, trainMerge: unused } as never,
+  })
+  // State changes written for the row in one tick (the fake shares row objects, so the
+  // train's `resolving` and the conflict pass's `blocked` can land in the same tick).
+  const tick = async (min: number) => {
+    clock = new Date(Date.parse('2026-10-23T09:00:00Z') + min * 60_000)
+    const before = writes.length
+    await runMergeQueue(db, d)
+    return writes.slice(before).filter((w) => w.table === 'fix_merge_queue' && 'state' in w.value).map((w) => w.value.state)
+  }
+  assertEquals(await tick(0), ['resolving', 'blocked'])
+  assertEquals([rows[0].state, rows[0].detail], ['blocked', 'Merge conflict. Review follow-ups are off.'])
+  assertEquals(await tick(5), [])
+  assertEquals(await tick(30), [])
+  // An hour later it is offered again, in case follow-ups were turned on.
+  assertEquals(await tick(65), ['resolving', 'blocked'])
 })

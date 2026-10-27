@@ -1160,9 +1160,18 @@ export const REGRESSION_LABEL: Record<RegressionSignal, string> = {
   new_report_in_changed_file: 'A new report points at a changed file',
 }
 
-/** Did default-branch CI on the merge commit fail on code (not on the test machine)? */
+/**
+ * Did default-branch CI on the merge commit fail on code (not on the test
+ * machine)? A cancelled run is not a failure here: on the default branch it
+ * is almost always the next push superseding it (workflow concurrency).
+ * PR 686 reverted a good fix because the Secret scan on its merge commit was
+ * cancelled that way.
+ */
 export function ciFailedOnMerge(checks: readonly VerifyCheckRunLike[], opts: { now: Date }): { failed: boolean; detail: string | null; evidence: Record<string, unknown> | null } {
-  const gate = ciGate(checks, { now: opts.now })
+  const gate = ciGate(
+    checks.filter((c) => (c.conclusion ?? '').toLowerCase() !== 'cancelled'),
+    { now: opts.now },
+  )
   if (gate.status !== 'fail') return { failed: false, detail: null, evidence: null }
   return { failed: true, detail: gate.label, evidence: gate.evidence ?? null }
 }

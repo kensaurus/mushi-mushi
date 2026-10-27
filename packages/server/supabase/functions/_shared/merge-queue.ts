@@ -37,6 +37,23 @@ export interface ChecksView {
   pending: number
   /** Names of check runs that failed on the head. */
   failed: string[]
+  /** Names of check runs that finished and were not skipped. Absent: not read. */
+  ran?: string[]
+}
+
+/**
+ * Whether a head's failed checks are the base branch's, not its own: at
+ * least one also fails on the base, and every other one fails there too or
+ * did not run there. The second rule sees through aggregator jobs: glot.it's
+ * `gate` fails whenever a job it needs fails, but on main it is skipped, so
+ * comparing names alone blamed the members for main's red npm audit
+ * (2026-10-26).
+ */
+export function failuresOnBase(failed: string[], base: ChecksView): boolean {
+  const baseFailed = new Set(base.failed)
+  if (!failed.some((n) => baseFailed.has(n))) return false
+  const ran = base.ran ? new Set(base.ran) : null
+  return failed.every((n) => baseFailed.has(n) || (ran !== null && !ran.has(n)))
 }
 
 export type QueueStep =
@@ -64,22 +81,72 @@ export function nextQueueStep(pr: PullView, checks: ChecksView): QueueStep {
   if (s === 'dirty' || pr.mergeable === false) return { do: 'resolve' }
   if (s === 'behind') return { do: 'update' }
   if (pr.mergeable == null || s === 'unknown') return { do: 'wait', reason: 'GitHub is still working out whether it can merge.' }
-  if (checks.failed.length) return { do: 'blocked', reason: `CI failed: ${checks.failed.slice(0, 4).join(', ')}.` }
+  if (checks.failed.length) {
+    return { do: 'blocked', reason: `CI failed: ${checks.failed.slice(0, 4).join(', ')}. A CI-repair agent may fix it (review follow-ups); the queue looks again after each push.` }
+  }
   if (checks.pending > 0) return { do: 'wait', reason: `CI is running (${checks.pending} check${checks.pending === 1 ? '' : 's'} left).` }
   if (s === 'clean' || s === 'unstable' || s === 'has_hooks') return { do: 'merge' }
   if (s === 'blocked') return { do: 'blocked', reason: 'Branch protection blocks it (a required review or check is missing).' }
   return { do: 'wait', reason: `GitHub says "${s}".` }
 }
 
-/** The check runs of a head, reduced to what `nextQueueStep` reads. */
-export function checksView(runs: Array<{ name?: string; status?: string; conclusion?: string | null }>): ChecksView {
+/**
+ * What a refused gated merge means for the queue row, in words the console
+ * shows (2026-10-23: "Mushi merges on its own only when the Opus review of this
+ * exact commit says merge" told nobody what to do). A held row does not hold
+ * its repo; it is looked at again whenever nothing else there moves.
+ */
+export function reviewRefusal(
+  code: string,
+  message: string,
+  review: { verdict?: string | null; stale?: boolean; rerunning?: boolean } | null,
+): { state: 'waiting' | 'blocked'; detail: string; requeueReview: boolean } {
+  if (code === 'HEAD_MOVED' || code === 'REVIEW_PENDING') return { state: 'waiting', detail: message, requeueReview: false }
+  const verdict = review?.verdict ?? null
+  if (verdict === 'merge' && (review?.stale || review?.rerunning)) {
+    return { state: 'waiting', detail: 'Opus is reviewing the updated commit; it merges when the verdict is merge.', requeueReview: !review?.rerunning }
+  }
+  if (verdict === 'fix_first') {
+    return {
+      state: 'blocked',
+      detail: 'Opus says fix first on this commit. With review follow-ups on, an agent fixes its findings and Opus reviews the push; the queue merges it once the verdict is merge.',
+      requeueReview: false,
+    }
+  }
+  if (verdict === 'hold' || code === 'REVIEW_HOLD') {
+    return { state: 'blocked', detail: 'Opus says hold on this commit. Open the fix to read why; only you can override a hold.', requeueReview: false }
+  }
+  if (!verdict) {
+    return { state: 'blocked', detail: 'This pull request has no Opus review yet. Start one from the fix (Review), or merge it yourself.', requeueReview: false }
+  }
+  return { state: 'blocked', detail: message, requeueReview: false }
+}
+
+/**
+ * The check runs of a head, reduced to what `nextQueueStep` reads. A name
+ * that ran more than once counts by its newest run: a draft's CI stops on
+ * purpose ("Draft PRs run no CI") and runs again on the same commit once
+ * the PR is marked ready, so the old stop must not read as a failure.
+ */
+export function checksView(runs: Array<{ id?: number; name?: string; status?: string; conclusion?: string | null; started_at?: string | null }>): ChecksView {
+  const newest = new Map<string, (typeof runs)[number]>()
+  runs.forEach((r, i) => {
+    const key = r.name ?? `#${i}`
+    const prev = newest.get(key)
+    const later = !prev || (r.started_at ?? '') > (prev.started_at ?? '') || ((r.started_at ?? '') === (prev.started_at ?? '') && (r.id ?? 0) > (prev.id ?? 0))
+    if (later) newest.set(key, r)
+  })
   let pending = 0
   const failed: string[] = []
-  for (const r of runs) {
+  const ran: string[] = []
+  for (const r of newest.values()) {
     if (r.status !== 'completed') pending++
-    else if (r.conclusion && ['failure', 'timed_out', 'action_required', 'startup_failure'].includes(r.conclusion)) failed.push(r.name ?? 'a check')
+    else {
+      if (r.conclusion && ['failure', 'timed_out', 'action_required', 'startup_failure'].includes(r.conclusion)) failed.push(r.name ?? 'a check')
+      if (r.conclusion !== 'skipped') ran.push(r.name ?? 'a check')
+    }
   }
-  return { pending, failed }
+  return { pending, failed, ran }
 }
 
 /** The task a Cursor agent gets for a conflicting PR. Pure text; no report content goes in. */

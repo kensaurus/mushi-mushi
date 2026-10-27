@@ -19,7 +19,11 @@ type SeverityKey = 'critical' | 'high' | 'medium' | 'low'
 interface SeverityStats {
   window_days: number
   bySeverity: Record<SeverityKey, number>
+  /** Of those, still open (not fixed, resolved or verified). Absent from an older API. */
+  openBySeverity?: Record<SeverityKey, number>
   byDay?: Array<{ day: string } & Record<SeverityKey | 'total', number>>
+  /** All apps, and the day scan was shorter than the exact total. */
+  byDayCapped?: boolean
   total: number
 }
 
@@ -49,6 +53,8 @@ function severityDelta(values: number[]): KpiDelta | null {
 }
 
 interface Props {
+  /** `enumeration` counts every app (All apps). Default is the pinned app. */
+  scope?: 'enumeration' | 'project'
   /** Currently active severity filter (so we can highlight the matching tile). */
   activeSeverity?: string
   /** Click handler — the page applies the severity plus this tile's window
@@ -73,7 +79,7 @@ const TILES_ADVANCED: Array<{
   meaning: string
 }> = [
   { key: 'critical', label: 'Critical', accent: 'danger',
-    meaning: 'Reports flagged Critical by the classifier in the window. These usually block user flow — triage first.' },
+    meaning: 'Critical reports from the window that are not fixed yet (the line below counts all that came in). These usually block user flow: triage first.' },
   { key: 'high', label: 'High', accent: 'warn',
     meaning: 'High-severity reports — broken functionality but with a workaround. Schedule a fix before next release.' },
   { key: 'medium', label: 'Medium', accent: 'info',
@@ -93,15 +99,17 @@ const TILES_PLAIN: typeof TILES_ADVANCED = [
     meaning: 'Visual nits or confusion — low urgency individually.' },
 ]
 
-export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: Props) {
+export function ReportsKpiStrip({ scope = 'project', activeSeverity, onFilter, windowDays = 14 }: Props) {
   const { isAdvanced } = useAdminMode()
   const tiles = isAdvanced ? TILES_ADVANCED : TILES_PLAIN
   const { data, loading, error, reload } = usePageData<SeverityStats>(
     `/v1/admin/reports/severity-stats?days=${windowDays}`,
-    { deps: [windowDays] },
+    { deps: [windowDays, scope], scope },
   )
 
   const counts = data?.bySeverity ?? { critical: 0, high: 0, medium: 0, low: 0 }
+  // A capped scan would draw a trend that does not add up to the tiles.
+  const trendHidden = Boolean(data?.byDayCapped)
   const sparks = useMemo(
     () => ({
       critical: buildSeveritySpark(data?.byDay, 'critical'),
@@ -127,13 +135,16 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
   const criticalCount = counts.critical
 
   return (
+    <>
     <MetricStrip cols={4} panel ariaLabel="Reports severity breakdown" className="mb-3" stagger>
       {tiles.map((tile) => {
         const isActive = activeSeverity === tile.key
         const total = data?.total ?? 0
         const count = counts[tile.key]
+        // Lead with what is still open; how many came in is the sub-line.
+        const openCount = data?.openBySeverity?.[tile.key]
         const sharePct = total > 0 ? Math.round((count / total) * 100) : 0
-        const isHero = tile.key === 'critical' && criticalCount > 0
+        const isHero = tile.key === 'critical' && (data?.openBySeverity?.critical ?? criticalCount) > 0
         return (
           <button
             key={tile.key}
@@ -153,20 +164,26 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
               density="flat"
               // The quick-filter chips count all time; these tiles count a
               // window, so the label says which.
-              label={`${tile.label} · ${windowDays}d`}
-              value={loading ? '…' : count}
+              label={openCount == null ? `${tile.label} · ${windowDays}d` : `${tile.label} · open`}
+              value={loading ? '…' : (openCount ?? count)}
               sublabel={
                 loading
                   ? `last ${windowDays} days`
-                  : total > 0
-                    ? `${sharePct}% of ${total} in ${windowDays}d${isActive ? ' · filtering' : ''}`
-                    : `none in ${windowDays}d${isActive ? ' · filtering' : ''}`
+                  : openCount != null
+                    ? `${count} filed in ${windowDays}d · ${count - openCount} closed${isActive ? ' · filtering' : ''}`
+                    : total > 0
+                      ? `${sharePct}% of ${total} in ${windowDays}d${isActive ? ' · filtering' : ''}`
+                      : `none in ${windowDays}d${isActive ? ' · filtering' : ''}`
               }
               accent={tile.accent}
               meaning={tile.meaning}
-              series={sparks[tile.key]}
-              delta={severityDelta(sparks[tile.key])}
+              series={trendHidden ? [] : sparks[tile.key]}
+              delta={trendHidden ? null : severityDelta(sparks[tile.key])}
               seriesAriaLabel={`${tile.label} reports per day, last ${windowDays} days`}
+              // The per-day series only exists after the fetch; without the
+              // reservation the four tiles grow a sparkline row on load and
+              // shove the filters and the table down the page.
+              reserveSeriesSpace
               variant={isHero ? 'primary' : 'default'}
             />
             {!loading && total > 0 && sharePct > 0 ? (
@@ -184,5 +201,11 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
         )
       })}
     </MetricStrip>
+    {trendHidden ? (
+      <p className="-mt-2 mb-3 text-2xs text-fg-muted" data-testid="reports-kpi-trend-cap">
+        Daily trend is hidden: this window has more bugs than the chart can read. The counts above include every bug.
+      </p>
+    ) : null}
+    </>
   )
 }

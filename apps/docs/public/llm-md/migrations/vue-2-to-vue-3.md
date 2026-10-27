@@ -19,7 +19,7 @@ still on Vue 2 must use the vanilla `@mushi-mushi/web` SDK; this guide
 brings you onto the adapter.
 
   **Vue 2 is no longer receiving security patches.** The Vue team's official
-  recommendation is to migrate. If you cannot, [HeroDevs ships a paid LTS](https://www.herodevs.com/support/vue-2-nes)
+  recommendation is to migrate. If you cannot, [HeroDevs ships a paid LTS](https://www.herodevs.com/support/nes-vue)
   for Vue 2.7 with security backports.
 
 ## What changes (high level)

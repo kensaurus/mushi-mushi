@@ -127,7 +127,7 @@ export interface SavedRunOptions {
   /** Steps mode: plan each screen, then one small change per attempt. */
   steps?: boolean
   /** The reviewing model that may veto a kept step (ADR 0021). */
-  checker?: { via: 'claude-code' | 'anthropic-api'; model: string } | null
+  checker?: { via: 'claude-code' | 'anthropic-api' | 'cursor'; model: string } | null
   /** Keep edits with nothing visible, flagged for review. */
   keepInvisible?: boolean
 }

@@ -1,0 +1,22 @@
+schema_version: "2.0"
+app:
+  id: glot-it
+  name: Glot.it
+  base_url: https://glot.it
+  auth:
+    type: scripted
+    config:
+      login_path: /login
+      script: |
+        await page.fill('[data-testid=email]', env.TEST_USER_EMAIL)
+        await page.fill('[data-testid=password]', env.TEST_USER_PASSWORD)
+        await page.click('[data-testid=login]')
+pages:
+  - id: dashboard
+    path: /dashboard
+    title: Dashboard
+    elements:
+      - id: btn-logout
+        type: button
+        action: signs the user out
+        status: verified

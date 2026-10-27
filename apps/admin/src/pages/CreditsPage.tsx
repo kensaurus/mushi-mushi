@@ -17,10 +17,12 @@ import { Callout, Section } from '../components/ui'
 import { IconCost } from '../components/icons'
 import { CursorLevers } from '../components/credits/CursorLevers'
 import { FirecrawlLevers, type FirecrawlBalance } from '../components/credits/FirecrawlLevers'
+import { SkillRunsCard } from '../components/credits/SkillRunsCard'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useNow } from '../lib/useNow'
+import { useScrollToHash } from '../lib/useScrollToHash'
 import { expiryLabel } from '../lib/creditPlan'
 import type { SpendDownResponse } from '../components/settings/spendDown'
 import type { ReviewFollowupsResponse } from '../components/settings/reviewFollowups'
@@ -49,6 +51,8 @@ export function CreditsPage() {
   const now = new Date(useNow(60_000))
   const credits = usePageData<CreditsResponse>('/v1/admin/byok/credits')
   const spendDown = usePageData<SpendDownResponse>('/v1/admin/byok/spend-down')
+  // /pipeline links here (#cursor-fix-bugs) when auto-fix is on but no Cursor key can dispatch.
+  useScrollToHash(!!spendDown.data)
   const followups = usePageData<ReviewFollowupsResponse | null>('/v1/admin/byok/review-followups')
   const projects = usePageData<{ projects?: Array<{ id: string; name: string }> }>('/v1/admin/projects')
 
@@ -79,7 +83,7 @@ export function CreditsPage() {
         icon={<IconCost />}
         description="Credits that expire, and every way Mushi can spend them finding and fixing your bugs."
         helpTitle="About Spend credits"
-        helpWhatIsIt="Cursor and Firecrawl credits that lapse at the end of a period are worth more spent. This page lists each place Mushi can spend them on your apps, with a switch for each: Cursor fixes open bugs and answers review findings; Firecrawl checks your live sites for broken pages that become bug reports."
+        helpWhatIsIt="Cursor and Firecrawl credits that lapse at the end of a period are worth more spent. This page lists each place Mushi can spend them on your apps, with a switch for each: Cursor fixes open bugs, answers review findings and runs skills that improve an app round by round; Firecrawl checks your live sites for broken pages that become bug reports."
         helpHowToUse="Turn on what you want, top to bottom. Every fix still opens a draft pull request for you to review, inside each app's auto-fix limits. The full settings for each switch are linked from its row."
       />
       <PagePosture
@@ -98,7 +102,7 @@ export function CreditsPage() {
       />
       {error && <PageLoadError error={error} resource="credit settings" endpoint="/v1/admin/byok/spend-down" onRetry={() => { spendDown.reload(); credits.reload() }} />}
 
-      <Section title="Cursor: fix bugs">
+      <Section title="Cursor: fix bugs" id="cursor-fix-bugs">
         {spendDown.loading && !spendDown.data && <p className="text-xs text-fg-muted">Reading your Cursor keys…</p>}
         <CursorLevers
           spendDown={spendDown.data ?? null}
@@ -109,6 +113,10 @@ export function CreditsPage() {
             followups.reload()
           }}
         />
+      </Section>
+
+      <Section title="Cursor: improve your apps with skills">
+        <SkillRunsCard projects={projects.data ? (projects.data.projects ?? []) : null} />
       </Section>
 
       <Section title="Firecrawl: find bugs on your live sites">

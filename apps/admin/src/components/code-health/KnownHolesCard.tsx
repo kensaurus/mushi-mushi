@@ -75,11 +75,15 @@ const SEVERITY: Record<Severity, { label: string; tone: BadgeTone }> = {
 
 const RUNTIME_LABEL: Record<string, string> = { php: 'PHP', node: 'Node.js', python: 'Python', go: 'Go' }
 
+/** @internal Exported for tests only. */
 export function groupTitle(g: Pick<KnownHoleGroup, 'kind' | 'package'>): string {
   return g.kind === 'runtime' ? RUNTIME_LABEL[g.package] ?? g.package : g.package
 }
 
-/** The fix prompt to paste into the editor: facts and the rule, no exploit. */
+/**
+ * The fix prompt to paste into the editor: facts and the rule, no exploit.
+ * @internal Exported for tests only.
+ */
 export function fixPrompt(g: KnownHoleGroup): string {
   const name = groupTitle(g)
   const where = g.sources.map((s) => s.path).join(', ')

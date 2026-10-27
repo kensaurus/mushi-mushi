@@ -73,6 +73,10 @@ export interface MushiLocale {
     screenshotRetry: string;
     /** Offered after a failed capture: user-consented tab share (getDisplayMedia). */
     screenshotShareTab: string;
+    /** The report was stopped on the device (filter, classifier, host hook); the text is kept. */
+    notSentBlocked: string;
+    /** The SDK's own send limiter refused the report; the text is kept. */
+    notSentThrottled: string;
     /** Why the last capture failed, shown under the attachment row. */
     screenshotErrors: {
       permission: string;

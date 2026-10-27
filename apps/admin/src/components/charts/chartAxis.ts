@@ -1,6 +1,27 @@
 /**
  * FILE: apps/admin/src/components/charts/chartAxis.ts
  * PURPOSE: Shared axis tick math and label formatters for admin charts.
+ *
+ * OVERVIEW:
+ * - Day/X sparse labels and Y-axis tick builders for dashboard sparklines
+ * - Count / USD formatters used by ChartFrame tick labels
+ * - Count charts (integer:true) use a nice-step scale so discrete axes stay
+ *   on whole numbers (peak 33 → 40/30/20/10/0); non-count keeps the linear
+ *   12% headroom path from master
+ *
+ * DEPENDENCIES:
+ * - None (pure helpers)
+ *
+ * USAGE:
+ * - LineSparkline / BarSparkline / Histogram pass { integer: true } only when
+ *   valueFormat === 'count'
+ * - resolvePlotChartMax(values, yTickTop, scaleToData): the plot top is
+ *   always the top tick. scaleToData only controls the headroom used to
+ *   pick the step.
+ *
+ * NOTES:
+ * - Non-count buildYTickValues must match master bit-for-bit (no nice-step)
+ * - Count peaks that already land on a nice step still gain one step of headroom
  */
 
 /** Admin console copy is English — keep chart dates off system locale (e.g. 5月7日). */
@@ -79,12 +100,34 @@ export function formatChartUsd(n: number): string {
   return `$${n.toFixed(6)}`
 }
 
-/** Y-axis tick values from top (max) to bottom (min). */
-export function buildYTickValues(
+export type BuildYTickOptions = {
+  /** Force step ≥ 1 and integer multiples (no 2.5). Use for count charts. */
+  integer?: boolean
+}
+
+/** Nice step near `rawStep` from {1,2,5,10}×10^n (count axes only). */
+function niceIntegerStep(rawStep: number): number {
+  if (!(rawStep > 0) || !Number.isFinite(rawStep)) return 1
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep))
+  const candidates = [1, 2, 5, 10].map((f) => f * magnitude)
+  let best = candidates[0]!
+  let bestDist = Math.abs(best - rawStep)
+  for (const c of candidates) {
+    const dist = Math.abs(c - rawStep)
+    if (dist < bestDist || (dist === bestDist && c > best)) {
+      best = c
+      bestDist = dist
+    }
+  }
+  return Math.max(1, best)
+}
+
+/** Linear master-path ticks (USD / non-count). Unchanged from origin/master. */
+function buildLinearYTickValues(
   max: number,
-  min = 0,
-  tickCount = 4,
-  headroomRatio = 0.12,
+  min: number,
+  tickCount: number,
+  headroomRatio: number,
 ): number[] {
   const rawPeak = Math.max(max, min)
   const floor = Math.min(min, max)
@@ -101,6 +144,60 @@ export function buildYTickValues(
   return out
 }
 
+/** Integer nice-step ticks for count charts. */
+function buildIntegerYTickValues(
+  max: number,
+  min: number,
+  tickCount: number,
+  headroomRatio: number,
+): number[] {
+  const rawPeak = Math.max(max, min)
+  const floor = Math.min(min, max)
+  const peakTarget = rawPeak > 0 ? rawPeak * (1 + headroomRatio) : rawPeak
+  if (tickCount <= 1) return [Math.ceil(peakTarget)]
+  if (peakTarget === floor) return [peakTarget, floor]
+
+  const steps = tickCount - 1
+  // Headroom guides step size; top snaps to a nice multiple of the data max
+  // so e.g. max 57 → step 20 → [60,40,20,0] (not 63.8 linear fractions).
+  const rawStep = (peakTarget - floor) / steps
+  const step = niceIntegerStep(rawStep)
+  // LineSparkline's floor is Math.min(0, ...values). Stepping down from the
+  // top and then appending that raw floor leaves an irregular last gap
+  // (10, 0, -5). Snap down onto the step so every gap is one step. Callers
+  // use this same value (the bottom tick) as the plot minimum.
+  const axisFloor = Math.floor(floor / step) * step
+  let top = Math.ceil(rawPeak / step) * step
+  // Peak already on a nice step still gets one step of headroom (40 → 50).
+  if (top <= rawPeak) top += step
+  top = Math.round(top)
+  if (top <= axisFloor) {
+    return [Math.max(1, Math.ceil(rawPeak) || 1), axisFloor]
+  }
+
+  const out: number[] = []
+  for (let v = top; v > axisFloor + step * 0.5; v -= step) {
+    const tick = Math.round(v)
+    if (out.length === 0 || out[out.length - 1] !== tick) out.push(tick)
+  }
+  out.push(axisFloor)
+  return out
+}
+
+/** Y-axis tick values from top (max) to bottom (min). */
+export function buildYTickValues(
+  max: number,
+  min = 0,
+  tickCount = 4,
+  headroomRatio = 0.12,
+  opts?: BuildYTickOptions,
+): number[] {
+  if (opts?.integer === true) {
+    return buildIntegerYTickValues(max, min, tickCount, headroomRatio)
+  }
+  return buildLinearYTickValues(max, min, tickCount, headroomRatio)
+}
+
 export function resolveChartMax(
   values: number[],
   scaleToData: boolean,
@@ -110,4 +207,19 @@ export function resolveChartMax(
   if (!scaleToData) return Math.max(1, peak)
   if (peak <= 0) return 0.001
   return peak * (1 + headroomRatio)
+}
+
+/**
+ * Plot domain top for count charts: the top tick, in both modes, so bars and
+ * lines share the labels' domain. scaleToData decides the headroom the
+ * caller builds the ticks with (12% when true, none when false), so it still
+ * changes the chart. An all-zero series falls back to resolveChartMax.
+ */
+export function resolvePlotChartMax(
+  values: number[],
+  yTickTop: number | undefined,
+  scaleToData: boolean,
+): number {
+  if (yTickTop != null && yTickTop > 0) return yTickTop
+  return resolveChartMax(values, scaleToData)
 }

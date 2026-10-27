@@ -5,6 +5,8 @@
  *
  *   mushi-ux login    --url http://localhost:5173        (once, headed)
  *   mushi-ux discover --url http://localhost:5173        (list screens, no agent)
+ *   mushi-ux audit --url https://app.example.com/admin --profile-dir ~/.playwright-cli-profiles/app
+ *                                                        (find UX bugs on signed-in screens, file reports)
  *   mushi-ux run --dev "pnpm dev --port {port}" --agent claude-code
  *   mushi-ux ui                                          (studio: pick agent, model, skill; watch runs)
  *   mushi-ux open <runId>                                (dashboard for a past run)
@@ -21,11 +23,15 @@ import { join } from 'node:path'
 import { Command, InvalidArgumentError, Option } from 'commander'
 import { chromium } from 'playwright'
 import { AGENTS, type AgentName } from './agents.js'
+import { AUDIT_FILE_CAP, auditHome, fileFindings, runAudit, writePending, type ReviewVia } from './audit.js'
 import { openSession } from './capture.js'
 import { startDashboard, startStudio, type LaunchInput } from './dashboard.js'
 import { discover } from './discover.js'
 import { isSafeSelector } from './ignore.js'
+import { DEFAULT_CURSOR_REVIEW_MODEL } from './checker.js'
+import { CHARTERS, runExplore, type CharterName } from './explore.js'
 import { DEFAULT_JUDGE_MODEL } from './judge.js'
+import { cachedProfile, parseChannel } from './profile.js'
 import { agentAccount, studioOptions } from './launcher.js'
 import { listModels } from './models.js'
 import { DEFAULT_SKILLS_REPO, listSkills, resolveSkill, resolveSkillChain } from './skills.js'
@@ -118,8 +124,16 @@ program
   .option('--max-pages <n>', 'Stop after this many pages', '40')
   .option('--src <dir>', 'Read routes from this source directory (default: the current directory)', '.')
   .option('--no-profile', 'Ignore the signed-in session from `login`')
-  .action(async (o: { url: string; path: string[]; allow: string[]; ignore: string[]; maxPages: string; src: string; profile: boolean }) => {
-    const session = await openSession({ profileDir: o.profile ? profileDirFor(o.url) : undefined, allow: o.allow, ignore: o.ignore })
+  .option('--profile-dir <dir>', 'Reuse this cached, signed-in browser profile (e.g. ~/.playwright-cli-profiles/<app>) instead of the `login` one')
+  .option('--channel <name>', 'Browser build for --profile-dir: chrome (default; the profile was made by Google Chrome) or chromium', parseChannel)
+  .action(async (o: { url: string; path: string[]; allow: string[]; ignore: string[]; maxPages: string; src: string; profile: boolean; profileDir?: string; channel?: string }) => {
+    const cached = cachedProfile(o)
+    const session = await openSession({
+      profileDir: cached?.profileDir ?? (o.profile ? profileDirFor(o.url) : undefined),
+      channel: cached?.channel,
+      allow: o.allow,
+      ignore: o.ignore,
+    })
     try {
       const surfaces = await discover(session, {
         baseUrl: o.url,
@@ -154,10 +168,12 @@ program
   .option('--ignore <selector>', 'CSS selector that is not part of the app: hidden in screenshots, skipped by checks (repeatable)', collectSelector, [])
   .option('--install <command>', 'Install command for the worktree (default: from the lockfile; "none" to skip)')
   .option('--login-url <url>', 'Reuse the session saved by `mushi-ux login --url <url>`')
+  .option('--profile-dir <dir>', 'Reuse this cached, signed-in browser profile (e.g. ~/.playwright-cli-profiles/<app>) instead of a `login` one')
+  .option('--channel <name>', 'Browser build for --profile-dir: chrome (default) or chromium', parseChannel)
   .option('--judge-model <id>', 'Model for the final before/after review (your Anthropic credentials)', DEFAULT_JUDGE_MODEL)
   .option('--no-judge', 'Skip the final review')
   .option('--checker <model>', 'A second model that reviews each kept step and may roll it back, never keep a rejected one (e.g. claude-opus-5-5)')
-  .option('--checker-via <how>', 'claude-code (your Claude sign-in) or anthropic-api (ANTHROPIC_API_KEY)', 'claude-code')
+  .option('--checker-via <how>', 'claude-code (your Claude sign-in), anthropic-api (ANTHROPIC_API_KEY) or cursor (the Cursor CLI, e.g. --checker grok-4.7-high-fast)', 'claude-code')
   .option('--no-keep-invisible', 'Roll back edits with nothing visible in a screenshot instead of keeping them for review')
   .option('--resume <runId>', 'Continue a stopped run with the settings it started with (other run options are ignored)')
   .option('--no-preflight', 'Skip the one-minute check that the agent can read files')
@@ -179,6 +195,8 @@ program
       ignore: string[]
       install?: string
       loginUrl?: string
+      profileDir?: string
+      channel?: string
       resume?: string
       crawl?: boolean
       steps?: boolean
@@ -223,13 +241,16 @@ program
           allow: o.allow,
           ignore: o.ignore,
           loginUrl: o.loginUrl ?? null,
-          profileDir: o.loginUrl ? profileDirFor(o.loginUrl) : undefined,
+          profileDir: cachedProfile(o)?.profileDir ?? (o.loginUrl ? profileDirFor(o.loginUrl) : undefined),
+          channel: cachedProfile(o)?.channel,
           resumeRunId: o.resume,
           preflight: o.preflight,
           judgeModel: o.judge ? o.judgeModel : null,
           sync: o.sync,
           steps: o.steps,
-          checker: o.checker ? { via: o.checkerVia === 'anthropic-api' ? 'anthropic-api' : 'claude-code', model: o.checker } : null,
+          checker: o.checker
+            ? { via: o.checkerVia === 'anthropic-api' ? 'anthropic-api' : o.checkerVia === 'cursor' ? 'cursor' : 'claude-code', model: o.checker }
+            : null,
           keepInvisible: o.keepInvisible,
         }
       }
@@ -285,6 +306,143 @@ program
         }
       } finally {
         await dash?.close()
+      }
+    },
+  )
+
+program
+  .command('audit')
+  .description('Find UI/UX bugs on the signed-in screens of a live app, read-only, and file each one as a Mushi report.')
+  .requiredOption('--url <url>', 'The live app where your cached session is signed in, e.g. https://example.com/admin; only paths under it are visited')
+  .option('--profile-dir <dir>', 'The cached, signed-in browser profile to reuse (e.g. ~/.playwright-cli-profiles/<app>); never a fresh browser')
+  .option('--channel <name>', 'Browser build for --profile-dir: chrome (default) or chromium', parseChannel)
+  .option('--path <path>', 'Also start from this path (repeatable)', collect, [])
+  .option('--max-pages <n>', 'Stop mapping after this many pages', '15')
+  .option('--max-screens <n>', 'Screens captured in one run: pages first, then their tabs and dialogs', '30')
+  .option('--states <n>', 'Tabs, dialogs and menus to open on each page (each costs a few seconds); 0 maps pages only', '0')
+  .option('--viewports <names>', 'desktop, phone or both, comma-separated', 'desktop,phone')
+  .addOption(
+    new Option('--review <how>', 'Model review of the screenshots: claude-code (your Claude sign-in), anthropic-api (ANTHROPIC_API_KEY), cursor (the Cursor CLI: Grok by default) or none')
+      .choices(['claude-code', 'anthropic-api', 'cursor', 'none'])
+      .default('none'),
+  )
+  .option('--review-model <id>', `Model for the review (default: ${DEFAULT_CURSOR_REVIEW_MODEL} with --review cursor, else ${DEFAULT_JUDGE_MODEL})`)
+  .option('--allow <rule>', 'Allow a non-GET request that only reads, e.g. "POST /rest/v1/rpc/*" (repeatable)', collect, [])
+  .option('--ignore <selector>', 'CSS selector that is not part of the app: hidden in screenshots, skipped by checks (repeatable)', collectSelector, [])
+  .option('--file', `File the findings as Mushi reports (MUSHI_API_KEY / MUSHI_PROJECT_ID; at most ${AUDIT_FILE_CAP} a run, deduped)`)
+  .option('--dry-run', 'With --file: show what would be filed, file nothing')
+  .action(
+    async (o: {
+      url: string
+      profileDir?: string
+      channel?: string
+      path: string[]
+      maxPages: string
+      maxScreens: string
+      states: string
+      viewports: string
+      review: ReviewVia
+      reviewModel?: string
+      allow: string[]
+      ignore: string[]
+      file?: boolean
+      dryRun?: boolean
+    }) => {
+      const cached = cachedProfile(o)
+      if (!cached) console.warn('No --profile-dir: the audit sees the app signed out. Pass a cached, signed-in profile.')
+      const viewports = o.viewports.split(',').map((v) => v.trim()).map((v) => (v === 'phone' ? 'mobile' : v)).filter((v): v is 'desktop' | 'mobile' => v === 'desktop' || v === 'mobile')
+      const cfg = o.file ? syncConfigFromEnv() : null
+      for (const k of ['MUSHI_API_KEY', 'MUSHI_PROJECT_ID', 'MUSHI_API_ENDPOINT']) delete process.env[k]
+      const result = await runAudit({
+        url: o.url,
+        profileDir: cached?.profileDir,
+        channel: cached?.channel,
+        paths: o.path,
+        maxPages: Number(o.maxPages),
+        maxScreens: Number(o.maxScreens),
+        statesPerPage: Number(o.states),
+        viewports,
+        review: o.review,
+        reviewModel: o.reviewModel ?? (o.review === 'cursor' ? DEFAULT_CURSOR_REVIEW_MODEL : DEFAULT_JUDGE_MODEL),
+        allow: o.allow,
+        ignore: o.ignore,
+        onProgress: (m) => process.stderr.write(`  ${m}\n`),
+      })
+      console.log(`\n${result.screens} screen(s), ${result.findings.length} finding(s), ${result.blockedWrites} write request(s) blocked. Summary: ${result.dir}/summary.md`)
+      for (const e of result.reviewErrors.slice(0, 5)) console.warn(`Review: ${e}`)
+      if (!o.file) return
+      const outcome = await fileFindings({ findings: result.findings, baseUrl: o.url, cfg, ledgerPath: join(auditHome(), 'filed.json'), dryRun: o.dryRun })
+      for (const f of outcome.filed) console.log(`Filed ${f.reportId}: ${f.title}`)
+      for (const s of outcome.skipped) console.log(`Skipped ${s.fingerprint}: ${s.reason}`)
+      const pending = writePending(result.dir, outcome.pending)
+      if (pending) {
+        console.log(o.dryRun ? `Dry run: ${outcome.pending.length} report(s) would be filed: ${pending}` : `No MUSHI_API_KEY / MUSHI_PROJECT_ID: ${outcome.pending.length} report(s) left to file in ${pending}`)
+      }
+    },
+  )
+
+program
+  .command('explore')
+  .description('Let a model use the signed-in app like a careless user, read-only; file only the errors that happen again when its steps are replayed.')
+  .requiredOption('--url <url>', 'The live app where your cached session is signed in; sessions start here')
+  .option('--profile-dir <dir>', 'The cached, signed-in browser profile to reuse (e.g. ~/.playwright-cli-profiles/<app>); never a fresh browser')
+  .option('--channel <name>', 'Browser build for --profile-dir: chrome (default) or chromium', parseChannel)
+  .option('--path <path>', 'Start sessions from this path too (repeatable; default: the url)', collect, [])
+  .option('--charter <name>', `What a session tries: ${Object.keys(CHARTERS).join(', ')} (repeatable; default: all)`, collect, [])
+  .option('--steps <n>', 'Actions per session (at most 60)', '35')
+  .option('--model <id>', 'Cursor CLI model that picks the actions', DEFAULT_CURSOR_REVIEW_MODEL)
+  .option('--api-host <host>', "A host whose 5xx count as the app's, e.g. the API (repeatable)", collect, [])
+  .option('--allow <rule>', 'Allow a non-GET request that only reads (repeatable)', collect, [])
+  .option('--ignore <selector>', 'CSS selector that is not part of the app (repeatable)', collectSelector, [])
+  .option('--file', `File confirmed findings as Mushi reports (MUSHI_API_KEY / MUSHI_PROJECT_ID; at most ${AUDIT_FILE_CAP} a run, deduped)`)
+  .option('--dry-run', 'With --file: show what would be filed, file nothing')
+  .action(
+    async (o: {
+      url: string
+      profileDir?: string
+      channel?: string
+      path: string[]
+      charter: string[]
+      steps: string
+      model: string
+      apiHost: string[]
+      allow: string[]
+      ignore: string[]
+      file?: boolean
+      dryRun?: boolean
+    }) => {
+      const cached = cachedProfile(o)
+      if (!cached) console.warn('No --profile-dir: explore sees the app signed out. Pass a cached, signed-in profile.')
+      const unknown = o.charter.filter((c) => !(c in CHARTERS))
+      if (unknown.length) throw new Error(`Unknown charter ${unknown.join(', ')}: use ${Object.keys(CHARTERS).join(', ')}`)
+      const cfg = o.file ? syncConfigFromEnv() : null
+      for (const k of ['MUSHI_API_KEY', 'MUSHI_PROJECT_ID', 'MUSHI_API_ENDPOINT']) delete process.env[k]
+      const result = await runExplore({
+        url: o.url,
+        profileDir: cached?.profileDir,
+        channel: cached?.channel,
+        paths: o.path,
+        charters: o.charter as CharterName[],
+        steps: Number(o.steps),
+        model: o.model,
+        apiHosts: o.apiHost,
+        allow: o.allow,
+        ignore: o.ignore,
+        onProgress: (m) => process.stderr.write(`  ${m}\n`),
+      })
+      console.log(
+        `\n${result.sessions} session(s), ${result.steps} action(s), ${result.candidates} candidate(s), ${result.findings.length} confirmed, ${result.refused.length} destructive click(s) refused, ${result.blocked} write request(s) blocked.`,
+      )
+      if (!o.file) {
+        for (const f of result.findings) console.log(`- ${f.severity} ${f.screen}: ${f.summary}`)
+        return
+      }
+      const outcome = await fileFindings({ findings: result.findings, baseUrl: o.url, cfg, ledgerPath: join(auditHome(), 'filed.json'), dryRun: o.dryRun })
+      for (const f of outcome.filed) console.log(`Filed ${f.reportId}: ${f.title}`)
+      for (const s of outcome.skipped) console.log(`Skipped ${s.fingerprint}: ${s.reason}`)
+      const pending = writePending(result.dir, outcome.pending)
+      if (pending) {
+        console.log(o.dryRun ? `Dry run: ${outcome.pending.length} report(s) would be filed: ${pending}` : `No MUSHI_API_KEY / MUSHI_PROJECT_ID: ${outcome.pending.length} report(s) left to file in ${pending}`)
       }
     },
   )

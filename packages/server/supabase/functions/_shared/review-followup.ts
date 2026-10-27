@@ -105,6 +105,7 @@ export const FOLLOWUP_REASONS = {
   autofix_cap: "The app's auto-fix limit is reached.",
   budget_unavailable: "The app's auto-fix limits could not be read.",
   no_cursor_key: 'No Cursor key is available for this app.',
+  key_used_up: "The chosen Cursor key's account reached its plan's usage limit; follow-ups wait until it is back or another key is chosen.",
   key_not_allowed: 'The chosen Cursor key is not one this organization can use.',
   models_unavailable: "Cursor's model list could not be read for this key.",
   model_not_listed: 'The follow-up model is not in this key\'s Cursor model list.',
@@ -280,6 +281,22 @@ export type CiHeadState =
   | { state: 'base_failing'; failing: []; onBase: string[] }
   | { state: 'pending' | 'infra' | 'green' | 'none'; failing: [] }
 
+/**
+ * Host repos fail their required gate on a draft PR on purpose, in a first
+ * step named "Draft PRs run no CI" (a skipped required check would read as
+ * green and let a draft merge untested). Shortly after the review marks the
+ * PR ready, the newest collected row for the gate can still be that stop;
+ * read as a code failure it bought a CI-repair agent run (2026-10-26).
+ */
+const DRAFT_GUARD_STEP = /^draft prs? run no ci\b/i
+
+/** @internal Exported for tests only. A failed job whose only failed steps are the draft guard. */
+export function isDraftGuardStop(job: Pick<CiJobForRepair, 'conclusion' | 'steps'>): boolean {
+  if ((job.conclusion ?? '').toLowerCase() !== 'failure') return false
+  const failed = (job.steps ?? []).filter((s) => String(s?.conclusion ?? '').toLowerCase() === 'failure')
+  return failed.length > 0 && failed.every((s) => DRAFT_GUARD_STEP.test(String(s?.name ?? '').trim()))
+}
+
 /** Conclusions that are the code's fault. `action_required` (an approval) and `startup_failure` (the workflow file) are not an agent's to fix. */
 const CODE_FAILURE_CONCLUSIONS = new Set(['failure', 'timed_out'])
 const PENDING_KINDS = new Set(['running', 'queued'])
@@ -311,7 +328,11 @@ export function ciHeadState(rows: readonly CiJobForRepair[], baseFailing: Readon
   }
   const jobs = [...latest.values()]
   if (jobs.length === 0) return { state: 'none', failing: [] }
+  // The draft run's intentional stop is not a test result: CI runs once the
+  // PR is marked ready, so it counts as pending until that run is collected.
+  const draftStopped = jobs.some(isDraftGuardStop)
   const failing = jobs
+    .filter((j) => !isDraftGuardStop(j))
     .filter((j) => j.ci_kind === 'code_failure' && !j.infra && CODE_FAILURE_CONCLUSIONS.has((j.conclusion ?? '').toLowerCase()))
     .map((j) => ({
       jobId: j.job_id,
@@ -330,7 +351,7 @@ export function ciHeadState(rows: readonly CiJobForRepair[], baseFailing: Readon
     if (own.length === 0) return { state: 'base_failing', failing: [], onBase }
     return onBase.length > 0 ? { state: 'code_failure', failing: own, onBase } : { state: 'code_failure', failing: own }
   }
-  if (jobs.some((j) => PENDING_KINDS.has(j.ci_kind))) return { state: 'pending', failing: [] }
+  if (draftStopped || jobs.some((j) => PENDING_KINDS.has(j.ci_kind))) return { state: 'pending', failing: [] }
   if (jobs.some((j) => INFRA_KINDS.has(j.ci_kind) || j.infra)) return { state: 'infra', failing: [] }
   return { state: 'green', failing: [] }
 }
@@ -508,6 +529,8 @@ export interface FollowupPromptInput {
   findings: FollowupFinding[]
   /** Scrubs untrusted text (sanitizeForLLM in the worker). */
   scrub: (text: string) => string
+  /** A local agent (`mushi work`): it leaves the change in the working tree and the CLI pushes it. */
+  local?: boolean
 }
 
 export interface ScreenedFindings {
@@ -752,7 +775,9 @@ export function buildFollowupPrompt(input: FollowupPromptInput): { text: string;
     '1. Fix exactly the findings above, and nothing else. Keep the pull request\'s scope: no refactors, renames or unrelated changes.',
     '2. Add or adjust tests so each fixed finding is covered: a test that fails without your change and passes with it.',
     '3. Run the tests you touched (and the project\'s typecheck and lint if they are quick) and make them pass.',
-    '4. Commit and push to the CURRENT branch of this pull request. Do not open a new pull request, do not create a new branch, never force-push, never merge.',
+    input.local
+      ? '4. Leave your changes uncommitted in the working tree: Mushi commits them and pushes to this pull request\'s branch. Do not commit, do not create a branch, never push, never merge.'
+      : '4. Commit and push to the CURRENT branch of this pull request. Do not open a new pull request, do not create a new branch, never force-push, never merge.',
     '5. If a finding is wrong (the code is already correct, or the suggested fix would break something), do not change code for it. Explain why in your final message, naming the finding.',
     '6. End with a short final message: which findings you fixed, which you did not and why, and which tests you ran.',
     '',

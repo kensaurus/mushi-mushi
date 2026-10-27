@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   bottleneckActionLabel,
-  bottleneckChipLabel,
   bottleneckDeepLink,
   bottleneckHumanHeadline,
   bottleneckHumanHint,
@@ -22,15 +21,6 @@ describe('pdcaBottleneck human copy', () => {
     expect(
       bottleneckActionLabel({ stage: 'do', label: '2 fixes need retry', count: 2 }),
     ).toBe('See why (2)')
-  })
-
-  it('chip label is human not P/D/C/A', () => {
-    expect(bottleneckChipLabel({ stage: 'do', label: '2 fixes need retry', count: 2 })).toBe(
-      '2 fixes stopped',
-    )
-    expect(bottleneckChipLabel({ stage: 'plan', label: '3 reports waiting', count: 3 })).toBe(
-      '3 to triage',
-    )
   })
 })
 

@@ -93,6 +93,24 @@ The review is advisory: it never keeps or reverts anything.
 **File as bug** adds the screen to your normal bug queue (source `ux_loop`) with the
 measurements and the review's notes. It makes no AI call.
 
+## Audit signed-in screens
+
+`mushi-ux audit` finds UI bugs on the screens behind your sign-in and files them as
+reports, without editing code. It reuses a browser profile you are already signed in
+with, so it never asks you to sign in again:
+
+```bash
+mushi-ux audit --url https://example.com/admin \
+  --profile-dir ~/.playwright-cli-profiles/example --file --dry-run
+```
+
+It maps the screens under that URL read-only, captures each on desktop and phone, and
+files what it measures: serious accessibility rules, a page that scrolls sideways,
+console errors, and content that jumps while loading. Add `--review claude-code` for a
+model to point out concrete visual defects on whole pages. `--file` files at most 15
+reports a run and skips one still open or filed in the last 14 days; `--dry-run` lists
+them instead.
+
 ## Where the changes are
 
 Kept edits are commits on the branch shown above the screen list

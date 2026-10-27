@@ -15,7 +15,7 @@
  *      cloud-agent PR that has none (newest first, at most `limit`);
  *   3. on `{ fixAttemptId, force }`, queues that attempt (again, with force)
  *      and reviews it now;
- *   4. claims up to 3 due reviews, at most one per project per tick, and runs
+ *   4. claims up to 8 due reviews, at most one per project per tick, and runs
  *      them side by side. A claim stamps a fresh `run_id`; every later write
  *      of that run is guarded on it, so a run that a re-queue or a newer run
  *      superseded can never overwrite the row.
@@ -98,12 +98,17 @@ import {
 
 const log = rootLog.child('agent-pr-review')
 
-/** Reviews run per tick, side by side. */
-export const REVIEW_BATCH = 3
+/**
+ * Reviews run per tick, side by side (each call is capped at 100 s, so the
+ * tick stays inside the function's wall time). 3 a tick fell behind on
+ * 2026-10-23: 74 queued, the oldest 4 hours old, while the merge queue
+ * waited on re-reviews; one per app across 8 apps keeps every app moving.
+ */
+export const REVIEW_BATCH = 8
 /** Fairness: one project's backlog cannot take every slot of a tick. */
 export const REVIEW_MAX_PER_PROJECT_PER_TICK = 1
-/** Due rows read per tick to fill the batch fairly. */
-const QUEUE_SCAN = 30
+/** Due rows read per tick to fill the batch fairly (one app's backlog can fill 30). */
+const QUEUE_SCAN = 120
 export const REVIEW_MAX_TRIES = 3
 export const REVIEW_STALE_MS = REVIEW_RUN_STALE_MS
 /** A model error waits this long × tries before the next try. */
@@ -548,7 +553,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
   if (listed.files.length === 0) return finishSkipped(attempt, 'no_files')
 
   const diff = buildReviewDiff(listed.files, { complete: listed.complete })
-  const ci = describeCi(attempt.check_run_conclusion, attempt.check_run_status, attempt.ci_infra)
+  const ci = describeCi(attempt.check_run_conclusion, attempt.check_run_status, attempt.ci_infra, details.draft === true)
   let report: Record<string, unknown> | null = null
   if (attempt.report_id) {
     const { data } = await db.from('reports').select(REPORT_COLUMNS).eq('id', attempt.report_id).maybeSingle()
