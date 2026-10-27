@@ -28,7 +28,7 @@ import type { Page } from 'playwright'
 import { openSession, waitForContent, type BrowserSession } from './capture.js'
 import { DEFAULT_CURSOR_REVIEW_MODEL, firstJson } from './checker.js'
 import { blank, describeAction, normalizeMessage, onSite, parseAction, perform, REFUSED_VALUE, signalKey, snapshotOf, watch, type ExploreAction, type Signal } from './explore.js'
-import { isCaptchaUrl, isFreshEyesRefusedLabel, requestRefusal, type AllowRule } from './guard.js'
+import { heldSubmits, isCaptchaUrl, isFreshEyesRefusedLabel, requestRefusal, type AllowRule } from './guard.js'
 import { pagePath, type AuditFinding } from './audit.js'
 import { run } from './proc.js'
 import { newRunId } from './state.js'
@@ -906,6 +906,7 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
         continue
       }
       const blockedBefore = browser.guard.blocked.length
+      const submitsBefore = x.readOnly ? await heldSubmits(page) : 0
       const tAct = performance.now()
       const refusal = await perform(page, action, isFreshEyesRefusedLabel, (v) => fillValue(v, identity))
       const appMs = since(tAct)
@@ -929,7 +930,11 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
         continue
       }
       // A write to the app itself that this read-only run held back: the visitor's step did not happen as the app intended.
-      const heldWrite = x.readOnly && browser.guard.blocked.slice(blockedBefore).some((r) => !['GET', 'HEAD', 'OPTIONS'].includes(r.method.toUpperCase()) && x.apiHosts.includes(safeHost(r.url)))
+      // A form submit the guard cancelled never becomes a request, so it is counted in the page.
+      const heldWrite =
+        x.readOnly &&
+        (browser.guard.blocked.slice(blockedBefore).some((r) => !['GET', 'HEAD', 'OPTIONS'].includes(r.method.toUpperCase()) && x.apiHosts.includes(safeHost(r.url))) ||
+          (await heldSubmits(page)) > submitsBefore)
       if (!refusedRequests.length && heldWrite) {
         step.outcome = 'blocked'
         step.note = 'write held back: this run has no account, so it writes nothing'

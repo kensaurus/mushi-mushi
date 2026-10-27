@@ -212,8 +212,9 @@ async function accessibleLabel(loc: Awaited<ReturnType<typeof target>>): Promise
         const inner = [...h.querySelectorAll('[aria-label], [title]')].map((c) => c.getAttribute('aria-label') ?? c.getAttribute('title') ?? '').join(' ')
         // A submit button acts for its form or dialog: "Confirm" in a dialog labelled "Delete project".
         const type = (h.getAttribute('type') ?? (h.tagName === 'BUTTON' ? 'submit' : '')).toLowerCase()
-        const box = type === 'submit' ? ((h as HTMLButtonElement).form ?? h.closest('form, [role=dialog], [role=alertdialog], dialog')) : h.closest('[role=dialog], [role=alertdialog], dialog')
-        const boxLabel = box ? [box.getAttribute('aria-label'), ...(box.getAttribute('aria-labelledby') ?? '').split(/s+/).filter(Boolean).map((id) => document.getElementById(id)?.innerText ?? '')].filter(Boolean).join(' ') : ''
+        const boxes = [type === 'submit' ? ((h as HTMLButtonElement).form ?? h.closest('form')) : null, h.closest('[role=dialog], [role=alertdialog], dialog')].filter((b): b is Element => !!b)
+        const labelOf = (b: Element) => [b.getAttribute('aria-label'), ...(b.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean).map((id) => document.getElementById(id)?.innerText ?? '')]
+        const boxLabel = boxes.flatMap(labelOf).filter(Boolean).join(' ')
         return [h.getAttribute('aria-label'), byId, h.innerText, h.getAttribute('value'), h.getAttribute('title'), inner, boxLabel].filter(Boolean).join(' ').trim().slice(0, 400)
       },
       undefined,
@@ -241,7 +242,7 @@ async function focusedLabels(page: Page): Promise<string[] | null> {
       const form = (el as HTMLInputElement).form ?? el.closest('form')
       if (form) {
         out.push(form.getAttribute('aria-label') ?? '')
-        for (const id of (form.getAttribute('aria-labelledby') ?? '').split(/s+/).filter(Boolean)) out.push(document.getElementById(id)?.innerText ?? '')
+        for (const id of (form.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean)) out.push(document.getElementById(id)?.innerText ?? '')
         // form.elements includes buttons outside the <form> tied to it with form="id".
         for (const b of [...form.elements].filter((x) => x.matches('button, input[type=submit], input[type=image]'))) {
           const type = (b.getAttribute('type') ?? 'submit').toLowerCase()

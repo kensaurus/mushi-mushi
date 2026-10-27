@@ -148,10 +148,17 @@ export function isFreshEyesRefusedLabel(label: string): boolean {
  * script runs. Covers submit events, `form.submit()` and `requestSubmit()`.
  */
 const NO_SUBMIT_SCRIPT = `(() => {
-  addEventListener('submit', (e) => { e.preventDefault(); e.stopImmediatePropagation() }, true)
-  HTMLFormElement.prototype.submit = function () {}
-  HTMLFormElement.prototype.requestSubmit = function () {}
+  window.__mushiHeldSubmits = 0
+  const held = () => { window.__mushiHeldSubmits = (window.__mushiHeldSubmits || 0) + 1 }
+  addEventListener('submit', (e) => { e.preventDefault(); e.stopImmediatePropagation(); held() }, true)
+  HTMLFormElement.prototype.submit = function () { held() }
+  HTMLFormElement.prototype.requestSubmit = function () { held() }
 })()`
+
+/** Form submits the read-only guard cancelled in this page so far (they never become a request). */
+export async function heldSubmits(page: { evaluate<T>(fn: () => T): Promise<T> }): Promise<number> {
+  return page.evaluate(() => Number((window as unknown as { __mushiHeldSubmits?: number }).__mushiHeldSubmits ?? 0)).catch(() => 0)
+}
 
 export async function installGuard(context: BrowserContext, allow: readonly AllowRule[], log: GuardLog = { blocked: [] }, policy: GuardPolicy = {}): Promise<GuardLog> {
   // A run that may write lets the app's own forms submit; the request route still decides where they go.
