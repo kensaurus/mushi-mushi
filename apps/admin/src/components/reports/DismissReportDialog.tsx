@@ -13,7 +13,7 @@ import { useToast } from '../../lib/toast'
 import { CloseReasonSelect } from './CloseReasonSelect'
 
 interface Props {
-  report: { id: string }
+  report: { id: string; source?: string | null }
   onClose: () => void
   /** Called after the server accepted the dismiss, to reload the list. */
   onDismissed: () => void
@@ -52,7 +52,7 @@ export function DismissReportDialog({ report, onClose, onDismissed }: Props) {
       }}
       onConfirm={dismiss}
     >
-      <CloseReasonSelect value={reason} onChange={setReason} />
+      <CloseReasonSelect value={reason} onChange={setReason} source={report.source} />
     </ConfirmDialog>
   )
 }
