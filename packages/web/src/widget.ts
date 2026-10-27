@@ -15,7 +15,7 @@ import type * as Views from './widget-views';
 import { getWidgetStyles } from './styles';
 import { contrastingInk, safeCssColor } from './build-widget-theme';
 import { readPageFaviconHref, MUSHI_COPY, MUSHI_GEOMETRY, MUSHI_TIER_COLORS } from '@mushi-mushi/core';
-import { FEATURE_REQUEST_INTENT, REPORTER_READ_DEADLINE_MS, bindFaviconFallbacks, isSubmitShortcut, loadAssistantSession, saveAssistantSession, clearAssistantSession, readLauncherDismissed, withDeadline, writeLauncherDismissed } from './widget-helpers';
+import { FEATURE_REQUEST_INTENT, REPORTER_READ_DEADLINE_MS, bindFaviconFallbacks, isNotSentOutcome, isSubmitShortcut, loadAssistantSession, saveAssistantSession, clearAssistantSession, readLauncherDismissed, withDeadline, writeLauncherDismissed } from './widget-helpers';
 import type {
   AssistantTurn,
   PendingReply,
@@ -196,6 +196,8 @@ export class MushiWidget {
   private lastSubmitQueuedOffline = false;
   private lastSubmitFailureKind: WidgetSubmitOutcome['failureKind'];
   private lastSubmitScreenshotDropped = false;
+  /** The last submit never left the device; the report step says why. */
+  private submitNotSent: 'blocked' | 'throttled' | null = null;
   /** Whether the user has clicked ✕ on the header banner this session. */
   private bannerDismissed = false;
   private bannerResizeObserver: ResizeObserver | null = null;
@@ -414,6 +416,7 @@ export class MushiWidget {
     this.lastSubmitQueuedOffline = false;
     this.lastSubmitFailureKind = undefined;
     this.lastSubmitScreenshotDropped = false;
+    this.submitNotSent = null;
     this.emailOptInOpen = false;
     this.emailState = 'idle';
     // Drafts only survive patches WITHIN a session.
@@ -1834,6 +1837,7 @@ export class MushiWidget {
       lastSubmitQueuedOffline: this.lastSubmitQueuedOffline,
       lastSubmitFailureKind: this.lastSubmitFailureKind,
       lastSubmitScreenshotDropped: this.lastSubmitScreenshotDropped,
+      submitNotSent: this.submitNotSent,
       channels: this.channels,
       emailOptInOpen: this.emailOptInOpen,
       emailState: this.emailState,
@@ -2081,6 +2085,9 @@ export class MushiWidget {
     this.lastSubmitQueuedOffline = false;
     this.lastSubmitFailureKind = undefined;
     this.lastSubmitScreenshotDropped = false;
+    this.submitNotSent = null;
+    // Restored if the report never leaves the device (blocked / throttled).
+    const keptDrafts = { ...this.drafts };
     this.render();
 
     // Both sync-void (legacy) and async-outcome host handlers are supported.
@@ -2101,11 +2108,19 @@ export class MushiWidget {
         return { reportId: null, queuedOffline: true } as WidgetSubmitOutcome;
       }
     })();
+    let settled: WidgetSubmitOutcome | null | undefined;
+    void outcomeP.then((outcome) => { settled = outcome; });
 
     // The receipt appears within one breath even on a slow network; the
     // outcome patches it in place. No auto-close: it stays until Done / ✕ / Esc.
+    // A report blocked on the device never gets a receipt: the reporter stays
+    // on the report step with their text and a plain "not sent" line.
     this.successTimer = setTimeout(() => {
       this.successTimer = null;
+      if (isNotSentOutcome(settled)) {
+        this.showNotSent(settled.failureKind, keptDrafts);
+        return;
+      }
       this.submitting = false;
       this.step = 'success';
       this.drafts = {};
@@ -2113,6 +2128,11 @@ export class MushiWidget {
       this.announce(this.rc.ui.sent);
       void outcomeP.then((outcome) => {
         if (this.step !== 'success' || !outcome) return;
+        // A slow on-device check (e.g. a WASM classifier) can block after the receipt showed.
+        if (isNotSentOutcome(outcome)) {
+          this.showNotSent(outcome.failureKind, keptDrafts);
+          return;
+        }
         this.lastReportId = outcome.reportId ?? null;
         this.lastSubmitQueuedOffline = Boolean(outcome.queuedOffline);
         this.lastSubmitFailureKind = outcome.failureKind;
@@ -2120,6 +2140,17 @@ export class MushiWidget {
         this.render();
       });
     }, 500);
+  }
+
+  /** Back to the report step with the reporter's text, saying the report was not sent. */
+  private showNotSent(kind: 'blocked' | 'throttled', keptDrafts: Record<string, string>): void {
+    this.submitting = false;
+    this.step = 'report';
+    this.drafts = keptDrafts;
+    this.submitNotSent = kind;
+    this.render();
+    const s3 = this.locale.step3;
+    this.announce(kind === 'throttled' ? s3.notSentThrottled : s3.notSentBlocked);
   }
 
   // ─── Your reports ──────────────────────────────────────────────────

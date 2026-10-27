@@ -50,6 +50,8 @@ const BUILTIN_ALLOWLIST = new Set([
   // CI injects these. The CLI prefers them over `git rev-parse`.
   'GITHUB_SHA',
   'GITHUB_REF_NAME',
+  // Actions sets it to the checkout; mcp-ci's gates make ESLint report paths relative to it.
+  'GITHUB_WORKSPACE',
   'CI_COMMIT_SHA',
   'CI_COMMIT_BRANCH',
   // OS locale, and the Windows per-user directory (same class as HOME / APPDATA).

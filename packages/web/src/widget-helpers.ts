@@ -305,12 +305,24 @@ export interface WidgetSubmitOutcome {
    *   - rate_limited: 429 — user should wait before sending more
    *   - quota: 403 entitlement/quota — will not succeed on retry
    *   - permanent: validation / payload too large — dropped, not queued
+   *   - blocked: stopped on the device before any send (pre-filter, on-device
+   *     classifier, sampleRate, or the host's beforeSend) — nothing queued
+   *   - throttled: the SDK's own send limiter refused it — nothing queued
+   * `blocked` and `throttled` mean the report was NOT sent: the widget keeps
+   * the reporter's text and says so instead of showing a receipt.
    */
-  failureKind?: 'offline' | 'retrying' | 'rate_limited' | 'quota' | 'permanent';
+  failureKind?: 'offline' | 'retrying' | 'rate_limited' | 'quota' | 'permanent' | 'blocked' | 'throttled';
   /** The report went through but its screenshot had to be shed (couldn't
    *  compress under the wire budget, or the server said PAYLOAD_TOO_LARGE).
    *  The success receipt says so instead of implying the image landed. */
   screenshotDropped?: boolean;
+}
+
+/** The submit never left the device: no receipt, keep the reporter's text. */
+export function isNotSentOutcome(
+  outcome: WidgetSubmitOutcome | null | undefined,
+): outcome is WidgetSubmitOutcome & { failureKind: 'blocked' | 'throttled' } {
+  return outcome?.failureKind === 'blocked' || outcome?.failureKind === 'throttled';
 }
 
 export interface WidgetCallbacks {

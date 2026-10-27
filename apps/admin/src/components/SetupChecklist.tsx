@@ -20,7 +20,8 @@ import { Link } from 'react-router-dom'
 import type { SetupProject, SetupStep } from '../lib/useSetupStatus'
 import { CHIP_TONE } from '../lib/chipTone'
 import { useClaimNextStep, useNextStep } from '../lib/useNextStep'
-import { Card, RefreshIconButton } from './ui'
+import { Btn, Card, RefreshIconButton } from './ui'
+import { SdkHealthPanel } from './SdkHealthPanel'
 
 interface SetupChecklistProps {
   project: SetupProject
@@ -192,6 +193,7 @@ function BannerChecklist({
             step={step}
             current={step.id === nextRequiredId}
             adminEndpointHost={adminEndpointHost}
+            projectId={project.project_id}
           />
         ))}
       </ol>
@@ -231,6 +233,7 @@ function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndp
               step={step}
               current={step.id === nextRequiredId}
               adminEndpointHost={adminEndpointHost}
+              projectId={project.project_id}
             />
           </li>
         ))}
@@ -329,16 +332,37 @@ function SdkDiagnostic({ tone, lines }: { tone: 'ok' | 'warn' | 'info'; lines: s
   )
 }
 
+/** The sdk_installed step's Fix button and, once pressed, the SDK health panel with its fixes. */
+function useSdkFix(step: SetupStep, projectId: string) {
+  const [open, setOpen] = useState(false)
+  if (step.id !== 'sdk_installed' || step.complete || !projectId) return { button: null, panel: null }
+  return {
+    button: (
+      <Btn size="sm" variant={open ? 'ghost' : 'primary'} className="shrink-0" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        {open ? 'Hide' : 'Fix it'}
+      </Btn>
+    ),
+    panel: open ? (
+      <div className="mt-2">
+        <SdkHealthPanel projectId={projectId} bare />
+      </div>
+    ) : null,
+  }
+}
+
 function ChecklistRow({
   step,
   current,
   adminEndpointHost,
+  projectId,
 }: {
   step: SetupStep
   current?: boolean
   adminEndpointHost?: string | null
+  projectId: string
 }) {
   const diag = buildSdkDiagnostic(step, adminEndpointHost)
+  const fix = useSdkFix(step, projectId)
   return (
     <li className={`flex items-start gap-2.5 rounded-sm px-1.5 py-1 motion-safe:transition-opacity ${
       current ? 'bg-brand/5 ring-1 ring-brand/30' : 'hover:bg-surface-overlay/40'
@@ -362,7 +386,9 @@ function ChecklistRow({
         </div>
         <p className="text-2xs text-fg-muted truncate">{step.description}</p>
         {diag && <SdkDiagnostic tone={diag.tone} lines={diag.lines} />}
+        {fix.panel}
       </div>
+      {fix.button}
       {!step.complete && (
         <Link
           to={step.cta_to}
@@ -379,12 +405,15 @@ function ChecklistCard({
   step,
   current,
   adminEndpointHost,
+  projectId,
 }: {
   step: SetupStep
   current?: boolean
   adminEndpointHost?: string | null
+  projectId: string
 }) {
   const diag = buildSdkDiagnostic(step, adminEndpointHost)
+  const fix = useSdkFix(step, projectId)
   return (
     <div className={`rounded-md border p-3 motion-safe:transition-[transform,opacity] ${
       step.complete
@@ -420,7 +449,9 @@ function ChecklistCard({
           </div>
           <p className="mt-1 text-xs text-fg-muted">{step.description}</p>
           {diag && <SdkDiagnostic tone={diag.tone} lines={diag.lines} />}
+          {fix.panel}
         </div>
+        {fix.button}
         {!step.complete && (
           <Link
             to={step.cta_to}

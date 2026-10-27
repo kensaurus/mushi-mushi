@@ -50,6 +50,8 @@ type ProjectScopeMode = ProjectScope['mode']
  *
  *   /ci — GET /v1/admin/ci/overview without project_id reads every project
  *         the caller can open (routes/ci.ts, callerProjectIds).
+ *   /pipeline — GET /v1/admin/pipeline without projectId reads every
+ *         project the caller can open (routes/pipeline.ts).
  *   /reports — the list, severity tiles, quick-filter counts and
  *         /reports/stats?apps=all. The page omits the project pin; rows carry
  *         the app name. Report detail (/reports/:id) stays one report.
@@ -59,7 +61,7 @@ type ProjectScopeMode = ProjectScope['mode']
  * but the pages assume one app: rows carry no app name, and actions, filters
  * and counts are per app): /fixes, /releases, /lessons.
  */
-const ALL_APPS_ROUTES: readonly string[] = ['/ci']
+const ALL_APPS_ROUTES: readonly string[] = ['/ci', '/pipeline']
 /** Exact paths only — a prefix would also opt in /reports/:id. */
 const ALL_APPS_EXACT: readonly string[] = ['/reports']
 

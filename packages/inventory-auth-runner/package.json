@@ -1,8 +1,8 @@
 {
   "name": "@mushi-mushi/inventory-auth-runner",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "license": "MIT",
-  "description": "Runs the inventory.yaml auth.scripted block via Playwright and seeds the resulting cookies into project_settings so the Mushi crawler + synthetic monitor can hit auth-gated routes.",
+  "description": "Signs in to your app with Playwright using the login script in inventory.yaml, so Mushi's crawler and synthetic monitor can check the pages behind your login.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -66,6 +66,7 @@
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
+    "@mushi-mushi/inventory-schema": "workspace:*",
     "@mushi-mushi/tsconfig": "workspace:*",
     "@types/node": "^22.20.0",
     "eslint": "^10.6.0",
