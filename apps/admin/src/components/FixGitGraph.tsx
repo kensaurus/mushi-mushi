@@ -249,8 +249,11 @@ export function FixGitGraph({
 
   return (
     // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
-    <div className={`grid grid-cols-[7.5rem_1fr] gap-3 rounded-sm border border-edge-subtle/55 bg-surface-overlay/20 p-2 ${className}`}>
+    // Below sm the rail is hidden and rows wrap, so a phone reads the whole
+    // review and branch name instead of a clipped line (report 2375c9c5).
+    <div className={`grid grid-cols-1 gap-3 rounded-sm border border-edge-subtle/55 bg-surface-overlay/20 p-2 sm:grid-cols-[7.5rem_minmax(0,1fr)] ${className}`}>
       <svg
+        className="hidden sm:block"
         viewBox={`0 0 80 ${totalH}`}
         width="80"
         height={totalH}
@@ -372,7 +375,7 @@ export function FixGitGraph({
         })}
       </svg>
 
-      <ul className="space-y-0 text-xs">
+      <ul className="min-w-0 space-y-0 text-xs">
         <li className="mb-1 flex h-auto min-h-5 flex-wrap items-center gap-1.5 rounded-sm border border-edge-subtle/50 bg-surface-overlay/35 px-2 py-1 text-3xs uppercase tracking-wider text-fg-faint">
           <span className="font-mono normal-case text-fg-secondary">{baseBranch || 'default branch'}</span>
           <span className="text-fg-faint">→</span>
@@ -381,13 +384,13 @@ export function FixGitGraph({
               href={branchUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="truncate font-mono normal-case text-accent-foreground hover:text-accent underline-offset-2 hover:underline"
+              className="min-w-0 max-w-full wrap-anywhere font-mono normal-case text-accent-foreground hover:text-accent underline-offset-2 hover:underline sm:truncate"
               title={`View branch ${branchName} on GitHub`}
             >
               {branchName}
             </a>
           ) : (
-            <span className="truncate font-mono normal-case text-fg-secondary">
+            <span className="min-w-0 max-w-full wrap-anywhere font-mono normal-case text-fg-secondary sm:truncate">
               {branchName ?? 'feature/—'}
             </span>
           )}
@@ -424,8 +427,8 @@ export function FixGitGraph({
                 {kindLabel(e.kind)}
               </SignalChip>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="truncate text-xs font-medium leading-tight text-fg">
+                <div className="flex items-start gap-1.5 sm:items-center">
+                  <span className="min-w-0 wrap-break-word text-xs font-medium leading-tight text-fg sm:truncate">
                     {e.label}
                   </span>
                   <span
@@ -439,7 +442,7 @@ export function FixGitGraph({
                   </span>
                 </div>
                 {e.detail && (
-                  <div className="text-2xs text-fg-muted truncate" title={e.detail}>
+                  <div className="wrap-break-word text-2xs text-fg-muted sm:truncate" title={e.detail}>
                     {e.kind === 'pr_opened' && prUrl ? (
                       <a
                         href={prUrl}

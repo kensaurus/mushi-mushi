@@ -60,7 +60,8 @@ export function Field({ label, value, mono, tooltip, helpId, copyable, valueClas
         {label}
         <LabelHelp helpId={helpId} tooltip={tooltip} />
       </span>
-      <div className="flex items-start gap-1.5 mt-0.5">
+      {/* min-w-0: a long description must wrap here, not widen the page (report 2375c9c5). */}
+      <div className="mt-0.5 flex min-w-0 items-start gap-1.5">
         {useProse ? (
           <LongFormText value={value} className={valueClassName} />
         ) : codeTone ? (
