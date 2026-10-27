@@ -664,6 +664,7 @@ export function registerWorkspaceNavMetaRoutes(
         'platformConnected',
         'platformTotal',
         'routingPaused',
+        'platformAttention',
       ]),
       featureBoard: pick(byPath['/v1/admin/feature-board/stats'], [
         'openCount',

@@ -1009,6 +1009,17 @@ export function integrationsNavBadge(
       `${stats.platformDown} integration${stats.platformDown === 1 ? '' : 's'} down`,
     )
   }
+  // platformAttention from /v1/admin/integrations/stats ("N connections need
+  // attention"). Checked before the not-configured count: with nothing saved,
+  // that count is platformTotal, and the banner's number is platformAttention.
+  const attention = stats.platformAttention ?? 0
+  if (attention > 0) {
+    return attentionBadge(
+      attention,
+      'warn',
+      `${attention} connection${attention === 1 ? '' : 's'} need${attention === 1 ? 's' : ''} attention`,
+    )
+  }
   const disconnected = stats.platformTotal - stats.platformConnected
   if (disconnected > 0 && stats.platformConnected === 0) {
     return attentionBadge(

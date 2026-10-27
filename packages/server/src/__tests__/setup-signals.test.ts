@@ -203,4 +203,84 @@ describe('classifyPlatformConnection (finding B25)', () => {
     ).toBe('attention')
     expect(classifyPlatformConnection({ probeStatus: 'ok', probeCheckedAt: recent, now: NOW })).toBe('working')
   })
+
+  it('polling with a fresh passing probe is working until a delivery is rejected', () => {
+    expect(
+      classifyPlatformConnection({
+        probeStatus: 'ok',
+        probeCheckedAt: recent,
+        needsInbound: true,
+        inboundAccepted: false,
+        inboundPolling: true,
+        inboundPolledAt: recent,
+        now: NOW,
+      }),
+    ).toBe('working')
+    expect(
+      classifyPlatformConnection({
+        probeStatus: 'ok',
+        probeCheckedAt: recent,
+        needsInbound: true,
+        inboundAccepted: false,
+        inboundRejected: true,
+        inboundPolling: true,
+        inboundPolledAt: recent,
+        now: NOW,
+      }),
+    ).toBe('attention')
+    // Polling does not paper over a dead token or a stale probe.
+    expect(
+      classifyPlatformConnection({
+        probeStatus: 'down',
+        probeCheckedAt: recent,
+        needsInbound: true,
+        inboundPolling: true,
+        now: NOW,
+      }),
+    ).toBe('down')
+    expect(
+      classifyPlatformConnection({
+        probeStatus: 'ok',
+        probeCheckedAt: '2026-09-20T00:00:00Z',
+        needsInbound: true,
+        inboundPolling: true,
+        inboundPolledAt: recent,
+        now: NOW,
+      }),
+    ).toBe('attention')
+  })
+
+  it('polling with no finished run, or a run older than three intervals, needs attention', () => {
+    const base = {
+      probeStatus: 'ok' as const,
+      probeCheckedAt: recent,
+      needsInbound: true,
+      inboundAccepted: false,
+      inboundPolling: true,
+      now: NOW,
+    }
+    expect(classifyPlatformConnection({ ...base, inboundPolledAt: null })).toBe('attention')
+    expect(classifyPlatformConnection({ ...base, inboundPolledAt: undefined })).toBe('attention')
+    expect(
+      classifyPlatformConnection({
+        ...base,
+        inboundPolledAt: new Date(NOW - 46 * 60 * 1000).toISOString(),
+      }),
+    ).toBe('attention')
+    // Exactly three 15-minute intervals is still fresh.
+    expect(
+      classifyPlatformConnection({
+        ...base,
+        inboundPolledAt: new Date(NOW - 45 * 60 * 1000).toISOString(),
+      }),
+    ).toBe('working')
+    // An accepted webhook is working even when the poll has never finished.
+    expect(
+      classifyPlatformConnection({
+        ...base,
+        inboundAccepted: true,
+        inboundPolledAt: null,
+      }),
+    ).toBe('working')
+  })
 })
