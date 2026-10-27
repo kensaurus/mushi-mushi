@@ -21,6 +21,8 @@ import type { MushiCaptureSink, WebhookResponse } from './types.js'
 
 export interface HoneycombPayload {
   name?: string
+  /** The trigger id; Honeycomb's default webhook body sends it as `id`. */
+  id?: string
   trigger_id?: string
   status?: string
   summary?: string
@@ -35,12 +37,12 @@ export interface HoneycombPayload {
  */
 export function translateHoneycomb(raw: HoneycombPayload): MushiCaptureEventInput {
   return {
-    description: raw.summary ?? raw.name ?? `Honeycomb trigger ${raw.trigger_id ?? ''}`.trim(),
+    description: raw.summary ?? raw.name ?? `Honeycomb trigger ${raw.trigger_id ?? raw.id ?? ''}`.trim(),
     category: 'slow',
     severity: mapSeverity(raw.severity),
     source: 'honeycomb',
     metadata: {
-      triggerId: raw.trigger_id,
+      triggerId: raw.trigger_id ?? raw.id,
       status: raw.status,
       link: raw.result_url,
       groups: raw.result_groups_triggered,

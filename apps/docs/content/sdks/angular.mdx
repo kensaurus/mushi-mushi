@@ -1,6 +1,6 @@
 ---
 title: '@mushi-mushi/angular'
-description: API reference for @mushi-mushi/angular — MushiService, MushiErrorHandler and the MUSHI_CONFIG token, wired with factory providers in an Angular 17+ app.
+description: API reference for @mushi-mushi/angular — provideMushi(), MushiService, MushiErrorHandler and the MUSHI_CONFIG token in an Angular 17+ app.
 ---
 
 import { Callout } from 'nextra/components'
@@ -19,45 +19,55 @@ See [Quickstart → Angular](/quickstart/angular) for the full setup walkthrough
 ## API surface
 
 ```ts
-import { MUSHI_CONFIG, MushiService, MushiErrorHandler } from '@mushi-mushi/angular'
+import { provideMushi, MushiService } from '@mushi-mushi/angular'
 ```
 
 | Export | Purpose |
 | --- | --- |
+| `provideMushi(config)` | `EnvironmentProviders` for `bootstrapApplication` or `NgModule.providers`: provides `MushiService`, installs `MushiErrorHandler` as Angular's `ErrorHandler`, and starts the SDK at startup (browser only) |
+| `provideMushiAngular(config)` | The same providers as a plain `Provider[]`, for spreading |
+| `MushiService` | `report({ description, category, metadata })`, `identify(userId, traits)` and `captureError(error, context)` |
+| `MushiErrorHandler` | An `ErrorHandler` that forwards uncaught errors to `MushiService.captureError`, then logs them like Angular's default handler |
 | `MUSHI_CONFIG` | `InjectionToken<MushiConfig>` holding your project ID and public API key |
-| `MushiService` | Starts the web SDK when constructed in the browser; `report({ description, category, metadata })` and `captureError(error, context)` |
-| `MushiErrorHandler` | An `ErrorHandler` that forwards uncaught errors to `MushiService.captureError` |
-| `provideMushi(config)` | Up to 1.0.2: returns `{ service, errorHandler }` objects, not Angular providers — do not put it in a `providers` array |
-| `provideMushiAngular(config)` | Up to 1.0.2: lists `MushiService` as a class provider, which needs the JIT compiler — avoid in production builds |
 
 ## Setup (standalone bootstrap)
 
-<Callout type="warning">
-  Register `MushiService` with `useFactory`, as below; it works with every
-  release. Up to 1.0.2 (the current npm release) the package ships without
-  Angular's ahead-of-time metadata, so a plain class provider asks for the JIT
-  compiler and fails at bootstrap in a production build.
-</Callout>
-
 ```ts
 // main.ts
-import { ErrorHandler } from '@angular/core'
 import { bootstrapApplication } from '@angular/platform-browser'
-import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from '@mushi-mushi/angular'
+import { provideMushi } from '@mushi-mushi/angular'
 import { AppComponent } from './app/app.component'
 import { environment } from './environments/environment'
 
 bootstrapApplication(AppComponent, {
   providers: [
-    { provide: MUSHI_CONFIG, useValue: { projectId: environment.mushiProjectId, apiKey: environment.mushiApiKey } },
-    { provide: MushiService, useFactory: (config: MushiConfig) => new MushiService(config), deps: [MUSHI_CONFIG] },
-    { provide: ErrorHandler, useFactory: (mushi: MushiService) => new MushiErrorHandler(mushi), deps: [MushiService] },
+    provideMushi({ projectId: environment.mushiProjectId, apiKey: environment.mushiApiKey }),
   ],
 })
 ```
 
-The SDK starts when Angular first resolves `ErrorHandler`, which happens during
-bootstrap. On the server (Angular SSR) `MushiService` skips initialisation.
+On the server (Angular SSR) `MushiService` skips initialisation.
+
+<Callout type="warning">
+  **1.0.2 and earlier:** `provideMushi()` returned plain objects, not Angular
+  providers, and the package needed the JIT compiler in production builds.
+  Upgrade to 1.0.3 or later. If you cannot, register the providers by hand with
+  factories:
+
+  ```ts snippet-skip="1.0.2 fallback; needs the reader's environment file"
+  import { ErrorHandler } from '@angular/core'
+  import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from '@mushi-mushi/angular'
+
+  const providers = [
+    { provide: MUSHI_CONFIG, useValue: { projectId: environment.mushiProjectId, apiKey: environment.mushiApiKey } },
+    { provide: MushiService, useFactory: (config: MushiConfig) => new MushiService(config), deps: [MUSHI_CONFIG] },
+    { provide: ErrorHandler, useFactory: (mushi: MushiService) => new MushiErrorHandler(mushi), deps: [MushiService] },
+  ]
+  ```
+
+  With this fallback the SDK starts when Angular first resolves `ErrorHandler`,
+  which can be the first error rather than startup.
+</Callout>
 
 ## Submitting a report
 
@@ -77,12 +87,17 @@ export class FeedbackButtonComponent {
 
 ## Identifying users
 
-`MushiService` in 1.0.2 has no identify method. Use the web SDK instance
-directly (add `@mushi-mushi/web` to your own dependencies first, because pnpm
-will not resolve it through the Angular package):
+Call `identify()` on `MushiService` when the signed-in user changes (1.0.3 and later):
 
 ```ts
-import { Mushi } from '@mushi-mushi/web'
+import { inject } from '@angular/core'
+import { MushiService } from '@mushi-mushi/angular'
 
-Mushi.getInstance()?.setUser({ id: user.id, email: user.email })
+const mushi = inject(MushiService)
+mushi.identify(user.id, { email: user.email, name: user.name })
 ```
+
+On 1.0.2 and earlier, `MushiService` has no `identify()`. Use the web SDK
+instance instead: add `@mushi-mushi/web` to your own dependencies (pnpm will
+not resolve it through the Angular package), then call
+`Mushi.getInstance()?.setUser({ id: user.id, email: user.email })`.

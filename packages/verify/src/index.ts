@@ -338,6 +338,8 @@ function compareScreenshots(before: Buffer, after: Buffer): number {
     const height = Math.min(img1.height, img2.height)
 
     const diff = new PNG({ width, height })
+    // 0.1 is pixelmatch's per-pixel distance (v8 OKLab; 1 = black vs white),
+    // not the share-of-pixels cutoff applied to the returned ratio.
     const numDiffPixels = pixelmatch(
       img1.data, img2.data, diff.data,
       width, height,

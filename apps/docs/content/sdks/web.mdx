@@ -6,7 +6,7 @@ description: Reference for @mushi-mushi/web, the browser SDK — screenshots, co
 # `@mushi-mushi/web`
 
 Browser SDK: screenshots, console logs, network breadcrumbs, and a
-shake-to-report widget in a Shadow DOM so your CSS never leaks in or out.
+report widget in a Shadow DOM so your CSS never leaks in or out.
 
 import { Callout } from 'nextra/components'
 
@@ -43,9 +43,9 @@ See [Quickstart → Vanilla JS](/quickstart/web) for setup. Notable extras:
 - **`sampleRate` / `replaySampleRate`** — probabilistic gates for automatic
   error reports and session replay (see below). User-initiated feedback is
   never sampled out.
-- **`pii`** — built-in scrubber masks emails, phones, SSNs,
-  credit-card-shaped strings, and JWTs by default. Add custom regex via
-  `pii.customPatterns`.
+- **Built-in PII scrubber** — always on; masks emails, phones, SSNs,
+  credit-card-shaped strings, and JWTs. It has no init option. To remove
+  anything else, edit or drop the report in `beforeSend`.
 
 ---
 
