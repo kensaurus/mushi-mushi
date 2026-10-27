@@ -177,6 +177,102 @@ describe('mushi runner placement', () => {
   })
 })
 
+describe('mushi runner fix', () => {
+  const JOB = '44444444-5555-4666-8777-888888888888'
+  const job = (over: Record<string, unknown> = {}) => ({
+    id: JOB,
+    repo: 'acme/api',
+    workflowPath: '.github/workflows/ci.yml',
+    kind: 'skip_drafts',
+    status: 'queued',
+    summary: null,
+    errorCode: null,
+    error: null,
+    prUrl: null,
+    prNumber: null,
+    monthSavingUsd: 3.5,
+    baseline: null,
+    measured: null,
+    saving: null,
+    mergedAt: null,
+    closedAt: null,
+    ...over,
+  })
+  const FIX = ['runner', 'fix', '--repo', 'acme/api', '--workflow', '.github/workflows/ci.yml', '--kind', 'skip_drafts']
+
+  it('POSTs the fix for the configured project and says how to follow it', async () => {
+    const run = await runCli(registerRunnerCommands, FIX, () => okReply({ job: job() }))
+    expect(run.calls).toHaveLength(1)
+    expect(run.calls[0]).toMatchObject({ method: 'POST', path: '/v1/admin/ci/cost-fixes' })
+    expect(run.calls[0]!.body).toEqual({ projectId: TEST_PROJECT_ID, repo: 'acme/api', workflowPath: '.github/workflows/ci.yml', kind: 'skip_drafts' })
+    expect(run.stdout).toContain('Opening a draft PR for acme/api/.github/workflows/ci.yml (skip_drafts)')
+    expect(run.stdout).toContain(`mushi runner fix-status ${JOB}`)
+    expect(run.stdout).toContain('Estimated saving: about $3.50 a month.')
+  })
+
+  it('--wait reads the job until the PR is open; --project picks another project', async () => {
+    const OTHER = '22222222-3333-4444-8555-666666666666'
+    const run = await runCli(registerRunnerCommands, [...FIX, '--wait', '--project', OTHER], (call) =>
+      call.method === 'POST'
+        ? okReply({ job: job() })
+        : okReply({ job: job({ status: 'pr_opened', prUrl: 'https://github.com/acme/api/pull/42', prNumber: 42, summary: 'The workflow now skips drafts.' }) }),
+    )
+    expect(run.calls.map((c) => `${c.method} ${c.path}`)).toEqual(['POST /v1/admin/ci/cost-fixes', `GET /v1/admin/ci/cost-fixes/${JOB}`])
+    expect(run.calls[0]!.body).toMatchObject({ projectId: OTHER })
+    expect(run.stdout).toContain('Draft PR for acme/api/.github/workflows/ci.yml (skip_drafts): https://github.com/acme/api/pull/42')
+    expect(run.stdout).toContain('Review it, mark it ready and merge it.')
+  })
+
+  it('refuses a bad repo, workflow path or kind before any call', async () => {
+    for (const argv of [
+      ['runner', 'fix', '--repo', 'acme', '--workflow', '.github/workflows/ci.yml', '--kind', 'skip_drafts'],
+      ['runner', 'fix', '--repo', 'acme/api', '--workflow', 'ci.yml', '--kind', 'skip_drafts'],
+      ['runner', 'fix', '--repo', 'acme/api', '--workflow', '.github/workflows/../x.yml', '--kind', 'skip_drafts'],
+      ['runner', 'fix', '--repo', 'acme/api', '--workflow', '.github/workflows/ci.yml', '--kind', 'rm_rf'],
+    ]) {
+      const bad = await runCli(registerRunnerCommands, argv)
+      expect(bad.calls).toEqual([])
+      expect(bad.error?.code).toBe('E_INVALID_INPUT')
+    }
+  })
+
+  it('shows the server\'s refusal, and fix-status shows the measured saving', async () => {
+    const refused = await runCli(registerRunnerCommands, FIX, () => errorReply(404, 'REPO_NOT_IN_PROJECT', 'acme/api is not connected to this project.'))
+    expect(refused.exitCode).toBe(1)
+    expect(refused.stderr).toContain('REPO_NOT_IN_PROJECT')
+
+    const status = await runCli(registerRunnerCommands, ['runner', 'fix-status', JOB], () =>
+      okReply({
+        job: job({
+          status: 'pr_opened',
+          prUrl: 'https://github.com/acme/api/pull/42',
+          mergedAt: '2026-10-20T00:00:00Z',
+          baseline: { days: 14, minutes: 280, usd: 1.68, jobs: 100 },
+          saving: { minutesPerDay: 12, usdPerMonth: 2.16, measuredDays: 3 },
+        }),
+      }),
+    )
+    expect(status.calls[0]!.path).toBe(`/v1/admin/ci/cost-fixes/${JOB}`)
+    expect(status.stdout).toContain('Before: about 280 billed minutes over 14 days')
+    expect(status.stdout).toContain('Saved 12 billed minutes a day (about $2.16 a month), measured over 3 days.')
+    expect(status.stdout).not.toContain('Review it')
+  })
+
+  it('fix-status without an id lists the configured project\'s fixes', async () => {
+    const run = await runCli(registerRunnerCommands, ['runner', 'fix-status'], () => okReply({ jobs: [job({ status: 'no_change', summary: 'The workflow already skips draft pull requests.' })] }))
+    expect(run.calls[0]!.path).toBe(`/v1/admin/ci/cost-fixes?project_id=${TEST_PROJECT_ID}`)
+    expect(run.stdout).toContain('Nothing to change in acme/api/.github/workflows/ci.yml (skip_drafts)')
+    expect(run.stdout).toContain(`job ${JOB}`)
+    const none = await runCli(registerRunnerCommands, ['runner', 'fix-status'], () => okReply({ jobs: [] }))
+    expect(none.stdout).toContain('No CI cost fixes yet.')
+  })
+
+  it('--json prints the job', async () => {
+    const run = await runCli(registerRunnerCommands, [...FIX, '--json'], () => okReply({ job: job({ status: 'refused', error: 'no schedule' }) }))
+    expect(JSON.parse(run.stdout)).toMatchObject({ id: JOB, status: 'refused' })
+  })
+})
+
 describe('mushi runner heartbeat', () => {
   it('--dry-run prints the body and sends nothing; the raw machine id never appears', async () => {
     const run = await runCli(registerRunnerCommands, ['runner', 'heartbeat', '--dry-run'])

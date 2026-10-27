@@ -651,6 +651,16 @@ const BASE_TOOLS: Record<string, HostedTool> = {
       return apiCall('/v1/admin/ci/placement/requests', { method: 'POST', headers: ctx.authHeaders, body: JSON.stringify(body) })
     },
   },
+  open_ci_cost_fix: {
+    scope: 'mcp:write',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for open_ci_cost_fix')
+      // The route validates repo, workflowPath and kind, and that the repo is the project's.
+      const body = { projectId: pid, repo: args.repo, workflowPath: args.workflowPath, kind: args.kind }
+      return apiCall('/v1/admin/ci/cost-fixes', { method: 'POST', headers: ctx.authHeaders, body: JSON.stringify(body) })
+    },
+  },
   request_connector_action: {
     scope: 'mcp:write',
     handler: async (args, ctx) => {
@@ -2149,6 +2159,7 @@ const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   'get_ci_overview',
   'get_ci_costs',
   'request_ci_placement_change',
+  'open_ci_cost_fix',
   'get_fix_verification',
   'explain_finding',
   'get_repo_diagram',

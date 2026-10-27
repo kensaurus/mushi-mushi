@@ -1,6 +1,6 @@
 /**
  * FILE: packages/cli/src/commands/runner.ts
- * PURPOSE: `mushi runner status|compare|heartbeat|hooks install|add|audit`
+ * PURPOSE: `mushi runner status|compare|placement|fix|heartbeat|hooks install|add|audit`
  *          (Plan 022, ADR 0033 / 0037): where your tests run, why a fix waits
  *          to land, and what each place costs.
  *
@@ -11,6 +11,9 @@
  *                       and a request for one (ADR 0037: only LINUX_RUNNER /
  *                       RUNNER_<WORKFLOW>; an owner or admin approves and
  *                       runs it in the console)
+ *          - fix        open a draft PR that applies one CI cost fix to a
+ *                       workflow (POST /v1/admin/ci/cost-fixes, ADR 0047);
+ *                       fix-status shows it and, after the merge, the saving
  *          - heartbeat  this machine's memory, swap, load and runner services
  *                       (POST /v1/ingest/runner, kind heartbeat)
  *          - hooks      job hooks that report each job's memory peak and OOM
@@ -55,6 +58,7 @@ import { collectHeartbeat, detectPlatform, hashHostId, nodeHostIO, readMachineId
 import { renderOverview, type CiOverview } from '../runner/overview.js'
 import { renderCompare, type CiCompare } from '../runner/compare.js'
 import { renderPlacement, renderPreview, type PlacementPreviewView, type PlacementView } from '../runner/placement.js'
+import { COST_FIX_KINDS, renderCostFix, waitForCostFix, type CostFixJob } from '../runner/cost-fix.js'
 import { assertNotCliKey, defaultRunnerKeyLabel, resolveRunnerKey, RUNNER_KEY_CREDENTIAL, RUNNER_KEY_PATH } from '../runner/key.js'
 
 const HEARTBEAT_INTERVAL_MS = 120_000
@@ -376,6 +380,81 @@ prices (dated), your plan's included minutes, and your electricity figures
         return
       }
       console.log(`Requested revert ${result.data.id} of ${result.data.revertOf} (${result.data.status}). An owner or admin approves and runs it in the console.`)
+    })
+
+  runner
+    .command('fix')
+    .description('Open a draft PR that applies one CI cost fix to a workflow (ADR 0047): add_concurrency, skip_drafts, weekly_cron or ignore_docs_paths')
+    .requiredOption('--repo <owner/repo>', 'Repository connected to the project')
+    .requiredOption('--workflow <path>', 'Workflow file, e.g. .github/workflows/ci.yml')
+    .requiredOption('--kind <kind>', `The fix: ${COST_FIX_KINDS.join(', ')}`)
+    .option('--project-id <id>', 'Project ID (defaults to the configured project)')
+    .option('--project <id>', 'Same as --project-id')
+    .option('--wait', 'Wait (up to 2 minutes) until the pull request is open, and print its link')
+    .option('--json', 'Machine-readable JSON output')
+    .addHelpText('after', `
+The PR is a draft: nothing changes until you review it, mark it ready and merge
+it. After the merge, \`mushi runner fix-status <jobId>\` (or the console's CI
+page) shows the billed minutes per day saved, measured against the 14 days
+before. Writing a workflow file needs the GitHub App's "Workflows: Read and
+write" permission (or a token with the workflow scope).`)
+    .action(async (opts: { repo: string; workflow: string; kind: string; projectId?: string; project?: string; wait?: boolean; json?: boolean }) => {
+      const config = requireConfig()
+      if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(opts.repo)) throw new MushiCliError('E_INVALID_INPUT', '--repo must be owner/repo.')
+      if (!/^\.github\/workflows\/[A-Za-z0-9._/-]+\.ya?ml$/.test(opts.workflow) || opts.workflow.includes('..')) {
+        throw new MushiCliError('E_INVALID_INPUT', '--workflow must be a file under .github/workflows/, e.g. .github/workflows/ci.yml.')
+      }
+      if (!(COST_FIX_KINDS as readonly string[]).includes(opts.kind)) {
+        throw new MushiCliError('E_INVALID_INPUT', `--kind must be one of: ${COST_FIX_KINDS.join(', ')}.`)
+      }
+      const raw = opts.projectId ?? opts.project ?? config.projectId
+      if (!raw) throw new MushiCliError('E_INVALID_INPUT', 'Pass --project-id (or configure a project).')
+      const body = { projectId: requireUuid(raw, 'project id'), repo: opts.repo, workflowPath: opts.workflow, kind: opts.kind }
+      const result = await apiCall<{ job: CostFixJob }>('/v1/admin/ci/cost-fixes', config, { method: 'POST', body: JSON.stringify(body) })
+      if (!result.ok) die(result)
+      let job = result.data.job
+      if (opts.wait) job = await waitForCostFix(job, config)
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(job, null, 2))
+        return
+      }
+      for (const line of renderCostFix(job)) console.log(line)
+    })
+
+  runner
+    .command('fix-status [jobId]')
+    .description('CI cost fixes: one by id (its state, its PR, and after the merge the measured saving), or the project\'s recent ones')
+    .option('--project-id <id>', 'Project ID for the list (defaults to the configured project)')
+    .option('--project <id>', 'Same as --project-id')
+    .option('--json', 'Machine-readable JSON output')
+    .action(async (jobId: string | undefined, opts: { projectId?: string; project?: string; json?: boolean }) => {
+      const config = requireConfig()
+      if (jobId) {
+        const result = await apiCall<{ job: CostFixJob }>(`/v1/admin/ci/cost-fixes/${requireUuid(jobId, 'job id')}`, config)
+        if (!result.ok) die(result)
+        if (outputIsJson(opts.json)) {
+          console.log(JSON.stringify(result.data.job, null, 2))
+          return
+        }
+        for (const line of renderCostFix(result.data.job)) console.log(line)
+        return
+      }
+      const raw = opts.projectId ?? opts.project ?? config.projectId
+      if (!raw) throw new MushiCliError('E_INVALID_INPUT', 'Pass a job id, or --project-id (or configure a project).')
+      const result = await apiCall<{ jobs: CostFixJob[] }>(`/v1/admin/ci/cost-fixes?project_id=${encodeURIComponent(requireUuid(raw, 'project id'))}`, config)
+      if (!result.ok) die(result)
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(result.data.jobs, null, 2))
+        return
+      }
+      if (result.data.jobs.length === 0) {
+        console.log('No CI cost fixes yet. Open one with: mushi runner fix --repo <owner/repo> --workflow <path> --kind <kind>')
+        return
+      }
+      for (const job of result.data.jobs) {
+        for (const line of renderCostFix(job)) console.log(line)
+        console.log(`  job ${job.id}\n`)
+      }
     })
 
   runner
