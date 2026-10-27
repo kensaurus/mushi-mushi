@@ -191,7 +191,7 @@ describe('runCiCostFixJob', () => {
     expect(createPr).not.toHaveBeenCalled()
   })
 
-  it('reads the required checks only for the docs filter, and refuses when the workflow backs one', async () => {
+  it('reads the required checks for the draft and docs fixes, and refuses when the workflow backs one', async () => {
     seed([jobRow({ kind: 'ignore_docs_paths' })])
     const required = vi.fn(async () => ['test'])
     await runCiCostFixJob(db as never, JOB, deps({ requiredChecks: required }))
@@ -199,10 +199,28 @@ describe('runCiCostFixJob', () => {
     expect(row()).toMatchObject({ status: 'refused' })
     expect(row().error).toMatch(/`test` is a required check/)
 
-    seed([jobRow()])
+    seed([jobRow({ kind: 'weekly_cron' })])
     const notAsked = vi.fn(async () => [])
     await runCiCostFixJob(db as never, JOB, deps({ requiredChecks: notAsked }))
     expect(notAsked).not.toHaveBeenCalled()
+  })
+
+  it('refuses the draft fix when the required checks cannot be read, and opens no PR', async () => {
+    for (const unreadable of [async () => null, async () => { throw new Error('GitHub 403') }]) {
+      seed([jobRow()])
+      const res = await runCiCostFixJob(db as never, JOB, deps({ requiredChecks: unreadable }))
+      expect(res).toMatchObject({ ok: true, status: 'refused' })
+      expect(row().error).toMatch(/could not read which status checks/)
+    }
+    expect(createPr).not.toHaveBeenCalled()
+  })
+
+  it('a required job keeps running on drafts in the PR it opens', async () => {
+    seed([jobRow()])
+    await runCiCostFixJob(db as never, JOB, deps({ requiredChecks: async () => ['test'] }))
+    const contents = createPr.mock.calls[0][0].files[0].contents as string
+    expect(contents).toContain('- name: Draft PRs run no CI')
+    expect(contents).not.toContain('if: github.event.pull_request.draft != true')
   })
 
   it('fails in plain words: repo gone, no token, workflow missing, no workflow write access, GitHub error', async () => {

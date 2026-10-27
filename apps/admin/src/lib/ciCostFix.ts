@@ -47,10 +47,10 @@ export interface CiCostFixJob {
 
 /** What the PR changes, for the confirm dialog. */
 export const CI_COST_FIX_CHANGE: Record<CiCostFixKind, string> = {
-  add_concurrency: 'Adds a concurrency group, so a new push to a pull request cancels the run it replaces. Pushes to your branches always finish.',
-  skip_drafts: 'Draft pull requests stop running this workflow. It runs when a pull request is marked ready for review.',
-  weekly_cron: 'Its schedule runs once a week instead of more often.',
-  ignore_docs_paths: 'A change to only Markdown files or docs/ stops running this workflow. Mushi refuses if a job here looks like a required check.',
+  add_concurrency: 'Adds a concurrency group, so a new push to a pull request cancels the run it replaces. Pushes, manual and scheduled runs always finish. Mushi refuses on a workflow that deploys or releases.',
+  skip_drafts: 'Draft pull requests stop running this workflow; it runs when a pull request is marked ready for review. A job your branch requires keeps running on drafts and fails at a first step, "Draft PRs run no CI", so a draft can never merge untested.',
+  weekly_cron: 'Its schedule runs once a week instead of more often. Mushi refuses on a workflow that deploys or releases.',
+  ignore_docs_paths: 'A change to only Markdown files or docs/ stops running this workflow. Mushi refuses when the workflow produces a check your branch requires.',
 }
 
 export function isCostFixInFlight(job: Pick<CiCostFixJob, 'status'> | null): boolean {

@@ -54,8 +54,16 @@ Two Mushi paths still paid for CI before anyone had approved the change:
   decides, as it did before this ADR. The event reads "Marked ready without
   an Opus review; CI runs now". A PR is never stranded as a draft because a
   project cannot pay for a review, and a recorded `hold` is never undone.
-- **Cloud-agent PRs are unchanged.** They are still readied on `merge` or
-  `fix_first`, now with the same current-head check.
+- **Cloud-agent PRs follow the same rule.** Before this ADR they were also
+  readied on `fix_first`; now only `merge` readies them, with the same
+  current-head check.
+  - A `fix_first` head is about to be replaced: its review follow-up (ADR
+    0032) pushes a new commit, which is reviewed again.
+  - Nothing reads CI on a `fix_first` head. The findings follow-up sends the
+    review's findings, not CI results. The CI-repair follow-up (ADR 0032
+    amendment) starts only from a `merge` review whose head is red. The
+    `fix-verifier` gates start from a `merge` review too. The merge queue
+    readies an approved draft itself (ADR 0044 amendment).
 - **The `mushi-verify` template:**
   - adds `ready_for_review` to its triggers;
   - runs its job only when `github.event.pull_request.draft == false`;
@@ -63,8 +71,28 @@ Two Mushi paths still paid for CI before anyone had approved the change:
 
   The template and its generator (`_shared/verify-workflow.ts`) stay byte
   for byte equal.
-- **Workflow fixes Mushi proposes** (the CI cost "Open fix PR") are also
-  opened as drafts for a person to review.
+- **Workflow fixes Mushi proposes** (the CI cost "Open fix PR",
+  `_shared/ci-cost-fix.ts`) are also opened as drafts for a person to
+  review, and refuse in plain words where the edit could do harm:
+  - **skip_drafts** never skips a job that produces a required status check:
+    a skipped check reads as passing and would let a draft merge untested.
+    That job keeps running and fails at a first step named exactly "Draft
+    PRs run no CI" (the host repos' pattern, which `review-followup.ts` and
+    `merge-queue.ts` recognise). It refuses when the required checks cannot
+    be read, when such a job calls another workflow, and when it waits on
+    jobs without running anyway (`always()`).
+  - **ignore_docs_paths** refuses on a workflow that produces a required
+    check or has a job that looks like one, when the required checks cannot
+    be read, and when an event already lists `paths` (GitHub rejects
+    `paths` with `paths-ignore`). The path list is one exported constant,
+    `DOCS_PATHS_IGNORE`.
+  - **add_concurrency** refuses on a workflow that deploys or releases (its
+    name, file, jobs, steps or deploy commands). Elsewhere only pull request
+    runs share a group and cancel; every other run gets its own group, so a
+    push to the default branch is never cancelled or dropped from the queue.
+  - **weekly_cron** refuses on a workflow that deploys or releases (some
+    daily schedules drive staged rollouts), and the PR says what the
+    schedule was.
 
 ## Consequences
 
@@ -87,8 +115,9 @@ Two Mushi paths still paid for CI before anyone had approved the change:
 
 - **Ready on the model's own check (the old behaviour).** The model grading
   its own fix is not independent, and CI ran on PRs that were then closed.
-- **Ready on `fix_first` for fix-worker PRs.** Its findings mean the code
-  will change, so CI on that head is spent on a commit nobody will merge.
+- **Ready on `fix_first`** (what cloud-agent PRs did before). Its findings
+  mean the code will change, so CI on that head is spent on a commit nobody
+  will merge.
 - **Leave drafts stranded when no review can run.** That would make fix-worker
   unusable for projects without an Anthropic key, for a saving the project
   never asked for.

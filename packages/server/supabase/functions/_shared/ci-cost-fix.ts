@@ -5,20 +5,32 @@
  *          workflow's YAML text, through the `yaml` Document API so comments,
  *          quoting and key order survive:
  *
- *   add_concurrency    a top-level `concurrency:` group per workflow and ref
- *                      that cancels superseded PR runs and never a push to
- *                      the default branch
+ *   add_concurrency    a top-level `concurrency:` group: a pull request's runs
+ *                      share one per ref and a new push cancels the old run;
+ *                      every other run (a push, a manual run) gets a group of
+ *                      its own, so it is never cancelled or dropped from the
+ *                      queue. Refused on a workflow that deploys or releases.
  *   skip_drafts        `ready_for_review` added to the pull_request types (the
  *                      defaults written out when there were none), and
  *                      `if: github.event.pull_request.draft != true` on every
- *                      job (joined to an existing `if` with &&)
+ *                      job (joined to an existing `if` with &&), except a job
+ *                      that produces a REQUIRED status check: a skipped check
+ *                      reads as passing and would let a draft merge untested,
+ *                      so that job keeps running and fails at a first step
+ *                      named exactly "Draft PRs run no CI" (the host repos'
+ *                      pattern; review-followup.ts and merge-queue.ts read the
+ *                      name). Refused when the required checks are unknown.
  *   weekly_cron        a schedule that fires more than once a week rewritten
- *                      to once a week, keeping its minute, hour and first day
- *   ignore_docs_paths  `paths-ignore: ['**\/*.md', 'docs/**']` on pull_request
- *                      and push when neither has a path filter; refused when a
- *                      job looks like a required check, because a skipped
- *                      workflow never reports and the PR could never merge
- *                      (GitHub, "Handling skipped but required checks")
+ *                      to once a week, keeping its minute, hour and first day.
+ *                      Refused on a workflow that deploys or releases (some
+ *                      daily schedules drive staged rollouts on purpose).
+ *   ignore_docs_paths  `paths-ignore: DOCS_PATHS_IGNORE` on pull_request and
+ *                      push. Refused when the workflow produces a required
+ *                      check, or looks like it does, because a skipped workflow
+ *                      never reports and the PR could never merge (GitHub,
+ *                      "Handling skipped but required checks"); when the
+ *                      required checks are unknown; and when an event already
+ *                      has `paths:` (GitHub rejects `paths` with `paths-ignore`).
  *
  * Every transform is idempotent: run on its own output it changes nothing.
  * It returns `{ changed, yaml, summary, refused? }`; `yaml` is the input,
@@ -45,18 +57,33 @@ export interface CostFixResult {
 export interface CostFixOptions {
   /**
    * Status check names the default branch requires (rulesets and branch
-   * protection), when Mushi could read them. `ignore_docs_paths` refuses when
-   * a job of this workflow is one of them.
+   * protection). Null or absent when Mushi could not read them: then
+   * `skip_drafts` and `ignore_docs_paths` refuse, because guessing wrong lets
+   * a draft merge untested or leaves a PR that can never merge.
    */
-  requiredChecks?: readonly string[]
+  requiredChecks?: readonly string[] | null
+  /** `.github/workflows/deploy.yml`: its file name counts toward "deploys or releases". */
+  workflowPath?: string
 }
 
 /** GitHub's `pull_request` activity types when a workflow names none. */
 export const DEFAULT_PR_TYPES = ['opened', 'synchronize', 'reopened'] as const
+/**
+ * The docs-only paths `ignore_docs_paths` adds. The one list: the ci-advisor
+ * rule `missing_path_filter` imports it, so advice and fix agree.
+ */
 export const DOCS_PATHS_IGNORE = ['**/*.md', 'docs/**'] as const
 export const DRAFT_CONDITION = 'github.event.pull_request.draft != true'
-export const CONCURRENCY_GROUP = '${{ github.workflow }}-${{ github.ref }}'
-/** Cancels a superseded PR run; a push (the default branch included) always finishes. */
+/** The step a required job fails at on a draft (exact name: Mushi's CI readers match it). */
+export const DRAFT_GUARD_STEP_NAME = 'Draft PRs run no CI'
+const DRAFT_GUARD_STEP_RE = /^draft prs? run no ci\b/i
+/**
+ * A pull request's runs share one group per ref; any other run (a push, a
+ * manual or scheduled run) gets its own group by run id, so it is never
+ * cancelled, and never dropped as a pending run when a newer one queues.
+ */
+export const CONCURRENCY_GROUP = "${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}"
+/** Cancels a superseded PR run; anything else always finishes. */
 export const CANCEL_IN_PROGRESS = "${{ github.event_name == 'pull_request' }}"
 
 const KIND_SET: ReadonlySet<string> = new Set(CI_COST_FIX_KINDS)
@@ -75,11 +102,11 @@ export function applyCiCostFix(kind: CiCostFixKind, yaml: string, opts: CostFixO
   try {
     switch (kind) {
       case 'add_concurrency':
-        return addConcurrency(doc, yaml)
+        return addConcurrency(doc, yaml, opts)
       case 'skip_drafts':
-        return skipDrafts(doc, yaml)
+        return skipDrafts(doc, yaml, opts)
       case 'weekly_cron':
-        return weeklyCron(doc, yaml)
+        return weeklyCron(doc, yaml, opts)
       case 'ignore_docs_paths':
         return ignoreDocsPaths(doc, yaml, opts)
       default:
@@ -160,11 +187,66 @@ function jobEntries(doc: Document): Array<{ id: string; job: YAMLMap }> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Deploys, releases and required checks
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DEPLOY_WORD = /(?:^|[^a-z0-9])(?:deploy(?:s|ment|ments)?|release(?:s)?|publish(?:es)?|ota)(?:[^a-z0-9]|$)/i
+const DEPLOY_COMMAND = /\b(?:eas (?:update|submit)|(?:npm|pnpm|yarn) publish|changeset publish|vercel (?:deploy|--prod)|firebase deploy|supabase (?:functions deploy|db push)|wrangler (?:deploy|publish)|fly deploy|netlify deploy)\b/i
+
+/**
+ * What makes the workflow look like it deploys or releases: its name or file,
+ * a job id or name, a step name, or a step that runs a deploy or publish
+ * command. Null when nothing does.
+ */
+export function deployEvidence(doc: Document, workflowPath?: string): string | null {
+  const name = scalarString(doc.get('name', true))
+  if (name && DEPLOY_WORD.test(name)) return `workflow \`${name}\``
+  const file = workflowPath?.split('/').pop()
+  if (file && DEPLOY_WORD.test(file.replace(/\.ya?ml$/i, ''))) return `file \`${file}\``
+  for (const { id, job } of jobEntries(doc)) {
+    const jobName = scalarString(job.get('name', true))
+    if (DEPLOY_WORD.test(id) || (jobName && DEPLOY_WORD.test(jobName))) return `job \`${jobName ?? id}\``
+    const steps = job.get('steps', true)
+    if (!isSeq(steps)) continue
+    for (const step of steps.items) {
+      if (!isMap(step)) continue
+      const stepName = scalarString(step.get('name', true))
+      if (stepName && DEPLOY_WORD.test(stepName)) return `step \`${stepName}\` in job \`${id}\``
+      const run = scalarString(step.get('run', true))
+      const cmd = run ? DEPLOY_COMMAND.exec(run)?.[0] : null
+      if (cmd) return `\`${cmd}\` in job \`${id}\``
+    }
+  }
+  return null
+}
+
+/** The status check names a job reports (its `name:`, else its id; a matrix adds ` (…)`). */
+function checkNameMatches(check: string, jobName: string): boolean {
+  return check === jobName || check.startsWith(`${jobName} (`) || check.endsWith(` / ${jobName}`)
+}
+
+/** The required check this job produces, if any. */
+function requiredCheckOf(id: string, job: YAMLMap, required: readonly string[]): string | null {
+  const name = scalarString(job.get('name', true)) ?? id
+  return required.find((c) => checkNameMatches(c, name) || checkNameMatches(c, id)) ?? null
+}
+
+const UNKNOWN_REQUIRED =
+  'Mushi could not read which status checks your default branch requires (branch protection and rulesets). Without that list it cannot tell which jobs must keep reporting, so it changes nothing. Check that the GitHub access Mushi uses can read this repository, then try again.'
+
+// ─────────────────────────────────────────────────────────────────────────────
 // add_concurrency
 // ─────────────────────────────────────────────────────────────────────────────
 
-function addConcurrency(doc: Document, yaml: string): CostFixResult {
+function addConcurrency(doc: Document, yaml: string, opts: CostFixOptions): CostFixResult {
   if (doc.has('concurrency')) return unchanged(yaml, 'The workflow already has a concurrency group.')
+  const deploy = deployEvidence(doc, opts.workflowPath)
+  if (deploy) {
+    return refuse(
+      yaml,
+      `This workflow looks like it deploys or releases (${deploy}). Cancelling it part-way could leave a half-finished deploy, and a concurrency group also drops a waiting run when a newer one queues, so Mushi will not add one. If you want deploys to wait their turn, add \`concurrency\` by hand with \`cancel-in-progress: false\`.`,
+    )
+  }
   const root = doc.contents as YAMLMap
   const pair = doc.createPair('concurrency', { group: CONCURRENCY_GROUP, 'cancel-in-progress': CANCEL_IN_PROGRESS }) as Pair
   ;(pair.key as Scalar).spaceBefore = true
@@ -176,7 +258,7 @@ function addConcurrency(doc: Document, yaml: string): CostFixResult {
   return {
     changed: true,
     yaml: render(doc, yaml),
-    summary: 'Added a concurrency group, so a new push to a pull request cancels the run it replaces. Pushes to your branches always finish.',
+    summary: 'Added a concurrency group, so a new push to a pull request cancels the run it replaces. Pushes, manual and scheduled runs each get a group of their own and always finish.',
   }
 }
 
@@ -198,9 +280,32 @@ function mentionsDraft(cond: string): boolean {
   return /pull_request\.draft\b/.test(cond)
 }
 
-function skipDrafts(doc: Document, yaml: string): CostFixResult {
+function skipDrafts(doc: Document, yaml: string, opts: CostFixOptions): CostFixResult {
   if (!eventNames(doc).includes('pull_request')) {
     return refuse(yaml, 'This workflow does not run on pull requests, so drafts already cost nothing here.')
+  }
+  if (!opts.requiredChecks) return refuse(yaml, UNKNOWN_REQUIRED)
+  const required = opts.requiredChecks
+  // A required job must keep running on drafts (a skipped check reads as
+  // passing). It cannot if it waits on a job that will now be skipped, unless
+  // its own `if` runs it anyway (always(), !cancelled(), failure()).
+  for (const { id, job } of jobEntries(doc)) {
+    const check = requiredCheckOf(id, job, required)
+    if (!check) continue
+    const label = scalarString(job.get('name', true)) ?? id
+    if (job.has('uses') && !job.has('steps')) {
+      return refuse(
+        yaml,
+        `Job \`${label}\` produces the required check \`${check}\` and calls another workflow, so Mushi cannot add the "${DRAFT_GUARD_STEP_NAME}" step to it. Skipping it on drafts would read as passing and let a draft merge untested.`,
+      )
+    }
+    const cond = scalarString(job.get('if', true)) ?? ''
+    if (job.has('needs') && !ALWAYS_RUNS.test(cond)) {
+      return refuse(
+        yaml,
+        `Job \`${label}\` produces the required check \`${check}\` and waits on other jobs. If those skip drafts, it would skip too, and a skipped required check reads as passing, so a draft could merge untested. Give it \`if: always()\` (and fail it when a needed job failed), then try again.`,
+      )
+    }
   }
   const edits: string[] = []
   const on = triggers(doc)!
@@ -227,8 +332,13 @@ function skipDrafts(doc: Document, yaml: string): CostFixResult {
   }
 
   const skipped: string[] = []
+  const guarded: string[] = []
   const unsure: string[] = []
   for (const { id, job } of jobEntries(doc)) {
+    if (requiredCheckOf(id, job, required)) {
+      if (addDraftGuardStep(doc, job)) guarded.push(id)
+      continue
+    }
     const node = job.get('if', true)
     if (node == null) {
       const pair = doc.createPair('if', DRAFT_CONDITION) as Pair
@@ -252,6 +362,9 @@ function skipDrafts(doc: Document, yaml: string): CostFixResult {
     skipped.push(id)
   }
   if (skipped.length > 0) edits.push(`skips draft pull requests in ${listOf(skipped)}`)
+  if (guarded.length > 0) {
+    edits.push(`stops ${listOf(guarded)} at a first step named "${DRAFT_GUARD_STEP_NAME}" on a draft: ${guarded.length === 1 ? 'it produces a required check, which' : 'they produce required checks, which'} must not read as passing, so a draft can never merge untested`)
+  }
 
   if (edits.length === 0) {
     return unsure.length > 0
@@ -260,6 +373,25 @@ function skipDrafts(doc: Document, yaml: string): CostFixResult {
   }
   const note = unsure.length > 0 ? ` Left ${listOf(unsure)} alone: add \`${DRAFT_CONDITION}\` to their \`if:\` by hand.` : ''
   return { changed: true, yaml: render(doc, yaml), summary: `The workflow now ${edits.join(' and ')}.${note}` }
+}
+
+/**
+ * Put the draft guard first in a required job's steps: on a draft it fails
+ * the job (the check is red, the PR cannot merge) and the other steps skip.
+ * False when the job already has it.
+ */
+function addDraftGuardStep(doc: Document, job: YAMLMap): boolean {
+  const steps = job.get('steps', true)
+  if (!isSeq(steps)) return false
+  if (steps.items.some((st) => isMap(st) && DRAFT_GUARD_STEP_RE.test(scalarString(st.get('name', true)) ?? ''))) return false
+  steps.items.unshift(
+    doc.createNode({
+      name: DRAFT_GUARD_STEP_NAME,
+      if: 'github.event.pull_request.draft == true',
+      run: 'echo "Draft pull requests run no CI. Mark the pull request ready for review to run it." && exit 1',
+    }),
+  )
+  return true
 }
 
 function listOf(ids: readonly string[]): string {
@@ -373,7 +505,7 @@ export function weeklyCronFor(c: ParsedCron): string {
   return `${minute} ${hour} * * ${day}`
 }
 
-function weeklyCron(doc: Document, yaml: string): CostFixResult {
+function weeklyCron(doc: Document, yaml: string, opts: CostFixOptions): CostFixResult {
   const on = doc.get('on', true)
   const schedule = isMap(on) ? on.get('schedule', true) : null
   if (!isSeq(schedule) || schedule.items.length === 0) {
@@ -388,11 +520,22 @@ function weeklyCron(doc: Document, yaml: string): CostFixResult {
     entries.push({ node: node as Scalar, cron, text })
   }
   if (firesPer28Days(entries.map((e) => e.cron)) <= 4) return unchanged(yaml, 'The schedule already runs at most once a week.')
+  const deploy = deployEvidence(doc, opts.workflowPath)
+  if (deploy) {
+    return refuse(
+      yaml,
+      `This scheduled workflow looks like it deploys or releases (${deploy}). Some daily schedules drive staged rollouts on purpose, so Mushi will not change how often it runs.`,
+    )
+  }
   const next = weeklyCronFor(entries[0].cron)
   entries[0].node.value = next
   schedule.items.splice(1)
   const was = entries.map((e) => `\`${e.text}\``).join(', ')
-  return { changed: true, yaml: render(doc, yaml), summary: `The schedule now runs once a week (\`${next}\`, UTC) instead of ${was}.` }
+  return {
+    changed: true,
+    yaml: render(doc, yaml),
+    summary: `The schedule now runs once a week (\`${next}\`, UTC). It was ${was}; put that back if something depends on the old schedule.`,
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -420,19 +563,14 @@ export function requiredLookingJob(doc: Document): string | null {
   return null
 }
 
-/** The status check names a job reports (its `name:`, else its id; a matrix adds ` (…)`). */
-function checkNameMatches(check: string, jobName: string): boolean {
-  return check === jobName || check.startsWith(`${jobName} (`) || check.endsWith(` / ${jobName}`)
-}
-
 function ignoreDocsPaths(doc: Document, yaml: string, opts: CostFixOptions): CostFixResult {
   const events = eventNames(doc).filter((e) => e === 'pull_request' || e === 'push')
   if (events.length === 0) return refuse(yaml, 'This workflow does not run on pushes or pull requests, so a path filter would not change anything.')
 
-  const required = opts.requiredChecks ?? []
+  if (!opts.requiredChecks) return refuse(yaml, UNKNOWN_REQUIRED)
+  const required = opts.requiredChecks
   for (const { id, job } of jobEntries(doc)) {
-    const name = scalarString(job.get('name', true)) ?? id
-    const hit = required.find((c) => checkNameMatches(c, name) || checkNameMatches(c, id))
+    const hit = requiredCheckOf(id, job, required)
     if (hit) {
       return refuse(
         yaml,
@@ -448,11 +586,21 @@ function ignoreDocsPaths(doc: Document, yaml: string, opts: CostFixOptions): Cos
     )
   }
 
+  for (const event of events) {
+    const current = isMap(doc.get('on', true)) ? (doc.get('on', true) as YAMLMap).get(event, true) : null
+    if (isMap(current) && current.has('paths')) {
+      return refuse(
+        yaml,
+        `The \`${event}\` trigger already lists \`paths\`, and GitHub does not allow \`paths\` and \`paths-ignore\` on the same event. Add \`!**/*.md\` and \`!docs/**\` to its \`paths\` by hand instead.`,
+      )
+    }
+  }
+
   const on = triggers(doc)!
   const added: string[] = []
   for (const event of events) {
     const current = on.get(event, true)
-    if (isMap(current) && (current.has('paths') || current.has('paths-ignore'))) continue
+    if (isMap(current) && current.has('paths-ignore')) continue
     // A push filtered to tags only: paths are not evaluated for tags, nothing to save.
     if (isMap(current) && event === 'push' && (current.has('tags') || current.has('tags-ignore')) && !current.has('branches') && !current.has('branches-ignore')) continue
     const map = eventMap(on, event)

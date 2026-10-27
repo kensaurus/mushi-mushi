@@ -287,9 +287,9 @@ const KIND_WHY: Record<CiCostFixKind, string> = {
   add_concurrency:
     'Without a concurrency group, every push to a pull request starts a new run while the old one keeps going and keeps billing. Now the new push cancels the run it replaces. Pushes to your branches (the default branch included) always finish.',
   skip_drafts:
-    'Coding agents open draft pull requests and push to them many times. Each push ran this workflow before anyone could merge it. Now drafts run nothing, and the workflow runs when the pull request is marked ready for review.',
+    'Coding agents open draft pull requests and push to them many times. Each push ran this workflow before anyone could merge it. Now drafts run nothing, and the workflow runs when the pull request is marked ready for review. A job whose check your branch requires keeps running on drafts and fails at its first step, "Draft PRs run no CI", because a skipped required check reads as passing and a draft must never merge untested.',
   weekly_cron:
-    'This schedule ran more often than once a week, whether or not anything changed. It now runs once a week; run it by hand (workflow_dispatch) when you need it sooner.',
+    'This schedule ran more often than once a week, whether or not anything changed. It now runs once a week; the old schedule is above, so you can put it back if something depends on it.',
   ignore_docs_paths:
     'A pull request or push that only changes Markdown files or `docs/` ran every job here. Now it skips this workflow.',
 }
@@ -368,34 +368,38 @@ export async function findProjectRepo(db: SupabaseClient, projectId: string, rep
   return null
 }
 
-/** Status check names the branch requires (rulesets, then classic protection). Best effort: [] when unreadable. */
-export async function fetchRequiredChecks(token: string, ref: GithubRepoRef, branch: string): Promise<string[]> {
+/**
+ * Status check names the branch requires: rulesets (`GET /rules/branches`)
+ * plus classic branch protection (`GET /branches/{b}`). Null when either read
+ * fails, or the branch is protected but its required checks are not visible:
+ * the transforms then refuse instead of guessing.
+ */
+export async function fetchRequiredChecks(token: string, ref: GithubRepoRef, branch: string): Promise<string[] | null> {
   const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }
   const base = `https://api.github.com/repos/${ref.owner}/${ref.repo}`
   const out = new Set<string>()
   try {
-    const res = await fetchWithTimeout(`${base}/rules/branches/${encodeURIComponent(branch)}`, { headers }, 10_000)
-    if (res.ok) {
-      const rules = (await res.json()) as Array<{ type?: string; parameters?: { required_status_checks?: Array<{ context?: string }> } }>
-      for (const r of Array.isArray(rules) ? rules : []) {
-        if (r.type !== 'required_status_checks') continue
-        for (const c of r.parameters?.required_status_checks ?? []) if (c.context) out.add(c.context)
-      }
+    const rulesRes = await fetchWithTimeout(`${base}/rules/branches/${encodeURIComponent(branch)}`, { headers }, 10_000)
+    if (!rulesRes.ok) return null
+    const rules = (await rulesRes.json()) as Array<{ type?: string; parameters?: { required_status_checks?: Array<{ context?: string }> } }>
+    if (!Array.isArray(rules)) return null
+    for (const r of rules) {
+      if (r.type !== 'required_status_checks') continue
+      for (const c of r.parameters?.required_status_checks ?? []) if (c.context) out.add(c.context)
     }
-  } catch {
-    // best effort
-  }
-  try {
-    const res = await fetchWithTimeout(`${base}/branches/${encodeURIComponent(branch)}`, { headers }, 10_000)
-    if (res.ok) {
-      const b = (await res.json()) as { protection?: { required_status_checks?: { contexts?: string[]; checks?: Array<{ context?: string }> } } }
-      for (const c of b.protection?.required_status_checks?.contexts ?? []) out.add(c)
-      for (const c of b.protection?.required_status_checks?.checks ?? []) if (c.context) out.add(c.context)
+    const branchRes = await fetchWithTimeout(`${base}/branches/${encodeURIComponent(branch)}`, { headers }, 10_000)
+    if (!branchRes.ok) return null
+    const b = (await branchRes.json()) as {
+      protected?: boolean
+      protection?: { required_status_checks?: { contexts?: string[]; checks?: Array<{ context?: string }> } }
     }
+    if (b.protected && !b.protection) return null
+    for (const c of b.protection?.required_status_checks?.contexts ?? []) out.add(c)
+    for (const c of b.protection?.required_status_checks?.checks ?? []) if (c.context) out.add(c.context)
+    return [...out]
   } catch {
-    // best effort
+    return null
   }
-  return [...out]
 }
 
 export interface CostFixDeps {
@@ -404,7 +408,8 @@ export interface CostFixDeps {
   /** The default branch and its tip (stored name first, then GitHub's). */
   baseBranch: (token: string, ref: GithubRepoRef, stored: string | null) => Promise<{ branch: string; sha: string }>
   readFile: (token: string, ref: GithubRepoRef, branch: string, path: string) => Promise<BaseFileState>
-  requiredChecks: (token: string, ref: GithubRepoRef, branch: string) => Promise<string[]>
+  /** Null when they could not be read (the transforms that need them refuse). */
+  requiredChecks: (token: string, ref: GithubRepoRef, branch: string) => Promise<string[] | null>
   createPr: (opts: Parameters<typeof createPrFromFiles>[0]) => Promise<PrResult>
   fetchPr: (token: string, ref: GithubRepoRef, n: number) => Promise<PullRequestSnapshot | null>
 }
@@ -489,8 +494,10 @@ export async function runCiCostFixJob(db: SupabaseClient, jobId: string, deps: C
     if (file.kind !== 'exists') return await fail('WORKFLOW_UNREADABLE', file.detail)
 
     const workflowName = workflowNameOf(file.contents, job.workflow_path)
-    const requiredChecks = job.kind === 'ignore_docs_paths' ? await deps.requiredChecks(token, repo.ref, base.branch).catch(() => []) : []
-    const result = applyCiCostFix(job.kind, file.contents, { requiredChecks })
+    // Which jobs must keep reporting: skip_drafts and ignore_docs_paths refuse without the list.
+    const needsChecks = job.kind === 'skip_drafts' || job.kind === 'ignore_docs_paths'
+    const requiredChecks = needsChecks ? await deps.requiredChecks(token, repo.ref, base.branch).catch(() => null) : null
+    const result = applyCiCostFix(job.kind, file.contents, { requiredChecks, workflowPath: job.workflow_path })
     if (result.refused) {
       await finish('refused', { workflow_name: workflowName, summary: result.summary, error_code: 'TRANSFORM_REFUSED', error: result.refused })
       return { ok: true, status: 'refused', summary: result.summary }

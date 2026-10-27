@@ -8,17 +8,21 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { parse } from 'yaml'
+import { parse, parseDocument } from 'yaml'
 import {
   applyCiCostFix,
   bareCondition,
   CI_COST_FIX_KINDS,
+  deployEvidence,
+  DOCS_PATHS_IGNORE,
   DRAFT_CONDITION,
+  DRAFT_GUARD_STEP_NAME,
   firesPer28Days,
   isCiCostFixKind,
   parseCron,
   weeklyCronFor,
   type CiCostFixKind,
+  type CostFixOptions,
 } from '../../supabase/functions/_shared/ci-cost-fix.ts'
 
 const CI = `# CI for the app. Keep the job names: branch rules read them.
@@ -47,7 +51,10 @@ jobs:
       - run: pnpm lint
 `
 
-function twice(kind: CiCostFixKind, yaml: string, opts = {}) {
+/** The default branch requires no checks. */
+const NONE: CostFixOptions = { requiredChecks: [] }
+
+function twice(kind: CiCostFixKind, yaml: string, opts: CostFixOptions = NONE) {
   const first = applyCiCostFix(kind, yaml, opts)
   const second = applyCiCostFix(kind, first.yaml, opts)
   return { first, second }
@@ -93,7 +100,7 @@ describe('add_concurrency', () => {
     const out = applyCiCostFix('add_concurrency', CI)
     const wf = parse(out.yaml)
     expect(wf.concurrency).toEqual({
-      group: '${{ github.workflow }}-${{ github.ref }}',
+      group: "${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}",
       'cancel-in-progress': "${{ github.event_name == 'pull_request' }}",
     })
     expect(out.yaml.indexOf('concurrency:')).toBeLessThan(out.yaml.indexOf('jobs:'))
@@ -104,7 +111,7 @@ describe('add_concurrency', () => {
 
 describe('skip_drafts', () => {
   it('writes out the default types plus ready_for_review, and adds the draft check to every job', () => {
-    const out = applyCiCostFix('skip_drafts', CI)
+    const out = applyCiCostFix('skip_drafts', CI, NONE)
     const wf = parse(out.yaml)
     expect(wf.on.pull_request).toEqual({ types: ['opened', 'synchronize', 'reopened', 'ready_for_review'], branches: ['main'] })
     // Push is untouched: the draft check is true on a push (no pull_request payload).
@@ -126,18 +133,18 @@ describe('skip_drafts', () => {
   })
 
   it('handles on: pull_request and on: [push, pull_request], and a block-scalar if', () => {
-    const scalar = applyCiCostFix('skip_drafts', 'on: pull_request\njobs:\n  a:\n    runs-on: x\n')
+    const scalar = applyCiCostFix('skip_drafts', 'on: pull_request\njobs:\n  a:\n    runs-on: x\n', NONE)
     expect(parse(scalar.yaml).on).toEqual({ pull_request: { types: ['opened', 'synchronize', 'reopened', 'ready_for_review'] } })
-    const seq = applyCiCostFix('skip_drafts', 'on: [push, pull_request]\njobs:\n  a:\n    runs-on: x\n')
+    const seq = applyCiCostFix('skip_drafts', 'on: [push, pull_request]\njobs:\n  a:\n    runs-on: x\n', NONE)
     expect(parse(seq.yaml).on.push).toBeNull()
     expect(seq.yaml).toContain('  push:\n')
-    const block = applyCiCostFix('skip_drafts', "on: pull_request\njobs:\n  a:\n    if: >-\n      github.ref == 'refs/heads/main' ||\n      always()\n    runs-on: x\n")
+    const block = applyCiCostFix('skip_drafts', "on: pull_request\njobs:\n  a:\n    if: >-\n      github.ref == 'refs/heads/main' ||\n      always()\n    runs-on: x\n", NONE)
     expect(parse(block.yaml).jobs.a.if).toBe(`(github.ref == 'refs/heads/main' || always()) && ${DRAFT_CONDITION}`)
   })
 
   it('leaves a job that already checks the draft flag, and a mixed text-and-expression if, alone', () => {
     const yaml = "on: pull_request\njobs:\n  a:\n    if: github.event.pull_request.draft == false\n    runs-on: x\n  b:\n    if: ${{ github.ref }} == 'x' && ${{ true }}\n    runs-on: x\n  c:\n    runs-on: x\n"
-    const out = applyCiCostFix('skip_drafts', yaml)
+    const out = applyCiCostFix('skip_drafts', yaml, NONE)
     const wf = parse(out.yaml)
     expect(wf.jobs.a.if).toBe('github.event.pull_request.draft == false')
     expect(wf.jobs.b.if).toBe("${{ github.ref }} == 'x' && ${{ true }}")
@@ -147,7 +154,7 @@ describe('skip_drafts', () => {
 
   it('refuses a workflow without pull_request, and one where every job has a mixed if', () => {
     expect(applyCiCostFix('skip_drafts', 'on: push\njobs:\n  a:\n    runs-on: x\n').refused).toMatch(/does not run on pull requests/)
-    const mixed = applyCiCostFix('skip_drafts', "on:\n  pull_request:\n    types: [opened, ready_for_review]\njobs:\n  b:\n    if: ${{ a }} && ${{ b }}\n    runs-on: x\n")
+    const mixed = applyCiCostFix('skip_drafts', "on:\n  pull_request:\n    types: [opened, ready_for_review]\njobs:\n  b:\n    if: ${{ a }} && ${{ b }}\n    runs-on: x\n", NONE)
     expect(mixed.changed).toBe(false)
     expect(mixed.refused).toMatch(/could not safely add the draft check to job `b`/)
   })
@@ -222,7 +229,7 @@ jobs:
 
 describe('ignore_docs_paths', () => {
   it('adds paths-ignore to pull_request and push, quoted, and keeps branch filters', () => {
-    const out = applyCiCostFix('ignore_docs_paths', CI)
+    const out = applyCiCostFix('ignore_docs_paths', CI, NONE)
     const wf = parse(out.yaml)
     expect(wf.on.pull_request).toEqual({ branches: ['main'], 'paths-ignore': ['**/*.md', 'docs/**'] })
     expect(wf.on.push).toEqual({ branches: ['main'], 'paths-ignore': ['**/*.md', 'docs/**'] })
@@ -230,11 +237,31 @@ describe('ignore_docs_paths', () => {
     expect(out.summary).toContain('pull_request or push')
   })
 
-  it('leaves a trigger that already has paths or paths-ignore, and a tags-only push', () => {
-    const yaml = "on:\n  pull_request:\n    paths: ['src/**']\n  push:\n    tags: ['v*']\njobs:\n  a:\n    runs-on: x\n"
-    const out = applyCiCostFix('ignore_docs_paths', yaml)
+  it('leaves a trigger that already has paths-ignore, and a tags-only push', () => {
+    const yaml = "on:\n  pull_request:\n    paths-ignore: ['src/**']\n  push:\n    tags: ['v*']\njobs:\n  a:\n    runs-on: x\n"
+    const out = applyCiCostFix('ignore_docs_paths', yaml, NONE)
     expect(out.changed).toBe(false)
     expect(out.refused).toBeUndefined()
+  })
+
+  it('refuses when an event already lists paths (GitHub rejects paths with paths-ignore)', () => {
+    const yaml = "on:\n  pull_request:\n  push:\n    branches: [main]\n    paths: ['src/**']\njobs:\n  a:\n    runs-on: x\n"
+    const out = applyCiCostFix('ignore_docs_paths', yaml, NONE)
+    expect(out.changed).toBe(false)
+    expect(out.yaml).toBe(yaml)
+    expect(out.refused).toMatch(/`push` trigger already lists `paths`/)
+  })
+
+  it('refuses when the required checks could not be read', () => {
+    for (const opts of [{}, { requiredChecks: null }]) {
+      const out = applyCiCostFix('ignore_docs_paths', CI, opts)
+      expect(out.changed).toBe(false)
+      expect(out.refused).toMatch(/could not read which status checks/)
+    }
+  })
+
+  it('exports the docs path list once, for the advisor rule to import', () => {
+    expect([...DOCS_PATHS_IGNORE]).toEqual(['**/*.md', 'docs/**'])
   })
 
   it('refuses when a job is a required check, so a docs-only PR never gets stuck', () => {
@@ -248,13 +275,105 @@ describe('ignore_docs_paths', () => {
 
   it('refuses a workflow with an aggregator job, by name or by shape', () => {
     const named = CI + '  gate:\n    runs-on: ubuntu-latest\n    needs: [test]\n    steps:\n      - run: echo ok\n'
-    expect(applyCiCostFix('ignore_docs_paths', named).refused).toMatch(/Job `gate` looks like the check/)
+    expect(applyCiCostFix('ignore_docs_paths', named, NONE).refused).toMatch(/Job `gate` looks like the check/)
     const shaped = CI + '  summary:\n    name: Everything\n    if: always()\n    needs: [test, lint]\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ok\n'
-    expect(applyCiCostFix('ignore_docs_paths', shaped).refused).toMatch(/Job `Everything` looks like/)
+    expect(applyCiCostFix('ignore_docs_paths', shaped, NONE).refused).toMatch(/Job `Everything` looks like/)
   })
 
   it('refuses a workflow that does not run on pushes or pull requests', () => {
     expect(applyCiCostFix('ignore_docs_paths', 'on: workflow_dispatch\njobs:\n  a:\n    runs-on: x\n').refused).toMatch(/does not run on pushes or pull requests/)
+  })
+})
+
+describe('safety: required checks (skip_drafts)', () => {
+  const GATED = `on:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: pnpm test
+  gate:
+    name: CI Gate
+    if: always()
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "\${{ needs.test.result }}" = success
+`
+
+  it('refuses when the required checks could not be read', () => {
+    for (const opts of [{}, { requiredChecks: null }]) {
+      const out = applyCiCostFix('skip_drafts', CI, opts)
+      expect(out.changed).toBe(false)
+      expect(out.yaml).toBe(CI)
+      expect(out.refused).toMatch(/could not read which status checks your default branch requires/)
+    }
+  })
+
+  it('never skips a job that produces a required check: it fails at "Draft PRs run no CI" instead', () => {
+    const { first, second } = twice('skip_drafts', GATED, { requiredChecks: ['CI Gate'] })
+    expect(first.changed).toBe(true)
+    const wf = parse(first.yaml)
+    // The other job skips drafts; the required one has no skip `if`.
+    expect(wf.jobs.test.if).toBe(DRAFT_CONDITION)
+    expect(wf.jobs.gate.if).toBe('always()')
+    expect(wf.jobs.gate.steps[0]).toEqual({
+      name: 'Draft PRs run no CI',
+      if: 'github.event.pull_request.draft == true',
+      run: 'echo "Draft pull requests run no CI. Mark the pull request ready for review to run it." && exit 1',
+    })
+    expect(DRAFT_GUARD_STEP_NAME).toBe('Draft PRs run no CI')
+    expect(wf.jobs.gate.steps).toHaveLength(2)
+    expect(first.summary).toContain('stops job `gate` at a first step named "Draft PRs run no CI"')
+    expect(second.changed).toBe(false)
+  })
+
+  it('matches a required check by job name, id, or a matrix entry; keeps an existing guard step', () => {
+    const matrix = 'on: pull_request\njobs:\n  lint:\n    runs-on: x\n    strategy:\n      matrix:\n        node: [20]\n    steps:\n      - run: pnpm lint\n'
+    const out = applyCiCostFix('skip_drafts', matrix, { requiredChecks: ['lint (20)'] })
+    expect(parse(out.yaml).jobs.lint.if).toBeUndefined()
+    expect(parse(out.yaml).jobs.lint.steps[0].name).toBe('Draft PRs run no CI')
+    const guarded = 'on:\n  pull_request:\n    types: [opened, synchronize, reopened, ready_for_review]\njobs:\n  gate:\n    runs-on: x\n    steps:\n      - name: Draft PRs run no CI\n        if: github.event.pull_request.draft\n        run: exit 1\n'
+    const kept = applyCiCostFix('skip_drafts', guarded, { requiredChecks: ['gate'] })
+    expect(kept.changed).toBe(false)
+    expect(kept.refused).toBeUndefined()
+  })
+
+  it('refuses a required job that waits on other jobs without always(), and one that calls another workflow', () => {
+    const waits = GATED.replace('    if: always()\n', '')
+    expect(applyCiCostFix('skip_drafts', waits, { requiredChecks: ['CI Gate'] }).refused).toMatch(/`CI Gate` produces the required check `CI Gate` and waits on other jobs/)
+    const reusable = 'on: pull_request\njobs:\n  ci:\n    uses: ./.github/workflows/reusable.yml\n'
+    expect(applyCiCostFix('skip_drafts', reusable, { requiredChecks: ['ci'] }).refused).toMatch(/calls another workflow/)
+  })
+})
+
+describe('safety: deploys and releases (add_concurrency, weekly_cron)', () => {
+  const DEPLOY = 'name: Deploy site\non:\n  push:\n    branches: [main]\njobs:\n  build:\n    runs-on: x\n    steps:\n      - run: pnpm build\n'
+
+  it('add_concurrency refuses a workflow that deploys or releases, by name, file, job, step or command', () => {
+    expect(applyCiCostFix('add_concurrency', DEPLOY).refused).toMatch(/looks like it deploys or releases \(workflow `Deploy site`\)/)
+    const quiet = 'on:\n  push:\n    branches: [main]\njobs:\n  build:\n    runs-on: x\n    steps:\n      - run: pnpm build\n'
+    expect(applyCiCostFix('add_concurrency', quiet, { workflowPath: '.github/workflows/release.yml' }).refused).toMatch(/file `release.yml`/)
+    expect(applyCiCostFix('add_concurrency', quiet.replace('  build:', '  publish-npm:')).refused).toMatch(/job `publish-npm`/)
+    expect(applyCiCostFix('add_concurrency', quiet.replace('- run: pnpm build', '- name: Ship OTA update\n        run: x')).refused).toMatch(/step `Ship OTA update`/)
+    expect(applyCiCostFix('add_concurrency', quiet.replace('pnpm build', 'npx eas update --branch production')).refused).toMatch(/`eas update` in job `build`/)
+    // A plain CI that also runs on pushes to main gets the group: pushes never share it.
+    expect(applyCiCostFix('add_concurrency', quiet).changed).toBe(true)
+  })
+
+  it('deployEvidence does not fire on ordinary CI words', () => {
+    const ci = parseDocument('name: CI\non: pull_request\njobs:\n  test:\n    name: Unit tests\n    runs-on: x\n    steps:\n      - name: Install\n        run: pnpm install\n')
+    expect(deployEvidence(ci, '.github/workflows/ci.yml')).toBeNull()
+  })
+
+  it('weekly_cron refuses a scheduled deploy or release, and says what the schedule was otherwise', () => {
+    const rollout = "name: Staged OTA rollout\non:\n  schedule:\n    - cron: '0 9 * * *'\njobs:\n  roll:\n    runs-on: x\n    steps:\n      - run: ./roll.sh\n"
+    const out = applyCiCostFix('weekly_cron', rollout)
+    expect(out.changed).toBe(false)
+    expect(out.refused).toMatch(/staged rollouts on purpose/)
+    const nightly = "name: Nightly lint\non:\n  schedule:\n    - cron: '0 9 * * *'\njobs:\n  lint:\n    runs-on: x\n    steps:\n      - run: pnpm lint\n"
+    expect(applyCiCostFix('weekly_cron', nightly).summary).toContain('It was `0 9 * * *`; put that back')
   })
 })
 
