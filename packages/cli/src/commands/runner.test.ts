@@ -437,6 +437,23 @@ describe('mushi runner fix --all', () => {
     expect(capped.stdout).toContain('acme/r0: at most 20 fixes per repo; 2 wait for the next run')
   })
 
+  it('--wait shows each bundle and still prints the items the server skipped in a queued repo', async () => {
+    const run = await runCli(registerRunnerCommands, ['runner', 'fix', '--all', '--apply', '--wait'], (call) => {
+      if (call.method === 'POST') {
+        return okReply({
+          queued: 1,
+          results: [{ projectId: A, repo: 'acme/api', status: 'queued', bundleId: BUNDLE, jobs: [{}], skipped: [{ workflowPath: '.github/workflows/ci.yml', kind: 'skip_drafts', code: 'PR_ALREADY_OPEN', message: 'Mushi already opened this fix.', prUrl: 'https://github.com/acme/api/pull/3' }], error: null }],
+        })
+      }
+      if (call.path.startsWith('/v1/admin/ci/cost-fix-bundles/')) {
+        return okReply({ bundle: { id: BUNDLE, repo: 'acme/api', status: 'pr_opened', prUrl: 'https://github.com/acme/api/pull/9', measuredUsdPerMonth: null, items: [] } })
+      }
+      return okReply(preview())
+    })
+    expect(run.stdout).toContain('acme/api: draft PR https://github.com/acme/api/pull/9.')
+    expect(run.stdout).toContain('.github/workflows/ci.yml skip_drafts: Mushi already opened this fix. https://github.com/acme/api/pull/3')
+  })
+
   it('refuses mixed flags before any call', async () => {
     for (const argv of [
       ['runner', 'fix', '--all', '--kind', 'skip_drafts'],

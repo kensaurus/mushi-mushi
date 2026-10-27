@@ -150,7 +150,7 @@ function RolloutModal({ onClose }: { onClose: () => void }) {
   )
 
   return (
-    <Modal open onClose={onClose} title="Apply CI cost fixes to every app" size="lg" footer={footer} dismissible={!busy}>
+    <Modal open onClose={onClose} title="Apply CI cost fixes to every app" size="lg" footer={footer} dismissible={!busy && !confirming}>
       <div className="flex flex-col gap-3 text-xs" data-testid="ci-rollout">
         {results ? (
           <RolloutResults results={results} />

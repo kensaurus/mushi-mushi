@@ -191,6 +191,20 @@ describe('CiCostFixRollout', () => {
     expect(result?.textContent).toContain('The workflow now skips draft pull requests.')
   })
 
+  it('Esc on the confirm closes only the confirm; the preview and its selection stay', async () => {
+    await render()
+    await click(document.querySelector('[data-testid="ci-rollout-open"]'))
+    await flush()
+    await click(document.querySelector('[data-testid="ci-rollout-continue"]'))
+    expect(document.body.textContent).toContain('Open 1 draft pull request?')
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+    await flush()
+    expect(document.querySelector('[data-testid="ci-rollout"]')).not.toBeNull()
+    expect(document.body.textContent).toContain('1 repo, 2 fixes')
+  })
+
   it('shows a repo that did not start, and an error from the request, in plain words', async () => {
     state.apiFetchMutate.mockResolvedValueOnce({ ok: false, error: { code: 'FORBIDDEN', message: 'x' } })
     await render()

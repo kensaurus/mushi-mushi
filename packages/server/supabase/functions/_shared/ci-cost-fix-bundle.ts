@@ -230,6 +230,18 @@ export async function runCiCostFixBundle(db: SupabaseClient, bundleId: string, d
     const files: Array<{ path: string; contents: string; workflowName: string; changed: CostFixJobRow[] }> = []
     const changeSummary = new Map<string, string>()
     const bodyItems: BundleBodyItem[] = []
+    // A reclaim claims only the rows still running: the ones an earlier run
+    // already refused, found applied or failed stay listed in the PR body.
+    const { data: earlier } = await db
+      .from('ci_cost_fix_jobs')
+      .select(COST_FIX_JOB_COLUMNS)
+      .eq('bundle_id', bundleId)
+      .in('status', ['refused', 'no_change', 'failed'])
+    for (const r of (earlier ?? []) as CostFixJobRow[]) {
+      if (rows.some((c) => c.id === r.id) || !isCiCostFixKind(r.kind)) continue
+      const outcome = r.status === 'refused' ? 'refused' : r.status === 'no_change' ? 'no_change' : 'failed'
+      bodyItems.push({ kind: r.kind, workflowPath: r.workflow_path, summary: r.error ?? r.summary ?? '', outcome, evidence: null, monthSavingUsd: null })
+    }
     for (const path of [...new Set(live.map((r) => r.workflow_path))]) {
       const fileRows = live.filter((r) => r.workflow_path === path)
       const file = await deps.readFile(token, repo.ref, base.branch, path)

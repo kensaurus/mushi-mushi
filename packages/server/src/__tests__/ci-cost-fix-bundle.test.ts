@@ -276,6 +276,39 @@ describe('runCiCostFixBundle', () => {
     expect(rows().map((r) => r.status)).toEqual(['pr_opened', 'pr_opened'])
   })
 
+  it('a reclaim keeps the refusals an earlier run already recorded in the PR body', async () => {
+    seed([
+      item('.github/workflows/deploy.yml', 'add_concurrency', { status: 'refused', error: 'This workflow looks like it deploys or releases.', error_code: 'TRANSFORM_REFUSED' }),
+      item('.github/workflows/ci.yml', 'skip_drafts', { status: 'running', started_at: '2026-10-27T11:00:00Z' }),
+    ])
+    expect(await runCiCostFixBundle(db as never, BUNDLE, deps())).toMatchObject({ ok: true, status: 'pr_opened' })
+    const body = createPr.mock.calls[0][0].body as string
+    expect(body).toContain('### Not changed')
+    expect(body).toMatch(/deploy\.yml`, cancel superseded runs: This workflow looks like it deploys or releases\./)
+    expect(byKind('.github/workflows/deploy.yml', 'add_concurrency').status).toBe('refused')
+  })
+
+  it('ignore_docs_paths keeps its refusals in a bundle: a required check, and a trigger that already lists paths', async () => {
+    const withPaths = "name: Lint\non:\n  pull_request:\n    paths: ['src/**']\njobs:\n  lint:\n    runs-on: ubuntu-latest\n    steps:\n      - run: pnpm lint\n"
+    FILES['.github/workflows/lint.yml'] = withPaths
+    try {
+      seed([item('.github/workflows/ci.yml', 'ignore_docs_paths'), item('.github/workflows/lint.yml', 'ignore_docs_paths'), item('.github/workflows/ci.yml', 'add_concurrency')])
+      await runCiCostFixBundle(db as never, BUNDLE, deps({ requiredChecks: async () => ['test'] }))
+      expect(byKind('.github/workflows/ci.yml', 'ignore_docs_paths')).toMatchObject({ status: 'refused', error_code: 'TRANSFORM_REFUSED' })
+      expect(byKind('.github/workflows/ci.yml', 'ignore_docs_paths').error).toMatch(/`test` is a required check/)
+      expect(byKind('.github/workflows/lint.yml', 'ignore_docs_paths').error).toMatch(/already lists `paths`/)
+      // The other fix on ci.yml still goes in, and the refused ones are listed.
+      expect(byKind('.github/workflows/ci.yml', 'add_concurrency').status).toBe('pr_opened')
+      const opts = createPr.mock.calls[0][0]
+      expect(opts.files.map((f: { path: string }) => f.path)).toEqual(['.github/workflows/ci.yml'])
+      expect(opts.files[0].contents).not.toContain('paths-ignore')
+      expect(opts.body).toMatch(/ci\.yml`, skip docs-only changes: `test` is a required check/)
+      expect(opts.body).toMatch(/lint\.yml`, skip docs-only changes: The `pull_request` trigger already lists `paths`/)
+    } finally {
+      delete FILES['.github/workflows/lint.yml']
+    }
+  })
+
   it('a bundle row is never run on its own (that would open a second PR)', async () => {
     const one = item('.github/workflows/ci.yml', 'skip_drafts')
     seed([one])

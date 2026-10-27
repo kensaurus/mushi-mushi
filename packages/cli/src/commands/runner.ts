@@ -1001,7 +1001,11 @@ async function fixAll(config: ReturnType<typeof requireConfig>, opts: FixOpts): 
   }
   if (bundles) {
     for (const b of bundles) for (const line of renderBundle(b)) console.log(line)
-    for (const line of renderBundleResults(result.data.results.filter((r) => !r.bundleId))) console.log(line)
+    for (const r of result.data.results) {
+      // A queued repo's skipped items (already open, in flight, no longer advised) still print.
+      if (!r.bundleId) for (const line of renderBundleResults([r])) console.log(line)
+      else for (const s of r.skipped) console.log(`  ${s.workflowPath} ${s.kind}: ${s.message}${s.prUrl ? ` ${s.prUrl}` : ''}`)
+    }
   } else {
     for (const line of renderBundleResults(result.data.results)) console.log(line)
   }
