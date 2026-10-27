@@ -39,7 +39,7 @@ export type BillingOwnerType = 'User' | 'Organization'
 export type BillingSource = 'api' | 'cli'
 
 export const BILLING_UNAVAILABLE_REASON =
-  "The GitHub token can't read billing: use a token with billing read access (fine-grained: Plan read for a personal account, Administration read for an organization), or run `mushi runner bill --push`."
+  "The GitHub token can't read billing: use a token with billing read access (fine-grained: Plan read for a personal account, Administration read for an organization; classic: the user scope), or run `gh auth refresh -s user` and then `mushi runner bill --push`."
 
 export const NO_BILL_REASON =
   'No GitHub bill yet. Connect a GitHub token with billing read access (fine-grained: Plan read for a personal account, Administration read for an organization) in the project\'s GitHub settings, or run `mushi runner bill --push` on a machine where `gh` is signed in.'

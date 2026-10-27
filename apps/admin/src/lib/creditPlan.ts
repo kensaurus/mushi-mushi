@@ -95,6 +95,102 @@ function shortDate(iso: string): string {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
+/** The Cursor key fields the countdown reads (a subset of SpendDownKeyStatus). */
+export interface CountdownCursorKey {
+  id: string
+  label: string | null
+  keyHint: string | null
+  enabled: boolean
+  creditsExpireAt: string | null
+  dailyLimit: number
+  dispatchedToday: number
+  state: string
+  scoreboard?: { days: number; totals: { runs: number } } | null
+}
+
+/** One key's countdown card on /credits: time left, and what is used vs left. */
+export interface CreditCountdown {
+  id: string
+  provider: 'cursor' | 'firecrawl'
+  name: string
+  daysLeft: number
+  /** "Oct 31" */
+  date: string
+  verb: 'expires' | 'resets'
+  /** The bar: how much of `of` is used. Cursor counts today's fixes against the daily limit. */
+  used: number
+  of: number | null
+  usedLine: string
+  leftLine: string
+  /** A Cursor key with an expiry date and spend-down off: its credits are not fixing bugs. */
+  idle: boolean
+  tone: 'ok' | 'warn' | 'danger' | 'neutral'
+}
+
+function n(v: number): string {
+  return Math.round(v).toLocaleString()
+}
+
+/**
+ * Every key with a date its credits lapse, soonest first. Cursor shares no
+ * balance (ADR 0028: count, not dollars), so a Cursor card counts fixes:
+ * sent today against the daily limit, and how many more the limit allows
+ * before the date. Firecrawl reports a real balance.
+ */
+export function creditCountdowns(input: {
+  cursorKeys: readonly CountdownCursorKey[]
+  firecrawl: { remaining: number | null; limit: number | null; periodEnd: string | null } | null
+  now: Date
+}): CreditCountdown[] {
+  const out: CreditCountdown[] = []
+  for (const k of input.cursorKeys) {
+    const days = daysLeft(k.creditsExpireAt, input.now)
+    if (days == null || !k.creditsExpireAt) continue
+    const expired = days === 0 || k.state === 'expired'
+    const idle = !expired && !k.enabled
+    const week = k.scoreboard && k.scoreboard.totals.runs > 0 ? ` · ${n(k.scoreboard.totals.runs)} in the last ${k.scoreboard.days} days` : ''
+    const room = Math.max(0, k.dailyLimit * days - k.dispatchedToday)
+    out.push({
+      id: k.id,
+      provider: 'cursor',
+      name: `Cursor${k.label ? ` · ${k.label}` : ''}${k.keyHint ? ` (${k.keyHint})` : ''}`,
+      daysLeft: days,
+      date: shortDate(k.creditsExpireAt),
+      verb: 'expires',
+      used: k.dispatchedToday,
+      of: k.dailyLimit,
+      usedLine: `${n(k.dispatchedToday)} of ${n(k.dailyLimit)} fixes sent today${week}`,
+      leftLine: expired
+        ? 'These credits have expired.'
+        : idle
+          ? 'Spend-down is off, so nothing is spending these credits.'
+          : `Room for up to ${n(room)} more fixes before they expire.`,
+      idle,
+      tone: expired ? 'neutral' : idle ? (days <= 3 ? 'danger' : 'warn') : 'ok',
+    })
+  }
+  const fc = input.firecrawl
+  const fcDays = daysLeft(fc?.periodEnd, input.now)
+  if (fc && fc.periodEnd && fcDays != null && fc.remaining != null) {
+    const used = fc.limit != null ? Math.max(0, fc.limit - fc.remaining) : 0
+    out.push({
+      id: 'firecrawl',
+      provider: 'firecrawl',
+      name: 'Firecrawl',
+      daysLeft: fcDays,
+      date: shortDate(fc.periodEnd),
+      verb: 'resets',
+      used,
+      of: fc.limit,
+      usedLine: fc.limit != null ? `${n(used)} of ${n(fc.limit)} credits used` : 'Usage not reported',
+      leftLine: `${n(fc.remaining)} credits left until the reset.`,
+      idle: false,
+      tone: 'ok',
+    })
+  }
+  return out.sort((a, b) => a.daysLeft - b.daysLeft)
+}
+
 /** "expires Oct 28 (5 days)", "expired", or null without a date. */
 export function expiryLabel(until: string | null | undefined, now: Date, verb = 'expires'): string | null {
   const days = daysLeft(until, now)

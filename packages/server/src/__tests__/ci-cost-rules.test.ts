@@ -87,6 +87,14 @@ describe('cron_too_frequent', () => {
     expect(a.autofix).toEqual({ kind: 'weekly_cron', projectId: P1, repo: REPO, workflowPath: '.github/workflows/fresh.yml' })
   })
 
+  it('offers no weekly_cron on a deploy or release workflow, which the worker refuses, and says why', () => {
+    const rollout = yaml.replace('name: Freshness', 'name: Staged rollout').replace('      - run: node check.mjs', '      - run: eas update --branch production')
+    const sched = facts({ events: [ev({ workflow_name: 'Staged rollout', job_name: 'check', event: 'schedule', runs: 600, billed_minutes: 600 })] })
+    const [a] = byRule(adviseCiCost(input({ workflows: [wf('.github/workflows/rollout.yml', rollout)], facts: sched })), 'cron_too_frequent')
+    expect(a.autofix).toBeNull()
+    expect(a.fix).toContain('looks like it deploys or releases (`eas update` in job `check`)')
+  })
+
   it('stays silent for a weekly schedule, without recorded runs, or with an unreadable cron; saves 0 on a public repo', () => {
     const weekly = yaml.replace("'0 * * * *'", "'17 3 * * 1'")
     const sched = facts({ events: [ev({ workflow_name: 'Freshness', job_name: 'check', event: 'schedule', runs: 4, billed_minutes: 8 })] })
@@ -120,6 +128,12 @@ describe('missing_path_filter', () => {
   it('offers no autofix when push already filters paths (GitHub refuses both on one event)', () => {
     const withPush = yaml.replace('on:\n', "on:\n  push:\n    paths: ['src/**']\n")
     const [a] = byRule(adviseCiCost(input({ workflows: [wf('ci.yml', withPush)], facts: prFacts, pullRequests: [pr(1, true)] })), 'missing_path_filter')
+    expect(a.autofix).toBeNull()
+  })
+
+  it('offers no autofix when a job looks like the required check (the worker refuses the docs filter there)', () => {
+    const gated = yaml + '  all-green:\n    needs: [test, lint]\n    if: always()\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ok\n'
+    const [a] = byRule(adviseCiCost(input({ workflows: [wf('ci.yml', gated)], facts: prFacts, pullRequests: [pr(1, true)] })), 'missing_path_filter')
     expect(a.autofix).toBeNull()
   })
 
@@ -244,6 +258,14 @@ describe('autofix on the workflow rules of adviseCi', () => {
     expect(advice.find((a) => a.id.startsWith('drafts_not_skipped:'))?.autofix).toEqual({ kind: 'skip_drafts', projectId: P1, repo: REPO, workflowPath: 'ci.yml' })
     const anon = adviseCi({ ...base, workflows: [{ repo: REPO, path: 'ci.yml', text: yaml }] })
     expect(anon.every((a) => !a.autofix)).toBe(true)
+  })
+
+  it('offers no add_concurrency on a deploy workflow (the worker refuses it there) but still gives the advice', () => {
+    const yaml = 'name: Deploy\non:\n  push:\njobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - run: pnpm test\n'
+    const advice = adviseCi({ ...base, workflows: [{ projectId: P1, repo: REPO, path: 'deploy.yml', text: yaml }] })
+    const a = advice.find((x) => x.id.startsWith('no_cancel_in_progress:'))
+    expect(a).toBeDefined()
+    expect(a?.autofix).toBeNull()
   })
 
   it('leaves a concurrency group without cancel-in-progress, and pull_request_target, to a person', () => {

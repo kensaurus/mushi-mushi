@@ -23,6 +23,7 @@ import {
   type ReviewRow,
 } from '../../supabase/functions/_shared/pipeline-view.ts'
 import type { CiJobForRepair } from '../../supabase/functions/_shared/review-followup.ts'
+import { checkNameList } from '../../supabase/functions/_shared/merge-queue.ts'
 
 const NOW = new Date('2026-10-26T12:00:00Z')
 const P = '00000000-0000-4000-8000-000000000001'
@@ -214,6 +215,19 @@ describe('buildPipeline', () => {
     expect(group(stages, 'review_slow')?.group.actions).toEqual(['re_review'])
   })
 
+  // Report 7426815e: "Re-run review" seconds ago read "not finished after 2 hours, oldest 6 d".
+  it('a re-requested review is aged from the request, not from the first review', () => {
+    const rerun = review({ status: 'queued', created_at: '2026-10-20T00:00:00Z', queued_at: '2026-10-26T11:59:00Z' })
+    const stages = run({ reviews: [rerun] })
+    expect(group(stages, 'review_slow')).toBeNull()
+    const hit = group(stages, 'review_running')
+    expect(hit?.group.label).toBe('1 PR: Opus is reviewing')
+    expect(hit?.group.items[0].since).toBe('2026-10-26T11:59:00Z')
+    // A request left unanswered for over two hours is stuck.
+    const old = run({ reviews: [review({ status: 'queued', created_at: '2026-10-20T00:00:00Z', queued_at: '2026-10-26T09:00:00Z' })] })
+    expect(group(old, 'review_slow')?.group.label).toBe('1 PR: review not finished after 2 hours')
+  })
+
   it('green and approved but not queued is stuck, with Queue to merge', () => {
     expect(group(run(), 'not_queued')?.group.actions).toContain('queue_merge')
   })
@@ -263,6 +277,48 @@ describe('buildPipeline', () => {
     expect(g?.label).toBe('1 report: the agent failed, no PR opened')
   })
 
+  it('"agent failed" splits by why, and every part can close the report', () => {
+    const failed = (id: string, category: string | null) =>
+      attempt({ id, report_id: `r-${id}`, status: 'failed', pr_url: null, pr_number: null, pr_state: null, commit_sha: null, created_at: '2026-10-25T00:00:00Z', completed_at: '2026-10-25T00:00:00Z', failure_category: category })
+    const stages = run({
+      attempts: [failed('a1', 'needs_human'), failed('a2', 'already_fixed'), failed('a3', 'not_actionable'), failed('a4', 'sandbox_error'), failed('a5', null)],
+      reviews: [],
+      actionFacts: { cloud: new Map(), prior: new Map(), roundHeads: new Map(), rerunRefused: new Set() },
+    })
+    expect(group(stages, 'agent_failed_person')?.group.label).toBe('1 report: the agent says a person must do it, no PR opened')
+    expect(group(stages, 'agent_failed_nothing')?.group.label).toBe('2 reports: the agent found nothing to change in the code')
+    expect(group(stages, 'agent_failed')?.group.count).toBe(2)
+    for (const id of ['agent_failed_person', 'agent_failed_nothing', 'agent_failed']) {
+      const g = group(stages, id)!.group
+      expect(g.actions).toEqual(['dismiss'])
+      expect(g.items.every((i) => Object.keys(i.blocked).length === 0)).toBe(true)
+    }
+  })
+
+  it('blocked: without the read facts nothing is blocked; with them, known refusals are named', () => {
+    const red = new Map([['h1', [job({ conclusion: 'failure' })]]])
+    expect(group(run({ ciJobs: red }), 'ci_red')?.group.items[0].blocked).toEqual({})
+    const facts = {
+      cloud: new Map([[P, { ready: false, enabled: false, why: 'Review follow-ups are off for this team' }]]),
+      prior: new Map(),
+      roundHeads: new Map([['f1', ['old-1', 'old-2']]]),
+      rerunRefused: new Set([P]),
+    }
+    const item = group(run({ ciJobs: red, reviews: [review({ head_sha: 'h1' })], actionFacts: facts }), 'ci_red')!.group.items[0]
+    expect(item.blocked.ci_repair).toBe(
+      'Review follow-ups are off for this team, and the local mushi work lanes cannot take it: Both follow-up rounds were used on this pull request; a person decides what happens next.',
+    )
+    expect(item.blocked.rerun_ci).toMatch(/give it Actions: Read and write/)
+    expect(item.blocked.update_branch).toBeUndefined()
+    expect(item.blocked.close).toBeUndefined()
+    // Cloud follow-ups ready: the cloud trigger's own reason.
+    const cloudFacts = { ...facts, cloud: new Map([[P, { ready: true, enabled: true, why: null }]]), rerunRefused: new Set<string>() }
+    const prior = new Map([['f1', [{ head_sha_before: 'h1', status: 'completed', cursor_agent_id: 'bc-1' }]]])
+    const again = group(run({ ciJobs: red, reviews: [review({ head_sha: 'h1' })], actionFacts: { ...cloudFacts, prior } }), 'ci_red')!.group.items[0]
+    expect(again.blocked.ci_repair).toBe('Not queued. This commit already had a follow-up.')
+    expect(again.blocked.rerun_ci).toBeUndefined()
+  })
+
   it('stage totals: count and stuck add up over groups', () => {
     const stages = run({
       attempts: [attempt(), attempt({ id: 'f2', commit_sha: 'h2', pr_number: 13 })],
@@ -287,10 +343,23 @@ describe('helpers', () => {
     expect(queueDetailKind('Something new')).toBe('other')
   })
 
-  it('failedChecksFromDetail splits the train detail', () => {
-    expect(failedChecksFromDetail('CI failed: gate, Checks (security, conventions, coverage).')).toEqual(['gate', 'Checks (security', 'conventions', 'coverage)'])
+  it('failedChecksFromDetail keeps a check name with commas whole (report 7426815e)', () => {
+    // Quoted lists (checkNameList, since 2026-10-27).
+    expect(failedChecksFromDetail('Members failed CI: "Lint, typecheck, build, doctor", "pgTAP RLS suite".')).toEqual(['Lint, typecheck, build, doctor', 'pgTAP RLS suite'])
+    expect(failedChecksFromDetail('CI failed: "Checks (security, conventions, coverage)". A CI-repair agent may fix it (review follow-ups); the queue looks again after each push.')).toEqual([
+      'Checks (security, conventions, coverage)',
+    ])
+    expect(failedChecksFromDetail('CI fails on its own commit ("Lint, typecheck, build, doctor"). With review follow-ups on, a CI-repair agent fixes it.')).toEqual(['Lint, typecheck, build, doctor'])
+    // Older rows, written bare.
+    expect(failedChecksFromDetail('CI failed: gate, Checks (security, conventions, coverage).')).toEqual(['gate', 'Checks (security, conventions, coverage)'])
+    expect(failedChecksFromDetail('Members failed CI: pgTAP RLS suite, Lint, typecheck, build, doctor.')).toEqual(['pgTAP RLS suite', 'Lint, typecheck, build, doctor'])
     expect(failedChecksFromDetail('CI failed: Build & Test.')).toEqual(['Build & Test'])
     expect(failedChecksFromDetail('Merged 3 fixes.')).toEqual([])
+  })
+
+  it('checkNameList writes what failedChecksFromDetail reads back', () => {
+    const names = ['Lint, typecheck, build, doctor', 'Checks (security, conventions, coverage)', 'say "hi"']
+    expect(failedChecksFromDetail(`Members failed CI: ${checkNameList(names)}.`)).toEqual(['Lint, typecheck, build, doctor', 'Checks (security, conventions, coverage)', "say 'hi'"])
   })
 
   it('summarizeTrains tallies failures per repo, newest first', () => {

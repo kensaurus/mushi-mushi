@@ -4,7 +4,7 @@
  *          whether Mushi's diagnoses can be trusted (PageStatus, P1).
  */
 
-import { PageStatus, type PageStatusTone } from '../ui'
+import { Btn, PageStatus, type PageStatusMetric, type PageStatusTone } from '../ui'
 import { judgeWeekTitle, type JudgeStats } from './JudgeStatsTypes'
 import { judgeLinks } from '../../lib/statCardLinks'
 
@@ -13,6 +13,8 @@ interface Props {
   statsFetchedAt: string | null
   statsValidating?: boolean
   statLabels?: Record<string, string>
+  /** Opens the disagreements list: the page's one action while any exist. */
+  onSeeDisagreements?: () => void
 }
 
 function scoreTone(score: number | null): PageStatusTone {
@@ -22,7 +24,17 @@ function scoreTone(score: number | null): PageStatusTone {
   return 'danger'
 }
 
-function judgeStatusSentence(stats: JudgeStats): string {
+/** The recent window when the server sent it, else all time; the words say which (64c2b3df). */
+function disagreementWindow(stats: JudgeStats): { disagreed: number; graded: number; words: string; recent: boolean } {
+  if (stats.recentEvaluations != null && stats.recentDisagreements != null) {
+    const days = stats.recentWindowDays ?? 14
+    return { disagreed: stats.recentDisagreements, graded: stats.recentEvaluations, words: `in the last ${days} days`, recent: true }
+  }
+  return { disagreed: stats.disagreementCount, graded: stats.totalEvaluations, words: 'so far', recent: false }
+}
+
+/** @internal Exported for tests only. */
+export function judgeStatusSentence(stats: JudgeStats): string {
   if (stats.totalEvaluations === 0) {
     return stats.ungradedReports > 0
       ? `Nothing graded yet; ${stats.ungradedReports} diagnosed report${stats.ungradedReports === 1 ? ' is' : 's are'} ready.`
@@ -33,20 +45,38 @@ function judgeStatusSentence(stats: JudgeStats): string {
   const scored = score
     ? `Diagnoses scored ${score} ${week} across ${stats.latestWeekEvalCount} grade${stats.latestWeekEvalCount === 1 ? '' : 's'}`
     : `No grades ${week}`
+  const w = disagreementWindow(stats)
   const disagree =
-    stats.disagreementCount > 0
-      ? `; the grader disagreed with ${stats.disagreementCount}${stats.disagreementRatePct != null ? ` (${stats.disagreementRatePct}%)` : ''}.`
-      : '; no disagreements.'
+    w.graded === 0
+      ? `. Nothing was graded ${w.words}.`
+      : w.disagreed > 0
+        ? `. ${w.recent ? 'In the last' : 'So far'}${w.recent ? ` ${stats.recentWindowDays ?? 14} days` : ''} the grader disagreed with ${w.disagreed} of ${w.graded} diagnoses (${Math.round((w.disagreed / w.graded) * 100)}%).`
+        : `. The grader agreed with all ${w.graded} diagnoses ${w.words}.`
   return scored + disagree
 }
 
-export function JudgeSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels }: Props) {
+export function JudgeSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, onSeeDisagreements }: Props) {
+  const w = disagreementWindow(stats)
+  const disagreements: PageStatusMetric = {
+    label: w.recent ? `Disagreed, last ${stats.recentWindowDays ?? 14} days` : (statLabels?.disagree ?? 'Disagreements, all time'),
+    value: w.disagreed,
+    tone: w.disagreed > 0 ? 'warn' : 'neutral',
+    hint: 'Grades where the second model disagreed with the diagnosis. Read these before merging their fixes.',
+    to: judgeLinks.disagree,
+  }
   return (
     <PageStatus
       ariaLabel="Triage grading status"
       tone={scoreTone(stats.latestWeekScore)}
       sentence={judgeStatusSentence(stats)}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      action={
+        onSeeDisagreements && w.disagreed > 0 ? (
+          <Btn size="sm" variant="primary" onClick={onSeeDisagreements}>
+            See disagreements
+          </Btn>
+        ) : undefined
+      }
       metrics={[
         {
           label: statLabels?.week ?? judgeWeekTitle(stats.latestWeekLabel),
@@ -55,13 +85,7 @@ export function JudgeSnapshotStrip({ stats, statsFetchedAt, statsValidating, sta
           hint: 'Average grade for the latest week with grades: was the category, severity and component right.',
           to: judgeLinks.week,
         },
-        {
-          label: statLabels?.disagree ?? 'Disagreements',
-          value: stats.disagreementCount,
-          tone: stats.disagreementCount > 0 ? 'warn' : 'neutral',
-          hint: 'Grades where the second model disagreed with the diagnosis. Read these before merging their fixes.',
-          to: judgeLinks.disagree,
-        },
+        disagreements,
         {
           label: statLabels?.classified ?? 'Ready to grade',
           value: stats.ungradedReports,

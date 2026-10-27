@@ -342,6 +342,8 @@ export interface SdkHeartbeat {
   last_seen_origin: string | null
   last_seen_user_agent: string | null
   last_seen_endpoint_host: string | null
+  /** The checked-in key's label, so the console can say which key the app uses. */
+  key_label?: string | null
 }
 
 /** Every signal a setup / onboarding step reads, for one project. */
@@ -377,6 +379,7 @@ export function freshestHeartbeat(
     last_seen_origin?: string | null
     last_seen_user_agent?: string | null
     last_seen_endpoint_host?: string | null
+    label?: string | null
   }>,
 ): SdkHeartbeat | null {
   let best: SdkHeartbeat | null = null
@@ -391,6 +394,7 @@ export function freshestHeartbeat(
       last_seen_origin: k.last_seen_origin ?? null,
       last_seen_user_agent: k.last_seen_user_agent ?? null,
       last_seen_endpoint_host: k.last_seen_endpoint_host ?? null,
+      key_label: k.label ?? null,
     }
   }
   return best
@@ -417,7 +421,7 @@ export async function loadProjectSetupSignals(
   ] = await Promise.all([
     db
       .from('project_api_keys')
-      .select('project_id, scopes, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host')
+      .select('project_id, scopes, label, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host')
       .in('project_id', projectIds)
       .eq('is_active', true),
     db
@@ -432,6 +436,7 @@ export async function loadProjectSetupSignals(
   type KeyRow = {
     project_id: string
     scopes?: string[] | null
+    label?: string | null
     last_seen_at?: string | null
     last_seen_origin?: string | null
     last_seen_user_agent?: string | null

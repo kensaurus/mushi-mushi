@@ -9,6 +9,7 @@ parked work is visible in one place.
 
 - **Last regenerated:** 2026-10-27 (fourth run; delta against 2026-10-17 below)
 - **Added 2026-10-27 (per-app Home):** BL-135, parts the Home redesign left out.
+- **Added 2026-10-27 (release 2):** BL-136 and BL-137: the Set up rail and the server's first-report step count different reports, and the local-worker claim race ADR 0048 names.
 - **Delta 2026-10-27:** 12 new (BL-123..BL-130 from the scan; BL-131..BL-134 host-repo follow-ups from the 2026-10-26 CI cost rollout) · 0 closed · 0 newly stale · 0 moved to verify-done (BL-011, BL-013, BL-040, BL-041, BL-068, BL-069, BL-071, BL-079, BL-096, BL-098, BL-099, BL-107, BL-108, BL-115, BL-121 re-checked in code: still open)
 - **Added 2026-10-20 (PR #504, spend-down):** BL-087..BL-091, parked parts of ADR 0028. Closed BL-089 on 2026-10-22.
 - **Added 2026-10-21 (agent PR review):** BL-095, a parked part of ADR 0030.
@@ -164,6 +165,8 @@ parked work is visible in one place.
 | BL-133 | tech-debt | yen-yen: workflow lint (actionlint) fails on every workflow PR because `shellcheck` is not installed on the self-hosted runner; a local run of the same linter is clean. Install shellcheck in the runner setup (owner) | relevant | low | yen-yen repo; owner handoff `ci-cost-2026-10-26.md` | — |
 | BL-134 | tech-debt | Host repos run advisory crons daily (security scans, OTA checks, store reviews); the owner's CI cost rule says advisory crons run weekly. Move them in each repo's next batch, except crons that drive a staged OTA rollout on purpose. The CI page's new `cron_too_frequent` rule will list them | relevant | low | owner rule `ci-cost-discipline.md` §2 and §9; owner handoff `ci-cost-2026-10-26.md` | — |
 | BL-135 | unfinished-feature | Per-app Home (2026-10-27) left out: Needs you does not list Cursor credits about to expire (`byok_keys.credits_expire_at`, needs the key-owner filter per app); `GET /v1/admin/projects/:id/home` has no MCP tool or `mushi` command (surface-parity `jwt-only`); a page's bug badge opens the 14-day report list because reports cannot be filtered by page URL | relevant | low | `packages/server/supabase/functions/api/routes/project-home.ts`; `apps/admin/src/components/home/SitemapCard.tsx`; `scripts/surface-parity.json` | — |
+| BL-136 | decision-needed | Set up rail vs activation step: the console's Set up rail finishes its last step only on a report from the app, while the server's `first_report_received` step (Steps, Home, activation, lifecycle emails) completes on any report, so mushi-demo reads 2 of 4 on the rail and 3 of 4 elsewhere. Aligning the server step changes who counts as activated and which emails go out | relevant | medium | `apps/admin/src/pages/OnboardingPage.tsx`; `packages/server/supabase/functions/_shared/setup-signals.ts`; `lifecycle-emails` | — |
+| BL-137 | known-bug | Local workers (ADR 0048): a worker can claim a report after `fix-worker`'s last lease check but before its agent starts, so a cloud run and a local run can overlap on one report. The lease is read, not held, by the dispatchers | relevant | low | `packages/server/supabase/functions/_shared/work-claims.ts`; `packages/server/supabase/functions/fix-worker/index.ts`; `docs/adr/0048-*.md` | — |
 
 ---
 

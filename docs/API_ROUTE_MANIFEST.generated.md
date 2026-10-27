@@ -2,18 +2,18 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-27 · **760** routes.
+> Generated: 2026-10-27 · **772** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 200 |
+| `adminOrApiKey` | 202 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 392 |
+| `jwtAuth` | 397 |
 | `jwtOrApiKey` | 3 |
 | `public` | 61 |
-| `unknown` | 45 |
+| `unknown` | 50 |
 
 ## Routes by path
 
@@ -314,6 +314,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | DELETE | `/v1/admin/orgs/:orgId/spend/imports/:importId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/spend-ledger.ts` |
 | GET | `/v1/admin/pipeline` | `jwtAuth` | `packages/server/supabase/functions/api/routes/pipeline.ts` |
 | POST | `/v1/admin/pipeline/actions` | `jwtAuth` | `packages/server/supabase/functions/api/routes/pipeline.ts` |
+| GET | `/v1/admin/pipeline/fix/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/pipeline.ts` |
 | GET | `/v1/admin/plugins` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | POST | `/v1/admin/plugins` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | DELETE | `/v1/admin/plugins/:slug` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
@@ -621,6 +622,12 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/tester-submissions/:id/spam` | `jwtAuth` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | GET | `/v1/admin/two-way-health` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | GET | `/v1/admin/verifications` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
+| DELETE | `/v1/admin/work/hosts/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work.ts` |
+| PATCH | `/v1/admin/work/hosts/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work.ts` |
+| POST | `/v1/admin/work/key` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/work.ts` |
+| GET | `/v1/admin/work/lanes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/work.ts` |
+| PATCH | `/v1/admin/work/lanes/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work.ts` |
+| PUT | `/v1/admin/work/lanes/:id/queue` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work.ts` |
 | GET | `/v1/admin/workspace/projects` | `unknown` | `packages/server/supabase/functions/api/routes/workspace-nav-meta.ts` |
 | GET | `/v1/agent-card` | `public` | `packages/server/supabase/functions/api/routes/discovery.ts` |
 | POST | `/v1/cli/auth/device/approve` | `jwtAuth` | `packages/server/supabase/functions/api/routes/cli-auth.ts` |
@@ -779,3 +786,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/webhooks/slack/events` | `public` | `packages/server/supabase/functions/api/routes/slack-events-core.ts` |
 | GET | `/v1/webhooks/slack/oauth-callback` | `public` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/webhooks/tremendous` | `public` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
+| POST | `/v1/worker/claim` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
+| POST | `/v1/worker/claims/:id/done` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
+| POST | `/v1/worker/claims/:id/renew` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
+| POST | `/v1/worker/heartbeat` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
+| POST | `/v1/worker/revoke` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |

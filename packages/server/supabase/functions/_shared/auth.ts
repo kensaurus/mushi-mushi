@@ -771,9 +771,13 @@ export async function jwtAuth(c: Context, next: Next) {
  * it grants nothing else, and no other scope implies it. `runner:write` is the
  * same for the key that lives on a CI runner host (POST /v1/ingest/runner,
  * Plan 022): CI jobs run as the runner's user and can read it, so it unlocks
- * that route only, and mcp:write does not imply it.
+ * that route only, and mcp:write does not imply it. `worker:run` is the key of
+ * a local worker (`mushi work --daemon`, ADR 0048): the /v1/worker/* routes,
+ * the local follow-up routes, report filing, and recording a fix on a report
+ * the worker holds an active claim on (_shared/work-claims.ts). Never merge,
+ * settings or keys; mcp:write does not imply it either.
  */
-export type McpScope = 'mcp:read' | 'mcp:write' | 'voice:write' | 'runner:write'
+export type McpScope = 'mcp:read' | 'mcp:write' | 'voice:write' | 'runner:write' | 'worker:run'
 
 interface AdminOrApiKeyOptions {
   /**

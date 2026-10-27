@@ -36,6 +36,16 @@ describe('Rewards responsive chrome', () => {
     expect(html).not.toContain('<dl')
   })
 
+  // 5f2ab6c5: off means new activity earns nothing; points already earned still show.
+  it('RewardsSnapshotStrip says what off means when testers already earned points', () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <RewardsSnapshotStrip stats={{ ...EMPTY_REWARDS_STATS, activeContributors30d: 1, pointsAwarded30d: 20 }} statsFetchedAt={null} />
+      </MemoryRouter>,
+    )
+    expect(html).toContain('Rewards are off for this app. New activity earns no points. In the last 30 days 1 tester earned 20 points.')
+  })
+
   it('RewardsSnapshotStrip shows three linked numbers once testers earn points', () => {
     const html = renderToStaticMarkup(
       <MemoryRouter>

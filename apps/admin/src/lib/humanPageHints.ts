@@ -40,12 +40,6 @@ export function judgeDisagreementHint(ratePct: number): string {
   return `The judge disagreed with the classifier on ${ratePct}% of recent grades. Review mismatches before merging fixes.`
 }
 
-export function integrationIssuesHint(count: number): string {
-  return count === 1
-    ? 'A GitHub, webhook, or Sentry connection is failing — fixes may not land until this is green.'
-    : `${count} integrations are failing health checks — fixes may not land until connections recover.`
-}
-
 export function llmErrorsHint(ratePct: number): string {
   return `${ratePct}% of AI calls failed recently. Check your API keys in Settings or inspect the failing model on the LLM tab.`
 }

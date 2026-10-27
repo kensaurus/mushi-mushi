@@ -37,6 +37,7 @@ import { PromptLabStatusBanner } from '../components/prompt-lab/PromptLabStatusB
 import { PromptLabGuide } from '../components/prompt-lab/PromptLabGuide'
 import { PromptLabSnapshotStrip } from '../components/prompt-lab/PromptLabSnapshotStrip'
 import { PromptLabReadout } from '../components/prompt-lab/PromptLabReadout'
+import { PromptScoreboard } from '../components/prompt-lab/PromptScoreboard'
 import { EMPTY_PROMPT_LAB_STATS, type PromptLabStats } from '../components/prompt-lab/PromptLabStatsTypes'
 
 export function PromptLabPage() {
@@ -255,14 +256,14 @@ export function PromptLabPage() {
         title="AI prompts"
 
         helpTitle="About AI prompts"
-        helpWhatIsIt="The control plane for the LLM prompts that drive fast-filter (Stage 1) and classify-report (Stage 2). Clone a baseline, edit it, run it as a candidate at 10% traffic, and promote when the judge score beats the active version."
+        helpWhatIsIt="An advanced page (a Lab) for the instructions Mushi gives the AI at each step: the fast filter, the diagnosis, grading, the fix writer and more. Each step shows the version in use and the version being tested, with their grades from Triage grading."
         helpUseCases={[
-          'A/B test a sharper Stage 2 prompt before flipping it on for everyone',
-          'Iterate on category rules without redeploying — prompts hot-reload from the DB',
-          'Audit who changed what, when, and what the judge thought of it',
-          'Validate prompt changes against synthetic reports before they reach real users',
+          'Test a sharper diagnosis prompt on a share of reports before it replaces the one in use',
+          'Change category rules without redeploying: prompts are read from the database',
+          'See who changed what, when, and how it graded',
+          'Try a prompt change on test reports before real users see it',
         ]}
-        helpHowToUse="Pick a baseline → Clone → Edit → set Traffic % to a small number (e.g. 10) → wait for the judge to score it → Promote if it beats the active prompt. Global defaults are read-only; clone first."
+        helpHowToUse="Open a step from the list at the top. Clone a version, edit it, give it a small share of traffic (for example 10%), wait for grades, then promote it if it grades higher than the one in use. Built-in versions are read-only; clone first."
       />
 
       <PagePosture
@@ -308,10 +309,14 @@ export function PromptLabPage() {
         ]}
       />
 
-      <PromptLabReadout
-        stats={promptLabStats}
-        fetchedAt={statsFetchedAt}
-        isValidating={statsValidating}
+      <PromptScoreboard
+        stages={orderedStages}
+        grouped={grouped}
+        selected={visibleStage}
+        onOpen={(stage) => {
+          setActiveStage(stage)
+          document.getElementById('prompt-lab-stages')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }}
       />
 
       {orderedStages.length > 0 && visibleStage && (
@@ -360,6 +365,13 @@ export function PromptLabPage() {
           <SyntheticReportsCard />
         </div>
       </DisclosurePanel>
+
+      {/* Endpoints and raw counts: developer detail, at the foot of the page. */}
+      <PromptLabReadout
+        stats={promptLabStats}
+        fetchedAt={statsFetchedAt}
+        isValidating={statsValidating}
+      />
 
       {diffing && (
         <PromptDiffModal prompt={diffing} parent={parentForDiff} onClose={() => setDiffing(null)} />

@@ -372,8 +372,134 @@ describe('PipelinePage', () => {
     expect(q('pipeline-intake')!.textContent).toContain('no deploy recorded in 14 days')
   })
 
+  it('the Workers tab reads the local workers instead of the pipeline', async () => {
+    await render('/pipeline?tab=workers')
+    const paths = state.paths.map((p) => p.path)
+    expect(paths).toContain('/v1/admin/work/lanes?projectId=p1')
+    expect(paths).not.toContain('/v1/admin/pipeline?projectId=p1')
+    expect(q('pipeline-stage-ci')).toBeNull()
+  })
+
+  it('shows registered local worker lanes per app, linked to the Workers tab', async () => {
+    ;(state.data as PipelineData).dispatchers![0]!.local = { runs24h: 6, running: 2, lastAt: '2026-10-26T11:00:00Z', lanes: 2, lanesActive: 1, models: ['grok-4.7-xhigh-fast'] }
+    await render()
+    const link = q('pipeline-opener-p1-lanes')!
+    expect(link.textContent).toBe('2 lanes (1 taking reports) · grok-4.7-xhigh-fast')
+    expect(link.getAttribute('href')).toBe('/pipeline?tab=workers')
+  })
+
+  it('Requeue on a local worker group asks first and posts the run ids as claimIds', async () => {
+    const data = state.data as PipelineData
+    data.stages[2]!.groups = [
+      {
+        id: 'local_infra',
+        stage: 'pr',
+        tone: 'stuck',
+        label: "1 report: a local worker's machine stopped the run again (not the code); requeue to try once more",
+        count: 1,
+        oldestAt: '2026-10-26T10:00:00Z',
+        actions: ['requeue'],
+        settings: { label: 'Local workers', to: '/pipeline?tab=workers' },
+        items: [item('c7', { reportId: 'r7', prUrl: null, prNumber: null, repo: null, lastError: 'permission denied' })],
+      },
+    ]
+    data.stages[2]!.count = 1
+    data.stages[2]!.stuck = 1
+    state.respond = () => ({ ok: true, data: { results: [{ id: 'c7', ok: true, message: 'Back at the front of its lane; the worker takes it next.' }] } })
+    await render()
+    await click(q('pipeline-group-local_infra-requeue'))
+    const confirm = Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'Requeue' && b.hasAttribute('data-primary'))!
+    await click(confirm)
+    await flush()
+    expect(state.posts.find((p) => p.path === '/v1/admin/pipeline/actions')).toEqual({ path: '/v1/admin/pipeline/actions', body: { action: 'requeue', claimIds: ['c7'] } })
+  })
+
   it('All apps reads every app without a project id', async () => {
     await render('/pipeline?apps=all')
     expect(state.paths[0]).toEqual({ path: '/v1/admin/pipeline', scope: 'enumeration' })
+  })
+
+  describe('only actions that can succeed (report 69fcafcb)', () => {
+    const NO_ACTIONS_WRITE = 'The GitHub token cannot re-run workflows: give it Actions: Read and write (fine-grained token) or the workflow scope, in the GitHub connection.'
+    const ROUNDS_USED = 'Review follow-ups are off for this team, and the local mushi work lanes cannot take it: Both follow-up rounds were used on this pull request; a person decides what happens next.'
+
+    function withBlocked() {
+      const ci = (state.data as PipelineData).stages.find((s) => s.id === 'ci')!.groups[0]
+      ci.items = [
+        item('f1', { blocked: { rerun_ci: NO_ACTIONS_WRITE, ci_repair: ROUNDS_USED } }),
+        item('f2', { blocked: { rerun_ci: NO_ACTIONS_WRITE } }),
+      ]
+    }
+
+    it('disables an action every item would be refused, with the reason and the setting that fixes it', async () => {
+      withBlocked()
+      await render()
+      const bulkRerun = q('pipeline-group-ci_red_queued-rerun_ci') as HTMLButtonElement
+      expect(bulkRerun.disabled).toBe(true)
+      expect(bulkRerun.title).toBe(NO_ACTIONS_WRITE)
+      await click(q('pipeline-group-ci_red_queued-toggle'))
+      expect((q('pipeline-item-f1-rerun_ci') as HTMLButtonElement).disabled).toBe(true)
+      const why = q('pipeline-item-f1-blocked')!
+      expect(why.textContent).toContain('Re-run CI is off: The GitHub token cannot re-run workflows')
+      expect(why.querySelector('a[href="/integrations/config#platform-card-github"]')).not.toBeNull()
+      expect(why.textContent).toContain('Send to CI repair is off: Review follow-ups are off')
+    })
+
+    it('a bulk action runs only on the items that can take it, and says how many', async () => {
+      withBlocked()
+      await render()
+      const bulkRepair = q('pipeline-group-ci_red_queued-ci_repair') as HTMLButtonElement
+      expect(bulkRepair.disabled).toBe(false)
+      expect(bulkRepair.textContent).toBe('Send to CI repair')
+      expect(bulkRepair.title).toContain('1 of 2 can take it')
+      await click(bulkRepair)
+      const confirm = Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'Send to CI repair' && b.hasAttribute('data-primary'))!
+      await click(confirm)
+      await flush()
+      expect(state.posts).toEqual([{ path: '/v1/admin/pipeline/actions', body: { action: 'ci_repair', fixIds: ['f2'] } }])
+    })
+  })
+
+  it('the agent-failed group offers "Not a code bug", which closes the report with a reason', async () => {
+    const pr = (state.data as PipelineData).stages.find((s) => s.id === 'pr')!
+    pr.groups.push({
+      id: 'agent_failed_person',
+      stage: 'pr',
+      tone: 'stuck',
+      label: '1 report: the agent says a person must do it, no PR opened',
+      count: 1,
+      oldestAt: '2026-10-25T00:00:00Z',
+      actions: ['dismiss'],
+      settings: null,
+      items: [item('f7', { prUrl: null, prNumber: null, repo: null, blocked: {} })],
+    })
+    state.respond = () => ({ ok: true, data: {} })
+    await render()
+    await click(q('pipeline-group-agent_failed_person-dismiss'))
+    expect(document.body.textContent).toContain('Why close it?')
+    const confirm = Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'Not a code bug' && b.hasAttribute('data-primary'))!
+    await click(confirm)
+    await flush()
+    expect(state.posts[0]).toEqual({ path: '/v1/admin/reports/r-f7', body: { status: 'dismissed', closed_reason: 'wont_fix' } })
+  })
+
+  it('the status line names the biggest stuck group and runs its first action that can succeed', async () => {
+    await render()
+    expect(q('pipeline-status')!.textContent).toContain('5 items stuck. The biggest: 2 PRs: their own CI is red')
+    const top = q('pipeline-top-action')!
+    expect(top.textContent).toBe('Send to CI repair (2)')
+    await click(top)
+    expect(document.body.textContent).toContain('otherwise your local mushi work lanes')
+  })
+
+  it('a long group pages with "Show more" instead of a scroll box inside the page', async () => {
+    const ci = (state.data as PipelineData).stages.find((s) => s.id === 'ci')!.groups[0]
+    ci.items = Array.from({ length: 25 }, (_, i) => item(`f${i + 1}`))
+    ci.count = 25
+    await render()
+    await click(q('pipeline-group-ci_red_queued-toggle'))
+    expect(document.querySelectorAll('[data-testid^="pipeline-item-"][data-testid$="-blocked"], li[data-testid^="pipeline-item-"]').length).toBe(20)
+    await click(q('pipeline-group-ci_red_queued-more'))
+    expect(document.querySelectorAll('li[data-testid^="pipeline-item-"]').length).toBe(25)
   })
 })

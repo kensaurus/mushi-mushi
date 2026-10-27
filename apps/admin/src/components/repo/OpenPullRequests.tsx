@@ -10,6 +10,10 @@
  * Nothing merges on its own (ADR 0017): a person reads the confirmation and clicks Confirm.
  * A Mushi fix PR shows its Opus review (ADR 0030); a hold disables Merge here and
  * points to the fix, whose merge dialog shows the findings and the override.
+ *
+ * The list is grouped by what the person can do (console journeys 2026-10-27):
+ * Mergeable now, Needs a fix, Hold, then Waiting (CI or a review still running,
+ * drafts). Merge used to sit on every row, including Opus "hold" PRs.
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -64,6 +68,30 @@ export function openPrMergeBlocker(pr: Pick<OpenPullRequest, 'checks' | 'review'
   return null
 }
 
+export type OpenPrGroup = 'mergeable' | 'needs_fix' | 'hold' | 'waiting'
+
+/**
+ * What a person can do with this PR now. A Mushi fix PR is mergeable on an
+ * Opus "merge" about its latest commit (countDefinitions "Ready to merge");
+ * a PR Opus did not review merges on its checks alone, as before (ADR 0030).
+ * @internal Exported for tests only.
+ */
+function openPrGroup(pr: Pick<OpenPullRequest, 'checks' | 'review' | 'draft'>): OpenPrGroup {
+  const state = pr.review?.state
+  if (state === 'hold' || (pr.review?.verdict === 'hold' && state !== 'merge')) return 'hold'
+  const checks = uxRequiredChecks(pr.checks)
+  if (checks.some((c) => c.result === 'fail') || state === 'fix_first') return 'needs_fix'
+  if (pr.draft || checks.some((c) => c.result === 'pending') || state === 'queued' || state === 'stale' || pr.review?.pending) return 'waiting'
+  return 'mergeable'
+}
+
+const GROUPS: Array<{ id: OpenPrGroup; title: string; hint: string }> = [
+  { id: 'mergeable', title: 'Mergeable now', hint: 'Required checks passed; a Mushi fix also has an Opus "merge" on its latest commit.' },
+  { id: 'needs_fix', title: 'Needs a fix', hint: 'A required check fails, or Opus said fix first. Open the fix to send it back.' },
+  { id: 'hold', title: 'Hold', hint: 'Opus said hold: a person decides. The fix page shows the findings.' },
+  { id: 'waiting', title: 'Waiting', hint: 'CI or a review is still running, or the PR is a draft.' },
+]
+
 export function OpenPullRequests({ projectId }: { projectId: string }) {
   const list = usePageData<{ pullRequests: OpenPullRequest[]; repos: string[] }>(`/v1/admin/projects/${projectId}/pull-requests`)
   const prs = list.data?.pullRequests ?? []
@@ -90,18 +118,42 @@ export function OpenPullRequests({ projectId }: { projectId: string }) {
       )}
       {list.loading && !list.data && <p className="text-xs text-fg-muted">Reading pull requests from GitHub…</p>}
       {list.data && prs.length === 0 && <p className="text-xs text-fg-muted">No open pull requests.</p>}
-      {prs.length > 0 && (
-        <ul className="flex flex-col divide-y divide-edge-subtle">
-          {prs.map((pr) => (
-            <OpenPullRequestRow key={`${pr.repo}#${pr.number}`} projectId={projectId} pr={pr} showRepo={multiRepo} onMerged={reload} />
-          ))}
-        </ul>
-      )}
+      {prs.length > 0 &&
+        GROUPS.map((g) => {
+          const mine = prs.filter((pr) => openPrGroup(pr) === g.id)
+          if (mine.length === 0) return null
+          return (
+            <section key={g.id} aria-label={g.title} data-testid={`open-prs-${g.id}`}>
+              <h3 className="text-xs font-semibold text-fg">
+                {g.title} <span className="font-normal tabular-nums text-fg-muted">{mine.length}</span>
+              </h3>
+              <p className="text-2xs text-fg-muted">{g.hint}</p>
+              <ul className="flex flex-col divide-y divide-edge-subtle">
+                {mine.map((pr) => (
+                  <OpenPullRequestRow key={`${pr.repo}#${pr.number}`} projectId={projectId} pr={pr} showRepo={multiRepo} onMerged={reload} primary={g.id === 'mergeable'} />
+                ))}
+              </ul>
+            </section>
+          )
+        })}
     </Card>
   )
 }
 
-function OpenPullRequestRow({ projectId, pr, showRepo, onMerged }: { projectId: string; pr: OpenPullRequest; showRepo: boolean; onMerged: () => void }) {
+function OpenPullRequestRow({
+  projectId,
+  pr,
+  showRepo,
+  onMerged,
+  primary,
+}: {
+  projectId: string
+  pr: OpenPullRequest
+  showRepo: boolean
+  onMerged: () => void
+  /** Mergeable now: Merge is the row's main button; elsewhere it is secondary. */
+  primary: boolean
+}) {
   const [confirming, setConfirming] = useState(false)
   const [method, setMethod] = useState<MergeMethod>('squash')
   const [merging, setMerging] = useState(false)
@@ -143,12 +195,12 @@ function OpenPullRequestRow({ projectId, pr, showRepo, onMerged }: { projectId: 
     <li className="flex flex-col gap-2 py-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <a href={pr.url} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 text-xs font-medium text-fg hover:underline">
-          <span className="truncate">
+          <span className="min-w-0 wrap-break-word sm:truncate">
             #{pr.number} {pr.title}
           </span>
           <IconExternalLink className="h-3 w-3 shrink-0" />
         </a>
-        <span className="flex items-center gap-1.5">
+        <span className="flex flex-wrap items-center gap-1.5">
           {pr.draft && <Badge tone="neutral">Draft</Badge>}
           {pr.review && (
             <span className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-2xs font-medium ${META_CHIP_TONE[reviewTone({ state: pr.review.state, verdict: pr.review.verdict ?? null })]}`}>
@@ -158,7 +210,7 @@ function OpenPullRequestRow({ projectId, pr, showRepo, onMerged }: { projectId: 
           {merged ? (
             <Badge tone="okSubtle">Merged</Badge>
           ) : (
-            <Btn size="sm" variant="success" disabled={blocker != null || merging} aria-expanded={confirming} onClick={() => { setConfirming(true); setError(null) }}>
+            <Btn size="sm" variant={primary ? 'success' : 'ghost'} disabled={blocker != null || merging} aria-expanded={confirming} onClick={() => { setConfirming(true); setError(null) }}>
               Merge
             </Btn>
           )}

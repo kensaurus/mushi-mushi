@@ -440,7 +440,8 @@ export function BillingUsageBar({
       <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-edge-subtle/60">
         <ContainedBlock tone="muted" className="flex flex-wrap items-center gap-1.5 py-1.5">
           <SignalChip tone="info">
-            Fixes <span className="font-mono tabular-nums">{usage.fixes.toLocaleString()}</span>
+            {/* Merged fix PRs from any agent; `fixes` counts only the server agent's runs (1c802df2). */}
+            Fixes merged <span className="font-mono tabular-nums">{(usage.fixesSucceeded ?? usage.fixes).toLocaleString()}</span>
           </SignalChip>
           <SignalChip tone="neutral">
             Classifier tokens <span className="font-mono tabular-nums">{usage.tokens.toLocaleString()}</span>

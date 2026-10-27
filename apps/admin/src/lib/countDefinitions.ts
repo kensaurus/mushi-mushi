@@ -29,7 +29,10 @@
  *   Agent failed — "N reports: the agent failed, no PR opened".
  *     Reports whose newest attempt in the last 7 days ended without a PR,
  *     with no fix in flight. Fixed, verified, resolved and dismissed reports
- *     never count. Server: _shared/pipeline-view.ts, group `agent_failed`.
+ *     never count. Server: _shared/pipeline-view.ts, groups `agent_failed`,
+ *     `agent_failed_person` (the agent says a person must decide) and
+ *     `agent_failed_nothing` (nothing to change in the code); together they
+ *     are the one count.
  *     It is a part of Stopped, over a shorter window.
  *
  *   Failing CI — "N fix PRs failing CI". Unit: an open fix PULL REQUEST, as
@@ -46,6 +49,14 @@
  *     reads job-level results (ci_jobs) where /repo reads the PR's check
  *     summary. So the CI stage's stuck count is not Failing CI and is
  *     usually smaller; say "stuck at CI", never "failing CI", for it.
+ *
+ *   Ready to merge — Unit: an open fix PULL REQUEST. Not a draft, its
+ *     latest Opus review says "merge" about its current commit, and its own
+ *     CI passed on the code (a stopped test machine is not a pass).
+ *     readyToMerge picks /fixes "Ready to merge" from the fix list; /repo
+ *     "Mergeable now" applies the same rule to GitHub's live checks
+ *     (OpenPullRequests openPrGroup). /pipeline's "approved and green, not
+ *     queued to merge" is the part of it not in the merge queue yet.
  *
  *   In flight — reports with a fix attempt queued or running.
  *   PR open   — reports whose fix PR is open and not blocked.
@@ -64,8 +75,33 @@ export function failingCiTitle(prs: number): string {
   return `${prs} fix ${pluralize(prs, 'PR')} failing CI`
 }
 
+/** The fields "Ready to merge" reads; a fix attempt (GET /v1/admin/fixes) has them all. */
+export interface ReadyToMergeSignals {
+  pr_url?: string | null
+  pr_state?: string | null
+  merged_at?: string | null
+  commit_sha?: string | null
+  check_run_conclusion?: string | null
+  ci_infra?: { infra: boolean } | null
+  review_verdict?: string | null
+  /** The commit the latest Opus review is about; unknown on an older server. */
+  review_head_sha?: string | null
+}
+
+/** Ready to merge (see the glossary). A review about an older commit is stale, never "merge". */
+export function readyToMerge(fix: ReadyToMergeSignals): boolean {
+  if (!fix.pr_url || fix.merged_at) return false
+  if ((fix.pr_state ?? 'open') !== 'open') return false
+  if (fix.review_verdict !== 'merge') return false
+  if (fix.review_head_sha && fix.commit_sha && fix.review_head_sha !== fix.commit_sha) return false
+  if (fix.ci_infra?.infra) return false
+  return (fix.check_run_conclusion ?? '').toLowerCase() === 'success'
+}
+
 /** One-line definitions, for a hint beside the number. */
 export const COUNT_HINTS = {
+  readyToMerge: 'Open fix PRs whose Opus review says merge about their latest commit and whose CI passed.',
+  stuck: 'Items waiting longer than their step should take, or that need a person. Each counts once, at the step it sits in.',
   stopped:
     'Reports whose latest auto-fix attempt failed, was skipped, or whose PR closed unmerged. Fixed and dismissed reports never count.',
   failingCi:

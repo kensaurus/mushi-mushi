@@ -21,10 +21,13 @@ function lessonsSentence(stats: LessonsStats): string {
     return 'No lessons yet. A bug pattern that keeps coming back across reports becomes one.'
   }
   const active = `${pluralizeWithCount(stats.activeLessons, 'lesson')} in use${stats.criticalLessons > 0 ? ` (${stats.criticalLessons} critical)` : ''}`
+  // Ready = 3+ reports, the bar for promoting; smaller patterns are still growing.
   const ready =
-    stats.candidateClusters > 0
-      ? `${pluralizeWithCount(stats.candidateClusters, 'recurring pattern')} ready to become one`
-      : 'no new patterns waiting'
+    stats.readyToPromote > 0
+      ? `${pluralizeWithCount(stats.readyToPromote, 'recurring pattern')} ready to become one`
+      : stats.candidateClusters > 0
+        ? `${pluralizeWithCount(stats.candidateClusters, 'recurring pattern')} still growing`
+        : 'no new patterns waiting'
   return `${active}; ${ready}.`
 }
 
@@ -32,7 +35,7 @@ export function LessonsSnapshotStrip({ stats, statsFetchedAt, statsValidating, s
   return (
     <PageStatus
       ariaLabel="Lessons status"
-      tone={stats.criticalLessons > 0 ? 'warn' : stats.candidateClusters > 0 ? 'info' : 'ok'}
+      tone={stats.criticalLessons > 0 ? 'warn' : stats.readyToPromote > 0 ? 'info' : 'ok'}
       sentence={lessonsSentence(stats)}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       metrics={[
@@ -44,9 +47,9 @@ export function LessonsSnapshotStrip({ stats, statsFetchedAt, statsValidating, s
         },
         {
           label: statLabels?.candidates ?? 'Ready to promote',
-          value: stats.candidateClusters,
-          tone: stats.candidateClusters > 0 ? 'warn' : 'neutral',
-          hint: 'Groups of similar reports that could become a lesson. Promote one to apply it.',
+          value: stats.readyToPromote,
+          tone: stats.readyToPromote > 0 ? 'warn' : 'neutral',
+          hint: 'Bugs with 3 or more reports that share one cause. Promote one to make its suggested rule a rule in use.',
           to: lessonsLinks.candidates,
         },
         {

@@ -32,6 +32,12 @@ import {
 type Db = { from: (table: string) => any }
 
 const API = 'https://api.github.com'
+/**
+ * fix_events.dedupe_key prefix of a CI re-run GitHub refused because the
+ * token lacks Actions write (api/routes/ci.ts writes it; the /pipeline read
+ * stops offering Re-run CI for that app until its settings change).
+ */
+export const RERUN_REFUSED_DEDUPE_PREFIX = 'ci_rerun_refused:'
 /** Runs read per PR head in the fix loop. */
 export const MAX_RUNS_PER_SHA = 5
 /** Annotation reads per PR head (one per cancelled / failed job). */

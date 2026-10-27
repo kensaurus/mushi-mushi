@@ -315,8 +315,10 @@ prices (dated), your plan's included minutes, and your electricity figures
     .addHelpText('after', `
 Reads GitHub's billing usage API with GITHUB_TOKEN, or the token of \`gh auth
 login\`. The token stays on this machine and is never printed. A personal
-account's bill needs your own login (fine-grained tokens: Plan read); an
-organization's needs an owner or billing manager (Administration read).
+account's bill needs your own login with the classic \`user\` scope, which
+gh does not ask for by default (\`gh auth refresh -s user\`), or a
+fine-grained token with Plan: read. An organization's needs an owner or
+billing manager (Administration read).
 
 Net is what GitHub charged; public repos and your plan's included minutes show
 as discount. Copilot and other products are left out. With --push, the month's

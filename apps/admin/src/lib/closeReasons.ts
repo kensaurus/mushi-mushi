@@ -26,7 +26,7 @@ function isMushiCheckSource(source: string | null | undefined): boolean {
   return typeof source === 'string' && MUSHI_CHECK_SOURCES.has(source)
 }
 
-const CLOSE_REASONS: readonly CloseReason[] = [
+export const CLOSE_REASONS: readonly CloseReason[] = [
   { value: 'not_reproducible', label: "Couldn't reproduce it" },
   { value: 'wont_fix', label: "Won't fix" },
   { value: 'working_as_intended', label: 'Works as intended' },

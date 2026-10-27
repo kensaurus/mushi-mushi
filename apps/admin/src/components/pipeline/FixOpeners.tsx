@@ -8,6 +8,10 @@
  *
  *          2026-10-26: every app showed auto-fix "on" while the server had
  *          dispatched nothing for 48 h, because its only Cursor key was off.
+ *
+ *          Local lanes are the registered `mushi work --daemon` lanes (ADR
+ *          0048), not guessed from runs: how many, how many take reports now,
+ *          and their models, linked to the Workers tab.
  */
 
 import { Link } from 'react-router-dom'
@@ -24,6 +28,13 @@ const OPENER: Record<DispatcherStatus['opener'], { label: string; tone: 'ok' | '
   server: { label: 'Server', tone: 'info' },
   local: { label: 'Local lanes', tone: 'info' },
   nobody: { label: 'Nobody', tone: 'warn' },
+}
+
+/** "2 lanes (1 taking reports) · grok-4.7-xhigh-fast", or null when no lane is registered. */
+function lanesLabel(local: DispatcherStatus['local']): string | null {
+  if (!local.lanes) return null
+  const models = (local.models ?? []).join(', ')
+  return `${local.lanes} lane${local.lanes === 1 ? '' : 's'} (${local.lanesActive ?? 0} taking reports)${models ? ` · ${models}` : ''}`
 }
 
 function since(iso: string | null, now: number): string {
@@ -66,7 +77,14 @@ export function FixOpeners({ dispatchers, now }: Props) {
                 )}
               </td>
               <td className="py-1.5 pr-3 align-top text-fg-secondary">
-                {d.local.runs24h} in 24h{d.local.running > 0 ? ` · ${d.local.running} running` : ''} · last {since(d.local.lastAt, now)}
+                <span className="block">
+                  {d.local.runs24h} in 24h{d.local.running > 0 ? ` · ${d.local.running} running` : ''} · last {since(d.local.lastAt, now)}
+                </span>
+                {lanesLabel(d.local) && (
+                  <Link to="/pipeline?tab=workers" className="block text-brand hover:underline" data-testid={`pipeline-opener-${d.projectId}-lanes`}>
+                    {lanesLabel(d.local)}
+                  </Link>
+                )}
               </td>
             </tr>
           ))}

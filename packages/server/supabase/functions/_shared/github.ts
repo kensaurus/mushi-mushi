@@ -509,6 +509,8 @@ export interface CheckRunSnapshot {
  *     pending and conclusion stays null (the PR is not done).
  *   - Otherwise conclusion = worst (failure > cancelled > timed_out > neutral
  *     > skipped > success), mirroring GitHub's own UI badge colouring.
+ *   - A run a later re-run of the same check replaced is left out first
+ *     (currentCheckRuns), as GitHub's merge state does.
  */
 export async function fetchLatestCheckRun(
   token: string,
@@ -557,7 +559,7 @@ export async function fetchFailingCheckNames(
   const body = (await res.json().catch(() => null)) as { check_runs?: CheckRunLike[] } | null
   if (!body || !Array.isArray(body.check_runs)) return null
   return new Set(
-    body.check_runs
+    currentCheckRuns(body.check_runs)
       .filter((r) => !isAdvisoryCheckRun(r) && (r.conclusion === 'failure' || r.conclusion === 'timed_out'))
       .map((r) => String(r.name ?? ''))
       .filter(Boolean),
@@ -568,6 +570,44 @@ export interface CheckRunLike {
   name?: string | null
   status: string | null
   conclusion: string | null
+  started_at?: string | null
+  completed_at?: string | null
+  /** For Actions jobs: .../actions/runs/<run id>/job/<job id>. */
+  details_url?: string | null
+  app?: { id?: number | null; slug?: string | null } | null
+}
+
+function actionsRunId(r: CheckRunLike): string | null {
+  return r.details_url?.match(/\/actions\/runs\/(\d+)/)?.[1] ?? null
+}
+
+/**
+ * Whether `later` re-ran the check `earlier` stands for: the same name from
+ * the same app, and either the same Actions run (a re-run attempt) or started
+ * after `earlier` finished. Two workflows with a job of the same name run side
+ * by side on one push, so neither supersedes the other and a red one stays red.
+ */
+function supersedes(later: CheckRunLike, earlier: CheckRunLike): boolean {
+  if ((later.name ?? '') !== (earlier.name ?? '') || !later.name) return false
+  if ((later.app?.id ?? later.app?.slug ?? null) !== (earlier.app?.id ?? earlier.app?.slug ?? null)) return false
+  const t = (s: string | null | undefined) => (s ? Date.parse(s) : NaN)
+  const laterStart = t(later.started_at)
+  if (!Number.isFinite(laterStart)) return false
+  const runA = actionsRunId(later)
+  const runB = actionsRunId(earlier)
+  if (runA && runB && runA === runB) return laterStart > t(earlier.started_at) || !Number.isFinite(t(earlier.started_at))
+  const earlierDone = t(earlier.completed_at)
+  return Number.isFinite(earlierDone) && laterStart >= earlierDone
+}
+
+/**
+ * Drop check runs a later run of the same check replaced. GitHub lists every
+ * run of a head, so a failed run and its green re-run both come back, even
+ * with `filter=latest` when they sit in different check suites (report
+ * 9e2ec6f0: yen-yen#364 read "CI failed" while GitHub said CLEAN).
+ */
+function currentCheckRuns<T extends CheckRunLike>(all: T[]): T[] {
+  return all.filter((r) => !all.some((other) => other !== r && supersedes(other, r)))
 }
 
 /**
@@ -584,7 +624,7 @@ export function isAdvisoryCheckRun(run: { name?: string | null }): boolean {
 }
 
 export function collapseCheckRuns(all: CheckRunLike[]): CheckRunSnapshot {
-  const runs = all.filter((r) => !isAdvisoryCheckRun(r))
+  const runs = currentCheckRuns(all.filter((r) => !isAdvisoryCheckRun(r)))
   if (runs.length === 0) return { status: null, conclusion: null }
 
   const pending = runs.some((r) => r.status === 'queued' || r.status === 'in_progress')

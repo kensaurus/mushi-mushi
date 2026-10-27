@@ -68,10 +68,16 @@ export function dispatchBlock(input: {
   report: Parameters<typeof featureRequestDispatchBlock>[0] & { status: string }
   preflight?: { loading: boolean; ready: boolean; failing: ReadonlyArray<{ label: string }> } | null
   busy?: boolean
+  /** The report's fix PR that is still open: a second paid fix of the same bug is not offered (report 9831ade8). */
+  openPr?: { number: number | null } | null
 }): { blocked: boolean; reason: string | null } {
-  const { report, preflight, busy } = input
+  const { report, preflight, busy, openPr } = input
   if (report.status === 'fixed' || report.status === 'dismissed') {
     return { blocked: true, reason: `This report is ${report.status === 'fixed' ? 'fixed' : 'dismissed'}; reopen it to dispatch a fix.` }
+  }
+  if (openPr) {
+    const pr = openPr.number ? `#${openPr.number}` : 'for this report'
+    return { blocked: true, reason: `A fix PR is already open (${pr}). Review it, merge it or close it before paying for another fix.` }
   }
   const feature = featureRequestDispatchBlock(report)
   if (feature) return { blocked: true, reason: feature }

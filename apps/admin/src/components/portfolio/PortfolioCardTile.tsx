@@ -5,20 +5,22 @@
  *          - header: app icon, name, kind, live release and when it shipped;
  *          - one row of status chips (bugs, checks, SDK, release), each a link
  *            to the page that fixes it, the full sentence in its tooltip;
- *          - at most one "Next step" link;
+ *          - at most one "Next step" link: the app's own top problem
+ *            (appUrgency), never Mushi's setup chores when the app has a
+ *            real one, and a chip naming it ("CI failing", "Bugs to fix"),
+ *            so eight cards no longer all read "Needs attention";
  *          - a muted footer: links into the app's pages and when the checks ran.
  *          Healthy apps render as a compact row (`PortfolioCompactRow`).
  */
 
 import { Link } from 'react-router-dom'
-import { Card, RelativeTime, Tooltip } from '../ui'
+import { Badge, Card, RelativeTime, Tooltip } from '../ui'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { setActiveProjectIdSnapshot } from '../../lib/activeProject'
 import type { PortfolioCard } from '../../lib/portfolioTypes'
 import type { ProjectFaviconSource } from '@mushi-mushi/core'
 import { ProjectFavicon } from '../ProjectFavicon'
-import { RecipeStateChip } from '../recipe/RecipeStateChip'
-import { budgetText, cardNextStep, cardStatusChips, kindLabel, spendText, type CardStatusChip } from './portfolioView'
+import { appUrgency, budgetText, cardStatusChips, kindLabel, spendText, type CardStatusChip } from './portfolioView'
 
 interface Props {
   card: PortfolioCard
@@ -52,7 +54,8 @@ function StatusChip({ chip, onOpen }: { chip: CardStatusChip; onOpen: () => void
 export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
   const open = () => setActiveProjectIdSnapshot(card.projectId)
   const chips = cardStatusChips(card)
-  const next = cardNextStep(card)
+  const urgency = appUrgency(card)
+  const next = urgency.next
   return (
     <Card className="flex min-w-0 flex-col gap-3 p-4">
       <div className="flex items-start gap-3">
@@ -73,7 +76,9 @@ export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
             ) : null}
           </p>
         </div>
-        <RecipeStateChip state={card.worst} className="shrink-0" />
+        <Badge tone={urgency.chip.tone} className="shrink-0">
+          {urgency.chip.text}
+        </Badge>
       </div>
 
       {card.error && <p className="text-xs text-danger" role="status">{card.error}</p>}
@@ -89,12 +94,13 @@ export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
         // title, not <Tooltip>: its inline anchor stops `truncate` shrinking
         // the line, which pushed the card wider than a phone screen.
         <Link
-          to="/recipe"
+          to={next.to}
           onClick={open}
-          title={next.more > 0 ? `${next.reason} (+${next.more} more on the App blueprint page)` : next.reason}
+          title={next.more > 0 ? `${next.text} (+${next.more} more on the App blueprint page)` : next.text}
           className="block min-w-0 truncate text-xs text-fg-secondary hover:text-fg hover:underline"
+          data-testid="portfolio-next-step"
         >
-          <span className="font-medium text-fg">Next step: {next.label}</span> — {next.reason} →
+          <span className="font-medium text-fg">Next step:</span> {next.text} →
         </Link>
       )}
 
@@ -127,9 +133,10 @@ export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
   )
 }
 
-/** A healthy app: one line with its icon, name and chips. */
+/** An app that does not need its owner: one line with its icon, name, chore and chips. */
 export function PortfolioCompactRow({ card, favicon }: Omit<Props, 'showSpend'>) {
   const open = () => setActiveProjectIdSnapshot(card.projectId)
+  const urgency = appUrgency(card)
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2">
       <ProjectFavicon {...favicon} size={20} className="shrink-0" />
@@ -137,6 +144,9 @@ export function PortfolioCompactRow({ card, favicon }: Omit<Props, 'showSpend'>)
         {card.name}
       </Link>
       <span className="text-2xs text-fg-faint">{kindLabel(card)}</span>
+      <Badge tone={urgency.chip.tone} title={urgency.next?.text}>
+        {urgency.chip.text}
+      </Badge>
       <div className="ml-auto flex flex-wrap gap-1.5">
         {cardStatusChips(card).map((chip) => (
           <StatusChip key={chip.key} chip={chip} onOpen={open} />

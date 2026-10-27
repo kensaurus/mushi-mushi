@@ -39,17 +39,20 @@ describe('GitHub abilities', () => {
       pullRequests: 'yes',
       actions: 'no',
       secrets: 'no',
+      workflows: 'no',
     })
+    expect(abilitiesFromInstallation({ contents: 'write', workflows: 'write' }, true).workflows).toBe('yes')
   })
 
   it('a repo outside the installation can do nothing; no permissions in the answer is unknown', () => {
-    expect(abilitiesFromInstallation({ contents: 'write' }, false)).toEqual({ contents: 'no', pullRequests: 'no', actions: 'no', secrets: 'no' })
+    expect(abilitiesFromInstallation({ contents: 'write' }, false)).toEqual({ contents: 'no', pullRequests: 'no', actions: 'no', secrets: 'no', workflows: 'no' })
     expect(abilitiesFromInstallation(null, true).contents).toBe('unknown')
   })
 
-  it('reads a classic token scope header', () => {
-    expect(abilitiesFromClassicScopes('read:org, repo, workflow', true)).toEqual({ contents: 'yes', pullRequests: 'yes', actions: 'yes', secrets: 'yes' })
-    expect(abilitiesFromClassicScopes('public_repo', true)).toEqual({ contents: 'yes', pullRequests: 'yes', actions: 'unknown', secrets: 'no' })
+  it('reads a classic token scope header; workflow files need the workflow scope on top of repo', () => {
+    expect(abilitiesFromClassicScopes('read:org, repo, workflow', true)).toEqual({ contents: 'yes', pullRequests: 'yes', actions: 'yes', secrets: 'yes', workflows: 'yes' })
+    expect(abilitiesFromClassicScopes('repo', true).workflows).toBe('no')
+    expect(abilitiesFromClassicScopes('public_repo', true)).toEqual({ contents: 'yes', pullRequests: 'yes', actions: 'unknown', secrets: 'no', workflows: 'no' })
     expect(abilitiesFromClassicScopes('read:org', true).contents).toBe('no')
     expect(abilitiesFromClassicScopes('repo', false).contents).toBe('no')
   })
@@ -60,6 +63,7 @@ describe('GitHub abilities', () => {
       pullRequests: 'read_only',
       actions: 'no',
       secrets: 'no',
+      workflows: 'unknown',
     })
     expect(abilitiesFromReadProbes({ contents: null, pullRequests: 502, actions: 200, secrets: 200 })).toMatchObject({ contents: 'unknown', pullRequests: 'unknown' })
   })
@@ -67,7 +71,7 @@ describe('GitHub abilities', () => {
 
 describe('githubAccessGap', () => {
   const line = (over: Partial<Parameters<typeof githubAccessGap>[0]>) =>
-    githubAccessGap({ projectId: P, repo: 'kensaurus/glot.it', source: 'app', abilities: { contents: 'yes', pullRequests: 'yes', actions: 'yes', secrets: 'no' }, readError: null, ...over })
+    githubAccessGap({ projectId: P, repo: 'kensaurus/glot.it', source: 'app', abilities: { contents: 'yes', pullRequests: 'yes', actions: 'yes', secrets: 'no', workflows: 'yes' }, readError: null, ...over })
 
   it('the App without secrets is not a gap: the owner gets copy-paste commands instead', () => {
     const g = line({})
@@ -76,15 +80,24 @@ describe('githubAccessGap', () => {
     expect(g.fixHref).toBe('/connect#connect-github')
   })
 
+  it('names a missing Workflows permission without making the line a gap: only one-click CI cost fixes need it', () => {
+    const g = line({ abilities: { contents: 'yes', pullRequests: 'yes', actions: 'yes', secrets: 'no', workflows: 'no' } })
+    expect(g.status).toBe('ok')
+    expect(g.summary).toContain("can't edit workflow files (Workflows: Read and write), so one-click CI cost fixes fail")
+    expect(line({}).summary).toContain('It can edit workflow files')
+    const unknown = line({ source: 'pat_fine_grained', abilities: { contents: 'read_only', pullRequests: 'read_only', actions: 'read_only', secrets: 'read_only', workflows: 'unknown' } })
+    expect(unknown.summary).not.toContain('workflow files')
+  })
+
   it('a missing core permission is a gap that names it (the GITHUB_ACTIONS_WRITE_MISSING case)', () => {
-    expect(line({ abilities: { contents: 'yes', pullRequests: 'yes', actions: 'read_only', secrets: 'no' } }).status).toBe('unknown')
-    const gap = line({ abilities: { contents: 'yes', pullRequests: 'yes', actions: 'no', secrets: 'no' } })
+    expect(line({ abilities: { contents: 'yes', pullRequests: 'yes', actions: 'read_only', secrets: 'no', workflows: 'yes' } }).status).toBe('unknown')
+    const gap = line({ abilities: { contents: 'yes', pullRequests: 'yes', actions: 'no', secrets: 'no', workflows: 'yes' } })
     expect(gap.status).toBe('gap')
     expect(gap.summary).toContain("can't re-run CI (Actions: Read and write)")
   })
 
   it('a fine-grained token never reads as ok: writes cannot be proven without writing', () => {
-    const g = line({ source: 'pat_fine_grained', abilities: { contents: 'read_only', pullRequests: 'read_only', actions: 'read_only', secrets: 'read_only' } })
+    const g = line({ source: 'pat_fine_grained', abilities: { contents: 'read_only', pullRequests: 'read_only', actions: 'read_only', secrets: 'read_only', workflows: 'unknown' } })
     expect(g.status).toBe('unknown')
     expect(g.summary).toContain('it never writes to check')
   })

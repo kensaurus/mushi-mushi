@@ -516,13 +516,10 @@ function HealthPageContent() {
         />
       )
     }
-    return (
-      <RecommendedAction
-        tone="success"
-        title="All systems nominal"
-        description={`${llm.totalCalls} LLM calls · ${errorPct}% errors · ${fallbackPct}% fallbacks. No action needed.`}
-      />
-    )
+    // Healthy: the status sentence above already says so. A second
+    // "All systems nominal" card beside an amber error rate read as a
+    // contradiction (console journeys 2026-10-27).
+    return null
   })()
 
   return (
@@ -565,7 +562,8 @@ function HealthPageContent() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
-            show: isHealthStatusBannerCritical(stats),
+            // The status sentence below says the same thing; the banner stands in only when it is hidden.
+            show: isHealthStatusBannerCritical(stats) && (ux.hideHealthSnapshot || !stats.hasAnyProject),
             children: (
               <HealthStatusBanner
                 stats={stats}
