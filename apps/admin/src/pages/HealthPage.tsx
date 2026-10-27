@@ -562,7 +562,8 @@ function HealthPageContent() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
-            show: isHealthStatusBannerCritical(stats),
+            // The status sentence below says the same thing; the banner stands in only when it is hidden.
+            show: isHealthStatusBannerCritical(stats) && (ux.hideHealthSnapshot || !stats.hasAnyProject),
             children: (
               <HealthStatusBanner
                 stats={stats}

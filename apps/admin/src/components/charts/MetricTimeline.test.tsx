@@ -60,6 +60,14 @@ describe('MetricTimeline', () => {
     const spikes = [...host.querySelectorAll<HTMLElement>('[data-testid="metric-timeline-spike"]')]
     expect(spikes.map((s) => s.dataset.state)).toEqual(['open', 'closed'])
     expect(spikes[0]!.className).toContain('bg-danger')
+    // Marks are positioned against the plot itself: a wrapper in between (a
+    // tooltip span) pinned every mark to the left edge in the first build.
+    const plot = host.querySelector('[role="img"]')!
+    expect(spikes.every((s) => s.parentElement === plot)).toBe(true)
+    expect(spikes[0]!.style.left).toBe('100%')
+    const release = host.querySelector<HTMLElement>('[data-testid="metric-timeline-release"]')!
+    expect(release.parentElement).toBe(plot)
+    expect(release.style.left).toBe('75%')
     expect(host.querySelector('figcaption')?.textContent).toContain('Release')
     expect(host.querySelector('figcaption')?.textContent).toContain('Spike to check')
     // Screen readers get the same data as a table.

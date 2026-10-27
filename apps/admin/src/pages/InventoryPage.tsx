@@ -446,17 +446,6 @@ export function InventoryPage() {
         helpHowToUse={INVENTORY_HELP.howToUse}
       />
 
-      <PagePosture
-        slots={[
-          {
-            priority: POSTURE_PRIORITY.guide,
-            show: Boolean(projectId),
-            children: (
-              <InventoryWorkspaceReadout
-                projectId={projectId!}
-                storyCount={storiesQuery.data ? storiesQuery.data.tree.length : null}
-                nodeCount={total}
-              />
             ),
           },
         ]}
@@ -508,15 +497,7 @@ export function InventoryPage() {
         }}
       />
       ) : null}
-      <SegmentedControl<Tab>
-        size="sm"
-        scrollable
-        ariaLabel="Inventory sections"
-        value={tab}
-        onChange={setTab}
-        options={INVENTORY_TABS}
-        className="w-full sm:w-auto"
-      />
+
       {hasInventory ? (
         <PageStatus
           tone={broken > 0 ? 'danger' : total > 0 && verified === total ? 'ok' : 'warn'}
@@ -547,6 +528,16 @@ export function InventoryPage() {
           data-testid="inventory-first-step"
         />
       ) : null}
+
+      <SegmentedControl<Tab>
+        size="sm"
+        scrollable
+        ariaLabel="Inventory sections"
+        value={tab}
+        onChange={setTab}
+        options={INVENTORY_TABS}
+        className="w-full sm:w-auto"
+      />
 
       {tab === 'stories' && (
         hasInventory ? (
@@ -656,6 +647,19 @@ export function InventoryPage() {
           </div>
         </div>
       )}
+
+      {/* Endpoints and raw signals: developer detail, at the foot of the page. */}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.guide,
+            show: Boolean(projectId),
+            children: (
+              <InventoryWorkspaceReadout
+                projectId={projectId!}
+                storyCount={storiesQuery.data ? storiesQuery.data.tree.length : null}
+                nodeCount={total}
+              />
 
       <ActionDetailDrawer
         open={drawer != null}

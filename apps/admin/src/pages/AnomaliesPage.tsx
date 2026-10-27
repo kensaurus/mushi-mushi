@@ -325,7 +325,8 @@ export function AnomaliesPage() {
           {
             priority: POSTURE_PRIORITY.status,
             // No metrics: the snapshot below is the page's one first step (P3).
-            show: isAnomaliesStatusBannerCritical(stats) && stats.topPriority !== 'no_metrics',
+            // The status sentence below says the same thing; the banner stands in only when it is hidden.
+            show: isAnomaliesStatusBannerCritical(stats) && stats.topPriority !== 'no_metrics' && (ux.hideAnomaliesSnapshot || !stats.hasAnyProject),
             children: (
               <AnomaliesStatusBanner
                 stats={stats}
@@ -346,6 +347,7 @@ export function AnomaliesPage() {
                 statsValidating={statsValidating}
                 statLabels={copy?.statLabels}
                 onAddMetrics={() => setActiveTab('metrics')}
+                onReview={() => setActiveTab('anomalies')}
               />
             ),
           },

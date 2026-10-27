@@ -435,7 +435,8 @@ export function DriftPage() {
           {
             priority: POSTURE_PRIORITY.status,
             // Never scanned: the snapshot below is the page's one first step (P3).
-            show: isDriftStatusBannerCritical(stats) && stats.topPriority !== 'never_scanned',
+            // The status sentence below says the same thing; the banner stands in only when it is hidden.
+            show: isDriftStatusBannerCritical(stats) && stats.topPriority !== 'never_scanned' && (ux.hideDriftSnapshot || !stats.hasAnyProject),
             children: (
               <DriftStatusBanner
                 stats={stats}

@@ -8,11 +8,12 @@
  *
  *          One series, one y-axis. The line is an SVG polyline; markers and
  *          dots are positioned in HTML (percentages) so they stay round at any
- *          width. Every dot and marker has a hover tooltip, and a hidden
- *          table carries the same data for screen readers.
+ *          width. Every dot and marker has a hover tooltip (title) and is
+ *          positioned against the plot itself: a tooltip wrapper would become
+ *          the positioning parent and pin every mark to the left edge. A
+ *          hidden table carries the same data for screen readers.
  */
 
-import { Tooltip } from '../ui'
 import { ChartAccessibleSummary } from './ChartAccessibleSummary'
 
 interface TimelinePoint {
@@ -125,29 +126,29 @@ export function MetricTimeline({ points, markers = [], dots = [], title, formatV
             <polyline points={line} fill="none" className="stroke-brand" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           </svg>
           {shownMarkers.map((m) => (
-            <Tooltip key={`m-${m.ts}-${m.label}`} content={`${m.label} · ${shortDate(time(m.ts))}`}>
-              <span
-                data-testid="metric-timeline-release"
-                tabIndex={0}
-                aria-label={`Release ${m.label}`}
-                className="absolute inset-y-0 w-3 -translate-x-1/2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
-                style={{ left: `${scale.x(m.ts)}%` }}
-              >
-                <span aria-hidden="true" className="absolute inset-y-0 left-1/2 border-l border-dashed border-brand/70" />
-              </span>
-            </Tooltip>
+            <span
+              key={`m-${m.ts}-${m.label}`}
+              data-testid="metric-timeline-release"
+              tabIndex={0}
+              title={`Release ${m.label} · ${shortDate(time(m.ts))}`}
+              aria-label={`Release ${m.label}, ${shortDate(time(m.ts))}`}
+              className="absolute inset-y-0 w-3 -translate-x-1/2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+              style={{ left: `${scale.x(m.ts)}%` }}
+            >
+              <span aria-hidden="true" className="absolute inset-y-0 left-1/2 border-l border-dashed border-brand/70" />
+            </span>
           ))}
           {shownDots.map((d) => (
-            <Tooltip key={`d-${d.ts}-${d.label}`} content={`${d.label} · ${formatValue(d.value)} · ${shortDate(time(d.ts))}`}>
-              <span
-                data-testid="metric-timeline-spike"
-                data-state={d.state}
-                tabIndex={0}
-                aria-label={d.label}
-                className={`absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-surface-raised focus-visible:outline-none focus-visible:ring-brand/60 ${d.state === 'open' ? 'bg-danger' : 'bg-fg-faint'}`}
-                style={{ left: `${scale.x(d.ts)}%`, top: `${scale.y(d.value)}%` }}
-              />
-            </Tooltip>
+            <span
+              key={`d-${d.ts}-${d.label}`}
+              data-testid="metric-timeline-spike"
+              data-state={d.state}
+              tabIndex={0}
+              title={`${d.label} · ${formatValue(d.value)} · ${shortDate(time(d.ts))}`}
+              aria-label={`${d.label}, ${formatValue(d.value)}, ${shortDate(time(d.ts))}`}
+              className={`absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-surface-raised focus-visible:outline-none focus-visible:ring-brand/60 ${d.state === 'open' ? 'bg-danger' : 'bg-fg-faint'}`}
+              style={{ left: `${scale.x(d.ts)}%`, top: `${scale.y(d.value)}%` }}
+            />
           ))}
         </div>
       </div>
