@@ -1380,7 +1380,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/integrations': {
-      title: 'Where fixed bugs go',
+      title: 'Integrations',
       description: 'Connect Sentry, Langfuse, GitHub, and routing destinations so Mushi closes the loop in tools your team already uses.',
       sections: {
         platforms: 'Connected services',

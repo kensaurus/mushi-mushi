@@ -54,7 +54,7 @@ export function SetupProgressRail({ project, apiKey, onTab, onMintKey, minting, 
     >
       <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h2 className="text-sm font-semibold text-fg">
-          {rail.next ? `${rail.doneCount} of 4 done. Next: ${rail.next.label.toLowerCase()}` : 'Your app is wired up'}
+          {rail.next ? `${rail.doneCount} of 4 done. Next: ${rail.next.label}` : 'Your app is wired up'}
         </h2>
       </div>
       <ol className="mt-3 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">

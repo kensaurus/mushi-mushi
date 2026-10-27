@@ -1,6 +1,6 @@
 /**
  * FILE: BillingSnapshotStrip.tsx
- * PURPOSE: The top of Billing: the plan in one line, then one usage meter per
+ * PURPOSE: The top of Billing, under the plan banner: one usage meter per
  *          limit (diagnoses or reports, seats), fixes merged, and the spend cap.
  *          The meters come from billingMeters.ts; a plain count never shows
  *          as a ratio (report 1c802df2: "Fixes · period 4/0").
@@ -8,7 +8,7 @@
 
 import { Link } from 'react-router-dom'
 import { Section } from '../ui'
-import { billingMeters, planLine, type MeterTone, type SeatUsage, type UsageMeter } from './billingMeters'
+import { billingMeters, type MeterTone, type SeatUsage, type UsageMeter } from './billingMeters'
 import type { BillingStats } from './types'
 
 interface Props {
@@ -34,13 +34,10 @@ const VALUE: Record<MeterTone, string> = {
   neutral: 'text-fg',
 }
 
-export function BillingSnapshotStrip({ stats, fetchedAt, isValidating, sectionTitle = 'Your plan and usage', seats = null }: Props) {
+export function BillingSnapshotStrip({ stats, fetchedAt, isValidating, sectionTitle = 'Usage this period', seats = null }: Props) {
   const meters = billingMeters(stats, seats)
   return (
     <Section title={sectionTitle} freshness={{ at: fetchedAt, isValidating }}>
-      <p className="mb-2.5 text-sm text-fg" data-testid="billing-plan-line">
-        {planLine(stats)}
-      </p>
       <ul aria-label="Usage this period" className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
         {meters.map((m) => (
           <MeterCard key={m.id} meter={m} />

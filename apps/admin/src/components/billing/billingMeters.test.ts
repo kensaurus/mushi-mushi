@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { billingMeters, fixesMeter, planLine, resetsIn } from './billingMeters'
+import { billingMeters, fixesMeter, resetsIn } from './billingMeters'
 import { EMPTY_BILLING_STATS, type BillingStats } from './types'
 
 const NOW = Date.parse('2026-10-27T00:00:00Z')
@@ -60,15 +60,10 @@ describe('billingMeters', () => {
   })
 })
 
-describe('planLine and resetsIn', () => {
-  it('says what the plan costs in plain words', () => {
-    expect(planLine(stats({ isComplimentary: true }), NOW)).toBe('Pro · admin account, no charges')
-    expect(planLine(stats({ subscriptionStatus: 'active' }), NOW)).toBe('Pro · usage resets in 5 days')
-    expect(planLine(stats({ subscriptionStatus: 'past_due' }), NOW)).toBe('Pro · payment needs attention (past due)')
-  })
-
+describe('resetsIn', () => {
   it('handles a missing or past period end', () => {
     expect(resetsIn(null, NOW)).toBeNull()
     expect(resetsIn('2026-10-26T00:00:00Z', NOW)).toBe('resets today')
+    expect(resetsIn(PERIOD_END, NOW)).toBe('resets in 5 days')
   })
 })

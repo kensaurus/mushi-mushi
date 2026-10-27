@@ -213,6 +213,14 @@ const ELEMENT_PAGE: Partial<Record<RecipeElementKey, string>> = {
   integrations: '/integrations/config',
 }
 
+/** A label inside a sentence: lower case, except acronyms ("CI", "SDK") stay as they are. */
+function inSentence(label: string): string {
+  return label
+    .split(' ')
+    .map((w) => (w.length > 1 && w === w.toUpperCase() ? w : w.toLowerCase()))
+    .join(' ')
+}
+
 /** Most urgent first: broken, bugs waiting, a part to fix, SDK behind, chores, clear. */
 type UrgencyLevel = 'broken' | 'bugs' | 'fix' | 'behind' | 'chores' | 'clear'
 
@@ -247,7 +255,7 @@ export function appUrgency(card: PortfolioCard): AppUrgency {
     return {
       level: 'broken',
       chip: { text: `${failing.label} failing`, tone: 'danger' },
-      short: `${failing.label.toLowerCase()} failing`,
+      short: `${inSentence(failing.label)} failing`,
       next: { text: `${failing.label}: ${failing.reason}`, to: pageFor(failing), more: others(1) },
     }
   }
@@ -270,7 +278,7 @@ export function appUrgency(card: PortfolioCard): AppUrgency {
     return {
       level: 'fix',
       chip: { text: `${drift.label} to fix`, tone: 'warnSubtle' },
-      short: `${drift.label.toLowerCase()} to fix`,
+      short: `${inSentence(drift.label)} to fix`,
       next: { text: `${drift.label}: ${drift.reason}`, to: pageFor(drift), more: others(1) },
     }
   }

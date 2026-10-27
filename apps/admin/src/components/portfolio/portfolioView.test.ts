@@ -195,6 +195,9 @@ describe('appUrgency', () => {
   it('names a failing part and sends the user to the page that fixes it', () => {
     const u = appUrgency(card({ worst: 'error', needsLook: [{ element: 'ci', label: 'CI', state: 'error', reason: 'Mushi could not read your CI builds.' }] }))
     expect(u).toMatchObject({ level: 'broken', chip: { text: 'CI failing', tone: 'danger' }, next: { to: '/ci' } })
+    // Acronyms keep their case inside the status sentence.
+    expect(u.short).toBe('CI failing')
+    expect(appUrgency(card({ worst: 'error', needsLook: [{ element: 'design', label: 'Design system', state: 'error', reason: 'x' }] })).short).toBe('design system failing')
   })
 
   it('offers the worst part to fix and counts the rest', () => {

@@ -97,7 +97,7 @@ describe('SetupProgressRail', () => {
   it('without a key, the one button makes it', () => {
     const onMintKey = vi.fn()
     render(project(false, false), { onMintKey })
-    expect(host.textContent).toContain('1 of 4 done. Next: report key')
+    expect(host.textContent).toContain('1 of 4 done. Next: Report key')
     act(() => button('Make the report key')!.click())
     expect(onMintKey).toHaveBeenCalled()
   })

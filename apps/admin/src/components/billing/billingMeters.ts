@@ -146,14 +146,3 @@ export function billingMeters(stats: BillingStats, seats: SeatUsage | null = nul
 
   return meters
 }
-
-/** The one line above the meters: plan, and when it renews or that it is free. */
-export function planLine(stats: BillingStats, now: number = Date.now()): string {
-  if (stats.isComplimentary) return `${stats.planDisplayName} · admin account, no charges`
-  const reset = resetsIn(stats.periodEnd, now)
-  if (stats.cancelAtPeriodEnd) return `${stats.planDisplayName} · cancels at the end of this period`
-  if (stats.subscriptionStatus && stats.subscriptionStatus !== 'active' && stats.subscriptionStatus !== 'trialing') {
-    return `${stats.planDisplayName} · payment needs attention (${stats.subscriptionStatus.replace(/_/g, ' ')})`
-  }
-  return reset ? `${stats.planDisplayName} · usage ${reset}` : stats.planDisplayName
-}
