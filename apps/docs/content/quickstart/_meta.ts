@@ -2,6 +2,7 @@ export default {
   index: 'Choose your stack',
   'incident-loop': 'Incident loop (start here)',
   'lovable-mcp': 'Lovable, Claude Code, Cursor',
+  'lovable-bolt': 'Lovable or Bolt (no terminal)',
   'cli-console-loop': 'CLI ↔ console loop',
   mcp: 'MCP server',
   react: 'React',
