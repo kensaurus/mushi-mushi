@@ -2148,6 +2148,7 @@ const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   'get_code_health',
   'get_ci_overview',
   'get_ci_costs',
+  'get_ci_bill',
   'request_ci_placement_change',
   'get_fix_verification',
   'explain_finding',
