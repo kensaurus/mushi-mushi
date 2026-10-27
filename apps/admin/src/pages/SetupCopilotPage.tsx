@@ -19,6 +19,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageData } from '../lib/usePageData'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { mushiEnvVarsForProjectSlug, isExpoReporterProject } from '../lib/projectMushiEnv'
+import { hasSdkCheckIn } from '../lib/heartbeat'
 import { SetupCopilotReadout } from '../components/setup-copilot/SetupCopilotReadout'
 import { ContainedBlock } from '../components/report-detail/ReportSurface'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -47,6 +48,7 @@ interface ProjectRow {
     last_seen_origin?: string | null
     last_seen_user_agent?: string | null
     last_seen_endpoint_host?: string | null
+    scopes?: string[] | null
   }>
   sdk_status?: SdkStatus
   sdk_package?: string | null
@@ -84,6 +86,9 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
 
   const setupProject = setup.data?.projects.find((p) => p.project_id === projectId)
   const env = mushiEnvVarsForProjectSlug(projectRow?.slug ?? setupProject?.project_slug)
+  const expoReporter = isExpoReporterProject(projectRow?.slug)
+  // An MCP or CLI key's last call is not the app's SDK (report fe489587).
+  const sdkCheckedIn = hasSdkCheckIn(projectRow?.api_keys)
 
   const connectCmd =
     'mushi connect --api-key <key> --project-id <uuid> --endpoint <url> --wait'
@@ -91,20 +96,17 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
   const pageSummary = useMemo(() => {
     if (!projectId) return 'Select a project'
     const { required_complete, required_total } = setup.selectors
-    const sdkLive = Boolean(
-      projectRow?.api_keys?.some((k) => k.is_active && k.last_seen_at),
-    )
     const parts: string[] = []
     if (required_total > 0) {
       parts.push(`Ingest ${required_complete}/${required_total}`)
     }
-    parts.push(sdkLive ? 'SDK live' : 'SDK pending')
+    parts.push(sdkCheckedIn ? 'SDK live' : 'SDK pending')
     if (projectRow) {
       const n = projectRow.report_count
       parts.push(`${n} report${n === 1 ? '' : 's'}`)
     }
     return parts.join(' · ')
-  }, [projectId, setup.selectors, projectRow])
+  }, [projectId, setup.selectors, projectRow, sdkCheckedIn])
 
   usePublishPageContext({
     route: '/setup-copilot',
@@ -198,9 +200,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
                     projectName={projectRow.name}
                     projectSlug={projectRow.slug}
                     reportCount={projectRow.report_count}
-                    sdkConnected={Boolean(
-                      projectRow.api_keys?.some((k) => k.is_active && k.last_seen_at),
-                    )}
+                    sdkConnected={sdkCheckedIn}
                     connectCmd={connectCmd}
                   />
                 ),
@@ -246,7 +246,9 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
 
           <Section title="2b · CI &amp; store builds">
             <p className="text-xs text-fg-muted mb-3">
-              Reporter SDK keys for TestFlight / Play builds vs Code Health ingest — different secrets.
+              {expoReporter
+                ? 'Reporter SDK keys for TestFlight / Play builds vs Code Health ingest — different secrets.'
+                : 'Reporter SDK keys vs Code Health ingest — different secrets.'}
             </p>
             <div className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
@@ -270,7 +272,9 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
                         <code className="font-mono">{env.ciVars.apiKey.name}</code> (secret)
                       </li>
                     ) : null}
-                    <li>Rebuild store apps after changing — EXPO_PUBLIC_* is compile-time.</li>
+                    {expoReporter ? (
+                      <li>Rebuild store apps after changing — EXPO_PUBLIC_* is compile-time.</li>
+                    ) : null}
                   </ul>
                 </ContainedBlock>
                 <ContainedBlock tone="muted">
@@ -284,7 +288,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
                     </li>
                     <li>Does not enable the in-app band — metrics POST /v1/ingest/metrics only.</li>
                     {/* The secrets script lives in the yen-yen repo only (report fe489587). */}
-                    {isExpoReporterProject(projectRow.slug) ? (
+                    {expoReporter ? (
                       <li>
                         Setup: <code className="font-mono">node scripts/setup-yen-yen-ingest-secrets.mjs</code>
                       </li>
@@ -292,7 +296,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
                   </ul>
                 </ContainedBlock>
               </div>
-              {(env.ciVars && isExpoReporterProject(projectRow.slug)) ? (
+              {(env.ciVars && expoReporter) ? (
                 <ContainedBlock tone="warn">
                   <p className="text-2xs text-fg-muted">
                     Automate reporter GitHub vars:{' '}

@@ -15,6 +15,9 @@
  * a missing heartbeat. Callers must render no connectivity claim at all in that
  * case rather than defaulting to "Not connected" and reporting every project as
  * dead. An explicit `null` is the deployed backend saying "never seen".
+ *
+ * `hasSdkCheckIn` is the yes/no used by Setup Diagnose: a `report:write` key
+ * with no MCP scope has authenticated.
  */
 
 /** Heartbeat freshness buckets. Ordered most-alive → least-alive. */
@@ -165,6 +168,17 @@ export const HEARTBEAT_HINT: Record<Exclude<HeartbeatState, 'unknown'>, string> 
 export function isSdkKeyScopes(scopes: readonly string[] | null | undefined): boolean {
   const s = scopes ?? []
   return s.includes('report:write') && !s.some((x) => x.startsWith('mcp:'))
+}
+
+/**
+ * True when an SDK key has checked in. MCP and CLI calls do not count: the
+ * docs demo's read-only key, last called by curl, is not the app's SDK
+ * (report fe489587).
+ */
+export function hasSdkCheckIn(
+  keys: ReadonlyArray<HeartbeatKeyLike & { scopes?: readonly string[] | null }> | null | undefined,
+): boolean {
+  return latestHeartbeatAt((keys ?? []).filter((k) => isSdkKeyScopes(k.scopes))) != null
 }
 
 /** The SDK key legend's scale (Connect key list): Healthy under 1 hour, Stale up to 7 days, Cold after. */
