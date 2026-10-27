@@ -230,6 +230,7 @@ describe('findings policy', () => {
     expect(isMeasuredStall('dead_end')).toBe(true)
     expect(isMeasuredStall('model_gave_up')).toBe(false)
     expect(isMeasuredStall('out_of_steps')).toBe(false)
+    expect(isMeasuredStall('model_unavailable')).toBe(false)
   })
 
   it('a measured finding lists the steps to repeat and keeps one fingerprint across sessions', () => {

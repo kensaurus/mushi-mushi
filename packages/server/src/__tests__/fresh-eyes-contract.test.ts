@@ -44,7 +44,7 @@ function noisyRun(): FreshEyesResult {
     sessions: [1, 2, 3].map((index) => ({
       index,
       outcome: 'stalled' as const,
-      stall: { step: 5, screen: '/s'.repeat(200), reason: 'model_gave_up' as const, detail: 'z'.repeat(500) },
+      stall: { step: 5, screen: '/s'.repeat(200), reason: index === 3 ? ('model_unavailable' as const) : ('model_gave_up' as const), detail: 'z'.repeat(500) },
       ttfvSeconds: null,
       appSeconds: 12.3,
       readSeconds: 70,

@@ -5,7 +5,7 @@
  *          first-time visitor tried one goal and the time it took.
  */
 
-export type FreshEyesStallReason = 'signup_wall' | 'captcha' | 'external' | 'dead_end' | 'blocked' | 'error' | 'model_gave_up' | 'out_of_steps'
+export type FreshEyesStallReason = 'signup_wall' | 'captcha' | 'external' | 'dead_end' | 'blocked' | 'error' | 'model_gave_up' | 'model_unavailable' | 'out_of_steps'
 
 export interface FreshEyesStep {
   n: number
@@ -84,6 +84,7 @@ export const STALL_LABEL: Record<FreshEyesStallReason, string> = {
   blocked: 'A refused request',
   error: 'An error stopped it',
   model_gave_up: 'Did not know what to do next',
+  model_unavailable: 'The model did not answer (not your app)',
   out_of_steps: 'Ran out of steps',
 }
 

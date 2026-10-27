@@ -372,7 +372,7 @@ export interface FreshEyesStep {
 }
 
 /** Why a session ended without reaching its goal. Measured causes are page facts; the last two are the model's. */
-export type StallReason = 'signup_wall' | 'captcha' | 'external' | 'dead_end' | 'blocked' | 'error' | 'model_gave_up' | 'out_of_steps'
+export type StallReason = 'signup_wall' | 'captcha' | 'external' | 'dead_end' | 'blocked' | 'error' | 'model_gave_up' | 'model_unavailable' | 'out_of_steps'
 
 const MEASURED_STALLS: ReadonlySet<StallReason> = new Set(['signup_wall', 'captcha', 'external', 'dead_end', 'blocked', 'error'])
 
@@ -856,7 +856,8 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
         say(`  step ${n}: no usable action (${(answer.error ?? answer.text ?? '').slice(0, 80)})`)
         session.modelSeconds += modelMs / 1000
         if (++unusable >= 3) {
-          stall(n, 'error', `The model gave no usable action three times: ${(answer.error ?? '').slice(0, 120)}`)
+          // The model, not the app: never a finding, and the run says so.
+          stall(n, 'model_unavailable', `The model gave no usable action three times: ${(answer.error ?? '').slice(0, 120)}`)
           break
         }
         continue

@@ -23,6 +23,7 @@ const STALL_TEXT: Record<StallReason, string> = {
   blocked: 'stopped at a refused request',
   error: 'stopped on an error',
   model_gave_up: 'gave up (the model did not know what to do)',
+  model_unavailable: 'stopped because the model did not answer (not the app)',
   out_of_steps: 'ran out of steps',
 }
 

@@ -23,7 +23,7 @@ export const SYNTHETIC_ACCOUNT_TTL_HOURS = 24
 export const SYNTHETIC_MINTS_PER_HOUR = 12
 export const SYNTHETIC_MINT_RATE_SCOPE = 'fresh_eyes_test_account'
 
-const STALL_REASONS = ['signup_wall', 'captcha', 'external', 'dead_end', 'blocked', 'error', 'model_gave_up', 'out_of_steps'] as const
+const STALL_REASONS = ['signup_wall', 'captcha', 'external', 'dead_end', 'blocked', 'error', 'model_gave_up', 'model_unavailable', 'out_of_steps'] as const
 const OPINIONS = ['confusing', 'unclear_copy', 'too_many_choices', 'gave_up'] as const
 
 const Step = z.object({
