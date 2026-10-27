@@ -17,6 +17,8 @@ export interface FullstackAuditStats {
   errorCount: number
   warnCount: number
   failedGateCount: number
+  /** Newest finished gate run. Null when none was read. Absent on older API answers. */
+  lastRunAt?: string | null
   topPriority: FullstackAuditTopPriority
   /** Plain-English reason when topPriority is `unknown`. */
   readError?: string | null

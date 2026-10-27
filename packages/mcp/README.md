@@ -9,6 +9,8 @@
 
 The [Model Context Protocol](https://modelcontextprotocol.io/) server for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi). It lets Cursor, Claude Code, VS Code or any MCP client read your app's bug reports, get a plain-English diagnosis with a fix to start from, and dispatch or merge fixes. Your editor's own model does the work, so you need no second LLM key.
 
+Docs: [MCP guide](https://kensaur.us/mushi-mushi/docs/sdks/mcp) · [tool reference](https://kensaur.us/mushi-mushi/docs/sdks/mcp-tools)
+
 ```mermaid
 flowchart LR
     A["Bug reports<br/>in Mushi"] --> B["This MCP server"] --> C["Your editor<br/>'what's broken in prod?'"] --> D["Fix: you, or a<br/>draft PR from an agent"]
@@ -29,7 +31,7 @@ Restart the editor and ask *"what's broken in prod?"*. For Cursor and Claude, `s
   "mcpServers": {
     "mushi-mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.29.1"],
+      "args": ["-y", "@mushi-mushi/mcp@0.29.2"],
       "env": {
         "MUSHI_API_KEY": "mushi_xxxxxxxxxxxxxxxxxxxx",
         "MUSHI_PROJECT_ID": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
@@ -59,7 +61,7 @@ Claude Desktop does not expand `${VAR}` references in this file; Cursor and VS C
 | `diagnose_setup` | Explains a broken install and the one next step |
 | `search_mushi_docs` | Answers setup and API questions from the docs |
 
-The full catalog has 124 tools, plus 8 resources (`project://dashboard`, `project://stats`, …) and 4 prompts (`summarize_report_for_fix`, `triage_next_steps`, …). Every tool carries read-only and destructive hints, so your editor can ask before it changes anything. Full list: [MCP tool reference](https://kensaur.us/mushi-mushi/docs/sdks/mcp-tools).
+The full catalog has 129 tools, plus 8 resources (`project://dashboard`, `project://stats`, …) and 4 prompts (`summarize_report_for_fix`, `triage_next_steps`, …). Every tool carries read-only and destructive hints, so your editor can ask before it changes anything. Full list: [MCP tool reference](https://kensaur.us/mushi-mushi/docs/sdks/mcp-tools).
 
 **Tool groups.** New installs get a lean default: `triage`, `fixes`, `inventory`, `setup`, `docs`. Turn on more with `MUSHI_FEATURES=triage,qa,codebase` (stdio) or `?features=…` on the hosted URL, or everything with `all`. Groups: `qa`, `skills`, `codebase`, `rewards`, `admin`, `audit`, `usage`. Add `?read_only=1` to the hosted URL to hide every write tool.
 

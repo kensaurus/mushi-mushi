@@ -11,17 +11,49 @@ import { MCP_QUICKSTART_LEDE, PUBLIC_FAQ_MCP } from '@/lib/public-copy'
 
 {MCP_QUICKSTART_LEDE}
 
-**Model Context Protocol (MCP)** is how your editor talks to Mushi tools — reports, fix briefs, and optional dispatch without leaving the chat.
+<InThirtySeconds>
+- MCP is how your AI editor (Cursor, Claude Code, VS Code) talks to Mushi.
+- Add the server in one click, sign in once in your browser. No key to paste.
+- Then ask your editor about bugs: it gets the report, the diagnosis and a fix brief.
+</InThirtySeconds>
 
-**[Add to Cursor](https://kensaur.us/mushi-mushi/docs/connect)** · **[Add to VS Code](https://kensaur.us/mushi-mushi/docs/connect)** · **[Try the demo, no signup](https://kensaur.us/mushi-mushi/docs/connect)**
+## Connect in three steps
 
-<Callout type="info">
-  [Connect page](https://kensaur.us/mushi-mushi/docs/connect) — pick your client
-  and install in one click, or try the read-only demo with no signup. Terminal
-  one-liner below if you prefer the CLI.
-</Callout>
+<Steps>
 
-## OAuth login (recommended — no keys to copy)
+### Add the Mushi server
+
+One click: pick your editor on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect).
+No signup needed for the read-only demo. Or run one command:
+
+```bash
+# Claude Code
+claude mcp add --transport http mushi "https://kensaur.us/mushi-mushi/hosted-mcp/"
+
+# Cursor (writes .cursor/mcp.json)
+npx mushi-mushi setup --ide cursor
+```
+
+### Sign in
+
+The first time your editor calls Mushi, your browser opens. Sign in, pick which
+projects it may see, and click **Approve**. In Claude Code, run `claude mcp login mushi`
+(or `/mcp`) to start it.
+
+<YouWillSee>**You'll see:** Mushi listed as connected in your editor's MCP settings.</YouWillSee>
+
+### Ask your editor
+
+Try *"list mushi tools"*, then *"Get the latest Mushi report and fix it."*
+
+<YouWillSee>**You'll see:** the Mushi tools in the list, then a fix brief: the cause, the files to change and how to check it.</YouWillSee>
+
+</Steps>
+
+The rest of this page is detail: how sign-in works, manual config files,
+the hosted transport for headless agents, and the tool list.
+
+## How sign-in works (OAuth, no keys to copy)
 
 The hosted MCP endpoint speaks the standard MCP OAuth flow (authorization
 code + PKCE), so clients that support MCP login connect with **zero manual
@@ -42,17 +74,15 @@ connection reaches, and click **Approve**:
 | **Only the projects I pick** | An account key limited to the ticked projects | **MCP → Account keys** |
 | **One project** | A project key (label `mcp-oauth`); needs owner or admin | **Projects → Keys** |
 
-An account key does in each project only what your role there allows. The
-agent calls `list_projects` to see your projects and passes `projectId` to
-project tools. To keep one connection on a single project, add
-`?project=<project-id>` to the server URL, for example
-`https://kensaur.us/mushi-mushi/hosted-mcp/?project=<project-id>`. A pinned
-connection, or one limited to picked projects, leaves out the
-organization-wide tools (portfolio, connectors, spend, accounts register):
-they reach every project in the team. Cursor and VS Code follow the same flow when you add the
-hosted URL as a remote MCP server; do **not** configure an `Authorization`
-header if you want the login flow — a static header tells the client that
-OAuth isn't needed.
+- An account key does in each project only what your role there allows. The
+  agent calls `list_projects` and passes `projectId` to project tools.
+- To keep one connection on a single project, add `?project=<project-id>` to the
+  server URL, for example `https://kensaur.us/mushi-mushi/hosted-mcp/?project=<project-id>`.
+- A pinned connection, or one limited to picked projects, leaves out the
+  organization-wide tools (portfolio, connectors, spend, accounts register).
+- Cursor and VS Code follow the same flow when you add the hosted URL as a
+  remote MCP server. Do **not** set an `Authorization` header if you want the
+  login flow: a static header tells the client that OAuth isn't needed.
 
 Use the `kensaur.us/mushi-mushi/hosted-mcp/` URL for the login flow. Clients
 look for the OAuth metadata at the root of the server's host
@@ -126,7 +156,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.29.1"],
+      "args": ["-y", "@mushi-mushi/mcp@0.29.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -152,7 +182,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.29.1"],
+      "args": ["-y", "@mushi-mushi/mcp@0.29.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",

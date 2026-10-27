@@ -16,6 +16,7 @@ export function readPageHelpAlwaysOpen(): boolean {
   }
 }
 
+/** @internal Exported for tests only (the PageHelp toggle that wrote it is unused). */
 export function writePageHelpAlwaysOpen(next: boolean): void {
   if (typeof window === 'undefined') return
   try {

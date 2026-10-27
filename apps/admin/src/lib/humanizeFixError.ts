@@ -408,7 +408,7 @@ export function humanizeFixError(
       title: 'The code lookup failed before the agent could start.',
       hint: 'If the error mentions a 401 from the embedding provider, the BYOK OpenAI key is invalid or revoked \u2014 rotate it under Settings \u2192 BYOK and retry.',
       severity: 'hard',
-      action: { label: 'Check BYOK keys', target: { kind: 'route', to: '/settings?tab=byok' } },
+      action: { label: 'Check AI keys', target: { kind: 'route', to: '/settings?tab=byok' } },
       raw,
     };
   }

@@ -90,17 +90,12 @@ describe('StatusStepper', () => {
       expect(seg.getAttribute('role')).toBeNull()
       expect(seg.hasAttribute('aria-label')).toBe(false)
     }
-    if (size === 'compact') {
-      const caption = [...host.querySelectorAll('span')].find(
-        (el) => el.textContent?.includes(label) && el.textContent?.includes(`${step}/4`),
-      )
+    if (size === 'compact' || size === 'table') {
+      // The caption is the step's word, never a bare "n/4" that needs a legend.
+      const caption = [...host.querySelectorAll('span')].find((el) => el.textContent === label)
       expect(caption?.getAttribute('aria-hidden')).toBe('true')
       expect(caption?.closest('[role="img"]')).toBeNull()
-    }
-    if (size === 'table') {
-      const fraction = [...host.querySelectorAll('span')].find((el) => el.textContent === `${step}/4`)
-      expect(fraction?.getAttribute('aria-hidden')).toBe('true')
-      expect(fraction?.closest('[role="img"]')).toBeNull()
+      expect(host.textContent).not.toContain(`${step}/4`)
     }
     if (size === 'full') {
       for (const stepLabel of ['Received', 'Classified', 'Fixing', 'Fixed']) {
@@ -127,11 +122,11 @@ describe('StatusStepper', () => {
     expect(accessibleNames(host).filter((name) => name.includes('Dismissed'))).toEqual(['Dismissed'])
   })
 
-  it('lets the table bar row grow next to its "4/4" label', () => {
+  it('lets the table bar row grow next to its "Fixed" label', () => {
     act(() => root.render(createElement(StatusStepper, { status: 'fixed', size: 'table' })))
     const img = host.querySelector('[role="img"]')!
     const barWrapper = img.parentElement as HTMLElement
     expect(barWrapper.className).toContain('flex-1')
-    expect(host.textContent).toContain('4/4')
+    expect(host.textContent).toContain('Fixed')
   })
 })

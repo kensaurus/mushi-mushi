@@ -84,18 +84,18 @@ export interface PromptLabData {
 }
 
 export const STAGE_LABELS: Record<string, string> = {
-  stage1: 'Stage 1 · Fast filter',
-  stage2: 'Stage 2 · Classify',
-  judge: 'Judge',
-  fix: 'Fix-worker',
-  intelligence: 'Intelligence digest',
-  nl_plan: 'NL → SQL planner',
-  nl_summary: 'NL → summary',
-  synthetic: 'Synthetic generator',
-  modernizer: 'Dep modernizer',
-  prompt_tune: 'Prompt auto-tune',
-  'inventory-propose': 'Inventory proposer',
-  sentinel: 'Sentinel audit',
+  stage1: 'Fast filter',
+  stage2: 'Diagnosis',
+  judge: 'Grading',
+  fix: 'Fix writer',
+  intelligence: 'Weekly summary',
+  nl_plan: 'Question to SQL',
+  nl_summary: 'Answer summary',
+  synthetic: 'Test reports',
+  modernizer: 'Dependency upgrades',
+  prompt_tune: 'Prompt tuner',
+  'inventory-propose': 'User story drafts',
+  sentinel: 'Story map audit',
 }
 
 /** "stage1/v3", or the stage's name when the version is unknown. */

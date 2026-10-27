@@ -17,7 +17,7 @@ inputs:
     required: false
     default: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
   command:
-    description: 'Which MCP tool to run: trigger-judge | dispatch-fix | check-coverage | query | gates | discover-api'
+    description: 'Which command to run: trigger-judge | dispatch-fix | check-coverage | query | gates | discover-api | spec-drift | discovery-status | propose | auth-bootstrap'
     required: true
   report-id:
     description: 'Report UUID — required for dispatch-fix.'
@@ -37,17 +37,20 @@ inputs:
     required: false
     default: 'true'
   commit-sha:
-    description: 'For command=gates: commit SHA the gates run against. Defaults to GITHUB_SHA.'
+    description: 'For command=gates and spec-drift: commit SHA the gates run against. Defaults to GITHUB_SHA.'
     required: false
   pr-number:
-    description: 'For command=gates: pull-request number, used to scope findings on the admin UI.'
+    description: 'For command=gates and spec-drift: pull-request number, used to scope findings on the admin UI.'
     required: false
   gates:
-    description: 'For command=gates: comma-separated subset to run. Defaults to "all".'
+    description: 'For command=gates: comma-separated subset to run. "all" = dead_handler, mock_leak, api_contract, status_claim, orphan_endpoint, unknown_call (crawl runs from Inventory → Reconcile, not here).'
     required: false
     default: 'all'
+  eslint-report:
+    description: 'For command=gates: path to an ESLint JSON report (eslint -f json) made with eslint-plugin-mushi-mushi. Required when dead_handler or mock_leak is run; without it the step fails.'
+    required: false
   repo-root:
-    description: 'For command=discover-api: directory to walk for Next.js route handlers + OpenAPI files. Defaults to GitHub workspace.'
+    description: 'For command=discover-api: directory to walk for Next.js route handlers + OpenAPI files. For command=gates: root that eslint-report file paths are made relative to. Defaults to GitHub workspace.'
     required: false
   openapi-file:
     description: 'For command=discover-api: explicit OpenAPI file path. Defaults to <repo-root>/openapi.yaml.'
@@ -58,12 +61,32 @@ inputs:
   supabase-anon-key:
     description: 'For command=discover-api: Supabase anon key for introspection.'
     required: false
+  base-spec:
+    description: 'For command=spec-drift: path or URL of the base OpenAPI spec (the previous version). Required for spec-drift.'
+    required: false
+  head-spec:
+    description: 'For command=spec-drift: path or URL of the head OpenAPI spec (this PR). Required for spec-drift.'
+    required: false
+  fail-on-breaking:
+    description: 'For command=spec-drift: fail the step when oasdiff finds a breaking change.'
+    required: false
+    default: 'true'
 
 outputs:
   result:
-    description: 'JSON payload returned by the MCP tool.'
+    description: 'JSON payload returned by the Mushi API.'
   coverage:
     description: 'For check-coverage: observed classified ratio.'
+  findings:
+    description: 'For spec-drift: JSON array of the oasdiff findings.'
+  ready_to_propose:
+    description: 'For discovery-status: "true" when there is enough SDK discovery data to propose an inventory.'
+  total_events:
+    description: 'For discovery-status: number of SDK discovery events recorded.'
+  route_count:
+    description: 'For discovery-status: number of routes discovered.'
+  proposal_id:
+    description: 'For propose: id of the inventory proposal to review on /inventory → Discovery.'
 
 runs:
   using: 'node20'

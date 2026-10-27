@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
+  checkCursorSignIn,
+  cursorSignInState,
   wrongAppReason,
   inLocalCooldown,
   installCommand,
@@ -8,7 +10,9 @@ import {
   failureTail,
   agentEnv,
   branchNameFor,
+  runProc,
   buildLocalPrompt,
+  commitBody,
   earlierAttemptsBlock,
   hasLiveAttempt,
   parseVerdict,
@@ -22,6 +26,8 @@ import {
   missingWriteScope,
   runningPayload,
   stoppedPayload,
+  classifyFailure,
+  WORK_INFRA_PREFIX,
 } from './work.js'
 
 const R1 = '11111111-1111-4111-8111-111111111111'
@@ -275,5 +281,149 @@ describe('freeBranchName', () => {
     expect(freeBranchName(b, new Set())).toBe(b)
     expect(freeBranchName(b, new Set([b]))).toBe(`${b}-2`)
     expect(freeBranchName(b, new Set([b, `${b}-2`]))).toBe(`${b}-3`)
+  })
+})
+
+describe('mushi work: commit messages commitlint config-conventional accepts', () => {
+  // glot.it lost a review follow-up to an unwrapped agent summary (2026-10-26):
+  // "body's lines must not be longer than 100 characters".
+  const footerLike = /^[\w-]+(?:\([^)]*\))?!?:|^BREAKING[ -]CHANGE/i
+  const agentSummary = [
+    'Summary: moved the y-axis tick rounding into buildYTickValues so count charts never show fractional ticks again,',
+    'and added a regression test for 0.5 steps. Fixes: the Opus finding about headroom.',
+    'BREAKING CHANGE none, just wording.',
+    `See https://github.com/kensaurus/glot.it/pull/183/files#diff-${'a'.repeat(140)} for the full diff.`,
+    'x'.repeat(250),
+  ].join(' ')
+
+  it('wraps every body line at 100 characters and never starts one like a footer', () => {
+    const body = commitBody(agentSummary, 'Made by a local Cursor agent through `mushi work --followups`.')
+    const lines = body.split('\n')
+    for (const line of lines) {
+      expect(line.length, line).toBeLessThanOrEqual(100)
+      expect(footerLike.test(line), line).toBe(false)
+    }
+    // Paragraphs stay separated, nothing is lost but whitespace.
+    expect(body).toContain('\n\nMade by a local Cursor agent through `mushi work --followups`.')
+    expect(body.replace(/\s+/g, '')).toBe(`${agentSummary}Made by a local Cursor agent through \`mushi work --followups\`.`.replace(/\s+/g, ''))
+  })
+
+  it('keeps short bodies as they were', () => {
+    expect(commitBody('Mushi report: 1111', 'Made by a local Cursor agent through `mushi work`.')).toBe(
+      'Mushi report: 1111\n\nMade by a local Cursor agent through `mushi work`.',
+    )
+    expect(commitBody('', 'See the diff.')).toBe('See the diff.')
+  })
+
+  it('keeps the subject within 72 characters for a long report summary', () => {
+    const header = prTitle('A'.repeat(300), '22222222-2222-4222-8222-222222222222')
+    expect(header.replace(/^fix: /, '').length).toBeLessThanOrEqual(72)
+    expect(header.length).toBeLessThanOrEqual(100)
+  })
+})
+
+// Mushi report 7880503f: with 7 lanes at once, one lane stopped 5 times on
+// "The Cursor CLI is not signed in" while `cursor-agent status` said
+// "Logged in as …". Only a clear signed-out answer may stop a run.
+describe('cursorSignInState', () => {
+  const proc = (p: Partial<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }>) =>
+    ({ code: 0, stdout: '', stderr: '', timedOut: false, ...p })
+
+  it('reads "Logged in as …", with or without colour codes', () => {
+    expect(cursorSignInState(proc({ stdout: '✓ Logged in as dev@example.com\n' }))).toBe('signed_in')
+    expect(cursorSignInState(proc({ stdout: '\u001b[32m✓\u001b[39m Logged in as dev@example.com' }))).toBe('signed_in')
+  })
+
+  it('reads "Not logged in" as signed out, though it contains "logged in"', () => {
+    expect(cursorSignInState(proc({ code: 1, stdout: 'Not logged in. Run cursor-agent login.' }))).toBe('signed_out')
+    expect(cursorSignInState(proc({ code: 0, stdout: 'Not logged in' }))).toBe('signed_out')
+  })
+
+  it('treats a timeout, a crash or an unclear answer as unknown, not signed out', () => {
+    expect(cursorSignInState(proc({ code: null, timedOut: true }))).toBe('unknown')
+    expect(cursorSignInState(proc({ code: 1, stderr: 'Error: EBUSY: resource busy or locked' }))).toBe('unknown')
+    expect(cursorSignInState(proc({ code: 0, stdout: '' }))).toBe('unknown')
+  })
+
+  it('tells a missing cursor-agent apart from a signed-out one', () => {
+    expect(cursorSignInState(proc({ code: null, stderr: 'spawn cursor-agent ENOENT' }))).toBe('missing')
+  })
+})
+
+describe('checkCursorSignIn', () => {
+  type P = { code: number | null; stdout: string; stderr: string; timedOut: boolean }
+  const answers = (...ps: Array<Partial<P>>) => {
+    const queue = ps.map((p) => ({ code: 0, stdout: '', stderr: '', timedOut: false, ...p }))
+    return vi.fn(async (_cmd: string, _args: readonly string[], _opts: { timeoutMs: number }) => queue.shift()!)
+  }
+  const noWait = async () => {}
+
+  it('asks once when the first answer is signed in, with a timeout above 60 s', async () => {
+    const run = answers({ stdout: 'Logged in as dev@example.com' })
+    await expect(checkCursorSignIn(run, noWait)).resolves.toMatchObject({ state: 'signed_in' })
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(run.mock.calls[0][2].timeoutMs).toBeGreaterThan(60_000)
+  })
+
+  it('retries once after a timeout and accepts the second answer', async () => {
+    const run = answers({ code: null, timedOut: true }, { stdout: 'Logged in as dev@example.com' })
+    await expect(checkCursorSignIn(run, noWait)).resolves.toMatchObject({ state: 'signed_in' })
+    expect(run).toHaveBeenCalledTimes(2)
+  })
+
+  it('retries a signed-out answer once (a lane may be rewriting the auth file)', async () => {
+    const run = answers({ code: 1, stdout: 'Not logged in' }, { stdout: 'Logged in as dev@example.com' })
+    await expect(checkCursorSignIn(run, noWait)).resolves.toMatchObject({ state: 'signed_in' })
+  })
+
+  it('reports signed out only when the retry says so too', async () => {
+    const run = answers({ code: 1, stdout: 'Not logged in' }, { code: 1, stdout: 'Not logged in' })
+    await expect(checkCursorSignIn(run, noWait)).resolves.toMatchObject({ state: 'signed_out' })
+  })
+
+  it('stays unknown, not signed out, when both checks time out', async () => {
+    const run = answers({ code: null, timedOut: true }, { code: null, timedOut: true })
+    await expect(checkCursorSignIn(run, noWait)).resolves.toMatchObject({ state: 'unknown', detail: 'timed out after 90 s' })
+    expect(run).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('local workers (ADR 0048): infra failures never count against a report', () => {
+  const now = Date.parse('2026-10-27T12:00:00Z')
+  const failed = { id: 'a', status: 'failed', pr_url: null, agent: 'mcp', created_at: '2026-10-27T08:00:00Z' }
+
+  it('a run closed as an infra failure starts no cooldown', () => {
+    expect(inLocalCooldown([{ ...failed, error: `${WORK_INFRA_PREFIX} git fetch failed: Permission denied` }], now)).toBe(false)
+    expect(inLocalCooldown([{ ...failed, error: 'mushi work: git commit failed: 1 test failed' }], now)).toBe(true)
+  })
+
+  it("splits infra from code: before the agent, every failure is the machine's", () => {
+    expect(classifyFailure('git commit failed: lint error in src/a.ts', 'prepare')).toBe('infra')
+    expect(classifyFailure('git push failed: pre-push hook timed out', 'push')).toBe('infra')
+    expect(classifyFailure('git fetch: fatal: unable to access https://github.com/o/r: Could not resolve host', 'commit')).toBe('infra')
+    expect(classifyFailure("fatal: Unable to create '/x/.git/index.lock': File exists", 'commit')).toBe('infra')
+    expect(classifyFailure('git commit failed: ✗ check-dead-buttons: 1 violation', 'commit')).toBe('code')
+    expect(classifyFailure('gh pr create failed: a pull request already exists', 'pr')).toBe('code')
+  })
+
+  it('agentEnv still strips every key, the worker key included', () => {
+    const env = agentEnv({ PATH: '/bin', HOME: '/h', MUSHI_API_KEY: 'k', MUSHI_WORKER_KEY: 'mushi_worker', CREDENTIALS_DIRECTORY: '/run/cred', XDG_RUNTIME_DIR: '/run/user/1000' }, '/tmp/empty')
+    expect(env.MUSHI_WORKER_KEY).toBeUndefined()
+    expect(env.MUSHI_API_KEY).toBeUndefined()
+    expect(env.CREDENTIALS_DIRECTORY).toBeUndefined()
+    expect(Object.keys(env).filter((k) => /KEY|TOKEN|SECRET|CRED/i.test(k))).toEqual([])
+  })
+})
+
+describe('runProc', () => {
+  it('answers when the process exited but something it started still holds the output (the 51-minute audit hang)', async () => {
+    // The grandchild inherits stdout and lives on; Node then never fires 'close'.
+    const hold = "require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 8000)'], { stdio: 'inherit', detached: true }).unref(); console.log('parent done')"
+    const t0 = Date.now()
+    const r = await runProc(process.execPath, ['-e', hold], { closeGraceMs: 300 })
+    expect(Date.now() - t0).toBeLessThan(5000)
+    expect(r.code).toBe(0)
+    expect(r.stdout).toContain('parent done')
+    expect(r.stderr).toMatch(/output pipes still open/)
   })
 })

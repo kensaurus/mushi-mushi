@@ -40,7 +40,7 @@ const VENDOR_OPTIONS = [
   {
     value: 'openai:gpt-4o-mini',
     label: 'OpenAI — gpt-4o-mini (self-service)',
-    description: 'End-to-end fine-tuning via OpenAI API. Requires BYOK OpenAI key.',
+    description: 'End-to-end fine-tuning via the OpenAI API. Needs your own OpenAI key in AI keys.',
   },
   {
     value: 'bedrock:anthropic.claude-3-haiku-20240307-v1:0',

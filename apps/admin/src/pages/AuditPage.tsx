@@ -14,7 +14,6 @@ import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { NextStep } from '../components/NextStep'
 import { AuditStatusBanner, isAuditStatusBannerCritical } from '../components/audit/AuditStatusBanner'
-import { AuditGuide } from '../components/audit/AuditGuide'
 import { AuditSnapshotStrip } from '../components/audit/AuditSnapshotStrip'
 import { AuditReadout } from '../components/audit/AuditReadout'
 import {
@@ -725,7 +724,7 @@ export function AuditPage() {
         ) : (
           <Badge tone="warnSubtle">{stats.planDisplayName} — upgrade for audit</Badge>
         )}
-        <Btn variant="ghost" size="sm" onClick={exportCsv} data-dav-anchor="audit:act">
+        <Btn variant="primary" size="sm" onClick={exportCsv} disabled={logs.length === 0} data-dav-anchor="audit:act">
           Export CSV ({logs.length})
         </Btn>
       </PageHeaderBar>
@@ -751,15 +750,8 @@ export function AuditPage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt ?? lastFetchedAt}
                 statsValidating={statsValidating || isValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'Audit snapshot'}
-                hint={activeTabMeta.description}
-                statLabels={copy?.statLabels}
               />
             ),
-          },
-          {
-            priority: POSTURE_PRIORITY.guide,
-            children: <AuditGuide failCount24h={stats.failCount24h} />,
           },
         ]}
       />

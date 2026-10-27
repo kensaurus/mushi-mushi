@@ -12,6 +12,9 @@ import type { ApiResult } from './apiEnvelope'
 import type { FixVerification } from './verifyTypes'
 import { normalizeVerification } from './verifyView'
 
+/** Agents whose PRs get the verified-fix gates (ADR 0035); a person's own lane does not. */
+export const CLOUD_FIX_AGENTS: ReadonlySet<string> = new Set(['cursor_cloud', 'github_cloud_agent'])
+
 export type VerificationLoad = { ok: true; verification: FixVerification | null } | { ok: false; error: string }
 
 export type VerificationRecheck =

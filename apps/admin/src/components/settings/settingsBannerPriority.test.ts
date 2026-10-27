@@ -15,6 +15,7 @@ const stats = (over: Partial<SettingsStats> = {}): SettingsStats => ({
 const summary = (over: Partial<KeySummary> = {}): KeySummary => ({
   working: 1,
   attention: 0,
+  replaced: 0,
   expiring: 0,
   checking: 0,
   off: 0,

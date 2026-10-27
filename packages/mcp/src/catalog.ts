@@ -404,6 +404,16 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'What does my CI cost, and would it be cheaper or faster on my own machine?',
   },
   {
+    name: 'get_ci_bill',
+    title: 'Real GitHub Actions bill',
+    description:
+      'Return what GitHub actually charged for Actions, read from GitHub\'s billing usage API by the CI collector once a day (or pushed with `mushi runner bill --push`). Unlike get_ci_costs, these money figures are measured, not estimated. Returns { window, previousWindow, provenance: "measured", currency: "USD", available, repoScoped (true when you are not a member of the organization: only your projects\' repos are shown), unavailableReason (why there is no bill and how to connect one), owners [{ owner, ownerType, lastOkAt, lastAttemptAt, lastError, lastSource (api | cli), coveredFrom }], month { label, grossUsd, discountUsd, netUsd } (this calendar month so far), totals { grossUsd, discountUsd, netUsd, minutes }, previousTotals and change { netUsd, netPct } (null unless Mushi holds the whole previous period), windowComplete, byRepo [{ repo, netUsd, grossUsd, discountUsd, minutes }], bySku, byDay (every day of the window), dataThrough, agentShare { share, billedMinutes, agentBilledMinutes, branches, provenance: "estimated" } (paid GitHub-hosted minutes on Mushi agent branches, from the jobs Mushi recorded) }. Net is what was charged; public repos and included minutes show as discount. Optional projectId (default: the configured project; an account-level key with none reads every project) and days (1-90, default 30). Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'What did GitHub Actions actually cost me this month, and which repo or agent drove it?',
+  },
+  {
     name: 'request_ci_placement_change',
     title: 'Ask to change where CI runs (needs approval)',
     description:
@@ -412,6 +422,46 @@ export const TOOL_CATALOG: ToolSpec[] = [
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     returnsUntrusted: true,
     useCase: 'Ask to run yen-yen\'s PR jobs on the Alienware runner instead of paid GitHub minutes, for a person to approve.',
+  },
+  {
+    name: 'open_ci_cost_fix',
+    title: 'Open a CI cost fix PR (draft)',
+    description:
+      'Open a DRAFT pull request that applies one CI cost fix to one workflow file (ADR 0047), the fix a CI advice item offers as autofix (get_ci_overview / get_ci_costs advice[].autofix { kind, projectId, repo, workflowPath }). kind: add_concurrency (a concurrency group that cancels superseded pull request runs, never a push), skip_drafts (ready_for_review added to the pull_request types and every job skips drafts), weekly_cron (a schedule that fires more than weekly runs once a week), ignore_docs_paths (paths-ignore for docs-only changes, Markdown, docs/, license and issue templates, on pull_request and push; refused when a job looks like a required check, because a skipped workflow never reports and the PR could not merge). The repo must be connected to the project. Mushi reads the workflow from the default branch, edits only that file (comments kept), opens the PR as a draft with a conventional ci: title, and records the workflow\'s billed minutes per day for the 14 days before; nothing changes until a person reviews, readies and merges it. The job runs in the background: read it again with the job id (GET /v1/admin/ci/cost-fixes/{id}, or `mushi runner fix-status`); after the merge it shows the saving measured per day. Writing a workflow file needs the GitHub App\'s Workflows: Read and write permission or a token with the workflow scope. Confirm with the user first. Returns { job: { id, status (queued | running | pr_opened | no_change | refused | failed), summary, errorCode, error, prUrl, baseline, measured, saving } }, or an error (REPO_NOT_IN_PROJECT, PR_ALREADY_OPEN with the job, COST_FIX_IN_PROGRESS, RATE_LIMITED: 10 an hour per project). Write.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Stop glot.it\'s CI from running on draft agent PRs: open the skip-drafts fix for ci.yml as a draft PR to review.',
+  },
+  {
+    name: 'preview_ci_cost_fix_rollout',
+    title: 'Preview CI cost fixes for every app',
+    description:
+      'Preview \'Apply to every app\' for the CI cost fixes (ADR 0047 amendment): every CI advice item that carries an autofix, across the apps this key may change (viewers\' apps are left out), grouped per app and repo, so each repo can get ONE draft pull request (one CI run) for all its fixes. Per repo { projectId, projectName, repo, items [{ key, workflowPath, kind (add_concurrency | skip_drafts | weekly_cron | ignore_docs_paths), title, evidence, monthSavingUsd (estimated USD per 30 days, null when Mushi cannot price it), state (ready | pr_open | in_progress), prUrl }], readyItems, monthSavingUsd (the ready items\' priced saving), unpricedItems, block (set when Mushi already knows the repo\'s GitHub access cannot edit workflow files: GITHUB_WORKFLOWS_WRITE_MISSING, from the setup check or the last attempt) }, largest saving first, plus totals, caps { reposPerRequest: 10, itemsPerRepo: 20 } and partial (set when part of the advice could not be read). Optional projectId limits it to one app; an account-level key with none reads every app. Read-only: it changes nothing. Open them with apply_ci_cost_fix_rollout.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Which CI cost fixes can Mushi open across all my apps, and what would each repo save?',
+  },
+  {
+    name: 'apply_ci_cost_fix_rollout',
+    title: 'Open CI cost fixes for every app (one draft PR per repo)',
+    description:
+      'Open the CI cost fixes from preview_ci_cost_fix_rollout as ONE draft pull request per repo (ADR 0047 amendment), so each repo runs CI once for all its fixes instead of once per fix. repos: [{ projectId, repo, items: [{ workflowPath, kind }] }], at most 10 repos and 20 items each (pass the preview\'s ready items). Mushi rebuilds the advice itself and opens only items it still advises (evidence and saving come from the server), skips an edit whose PR is still open or that is being opened, and counts each repo once against its project\'s 10 CI fix PRs an hour. In each repo it reads every workflow once, applies the kinds in turn with the same refusals as open_ci_cost_fix, and opens one draft PR with a ci: title whose body lists each change and each refusal; a refused item is never dropped, and when every item is refused no PR is opened. Nothing changes until a person reviews, readies and merges the PR. Needs the GitHub App\'s Workflows: Read and write permission (or a token with the workflow scope). Confirm with the user first. Returns { queued, results [{ projectId, repo, status (queued | skipped | error), bundleId, jobs, skipped [{ workflowPath, kind, code (NOT_ADVISED | PR_ALREADY_OPEN | COST_FIX_IN_PROGRESS), message, prUrl }], error { code (NOT_FOUND | FORBIDDEN | REPO_NOT_IN_PROJECT | RATE_LIMITED | COST_FIX_IN_PROGRESS | MIGRATION_PENDING), message } }] }. Follow each bundle with get_ci_cost_fix_bundle. Write.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Open every advised CI cost fix across my apps, one reviewed draft PR per repo.',
+  },
+  {
+    name: 'get_ci_cost_fix_bundle',
+    title: 'CI cost fix bundle (one PR, several fixes)',
+    description:
+      'Read one CI cost fix bundle (one draft PR for several fixes in one repo, from apply_ci_cost_fix_rollout) by its bundleId: { bundle: { id, projectId, repo, status (queued | running | pr_opened | nothing_opened | failed), prUrl, prNumber, items (each fix: workflowPath, kind, status, summary, error, prUrl, baseline, measured, saving), measuredUsdPerMonth (after the merge: the saving measured per workflow, each workflow once) } }. After the merge it reads GitHub once and stores the minutes per day since. Read-only on GitHub.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Did the CI fix PR for glot.it open, which fixes were refused, and what did it save after the merge?',
   },
   {
     name: 'explain_finding',

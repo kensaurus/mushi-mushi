@@ -90,6 +90,7 @@ export async function buildSetupResponse(
           last_sdk_origin: heartbeat?.last_seen_origin ?? null,
           last_sdk_user_agent: heartbeat?.last_seen_user_agent ?? null,
           last_sdk_endpoint_host: heartbeat?.last_seen_endpoint_host ?? null,
+          last_sdk_key_label: heartbeat?.key_label ?? null,
         },
       },
       {

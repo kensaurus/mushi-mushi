@@ -12,6 +12,8 @@ export interface GraphNode {
   id: string
   node_type: string
   label: string
+  /** A bug group's readable name (its label is the group id the server dedupes on). */
+  display_label?: string | null
   metadata?: Record<string, unknown> | null
   last_traversed_at?: string | null
   created_at?: string | null

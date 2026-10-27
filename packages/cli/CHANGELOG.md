@@ -1,5 +1,13 @@
 # @mushi-mushi/cli
 
+## 0.34.1
+
+### Patch Changes
+
+- 271abb8: The npm pages link to each package's docs page, and their commands, flags and rule names match the current release. The eslint plugin and inventory packages describe what you get instead of internal pipeline names.
+- 15ba9ce: `mushi work` writes commit messages that commitlint's config-conventional accepts: body lines are wrapped at 100 characters and never start like a footer (`token:`), so a long agent summary no longer fails a repo's commit hook and loses the follow-up.
+- 15ba9ce: `mushi work` no longer stops with "The Cursor CLI is not signed in" when `cursor-agent status` is only slow or unclear, as happened with several `mushi work` lanes on one machine. The sign-in check now waits up to 90 s, asks a second time when the first answer is not "signed in", and stops only on a clear "not logged in". A timeout or unclear answer prints a warning and the run continues. A missing `cursor-agent` now says it is not installed instead of "not signed in".
+
 ## 0.34.0
 
 ### Minor Changes

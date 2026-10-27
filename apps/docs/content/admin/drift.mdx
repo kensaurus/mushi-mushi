@@ -11,6 +11,12 @@ import { Callout } from 'nextra/components'
 
 **Route:** `/drift`
 
+**First on the page:** one sentence on what changed since the baseline, with
+**Review changes** when any wait. Once scanned, **Changes found per day** draws the
+changes over time with a dashed line per release and a dot on each day with a serious
+change (red while one is open). Never scanned: one **Run first scan** step and nothing
+else.
+
 > **Scenario:** You shipped a refactor last Friday. It's Monday and two users have
 > reported the Settings page is blank. You suspect a route or component broke silently.
 > You run the drift scanner and in 45 seconds it shows you exactly what changed between

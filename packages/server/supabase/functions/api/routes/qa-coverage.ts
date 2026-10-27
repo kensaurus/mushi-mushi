@@ -5,7 +5,7 @@
  *          rollup, and manual "run now" trigger.
  *
  * OVERVIEW:
- * - GET  /v1/admin/projects/:id/qa-coverage          → list stories with 24h stats
+ * - GET  /v1/admin/projects/:id/qa-coverage          → list stories with 24h stats and a 7-day pass/fail strip
  * - GET  /v1/admin/projects/:id/qa-coverage-summary  → tile summary (total/pass/fail/top_failing)
  * - GET  /v1/admin/projects/:id/qa-stories/:sid      → single story detail
  * - POST /v1/admin/projects/:id/qa-stories           → create story
@@ -29,6 +29,66 @@ import { jwtAuth, apiKeyAuth, requireApiKeyScope } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { dbError, ownedProjectIds, jsonError, userCanAccessProject } from '../shared.ts';
 import { denyViewerWrite } from '../viewer-gate.ts';
+
+/** Days in each story's pass/fail strip on /qa-coverage. */
+const STRIP_DAYS = 7;
+/** PostgREST returns at most 1,000 rows a request; read pages up to this many rows. */
+const STRIP_PAGE = 1000;
+const STRIP_MAX_ROWS = 10_000;
+
+type StripDay = { day: string; passed: number; failed: number };
+
+/**
+ * One entry per UTC day (oldest first, today last) per story. A run counts as
+ * passed or failed only when it finished that way: skipped, pending and
+ * running runs are left out, so a skipped story is never drawn as failing.
+ */
+export function buildRunStrips(
+  rows: ReadonlyArray<{ story_id: string; status: string; started_at: string }>,
+  now: number,
+): Map<string, StripDay[]> {
+  const days = blankRunStrip(now).map((d) => d.day);
+  const out = new Map<string, StripDay[]>();
+  for (const r of rows) {
+    const passed = r.status === 'passed';
+    const failed = r.status === 'failed' || r.status === 'error' || r.status === 'timeout';
+    if (!passed && !failed) continue;
+    const idx = days.indexOf(String(r.started_at).slice(0, 10));
+    if (idx < 0) continue;
+    let strip = out.get(r.story_id);
+    if (!strip) {
+      strip = days.map((day) => ({ day, passed: 0, failed: 0 }));
+      out.set(r.story_id, strip);
+    }
+    if (passed) strip[idx]!.passed += 1;
+    else strip[idx]!.failed += 1;
+  }
+  return out;
+}
+
+/**
+ * A story's 24h pass rate over runs that finished (passed, failed, error).
+ * The view's pass_rate_pct divides by every run, skipped ones included, so a
+ * story that only skipped read 0% and was counted failing (1d625b63). Null
+ * when nothing finished.
+ */
+export function finishedPassRate(m: Record<string, unknown> | undefined): number | null {
+  const passed = Number(m?.passed_24h ?? 0);
+  const finished = passed + Number(m?.failed_24h ?? 0) + Number(m?.error_24h ?? 0);
+  if (finished === 0) return null;
+  return Math.round((1000 * passed) / finished) / 10;
+}
+
+/** The STRIP_DAYS UTC days ending today, oldest first, with no runs. */
+export function blankRunStrip(now: number): StripDay[] {
+  const d = new Date(now);
+  const today = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  return Array.from({ length: STRIP_DAYS }, (_, i) => ({
+    day: new Date(today - (STRIP_DAYS - 1 - i) * 86_400_000).toISOString().slice(0, 10),
+    passed: 0,
+    failed: 0,
+  }));
+}
 
 const CRON_FIELD = /^(\*(\/\d+)?|\d+(-\d+)?(,\d+(-\d+)?)*)(\/\d+)?$/;
 
@@ -231,10 +291,11 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
     for (const s of stories) {
       const m = mvMap.get(s.id) as Record<string, unknown> | undefined;
       const runs24h = Number(m?.runs_24h ?? 0);
-      const passRate = m?.pass_rate_pct != null ? Number(m.pass_rate_pct) : null;
+      const passRate = finishedPassRate(m);
       totalRuns24h += runs24h;
 
-      if (runs24h === 0) {
+      // Only skipped (or still running) runs: no result yet, not a failure.
+      if (passRate === null) {
         noDataStories += 1;
       } else if (passRate != null && passRate >= 80) {
         passingStories += 1;
@@ -328,6 +389,36 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid, contextPid))) return c.json({ error: 'Not found' }, 404);
 
+    // The 7-day strip: finished runs since the start of the oldest day, in
+    // pages (PostgREST stops at 1,000 rows). A failed read leaves the strip
+    // out (null) rather than drawing empty days as "no runs".
+    const stripSince = `${blankRunStrip(Date.now())[0]!.day}T00:00:00.000Z`;
+    const stripRows: Array<{ story_id: string; status: string; started_at: string }> = [];
+    let stripOk = true;
+    for (let from = 0; from < STRIP_MAX_ROWS; from += STRIP_PAGE) {
+      const { data: page, error: stripErr } = await db
+        .from('qa_story_runs')
+        .select('story_id, status, started_at')
+        .eq('project_id', pid)
+        .gte('started_at', stripSince)
+        .order('started_at', { ascending: false })
+        .range(from, from + STRIP_PAGE - 1);
+      if (stripErr) {
+        stripOk = false;
+        break;
+      }
+      stripRows.push(...((page ?? []) as typeof stripRows));
+      if ((page ?? []).length < STRIP_PAGE) break;
+    }
+    const now = Date.now();
+    const strips = stripOk ? buildRunStrips(stripRows, now) : null;
+    const withStrip = <T extends { story_id: string }>(row: T) => ({
+      ...row,
+      // Over finished runs only, like the stats banner: skipped runs are not failures.
+      pass_rate_pct: finishedPassRate(row as unknown as Record<string, unknown>),
+      last_7d: strips ? strips.get(row.story_id) ?? blankRunStrip(now) : null,
+    });
+
     // Left-join stories against MV to get live 24h stats
     const { data, error } = await db.rpc('get_qa_coverage', { p_project_id: pid });
     if (error) {
@@ -389,9 +480,9 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
           last_failure_url: m?.last_failure_url ?? null,
         };
       });
-      return c.json({ ok: true, data: { coverage } });
+      return c.json({ ok: true, data: { coverage: coverage.map(withStrip) } });
     }
-    return c.json({ ok: true, data: { coverage: data ?? [] } });
+    return c.json({ ok: true, data: { coverage: ((data ?? []) as Array<{ story_id: string }>).map(withStrip) } });
   });
 
   // ── Dashboard tile summary ────────────────────────────────────────────────
