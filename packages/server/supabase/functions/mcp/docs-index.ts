@@ -1480,7 +1480,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "quickstart/lovable-mcp.md",
     keywords: ["quickstart", "lovable-mcp", "lovable", "mcp", "ask", "broke"],
     headings: ["Add Mushi to Lovable", "Open the custom MCP form", "Fill in the form", "Sign in and approve", "Ask Lovable", "Claude Code: one paste", "Cursor: one click", "Bolt"],
-    excerpt: "Add Mushi to Lovable as a custom MCP connector in three steps, then ask what your users reported. Lovable reads the plain-English diagnosis and the fix prompt, and fixes it…",
+    excerpt: "Add Mushi to Lovable as an MCP connector in three steps; Lovable reads the plain-English diagnosis and fixes the bug. Claude Code and Cursor in one paste.",
   },
   {
     title: "MCP server for bug fixing in Cursor & Claude Code",

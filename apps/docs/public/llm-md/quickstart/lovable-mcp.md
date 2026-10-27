@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/lovable-mcp
 
 ---
 title: Ask Lovable why it broke
-description: Add Mushi to Lovable as a custom MCP connector in three steps, then ask what your users reported. Lovable reads the plain-English diagnosis and the fix prompt, and fixes it. One-paste installs for Claude Code and Cursor too.
+description: Add Mushi to Lovable as an MCP connector in three steps; Lovable reads the plain-English diagnosis and fixes the bug. Claude Code and Cursor in one paste.
 ---
 
 # Ask Lovable why it broke
