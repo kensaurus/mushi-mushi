@@ -26,6 +26,13 @@ ship only as reviewed draft PRs. It never leads a public surface.
 
 **Primary buyer.** The solo / indie **vibe coder** who builds fast with AI (Cursor, Claude Code, Lovable, Bolt), ships to real users, then loses afternoons when something breaks because they don't fully grasp the generated code. Small teams and agencies are secondary; the enterprise SRE running Sentry + Datadog + Firebase is explicitly *not* who we lead with.
 
+**The public surface leads with one job** ([ADR 0052](./docs/adr/0052-public-surface-leads-with-one-job.md)):
+the landing and the README's first screen say only "a user said your app is
+broken; Mushi tells you why in plain English and hands Cursor, Claude Code or
+Lovable the fix", with one install action and one readable sample diagnosis.
+Integrations, CI cost, voice, rewards and self-host live on docs pages one
+click away; the operator cockpit never appears on the public path.
+
 **Portfolio operator** (ADR 0017) is the same vibe coder with several apps.
 Portfolio and radar features never lead a public surface; the claim is
 "nobody bundles this for a solo operator", never "nobody does this".
