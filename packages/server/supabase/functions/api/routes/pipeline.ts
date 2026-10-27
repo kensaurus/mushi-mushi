@@ -893,7 +893,8 @@ async function runAction(
     if (action === 'remove') {
       const { error: upErr } = await db
         .from('fix_merge_queue')
-        .update({ state: 'removed', detail: `Taken out of the queue: ${reason}`.slice(0, 500), updated_at: now.toISOString(), claimed_until: null })
+        // A local lane's claim on the row ends with it: its push or failure no longer moves the row (ADR 0049).
+        .update({ state: 'removed', detail: `Taken out of the queue: ${reason}`.slice(0, 500), updated_at: now.toISOString(), claimed_until: null, local_claim_id: null })
         .eq('id', q.id);
       if (upErr) return { id: a.id, ok: false, message: 'Could not take it out of the queue.', url };
       const noteErr = await note(db, a, `Removed from the merge queue: ${reason}`, author);

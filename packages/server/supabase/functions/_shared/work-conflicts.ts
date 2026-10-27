@@ -169,11 +169,12 @@ export async function endConflictClaim(
     return
   }
   const row = data as QueueRow
-  if (row.local_claim_id !== claim.id) return
+  // Removed from the queue, merged, or taken over meanwhile: the run's end changes nothing there.
+  if (row.local_claim_id !== claim.id || row.state !== 'resolving') return
   const patch: Record<string, unknown> = { ...conflictRowAfterRun({ ...run, laneName }), updated_at: now.toISOString(), claimed_until: null }
   const n = row.conflict_agents ?? 0
   if (conflictSlotBack(run.outcome, run.failureKind) && n > 0) patch.conflict_agents = n - 1
-  const { data: moved } = await db.from('fix_merge_queue').update(patch).eq('id', row.id).eq('local_claim_id', claim.id).select('id')
+  const { data: moved } = await db.from('fix_merge_queue').update(patch).eq('id', row.id).eq('local_claim_id', claim.id).eq('state', 'resolving').select('id')
   if (!moved || (moved as unknown[]).length === 0) return
   if (run.outcome === 'pushed' && run.headAfter) {
     await queueEvent(db, row, 'ok', 'Conflict resolved by a local worker', `New head ${run.headAfter.slice(0, 7)}; the queue continues.`, `mq-resolved:${row.id}:${run.headAfter}`)

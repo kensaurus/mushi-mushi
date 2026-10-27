@@ -649,6 +649,18 @@ async function claimConflictMode(c: Ctx, db: Db, lane: LaneRow, now: Date, lease
 
 /** An `audit` lane (ADR 0050): one audit pass, while the app's hourly audit cap has room. The worker picks the screen itself. */
 async function claimAuditMode(c: Ctx, db: Db, lane: LaneRow, host: HostRow, now: Date, leaseUntil: string, cfg: LaneConfig): Promise<Response> {
+  // One pass per lane at a time, whatever its concurrency: a pass owns the
+  // lane's audit worktree and its list of screens done on the machine.
+  const { data: running, error: runErr } = await db
+    .from('work_claims')
+    .select('id')
+    .eq('lane_id', lane.id)
+    .eq('kind', 'audit')
+    .eq('status', 'active')
+    .gt('lease_until', now.toISOString())
+    .limit(1)
+  if (runErr) return err(c, 'DB_ERROR', "Could not read the lane's claims.", 500)
+  if (((running ?? []) as unknown[]).length > 0) return c.json({ ok: true, data: { claim: null, reason: 'An audit lane runs one pass at a time.' } })
   const filed = await auditFiledLastHour(db, lane.project_id, now)
   if (filed === null) return err(c, 'DB_ERROR', "Could not read the audit's hourly count. Try again in a minute.", 503)
   if (filed >= AUDIT_FINDINGS_PER_HOUR) {

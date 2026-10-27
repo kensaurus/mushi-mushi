@@ -310,6 +310,7 @@ async function localConflict(
       .update({ state: 'waiting', detail: 'A local worker pushed a merge; checking it.', head_sha: head, local_claim_id: null, updated_at: at, claimed_until: null })
       .eq('id', row.id)
       .eq('local_claim_id', claimId)
+      .eq('state', 'resolving')
       .select('id')
     if (moved && (moved as unknown[]).length > 0) {
       await event(db, row, 'ok', 'Conflict resolved by a local worker', `New head ${head.slice(0, 7)}; the queue continues.`, `mq-resolved:${row.id}:${head}`)
@@ -339,7 +340,7 @@ async function localConflict(
   }
   const patch: Record<string, unknown> = { ...conflictRowAfterRun({ outcome, failureKind, detail: claim?.detail ?? 'its lease ran out', headAfter: null, laneName: 'a local lane' }), updated_at: at, claimed_until: null }
   if (conflictSlotBack(outcome, failureKind) && row.conflict_agents > 0) patch.conflict_agents = row.conflict_agents - 1
-  await db.from('fix_merge_queue').update(patch).eq('id', row.id).eq('local_claim_id', claimId)
+  await db.from('fix_merge_queue').update(patch).eq('id', row.id).eq('local_claim_id', claimId).eq('state', 'resolving')
   return 'blocked'
 }
 

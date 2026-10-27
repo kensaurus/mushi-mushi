@@ -177,6 +177,9 @@ export async function resolveConflict(t: ConflictTarget, o: ConflictRunOptions):
 
     let agentNote = 'merged cleanly; no agent was needed'
     if (files.length) {
+      // What the dependency install or the merge left loose is not the agent's doing.
+      const conflictedSet = new Set(files)
+      const looseBefore = new Set((await loosePaths(wt)).filter((p) => !conflictedSet.has(p)))
       o.log(`  conflicts in ${files.length} file(s): ${files.slice(0, 6).join(', ')}${files.length > 6 ? ', …' : ''}`)
       const empty = join(tmpdir(), `mushi-conflict-${process.pid}`)
       mkdirSync(empty, { recursive: true })
@@ -201,7 +204,7 @@ export async function resolveConflict(t: ConflictTarget, o: ConflictRunOptions):
       await git(wt, ['add', '-A', '--', ...files])
       const after = parseLsFiles(await git(wt, ['ls-files', '-s', '-z']))
       if (conflictedPaths(after).length) return { result: 'refused', detail: `still unmerged: ${conflictedPaths(after).slice(0, 5).join(', ')}` }
-      const changed = outsideChanges({ before, after, conflicted: files, loosePaths: await loosePaths(wt) })
+      const changed = outsideChanges({ before, after, conflicted: files, loosePaths: (await loosePaths(wt)).filter((p) => !looseBefore.has(p)) })
       if (changed.length) return { result: 'refused', detail: `the agent changed files that had no conflict: ${changed.slice(0, 5).join(', ')}${changed.length > 5 ? ', …' : ''}` }
     }
 

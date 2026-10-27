@@ -207,6 +207,23 @@ describe('conflicts mode (ADR 0049)', () => {
     expect(s.db.table('fix_events').map((e) => e.label)).toContain('Conflict resolved by a local worker')
   })
 
+  it('a row a person removed (or that merged) while the lane worked stays where it is', async () => {
+    for (const state of ['removed', 'merged']) {
+      const s = await lanes({ fix_merge_queue: [queueRow()], fix_attempts: [attempt], fix_events: [] }, [{ name: 'c', mode: 'conflicts' }])
+      const claim = (await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.ids.c } })).body.data.claim
+      // pipeline "remove" clears local_claim_id; a merge leaves it set but moves the state on.
+      Object.assign(s.db.table('fix_merge_queue')[0]!, state === 'removed' ? { state, local_claim_id: null } : { state })
+      for (const body of [{ outcome: 'pushed', headAfter: MERGED }, { outcome: 'failed', failureKind: 'infra' }]) {
+        if (body.outcome === 'failed') {
+          s.db.table('work_claims')[0]!.status = 'active'
+        }
+        await s.app.call('POST', '/v1/worker/claims/:id/done', { params: { id: claim.id }, body })
+        expect(s.db.table('fix_merge_queue')[0]!.state, `${state} after ${body.outcome}`).toBe(state)
+      }
+      expect(s.db.table('fix_events').filter((e) => e.label === 'Conflict resolved by a local worker')).toHaveLength(0)
+    }
+  })
+
   it('a push without the merge commit is refused', async () => {
     const s = await lanes({ fix_merge_queue: [queueRow()], fix_attempts: [attempt] }, [{ name: 'c', mode: 'conflicts' }])
     const claim = (await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.ids.c } })).body.data.claim
@@ -314,6 +331,16 @@ describe('audit mode (ADR 0050)', () => {
     expect(refiled.body.data.reportId).not.toBe(first.body.data.reportId)
     expect(s.db.table('code_audit_keys')).toHaveLength(1)
     expect(s.db.table('code_audit_keys')[0]!.report_id).toBe(refiled.body.data.reportId)
+  })
+
+  it('runs one pass per lane at a time, whatever its concurrency', async () => {
+    const s = await auditLane()
+    s.db.table('work_lanes').find((l) => l.name === 'glot-audit')!.concurrency = 3
+    const second = await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.ids['glot-audit'] } })
+    expect(second.body.data).toEqual({ claim: null, reason: 'An audit lane runs one pass at a time.' })
+    await s.app.call('POST', '/v1/worker/claims/:id/done', { params: { id: s.claim.id }, body: { outcome: 'no_change' } })
+    const third = await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.ids['glot-audit'] } })
+    expect(third.body.data.claim).toMatchObject({ kind: 'audit' })
   })
 
   it('stops claiming and filing at the hourly cap', async () => {
