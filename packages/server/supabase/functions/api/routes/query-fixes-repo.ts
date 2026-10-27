@@ -55,6 +55,7 @@ import { canonicalPrUrl, parsePullRequestUrl } from '../../_shared/pr-substance.
 import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
 import { loadRecentFixTruths, loadReportFixTruths, reportTitle } from '../../_shared/fix-report-truth-load.ts';
 import { resolveUserDisplays } from '../../_shared/user-display.ts';
+import { isWorkerOnlyKey, workerClaimDenial } from '../../_shared/work-claims.ts';
 import {
   fetchPullRequest,
   installationIdForAttempt,
@@ -735,7 +736,9 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     return c.json({ ok: true, data: { fixes: enriched, total: count ?? enriched.length, offset: queryOffset } });
   });
 
-  app.post('/v1/admin/fixes', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+  // A local worker's key (worker:run, ADR 0048) records fixes too, but only on
+  // a report its host holds an active claim on (workerClaimDenial).
+  app.post('/v1/admin/fixes', adminOrApiKey({ scope: ['mcp:write', 'worker:run'] }), async (c) => {
     // withIdempotency: submit_fix_result (MCP) sends a stable derived
     // Idempotency-Key so a retried call must not insert a second
     // fix_attempts row — the wrapper was opt-in and this route never opted
@@ -756,6 +759,8 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
 
     if (!report)
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
+    const unclaimed = await workerClaimDenial(c, db, report.id);
+    if (unclaimed) return unclaimed;
 
     const { data: fix, error } = await db
       .from('fix_attempts')
@@ -1134,7 +1139,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
   // Anthropic key, so viewers cannot start one, a review already queued or
   // running is a 409, and each fix is limited to 3 re-runs an hour.
   // ---------------------------------------------------------------------------
-  app.post('/v1/admin/fixes/:id/review', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+  app.post('/v1/admin/fixes/:id/review', adminOrApiKey({ scope: ['mcp:write', 'worker:run'] }), async (c) => {
     const fixId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -1151,6 +1156,8 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403);
     }
+    const unclaimed = await workerClaimDenial(c, db, attempt.report_id);
+    if (unclaimed) return unclaimed;
     if (!attempt.pr_url) {
       return c.json({ ok: false, error: { code: 'NO_PR', message: 'This fix has no pull request to review' } }, 409);
     }
@@ -1834,12 +1841,17 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     return c.json({ ok: true, data: { events: events.slice(0, limit) } });
   });
 
-  app.patch('/v1/admin/fixes/:id', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+  app.patch('/v1/admin/fixes/:id', adminOrApiKey({ scope: ['mcp:write', 'worker:run'] }), async (c) => {
     const fixId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const body = await c.req.json();
     const db = getServiceClient();
     const projectIds = await callerProjectIds(c, db, userId);
+    if (isWorkerOnlyKey(c)) {
+      const { data: target } = await db.from('fix_attempts').select('report_id').eq('id', fixId).in('project_id', projectIds).maybeSingle();
+      const unclaimed = await workerClaimDenial(c, db, (target as { report_id?: string | null } | null)?.report_id);
+      if (unclaimed) return unclaimed;
+    }
 
     const allowed: Record<string, boolean> = {
       status: true,
