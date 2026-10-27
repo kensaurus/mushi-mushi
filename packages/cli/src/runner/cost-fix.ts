@@ -30,8 +30,8 @@ export interface CostFixJob {
   closedAt: string | null
 }
 
-export const COST_FIX_WAIT_MS = 120_000
-export const COST_FIX_POLL_MS = 3_000
+const COST_FIX_WAIT_MS = 120_000
+const COST_FIX_POLL_MS = 3_000
 
 const inFlight = (j: CostFixJob) => j.status === 'queued' || j.status === 'running'
 

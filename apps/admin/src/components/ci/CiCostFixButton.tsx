@@ -28,7 +28,7 @@ import { Btn, CodeChip } from '../ui'
 import { IconExternalLink } from '../icons'
 
 /** How often a job in flight is read again. */
-export const COST_FIX_POLL_MS = 3_000
+const COST_FIX_POLL_MS = 3_000
 
 /** The key a job and an advice target share. */
 export function costFixKey(f: { projectId: string; repo: string; workflowPath: string; kind: string }): string {

@@ -20,7 +20,10 @@ import type { CiAdvice } from '../../lib/ciTypes'
 const state = vi.hoisted(() => ({ apiFetch: vi.fn(), apiFetchMutate: vi.fn() }))
 vi.mock('../../lib/supabase', () => ({ apiFetch: state.apiFetch, apiFetchMutate: state.apiFetchMutate }))
 
-import { CiCostFixButton, COST_FIX_POLL_MS } from './CiCostFixButton'
+import { CiCostFixButton } from './CiCostFixButton'
+
+/** CiCostFixButton reads a job in flight again every 3 s. */
+const COST_FIX_POLL_MS = 3_000
 import { CiAdviceList } from './CiSections'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true

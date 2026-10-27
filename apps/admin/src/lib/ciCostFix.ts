@@ -8,7 +8,7 @@
 
 import type { CiCostFixKind } from './ciTypes'
 
-export type CiCostFixStatus = 'queued' | 'running' | 'pr_opened' | 'no_change' | 'refused' | 'failed'
+type CiCostFixStatus = 'queued' | 'running' | 'pr_opened' | 'no_change' | 'refused' | 'failed'
 
 interface CiMinutesSeries {
   from: string
