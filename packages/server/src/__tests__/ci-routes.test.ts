@@ -364,7 +364,11 @@ describe('GET /v1/admin/ci/compare', () => {
 
   it('reads the SQL aggregate over a window clamped to 30 days, scoped to the project', async () => {
     const s = setup({}, {
-      rpc: () => ({ groups: [{ project_id: P1, repo: 'kensaurus/glot.it', runner_class: 'github_hosted', os: 'linux', labels: ['ubuntu-latest'], jobs: '3', billed_minutes: '6', raw_seconds: '255' }], pairs: [], workflows: [], intervals: [], oldest: NOW.toISOString(), jobs: 3 }),
+      // ci_cost_facts (the cost rules' job facts) answers its own shape.
+      rpc: (fn) =>
+        fn === 'ci_cost_facts'
+          ? { events: [], prs: [], steps: [], jobs: 0 }
+          : { groups: [{ project_id: P1, repo: 'kensaurus/glot.it', runner_class: 'github_hosted', os: 'linux', labels: ['ubuntu-latest'], jobs: '3', billed_minutes: '6', raw_seconds: '255' }], pairs: [], workflows: [], intervals: [], oldest: NOW.toISOString(), jobs: 3 },
     })
     const res = await s.app.call('GET', '/v1/admin/ci/compare', { query: { project_id: P1, days: '99' } })
     expect(res.status).toBe(200)
@@ -387,6 +391,16 @@ describe('GET /v1/admin/ci/compare', () => {
     expect(res.body.data.settingsWritable).toBe(false)
     expect(res.body.data.settings[0]).toMatchObject({ source: 'default', organizationId: ORG })
     expect(res.body.data.rows[0]).toMatchObject({ jobs: 2, billedMinutes: 3, tinyJobs: 1 })
+  })
+
+  it('still answers when only the cost rules\' job facts fail, and says the job-based advice is left out', async () => {
+    const s = setup({}, {
+      rpc: () => ({ groups: [], pairs: [], workflows: [], intervals: [], oldest: null, jobs: 0 }),
+      rpcError: (fn) => (fn === 'ci_cost_facts' ? { code: '57014', message: 'canceling statement due to statement timeout' } : null),
+    })
+    const res = await s.app.call('GET', '/v1/admin/ci/compare', {})
+    expect(res.status).toBe(200)
+    expect(res.body.data.sourceNote).toMatch(/job-based cost advice is left out/)
   })
 
   it('answers 500, never an empty comparison, when the aggregate fails for another reason', async () => {
