@@ -27,6 +27,30 @@ export type TrainState = (typeof TRAIN_STATES)[number]
 export const DEFAULT_TRAIN_INTERVAL_MINUTES = 360
 export const DEFAULT_TRAIN_MAX_MEMBERS = 15
 
+/**
+ * CI on a candidate's own head. Only `green` rides (ADR 0044 amendment
+ * 2026-10-26): on 2026-10-26, 37 of glot.it's 40 queued PRs were red on
+ * their own heads, so every train failed, was bisected down to one member,
+ * and the held member rode the next train again (179 red trains in 5 days).
+ * `unknown` means it was not read (not approved on this head, or a draft).
+ */
+export type TrainCi = 'green' | 'pending' | 'red' | 'base_red' | 'unknown'
+
+/**
+ * A member that rode this many red trains at one head stops riding until it
+ * has a new commit. One bisection of a full train (15 → 8 → 4 → 2 → 1) puts
+ * an innocent member in at most 4, so 5 means it was in two bisections.
+ */
+export const MAX_RED_TRAINS_PER_HEAD = 5
+
+/**
+ * `release_trains.detail` of a train that failed on its members' code (not a
+ * red base). Trains written before 2026-10-26 say "CI failed:" and are not
+ * read back: the red-base check could not see through aggregators then, so
+ * many of them failed only because the base branch was red.
+ */
+export const RED_TRAIN_DETAIL_PREFIX = 'Members failed CI:'
+
 export interface TrainCandidate {
   rowId: string
   fixAttemptId: string
@@ -44,6 +68,11 @@ export interface TrainCandidate {
   severity: string | null
   /** reports.source of the fix's report. */
   source: string | null
+  /** A draft runs no CI until it is marked ready. */
+  draft: boolean
+  ci: TrainCi
+  /** Why it may not ride at this head (red trains), or null. */
+  benched: string | null
 }
 
 /**
@@ -54,9 +83,42 @@ export function isExpress(c: Pick<TrainCandidate, 'severity' | 'source'>): boole
   return c.source === 'security_advisory' || (c.severity ?? '').toLowerCase() === 'critical'
 }
 
-/** Ready for a train: open, Opus says merge on its exact head, no hold. */
-export function isTrainReady(c: TrainCandidate): boolean {
+/** Opus says merge on its exact head and nothing holds it. */
+export function isApprovedAtHead(c: TrainCandidate): boolean {
   return c.prOpen && !c.held && c.verdict === 'merge' && !!c.headSha && c.headSha === c.verdictHead
+}
+
+/** Ready for a train: approved at its head, not a draft, its own CI green, not benched. */
+export function isTrainReady(c: TrainCandidate): boolean {
+  return isApprovedAtHead(c) && !c.draft && c.ci === 'green' && !c.benched
+}
+
+export interface PastTrain {
+  pr_number: number | null
+  detail: string | null
+  members: Array<{ rowId: string; headSha: string }>
+}
+
+/**
+ * Why a member may not ride again at `headSha`, from the repo's recent red
+ * trains (ADR 0044 amendment 2026-10-26): it failed alone at this head, or
+ * it rode MAX_RED_TRAINS_PER_HEAD red trains at it. A new commit (a
+ * CI-repair push, a branch update) clears both. Trains that failed because
+ * the base branch was red are not counted.
+ */
+export function benchReason(history: PastTrain[], rowId: string, headSha: string | null): string | null {
+  if (!headSha) return null
+  const red = history.filter(
+    (t) => (t.detail ?? '').startsWith(RED_TRAIN_DETAIL_PREFIX) && t.members.some((m) => m.rowId === rowId && m.headSha === headSha),
+  )
+  const alone = red.find((t) => t.members.length === 1)
+  if (alone) {
+    return `It failed CI alone in release train${alone.pr_number ? ` #${alone.pr_number}` : ''} at this commit (${(alone.detail ?? '').slice(RED_TRAIN_DETAIL_PREFIX.length).trim().replace(/\.$/, '')}). It rides again after a new commit; a CI-repair agent may push one.`
+  }
+  if (red.length >= MAX_RED_TRAINS_PER_HEAD) {
+    return `It rode ${red.length} release trains that failed CI at this commit. It rides again after a new commit.`
+  }
+  return null
 }
 
 /** Members for the next train: ready, not express, oldest first, at most `max`. */

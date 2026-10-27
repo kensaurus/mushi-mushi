@@ -44,15 +44,49 @@ import {
   SDK_UPGRADE_SETTLED_STATUSES,
   UPGRADE_BRANCH_PREFIX,
 } from '../../_shared/sdk-upgrade-gates.ts'
-import { parseGithubRepoUrl } from '../../_shared/github.ts'
+import {
+  parseGithubRepoUrl,
+  resolveProjectGithubToken,
+  fetchPullRequestDetails as readPullRequest,
+  fetchLatestCheckRun as readLatestCheckRun,
+  fetchLatestDeploymentStatusForSha as readLatestDeployment,
+  fetchLatestWorkflowRunForSha as readLatestWorkflow,
+  type GithubRepoRef,
+} from '../../_shared/github.ts'
 import type { MergeMethod } from '../../_shared/fix-merge.ts'
 import { gatedMergePullRequest } from '../../_shared/gated-merge.ts'
+import { upgradeCheckCommitSha } from '../../_shared/sdk-upgrade-ci.ts'
 import {
-  resolveProjectGithubToken,
-  type GithubRepoRef,
-  normalizeDeployStatus,
-} from '../../_shared/github.ts'
-import { fetchUpgradeCiOnHead } from '../../_shared/sdk-upgrade-ci.ts'
+  deriveSdkReleaseUpdate,
+  describeGithubReadFailure,
+  type SdkReleaseGithubState,
+  type SdkReleaseJob,
+} from '../../_shared/sdk-release-sync.ts'
+
+/**
+ * Pull request first, then checks and deploy on that head (stored bump SHA
+ * only when GitHub did not return a head). Unlike the snapshot helper, a
+ * failed check or deploy read throws so the caller can store nothing.
+ */
+async function fetchUpgradeCiOnHead(
+  token: string,
+  ref: GithubRepoRef,
+  prNumber: number,
+  storedSha: string | null | undefined,
+  opts?: { workflow?: boolean },
+): Promise<SdkReleaseGithubState> {
+  const pr = await readPullRequest(token, ref, prNumber)
+  const commitSha = upgradeCheckCommitSha(pr?.headSha, storedSha)
+  if (!commitSha) return { pr, commitSha, checks: null, deploy: null, workflow: null }
+  const [checks, deploy, workflow] = await Promise.all([
+    readLatestCheckRun(token, ref, commitSha),
+    readLatestDeployment(token, ref, commitSha),
+    opts?.workflow
+      ? readLatestWorkflow(token, ref, pr?.baseRef ?? null, commitSha).catch(() => null)
+      : Promise.resolve(null),
+  ])
+  return { pr, commitSha, checks, deploy, workflow }
+}
 
 function scheduleSdkUpgradeRun(jobId: string): void {
   const run = runSdkUpgradeJob(jobId).catch((err) => {
@@ -551,86 +585,46 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
     // New release-cockpit columns added by migration 20260618124500
     const job = rawJob as Record<string, unknown> & typeof rawJob
     const prUrl = job.pr_url as string | null
-    const existingPrState = job['pr_state'] as string | null
-    const existingReleaseStatus = job['release_status'] as string | null
-    const existingMergedAt = job['merged_at'] as string | null
-    const existingCommitSha = job.commit_sha as string | null
-
     if (!prUrl) return c.json({ ok: false, error: { code: 'NO_PR', message: 'Nothing to sync (no PR)' } }, 400)
 
     const token = await resolveProjectGithubToken(db, projectId)
     if (!token) return c.json({ ok: false, error: { code: 'GH_NOT_CONNECTED', message: 'GitHub not connected' } }, 422)
 
-    // Parse PR URL: https://github.com/owner/repo/pull/123
+    // Checks are read on the live PR head, not the stored bump commit, so a
+    // later push cannot save "CI failing" again. A failed GitHub read answers
+    // 502 and stores nothing, so the console keeps the last known CI state.
     const prUrlMatch = prUrl.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/)
     if (!prUrlMatch) return c.json({ ok: false, error: { code: 'INVALID_PR_URL', message: 'Could not parse PR URL' } }, 400)
     const [, owner, repo, prNumberStr] = prUrlMatch
-    const prNumber = parseInt(prNumberStr, 10)
     const ref: GithubRepoRef = { owner, repo }
-
-    // Same head read as sdk-release-sync. The page-open refresh posts here;
-    // reading checks on the stored bump commit would save "CI failing" again.
-    const snap = await fetchUpgradeCiOnHead(token, ref, prNumber, existingCommitSha, { workflow: true })
-    const pr = snap.pr
-    const prState = pr?.state ?? existingPrState ?? null
-    const commitSha = snap.commitSha
-    const checks = snap.checks
-    const workflow = snap.workflow
-    const deploy = snap.deploy
-
-    // A PR merged directly on GitHub reports state='closed' + merged=true — the
-    // `merged` flag is authoritative (GitHub never returns state='merged').
-    const isMerged = pr?.merged === true || prState === 'merged' || Boolean(existingMergedAt)
-    const deployState = deploy ? normalizeDeployStatus(deploy.state) : null
-
-    // Derive release_status from authoritative GitHub facts
-    let releaseStatus: string = existingReleaseStatus ?? 'pr_opened'
-    if (isMerged) {
-      if (deployState === 'success') releaseStatus = 'deployed'
-      else if (deployState === 'failure') releaseStatus = 'failed'
-      else if (checks?.conclusion === 'success') releaseStatus = 'deploying'
-      else releaseStatus = 'merged'
-    } else if (prState === 'closed') {
-      releaseStatus = 'failed'
-    } else if (prState === 'open') {
-      if (checks?.conclusion === 'failure') releaseStatus = 'blocked'
-      else if (pr?.mergeable === true && pr?.mergeableState === 'clean' && checks?.conclusion === 'success') {
-        releaseStatus = 'ready_to_merge'
-      } else {
-        releaseStatus = 'pr_opened'
-      }
+    const releaseJob: SdkReleaseJob = {
+      id: jobId,
+      pr_url: prUrl,
+      pr_state: (job['pr_state'] as string | null) ?? null,
+      release_status: (job['release_status'] as string | null) ?? null,
+      merged_at: (job['merged_at'] as string | null) ?? null,
+      commit_sha: (job['commit_sha'] as string | null) ?? null,
     }
-
-    const now = new Date().toISOString()
-    // Persist only the columns whose GitHub fetch succeeded so a transient
-    // failure never wipes last-known deploy state back to 'unknown'.
-    const { error: updErr } = await db.from('sdk_upgrade_jobs').update({
-      pr_state: isMerged ? 'merged' : prState,
-      check_run_status: checks?.status ?? null,
-      check_run_conclusion: checks?.conclusion ?? null,
-      check_run_updated_at: now,
-      release_status: releaseStatus,
-      ...(isMerged && !existingMergedAt ? { merged_at: now } : {}),
-      ...(deploy
-        ? {
-            deploy_status: deployState,
-            deploy_url: deploy.environmentUrl ?? null,
-            deploy_environment: deploy.environment ?? null,
-            deploy_updated_at: now,
-          }
-        : {}),
-      ...(commitSha && commitSha !== existingCommitSha ? { commit_sha: commitSha } : {}),
-    }).eq('id', jobId)
-    if (updErr) {
-      return c.json({ ok: false, error: { code: 'SYNC_PERSIST_FAILED', message: updErr.message } }, 500)
+    let snap: SdkReleaseGithubState
+    try {
+      snap = await fetchUpgradeCiOnHead(token, ref, parseInt(prNumberStr, 10), releaseJob.commit_sha, { workflow: true })
+    } catch (err) {
+      return c.json({
+        ok: false,
+        error: { code: 'GITHUB_UNAVAILABLE', message: `GitHub did not answer (${describeGithubReadFailure(err)})` },
+      }, 502)
     }
+    const derived = deriveSdkReleaseUpdate(releaseJob, snap, new Date().toISOString())
+    const { error: updErr } = await db.from('sdk_upgrade_jobs').update(derived.update).eq('id', jobId)
+    if (updErr) return c.json({ ok: false, error: { code: 'SYNC_PERSIST_FAILED', message: updErr.message } }, 500)
 
+    const { pr, checks, workflow, deploy } = snap
     return c.json({
       ok: true,
       data: {
         jobId,
-        releaseStatus,
-        prState: isMerged ? 'merged' : prState,
+        releaseStatus: derived.releaseStatus,
+        prState: derived.prState,
         prMergeable: pr?.mergeable ?? null,
         prMergeableState: pr?.mergeableState ?? null,
         checkRunStatus: checks?.status ?? null,
@@ -638,7 +632,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
         workflowStatus: workflow?.status ?? null,
         workflowConclusion: workflow?.conclusion ?? null,
         workflowUrl: workflow?.htmlUrl ?? null,
-        deployStatus: deployState,
+        deployStatus: derived.deployState,
         deployUrl: deploy?.environmentUrl ?? null,
         deployEnvironment: deploy?.environment ?? null,
       },
