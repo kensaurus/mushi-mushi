@@ -481,6 +481,13 @@
     "path": "/v1/admin/ci/compare?project_id={projectId}&days={days|30}",
     "hints": { "destructive": false, "idempotent": true }
   },
+  "get_ci_bill": {
+    "scope": "mcp:read",
+    "description": "What GitHub actually charged for Actions (measured from GitHub's bill): net, gross and discount per repo, SKU and day, this month, the change, and the agent PR share.",
+    "method": "GET",
+    "path": "/v1/admin/ci/bill?project_id={projectId}&days={days|30}",
+    "hints": { "destructive": false, "idempotent": true }
+  },
   "get_fix_verification": {
     "scope": "mcp:read",
     "description": "Merge checks for a fix's current PR head: Opus review, CI, fail-to-pass proof, weakened tests, size, second review; automatic merge state and regressions.",

@@ -1,12 +1,14 @@
 /**
  * FILE: packages/cli/src/commands/runner.ts
- * PURPOSE: `mushi runner status|compare|heartbeat|hooks install|add|audit`
+ * PURPOSE: `mushi runner status|compare|bill|heartbeat|hooks install|add|audit`
  *          (Plan 022, ADR 0033 / 0037): where your tests run, why a fix waits
  *          to land, and what each place costs.
  *
  *          - status     the CI view in the terminal (GET /v1/admin/ci/overview)
  *          - compare    cost and speed per repo × runner class, what-ifs
  *                       (GET /v1/admin/ci/compare; read-only)
+ *          - bill       what GitHub actually charged, read with your own gh
+ *                       login; --push uploads it (POST /v1/admin/ci/bill)
  *          - placement  where each repo's CI runs, the dry run of a change,
  *                       and a request for one (ADR 0037: only LINUX_RUNNER /
  *                       RUNNER_<WORKFLOW>; an owner or admin approves and
@@ -54,6 +56,7 @@ import { HOOKS_DIR_NAME, hookScript, mergeRunnerEnv } from '../runner/hooks.js'
 import { collectHeartbeat, detectPlatform, hashHostId, nodeHostIO, readMachineId, UnsupportedHostError, type HostIO } from '../runner/host.js'
 import { renderOverview, type CiOverview } from '../runner/overview.js'
 import { renderCompare, type CiCompare } from '../runner/compare.js'
+import { fetchActionsUsage, isGithubLogin, lookupOwner, parseMonth, renderBill, summarizeBill } from '../runner/bill.js'
 import { renderPlacement, renderPreview, type PlacementPreviewView, type PlacementView } from '../runner/placement.js'
 import { assertNotCliKey, defaultRunnerKeyLabel, resolveRunnerKey, RUNNER_KEY_CREDENTIAL, RUNNER_KEY_PATH } from '../runner/key.js'
 
@@ -121,6 +124,16 @@ export function __setRunnerDeps(next: Partial<RunnerDeps>): () => void {
   return () => {
     deps = prev
   }
+}
+
+/** GITHUB_TOKEN, else `gh auth token`. Never printed. */
+function githubTokenForBill(): string {
+  const fromEnv = process.env['GITHUB_TOKEN']?.trim()
+  if (fromEnv) return fromEnv
+  const r = deps.gh(['auth', 'token'])
+  const token = r.ok ? r.stdout.trim() : ''
+  if (!token) throw new MushiCliError('E_INVALID_INPUT', 'No GitHub login on this machine.', 'Run `gh auth login`, or set GITHUB_TOKEN to a token that can read your billing.')
+  return token
 }
 
 function hostIdOrThrow(): string {
@@ -284,6 +297,69 @@ prices (dated), your plan's included minutes, and your electricity figures
         return
       }
       for (const line of renderCompare(result.data)) console.log(line)
+    })
+
+  runner
+    .command('bill')
+    .description('What GitHub actually charged for Actions this month, per repo (read with your own gh login)')
+    .option('--month <yyyy-mm>', 'Month to read (default: this month, UTC)')
+    .option('--owner <login>', 'GitHub user or organization whose bill to read (default: you)')
+    .option('--push', 'Upload the month to Mushi, so the console shows the real bill')
+    .option('--project-id <id>', 'Project to upload to with --push (defaults to the configured project)')
+    .option('--project <id>', 'Same as --project-id')
+    .option('--json', 'Machine-readable JSON output')
+    .addHelpText('after', `
+Reads GitHub's billing usage API with GITHUB_TOKEN, or the token of \`gh auth
+login\`. The token stays on this machine and is never printed. A personal
+account's bill needs your own login (fine-grained tokens: Plan read); an
+organization's needs an owner or billing manager (Administration read).
+
+Net is what GitHub charged; public repos and your plan's included minutes show
+as discount. Copilot and other products are left out. With --push, the month's
+Actions items go to POST /v1/admin/ci/bill for the configured project; the
+owner must own one of the project's repositories.`)
+    .action(async (opts: { month?: string; owner?: string; push?: boolean; projectId?: string; project?: string; json?: boolean }) => {
+      const when = parseMonth(opts.month)
+      if (!when) throw new MushiCliError('E_INVALID_INPUT', '--month must look like 2026-10.')
+      if (opts.owner !== undefined && !isGithubLogin(opts.owner)) throw new MushiCliError('E_INVALID_INPUT', '--owner must be a GitHub user or organization name.')
+      const config = opts.push ? requireConfig() : null
+      const token = githubTokenForBill()
+      const signal = getAbortSignal()
+      const fetchFn: (url: string, init: RequestInit) => Promise<Response> = (url, init) => fetch(url, { ...init, signal })
+      const who = await lookupOwner(fetchFn, token, opts.owner)
+      if ('error' in who) throw new MushiCliError('E_API_ERROR', who.error)
+      const usage = await fetchActionsUsage(fetchFn, token, who.owner, who.ownerType, when.year, when.month)
+      if ('error' in usage) throw new MushiCliError('E_API_ERROR', usage.error)
+      const summary = summarizeBill(who.owner, who.ownerType, when.year, when.month, usage.items)
+
+      let pushed: unknown = null
+      if (opts.push && config) {
+        const raw = opts.projectId ?? opts.project ?? config.projectId
+        const body = {
+          ...(raw ? { projectId: requireUuid(raw, 'project id') } : {}),
+          owner: who.owner,
+          ownerType: who.ownerType,
+          year: when.year,
+          month: when.month,
+          items: usage.items,
+        }
+        const result = await apiCall<{ owner: string; month: string; rows: number; netUsd: number }>('/v1/admin/ci/bill', config, { method: 'POST', body: JSON.stringify(body) }, { timeoutMs: 60_000 })
+        if (!result.ok) die(result)
+        pushed = result.data
+      }
+
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify({ ...summary, incomplete: usage.incomplete, ...(pushed ? { pushed } : {}) }, null, 2))
+        return
+      }
+      for (const line of renderBill(summary)) console.log(line)
+      if (usage.incomplete) console.log('  ! GitHub returned more than one page of usage; part of the month may be missing.')
+      if (pushed) {
+        const p = pushed as { rows: number; month: string }
+        console.log(`\nUploaded ${p.rows} day × repo × SKU rows for ${p.month}. The console's CI page shows them now.`)
+      } else if (!opts.json) {
+        console.log('\nRun again with --push to show this bill in the Mushi console.')
+      }
     })
 
   const placement = runner

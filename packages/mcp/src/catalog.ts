@@ -404,6 +404,16 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'What does my CI cost, and would it be cheaper or faster on my own machine?',
   },
   {
+    name: 'get_ci_bill',
+    title: 'Real GitHub Actions bill',
+    description:
+      'Return what GitHub actually charged for Actions, read from GitHub\'s billing usage API by the CI collector once a day (or pushed with `mushi runner bill --push`). Unlike get_ci_costs, these money figures are measured, not estimated. Returns { window, previousWindow, provenance: "measured", currency: "USD", available, repoScoped (true when you are not a member of the organization: only your projects\' repos are shown), unavailableReason (why there is no bill and how to connect one), owners [{ owner, ownerType, lastOkAt, lastAttemptAt, lastError, lastSource (api | cli), coveredFrom }], month { label, grossUsd, discountUsd, netUsd } (this calendar month so far), totals { grossUsd, discountUsd, netUsd, minutes }, previousTotals and change { netUsd, netPct } (null unless Mushi holds the whole previous period), windowComplete, byRepo [{ repo, netUsd, grossUsd, discountUsd, minutes }], bySku, byDay (every day of the window), dataThrough, agentShare { share, billedMinutes, agentBilledMinutes, branches, provenance: "estimated" } (paid GitHub-hosted minutes on Mushi agent branches, from the jobs Mushi recorded) }. Net is what was charged; public repos and included minutes show as discount. Optional projectId (default: the configured project; an account-level key with none reads every project) and days (1-90, default 30). Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'What did GitHub Actions actually cost me this month, and which repo or agent drove it?',
+  },
+  {
     name: 'request_ci_placement_change',
     title: 'Ask to change where CI runs (needs approval)',
     description:

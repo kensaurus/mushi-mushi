@@ -1797,6 +1797,48 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   );
 
   server.registerTool(
+    'get_ci_bill',
+    {
+      title: titleOf('get_ci_bill'),
+      description: descOf('get_ci_bill'),
+      annotations: annotationsFor('get_ci_bill'),
+      inputSchema: z.object({
+        projectId: z
+          .string()
+          .optional()
+          .describe('Project UUID — defaults to the server-configured project; omitted with an account-level key, every project you can read'),
+        days: z.number().int().min(1).max(90).optional().describe('Window in days (default 30)'),
+      }),
+      outputSchema: z.looseObject({
+        window: z.unknown().optional(),
+        previousWindow: z.unknown().optional(),
+        provenance: z.string().optional().describe('measured: from GitHub\'s bill'),
+        currency: z.string().optional(),
+        available: z.boolean().optional(),
+        repoScoped: z.boolean().optional().describe('Only your projects\' repos: you are not a member of the organization'),
+        unavailableReason: z.string().nullable().optional().describe('Why there is no bill, and how to connect one'),
+        owners: z.array(z.looseObject({})).optional(),
+        month: z.looseObject({}).optional().describe('This calendar month so far: grossUsd, discountUsd, netUsd'),
+        totals: z.looseObject({}).optional(),
+        previousTotals: z.looseObject({}).nullable().optional(),
+        change: z.looseObject({}).nullable().optional(),
+        windowComplete: z.boolean().optional(),
+        byRepo: z.array(z.looseObject({})).optional(),
+        bySku: z.array(z.looseObject({})).optional(),
+        byDay: z.array(z.looseObject({})).optional(),
+        dataThrough: z.string().nullable().optional(),
+        agentShare: z.looseObject({}).nullable().optional().describe('Paid minutes on Mushi agent branches (estimated)'),
+      }),
+    },
+    async (args) => {
+      const pid = args.projectId ? await resolveProjectId(args.projectId) : projectId || undefined;
+      const qs = new URLSearchParams({ days: String(args.days ?? 30) });
+      if (pid) qs.set('project_id', pid);
+      return jsonResult(await apiCall(`/v1/admin/ci/bill?${qs}`, undefined, { minTimeoutMs: 60_000 }));
+    },
+  );
+
+  server.registerTool(
     'request_ci_placement_change',
     {
       title: titleOf('request_ci_placement_change'),
