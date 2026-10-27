@@ -25,7 +25,7 @@ import { isAbsolute, join, resolve } from 'node:path'
 import { MushiCliError } from '../errors.js'
 
 /** fix and followups (ADR 0048); conflicts (ADR 0049), audit (ADR 0050) and skill (ADR 0042 amendment). */
-export const LANE_MODES = ['fix', 'followups', 'conflicts', 'audit', 'skill'] as const
+const LANE_MODES = ['fix', 'followups', 'conflicts', 'audit', 'skill'] as const
 type LaneMode = (typeof LANE_MODES)[number]
 const LANE_VERBS = ['paused', 'concurrency', 'model', 'mode', 'stop_at', 'drain', 'prune_own'] as const
 
@@ -47,7 +47,7 @@ export interface HostGuards {
 
 export const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/
 /** owner/name of a GitHub repository. */
-export const REPO_RE = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/
+const REPO_RE = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/
 /** A branch name git and GitHub both accept, and never an option or a path escape. */
 const BRANCH_RE = /^(?!-)(?!.*\.\.)(?!.*\/\/)(?!.*@\{)[A-Za-z0-9._\/-]{1,200}(?<![./])$/
 const SHA_RE = /^[0-9a-f]{40}$/
@@ -166,7 +166,7 @@ export interface ConflictTarget {
   prUrl: string | null
 }
 
-export type ParsedClaim =
+type ParsedClaim =
   | { kind: 'fix'; id: string; model: string | null; raw: Record<string, unknown> }
   | { kind: 'conflict'; id: string; model: string | null; conflict: ConflictTarget }
   | { kind: 'audit'; id: string; model: string | null; audit: { reviewModel: string | null; findingsLeft: number } }

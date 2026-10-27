@@ -38,11 +38,11 @@ const MAX_PENDING = 20
 const MAX_FILE_BYTES = 1_000_000
 const SCRIPT_NAMES = ['lint', 'typecheck', 'test', 'check'] as const
 
-export type AuditCheck =
+type AuditCheck =
   | { kind: 'pattern'; file: string; regex: string; ignoreCase: boolean; expect: 'present' | 'absent'; line: number | null }
   | { kind: 'script'; script: (typeof SCRIPT_NAMES)[number]; expect: string }
 
-export interface Proposal {
+interface Proposal {
   title: string
   severity: 'high' | 'medium' | 'low'
   file: string
@@ -56,7 +56,7 @@ export interface Proposal {
 }
 
 /** What the worker sends (POST /v1/worker/claims/:id/findings); the server checks every field again. */
-export interface FindingBody {
+interface FindingBody {
   title: string
   severity: Proposal['severity']
   file: string
@@ -72,14 +72,14 @@ export interface FindingBody {
   vetoBy: string | null
 }
 
-export interface AuditState {
+interface AuditState {
   pass: number
   done: string[]
   /** Reproduced findings the hourly cap held back; filed first next time. */
   pending: FindingBody[]
 }
 
-export interface AuditOutcome {
+interface AuditOutcome {
   result: 'filed' | 'no_change' | 'timeout' | 'stopped' | 'failed'
   failureKind?: 'infra' | 'code'
   detail: string
@@ -131,7 +131,7 @@ Answer with ONLY this JSON: {"veto":true|false,"reason":"one sentence"}`
 }
 
 /** The first JSON object in a model's text. */
-export function jsonIn(text: string): Record<string, unknown> | null {
+function jsonIn(text: string): Record<string, unknown> | null {
   const m = text.match(/\{[\s\S]*\}/)
   if (!m) return null
   try {
@@ -143,7 +143,7 @@ export function jsonIn(text: string): Record<string, unknown> | null {
 }
 
 const SAFE_PATH_RE = /^[A-Za-z0-9_@()[\]+.-]+(?:\/[A-Za-z0-9_@()[\]+.-]+)*$/
-/** A repo-relative path with no way out of the worktree. */
+/** @internal Exported for tests only. A repo-relative path with no way out of the worktree. */
 export function safePath(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
   const p = raw.trim().replace(/^\.\//, '')
@@ -240,6 +240,7 @@ export function scriptReproduces(run: { code: number | null; stdout: string; std
   return out.includes(file) && out.toLowerCase().includes(expect.toLowerCase())
 }
 
+/** @internal Exported for tests only. What the check was, in one line. */
 export function checkSummary(c: AuditCheck): string {
   return c.kind === 'pattern'
     ? `/${c.regex}/${c.ignoreCase ? 'i' : ''} is ${c.expect} in ${c.file}${c.line ? ` near line ${c.line}` : ''}`.slice(0, 300)
@@ -259,7 +260,7 @@ function statePath(lane: string): string {
   return join(homedir(), '.cache', 'mushi', 'audit', `${lane}.json`)
 }
 
-export function loadAuditState(lane: string): AuditState {
+function loadAuditState(lane: string): AuditState {
   try {
     const s = JSON.parse(readFileSync(statePath(lane), 'utf8')) as Partial<AuditState>
     return { pass: Number.isInteger(s.pass) && s.pass! >= 1 ? s.pass! : 1, done: Array.isArray(s.done) ? s.done.filter((x) => typeof x === 'string') : [], pending: Array.isArray(s.pending) ? s.pending.slice(0, MAX_PENDING) : [] }
@@ -275,7 +276,7 @@ function saveAuditState(lane: string, s: AuditState): void {
 
 // ── The run ─────────────────────────────────────────────────────────────────
 
-export interface AuditRunOptions {
+interface AuditRunOptions {
   repoDir: string
   laneName: string
   model?: string

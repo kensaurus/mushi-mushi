@@ -12,7 +12,7 @@ import { apiFetch } from './supabase'
 export const LANES_PATH = '/v1/admin/work/lanes'
 const KEY_PATH = '/v1/admin/work/key'
 
-export type LaneMode = 'fix' | 'followups' | 'conflicts' | 'audit' | 'skill'
+type LaneMode = 'fix' | 'followups' | 'conflicts' | 'audit' | 'skill'
 
 /** What each mode does, as the Workers tab offers it (ADR 0048; P3: 0049, 0050, 0042 amendment). */
 export const LANE_MODES: ReadonlyArray<{ value: LaneMode; label: string; hint: string }> = [

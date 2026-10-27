@@ -31,7 +31,7 @@ import type { ConflictTarget } from './protocol.js'
 
 const CONFLICT_AGENT_TIMEOUT_MS = 20 * 60_000
 
-export interface ConflictOutcome {
+interface ConflictOutcome {
   result: 'pushed' | 'refused' | 'skipped' | 'timeout' | 'stopped' | 'failed'
   failureKind?: 'infra' | 'code'
   detail: string
@@ -40,14 +40,14 @@ export interface ConflictOutcome {
 
 // ── Pure checks (exported for tests) ────────────────────────────────────────
 
-/** @internal Exported for tests only. owner/name of a GitHub remote URL (https or ssh), lower case; null for anything else. */
+/** owner/name of a GitHub remote URL (https or ssh), lower case; null for anything else. */
 export function repoOfRemote(url: string): string | null {
   const m = url.trim().match(/github\.com[:/]([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/)
   return m ? `${m[1]}/${m[2]}`.toLowerCase() : null
 }
 
 /** One `git ls-files -s` entry: path → staged blobs by stage (0 = merged, 1-3 = a conflict). */
-export type IndexEntries = Map<string, Map<number, string>>
+type IndexEntries = Map<string, Map<number, string>>
 
 /** @internal Exported for tests only. Parse `git ls-files -s -z` output. */
 export function parseLsFiles(out: string): IndexEntries {
@@ -99,7 +99,7 @@ export function outsideChanges(input: { before: IndexEntries; after: IndexEntrie
   return [...bad].sort()
 }
 
-/** NUL-separated paths (`-z` output). */
+/** @internal Exported for tests only. NUL-separated paths (`-z` output). */
 export function nulPaths(out: string): string[] {
   return out.split('\0').map((p) => p.replace(/^\n+|\n+$/g, '')).filter(Boolean)
 }
@@ -129,7 +129,7 @@ export function conflictPromptLocal(t: { repo: string; prNumber: number; base: s
 
 // ── The run ─────────────────────────────────────────────────────────────────
 
-export interface ConflictRunOptions {
+interface ConflictRunOptions {
   repoDir: string
   model?: string
   log: (line: string) => void
