@@ -81,3 +81,55 @@ describe('reportGroupDisplayLabel', () => {
     expect(graph.reportGroupDisplayLabel({ report: { title: '', summary: null } })).toBeNull()
   })
 })
+
+// The map stores a UUID on purpose (dedupe key). Two shapes reach the canvas:
+// the group id, and the report id with metadata.report_id (linkReportToAction).
+const GROUP_ID = '6f6a3044-f1b6-4000-8000-000000000001'
+const REPORT_ID = 'cb7ca884-d2be-4000-8000-000000000002'
+
+describe('reportGroupNames', () => {
+  it('names a group-id node from the group title, and a report-id node from the report', async () => {
+    const db = makeFakeDb({
+      report_groups: [
+        { id: GROUP_ID, title: 'Lesson rail crashes on open', report_count: 3, canonical_report_id: REPORT_ID },
+      ],
+      reports: [
+        {
+          id: REPORT_ID,
+          title: null,
+          summary: null,
+          description: 'Lesson rail crashes on open',
+          report_group_id: GROUP_ID,
+        },
+      ],
+    })
+    const names = await graph.reportGroupNames(db as never, [
+      { id: 'node-group', node_type: 'report_group', label: GROUP_ID, metadata: { reportId: REPORT_ID } },
+      { id: 'node-report', node_type: 'report_group', label: REPORT_ID, metadata: { kind: 'report', report_id: REPORT_ID } },
+      { id: 'node-page', node_type: 'page', label: '/lesson', metadata: null },
+    ])
+    expect(names.get('node-group')).toBe('Lesson rail crashes on open (3 reports)')
+    expect(names.get('node-report')).toBe('Lesson rail crashes on open (3 reports)')
+    expect(names.has('node-page')).toBe(false)
+    expect([...names.values()].join(' ')).not.toMatch(/6f6a3044|cb7ca884/)
+
+    // The report id is not a group id; the group is reached through the report row.
+    const onlyReport = await graph.reportGroupNames(db as never, [
+      { id: 'node-report', node_type: 'report_group', label: REPORT_ID, metadata: { kind: 'report', report_id: REPORT_ID } },
+    ])
+    expect(onlyReport.get('node-report')).toBe('Lesson rail crashes on open (3 reports)')
+  })
+
+  it('uses the canonical report when the group has no title and the node only stores the group id', async () => {
+    const db = makeFakeDb({
+      report_groups: [{ id: GROUP_ID, title: null, report_count: 1, canonical_report_id: REPORT_ID }],
+      reports: [
+        { id: REPORT_ID, title: null, summary: 'Checkout total shows NaN', description: null, report_group_id: GROUP_ID },
+      ],
+    })
+    const names = await graph.reportGroupNames(db as never, [
+      { id: 'node-group', node_type: 'report_group', label: GROUP_ID, metadata: {} },
+    ])
+    expect(names.get('node-group')).toBe('Checkout total shows NaN')
+  })
+})
