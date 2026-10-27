@@ -32,7 +32,7 @@ const APP_LINKS: ReadonlyArray<{ to: string; label: string }> = [
   { to: '/reports', label: 'Bugs' },
   { to: '/fixes', label: 'Fixes' },
   { to: '/releases', label: 'Releases' },
-  { to: '/recipe', label: 'Recipe' },
+  { to: '/recipe', label: 'Blueprint' },
 ]
 
 function StatusChip({ chip, onOpen }: { chip: CardStatusChip; onOpen: () => void }) {
@@ -91,7 +91,7 @@ export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
         <Link
           to="/recipe"
           onClick={open}
-          title={next.more > 0 ? `${next.reason} (+${next.more} more on the Recipe page)` : next.reason}
+          title={next.more > 0 ? `${next.reason} (+${next.more} more on the App blueprint page)` : next.reason}
           className="block min-w-0 truncate text-xs text-fg-secondary hover:text-fg hover:underline"
         >
           <span className="font-medium text-fg">Next step: {next.label}</span> — {next.reason} →

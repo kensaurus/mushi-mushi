@@ -93,7 +93,7 @@ export function buildBottleneckTooltip(
     sections: [
       {
         kind: 'shows',
-        label: 'PDCA bottleneck',
+        label: 'Where the loop is stuck',
         body: `This project is most stuck at the ${stage.toUpperCase()} stage right now.`,
       },
       { kind: 'takeaway', label: 'Detail', body: label },

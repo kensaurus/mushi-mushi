@@ -309,14 +309,14 @@ async function readIntake(db: Db, projectIds: string[], now: Date) {
   return summarizeIntake((rowsRes.data ?? []) as RejectionRow[], projectIds, first, now);
 }
 
-type DispatcherProject = { id: string; name: string; organization_id: string | null; owner_id: string | null };
+export type DispatcherProject = { id: string; name: string; organization_id: string | null; owner_id: string | null };
 
 /**
  * Who opens fixes per app: the server's dispatcher (spend-down on an active
  * Cursor key, ADR 0028) and its last 48 h, and local `mushi work` lanes.
  * Counts only; no key material is read.
  */
-async function readDispatchers(db: Db, projectIds: string[], projects: DispatcherProject[], now: Date) {
+export async function readDispatchers(db: Db, projectIds: string[], projects: DispatcherProject[], now: Date) {
   const since48 = new Date(now.getTime() - 2 * DAY).toISOString();
   const since7 = new Date(now.getTime() - 7 * DAY).toISOString();
   const orgIds = [...new Set(projects.map((p) => p.organization_id).filter((x): x is string => !!x))];

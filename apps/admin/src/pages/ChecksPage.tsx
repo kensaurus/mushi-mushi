@@ -65,7 +65,7 @@ export function ChecksPage() {
         icon={<IconShieldCheck />}
         description="Every automatic check on this app in one place."
         helpTitle="About Checks"
-        helpWhatIsIt="Each card is one automatic check Mushi runs on your app or on its own triage: scheduled browser tests, app health, audits, user stories, the app blueprint, design tokens, content, and how well the AI graded, learned from and prompted each fix."
+        helpWhatIsIt="Each card is one automatic check Mushi runs on your app or on its own triage: scheduled browser tests, audits, user stories, the app blueprint, design tokens, content, how well the AI graded, learned from and prompted each fix, and whether Mushi itself is healthy."
         helpHowToUse="Open a card to see that check's findings. A chip on the card shows the sidebar's live count or status for it; a Pro pill means the check needs a plan upgrade."
       />
 

@@ -123,6 +123,20 @@ export interface CiAdvice {
   repo?: string | null
   runner?: string | null
   hostId?: string | null
+  /** Projected saving per 30 days if applied (USD, estimated); null when it cannot be priced. */
+  monthSavingUsd?: number | null
+  /** Mushi can open a PR that applies this fix (POST /v1/admin/ci/cost-fixes). */
+  autofix?: CiCostAutofix | null
+}
+
+/** Copy of `CI_COST_FIX_KINDS` in `_shared/ci-overview-types.ts`; change it there first. */
+export type CiCostFixKind = 'add_concurrency' | 'skip_drafts' | 'weekly_cron' | 'ignore_docs_paths'
+
+export interface CiCostAutofix {
+  kind: CiCostFixKind
+  projectId: string
+  repo: string
+  workflowPath: string
 }
 
 interface CiStats {

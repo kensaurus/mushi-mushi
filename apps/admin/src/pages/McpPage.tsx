@@ -401,8 +401,6 @@ export function McpPage() {
                 stats={stats}
                 statsFetchedAt={lastFetchedAt}
                 statsValidating={isValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'MCP SNAPSHOT'}
-                hint={activeMeta.description}
                 statLabels={copy?.statLabels}
               />
             ),

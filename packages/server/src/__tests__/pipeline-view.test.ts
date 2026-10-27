@@ -241,6 +241,28 @@ describe('buildPipeline', () => {
     expect(group(before, 'not_deployed')?.group.tone).toBe('stuck')
   })
 
+  // Report f5575c9e: "43 agent failed" counted attempts, and dismissed and
+  // fixed reports with them; a dismissed report even read "retry".
+  it('"agent failed" counts each report once, from its newest attempt, and never a resolved report', () => {
+    const failed = (id: string, reportId: string, createdAt: string) =>
+      attempt({ id, report_id: reportId, status: 'failed', pr_url: null, pr_number: null, pr_state: null, commit_sha: null, created_at: createdAt, completed_at: createdAt })
+    const report = (id: string, status: string) => ({ id, project_id: P, status, title: id, summary: null, description: null, created_at: '2026-10-20T00:00:00Z', processing_error: null })
+    const stages = run({
+      attempts: [
+        failed('a1', 'r-open', '2026-10-24T00:00:00Z'),
+        failed('a2', 'r-open', '2026-10-25T00:00:00Z'),
+        failed('a3', 'r-dismissed', '2026-10-25T00:00:00Z'),
+        failed('a4', 'r-fixed', '2026-10-25T00:00:00Z'),
+      ],
+      reviews: [],
+      reports: [report('r-open', 'fixing'), report('r-dismissed', 'dismissed'), report('r-fixed', 'fixed')],
+    })
+    const g = group(stages, 'agent_failed')?.group
+    expect(g?.count).toBe(1)
+    expect(g?.items.map((i) => i.id)).toEqual(['a2'])
+    expect(g?.label).toBe('1 report: the agent failed, no PR opened')
+  })
+
   it('stage totals: count and stuck add up over groups', () => {
     const stages = run({
       attempts: [attempt(), attempt({ id: 'f2', commit_sha: 'h2', pr_number: 13 })],

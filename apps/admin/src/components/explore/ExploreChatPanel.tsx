@@ -398,7 +398,7 @@ export function ExploreChatPanel({
             <p className="text-2xs text-fg-muted">
               Requires an Anthropic or OpenAI key in{' '}
               <Link to="/settings?tab=byok" className="text-accent underline hover:no-underline">
-                Settings → API Keys
+                Settings → AI keys
               </Link>
               . Usage (model · tokens · cost) appears under each answer.
             </p>
@@ -603,7 +603,7 @@ function MessageTelemetryStrip({ turn }: { turn: ChatTurn }) {
       <Link
         to="/settings?tab=byok"
         className="text-info hover:underline font-sans normal-case tracking-normal"
-        title="Manage API keys and BYOK usage"
+        title="Manage your AI keys"
       >
         API keys ↗
       </Link>

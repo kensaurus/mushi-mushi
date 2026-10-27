@@ -51,7 +51,7 @@ const EXACT: Record<string, OperationInfo> = {
     healthFn: 'classify-report',
   },
   'pdca-iteration': {
-    label: 'PDCA critique',
+    label: 'Improvement-run critique',
     category: 'iterate',
     description: 'Plan–Do–Check–Act loop that scores and critiques a draft fix before merge.',
     to: '/iterate',
@@ -72,7 +72,7 @@ const EXACT: Record<string, OperationInfo> = {
     healthFn: 'mistake-summarizer',
   },
   'cluster-coherence': {
-    label: 'Cluster coherence',
+    label: 'How alike grouped reports are',
     category: 'lessons',
     description: 'Checks whether grouped bugs really belong in the same lesson cluster.',
     to: '/lessons',

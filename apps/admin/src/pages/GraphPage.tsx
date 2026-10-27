@@ -98,7 +98,7 @@ const GRAPH_TABS: Array<{ id: GraphTabId; label: string; description: string }> 
   {
     id: 'explore',
     label: 'Explore',
-    description: 'Interactive canvas, table, or inventory surface — click nodes for blast radius.',
+    description: 'The map as a canvas, a table or by page: click a bug group to see what else it touches.',
   },
   {
     id: 'backend',
@@ -707,7 +707,7 @@ export function GraphPage() {
             to={graphLinks.nodes}
           />
           <StatCard
-            label={copy?.statLabels?.edges ?? 'Edges'}
+            label={copy?.statLabels?.edges ?? 'Links'}
             value={stats.edgeCount}
             accent={stats.edgeCount > 0 ? 'text-brand' : undefined}
             tooltip={edgesTooltip(stats)}

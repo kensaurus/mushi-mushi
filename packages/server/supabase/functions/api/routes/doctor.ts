@@ -16,6 +16,10 @@
  *   - codebase_index:   per accessible project — enabled but 0 files, or
  *                       last_index_error set (incl. `partial:` markers)
  *   - observability:    Langfuse / Sentry transports configured
+ *   - platform_*:       super-admins only: server secrets an app owner cannot
+ *                       set (Slack and Linear OAuth, Slack signing), present
+ *                       or missing, never their values
+ *                       (_shared/platform-setup-checks.ts, console ops plan P1)
  */
 import type { Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
@@ -23,6 +27,8 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { adminOrApiKey } from '../../_shared/auth.ts';
 import { ownedProjectIds } from '../shared.ts';
 import { codebaseIndexDoctorCheck, type IndexDoctorRepo } from '../../_shared/index-coverage.ts';
+import { getUserRole, SUPER_ADMIN_ROLE } from '../../_shared/super-admin.ts';
+import { platformGaps } from '../../_shared/platform-setup-checks.ts';
 
 /** The project_repos columns the codebase-index check reads. */
 interface DoctorRepoRow extends IndexDoctorRepo {
@@ -189,6 +195,18 @@ export function registerDoctorRoutes(app: Hono<{ Variables: Variables }>): void 
         ? {}
         : { hint: 'Set LANGFUSE_SECRET_KEY/LANGFUSE_PUBLIC_KEY and SENTRY_DSN function secrets for full pipeline observability.' }),
     });
+
+    // ── Platform secrets (super-admins only; app owners never see these) ──
+    if ((await getUserRole(userId)) === SUPER_ADMIN_ROLE) {
+      for (const g of platformGaps((name) => !!Deno.env.get(name))) {
+        checks.push({
+          name: g.id,
+          status: g.status === 'gap' ? 'fail' : 'pass',
+          summary: g.summary,
+          ...(g.status === 'gap' ? { hint: `Set ${g.missing.join(' and ')} as function secrets (${g.fixHref}).` } : {}),
+        });
+      }
+    }
 
     const worst = checks.some((ch) => ch.status === 'fail')
       ? 'fail'

@@ -4,6 +4,8 @@
  *          backend omits topPriorityLabel or for client-side fallbacks.
  */
 
+import { stoppedTitle } from './countDefinitions'
+
 export function scopedHref(base: string, projectId: string | null | undefined): string {
   if (!projectId) return base
   const [path, qs = ''] = base.split('?')
@@ -15,7 +17,7 @@ export function scopedHref(base: string, projectId: string | null | undefined): 
 
 /** Headline for reports still unfixed after their last auto-fix attempt (counted per report). */
 export function fixesFailedTitle(count: number): string {
-  return `Auto-fix stopped on ${count} report${count === 1 ? '' : 's'}`
+  return stoppedTitle(count)
 }
 
 export function fixesFailedHint(count: number): string {

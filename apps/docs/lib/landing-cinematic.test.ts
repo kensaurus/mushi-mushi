@@ -10,8 +10,9 @@ import {
   LANDING_WHAT_THIS_IS,
   LANDING_HERO,
   LANDING_HERO_START,
-  LANDING_SIXTY_SECOND,
-  LANDING_HOW_IT_WORKS,
+  LANDING_INSTALL,
+  LANDING_SETUP_PROMPT,
+  LANDING_FIX_PROMPT,
   LANDING_PILLARS,
   LANDING_OPERATOR,
   LANDING_WHERE_TO_START,
@@ -40,8 +41,8 @@ describe('landing cinematic copy SSOT', () => {
     expect(landing).toContain(`\n${definition}\n`)
   })
 
-  it('keeps 60-second proof pricing claim', () => {
-    expect(LANDING_SIXTY_SECOND.pricing).toMatch(/50 diagnoses/i)
+  it('keeps the free-plan pricing claim under the hero install box', () => {
+    expect(LANDING_HERO.reassure).toMatch(/50 diagnoses/i)
   })
 
   it('exposes four diagnosis pillars for the scroll stage', () => {
@@ -62,7 +63,7 @@ describe('landing cinematic copy SSOT', () => {
     expect(LANDING_OPERATOR.teamHref).toContain('github.com/kensaurus/mushi-mushi')
   })
 
-  it('starts in one click from the hero: console signup, Add to Cursor, and the npx command', () => {
+  it('keeps the funnel ids on the hero links: console signup, Cursor, npx and other editors', () => {
     const { console: signup, cursor, npx, more } = LANDING_HERO_START
     // `landing-hero` stays on signup so the funnel keeps its history.
     expect(signup.id).toBe('landing-hero')
@@ -70,22 +71,27 @@ describe('landing cinematic copy SSOT', () => {
     expect(cursor.id).toBe('landing-hero-cursor')
     expect(npx.cmd).toBe('npx mushi-mushi')
     expect(more.href).toBe('/connect')
-    // Three actions, three jobs: no two share an id.
     expect(new Set([signup.id, cursor.id, npx.id, more.id]).size).toBe(4)
   })
 
-  it('explains getting started in three steps, each ending in what you should see', () => {
-    expect(LANDING_HOW_IT_WORKS.steps.map((s) => s.title)).toEqual([
-      'Install',
-      'Send a first report',
-      'Get your first fix',
-    ])
-    for (const step of LANDING_HOW_IT_WORKS.steps) expect(step.check.length).toBeGreaterThan(0)
+  it('installs from the hero: pick Claude Code, Cursor or another editor, then three steps with one prompt', () => {
+    expect(LANDING_INSTALL.tabs.map((t) => t.id)).toEqual(['claude-code', 'cursor', 'other'])
+    for (const tab of LANDING_INSTALL.tabs) expect(tab.connect.length).toBeGreaterThan(0)
+    // ADR 0027's cycle: connect, a report comes in, a fix you review.
+    expect(Object.values(LANDING_INSTALL.steps)).toEqual(['Connect your editor', 'Paste this prompt', 'Fix a real bug'])
+    expect(LANDING_INSTALL.fixCheck).toMatch(/You review the change/)
+    // The prompt has the AI run the wizard non-interactively (an agent shell
+    // cannot answer prompts) and send a test report it can show.
+    expect(LANDING_SETUP_PROMPT).toContain('npx mushi-mushi --yes')
+    expect(LANDING_SETUP_PROMPT).toContain('npx mushi-mushi test')
+    expect(LANDING_FIX_PROMPT).toMatch(/latest Mushi report/)
+    const hero = readFileSync(join(__dirname, '..', 'components', 'landing', 'CinematicEditorialHero.tsx'), 'utf8')
+    expect(hero).toContain('<LandingInstallStrip />')
     const landing = readFileSync(join(__dirname, '..', 'content', 'index.mdx'), 'utf8')
-    // The pipeline and the three steps sit right under the hero, before anything else.
+    // The install lives in the hero only; the pipeline picture comes right after it.
+    expect(landing).not.toContain('<LandingInstallStrip')
     expect(landing.indexOf('<LoopPipeline')).toBeGreaterThan(landing.indexOf('<CinematicEditorialHero'))
-    expect(landing.indexOf('<LandingInstallStrip')).toBeGreaterThan(landing.indexOf('<LoopPipeline'))
-    expect(landing.indexOf('<LandingInstallStrip')).toBeLessThan(landing.indexOf('<OssTrustStrip'))
+    expect(landing.indexOf('<LoopPipeline')).toBeLessThan(landing.indexOf('<OssTrustStrip'))
   })
 
   it('keeps the hero lead on the solo-builder positioning against Sentry', () => {

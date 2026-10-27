@@ -17,6 +17,7 @@ import { normalizeCostSettings, type CostSettingsRow } from './ci-cost.ts'
 import { aggregateCiJobs, COMPARE_JOB_COLUMNS, readComparisonData, type CompareInput, type CompareJobRow, type ComparisonData } from './ci-compare.ts'
 import type { CiCompareSettings, RepoVisibility } from './ci-compare-types.ts'
 import type { RepoPermissions } from './ci-collector.ts'
+import { loadCostFacts } from './ci-cost-facts.ts'
 
 // deno-lint-ignore no-explicit-any
 type Db = { from: (table: string) => any; rpc: (fn: string, args: Record<string, unknown>) => any }
@@ -98,11 +99,16 @@ export async function loadCiCompareInput(db: Db, projectIds: string[], from: Dat
   for (const org of orgIds) settingsByOrg.set(org, normalizeCostSettings(org, (saved.get(org) as CostSettingsRow | undefined) ?? null))
 
   const { data, source, sourceNote } = await loadComparisonData(db, projectIds, from, to)
+  // The cost rules' facts never fail the page: on an error they are null and the note says so.
+  const facts = await loadCostFacts(db, projectIds, from, to)
+  const pullRequests = await loadPullRequests(db, projectIds, from)
 
   return {
     data,
     source,
-    sourceNote,
+    sourceNote: [sourceNote, facts.note].filter(Boolean).join(' ') || null,
+    costFacts: facts.facts,
+    pullRequests,
     projects,
     repoBindings: check<{ project_id: string; repo_url: string }>(reposRes, 'project_repos')
       .map((r) => ({ project_id: r.project_id, repo: repoOf(r.repo_url) }))
@@ -115,6 +121,30 @@ export async function loadCiCompareInput(db: Db, projectIds: string[], from: Dat
     runners: check<CompareInput['runners'][number]>(runnersRes, 'ci_runners'),
     workflows,
     variableNames,
+  }
+}
+
+/** Pull requests closed in the window or still open (ci_pull_requests); null when they cannot be read (e.g. not applied yet). */
+async function loadPullRequests(db: Db, projectIds: string[], from: Date): Promise<CompareLoad['pullRequests']> {
+  if (projectIds.length === 0) return []
+  try {
+    const read = await readAllPages<{ repo: string; number: number; merged: boolean; state: string; closed_at: string | null; head_ref: string | null; docs_only: boolean | null }>(
+      (lo, hi, count) =>
+        db
+          .from('ci_pull_requests')
+          .select('project_id, repo, number, merged, state, closed_at, head_ref, docs_only', { count })
+          .in('project_id', projectIds)
+          .gte('updated_at', from.toISOString())
+          // (project, repo, number) is the key: pages never overlap.
+          .order('project_id', { ascending: true })
+          .order('repo', { ascending: true })
+          .order('number', { ascending: true })
+          .range(lo, hi),
+      { what: 'ci_pull_requests', maxRows: 5_000 },
+    )
+    return read.rows.map((p) => ({ repo: p.repo, number: Number(p.number), merged: p.merged === true, state: p.state, closedAt: p.closed_at, headRef: p.head_ref, docsOnly: p.docs_only }))
+  } catch {
+    return null
   }
 }
 

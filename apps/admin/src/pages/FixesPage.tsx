@@ -83,9 +83,6 @@ const STATUS_BUCKETS: { id: StatusBucket; label: string }[] = [
   { id: 'failed', label: 'Failed / skipped' },
 ]
 
-const SNAPSHOT_HINT =
-  'Completed, failed and in flight count reports. Attempts, PRs open and CI passing count fix attempts; the PR counts use the same rule as Pull requests.'
-
 /** Attempts per request; the list route allows up to 200. */
 const FIXES_PAGE_SIZE = 200
 
@@ -879,11 +876,6 @@ export function FixesPage() {
                 stats={snapshotStats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                description={SNAPSHOT_HINT}
-                sectionTitle={copy?.sections?.snapshot ?? 'FIXES SNAPSHOT'}
-                statLabels={copy?.statLabels}
-                hideLinks={ux.hideSnapshotLinks}
-                compact={ux.isQuickstart}
               />
             ),
           },
