@@ -19,7 +19,7 @@ import {
 } from '../shared.ts';
 import { denyViewerWrite } from '../viewer-gate.ts';
 import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts';
-import { postReporterReply, computeTwoWayHealth } from '../../_shared/reporter-comms.ts';
+import { postReporterReply, postTeamNote, computeTwoWayHealth } from '../../_shared/reporter-comms.ts';
 import { buildReportFixPacket } from './report-agent-context.ts';
 import { inventoryAnchorOf } from './report-agent-context-helpers.ts';
 import { getStorageAdapter } from '../../_shared/storage.ts';
@@ -27,6 +27,7 @@ import { runInBackground } from '../../_shared/background.ts';
 import { loadReportDeployLive, type MergedFixRow } from '../../_shared/report-deploy-live.ts';
 import { CLASSIFIER_REPORT_CATEGORIES, featureRequestDispatchBlock } from '../../_shared/report-category.ts';
 import { bulkClosedReason } from '../../_shared/report-close-reasons.ts';
+import { isSdkKey } from '../../_shared/setup-signals.ts';
 import { REPORT_ORIGIN_FILTERS, reportOriginFilter } from '../../_shared/report-origin.ts';
 import {
   NEW_BUCKET_STATUSES,
@@ -115,18 +116,18 @@ async function unpinnedReportStats(
     db.from('project_api_keys').select('id').in('project_id', projectIds).eq('is_active', true).limit(1),
     db
       .from('project_api_keys')
-      .select('last_seen_at')
+      .select('scopes, last_seen_at')
       .in('project_id', projectIds)
       .eq('is_active', true)
       .not('last_seen_at', 'is', null)
       .order('last_seen_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+      .limit(50),
   ]);
 
   const hasIngest = totalAllTime > 0;
   const hasKey = (keysRes.data ?? []).length > 0;
-  const hasSdk = Boolean(heartbeatRes.data?.last_seen_at);
+  // SDK keys only: an MCP or CLI key's calls are not the app checking in.
+  const hasSdk = ((heartbeatRes.data ?? []) as Array<{ scopes?: string[] | null }>).some((k) => isSdkKey(k.scopes));
   const setupDone = hasKey && hasSdk && hasIngest;
   const lastReportAt = (latest.data?.created_at as string | null | undefined) ?? null;
   const scoped = (path: string) => `${path}${path.includes('?') ? '&' : '?'}apps=all`;
@@ -260,13 +261,12 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         .limit(1),
       db
         .from('project_api_keys')
-        .select('last_seen_at')
+        .select('scopes, last_seen_at')
         .eq('project_id', activeProject.id)
         .eq('is_active', true)
         .not('last_seen_at', 'is', null)
         .order('last_seen_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+        .limit(50),
     ]);
 
     const recentReports = reportsRes.data ?? [];
@@ -300,7 +300,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
 
     const totalAllTime = reportCountRes.count ?? 0;
     const hasKey = (keysRes.data ?? []).length > 0;
-    const hasSdk = Boolean(heartbeatRes.data?.last_seen_at);
+    const hasSdk = ((heartbeatRes.data ?? []) as Array<{ scopes?: string[] | null }>).some((k) => isSdkKey(k.scopes));
     const hasIngest = totalAllTime > 0;
     const setupDone = hasKey && hasSdk && hasIngest;
     const lastReportAt = recentReports[0]?.created_at ?? null;
@@ -1390,6 +1390,12 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         400,
       );
     }
+    // `note`: why the change was made, kept as a team note (internal, never
+    // sent to the reporter). MCP transition_status sends its `reason` here.
+    const teamNote = typeof body.note === 'string' ? body.note.trim() : '';
+    if (teamNote.length > 4_000) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'note is at most 4000 chars' } }, 400);
+    }
 
     if (typeof updates.status === 'string') {
       const normalized = normalizeAdminStatus(updates.status as string);
@@ -1413,7 +1419,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       updates.reopened_at = new Date().toISOString();
     }
 
-    if (Object.keys(updates).length === 0 && !reporterMessage) {
+    if (Object.keys(updates).length === 0 && !reporterMessage && !teamNote) {
       return c.json(
         { ok: false, error: { code: 'NO_FIELDS', message: 'No valid fields to update' } },
         400,
@@ -1495,6 +1501,13 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         authorName: 'Developer',
       });
       if (reply.status !== 201) return c.json(reply.body, reply.status);
+    }
+
+    if (teamNote) {
+      // A note for a report this caller cannot read must not look saved.
+      if (!report) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
+      const saved = await postTeamNote(db, { projectId: report.project_id as string, reportId, body: teamNote, authorName: 'API key / MCP' });
+      if (!saved.ok) return c.json({ ok: false, error: { code: 'NOTE_NOT_SAVED', message: saved.error } }, 500);
     }
 
     return c.json({ ok: true });

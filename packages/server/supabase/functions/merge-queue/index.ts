@@ -51,7 +51,7 @@ async function githubChecks(token: string, ref: GithubRepoRef, sha: string): Pro
     headers: { ...GH_HEADERS, Authorization: `Bearer ${token}` },
   })
   if (!res.ok) throw new Error(`GitHub check runs answered ${res.status}`)
-  const body = (await res.json()) as { check_runs?: Array<{ name?: string; status?: string; conclusion?: string | null }> }
+  const body = (await res.json()) as { check_runs?: Array<{ id?: number; name?: string; status?: string; conclusion?: string | null; started_at?: string | null }> }
   return checksView(body.check_runs ?? [])
 }
 

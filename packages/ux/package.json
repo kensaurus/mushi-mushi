@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/ux",
-  "version": "0.1.2",
+  "version": "0.2.1",
   "license": "MIT",
   "description": "Local visual UX loop: maps a running app's pages, tabs and dialogs, runs your coding agent on each one against screenshot baselines, and shows before/after diffs, regressions and a pairwise judge.",
   "type": "module",
@@ -59,7 +59,7 @@
     "@anthropic-ai/sdk": "^0.129.0",
     "@axe-core/playwright": "^4.12.1",
     "commander": "^14.0.2",
-    "pixelmatch": "^7.2.0",
+    "pixelmatch": "^8.0.0",
     "playwright": "^1.61.1",
     "pngjs": "^7.0.0",
     "zod": "^4.6.7"

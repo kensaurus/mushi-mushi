@@ -111,7 +111,7 @@ export const CONNECT_SKILLS = {
 } as const
 
 export const QUICKSTART_HUB_LEDE =
-  'New here? Setup is one command. If you build with AI tools (vibe coding), start with the incident loop: it takes you from a bug in your live app to a fix prompt you can paste into Cursor, usually in a few minutes.'
+  'New here? Three steps: install, send a first report, get your first fix.'
 
 export const QUICKSTART_ONE_KEY_CALLOUT =
   'One key does it all. The wizard creates a single API key (a password your app uses to talk to Mushi) for the SDK, which sends reports, and for the command-line tool (mushi doctor, mushi billing and so on). The same key also works for the read-only MCP tools in your editor.'
