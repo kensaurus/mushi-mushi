@@ -1,4 +1,4 @@
-# 0051. Fresh-eyes runs: a first-time visitor may sign in on the app's own origins, with a synthetic account
+# 0053. Fresh-eyes runs: a first-time visitor may sign in on the app's own origins, with a synthetic account
 
 Status: Accepted 2026-10-27 (owner: "proceed and build it and run with grok and the cursor credits and test thoroughly"). Date: 2026-10-27
 

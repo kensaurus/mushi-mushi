@@ -1,6 +1,6 @@
 # Fresh-eyes runs (operators)
 
-A fresh-eyes run (ADR [0051](../adr/0051-fresh-eyes-runs-may-sign-up.md)) tries one goal
+A fresh-eyes run (ADR [0053](../adr/0053-fresh-eyes-runs-may-sign-up.md)) tries one goal
 as a first-time visitor and times the path. This page is for running it on Mushi itself,
 where it needs a synthetic account, and for checking that those accounts never count.
 

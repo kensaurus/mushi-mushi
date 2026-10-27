@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 /**
- * What a fresh-eyes run leaves behind (ADR 0051): a timeline a person can
+ * What a fresh-eyes run leaves behind (ADR 0053): a timeline a person can
  * read (timeline.md next to the screenshots), the run mirrored to the console
  * (`--sync`), its findings filed as `fresh_eyes` reports (`--file`), and a
  * synthetic account minted for Mushi itself (`--mint-account`).

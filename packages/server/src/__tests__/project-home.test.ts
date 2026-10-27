@@ -295,7 +295,7 @@ describe('app info', () => {
   })
 })
 
-describe('setupSignal (fresh-eyes, ADR 0051)', () => {
+describe('setupSignal (fresh-eyes, ADR 0053)', () => {
   const run = { ttfv_seconds: 372, steps: 11, reached: 2, stalled_at: null, finished_at: '2026-10-27T21:00:00.000Z', counts: { sessions: 3 } }
 
   it('shows nothing for an app that never ran one', () => {

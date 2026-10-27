@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 /**
- * Fresh-eyes runs (`mushi-ux fresh-eyes`, ADR 0051): a model plays someone
+ * Fresh-eyes runs (`mushi-ux fresh-eyes`, ADR 0053): a model plays someone
  * who has never seen the product and tries one goal ("get my first bug
  * explained") from the landing page, signed out, while code measures the path.
  *

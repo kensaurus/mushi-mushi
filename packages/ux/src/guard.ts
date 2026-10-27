@@ -15,7 +15,7 @@
  * WebSockets are not routed: a Supabase Realtime socket only subscribes, and
  * table writes go through REST, which the route sees.
  *
- * Fresh-eyes runs (ADR 0051) may write, but only on the app's own origins
+ * Fresh-eyes runs (ADR 0053) may write, but only on the app's own origins
  * (`writes: 'same-origin'`). In every mode, a request is refused when it would
  * pay, sign in with a third party, or create an account through a public
  * sign-up endpoint: those never reach the network, whatever the allowlist.
@@ -30,7 +30,7 @@ export type AllowRule = string
 
 /**
  * read-only (the default): every write is aborted unless the allowlist names it.
- * same-origin (fresh-eyes, ADR 0051): writes may also reach `appOrigins`.
+ * same-origin (fresh-eyes, ADR 0053): writes may also reach `appOrigins`.
  */
 export type WriteMode = 'read-only' | 'same-origin'
 
@@ -131,7 +131,7 @@ export function isDestructiveLabel(label: string): boolean {
 }
 
 /**
- * What a fresh-eyes visitor never clicks (ADR 0051). Unlike discovery it may
+ * What a fresh-eyes visitor never clicks (ADR 0053). Unlike discovery it may
  * submit, send and sign up on the app itself; it never deletes, revokes, pays,
  * subscribes, signs out or signs in with a third-party account.
  */

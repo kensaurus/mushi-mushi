@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 /**
- * Fresh-eyes pure rules (ADR 0051): which answers run, how identities are
+ * Fresh-eyes pure rules (ADR 0053): which answers run, how identities are
  * typed and hidden, what counts as a wall, a dead end, a backtrack or a step
  * outside the app, how time is counted, and when a finding is filed.
  */

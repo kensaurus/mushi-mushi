@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 /**
- * The terminal runner (ADR 0051): only the supplied values reach the shell,
+ * The terminal runner (ADR 0053): only the supplied values reach the shell,
  * every phase is timed, and a failing phase stops the run and says why,
  * without the key.
  */

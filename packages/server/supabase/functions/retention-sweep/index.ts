@@ -29,7 +29,7 @@
 //      first real report is kept, so a returning new user still sees
 //      their first diagnosis (keepsFirstReport / firstRealReportId).
 //   3. Deletes synthetic fresh-eyes accounts past their 24 h, with the
-//      projects and organizations they alone own (ADR 0051,
+//      projects and organizations they alone own (ADR 0053,
 //      _shared/fresh-eyes-cleanup.ts).
 //   4. Writes ONE audit_logs row per project per sweep with
 //      { deleted_count, retention_days, plan_id, source }, so the
@@ -102,7 +102,7 @@ const handler = async (req: Request): Promise<Response> => {
     const voice = await sweepVoiceIntake(db)
     const traces = await sweepLlmTraces(db)
     const uxCaptures = await sweepUxCaptures(db)
-    // Fresh-eyes test accounts past their 24 h (ADR 0051).
+    // Fresh-eyes test accounts past their 24 h (ADR 0053).
     const freshEyesShots = await sweepFreshEyesShots(db)
     const synthetic = await sweepSyntheticAccounts(db as unknown as CleanupDb, new Date(), (msg, ctx) => rlog.warn(msg, ctx))
 
@@ -636,7 +636,7 @@ interface FreshEyesShotRow {
 }
 
 /**
- * Fresh-eyes screenshots (ADR 0051) live under <project>/<run>/fresh-eyes/
+ * Fresh-eyes screenshots (ADR 0053) live under <project>/<run>/fresh-eyes/
  * in the same bucket, named in the run's timeline. Removed after the same
  * window as the loop's; the run keeps its timeline and is marked
  * counts.shots_cleared so it is not listed again.

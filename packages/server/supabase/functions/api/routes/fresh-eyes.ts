@@ -1,6 +1,6 @@
 /**
  * FILE: packages/server/supabase/functions/api/routes/fresh-eyes.ts
- * PURPOSE: Fresh-eyes runs (ADR 0051), served by `api-ext` (deploy size limit;
+ * PURPOSE: Fresh-eyes runs (ADR 0053), served by `api-ext` (deploy size limit;
  *          `api` forwards these paths).
  *
  *   POST /v1/admin/fresh-eyes/test-account                — operator: mint a synthetic account (password returned once)

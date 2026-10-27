@@ -1,6 +1,6 @@
 /**
  * FILE: fresh-eyes-retention.test.ts
- * PURPOSE: Fresh-eyes screenshots (ADR 0051) leave the bucket after the
+ * PURPOSE: Fresh-eyes screenshots (ADR 0053) leave the bucket after the
  *          project's capture window, the run keeps its timeline and is not
  *          swept again, and a failed delete keeps the mark off for a retry.
  */

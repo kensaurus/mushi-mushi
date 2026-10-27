@@ -54,7 +54,7 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
     setParams(next, { replace: true })
   }
   const [showOlder, setShowOlder] = useState(false)
-  // ?tab=fresh-eyes: first-time visitor runs (ADR 0051); the default is the screen-by-screen runs.
+  // ?tab=fresh-eyes: first-time visitor runs (ADR 0053); the default is the screen-by-screen runs.
   const tab: UxTab = params.get('tab') === 'fresh-eyes' ? 'fresh-eyes' : 'screens'
   const setTab = (t: UxTab) => {
     const next = new URLSearchParams(params)

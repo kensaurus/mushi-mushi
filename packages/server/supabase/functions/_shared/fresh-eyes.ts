@@ -1,6 +1,6 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/fresh-eyes.ts
- * PURPOSE: The rules of fresh-eyes runs on the server (ADR 0051): the run
+ * PURPOSE: The rules of fresh-eyes runs on the server (ADR 0053): the run
  *          snapshot `mushi-ux fresh-eyes --sync` sends, the screenshot names
  *          it may upload, the finding it may file, the synthetic account the
  *          operator route mints, the metric rows a finished run writes once,

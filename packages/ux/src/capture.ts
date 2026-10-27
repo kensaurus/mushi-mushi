@@ -52,7 +52,7 @@ export interface SessionOptions {
   allow?: readonly AllowRule[]
   /** Extra selectors to ignore on top of DEFAULT_IGNORE. */
   ignore?: readonly string[]
-  /** Write policy (guard.ts). Default read-only; fresh-eyes runs may write to the app's own origins (ADR 0051). */
+  /** Write policy (guard.ts). Default read-only; fresh-eyes runs may write to the app's own origins (ADR 0053). */
   policy?: GuardPolicy
 }
 

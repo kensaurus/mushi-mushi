@@ -2,7 +2,7 @@
 /**
  * Runs only with MUSHI_UX_BROWSER_TESTS=1 (launches Chromium).
  * The write guard in a real browser: by default a form submit and a fetch
- * POST never reach the app; with writes: 'same-origin' (ADR 0051) they reach
+ * POST never reach the app; with writes: 'same-origin' (ADR 0053) they reach
  * the app's own origin and nothing else, and a public sign-up call is still
  * refused there.
  */

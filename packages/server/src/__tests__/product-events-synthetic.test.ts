@@ -1,6 +1,6 @@
 /**
  * FILE: packages/server/src/__tests__/product-events-synthetic.test.ts
- * PURPOSE: A synthetic fresh-eyes account (ADR 0051) never writes a server
+ * PURPOSE: A synthetic fresh-eyes account (ADR 0053) never writes a server
  *          product event: not for its own user id, not about a project it
  *          owns. A failed check records the event and warns.
  */

@@ -294,7 +294,7 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
       return ciSignal({ repo: slug, branch, jobs })
     })().catch((e) => errorSignal('ci', 'CI on main', '/ci', e)),
   ])
-  // First-time setup, only for apps with a finished fresh-eyes run (ADR 0051).
+  // First-time setup, only for apps with a finished fresh-eyes run (ADR 0053).
   const setupRun = await one<SetupInput['run']>(
     'fresh-eyes run',
     db.from('ux_runs').select('ttfv_seconds, steps, reached, stalled_at, finished_at, counts').eq('project_id', id).eq('kind', 'fresh_eyes').eq('status', 'done').eq('dry_run', false).order('finished_at', { ascending: false }).limit(1).maybeSingle(),

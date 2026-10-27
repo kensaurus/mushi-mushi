@@ -781,7 +781,7 @@ forwardToApiExt([
   '/v1/admin/projects/:pid/ux-runs/:runId/surfaces/:key/report',
   '/v1/admin/projects/:pid/ux-runs/:runId/uploads',
 ]);
-// Fresh-eyes runs (fresh-eyes.ts, ADR 0051).
+// Fresh-eyes runs (fresh-eyes.ts, ADR 0053).
 forwardToApiExt([
   '/v1/admin/fresh-eyes/test-account',
   '/v1/admin/projects/:pid/fresh-eyes',

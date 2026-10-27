@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/components/ux-runs/FreshEyesPanel.tsx
- * PURPOSE: The Fresh eyes tab of UX runs (ADR 0051). A fresh-eyes run is a
+ * PURPOSE: The Fresh eyes tab of UX runs (ADR 0053). A fresh-eyes run is a
  *          model playing someone who has never seen the app, trying one goal
  *          from the landing page while code times each step. This tab shows
  *          how long the last run took to reach the goal, where it stalled,

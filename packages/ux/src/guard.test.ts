@@ -24,7 +24,7 @@ describe('isRequestAllowed', () => {
   })
 })
 
-describe('isRequestAllowed with writes: same-origin (fresh-eyes, ADR 0051)', () => {
+describe('isRequestAllowed with writes: same-origin (fresh-eyes, ADR 0053)', () => {
   const policy = { writes: 'same-origin' as const, appOrigins: ['https://app.test', 'https://abc.supabase.co'] }
 
   it('lets writes reach the app origins only', () => {

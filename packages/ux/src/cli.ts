@@ -454,7 +454,7 @@ program
 
 program
   .command('fresh-eyes')
-  .description('Try one goal like a first-time visitor (signed out, never seen the product) and time the path; file what stops them (ADR 0051).')
+  .description('Try one goal like a first-time visitor (signed out, never seen the product) and time the path; file what stops them (ADR 0053).')
   .requiredOption('--url <url>', 'Where a stranger starts: the landing page')
   .requiredOption('--goal <text>', 'What they came to do, in plain words, e.g. "get my first bug explained"')
   .option('--sessions <n>', 'Independent sessions; opinions are filed only when 2 agree', '3')

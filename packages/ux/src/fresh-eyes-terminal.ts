@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 /**
- * The terminal part of a fresh-eyes run (ADR 0051), for apps whose setup is a
+ * The terminal part of a fresh-eyes run (ADR 0053), for apps whose setup is a
  * CLI (Mushi's is `npx mushi-mushi`). Model-free, each phase timed:
  *
  *   scaffold  a tiny sample web app in a temp folder

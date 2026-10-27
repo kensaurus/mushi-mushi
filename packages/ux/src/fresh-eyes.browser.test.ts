@@ -2,7 +2,7 @@
 /**
  * Runs only with MUSHI_UX_BROWSER_TESTS=1 (launches Chromium).
  *
- * A fresh-eyes run (ADR 0051) against a tiny local app with a landing page, a
+ * A fresh-eyes run (ADR 0053) against a tiny local app with a landing page, a
  * sign-in form, a dashboard and a report page, driven by a scripted "model":
  *
  * - with a synthetic identity it signs in (the real values reach the app, the

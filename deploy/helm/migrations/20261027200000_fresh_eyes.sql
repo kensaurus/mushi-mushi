@@ -1,7 +1,7 @@
 -- ============================================================================
 -- 20261027200000_fresh_eyes
 --
--- Fresh-eyes runs (ADR 0051): `mushi-ux fresh-eyes` tries one goal as a
+-- Fresh-eyes runs (ADR 0053): `mushi-ux fresh-eyes` tries one goal as a
 -- first-time visitor and mirrors the run to the console.
 --
 --   synthetic_accounts   accounts POST /v1/admin/fresh-eyes/test-account made
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS public.synthetic_accounts (
 );
 
 COMMENT ON TABLE public.synthetic_accounts IS
-  'Accounts made for fresh-eyes runs (ADR 0051). Flagged in app_metadata.synthetic, listed in operator_users so every company count and lifecycle email skips them, never write server product events, and are deleted with the projects and organizations they alone own once expires_at passes (retention-sweep). Service role only.';
+  'Accounts made for fresh-eyes runs (ADR 0053). Flagged in app_metadata.synthetic, listed in operator_users so every company count and lifecycle email skips them, never write server product events, and are deleted with the projects and organizations they alone own once expires_at passes (retention-sweep). Service role only.';
 
 CREATE INDEX IF NOT EXISTS idx_synthetic_accounts_expires ON public.synthetic_accounts (expires_at);
 
@@ -57,7 +57,7 @@ CREATE POLICY synthetic_accounts_service_all ON public.synthetic_accounts
 REVOKE ALL ON TABLE public.synthetic_accounts FROM anon, authenticated;
 
 COMMENT ON TABLE public.operator_users IS
-  'auth.users ids excluded from company counts and lifecycle emails: founders and staff (mirror of the MUSHI_OPERATOR_USER_IDS edge secret, which is the operator gate) and synthetic fresh-eyes accounts (synthetic_accounts, ADR 0051). Membership grants nothing. Service role only.';
+  'auth.users ids excluded from company counts and lifecycle emails: founders and staff (mirror of the MUSHI_OPERATOR_USER_IDS edge secret, which is the operator gate) and synthetic fresh-eyes accounts (synthetic_accounts, ADR 0053). Membership grants nothing. Service role only.';
 
 -- ── ux_runs: fresh-eyes columns ─────────────────────────────────────────────
 ALTER TABLE public.ux_runs
@@ -74,7 +74,7 @@ ALTER TABLE public.ux_runs
   ADD COLUMN IF NOT EXISTS has_account boolean;
 
 COMMENT ON COLUMN public.ux_runs.kind IS
-  'loop: a mushi-ux run of the coding agent over every screen (ADR 0020). fresh_eyes: a first-time visitor trying one goal (ADR 0051); goal, start_url, timeline, ttfv_seconds, steps, reached, stalled_at, findings, dry_run and has_account are its columns.';
+  'loop: a mushi-ux run of the coding agent over every screen (ADR 0020). fresh_eyes: a first-time visitor trying one goal (ADR 0053); goal, start_url, timeline, ttfv_seconds, steps, reached, stalled_at, findings, dry_run and has_account are its columns.';
 COMMENT ON COLUMN public.ux_runs.ttfv_seconds IS
   'Fresh-eyes: median time to first value over sessions that reached the goal, app time plus reading time, never the model''s think time. NULL when no session reached it.';
 
@@ -127,7 +127,7 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION public.is_synthetic_subject(uuid, uuid) IS
-  'True when the user, or the owner of the project, is a synthetic fresh-eyes account (ADR 0051). emitProductEvent skips such events. Service role only.';
+  'True when the user, or the owner of the project, is a synthetic fresh-eyes account (ADR 0053). emitProductEvent skips such events. Service role only.';
 
 REVOKE ALL ON FUNCTION public.is_synthetic_subject(uuid, uuid) FROM public, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.is_synthetic_subject(uuid, uuid) TO service_role;

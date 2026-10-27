@@ -149,7 +149,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /**
  * True when the console user, or the owner of the project the event is
- * about, is a synthetic fresh-eyes account (synthetic_accounts, ADR 0051).
+ * about, is a synthetic fresh-eyes account (synthetic_accounts, ADR 0053).
  * A failed check records the event (losing real funnel rows is worse) and
  * says so; the retention sweep deletes a synthetic account's rows anyway.
  */
@@ -194,7 +194,7 @@ async function writeProductEvent(db: SupabaseClient, payload: ProductEventPayloa
       log.warn('product-events: properties too large', { event: payload.eventName })
       return false
     }
-    // Fresh-eyes test accounts and their projects are not people (ADR 0051).
+    // Fresh-eyes test accounts and their projects are not people (ADR 0053).
     if (await isSyntheticSubject(db, payload.userId, properties.project_id)) return false
     // The /connect demo runs on one shared read-only key, so a stranger's
     // tool call would otherwise land on the demo project owner's person row

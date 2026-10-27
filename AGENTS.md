@@ -1036,7 +1036,7 @@ Plan 017 (`docs/execplans/dead-code-voice-agent-loop.md`, ADRs 0007–0013).
 
 ## Fresh-eyes runs (Oct 27 2026)
 
-ADR 0051. `mushi ux fresh-eyes --url <landing> --goal "<text>"` (`packages/ux/src/fresh-eyes.ts`, `fresh-eyes-terminal.ts`, `fresh-eyes-report.ts`): a model that has never seen the product tries one goal, signed out; code times app wait plus reading (never model think time) to a code-defined goal check and files measured stalls after a model-free replay, opinions only when 2 sessions agree.
+ADR 0053. `mushi ux fresh-eyes --url <landing> --goal "<text>"` (`packages/ux/src/fresh-eyes.ts`, `fresh-eyes-terminal.ts`, `fresh-eyes-report.ts`): a model that has never seen the product tries one goal, signed out; code times app wait plus reading (never model think time) to a code-defined goal check and files measured stalls after a model-free replay, opinions only when 2 sessions agree.
 
 | Object | Role |
 | --- | --- |

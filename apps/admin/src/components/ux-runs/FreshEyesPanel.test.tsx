@@ -4,7 +4,7 @@
 
 /**
  * FILE: apps/admin/src/components/ux-runs/FreshEyesPanel.test.tsx
- * PURPOSE: The Fresh eyes tab (ADR 0051): with no run it gives the command to
+ * PURPOSE: The Fresh eyes tab (ADR 0053): with no run it gives the command to
  *          paste; with runs it leads with time to first value and steps,
  *          shows each step with its screenshot and wait, says where a
  *          session stalled and why, and links the reports it filed. The UX

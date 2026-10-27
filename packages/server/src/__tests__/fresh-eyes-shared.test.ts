@@ -1,6 +1,6 @@
 /**
  * FILE: fresh-eyes-shared.test.ts
- * PURPOSE: The server's fresh-eyes rules (ADR 0051) and the synthetic account
+ * PURPOSE: The server's fresh-eyes rules (ADR 0053) and the synthetic account
  *          sweep: identities are random and on a mailbox-less domain, expired
  *          accounts go with the projects and organizations they alone own,
  *          a shared organization keeps its account, and nothing is deleted

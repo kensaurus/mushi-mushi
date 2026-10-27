@@ -52,7 +52,7 @@ export function errorSection<T>(err: unknown): HomeSection<T> {
 /** good / warn / bad are traffic lights; busy = running now; off = no signal. */
 export type Light = 'good' | 'warn' | 'bad' | 'busy' | 'off'
 
-/** `setup` shows only on apps with a finished fresh-eyes run (ADR 0051). */
+/** `setup` shows only on apps with a finished fresh-eyes run (ADR 0053). */
 export type HealthId = 'site' | 'errors' | 'sdk' | 'ci' | 'setup'
 
 export interface HealthSignal {

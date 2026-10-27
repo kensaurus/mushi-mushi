@@ -1,6 +1,6 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/fresh-eyes-cleanup.ts
- * PURPOSE: Delete synthetic fresh-eyes accounts once they expire (ADR 0051),
+ * PURPOSE: Delete synthetic fresh-eyes accounts once they expire (ADR 0053),
  *          from the daily retention sweep. Per account, in order:
  *            1. product events about its projects or its person row (a
  *               second line behind emitProductEvent's own skip);

@@ -1,7 +1,7 @@
 /**
  * FILE: apps/admin/src/lib/freshEyes.ts
  * PURPOSE: Types and wording for the Fresh eyes tab of the UX runs page
- *          (ADR 0051): runs synced by `mushi ux fresh-eyes --sync`, where a
+ *          (ADR 0053): runs synced by `mushi ux fresh-eyes --sync`, where a
  *          first-time visitor tried one goal and the time it took.
  */
 

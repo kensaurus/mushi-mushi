@@ -1,6 +1,6 @@
 /**
  * FILE: fresh-eyes-routes.test.ts
- * PURPOSE: Fresh-eyes routes (ADR 0051) through the real handlers on an
+ * PURPOSE: Fresh-eyes routes (ADR 0053) through the real handlers on an
  *          in-memory database: only an operator mints a test account, never
  *          through a project key or from a synthetic account; the account is
  *          confirmed, flagged and listed for exclusion, or deleted again; a
