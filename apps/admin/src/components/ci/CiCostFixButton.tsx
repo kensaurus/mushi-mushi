@@ -12,7 +12,7 @@
  *          opened earlier shows its state after a reload.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch, apiFetchMutate } from '../../lib/supabase'
 import type { CiAdviceFixable } from '../../lib/ciAdvice'
 import {
@@ -73,11 +73,21 @@ export function CiCostFixButton({ fixable, initialJob = null }: { fixable: CiAdv
     if (initialJob && !job) setJob(initialJob)
   }, [initialJob, job])
 
+  const readIds = useRef(new Set<string>())
   const refresh = useCallback(async (id: string) => {
+    readIds.current.add(id)
     const res = await apiFetch<{ job: CiCostFixJob }>(`/v1/admin/ci/cost-fixes/${id}`, { cache: 'no-store' })
     if (res.ok && res.data?.job) setJob(res.data.job)
     return res.ok
   }, [])
+
+  // The list does not look at GitHub. Read an opened PR's job once by id, so
+  // the card notices a merge and shows the saving measured since.
+  useEffect(() => {
+    if (!job || job.status !== 'pr_opened' || job.closedAt || job.measured?.complete) return
+    if (readIds.current.has(job.id)) return
+    void refresh(job.id)
+  }, [job, refresh])
 
   // Read a job in flight again until the worker finishes it.
   useEffect(() => {

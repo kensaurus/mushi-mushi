@@ -237,22 +237,40 @@ async function loadWorkflowMinutes(
   complete: boolean,
 ): Promise<MinutesSeries | null> {
   const names = [...new Set([job.workflow_name ?? job.workflow_path, job.workflow_path])]
-  const { data, error } = await db
-    .from('ci_jobs')
-    .select(COST_FIX_CI_JOB_COLUMNS)
-    .eq('project_id', job.project_id)
-    .in('workflow_name', names)
-    .gte('gh_created_at', from.toISOString())
-    .lt('gh_created_at', to.toISOString())
-    .limit(20_000)
-  if (error) {
-    log.warn('ci_jobs read failed', { err: error.message })
-    return null
-  }
   const repo = job.repo.toLowerCase()
-  const rows = ((data ?? []) as CostFixCiJobRow[]).filter((r) => r.repo.toLowerCase() === repo)
-  return minutesPerDay(rows, from, to, complete)
+  const rows: CostFixCiJobRow[] = []
+  // PostgREST caps each response (max_rows, 1,000 on Supabase), and 14 days
+  // of a busy repo's jobs are more: read on from wherever the last page
+  // ended until a page comes back empty, so a lower cap is read in full too.
+  let start = 0
+  for (let page = 0; page < CI_JOB_MAX_PAGES; page++) {
+    const { data, error } = await db
+      .from('ci_jobs')
+      .select(COST_FIX_CI_JOB_COLUMNS)
+      .eq('project_id', job.project_id)
+      .in('workflow_name', names)
+      .gte('gh_created_at', from.toISOString())
+      .lt('gh_created_at', to.toISOString())
+      .order('gh_created_at', { ascending: true })
+      .order('job_id', { ascending: true })
+      .range(start, start + CI_JOB_PAGE - 1)
+    if (error) {
+      log.warn('ci_jobs read failed', { err: error.message })
+      return null
+    }
+    const got = (data ?? []) as CostFixCiJobRow[]
+    if (got.length === 0) return minutesPerDay(rows, from, to, complete)
+    for (const r of got) if (r.repo.toLowerCase() === repo) rows.push(r)
+    start += got.length
+  }
+  // More jobs than the cap: a total that is too low would read as a saving.
+  log.warn('ci_jobs over the read cap; minutes not stored', { repo: job.repo, workflow: job.workflow_path })
+  return null
 }
+
+/** Rows asked for per request (Supabase's max_rows), and requests per window (about 20,000 jobs). */
+const CI_JOB_PAGE = 1_000
+const CI_JOB_MAX_PAGES = 21
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The PR

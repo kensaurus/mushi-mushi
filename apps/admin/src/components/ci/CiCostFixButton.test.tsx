@@ -72,6 +72,7 @@ beforeEach(() => {
   document.body.appendChild(host)
   root = createRoot(host)
   state.apiFetch.mockReset()
+  state.apiFetch.mockResolvedValue({ ok: true, data: {} })
   state.apiFetchMutate.mockReset()
 })
 
@@ -177,6 +178,38 @@ describe('CiCostFixButton', () => {
     await click(button('Open draft PR'))
     expect(host.querySelector('a[href="https://github.com/acme/app/pull/7"]')).not.toBeNull()
     expect(host.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('reads an opened PR\'s job once on load, so a merge since shows with its saving', async () => {
+    const merged = job({
+      status: 'pr_opened',
+      prUrl: 'https://github.com/acme/app/pull/42',
+      prNumber: 42,
+      mergedAt: '2026-10-20T00:00:00Z',
+      baseline: { from: 'a', to: 'b', days: 14, complete: true, minutes: 280, usd: 1.68, jobs: 100, perDay: [] },
+      measured: { from: 'c', to: 'd', days: 2, complete: false, minutes: 16, usd: 0.096, jobs: 8, perDay: [] },
+      saving: { minutesPerDay: 12, usdPerMonth: 2.16, measuredDays: 2 },
+    })
+    state.apiFetch.mockResolvedValue({ ok: true, data: { job: merged } })
+    await render(createElement(CiCostFixButton, { fixable: FIXABLE, initialJob: job({ status: 'pr_opened', prUrl: 'https://github.com/acme/app/pull/42', prNumber: 42 }) }))
+    expect(state.apiFetch).toHaveBeenCalledTimes(1)
+    expect(state.apiFetch).toHaveBeenCalledWith('/v1/admin/ci/cost-fixes/j1', { cache: 'no-store' })
+    expect(host.textContent).toContain('Saved 12 billed minutes a day')
+    // Once per job: the stored result does not trigger another read.
+    expect(state.apiFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not read a closed PR or a finished measurement again', async () => {
+    await render(createElement(CiCostFixButton, { fixable: FIXABLE, initialJob: job({ status: 'pr_opened', closedAt: '2026-10-21T00:00:00Z' }) }))
+    await render(
+      createElement(CiCostFixButton, {
+        key: 'done',
+        fixable: FIXABLE,
+        initialJob: job({ status: 'pr_opened', mergedAt: '2026-10-01T00:00:00Z', measured: { from: 'c', to: 'd', days: 14, complete: true, minutes: 1, usd: 0, jobs: 1, perDay: [] } }),
+      }),
+    )
+    expect(state.apiFetch).not.toHaveBeenCalled()
+    expect(host.textContent).toContain('Merged.')
   })
 
   it('a merged fix shows the measured saving; an applied or refused one explains itself', async () => {

@@ -78,8 +78,10 @@ function jobRow(over: Partial<Row> = {}): Row {
   }
 }
 
+let jobSeq = 0
 function ciJob(over: Partial<CostFixCiJobRow> & { project_id?: string } = {}): Row {
   return {
+    job_id: ++jobSeq,
     project_id: P,
     repo: 'acme/app',
     workflow_name: 'CI',
@@ -95,13 +97,13 @@ function ciJob(over: Partial<CostFixCiJobRow> & { project_id?: string } = {}): R
   }
 }
 
-function seed(jobs: Row[] = [jobRow()], ciJobs: Row[] = []) {
+function seed(jobs: Row[] = [jobRow()], ciJobs: Row[] = [], maxRows?: number) {
   db = makeFakeDb({
     ci_cost_fix_jobs: jobs,
     project_repos: [{ project_id: P, repo_url: 'https://github.com/acme/app', is_primary: true, default_branch: 'main', github_app_installation_id: 7 }],
     project_settings: [{ project_id: P, github_repo_url: null }],
     ci_jobs: ciJobs,
-  })
+  }, maxRows ? { maxRows } : {})
 }
 
 const createPr = vi.fn()
@@ -167,6 +169,13 @@ describe('runCiCostFixJob', () => {
     expect(r.baseline).toMatchObject({ days: 14, minutes: 4, jobs: 2, complete: true, from: '2026-10-13T00:00:00.000Z', to: '2026-10-27T00:00:00.000Z' })
     expect(r.baseline!.perDay.find((d) => d.day === '2026-10-20')).toEqual({ day: '2026-10-20', minutes: 3, usd: 0.018, jobs: 1 })
     expect(r.finished_at).toBe(NOW.toISOString())
+  })
+
+  it('reads every job page by page when the server caps rows per request (Supabase max_rows)', async () => {
+    const five = [1, 2, 3, 4, 5].map((d) => ciJob({ gh_created_at: `2026-10-1${d + 3}T10:00:00Z`, duration_seconds: 60 }))
+    seed([jobRow()], five, 3)
+    await runCiCostFixJob(db as never, JOB, deps())
+    expect(row().baseline).toMatchObject({ minutes: 5, jobs: 5 })
   })
 
   it('a refused edit and an edit already made end without a PR, in plain words', async () => {
