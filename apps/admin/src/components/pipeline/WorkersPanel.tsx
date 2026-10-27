@@ -151,8 +151,8 @@ export function WorkersPanel({ projectId, now }: Props) {
     [reload, toast],
   )
   const onQueue = useCallback(
-    async (lane: WorkerLane, reportIds: string[]) => {
-      const res = await putQueue(lane.id, reportIds)
+    async (lane: WorkerLane, reportIds: string[], append = false) => {
+      const res = await putQueue(lane.id, reportIds, append)
       if (res.ok) reload()
       else toast.error(res.message)
       return res

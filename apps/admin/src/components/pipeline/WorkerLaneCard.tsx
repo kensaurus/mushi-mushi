@@ -11,7 +11,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Btn, Card, Input, SelectField, Toggle } from '../ui'
 import { IconChevronDown, IconChevronUp, IconClose, IconExternalLink } from '../icons'
-import { MODEL_RE, moveItem, OUTCOME_LABEL, sinceLabel, type LaneConfig, type WorkerHost, type WorkerLane, type WriteResult } from '../../lib/workers'
+import { MODEL_RE, moveItem, OUTCOME_LABEL, reportIdsIn, sinceLabel, type LaneConfig, type WorkerHost, type WorkerLane, type WriteResult } from '../../lib/workers'
 
 interface Props {
   lane: WorkerLane
@@ -19,7 +19,8 @@ interface Props {
   now: number
   showApp: boolean
   onPatch: (lane: WorkerLane, patch: Partial<LaneConfig>) => Promise<WriteResult>
-  onQueue: (lane: WorkerLane, reportIds: string[]) => Promise<WriteResult>
+  /** Replace the queue with this order, or (append) add these at its end. */
+  onQueue: (lane: WorkerLane, reportIds: string[], append?: boolean) => Promise<WriteResult>
 }
 
 /** ISO → the value a datetime-local input shows, in the viewer's time zone. */
@@ -36,6 +37,8 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue }: P
   const [stop, setStop] = useState(toLocalInput(c.stop_at))
   const [busy, setBusy] = useState<string | null>(null)
   const [note, setNote] = useState<WriteResult | null>(null)
+  const [pasted, setPasted] = useState('')
+  const pastedIds = reportIdsIn(pasted)
   const modelError = model && !MODEL_RE.test(model) ? 'Letters, digits, ".", "_", ":" and "-" only.' : undefined
   const state = c.paused ? 'paused' : c.drain ? 'draining' : String(lane.status.state ?? (host?.online ? 'starting' : 'offline'))
   const testId = `worker-lane-${lane.id}`
@@ -45,9 +48,11 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue }: P
     setNote(await onPatch(lane, patch))
     setBusy(null)
   }
-  const queue = async (key: string, ids: string[]) => {
+  const queue = async (key: string, ids: string[], append = false) => {
     setBusy(key)
-    setNote(await onQueue(lane, ids))
+    const res = await onQueue(lane, ids, append)
+    setNote(res)
+    if (res.ok && append) setPasted('')
     setBusy(null)
   }
   const ids = lane.queue.map((q) => q.reportId)
@@ -175,6 +180,28 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue }: P
             ))}
           </ol>
         )}
+        <div className="flex flex-wrap items-end gap-1.5">
+          <div className="min-w-0 flex-1 basis-56">
+            <Input
+              id={`${testId}-add-input`}
+              label="Add reports by id"
+              placeholder="Paste report ids or links, one or more"
+              value={pasted}
+              onChange={(e) => setPasted(e.target.value)}
+              data-testid={`${testId}-add`}
+            />
+          </div>
+          <Btn
+            size="sm"
+            variant="ghost"
+            disabled={pastedIds.length === 0 || busy != null}
+            loading={busy === 'add'}
+            onClick={() => void queue('add', pastedIds, true)}
+            data-testid={`${testId}-add-save`}
+          >
+            {pastedIds.length > 1 ? `Add ${pastedIds.length}` : 'Add'}
+          </Btn>
+        </div>
       </div>
 
       {lane.recent.length > 0 && (

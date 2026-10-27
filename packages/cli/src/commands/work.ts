@@ -906,8 +906,8 @@ const CURSOR_STATUS_RETRY_DELAY_MS = 5_000
 export async function checkCursorSignIn(
   run: (cmd: string, args: readonly string[], opts: { timeoutMs: number }) => Promise<Proc> = runProc,
   wait: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
-): Promise<{ state: CursorSignIn; detail: string }> {
-  let last: { state: CursorSignIn; detail: string } = { state: 'unknown', detail: 'not checked' }
+): Promise<{ state: CursorSignIn; detail: string; output: string }> {
+  let last: { state: CursorSignIn; detail: string; output: string } = { state: 'unknown', detail: 'not checked', output: '' }
   for (let attempt = 0; attempt < 2; attempt++) {
     if (attempt > 0) await wait(CURSOR_STATUS_RETRY_DELAY_MS)
     const p = await run('cursor-agent', ['status'], { timeoutMs: CURSOR_STATUS_TIMEOUT_MS })
@@ -915,7 +915,7 @@ export async function checkCursorSignIn(
     const detail = p.timedOut
       ? `timed out after ${CURSOR_STATUS_TIMEOUT_MS / 1000} s`
       : stripVTControlCharacters(`${p.stdout}\n${p.stderr}`).trim().split('\n')[0]?.slice(0, 200) || `exit ${p.code}`
-    last = { state, detail }
+    last = { state, detail, output: stripVTControlCharacters(`${p.stdout}\n${p.stderr}`).slice(0, 2000) }
     if (state === 'signed_in' || state === 'missing') break
   }
   return last

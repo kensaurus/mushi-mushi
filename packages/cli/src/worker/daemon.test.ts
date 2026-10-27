@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ApiResult } from '../cli-shared.js'
-import { assertWorkerKey, createDaemon, workerHostId, type DaemonDeps } from './daemon.js'
+import { assertWorkerKey, createDaemon, cursorStateFor, workerHostId, type DaemonDeps } from './daemon.js'
 import type { WorkerConfig } from './protocol.js'
 import type { HostIO } from '../runner/host.js'
 
@@ -148,5 +148,15 @@ describe('the worker key and host id', () => {
     const win = workerHostId(io('win32', {}, '\r\n    MachineGuid    REG_SZ    4c4c4544-0042-3510-8051-b4c04f4d3332\r\n'))
     expect(win).toMatch(/^[0-9a-f]{64}$/)
     expect(workerHostId(io('win32', {}, null))).toBeNull()
+  })
+})
+
+describe('the Cursor account a worker may spend', () => {
+  const out = 'Logged in as suzu.haruka1130@gmail.com'
+  it('counts a sign-in as another account as signed out, and leaves unclear answers unclear', () => {
+    expect(cursorStateFor({ state: 'signed_in', output: out }, 'suzu.haruka1130@gmail.com')).toBe('signed_in')
+    expect(cursorStateFor({ state: 'signed_in', output: out }, 'someone@else.com')).toBe('signed_out')
+    expect(cursorStateFor({ state: 'unknown', output: '' }, 'someone@else.com')).toBe('unknown')
+    expect(cursorStateFor({ state: 'signed_in', output: out }, undefined)).toBe('signed_in')
   })
 })

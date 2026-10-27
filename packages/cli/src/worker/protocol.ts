@@ -159,6 +159,12 @@ export interface WorkerConfig {
   version: 1
   /** API endpoint; defaults to the CLI's. */
   endpoint?: string
+  /**
+   * The Cursor account the agents must run as (as `cursor-agent status`
+   * prints it). When set, a CLI signed in as anyone else counts as signed
+   * out, so another account's credits are never spent. Local only.
+   */
+  cursorAccount?: string
   lanes: LocalLane[]
 }
 
@@ -174,6 +180,7 @@ export function validateWorkerConfig(raw: unknown): WorkerConfig {
   const c = raw as Record<string, unknown>
   if (c.version !== 1) fail('version must be 1')
   if (c.endpoint !== undefined && (typeof c.endpoint !== 'string' || !/^https?:\/\//.test(c.endpoint))) fail('endpoint must be an http(s) URL')
+  if (c.cursorAccount !== undefined && (typeof c.cursorAccount !== 'string' || !/^[^\s@]{1,100}@[^\s@]{1,100}$/.test(c.cursorAccount))) fail('cursorAccount must be the account\'s email address')
   if (!Array.isArray(c.lanes) || c.lanes.length === 0) fail('list at least one lane')
   if ((c.lanes as unknown[]).length > 20) fail('at most 20 lanes')
   const names = new Set<string>()
@@ -198,7 +205,12 @@ export function validateWorkerConfig(raw: unknown): WorkerConfig {
     }
     lanes.push({ name, projectId: (l.projectId as string).toLowerCase(), repoDir, ...(initial ? { initial } : {}) })
   }
-  return { version: 1, ...(typeof c.endpoint === 'string' ? { endpoint: c.endpoint } : {}), lanes }
+  return {
+    version: 1,
+    ...(typeof c.endpoint === 'string' ? { endpoint: c.endpoint } : {}),
+    ...(typeof c.cursorAccount === 'string' ? { cursorAccount: c.cursorAccount } : {}),
+    lanes,
+  }
 }
 
 export function loadWorkerConfig(path = WORKER_CONFIG_PATH): WorkerConfig {

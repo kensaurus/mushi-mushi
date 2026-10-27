@@ -382,7 +382,7 @@ describe('checkCursorSignIn', () => {
 
   it('stays unknown, not signed out, when both checks time out', async () => {
     const run = answers({ code: null, timedOut: true }, { code: null, timedOut: true })
-    await expect(checkCursorSignIn(run, noWait)).resolves.toEqual({ state: 'unknown', detail: 'timed out after 90 s' })
+    await expect(checkCursorSignIn(run, noWait)).resolves.toMatchObject({ state: 'unknown', detail: 'timed out after 90 s' })
     expect(run).toHaveBeenCalledTimes(2)
   })
 })

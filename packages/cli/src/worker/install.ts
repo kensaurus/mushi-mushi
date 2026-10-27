@@ -63,6 +63,8 @@ ExecStart=${exec}
 Environment=${systemdQuote(`PATH=${o.path}`)}
 Restart=on-failure
 RestartSec=300
+# Exit 2: the key was revoked or is missing. Restarting would not help.
+RestartPreventExitStatus=2
 # The worker key comes from the keychain or ~/.config/mushi/worker.key (0600), never from this file.
 NoNewPrivileges=yes
 

@@ -150,6 +150,21 @@ describe('WorkersPanel', () => {
     expect(state.calls[0]).toEqual({ path: '/v1/admin/work/lanes/l1/queue', method: 'PUT', body: { reportIds: ['r1'] } })
   })
 
+  it('pasted report ids (a lane-v4 queue file) are added at the end of the queue', async () => {
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    const input = q('worker-lane-l1-add') as HTMLInputElement
+    const ids = ['2000000a-0000-4000-8000-000000000000', '2000000b-0000-4000-8000-000000000000']
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+      set.call(input, `${ids[0]}
+${ids[1]} ${ids[0]}`)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(q('worker-lane-l1-add-save')!.textContent).toContain('Add 2')
+    await click(q('worker-lane-l1-add-save'))
+    expect(state.calls).toEqual([{ path: '/v1/admin/work/lanes/l1/queue', method: 'PUT', body: { reportIds: ids, append: true } }])
+  })
+
   it('with no worker, shows how to install one and the lanes.conf import', async () => {
     state.data = { ...fixture(), hosts: [], lanes: [] }
     await render(createElement(WorkersPanel, { projectId: null, now: NOW }))

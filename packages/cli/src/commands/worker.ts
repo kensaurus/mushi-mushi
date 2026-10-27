@@ -96,15 +96,24 @@ export function registerWorkerCommands(program: Command): void {
     .option('--project <id>', 'One lane: its app id')
     .option('--repo-dir <path>', 'One lane: the clone it works in')
     .option('--model <id>', 'One lane: its model when it first registers (the console can change it)')
+    .option('--stop-at <time>', 'Every lane stops taking reports at this time when it first registers (ISO, e.g. 2026-10-31T14:59:00Z); change it in the console later')
+    .option('--cursor-account <email>', 'Spend only this Cursor account: a CLI signed in as anyone else counts as signed out')
     .option('--endpoint <url>', 'API endpoint (default: the CLI login\'s)')
     .option('--key-stdin', 'Read a worker key made in the console (Workers tab) from stdin instead of creating one')
     .option('--no-service', 'Write the lanes file and key only')
     .option('--yes', 'Do not ask before writing')
     .option('--dry-run', 'Print what would be written; write nothing')
-    .action(async (opts: { lanesConf?: string; cloneRoot?: string; lane?: string; project?: string; repoDir?: string; model?: string; endpoint?: string; keyStdin?: boolean; service: boolean; yes?: boolean; dryRun?: boolean }) => {
+    .action(async (opts: { lanesConf?: string; cloneRoot?: string; lane?: string; project?: string; repoDir?: string; model?: string; stopAt?: string; cursorAccount?: string; endpoint?: string; keyStdin?: boolean; service: boolean; yes?: boolean; dryRun?: boolean }) => {
       const cli = loadConfig()
       const endpoint = opts.endpoint ?? process.env['MUSHI_API_ENDPOINT'] ?? cli.endpoint
-      const cfg = validateWorkerConfig({ version: 1, ...(endpoint ? { endpoint } : {}), lanes: lanesFromOptions(opts) })
+      let stopAt: string | null = null
+      if (opts.stopAt) {
+        const t = Date.parse(opts.stopAt)
+        if (!Number.isFinite(t)) throw new MushiCliError('E_INVALID_INPUT', `--stop-at "${opts.stopAt}" is not a date and time.`, 'e.g. --stop-at 2026-10-31T14:59:00Z')
+        stopAt = new Date(t).toISOString()
+      }
+      const lanes = lanesFromOptions(opts).map((l) => (stopAt ? { ...l, initial: { ...l.initial, stop_at: stopAt } } : l))
+      const cfg = validateWorkerConfig({ version: 1, ...(endpoint ? { endpoint } : {}), ...(opts.cursorAccount ? { cursorAccount: opts.cursorAccount } : {}), lanes })
       const projectIds = [...new Set(cfg.lanes.map((l) => l.projectId))]
       const node = process.execPath
       const cli0 = cliPath()
@@ -119,12 +128,13 @@ export function registerWorkerCommands(program: Command): void {
 
       console.log(`Lanes (${WORKER_CONFIG_PATH}):`)
       printLanes(cfg)
+      if (cfg.cursorAccount) console.log(`Cursor: spends only ${cfg.cursorAccount}; signed in as anyone else, the worker waits.`)
       const keySource = process.env['MUSHI_WORKER_KEY'] ? 'MUSHI_WORKER_KEY' : opts.keyStdin ? 'stdin' : `a new worker key for ${projectIds.length} app(s), made with your CLI login`
       console.log(`\nKey: ${keySource}; stored in ${isKeychainEnabled() ? 'the OS keychain' : `${WORKER_KEY_PATH} (mode 0600; no keychain here)`}. It can only take reports and record their fixes.`)
       if (service?.kind === 'systemd') {
         console.log(`\nService: ${UNIT_PATH}\n${service.unit.replace(/^/gm, '  ')}`)
         console.log(`Then: systemctl --user daemon-reload && systemctl --user enable --now ${SYSTEMD_UNIT_NAME}`)
-        console.log('To start at boot without a login: loginctl enable-linger $USER')
+        console.log('To start at boot without a login (as root, once): loginctl enable-linger <this user>')
       } else if (service?.kind === 'task') {
         console.log(`\nService: a scheduled task that starts at logon:\n  schtasks ${service.args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' ')}`)
       } else if (opts.service) {

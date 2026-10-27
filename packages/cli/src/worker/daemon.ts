@@ -416,7 +416,21 @@ export function assertWorkerKey(key: string, cliKey: string | undefined): string
   return key
 }
 
-async function machineReadings(state: { ghAt: number; gh: number | null; cursorAt: number; cursor: CursorSignIn; confirmedAt: number | null }, now: number): Promise<Omit<MachineReadings, 'agents'>> {
+/**
+ * The sign-in, narrowed to one account when the worker config names it: a
+ * clear "signed in" as anyone else counts as signed out (lane-v4 spent only
+ * suzu's credits this way). An unclear answer stays unclear.
+ */
+export function cursorStateFor(s: { state: CursorSignIn; output: string }, account: string | undefined): CursorSignIn {
+  if (!account || s.state !== 'signed_in') return s.state
+  return s.output.toLowerCase().includes(account.toLowerCase()) ? 'signed_in' : 'signed_out'
+}
+
+async function machineReadings(
+  state: { ghAt: number; gh: number | null; cursorAt: number; cursor: CursorSignIn; confirmedAt: number | null },
+  now: number,
+  cursorAccount: string | undefined,
+): Promise<Omit<MachineReadings, 'agents'>> {
   const meminfo = process.platform === 'linux' ? nodeHostIO.readFile('/proc/meminfo') : null
   const mem = memAvailableGb(meminfo) ?? Math.floor(freemem() / 1024 ** 3)
   if (now - state.ghAt >= GH_CHECK_MS) {
@@ -427,8 +441,9 @@ async function machineReadings(state: { ghAt: number; gh: number | null; cursorA
   }
   if (now - state.cursorAt >= CURSOR_CHECK_MS) {
     const s = await checkCursorSignIn()
-    state.cursor = s.state
-    if (s.state === 'signed_in') state.confirmedAt = now
+    state.cursor = cursorStateFor(s, cursorAccount)
+    if (s.state === 'signed_in' && state.cursor === 'signed_out') process.stdout.write(`worker: the Cursor CLI is signed in, but not as ${cursorAccount}; taking nothing new.\n`)
+    if (state.cursor === 'signed_in') state.confirmedAt = now
     state.cursorAt = now
   }
   // A status call that timed out under load still counts as signed in for 2 h after the last confirmation.
@@ -462,7 +477,7 @@ export async function runDaemon(opts: { configPath?: string } = {}): Promise<voi
     followUpOne,
     readings: (() => {
       const state = { ghAt: 0, gh: null as number | null, cursorAt: 0, cursor: 'unknown' as CursorSignIn, confirmedAt: null as number | null }
-      return () => machineReadings(state, Date.now())
+      return () => machineReadings(state, Date.now(), cfg.cursorAccount)
     })(),
     now: () => Date.now(),
     log: (l) => process.stdout.write(`${l}\n`),

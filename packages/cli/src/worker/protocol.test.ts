@@ -56,6 +56,10 @@ describe('the worker config', () => {
     expect(() => validateWorkerConfig({ version: 1, lanes: [lane('a', '/home/u/clone'), lane('b', '/home/u/clone/')] })).toThrow(/same clone/)
     expect(validateWorkerConfig({ version: 1, lanes: [lane('a', '/home/u/a'), lane('b', '/home/u/b')] }).lanes).toHaveLength(2)
   })
+  it('takes an optional Cursor account (an email), kept local', () => {
+    expect(validateWorkerConfig({ version: 1, cursorAccount: 'suzu@example.com', lanes: [lane('a', '/home/u/a')] }).cursorAccount).toBe('suzu@example.com')
+    expect(() => validateWorkerConfig({ version: 1, cursorAccount: '$(id)', lanes: [lane('a', '/home/u/a')] })).toThrow(/cursorAccount/)
+  })
   it('needs absolute clone paths and app ids', () => {
     expect(() => validateWorkerConfig({ version: 1, lanes: [lane('a', 'relative/clone')] })).toThrow(/absolute/)
     expect(() => validateWorkerConfig({ version: 1, lanes: [{ name: 'a', projectId: 'glot', repoDir: '/x' }] })).toThrow(/projectId/)
@@ -111,6 +115,8 @@ glot             glot      glot.it      542b34e0-019e-41fe-b900-7b637717bb86   c
     const unit = systemdUnit({ node: '/usr/bin/node', cli: '/home/u/cli/dist/index.js', path: '/usr/bin:/bin' })
     expect(unit).toContain('ExecStart=/usr/bin/node /home/u/cli/dist/index.js work --daemon')
     expect(unit).toContain('Restart=on-failure')
+    // A revoked key exits 2: systemd must not bring it back every 5 minutes.
+    expect(unit).toContain('RestartPreventExitStatus=2')
     expect(unit).not.toMatch(/mushi_[A-Za-z0-9]/)
     expect(windowsTaskArgs({ node: 'C:\\Program Files\\nodejs\\node.exe', cli: 'C:\\m\\index.js' })).toEqual([
       '/Create', '/TN', 'Mushi worker', '/SC', 'ONLOGON', '/RL', 'LIMITED', '/F', '/TR', '"C:\\Program Files\\nodejs\\node.exe" C:\\m\\index.js work --daemon',

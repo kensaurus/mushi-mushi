@@ -155,6 +155,13 @@ export async function patchLane(laneId: string, patch: Partial<LaneConfig>): Pro
 }
 
 /** Replace a lane's queue with this order, or append reports to its end. */
+const REPORT_ID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
+
+/** Report ids in pasted text (one per line, a queue file, a list of links), in order, each once. */
+export function reportIdsIn(text: string): string[] {
+  return [...new Set((text.match(REPORT_ID_RE) ?? []).map((id) => id.toLowerCase()))]
+}
+
 export async function putQueue(laneId: string, reportIds: string[], append = false): Promise<WriteResult> {
   const res = await apiFetch<{ laneId: string; reportIds: string[] }>(`/v1/admin/work/lanes/${encodeURIComponent(laneId)}/queue`, {
     method: 'PUT',
