@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HEALTH_HUB, HOME_HUB, TEAM_HUB, hubRedirectTarget, legacyHubRoutes, resolveHubView, visibleViews } from './pageHubs'
+import { HEALTH_HUB, HOME_HUB, TEAM_HUB, hubRedirectTarget, legacyHubRoutes, lockedHubView, resolveHubView, visibleViews } from './pageHubs'
 
 const viewer = (over: Partial<{ isOperator: boolean; isSuperAdmin: boolean; flags: string[] }> = {}) => ({
   isOperator: over.isOperator ?? false,
@@ -30,5 +30,17 @@ describe('page hubs', () => {
     expect(legacyHubRoutes().map((r) => r.path).sort()).toEqual(
       ['/activity', '/analytics', '/anomalies', '/audit', '/billing', '/code-health', '/compliance', '/cost', '/drift', '/growth', '/intelligence', '/organization/members', '/overview', '/sso', '/storage'].sort(),
     )
+  })
+
+  // ?view=sso and ?view=compliance silently rendered Members (console
+  // journeys 2026-10-27): a view the plan lacks is "locked", not swapped.
+  it('names a plan-gated view the viewer lacks as locked, never an operator view', () => {
+    expect(lockedHubView(TEAM_HUB, 'sso', viewer())?.id).toBe('sso')
+    expect(lockedHubView(TEAM_HUB, 'compliance', viewer({ flags: ['teams'] }))?.id).toBe('compliance')
+    expect(lockedHubView(TEAM_HUB, 'sso', viewer({ flags: ['sso'] }))).toBeNull()
+    expect(lockedHubView(TEAM_HUB, 'sso', viewer({ isSuperAdmin: true }))).toBeNull()
+    expect(lockedHubView(TEAM_HUB, 'billing', viewer())).toBeNull()
+    expect(lockedHubView(TEAM_HUB, null, viewer())).toBeNull()
+    expect(lockedHubView(HOME_HUB, 'growth', viewer())).toBeNull()
   })
 })

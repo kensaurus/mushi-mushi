@@ -5,7 +5,7 @@
  *          a conflict, CI running or failed on the head, a closed PR.
  */
 import { describe, expect, it } from 'vitest'
-import { checksView, conflictPrompt, nextQueueStep, queueLine, reviewRefusal } from '../../supabase/functions/_shared/merge-queue.ts'
+import { checksView, conflictPrompt, failuresOnBase, nextQueueStep, queueLine, reviewRefusal } from '../../supabase/functions/_shared/merge-queue.ts'
 
 const pr = (over: Partial<Parameters<typeof nextQueueStep>[0]> = {}) => ({
   state: 'open',
@@ -32,13 +32,26 @@ describe('nextQueueStep', () => {
   it('waits while GitHub computes or CI runs, and blocks on failed CI', () => {
     expect(nextQueueStep(pr({ mergeable: null, mergeableState: 'unknown' }), green).do).toBe('wait')
     expect(nextQueueStep(pr(), { pending: 1, failed: [] })).toEqual({ do: 'wait', reason: 'CI is running (1 check left).' })
-    expect(nextQueueStep(pr(), { pending: 0, failed: ['required', 'lint'] })).toMatchObject({ do: 'blocked', reason: expect.stringMatching(/^CI failed: required, lint\. A CI-repair agent/) })
+    expect(nextQueueStep(pr(), { pending: 0, failed: ['required', 'lint'] })).toMatchObject({ do: 'blocked', reason: expect.stringMatching(/^CI failed: "required", "lint"\. A CI-repair agent/) })
     expect(nextQueueStep(pr({ mergeableState: 'blocked' }), green).do).toBe('blocked')
   })
   it('is done when merged, drops a closed PR, and marks a draft ready', () => {
     expect(nextQueueStep(pr({ merged: true, state: 'closed' }), green)).toEqual({ do: 'done' })
     expect(nextQueueStep(pr({ state: 'closed' }), green).do).toBe('drop')
     expect(nextQueueStep(pr({ draft: true }), green)).toEqual({ do: 'ready' })
+  })
+})
+
+describe('failuresOnBase', () => {
+  const base = { pending: 0, failed: ['npm audit'], ran: ['npm audit', 'build'] }
+  it('blames the base when every failure fails there or did not run there (an aggregator)', () => {
+    expect(failuresOnBase(['npm audit'], base)).toBe(true)
+    expect(failuresOnBase(['gate', 'npm audit'], base)).toBe(true)
+  })
+  it('blames the PR when a failure passed on the base, or none fails there', () => {
+    expect(failuresOnBase(['build', 'npm audit'], base)).toBe(false)
+    expect(failuresOnBase(['gate'], base)).toBe(false)
+    expect(failuresOnBase(['gate', 'npm audit'], { pending: 0, failed: ['npm audit'] })).toBe(false)
   })
 })
 
@@ -51,7 +64,17 @@ describe('checksView / conflictPrompt / queueLine', () => {
         { name: 'lighthouse', status: 'completed', conclusion: 'neutral' },
         { name: 'e2e', status: 'completed', conclusion: 'skipped' },
       ]),
-    ).toEqual({ pending: 1, failed: ['required'] })
+    ).toEqual({ pending: 1, failed: ['required'], ran: ['required', 'lighthouse'] })
+  })
+  it('counts a check by its newest run, so a draft guard stop is gone once CI ran after mark-ready', () => {
+    expect(
+      checksView([
+        { id: 1, name: 'gate', status: 'completed', conclusion: 'failure', started_at: '2026-10-26T08:00:00Z' },
+        { id: 2, name: 'gate', status: 'completed', conclusion: 'success', started_at: '2026-10-26T08:10:00Z' },
+        { id: 3, name: 'build', status: 'completed', conclusion: 'success', started_at: '2026-10-26T08:10:00Z' },
+        { id: 4, name: 'build', status: 'completed', conclusion: 'failure', started_at: '2026-10-26T08:20:00Z' },
+      ]),
+    ).toEqual({ pending: 0, failed: ['build'], ran: ['gate', 'build'] })
   })
   it('asks the agent to keep both sides and to say needs_human otherwise', () => {
     const p = conflictPrompt({ prUrl: 'https://github.com/o/r/pull/1', baseRef: 'main', headRef: 'fix/x' })

@@ -6,6 +6,7 @@
 
 import type { SetupProject, SetupStepDiagnostic } from './useSetupStatus'
 import type { ProjectSnapshot } from './projectSnapshotTypes'
+import { sdkFreshness } from './heartbeat'
 import {
   projectInitials,
   projectInitialsThemeIndex,
@@ -91,8 +92,11 @@ export function formatHeartbeatOrigin(origin: string | null | undefined): string
   }
 }
 
-/** @internal Exported for tests only. */
-export type HeartbeatTone = 'live' | 'stale' | 'mismatch' | 'none'
+/**
+ * live/stale/cold follow the SDK key legend (`sdkFreshness`): under 1h, up to 7d, after.
+ * @internal Exported for tests only.
+ */
+export type HeartbeatTone = 'live' | 'stale' | 'cold' | 'mismatch' | 'none'
 
 /** @internal Exported for tests only. */
 export function heartbeatTone(
@@ -109,9 +113,8 @@ export function heartbeatTone(
   ) {
     return 'mismatch'
   }
-  const hours = (Date.now() - ts) / 3_600_000
-  if (hours > 48) return 'stale'
-  return 'live'
+  const freshness = sdkFreshness(diagnostic.last_sdk_seen_at)
+  return freshness === 'healthy' ? 'live' : freshness === 'cold' ? 'cold' : 'stale'
 }
 
 export interface ProjectHeartbeatSummary {

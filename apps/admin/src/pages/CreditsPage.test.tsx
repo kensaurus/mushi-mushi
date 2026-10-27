@@ -87,7 +87,16 @@ vi.mock('../lib/usePageData', () => ({
             ? { available: true, canManage: true, settings: { enabled: true, keyId: null, model: 'grok-4.7?reasoning_effort=xhigh', escalationModel: 'claude-opus-5-5', dailyLimit: 200 } }
             : path === '/v1/admin/projects'
               ? { projects: [{ id: 'p1', name: 'mushi-mushi' }, { id: 'p2', name: 'tsumagoi' }, { id: 'p3', name: 'lets-talk' }] }
-              : null
+              : path === '/v1/admin/work/lanes'
+                ? {
+                    generatedAt: '2026-10-23T02:00:00Z',
+                    projects: [{ id: 'p2', name: 'tsumagoi' }],
+                    hosts: [{ id: 'h1', hostname: 'alienware', platform: 'wsl2', version: null, online: true, lastHeartbeatAt: '2026-10-23T01:59:00Z', status: {}, guards: { max_agents: 6, min_free_mem_gb: 5, gh_floor: 800 }, revoked: false, mine: true }],
+                    lanes: [
+                      { id: 'l1', hostId: 'h1', projectId: 'p2', projectName: 'tsumagoi', name: 'tsumagoi', config: { paused: false, concurrency: 1, model: 'claude-opus-5-5-medium', mode: 'fix', stop_at: null, drain: false, prune_own: false }, status: {}, lastSeenAt: '2026-10-23T01:59:00Z', active: [], queue: [], recent: [], counts7d: { runs: 0, prs: 0, noChange: 0, timeouts: 0, errors: 0, infra: 0 } },
+                    ],
+                  }
+                : null
     return { data, loading: false, error: null, isValidating: false, reload: () => {}, lastFetchedAt: null }
   },
 }))
@@ -195,6 +204,23 @@ describe('CreditsPage', () => {
     const letsTalk = watchSwitches[2].querySelector('[role="switch"], input[type="checkbox"]') as HTMLButtonElement
     await act(async () => letsTalk.click())
     expect(state.calls).toContainEqual({ path: '/v1/admin/projects/p3/site-watch', method: 'PUT', body: { baseUrl: 'https://talk.kensaur.us', pageLimit: 25 } })
+  })
+})
+
+describe('expiry countdown on /credits', () => {
+  it('opens on one card per expiring key, soonest first, and turns spend-down on from the status line', async () => {
+    await render()
+    const cards = Array.from(host.querySelectorAll('[aria-label="Credits by expiry date"] > li'))
+    expect(cards.map((c) => c.textContent)).toEqual([
+      expect.stringContaining('Cursor · hirose'),
+      expect.stringContaining('Firecrawl'),
+    ])
+    expect(cards[0].textContent).toContain('Expires Oct 28')
+    expect(cards[0].textContent).toContain('Spend-down is off, so nothing is spending these credits.')
+    expect(cards[1].textContent).toContain('64,175 credits left until the reset.')
+    const turnOn = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Turn on spend-down')!
+    await act(async () => turnOn.click())
+    expect(state.calls).toContainEqual({ path: '/v1/admin/byok/keys/k1/spend-down', method: 'PATCH', body: { enabled: true } })
   })
 })
 
@@ -334,6 +360,17 @@ describe('firecrawlBalance', () => {
   it('takes the first Firecrawl key that reported a balance', () => {
     expect(firecrawlBalance({ keys: [{ id: 'a', provider: 'firecrawl', credits: { kind: 'error' } }, { id: 'b', provider: 'firecrawl', credits: { kind: 'credits', remaining: 5, limit: 10, periodEnd: null } }] })).toEqual({ remaining: 5, limit: 10, periodEnd: null })
     expect(firecrawlBalance(null)).toBeNull()
+  })
+})
+
+describe('Local workers on /credits', () => {
+  it('lists each lane with its model and whether it takes reports, linked to the Workers tab', async () => {
+    await render()
+    const row = host.querySelector('[data-testid="credits-worker-model-l1"]')!
+    expect(row.textContent).toContain('tsumagoi')
+    expect(row.textContent).toContain('claude-opus-5-5-medium')
+    expect(row.textContent).toContain('taking reports')
+    expect(host.querySelector('[data-testid="credits-worker-models"] a[href="/pipeline?tab=workers"]')).not.toBeNull()
   })
 })
 

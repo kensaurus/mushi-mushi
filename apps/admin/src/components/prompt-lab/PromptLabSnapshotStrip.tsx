@@ -1,88 +1,64 @@
 /**
  * FILE: PromptLabSnapshotStrip.tsx
- * PURPOSE: Prompt Lab KPI strip using MetricStrip — backed by /v1/admin/prompt-lab/stats.
+ * PURPOSE: AI prompts status: which prompts are in use, which are being
+ *          tested, and the best grade so far (PageStatus, P1).
  */
 
-import { Section, StatCard, SnapshotSectionHint } from '../ui'
-import { MetricStrip } from '../MetricStrip'
+import { PageStatus } from '../ui'
 import type { PromptLabStats } from './PromptLabStatsTypes'
 import { bestScoreSource } from './types'
+import { pluralizeWithCount } from '../../lib/format'
 
 const promptLabLinks = {
   active: '/prompt-lab?tab=prompts',
   candidates: '/prompt-lab?tab=prompts',
   bestScore: '/judge',
-  dataset: '/prompt-lab?tab=dataset',
 } as const
 
 interface Props {
   stats: PromptLabStats
   statsFetchedAt: string | null
   statsValidating?: boolean
-  /** The same classified-report counts the Eval dataset card shows. */
-  dataset: { total: number; labelled: number }
   /** The best score belongs to a global default, scored on other projects. */
   bestIsBuiltIn?: boolean
-  sectionTitle?: string
-  hint?: string
   statLabels?: Record<string, string>
 }
 
-export function PromptLabSnapshotStrip({
-  stats,
-  statsFetchedAt,
-  statsValidating,
-  dataset,
-  bestIsBuiltIn = false,
-  sectionTitle = 'PROMPT LAB SNAPSHOT',
-  hint,
-  statLabels,
-}: Props) {
-  const bestScoreLabel =
-    stats.bestScore != null ? `${Math.round(stats.bestScore * 100)}%` : '—'
-  const bestSource = bestScoreSource(stats) ?? (stats.bestScore != null ? 'judge score' : 'no scored prompts yet')
-  const bestScoreDetail = bestIsBuiltIn ? `${bestSource} · built-in default` : bestSource
-
+export function PromptLabSnapshotStrip({ stats, statsFetchedAt, statsValidating, bestIsBuiltIn = false, statLabels }: Props) {
+  const best = stats.bestScore != null ? `${Math.round(stats.bestScore * 100)}%` : '—'
+  const source = bestScoreSource(stats) ?? (stats.bestScore != null ? 'grade' : null)
+  const testing =
+    stats.candidatePrompts > 0
+      ? `${pluralizeWithCount(stats.candidatePrompts, 'prompt')} being tested${stats.untestedAbCount > 0 ? `, ${stats.untestedAbCount} with no grades yet` : ''}`
+      : 'none being tested'
+  const bestPart =
+    stats.bestScore != null ? `; best grade ${best}${source ? ` (${source}${bestIsBuiltIn ? ', built-in default' : ''})` : ''}` : ''
   return (
-    <Section title={sectionTitle} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-      {hint ? <SnapshotSectionHint text={hint} /> : null}
-      <MetricStrip cols={4} ariaLabel="Prompt lab snapshot">
-        <StatCard
-          label={statLabels?.active ?? 'Active prompts'}
-          value={stats.activePrompts}
-          accent={stats.activePrompts > 0 ? 'text-ok' : undefined}
-          hint="Prompts currently serving production traffic — one active per stage."
-          detail="serving production traffic"
-          to={promptLabLinks.active}
-        />
-        <StatCard
-          label={statLabels?.candidates ?? 'Candidates'}
-          value={stats.candidatePrompts}
-          accent={stats.candidatePrompts > 0 ? 'text-info' : undefined}
-          hint="Cloned prompts collecting evaluations before promotion."
-          detail={
-            stats.untestedAbCount > 0
-              ? `${stats.untestedAbCount} untested A/B`
-              : 'awaiting eval'
-          }
-          to={promptLabLinks.candidates}
-        />
-        <StatCard
-          label={statLabels?.bestScore ?? 'Best score'}
-          value={bestScoreLabel}
-          accent={stats.bestScore != null ? 'text-ok' : undefined}
-          hint="Highest mean judge score across active and candidate prompts. Opens Fix grading."
-          detail={bestScoreDetail}
-          to={promptLabLinks.bestScore}
-        />
-        <StatCard
-          label={statLabels?.dataset ?? 'Eval dataset'}
-          value={dataset.labelled.toLocaleString()}
-          hint="Classified reports a prompt experiment can be evaluated on: the list below."
-          detail={`labelled · ${dataset.total.toLocaleString()} reports in total`}
-          to={promptLabLinks.dataset}
-        />
-      </MetricStrip>
-    </Section>
+    <PageStatus
+      ariaLabel="AI prompts status"
+      tone={stats.untestedAbCount > 0 ? 'info' : 'ok'}
+      sentence={`${pluralizeWithCount(stats.activePrompts, 'prompt')} in use, ${testing}${bestPart}.`}
+      freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      metrics={[
+        {
+          label: statLabels?.active ?? 'In use',
+          value: stats.activePrompts,
+          hint: 'Prompts diagnosing your reports now, one per step.',
+          to: promptLabLinks.active,
+        },
+        {
+          label: statLabels?.candidates ?? 'Being tested',
+          value: stats.candidatePrompts,
+          hint: 'Copies of a prompt collecting grades before they replace it.',
+          to: promptLabLinks.candidates,
+        },
+        {
+          label: statLabels?.bestScore ?? 'Best grade',
+          value: best,
+          hint: 'Highest average grade across prompts in use and being tested. Opens Triage grading.',
+          to: promptLabLinks.bestScore,
+        },
+      ]}
+    />
   )
 }

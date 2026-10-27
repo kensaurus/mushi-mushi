@@ -23,10 +23,12 @@
  *   5. Validates scope/circuit breaker.
  *   6. Resolves the GitHub repo (project_repos primary, falls back to
  *      project_settings.github_repo_url).
- *   7. Creates a draft PR via direct GitHub REST API, then immediately marks
- *      it ready for review so CI runs and console merge works (human still
- *      confirms merge — nothing auto-merges).
- *   8. Updates fix_attempts and fix_dispatch_jobs with the result.
+ *   7. Creates a draft PR via direct GitHub REST API. It stays a draft, so
+ *      the host's CI does not run (ADR 0047): agent-pr-review marks it ready
+ *      once the Opus review says "merge" on its head (or, when no review can
+ *      run, when the model's own check passed). Nothing auto-merges here.
+ *   8. Updates fix_attempts and fix_dispatch_jobs with the result, and
+ *      queues the Opus review (ADR 0030).
  *
  * Security:
  *   - JWT-verified at the edge (verify_jwt=false because the dispatch
@@ -105,6 +107,7 @@ import {
 } from '../_shared/fix-edits.ts';
 import { matchFramePathsToTree } from '../_shared/sentry-frames.ts';
 import { canonicalPrUrl } from '../_shared/pr-substance.ts';
+import { enqueueFixReview } from '../_shared/fix-review-db.ts';
 import { featureRequestDispatchBlock } from '../_shared/report-category.ts';
 
 function ragSkipReasonMessage(reason: RagSkipReason | 'ok', detail: string | undefined): string {
@@ -165,6 +168,7 @@ import { loadFixRecipeBlock } from '../_shared/fix-recipe-block.ts';
 import { PRIOR_ATTEMPTS_MAX, priorAttemptsBlock } from '../_shared/prior-attempts.ts';
 import type { FollowupFinding } from '../_shared/review-followup.ts';
 import { sanitizeForLLM } from '../_shared/sanitize.ts';
+import { reportHasActiveWorkClaim } from '../_shared/work-claims.ts';
 
 const SYSTEM_PROMPT = `You are a senior staff engineer fixing one specific bug report.
 
@@ -284,6 +288,27 @@ Deno.serve(
       reportId: dispatch.report_id,
     });
     tagLangfuseTrace(trace.id);
+
+    // ---- 1b. A local worker holds the report (ADR 0048) ----------------------
+    // dispatchFixForReport and spend-down already skip a claimed report; this
+    // is the last check before an agent starts, for a claim taken between
+    // the dispatch and now. An unreadable lease counts as held.
+    const held = await reportHasActiveWorkClaim(db, dispatch.report_id);
+    if (held !== false) {
+      const reason = held
+        ? 'Skipped: a local worker (mushi work --daemon) holds this report right now.'
+        : 'Skipped: could not read the local worker lease; the next dispatch tries again.';
+      await db
+        .from('fix_dispatch_jobs')
+        .update({ status: 'skipped', error: reason, finished_at: new Date().toISOString() })
+        .eq('id', dispatch.id);
+      log.info('job.skipped_local_claim', { dispatchId: dispatch.id, reportId: dispatch.report_id, held });
+      await trace.end();
+      return new Response(JSON.stringify({ ok: true, skipped: true, reason }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
     // ---- 2. Resolve requested agent + insert fix_attempts row ----------------
     // V5.3 §2.10: the fix-worker is the REST/LLM dispatch path (one of the
@@ -1316,8 +1341,10 @@ ${
           body: buildPrBody({ ...fix, files: prFiles }, dispatch.report_id),
           files: prFiles,
           labels: fixReviewPassed(fix) ? ['mushi-autofix'] : ['mushi-autofix', 'needs-review'],
-          // A fix the model flagged stays a draft: CI and merge wait for a person.
-          markReady: fixReviewPassed(fix),
+          // Always a draft: host CI runs only once the Opus review says
+          // "merge" (agent-pr-review readies it; ADR 0047). A fix the model
+          // flagged stays a draft even then: CI and merge wait for a person.
+          markReady: false,
           // `Fixes <SHORT-ID>` for Sentry-linked reports (sentry-resolve-back.ts).
           commitTrailers: sentryFixesTrailers(
             await sentryShortIdsForReport(db, dispatch.project_id, dispatch.report_id),
@@ -1353,6 +1380,17 @@ ${
           ? { spec_validation_warnings: specValidationWarnings }
           : {}),
       });
+      // The draft waits for this review before its CI runs (ADR 0047).
+      // Never throws; a failed enqueue leaves a draft a person can ready.
+      const reviewQueued = await enqueueFixReview(db, {
+        fixAttemptId,
+        projectId: dispatch.project_id,
+        reportId: dispatch.report_id,
+        prUrl,
+      });
+      if (!reviewQueued.queued) {
+        log.warn('Opus review not queued for the fix PR (non-fatal)', { fixAttemptId, err: reviewQueued.error });
+      }
 
       await db
         .from('fix_dispatch_jobs')

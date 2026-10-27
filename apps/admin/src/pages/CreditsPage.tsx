@@ -5,6 +5,8 @@
  *          with a switch. Cursor: spend-down (ADR 0028) and review
  *          follow-ups (ADR 0032). Firecrawl: the live-site watch of every
  *          app (ADR 0024), with what it will use before the balance resets.
+ *          Local workers: the model each `mushi work --daemon` lane runs on
+ *          your own Cursor account (ADR 0048).
  *          Detailed forms stay where they were (Settings, Inventory); this
  *          page answers "is anything spending them, and on what?".
  */
@@ -12,17 +14,19 @@
 import { Link } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PageLoadError } from '../components/PageLoadError'
-import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { Callout, Section } from '../components/ui'
+import { Section } from '../components/ui'
 import { IconCost } from '../components/icons'
 import { CursorLevers } from '../components/credits/CursorLevers'
+import { CreditCountdowns } from '../components/credits/CreditCountdowns'
 import { FirecrawlLevers, type FirecrawlBalance } from '../components/credits/FirecrawlLevers'
 import { SkillRunsCard } from '../components/credits/SkillRunsCard'
+import { LocalWorkerModels } from '../components/credits/LocalWorkerModels'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { useNow } from '../lib/useNow'
-import { expiryLabel } from '../lib/creditPlan'
+import { useScrollToHash } from '../lib/useScrollToHash'
 import type { SpendDownResponse } from '../components/settings/spendDown'
 import type { ReviewFollowupsResponse } from '../components/settings/reviewFollowups'
 
@@ -50,6 +54,8 @@ export function CreditsPage() {
   const now = new Date(useNow(60_000))
   const credits = usePageData<CreditsResponse>('/v1/admin/byok/credits')
   const spendDown = usePageData<SpendDownResponse>('/v1/admin/byok/spend-down')
+  // /pipeline links here (#cursor-fix-bugs) when auto-fix is on but no Cursor key can dispatch.
+  useScrollToHash(!!spendDown.data)
   const followups = usePageData<ReviewFollowupsResponse | null>('/v1/admin/byok/review-followups')
   const projects = usePageData<{ projects?: Array<{ id: string; name: string }> }>('/v1/admin/projects')
 
@@ -63,16 +69,6 @@ export function CreditsPage() {
   })
 
   const error = spendDown.error ?? credits.error
-  // The one-line answer the page opens with: is anything spending what expires soonest?
-  const soonest = [...cursorKeys].filter((k) => k.creditsExpireAt).sort((a, b) => String(a.creditsExpireAt).localeCompare(String(b.creditsExpireAt)))[0]
-  const idleKeys = cursorKeys.filter((k) => k.creditsExpireAt && !k.enabled)
-  const posture = !spendDown.data
-    ? null
-    : idleKeys.length > 0
-      ? { tone: 'warn' as const, text: `${idleKeys.length} Cursor key${idleKeys.length === 1 ? ' has' : 's have'} an expiry date but spend-down is off. Turn it on below so the credits fix bugs.` }
-      : soonest
-        ? { tone: 'info' as const, text: `Spend-down is on for every Cursor key with an expiry date; the soonest ${expiryLabel(soonest.creditsExpireAt, now) ?? 'expires soon'}.` }
-        : null
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-credits">
       <PageHeaderBar
@@ -83,23 +79,28 @@ export function CreditsPage() {
         helpWhatIsIt="Cursor and Firecrawl credits that lapse at the end of a period are worth more spent. This page lists each place Mushi can spend them on your apps, with a switch for each: Cursor fixes open bugs, answers review findings and runs skills that improve an app round by round; Firecrawl checks your live sites for broken pages that become bug reports."
         helpHowToUse="Turn on what you want, top to bottom. Every fix still opens a draft pull request for you to review, inside each app's auto-fix limits. The full settings for each switch are linked from its row."
       />
+      {/* First: one countdown per expiring key, and the one switch that matters. */}
       <PagePosture
         slots={[
           {
-            id: 'credits-status',
+            id: 'credits-countdowns',
             priority: POSTURE_PRIORITY.status,
-            show: posture != null,
-            children: posture ? (
-              <Callout tone={posture.tone} label="Expiring credits">
-                {posture.text}
-              </Callout>
-            ) : null,
+            show: !spendDown.error,
+            children: (
+              <CreditCountdowns
+                keys={spendDown.data ? cursorKeys : null}
+                balance={balance}
+                canManageOrg={followups.data?.canManage === true}
+                now={now}
+                onChanged={() => spendDown.reload()}
+              />
+            ),
           },
         ]}
       />
       {error && <PageLoadError error={error} resource="credit settings" endpoint="/v1/admin/byok/spend-down" onRetry={() => { spendDown.reload(); credits.reload() }} />}
 
-      <Section title="Cursor: fix bugs">
+      <Section title="Cursor: fix bugs" id="cursor-fix-bugs">
         {spendDown.loading && !spendDown.data && <p className="text-xs text-fg-muted">Reading your Cursor keys…</p>}
         <CursorLevers
           spendDown={spendDown.data ?? null}
@@ -110,6 +111,10 @@ export function CreditsPage() {
             followups.reload()
           }}
         />
+      </Section>
+
+      <Section title="Local workers: models" id="local-worker-models">
+        <LocalWorkerModels />
       </Section>
 
       <Section title="Cursor: improve your apps with skills">

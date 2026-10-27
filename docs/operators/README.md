@@ -33,6 +33,9 @@
   and how approved actions work (ADR 0025).
 - [Live-site watch](./site-watch.md) — the `MushiSiteWatch` User-Agent to
   filter from Sentry and analytics, and when older monitors start sending it.
+- [Local workers](./local-workers.md) — `mushi work --daemon` as a systemd
+  user unit or a Windows scheduled task, its guards and key, and moving the
+  hand-made lane services onto it (ADR 0048).
 
 ## BYOK validation migration gate
 

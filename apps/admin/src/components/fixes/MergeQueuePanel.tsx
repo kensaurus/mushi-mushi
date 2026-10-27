@@ -145,7 +145,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
     return (
       <section aria-label="Merge queue" aria-busy="true">
         <Card className={`p-3 space-y-2 ${rememberedNonEmpty(projectId) ? 'h-72' : 'h-24'}`}>
-          <h3 className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">Merge when ready</h3>
+          <h3 className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">Merge queue</h3>
           <div aria-hidden="true" className="h-7 rounded-sm bg-surface-overlay/50 motion-safe:animate-pulse" />
         </Card>
       </section>
@@ -175,7 +175,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
     <section aria-label="Merge queue">
     <Card className="p-3 space-y-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">Merge when ready</h3>
+        <h3 className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">Merge queue</h3>
         <p className="text-2xs text-fg-muted">{mergeQueueSummary(shown)}</p>
       </div>
       {release && (
@@ -230,7 +230,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
           ))}
         </ul>
       )}
-      {shown.length === 0 && <p className="text-2xs text-fg-muted">Nothing waiting to merge.</p>}
+      {shown.length === 0 && <p className="text-2xs text-fg-muted">Nothing in the merge queue.</p>}
       {listed.length > 0 && (
         // A long queue scrolls inside the panel instead of pushing the list down.
         <ul className="max-h-40 overflow-y-auto divide-y divide-edge-subtle">

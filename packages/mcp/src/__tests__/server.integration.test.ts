@@ -166,6 +166,7 @@ describe('MCP protocol handshake', () => {
       'request_connector_action',
       // Changing where CI runs: a request a person approves (ADR 0037).
       'request_ci_placement_change',
+      'open_ci_cost_fix',
       // Run-now tools: each starts a server-side run (repo reads, live probes).
       'run_radar',
       'refresh_recipe',

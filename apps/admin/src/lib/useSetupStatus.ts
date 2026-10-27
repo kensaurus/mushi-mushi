@@ -60,6 +60,8 @@ export interface SetupStepDiagnostic {
   last_sdk_origin: string | null
   last_sdk_user_agent: string | null
   last_sdk_endpoint_host: string | null
+  /** Label of the SDK key that checked in (absent before the 2026-10-27 server). */
+  last_sdk_key_label?: string | null
 }
 
 export interface SetupStep {

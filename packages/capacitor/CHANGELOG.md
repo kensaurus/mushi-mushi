@@ -1,5 +1,14 @@
 # @mushi-mushi/capacitor
 
+## 1.1.4
+
+### Patch Changes
+
+- 15ba9ce: The web fallback (`ionic serve`, browser previews) now sends reports to the hosted Mushi API when `configure()` has no `endpoint`, the same default as `@mushi-mushi/web` and the README. It used to leave the client unset, so every `report()` threw "endpoint not configured". Set `endpoint` only when self-hosting.
+- 271abb8: The npm pages now open with what the package does, how to install it, a short example that matches the current API, and a link to its docs page. The examples that named options or functions the SDKs no longer have are corrected.
+- Updated dependencies [271abb8]
+  - @mushi-mushi/core@1.33.3
+
 ## 1.1.3
 
 ### Patch Changes

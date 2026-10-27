@@ -11,6 +11,13 @@ description: The Anomaly detection page runs statistical detectors over the metr
 
 **Route:** `/anomalies`
 
+**First on the page:** one sentence on the spikes to confirm or dismiss. Once metrics
+arrive, **Your metrics, with releases and spikes** draws each metric over time (those
+with an open spike first, up to three) with a dashed line per release and a dot per
+spike, and **Confirm** / **Dismiss** under the chart. With no metrics yet the page is
+one **Add metrics** step. The detectors read **Sudden jump** (z-score), **Slow drift**
+(Page-Hinkley) and **Started with a release**.
+
 The Anomaly detection page applies statistical detectors to time-series metrics you
 feed in. When a metric behaves unexpectedly, it surfaces as an anomaly — optionally
 auto-filing a report in your project's queue.
