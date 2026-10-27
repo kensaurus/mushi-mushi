@@ -17940,7 +17940,7 @@ Four lights, each with a word beside its colour:
 | Light | Green | Amber | Red | Not connected |
 |-------|-------|-------|-----|---------------|
 | **Site up** | No broken pages | Last check failed, not checked for 3 days, or pages answer slower than 3 s | Pages the watch confirmed broken | Turn on the live-site watch |
-| **Errors (24 h)** | New reports, none critical | At least 5 new and double the day before | Any critical report | Install the SDK |
+| **Errors today** | New reports today (UTC), none critical | At least 5 new and double yesterday | Any critical report | Install the SDK |
 | **SDK sending** | Your app checked in today | Quiet for 1–7 days | Silent for over a week | Create a key and add the SDK |
 | **CI on main** | The latest run on your default branch passed | The test machine stopped (not a code failure) | A check failed | Connect your repo |
 
@@ -18007,7 +18007,7 @@ reports yet.
 
 ### After a deploy
 1. Check the version on the app card and under **Release** matches what you shipped.
-2. Watch **Errors (24 h)** and **CI on main** for the next hour.
+2. Watch **Errors today** and **CI on main** for the next hour.
 
 ---
 

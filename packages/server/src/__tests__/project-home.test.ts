@@ -70,18 +70,18 @@ describe('siteSignal', () => {
 describe('errorsSignal', () => {
   const base = { everConnected: true, latestAt: null, sdkHref: SDK_HREF }
   it('is not connected before the first report or check-in', () => {
-    const s = errorsSignal({ ...base, last24h: 0, previous24h: 0, critical24h: 0, everConnected: false })
+    const s = errorsSignal({ ...base, today: 0, yesterday: 0, criticalToday: 0, everConnected: false })
     expect(s.status).toBe('not_connected')
     expect(s.connect?.to).toBe(SDK_HREF)
   })
   it('is red on any critical, linking to the critical list', () => {
-    const s = errorsSignal({ ...base, last24h: 4, previous24h: 1, critical24h: 1 })
+    const s = errorsSignal({ ...base, today: 4, yesterday: 1, criticalToday: 1 })
     expect(s.light).toBe('bad')
     expect(s.href).toBe('/reports?days=1&severity=critical')
   })
   it('is amber when reports at least double (5 or more)', () => {
-    expect(errorsSignal({ ...base, last24h: 6, previous24h: 2, critical24h: 0 }).light).toBe('warn')
-    expect(errorsSignal({ ...base, last24h: 4, previous24h: 1, critical24h: 0 }).light).toBe('good')
+    expect(errorsSignal({ ...base, today: 6, yesterday: 2, criticalToday: 0 }).light).toBe('warn')
+    expect(errorsSignal({ ...base, today: 4, yesterday: 1, criticalToday: 0 }).light).toBe('good')
   })
 })
 

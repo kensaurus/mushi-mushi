@@ -1174,7 +1174,7 @@ const COPY: CopyRegistry = {
         whatIsIt:
           'One page per app: is it up, erroring or slow; what needs you; what is shipping and what is waiting; which pages have bugs; and who can reach it.',
         useCases: [
-          'Check the four lights: site up, errors in the last 24 hours, SDK sending, CI on main',
+          'Check the four lights: site up, errors today, SDK sending, CI on main',
           'Clear the few things that need you, most costly first',
           'See how far fixes have got toward a release, and how many bugs wait by severity',
           'Compare this week with last week',

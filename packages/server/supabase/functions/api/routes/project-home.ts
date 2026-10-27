@@ -72,6 +72,7 @@ import {
   type ThumbnailRow,
 } from '../../_shared/home-thumbnail.ts'
 import { readPipeline } from './pipeline.ts'
+import { reportWindowStartIso } from '../../_shared/report-list-filters.ts'
 import { dbError, OPEN_REPORT_STATUSES, parseUuidParam, userCanAccessProject } from '../shared.ts'
 
 const hlog = log.child('project-home')
@@ -177,7 +178,11 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
   const id = project.id
   const now = deps.now()
   const iso = (msAgo: number) => new Date(now.getTime() - msAgo).toISOString()
-  const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString()
+  // The report list's calendar windows (UTC midnight), so `/reports?days=N` shows the same count.
+  const todayStart = reportWindowStartIso(1, now)
+  const yesterdayStart = reportWindowStartIso(2, now)
+  const weekStart = reportWindowStartIso(7, now)
+  const priorStart = reportWindowStartIso(14, now)
   const sdkHref = `/connect?project=${encodeURIComponent(id)}#connect-sdk-health`
   const reportCount = () => db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', id)
   const mergedCount = () => db.from('fix_attempts').select('id', { count: 'exact', head: true }).eq('project_id', id)
@@ -251,16 +256,16 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
       })
     })().catch((e) => errorSignal('site', 'Site up', SITE_WATCH_HREF, e)),
     (async () => {
-      const [last24h, previous24h, critical24h, ever, latest] = await Promise.all([
-        count('reports 24h', reportCount().gte('created_at', iso(DAY))),
-        count('reports prior 24h', reportCount().gte('created_at', iso(2 * DAY)).lt('created_at', iso(DAY))),
-        count('critical 24h', reportCount().gte('created_at', iso(DAY)).eq('severity', 'critical')),
+      const [todayCount, yesterdayCount, criticalToday, ever, latest] = await Promise.all([
+        count('reports today', reportCount().gte('created_at', todayStart)),
+        count('reports yesterday', reportCount().gte('created_at', yesterdayStart).lt('created_at', todayStart)),
+        count('critical today', reportCount().gte('created_at', todayStart).eq('severity', 'critical')),
         count('reports ever', reportCount()),
         one<{ created_at: string }>('latest report', db.from('reports').select('created_at').eq('project_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle()),
       ])
       const sdkSeen = keys.ok && !!latestSeen(keys.value.filter((k) => isSdkKey(k.scopes)))
-      return errorsSignal({ last24h, previous24h, critical24h, everConnected: ever > 0 || sdkSeen, latestAt: latest?.created_at ?? null, sdkHref })
-    })().catch((e) => errorSignal('errors', 'Errors (24 h)', '/reports?days=1', e)),
+      return errorsSignal({ today: todayCount, yesterday: yesterdayCount, criticalToday, everConnected: ever > 0 || sdkSeen, latestAt: latest?.created_at ?? null, sdkHref })
+    })().catch((e) => errorSignal('errors', 'Errors today', '/reports?days=1', e)),
     (async () => {
       if (!keys.ok) return errorSignal('sdk', 'SDK sending', sdkHref, keys.error)
       const sdk = keys.value.filter((k) => k.is_active && isSdkKey(k.scopes))
@@ -307,19 +312,17 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
   // ── Week, activity ──
   const weekP = settle(
     (async () => {
-      const week = iso(7 * DAY)
-      const prior = iso(14 * DAY)
       const sessions = () => db.from('end_user_sessions').select('id', { count: 'exact', head: true }).eq('project_id', id)
       const [r0, r1, c0, c1, m0, m1, s0, s1] = await Promise.all([
-        count('reports 7d', reportCount().gte('created_at', week)),
-        count('reports prior 7d', reportCount().gte('created_at', prior).lt('created_at', week)),
-        count('critical 7d', reportCount().eq('severity', 'critical').gte('created_at', week)),
-        count('critical prior 7d', reportCount().eq('severity', 'critical').gte('created_at', prior).lt('created_at', week)),
-        count('merged 7d', mergedCount().gte('merged_at', week)),
-        count('merged prior 7d', mergedCount().gte('merged_at', prior).lt('merged_at', week)),
+        count('reports 7d', reportCount().gte('created_at', weekStart)),
+        count('reports prior 7d', reportCount().gte('created_at', priorStart).lt('created_at', weekStart)),
+        count('critical 7d', reportCount().eq('severity', 'critical').gte('created_at', weekStart)),
+        count('critical prior 7d', reportCount().eq('severity', 'critical').gte('created_at', priorStart).lt('created_at', weekStart)),
+        count('merged 7d', mergedCount().gte('merged_at', weekStart)),
+        count('merged prior 7d', mergedCount().gte('merged_at', priorStart).lt('merged_at', weekStart)),
         // Visits are optional (the SDK session tracker); no table or no rows hides the row.
-        count('sessions 7d', sessions().gte('started_at', week)).catch(() => null),
-        count('sessions prior 7d', sessions().gte('started_at', prior).lt('started_at', week)).catch(() => null),
+        count('sessions 7d', sessions().gte('started_at', weekStart)).catch(() => null),
+        count('sessions prior 7d', sessions().gte('started_at', priorStart).lt('started_at', weekStart)).catch(() => null),
       ])
       return buildWeek({ reports: [r0, r1], critical: [c0, c1], merged: [m0, m1], sessions: s0 != null && s1 != null && s0 + s1 > 0 ? [s0, s1] : null })
     })(),
@@ -327,12 +330,12 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
   const activityP = settle(
     (async () => {
       const [reportsToday, reportsWeek, mergedToday, mergedWeek, prsOpenedWeek, deploysWeek] = await Promise.all([
-        count('reports today', reportCount().gte('created_at', dayStart)),
-        count('reports week', reportCount().gte('created_at', iso(7 * DAY))),
-        count('merged today', mergedCount().gte('merged_at', dayStart)),
-        count('merged week', mergedCount().gte('merged_at', iso(7 * DAY))),
-        count('prs week', mergedCount().not('pr_url', 'is', null).gte('created_at', iso(7 * DAY))),
-        count('deploys week', db.from('deploy_observations').select('id', { count: 'exact', head: true }).eq('project_id', id).eq('ok', true).gte('observed_at', iso(7 * DAY))),
+        count('reports today', reportCount().gte('created_at', todayStart)),
+        count('reports week', reportCount().gte('created_at', weekStart)),
+        count('merged today', mergedCount().gte('merged_at', todayStart)),
+        count('merged week', mergedCount().gte('merged_at', weekStart)),
+        count('prs week', mergedCount().not('pr_url', 'is', null).gte('created_at', weekStart)),
+        count('deploys week', db.from('deploy_observations').select('id', { count: 'exact', head: true }).eq('project_id', id).eq('ok', true).gte('observed_at', weekStart)),
       ])
       const last = deploy.ok && deploy.value ? { at: deploy.value.observed_at, version: deploy.value.observed_version } : null
       return buildActivity({ reportsToday, reportsWeek, mergedToday, mergedWeek, prsOpenedWeek, deploysWeek, lastDeploy: last })
@@ -343,8 +346,8 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
   const sitemapP = settle(
     (async () => {
       const [views, bugs] = await Promise.all([
-        rows<{ route: string }>('session_page_views', db.from('session_page_views').select('route').eq('project_id', id).gte('ts', iso(7 * DAY)).order('ts', { ascending: false }).limit(PAGE_VIEW_SAMPLE)),
-        rows<{ url: string | null }>('report urls', db.from('reports').select('url:environment->>url').eq('project_id', id).gte('created_at', iso(14 * DAY)).limit(2000)),
+        rows<{ route: string }>('session_page_views', db.from('session_page_views').select('route').eq('project_id', id).gte('ts', weekStart).order('ts', { ascending: false }).limit(PAGE_VIEW_SAMPLE)),
+        rows<{ url: string | null }>('report urls', db.from('reports').select('url:environment->>url').eq('project_id', id).gte('created_at', priorStart).limit(2000)),
       ])
       return buildSitemap({
         views: views.map((v) => v.route),

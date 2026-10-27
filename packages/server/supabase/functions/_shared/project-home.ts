@@ -125,10 +125,14 @@ export function siteSignal(input: SiteInput): HealthSignal {
   return { ...base, status: 'ok', light: 'good', headline: 'Up', detail: speed ?? `No broken pages on ${hostOf(w.base_url)}.`, at, connect: null }
 }
 
+/**
+ * Report counts use the report list's calendar days (UTC midnight,
+ * `reportWindowStartIso`), so the number and the `?days=` list it opens agree.
+ */
 export interface ErrorsInput {
-  last24h: number
-  previous24h: number
-  critical24h: number
+  today: number
+  yesterday: number
+  criticalToday: number
   /** False until the app has sent its first report or the SDK checked in. */
   everConnected: boolean
   latestAt: string | null
@@ -136,18 +140,18 @@ export interface ErrorsInput {
 }
 
 export function errorsSignal(input: ErrorsInput): HealthSignal {
-  const base = { id: 'errors' as const, label: 'Errors (24 h)', href: '/reports?days=1' }
+  const base = { id: 'errors' as const, label: 'Errors today', href: '/reports?days=1' }
   if (!input.everConnected) {
     return { ...base, status: 'not_connected', light: 'off', headline: 'No reports yet', detail: 'Install the SDK so your users can report bugs.', at: null, connect: { label: 'Install the SDK', to: input.sdkHref } }
   }
-  const before = `${input.previous24h} the day before.`
-  if (input.critical24h > 0) {
-    return { ...base, href: '/reports?days=1&severity=critical', status: 'ok', light: 'bad', headline: `${input.critical24h} critical`, detail: `${plural(input.last24h, 'new report')} in the last 24 h; ${before}`, at: input.latestAt, connect: null }
+  const before = `${input.yesterday} yesterday.`
+  if (input.criticalToday > 0) {
+    return { ...base, href: '/reports?days=1&severity=critical', status: 'ok', light: 'bad', headline: `${input.criticalToday} critical`, detail: `${plural(input.today, 'new report')} today; ${before}`, at: input.latestAt, connect: null }
   }
-  if (input.last24h >= 5 && input.last24h >= 2 * input.previous24h) {
-    return { ...base, status: 'ok', light: 'warn', headline: `${input.last24h} new, rising`, detail: `Up from ${input.previous24h} the day before.`, at: input.latestAt, connect: null }
+  if (input.today >= 5 && input.today >= 2 * input.yesterday) {
+    return { ...base, status: 'ok', light: 'warn', headline: `${input.today} new, rising`, detail: `Up from ${input.yesterday} yesterday.`, at: input.latestAt, connect: null }
   }
-  return { ...base, status: 'ok', light: 'good', headline: input.last24h === 0 ? 'None new' : `${input.last24h} new`, detail: before, at: input.latestAt, connect: null }
+  return { ...base, status: 'ok', light: 'good', headline: input.today === 0 ? 'None new' : `${input.today} new`, detail: before, at: input.latestAt, connect: null }
 }
 
 export interface SdkInput {
@@ -448,6 +452,9 @@ export function buildSitemap(input: SitemapInput): SitemapView {
 
 // ── This week vs last ───────────────────────────────────────────────────────
 
+/** The fixes list filtered to merged attempts (apps/admin lib/statCardLinks.ts). */
+export const FIXES_MERGED_HREF = '/fixes?tab=attempts&status=merged'
+
 export interface WeekRow {
   id: 'reports' | 'critical' | 'merged' | 'sessions'
   label: string
@@ -467,7 +474,7 @@ export function buildWeek(c: {
   const rows: WeekRow[] = [
     { id: 'reports', label: 'Bug reports', thisWeek: c.reports[0], lastWeek: c.reports[1], moreIsBetter: false, href: '/reports?days=7' },
     { id: 'critical', label: 'Critical bugs', thisWeek: c.critical[0], lastWeek: c.critical[1], moreIsBetter: false, href: '/reports?days=7&severity=critical' },
-    { id: 'merged', label: 'Fixes merged', thisWeek: c.merged[0], lastWeek: c.merged[1], moreIsBetter: true, href: '/fixes' },
+    { id: 'merged', label: 'Fixes merged', thisWeek: c.merged[0], lastWeek: c.merged[1], moreIsBetter: true, href: FIXES_MERGED_HREF },
   ]
   if (c.sessions) rows.push({ id: 'sessions', label: 'User visits', thisWeek: c.sessions[0], lastWeek: c.sessions[1], moreIsBetter: true, href: '/dashboard?view=users' })
   return rows
@@ -491,9 +498,9 @@ export function buildActivity(c: {
   lastDeploy: { at: string; version: string | null } | null
 }): ActivityLine[] {
   const lines: ActivityLine[] = []
-  if (c.mergedToday > 0) lines.push({ id: 'merged_today', text: `${plural(c.mergedToday, 'fix', 'fixes')} merged today`, to: '/fixes' })
-  else if (c.mergedWeek > 0) lines.push({ id: 'merged_week', text: `${plural(c.mergedWeek, 'fix', 'fixes')} merged this week`, to: '/fixes' })
-  if (c.prsOpenedWeek > 0) lines.push({ id: 'prs_week', text: `${plural(c.prsOpenedWeek, 'fix PR')} opened this week`, to: '/fixes' })
+  if (c.mergedToday > 0) lines.push({ id: 'merged_today', text: `${plural(c.mergedToday, 'fix', 'fixes')} merged today`, to: FIXES_MERGED_HREF })
+  else if (c.mergedWeek > 0) lines.push({ id: 'merged_week', text: `${plural(c.mergedWeek, 'fix', 'fixes')} merged this week`, to: FIXES_MERGED_HREF })
+  if (c.prsOpenedWeek > 0) lines.push({ id: 'prs_week', text: `${plural(c.prsOpenedWeek, 'fix PR')} opened this week`, to: '/fixes?tab=attempts' })
   if (c.reportsToday > 0) lines.push({ id: 'reports_today', text: `${plural(c.reportsToday, 'bug report')} came in today`, to: '/reports?days=1' })
   else if (c.reportsWeek > 0) lines.push({ id: 'reports_week', text: `${plural(c.reportsWeek, 'bug report')} came in this week`, to: '/reports?days=7' })
   if (c.deploysWeek > 0) {

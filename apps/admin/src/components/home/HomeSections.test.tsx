@@ -81,7 +81,7 @@ describe('HealthStrip', () => {
       createElement(HealthStrip, {
         section: ok([
           signal({ id: 'site', light: 'bad', headline: '2 pages broken' }),
-          signal({ id: 'errors', label: 'Errors (24 h)', light: 'good', headline: '3 new', href: '/reports?days=1' }),
+          signal({ id: 'errors', label: 'Errors today', light: 'good', headline: '3 new', href: '/reports?days=1' }),
           signal({ id: 'sdk', label: 'SDK sending', status: 'not_connected', light: 'off', headline: 'Never checked in', href: '/connect', connect: { label: 'Set up the SDK', to: '/connect' } }),
           signal({ id: 'ci', label: 'CI on main', status: 'error', light: 'off', headline: 'Could not read', href: '/ci' }),
         ]),

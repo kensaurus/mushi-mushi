@@ -124,6 +124,8 @@ function seed(): Record<string, Array<Record<string, unknown>>> {
       report(2, { created_at: ago(30) }),
       report(3, { severity: 'high', created_at: ago(30), status: 'fixed' }),
       report(4, { severity: null, created_at: ago(24 * 9) }),
+      // 23:00 UTC yesterday: inside a rolling 24 h, but yesterday on the report list's calendar days.
+      report(5, { severity: 'low', status: 'fixed', created_at: '2026-10-26T23:00:00Z' }),
     ],
     fix_attempts: [{ id: 'f1', project_id: P, merged_at: ago(1), created_at: ago(20), pr_url: 'https://github.com/kensaurus/glot.it/pull/1' }],
     deploy_observations: [{ id: 'd1', project_id: P, observed_at: ago(3), observed_version: 'v1.103.0', ok: true }],
@@ -183,7 +185,8 @@ describe('GET /v1/admin/projects/:id/home', () => {
     const d = res.body.data!
     const health = Object.fromEntries((d.health.data as Array<{ id: string }>).map((h) => [h.id, h])) as Record<string, any>
     expect(health.site).toMatchObject({ light: 'bad', headline: '1 page broken' })
-    expect(health.errors).toMatchObject({ light: 'bad', headline: '1 critical' })
+    // Same calendar windows as /reports?days=1, so the click shows the same count.
+    expect(health.errors).toMatchObject({ label: 'Errors today', light: 'bad', headline: '1 critical', detail: '1 new report today; 3 yesterday.', href: '/reports?days=1&severity=critical' })
     expect(health.sdk).toMatchObject({ light: 'good' })
     expect(health.ci).toMatchObject({ light: 'good', label: 'CI on main' })
 
@@ -205,7 +208,7 @@ describe('GET /v1/admin/projects/:id/home', () => {
     })
     // Labels and last use only: never a key, prefix or hash.
     expect(JSON.stringify(d.access.data.keys)).not.toMatch(/key_prefix|hash|mushi_/)
-    expect(d.week.data.find((r: { id: string }) => r.id === 'reports')).toMatchObject({ thisWeek: 3, lastWeek: 1 })
+    expect(d.week.data.find((r: { id: string }) => r.id === 'reports')).toMatchObject({ thisWeek: 4, lastWeek: 1 })
     expect((d.activity.data as Array<{ text: string }>).map((l) => l.text)).toContain('1 fix merged today')
     expect(d.sitemap.status).toBe('ok')
   })
