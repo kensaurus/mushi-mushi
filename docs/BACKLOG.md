@@ -10,7 +10,7 @@ parked work is visible in one place.
 - **Last regenerated:** 2026-10-17 (third run; delta against 2026-10-16 below)
 - **Added 2026-10-20 (PR #504, spend-down):** BL-087..BL-091, parked parts of ADR 0028. Closed BL-089 on 2026-10-22.
 - **Added 2026-10-21 (agent PR review):** BL-095, a parked part of ADR 0030.
-- **Added 2026-10-21 (universal AI keys):** BL-096, BL-097, BL-098, parked parts of ADR 0031. BL-098 stays verify-done until migration `20261022010254` is applied.
+- **Added 2026-10-21 (universal AI keys):** BL-096, BL-097, BL-098, parked parts of ADR 0031.
 - **Added 2026-10-21 (review follow-ups):** BL-099, BL-100, parked parts of ADR 0032.
 - **Added 2026-10-21 (verified fixes):** BL-101, a parked part of ADR 0035.
 - **Added 2026-10-22 (licensing posture):** BL-102..BL-105, parked parts and owner gates of ADR 0036.
@@ -33,8 +33,8 @@ parked work is visible in one place.
 
 | Status | Open |
 |---|---|
-| relevant | 53 |
-| verify-done | 4 |
+| relevant | 54 |
+| verify-done | 3 |
 | stale (propose removal) | 0 |
 
 > **Scanned 2026-10-17** on `origin/master` `3fc2476d` (#494, the PR that wrote
@@ -115,7 +115,7 @@ parked work is visible in one place.
 | BL-095 | unfinished-feature | Per-project review model for the agent PR review (`project_settings.agent_pr_review_model`, the `judge_model` pattern with `resolveClaudeModel`). Deferred: Opus 5.5 is the point of the gate | relevant | low | ADR 0030 (Rejected), `_shared/models.ts` `AGENT_PR_REVIEW_MODEL` | — |
 | BL-096 | decision-needed | Universal AI keys (ADR 0031) serve apps through their organization's owners, so an app with no organization (only the legacy `projects.owner_id`) gets none. Decide: fall back to `projects.owner_id` in `keyOwnerForProject`, or move such apps into a personal organization | relevant | low | ADR 0031, `_shared/byok-scope.ts` `keyOwnerForProject` | — |
 | BL-097 | unfinished-feature | Add or move an organization or universal key from the CLI (`mushi keys add --scope`, `mushi keys scope`) through a device-auth console session instead of the project API key, which may not change shared keys (ADR 0023, ADR 0031). Today only the console does | relevant | low | ADR 0031, `packages/cli/src/commands/keys.ts`, `PATCH /v1/admin/byok/keys/:keyId/scope` | — |
-| BL-098 | known-bug | Legacy AI-key Vault cleanup waits on migration `20261022010254`. The route calls `vault_delete_secret_by_name_if_unused` after the legacy `*_ref` columns are cleared, and leaves the secret in Vault when that RPC is missing, so until migration `20261022010254` is applied an unused legacy secret stays in Vault. After apply, confirm a secret a `byok_keys` row still references is kept and an unreferenced secret is deleted | verify-done | med | ADR 0031, `api/routes/settings-research.ts` (`clearLegacyByokCredential`, Firecrawl and Browserbase deletes), migration `20261022010254` | — |
+| BL-098 | known-bug | The legacy single-key routes (`DELETE /v1/admin/byok/:provider`, the Firecrawl and Browserbase panels, and retiring a legacy key after its pooled copy validates) delete the Vault secret by name with `vault_delete_secret`, without asking `private.vault_secret_in_use`. On live data a pool row can share that secret (yen-yen's Anthropic key, 2026-10-21), so removing the legacy credential would break the pool row. Look the secret's id up and call `vault_delete_secret_if_unused` instead | relevant | med | ADR 0031, `api/routes/settings-research.ts` (`clearLegacyByokCredential`, firecrawl/browserbase deletes), migration `20261021051628` | — |
 | BL-099 | unfinished-feature | Send a "hold" agent PR back with its findings once a person approves it in the console (a "Send back with these findings" action that queues a review follow-up). Follow-ups run on fix_first only; a hold needs a person | relevant | low | ADR 0032 (Rejected), `_shared/review-followup.ts` `followupTrigger` | — |
 | BL-100 | unfinished-feature | Per-app review follow-up settings (on/off, key, model) overriding the organization's, plus CLI/MCP to read and change them; today they are per organization and console-only | relevant | low | ADR 0032 (Rejected), `api/routes/byok-review-followups.ts` | — |
 | BL-101 | unfinished-feature | Nightly mutation-testing sample of merged agent PRs (StrykerJS on the changed files) to measure whether fail-to-pass tests assert behaviour; too slow for the merge path | relevant | low | ADR 0035 (Rejected), Plan 024 | — |
