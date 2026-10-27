@@ -47,7 +47,9 @@ import { useByokPool } from './ByokPoolContext'
 import { providerStatusView } from './keyStatus'
 import { SettingsList, SettingsRow, type RowStatusValue } from './SettingsRow'
 import { slackAlertStatus, slackCanOfferTest } from './slackAlertStatus'
+import { fixBranchFieldState } from './fixBranchField'
 import { sentryRowStatus, useSentryConnection } from '../../lib/useSentryConnection'
+import type { HealthRow } from '../integrations/types'
 
 /** Tri-state select values for `widget_brand_footer` (null = plan default). */
 type BrandFooterChoice = 'default' | 'on' | 'off'
@@ -112,6 +114,10 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
   // The same verdict the Integrations card shows, from the same inputs, so
   // the two pages never disagree about Sentry.
   const sentryShared = useSentryConnection()
+  // The Slack probe the Integrations card reads (same request, cached), so a
+  // test sent from either page shows on both.
+  const health = usePageData<{ history: HealthRow[] }>('/v1/admin/health/history')
+  const slackProbe = health.data?.history?.find((h) => h.kind === 'slack')
   const [draft, setDraft] = useState<ProjectSettings | null>(null)
   const [saving, setSaving] = useState(false)
   const [showLegacyWebhook, setShowLegacyWebhook] = usePersistentState(
@@ -187,6 +193,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
     botSet: saved.slack_bot_token_ref_set === true,
     canPost: slackCanPost,
     tested: slackTest,
+    probe: slackProbe,
   }
   const slackStatus: RowStatusValue = slackAlertStatus(slackInput)
   const canTestSlack = slackCanOfferTest(slackInput)
@@ -215,8 +222,11 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
     : supabaseKeyView
 
   const branchExample = fixBranchExample(settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE)
-  // The server refuses a pattern that breaks the rule; say so before Save.
-  const branchProblem = fixBranchTemplate()(settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE)
+  const branch = fixBranchFieldState({
+    current: settings.fix_branch_template,
+    saved: saved.fix_branch_template,
+    defaultValue: DEFAULT_BRANCH_TEMPLATE,
+  })
 
   return (
     <>
@@ -247,7 +257,9 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             placeholder="C0B82A322RW"
           />
           <p className="text-xs text-fg-muted">
-            In Slack, open the channel's details and copy the channel ID at the bottom. Then invite the Mushi bot to the channel.
+            {slackInput.botSet || slackCanPost
+              ? "In Slack, open the channel's details and copy the channel ID at the bottom. Then invite the Mushi bot to the channel."
+              : "Mushi's Slack bot isn't connected to this app, so a channel ID alone can't post. Connect it on Integrations, or use the webhook below."}
           </p>
           <SettingsChangeHint current={settings.slack_channel_id ?? ''} saved={saved.slack_channel_id ?? ''} kind="text" />
           {slackTest && (
@@ -511,6 +523,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             onChange={(e) => update({ fix_branch_template: e.target.value })}
             placeholder={DEFAULT_BRANCH_TEMPLATE}
             validate={fixBranchTemplate()}
+            error={branch.error ?? undefined}
           />
           <p className="text-xs text-fg-muted">
             Example: <code className="font-mono">{branchExample}</code>
@@ -616,7 +629,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
         changeCount={changeCount}
         onSave={() => void save()}
         onDiscard={() => setDraft(null)}
-        blockedReason={branchProblem ? `Fix the branch name pattern first. ${branchProblem.message}` : null}
+        blockedReason={branch.blocksSave ? `Fix the branch name pattern first. ${branch.error}` : null}
       />
 
       {/* Account-scoped; saves on toggle, independent of the project form above. */}

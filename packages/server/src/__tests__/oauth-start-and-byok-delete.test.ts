@@ -86,6 +86,22 @@ describe('GET /v1/admin/integrations/slack/install', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('cache-control')).toBe('no-store')
   })
+
+  it('a server without a Slack app answers 503 in plain words, never an env var name (2d5e2bd7)', async () => {
+    const saved = ENV.SLACK_CLIENT_ID
+    delete ENV.SLACK_CLIENT_ID
+    try {
+      const res = await app.request('/v1/admin/integrations/slack/install')
+      expect(res.status).toBe(503)
+      const body = (await res.json()) as { error: { code: string; message: string } }
+      expect(body.error.code).toBe('NOT_CONFIGURED')
+      expect(body.error.message).toMatch(/webhook URL instead/)
+      expect(body.error.message).not.toMatch(/SLACK_/)
+      expect(warn).toHaveBeenCalled()
+    } finally {
+      ENV.SLACK_CLIENT_ID = saved
+    }
+  })
 })
 
 describe('GET /v1/admin/linear-oauth/authorize', () => {
