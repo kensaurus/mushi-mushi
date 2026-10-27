@@ -1,6 +1,6 @@
 /**
  * KnownHolesCard — known holes in this app's dependencies and runtime
- * (ADR 0038), on App health → Code. Not a "Security" page: a hole is a bug
+ * (ADR 0038), on Mushi health → Code size. Not a "Security" page: a hole is a bug
  * the user has not hit yet, so each one fileable becomes a normal report.
  *
  * One row per upgrade (package or runtime → the version that fixes every

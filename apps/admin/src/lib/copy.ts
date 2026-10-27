@@ -1340,9 +1340,9 @@ const COPY: CopyRegistry = {
       },
     },
     '/health': {
-      title: 'App health',
+      title: 'Mushi health',
       description:
-        'Banner + HEALTH SNAPSHOT first — then Overview for posture, LLM for breakdowns, Cron for jobs, Activity for traces.',
+        'Whether Mushi itself is working: the AI calls behind your diagnoses and fixes, and its background jobs.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         calls: 'AI calls',
@@ -1367,7 +1367,7 @@ const COPY: CopyRegistry = {
         activity: 'Recent traces',
       },
       help: {
-        title: 'About App health',
+        title: 'About Mushi health',
         whatIsIt:
           'Real-time vitals for every LLM call Mushi makes — how fast it responds, how often it fails, and how much each call costs you.',
         useCases: [
@@ -1649,8 +1649,8 @@ const COPY: CopyRegistry = {
       description: 'How well the AI triages bugs (severity, category, diagnosis), graded over time.',
     },
     '/health': {
-      title: 'App health',
-      description: 'Whether the AI calls and scheduled jobs this app relies on are working.',
+      title: 'Mushi health',
+      description: 'Whether Mushi itself is working: its AI calls and background jobs. Your app’s uptime and errors are on Home.',
     },
     '/integrations': {
       title: 'Integrations',

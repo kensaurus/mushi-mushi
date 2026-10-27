@@ -4,7 +4,7 @@
  *          now (Plan 021 Phase 3, owner 2026-10-06), switched with `?view=`:
  *
  *            Home (/dashboard)  — Today, Overview, User activity, Users & funnels, Weekly insights, Growth
- *            App health (/health) — AI & jobs, Code size, Schema changes, Unusual spikes
+ *            Mushi health (/health) — Mushi's AI & jobs, Code size, Schema changes, Unusual spikes
  *            Team (/team)       — Members, Billing, AI spend, Audit log, Single sign-on, Compliance, Storage
  *
  *          Every retired route redirects to its view with the query kept, so
@@ -44,9 +44,9 @@ export const HOME_HUB: PageHub = {
 
 export const HEALTH_HUB: PageHub = {
   path: '/health',
-  title: 'App health view',
+  title: 'Mushi health view',
   views: [
-    { id: 'integrations', label: 'AI & jobs', legacyPath: null },
+    { id: 'integrations', label: 'Mushi’s AI & jobs', legacyPath: null },
     { id: 'code', label: 'Code size', legacyPath: '/code-health' },
     { id: 'schema', label: 'Schema changes', legacyPath: '/drift' },
     { id: 'spikes', label: 'Unusual spikes', legacyPath: '/anomalies' },
