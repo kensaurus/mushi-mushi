@@ -10,6 +10,7 @@ import {
   failureTail,
   agentEnv,
   branchNameFor,
+  runProc,
   buildLocalPrompt,
   commitBody,
   earlierAttemptsBlock,
@@ -411,5 +412,18 @@ describe('local workers (ADR 0048): infra failures never count against a report'
     expect(env.MUSHI_API_KEY).toBeUndefined()
     expect(env.CREDENTIALS_DIRECTORY).toBeUndefined()
     expect(Object.keys(env).filter((k) => /KEY|TOKEN|SECRET|CRED/i.test(k))).toEqual([])
+  })
+})
+
+describe('runProc', () => {
+  it('answers when the process exited but something it started still holds the output (the 51-minute audit hang)', async () => {
+    // The grandchild inherits stdout and lives on; Node then never fires 'close'.
+    const hold = "require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 8000)'], { stdio: 'inherit', detached: true }).unref(); console.log('parent done')"
+    const t0 = Date.now()
+    const r = await runProc(process.execPath, ['-e', hold], { closeGraceMs: 300 })
+    expect(Date.now() - t0).toBeLessThan(5000)
+    expect(r.code).toBe(0)
+    expect(r.stdout).toContain('parent done')
+    expect(r.stderr).toMatch(/output pipes still open/)
   })
 })
