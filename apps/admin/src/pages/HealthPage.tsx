@@ -71,6 +71,7 @@ import { CHIP_TONE } from '../lib/chipTone'
 import { PageHubView } from '../components/PageHubView'
 import { HEALTH_HUB } from '../lib/pageHubs'
 import { PageLoadError } from '../components/PageLoadError'
+import { PlatformDoctorCard } from '../components/health/PlatformDoctorCard'
 
 const CodeHealthPage = lazy(() => import('./CodeHealthPage').then((m) => ({ default: m.CodeHealthPage })))
 const DriftPage = lazy(() => import('./DriftPage').then((m) => ({ default: m.DriftPage })))
@@ -974,6 +975,9 @@ function HealthPageContent() {
           </Section>
         </>
       )}
+
+      {/* Super-admins only: the server doctor with the platform secrets. */}
+      <PlatformDoctorCard />
     </div>
   )
 }
