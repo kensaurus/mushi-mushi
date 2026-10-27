@@ -5,10 +5,13 @@
  * version your app reports vs the latest release, and the latest upgrade job.
  * When the app is current there is no upgrade button; when an upgrade PR is
  * already open it is shown with its CI state instead of offering a new one.
+ * CI green offers Merge through the gated upgrade merge, after a confirm.
  */
 
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Btn, Tooltip, CopyButton, HelpBanner } from '../ui'
+import { ConfirmDialog } from '../ConfirmDialog'
 import { JobStatusPill } from '../ui/job-status-pill'
 import { BumpPlanTable } from './BumpPlanTable'
 import { useSdkUpgrade } from '../../lib/useSdkUpgrade'
@@ -103,8 +106,9 @@ const CI_CHIP: Record<UpdateCenterView['ci'], { label: string; tone: string }> =
 }
 
 export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
-  const { state, createUpgradePr, refreshUpgradePr, syncStatus } = useSdkUpgrade(project.id)
+  const { state, createUpgradePr, refreshUpgradePr, syncStatus, mergePr } = useSdkUpgrade(project.id)
   const view = deriveUpdateCenterView(project, state)
+  const [confirmMerge, setConfirmMerge] = useState(false)
 
   const isInFlight = ['queueing', 'queued', 'running', 'awaiting_lockfile'].includes(state.status)
   const githubCheck = preflight.checks.find((c) => c.key === 'github')
@@ -115,6 +119,7 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
   const githubHint = githubCheck && !githubCheck.ready ? githubCheck.hint : null
   const prLabel = prNumberFrom(state.prUrl) ?? 'Upgrade PR'
   const ci = CI_CHIP[view.ci]
+  const canMerge = view.mode === 'pr_open' && view.ci === 'passing' && Boolean(state.jobId)
 
   return (
     <div className="space-y-4">
@@ -183,8 +188,11 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
             <span className={`${CHIP} ${ci.tone}`}>{ci.label}</span>
           </p>
           <p className="text-2xs text-fg-muted">
-            Review and merge it on GitHub. Lockfile: your Mushi lockfile workflow refreshes it on
-            the PR branch; without one, run your package manager after merging.
+            {canMerge
+              ? 'CI is green. Merge it here, or review the diff on GitHub.'
+              : 'Review and merge it on GitHub.'}{' '}
+            Lockfile: your Mushi lockfile workflow refreshes it on the PR branch; without one, run
+            your package manager after merging.
           </p>
         </div>
       )}
@@ -202,6 +210,9 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
       )}
       {state.syncError && (
         <p className="text-xs text-danger-foreground" role="status">{state.syncError}</p>
+      )}
+      {view.mode === 'pr_open' && state.error && (
+        <p className="text-xs text-danger-foreground" role="status">{state.error}</p>
       )}
       {!state.syncError && state.checkedAt && !state.syncing ? (
         <p className="text-xs text-fg-muted" role="status" data-testid="update-center-ci-checked">
@@ -247,6 +258,17 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
                   Update PR to {view.packages[0]?.latest}
                 </Btn>
               </Tooltip>
+            ) : null}
+            {canMerge ? (
+              <Btn
+                size="md"
+                variant="success"
+                disabled={isInFlight || state.syncing || state.releaseStatus === 'merging'}
+                onClick={() => setConfirmMerge(true)}
+                data-testid="update-center-merge"
+              >
+                Merge
+              </Btn>
             ) : null}
             {(view.mode === 'pr_open' || view.mode === 'pr_merged') && state.jobId ? (
               <Btn
@@ -333,6 +355,21 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
       )}
 
       {hasGithubReady && <LockfileHelperDisclosure />}
+
+      {confirmMerge && canMerge && state.jobId ? (
+        <ConfirmDialog
+          title={`Merge upgrade PR ${prNumberFrom(state.prUrl) ?? ''} on GitHub?`}
+          body="Squash-merge this upgrade PR into the repo's default branch. Mushi uses the same review gate as other merges. A merge cannot be undone from here."
+          confirmLabel="Merge PR"
+          tone="danger"
+          onCancel={() => setConfirmMerge(false)}
+          onConfirm={() => {
+            const jobId = state.jobId
+            setConfirmMerge(false)
+            if (jobId) void mergePr(jobId)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

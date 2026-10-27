@@ -58,6 +58,39 @@ function readPath(row: Row, key: string): unknown {
   return row[key]
 }
 
+/** One PostgREST `or` / `and` atom. `and(...)` is every inner predicate. */
+function orPredicate(part: string): (r: Row) => boolean {
+  const and = /^and\((.*)\)$/.exec(part)
+  if (and) {
+    const inner = and[1].split(/,(?![^(]*\))/).map((p) => orPredicate(p.trim()))
+    return (r) => inner.every((f) => f(r))
+  }
+  const m = /^([\w>-]+)\.(not\.)?(is|eq|neq|in|lt|gt|lte|gte)\.(.*)$/.exec(part)
+  if (!m) throw new Error(`fake-supabase: or(${part}) unsupported`)
+  const [, key, negated, op, raw] = m
+  return (r: Row): boolean => {
+    const v = readPath(r, key)
+    if (op === 'is') {
+      if (raw !== 'null') throw new Error(`fake-supabase: or(${part}) unsupported`)
+      const isNull = v === null || v === undefined
+      return negated ? !isNull : isNull
+    }
+    // NULL compares as unknown in Postgres, so it never matches, negated or not.
+    if (v === null || v === undefined) return false
+    let hit: boolean
+    if (op === 'in') {
+      const values = raw.replace(/^\(|\)$/g, '').split(',').map((s) => s.trim())
+      hit = values.includes(String(v))
+    } else if (op === 'lt' || op === 'gt' || op === 'lte' || op === 'gte') {
+      const a = String(v)
+      hit = op === 'lt' ? a < raw : op === 'gt' ? a > raw : op === 'lte' ? a <= raw : a >= raw
+    } else {
+      hit = op === 'eq' ? String(v) === raw : String(v) !== raw
+    }
+    return negated ? !hit : hit
+  }
+}
+
 class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; message: string } | null; count?: number | null }> {
   private filters: Array<(r: Row) => boolean> = []
   private _limit: number | null = null
@@ -152,38 +185,13 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
   }
   /**
    * `or('a.is.null,b.neq.x')`: flat PostgREST alternatives of `is.null`,
-   * `eq`, `neq`, `in` and the comparisons `lt` / `gt` / `lte` / `gte`. `neq` never matches a NULL / absent column, as in Postgres
+   * `eq`, `neq`, `in`, `and(...)`, and the comparisons `lt` / `gt` / `lte` / `gte`. `neq` never matches a NULL / absent column, as in Postgres
    * (`NULL <> 'x'` is NULL), so a filter that forgets `is.null` fails here too.
    */
   or(filters: string): this {
     // Split on top-level commas only: `col.not.in.(a,b)` keeps its list.
     const parts = filters.split(/,(?![^(]*\))/)
-    const alternatives = parts.map((part) => {
-      const m = /^([\w>-]+)\.(not\.)?(is|eq|neq|in|lt|gt|lte|gte)\.(.*)$/.exec(part.trim())
-      if (!m) throw new Error(`fake-supabase: or(${part}) unsupported`)
-      const [, key, negated, op, raw] = m
-      return (r: Row): boolean => {
-        const v = readPath(r, key)
-        if (op === 'is') {
-          if (raw !== 'null') throw new Error(`fake-supabase: or(${part}) unsupported`)
-          const isNull = v === null || v === undefined
-          return negated ? !isNull : isNull
-        }
-        // NULL compares as unknown in Postgres, so it never matches, negated or not.
-        if (v === null || v === undefined) return false
-        let hit: boolean
-        if (op === 'in') {
-          const values = raw.replace(/^\(|\)$/g, '').split(',').map((s) => s.trim())
-          hit = values.includes(String(v))
-        } else if (op === 'lt' || op === 'gt' || op === 'lte' || op === 'gte') {
-          const a = String(v)
-          hit = op === 'lt' ? a < raw : op === 'gt' ? a > raw : op === 'lte' ? a <= raw : a >= raw
-        } else {
-          hit = op === 'eq' ? String(v) === raw : String(v) !== raw
-        }
-        return negated ? !hit : hit
-      }
-    })
+    const alternatives = parts.map((part) => orPredicate(part.trim()))
     this.filters.push((r) => alternatives.some((f) => f(r)))
     return this
   }

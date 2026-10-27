@@ -7,8 +7,6 @@
  * green — the Update center then stays on "CI failing".
  */
 
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const calls = vi.hoisted(() => ({
@@ -74,32 +72,43 @@ describe('fetchUpgradeCiOnHead', () => {
     expect(calls.workflow).toHaveBeenCalledWith('tok', REF, 'main', 'head-green')
   })
 
-  it('uses the stored sha when the pull request cannot be read', async () => {
-    calls.pull.mockRejectedValue(new Error('github down'))
+  it('uses the stored sha when the pull request was read and has no head', async () => {
+    calls.pull.mockResolvedValue({ headSha: '', baseRef: 'main', state: 'open', merged: false })
     calls.checks.mockResolvedValue({ status: 'completed', conclusion: 'failure' })
     calls.deploy.mockResolvedValue(null)
 
     const snap = await fetchUpgradeCiOnHead('tok', REF, 12, 'bump-red')
 
-    expect(snap.pr).toBeNull()
     expect(snap.commitSha).toBe('bump-red')
     expect(calls.checks).toHaveBeenCalledWith('tok', REF, 'bump-red')
     expect(calls.workflow).not.toHaveBeenCalled()
   })
-})
 
-describe('both CI writers use the head snapshot', () => {
-  const functions = resolve(__dirname, '../../supabase/functions')
+  it('a failed pull-request read throws and does not read the stored bump', async () => {
+    calls.pull.mockRejectedValue(new Error('github down'))
+    calls.checks.mockResolvedValue({ status: 'completed', conclusion: 'failure' })
 
-  it('the 5-minute sync does not read checks on the stored commit itself', () => {
-    const src = readFileSync(resolve(functions, 'sdk-release-sync/index.ts'), 'utf8')
-    expect(src).toContain('fetchUpgradeCiOnHead(')
-    expect(src).not.toContain('fetchLatestCheckRun(')
+    await expect(fetchUpgradeCiOnHead('tok', REF, 12, 'bump-red')).rejects.toThrow(/github down/)
+    expect(calls.checks).not.toHaveBeenCalled()
   })
 
-  it('the on-demand sync route does not read checks on the stored commit itself', () => {
-    const src = readFileSync(resolve(functions, 'api/routes/sdk-upgrade.ts'), 'utf8')
-    expect(src).toContain('fetchUpgradeCiOnHead(')
-    expect(src).not.toContain('fetchLatestCheckRun(')
+  it('a failed check read throws so the caller can store nothing', async () => {
+    calls.pull.mockResolvedValue({ headSha: 'head-green', baseRef: 'main', state: 'open', merged: false })
+    calls.checks.mockRejectedValue(new Error('check-runs fetch 403'))
+    calls.deploy.mockResolvedValue(null)
+
+    await expect(fetchUpgradeCiOnHead('tok', REF, 12, 'bump-red')).rejects.toThrow(/403/)
+  })
+
+  it('a failed workflow read stays display-only and does not throw', async () => {
+    calls.pull.mockResolvedValue({ headSha: 'head-green', baseRef: 'main', state: 'open', merged: false })
+    calls.checks.mockResolvedValue({ status: 'completed', conclusion: 'success' })
+    calls.deploy.mockResolvedValue(null)
+    calls.workflow.mockRejectedValue(new Error('workflow runs fetch 403'))
+
+    const snap = await fetchUpgradeCiOnHead('tok', REF, 12, 'bump-red', { workflow: true })
+
+    expect(snap.workflow).toBeNull()
+    expect(snap.checks).toEqual({ status: 'completed', conclusion: 'success' })
   })
 })

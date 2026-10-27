@@ -8,6 +8,12 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
+
+vi.mock('../../supabase/functions/_shared/sdk-release-sync.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../supabase/functions/_shared/sdk-release-sync.ts')>()
+  return { ...actual, syncSdkReleaseJob: vi.fn(actual.syncSdkReleaseJob) }
+})
+
 import {
   deriveSdkReleaseUpdate,
   describeGithubReadFailure,
@@ -28,14 +34,18 @@ const gh = vi.hoisted(() => ({
 }))
 
 vi.mock('../../supabase/functions/_shared/db.ts', () => ({ getServiceClient: () => db }))
-vi.mock('../../supabase/functions/_shared/sentry.ts', () => ({ reportError: vi.fn(), reportMessage: vi.fn() }))
+vi.mock('../../supabase/functions/_shared/sentry.ts', () => ({
+  reportError: vi.fn(),
+  reportMessage: vi.fn(),
+  withSentry: (_name: string, handler: (req: Request) => Response | Promise<Response>) => handler,
+}))
 vi.mock('../../supabase/functions/_shared/auth.ts', () => {
   const pass = async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
     c.set('userId', 'user-1')
     c.set('authMethod', 'jwt')
     await next()
   }
-  return { jwtAuth: pass, apiKeyAuth: pass, adminOrApiKey: () => pass }
+  return { jwtAuth: pass, apiKeyAuth: pass, adminOrApiKey: () => pass, requireServiceRoleAuth: () => null }
 })
 vi.mock('../../supabase/functions/api/shared.ts', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -72,11 +82,16 @@ const rateLimited = () => Promise.reject(new Error('check-runs fetch 403'))
 const timedOut = () => Promise.reject(Object.assign(new Error('The signal has been aborted'), { name: 'TimeoutError' }))
 
 let app: Hono
+let cronApp: Hono
 beforeAll(async () => {
-  ;(globalThis as { Deno?: unknown }).Deno = { env: { get: () => undefined } }
+  ;(globalThis as { Deno?: { env: { get: () => undefined }; serve: () => void } }).Deno = {
+    env: { get: () => undefined },
+    serve: () => {},
+  }
   const { registerSdkUpgradeRoutes } = await import('../../supabase/functions/api/routes/sdk-upgrade.ts')
   app = new Hono()
   registerSdkUpgradeRoutes(app as never)
+  ;({ app: cronApp } = await import('../../supabase/functions/sdk-release-sync/index.ts'))
 })
 
 beforeEach(() => {
@@ -85,6 +100,7 @@ beforeEach(() => {
   gh.checks.mockReset().mockResolvedValue({ status: 'completed', conclusion: 'failure' })
   gh.deploy.mockReset().mockResolvedValue(null)
   gh.workflow.mockReset().mockResolvedValue(null)
+  vi.mocked(syncSdkReleaseJob).mockClear()
 })
 
 async function sync() {
@@ -124,6 +140,23 @@ describe('POST /v1/admin/projects/:pid/sdk-upgrade/:id/sync', () => {
     })
   })
 
+  it('reads checks on the live head through syncSdkReleaseJob, not the stored bump', async () => {
+    gh.pull.mockResolvedValue({ ...openPr, headSha: 'head-green' })
+    gh.checks.mockImplementation(async (_token: string, _ref: unknown, sha: string) => ({
+      status: 'completed',
+      conclusion: sha === 'head-green' ? 'success' : 'failure',
+    }))
+    const res = await sync()
+    expect(res.status).toBe(200)
+    expect(syncSdkReleaseJob).toHaveBeenCalledTimes(1)
+    expect(gh.checks).toHaveBeenCalledWith('gh-token', { owner: 'o', repo: 'r' }, 'head-green')
+    expect(gh.checks).not.toHaveBeenCalledWith('gh-token', { owner: 'o', repo: 'r' }, 'sha-1')
+    expect(db.table('sdk_upgrade_jobs')[0]).toMatchObject({
+      commit_sha: 'head-green',
+      check_run_conclusion: 'success',
+    })
+  })
+
   it('a failed workflow-run read (display only) does not fail the sync', async () => {
     gh.workflow.mockImplementation(() => Promise.reject(new Error('workflow runs fetch 403')))
     const res = await sync()
@@ -152,6 +185,34 @@ describe('syncSdkReleaseJob (shared with the sdk-release-sync cron)', () => {
     const result = await syncSdkReleaseJob(db as never, 'tok', { ...STORED, pr_url: 'nope' })
     expect(result).toMatchObject({ ok: false, code: 'INVALID_PR_URL' })
     expect(gh.pull).not.toHaveBeenCalled()
+  })
+
+  it('an empty head falls back to the stored sha instead of skipping checks', async () => {
+    gh.pull.mockResolvedValue({ ...openPr, headSha: '' })
+    const result = await syncSdkReleaseJob(db as never, 'tok', STORED)
+    expect(result.ok).toBe(true)
+    expect(gh.checks).toHaveBeenCalledWith('tok', { owner: 'o', repo: 'r' }, 'sha-1')
+  })
+})
+
+describe('POST /sdk-release-sync', () => {
+  it('reads checks on the live head through syncSdkReleaseJob, not the stored bump', async () => {
+    gh.pull.mockResolvedValue({ ...openPr, headSha: 'head-green' })
+    gh.checks.mockImplementation(async (_token: string, _ref: unknown, sha: string) => ({
+      status: 'completed',
+      conclusion: sha === 'head-green' ? 'success' : 'failure',
+    }))
+    const res = await cronApp.request('/sdk-release-sync', { method: 'POST' })
+    expect(res.status).toBe(200)
+    const json = await res.json() as { ok: boolean }
+    expect(json.ok).toBe(true)
+    expect(syncSdkReleaseJob).toHaveBeenCalledTimes(1)
+    expect(gh.checks).toHaveBeenCalledWith('gh-token', { owner: 'o', repo: 'r' }, 'head-green')
+    expect(gh.checks).not.toHaveBeenCalledWith('gh-token', { owner: 'o', repo: 'r' }, 'sha-1')
+    expect(db.table('sdk_upgrade_jobs')[0]).toMatchObject({
+      commit_sha: 'head-green',
+      check_run_conclusion: 'success',
+    })
   })
 })
 

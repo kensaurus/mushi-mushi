@@ -407,16 +407,18 @@ export function useSdkUpgrade(projectId: string) {
   )
 
   const syncStatus = useCallback(async (jobId: string, epoch = syncEpoch.current) => {
-    setState((s) => (s.jobId && s.jobId !== jobId ? s : { ...s, syncing: true }))
+    // No job in state yet: don't raise `syncing`. The success path used to
+    // return that state unchanged, so the spinner stayed up until a later load.
+    setState((s) => (s.jobId === jobId ? { ...s, syncing: true } : s))
     const res = await apiFetch<UpgradeCiPayload>(
       `/v1/admin/projects/${projectId}/sdk-upgrade/${jobId}/sync`,
       { method: 'POST' },
     )
     // A project switch bumps the epoch. Drop the previous app's conclusion.
     // A discarded request does not count toward the once-a-minute limit, so
-    // the next open of the card still re-reads CI.
+    // the next open of the card still re-reads CI. A failed read does not
+    // count either: `upgradeCiRefreshDue` tracks the last success.
     if (epoch !== syncEpoch.current || cancelled.current) return
-    if (typeof window !== 'undefined') markUpgradeCiRefresh(window.sessionStorage, projectId, jobId, Date.now())
     if (!res.ok || !res.data) {
       // Used to return silently, so "Check CI status" / "Refresh all" looked
       // like nothing happened (QA bug 260). The cockpit fields stay as they
@@ -425,6 +427,7 @@ export function useSdkUpgrade(projectId: string) {
       setState((s) => (s.jobId && s.jobId !== jobId ? s : { ...s, syncing: false, syncError: message }))
       return
     }
+    if (typeof window !== 'undefined') markUpgradeCiRefresh(window.sessionStorage, projectId, jobId, Date.now())
     const data = res.data
     const checkedAt = Date.now()
     ciSyncedJobId.current = jobId
@@ -433,7 +436,7 @@ export function useSdkUpgrade(projectId: string) {
       // The saved snapshot may not be committed yet. `mergeLoadedUpgradeJob`
       // applies `pendingCi` when it is.
       if (s.jobId && s.jobId !== jobId) return s
-      if (!s.jobId) return s
+      if (!s.jobId) return { ...s, syncing: false }
       const updated = { ...applyUpgradeCi(s, data), syncing: false, checkedAt }
       if (updated.status === 'completed' || updated.status === 'completed_no_pr') {
         persistTerminal(projectId, updated)
