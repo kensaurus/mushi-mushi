@@ -59,7 +59,7 @@ describe('sentryConnection (finding B25)', () => {
     expect(v.detail).toMatch(/^Connected — waiting for the first event/)
   })
 
-  it('with automatic import on, says it is importing instead of demanding a webhook', () => {
+  it('with automatic import on and a passing probe, is working without a webhook', () => {
     const v = sentryConnection({
       configured: true,
       probe: ok,
@@ -68,9 +68,59 @@ describe('sentryConnection (finding B25)', () => {
       autoImport: { enabled: true, lastRunAt: RECENT },
       now: NOW,
     })
-    // Still attention: the server banner counts only alerts, and the two must agree.
-    expect(v.state).toBe('attention')
+    expect(v.state).toBe('working')
     expect(v.detail).toMatch(/^Connected — importing new Sentry issues automatically \(last run/)
+    expect(v.detail).toMatch(/also add the receive URL/)
+  })
+
+  it('automatic import with no finished poll, or a poll older than three intervals, needs attention', () => {
+    const stalled = sentryConnection({
+      configured: true,
+      probe: ok,
+      latestDelivery: null,
+      deliveriesLoaded: true,
+      autoImport: { enabled: true, lastRunAt: null },
+      now: NOW,
+    })
+    expect(stalled.state).toBe('attention')
+    expect(stalled.detail).toMatch(/no check has finished yet/)
+
+    const oldRun = new Date(NOW - 46 * 60 * 1000).toISOString()
+    const stale = sentryConnection({
+      configured: true,
+      probe: ok,
+      latestDelivery: null,
+      deliveriesLoaded: true,
+      autoImport: { enabled: true, lastRunAt: oldRun },
+      now: NOW,
+    })
+    expect(stale.state).toBe('attention')
+    expect(stale.detail).toMatch(/past the 15-minute check/)
+
+    // Exactly three intervals is still the last good run, not yet older than it.
+    const onTime = sentryConnection({
+      configured: true,
+      probe: ok,
+      latestDelivery: null,
+      deliveriesLoaded: true,
+      autoImport: { enabled: true, lastRunAt: new Date(NOW - 45 * 60 * 1000).toISOString() },
+      now: NOW,
+    })
+    expect(onTime.state).toBe('working')
+  })
+
+  it('automatic import does not hide a rejected webhook', () => {
+    const v = sentryConnection({
+      configured: true,
+      probe: ok,
+      latestDelivery: { outcome: 'rejected', created_at: RECENT, error_message: 'Invalid signature' },
+      deliveriesLoaded: true,
+      autoImport: { enabled: true, lastRunAt: RECENT },
+      now: NOW,
+    })
+    expect(v.state).toBe('attention')
+    expect(v.detail).toMatch(/rejected/)
+    expect(v.detail).toMatch(/Invalid signature/)
   })
 
   it('an accepted event makes it working; a rejected one needs attention', () => {

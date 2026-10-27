@@ -70,6 +70,8 @@ export interface IntegrationsNavSlice {
   platformConnected: number
   platformTotal: number
   routingPaused: number
+  /** Same count the Integrations banner titles as "need attention". */
+  platformAttention?: number
 }
 
 export interface FeatureBoardNavSlice {
