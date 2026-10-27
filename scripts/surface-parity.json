@@ -364,6 +364,7 @@
     "GET /v1/admin/telegram/status": {"allow": "jwt-only"},
     "GET /v1/admin/tester-redemptions/withheld": {"allow": "jwt-only"},
     "GET /v1/admin/tester-submissions": {"allow": "jwt-only"},
+    "GET /v1/admin/pipeline/fix/:id": {"allow": "jwt-only", "note": "One fix's place on /pipeline (group, actions and the server's refusals) for report detail; mushi fixes tail and get_fix_timeline already show a fix's state."},
     "GET /v1/admin/workspace/nav-meta": {"allow": "jwt-only"},
     "GET /v1/admin/workspace/projects": {"allow": "jwt-only"},
     "GET /v1/cli/auth/device/status": {"allow": "jwt-only"},
@@ -662,6 +663,9 @@
     "PUT /v1/tester/me": {"allow": "jwt-only"}
   },
   "dynamicCalls": {
+    "apps/admin/src/components/reports/ReportPicker.tsx": {
+      "value ? null : reportPickerPath(debounced, limit, query)": "reportPickerPath builds GET /v1/admin/reports with search and sort parameters (mapped as GET /v1/admin/reports); null while a report is picked."
+    },
     "apps/admin/src/components/pdca-flow/PipelineActionPanel.tsx": {
       "judgeRunEndpoint": "A prop that defaults to '/v1/admin/judge/run' (mapped as POST /v1/admin/judge/run); the only caller, PdcaFlow, passes none."
     }

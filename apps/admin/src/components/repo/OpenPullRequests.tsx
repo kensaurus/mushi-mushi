@@ -76,7 +76,7 @@ export type OpenPrGroup = 'mergeable' | 'needs_fix' | 'hold' | 'waiting'
  * a PR Opus did not review merges on its checks alone, as before (ADR 0030).
  * @internal Exported for tests only.
  */
-export function openPrGroup(pr: Pick<OpenPullRequest, 'checks' | 'review' | 'draft'>): OpenPrGroup {
+function openPrGroup(pr: Pick<OpenPullRequest, 'checks' | 'review' | 'draft'>): OpenPrGroup {
   const state = pr.review?.state
   if (state === 'hold' || (pr.review?.verdict === 'hold' && state !== 'merge')) return 'hold'
   const checks = uxRequiredChecks(pr.checks)
