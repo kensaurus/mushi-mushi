@@ -13,7 +13,7 @@ import { LANE_NAME_RE, MODEL_RE, type LaneConfig, type LocalLane } from './proto
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
- * @internal Exported for tests. lane-v4's lanes.conf
+ * lane-v4's lanes.conf
  * (`<name> <profile|default> <clone> <projectId> <model> <mode>`) as worker
  * lanes. The profile column is dropped: one worker key serves every app.
  * Modes: queue and fix → fix (the queue now lives in Mushi), followups →
@@ -47,7 +47,7 @@ function systemdQuote(arg: string): string {
 }
 
 /**
- * @internal Exported for tests. The systemd user unit. The key is never in
+ * The systemd user unit. The key is never in
  * it: the daemon reads the keychain or its 0600 file.
  */
 export function systemdUnit(o: { node: string; cli: string; path: string; configPath?: string }): string {
@@ -74,7 +74,7 @@ WantedBy=default.target
 export const SYSTEMD_UNIT_NAME = 'mushi-worker.service'
 export const WINDOWS_TASK_NAME = 'Mushi worker'
 
-/** @internal Exported for tests. `schtasks` arguments for a task that starts the daemon at logon. */
+/** `schtasks` arguments for a task that starts the daemon at logon. */
 export function windowsTaskArgs(o: { node: string; cli: string; configPath?: string }): string[] {
   const run = [o.node, o.cli, 'work', '--daemon', ...(o.configPath ? ['--worker-config', o.configPath] : [])].map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' ')
   return ['/Create', '/TN', WINDOWS_TASK_NAME, '/SC', 'ONLOGON', '/RL', 'LIMITED', '/F', '/TR', run]

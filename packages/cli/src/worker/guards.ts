@@ -32,7 +32,7 @@ export interface MachineReadings {
 export const CURSOR_CONFIRM_GRACE_MS = 2 * 3600_000
 
 /**
- * @internal Exported for tests. Whether the host may start another agent,
+ * Whether the host may start another agent,
  * and if not, the lane-v4 state word saying why. Unknown readings never
  * block (a hung `gh` or a slow `cursor-agent status` is not an answer).
  */
@@ -51,14 +51,14 @@ export function hostGate(g: HostGuards, r: MachineReadings): { ok: true } | { ok
   return { ok: true }
 }
 
-/** @internal Exported for tests. True once a lane's stop date has passed (checked on the machine too). */
+/** True once a lane's stop date has passed (checked on the machine too). */
 export function pastStop(stopAt: string | null, nowMs: number): boolean {
   if (!stopAt) return false
   const t = Date.parse(stopAt)
   return Number.isFinite(t) && nowMs >= t
 }
 
-/** @internal Exported for tests. MemAvailable from /proc/meminfo, in whole GB, or null. */
+/** MemAvailable from /proc/meminfo, in whole GB, or null. */
 export function memAvailableGb(meminfo: string | null): number | null {
   const m = meminfo ? /^MemAvailable:\s+(\d+)\s+kB/m.exec(meminfo) : null
   return m ? Math.floor(Number(m[1]) / 1048576) : null

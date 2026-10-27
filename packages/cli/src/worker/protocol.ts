@@ -97,7 +97,7 @@ export function parseHostGuards(raw: unknown): Parsed<HostGuards> {
   return { ok: true, value: out as HostGuards }
 }
 
-export interface ServerLane {
+interface ServerLane {
   id: string
   name: string
   projectId: string
@@ -114,7 +114,7 @@ export interface HeartbeatAnswer {
 }
 
 /**
- * @internal Exported for tests. The heartbeat answer, checked field by
+ * The heartbeat answer, checked field by
  * field. A lane whose settings fail the closed parser is dropped (it stays
  * idle) and named in `bad`; unknown top-level fields are ignored, never used.
  */
@@ -165,7 +165,7 @@ export interface WorkerConfig {
 export const WORKER_CONFIG_PATH = join(process.env['XDG_CONFIG_HOME'] || join(homedir(), '.config'), 'mushi', 'worker.json')
 export const WORKER_KEY_PATH = join(process.env['XDG_CONFIG_HOME'] || join(homedir(), '.config'), 'mushi', 'worker.key')
 
-/** @internal Exported for tests. Check a worker config; two lanes on one clone are refused (their git work would collide). */
+/** Check a worker config; two lanes on one clone are refused (their git work would collide). */
 export function validateWorkerConfig(raw: unknown): WorkerConfig {
   const fail = (m: string): never => {
     throw new MushiCliError('E_INVALID_INPUT', `Worker config: ${m}`, 'mushi worker install --help')

@@ -68,7 +68,6 @@ function getEntryClass(): (new (service: string, account: string) => any) | null
 /**
  * Return true when the OS keychain path is enabled (default) and the
  * native module loaded without error.
- * @internal Exported for tests only.
  */
 export function isKeychainEnabled(): boolean {
   if (process.env['MUSHI_NO_KEYCHAIN']) return false

@@ -165,7 +165,7 @@ const INFRA_FAILURE =
   /\b(?:EACCES|EPERM|ENOSPC|ENOMEM|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|E_NETWORK|E_AUTH_MISSING)\b|permission denied|could not resolve host|unable to access|connection (?:lost|reset|refused|timed out)|rate limit|index\.lock|cannot lock ref|unable to create .*\.lock|no space left|out of memory|cannot allocate memory|killed|signal 9|timed out|resource temporarily unavailable/i
 
 /**
- * @internal Exported for tests only. Infra or code, as ADR 0033 splits CI: a
+ * Infra or code, as ADR 0033 splits CI: a
  * failure before the agent started, or one that names the machine (a
  * permission, the network, a lock, memory, a timeout), is infra; anything
  * else (a hook rejecting the change, a test the change broke) is code.
@@ -394,7 +394,7 @@ export function agentEnv(base: NodeJS.ProcessEnv, emptyDir: string): NodeJS.Proc
 
 // ─── process helpers ──────────────────────────────────────────────────────
 
-/** @internal Exported for the daemon. */
+/** Used by the local worker (worker/daemon.ts). */
 export interface Proc {
   code: number | null
   stdout: string
@@ -409,7 +409,7 @@ function stopChildren(): void {
   for (const child of liveChildren) child.kill('SIGTERM')
 }
 
-/** @internal Exported for the daemon. */
+/** Used by the local worker (worker/daemon.ts). */
 export function runProc(cmd: string, args: readonly string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number; maxBytes?: number; signal?: AbortSignal } = {}): Promise<Proc> {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, { cwd: opts.cwd, env: opts.env ?? process.env, stdio: ['ignore', 'pipe', 'pipe'], ...(opts.signal ? { signal: opts.signal } : {}) })
@@ -481,7 +481,7 @@ async function defaultBranch(repoDir: string): Promise<string> {
 
 // ─── API ──────────────────────────────────────────────────────────────────
 
-/** @internal Exported for the daemon. */
+/** Used by the local worker (worker/daemon.ts). */
 export type Api = <T>(path: string, init?: RequestInit) => Promise<T>
 
 /** @internal Exported for the daemon. */
@@ -493,7 +493,7 @@ export function apiFor(cfg: CliConfig): Api {
   }
 }
 
-/** @internal Exported for the daemon. */
+/** Used by the local worker (worker/daemon.ts). */
 export interface ReportDetail {
   id: string
   project_id?: string | null
@@ -572,7 +572,7 @@ async function earlierFor(api: Api, detail: ReportDetail): Promise<EarlierAttemp
 
 // ─── one report ───────────────────────────────────────────────────────────
 
-/** @internal Exported for the daemon. */
+/** Used by the local worker (worker/daemon.ts). */
 export interface WorkOptions {
   repoDir: string
   agent: 'cursor'
@@ -588,7 +588,7 @@ export interface WorkOptions {
 /** How one run ended, as the daemon reports it back (POST /v1/worker/claims/:id/done). */
 export type WorkResult = 'pr_opened' | 'no_change' | 'verdict' | 'timeout' | 'skipped' | 'stopped' | 'failed'
 
-/** @internal Exported for the daemon. */
+/** Used by the local worker (worker/daemon.ts). */
 export interface WorkOutcome {
   reportId: string
   outcome: string
@@ -598,7 +598,7 @@ export interface WorkOutcome {
   fixId?: string
 }
 
-/** @internal Exported for the daemon and tests. */
+/** One report, start to end: the run `mushi work` and the local worker (worker/daemon.ts) both make. */
 export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<WorkOutcome> {
   const base = await defaultBranch(o.repoDir)
   await git(o.repoDir, ['fetch', '--quiet', 'origin', base])
@@ -739,7 +739,7 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
   }
 }
 
-/** @internal Exported for the daemon. */
+/** Used by the local worker (worker/daemon.ts). */
 export interface LocalFollowupCandidate {
   fixId: string
   prUrl: string | null
@@ -764,7 +764,7 @@ interface LocalFollowupClaim {
  * prompt, the local agent changes the PR branch's working tree, and the CLI
  * commits and pushes, which re-queues the Opus review.
  */
-/** @internal Exported for the daemon. */
+/** Used by the local worker (worker/daemon.ts). */
 export async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOptions): Promise<{ fixId: string; outcome: string; prUrl?: string }> {
   const claim = await api<LocalFollowupClaim>(`/v1/admin/fixes/${f.fixId}/local-followup`, { method: 'POST', body: '{}' })
   // The round's outcome is recorded exactly once: by the run, or by a stop.
@@ -898,7 +898,7 @@ const CURSOR_STATUS_TIMEOUT_MS = 90_000
 const CURSOR_STATUS_RETRY_DELAY_MS = 5_000
 
 /**
- * @internal Exported for tests only. Ask `cursor-agent status` once more when
+ * Ask `cursor-agent status` once more when
  * the first answer is not "signed in". With 7 lanes at once on one machine
  * the old single 60 s check reported "not signed in" 5 times in one lane
  * while `cursor-agent status` said "Logged in" (Mushi report 7880503f).

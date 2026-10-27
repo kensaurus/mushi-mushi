@@ -403,7 +403,7 @@ export function readWorkerKey(cliKey: string | undefined): string {
   return assertWorkerKey(key, cliKey)
 }
 
-/** @internal Exported for tests. A Mushi key that is not the CLI's own. */
+/** A Mushi key that is not the CLI's own. */
 export function assertWorkerKey(key: string, cliKey: string | undefined): string {
   if (!/^mushi_[A-Za-z0-9_-]{8,128}$/.test(key)) throw new MushiCliError('E_INVALID_INPUT', 'The worker key does not look like a Mushi key (mushi_…).', 'mushi worker install')
   if (cliKey && key === cliKey) {
