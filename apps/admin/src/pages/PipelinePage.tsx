@@ -126,7 +126,15 @@ export function PipelinePage() {
   usePublishPageContext({
     route: '/pipeline',
     title: 'Pipeline',
-    summary: data ? `${stuckTotal} items stuck across ${stages.filter((s) => s.stuck > 0).length} stages` : page.error ? "The pipeline couldn't load" : 'Loading the pipeline',
+    // The Workers tab never loads the pipeline, so it must not say it is loading it.
+    summary:
+      tab === 'workers'
+        ? 'Local workers'
+        : data
+          ? `${stuckTotal} items stuck across ${stages.filter((s) => s.stuck > 0).length} stages`
+          : page.error
+            ? "The pipeline couldn't load"
+            : 'Loading the pipeline',
     questions: ['Why are my fixes not merging?', 'Which PRs are stuck, and why?', 'Why do my release trains keep failing?'],
   })
 
