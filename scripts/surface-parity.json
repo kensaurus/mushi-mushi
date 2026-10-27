@@ -346,7 +346,6 @@
     "GET /v1/admin/storage/usage": {"allow": "jwt-only"},
     "GET /v1/admin/support/info": {"allow": "jwt-only"},
     "GET /v1/admin/support/tickets": {"cli": ["feedback board"]},
-    "GET /v1/admin/support/tickets/summary": {"allow": "jwt-only"},
     "GET /v1/admin/synthetic": {"allow": "jwt-only"},
     "GET /v1/admin/telegram/status": {"allow": "jwt-only"},
     "GET /v1/admin/tester-redemptions/withheld": {"allow": "jwt-only"},
