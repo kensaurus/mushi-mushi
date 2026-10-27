@@ -579,7 +579,7 @@ Async UX & reliability:
 
 **Rules:** never import raw `motion.*` without `useMotionTransition` / variant helpers; never spring `height: auto`; prefer explicit property lists over `transition-all` (baseline grep: 0 hits in `apps/admin/src` as of 2026-06).
 - `SettingsPage` tablist uses an absolutely-positioned underline that translates between active tabs in 200ms via `useLayoutEffect` measurement, instead of jumping per-button border styles — full a11y preserved (`role="tab"`, `aria-selected`, `aria-controls`, focus-visible ring)
-- Pre-setup dashboard gate: when any `setup.checklist` item is incomplete, `DashboardPage` renders only its `<NextStep variant="card">` + `HeroIntro` with a "Show full dashboard" reveal, so brand-new admins aren't drowned by 9 KPI tiles before they've even sent a test report
+- Pre-setup Home: while a required setup step is open, `DashboardPage` leads with the `SetupChecklist`, which marks the next step "Do this next" with its fix
 - **Layout-shaped skeletons** (`src/components/skeletons/`): `DashboardSkeleton`, `TableSkeleton`, `DetailSkeleton`, `PanelSkeleton`, **`GraphSkeleton`**, **`HealthSkeleton`**, **`OnboardingSkeleton`** — every page now first-paints into the shape it'll fill, not into a centered spinner
 - **Hero illustrations** (`src/components/illustrations/HeroIllustrations.tsx`,) — lightweight 64×64 SVG glyphs (`HeroBugFunnel`, `HeroFixWrench`, `HeroSearch`, `HeroPlugIntegration`) pinned to `currentColor` so they inherit theme. Used by `EmptyState` on Projects, Audit, Notifications, and Onboarding to give beginner-mode pages a visual anchor instead of a blank "no data yet" wall
 

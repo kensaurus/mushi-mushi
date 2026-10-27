@@ -29,7 +29,7 @@ import { PageStatus, type PageStatusTone } from '../components/ui/page-status'
 import { IconShieldCheck } from '../components/icons'
 import { UpgradePill } from '../components/billing/UpgradeNudge'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { CHECK_SUB_GROUPS, type CheckSubGroupId } from '../lib/navRegistry'
+import { CHECK_GROUPS, CHECK_SUB_GROUPS, type CheckSubGroupId } from '../lib/navRegistry'
 import { buildOperatorNav, type BuiltNavItem } from '../lib/buildNav'
 import { navSlicesForPaths } from '../lib/navBadges'
 import { useEntitlements } from '../lib/useEntitlements'
@@ -39,15 +39,6 @@ import { normalizeNavSlices, type WorkspaceNavMetaResponse } from '../lib/worksp
 import { pluralizeWithCount } from '../lib/format'
 import type { RecipeElementSummary, RecipeResponse } from '../lib/recipeTypes'
 import { buildCheckCardViews, type CheckCardState, type CheckCardView, type ObservedElement } from '../lib/checkCardStatus'
-
-/** Every check, in registry order within its group. Every path must exist in NAV_REGISTRY. */
-const CHECK_GROUPS: ReadonlyArray<{ id: CheckSubGroupId; paths: readonly string[] }> = [
-  {
-    id: 'system-health',
-    paths: ['/qa-coverage', '/health', '/ci', '/fullstack-audit', '/inventory', '/recipe', '/design', '/content'],
-  },
-  { id: 'quality-gates', paths: ['/judge', '/lessons', '/prompt-lab'] },
-]
 
 const ALL_PATHS = CHECK_GROUPS.flatMap((g) => g.paths)
 const GROUP_OF: ReadonlyMap<string, CheckSubGroupId> = new Map(CHECK_GROUPS.flatMap((g) => g.paths.map((p) => [p, g.id] as const)))
