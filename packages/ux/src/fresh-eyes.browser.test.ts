@@ -23,7 +23,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { runFreshEyes, type FreshAsk } from './fresh-eyes.js'
 
-const IDENTITY = { email: 'fe-test@synthetic.example', password: 'Pw-0123456789-xyz' }
+const IDENTITY = { email: 'fe-test@synthetic.example', password: 'TEST-FIXTURE-NOT-A-REAL-SECRET' }
 
 interface Fixture {
   url: string

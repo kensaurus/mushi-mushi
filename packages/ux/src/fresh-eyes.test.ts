@@ -30,7 +30,7 @@ import {
   type FreshEyesStep,
 } from './fresh-eyes.js'
 
-const identity = { email: 'fe-1a2b3c@fresh-eyes.mushi.invalid', password: 'S3cret-pass-XYZ-123', name: 'Fresh Eyes 1' }
+const identity = { email: 'fe-1a2b3c@fresh-eyes.mushi.invalid', password: 'TEST-FIXTURE-NOT-A-REAL-SECRET', name: 'Fresh Eyes 1' }
 
 describe('parseFreshAction', () => {
   it('accepts explore actions, stuck, and a feeling from the closed list', () => {
