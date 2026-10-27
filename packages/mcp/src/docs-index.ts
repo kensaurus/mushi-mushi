@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 222 pages, generated from llms.txt. */
+/** 223 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -1472,6 +1472,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["quickstart", "lovable-bolt", "lovable", "bolt", "no", "terminal"],
     headings: ["Get your script tag", "Paste it into Lovable or Bolt", "Publish and send a test report", "Fix a real bug", "Read reports inside Lovable", "Where the key goes, and is it safe?", "Change how the button looks", "If nothing shows up"],
     excerpt: "Add Mushi to a Lovable or Bolt app without a terminal. Paste one script tag through your prompt, then read each bug's plain-English cause and fix prompt.",
+  },
+  {
+    title: "Ask Lovable why it broke",
+    url: docUrl("/quickstart/lovable-mcp"),
+    route: "/quickstart/lovable-mcp",
+    markdown: "quickstart/lovable-mcp.md",
+    keywords: ["quickstart", "lovable-mcp", "lovable", "mcp", "ask", "broke"],
+    headings: ["Add Mushi to Lovable", "Open the custom MCP form", "Fill in the form", "Sign in and approve", "Ask Lovable", "Claude Code: one paste", "Cursor: one click", "Bolt"],
+    excerpt: "Add Mushi to Lovable as a custom MCP connector in three steps, then ask what your users reported. Lovable reads the plain-English diagnosis and the fix prompt, and fixes it…",
   },
   {
     title: "MCP server for bug fixing in Cursor & Claude Code",
