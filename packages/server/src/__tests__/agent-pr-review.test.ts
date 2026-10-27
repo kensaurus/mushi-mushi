@@ -14,9 +14,9 @@
  *            - one review per project per tick;
  *            - backfill queues only open cloud-agent and fix-worker PRs with
  *              no review;
- *            - readying (ADR 0047): a cloud PR on merge / fix_first, a
- *              fix-worker draft only on merge at the reviewed head and never
- *              one its model flagged; with no review possible, a never-reviewed
+ *            - readying (ADR 0047): a draft only on merge at the reviewed
+ *              head (fix_first and hold stay drafts), never a fix-worker
+ *              draft its model flagged; with no review possible, a never-reviewed
  *              fix-worker draft falls back to its model's own check.
  */
 
@@ -424,11 +424,13 @@ describe('readying the PR so host CI runs (drafts skip CI)', () => {
     expect(eventLabels(queries)).toContain(READY_AFTER_REVIEW_LABEL)
   })
 
-  it('a cloud agent\'s "fix first" draft is still readied (its follow-up works with CI in view)', async () => {
-    const { db } = scripted()
+  it('a cloud agent\'s "fix first" draft stays a draft: its follow-up replaces the head (ADR 0047)', async () => {
+    const { db, queries } = scripted()
     const d = deps({ ...verdict(FIX_FIRST), fetchPr: async () => PR })
-    await runAgentPrReview(db, {}, d)
-    expect(d.calls.ready).toEqual([194])
+    const summary = await runAgentPrReview(db, {}, d)
+    expect(summary.results[0]).toMatchObject({ outcome: 'completed', verdict: 'fix_first' })
+    expect(d.calls.ready).toEqual([])
+    expect(eventLabels(queries)).not.toContain(READY_AFTER_REVIEW_LABEL)
   })
 
   it('leaves a "hold" PR a draft', async () => {
@@ -498,7 +500,8 @@ describe('readying the PR so host CI runs (drafts skip CI)', () => {
   })
 
   it('readiesOnVerdict: the rule in one place', () => {
-    expect(readiesOnVerdict({ agent: 'cursor_cloud' }, 'fix_first')).toBe(true)
+    expect(readiesOnVerdict({ agent: 'cursor_cloud' }, 'merge')).toBe(true)
+    expect(readiesOnVerdict({ agent: 'cursor_cloud' }, 'fix_first')).toBe(false)
     expect(readiesOnVerdict({ agent: 'github_cloud_agent' }, 'hold')).toBe(false)
     expect(readiesOnVerdict({ agent: 'llm', review_passed: null }, 'merge')).toBe(true)
     expect(readiesOnVerdict({ agent: 'rest_fix_worker', review_passed: true }, 'fix_first')).toBe(false)

@@ -36,11 +36,12 @@
  *   A skipped or failed run keeps the last completed verdict, so a hold stays
  *   a hold. A model error retries after 10 min × tries.
  *
- * Readying (host repos skip CI on drafts): a cloud agent's PR is marked
- * ready on "merge" or "fix_first". fix-worker opens every PR as a draft and
- * queues this review (ADR 0047); its PR is marked ready only on "merge", only
- * when the model's own check passed, and only while the reviewed commit is
- * still the PR's head. When no review can run for it (review off, no
+ * Readying (host repos skip CI on drafts, ADR 0047): a draft PR is marked
+ * ready only on "merge", and only while the reviewed commit is still the PR's
+ * head. "fix_first" leaves it a draft: its follow-up (ADR 0032) pushes a new
+ * commit, so CI on this one would be spent on a head nobody merges.
+ * fix-worker opens every PR as a draft and queues this review; its PR is
+ * also never readied when the model's own check flagged the fix. When no review can run for it (review off, no
  * Anthropic key, AI budget used up) and it has no verdict yet, the
  * self-check alone decides, as before ADR 0047.
  *
@@ -476,13 +477,15 @@ export const READY_WITHOUT_REVIEW_LABEL = 'Marked ready without an Opus review; 
 export const NO_REVIEW_FALLBACK_REASONS: ReadonlySet<ReviewSkipReason> = new Set(['review_off', 'no_anthropic_key', 'llm_budget_exceeded'])
 
 /**
- * Whether a verdict readies the PR. Cloud agents: "merge" or "fix_first" (a
- * follow-up agent works on it with CI in view). fix-worker (ADR 0047): only
- * "merge", and never a fix its model flagged.
+ * Whether a verdict readies the PR (ADR 0047): only "merge". A "fix_first"
+ * head is about to be replaced by its follow-up's push, and nothing reads CI
+ * on it (the findings follow-up sends findings, not CI; CI repair and
+ * fix-verifier start from a "merge" review). fix-worker: never a fix its
+ * model flagged either.
  */
 export function readiesOnVerdict(attempt: { agent: string; review_passed?: boolean | null }, verdict: ReviewVerdict): boolean {
-  if (FIX_WORKER_AGENTS.has(attempt.agent)) return verdict === 'merge' && attempt.review_passed !== false
-  return verdict === 'merge' || verdict === 'fix_first'
+  if (verdict !== 'merge') return false
+  return !FIX_WORKER_AGENTS.has(attempt.agent) || attempt.review_passed !== false
 }
 
 /**
@@ -790,8 +793,8 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
 
   // Host repos skip CI on draft PRs and run it on ready_for_review (glot.it,
   // 2026-10-20: 131 queued runs on one runner). A PR the review would let
-  // through is marked ready so its CI runs; a hold stays a draft. A
-  // fix-worker PR (ADR 0047) only on "merge", and never one the model flagged.
+  // through is marked ready so its CI runs; fix_first and hold stay drafts
+  // (ADR 0047). A fix-worker PR the model flagged stays a draft even on merge.
   if (readiesOnVerdict(attempt, review.verdict)) {
     try {
       // Only the reviewed commit: a push during the review re-queued it, and
