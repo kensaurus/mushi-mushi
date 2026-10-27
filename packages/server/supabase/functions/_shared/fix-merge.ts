@@ -386,7 +386,7 @@ export async function finalizeFixMerge(
 export async function finalizeFixClosedUnmerged(
   db: Db,
   attempt: FixAttemptMergeRow,
-  meta: { prNumber?: number | null; closedAt?: string | null; source: 'ci_sync' | 'webhook' },
+  meta: { prNumber?: number | null; closedAt?: string | null; source: 'ci_sync' | 'webhook' | 'console' },
 ): Promise<{ justClosed: boolean; reportStatus: string | null }> {
   const { data: closedRow, error: closeErr } = await db
     .from('fix_attempts')

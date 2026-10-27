@@ -1,14 +1,18 @@
 'use client'
 
 /**
- * Cinematic landing hero — H1 + lead + primary CTAs, Motion stamp / line stagger, lazy R3F ink.
+ * Cinematic landing hero — H1, one-line lead, one-click start (console, Cursor, npx), Motion stamp / line stagger, lazy R3F ink.
  * No scroll timelines (docs/MOTION.md).
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { motion } from 'motion/react'
-import { LANDING_HERO, LANDING_HERO_CTAS } from '@/lib/landing-copy'
+import { MUSHI_CANONICAL_URLS } from '@mushi-mushi/brand'
+import { ConnectClientIcon } from '@mushi-mushi/marketing-ui'
+import { buildOAuthInstall } from '@mushi-mushi/mcp/clients'
+import { LANDING_HERO, LANDING_HERO_START } from '@/lib/landing-copy'
+import { CopyCommand } from '../CopyCommand'
 import { usePrefersReducedMotion } from './use-prefers-reduced-motion'
 import { landingStampVariants } from './landing-stagger'
 
@@ -36,6 +40,10 @@ function useShowDesktopCanvas(reducedMotion: boolean): boolean {
 
   return show
 }
+
+// URL-only install, so Cursor runs the Mushi sign-in on first use (no key).
+const cursorInstall = buildOAuthInstall('cursor', { mcpOAuthUrl: MUSHI_CANONICAL_URLS.hostedMcp })
+const CURSOR_DEEPLINK = cursorInstall.kind === 'deeplink' ? cursorInstall.url : '/connect'
 
 const STAMP_EASE = [0.22, 1, 0.36, 1] as const
 
@@ -102,38 +110,47 @@ export function CinematicEditorialHero({
             </motion.p>
           )
         ) : null}
-        <p className="landing-hero-proof">{LANDING_HERO.proofLine}</p>
-
-        <div className="landing-hero-ctas" role="group" aria-label="Get started">
-          {LANDING_HERO_CTAS.map((cta) => {
-            const className = `landing-hero-cta landing-hero-cta--${cta.kind}`
-            // `data-mushi-cta` is what <MushiSiteAnalytics /> listens for.
-            const tracking = { 'data-mushi-cta': cta.id, 'data-mushi-location': 'hero' } as const
-            if (cta.external) {
-              // Our own console (signup) keeps the tab; third-party links
-              // open a new one so the visitor never loses the landing page.
-              const newTab = cta.sameTab !== true
-              return (
-                <a
-                  key={cta.id}
-                  className={className}
-                  href={cta.href}
-                  {...(newTab ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                  {...tracking}
-                >
-                  {cta.label}
-                </a>
-              )
-            }
-            return (
-              <Link key={cta.id} className={className} href={cta.href} {...tracking}>
-                {cta.label}
-              </Link>
-            )
-          })}
+        <div className="landing-hero-start" role="group" aria-label="Get started">
+          <div className="landing-hero-ctas">
+            <a
+              className="landing-hero-cta landing-hero-cta--primary"
+              href={LANDING_HERO_START.console.href}
+              data-mushi-cta={LANDING_HERO_START.console.id}
+              data-mushi-location="hero"
+            >
+              {LANDING_HERO_START.console.label}
+            </a>
+            <a
+              className="landing-hero-cta landing-hero-cta--secondary"
+              href={CURSOR_DEEPLINK}
+              data-mushi-cta={LANDING_HERO_START.cursor.id}
+              data-mushi-location="hero"
+            >
+              <span className="landing-hero-cta__icon" aria-hidden="true">
+                <ConnectClientIcon id="cursor" size={16} />
+              </span>
+              {LANDING_HERO_START.cursor.label}
+            </a>
+          </div>
+          <div className="landing-hero-npx">
+            <CopyCommand
+              label={LANDING_HERO_START.npx.label}
+              cmd={LANDING_HERO_START.npx.cmd}
+              ctaId={LANDING_HERO_START.npx.id}
+              location="hero"
+            />
+          </div>
         </div>
         <p className="landing-hero-reassure">
           {LANDING_HERO.reassure}{' '}
+          <Link
+            href={LANDING_HERO_START.more.href}
+            data-mushi-cta={LANDING_HERO_START.more.id}
+            data-mushi-location="hero"
+          >
+            {LANDING_HERO_START.more.label}
+          </Link>
+          {' · '}
           <a
             href={LANDING_HERO.star.href}
             target="_blank"

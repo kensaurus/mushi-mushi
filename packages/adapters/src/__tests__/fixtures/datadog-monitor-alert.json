@@ -1,0 +1,11 @@
+{
+  "id": "7385529011453118021",
+  "alert_id": "142683914",
+  "title": "[Triggered on {service:checkout-api}] Error rate above 5% on checkout-api",
+  "body": "%%%\nError rate is 7.82% (threshold 5%) for service:checkout-api env:prod over the last 5m.\n\n@webhook-mushi\n%%%",
+  "link": "https://app.datadoghq.com/monitors/142683914?group=service%3Acheckout-api",
+  "priority": "P2",
+  "alert_status": "Triggered",
+  "alert_type": "error",
+  "tags": "env:prod,service:checkout-api,team:payments,monitor"
+}

@@ -92,6 +92,36 @@ export async function postReporterReply(
 }
 
 /**
+ * A team note on a report: the console's "Triage note" (internal, never shown
+ * to the reporter, no reporter notification). CLI `--note` and MCP notes and
+ * reasons land here, attributed to the project owner as API-key replies are,
+ * so a decision made outside the console is read where the console's are.
+ * They used to go to a `report_notes` table no migration ever created, with
+ * the error swallowed (2026-10-26).
+ */
+export async function postTeamNote(
+  db: Db,
+  params: { projectId: string; reportId: string; body: string; authorName: string },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const body = params.body.trim()
+  if (!body) return { ok: false, error: 'empty note' }
+  const { data: project, error: projectErr } = await db.from('projects').select('owner_id').eq('id', params.projectId).maybeSingle()
+  if (projectErr) return { ok: false, error: projectErr.message }
+  if (!project?.owner_id) return { ok: false, error: 'project has no owner_id' }
+  const { error } = await db.from('report_comments').insert({
+    report_id: params.reportId,
+    project_id: params.projectId,
+    author_kind: 'admin',
+    author_user_id: project.owner_id,
+    author_name: params.authorName,
+    body: body.slice(0, 4000),
+    visible_to_reporter: false,
+    created_at: new Date().toISOString(),
+  })
+  return error ? { ok: false, error: error.message } : { ok: true }
+}
+
+/**
  * "Ask for more info": post the question as a visible comment and set
  * `awaiting_reporter_at` in one transaction (mushi_request_reporter_info).
  * The comment trigger writes exactly one `info_requested` row for it; the

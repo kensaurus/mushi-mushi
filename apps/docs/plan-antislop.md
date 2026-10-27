@@ -40,7 +40,6 @@ scroll**, component-scoped Motion only — compliant with
 | Component | Role |
 |-----------|------|
 | `CinematicEditorialHero` | Brand-first hero |
-| `ProofPinSection` | 60-second install proof terminal (**name only** — `LandingStagger`, not a GSAP/ScrollTrigger pin) |
 | `ComparisonScrub` | Wrapper around the restored 8-row `ComparisonTable` |
 | `DiagnosisScrollStage` | Diagnosis narrative stage |
 | `ClosingCta` | Closing CTA |
