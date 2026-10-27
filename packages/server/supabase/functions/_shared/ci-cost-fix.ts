@@ -41,6 +41,7 @@
 
 import { isMap, isScalar, isSeq, parseDocument, Scalar, YAMLMap, YAMLSeq, type Document, type Pair } from 'npm:yaml@2'
 import { CI_COST_FIX_KINDS, type CiCostFixKind } from './ci-overview-types.ts'
+import { DOCS_ONLY_PATHS } from './ci-jobs.ts'
 
 export { CI_COST_FIX_KINDS, type CiCostFixKind }
 
@@ -69,12 +70,11 @@ export interface CostFixOptions {
 /** GitHub's `pull_request` activity types when a workflow names none. */
 export const DEFAULT_PR_TYPES = ['opened', 'synchronize', 'reopened'] as const
 /**
- * The docs-only paths `ignore_docs_paths` adds: the same files the CI cost
- * view counts as a docs-only change (`DOCS_ONLY_PATHS`, ci-bill's
- * `_shared/ci-jobs.ts`). The ci-advisor rule `missing_path_filter` imports
- * this list, so advice, classifier and fix agree.
+ * The docs-only paths `ignore_docs_paths` adds: exactly the files the CI cost
+ * view counts as a docs-only change (`DOCS_ONLY_PATHS` in `_shared/ci-jobs.ts`,
+ * the one list), so the advice, the classifier and the fix cannot drift apart.
  */
-export const DOCS_PATHS_IGNORE = ['**/*.md', '**/*.mdx', 'docs/**', 'LICENSE*', '.github/ISSUE_TEMPLATE/**'] as const
+export const DOCS_PATHS_IGNORE = DOCS_ONLY_PATHS
 export const DRAFT_CONDITION = 'github.event.pull_request.draft != true'
 /** The step a required job fails at on a draft (exact name: Mushi's CI readers match it). */
 export const DRAFT_GUARD_STEP_NAME = 'Draft PRs run no CI'
