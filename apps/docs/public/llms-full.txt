@@ -17310,8 +17310,11 @@ Mushi reads the bill once a day for each GitHub account or organization your rep
 If the token can't read the bill, the card says so and shows how to connect one. Instead of a token, you can upload the bill from a machine where `gh` is signed in as the paying account:
 
 ```bash
+gh auth refresh -s user   # once: a gh login has no billing access by default
 mushi runner bill --push
 ```
+
+A classic token, which is what `gh auth login` makes, reads a personal account's bill only with the `user` scope. Without it, GitHub answers 404 and `mushi runner bill` tells you to run the refresh above.
 
 `mushi runner bill` without `--push` prints the same bill in the terminal. Your token stays on your machine.
 

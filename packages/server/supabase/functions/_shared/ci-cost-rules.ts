@@ -34,6 +34,7 @@ import type { CiCostAutofix, CiOverviewAdvice } from './ci-overview-types.ts'
 import type { RepoVisibility } from './ci-compare-types.ts'
 import { isMushiAgentBranch } from './ci-billing.ts'
 import { monthUsd, usdForMinutes, type CostFactEvent, type CostFacts } from './ci-cost-facts.ts'
+import { predictableRefusals } from './ci-cost-fix.ts'
 
 export interface CostRulesInput {
   now: Date
@@ -82,6 +83,10 @@ export interface ReadWorkflow {
   triggerConfig: (t: string) => Obj | null
   crons: string[]
   jobs: ReadJob[]
+  /** Why ci-cost-fix-worker would refuse concurrency or a weekly cron here (it looks like a deploy), else null. */
+  deploy: string | null
+  /** A job that looks like a required check, so the worker refuses the docs filter; else null. */
+  requiredLooking: string | null
 }
 
 function triggersOf(wf: Obj): { names: string[]; config: (t: string) => Obj | null } {
@@ -113,7 +118,8 @@ export function readWorkflow(w: CostRulesInput['workflows'][number]): ReadWorkfl
       : []
     jobs.push({ id, name: typeof j.name === 'string' ? j.name : null, steps })
   }
-  return { projectId: w.projectId, repo: w.repo, path: w.path, name: typeof doc.name === 'string' ? doc.name : null, triggers: t.names, triggerConfig: t.config, crons, jobs }
+  const refusals = predictableRefusals(w.text, w.path)
+  return { projectId: w.projectId, repo: w.repo, path: w.path, name: typeof doc.name === 'string' ? doc.name : null, triggers: t.names, triggerConfig: t.config, crons, jobs, ...refusals }
 }
 
 /** GitHub names a run after the workflow's `name:`, or its path when there is none. */
@@ -246,10 +252,13 @@ export function adviseCostRules(input: CostRulesInput): CiOverviewAdvice[] {
       title: `${w.path} runs on a schedule ${Math.round(weekly)} times a week`,
       detail: 'A scheduled workflow runs whether or not anything changed. Checks like audits, freshness and link scans rarely need more than a weekly run.',
       evidence: `${w.repo}/${w.path}: ${w.crons.map((c) => `cron "${c}"`).join(', ')} is about ${Math.round(weekly)} runs a week; Mushi recorded ${runs} scheduled runs that billed ${mins(billed)} in ${days} days.`,
-      fix: "Run it once a week: keep its minute and hour and name one weekday, e.g. `'30 4 * * 1'` for 04:30 UTC on Mondays. Keep `workflow_dispatch:` so you can still run it by hand. Leave release and rollout schedules as they are.",
+      fix: w.deploy
+        ? `This workflow looks like it deploys or releases (${w.deploy}), so Mushi offers no one-click change: some daily schedules drive staged rollouts on purpose. If this one does not, run it once a week by hand: keep its minute and hour and name one weekday, e.g. \`'30 4 * * 1'\`.`
+        : "Run it once a week: keep its minute and hour and name one weekday, e.g. `'30 4 * * 1'` for 04:30 UTC on Mondays. Keep `workflow_dispatch:` so you can still run it by hand. Leave release and rollout schedules as they are.",
       repo: w.repo,
       monthSavingUsd: saving,
-      autofix: autofix('weekly_cron', w),
+      // ci-cost-fix-worker refuses a weekly cron on a deploy or release workflow.
+      autofix: w.deploy ? null : autofix('weekly_cron', w),
     })
   }
 
@@ -279,8 +288,9 @@ export function adviseCostRules(input: CostRulesInput): CiOverviewAdvice[] {
         fix: "Under `pull_request:` add\npaths-ignore:\n  - '**/*.md'\n  - '**/*.mdx'\n  - 'docs/**'\n  - 'LICENSE*'\n  - '.github/ISSUE_TEMPLATE/**'\nIf a required check must still report, give the skipped case a tiny job instead.",
         repo: w.repo,
         monthSavingUsd: saving,
-        // GitHub refuses paths and paths-ignore on one event, and the fix filters push too.
-        autofix: pushHasPaths(w) ? null : autofix('ignore_docs_paths', w),
+        // GitHub refuses paths and paths-ignore on one event, and the fix filters push too;
+        // the worker also refuses a workflow whose job looks like a required check.
+        autofix: pushHasPaths(w) || w.requiredLooking ? null : autofix('ignore_docs_paths', w),
       })
     }
   }

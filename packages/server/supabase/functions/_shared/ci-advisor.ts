@@ -49,6 +49,7 @@ import type { CiCompareExplain, CiCompareMachine, CiCompareRow, RepoVisibility }
 import type { ParsedWorkflow } from './ci-runs-on.ts'
 import type { CostFacts } from './ci-cost-facts.ts'
 import { adviseCostRules, type CostRulesInput } from './ci-cost-rules.ts'
+import { predictableRefusals } from './ci-cost-fix.ts'
 
 export interface AdvisorJob {
   repo: string
@@ -173,7 +174,8 @@ function workflowAdvice(workflows: AdvisorInput['workflows']): CiOverviewAdvice[
         evidence: `${w.repo}/${w.path}: ${noGroup ? 'no concurrency group' : 'a concurrency group without cancel-in-progress'}.`,
         fix: "Add at the top of the workflow:\nconcurrency:\n  group: ${{ github.workflow }}-${{ github.ref }}\n  cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
         repo: w.repo,
-        autofix: noGroup && w.projectId ? { kind: 'add_concurrency', projectId: w.projectId, repo: w.repo, workflowPath: w.path } : null,
+        // ci-cost-fix-worker refuses concurrency on a deploy or release workflow.
+        autofix: noGroup && w.projectId && !predictableRefusals(w.text, w.path).deploy ? { kind: 'add_concurrency', projectId: w.projectId, repo: w.repo, workflowPath: w.path } : null,
       })
     }
 

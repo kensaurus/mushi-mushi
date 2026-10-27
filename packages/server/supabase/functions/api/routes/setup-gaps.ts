@@ -165,7 +165,7 @@ async function probeRepo(db: Db, projectId: string, repo: GithubRepoRef, install
   }
   let abilities: TokenAbilities
   if (reachable(head.status) === false) {
-    abilities = { contents: 'no', pullRequests: 'no', actions: 'no', secrets: 'no' }
+    abilities = { contents: 'no', pullRequests: 'no', actions: 'no', secrets: 'no', workflows: 'no' }
   } else {
     const [contents, pulls, runs, secrets] = await Promise.all([
       deps.githubGet(token, `${path}/commits?per_page=1`),
