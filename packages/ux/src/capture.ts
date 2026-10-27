@@ -9,7 +9,7 @@
  */
 
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
-import { installGuard, isGuardNoise, type AllowRule, type GuardLog } from './guard.js'
+import { installGuard, isGuardNoise, type AllowRule, type GuardLog, type GuardPolicy } from './guard.js'
 import { ignoreList, ignoreStyle } from './ignore.js'
 import { isFrameworkNoise, runProbes } from './probes.js'
 import type { ProbeResult, ReplayStep, Surface, Viewport } from './types.js'
@@ -52,6 +52,8 @@ export interface SessionOptions {
   allow?: readonly AllowRule[]
   /** Extra selectors to ignore on top of DEFAULT_IGNORE. */
   ignore?: readonly string[]
+  /** Write policy (guard.ts). Default read-only; fresh-eyes runs may write to the app's own origins (ADR 0051). */
+  policy?: GuardPolicy
 }
 
 /** Sums layout shifts not caused by input, from page start. */
@@ -86,7 +88,7 @@ export async function openSession(opts: SessionOptions = {}): Promise<BrowserSes
     context = await browser.newContext({ serviceWorkers: 'block' })
     closeBrowser = () => browser.close()
   }
-  const guard = await installGuard(context, opts.allow ?? [])
+  const guard = await installGuard(context, opts.allow ?? [], { blocked: [] }, opts.policy)
   await context.addInitScript({ content: CLS_SCRIPT })
   // The state every capture starts from; warmUp replaces it with a visited app.
   let seed = await context.storageState({ indexedDB: true })
@@ -104,7 +106,7 @@ export async function openSession(opts: SessionOptions = {}): Promise<BrowserSes
   }
   const freshContext = async () => {
     const fresh = await browser.newContext({ serviceWorkers: 'block', storageState: seed })
-    await installGuard(fresh, opts.allow ?? [], guard)
+    await installGuard(fresh, opts.allow ?? [], guard, opts.policy)
     await fresh.addInitScript({ content: CLS_SCRIPT })
     return fresh
   }

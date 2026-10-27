@@ -155,7 +155,8 @@ export function explorePrompt(input: { charter: string; snapshot: string; done: 
   ].join('\n')
 }
 
-async function snapshotOf(page: Page): Promise<string> {
+/** The page's accessibility snapshot (text when it cannot be read), shared with fresh-eyes. */
+export async function snapshotOf(page: Page): Promise<string> {
   try {
     return await page.locator('body').ariaSnapshot({ timeout: 5000 })
   } catch {
@@ -191,18 +192,31 @@ async function target(page: Page, role: string, name: string) {
   return page.getByRole(role as AriaRole, { name }).first()
 }
 
-/** Run one action. Returns a reason when it was refused or could not run. */
-async function perform(page: Page, a: ExploreAction): Promise<string | null> {
+/**
+ * Run one action. Returns a reason when it was refused or could not run.
+ * `refuse` decides which labels are never clicked (fresh-eyes may submit and
+ * send, discovery may not); `fillValue` turns a typed value into what is
+ * actually typed (fresh-eyes substitutes its synthetic identity).
+ */
+export async function perform(
+  page: Page,
+  a: ExploreAction,
+  refuse: (label: string) => boolean = isDestructiveLabel,
+  fillValue: (value: string) => string | null = (v) => v,
+): Promise<string | null> {
   try {
     switch (a.action) {
       case 'click': {
-        if (isDestructiveLabel(a.name)) return `refused: "${a.name}" reads as destructive`
+        if (refuse(a.name)) return `refused: "${a.name}" reads as destructive`
         await (await target(page, a.role, a.name)).click({ timeout: 5000 })
         break
       }
-      case 'fill':
-        await (await target(page, a.role, a.name)).fill(a.value, { timeout: 5000 })
+      case 'fill': {
+        const value = fillValue(a.value)
+        if (value === null) return 'refused: no test account to type'
+        await (await target(page, a.role, a.name)).fill(value, { timeout: 5000 })
         break
+      }
       case 'select':
         await (await target(page, a.role, a.name)).selectOption({ label: a.value }, { timeout: 5000 })
         break
@@ -235,7 +249,7 @@ async function perform(page: Page, a: ExploreAction): Promise<string | null> {
 }
 
 /** Listeners that turn what the page does into signals. */
-function watch(page: Page, origin: string, apiHosts: readonly string[]): { take(): Signal[] } {
+export function watch(page: Page, origin: string, apiHosts: readonly string[]): { take(): Signal[] } {
   let signals: Signal[] = []
   page.on('console', (m) => {
     if (m.type() !== 'error') return
@@ -270,7 +284,7 @@ export function onSite(url: string, base: URL): boolean {
   }
 }
 
-async function blank(page: Page): Promise<Signal | null> {
+export async function blank(page: Page): Promise<Signal | null> {
   const text = (await page.locator('body').innerText({ timeout: 3000 }).catch(() => '')).trim()
   return text.length < 20 ? { kind: 'blank-screen', message: 'The page went blank', url: page.url() } : null
 }

@@ -2,7 +2,7 @@
 /**
  * @mushi-mushi/ux — library entry. The `mushi-ux` bin (cli.ts) is the main
  * way in; these exports let other tools drive the same steps: map an app,
- * run the loop, judge a run, serve its dashboard.
+ * run the loop, judge a run, serve its dashboard, try a goal as a first-time visitor.
  */
 
 export { AGENTS, getAgent, quoteArg, type AgentAdapter, type AgentName, type AgentRunOptions } from './agents.js'
@@ -10,7 +10,9 @@ export { cursorCloudAdapter, cursorModel, httpsRepoUrl, type CursorCloudDeps } f
 export { openSession, captureSurface, settle, type BrowserSession, type Capture } from './capture.js'
 export { startDashboard, safeShotPath, type Dashboard } from './dashboard.js'
 export { discover, normalizeLink, surfaceKey, type DiscoverOptions } from './discover.js'
-export { installGuard, isRequestAllowed, isDestructiveLabel, type AllowRule } from './guard.js'
+export { runFreshEyes, type FreshEyesOptions, type FreshEyesResult, type SuccessCheck } from './fresh-eyes.js'
+export { runTerminalSetup, type TerminalResult } from './fresh-eyes-terminal.js'
+export { installGuard, isRequestAllowed, isDestructiveLabel, type AllowRule, type GuardPolicy, type WriteMode } from './guard.js'
 export { pixelDiff, dHash, hammingHex, cropTop } from './image.js'
 export {
   judgeSurface,
