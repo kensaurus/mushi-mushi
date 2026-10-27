@@ -61,7 +61,7 @@ import { roundHeadsFor } from './local-followups.ts';
 import { ciHeadState, FOLLOWUP_REASONS, type CiJobForRepair, type PriorFollowup } from '../../_shared/review-followup.ts';
 import { postTeamNote } from '../../_shared/reporter-comms.ts';
 import { RERUN_REFUSED_DEDUPE_PREFIX } from '../../_shared/ci-jobs.ts';
-import { finalizeFixClosedUnmerged } from '../../_shared/fix-merge.ts';
+import { closeFixPullRequest, closePullRequest } from '../../_shared/fix-close.ts';
 import {
   buildDispatchers,
   buildPipeline,
@@ -131,14 +131,7 @@ export const defaultPipelineDeps: PipelineRouteDeps = {
   },
   updateBranch: updatePullRequestBranch,
   markReady: markPullRequestReady,
-  closePull: async (token, ref, n) => {
-    const res = await fetchWithTimeout(`https://api.github.com/repos/${ref.owner}/${ref.repo}/pulls/${n}`, {
-      method: 'PATCH',
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ state: 'closed' }),
-    }).catch(() => null);
-    return res?.ok === true;
-  },
+  closePull: closePullRequest,
   runQueue: async (projectId) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -381,6 +374,8 @@ async function readLocalInfra(db: Db, projectIds: string[], now: Date) {
         .from('work_claims')
         .select('id, project_id, report_id, lane_id, outcome, detail, claimed_at, finished_at, auto_requeued')
         .in('project_id', ids)
+        // Conflict and audit runs (P3) hold no report: nothing to requeue.
+        .not('report_id', 'is', null)
         .eq('failure_kind', 'infra')
         .in('status', ['done', 'expired'])
         .gte('claimed_at', since7)
@@ -812,7 +807,7 @@ async function requeueClaims(c: Ctx, db: Db, userId: string, raw: unknown, now: 
   if (claimIds.length === 0 || claimIds.length > MAX_ACTION_ITEMS) {
     return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: `Send 1 to ${MAX_ACTION_ITEMS} claim ids.` } }, 400);
   }
-  const { data, error } = await db.from('work_claims').select('id, project_id, report_id, lane_id, host_id, status').in('id', claimIds);
+  const { data, error } = await db.from('work_claims').select('id, project_id, report_id, lane_id, host_id, status').in('id', claimIds).not('report_id', 'is', null);
   if (error) return dbError(c, error);
   const rows = (data ?? []) as Array<{ id: string; project_id: string; report_id: string; lane_id: string; host_id: string; status: string }>;
   const held = await activeWorkClaims(db, rows.map((r) => r.report_id), now);
@@ -881,17 +876,18 @@ async function runAction(
   if (action === 'remove' || action === 'conflict_agent') {
     const { data: row, error } = await db
       .from('fix_merge_queue')
-      .select('id, state, conflict_agents, detail')
+      .select('id, state, conflict_agents, detail, local_claim_id')
       .eq('fix_attempt_id', a.id)
       .in('state', ['queued', 'waiting', 'resolving', 'blocked'])
       .maybeSingle();
     if (error) return { id: a.id, ok: false, message: 'Could not read the merge queue.', url };
     if (!row) return { id: a.id, ok: false, message: 'Not in the merge queue.', url };
-    const q = row as { id: string; state: string; conflict_agents: number | null; detail: string | null };
+    const q = row as { id: string; state: string; conflict_agents: number | null; detail: string | null; local_claim_id?: string | null };
     if (action === 'remove') {
       const { error: upErr } = await db
         .from('fix_merge_queue')
-        .update({ state: 'removed', detail: `Taken out of the queue: ${reason}`.slice(0, 500), updated_at: now.toISOString(), claimed_until: null })
+        // A local lane's claim on the row ends with it: its push or failure no longer moves the row (ADR 0049).
+        .update({ state: 'removed', detail: `Taken out of the queue: ${reason}`.slice(0, 500), updated_at: now.toISOString(), claimed_until: null, local_claim_id: null })
         .eq('id', q.id);
       if (upErr) return { id: a.id, ok: false, message: 'Could not take it out of the queue.', url };
       const noteErr = await note(db, a, `Removed from the merge queue: ${reason}`, author);
@@ -901,16 +897,28 @@ async function runAction(
       return { id: a.id, ok: false, message: `Both conflict agents (${CONFLICT_AGENT_CAP} of ${CONFLICT_AGENT_CAP}) were used on this PR. Update the branch, or resolve it on GitHub.`, url };
     }
     if (q.state !== 'resolving' && q.state !== 'blocked') return { id: a.id, ok: false, message: 'Only a conflicted PR gets a conflict agent.', url };
-    // Conflict agents are cloud agents; the local lanes push only commits that change files, not a merge.
+    if (q.local_claim_id) return { id: a.id, ok: false, message: 'A local worker is resolving this conflict right now.', url };
     const cloud = await cloudReady(db, a.project_id, cloudCache);
     if (!cloud.ready) {
+      // No cloud agent can run; a local worker lane in conflicts mode (ADR 0049) can.
+      const { data: lanes } = await db.from('work_lanes').select('id').eq('project_id', a.project_id).eq('mode', 'conflicts').eq('paused', false).limit(1);
+      if (((lanes ?? []) as unknown[]).length > 0) {
+        const { error: upErr } = await db
+          .from('fix_merge_queue')
+          .update({ state: 'blocked', cursor_agent_id: null, claimed_until: null, detail: 'Merge conflict: waits for a local worker lane in conflicts mode.', updated_at: now.toISOString() })
+          .eq('id', q.id)
+          .is('local_claim_id', null);
+        if (upErr) return { id: a.id, ok: false, message: 'Could not hand it back to the merge queue.', url };
+        return { id: a.id, ok: true, message: 'A local worker lane in conflicts mode takes it at its next claim.', url };
+      }
       return { id: a.id, ok: false, message: `Needs a person: resolve the conflict on GitHub (${url ?? 'the pull request'}). ${cloud.why}, so no conflict agent can run.`, url };
     }
     // The worker starts a new agent for a `resolving` row with no agent when the PR still conflicts.
     const { error: upErr } = await db
       .from('fix_merge_queue')
       .update({ state: 'resolving', cursor_agent_id: null, agent_head_sha: null, claimed_until: null, detail: 'Sent to a conflict agent again from the console.', updated_at: now.toISOString() })
-      .eq('id', q.id);
+      .eq('id', q.id)
+      .is('local_claim_id', null);
     if (upErr) return { id: a.id, ok: false, message: 'Could not hand it back to the merge queue.', url };
     runInBackground(deps.runQueue(a.project_id), 'pipeline-conflict-agent');
     return { id: a.id, ok: true, message: 'Handed back to the merge queue; it starts a conflict agent if the PR still conflicts (it needs review follow-ups on).', url };
@@ -935,21 +943,7 @@ async function runAction(
     if (!res.ok) return { id: a.id, ok: false, message: res.message ?? 'GitHub did not take it out of draft.', url };
     return { id: a.id, ok: true, message: res.alreadyReady ? 'It was already ready for review.' : 'Ready for review; CI runs now.', url };
   }
-  // close
-  const closed = await deps.closePull(token, pr.ref, pr.n);
-  if (!closed) return { id: a.id, ok: false, message: 'GitHub did not close the pull request.', url };
-  await db
-    .from('fix_merge_queue')
-    .update({ state: 'removed', detail: `Closed from the console: ${reason}`.slice(0, 500), updated_at: now.toISOString(), claimed_until: null })
-    .eq('fix_attempt_id', a.id)
-    .in('state', ['queued', 'waiting', 'resolving', 'blocked']);
-  if (a.report_id) {
-    await finalizeFixClosedUnmerged(
-      db,
-      { id: a.id, project_id: a.project_id, report_id: a.report_id, agent: a.agent, branch: a.branch, commit_sha: a.commit_sha, pr_url: a.pr_url, pr_number: a.pr_number },
-      { prNumber: pr.n, closedAt: now.toISOString(), source: 'console' },
-    ).catch((err) => plog.warn('finalize after a console close failed', { fixId: a.id, err: String(err).slice(0, 200) }));
-  }
-  const noteErr = await note(db, a, `Pull request #${pr.n} closed without merging: ${reason}`, author);
-  return { id: a.id, ok: true, message: noteErr ? `Closed. ${noteErr}` : 'Closed; the reason is a note on the report.', url };
+  // close (the repo clean-up's close_prs runs the same helper, ADR 0051)
+  const closed = await closeFixPullRequest(db, { fix: a, prNumber: pr.n, reason, author, now, source: 'console' }, () => deps.closePull(token, pr.ref, pr.n));
+  return { id: a.id, ...closed, url };
 }

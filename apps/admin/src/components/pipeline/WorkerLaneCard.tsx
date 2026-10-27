@@ -2,7 +2,9 @@
  * FILE: apps/admin/src/components/pipeline/WorkerLaneCard.tsx
  * PURPOSE: One local worker lane (one app on one machine) on the Workers tab:
  *          its settings (model, mode, how many at once, pause, drain, stop
- *          date), what it runs now, its queue in order, and its last runs.
+ *          date; an audit lane's veto model), what it runs now, its queue in
+ *          order, and its last runs. Conflict and audit runs hold no report,
+ *          so they show as text, not a report link.
  *          Each change saves just that setting; the machine reads it at its
  *          next heartbeat, within a minute.
  */
@@ -11,14 +13,14 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Btn, Card, Input, SelectField, Toggle } from '../ui'
 import { IconChevronDown, IconChevronUp, IconClose, IconExternalLink } from '../icons'
-import { MODEL_RE, moveItem, OUTCOME_LABEL, reportIdsIn, sinceLabel, type LaneConfig, type WorkerHost, type WorkerLane, type WriteResult } from '../../lib/workers'
+import { LANE_MODES, laneCountsLine, MODEL_RE, moveItem, OUTCOME_LABEL, reportIdsIn, sinceLabel, type LaneConfig, type LaneSettings, type WorkerHost, type WorkerLane, type WriteResult } from '../../lib/workers'
 
 interface Props {
   lane: WorkerLane
   host: WorkerHost | undefined
   now: number
   showApp: boolean
-  onPatch: (lane: WorkerLane, patch: Partial<LaneConfig>) => Promise<WriteResult>
+  onPatch: (lane: WorkerLane, patch: LaneSettings) => Promise<WriteResult>
   /** Replace the queue with this order, or (append) add these at its end. */
   onQueue: (lane: WorkerLane, reportIds: string[], append?: boolean) => Promise<WriteResult>
 }
@@ -31,9 +33,23 @@ function toLocalInput(iso: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+/** A report link when the run holds a report; plain text for a conflict or an audit pass. */
+function RunTitle({ reportId, title, className }: { reportId: string | null; title: string; className: string }) {
+  return reportId ? (
+    <Link to={`/reports/${reportId}`} className={`${className} hover:underline`}>
+      {title}
+    </Link>
+  ) : (
+    <span className={className}>{title}</span>
+  )
+}
+
 export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue }: Props) {
   const c = lane.config
   const [model, setModel] = useState(c.model ?? '')
+  const [reviewModel, setReviewModel] = useState(lane.reviewModel ?? '')
+  const reviewModelError = reviewModel && !MODEL_RE.test(reviewModel) ? 'Letters, digits, ".", "_", ":" and "-" only.' : undefined
+  const modeHint = LANE_MODES.find((m) => m.value === c.mode)?.hint
   const [stop, setStop] = useState(toLocalInput(c.stop_at))
   const [busy, setBusy] = useState<string | null>(null)
   const [note, setNote] = useState<WriteResult | null>(null)
@@ -43,7 +59,7 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue }: P
   const state = c.paused ? 'paused' : c.drain ? 'draining' : String(lane.status.state ?? (host?.online ? 'starting' : 'offline'))
   const testId = `worker-lane-${lane.id}`
 
-  const save = async (key: string, patch: Partial<LaneConfig>) => {
+  const save = async (key: string, patch: LaneSettings) => {
     setBusy(key)
     setNote(await onPatch(lane, patch))
     setBusy(null)
@@ -56,6 +72,8 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue }: P
     setBusy(null)
   }
   const ids = lane.queue.map((q) => q.reportId)
+  // Conflicts and audit lanes find their own work; they read no queue (the server refuses one).
+  const takesQueue = c.mode === 'fix' || c.mode === 'followups' || c.mode === 'skill'
 
   return (
     <li data-testid={testId}>
@@ -65,8 +83,8 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue }: P
         {showApp && <Badge tone="neutral">{lane.projectName}</Badge>}
         <Badge tone={state === 'working' ? 'ok' : state === 'paused' || state === 'draining' ? 'warn' : 'neutral'}>{state}</Badge>
         <span className="text-2xs text-fg-muted">
-          on {host?.hostname ?? 'a machine'} · {lane.counts7d.runs} runs, {lane.counts7d.prs} PRs, {lane.counts7d.timeouts} timed out, {lane.counts7d.errors} errors
-          {lane.counts7d.infra > 0 ? ` (${lane.counts7d.infra} the machine's fault)` : ''} in 7 days
+          on {host?.hostname ?? 'a machine'}
+          {lane.repo ? ` (${lane.repo})` : ''} · {laneCountsLine(lane)}
         </span>
       </div>
 
@@ -93,8 +111,11 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue }: P
           onChange={(e) => void save('mode', { mode: e.target.value as LaneConfig['mode'] })}
           data-testid={`${testId}-mode`}
         >
-          <option value="fix">Fix reports and follow-ups</option>
-          <option value="followups">Review follow-ups only</option>
+          {LANE_MODES.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
         </SelectField>
         <SelectField
           id={`${testId}-concurrency-input`}
@@ -126,6 +147,36 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue }: P
         </div>
       </div>
 
+      {modeHint && <p className="text-2xs text-fg-muted" data-testid={`${testId}-mode-hint`}>{modeHint}</p>}
+      {c.mode === 'conflicts' && !lane.repo && (
+        <p className="text-2xs text-warn-foreground">This machine has not said which repository its clone is. Update the Mushi CLI there; until then the lane takes no conflicts.</p>
+      )}
+      {c.mode === 'audit' && (
+        <div className="flex max-w-md items-end gap-1.5">
+          <div className="min-w-0 flex-1">
+            <Input
+              id={`${testId}-review-model-input`}
+              label="Second model (may only veto)"
+              placeholder="none: the check alone decides"
+              value={reviewModel}
+              error={reviewModelError}
+              onChange={(e) => setReviewModel(e.target.value.trim())}
+              data-testid={`${testId}-review-model`}
+            />
+          </div>
+          <Btn
+            size="sm"
+            variant="ghost"
+            disabled={!!reviewModelError || reviewModel === (lane.reviewModel ?? '')}
+            loading={busy === 'review_model'}
+            onClick={() => void save('review_model', { review_model: reviewModel || null })}
+            data-testid={`${testId}-review-model-save`}
+          >
+            Save
+          </Btn>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
         <Toggle label={c.paused ? 'Paused' : 'Taking reports'} checked={!c.paused} disabled={busy === 'paused'} onChange={(on) => void save('paused', { paused: !on })} />
         <Toggle label="Drain: finish what runs, take nothing new" checked={c.drain} disabled={busy === 'drain'} onChange={(on) => void save('drain', { drain: on })} />
@@ -142,9 +193,7 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue }: P
           <ul className="space-y-0.5 text-xs">
             {lane.active.map((a) => (
               <li key={a.claimId} className="flex flex-wrap items-baseline gap-x-2">
-                <Link to={`/reports/${a.reportId}`} className="min-w-0 truncate text-fg hover:underline">
-                  {a.title}
-                </Link>
+                <RunTitle reportId={a.reportId} title={a.title} className="min-w-0 truncate text-fg" />
                 <span className="text-2xs text-fg-muted">since {sinceLabel(a.since, now)}</span>
               </li>
             ))}
@@ -152,10 +201,15 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue }: P
         </div>
       )}
 
+      {takesQueue && (
       <div className="space-y-1">
         <p className="text-2xs font-medium text-fg-secondary">Queue ({lane.queue.length}): taken first, top to bottom</p>
         {lane.queue.length === 0 ? (
-          <p className="text-2xs text-fg-muted">Empty: the lane takes the worst open reports first. Send reports here from a report or a pipeline group.</p>
+          <p className="text-2xs text-fg-muted">
+            {c.mode === 'skill'
+              ? 'Empty: start a skill run on Spend credits with Run on set to this lane.'
+              : 'Empty: the lane takes the worst open reports first. Send reports here from a report or a pipeline group.'}
+          </p>
         ) : (
           <ol className="divide-y divide-edge-subtle rounded-sm border border-edge-subtle" data-testid={`${testId}-queue`}>
             {lane.queue.map((q, i) => (
@@ -203,6 +257,7 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue }: P
           </Btn>
         </div>
       </div>
+      )}
 
       {lane.recent.length > 0 && (
         <div className="space-y-1">
@@ -213,15 +268,13 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue }: P
                 {lane.recent.slice(0, 10).map((r) => (
                   <tr key={r.claimId}>
                     <td className="py-1 pr-2 align-top">
-                      <Badge tone={r.outcome === 'pr_opened' ? 'ok' : r.failureKind === 'infra' || r.outcome === 'lease_expired' ? 'warn' : r.outcome === 'failed' ? 'danger' : 'neutral'}>
+                      <Badge tone={r.outcome === 'pr_opened' || r.outcome === 'pushed' || r.outcome === 'filed' ? 'ok' : r.failureKind === 'infra' || r.outcome === 'lease_expired' ? 'warn' : r.outcome === 'failed' || r.outcome === 'refused' ? 'danger' : 'neutral'}>
                         {OUTCOME_LABEL[r.outcome ?? ''] ?? r.outcome ?? 'ended'}
                         {r.failureKind ? ` · ${r.failureKind === 'infra' ? 'machine' : 'code'}` : ''}
                       </Badge>
                     </td>
                     <td className="max-w-xs py-1 pr-2 align-top">
-                      <Link to={`/reports/${r.reportId}`} className="block truncate text-fg hover:underline">
-                        {r.title}
-                      </Link>
+                      <RunTitle reportId={r.reportId} title={r.title} className="block truncate text-fg" />
                       {r.detail && <span className="block truncate text-fg-muted" title={r.detail}>{r.detail}</span>}
                     </td>
                     <td className="py-1 pr-2 align-top">

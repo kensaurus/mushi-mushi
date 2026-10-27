@@ -24,6 +24,7 @@ import {
   parseClaimDone,
   parseHeartbeat,
   parseHostGuards,
+  parseLaneSettings,
   parseLaneVerbs,
   rankWorkCandidates,
   WORK_INFRA_PREFIX,
@@ -69,6 +70,41 @@ describe('closed lane settings', () => {
     expect(Object.keys(cfg).sort()).toEqual([...LANE_VERBS].sort())
     expect(cfg.mode).toBe('fix')
     expect(cfg.stop_at).toBe('2026-10-31T14:59:00.000Z')
+  })
+})
+
+describe('lane modes and the console settings (P3)', () => {
+  it('a lane may conflicts, audit or skill; nothing else', () => {
+    for (const mode of ['fix', 'followups', 'conflicts', 'audit', 'skill']) expect(parseLaneVerbs({ ...FULL, mode }).ok, mode).toBe(true)
+    for (const mode of ['ux', 'shell', 'Fix']) expect(parseLaneVerbs({ ...FULL, mode }).ok, mode).toBe(false)
+  })
+
+  it('the console may set review_model beside the verbs, never as a heartbeat verb', () => {
+    expect(parseLaneSettings({ review_model: 'claude-opus-5-5-medium' })).toEqual({ ok: true, value: { review_model: 'claude-opus-5-5-medium' } })
+    expect(parseLaneSettings({ mode: 'audit', review_model: null })).toEqual({ ok: true, value: { mode: 'audit', review_model: null } })
+    expect(parseLaneSettings({ review_model: '--model x' }).ok).toBe(false)
+    expect(parseLaneSettings({ review_model: 'x', command: 'ls' }).ok).toBe(false)
+    expect(parseLaneSettings({}).ok).toBe(false)
+    expect(parseLaneVerbs({ ...FULL, review_model: 'x' }).ok).toBe(false)
+  })
+
+  it('a heartbeat lane may say which repository its clone is, as owner/name only', () => {
+    const base = { host: { hostId: 'a'.repeat(64), hostname: 'h', platform: 'linux' }, lanes: [] as unknown[] }
+    const lane = (repo: unknown) => ({ ...base, lanes: [{ name: 'l', projectId: P1, status: {}, repo }] })
+    const ok = parseHeartbeat(lane('Kensaurus/Glot.it'))
+    expect(ok.ok && ok.value.lanes[0]!.repo).toBe('kensaurus/glot.it')
+    expect(parseHeartbeat(lane('/home/u/glot')).ok).toBe(false)
+    expect(parseHeartbeat(lane('a/b/c')).ok).toBe(false)
+    const none = parseHeartbeat({ ...base, lanes: [{ name: 'l', projectId: P1, status: {} }] })
+    expect(none.ok && none.value.lanes[0]!.repo).toBeNull()
+  })
+
+  it('a pushed merge needs its commit; pushed, refused and filed are outcomes', () => {
+    expect(parseClaimDone({ outcome: 'pushed' }).ok).toBe(false)
+    expect(parseClaimDone({ outcome: 'pushed', headAfter: 'e'.repeat(40) })).toMatchObject({ ok: true, value: { headAfter: 'e'.repeat(40) } })
+    expect(parseClaimDone({ outcome: 'refused', detail: 'markers remain' }).ok).toBe(true)
+    expect(parseClaimDone({ outcome: 'filed' }).ok).toBe(true)
+    expect(parseClaimDone({ outcome: 'no_change', headAfter: 'not-a-sha' })).toMatchObject({ ok: true, value: { headAfter: null } })
   })
 })
 

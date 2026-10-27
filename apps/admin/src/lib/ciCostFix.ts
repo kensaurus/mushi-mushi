@@ -43,6 +43,8 @@ export interface CiCostFixJob {
   closedAt: string | null
   createdAt: string
   finishedAt: string | null
+  /** Set when the fix was opened with others for the same repo in one PR ("Apply to every app"). */
+  bundleId?: string | null
 }
 
 /** What the PR changes, for the confirm dialog. */

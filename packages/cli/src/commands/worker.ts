@@ -46,8 +46,15 @@ interface WorkLanesView {
     status: Record<string, unknown>
     active: unknown[]
     queue: unknown[]
-    counts7d: { runs: number; prs: number; timeouts: number; errors: number; infra: number }
+    counts7d: { runs: number; prs: number; merges?: number; filed?: number; timeouts: number; errors: number; infra: number }
   }>
+}
+
+/** What a lane got done in 7 days, in its mode's terms. */
+function laneDone(l: WorkLanesView['lanes'][number]): number {
+  if (l.config.mode === 'conflicts') return l.counts7d.merges ?? 0
+  if (l.config.mode === 'audit') return l.counts7d.filed ?? 0
+  return l.counts7d.prs
 }
 
 async function readStdinKey(): Promise<string> {
@@ -242,14 +249,14 @@ export function registerWorkerCommands(program: Command): void {
         console.log('\nNo lanes registered yet.')
         return
       }
-      console.log(`\n${'lane'.padEnd(16)} ${'app'.padEnd(16)} ${'state'.padEnd(13)} ${'model'.padEnd(22)} ${'run'.padStart(4)} ${'PRs'.padStart(4)} ${'tmo'.padStart(4)} ${'err'.padStart(4)} ${'queue'.padStart(5)}  host`)
+      console.log(`\n${'lane'.padEnd(16)} ${'app'.padEnd(16)} ${'mode'.padEnd(10)} ${'state'.padEnd(13)} ${'model'.padEnd(22)} ${'run'.padStart(4)} ${'done'.padStart(4)} ${'tmo'.padStart(4)} ${'err'.padStart(4)} ${'queue'.padStart(5)}  host`)
       for (const l of res.data.lanes) {
         const state = l.config.paused ? 'paused' : l.config.drain ? 'draining' : String(l.status['state'] ?? '?')
         console.log(
-          `${l.name.padEnd(16)} ${l.projectName.slice(0, 16).padEnd(16)} ${state.padEnd(13)} ${(l.config.model ?? 'default').slice(0, 22).padEnd(22)} ${String(l.counts7d.runs).padStart(4)} ${String(l.counts7d.prs).padStart(4)} ${String(l.counts7d.timeouts).padStart(4)} ${String(l.counts7d.errors).padStart(4)} ${String(l.queue.length).padStart(5)}  ${hosts.get(l.hostId)?.hostname ?? '?'}`,
+          `${l.name.padEnd(16)} ${l.projectName.slice(0, 16).padEnd(16)} ${l.config.mode.padEnd(10)} ${state.padEnd(13)} ${(l.config.model ?? 'default').slice(0, 22).padEnd(22)} ${String(l.counts7d.runs).padStart(4)} ${String(laneDone(l)).padStart(4)} ${String(l.counts7d.timeouts).padStart(4)} ${String(l.counts7d.errors).padStart(4)} ${String(l.queue.length).padStart(5)}  ${hosts.get(l.hostId)?.hostname ?? '?'}`,
         )
       }
-      console.log('\nRuns are the last 7 days. Change lanes on Pipeline → Workers in the console.')
+      console.log('\nRuns are the last 7 days; "done" is PRs opened (fix, skill), merges pushed (conflicts) or passes that filed findings (audit). Change lanes on Pipeline → Workers in the console.')
     })
 
   worker

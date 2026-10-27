@@ -9,6 +9,9 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  clearRepoAbilities,
+  knownWorkflowsAbility,
+  rememberRepoAbilities,
   abilitiesFromClassicScopes,
   abilitiesFromInstallation,
   abilitiesFromReadProbes,
@@ -209,5 +212,17 @@ describe('createTtlCache', () => {
     c.set('c', 3, 0)
     expect(c.get('a', 1)).toBeNull()
     expect(c.get('c', 1)?.value).toBe(3)
+  })
+})
+
+describe('knownWorkflowsAbility', () => {
+  it('answers from what the setup check last probed, per app and repo, until it expires; never guesses', () => {
+    clearRepoAbilities()
+    const P = '1000000a-0000-4000-8000-000000000000'
+    expect(knownWorkflowsAbility(P, 'acme/app', 0)).toBeNull()
+    rememberRepoAbilities(P, 'Acme/App', { contents: 'yes', pullRequests: 'yes', actions: 'yes', secrets: 'no', workflows: 'no' }, 0)
+    expect(knownWorkflowsAbility(P, 'acme/app', 1000)).toBe('no')
+    expect(knownWorkflowsAbility('1000000b-0000-4000-8000-000000000000', 'acme/app', 1000)).toBeNull()
+    expect(knownWorkflowsAbility(P, 'acme/app', 10 * 60_000)).toBeNull()
   })
 })

@@ -12,6 +12,11 @@
  *
  *          The lanes and the clone each one works in live in a local file
  *          (~/.config/mushi/worker.json): the server never stores or sends a path.
+ *
+ *          A claim answer is parsed the same way (parseClaim): a fix claim
+ *          carries a report, a conflict claim (ADR 0049) a PR of the lane's own
+ *          repository with the head commit Mushi saw, an audit claim (ADR
+ *          0050) only models and a count. Anything else is refused.
  */
 
 import { existsSync, readFileSync } from 'node:fs'
@@ -19,7 +24,8 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import { MushiCliError } from '../errors.js'
 
-const LANE_MODES = ['fix', 'followups'] as const
+/** fix and followups (ADR 0048); conflicts (ADR 0049), audit (ADR 0050) and skill (ADR 0042 amendment). */
+const LANE_MODES = ['fix', 'followups', 'conflicts', 'audit', 'skill'] as const
 type LaneMode = (typeof LANE_MODES)[number]
 const LANE_VERBS = ['paused', 'concurrency', 'model', 'mode', 'stop_at', 'drain', 'prune_own'] as const
 
@@ -40,6 +46,11 @@ export interface HostGuards {
 }
 
 export const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/
+/** owner/name of a GitHub repository. */
+const REPO_RE = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/
+/** A branch name git and GitHub both accept, and never an option or a path escape. */
+const BRANCH_RE = /^(?!-)(?!.*\.\.)(?!.*\/\/)(?!.*@\{)[A-Za-z0-9._\/-]{1,200}(?<![./])$/
+const SHA_RE = /^[0-9a-f]{40}$/
 export const LANE_NAME_RE = /^[a-z0-9][a-z0-9._-]{0,39}$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -142,6 +153,61 @@ export function parseHeartbeatAnswer(raw: unknown): { answer: HeartbeatAnswer; b
     answer: { hostId: typeof d.hostId === 'string' ? d.hostId : '', guards: guards.value, lanes, refused, renewed: ids(d.renewed), lost: ids(d.lost) },
     bad,
   }
+}
+
+// ── Claims ──────────────────────────────────────────────────────────────────
+
+export interface ConflictTarget {
+  queueId: string
+  repo: string
+  prNumber: number
+  headRef: string
+  headSha: string
+  prUrl: string | null
+}
+
+type ParsedClaim =
+  | { kind: 'fix'; id: string; model: string | null; raw: Record<string, unknown> }
+  | { kind: 'conflict'; id: string; model: string | null; conflict: ConflictTarget }
+  | { kind: 'audit'; id: string; model: string | null; audit: { reviewModel: string | null; findingsLeft: number } }
+
+/**
+ * @internal Exported for tests. A claim answer, checked by kind. A fix claim's
+ * report goes on to `workOne` as it always did (a claim without `kind` is a fix
+ * claim from a server that predates P3). A conflict claim names a PR of the
+ * lane's repository and the head Mushi saw; its branch is checked so it can
+ * never be read as a git option or reach outside refs/heads.
+ */
+export function parseClaim(raw: unknown): Parsed<ParsedClaim> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, message: 'the claim is not an object' }
+  const c = raw as Record<string, unknown>
+  if (typeof c.id !== 'string' || !UUID_RE.test(c.id)) return { ok: false, message: 'the claim has no id' }
+  const model = c.model == null ? null : typeof c.model === 'string' && MODEL_RE.test(c.model) ? c.model : undefined
+  if (model === undefined) return { ok: false, message: 'the claim\'s model is not a model id' }
+  const kind = c.kind ?? 'fix'
+  if (kind === 'fix') {
+    const report = c.report as Record<string, unknown> | undefined
+    if (!report || typeof report.id !== 'string' || !UUID_RE.test(report.id)) return { ok: false, message: 'the fix claim has no report' }
+    return { ok: true, value: { kind: 'fix', id: c.id, model, raw: c } }
+  }
+  if (kind === 'conflict') {
+    const t = (c.conflict ?? {}) as Record<string, unknown>
+    if (typeof t.queueId !== 'string' || !UUID_RE.test(t.queueId)) return { ok: false, message: 'the conflict claim has no queue row' }
+    if (typeof t.repo !== 'string' || !REPO_RE.test(t.repo)) return { ok: false, message: 'the conflict claim\'s repo is not owner/name' }
+    if (typeof t.prNumber !== 'number' || !Number.isInteger(t.prNumber) || t.prNumber < 1) return { ok: false, message: 'the conflict claim\'s PR number is not a number' }
+    if (typeof t.headRef !== 'string' || !BRANCH_RE.test(t.headRef)) return { ok: false, message: 'the conflict claim\'s branch is not a plain branch name' }
+    if (typeof t.headSha !== 'string' || !SHA_RE.test(t.headSha)) return { ok: false, message: 'the conflict claim\'s head is not a commit sha' }
+    const prUrl = typeof t.prUrl === 'string' && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(t.prUrl) ? t.prUrl : null
+    return { ok: true, value: { kind: 'conflict', id: c.id, model, conflict: { queueId: t.queueId, repo: t.repo, prNumber: t.prNumber, headRef: t.headRef, headSha: t.headSha, prUrl } } }
+  }
+  if (kind === 'audit') {
+    const a = (c.audit ?? {}) as Record<string, unknown>
+    const reviewModel = a.reviewModel == null ? null : typeof a.reviewModel === 'string' && MODEL_RE.test(a.reviewModel) ? a.reviewModel : undefined
+    if (reviewModel === undefined) return { ok: false, message: 'the audit claim\'s review model is not a model id' }
+    const left = typeof a.findingsLeft === 'number' && Number.isInteger(a.findingsLeft) && a.findingsLeft >= 0 ? a.findingsLeft : 0
+    return { ok: true, value: { kind: 'audit', id: c.id, model, audit: { reviewModel, findingsLeft: left } } }
+  }
+  return { ok: false, message: `unknown claim kind "${String(kind).slice(0, 20)}"` }
 }
 
 // ── The local config ────────────────────────────────────────────────────────
