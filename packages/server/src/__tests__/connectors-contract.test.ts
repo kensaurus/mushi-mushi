@@ -172,6 +172,25 @@ describe('connector contract', () => {
 })
 
 describe('connector specifics', () => {
+  it('GitHub keeps a finished production deployment and ignores a list it cannot read', async () => {
+    const fetch = vi.fn(async (u: string, i?: RequestInit) => {
+      if (u.includes('/deployments?')) {
+        return json(200, [
+          { id: 9, environment: 'Production', production_environment: true, sha: 'A1B2C3D4E5F6A7B8', ref: 'v1.2.3', created_at: '2026-10-27T00:00:00Z' },
+          { id: 8, environment: 'Preview', sha: 'bbbbbbbbbbbbbbbb', ref: 'main' },
+        ])
+      }
+      if (u.includes('/deployments/9/statuses')) return json(200, [{ state: 'success', updated_at: '2026-10-27T01:00:00Z' }])
+      return recorded(u, i)
+    })
+    const snap = await registry.getConnector('github').snapshot(ctx('github', fetch) as never, [])
+    expect((snap.facts as { deployments: unknown }).deployments).toEqual([
+      { environment: 'Production', production: true, state: 'success', sha: 'a1b2c3d4e5f6a7b8', ref: 'v1.2.3', updatedAt: '2026-10-27T01:00:00.000Z' },
+    ])
+    const denied = await registry.getConnector('github').snapshot(ctx('github', async (u, i) => recorded(u, i)) as never, [])
+    expect((denied.facts as { deployments: unknown }).deployments).toEqual([])
+  })
+
   it('GitHub reads the login settings declared in supabase/config.toml, without secret values', async () => {
     const snap = await registry.getConnector('github').snapshot(ctx('github', async (u, i) => recorded(u, i)) as never, [])
     const auth = (snap.facts as { supabaseAuth?: unknown }).supabaseAuth

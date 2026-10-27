@@ -5,7 +5,8 @@
  *   collectProjectPhase2  connectors → snapshots → ci_drift / env_drift /
  *                         schema_drift / deploy_drift / budget gate runs,
  *                         ci_workflow_runs, deploy_observations (version
- *                         probes + SDK heartbeats), resource uses.
+ *                         probes, SDK heartbeats, and GitHub production
+ *                         deployments from the connector snapshot), resource uses.
  *   collectOrgPortfolio   once per organization: cross-project rules →
  *                         portfolio_findings (open / resolved).
  *
@@ -14,6 +15,7 @@
  */
 
 import type { getServiceClient } from './db.ts'
+import { observationsFromGithubFacts, recordGithubDeployObservation } from './github-deploy-observation.ts'
 import { budgetDrift, deployDrift, schemaMigrationDrift, type DeployObservation, type DriftFinding as RecipeDriftFinding } from './recipe-drift.ts'
 import { loadConnectorEntries, runConnector, type ConnectorRunResult, type RuntimeDeps } from './connectors/runtime.ts'
 import type { DriftFinding } from './connectors/types.ts'
@@ -229,8 +231,17 @@ export async function collectProjectPhase2(db: Db, projectId: string, deps: Phas
     await db.from('ci_workflow_runs').upsert(github.runs.map((x) => ({ project_id: projectId, repo, source: 'github', ...x })), { onConflict: 'project_id,repo,run_id' })
   }
 
-  // Deploy truth: probes, then drift.
-  const observations = await observeDeploys(db, projectId, manifest, deps, now)
+  // Deploy truth: probes, then GitHub production deployments (their own
+  // timestamp, so a later collector run does not look like a new deploy),
+  // then drift. GitHub rows keep a gh-* target id and do not overwrite a
+  // declared recipe target.
+  const probeObservations = await observeDeploys(db, projectId, manifest, deps, now)
+  const githubDeployRows = observationsFromGithubFacts(github)
+  for (const row of githubDeployRows) await recordGithubDeployObservation(db, projectId, row)
+  const observations: DeployObservation[] = [
+    ...probeObservations,
+    ...githubDeployRows.map((row) => ({ target_id: row.target_id, observed_at: row.observed_at, observed_commit: row.observed_commit, observed_version: row.observed_version, ok: row.ok })),
+  ]
   if (observations.length) connected.add('__deploy_probe')
   const targets = Array.isArray(manifest?.deploy?.targets) ? manifest!.deploy.targets.filter((t: { id?: unknown } | null) => typeof t?.id === 'string').map((t: { id: string; kind?: unknown; maxLagHours?: unknown }) => ({ id: t.id, kind: String(t.kind ?? ''), maxLagHours: typeof t.maxLagHours === 'number' ? t.maxLagHours : undefined })) : []
   if (targets.length && (observations.length || github)) {

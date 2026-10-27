@@ -6,7 +6,9 @@
  *          recent default-branch runs, Actions secret and variable NAMES
  *          (never values), and the login settings declared in
  *          supabase/config.toml (non-secret keys only), and the billing
- *          catalog the recipe declares (links.billing.catalog). Drift: ci_drift,
+ *          catalog the recipe declares (links.billing.catalog), and recent
+ *          finished production deployments (commit, state, GitHub time) so a
+ *          merged fix can be marked deployed. Drift: ci_drift,
  *          default_branch_red, env_drift.
  *          It is the only connector that proposes file edits; the PR itself
  *          is opened by the recipe-change worker as a draft.
@@ -29,6 +31,7 @@
  * config: { owner, repo, defaultBranchHint?, migrationsDir?, billingCatalogPath? }  readCredential: the token.
  */
 
+import { isProductionDeploy } from '../github-deploy-observation.ts'
 import { ciWorkflowDrift, defaultBranchRed, envDrift } from '../recipe-drift.ts'
 import { estimateRunMinutes } from '../ci-minutes.ts'
 import { presentEnvNames } from '../recipe-detail.ts'
@@ -68,6 +71,50 @@ function gh(ctx: ConnectorContext, path: string) {
   return fetchJson<any>(ctx, `${API}${path}`, {
     headers: { Authorization: `Bearer ${ctx.readCredential}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'mushi-mushi-recipe' },
   })
+}
+
+/** Finished production deployments. A missing permission or a bad call is empty, never a failed snapshot. */
+async function readProductionDeployments(ctx: ConnectorContext, owner: string, repo: string): Promise<Array<{ environment: string; production: true; state: string; sha: string; ref: string; updatedAt: string }>> {
+  const out: Array<{ environment: string; production: true; state: string; sha: string; ref: string; updatedAt: string }> = []
+  let list: { status: number; body: any }
+  try {
+    list = await gh(ctx, `/repos/${owner}/${repo}/deployments?per_page=10`)
+  } catch {
+    return out
+  }
+  if (list.status !== 200 || !Array.isArray(list.body)) return out
+  let fetches = 0
+  for (const d of list.body as Array<Record<string, unknown>>) {
+    if (out.length >= 4 || fetches >= 4) break
+    const environment = typeof d.environment === 'string' ? d.environment : ''
+    if (!isProductionDeploy(environment, d.production_environment === true)) continue
+    const id = d.id
+    if (typeof id !== 'number' && typeof id !== 'string') continue
+    const sha = typeof d.sha === 'string' ? d.sha.trim().toLowerCase() : ''
+    if (!/^[0-9a-f]{7,64}$/.test(sha)) continue
+    fetches++
+    try {
+      const statuses = await gh(ctx, `/repos/${owner}/${repo}/deployments/${id}/statuses?per_page=1`)
+      if (statuses.status !== 200 || !Array.isArray(statuses.body) || !statuses.body[0]) continue
+      const s = statuses.body[0] as Record<string, unknown>
+      const state = typeof s.state === 'string' ? s.state.trim().toLowerCase() : ''
+      if (state !== 'success' && state !== 'failure' && state !== 'error') continue
+      const rawAt = typeof s.updated_at === 'string' ? s.updated_at : typeof s.created_at === 'string' ? s.created_at : ''
+      const parsed = Date.parse(rawAt)
+      if (!rawAt || Number.isNaN(parsed)) continue
+      out.push({
+        environment: environment.slice(0, 60),
+        production: true,
+        state,
+        sha,
+        ref: typeof d.ref === 'string' ? d.ref.slice(0, 100) : '',
+        updatedAt: new Date(parsed).toISOString(),
+      })
+    } catch {
+      continue
+    }
+  }
+  return out
 }
 
 function decode(b64: string): string {
@@ -218,6 +265,7 @@ export const githubConnector: RecipeConnector = {
       }
     }
 
+    const deployments = await readProductionDeployments(ctx, r.owner, r.repo)
     const latest = runs.find((x) => x.status === 'completed') ?? null
     return {
       observedAt: ctx.now().toISOString(),
@@ -226,7 +274,7 @@ export const githubConnector: RecipeConnector = {
         env: { summary: { actionsNames: names.length } },
       },
       resources: [{ kind: 'repo', externalId: `${r.owner}/${r.repo}`, role: 'source' }],
-      facts: { branch, headSha, headCommittedAt, repoPrivate: typeof info.body?.private === 'boolean' ? info.body.private : null, workflowFiles, runs, actionsNames: names, actionsNamesComplete, variableNames, environmentNames, migrationsDir: migDir, migrationFiles, supabaseAuth, billingCatalog },
+      facts: { branch, headSha, headCommittedAt, repoPrivate: typeof info.body?.private === 'boolean' ? info.body.private : null, workflowFiles, runs, actionsNames: names, actionsNamesComplete, variableNames, environmentNames, migrationsDir: migDir, migrationFiles, supabaseAuth, billingCatalog, deployments },
       cursor: runs[0]?.run_id ? String(runs[0].run_id) : undefined,
     }
   },

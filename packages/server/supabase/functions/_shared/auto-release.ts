@@ -5,7 +5,11 @@
  *          `deployment_status`, or `release.published` on
  *          POST /v1/ingest/recipe/events — draft a Mushi release from the
  *          fixed, not-yet-released reports and publish it, which tells each
- *          reporter their bug shipped (release-publish.ts).
+ *          reporter their bug shipped (release-publish.ts). A finished
+ *          production deployment is also stored in `deploy_observations`
+ *          (github-deploy-observation.ts) whether or not auto-release is on,
+ *          so /pipeline can show the fix as deployed. That write does not
+ *          message reporters.
  *
  * Off unless `project_settings.auto_release_enabled` is true; an unreadable
  * setting counts as off, because publishing messages real reporters.
@@ -32,6 +36,7 @@
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import { isProductionDeploy, observationFromGithubDeployment, recordGithubDeployObservation } from './github-deploy-observation.ts'
 import { log } from './logger.ts'
 import { publishRelease, type PublishReleaseResult } from './release-publish.ts'
 import type { ReleaseDelivery } from './release-reporters.ts'
@@ -126,7 +131,7 @@ export function triggerFromGithubDeploymentStatus(payload: {
   const dep = payload.deployment
   if (!dep) return null
   const environment = (payload.deployment_status?.environment ?? dep.environment ?? '').trim()
-  const production = dep.production_environment === true || /^prod(uction)?$/i.test(environment)
+  const production = isProductionDeploy(environment, dep.production_environment)
   if (!production) return null
   const sha = (dep.sha ?? '').trim()
   const ref = (dep.ref ?? '').trim()
@@ -357,6 +362,8 @@ export type GithubShipPayload = Parameters<typeof triggerFromGithubRelease>[0] &
   Parameters<typeof triggerFromGithubDeploymentStatus>[0] & {
     repository?: { full_name?: string }
     installation?: { id?: number }
+    deployment_status?: { state?: string | null; environment?: string | null; updated_at?: string | null; created_at?: string | null }
+    deployment?: { sha?: string | null; ref?: string | null; environment?: string | null; production_environment?: boolean | null; updated_at?: string | null; created_at?: string | null }
   }
 
 export interface GithubShipRouting {
@@ -370,8 +377,10 @@ export interface GithubShipRouting {
 /**
  * Route a `release` / `deployment_status` delivery from the Mushi GitHub App
  * to the projects bound to that repo under THAT installation (the same
- * routing as push, without requiring indexing). A failed lookup is a 500 so
- * GitHub redelivers: answering "no project" would drop a real ship.
+ * routing as push, without requiring indexing). A finished production
+ * deployment is recorded before any auto-release is scheduled, so a failed
+ * write is a 500 and GitHub redelivers without a second publish. A failed
+ * lookup is a 500 too: answering "no project" would drop a real ship.
  */
 export async function routeGithubShipEvent(
   db: SupabaseClient,
@@ -380,7 +389,18 @@ export async function routeGithubShipEvent(
   schedule: (db: SupabaseClient, projectId: string, trigger: AutoReleaseTrigger) => unknown = scheduleAutoRelease,
 ): Promise<GithubShipRouting> {
   const trigger = event === 'release' ? triggerFromGithubRelease(payload) : triggerFromGithubDeploymentStatus(payload)
-  if (!trigger) return { status: 202, body: { ok: true, ignored: `${event}_not_a_production_ship` }, projectIds: [] }
+  const observation = event === 'deployment_status'
+    ? observationFromGithubDeployment({
+        state: payload.deployment_status?.state,
+        environment: payload.deployment_status?.environment ?? payload.deployment?.environment,
+        production: payload.deployment?.production_environment,
+        sha: payload.deployment?.sha,
+        ref: payload.deployment?.ref,
+        updatedAt: payload.deployment_status?.updated_at ?? payload.deployment_status?.created_at ?? payload.deployment?.updated_at ?? payload.deployment?.created_at,
+        now: new Date(),
+      })
+    : null
+  if (!trigger && !observation) return { status: 202, body: { ok: true, ignored: `${event}_not_a_production_ship` }, projectIds: [] }
   const installationId = payload.installation?.id
   const repo = payload.repository?.full_name
   if (!installationId || !repo) {
@@ -400,6 +420,18 @@ export async function routeGithubShipEvent(
   if (projectIds.length === 0) {
     return { status: 202, body: { ok: true, ignored: 'no_project_for_repo', repoFullName: repo }, projectIds }
   }
-  for (const pid of projectIds) void schedule(db, pid, trigger)
-  return { status: 202, body: { ok: true, autoRelease: { queued: projectIds.length, version: trigger.version } }, projectIds }
+  if (observation) {
+    for (const pid of projectIds) {
+      const stored = await recordGithubDeployObservation(db, pid, observation)
+      if (stored === 'error') {
+        arLog.error('deploy observation not stored', { projectId: pid, target: observation.target_id })
+        return { status: 500, body: { ok: false, error: 'deploy observation not stored; redeliver' }, projectIds }
+      }
+    }
+  }
+  if (trigger) for (const pid of projectIds) void schedule(db, pid, trigger)
+  const body: Record<string, unknown> = { ok: true }
+  if (trigger) body.autoRelease = { queued: projectIds.length, version: trigger.version }
+  if (observation) body.deployRecorded = projectIds.length
+  return { status: 202, body, projectIds }
 }

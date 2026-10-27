@@ -124,7 +124,7 @@ export async function readReleaseBatch(db: Db, projectIds: string[], deps: Relea
       .order('created_at', { ascending: false })
       .limit(1000),
     db.from('app_recipe_snapshots').select('project_id, manifest').in('project_id', projectIds).eq('is_current', true),
-    db.from('deploy_observations').select('project_id, observed_at, observed_commit, observed_version, ok').in('project_id', projectIds).gte('observed_at', since14).limit(2000),
+    db.from('deploy_observations').select('project_id, observed_at, observed_commit, observed_version, ok').in('project_id', projectIds).gte('observed_at', since14).order('observed_at', { ascending: false }).limit(2000),
   ])
   for (const r of [projectsRes, settingsRes, reposRes, queueRes, trainsRes]) if (r.error) throw new Error(r.error.message)
   const partial: string[] = []
