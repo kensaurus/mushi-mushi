@@ -500,7 +500,7 @@ async function readyWithoutReview(
   if (!FIX_WORKER_AGENTS.has(attempt.agent) || attempt.review_passed !== true) return
   const { data: last } = await db.from('fix_reviews').select('verdict').eq('id', row.id).maybeSingle()
   if ((last as { verdict?: string | null } | null)?.verdict) return
-  const pr = parsePullRequestUrl(attempt.pr_url)
+  const pr = attempt.pr_url ? parsePullRequestUrl(attempt.pr_url) : null
   if (!pr) return
   const token = await (deps.resolveGithubToken ?? defaultResolveGithubToken)(db, attempt)
   if (!token) return
