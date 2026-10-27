@@ -47,6 +47,25 @@ Runners that live for a single job, named as a label plus a number of seconds, a
 
 **Stopped by the test machine** lists jobs that never finished testing. Re-run them.
 
+## Fix it in one PR
+
+Some advice is one edit to one workflow file. Those cards have an **Open fix PR** button for each workflow they found:
+
+| Fix | What changes in the workflow |
+| --- | --- |
+| Cancel superseded runs | A `concurrency` group. A new push to a pull request cancels the run it replaces. Pushes to your branches always finish. |
+| Skip drafts | `ready_for_review` is added to the `pull_request` types, and every job skips draft pull requests. |
+| Run the schedule weekly | A schedule that runs more than once a week runs once a week, at the same hour. |
+| Skip docs-only changes | `paths-ignore` for Markdown files and `docs/` on `pull_request` and `push`. Mushi refuses this one when a job looks like a required check: a skipped workflow never reports, so the pull request could not merge. |
+
+Mushi asks you to confirm first. It then edits only that file, keeps your comments, and opens a **draft** pull request titled `ci: …`. Nothing changes until you review it, mark it ready and merge it. The card shows the job's progress and the link. If the workflow already has the fix, it says so and opens nothing.
+
+After the merge, the card shows the saving Mushi measured. That is the workflow's billed minutes per day after the merge, against the 14 days before. Like every number on this page, it is estimated from job times.
+
+Writing a workflow file needs the GitHub App's **Workflows: Read and write** permission, or a token with the `workflow` scope. Without it, the card says so. You can still copy the fix and commit it yourself.
+
+From the terminal, run `mushi runner fix --repo <owner/repo> --workflow .github/workflows/ci.yml --kind skip_drafts`, and follow it with `mushi runner fix-status`. In your editor, use the MCP tool `open_ci_cost_fix`.
+
 ## When nothing has reported in
 
 The page stays empty until GitHub reports a job for this app's repositories, or a machine that runs your tests reports in. On that machine, run:

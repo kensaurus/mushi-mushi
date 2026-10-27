@@ -81,6 +81,7 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `fast-filter` | Stage-1 cheap triage before `classify-report` (invoked by `api`) |
 | `ci-sync` | Polls GitHub check-runs for open fix PRs |
 | `ci-jobs-collector` | Every 10 minutes (:02 to :52; Plan 022, ADR 0033): reads GitHub Actions runs updated in the last 2 h on every branch of each project's repos (≤40 calls a tick, fair across projects), classifies each job (`_shared/ci-infra.ts`: runner lost, waiting for a runner and queue expired are infra, never code failures) into `ci_jobs`, derives `ci_runners` (one-job `<label>-<seconds>` runners fold into their label), reads the repo runner list when the token has Administration: read, records each repo's visibility and owner once a day (Metadata: read; ADR 0037: public repos run GitHub minutes free), and deletes job rows and samples older than 30 days. Hosted vs self-hosted comes from the job's `runner_group_name` ("GitHub Actions" = hosted). `GET /v1/admin/ci/overview?refresh=1` live-syncs queued and running jobs at most once a minute per project. Host health arrives through `POST /v1/ingest/runner` with a `runner:write` key only (`mushi runner heartbeat` / job hooks). Cost and speed (ADR 0037): `GET /v1/admin/ci/compare` (SQL aggregate `ci_runner_comparison`, cost figures per organization in `ci_cost_settings`; MCP `get_ci_costs`, `mushi runner compare`), read-only; money is always estimated. Where CI runs (ADR 0037): `api/routes/ci-placement.ts` previews and requests a change to one allowlisted repo variable (`LINUX_RUNNER`, `RUNNER_<WORKFLOW>`) as a legacy-backed GitHub `connector_actions` row; an owner/admin console session approves (1 h) and executes it; the GitHub connector's act() checks the allowlist, `ci_runner_policies` and a compare-and-set (409 `VARIABLE_MOVED`) with the project's stored PAT; each tick also evaluates `ci_placement_watches` from `ci_jobs` (the next 10 moved jobs). Never runner labels, registrations or a dispatcher |
+| `ci-cost-fix-worker` | Fired by `POST /v1/admin/ci/cost-fixes` (console "Open fix PR" on CI advice, `mushi runner fix`, MCP `open_ci_cost_fix`), ADR 0047: reads one workflow file through the Contents API, applies one edit (`_shared/ci-cost-fix.ts`: `add_concurrency`, `skip_drafts`, `weekly_cron`, `ignore_docs_paths`; idempotent, comments kept; the docs filter is refused when a job looks like a required check), stores the workflow's billed minutes per day for the 14 days before from `ci_jobs`, and opens a **draft** PR with a `ci:` title (`ci_cost_fix_jobs`, service role only). `GET /v1/admin/ci/cost-fixes/:id` notices the merge and stores the minutes per day after it (up to 14 days), so the saving shown is measured. `requireServiceRoleAuth` |
 | `retention-sweep` | Applies data-retention policies |
 | `stripe-webhooks` | Stripe subscription + invoice events |
 | `slack-interactions` | Slack interactive payloads + threaded replies |
@@ -293,7 +294,7 @@ Live App URL
 | **Fixes & releases** | `mushi fix`, `mushi fixes tail/refresh-ci/rerun-ci/merge/review/verify`, `mushi work` (a local Cursor CLI agent; you push and open the PR; `--followups` fixes Opus "fix first" findings on those PRs, and on cloud-agent PRs while cloud follow-ups are off), `mushi console watch <reportId>`, `mushi releases draft/list/show/edit/publish/delete/stats/auto-release/calendar` |
 | **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve/run`, `mushi stories map`, `mushi ux discover/login/run/open` (local UX loop, `@mushi-mushi/ux`, ADR 0020), `mushi ux-runs list/show/file` |
 | **Skills / pipeline** | `mushi skills list/show/sync`, `mushi pipeline start/watch/checkin` |
-| **CI runners** (ADR 0033, 0037) | `mushi runner status/compare/placement show/preview/request/revert/heartbeat/hooks install/key/add/audit` |
+| **CI runners** (ADR 0033, 0037, 0047) | `mushi runner status/compare/placement show/preview/request/revert/fix/fix-status/heartbeat/hooks install/key/add/audit` |
 | **Verified merge** (ADR 0035) | `mushi verify workflow` (the `mushi-verify` workflow for your repo; a fix's gates: `mushi fixes verify`) |
 | **Integrations** | `mushi integrations list/test`, `mushi slack status/test`, `mushi keys list/add/spend-down`, `mushi connectors list/status/actions` |
 | **Portfolio** (account-level key) | `mushi portfolio show/findings/resources/groups`, `mushi funnel show/set/growth`, `mushi accounts list/add/edit/remove/export/domain`, `mushi spend show/import/remove` |
@@ -370,7 +371,7 @@ mushi billing cap 0                    # clear spend cap
 
 ### MCP Tools
 
-Full catalog: **124 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
+Full catalog: **125 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
 
 Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_fix_context`, `query_lessons`, `list_lessons`, `list_qa_story_runs`, `get_qa_story_run`
 
@@ -496,8 +497,10 @@ CLI: `mushi fixes review`.
 
 ### Draft → ready → merge
 
-1. `fix-worker` opens a **draft** PR, then calls `markPullRequestReady()` (GraphQL —
-   REST `draft: false` is unreliable).
+1. `fix-worker` opens a **draft** PR and queues its Opus review. `agent-pr-review`
+   calls `markPullRequestReady()` (GraphQL — REST `draft: false` is unreliable)
+   when the review says merge on the PR's head (ADR 0047), so host CI runs only
+   on an approved commit.
 2. Console/CLI merge calls `mergeGithubPullRequest()` which re-readies if still draft.
 3. GitHub squash-merge (default) → webhook or inline `finalizeFixMerge()` sets
    `merged_at`, report → `fixed`, reporter notification, `fix.applied` plugins.
