@@ -262,7 +262,10 @@ export function providerStatusView(
     return { state: 'not_connected', detail: options.emptyDetail, action: null }
   }
   const views = keys.map((k) => keyStatusView(k, { pool, now, providerName: options.providerName }))
-  const problems = views.filter((v) => v.state === 'attention').length
+  // Keys another working key already replaced are tidy-up, not a problem:
+  // the provider reads Working, as the page banner and badge do.
+  const problems = views.filter((v) => v.state === 'attention' && v.action !== 'remove').length
+  const replaced = views.filter((v) => v.state === 'attention' && v.action === 'remove').length
   const working = views.find((v) => v.state === 'working')
   if (working) {
     if (problems > 0) {
@@ -273,7 +276,10 @@ export function providerStatusView(
       }
     }
     const expiring = views.find((v) => v.state === 'expiring')
-    return expiring ?? working
+    if (expiring) return expiring
+    return replaced > 0
+      ? { ...working, detail: `${working.detail} · ${replaced === 1 ? '1 old key' : `${replaced} old keys`} to remove below` }
+      : working
   }
   const order: ConnectionState[] = ['attention', 'expiring', 'checking', 'not_connected']
   for (const state of order) {

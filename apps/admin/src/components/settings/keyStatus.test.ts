@@ -176,10 +176,23 @@ describe('providerStatusView', () => {
     })
   })
 
-  it('a working provider with a broken spare key still asks for attention', () => {
+  it('a working provider with a rejected key it already replaced reads Working, with the key to remove', () => {
+    // The rejected key's row says "Another key is working, so remove this one";
+    // the banner and badge no longer count it, so the provider row agrees.
     const v = providerStatusView(
       'anthropic',
       [pool(), pool({ id: 'k2', status: 'auth_failed', test_status: 'error_auth' })],
+      [],
+      opts,
+    )
+    expect(v.state).toBe('working')
+    expect(v.detail).toMatch(/· 1 old key to remove below$/)
+  })
+
+  it('a working provider with a spare key out of quota still asks for attention', () => {
+    const v = providerStatusView(
+      'anthropic',
+      [pool(), pool({ id: 'k2', status: 'quota_exhausted', test_status: 'error_quota', cooldown_until: iso(H) })],
       [],
       opts,
     )

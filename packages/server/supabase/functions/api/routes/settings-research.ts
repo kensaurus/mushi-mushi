@@ -625,7 +625,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const byokKeysFailing = health.attention;
     const byokKeysUntested = health.checking;
     const byokKeysExpiring = health.expiring;
-    const byokKeysConfigured = health.working + health.attention + health.checking + health.expiring;
+    // A replaced key (another one took over) is saved but never "failing".
+    const byokKeysConfigured = health.working + health.attention + health.replaced + health.checking + health.expiring;
 
     // Per-provider configured flag: a key that is not turned off, pooled or legacy.
     const savedProviders = new Set(
