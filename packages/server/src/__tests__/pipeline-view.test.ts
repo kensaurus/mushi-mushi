@@ -175,6 +175,21 @@ describe('buildPipeline', () => {
     expect(train.oldestAt).toBe('2026-10-24T02:00:00Z')
   })
 
+  it('a conflict whose agent never started is not already over the 90 min timeout', () => {
+    // queued_at is days earlier. That is not how long a conflict agent has been
+    // working: with no Cursor key, none starts, and agent_started_at stays null.
+    const q = queue({
+      state: 'resolving',
+      agent_started_at: null,
+      queued_at: '2026-10-20T00:00:00Z',
+      detail: 'Conflicts with the base branch; a Cursor agent merges it in, then it rides a release train.',
+    })
+    const hit = group(run({ queue: [q] }), 'conflict_pending')
+    expect(hit?.group.tone).toBe('moving')
+    expect(hit?.group.label).toBe('1 PR: waiting for a conflict agent to start')
+    expect(group(run({ queue: [q] }), 'conflict_stuck')).toBeNull()
+  })
+
   it('a conflict row untouched past the agent timeout is stuck, and capped rows offer no new agent', () => {
     const q = queue({ state: 'resolving', agent_started_at: '2026-10-24T05:00:00Z', conflict_agents: 2, detail: 'Conflicts with the base branch; a Cursor agent merges it in.' })
     const hit = group(run({ queue: [q] }), 'conflict_capped')

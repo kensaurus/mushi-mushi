@@ -510,7 +510,25 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
     // Train apps keep two things on the single-PR path: express fixes, and
     // PRs a conflict agent is resolving (the train marked them `resolving`).
     // The latter do not share the repo's one-row slot the train just took.
-    conflictRows = rows.filter((r) => trainProjects.has(r.project_id) && !express.has(r.id) && r.state === 'resolving')
+    // Re-read: the train just marked conflicts `resolving` in the database.
+    // The rows loaded at the start of the tick still say queued, so without
+    // this they wait until the next cron — and, with no Cursor key, the ones
+    // past the two-agent cap wait there indefinitely.
+    const trainIds = [...trainProjects.keys()]
+    if (trainIds.length) {
+      const { data: resolvingNow, error: resolvingErr } = await db
+        .from('fix_merge_queue')
+        .select(ROW_COLUMNS)
+        .eq('state', 'resolving')
+        .in('project_id', trainIds)
+        .limit(500)
+      if (resolvingErr) throw new Error(`merge-queue conflict read failed: ${resolvingErr.message}`)
+      conflictRows = (resolvingNow ?? []).filter((r) => {
+        const row = r as QueueRow & { claimed_until: string | null }
+        if (!trainProjects.has(row.project_id) || express.has(row.id)) return false
+        return !row.claimed_until || row.claimed_until < nowIso
+      }) as typeof rows
+    }
     rows = rows.filter((r) => !trainProjects.has(r.project_id) || express.has(r.id))
   }
   // One active row per repo, then some blocked re-checks.
@@ -528,7 +546,33 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
     repos.add(r.repo)
     picked.push(r)
   }
-  const { work: conflictWork, inLine } = pickConflictRows(conflictRows)
+  // No cloud agent can start (follow-ups off, or no Cursor key). The two-at-a-time
+  // cap is for agents whose pushes run CI. Leaving the rest `resolving` made
+  // them "wait for a free conflict agent" that never comes. Block them all;
+  // a local conflicts lane claims a "Merge conflict…" row on its own.
+  const noCloudReason = new Map<string, string>()
+  const waitingProjects = [...new Set(conflictRows.filter((r) => !r.cursor_agent_id && !r.local_claim_id).map((r) => r.project_id))]
+  for (const pid of waitingProjects) {
+    const key = await deps.cursorKey(db, pid).catch(() => null)
+    if (key && !key.ok) noCloudReason.set(pid, key.reason)
+  }
+  const blockedNoCloud = new Set<string>()
+  for (const [pid, reason] of noCloudReason) {
+    const ids = conflictRows.filter((r) => r.project_id === pid && !r.cursor_agent_id && !r.local_claim_id).map((r) => r.id)
+    for (let i = 0; i < ids.length; i += 100) {
+      const chunk = ids.slice(i, i + 100)
+      await db
+        .from('fix_merge_queue')
+        .update({ state: 'blocked', detail: `Merge conflict. ${reason}`, updated_at: nowIso, claimed_until: null })
+        .in('id', chunk)
+        .is('cursor_agent_id', null)
+        .is('local_claim_id', null)
+      for (const id of chunk) blockedNoCloud.add(id)
+    }
+  }
+  const pickedConflicts = pickConflictRows(conflictRows)
+  const conflictWork = pickedConflicts.work.filter((r) => !blockedNoCloud.has(r.id))
+  const inLine = pickedConflicts.inLine.filter((x) => !blockedNoCloud.has(x.row.id))
   for (const { row, ahead } of inLine) {
     const detail = `Conflicts with the base branch; waits for a free conflict agent (${ahead} ahead in this repo), then rides a release train.`
     if (row.detail !== detail) await db.from('fix_merge_queue').update({ detail, updated_at: nowIso }).eq('id', row.id)
