@@ -241,10 +241,21 @@ type ActivityDbError = {
  * A gateway 5xx puts an HTML page in PostgREST `error.message`. Logging that
  * string with `rlog.error` opened a Sentry issue on every `session_minute`
  * heartbeat (59d3e946). Collapse it to the status plus a short title.
- * A 504 is transient but not retried: the insert may already have committed.
- * Heartbeats are not retried either — the next minute is the retry, and a
- * second write during an outage only adds pool pressure.
+ *
+ * Retry only when the insert cannot have committed. HTTP 503 means the
+ * gateway refused the request. A refused TCP connection with no HTTP status
+ * (or status 0) means it was never sent. A 502, a 504, a pooler error, or a
+ * connection reset can arrive after commit, and `end_user_activity` has no
+ * idempotency key, so a second insert would award the points twice.
+ * Heartbeats are not retried either — the next minute is the retry.
  */
+function failureClearlyBeforeWrite(err: ActivityDbError | null, status: number | null): boolean {
+  if (status === 503) return true
+  if (typeof status === 'number' && status !== 0) return false
+  const msg = (err?.message ?? '').toLowerCase()
+  return msg.includes('econnrefused') || /\bconnection refused\b/.test(msg)
+}
+
 function activityInsertOutcome(err: ActivityDbError | null, status: number | null): {
   transient: boolean
   retry: boolean
@@ -257,9 +268,52 @@ function activityInsertOutcome(err: ActivityDbError | null, status: number | nul
     : text
   return {
     transient,
-    retry: transient && status !== 504,
+    retry: failureClearlyBeforeWrite(err, status),
     error: summary.slice(0, 500),
   }
+}
+
+/** One Sentry error per window once transient insert failures keep happening. */
+const TRANSIENT_INSERT_ALERT_AFTER = 8
+const TRANSIENT_INSERT_ALERT_WINDOW_MS = 10 * 60_000
+
+let transientInsertCount = 0
+let transientInsertWindowStartedAt = 0
+let transientInsertAlerted = false
+
+/** Clears the outage window. The counter is process-local, like the rule cache. */
+export function resetTransientActivityInsertAlert(): void {
+  transientInsertCount = 0
+  transientInsertWindowStartedAt = 0
+  transientInsertAlerted = false
+}
+
+function recordTransientActivityInsert(meta: {
+  endUserId: string
+  action: string
+  error: string
+  status: number | null
+}): void {
+  rlog.warn('activity_insert_failed', { ...meta, transient: true })
+  const now = Date.now()
+  if (
+    transientInsertWindowStartedAt === 0 ||
+    now - transientInsertWindowStartedAt >= TRANSIENT_INSERT_ALERT_WINDOW_MS
+  ) {
+    transientInsertWindowStartedAt = now
+    transientInsertCount = 0
+    transientInsertAlerted = false
+  }
+  transientInsertCount += 1
+  if (transientInsertAlerted || transientInsertCount < TRANSIENT_INSERT_ALERT_AFTER) return
+  transientInsertAlerted = true
+  // warn does not reach Sentry. One error per window does, without the HTML body.
+  rlog.error('activity_insert_outage', {
+    ...meta,
+    transient: true,
+    sustained: true,
+    count: transientInsertCount,
+  })
 }
 
 function activityRetryPause(): Promise<void> {
@@ -278,8 +332,8 @@ async function insertEndUserActivity(
     metadata: Record<string, unknown>
   },
 ): Promise<{ error: ActivityDbError | null; status: number | null }> {
-  // One retry for a rare award whose gateway failure usually means the write
-  // never landed. session_minute already fires every minute.
+  // A second attempt only when activityInsertOutcome says the write cannot
+  // have landed. session_minute already fires every minute.
   const attempts = row.action === 'session_minute' ? 1 : 2
   let error: ActivityDbError | null = null
   let status: number | null = null
@@ -397,8 +451,9 @@ export async function awardPointsForEndUser(
   if (inserted.error) {
     const outcome = activityInsertOutcome(inserted.error, inserted.status)
     const meta = { endUserId, action, error: outcome.error, status: inserted.status }
-    // warn does not forward to Sentry; a real constraint failure still does.
-    if (outcome.transient) rlog.warn('activity_insert_failed', { ...meta, transient: true })
+    // A real constraint failure is an error. Transient failures warn, and a
+    // sustained run of them emits one activity_insert_outage per window.
+    if (outcome.transient) recordTransientActivityInsert(meta)
     else rlog.error('activity_insert_failed', meta)
     return { pointsAwarded: 0, totalPoints: 0, rejectedReason: 'insert_error', tierChanged: false }
   }
