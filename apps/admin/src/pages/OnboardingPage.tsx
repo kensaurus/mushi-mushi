@@ -7,8 +7,9 @@
  *          State source-of-truth is `useSetupStatus()` (DB-backed). The wizard
  *          drives next-step focus off `activeProject.steps`, so progress survives
  *          across browsers/devices and stays in sync with what the rest of the
- *          admin sees. The pipeline-live button uses those same step counts
- *          (`onboardingPrimaryCta`): a finished list shows View fixes.
+ *          admin sees. The pipeline-live card uses `onboardingSetupComplete`
+ *          and `onboardingPrimaryCta` together: the card needs a full counter,
+ *          and the button also stops after a merged fix.
  */
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -42,7 +43,7 @@ import { useToast } from '../lib/toast'
 import { useCreateProject } from '../lib/useCreateProject'
 import { usePageCopy } from '../lib/copy'
 import { useOnboardingUx, resolveQuickOnboardingTab } from '../lib/onboardingModeUx'
-import { onboardingPrimaryCta } from '../lib/onboardingPrimaryCta'
+import { onboardingPrimaryCta, onboardingSetupComplete } from '../lib/onboardingPrimaryCta'
 import { restartFirstRunTour } from '../components/FirstRunTour'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { FirstDiagnosisScreen } from '../components/onboarding/FirstDiagnosisScreen'
@@ -403,12 +404,17 @@ export function OnboardingPage() {
   const hasReports = (project?.report_count ?? 0) > 0
   const hasFix = (project?.fix_count ?? 0) > 0
   const hasMerged = (project?.merged_fix_count ?? 0) > 0
-  // Render a "Setup complete" hero (instead of bouncing) when there's nothing
-  // left for this project to do. Keeps the page useful as a permanent SDK
-  // reference for fully onboarded users.
-  const setupComplete = Boolean(project?.done && project.complete >= project.total)
-  // Same counts as the "N of N steps" header. A full list, or a merged fix,
-  // is finished setup — the hero must not keep asking to connect agents.
+  // Hero and button finish on different rules, both in onboardingPrimaryCta.ts.
+  // The card is the "N of N" header: required steps done and the counter full.
+  // The button also stops asking to connect agents after a merged fix, while
+  // optional steps remain — that wider rule must not bring the card up early.
+  const setupComplete = Boolean(
+    project && onboardingSetupComplete({
+      done: project.done,
+      complete: project.complete,
+      total: project.total,
+    }),
+  )
   const pipelineCta = project
     ? onboardingPrimaryCta({
         done: project.done,
