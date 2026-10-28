@@ -175,6 +175,7 @@
     "GET /v1/admin/graph/nodes": {"allow": "jwt-only"},
     "GET /v1/admin/graph/stats": {"allow": "jwt-only"},
     "GET /v1/admin/groups": {"allow": "jwt-only"},
+    "GET /v1/admin/growth/daily": {"cli": ["funnel daily"]},
     "GET /v1/admin/growth/funnel": {"cli": ["funnel growth"]},
     "GET /v1/admin/health/cron": {"allow": "jwt-only"},
     "GET /v1/admin/health/history": {"allow": "jwt-only"},

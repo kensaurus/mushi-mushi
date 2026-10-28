@@ -304,7 +304,7 @@ Live App URL
 | **CI runners** (ADR 0033, 0037, 0047) | `mushi runner status/compare/bill/placement show/preview/request/revert/fix/fix-status/heartbeat/hooks install/key/add/audit` |
 | **Verified merge** (ADR 0035) | `mushi verify workflow` (the `mushi-verify` workflow for your repo; a fix's gates: `mushi fixes verify`) |
 | **Integrations** | `mushi integrations list/test`, `mushi slack status/test`, `mushi keys list/add/spend-down`, `mushi connectors list/status/actions` |
-| **Portfolio** (account-level key) | `mushi portfolio show/findings/resources/groups`, `mushi funnel show/set/growth`, `mushi accounts list/add/edit/remove/export/domain`, `mushi spend show/import/remove` |
+| **Portfolio** (account-level key) | `mushi portfolio show/findings/resources/groups`, `mushi funnel show/set/growth/daily`, `mushi accounts list/add/edit/remove/export/domain`, `mushi spend show/import/remove` |
 | **Billing** | `mushi usage`, `mushi billing status/cap`, `mushi budgets show/autofix` |
 
 ```bash

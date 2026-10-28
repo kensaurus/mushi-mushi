@@ -1,9 +1,10 @@
 /**
  * FILE: packages/cli/src/commands/funnel.ts
- * PURPOSE: `mushi funnel show|set|growth` — console parity for the team
+ * PURPOSE: `mushi funnel show|set|growth|daily` — console parity for the team
  *          funnel (one funnel run over every app, GET/PUT
- *          /v1/admin/orgs/:orgId/funnel) and the operator growth funnel
- *          (GET /v1/admin/growth/funnel). All three need an account-level key.
+ *          /v1/admin/orgs/:orgId/funnel), the operator growth funnel
+ *          (GET /v1/admin/growth/funnel) and its daily scorecard
+ *          (GET /v1/admin/growth/daily). All four need an account-level key.
  */
 
 import type { Command } from 'commander'
@@ -27,6 +28,13 @@ interface GrowthFunnelData {
   window_start: string | null
   window_end: string | null
   source: string
+  self_project_configured: boolean
+}
+
+interface DailyScorecardData {
+  days: Array<{ day: string; page_views: number; signups: number; activated: number }>
+  by_src: Array<{ src: string; page_views: number; signups: number; activated: number }>
+  window_start: string | null
   self_project_configured: boolean
 }
 
@@ -73,6 +81,21 @@ function renderGrowthFunnel(data: GrowthFunnelData): string[] {
     const week = String(w['week'] ?? w['week_start'] ?? '')
     const rest = Object.entries(w).filter(([k]) => k !== 'week' && k !== 'week_start').map(([k, v]) => `${k} ${String(v)}`).join(' · ')
     lines.push(`  ${week.padEnd(12)} ${rest}`)
+  }
+  return lines
+}
+
+function renderDailyScorecard(data: DailyScorecardData): string[] {
+  const lines = [`Daily scorecard since ${data.window_start ?? '—'} (UTC; page views are counts, not people)`]
+  if (!data.self_project_configured) lines.push('  Note: the self-analytics project is not configured, so activated may read zero.')
+  for (const d of [...data.days].reverse()) {
+    lines.push(`  ${d.day.padEnd(12)} page views ${d.page_views} · signups ${d.signups} · activated ${d.activated}`)
+  }
+  if (data.by_src.length > 0) {
+    lines.push('', 'By source (?src= / signup source):')
+    for (const s of data.by_src) {
+      lines.push(`  ${oneLine(s.src, 24).padEnd(24)} page views ${s.page_views} · signups ${s.signups} · activated ${s.activated}`)
+    }
   }
   return lines
 }
@@ -148,5 +171,25 @@ export function registerFunnelCommands(program: Command): void {
         return
       }
       for (const line of renderGrowthFunnel(result.data)) console.log(line)
+    })
+
+  funnel
+    .command('daily')
+    .description('Daily page views, signups and activated organizations, by ?src= (operators only)')
+    .option('--days <n>', 'Days to show (1-90)', '14')
+    .option('--json', 'Machine-readable JSON output')
+    .action(async (opts: { days: string; json?: boolean }) => {
+      const config = requireConfig()
+      const qs = new URLSearchParams({ days: opts.days })
+      const result = await apiCall<DailyScorecardData>(`/v1/admin/growth/daily?${qs}`, config)
+      if (!result.ok) {
+        if (result.error.code.endsWith('_NEEDS_ACCOUNT_KEY')) dieOrgError(result)
+        die(result)
+      }
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(result.data, null, 2))
+        return
+      }
+      for (const line of renderDailyScorecard(result.data)) console.log(line)
     })
 }
