@@ -1,5 +1,26 @@
 # mushi-mushi
 
+## 0.8.11
+
+### Patch Changes
+
+- Updated dependencies [e421853]
+- Updated dependencies [2de87bf]
+- Updated dependencies [0c93c23]
+- Updated dependencies [0c93c23]
+- Updated dependencies [c7ee4d6]
+- Updated dependencies [0c93c23]
+- Updated dependencies [2de87bf]
+- Updated dependencies [c7ee4d6]
+- Updated dependencies [e421853]
+- Updated dependencies [346cc0e]
+- Updated dependencies [0c93c23]
+- Updated dependencies [0c93c23]
+- Updated dependencies [2de87bf]
+- Updated dependencies [0c93c23]
+- Updated dependencies [0c93c23]
+  - @mushi-mushi/cli@0.35.0
+
 ## 0.8.10
 
 ### Patch Changes
