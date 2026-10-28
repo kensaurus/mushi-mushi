@@ -767,14 +767,9 @@ export function ByokPanel() {
                 </ul>
               )}
               {provider === 'cursor' && providerKeys.length > 0 && (
-                <SpendDownSection
-                  canManageShared={Boolean(sharing?.canManage)}
-                  keysToken={providerKeys.map((k) => k.id).join(',')}
-                />
+                <SpendDownSection canManageShared={Boolean(sharing?.canManage)} />
               )}
-              {provider === 'cursor' && providerKeys.length > 0 && (
-                <ReviewFollowupsSection keysToken={providerKeys.map((k) => k.id).join(',')} />
-              )}
+              {provider === 'cursor' && providerKeys.length > 0 && <ReviewFollowupsSection />}
               {isOpen && (
                 <form
                   onSubmit={(e) => {

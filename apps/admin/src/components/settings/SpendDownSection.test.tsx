@@ -62,11 +62,7 @@ describe('SpendDownSection', () => {
   let container: HTMLDivElement
   let root: Root
   async function render(canManageShared: boolean) {
-    await act(async () =>
-      root.render(
-        createElement(MemoryRouter, null, createElement(SpendDownSection, { canManageShared, keysToken: 'key-1' })),
-      ),
-    )
+    await act(async () => root.render(createElement(MemoryRouter, null, createElement(SpendDownSection, { canManageShared }))))
   }
   beforeEach(() => {
     mocks.apiFetch.mockReset()
