@@ -1,7 +1,11 @@
 /**
  * FILE: apps/admin/src/pages/ExperimentsPage.tsx
  * PURPOSE: A/B experiment console — banner + EXPERIMENTS SNAPSHOT + tabs:
- *          Experiments | New, readout at the foot.
+ *          Experiments | New, readout at the foot. Below sm, each experiment
+ *          row stacks so Launch and its icon button stay fully visible at 390px.
+ *          Variant count and split stay on that row's meta line until md.
+ *          The stacked row keeps role=table/row/cell because display:block
+ *          below sm can drop the native table mapping.
  *
  * Variant name and weight inputs take their accessible name from Input's
  * own label (aria-label on rows after the first). Input already renders
@@ -404,46 +408,60 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
         <Btn size="sm" variant="primary" onClick={onCreate}>+ New experiment</Btn>
       </div>
     )}
-    <Card className="overflow-hidden">
+    <Card className="min-w-0 overflow-hidden">
+      {/* Six columns overflow a 390px card and clip Launch down to "L", plus
+          the trailing icon. Below sm the row is a stack: the name wraps
+          and the actions sit on a full-width line. Variants and Split stay
+          in the meta line until md, where those columns take over.
+          Roles stay explicit: display:block on the table parts below sm
+          can drop the native mapping, and the header row is hidden there. */}
       <ResponsiveTable ariaLabel="Experiments">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-edge-subtle bg-surface-overlay text-xs text-fg-muted">
-            <th className="px-3 py-2 text-left">Name</th>
-            <th className="px-3 py-2 text-left">Status</th>
-            <th className="px-3 py-2 text-left">Variants</th>
-            <th className="px-3 py-2 text-left">Split</th>
-            <th className="px-3 py-2 text-left">Created</th>
-            <th className="px-3 py-2" />
+      <table role="table" className="block w-full text-sm sm:table">
+        <thead role="rowgroup" className="hidden sm:table-header-group">
+          <tr role="row" className="border-b border-edge-subtle bg-surface-overlay text-xs text-fg-muted">
+            <th role="columnheader" className="px-3 py-2 text-left">Name</th>
+            <th role="columnheader" className="px-3 py-2 text-left">Status</th>
+            <th role="columnheader" className="hidden px-3 py-2 text-left md:table-cell">Variants</th>
+            <th role="columnheader" className="hidden px-3 py-2 text-left md:table-cell">Split</th>
+            <th role="columnheader" className="px-3 py-2 text-left">Created</th>
+            <th role="columnheader" className="px-3 py-2"><span className="sr-only">Actions</span></th>
           </tr>
         </thead>
-        <tbody>
+        <tbody role="rowgroup" className="block sm:table-row-group">
           {experiments.map((e) => (
-            <tr key={e.id} className="border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50 transition-opacity">
-              <td className="px-3 py-2">
-                <div className="font-medium text-fg">{e.name}</div>
+            <tr key={e.id} role="row" className="block border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50 transition-opacity sm:table-row">
+              <td role="cell" className="block min-w-0 px-3 pt-2 sm:table-cell sm:py-2">
+                <div className="font-medium text-fg wrap-break-word">{e.name}</div>
                 {e.hypothesis && <div className="text-xs text-fg-muted truncate max-w-48">{e.hypothesis}</div>}
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 md:hidden">
+                  <span className="sm:hidden">{statusBadge(e.status)}</span>
+                  <span className="text-xs tabular-nums text-fg-muted">{e.experiment_variants?.length ?? 0} variants</span>
+                  {e.bandit_enabled
+                    ? <Badge className={CHIP_TONE.brandSubtle}>Shifts to winner</Badge>
+                    : <span className="text-xs text-fg-muted">Even split</span>}
+                  <span className="text-xs text-fg-muted sm:hidden"><RelativeTime value={e.created_at} /></span>
+                </div>
               </td>
-              <td className="px-3 py-2">{statusBadge(e.status)}</td>
-              <td className="px-3 py-2 tabular-nums text-xs">{e.experiment_variants?.length ?? 0}</td>
-              <td className="px-3 py-2">
+              <td role="cell" className="hidden px-3 py-2 sm:table-cell">{statusBadge(e.status)}</td>
+              <td role="cell" className="hidden px-3 py-2 tabular-nums text-xs md:table-cell">{e.experiment_variants?.length ?? 0}</td>
+              <td role="cell" className="hidden px-3 py-2 md:table-cell">
                 {e.bandit_enabled
                   ? <Badge className={CHIP_TONE.brandSubtle}>Shifts to winner</Badge>
                   : <span className="text-xs text-fg-muted">Even split</span>}
               </td>
-              <td className="px-3 py-2 text-xs text-fg-muted"><RelativeTime value={e.created_at} /></td>
-              <td className="px-3 py-2">
-                <div className="flex gap-1 justify-end">
+              <td role="cell" className="hidden px-3 py-2 text-xs text-fg-muted sm:table-cell"><RelativeTime value={e.created_at} /></td>
+              <td role="cell" className="block px-3 pt-1 pb-2 sm:table-cell sm:py-2">
+                <div className="flex w-full gap-1 justify-end sm:w-auto">
                   {e.status === 'draft' && (e.experiment_variants?.length ?? 0) >= 2 && (
                     // A row action, not the page's main action: one primary per view (Carbon), green for "start".
-                    <Btn size="sm" variant="success" onClick={() => onLaunch(e.id)}>Launch</Btn>
+                    <Btn size="sm" variant="success" className="shrink-0 whitespace-nowrap" onClick={() => onLaunch(e.id)}>Launch</Btn>
                   )}
                   {e.status === 'running' && (
                     <Tooltip content="Stop experiment">
                       <Btn
                         size="sm"
                         variant="ghost"
-                        className="px-2"
+                        className="shrink-0 px-2"
                         aria-label={`Stop experiment ${e.name}`}
                         onClick={() => onStop(e.id)}
                       >
@@ -455,7 +473,7 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
                     <Btn
                       size="sm"
                       variant="ghost"
-                      className="px-2"
+                      className="shrink-0 px-2"
                       aria-label={`View experiment ${e.name}`}
                       onClick={() => onOpen(e)}
                     >

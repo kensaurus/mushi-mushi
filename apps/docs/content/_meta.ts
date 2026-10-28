@@ -27,6 +27,8 @@ export default {
 
   '-- Get started': { type: 'separator', title: 'Get started' },
   connect: { title: 'Connect your client', href: '/connect' },
+  // Readable without signup or install (owner, 2026-10-27; ADR 0052).
+  demo: 'Sample diagnosis',
   quickstart: 'Quickstart',
   concepts: 'Concepts',
 

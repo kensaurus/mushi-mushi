@@ -52,7 +52,8 @@ export function errorSection<T>(err: unknown): HomeSection<T> {
 /** good / warn / bad are traffic lights; busy = running now; off = no signal. */
 export type Light = 'good' | 'warn' | 'bad' | 'busy' | 'off'
 
-export type HealthId = 'site' | 'errors' | 'sdk' | 'ci'
+/** `setup` shows only on apps with a finished fresh-eyes run (ADR 0053). */
+export type HealthId = 'site' | 'errors' | 'sdk' | 'ci' | 'setup'
 
 export interface HealthSignal {
   id: HealthId
@@ -230,6 +231,33 @@ export function ciSignal(input: CiInput): HealthSignal {
     return { ...base, status: 'ok', light: 'busy', headline: 'Running', detail: `${plural(jobs.length, 'check')} on the latest commit.`, at, connect: null }
   }
   return { ...base, status: 'ok', light: 'good', headline: 'Passing', detail: `${plural(jobs.length, 'check')} green on the latest commit.`, at, connect: null }
+}
+
+export interface SetupInput {
+  /** The latest finished fresh-eyes run that was not a dry run, or null. */
+  run: { ttfv_seconds: number | null; steps: number | null; reached: number | null; stalled_at: { screen: string; reason: string } | null; finished_at: string | null; counts: { sessions?: number } | null } | null
+}
+
+/** First-time setup under this is a good light; over SETUP_SLOW_S, a bad one. */
+export const SETUP_GOOD_S = 5 * 60
+export const SETUP_SLOW_S = 15 * 60
+export const FRESH_EYES_HREF = '/ux-runs?tab=fresh-eyes'
+
+/**
+ * "First-time setup: 6 min, 11 steps", from the latest fresh-eyes run. Null
+ * when the app has none, so apps that never ran one get no extra light.
+ */
+export function setupSignal(input: SetupInput): HealthSignal | null {
+  const r = input.run
+  if (!r) return null
+  const base = { id: 'setup' as const, label: 'First-time setup', href: FRESH_EYES_HREF, status: 'ok' as const, at: r.finished_at, connect: null }
+  const sessions = r.counts?.sessions ?? 0
+  if (!r.reached || r.ttfv_seconds == null) {
+    return { ...base, light: 'bad', headline: r.stalled_at ? `Stalls at ${r.stalled_at.screen}` : 'Goal not reached', detail: `None of ${plural(sessions, 'first-time visitor')} reached the goal in the last run.` }
+  }
+  const minutes = Math.max(1, Math.round(r.ttfv_seconds / 60))
+  const light: Light = r.ttfv_seconds <= SETUP_GOOD_S ? 'good' : r.ttfv_seconds <= SETUP_SLOW_S ? 'warn' : 'bad'
+  return { ...base, light, headline: `${minutes} min, ${plural(r.steps ?? 0, 'step')}`, detail: `${r.reached} of ${plural(sessions, 'first-time visitor')} reached the goal in the last run.` }
 }
 
 // ── Release ─────────────────────────────────────────────────────────────────

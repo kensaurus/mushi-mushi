@@ -96,6 +96,8 @@ describe('RoutePageHelp', () => {
     expect(details).not.toBeNull()
     expect(details?.open).toBe(true)
     expect(container.textContent).toContain('What it is')
+    // The open help lists its related pages itself; the row under it would repeat them.
+    expect(container.textContent).not.toContain('Related:')
   })
 
   it('shows it expanded when the user keeps tips open', async () => {

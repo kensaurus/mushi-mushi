@@ -2,7 +2,7 @@
  * Smoke: cinematic landing still ships north-star copy from the SSOT.
  * Guards against accidental hero/CTA/nav drift when motion components wrap prose.
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -11,10 +11,13 @@ import {
   LANDING_HERO,
   LANDING_HERO_START,
   LANDING_INSTALL,
+  LANDING_INSTALL_LOVABLE,
+  LANDING_SAMPLE_LINK,
   LANDING_SETUP_PROMPT,
   LANDING_FIX_PROMPT,
   LANDING_PILLARS,
   LANDING_OPERATOR,
+  LANDING_PRICING_STRIP,
   LANDING_WHERE_TO_START,
   LANDING_QUICKSTART_PLATFORMS,
   LANDING_COMPARISON_ROWS,
@@ -24,6 +27,8 @@ import { MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
 import { ADMIN_DEMO_BASE } from '../data/admin-screenshots'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+const DOCS = join(__dirname, '..')
+const read = (...rel: string[]) => readFileSync(join(DOCS, ...rel), 'utf8')
 
 describe('landing cinematic copy SSOT', () => {
   it('keeps category eyebrow on the v2 ladder', () => {
@@ -45,14 +50,9 @@ describe('landing cinematic copy SSOT', () => {
     expect(LANDING_HERO.reassure).toMatch(/50 diagnoses/i)
   })
 
-  it('exposes four diagnosis pillars for the scroll stage', () => {
-    expect(LANDING_PILLARS).toHaveLength(4)
-    expect(LANDING_PILLARS.map((p) => p.name)).toEqual([
-      'User reports',
-      'Plain read',
-      'One row',
-      'Draft PR',
-    ])
+  it('explains the one job in three steps: a user reports, Mushi explains, your AI fixes (ADR 0052)', () => {
+    expect(LANDING_PILLARS.map((p) => p.name)).toEqual(['A user reports it', 'Mushi explains it', 'Your AI fixes it'])
+    expect(LANDING_PILLARS.map((p) => p.glyph)).toEqual(['report', 'diagnose', 'ship'])
   })
 
   it('keeps a clear closing question and a tracked solo CTA to console signup', () => {
@@ -60,7 +60,15 @@ describe('landing cinematic copy SSOT', () => {
     expect(LANDING_OPERATOR.soloCta).toBe('Start free →')
     expect(LANDING_OPERATOR.soloHref).toBe(`${ADMIN_DEMO_BASE}/signup?src=landing-closing`)
     expect(LANDING_OPERATOR.soloCtaId).toBe('landing-closing')
-    expect(LANDING_OPERATOR.teamHref).toContain('github.com/kensaurus/mushi-mushi')
+  })
+
+  it('keeps enterprise plumbing off the landing: no SSO, audit logs or operator docs (ADR 0052)', () => {
+    const closing = read('components', 'landing', 'ClosingCta.tsx')
+    const landing = read('content', 'index.mdx')
+    for (const text of [JSON.stringify(LANDING_OPERATOR), closing, landing]) {
+      expect(text).not.toMatch(/single sign-on|SSO|audit log|docs\/operators/)
+    }
+    expect(LANDING_PRICING_STRIP.tierIds).toEqual(['free', 'indie', 'pro'])
   })
 
   it('keeps the funnel ids on the hero links: console signup, Cursor, npx and other editors', () => {
@@ -74,8 +82,8 @@ describe('landing cinematic copy SSOT', () => {
     expect(new Set([signup.id, cursor.id, npx.id, more.id]).size).toBe(4)
   })
 
-  it('installs from the hero: pick Claude Code, Cursor or another editor, then three steps with one prompt', () => {
-    expect(LANDING_INSTALL.tabs.map((t) => t.id)).toEqual(['claude-code', 'cursor', 'other'])
+  it('installs from the hero: pick Claude Code, Cursor, Lovable or Bolt, or another editor, then three steps', () => {
+    expect(LANDING_INSTALL.tabs.map((t) => t.id)).toEqual(['claude-code', 'cursor', 'lovable', 'other'])
     for (const tab of LANDING_INSTALL.tabs) expect(tab.connect.length).toBeGreaterThan(0)
     // ADR 0027's cycle: connect, a report comes in, a fix you review.
     expect(Object.values(LANDING_INSTALL.steps)).toEqual(['Connect your editor', 'Paste this prompt', 'Fix a real bug'])
@@ -87,16 +95,76 @@ describe('landing cinematic copy SSOT', () => {
     expect(LANDING_FIX_PROMPT).toMatch(/latest Mushi report/)
     const hero = readFileSync(join(__dirname, '..', 'components', 'landing', 'CinematicEditorialHero.tsx'), 'utf8')
     expect(hero).toContain('<LandingInstallStrip />')
-    const landing = readFileSync(join(__dirname, '..', 'content', 'index.mdx'), 'utf8')
-    // The install lives in the hero only; the pipeline picture comes right after it.
-    expect(landing).not.toContain('<LandingInstallStrip')
-    expect(landing.indexOf('<LoopPipeline')).toBeGreaterThan(landing.indexOf('<CinematicEditorialHero'))
-    expect(landing.indexOf('<LoopPipeline')).toBeLessThan(landing.indexOf('<OssTrustStrip'))
+    // The install lives in the hero only.
+    expect(read('content', 'index.mdx')).not.toContain('<LandingInstallStrip')
   })
 
-  it('keeps the hero lead on the solo-builder positioning against Sentry', () => {
-    expect(LANDING_HERO.lead).toMatch(/solo builders/i)
-    expect(LANDING_HERO.lead).toMatch(/Sentry/)
+  it('gives Lovable and Bolt a no-terminal path: a script tag pasted through a prompt', () => {
+    const tab = LANDING_INSTALL.tabs.find((t) => t.id === 'lovable')
+    expect(tab?.label).toBe('Lovable or Bolt')
+    // The same loader URL the script-tag quickstart documents.
+    const loaderUrl = LANDING_INSTALL_LOVABLE.prompt.match(/src="([^"]+)"/)?.[1] ?? ''
+    expect(loaderUrl).toMatch(/^https:\/\/cdn\.jsdelivr\.net\/npm\/@mushi-mushi\/web@\d+\/dist\/mushi\.loader\.global\.js$/)
+    expect(read('content', 'quickstart', 'web.mdx')).toContain(loaderUrl)
+    expect(LANDING_INSTALL_LOVABLE.prompt).toContain('data-project="YOUR_PROJECT_ID"')
+    expect(LANDING_INSTALL_LOVABLE.prompt).toContain('data-key="YOUR_API_KEY"')
+    // No terminal step: Lovable and Bolt have none.
+    expect(LANDING_INSTALL_LOVABLE.prompt).not.toMatch(/\bnpx\b|\bnpm (?:i|install)\b|terminal/)
+    expect(LANDING_INSTALL_LOVABLE.guide.href).toBe('/quickstart/lovable-bolt')
+    expect(existsSync(join(DOCS, 'content', 'quickstart', 'lovable-bolt.mdx'))).toBe(true)
+    // The connector guide is launch-connector's page (feat/launch-connector).
+    expect(LANDING_INSTALL_LOVABLE.connector.href).toBe('/quickstart/lovable-mcp')
+    // Its first step is the console signup, which keeps the `landing-hero` funnel id.
+    expect(read('components', 'landing', 'LandingInstallStrip.tsx')).toContain('LANDING_HERO_START.console.href')
+  })
+
+  it('leads with one job: a user says it is broken, Mushi says why and hands the fix to the AI', () => {
+    expect(LANDING_HERO.lead).toMatch(/user says your app is broken/i)
+    expect(LANDING_HERO.lead).toMatch(/plain English/)
+    expect(LANDING_HERO.lead).toMatch(/Cursor, Claude Code or Lovable/)
+    expect(LANDING_HERO.lead).toMatch(/No Sentry/)
+  })
+
+  it('has one primary action and one secondary link in the hero: the install box and the sample diagnosis', () => {
+    const hero = read('components', 'landing', 'CinematicEditorialHero.tsx')
+    expect(hero.match(/<LandingInstallStrip \/>/g)).toHaveLength(1)
+    expect(hero.match(/<Link /g)).toHaveLength(1)
+    expect(hero).toContain('LANDING_SAMPLE_LINK.href')
+    // No signup, star or other-editor links compete with the install box.
+    expect(hero).not.toMatch(/<a\s/)
+    expect(hero).not.toContain('LANDING_HERO_START')
+    expect(LANDING_SAMPLE_LINK.href).toBe('/demo/diagnosis')
+    expect(LANDING_SAMPLE_LINK.label).toMatch(/sample/i)
+    expect(existsSync(join(DOCS, 'content', 'demo', 'diagnosis.mdx'))).toBe(true)
+  })
+
+  it('orders the landing: hero, how it works, what it takes, FAQ, closing', () => {
+    const landing = read('content', 'index.mdx')
+    const order = ['<CinematicEditorialHero', '<DiagnosisScrollStage', '## What it takes', '<LandingFaq', '<ClosingCta']
+    const at = order.map((s) => landing.indexOf(s))
+    expect(at.every((i) => i >= 0)).toBe(true)
+    expect(at).toEqual([...at].sort((a, b) => a - b))
+  })
+
+  it('keeps the other jobs off the landing but one click away (ADR 0052)', () => {
+    const landing = read('content', 'index.mdx')
+    for (const gone of ['<LoopPipeline', '<MediatorMap', '<WhereToStartGrid', '<QuickstartGrid', '<ComparisonScrub', '<DocsMediaShowcase', 'Spend less on CI', 'voice']) {
+      expect(landing).not.toContain(gone)
+    }
+    // Each moved block lives on a docs page the "More" line links to.
+    const homes: Array<[string, string[], string]> = [
+      ['/concepts/closed-loop', ['content', 'concepts', 'closed-loop.mdx'], '<LoopPipeline'],
+      ['/plugins', ['content', 'plugins', 'index.mdx'], '<MediatorMap'],
+      ['/quickstart', ['content', 'quickstart', 'index.mdx'], '<WhereToStartGrid'],
+      ['/quickstart', ['content', 'quickstart', 'index.mdx'], '<QuickstartGrid'],
+      ['/admin', ['content', 'admin', 'index.mdx'], '<DocsMediaShowcase'],
+    ]
+    for (const [href, file, block] of homes) {
+      expect(landing).toContain(`](${href})`)
+      expect(read(...file)).toContain(block)
+    }
+    expect(read('content', 'admin', 'ci.mdx')).toContain('## Spend less on CI')
+    expect(read('content', 'use-cases', 'sentry-alternative.mdx')).toContain('<ComparisonScrub>')
   })
 
   it('tags the console card as a tracked CTA with a src param', () => {
