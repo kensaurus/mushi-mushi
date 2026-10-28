@@ -26,12 +26,12 @@ let container: HTMLDivElement
 let root: Root
 let latest: PageDataState<unknown> | null = null
 
-function Harness({ path }: { path: string }) {
+function Harness({ path }: { path: string | null }) {
   latest = usePageData<unknown>(path)
   return null
 }
 
-async function render(path: string): Promise<void> {
+async function render(path: string | null): Promise<void> {
   await act(async () => {
     root.render(createElement(Harness, { path }))
   })
@@ -58,5 +58,17 @@ describe('usePageData', () => {
     await render('/v1/b')
     expect(latest?.data).toBeNull()
     expect(latest?.lastFetchedAt).toBeNull()
+  })
+
+  // Releases switched to its New draft tab (path null) while the list was
+  // loading; the aborted request left isValidating on and Refresh spun
+  // forever (2026-10-28).
+  it('stops validating when the path goes away mid-request', async () => {
+    api.apiFetch.mockReturnValueOnce(new Promise(() => {}))
+    await render('/v1/releases')
+    expect(latest?.isValidating).toBe(true)
+    await render(null)
+    expect(latest?.isValidating).toBe(false)
+    expect(latest?.loading).toBe(false)
   })
 })
