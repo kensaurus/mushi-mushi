@@ -198,7 +198,6 @@ export function ConnectPage() {
   const fallbackGithubRepoUrl = project?.primary_repo?.repo_url ?? null
   // SDK keys only: an MCP or CLI key's heartbeat is not the app checking in.
   const sdkLastSeenAt = latestHeartbeatAt(project?.api_keys?.filter((k) => isSdkKeyScopes(k.scopes)))
-  const sdkConnected = sdkLastSeenAt != null
   const snapshotLoading = (projectsFeed.loading && !project) || mcpStatsQuery.loading
   // A fresh load of /connect#connect-sdk-health ran the layout's hash scroll
   // before the sections above had their height, and stayed at the top.
@@ -280,18 +279,11 @@ export function ConnectPage() {
         ) : null}
       </div>
 
-      {/* Installing the SDK is taught once, on Set up, where the snippet comes
-          with a key filled in. This page also had a setup warning banner and
-          its own "Set up the SDK" section too (integrator's walk, 2026-10-28). */}
-      {!sdkConnected && !feedError && !snapshotLoading ? (
-        <p className="text-xs text-fg-muted" data-testid="connect-install-pointer">
-          Your app has not checked in yet.{' '}
-          <Link to="/onboarding" className={LINK_ACCENT}>
-            Install the SDK on Set up
-          </Link>
-          ; it gives you the snippet with a key filled in.
-        </p>
-      ) : null}
+      {/* The install lives once on this page, in Bug capture, where "Make a
+          key and fill it in" fills the snippet. A pointer to Set up sat above
+          it, so the install showed twice; a setup banner said the same again
+          (first-time user test, 2026-10-28). The "App checked in" pill is the
+          one status. */}
 
       {feedError && (
         <HelpBanner
