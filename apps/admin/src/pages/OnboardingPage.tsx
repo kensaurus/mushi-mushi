@@ -7,9 +7,9 @@
  *          State source-of-truth is `useSetupStatus()` (DB-backed). The wizard
  *          drives next-step focus off `activeProject.steps`, so progress survives
  *          across browsers/devices and stays in sync with what the rest of the
- *          admin sees. The pipeline-live card uses `onboardingSetupComplete`
- *          and `onboardingPrimaryCta` together: the card needs a full counter,
- *          and the button also stops after a merged fix.
+ *          admin sees. The pipeline-live card shows when
+ *          `onboardingSetupComplete` is true. Its buttons are View fixes
+ *          and Open dashboard.
  */
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -43,7 +43,7 @@ import { useToast } from '../lib/toast'
 import { useCreateProject } from '../lib/useCreateProject'
 import { usePageCopy } from '../lib/copy'
 import { useOnboardingUx, resolveQuickOnboardingTab } from '../lib/onboardingModeUx'
-import { onboardingPrimaryCta, onboardingSetupComplete } from '../lib/onboardingPrimaryCta'
+import { onboardingSetupComplete } from '../lib/onboardingPrimaryCta'
 import { restartFirstRunTour } from '../components/FirstRunTour'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { FirstDiagnosisScreen } from '../components/onboarding/FirstDiagnosisScreen'
@@ -404,10 +404,8 @@ export function OnboardingPage() {
   const hasReports = (project?.report_count ?? 0) > 0
   const hasFix = (project?.fix_count ?? 0) > 0
   const hasMerged = (project?.merged_fix_count ?? 0) > 0
-  // Hero and button finish on different rules, both in onboardingPrimaryCta.ts.
   // The card is the "N of N" header: required steps done and the counter full.
-  // The button also stops asking to connect agents after a merged fix, while
-  // optional steps remain — that wider rule must not bring the card up early.
+  // A merged fix does not show it while steps remain.
   const setupComplete = Boolean(
     project && onboardingSetupComplete({
       done: project.done,
@@ -415,14 +413,6 @@ export function OnboardingPage() {
       total: project.total,
     }),
   )
-  const pipelineCta = project
-    ? onboardingPrimaryCta({
-        done: project.done,
-        complete: project.complete,
-        total: project.total,
-        mergedFixCount: project.merged_fix_count,
-      })
-    : null
 
   usePublishPageContext({
     route: '/onboarding',
@@ -701,11 +691,7 @@ export function OnboardingPage() {
                   )}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
-                  {pipelineCta && (
-                    <Btn size="sm" variant={pipelineCta.variant} onClick={() => navigate(pipelineCta.to)}>
-                      {pipelineCta.label}{pipelineCta.variant === 'primary' ? ' →' : ''}
-                    </Btn>
-                  )}
+                  <Btn size="sm" variant="ghost" onClick={() => navigate('/fixes')}>View fixes</Btn>
                   <Btn size="sm" variant="ghost" onClick={() => navigate('/dashboard')}>Open dashboard</Btn>
                 </div>
               </div>
