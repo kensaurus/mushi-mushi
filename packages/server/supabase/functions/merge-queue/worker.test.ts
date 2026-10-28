@@ -174,7 +174,7 @@ test('a hold blocks; failed CI blocks with the check names', async () => {
     merge: (() => Promise.resolve({ ok: false, status: 409, code: 'REVIEW_HOLD', message: 'Opus said hold.', review: { verdict: 'hold', stale: false, rerunning: false } })) as never,
   }))
   assertEquals(out, 'blocked')
-  assertEquals(String(lastState(held.writes)?.detail).includes('only you can override a hold'), true)
+  assertEquals(String(lastState(held.writes)?.detail).includes('only you can override it'), true)
 
   const red = setup(row())
   const out2 = await processRow(red.db, row(), deps({ checks: () => Promise.resolve({ pending: 0, failed: ['required'] }) }))
