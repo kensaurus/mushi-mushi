@@ -217,8 +217,8 @@ export function CodebaseIndexCard({ projectId, canManage = true }: Props) {
     toast.success(
       next ? 'Autofix enabled' : 'Autofix paused',
       next
-        ? 'Dispatch buttons on the Reports page will now queue a fix worker.'
-        : 'Reports can still be triaged; the Dispatch button is disabled until you re-enable.',
+        ? 'Starting a fix from Bugs works again.'
+        : 'Bugs are still sorted and explained; starting a fix stays off until you turn it back on.',
     )
   }
 

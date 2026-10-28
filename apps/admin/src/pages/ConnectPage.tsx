@@ -350,7 +350,7 @@ export function ConnectPage() {
               {project && isExpoReporterNeverConnected(project) ? (
                 <HelpBanner
                   tone="warn"
-                  title="No SDK heartbeat from store builds yet"
+                  title="Your store builds have not checked in yet"
                   icon={<IconAlertTriangle className="h-5 w-5 text-warn-foreground" />}
                   className="mb-3"
                 >
