@@ -370,6 +370,25 @@ describe('PipelinePage', () => {
     expect(q('pipeline-intake-not-recorded')!.textContent).toBe('not recorded yet')
     expect(q('pipeline-intake-p1-rejected')).toBeNull()
     expect(q('pipeline-intake')!.textContent).toContain('no deploy recorded in 14 days')
+    expect(q('pipeline-intake-p1-deploy-stale')!.textContent).toContain('deploy.completed')
+    expect(q('pipeline-intake-p1-deploy-how')!.getAttribute('href')).toBe('/recipe')
+  })
+
+  it('a deploy inside 14 days is not a silence warning; an older date is', async () => {
+    const day = 24 * 3600_000
+    const now = Date.now()
+    ;(state.data as PipelineData).projects[0]!.lastDeploy = { at: new Date(now - day).toISOString(), version: '1.2.0', ok: true }
+    await render()
+    expect(q('pipeline-intake-p1-deploy')!.textContent).toContain('last deploy seen')
+    expect(q('pipeline-intake-p1-deploy')!.textContent).toContain('(1.2.0)')
+    expect(q('pipeline-intake-p1-deploy-stale')).toBeNull()
+
+    ;(state.data as PipelineData).projects[0]!.lastDeploy = { at: new Date(now - 16 * day).toISOString(), version: '1.0.0', ok: false }
+    await render()
+    const stale = q('pipeline-intake-p1-deploy-stale')!
+    expect(stale.textContent).toContain('Too old')
+    expect(stale.textContent).toContain('deploy.completed')
+    expect(q('pipeline-intake-p1-deploy')!.textContent).toContain('and it failed')
   })
 
   it('the Workers tab reads the local workers instead of the pipeline', async () => {
