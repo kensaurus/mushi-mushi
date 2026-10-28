@@ -237,7 +237,11 @@ export const AGENT_STUCK_MS = 6 * HOUR
 export const REVIEW_STUCK_MS = 2 * HOUR
 /** CI still running after this is stuck. */
 export const CI_STUCK_MS = 3 * HOUR
-/** A conflict agent (ADR 0041) times out at 90 min; past that nothing moves the row. */
+/**
+ * A conflict agent (ADR 0041) times out at 90 min after it starts
+ * (`agent_started_at`). The queue time is not that clock: a PR can sit queued
+ * for days before it conflicts, and with no Cursor key no agent ever starts.
+ */
 export const CONFLICT_STUCK_MS = 90 * 60_000
 /** The merge queue's per-PR conflict-agent cap (`MAX_CONFLICT_AGENTS`). */
 export const CONFLICT_AGENT_CAP = 2
@@ -617,15 +621,20 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       const since = q.agent_started_at ?? q.queued_at
       const capped = (q.conflict_agents ?? 0) >= CONFLICT_AGENT_CAP
       const off = queueDetailKind(q.detail) === 'followups_off'
-      const stuck = off || age(now, since) > CONFLICT_STUCK_MS
+      const timedOut = !!q.agent_started_at && age(now, q.agent_started_at) > CONFLICT_STUCK_MS
+      const stuck = off || timedOut
+      const waitingToStart = !q.agent_started_at && !off
       const text = off
         ? 'merge conflict and no agent may push (follow-ups are off): needs a person, resolve on GitHub'
         : capped && stuck
           ? 'merge conflict, both conflict agents used: needs a person, resolve on GitHub'
           : stuck
             ? `waiting on a conflict agent for over ${Math.round(CONFLICT_STUCK_MS / 60_000)} min`
-            : 'a conflict agent is merging the base in'
-      groups.add(off ? 'conflict_off' : capped && stuck ? 'conflict_capped' : stuck ? 'conflict_stuck' : 'conflict_running', {
+            : waitingToStart
+              ? 'waiting for a conflict agent to start'
+              : 'a conflict agent is merging the base in'
+      const id = off ? 'conflict_off' : capped && stuck ? 'conflict_capped' : stuck ? 'conflict_stuck' : waitingToStart ? 'conflict_pending' : 'conflict_running'
+      groups.add(id, {
         stage: 'train',
         tone: stuck ? 'stuck' : 'moving',
         noun: PR,

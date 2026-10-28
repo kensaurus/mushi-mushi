@@ -448,7 +448,14 @@ export async function runTrainTick(
         r.head_sha === pull.headSha && now.getTime() - Date.parse(r.updated_at ?? '') < CONFLICT_RECHECK_MS
       if (blockedHere) continue
       if ((r.conflict_agents ?? 0) < MAX_CONFLICT_AGENTS) {
-        await setRows(db, [r.id], { state: 'resolving', cursor_agent_id: null, detail: 'Conflicts with the base branch; a Cursor agent merges it in, then it rides a release train.' })
+        // head_sha is what a local conflicts lane claims on, and what keeps this
+        // row from being offered again for an hour after no cloud agent can start.
+        await setRows(db, [r.id], {
+          state: 'resolving',
+          cursor_agent_id: null,
+          ...(pull.headSha ? { head_sha: pull.headSha } : {}),
+          detail: 'Conflicts with the base branch; a Cursor agent merges it in, then it rides a release train.',
+        })
       } else if (r.state !== 'blocked') {
         await setRows(db, [r.id], { state: 'blocked', detail: `Merge conflict: ${MAX_CONFLICT_AGENTS} agent runs did not resolve it. Resolve it on GitHub.` })
       }

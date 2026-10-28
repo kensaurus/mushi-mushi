@@ -295,6 +295,35 @@ test('in a train app, conflicting PRs get agents even though the train holds the
   assertEquals(String(r3?.detail).startsWith('Conflicts with the base branch; waits for a free conflict agent (2 ahead'), true)
 })
 
+test('in a train app, no cloud key blocks every conflict, instead of leaving the rest waiting on an agent', async () => {
+  // A cloud agent starts at most two per repo. With no Cursor key none can start,
+  // so the ones past that cap used to stay `resolving` ("waits for a free conflict
+  // agent"). /pipeline then said "waiting on a conflict agent for over 90 min"
+  // from queued_at, which is often days earlier.
+  const rows = [7, 8, 9].map((pr, i) => ({
+    ...row({ id: `r${pr}`, state: 'queued', pr_number: pr }),
+    queued_at: `2026-10-23T08:0${i}:00Z`,
+    claimed_until: null,
+  }))
+  const { db, writes } = fakeDb({
+    fix_attempts: [{ ...attempt }],
+    fix_merge_queue: rows,
+    fix_events: [],
+    project_settings: [{ project_id: 'p1', release_mode: 'train' }],
+  })
+  const unused = () => Promise.reject(new Error('no train should be built'))
+  await runMergeQueue(db, deps({
+    pull: () => Promise.resolve(pull({ mergeable: false, mergeableState: 'dirty' })),
+    cursorKey: () => Promise.resolve({ ok: false, reason: 'No Cursor key of yours serves this app.' }),
+    createAgent: () => Promise.reject(new Error('must not start')),
+    train: { branchSha: unused, createBranch: unused, mergeInto: unused, openPr: unused, closePr: unused, deleteBranch: unused, mergeMethod: unused, trainMerge: unused } as never,
+  }))
+  for (const r of rows) {
+    assertEquals([r.state, r.detail, r.head_sha], ['blocked', 'Merge conflict. No Cursor key of yours serves this app.', 'h1'])
+  }
+  assertEquals(writes.some((w) => String(w.value.detail ?? '').includes('waits for a free conflict agent')), false)
+})
+
 test('in a train app, a conflict no agent may take stays blocked with the reason instead of flapping', async () => {
   const rows = [row({ id: 'q', state: 'queued', pr_number: 5 })].map((r) => ({ ...r, queued_at: '2026-10-23T08:00:00Z', claimed_until: null }))
   const { db, writes } = fakeDb({ fix_attempts: [{ ...attempt }], fix_merge_queue: rows, fix_events: [], project_settings: [{ project_id: 'p1', release_mode: 'train' }] })
