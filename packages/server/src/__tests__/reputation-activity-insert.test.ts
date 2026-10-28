@@ -1,0 +1,172 @@
+/**
+ * awardPointsForEndUser used to log PostgREST's raw gateway HTML with
+ * rlog.error, which Sentry stored as the issue message on every
+ * session_minute heartbeat. Transient gateway failures are a short status
+ * line at warn (no Sentry). Heartbeats are not retried; other awards get
+ * one retry, except a 504 which may already have committed.
+ */
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const fakeLog = vi.hoisted(() => {
+  const logger: Record<string, ReturnType<typeof vi.fn>> = {}
+  for (const level of ['debug', 'info', 'warn', 'error', 'fatal', 'audit']) logger[level] = vi.fn()
+  ;(logger as { child: () => typeof logger }).child = () => logger
+  return logger
+})
+vi.mock('../../supabase/functions/_shared/logger.ts', () => ({ log: fakeLog, createLogger: () => fakeLog }))
+
+import { awardPointsForEndUser } from '../../supabase/functions/_shared/reputation.ts'
+
+const GATEWAY_HTML =
+  '<!DOCTYPE html><html><head><title>supabase.co | 502: Bad gateway</title></head>' +
+  '<body><script>secret()</script>cloudflare</body></html>'
+
+type InsertStep =
+  | { throw: string }
+  | { error: { message?: string; code?: string | null } | null; status: number }
+
+function dbForInserts(script: InsertStep[], totalPoints = 10) {
+  const inserts: unknown[] = []
+  const thenable = (result: { data: unknown; error: unknown; status: number; count: number | null }) => {
+    const builder: Record<string, unknown> = {
+      then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+        Promise.resolve(result).then(resolve, reject),
+      single: () => Promise.resolve(result),
+    }
+    for (const method of ['select', 'eq', 'gte', 'is', 'order', 'limit', 'update']) {
+      builder[method] = () => builder
+    }
+    return builder
+  }
+  const db = {
+    from(table: string) {
+      if (table === 'end_user_activity') {
+        return {
+          insert(row: unknown) {
+            const step = script[inserts.length] ?? script[script.length - 1]
+            inserts.push(row)
+            if (step && 'throw' in step) return Promise.reject(new Error(step.throw))
+            return Promise.resolve({ data: null, error: step?.error ?? null, status: step && 'status' in step ? step.status : 201 })
+          },
+          select: () => thenable({ data: [], error: null, status: 200, count: 0 }),
+        }
+      }
+      if (table === 'end_user_points') {
+        return thenable({
+          data: { total_points: totalPoints, current_tier_id: null },
+          error: null,
+          status: 200,
+          count: null,
+        })
+      }
+      return thenable({ data: [], error: null, status: 200, count: null })
+    },
+  }
+  return { db, inserts }
+}
+
+function award(db: unknown, action: string, projectId: string) {
+  return awardPointsForEndUser(db as never, {
+    projectId,
+    organizationId: '00000000-0000-4000-8000-000000000001',
+    endUserId: '00000000-0000-4000-8000-000000000002',
+    action,
+  })
+}
+
+function logged(level: 'warn' | 'error') {
+  return fakeLog[level].mock.calls.filter((call) => call[0] === 'activity_insert_failed')
+}
+
+beforeEach(() => {
+  fakeLog.warn.mockClear()
+  fakeLog.error.mockClear()
+})
+
+describe('awardPointsForEndUser activity insert', () => {
+  it('logs a gateway HTML body as a short warning and does not retry a heartbeat', async () => {
+    const { db, inserts } = dbForInserts([{ error: { message: GATEWAY_HTML, code: null }, status: 502 }])
+    const result = await award(db, 'session_minute', 'proj-activity-heartbeat')
+
+    expect(result).toMatchObject({ pointsAwarded: 0, rejectedReason: 'insert_error' })
+    expect(inserts).toHaveLength(1)
+    expect(logged('error')).toEqual([])
+    expect(logged('warn')).toEqual([
+      [
+        'activity_insert_failed',
+        expect.objectContaining({
+          action: 'session_minute',
+          transient: true,
+          status: 502,
+          error: 'HTTP 502: [upstream gateway error] supabase.co | 502: Bad gateway',
+        }),
+      ],
+    ])
+    expect(JSON.stringify(logged('warn'))).not.toContain('<')
+    expect(JSON.stringify(logged('warn'))).not.toContain('secret()')
+  })
+
+  it('retries a non-heartbeat award once when the gateway page is transient', async () => {
+    const { db, inserts } = dbForInserts([
+      { error: { message: GATEWAY_HTML, code: null }, status: 503 },
+      { error: null, status: 201 },
+    ])
+    const result = await award(db, 'report.submitted', 'proj-activity-retry')
+
+    expect(inserts).toHaveLength(2)
+    expect(result.pointsAwarded).toBe(10)
+    expect(result.rejectedReason).toBeNull()
+    expect(logged('error')).toEqual([])
+    expect(logged('warn')).toEqual([])
+  })
+
+  it('does not retry a 504 and still keeps the HTML page out of the log', async () => {
+    const { db, inserts } = dbForInserts([{ error: { message: GATEWAY_HTML, code: null }, status: 504 }])
+    const result = await award(db, 'report.submitted', 'proj-activity-504')
+
+    expect(inserts).toHaveLength(1)
+    expect(result.rejectedReason).toBe('insert_error')
+    expect(logged('error')).toEqual([])
+    expect(logged('warn')[0]?.[1]).toMatchObject({
+      transient: true,
+      status: 504,
+      error: 'HTTP 504: [upstream gateway error] supabase.co | 502: Bad gateway',
+    })
+    expect(JSON.stringify(logged('warn'))).not.toContain('<')
+  })
+
+  it('still reports a real constraint failure, once, with its own message', async () => {
+    const { db, inserts } = dbForInserts([
+      { error: { message: 'duplicate key value violates unique constraint', code: '23505' }, status: 409 },
+    ])
+    const result = await award(db, 'report.submitted', 'proj-activity-constraint')
+
+    expect(inserts).toHaveLength(1)
+    expect(result.rejectedReason).toBe('insert_error')
+    expect(logged('warn')).toEqual([])
+    expect(logged('error')).toEqual([
+      [
+        'activity_insert_failed',
+        expect.objectContaining({
+          action: 'report.submitted',
+          status: 409,
+          error: 'duplicate key value violates unique constraint',
+        }),
+      ],
+    ])
+  })
+
+  it('sanitizes a thrown HTML body the same way as a returned PostgREST error', async () => {
+    const { db, inserts } = dbForInserts([{ throw: GATEWAY_HTML }])
+    const result = await award(db, 'session_minute', 'proj-activity-throw')
+
+    expect(inserts).toHaveLength(1)
+    expect(result.rejectedReason).toBe('insert_error')
+    expect(logged('error')).toEqual([])
+    expect(JSON.stringify(logged('warn'))).not.toContain('<')
+    expect(logged('warn')[0]?.[1]).toMatchObject({
+      transient: true,
+      error: '[upstream gateway error] supabase.co | 502: Bad gateway',
+    })
+  })
+})
