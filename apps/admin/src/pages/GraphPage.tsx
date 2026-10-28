@@ -505,7 +505,7 @@ export function GraphPage() {
         )}
         <InlineProof className="font-mono tabular-nums border-0 bg-transparent px-0 py-0">
           {graphCanvasProof('nodes', filteredNodes.length, rawNodes.length, nodesQuery.data?.total)}
-          {singletonCount > 0 ? ` (${singletonCount} isolated hidden)` : ''} ·{' '}
+          {singletonCount > 0 ? ` (${singletonCount} with no links hidden)` : ''} ·{' '}
           {graphCanvasProof('edges', filteredEdges.length, rawEdges.length, edgesQuery.data?.total)}
         </InlineProof>
         <SegmentedControl<ViewMode>
