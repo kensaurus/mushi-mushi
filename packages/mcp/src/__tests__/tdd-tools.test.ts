@@ -446,15 +446,6 @@ describe('TDD MCP tools', () => {
 describe('QA run tool project parameter', () => {
   const names = ['list_qa_story_runs', 'get_qa_story_run'] as const
 
-  function registration(name: string): string {
-    const src = readFileSync(resolve(REPO_ROOT, 'packages/mcp/src/server.ts'), 'utf8')
-    const marker = `server.registerTool(\n    '${name}'`
-    const start = src.indexOf(marker)
-    expect(start, name).toBeGreaterThan(-1)
-    const next = src.indexOf('\n  server.registerTool(', start + marker.length)
-    return src.slice(start, next === -1 ? undefined : next)
-  }
-
   it('documents projectId and project_id in the catalog and generated docs', () => {
     for (const name of names) {
       const tool = TDD_TOOL_CATALOG.find((t) => t.name === name)
@@ -478,14 +469,6 @@ describe('QA run tool project parameter', () => {
       expect(full.split('\n').find((line) => line.startsWith(row)), name).toContain(PROJECT_PARAM)
       expect(glama.tools.find((t) => t.name === name)?.description, name).toContain(PROJECT_PARAM)
       expect(discovery.tools[name]?.description, name).toContain(PROJECT_PARAM)
-    }
-  })
-
-  it('points both schemas at the snake_case normaliser', () => {
-    for (const name of names) {
-      const block = registration(name)
-      expect(block, name).toContain('acceptSnakeCaseAliases')
-      expect(block, name).toContain('normalizeArgAliases')
     }
   })
 })

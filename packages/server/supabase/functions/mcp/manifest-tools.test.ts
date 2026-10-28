@@ -1,6 +1,6 @@
 import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
 
-import { buildManifestTools } from './manifest-tools.ts';
+import { buildManifestTools, manifestToolRequiresProject } from './manifest-tools.ts';
 
 class TestMcpError extends Error {
   constructor(
@@ -344,5 +344,35 @@ Deno.test('QA run tools use the named project and the unwrapped runs list', asyn
     missing = err instanceof Error ? err.message : String(err);
   }
   assertEquals(missing, 'projectId is required');
+  let missingRun = '';
+  try {
+    await tools.get_qa_story_run.handler({ storyId, runId: 'run-1' }, context);
+  } catch (err) {
+    missingRun = err instanceof Error ? err.message : String(err);
+  }
+  assertEquals(missingRun, 'projectId is required');
   assertEquals(calls.length, 2);
+});
+
+Deno.test('requiresProject is a spec flag, not a path shape', async () => {
+  assertEquals(manifestToolRequiresProject({ requiresProject: true }), true);
+  assertEquals(manifestToolRequiresProject({}), false);
+  assertEquals(manifestToolRequiresProject({ requiresProject: false }), false);
+  // The old guard treated any /qa-stories/…/runs path as requiring a project.
+  assertEquals(
+    manifestToolRequiresProject({
+      path: '/v1/admin/projects/{projectId}/qa-stories/{storyId}/runs',
+    } as { requiresProject?: boolean }),
+    false,
+  );
+
+  const manifest = (await import('../_shared/mcp-hosted-tool-manifest.json', { with: { type: 'json' } })).default as Record<
+    string,
+    { requiresProject?: boolean }
+  >;
+  assertEquals(manifest.list_qa_story_runs?.requiresProject, true);
+  assertEquals(manifest.get_qa_story_run?.requiresProject, true);
+  assertEquals(manifestToolRequiresProject(manifest.list_qa_story_runs!), true);
+  assertEquals(manifestToolRequiresProject(manifest.get_qa_story_run!), true);
+  assertEquals(manifestToolRequiresProject(manifest.test_notification_channel!), false);
 });

@@ -22,6 +22,13 @@ export interface ManifestToolDef {
    */
   path: string;
   required?: string[];
+  /**
+   * The caller must name a project (`args.projectId` or the connection's
+   * project hint). An account connection has no hint; without one the path
+   * becomes `/projects//…` and the API 404s, which hosted MCP reports as
+   * "Upstream 404". Set this on the spec — do not infer it from the path.
+   */
+  requiresProject?: boolean;
   body?: Record<string, unknown>;
   bodyPassthrough?: boolean;
   /** Return `{ [wrap]: data }` instead of the route's payload, to match the catalog's outputSchema. */
@@ -115,6 +122,14 @@ function queryValue(token: string, args: Record<string, unknown>, ctx: { project
   if (raw === false) return '';
   if (Array.isArray(raw)) return raw.map(String).join(',');
   return resolveToken(token, args, ctx);
+}
+
+/**
+ * True when the spec says the caller must name a project. Path shape is not
+ * a signal: a `/qa-stories/…/runs` route without this flag does not require one.
+ */
+export function manifestToolRequiresProject(spec: { requiresProject?: boolean }): boolean {
+  return spec.requiresProject === true;
 }
 
 function interpolatePath(
@@ -248,11 +263,10 @@ export function buildManifestTools(deps: {
           }
         }
         const pid = (args.projectId ?? ctx.projectIdHint) as string | undefined;
-        // An account connection has no projectIdHint. These two tools used to
-        // call `/projects//qa-stories/…/runs`, which the API answers 404 with
-        // `{ error: "Not found" }` — hosted surfaces that as "Upstream 404".
-        const pathOnly = spec.path.split('?')[0] ?? spec.path;
-        if (pathOnly.includes('/qa-stories/') && pathOnly.endsWith('/runs') && !pid) {
+        // An account connection has no projectIdHint. Tools flagged
+        // requiresProject used to call `/projects//…`, which the API answers
+        // 404 — hosted surfaces that as "Upstream 404".
+        if (manifestToolRequiresProject(spec) && !pid) {
           throw new McpError(ERR_INVALID_PARAMS, 'projectId is required');
         }
 

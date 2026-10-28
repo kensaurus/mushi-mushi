@@ -1,7 +1,9 @@
 /**
  * FILE: packages/server/src/__tests__/qa-coverage-account-key.test.ts
  * PURPOSE: GET …/qa-stories/:sid/runs accepts an account key for a project
- *          that key can reach. The other QA routes keep their previous gates.
+ *          that key can reach, and a console JWT for an org or project
+ *          member who does not own the app. The other QA routes keep their
+ *          previous gates.
  *
  * list_qa_story_runs / get_qa_story_run call this route. jwtOrApiKey delegates
  * to apiKeyAuth, which refuses org-scoped keys, so an account connection got
@@ -20,6 +22,8 @@ vi.mock('../../supabase/functions/_shared/sdk-observation.ts', () => ({ upsertPr
 vi.mock('../../supabase/functions/_shared/setup-funnel.ts', () => ({ emitFunnelEvent: async () => {} }))
 
 const OWNER = '3000000a-0000-4000-8000-000000000000'
+const MEMBER = '3000000b-0000-4000-8000-000000000000'
+const ORG = '6000000a-0000-4000-8000-000000000000'
 const PID = '1000000a-0000-4000-8000-000000000000'
 const OTHER = '1000000b-0000-4000-8000-000000000000'
 const STORY = '2000000a-0000-4000-8000-000000000000'
@@ -228,5 +232,53 @@ describe('GET qa story runs with an account key', () => {
       headers: { 'X-Mushi-Api-Key': PROJECT_KEY },
     })
     expect(coverage.status).toBe(200)
+  })
+})
+
+/** Console JWT: getClaims returns this user. The token is the user id. */
+function allowConsoleUser(userId: string): void {
+  Object.assign(state.db!, {
+    auth: {
+      getClaims: async (token: string) =>
+        token === userId
+          ? { data: { claims: { sub: userId, role: 'authenticated', email: 'member@example.test' } }, error: null }
+          : { data: null, error: { message: 'invalid' } },
+    },
+  })
+}
+
+async function getRunsAsUser(userId: string) {
+  allowConsoleUser(userId)
+  const res = await app.request(runsUrl(PID), { headers: { Authorization: `Bearer ${userId}` } })
+  const body = await res.json() as { ok?: boolean; data?: { runs?: Array<{ id: string }> }; error?: { code?: string } | string }
+  return { status: res.status, body }
+}
+
+describe('GET qa story runs with a console session', () => {
+  it('lets an org member who does not own the project read runs', async () => {
+    seed({
+      projects: [{ id: PID, name: 'glot', owner_id: OWNER, organization_id: ORG }],
+      organization_members: [{ organization_id: ORG, user_id: MEMBER, role: 'member' }],
+      project_members: [],
+    })
+    const { status, body } = await getRunsAsUser(MEMBER)
+    expect(status).toBe(200)
+    expect(body.data?.runs?.map((r) => r.id)).toEqual([RUN])
+  })
+
+  it('lets a project viewer who does not own the project read runs', async () => {
+    seed({
+      project_members: [{ project_id: PID, user_id: MEMBER, role: 'viewer' }],
+    })
+    const { status, body } = await getRunsAsUser(MEMBER)
+    expect(status).toBe(200)
+    expect(body.data?.runs?.map((r) => r.id)).toEqual([RUN])
+  })
+
+  it('hides a project the signed-in user cannot reach', async () => {
+    seed()
+    const { status, body } = await getRunsAsUser(MEMBER)
+    expect(status).toBe(404)
+    expect(body.error).toBe('Not found')
   })
 })
