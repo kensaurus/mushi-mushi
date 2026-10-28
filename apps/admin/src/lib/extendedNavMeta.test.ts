@@ -22,6 +22,7 @@ import {
   workspaceSlicesAttention,
   usersNavBadge,
   integrationsNavBadge,
+  workersNavBadge,
 } from './extendedNavMeta'
 import { EMPTY_NAV_STAT_SLICES, type NavStatSlices } from './extendedNavMeta'
 
@@ -407,5 +408,19 @@ describe('section rollups follow the cycle', () => {
     }
     expect(workspaceSlicesAttention(slices)).toMatchObject({ count: 2, tone: 'danger' })
     expect(actSectionAttention(slices)).toBeNull()
+  })
+})
+
+describe('workersNavBadge (ADR 0048 amendment 2026-10-28)', () => {
+  it('is red with a danger flag, amber otherwise, and names the worst one', () => {
+    expect(workersNavBadge(null)).toBeNull()
+    expect(workersNavBadge({ flags: 0, danger: 0, top: null })).toBeNull()
+    expect(workersNavBadge({ flags: 3, danger: 1, top: 'glot: a run has held an agent space for 4 h' })).toEqual({
+      mode: 'attention',
+      count: 3,
+      tone: 'danger',
+      label: '3 local worker problems: glot: a run has held an agent space for 4 h',
+    })
+    expect(workersNavBadge({ flags: 1, danger: 0, top: null })).toMatchObject({ tone: 'warn', label: '1 local worker problem' })
   })
 })

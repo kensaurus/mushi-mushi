@@ -4,11 +4,14 @@
  *          lane runs (ADR 0048), beside the Cursor keys' spend-down, so the
  *          credits a lane spends are on the same page as the cloud keys'.
  *          The model is a lane setting held by Mushi (ADR 0039), changed on
- *          the Workers tab.
+ *          the Workers tab. When no local agent has worked for 2 hours while
+ *          Cursor credits expire within 7 days, it says so first, with what
+ *          blocks the work (the `credits_idle` worker flag, ADR 0048
+ *          amendment 2026-10-28).
  */
 
 import { Link } from 'react-router-dom'
-import { Badge } from '../ui'
+import { Badge, Btn, Callout } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import { LANES_PATH, laneTaking, type WorkLanesData } from '../../lib/workers'
 
@@ -30,8 +33,25 @@ export function LocalWorkerModels() {
     )
   }
   const hosts = new Map(data.hosts.map((h) => [h.id, h]))
+  const idle = (data.flags ?? []).find((f) => f.kind === 'credits_idle')
   return (
     <div className="space-y-2" data-testid="credits-worker-models">
+      {idle && (
+        <Callout
+          tone={idle.severity}
+          label="Credits idle"
+          action={
+            <Btn size="sm" variant={idle.severity === 'danger' ? 'danger' : 'ghost'} to="/pipeline?tab=workers" data-testid="credits-idle-open">
+              Open Workers
+            </Btn>
+          }
+        >
+          <div data-testid="credits-idle">
+            <p className="text-sm font-semibold text-fg">{idle.title}.</p>
+            <p className="text-xs text-fg-secondary">{idle.cause}</p>
+          </div>
+        </Callout>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full min-w-120 text-left text-xs">
           <thead className="text-2xs text-fg-muted">

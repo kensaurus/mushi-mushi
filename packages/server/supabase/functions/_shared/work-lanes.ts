@@ -13,6 +13,8 @@
  *          each side refuses anything else.
  */
 
+import { cleanHostTelemetry, cleanLaneTelemetry } from './work-telemetry.ts'
+
 /**
  * What a lane does (ADR 0048; P3 modes: ADR 0049 conflicts, ADR 0050 audit,
  * ADR 0042 amendment skill). An older daemon refuses a mode it does not know
@@ -197,14 +199,14 @@ export function hostGuardsFrom(raw: unknown): HostGuards {
 
 // ── What the daemon sends ───────────────────────────────────────────────────
 
-export const HOST_STATES = ['starting', 'working', 'idle', 'paused', 'mem-wait', 'gh-quota-wait', 'auth-wait', 'slot-wait', 'backoff', 'stopped', 'draining'] as const
+export const HOST_STATES = ['starting', 'working', 'idle', 'paused', 'mem-wait', 'gh-quota-wait', 'auth-wait', 'slot-wait', 'backoff', 'stopped', 'draining', 'not-ready'] as const
 export const MAX_LANES_PER_HOST = 20
 
 export interface HeartbeatLane {
   name: string
   projectId: string
-  /** lane-v4's status JSON, as numbers and one short state word. */
-  status: Record<string, string | number>
+  /** lane-v4's status JSON (numbers and one short state word), plus the runs in flight (work-telemetry.ts). */
+  status: Record<string, unknown>
   /** Settings the machine proposes for a lane it registers (lanes.conf import); used only when the lane is new. */
   initial: Partial<LaneConfig>
   /** owner/name of the lane's clone (its origin remote); null from a daemon that predates P3. */
@@ -221,13 +223,14 @@ export type HostTake = (typeof HOST_TAKES)[number]
 
 export interface Heartbeat {
   host: { hostId: string; hostname: string; platform: 'linux' | 'wsl2' | 'macos' | 'windows'; version: string | null; takes: HostTake[] }
-  status: Record<string, string | number | boolean>
+  /** Numbers and words (cleanStatus), plus the host's checks, agent spaces and why it waits (work-telemetry.ts). */
+  status: Record<string, unknown>
   lanes: HeartbeatLane[]
   /** Active claims the daemon is still working on: their leases are renewed. */
   claims: string[]
 }
 
-const STATUS_NUMBERS = ['runs', 'prs', 'pushes', 'timeouts', 'errors', 'idle', 'agentMin', 'agents', 'maxAgents', 'memAvailableGb', 'ghRemaining', 'worktrees', 'branches']
+const STATUS_NUMBERS = ['runs', 'prs', 'pushes', 'timeouts', 'errors', 'idle', 'agentMin', 'agents', 'maxAgents', 'memAvailableGb', 'ghRemaining', 'worktrees', 'branches', 'load1', 'cpus', 'stateSec']
 const STATUS_WORDS: Record<string, readonly string[]> = {
   state: HOST_STATES,
   cursor: ['signed_in', 'signed_out', 'unknown', 'missing'],
@@ -277,10 +280,10 @@ export function parseHeartbeat(raw: unknown): Parsed<Heartbeat> {
       initial = p.value
     }
     if (l.repo != null && (typeof l.repo !== 'string' || !REPO_RE.test(l.repo))) return { ok: false, message: `Lane "${name}": repo must be owner/name.` }
-    lanes.push({ name, projectId: l.projectId.toLowerCase(), status: cleanStatus(l.status), initial, repo: typeof l.repo === 'string' ? l.repo.toLowerCase() : null })
+    lanes.push({ name, projectId: l.projectId.toLowerCase(), status: { ...cleanStatus(l.status), ...cleanLaneTelemetry(l.status) }, initial, repo: typeof l.repo === 'string' ? l.repo.toLowerCase() : null })
   }
   const claims = (Array.isArray(b.claims) ? b.claims : []).filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)).slice(0, 50)
-  const status = cleanStatus(b.status)
+  const status = { ...cleanStatus(b.status), ...cleanHostTelemetry(b.status) }
   return {
     ok: true,
     value: { host: { hostId: h.hostId, hostname, platform: h.platform as Heartbeat['host']['platform'], version, takes }, status, lanes, claims },

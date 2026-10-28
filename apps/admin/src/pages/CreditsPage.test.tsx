@@ -18,6 +18,7 @@ const state = vi.hoisted(() => ({
   watches: {} as Record<string, unknown>,
   audits: {} as Record<string, unknown>,
   ranks: {} as Record<string, unknown>,
+  workerFlags: [] as unknown[],
   skillRuns: {
     skills: [
       { slug: 'audit-accessibility', label: 'Accessibility (WCAG 2.2 AA)', measure: 'axe-core violations on each page in scope', inCatalog: true },
@@ -91,6 +92,7 @@ vi.mock('../lib/usePageData', () => ({
                 ? {
                     generatedAt: '2026-10-23T02:00:00Z',
                     projects: [{ id: 'p2', name: 'tsumagoi' }],
+                    flags: state.workerFlags,
                     hosts: [{ id: 'h1', hostname: 'alienware', platform: 'wsl2', version: null, online: true, lastHeartbeatAt: '2026-10-23T01:59:00Z', status: {}, guards: { max_agents: 6, min_free_mem_gb: 5, gh_floor: 800 }, revoked: false, mine: true }],
                     lanes: [
                       { id: 'l1', hostId: 'h1', projectId: 'p2', projectName: 'tsumagoi', name: 'tsumagoi', config: { paused: false, concurrency: 1, model: 'claude-opus-5-5-medium', mode: 'fix', stop_at: null, drain: false, prune_own: false }, status: {}, lastSeenAt: '2026-10-23T01:59:00Z', active: [], queue: [], recent: [], counts7d: { runs: 0, prs: 0, noChange: 0, timeouts: 0, errors: 0, infra: 0 } },
@@ -313,6 +315,35 @@ describe('Local workers on /credits', () => {
     expect(row.textContent).toContain('claude-opus-5-5-medium')
     expect(row.textContent).toContain('taking reports')
     expect(host.querySelector('[data-testid="credits-worker-models"] a[href="/pipeline?tab=workers"]')).not.toBeNull()
+    expect(host.querySelector('[data-testid="credits-idle"]')).toBeNull()
+  })
+
+  it('says the credits are idle, for how long and what blocks the work (ADR 0048 amendment 2026-10-28)', async () => {
+    state.workerFlags = [
+      {
+        id: 'credits_idle',
+        kind: 'credits_idle',
+        severity: 'danger',
+        hostId: null,
+        hostname: null,
+        laneId: null,
+        laneName: null,
+        projectId: null,
+        title: 'Cursor credits idle for 7 h',
+        cause: 'Cursor key "suzu" expires in 24 h. What blocks the work: glot: a run has held an agent space for 4 h 10 min.',
+        sinceSec: 7 * 3600,
+        actions: [],
+      },
+    ]
+    try {
+      await render()
+      const idle = host.querySelector('[data-testid="credits-idle"]')!
+      expect(idle.textContent).toContain('Cursor credits idle for 7 h.')
+      expect(idle.textContent).toContain('What blocks the work: glot: a run has held an agent space')
+      expect(host.querySelector('[data-testid="credits-idle-open"]')!.getAttribute('href')).toBe('/pipeline?tab=workers')
+    } finally {
+      state.workerFlags = []
+    }
   })
 })
 

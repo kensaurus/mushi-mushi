@@ -24,6 +24,8 @@
  *     PATCH  /v1/admin/work/hosts/:id      host guards (console session, the host's owner)
  *     DELETE /v1/admin/work/hosts/:id      revoke a host and its key (console session, the owner)
  *     POST   /v1/admin/work/key            { projectIds, label? } mint a worker:run key (mcp:write)
+ *     GET    /v1/admin/work/stats, POST …/claims/:id/stop, POST …/hosts/:id/recheck: work-status.ts
+ *            (worker flags, ADR 0048 amendment 2026-10-28; the lanes answer carries `flags` too)
  *
  * Control is pull-only: the server never reaches the machine, and its answer
  * holds values from a closed set (_shared/work-lanes.ts), never a command or
@@ -65,6 +67,7 @@ import {
   type LaneConfig,
 } from '../../_shared/work-lanes.ts'
 import { callerCanAccessProject, callerProjectIds } from '../shared.ts'
+import { flagClaim, flagsFor, registerWorkStatusRoutes } from './work-status.ts'
 
 const wlog = log.child('work-routes')
 
@@ -561,10 +564,30 @@ async function heartbeat(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   // Lanes whose app has a first-time user test waiting ask for work now
   // instead of after their idle wait. Lane ids only: never a command.
   const wake = await lanesToWake(db, lanes, hb.host.takes.includes('fresh_eyes'), now)
+  const recheckAccount = await recheckAsked(db, host.id, hb.status, now)
   return c.json({
     ok: true,
-    data: { hostId: host.id, heartbeatSeconds: 60, guards: hostGuardsFrom(host.guards), lanes, refused, renewed, lost, wake },
+    // recheckAccount is a new top-level field: daemons that predate it ignore it (worker/protocol.ts).
+    data: { hostId: host.id, heartbeatSeconds: 60, guards: hostGuardsFrom(host.guards), lanes, refused, renewed, lost, wake, recheckAccount },
   })
+}
+
+/** How long a "Re-check the account" request stays open for a machine that has not run the check yet. */
+const RECHECK_OPEN_MS = 30 * 60_000
+
+/**
+ * True when someone asked for a new Cursor account check (POST
+ * /v1/admin/work/hosts/:id/recheck) after the machine's last one. Read on its
+ * own: before migration 20261028120000_worker_recheck the column is missing,
+ * and that must never fail a heartbeat.
+ */
+async function recheckAsked(db: Db, hostId: string, status: Record<string, unknown>, now: Date): Promise<boolean> {
+  const { data, error } = await db.from('work_hosts').select('recheck_requested_at').eq('id', hostId).maybeSingle()
+  const at = error ? null : ((data as { recheck_requested_at?: string | null } | null)?.recheck_requested_at ?? null)
+  const asked = at ? Date.parse(at) : NaN
+  if (!Number.isFinite(asked) || now.getTime() - asked > RECHECK_OPEN_MS) return false
+  const age = (status.checks as { cursor?: { ageSec?: number } } | undefined)?.cursor?.ageSec
+  return typeof age !== 'number' || now.getTime() - age * 1000 < asked
 }
 
 async function claim(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
@@ -848,7 +871,7 @@ async function listLanes(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   } else {
     projectIds = await deps.projectIds(c, db, userId)
   }
-  const empty = { generatedAt: now.toISOString(), hosts: [], lanes: [], projects: [] }
+  const empty = { generatedAt: now.toISOString(), hosts: [], lanes: [], projects: [], flags: [] }
   if (projectIds.length === 0) return c.json({ ok: true, data: empty })
 
   const lanes: LaneRow[] = []
@@ -907,12 +930,25 @@ async function listLanes(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
     return title(x.report_id ?? '')
   }
   const isActive = (x: ClaimRow) => x.status === 'active' && Date.parse(x.lease_until) > now.getTime()
+  const flags = await flagsFor(
+    db,
+    userId,
+    projectIds,
+    {
+      hosts: [...hosts.values()].map((h) => ({ id: h.id, hostname: h.hostname, platform: h.platform, lastHeartbeatAt: h.last_heartbeat_at, revoked: !!h.revoked_at, status: h.status ?? {} })),
+      lanes: lanes.map((l) => ({ id: l.id, hostId: l.host_id, projectId: l.project_id, name: l.name, config: laneConfigFromRow(l), status: l.status ?? {}, queued: queue.filter((q) => q.lane_id === l.id).length })),
+      claims: claims.map(flagClaim),
+    },
+    now,
+  )
 
   return c.json({
     ok: true,
     data: {
       generatedAt: now.toISOString(),
       projects: projectIds.map((id) => ({ id, name: names.get(id) ?? id.slice(0, 8) })),
+      // Worst first; the same list the sidebar badge, Home and the CLI read (work-flags.ts).
+      flags,
       hosts: [...hosts.values()].map((h) => ({
         id: h.id,
         hostname: h.hostname,
@@ -1148,4 +1184,5 @@ export function registerWorkRoutes(app: Hono<{ Variables: Variables }>, deps: Wo
   app.patch('/v1/admin/work/hosts/:id', deps.jwtAuth, (c) => patchHost(c as Ctx, deps))
   app.delete('/v1/admin/work/hosts/:id', deps.jwtAuth, (c) => deleteHost(c as Ctx, deps))
   app.post('/v1/admin/work/key', deps.adminOrApiKeyWrite, (c) => mintWorkerKey(c as Ctx, deps))
+  registerWorkStatusRoutes(app, deps)
 }

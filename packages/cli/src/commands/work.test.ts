@@ -1,4 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   checkCursorSignIn,
   cursorSignInState,
@@ -28,6 +32,7 @@ import {
   stoppedPayload,
   classifyFailure,
   WORK_INFRA_PREFIX,
+  workOne,
 } from './work.js'
 
 const R1 = '11111111-1111-4111-8111-111111111111'
@@ -447,4 +452,59 @@ describe('runProc', () => {
     expect(r.stdout).toContain('parent done')
     expect(r.stderr).toMatch(/output pipes still open/)
   })
+})
+
+describe('a run stopped from the console (ADR 0048 amendment 2026-10-28)', () => {
+  it.skipIf(process.platform === 'win32')('reports each stage, and after a stop during git commit pushes nothing', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mushi-work-stop-'))
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    // No gh on purpose: the default branch comes from origin. The agent writes one file.
+    writeFileSync(join(bin, 'gh'), '#!/bin/sh\nexit 1\n', { mode: 0o755 })
+    writeFileSync(join(bin, 'cursor-agent'), '#!/bin/sh\necho "fixed it" > fix.txt\necho done\n', { mode: 0o755 })
+    const sh = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, stdio: 'pipe' }).toString()
+    const origin = join(root, 'origin.git')
+    sh(root, 'init', '-q', '--bare', '-b', 'main', origin)
+    const clone = join(root, 'clone')
+    sh(root, 'clone', '-q', origin, clone)
+    sh(clone, 'config', 'user.email', 'w@example.com')
+    sh(clone, 'config', 'user.name', 'worker')
+    sh(clone, 'commit', '-q', '--allow-empty', '-m', 'first')
+    sh(clone, 'push', '-q', 'origin', 'HEAD:main')
+    sh(clone, 'remote', 'set-head', 'origin', 'main')
+    const saved = { PATH: process.env['PATH'], HOME: process.env['HOME'] }
+    process.env['PATH'] = `${bin}:${saved.PATH}`
+    process.env['HOME'] = root
+    const patches: unknown[] = []
+    const api = (async (path: string, init?: RequestInit) => {
+      if (init?.method === 'POST' && path === '/v1/admin/fixes') return { fixId: 'f1' }
+      if (init?.method === 'PATCH') patches.push(JSON.parse(String(init.body)))
+      return {}
+    }) as never
+    const ac = new AbortController()
+    const stages: string[] = []
+    try {
+      const out = await workOne(api, { id: R1, summary: 'Total is wrong', category: 'bug' } as never, {
+        repoDir: clone,
+        agent: 'cursor',
+        log: () => {},
+        earlier: [],
+        signal: ac.signal,
+        onStage: (s) => {
+          stages.push(s)
+          // "Stop this run" arrives while the repo's commit hook runs.
+          if (s === 'commit') ac.abort()
+        },
+      })
+      expect(stages).toEqual(['agent', 'commit'])
+      expect(out.result).toBe('stopped')
+      expect(out.outcome).toMatch(/before git push/)
+      expect(sh(clone, 'ls-remote', '--heads', 'origin')).not.toMatch(/bugfix|fix\//)
+      expect(patches.at(-1)).toMatchObject({ status: 'failed', error: expect.stringMatching(new RegExp(`^${WORK_STOPPED_PREFIX}`)) })
+    } finally {
+      process.env['PATH'] = saved.PATH
+      process.env['HOME'] = saved.HOME
+      rmSync(root, { recursive: true, force: true })
+    }
+  }, 30_000)
 })

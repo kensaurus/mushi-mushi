@@ -252,3 +252,120 @@ describe('Requeue', () => {
     expect(state.calls).toEqual([{ path: '/v1/admin/pipeline/actions', method: 'POST', body: { action: 'requeue', claimIds: ['c2'] } }])
   })
 })
+
+describe('worker problems are loud and fixable (ADR 0048 amendment 2026-10-28)', () => {
+  function withIncident(): WorkLanesData {
+    const data = fixture()
+    data.hosts[0]!.status = {
+      ...data.hosts[0]!.status,
+      load1: 37,
+      cpus: 16,
+      checks: { cursor: { result: 'timed_out', ageSec: 900, detail: 'timed out after 90 s', account: 's***@g***.com' }, gh: { result: 'signed_in', ageSec: 60, detail: '' } },
+      slots: [{ lane: 'glot', runId: 'c9', kind: 'fix', ageSec: 4 * 3600 + 600, stage: 'commit', stageSec: 4 * 3600 }],
+      waitWhy: "6 agents running, the host's cap is 6",
+    }
+    data.lanes[0]!.status = { state: 'working', runs: 4, inflight: [{ runId: 'c9', kind: 'fix', reportId: 'r9', ageSec: 4 * 3600 + 600, stage: 'commit', stageSec: 4 * 3600, model: 'grok-4.7-xhigh-fast', log: ['commit: pnpm exec tsc --noEmit'] }] }
+    data.flags = [
+      {
+        id: 'run_stuck:c9',
+        kind: 'run_stuck',
+        severity: 'danger',
+        hostId: 'h1',
+        hostname: 'alienware',
+        laneId: 'l1',
+        laneName: 'glot',
+        projectId: 'p1',
+        title: 'glot: a run has held an agent space for 4 h 10 min',
+        cause: "It has been in the repo's own commit hook (git commit) for 4 h.",
+        sinceSec: 4 * 3600 + 600,
+        stage: 'commit',
+        log: ['commit: pnpm exec tsc --noEmit'],
+        actions: [
+          { kind: 'stop_run', label: 'Stop this run', claimId: 'c9' },
+          { kind: 'open_report', label: 'Open the report', reportId: 'r9' },
+          { kind: 'copy_command', label: 'Find it on the machine', command: "ps -eo pid,etime,stat,args | grep -E 'git (commit|push)' | grep -v grep" },
+        ],
+      },
+      {
+        id: 'account_check:h1',
+        kind: 'account_check',
+        severity: 'warn',
+        hostId: 'h1',
+        hostname: 'alienware',
+        laneId: null,
+        laneName: null,
+        projectId: null,
+        title: 'The Cursor account check timed out on alienware',
+        cause: '`cursor-agent status` did not answer in time under load 37 on 16 cores 15 min ago.',
+        sinceSec: 900,
+        actions: [
+          { kind: 'recheck_account', label: 'Re-check the account', hostId: 'h1' },
+          { kind: 'copy_command', label: 'Check it on the machine', command: 'cursor-agent status' },
+        ],
+      },
+    ]
+    return data
+  }
+  const buttonByText = (text: string) => [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === text) ?? null
+
+  it('shows a stuck run first: what, why, its stage and last log lines, and the command for the machine', async () => {
+    state.data = withIncident()
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    const list = q('worker-flags')!
+    expect(list.textContent).toContain('2 things stop your local workers from fixing bugs (1 need you now).')
+    expect(list.textContent).toContain('An agent space is one coding agent running at a time')
+    const stuck = q('worker-flag-run_stuck')!
+    expect(stuck.textContent).toContain('Stuck run')
+    expect(stuck.textContent).toContain('glot: a run has held an agent space for 4 h 10 min')
+    expect(stuck.textContent).toContain('for 4 h 10 min')
+    expect(q('worker-flag-run_stuck-stage')!.textContent).toContain("in the repo's commit hook")
+    expect(q('worker-flag-run_stuck-log')!.textContent).toContain('commit: pnpm exec tsc --noEmit')
+    expect(stuck.textContent).toContain('Find it on the machine, on alienware:')
+    expect(stuck.textContent).toContain("ps -eo pid,etime,stat,args")
+    expect(stuck.querySelector('a[href="/reports/r9"]')).not.toBeNull()
+    // The status line leads with the worst problem, not "all fine".
+    expect(q('workers-status')!.textContent).toContain('glot: a run has held an agent space for 4 h 10 min.')
+    // The machine card says who holds the spaces, and the account check as it answered.
+    expect(q('worker-host-h1-slots')!.textContent).toContain("glot (4 h 10 min, in the repo's commit hook)")
+    expect(q('worker-host-h1-checks')!.textContent).toContain('check timed out')
+    expect(q('worker-host-h1-checks')!.textContent).toContain('(s***@g***.com) checked 15 min ago: "timed out after 90 s"')
+    expect(q('worker-host-h1')!.textContent).toContain('load 37 on 16 cores')
+    // The lane card shows the run's stage and log too.
+    expect(q('worker-lane-l1-run-c9-detail')!.textContent).toContain("in the repo's commit hook")
+    expect(q('worker-lane-l1-run-c9-detail')!.textContent).toContain('for 4 h · run 4 h 10 min · grok-4.7-xhigh-fast')
+  })
+
+  it('Stop this run asks first, then ends the claim', async () => {
+    state.data = withIncident()
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    await click(q('worker-flag-run_stuck-stop_run'))
+    expect(state.calls).toEqual([])
+    await click(buttonByText('Stop the run'))
+    expect(state.calls).toEqual([{ path: '/v1/admin/work/claims/c9/stop', method: 'POST', body: {} }])
+  })
+
+  it('Re-check the account asks the machine', async () => {
+    state.data = withIncident()
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    await click(q('worker-flag-account_check-recheck_account'))
+    expect(state.calls).toEqual([{ path: '/v1/admin/work/hosts/h1/recheck', method: 'POST', body: {} }])
+  })
+
+  it('flags show even with no machine registered (a script ran mushi work outside the worker)', async () => {
+    state.data = {
+      ...fixture(),
+      hosts: [],
+      lanes: [],
+      flags: [{ id: 'unmanaged_run:f1', kind: 'unmanaged_run', severity: 'danger', hostId: null, hostname: null, laneId: null, laneName: null, projectId: 'p1', title: 'A local mushi work run has been running 4 h outside the worker', cause: 'A script on a machine started it.', sinceSec: 4 * 3600, actions: [{ kind: 'open_report', label: 'Open the report', reportId: 'r1' }] }],
+    }
+    await render(createElement(WorkersPanel, { projectId: null, now: NOW }))
+    expect(q('worker-flag-unmanaged_run')!.textContent).toContain('outside the worker')
+    expect(q('workers-first-step')).not.toBeNull()
+  })
+
+  it('a machine whose CLI predates the telemetry says to update it, never "all fine"', async () => {
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    expect(q('worker-host-h1')!.textContent).toContain('does not report its checks')
+    expect(q('worker-flags')).toBeNull()
+  })
+})

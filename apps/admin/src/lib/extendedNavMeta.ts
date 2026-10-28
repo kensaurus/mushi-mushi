@@ -40,6 +40,7 @@ import type {
   SkillsNavSlice,
   SsoNavSlice,
   StorageNavSlice,
+  WorkersNavSlice,
 } from './remainingNavSliceTypes'
 import type { HealthTone } from './useNavCounts'
 import type { WorkspaceNavBadge } from './workspaceNavMeta'
@@ -161,6 +162,7 @@ export interface NavStatSlices {
   integrations: IntegrationsNavSlice | null
   featureBoard: FeatureBoardNavSlice | null
   skills: SkillsNavSlice | null
+  workers: WorkersNavSlice | null
 }
 
 export const EMPTY_NAV_STAT_SLICES: NavStatSlices = {
@@ -200,6 +202,7 @@ export const EMPTY_NAV_STAT_SLICES: NavStatSlices = {
   integrations: null,
   featureBoard: null,
   skills: null,
+  workers: null,
 }
 
 function attentionBadge(
@@ -781,6 +784,13 @@ export function repoStatsNavBadge(stats: NavStatSlices['repo']): WorkspaceNavBad
     )
   }
   return null
+}
+
+/** Pipeline: a local worker stopped doing useful work (stuck run, offline, account check…). Never hidden. */
+export function workersNavBadge(stats: NavStatSlices['workers']): WorkspaceNavBadge | null {
+  if (!stats || stats.flags <= 0) return null
+  const what = `${stats.flags} local worker problem${stats.flags === 1 ? '' : 's'}`
+  return attentionBadge(stats.flags, stats.danger > 0 ? 'danger' : 'warn', stats.top ? `${what}: ${stats.top}` : what)
 }
 
 export function mcpNavBadge(stats: NavStatSlices['mcp']): WorkspaceNavBadge | null {

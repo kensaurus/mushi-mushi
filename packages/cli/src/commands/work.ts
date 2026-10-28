@@ -653,6 +653,8 @@ export interface WorkOptions {
   earlier?: EarlierAttempt[]
   /** Stops the agent when the daemon loses the report's lease. */
   signal?: AbortSignal
+  /** Where the run is (prepare, agent, commit, push, pr), for the daemon's heartbeat. */
+  onStage?: (stage: WorkStage) => void
 }
 
 /** How one run ended, as the daemon reports it back (POST /v1/worker/claims/:id/done). */
@@ -741,6 +743,7 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
 
     o.log(`  agent: cursor-agent in ${wt} (up to ${WORK_AGENT_TIMEOUT_MS / 60_000} min); fix ${fixId} shows as running in the console`)
     stage = 'agent'
+    o.onStage?.(stage)
     const run = await runProc(
       'cursor-agent',
       ['-p', '--force', '--trust', '--output-format', 'text', '--workspace', wt, ...(o.model ? ['--model', o.model] : []), prompt],
@@ -766,7 +769,14 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
       return { reportId: detail.id, result: run.timedOut ? 'timeout' : noPr.verdict ? 'verdict' : 'no_change', outcome: `no change (${noPr.verdict ?? 'no verdict'}): ${noPr.reason}`, fixId }
     }
 
+    // The lease ended while the agent ran (stopped from the console): commit and push nothing.
+    if (o.signal?.aborted) {
+      keep = true
+      await close(stoppedPayload(branch, 'lost lease')).catch(() => undefined)
+      return { reportId: detail.id, result: 'stopped', outcome: `stopped (lease ended) before git commit; the change so far is kept in ${wt}`, fixId }
+    }
     stage = 'commit'
+    o.onStage?.(stage)
     await git(wt, ['add', '-A'])
     const last = run.stdout.trim().split('\n').filter((l) => l.trim()).slice(-6).join(' ')
     await commitWithHooks(wt, ['--quiet', '-m', prTitle(detail.summary, detail.id), '-m', commitBody(`Mushi report: ${detail.id}`, 'Made by a local Cursor agent through `mushi work`.')], o.log)
@@ -779,9 +789,16 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
       if (path) files.push(path)
       lines += (Number(add) || 0) + (Number(del) || 0)
     }
+    if (o.signal?.aborted) {
+      keep = true
+      await close(stoppedPayload(branch, 'lost lease')).catch(() => undefined)
+      return { reportId: detail.id, result: 'stopped', outcome: `stopped (lease ended) before git push; the commit is kept in ${wt}`, fixId }
+    }
     stage = 'push'
+    o.onStage?.(stage)
     await git(wt, ['push', '--quiet', '-u', 'origin', branch])
     stage = 'pr'
+    o.onStage?.(stage)
     const body = `Mushi report: ${detail.id}\n\n${cap(last, 1500) || 'See the commits.'}\n\nOpened by \`mushi work\` with a local Cursor agent; Mushi's Opus review decides whether it merges.`
     const pr = await runProc('gh', ['pr', 'create', '--draft', '--base', base, '--head', branch, '--title', prTitle(detail.summary, detail.id), '--body', body], { cwd: wt })
     const prUrl = pr.stdout.match(/https:\/\/github\.com\/\S+\/pull\/\d+/)?.[0] ?? null
@@ -866,6 +883,7 @@ export async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOp
     await installDeps(wt, o.log)
     const empty = join(tmpdir(), `mushi-work-${process.pid}`)
     mkdirSync(empty, { recursive: true })
+    o.onStage?.('agent')
     o.log(`  agent: cursor-agent on ${claim.branch}, round ${claim.round}, ${claim.findingsSent} finding(s)${claim.findingsDropped ? ` (${claim.findingsDropped} left out by the safety screen)` : ''}`)
     const run = await runProc(
       'cursor-agent',
@@ -884,10 +902,12 @@ export async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOp
       await done(null, why)
       return { fixId: f.fixId, outcome: `no change: ${why || `cursor-agent exited ${run.code}`}` }
     }
+    o.onStage?.('commit')
     await git(wt, ['add', '-A'])
     await commitWithHooks(wt, ['--quiet', '-m', `fix: address the Opus review (round ${claim.round})`, '-m', commitBody(cap(last, 1500) || 'See the diff.', 'Made by a local Cursor agent through `mushi work --followups`.')], o.log)
     const sha = await git(wt, ['rev-parse', 'HEAD'])
     // Fast-forward only: a push rejected because the branch moved fails loudly.
+    o.onStage?.('push')
     await git(wt, ['push', '--quiet', 'origin', `HEAD:refs/heads/${claim.branch}`])
     await done(sha, cap(last, 300))
     return { fixId: f.fixId, outcome: `pushed ${sha.slice(0, 7)} (round ${claim.round})`, ...(f.prUrl ? { prUrl: f.prUrl } : {}) }

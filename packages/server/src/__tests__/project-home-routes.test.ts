@@ -139,7 +139,7 @@ function seed(): Record<string, Array<Record<string, unknown>>> {
   }
 }
 
-function setup(opts: { failRead?: (t: string) => string | { code: string; message: string } | null; noThumbTable?: boolean } = {}) {
+function setup(opts: { failRead?: (t: string) => string | { code: string; message: string } | null; noThumbTable?: boolean; workerFlags?: (db: unknown, userId: string, projectId: string) => Promise<unknown[]> } = {}) {
   const db: FakeDb = makeFakeDb(seed(), {
     failRead: (t) => (opts.noThumbTable && t === 'project_home_thumbnails' ? { code: '42P01', message: 'relation "project_home_thumbnails" does not exist' } : opts.failRead?.(t) ?? null),
   })
@@ -165,6 +165,7 @@ function setup(opts: { failRead?: (t: string) => string | { code: string; messag
       return `${P}/home.png`
     }) as never,
     lookupUser: async () => ({ name: 'Kenji', avatarUrl: 'https://avatars.githubusercontent.com/u/1' }),
+    ...(opts.workerFlags ? { workerFlags: opts.workerFlags as never } : {}),
   })
   return { app, db }
 }
@@ -227,6 +228,23 @@ describe('GET /v1/admin/projects/:id/home', () => {
     expect(d.access.status).toBe('ok')
     // Without a site signal, Needs you does not claim the site is fine or broken.
     expect((d.needsYou.data as Array<{ id: string }>).some((n) => n.id === 'site_broken')).toBe(false)
+  })
+
+  it('Needs you leads with a stuck local worker of this app, read for the signed-in user', async () => {
+    const asked: string[] = []
+    const { app } = setup({
+      workerFlags: async (_db, userId, projectId) => {
+        asked.push(`${userId}:${projectId}`)
+        return [{ id: 'run_stuck:c1', severity: 'danger', title: 'glot: a run has held an agent space for 4 h' }]
+      },
+    })
+    const d = (await app.call('GET', '/v1/admin/projects/:id/home')).body.data!
+    expect(asked).toEqual([`u1:${P}`])
+    const needs = d.needsYou.data as Array<{ id: string; text: string; action: { to: string } }>
+    expect(needs.find((n) => n.id === 'worker_run_stuck:c1')).toMatchObject({ text: 'Local worker: glot: a run has held an agent space for 4 h.', action: { to: `/pipeline?tab=workers&project=${P}` } })
+    // A failed worker read is named, never shown as "no problems".
+    const failing = setup({ workerFlags: async () => { throw new Error('work_lanes: timeout') } })
+    expect((await failing.app.call('GET', '/v1/admin/projects/:id/home')).body.data!.partial).toEqual(['workers'])
   })
 
   it('answers before the thumbnail table exists, falling back to the icon', async () => {

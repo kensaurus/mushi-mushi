@@ -35,7 +35,7 @@ export function NeedsYouCard({ section, leading = [], partial = [] }: Props) {
               ) : (
                 <ol className="divide-y divide-edge-subtle" data-testid="home-needs-you">
                   {all.map((item, i) => (
-                    <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
+                    <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-2 first:pt-0 last:pb-0" data-testid={`home-needs-you-${item.id}`}>
                       <p className="min-w-0 flex-1 text-sm text-fg">{item.text}</p>
                       {/* One primary action: the costliest item; the rest stay quiet. */}
                       <Btn size="sm" variant={i === 0 ? 'primary' : 'ghost'} to={item.action.to}>

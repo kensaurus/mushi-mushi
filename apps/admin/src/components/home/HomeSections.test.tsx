@@ -113,6 +113,14 @@ describe('NeedsYouCard', () => {
     expect(text()).not.toContain('Thing e.')
   })
 
+  it('carries a stuck local worker with the way to the Workers tab (ADR 0048 amendment 2026-10-28)', async () => {
+    const worker: NeedsYouItem = { id: 'worker_run_stuck:c1', impact: 85, text: 'Local worker: glot: a run has held an agent space for 4 h.', action: { label: 'Open Workers', to: '/pipeline?tab=workers&project=p1' } }
+    await render(createElement(NeedsYouCard, { section: ok([worker, need('a', 80)]) }))
+    const row = byTestId('home-needs-you-worker_run_stuck:c1')!
+    expect(row.textContent).toContain('Local worker: glot: a run has held an agent space for 4 h.')
+    expect(row.querySelector('a')!.getAttribute('href')).toBe('/pipeline?tab=workers&project=p1')
+  })
+
   it('says nothing needs you, and warns when a check could not be read', async () => {
     await render(createElement(NeedsYouCard, { section: ok([]), partial: ['pipeline'] }))
     expect(byTestId('home-needs-you-clear')).toBeTruthy()

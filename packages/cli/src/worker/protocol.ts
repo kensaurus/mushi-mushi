@@ -126,6 +126,8 @@ export interface HeartbeatAnswer {
   lost: string[]
   /** Lane ids whose app has a first-time user test waiting: ask for work now. */
   wake: string[]
+  /** The console asked for a new Cursor account check (ADR 0048 amendment 2026-10-28). Only `true` counts. */
+  recheckAccount: boolean
 }
 
 /**
@@ -154,7 +156,7 @@ export function parseHeartbeatAnswer(raw: unknown): { answer: HeartbeatAnswer; b
     .filter((r) => typeof r?.name === 'string')
     .map((r) => ({ name: String(r.name).slice(0, 40), reason: String(r.reason ?? '').slice(0, 300) }))
   return {
-    answer: { hostId: typeof d.hostId === 'string' ? d.hostId : '', guards: guards.value, lanes, refused, renewed: ids(d.renewed), lost: ids(d.lost), wake: ids(d.wake) },
+    answer: { hostId: typeof d.hostId === 'string' ? d.hostId : '', guards: guards.value, lanes, refused, renewed: ids(d.renewed), lost: ids(d.lost), wake: ids(d.wake), recheckAccount: d.recheckAccount === true },
     bad,
   }
 }

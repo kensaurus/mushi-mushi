@@ -53,6 +53,7 @@ import {
   ssoNavBadge,
   storageNavBadge,
   usersNavBadge,
+  workersNavBadge,
 } from './extendedNavMeta'
 import {
   membersNavBadge,
@@ -118,6 +119,7 @@ const PATH_SLICES: Readonly<Record<string, readonly string[]>> = {
   '/sso': ['sso'],
   '/compliance': ['compliance'],
   '/storage': ['storage'],
+  '/pipeline': ['workers'],
   '/query': ['query'],
 }
 
@@ -198,6 +200,8 @@ export function resolveNavBadge(
       return sliceBadgeSpec(onboardingNavBadge(slices.onboarding))
     case '/dashboard':
       return sliceBadgeSpec(dashboardNavBadge(slices.dashboard))
+    case '/pipeline':
+      return sliceBadgeSpec(workersNavBadge(slices.workers))
     case '/content':
       return sliceBadgeSpec(
         contentQualityNavBadge(slices.contentQuality),

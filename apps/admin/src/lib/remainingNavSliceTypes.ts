@@ -81,6 +81,13 @@ export interface FeatureBoardNavSlice {
   trendingCount: number
 }
 
+/** Local worker flags (GET /v1/admin/work/stats, ADR 0048 amendment 2026-10-28). */
+export interface WorkersNavSlice {
+  flags: number
+  danger: number
+  top: string | null
+}
+
 export interface SkillsNavSlice {
   catalogTotal: number
   activeRuns: number

@@ -380,6 +380,22 @@ describe('PipelinePage', () => {
     expect(q('pipeline-stage-ci')).toBeNull()
   })
 
+  it('a stuck local worker is loud above the tabs, with the way to the Workers tab (ADR 0048 amendment 2026-10-28)', async () => {
+    const flag = (id: string, severity: 'danger' | 'warn', title: string) => ({ id, kind: id.split(':')[0], severity, hostId: 'h1', hostname: 'alienware', laneId: null, laneName: null, projectId: 'p1', title, cause: '', sinceSec: 60, actions: [] })
+    ;(state.data as PipelineData & { flags?: unknown[] }).flags = [
+      flag('run_stuck:c1', 'danger', 'glot: a run has held an agent space for 4 h'),
+      flag('run_stuck:c2', 'danger', 'yen-yen: a run has held an agent space for 5 h 36 min'),
+      flag('lanes_waiting:h1', 'danger', '6 lanes on alienware have waited 3 h for an agent space'),
+      flag('account_check:h1', 'warn', 'The Cursor account check timed out on alienware'),
+    ]
+    await render()
+    const strip = q('worker-flags-strip')!
+    expect(strip.textContent).toContain('glot: a run has held an agent space for 4 h.')
+    expect(strip.textContent).toContain('and 1 more on the Workers tab.')
+    expect(q('worker-flags-strip-open')!.getAttribute('href')).toBe('/pipeline?tab=workers')
+    expect(document.body.textContent).toContain('Workers (4 problems)')
+  })
+
   it('shows registered local worker lanes per app, linked to the Workers tab', async () => {
     ;(state.data as PipelineData).dispatchers![0]!.local = { runs24h: 6, running: 2, lastAt: '2026-10-26T11:00:00Z', lanes: 2, lanesActive: 1, models: ['grok-4.7-xhigh-fast'] }
     await render()

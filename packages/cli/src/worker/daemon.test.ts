@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ApiResult } from '../cli-shared.js'
-import { assertWorkerKey, createDaemon, cursorStateFor, workerHostId, type DaemonDeps } from './daemon.js'
+import { assertWorkerKey, createDaemon, createHostReadings, cursorStateFor, workerHostId, type DaemonDeps } from './daemon.js'
 import type { WorkerConfig } from './protocol.js'
 import type { HostIO } from '../runner/host.js'
 
@@ -14,7 +14,7 @@ const CONFIG: WorkerConfig = { version: 1, lanes: [{ name: 'glot', projectId: P1
 type Reply = ApiResult<unknown>
 const ok = (data: unknown): Reply => ({ ok: true, data })
 
-function harness(opts: { heartbeat?: Reply | ((n: number) => Reply | undefined); claim?: Reply[]; readings?: Partial<Awaited<ReturnType<DaemonDeps['readings']>>>; lane?: Record<string, unknown>; workOne?: DaemonDeps['workOne']; resolveConflict?: DaemonDeps['resolveConflict']; auditPass?: DaemonDeps['auditPass']; freshEyes?: DaemonDeps['freshEyes'] } = {}) {
+function harness(opts: { heartbeat?: Reply | ((n: number) => Reply | undefined); claim?: Reply[]; readings?: Partial<Awaited<ReturnType<DaemonDeps['readings']>>>; lane?: Record<string, unknown>; workOne?: DaemonDeps['workOne']; resolveConflict?: DaemonDeps['resolveConflict']; auditPass?: DaemonDeps['auditPass']; freshEyes?: DaemonDeps['freshEyes']; extra?: Partial<DaemonDeps> } = {}) {
   const calls: Array<{ path: string; body: unknown }> = []
   const logs: string[] = []
   const claims = [...(opts.claim ?? [ok({ claim: null, reason: 'Nothing to work on.' })])]
@@ -46,6 +46,7 @@ function harness(opts: { heartbeat?: Reply | ((n: number) => Reply | undefined);
     resolveConflict: opts.resolveConflict ?? (async () => { throw new Error('unexpected conflict run') }),
     auditPass: opts.auditPass ?? (async () => { throw new Error('unexpected audit run') }),
     ...(opts.freshEyes ? { freshEyes: opts.freshEyes } : {}),
+    ...opts.extra,
   }
   return { daemon: createDaemon(CONFIG, deps), calls, runs, logs }
 }
@@ -282,5 +283,131 @@ describe('a first-time user test the console queued (ADR 0053 amendment)', () =>
     expect(calls.filter((c) => c.path === '/v1/worker/claim')).toHaveLength(2)
     await daemon.tick()
     expect(calls.filter((c) => c.path === '/v1/worker/claim')).toHaveLength(2)
+  })
+})
+
+describe('what the console sees of a run (ADR 0048 amendment 2026-10-28)', () => {
+  const T0 = Date.parse('2026-10-28T08:00:00Z')
+
+  it('sends the stage, its age, the model, cleaned log lines and which lane holds the agent space', async () => {
+    let clock = T0
+    let release: () => void = () => {}
+    const { daemon, calls } = harness({
+      claim: [claimReply],
+      extra: { now: () => clock },
+      workOne: async (_api, _d, o) => {
+        o.log('  agent: cursor-agent in /home/mushi-agent/.cache/mushi/work/glot/2000000a (up to 30 min)')
+        o.onStage?.('agent')
+        clock += 20 * 60_000
+        o.onStage?.('commit')
+        o.log('  git push https://x-access-token:ghs_abcdefghijklmnopqrstuvwxyz0123@github.com/kensaurus/glot.it.git as suzu.haruka1130@gmail.com')
+        o.log('  12 | const secret = process.env.KEY')
+        await new Promise<void>((r) => (release = r))
+        return { reportId: R1, result: 'failed', failureKind: 'infra', outcome: 'failed (infra): git commit timed out after 25 min' }
+      },
+    })
+    await daemon.tick()
+    clock += 4 * 3600_000
+    await daemon.tick()
+    const hb = calls.filter((c) => c.path === '/v1/worker/heartbeat')[1]!.body as { status: { slots: unknown[] }; lanes: Array<{ status: { inflight: Array<Record<string, unknown>> } }> }
+    const [run] = hb.lanes[0]!.status.inflight
+    expect(run).toMatchObject({ runId: CLAIM, kind: 'fix', reportId: R1, stage: 'commit', stageSec: 4 * 3600, ageSec: 4 * 3600 + 20 * 60, model: 'claude-opus-5-5-medium' })
+    expect(hb.status.slots).toEqual([{ lane: 'glot', runId: CLAIM, kind: 'fix', ageSec: 4 * 3600 + 20 * 60, stage: 'commit', stageSec: 4 * 3600 }])
+    const log = (run!.log as string[]).join(' / ')
+    expect(log).toContain('…/2000000a')
+    expect(log).not.toContain('/home/mushi-agent')
+    expect(log).not.toContain('ghs_')
+    expect(log).not.toContain('suzu.haruka1130')
+    expect(log).toContain('s***@g***.com')
+    expect(log).not.toContain('process.env.KEY')
+    release()
+    await daemon.settle()
+    clock += 60_000
+    await daemon.tick()
+    const after = calls.filter((c) => c.path === '/v1/worker/heartbeat')[2]!.body as { status: { slots: unknown[] }; lanes: Array<{ status: { inflight: unknown[] } }> }
+    expect(after.lanes[0]!.status.inflight).toEqual([])
+    expect(after.status.slots).toEqual([])
+  })
+
+  it('says how long a lane has waited, and why the machine waits', async () => {
+    let clock = T0
+    const { daemon, calls } = harness({ extra: { now: () => clock }, readings: { memAvailableGb: 2 } })
+    await daemon.tick()
+    clock += 30 * 60_000
+    await daemon.tick()
+    clock += 30 * 60_000
+    await daemon.tick()
+    const hb = calls.filter((c) => c.path === '/v1/worker/heartbeat')[2]!.body as { status: Record<string, unknown>; lanes: Array<{ status: Record<string, unknown> }> }
+    expect(hb.lanes[0]!.status).toMatchObject({ state: 'mem-wait', stateSec: 30 * 60 })
+    expect(hb.status).toMatchObject({ state: 'mem-wait', waitWhy: '2 GB free, under the 5 GB floor' })
+  })
+
+  it('re-checks the account when the console asks, and keeps a lane whose clone is broken out of work', async () => {
+    let rechecks = 0
+    const answer = ok({ hostId: 'h', guards: { max_agents: 6, min_free_mem_gb: 5, gh_floor: 800 }, lanes: [{ id: LANE, name: 'glot', projectId: P1, config: CFG }], refused: [], renewed: [], lost: [], recheckAccount: true })
+    const { daemon, calls } = harness({
+      heartbeat: answer,
+      claim: [claimReply],
+      extra: { recheck: () => rechecks++, notReady: new Map([['glot', 'Its folder on /home/u/glot is not a git clone']]), cursorAccount: 'suzu.haruka1130@gmail.com' },
+      readings: { checks: { cursor: { result: 'timed_out', at: Date.parse('2026-10-27T11:50:00Z'), detail: 'timed out after 90 s' } } },
+    })
+    await daemon.tick()
+    expect(rechecks).toBe(1)
+    expect(calls.some((c) => c.path === '/v1/worker/claim')).toBe(false)
+    expect(daemon.lanes[0]!.state).toBe('not-ready')
+    await daemon.tick()
+    const hb = calls.filter((c) => c.path === '/v1/worker/heartbeat')[1]!.body as { status: { checks: Record<string, unknown> } }
+    expect(hb.status.checks).toEqual({
+      cursor: { result: 'timed_out', ageSec: 600, detail: 'timed out after 90 s', account: 's***@g***.com' },
+      notReady: [{ lane: 'glot', problem: 'Its folder on …/glot is not a git clone' }],
+    })
+  })
+})
+
+describe('the machine readings behind the gate', () => {
+  const proc = (code: number | null, stdout = '', stderr = '', timedOut = false) => ({ code, stdout, stderr, timedOut })
+
+  it('reports a timed-out account check as timed out, and runs later checks in the background', async () => {
+    let clock = 0
+    let checks = 0
+    let finish: (v: { state: 'unknown'; detail: string; output: string }) => void = () => {}
+    const r = createHostReadings({
+      cursorAccount: 'suzu.haruka1130@gmail.com',
+      now: () => clock,
+      log: () => {},
+      memGb: () => 20,
+      load: () => 37.2,
+      cpus: () => 16,
+      run: async () => proc(0, '4900'),
+      checkCursor: async () => {
+        checks++
+        if (checks === 1) return { state: 'unknown', detail: 'timed out after 90 s', output: '' }
+        return new Promise((res) => (finish = res))
+      },
+    })
+    const first = await r.read()
+    expect(first.checks?.cursor).toMatchObject({ result: 'timed_out', detail: 'timed out after 90 s' })
+    expect(first.checks?.gh).toMatchObject({ result: 'signed_in' })
+    expect(first).toMatchObject({ load1: 37.2, cpus: 16, ghRemaining: 4900, cursor: 'unknown' })
+    r.recheck()
+    clock += 1000
+    // The second check hangs; the reading still answers at once.
+    const second = await r.read()
+    expect(checks).toBe(2)
+    expect(second.checks?.cursor?.result).toBe('timed_out')
+    finish({ state: 'unknown', detail: 'still nothing', output: '' })
+  })
+
+  it('reads a gh call that asks for a login as signed out, which the gate waits on', async () => {
+    const r = createHostReadings({
+      now: () => 0,
+      log: () => {},
+      memGb: () => 20,
+      run: async () => proc(4, '', 'To get started with GitHub CLI, please run:  gh auth login'),
+      checkCursor: async () => ({ state: 'signed_in', detail: 'Logged in', output: 'Logged in as a@b.co' }),
+    })
+    const got = await r.read()
+    expect(got.gh).toBe('signed_out')
+    expect(got.checks?.cursor?.result).toBe('expected')
   })
 })
