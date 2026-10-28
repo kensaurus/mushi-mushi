@@ -156,6 +156,15 @@ describe('listIndexedFileRows', () => {
     expect(trimmed.edges).toEqual(untrimmed.edges)
   })
 
+  it('stops at the page cap and reports the read incomplete', async () => {
+    const rows: Row[] = []
+    for (let i = 0; i < 1500; i++) rows.push({ ...fileRow(`src/f${String(i).padStart(4, '0')}.ts`), content_preview: '' })
+    const db = makeFakeDb({ project_codebase_files: rows }, { maxRows: 1000 })
+    const index = await listIndexedFileRows(db as never, P, 1)
+    expect(index.complete).toBe(false)
+    expect(index.rows).toHaveLength(1000)
+  })
+
   it('pages inside one path whose rows fill a whole page instead of skipping the rest', async () => {
     const rows: Row[] = []
     // One god file with more chunk rows than a page: the walk used to step
@@ -279,6 +288,50 @@ describe('runCodebaseAnalyzeJob graph write', () => {
     expect(result).toMatchObject({ ok: true, status: 'completed' })
     const write = db.rpcCalls.find((c) => c.fn === 'write_codebase_graph')
     expect((write?.args.p_graph as KnowledgeGraph).nodes).toHaveLength(1200)
+  })
+
+  it('does not merge the stored graph on a push once the index read is complete', async () => {
+    const db = dbWith({
+      project_codebase_files: [fileRow('src/a.ts'), fileRow('src/b.ts')],
+      project_codebase_graph: [{
+        project_id: P,
+        index_fingerprint: 'stale',
+        graph: graph([
+          { id: 'src/a.ts', type: 'file', name: 'a.ts', filePath: 'src/a.ts' },
+          { id: 'src/b.ts', type: 'file', name: 'b.ts', filePath: 'src/b.ts' },
+          { id: 'stale-b', type: 'function', name: 'old', filePath: 'src/b.ts' },
+          { id: 'ghost', type: 'module', name: 'ghost' },
+        ]),
+      }],
+    })
+    const result = await runner.runCodebaseAnalyzeJob(db as never, 'job-1')
+    expect(result).toMatchObject({ ok: true, status: 'completed' })
+    const write = db.rpcCalls.find((c) => c.fn === 'write_codebase_graph')
+    const ids = (write?.args.p_graph as KnowledgeGraph).nodes.map((n) => n.id)
+    // changed_paths is only src/a.ts. b.ts still comes from the index.
+    // The stored stale symbol and the path-less ghost must not be written back.
+    expect(ids).toEqual(['src/a.ts', 'src/b.ts'])
+  })
+
+  it('refuses a partial index instead of merging it into the stored graph', async () => {
+    const files: Row[] = []
+    for (let i = 0; i < 1001; i++) files.push({ ...fileRow(`src/f${String(i).padStart(4, '0')}.ts`), content_preview: '' })
+    const db = makeFakeDb({
+      codebase_analyze_jobs: [pushJob('job-1', { changed_paths: null })],
+      projects: [{ id: P, name: 'glot.it' }],
+      project_repos: [{ project_id: P, is_primary: true, commit_sha: 'abc123' }],
+      project_codebase_files: files,
+      project_codebase_graph: [{
+        project_id: P,
+        index_fingerprint: 'stale',
+        graph: graph([{ id: 'ghost', type: 'module', name: 'ghost' }]),
+      }],
+    }, { maxRows: 1000 })
+    const result = await runner.runCodebaseAnalyzeJob(db as never, 'job-1', { maxFileRowPages: 1 })
+    expect(result).toMatchObject({ ok: false, status: 'failed' })
+    expect(result.error).toContain('page cap')
+    expect(db.rpcCalls.filter((c) => c.fn === 'write_codebase_graph')).toHaveLength(0)
+    expect(db.tables.codebase_analyze_jobs[0]).toMatchObject({ status: 'failed' })
   })
 
   it('does not merge the stored document back into a whole-index rebuild', async () => {
@@ -425,9 +478,10 @@ describe('runCodebaseAnalyzeJob graph write', () => {
 })
 
 /**
- * A whole-index rebuild writes the freshly built graph and never reads the
- * stored document, so a second writer's nodes would vanish on the next push.
- * These pin the invariant the rebuild branch relies on.
+ * A complete index read replaces the row, including on a push, so a second
+ * writer's nodes would vanish. The trigger in
+ * 20261028080000_codebase_graph_index_and_writer.sql is what enforces the
+ * one writer; these scans are the code-side tripwire.
  */
 describe('project_codebase_graph has one writer', () => {
   const functionsDir = resolve(__dirname, '../../supabase/functions')
@@ -470,6 +524,28 @@ describe('project_codebase_graph has one writer', () => {
         return writesGraph && !/function\s+public\.write_codebase_graph/i.test(sql)
       })
     expect(offenders).toEqual([])
+  })
+})
+
+describe('codebase graph index and writer migration', () => {
+  it('matches the (file_path, id) walk and rejects any other writer', () => {
+    const walk = readFileSync(
+      resolve(__dirname, '../../supabase/functions/_shared/codebase-graph-write.ts'),
+      'utf8',
+    )
+    expect(walk).toMatch(/\.order\('file_path', \{ ascending: true \}\)\.order\('id', \{ ascending: true \}\)/)
+    const sql = readFileSync(
+      resolve(__dirname, '../../supabase/migrations/20261028080000_codebase_graph_index_and_writer.sql'),
+      'utf8',
+    ).replace(/\s+/g, ' ')
+    expect(sql).toMatch(
+      /create index idx_codebase_files_active on public\.project_codebase_files \(project_id, file_path, id\) where tombstoned_at is null/i,
+    )
+    expect(sql).toMatch(/mushi\.codebase_graph_write/)
+    expect(sql).toMatch(/before insert or update on public\.project_codebase_graph/i)
+    expect(sql).not.toMatch(/before insert or update or delete/i)
+    expect(sql).toMatch(/set statement_timeout = '90s'/)
+    expect(sql).toMatch(/grant execute on function public\.write_codebase_graph\(uuid, text, text, jsonb\) to service_role/)
   })
 })
 

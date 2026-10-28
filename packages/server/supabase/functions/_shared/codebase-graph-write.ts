@@ -9,14 +9,16 @@
  *   document only grew and the upsert got slower.
  * - The index read was truncated by PostgREST's max_rows (1000), so a
  *   "full" rebuild was a slice and the merge re-added everything else.
+ *   Pushes always set changed_paths, so they kept merging that slice.
  *
  * DEPENDENCIES:
  * - Supabase client rpc `write_codebase_graph`
  * - KnowledgeGraph from codebase-graph-build.ts
  *
  * USAGE:
- * - codebase-analyze-runner.ts calls listIndexedFileRows, listIndexedFilePaths,
- *   pruneGraphToLivePaths, and writeCodebaseGraph around the graph upsert.
+ * - codebase-analyze-runner.ts calls listIndexedFileRows and writeCodebaseGraph.
+ *   A complete read replaces the row. listIndexedFilePaths and
+ *   pruneGraphToLivePaths remain for a caller that already holds a graph.
  *
  * NOTES:
  * - A statement timeout is retried once. A busy project lock is not: the
@@ -42,7 +44,8 @@ const FILE_ROW_PAGE = 1000
 /**
  * 50k rows. Unlike the path walk these rows carry content_preview, so the
  * cap is what keeps the edge worker inside its memory limit; the largest
- * project indexes about 26k. Past it the caller merges the stored graph.
+ * project indexes about 26k. Past it the read is incomplete and the caller
+ * refuses the write instead of merging the stored graph.
  * Only a symbol-less row's preview is kept (see dropUnusedPreview), so what
  * the walk holds is bounded by the file count, not the chunk count.
  */
@@ -135,24 +138,34 @@ export interface IndexedFileRows {
  * document back, so the jsonb row only ever grew until the upsert hit the
  * statement timeout (57014).
  *
- * Pages keyset on file_path over idx_codebase_files_active. A path's chunk
- * rows can straddle a page, so the next page re-reads that path (`gte`) and
- * ids dedupe the overlap. A page that is one single path cannot be re-read
- * without looping, so the walk pages inside that path on `id` until its rows
- * run out and only then steps past it: stepping past it straight away
- * dropped the rest of a file with more rows than a page.
+ * Pages keyset on file_path, then id. idx_codebase_files_active is
+ * (project_id, file_path, id) WHERE tombstoned_at IS NULL, so that order is
+ * an index scan. id only breaks ties inside one path. A path's chunk rows
+ * can straddle a page, so the next page
+ * re-reads that path (`gte`) and ids dedupe the overlap. A page that is one
+ * single path cannot be re-read without looping, so the walk pages inside
+ * that path on `id` until its rows run out and only then steps past it:
+ * stepping past it straight away dropped the rest of a file with more rows
+ * than a page.
+ *
+ * `maxPages` defaults to MAX_FILE_ROW_PAGES and cannot be raised past it.
  */
 export async function listIndexedFileRows(
   db: SupabaseClient,
   projectId: string,
+  maxPages: number = MAX_FILE_ROW_PAGES,
 ): Promise<IndexedFileRows> {
+  const pageCap = Math.min(
+    MAX_FILE_ROW_PAGES,
+    Math.max(1, Number.isFinite(maxPages) ? Math.floor(maxPages) : MAX_FILE_ROW_PAGES),
+  )
   const rows: IndexedFileRow[] = []
   const seen = new Set<string>()
   let after: string | null = null
   let inclusive = false
   /** Set while paging inside one path whose rows fill a whole page. */
   let afterId: string | null = null
-  for (let page = 0; page < MAX_FILE_ROW_PAGES; page++) {
+  for (let page = 0; page < pageCap; page++) {
     let query = db
       .from('project_codebase_files')
       .select(FILE_ROW_COLUMNS)
