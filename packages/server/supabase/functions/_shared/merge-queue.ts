@@ -104,20 +104,20 @@ export function reviewRefusal(
   if (code === 'HEAD_MOVED' || code === 'REVIEW_PENDING') return { state: 'waiting', detail: message, requeueReview: false }
   const verdict = review?.verdict ?? null
   if (verdict === 'merge' && (review?.stale || review?.rerunning)) {
-    return { state: 'waiting', detail: 'Opus is reviewing the updated commit; it merges when the verdict is merge.', requeueReview: !review?.rerunning }
+    return { state: 'waiting', detail: 'The AI review is checking the updated commit; it merges once the review says merge.', requeueReview: !review?.rerunning }
   }
   if (verdict === 'fix_first') {
     return {
       state: 'blocked',
-      detail: 'Opus says fix first on this commit. With review follow-ups on, an agent fixes its findings and Opus reviews the push; the queue merges it once the verdict is merge.',
+      detail: 'The AI review asked for changes on this commit. With review follow-ups on, an agent makes them and the review checks the push again; the queue merges it once the verdict is merge.',
       requeueReview: false,
     }
   }
   if (verdict === 'hold' || code === 'REVIEW_HOLD') {
-    return { state: 'blocked', detail: 'Opus says hold on this commit. Open the fix to read why; only you can override a hold.', requeueReview: false }
+    return { state: 'blocked', detail: 'The AI review says do not merge this commit. Open the fix to read why; only you can override it.', requeueReview: false }
   }
   if (!verdict) {
-    return { state: 'blocked', detail: 'This pull request has no Opus review yet. Start one from the fix (Review), or merge it yourself.', requeueReview: false }
+    return { state: 'blocked', detail: 'This pull request has no AI review yet. Start one from the fix (Review), or merge it yourself.', requeueReview: false }
   }
   return { state: 'blocked', detail: message, requeueReview: false }
 }

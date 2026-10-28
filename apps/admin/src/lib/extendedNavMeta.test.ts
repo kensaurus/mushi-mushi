@@ -284,6 +284,8 @@ describe('fullstackAuditNavBadge', () => {
 describe('dashboardNavBadge', () => {
   it('does not repeat the counts Fixes and Integrations already show', () => {
     expect(dashboardNavBadge({ openBacklog: 0, fixesFailed: 48, fixesInProgress: 0, integrationIssues: 3, topPriority: 'integrations' })).toBeNull()
+    // Fixes in progress are the Fixes item's badge; Home showed the same number (console sweep #30).
+    expect(dashboardNavBadge({ openBacklog: 0, fixesFailed: 0, fixesInProgress: 48, integrationIssues: 0, topPriority: 'fixes' as never })).toBeNull()
   })
 
   it('shows the open backlog when that is the top priority', () => {
