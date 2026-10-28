@@ -48,6 +48,9 @@ const mocks = vi.hoisted(() => ({
   fixes: [] as unknown[],
   total: 0,
   published: null as { summary?: string } | null,
+  hideTableChrome: false,
+  hideFixesSnapshot: true,
+  renderPosture: false,
 }))
 
 vi.mock('../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
@@ -77,16 +80,28 @@ vi.mock('../lib/fixesModeUx', () => ({
   useFixesUx: () => ({
     isQuickstart: false,
     isBeginner: false,
-    isAdvanced: true,
-    compactTable: false,
-    plainBanner: false,
-    hideTableChrome: false,
+    isAdvanced: !mocks.hideTableChrome,
+    compactTable: mocks.hideTableChrome,
+    plainBanner: mocks.hideTableChrome,
+    hideTableChrome: mocks.hideTableChrome,
     hideFailureCategories: false,
-    hideSnapshotLinks: false,
-    hideFixesSnapshot: true,
+    hideSnapshotLinks: mocks.hideTableChrome,
+    hideFixesSnapshot: mocks.hideFixesSnapshot,
   }),
 }))
-vi.mock('../components/PagePosture', () => ({ PagePosture: () => null, POSTURE_PRIORITY: {} }))
+vi.mock('../components/PagePosture', () => ({
+  PagePosture: ({ slots }: { slots: Array<{ show?: boolean; children?: unknown }> }) => {
+    if (!mocks.renderPosture) return null
+    return createElement(
+      'div',
+      { 'data-testid': 'posture' },
+      slots
+        .filter((slot) => slot.show !== false)
+        .map((slot, i) => createElement('div', { key: i }, slot.children as never)),
+    )
+  },
+  POSTURE_PRIORITY: { status: 0, recommended: 10, heroOrSnapshot: 20, guide: 30, nudge: 5 },
+}))
 vi.mock('../components/PageHeaderBar', () => ({
   PageHeaderBar: ({ children }: { children?: unknown }) => createElement('div', { 'data-testid': 'header' }, children as never),
 }))
@@ -105,6 +120,10 @@ function LocationProbe() {
 }
 
 beforeEach(() => {
+  mocks.hideTableChrome = false
+  mocks.hideFixesSnapshot = true
+  mocks.renderPosture = false
+  mocks.published = null
   vi.stubGlobal('ResizeObserver', class {
     observe() {}
     unobserve() {}
@@ -247,6 +266,57 @@ describe('FixesPage', () => {
     const segments = [...document.querySelectorAll('[aria-label="Filter fix attempts by status"] [role="radio"]')]
     expect(segments.find((b) => b.textContent?.startsWith('In flight'))?.textContent).toBe('In flight1')
     expect(mocks.published?.summary).toContain('1 in flight')
+  })
+
+  it('the full-mode status line uses the same in-flight number as the tab title', async () => {
+    mocks.renderPosture = true
+    mocks.hideFixesSnapshot = false
+    mocks.fixes = [fix({ id: 'a', status: 'pending', report_fix_state: 'in_flight', retryable: false })]
+    mocks.total = 1
+    await render('/fixes')
+    expect(mocks.published?.summary).toContain('1 in flight')
+    expect(document.body.textContent).toContain('1 fix running')
+  })
+
+  it('the All list does not call shipped or failed rows drafts', async () => {
+    mocks.hideTableChrome = true
+    mocks.fixes = [
+      fix({
+        id: 'a',
+        status: 'completed',
+        pr_state: 'merged',
+        merged_at: '2026-10-04T00:00:00Z',
+        report_fix_state: 'resolved',
+        retryable: false,
+        report_title: 'Shipped fix',
+      }),
+      fix({ id: 'b', report_id: 'r2', report_title: 'Still broken' }),
+    ]
+    mocks.total = 2
+    await render('/fixes')
+    expect(document.body.textContent).toContain('2 fixes — tap a row for details')
+    expect(document.body.textContent).not.toContain('draft fix')
+  })
+
+  it('a running attempt on a resolved report is not In flight, Failed, or Shipped', async () => {
+    mocks.fixes = [fix({
+      id: 'a',
+      status: 'running',
+      report_fix_state: 'resolved',
+      report_status: 'fixed',
+      retryable: false,
+      report_title: 'Already shipped',
+    })]
+    mocks.total = 1
+    await render('/fixes')
+    const segments = [...document.querySelectorAll('[aria-label="Filter fix attempts by status"] [role="radio"]')]
+    expect(segments.find((b) => b.textContent?.startsWith('In flight'))?.textContent).toBe('In flight0')
+    expect(segments.find((b) => b.textContent?.startsWith('Failed'))?.textContent).toBe('Failed / skipped0')
+    expect(segments.find((b) => b.textContent?.startsWith('Shipped'))?.textContent).toBe('Shipped0')
+    expect(document.body.textContent).toContain('Already shipped')
+    click(segments.find((b) => b.textContent?.startsWith('In flight')))
+    await flush()
+    expect(document.body.textContent).not.toContain('Already shipped')
   })
 
   it('a queued dispatch with no attempt counts as in flight in the tab title', async () => {

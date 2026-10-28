@@ -61,6 +61,16 @@ describe('in flight counts', () => {
     })).toBe(1)
   })
 
+  it('adds dispatch-only reports on top of summary inProgress, because the summary counts attempts and not dispatches', () => {
+    expect(inFlightHeadline({
+      attempts: [],
+      dispatches: [],
+      summaryInProgress: 1,
+      statsInProgress: 0,
+      statsInflightDispatches: 2,
+    })).toBe(3)
+  })
+
   it('a queued dispatch with no attempt is in flight, and is not counted twice', () => {
     const pending = fix({ report_id: 'r1', status: 'pending', report_fix_state: 'in_flight' })
     expect(extraInFlightDispatches([], [{ report_id: 'r9', status: 'queued' }])).toBe(1)
