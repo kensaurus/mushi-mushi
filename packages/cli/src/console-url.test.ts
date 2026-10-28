@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
+import type * as ConfigModule from './config.js'
 import {
   HOSTED_CONSOLE_BASE,
   consoleUrl,
@@ -11,7 +12,7 @@ import {
 } from './console-url.js'
 
 // The machine's own ~/.config/mushi/config.json (a consoleUrl, a profile) must not decide these results.
-vi.mock('./config.js', async (importOriginal) => ({ ...(await importOriginal<typeof import('./config.js')>()), loadConfig: () => ({}) }))
+vi.mock('./config.js', async (importOriginal) => ({ ...(await importOriginal<typeof ConfigModule>()), loadConfig: () => ({}) }))
 
 describe('console-url', () => {
   const originalEnv = process.env['MUSHI_CONSOLE_URL']
