@@ -580,22 +580,13 @@ export function fullstackAuditNavBadge(
   return null
 }
 
+/**
+ * Home's own count. Failed fixes and integration issues are not repeated
+ * here: Fixes and Integrations sit right below Home in the sidebar and carry
+ * them (owner walk, 2026-10-28: "48" on both Home and Fixes).
+ */
 export function dashboardNavBadge(stats: NavStatSlices['dashboard']): WorkspaceNavBadge | null {
   if (!stats) return null
-  if (stats.fixesFailed > 0) {
-    return attentionBadge(
-      stats.fixesFailed,
-      'danger',
-      `${stats.fixesFailed} failed fix${stats.fixesFailed === 1 ? '' : 'es'} on dashboard`,
-    )
-  }
-  if (stats.integrationIssues > 0) {
-    return attentionBadge(
-      stats.integrationIssues,
-      'warn',
-      `${stats.integrationIssues} integration issue${stats.integrationIssues === 1 ? '' : 's'}`,
-    )
-  }
   if (stats.openBacklog > 0 && stats.topPriority === 'backlog') {
     return attentionBadge(
       stats.openBacklog,

@@ -80,7 +80,9 @@ describe('which page is open', () => {
 
   it('finds the core page a sub-page belongs to', () => {
     expect(activeParent('/qa-coverage', '')).toBe('/checks')
-    expect(activeParent('/team', '?view=billing')).toBe('/team')
+    // Home and Team switch views with their own tabs, so the sidebar adds no list.
+    expect(activeParent('/team', '?view=billing')).toBeNull()
+    expect(NAV_CHILDREN['/dashboard']).toBeUndefined()
     expect(activeParent('/projects', '')).toBe('/portfolio')
     expect(activeParent('/pipeline', '')).toBeNull()
   })

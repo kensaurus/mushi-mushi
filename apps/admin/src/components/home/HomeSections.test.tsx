@@ -287,6 +287,11 @@ describe('AppCard', () => {
     expect(hrefs()).toContain('https://glot.it')
   })
 
+  it('names a site under a path by its path, not just the domain', async () => {
+    await render(createElement(AppCard, { section: ok(app({ name: 'mushi-mushi', liveUrl: 'https://kensaur.us/mushi-mushi/' })), projectId: P, canEdit: false, onRefreshed: () => {} }))
+    expect(byTestId('home-app-card')!.textContent).toContain('kensaur.us/mushi-mushi')
+  })
+
   it('falls back to the icon and says why there is no screenshot', async () => {
     await render(createElement(AppCard, { section: ok(app({ thumbnailState: { available: true, canRefresh: false, reason: 'Add a Firecrawl key in Settings to take a screenshot.', lastError: null, lastAttemptAt: null } })), projectId: P, canEdit: true, onRefreshed: () => {} }))
     expect(text()).toContain('Add a Firecrawl key')

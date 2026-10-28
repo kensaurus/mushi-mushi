@@ -173,10 +173,16 @@ export function initialsOf(name: string | null): string {
   return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '?'
 }
 
-export function hostOf(url: string | null): string | null {
+/**
+ * The site as people say it: host plus path ("kensaur.us/mushi-mushi"). A bare
+ * host named the company homepage for an app that lives under a path.
+ */
+export function siteLabel(url: string | null): string | null {
   if (!url) return null
   try {
-    return new URL(url).host
+    const u = new URL(url)
+    const path = u.pathname.replace(/\/+$/, '')
+    return path ? `${u.host}${path}` : u.host
   } catch {
     return url
   }

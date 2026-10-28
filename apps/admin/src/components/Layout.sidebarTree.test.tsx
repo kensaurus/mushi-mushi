@@ -148,9 +148,10 @@ describe('the sidebar shows where you are', () => {
     expect(current()).toEqual(['/qa-coverage'])
   })
 
-  it('highlights a view, not its page, on /team?view=billing', () => {
+  it('keeps Team highlighted on one of its tabs, with no repeat of the tabs in the sidebar', () => {
     renderAt('/team?view=billing')
-    expect(current()).toEqual(['/team?view=billing'])
+    expect(current()).toEqual(['/team'])
+    expect(nav().querySelector('[data-testid="nav-children"]')).toBeNull()
   })
 
   it('opens More pages on a page listed there', () => {
@@ -159,6 +160,23 @@ describe('the sidebar shows where you are', () => {
     expect(more).not.toBeNull()
     expect(more!.textContent).toContain('Account')
     expect(current()).toEqual(['/credits'])
+  })
+
+  it('scrolls the page you are on into view, even low in More pages', async () => {
+    const scrolled: string[] = []
+    const original = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this.getAttribute('href') ?? '')
+    }
+    try {
+      renderAt('/credits')
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50))
+      })
+      expect(scrolled).toContain('/credits')
+    } finally {
+      Element.prototype.scrollIntoView = original
+    }
   })
 
   it('keeps More pages closed and sub-pages hidden on a core page with none', () => {
