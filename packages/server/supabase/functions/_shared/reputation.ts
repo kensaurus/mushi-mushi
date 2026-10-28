@@ -273,7 +273,12 @@ function activityInsertOutcome(err: ActivityDbError | null, status: number | nul
   }
 }
 
-/** One Sentry error per window once transient insert failures keep happening. */
+/**
+ * Best-effort Sentry nudge. The count is module state in one edge isolate.
+ * Isolates are short-lived and many run at once, so a sustained outage can
+ * stay under this threshold everywhere and never emit `activity_insert_outage`.
+ * Alert on the `activity_insert_failed` warning (`transient: true`).
+ */
 const TRANSIENT_INSERT_ALERT_AFTER = 8
 const TRANSIENT_INSERT_ALERT_WINDOW_MS = 10 * 60_000
 
