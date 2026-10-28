@@ -15,6 +15,11 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
 import { createNotification, buildNotificationMessage } from './notifications.ts'
 import { evaluateTier } from './tier-evaluator.ts'
+import {
+  dbFailureMessage,
+  isTransientDbConnectionError,
+  isTransientGatewayStatus,
+} from './error-codes.ts'
 
 const rlog = log.child('reputation')
 
@@ -225,6 +230,78 @@ export interface AwardActivityResult {
   tierChanged: boolean
 }
 
+type ActivityDbError = {
+  message?: string
+  code?: string | null
+  details?: string | null
+  hint?: string | null
+}
+
+/**
+ * A gateway 5xx puts an HTML page in PostgREST `error.message`. Logging that
+ * string with `rlog.error` opened a Sentry issue on every `session_minute`
+ * heartbeat (59d3e946). Collapse it to the status plus a short title.
+ * A 504 is transient but not retried: the insert may already have committed.
+ * Heartbeats are not retried either — the next minute is the retry, and a
+ * second write during an outage only adds pool pressure.
+ */
+function activityInsertOutcome(err: ActivityDbError | null, status: number | null): {
+  transient: boolean
+  retry: boolean
+  error: string
+} {
+  const transient = isTransientDbConnectionError(err) || isTransientGatewayStatus(status)
+  const text = dbFailureMessage(err)
+  const summary = status != null && status >= 500
+    ? (text.startsWith('Unknown DB error') ? `HTTP ${status}` : `HTTP ${status}: ${text}`)
+    : text
+  return {
+    transient,
+    retry: transient && status !== 504,
+    error: summary.slice(0, 500),
+  }
+}
+
+function activityRetryPause(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 80))
+}
+
+async function insertEndUserActivity(
+  db: SupabaseClient,
+  row: {
+    end_user_id: string
+    organization_id: string
+    project_id: string
+    action: string
+    points_awarded: number
+    rule_id: string | null
+    metadata: Record<string, unknown>
+  },
+): Promise<{ error: ActivityDbError | null; status: number | null }> {
+  // One retry for a rare award whose gateway failure usually means the write
+  // never landed. session_minute already fires every minute.
+  const attempts = row.action === 'session_minute' ? 1 : 2
+  let error: ActivityDbError | null = null
+  let status: number | null = null
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const inserted = await db.from('end_user_activity').insert(row) as {
+        error: ActivityDbError | null
+        status?: number
+      }
+      error = inserted.error
+      status = typeof inserted.status === 'number' ? inserted.status : null
+    } catch (thrown) {
+      error = { message: thrown instanceof Error ? thrown.message : String(thrown) }
+      status = null
+    }
+    if (!error) return { error: null, status }
+    if (!activityInsertOutcome(error, status).retry || attempt === attempts) break
+    await activityRetryPause()
+  }
+  return { error, status }
+}
+
 /**
  * Awards points for a single activity action against the end_user_points
  * system. Enforces velocity caps from reward_rules, propagates to
@@ -307,7 +384,7 @@ export async function awardPointsForEndUser(
   const pointsAwarded = Math.max(0, Math.round(basePoints * multiplier))
 
   // 5. Persist activity row (trigger updates end_user_points)
-  const { error: insertErr } = await db.from('end_user_activity').insert({
+  const inserted = await insertEndUserActivity(db, {
     end_user_id: endUserId,
     organization_id: organizationId,
     project_id: projectId,
@@ -317,8 +394,12 @@ export async function awardPointsForEndUser(
     metadata: metadata ?? {},
   })
 
-  if (insertErr) {
-    rlog.error('activity_insert_failed', { endUserId, action, error: insertErr.message })
+  if (inserted.error) {
+    const outcome = activityInsertOutcome(inserted.error, inserted.status)
+    const meta = { endUserId, action, error: outcome.error, status: inserted.status }
+    // warn does not forward to Sentry; a real constraint failure still does.
+    if (outcome.transient) rlog.warn('activity_insert_failed', { ...meta, transient: true })
+    else rlog.error('activity_insert_failed', meta)
     return { pointsAwarded: 0, totalPoints: 0, rejectedReason: 'insert_error', tierChanged: false }
   }
 
