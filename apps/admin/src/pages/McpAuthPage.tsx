@@ -27,6 +27,7 @@
  * DEPENDENCIES:
  *   - apiFetch (lib/supabase)
  *   - UI primitives (components/ui)
+ *   - PagePosture + PageStatus — one status line and next step per auth state
  *   - Sibling page: CliAuthPage.tsx (RFC 8628 device flow for `mushi login`)
  */
 
@@ -34,6 +35,8 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { Btn, ErrorAlert } from '../components/ui'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { PageStatus, type PageStatusTone } from '../components/ui/page-status'
 import { CHIP_TONE } from '../lib/chipTone'
 import {
   mcpAuthAccessPlan,
@@ -66,6 +69,49 @@ function assignRedirect(url: string): boolean {
 }
 
 type PageState = 'loading' | 'ready' | 'approving' | 'redirecting' | 'denied' | 'complete' | 'error'
+
+/** Status sentence for the consent page. Copy only — it does not change the approve, deny, or error screens. */
+function mcpAuthStatusLine(state: PageState, errorMessage: string | null): { tone: PageStatusTone; sentence: string } {
+  switch (state) {
+    case 'loading':
+      return { tone: 'info', sentence: 'Loading the authorization request.' }
+    case 'approving':
+      return { tone: 'info', sentence: 'Approving this connection.' }
+    case 'ready':
+      return errorMessage
+        ? { tone: 'danger', sentence: 'The connection was not approved. Next: try again.' }
+        : { tone: 'info', sentence: 'An MCP client is waiting for your approval. Next: Approve access.' }
+    case 'redirecting':
+      return { tone: 'ok', sentence: 'Approved. Next: Return to your MCP client.' }
+    case 'complete':
+      return { tone: 'ok', sentence: 'This connection is already complete. Next: Return to your MCP client.' }
+    case 'denied':
+      return { tone: 'warn', sentence: 'The MCP client was not connected. Next: retry the login from your client if this was a mistake.' }
+    case 'error':
+      return { tone: 'danger', sentence: 'This connection could not be completed. Next: restart it from your MCP client.' }
+  }
+}
+
+function McpAuthStatus({ state, errorMessage }: { state: PageState; errorMessage: string | null }) {
+  const line = mcpAuthStatusLine(state, errorMessage)
+  return (
+    <PagePosture
+      className="w-full max-w-lg text-left"
+      slots={[{
+        id: 'mcp-auth-status',
+        priority: POSTURE_PRIORITY.status,
+        children: (
+          <PageStatus
+            ariaLabel="MCP authorization status"
+            tone={line.tone}
+            sentence={line.sentence}
+            data-testid="mcp-auth-status"
+          />
+        ),
+      }]}
+    />
+  )
+}
 
 function PlugIcon() {
   return (
@@ -189,6 +235,7 @@ export function McpAuthPage() {
   if (state === 'loading') {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        <McpAuthStatus state={state} errorMessage={errorMessage} />
         <span
           className="h-10 w-10 animate-spin rounded-full border-4 border-brand/25 border-t-brand motion-reduce:animate-none"
           role="status"
@@ -202,6 +249,7 @@ export function McpAuthPage() {
   if (state === 'redirecting') {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        <McpAuthStatus state={state} errorMessage={errorMessage} />
         <span
           className="h-10 w-10 animate-spin rounded-full border-4 border-brand/25 border-t-brand motion-reduce:animate-none"
           role="status"
@@ -218,6 +266,7 @@ export function McpAuthPage() {
   if (state === 'denied') {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        <McpAuthStatus state={state} errorMessage={errorMessage} />
         <XCircleIcon />
         <h1 className="text-xl font-semibold text-fg">Access denied</h1>
         <p className="max-w-sm text-sm text-fg-muted">
@@ -230,6 +279,7 @@ export function McpAuthPage() {
   if (state === 'complete') {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        <McpAuthStatus state={state} errorMessage={errorMessage} />
         <PlugIcon />
         <h1 className="text-xl font-semibold text-fg">Connection complete</h1>
         <p className="max-w-sm text-sm text-fg-muted">{errorMessage}</p>
@@ -240,6 +290,7 @@ export function McpAuthPage() {
   if (state === 'error') {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        <McpAuthStatus state={state} errorMessage={errorMessage} />
         <XCircleIcon />
         <h1 className="text-xl font-semibold text-fg">Can't complete this connection</h1>
         <div className="w-full max-w-md text-left">
@@ -259,6 +310,7 @@ export function McpAuthPage() {
 
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 px-4 py-10">
+      <McpAuthStatus state={state} errorMessage={errorMessage} />
       <div className="w-full max-w-lg">
         {/* Header */}
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
