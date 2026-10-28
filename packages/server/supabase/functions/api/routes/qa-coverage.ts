@@ -609,10 +609,9 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
   });
 
   // ── List runs for a story ─────────────────────────────────────────────────
-  // Account keys (MCP account connection) are rejected by apiKeyAuth, which
-  // jwtOrApiKey uses, so this read uses adminOrApiKey. The other QA routes
-  // stay on jwtAuth / jwtOrApiKey: creating or running a story is unchanged.
-  // mcp:read (mcp:write implies it). A project key stays pinned to its project.
+  // mcp:read (mcp:write implies it). An account key may read runs for a
+  // project it can reach, the same gate as GET /qa-coverage. Creating or
+  // editing a story stays on jwtAuth. A project key stays pinned to its project.
   app.get('/v1/admin/projects/:pid/qa-stories/:sid/runs', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
     const pid = c.req.param('pid')!;

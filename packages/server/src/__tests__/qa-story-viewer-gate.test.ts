@@ -30,15 +30,6 @@ describe('QA story writes refuse viewers', () => {
     expect(gate).toBeGreaterThan(0)
     expect(body.indexOf(write)).toBeGreaterThan(gate)
   })
-
-  it('the gate uses the shared viewer rule and skips project-bound API keys', () => {
-    const start = src.indexOf('async function qaViewerDenied')
-    const helper = src.slice(start, start + 700)
-    expect(helper).toContain("c.get('authMethod') === 'apiKey' && !c.get('isOrgScopedKey')")
-    expect(helper).toContain('if (!userId) return null')
-    expect(helper).toContain('userCanAccessProject(db, userId, projectId)')
-    expect(helper).toContain('denyViewerWrite(c, access.role, action)')
-  })
 })
 
 describe('inventory writes refuse viewers', () => {

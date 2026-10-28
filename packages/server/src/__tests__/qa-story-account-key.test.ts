@@ -30,6 +30,7 @@ const ACCOUNT = 'mushi_accountkey0123456789abcdef'
 const READONLY = 'mushi_readonlykey0123456789abcdef'
 const LIMITED = 'mushi_limitedkey0123456789abcdef'
 const VIEWER_KEY = 'mushi_viewerkey0123456789abcdef0'
+const VIEWER_PROJECT = 'mushi_viewerbound0123456789abcdef'
 const PROJECT_KEY = 'mushi_projectkey0123456789abcdef'
 const SDK_KEY = 'mushi_sdkkey0123456789abcdefghijkl'
 
@@ -69,6 +70,7 @@ function seed(): FakeDb {
         key(READONLY, { scopes: ['mcp:read'] }),
         key(LIMITED, { allowed_project_ids: [P_MINE] }),
         key(VIEWER_KEY, { owner_user_id: VIEWER }),
+        key(VIEWER_PROJECT, { is_org_scoped: false, project_id: P_TEAM, owner_user_id: VIEWER, projects: { name: 'Team' } }),
         key(PROJECT_KEY, { is_org_scoped: false, project_id: P_TEAM, projects: { name: 'Team' } }),
         key(SDK_KEY, { is_org_scoped: false, project_id: P_TEAM, scopes: ['report:write'], projects: { name: 'Team' } }),
       ],
@@ -149,6 +151,14 @@ describe('POST /qa-stories/:sid/run with an account key', () => {
     expect(res.status).toBe(403)
     expect(res.body.error?.code).toBe('FORBIDDEN')
     expect(runs()).toEqual([])
+  })
+
+  it('lets a project-bound key run even when its owner is only a viewer', async () => {
+    // A project key is the project's credential. The viewer role applies to
+    // an account key, not to a key bound to this project.
+    const res = await post(P_TEAM, STORY, VIEWER_PROJECT)
+    expect(res.status).toBe(202)
+    expect(runs()).toHaveLength(1)
   })
 
   it('refuses a public SDK key (report:write only)', async () => {
