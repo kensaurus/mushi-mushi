@@ -12,6 +12,10 @@
  *      Uses `chat.postMessage` with SLACK_BOT_TOKEN (xoxb-).
  *      Returns `{ ok, ts }` — the `ts` can be stored on the report row
  *      and used to post threaded follow-up messages (fix dispatched, PR link).
+ *      `channel_not_found`, `not_in_channel` and `is_archived` are a stale
+ *      channel, not an outage: they are recorded on
+ *      `integration_health_history` as down and are not sent to Sentry.
+ *      The same channel is not posted to again for an hour.
  *
  * Threading flow
  * --------------
@@ -654,16 +658,111 @@ export interface BotMessageResult {
   error?: string
 }
 
+/** Slack errors that mean this channel cannot take a post. Not an outage. */
+const SLACK_CHANNEL_UNUSABLE = new Set(['channel_not_found', 'not_in_channel', 'is_archived'])
+
+/** How long a recorded dead channel skips chat.postMessage. */
+const SLACK_CHANNEL_UNUSABLE_COOLDOWN_MS = 60 * 60 * 1000
+
 /**
- * Post a message via the Slack Bot API (`chat.postMessage`).
- * Returns `{ ok, ts }` — when `ok`, `ts` is the message's unique timestamp
- * which can be stored on the report row and used to post threaded replies.
- *
- * Token resolution order:
- *   1. `opts.token` (explicit override)
- *   2. Per-project vaulted token via `opts.db` + `opts.projectId`
- *   3. Global `SLACK_BOT_TOKEN` env var
+ * Plain-English reason a chat.postMessage (or conversations.info) error is
+ * the channel, not the token. Null for every other Slack error. `channel`
+ * is included so a later send can tell which channel was marked down.
  */
+export function slackChannelUnusableCopy(error: string, channel?: string): string | null {
+  const named = channel ? `Slack channel ${channel}` : 'This Slack channel'
+  if (error === 'channel_not_found') {
+    return `${named} was not found. It may have been deleted or belong to another workspace. Pick the channel again on Integrations.`
+  }
+  if (error === 'not_in_channel') {
+    const where = channel ? `Slack channel ${channel}` : 'this Slack channel'
+    return `The Mushi bot is not in ${where}. Invite it with /invite, or pick another channel.`
+  }
+  if (error === 'is_archived') {
+    return `${named} is archived. Pick another channel on Integrations.`
+  }
+  return null
+}
+
+type SlackHealthRow = { status?: string; message?: string | null; checked_at?: string }
+
+type SlackHealthTable = {
+  select: (cols: string) => SlackHealthTable
+  eq: (col: string, val: string) => SlackHealthTable
+  order: (col: string, opts: { ascending: boolean }) => SlackHealthTable
+  limit: (n: number) => SlackHealthTable
+  maybeSingle: () => Promise<{ data: SlackHealthRow | null }>
+  insert: (row: Record<string, unknown>) => Promise<{ error: { message?: string } | null }>
+}
+
+function slackHealthTable(db: unknown): SlackHealthTable | null {
+  const from = (db as { from?: (table: string) => SlackHealthTable } | null)?.from
+  if (typeof from !== 'function') return null
+  try {
+    return from('integration_health_history')
+  } catch {
+    return null
+  }
+}
+
+/** The Slack error code stored in a health row we wrote, for this channel. */
+/** True when the health sentence names this channel and not a longer id that shares its prefix. */
+function messageNamesChannel(message: string, channel: string): boolean {
+  return message.includes(`channel ${channel} `) || message.includes(`channel ${channel}.`)
+}
+
+function slackChannelDownCode(row: SlackHealthRow | null, channel: string): string | null {
+  if (!row || row.status !== 'down' || !row.message || !messageNamesChannel(row.message, channel)) return null
+  if (row.message.includes('was not found')) return 'channel_not_found'
+  if (row.message.includes('is archived')) return 'is_archived'
+  if (row.message.includes('Invite it with /invite')) return 'not_in_channel'
+  return null
+}
+
+/**
+ * Skip chat.postMessage while the newest slack health row says this exact
+ * channel is down and that row is still inside the cooldown. A different
+ * channel, an older row, or a failed read all post normally.
+ */
+async function slackChannelCoolingDown(db: unknown, projectId: string, channel: string): Promise<string | null> {
+  try {
+    const table = slackHealthTable(db)
+    if (!table) return null
+    const { data } = await table
+      .select('status, message, checked_at')
+      .eq('project_id', projectId)
+      .eq('kind', 'slack')
+      .order('checked_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const code = slackChannelDownCode(data, channel)
+    if (!code || !data?.checked_at) return null
+    const at = Date.parse(data.checked_at)
+    if (!Number.isFinite(at) || Date.now() - at > SLACK_CHANNEL_UNUSABLE_COOLDOWN_MS) return null
+    return code
+  } catch {
+    return null
+  }
+}
+
+/** Best-effort. A failed insert must not fail the notification call. */
+async function recordSlackChannelDown(db: unknown, projectId: string, message: string): Promise<void> {
+  try {
+    const table = slackHealthTable(db)
+    if (!table) return
+    const { error } = await table.insert({
+      project_id: projectId,
+      kind: 'slack',
+      status: 'down',
+      message: message.slice(0, 300),
+      source: 'send',
+    })
+    if (error) slackLog.warn('slack channel health not stored', { projectId, err: error.message })
+  } catch (err) {
+    slackLog.warn('slack channel health not stored', { projectId, err: String(err) })
+  }
+}
+
 /**
  * The project's Slack bot token: the per-project vaulted token, else the
  * global `SLACK_BOT_TOKEN`. Null when neither exists. Never throws.
@@ -687,6 +786,20 @@ export async function resolveSlackBotToken(db: unknown, projectId: string | null
   return Deno.env.get('SLACK_BOT_TOKEN') ?? null
 }
 
+/**
+ * Post a message via the Slack Bot API (`chat.postMessage`).
+ * Returns `{ ok, ts }` — when `ok`, `ts` is the message's unique timestamp
+ * which can be stored on the report row and used to post threaded replies.
+ *
+ * Token resolution order:
+ *   1. `opts.token` (explicit override)
+ *   2. Per-project vaulted token via `opts.db` + `opts.projectId`
+ *   3. Global `SLACK_BOT_TOKEN` env var
+ *
+ * `channel_not_found`, `not_in_channel` and `is_archived` are recorded as a
+ * down slack health row and are not forwarded to Sentry. The same channel
+ * is not posted to again until that row is an hour old.
+ */
 export async function sendBotMessage(opts: BotMessageOptions): Promise<BotMessageResult> {
   // Explicit token, else the per-project vaulted token, else SLACK_BOT_TOKEN.
   const token = opts.token || (await resolveSlackBotToken(opts.db, opts.projectId))
@@ -699,6 +812,14 @@ export async function sendBotMessage(opts: BotMessageOptions): Promise<BotMessag
   if (!channel) {
     slackLog.warn('sendBotMessage: no channel — skipping')
     return { ok: false, ts: null, error: 'no_channel' }
+  }
+
+  // A deleted, archived, or unjoined channel fails the same way on every
+  // notification. One health row marks it down; further posts wait out the
+  // cooldown instead of calling Slack (and Sentry) again.
+  if (opts.db && opts.projectId) {
+    const cooling = await slackChannelCoolingDown(opts.db, opts.projectId, channel)
+    if (cooling) return { ok: false, ts: null, error: cooling }
   }
 
   const body: Record<string, unknown> = {
@@ -720,8 +841,17 @@ export async function sendBotMessage(opts: BotMessageOptions): Promise<BotMessag
     })
     const json = await res.json() as { ok: boolean; ts?: string; error?: string }
     if (!json.ok) {
-      slackLog.error('chat.postMessage failed', { slackError: json.error })
-      return { ok: false, ts: null, error: json.error }
+      const slackError = json.error ?? 'slack_error'
+      const copy = slackChannelUnusableCopy(slackError, channel)
+      if (copy && SLACK_CHANNEL_UNUSABLE.has(slackError)) {
+        // warn, not error: error is forwarded to Sentry, and a stale channel
+        // is a setup problem the user can fix, not a crash on every send.
+        slackLog.warn('chat.postMessage channel unusable', { slackError, channel })
+        if (opts.db && opts.projectId) await recordSlackChannelDown(opts.db, opts.projectId, copy)
+        return { ok: false, ts: null, error: slackError }
+      }
+      slackLog.error('chat.postMessage failed', { slackError })
+      return { ok: false, ts: null, error: slackError }
     }
     return { ok: true, ts: json.ts ?? null }
   } catch (err) {

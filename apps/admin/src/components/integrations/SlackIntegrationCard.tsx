@@ -4,7 +4,8 @@
  * First-class Slack integration card with:
  * - "Add to Slack" OAuth button (per-project bot token flow)
  * - Channel picker (proxied conversations.list)
- * - Send-test button
+ * - Send-test button (channel_not_found / not_in_channel / is_archived say to
+ *   reselect the channel or /invite the bot)
  * - Health sparkline (slack probe from integration-probes)
  * - Legacy webhook URL fallback behind a <details>
  */
@@ -75,8 +76,23 @@ interface SlackChannel {
   private: boolean
 }
 
-/** Decode the Slack error code from the backend into an actionable UI message. */
-function slackErrorToMessage(errorCode: string | undefined, rawMessage: string): string {
+/**
+ * Decode a Slack error code into an actionable UI message.
+ * Exported for tests. The test-send route reports the Slack code as
+ * `SLACK_API_ERROR` with the code in `message`; the channel list route
+ * reports the Slack code itself.
+ */
+export function slackErrorToMessage(errorCode: string | undefined, rawMessage: string): string {
+  const code = errorCode === 'SLACK_API_ERROR' ? rawMessage : errorCode
+  if (code === 'channel_not_found' || rawMessage === 'channel_not_found') {
+    return 'This Slack channel was not found. It may have been deleted or belong to another workspace. Pick the channel again on Integrations.'
+  }
+  if (code === 'is_archived' || rawMessage === 'is_archived') {
+    return 'This Slack channel is archived. Pick another channel on Integrations.'
+  }
+  if (code === 'not_in_channel' || rawMessage === 'not_in_channel') {
+    return 'The Mushi bot is not in this Slack channel. Invite it with /invite, or pick another channel.'
+  }
   if (errorCode === 'missing_scope') {
     return "Your Slack app doesn't have 'channels:read' permission. Click \"Re-add to Slack\" below to reinstall with the correct scopes."
   }
@@ -228,10 +244,11 @@ export function SlackIntegrationCard({
     setTestingSlack(true)
     try {
       const res = await apiFetch('/v1/admin/settings/test-slack', { method: 'POST' })
-      setLocalProbe(probeFromTestSend(res.ok, res.ok ? null : res.error?.message ?? 'Slack test failed.'))
+      const friendly = res.ok ? null : slackErrorToMessage(res.error?.code, res.error?.message ?? '')
+      setLocalProbe(probeFromTestSend(res.ok, friendly))
       if (res.ok) toast.success('Test message sent to Slack!')
       else {
-        const t = describeApiFailure(res.error, 'Slack test failed')
+        const t = describeApiFailure({ code: res.error?.code, message: friendly }, 'Slack test failed')
         toast.error(t.title, t.description)
       }
     } catch {

@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../../lib/toast', () => ({ useToast: () => mocks.toast }))
 
-import { SlackIntegrationCard, isSlackInstallUnavailable } from './SlackIntegrationCard'
+import { SlackIntegrationCard, isSlackInstallUnavailable, slackErrorToMessage } from './SlackIntegrationCard'
 import { coerceApiResult } from '../../lib/apiEnvelope'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -55,6 +55,22 @@ function render() {
   })
 }
 
+describe('slackErrorToMessage', () => {
+  it('tells the user to reselect a missing or archived channel', () => {
+    expect(slackErrorToMessage('channel_not_found', '')).toMatch(/pick the channel again/i)
+    expect(slackErrorToMessage('is_archived', '')).toMatch(/pick another channel/i)
+  })
+
+  it('tells the user to invite the bot when it is not in the channel', () => {
+    expect(slackErrorToMessage('not_in_channel', '')).toMatch(/\/invite/)
+  })
+
+  it('reads the Slack code when the test endpoint wraps it as SLACK_API_ERROR', () => {
+    expect(slackErrorToMessage('SLACK_API_ERROR', 'channel_not_found')).toMatch(/pick the channel again/i)
+    expect(slackErrorToMessage('SLACK_API_ERROR', 'not_in_channel')).toMatch(/\/invite/)
+  })
+})
+
 describe('isSlackInstallUnavailable', () => {
   it('is true only for the server not having a Slack app', () => {
     expect(isSlackInstallUnavailable({ code: 'NOT_CONFIGURED' })).toBe(true)
@@ -68,6 +84,33 @@ describe('isSlackInstallUnavailable', () => {
     const res = coerceApiResult(body)
     expect(res.ok).toBe(false)
     expect(isSlackInstallUnavailable(res.ok ? null : res.error)).toBe(true)
+  })
+})
+
+describe('SlackIntegrationCard send test', () => {
+  it('explains a stale channel instead of a raw Slack code', async () => {
+    mocks.apiFetch.mockImplementation(async (url: string) => {
+      if (String(url).includes('channels')) return { ok: true, data: { channels: [] } }
+      return { ok: false, error: { code: 'SLACK_API_ERROR', message: 'channel_not_found' } }
+    })
+    act(() => {
+      root.render(createElement(SlackIntegrationCard, {
+        projectId: 'p1',
+        slackConfigured: true,
+        teamName: 'Acme',
+        canPost: true,
+      }))
+    })
+    await act(async () => {
+      await flush()
+    })
+    await act(async () => {
+      buttons('Send test')[0].click()
+      await flush()
+    })
+    const description = mocks.toast.error.mock.calls[0]?.[1] as string
+    expect(description).toMatch(/pick the channel again/i)
+    expect(description).not.toMatch(/channel_not_found/)
   })
 })
 
