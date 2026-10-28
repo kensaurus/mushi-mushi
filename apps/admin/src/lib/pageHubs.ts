@@ -4,7 +4,7 @@
  *          now (Plan 021 Phase 3, owner 2026-10-06), switched with `?view=`:
  *
  *            Home (/dashboard)  — Today, Overview, User activity, Users & funnels, Weekly insights, Growth
- *            App health (/health) — AI & jobs, Code size, Schema changes, Unusual spikes
+ *            Mushi health (/health) — Mushi's AI & jobs, Code size, Schema changes, Unusual spikes
  *            Team (/team)       — Members, Billing, AI spend, Audit log, Single sign-on, Compliance, Storage
  *
  *          Every retired route redirects to its view with the query kept, so
@@ -44,9 +44,9 @@ export const HOME_HUB: PageHub = {
 
 export const HEALTH_HUB: PageHub = {
   path: '/health',
-  title: 'App health view',
+  title: 'Mushi health view',
   views: [
-    { id: 'integrations', label: 'AI & jobs', legacyPath: null },
+    { id: 'integrations', label: 'Mushi’s AI & jobs', legacyPath: null },
     { id: 'code', label: 'Code size', legacyPath: '/code-health' },
     { id: 'schema', label: 'Schema changes', legacyPath: '/drift' },
     { id: 'spikes', label: 'Unusual spikes', legacyPath: '/anomalies' },
@@ -87,6 +87,18 @@ export function visibleViews(hub: PageHub, viewer: HubViewer): HubView[] {
 export function resolveHubView(hub: PageHub, raw: string | null, viewer: HubViewer): string {
   const views = visibleViews(hub, viewer)
   return views.find((v) => v.id === raw)?.id ?? views[0]?.id ?? hub.views[0].id
+}
+
+/**
+ * A view the URL asks for that the viewer's plan does not include. The hub
+ * shows it as "Available on <plan>" instead of quietly opening its first
+ * view: `?view=sso` used to render Members (console journeys 2026-10-27).
+ * Operator-only views still fall back, since they are not for sale.
+ */
+export function lockedHubView(hub: PageHub, raw: string | null, viewer: HubViewer): HubView | null {
+  const view = hub.views.find((v) => v.id === raw)
+  if (!view?.requiresFeature || view.operatorOnly) return null
+  return visibleViews(hub, viewer).some((v) => v.id === view.id) ? null : view
 }
 
 /** `/activity?project=x` → `/dashboard?project=x&view=users`, keeping every other param. */

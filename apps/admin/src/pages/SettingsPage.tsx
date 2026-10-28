@@ -18,7 +18,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout';
-import { PageScopeHint, SegmentedControl, StatCard, ErrorAlert } from '../components/ui';
+import { Card, PageScopeHint, SegmentedControl, StatCard, ErrorAlert } from '../components/ui';
 import { PageHeaderBar } from '../components/PageHeaderBar';
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture';
 import { GeneralPanel } from '../components/settings/GeneralPanel';
@@ -36,6 +36,8 @@ import { VoiceIntakePanel } from '../components/settings/VoiceIntakePanel';
 import { HealthPanel } from '../components/settings/HealthPanel';
 import { DevToolsPanel } from '../components/settings/DevToolsPanel';
 import { LabsPanel } from '../components/settings/LabsPanel';
+import { DisplayPreferences } from '../components/DisplayPreferences';
+import { useFocusMode } from '../lib/focusMode';
 import { SettingsIntegrationsReadout } from '../components/settings/SettingsIntegrationsReadout';
 import { SettingsStatusBanner } from '../components/settings/SettingsStatusBanner';
 import { DeveloperDetails } from '../components/settings/SettingsRow';
@@ -77,6 +79,7 @@ import {
   sdkDetail,
   sdkTooltip,
 } from '../lib/statTooltips/settings';
+import { slackStatLabel } from '../components/settings/slackAlertStatus';
 import { settingsLinks } from '../lib/statCardLinks';
 import { useRealtimeReload } from '../lib/realtime';
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton';
@@ -105,6 +108,7 @@ function SettingsPageBody({
   const copy = usePageCopy('/settings');
   const ux = useSettingsUx();
   const activeProjectId = useActiveProjectId();
+  const [focusMode, setFocusMode] = useFocusMode();
   const setup = useSetupStatus(activeProjectId);
   const projectName = setup.activeProject?.project_name ?? null;
   const projectSlug = setup.activeProject?.project_slug ?? null;
@@ -142,6 +146,10 @@ function SettingsPageBody({
     isValidating,
   } = usePageData<SettingsStats>(statsPath);
   const stats = { ...EMPTY_SETTINGS_STATS, ...statsData };
+  // The same read GeneralPanel makes (concurrent reads share one request):
+  // the cards below it wait for it, so its growth never pushes them.
+  const generalSettings = usePageData<unknown>(active === 'general' ? '/v1/admin/settings' : null);
+  const generalLoaded = !generalSettings.loading;
 
   const pool = useByokPool(byokEnabled);
   const keySummary: KeySummary | null = useMemo(() => {
@@ -314,12 +322,20 @@ function SettingsPageBody({
       >
         {active === 'general' && (
           <>
-            <GeneralPanel />
-            <SpendLimitsPanel />
-            <AgentPrReviewCard projectId={activeProjectId} />
-            <VerifiedMergeCard projectId={activeProjectId} />
-            <CiCostSettingsCard projectId={activeProjectId} />
-            <CiPolicyCard projectId={activeProjectId} />
+            <GeneralPanel slackCanPost={stats.slackCanPost} />
+            {/* The General panel grows from a ~320px skeleton to ~3,600px when
+                its settings land; cards rendered below it were pushed off
+                screen (layout shift 0.53, measured 2026-10-24). They mount once
+                it has loaded, below the fold, where growth moves nothing. */}
+            {generalLoaded && (
+              <>
+                <SpendLimitsPanel />
+                <AgentPrReviewCard projectId={activeProjectId} />
+                <VerifiedMergeCard projectId={activeProjectId} />
+                <CiCostSettingsCard projectId={activeProjectId} />
+                <CiPolicyCard projectId={activeProjectId} />
+              </>
+            )}
           </>
         )}
         {active === 'byok' && <ByokPanel />}
@@ -349,7 +365,18 @@ function SettingsPageBody({
             </div>
           </>
         )}
-        {active === 'labs' && <LabsPanel />}
+        {active === 'display' && (
+          <>
+            <Card className="px-4 py-2" data-testid="settings-display">
+              <h2 className="pt-1 text-sm font-semibold text-fg">Display</h2>
+              <p className="text-xs text-fg-muted">Saved in this browser. The same controls are in the menu under your name at the foot of the sidebar.</p>
+              <DisplayPreferences layout="page" focusMode={focusMode} onFocusChange={setFocusMode} />
+            </Card>
+            <div id={SETTINGS_SECTION_IDS.sidebarPages} className="scroll-mt-6 space-y-4">
+              <LabsPanel />
+            </div>
+          </>
+        )}
       </div>
 
       {stats.projectId ? (
@@ -373,9 +400,7 @@ function SettingsPageBody({
               <StatCard
                 label={copy?.statLabels?.routing ?? 'Alerts'}
                 value={
-                  [stats.slackConfigured && 'Slack', stats.sentryConfigured && 'Sentry']
-                    .filter(Boolean)
-                    .join(' · ') || 'None'
+                  [slackStatLabel(stats), stats.sentryConfigured && 'Sentry'].filter(Boolean).join(' · ') || 'None'
                 }
                 tooltip={routingTooltip(stats)}
                 detail={routingDetail()}

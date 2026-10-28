@@ -26,11 +26,79 @@ import { MushiCliError } from './errors.js'
 
 let installed = false
 let activeController: AbortController | null = null
+let interrupted: NodeJS.Signals | null = null
+
+type InterruptCleanup = (signal: NodeJS.Signals) => unknown
+const cleanups = new Set<InterruptCleanup>()
 
 /**
- * Install one-shot SIGINT / SIGTERM listeners that abort the active
- * controller and bail out with exit code 130. Idempotent — calling
- * twice is safe; the second call is a no-op.
+ * How long cleanups get before the process exits anyway: well inside
+ * systemd's (90 s) and Docker's (10 s) stop timeouts.
+ */
+const INTERRUPT_CLEANUP_MS = 8_000
+
+/**
+ * Run `fn` when SIGINT / SIGTERM arrives, before the process exits: e.g.
+ * close a server-side record the command opened, so it does not sit
+ * "running" until a reaper finds it. Cleanups run together and get
+ * INTERRUPT_CLEANUP_MS; a second signal exits at once. API calls made from
+ * a cleanup work: the aborted controller is replaced on the next
+ * `getAbortSignal()`. Returns the function that unregisters it.
+ */
+export function onInterrupt(fn: InterruptCleanup): () => void {
+  cleanups.add(fn)
+  return () => {
+    cleanups.delete(fn)
+  }
+}
+
+/** The signal that stopped this process, or null: work in flight checks it before its next step. */
+export function interruptedBy(): NodeJS.Signals | null {
+  return interrupted
+}
+
+/**
+ * @internal Exported for tests only. Abort in-flight requests, give the
+ * registered cleanups their time, then exit with 128 + the signal number.
+ */
+export async function handleInterrupt(
+  signal: NodeJS.Signals,
+  exit: (code: number) => void = (code) => process.exit(code),
+  budgetMs = INTERRUPT_CLEANUP_MS,
+): Promise<void> {
+  // Per POSIX, exit code = 128 + signal number. Common shells branch
+  // on 130 (SIGINT) and 143 (SIGTERM) to detect user-initiated stops.
+  const code = signal === 'SIGINT' ? 130 : signal === 'SIGTERM' ? 143 : 1
+  if (interrupted) {
+    exit(code)
+    return
+  }
+  interrupted = signal
+  activeController?.abort(
+    new MushiCliError(
+      'E_INTERRUPTED',
+      `aborted by ${signal}`,
+      'partial state on the server is safe to retry — re-run the same command',
+    ),
+  )
+  if (cleanups.size) {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const budget = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, budgetMs)
+    })
+    const all = Promise.allSettled([...cleanups].map(async (fn) => fn(signal)))
+    await Promise.race([all, budget])
+    clearTimeout(timer)
+  }
+  // Give the AbortController's listeners one tick to flush log lines.
+  await new Promise<void>((resolve) => process.nextTick(resolve))
+  exit(code)
+}
+
+/**
+ * Install SIGINT / SIGTERM listeners that abort the active controller,
+ * run the registered cleanups and exit with 130 / 143. Idempotent —
+ * calling twice is safe; the second call is a no-op.
  *
  * Tests can call `__resetSignalHandlersForTesting()` to undo this.
  */
@@ -38,25 +106,8 @@ export function installSignalHandlers(): void {
   if (installed) return
   installed = true
 
-  const abortAndExit = (signal: NodeJS.Signals) => {
-    activeController?.abort(
-      new MushiCliError(
-        'E_INTERRUPTED',
-        `aborted by ${signal}`,
-        'partial state on the server is safe to retry — re-run the same command',
-      ),
-    )
-    // Per POSIX, exit code = 128 + signal number. Common shells branch
-    // on 130 (SIGINT) and 143 (SIGTERM) to detect user-initiated stops.
-    const code = signal === 'SIGINT' ? 130 : signal === 'SIGTERM' ? 143 : 1
-    // Give the AbortController's listeners one tick to flush log lines.
-    process.nextTick(() => {
-      process.exit(code)
-    })
-  }
-
-  process.on('SIGINT', () => abortAndExit('SIGINT'))
-  process.on('SIGTERM', () => abortAndExit('SIGTERM'))
+  process.on('SIGINT', () => void handleInterrupt('SIGINT'))
+  process.on('SIGTERM', () => void handleInterrupt('SIGTERM'))
 }
 
 /**
@@ -83,4 +134,6 @@ export function getAbortSignal(external?: AbortController): AbortSignal {
 export function __resetSignalHandlersForTesting(): void {
   installed = false
   activeController = null
+  interrupted = null
+  cleanups.clear()
 }

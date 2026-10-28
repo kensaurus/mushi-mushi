@@ -17,4 +17,29 @@ describe('reconcileDesignState (audit 2026-10-20, B7)', () => {
     const out = reconcileDesignState({ state: 'error', reason: 'Scan failed.' }, 5)
     expect(out).toEqual({ state: 'error', reason: 'Scan failed.' })
   })
+
+  it('does not tell you to open the Design system page when the banner is already on it', () => {
+    const out = reconcileDesignState(
+      {
+        state: 'drift',
+        reason: '3 hard-coded styles to swap for your design tokens (off-system score 42/100). Open the Design system page for each one.',
+      },
+      0,
+    )
+    expect(out.state).toBe('drift')
+    expect(out.reason).toBe(
+      '3 hard-coded styles to swap for your design tokens (off-system score 42/100). See each one under Deviance on this page.',
+    )
+    expect(out.reason).not.toContain('Open the Design system page')
+  })
+
+  it('points a not-yet-run check at this page instead of the Design system page', () => {
+    const out = reconcileDesignState(
+      { state: 'unknown', reason: 'Design tokens are read, but the design check has not run yet. Run it from the Design system page.' },
+      0,
+    )
+    expect(out.reason).toBe(
+      'Design tokens are read, but the design check has not run yet. Run the deviance check on this page.',
+    )
+  })
 })

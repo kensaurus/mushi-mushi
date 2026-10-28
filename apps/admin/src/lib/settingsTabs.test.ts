@@ -14,7 +14,7 @@ import { SETTINGS_TAB_DESCRIPTIONS, SETTINGS_TAB_LABELS } from './settingsTabExp
 
 describe('SETTINGS_TAB_IDS', () => {
   it('is the six tabs, in strip order', () => {
-    expect(SETTINGS_TAB_IDS).toEqual(['general', 'byok', 'tools', 'voice', 'sdk', 'labs'])
+    expect(SETTINGS_TAB_IDS).toEqual(['general', 'byok', 'tools', 'voice', 'sdk', 'display'])
   })
 })
 
@@ -109,7 +109,7 @@ describe('Settings tab labels', () => {
       tools: 'Web tools',
       voice: 'Voice reports',
       sdk: 'SDK & connection',
-      labs: 'Labs',
+      display: 'Display & sidebar',
     })
   })
 

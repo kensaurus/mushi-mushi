@@ -3,7 +3,10 @@
  * PURPOSE: One Sentry/Langfuse/GitHub/Cursor card. Pure presentation: shows
  *          service icon, status-coded left border, last probe + sparkline,
  *          external link to the service, and the edit form. Mutations bubble
- *          up to the page via callbacks.
+ *          up to the page via callbacks. The title shares a row with the
+ *          icon buttons; status text and the description sit on a full-width
+ *          row under that, so a 390px card does not squeeze them into the
+ *          sliver beside the buttons.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
@@ -305,7 +308,9 @@ export function PlatformIntegrationCard({
         )}
 
         <div className="flex flex-wrap items-start justify-between gap-2">
-          {/* Left: icon + label + status chips */}
+          {/* Title only. Status and the description are the full-width block
+              below — they used to live in this column and wrapped to a few
+              words beside the icon buttons on a phone-width card. */}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               {/* Service brand favicon — real brand icon via Google's favicon CDN */}
@@ -340,49 +345,10 @@ export function PlatformIntegrationCard({
                 </Tooltip>
               )}
             </div>
-
-            {/* One status line: the same four states as every connection card. */}
-            <div className="mt-1.5" title={connection.raw && connection.raw !== connection.detail ? connection.raw : undefined}>
-              <ConnectionStatus
-                state={testing ? 'checking' : connection.state}
-                label={testing ? 'Testing…' : undefined}
-                detail={testing ? undefined : connection.detail}
-                action={testing ? undefined : connectionAction}
-              />
-            </div>
-
-            <p className="text-2xs text-fg-secondary mt-1.5 pl-2 border-l border-brand/20 leading-snug">{def.whyItMatters}</p>
-
-            {/* Credential chips — show which secrets are set in read-only mode */}
-            {requiredOk && !isEditing && (
-              <IntegrationCredentialChips fields={def.fields} config={config} />
-            )}
-
-            {def.webhookPath && requiredOk && <WebhookReceiveUrl path={def.webhookPath} latest={latestDelivery} />}
-
-            {!requiredOk && def.setupSteps && def.setupSteps.length > 0 && (
-              <IntegrationSetupGuide
-                label={def.label}
-                steps={def.setupSteps}
-                consoleUrl={def.consoleUrl}
-                consoleLabel={def.consoleLabel}
-              />
-            )}
-
-            {!requiredOk && def.capabilitiesOnceConnected.length > 0 && (
-              <ul className="mt-1.5 space-y-1 text-2xs">
-                {def.capabilitiesOnceConnected.map((capability) => (
-                  <li key={capability} className="flex gap-1.5 items-baseline">
-                    <span aria-hidden="true" className="shrink-0 text-ok font-semibold leading-tight">✓</span>
-                    <span className="text-fg-secondary leading-snug">{capability}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
 
           {/* Right: probe chip + action buttons */}
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex shrink-0 items-center gap-1.5 flex-wrap">
 
             {/* External link to the service */}
             <Tooltip content={`Open ${def.label}`}>
@@ -480,6 +446,57 @@ export function PlatformIntegrationCard({
               </div>
             )}
           </div>
+        </div>
+
+        {/* Full width of the card. Sharing the title row with the icon
+            buttons left this copy in a ~130px column at 390px. */}
+        <div className="mt-1.5 min-w-0" data-testid="platform-card-summary">
+          <div title={connection.raw && connection.raw !== connection.detail ? connection.raw : undefined}>
+            <ConnectionStatus
+              state={testing ? 'checking' : connection.state}
+              label={testing ? 'Testing…' : undefined}
+              detail={testing ? undefined : connection.detail}
+              action={testing ? undefined : connectionAction}
+            />
+          </div>
+
+          <p className="text-2xs text-fg-secondary mt-1.5 pl-2 border-l border-brand/20 leading-snug">{def.whyItMatters}</p>
+
+          {requiredOk && !isEditing && (
+            <IntegrationCredentialChips fields={def.fields} config={config} />
+          )}
+
+          {def.webhookPath && requiredOk && <WebhookReceiveUrl path={def.webhookPath} latest={latestDelivery} />}
+
+          {/* The vendor how-to and "what you get" stay folded until asked for:
+              open by default they made the page 4,600 px tall (console
+              journeys 2026-10-27). "Connect" opens the guide beside the form. */}
+          {!requiredOk && ((def.setupSteps?.length ?? 0) > 0 || def.capabilitiesOnceConnected.length > 0) && (
+            <details className="group mt-1.5" data-testid={`platform-howto-${def.kind}`}>
+              <summary className="flex cursor-pointer list-none items-center gap-1 text-2xs font-medium text-fg-secondary hover:text-fg">
+                <span aria-hidden="true" className="inline-block transition-transform group-open:rotate-90">›</span>
+                How to connect {def.label}
+              </summary>
+              {def.setupSteps && def.setupSteps.length > 0 && (
+                <IntegrationSetupGuide
+                  label={def.label}
+                  steps={def.setupSteps}
+                  consoleUrl={def.consoleUrl}
+                  consoleLabel={def.consoleLabel}
+                />
+              )}
+              {def.capabilitiesOnceConnected.length > 0 && (
+                <ul className="mt-1.5 space-y-1 text-2xs">
+                  {def.capabilitiesOnceConnected.map((capability) => (
+                    <li key={capability} className="flex gap-1.5 items-baseline">
+                      <span aria-hidden="true" className="shrink-0 text-ok font-semibold leading-tight">✓</span>
+                      <span className="text-fg-secondary leading-snug">{capability}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </details>
+          )}
         </div>
 
         {/* Probe metadata + sparkline */}

@@ -235,6 +235,18 @@ export function linkTargets(pages: AuditPage[], cap = 2000): Array<{ url: string
 }
 
 /**
+ * When the next audit runs after its cadence changes: `cadence_days` after
+ * the last run, never in the past. Without it a new cadence only applied
+ * after the next run (2026-10-24: eight audits set to every day still waited
+ * out the 3-day gap from before). No last run keeps the current schedule.
+ */
+export function nextRunAfterCadenceChange(a: { lastRunAt: string | null; nextRunAt: string | null; cadenceDays: number; now: Date }): string | null {
+  if (!a.lastRunAt) return a.nextRunAt
+  const due = Date.parse(a.lastRunAt) + a.cadenceDays * 86_400_000
+  return new Date(Math.max(a.now.getTime(), due)).toISOString()
+}
+
+/**
  * Whether a target's status means it is broken. Only answers a site gives
  * every visitor count: 404/410/5xx and unreachable (-1). 401/403/405/429 and
  * other 4xx are often bot walls, so they are not findings.

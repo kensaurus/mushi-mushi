@@ -61,6 +61,7 @@ import {
   buildFollowupPrompt,
   CI_LOG_EXCERPT_MAX_CHARS,
   ciHeadState,
+  isDraftGuardStop,
   extractCiLogExcerpt,
   expireIfStale,
   FOLLOWUP_MAX_PER_PR,
@@ -941,6 +942,23 @@ describe('review fixes (PR #540 review)', () => {
     expect(await cursorKeyById(db as never, 'k-owner', ORG, { projectId: P1 })).toEqual({ ok: false, reason: 'key_not_allowed' })
   })
 
+  it('a used-up key (exhausted_until) starts no new follow-up, but its running agents can still be polled (2026-10-24)', async () => {
+    const db = makeFakeDb(
+      {
+        projects: [{ id: P1, organization_id: ORG }],
+        organization_members: [],
+        byok_keys: [
+          { id: 'k-used', provider_slug: 'cursor', project_id: null, organization_id: ORG, status: 'active', vault_secret_id: 'v1', exhausted_until: '2999-01-01T00:00:00Z' },
+          { id: 'k-back', provider_slug: 'cursor', project_id: null, organization_id: ORG, status: 'active', vault_secret_id: 'v2', exhausted_until: '2000-01-01T00:00:00Z' },
+        ],
+      },
+      { rpc: (fn, args) => (fn === 'vault_get_secret' ? `secret-${String(args.secret_id)}` : null) },
+    )
+    expect(await cursorKeyById(db as never, 'k-used', ORG, { projectId: P1 })).toEqual({ ok: false, reason: 'key_used_up' })
+    expect(await cursorKeyById(db as never, 'k-used', ORG, { requireActive: false, projectId: P1 })).toMatchObject({ ok: true, keyId: 'k-used' })
+    expect(await cursorKeyById(db as never, 'k-back', ORG, { projectId: P1 })).toMatchObject({ ok: true, keyId: 'k-back' })
+  })
+
   it('W4: discovery reaches 3 days before follow-ups were turned on, not further', async () => {
     const enabledAt = NOW.toISOString()
     const inWindow = seed({ org: { review_followup_enabled_at: enabledAt }, review: { reviewed_at: new Date(NOW.getTime() - 2 * 86_400_000).toISOString() } })
@@ -1199,6 +1217,20 @@ describe('CI repair: rules', () => {
     const merge = { review, attempt, prior: [] }
     expect(followupTrigger({ ...merge, ci: { state: 'infra', failing: [] } })).toEqual({ queue: false, reason: 'ci_not_failing' })
     expect(followupTrigger({ ...merge, ci: { state: 'pending', failing: [] } })).toEqual({ queue: false, reason: 'ci_pending' })
+  })
+
+  it('reads a draft run stopped by the host gate as pending, never as a code failure to repair', () => {
+    const draftGate = ciJob({ job_name: 'CI Gate', steps: [{ name: 'Draft PRs run no CI', conclusion: 'failure' }, { name: 'Gate', conclusion: 'skipped' }] })
+    expect(isDraftGuardStop(draftGate as never)).toBe(true)
+    expect(ciHeadState([draftGate] as never)).toEqual({ state: 'pending', failing: [] })
+    expect(followupTrigger({ review, attempt, prior: [], ci: ciHeadState([draftGate] as never) })).toEqual({ queue: false, reason: 'ci_pending' })
+    // A real failure in another job on the same head still counts, without the guard.
+    const real = ciHeadState([draftGate, ciJob({ job_id: 7009, job_name: 'Typecheck' })] as never)
+    expect(real.state).toBe('code_failure')
+    expect(real.failing.map((f) => f.name)).toEqual(['Typecheck'])
+    // A job that failed in a real step is not the guard, even if the guard step also failed.
+    expect(isDraftGuardStop(ciJob({ steps: [{ name: 'Draft PRs run no CI', conclusion: 'failure' }, { name: 'Typecheck', conclusion: 'failure' }] }) as never)).toBe(false)
+    expect(isDraftGuardStop(ciJob({ conclusion: 'success', steps: [{ name: 'Draft PRs run no CI', conclusion: 'success' }] }) as never)).toBe(false)
   })
 
   it('a check that also fails on the base branch is not counted; all of them on the base means no repair', () => {

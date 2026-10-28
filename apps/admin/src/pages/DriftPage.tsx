@@ -30,7 +30,6 @@ import {
   RelativeTime,
   SegmentedControl,
   FreshnessPill,
-  RecommendedAction,
   Tooltip,
 } from '../components/ui'
 import { IconClose, IconEye } from '../components/icons'
@@ -41,6 +40,7 @@ import {
 } from '../components/report-detail/ReportSurface'
 import { DriftStatusBanner, isDriftStatusBannerCritical } from '../components/drift/DriftStatusBanner'
 import { DriftReadout } from '../components/drift/DriftReadout'
+import { SchemaChangesTimeline } from '../components/drift/SchemaChangesTimeline'
 import { DriftSnapshotStrip } from '../components/drift/DriftSnapshotStrip'
 import { DriftSchemaGuide } from '../components/drift/DriftSchemaGuide'
 import {
@@ -103,10 +103,10 @@ function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
 }
 
 const TABS: Array<{ id: DriftTabId; label: string; description: string }> = [
-  { id: 'overview', label: 'Overview', description: 'Posture banner and how contract drift detection works.' },
-  { id: 'findings', label: 'Findings', description: 'Open gaps between OpenAPI spec, inventory nodes, and DB schema.' },
-  { id: 'snapshots', label: 'Snapshots', description: 'Contract snapshot history and edge-count trend.' },
-  { id: 'scanner', label: 'Scanner', description: 'Trigger a manual drift-walker scan on demand.' },
+  { id: 'overview', label: 'Overview', description: 'Status and how schema scans work.' },
+  { id: 'findings', label: 'Changes', description: 'Routes and tables that changed since the baseline, worst first.' },
+  { id: 'snapshots', label: 'Scans', description: 'Every scan so far and how many routes and tables each one saw.' },
+  { id: 'scanner', label: 'Run a scan', description: 'Scan your API and database now.' },
 ]
 
 function resolveDriftTab(value: string | null): DriftTabId {
@@ -126,7 +126,6 @@ export function DriftPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const activeTab = resolveDriftTab(tabParam)
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const [selectedFinding, setSelectedFinding] = useState<DriftFinding | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -317,13 +316,13 @@ export function DriftPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-drift">
       <PageHeaderBar
-        title={copy?.title ?? 'Drift'}
+        title={copy?.title ?? 'Schema changes'}
         projectScope={stats.projectName ?? projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
 
         contextChip={<PdcaContextHint stage="check" />}
         helpTitle={copy?.help?.title ?? 'Contract drift detection'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'The drift-walker builds a contract snapshot then walks every route with Thompson-sampled priority — routes with more historical findings are checked first.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Each scan reads your API routes, your app map and your database tables, and compares them with the scan before.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Find API endpoints present in inventory but missing in OpenAPI spec',
           'Detect DB columns expected by the FE but removed from the schema',
@@ -370,7 +369,7 @@ export function DriftPage() {
       {!ux.hideOverviewChrome ? (
         <PageHero
           scope="drift"
-          title={copy?.title ?? 'Drift'}
+          title={copy?.title ?? 'Schema changes'}
           kicker="Contract sync"
           decide={{
             label:
@@ -435,7 +434,9 @@ export function DriftPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
-            show: isDriftStatusBannerCritical(stats),
+            // Never scanned: the snapshot below is the page's one first step (P3).
+            // The status sentence below says the same thing; the banner stands in only when it is hidden.
+            show: isDriftStatusBannerCritical(stats) && stats.topPriority !== 'never_scanned' && (ux.hideDriftSnapshot || !stats.hasAnyProject),
             children: (
               <DriftStatusBanner
                 stats={stats}
@@ -454,16 +455,18 @@ export function DriftPage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'DRIFT SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
+                onFirstScan={() => setActiveTab('scanner')}
+                onReview={() => setActiveTab('findings')}
               />
             ),
           },
           {
             priority: POSTURE_PRIORITY.guide,
+            // Never scanned: the first-step card is the one thing to do (P3).
             show:
               activeTab === 'overview' &&
+              stats.topPriority !== 'never_scanned' &&
               !shouldHideGuideWhenBannerActive(
                 isDriftStatusBannerCritical(stats),
                 COMMON_HEALTHY_PRIORITIES,
@@ -492,33 +495,11 @@ export function DriftPage() {
         />
       ) : null}
 
-      {activeTab === 'overview' && (
-        <div className="space-y-4">
-          {stats.topPriority === 'healthy' && (
-            <RecommendedAction
-              tone="success"
-              title="Contracts are in sync"
-              description={`${stats.snapshotCount} snapshot${stats.snapshotCount === 1 ? '' : 's'} · ${stats.lastSnapshotEdges} edges tracked · 0 open findings.`}
-            />
-          )}
-          {stats.topPriority === 'never_scanned' && (
-            <RecommendedAction
-              tone="info"
-              title="Build your first contract baseline"
-              description="The drift-walker compares OpenAPI, inventory nodes, and Postgres schema. Run a scan to capture edges and detect gaps."
-              cta={{ label: 'Open Scanner', to: '/drift?tab=scanner' }}
-            />
-          )}
-          {(stats.topPriority === 'critical_findings' || stats.topPriority === 'warn_findings') && (
-            <RecommendedAction
-              tone="info"
-              title="Triage open drift findings"
-              description={stats.topPriorityLabel ?? 'Review findings and dismiss false positives or promote critical gaps to lessons.'}
-              cta={{ label: 'Open Findings', to: '/drift?tab=findings' }}
-            />
-          )}
-        </div>
-      )}
+      {/* Changes over time with releases on them; the status sentence above
+          already says what waits, so no second "recommended" card. */}
+      {activeTab === 'overview' && projectId && stats.snapshotCount > 0 ? (
+        <SchemaChangesTimeline projectId={projectId} />
+      ) : null}
 
       {activeTab === 'findings' && (
         <FindingsTab

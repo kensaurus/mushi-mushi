@@ -29,6 +29,9 @@ import { Mushi } from '@mushi-mushi/capacitor'
 await Mushi.configure({
   projectId: 'YOUR_PROJECT_ID',
   apiKey:    'YOUR_PUBLIC_API_KEY',
+  // iOS and Android default to Mushi Cloud; the web fallback (ionic serve)
+  // has no default and report() throws until this is set.
+  endpoint:  'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
 
   triggerMode: 'shake',         // 'shake' | 'button' | 'both' | 'none'
   captureScreenshot: true,      // base64 PNG of the active webview
@@ -54,8 +57,8 @@ await Mushi.report({
 ```ts
 await Mushi.showWidget({ category: 'visual' })
 await Mushi.flushQueue()
-await Mushi.setUser({ id: 'u_42', email: 'me@example.com' })
-await Mushi.setMetadata({ build: '2026.4.29' })
+await Mushi.setUser({ user: { id: 'u_42', email: 'me@example.com' } }) // { user: null } on logout
+await Mushi.setMetadata({ key: 'build', value: '2026.4.29' })
 
 const sub = await Mushi.addListener('reportSubmitted', (e) => {
   console.log('Report accepted:', e)
@@ -65,12 +68,15 @@ const sub = await Mushi.addListener('reportSubmitted', (e) => {
 ## Position the trigger above your tab bar / dock
 
 Use a preset (`triggerInsetPreset: 'tabBarSafe'` for a 72 dp lift, or
-`'dockSafe'` for a 96 dp lift) or pass your own offsets:
+`'dockSafe'` for a 96 dp lift) or pass your own offsets. With neither, the
+button sits 96 from the bottom and 20 from the side. The side key is
+`trailing` / `leading` on iOS and `end` / `start` on Android, so set both
+for a cross-platform app:
 
 ```ts
 await Mushi.configure({
   /* ... */
-  triggerInset: { bottom: 88, trailing: 16 },
+  triggerInset: { bottom: 88, trailing: 16, end: 16 },
 })
 ```
 

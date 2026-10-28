@@ -11,6 +11,17 @@
  *          completed segments tinted ok-muted, future segments edge-subtle —
  *          mirroring the affordance Linear uses for workflow state and GitHub
  *          uses for PR status (Open → Review → Merged).
+ *
+ *          The bar row is one `role="img"` named with the current step
+ *          (`Status: Fixing, step 3 of 4`). Segments are `aria-hidden`, and
+ *          so are the sighted captions (the step's word, or the full step
+ *          names): they repeat that name. The captions say the word
+ *          ("Fixing"), never a bare "3/4", which needed a legend (console
+ *          journeys 2026-10-27). A screen reader hears it
+ *          once. A bare span is generic, and axe `aria-prohibited-attr`
+ *          rejects `aria-label` on that role (reports table Status column).
+ *          Tooltips still show each step. Their triggers are plain spans,
+ *          not focusable controls, inside the image.
  */
 
 import { Tooltip } from '../ui'
@@ -66,10 +77,17 @@ export function StatusStepper({
   size = 'compact',
 }: StatusStepperProps) {
   if (status === 'dismissed') {
+    // Full size already prints the word, so the bar stays decorative.
+    const showCaption = size === 'full'
     return (
       <div className={`flex items-center gap-1 ${className}`}>
-        <span className="h-1 w-full rounded-full bg-surface-overlay" aria-label="Dismissed" />
-        {size === 'full' && (
+        <span
+          role={showCaption ? undefined : 'img'}
+          aria-hidden={showCaption ? true : undefined}
+          aria-label={showCaption ? undefined : 'Dismissed'}
+          className="h-1 w-full rounded-full bg-surface-overlay"
+        />
+        {showCaption && (
           <span className="text-2xs text-fg-faint ml-1">Dismissed</span>
         )}
       </div>
@@ -84,10 +102,14 @@ export function StatusStepper({
   const activeLabel = STEP_LABELS[STATUS_STEPS[activeIdx]]
   const isTable = size === 'table'
   const barHeight = size === 'full' ? 'h-2.5' : isTable ? 'h-2' : 'h-1.5'
-  const tableSummary = `${activeLabel} · stage ${activeIdx + 1} of 4`
+  const tableSummary = `${activeLabel} · step ${activeIdx + 1} of 4`
 
   const barRow = (
-    <div className="flex w-full max-w-full min-w-0 items-center gap-px">
+    <div
+      className="flex w-full max-w-full min-w-0 items-center gap-px"
+      role="img"
+      aria-label={`Status: ${activeLabel}, step ${activeIdx + 1} of 4`}
+    >
       {STATUS_STEPS.map((step, i) => {
         const completed = i < activeIdx
         const active = i === activeIdx
@@ -107,7 +129,7 @@ export function StatusStepper({
         return (
           <Tooltip key={step} portal content={tooltip} className="flex-1 min-w-0">
             <span
-              aria-label={tooltipBase}
+              aria-hidden="true"
               className={`${barHeight} w-full rounded-hairline motion-safe:transition-opacity ${tint} ${activeRing}`}
             />
           </Tooltip>
@@ -119,13 +141,10 @@ export function StatusStepper({
   return (
     <div
       className={`flex items-stretch w-full min-w-0 ${size === 'full' ? 'flex-col gap-1' : isTable ? 'flex-row items-center gap-1' : 'flex-col gap-1'} ${className}`}
-      role="group"
-      aria-label={`Report progress: ${activeLabel} (${activeIdx + 1} of 4)`}
     >
       {size === 'compact' && (
-        <span className="text-2xs text-fg-muted leading-none font-medium">
+        <span aria-hidden="true" className="text-2xs text-fg-muted leading-none font-medium">
           {activeLabel}
-          <span className="text-fg-faint font-normal"> · {activeIdx + 1}/4</span>
         </span>
       )}
       {isTable ? (
@@ -137,14 +156,15 @@ export function StatusStepper({
       )}
       {isTable && (
         <span
-          className="shrink-0 text-2xs text-fg-muted tabular-nums leading-none font-medium"
+          aria-hidden="true"
+          className="shrink-0 text-2xs text-fg-muted leading-none font-medium"
           title={tableSummary}
         >
-          {activeIdx + 1}/4
+          {activeLabel}
         </span>
       )}
       {size === 'full' && (
-        <div className="flex items-center justify-between text-2xs text-fg-faint w-full">
+        <div aria-hidden="true" className="flex items-center justify-between text-2xs text-fg-faint w-full">
           {STATUS_STEPS.map((step, i) => (
             <span
               key={step}

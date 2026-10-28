@@ -217,7 +217,13 @@ html[data-theme="light"] {
   --color-sev-medium:    oklch(0.80 0.17 100);
   --color-warn-fg:       oklch(0.99 0.02 80);
   --color-warn-muted:    oklch(0.96 0.06 80);
-  --color-danger:        oklch(0.58 0.24 25);
+  /* 2026-10-24: light danger was oklch(0.58 0.24 25) — under 4.5:1 on
+     surface and surface-overlay. L 0.48 clears AA, but chroma 0.24 is
+     outside sRGB, so browsers gamut-map it. Chroma 0.19 stays inside sRGB
+     at the same L and hue and still clears 4.5:1 on surface, raised,
+     overlay, and for danger-fg on the fill.
+     Contrast and gamut: packages/server/src/__tests__/danger-contrast.test.ts. */
+  --color-danger:        oklch(0.48 0.19 25);
   --color-danger-fg:     oklch(0.99 0.02 25);
   --color-danger-muted:  oklch(0.95 0.07 25);
   --color-info:          oklch(0.48 0.17 240);

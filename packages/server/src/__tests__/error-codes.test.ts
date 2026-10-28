@@ -9,8 +9,20 @@ import {
   dbErrorFingerprint,
   dbFailureMessage,
   isTransientDbConnectionError,
+  isTransientGatewayStatus,
   logDbFailure,
 } from '../../supabase/functions/_shared/error-codes.ts'
+
+describe('isTransientGatewayStatus (MUSHI-MUSHI-SERVER-2R)', () => {
+  it('treats a failed fetch, gateway 502-504 and Cloudflare 520-527 as transient', () => {
+    expect([0, 502, 503, 504, 520, 522, 525, 527].every(isTransientGatewayStatus)).toBe(true)
+  })
+  it('keeps a PostgREST answer, a 500 and a client error reportable', () => {
+    expect([200, 201, 400, 401, 404, 409, 500, 501, 519, 528].some(isTransientGatewayStatus)).toBe(false)
+    expect(isTransientGatewayStatus(null)).toBe(false)
+    expect(isTransientGatewayStatus(undefined)).toBe(false)
+  })
+})
 
 const assertEquals = (actual: unknown, expected: unknown) => expect(actual).toBe(expected)
 

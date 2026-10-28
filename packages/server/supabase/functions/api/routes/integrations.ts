@@ -19,6 +19,7 @@ import { log } from '../../_shared/logger.ts';
 import { vaultRoutingSecrets } from '../../_shared/routing-secrets.ts';
 import { resolveEffectivePlatformSettings } from '../../_shared/integration-settings.ts';
 import { classifyPlatformConnection } from '../../_shared/setup-signals.ts';
+import { integrationSecretHint, isIntegrationSecretPlaceholder } from '../../_shared/settings-secrets.ts';
 import { getMushiClaudeFixWorkflowYaml, MUSHI_CLAUDE_GITHUB_SECRETS } from '../../_shared/mushi-claude-workflow.ts';
 import { resolveCursorApiKey } from '../../_shared/agent-adapters.ts';
 import { CursorApiError, listCursorModelsV1 } from '../../_shared/cursor-cloud.ts';
@@ -113,7 +114,7 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
 
     const merged: Record<string, unknown> = { ...prev };
     for (const [k, v] of Object.entries(body.config ?? {})) {
-      if (typeof v === 'string' && v.startsWith('…') && v.length <= 6) continue;
+      if (isIntegrationSecretPlaceholder(v)) continue;
       merged[k] = v === '' ? null : v;
     }
 
@@ -237,7 +238,8 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       { settings: effectiveSettings, sourceByField },
       { data: routingRows },
       { data: probes },
-      { data: sentryDelivered },
+      { data: sentryLatest },
+      { data: sentryImport },
     ] =
       await Promise.all([
         resolveEffectivePlatformSettings(db, project.id as string),
@@ -251,16 +253,41 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
           .eq('project_id', project.id)
           .order('checked_at', { ascending: false })
           .limit(50),
-        // Has any Sentry alert ever reached this project? The API probe only
-        // proves the token; the inbound webhook is the other half.
+        // Latest Sentry delivery, not "any accepted ever". A later rejection
+        // (bad signature, missing secret) is attention even when polling is on.
+        // The card reads the same newest row.
         db
           .from('webhook_audit_log')
-          .select('id')
+          .select('outcome')
           .eq('project_id', project.id)
           .eq('webhook_source', 'sentry')
-          .eq('outcome', 'accepted')
+          .order('created_at', { ascending: false })
           .limit(1),
+        // sentry_auto_import is per-app, not inherited. It is listed in
+        // PER_APP_FIELDS_BY_KIND (platform-config.ts) and is absent from the
+        // resolver's project/org field lists (integration-settings.ts), so an
+        // org default cannot turn another app's import on. The project row is
+        // authoritative — the same row the Sentry card reads. The poller writes
+        // sentry_auto_import_last_at on that row; effectiveSettings never has it.
+        db
+          .from('project_settings')
+          .select('sentry_auto_import, sentry_auto_import_last_at')
+          .eq('project_id', project.id)
+          .maybeSingle(),
       ]);
+
+    const latestSentryOutcome = ((sentryLatest ?? [])[0] as { outcome?: string } | undefined)?.outcome;
+    const sentryInboundAccepted = latestSentryOutcome === 'accepted';
+    const sentryInboundRejected = latestSentryOutcome != null && !sentryInboundAccepted;
+    const sentryImportRow = sentryImport as {
+      sentry_auto_import?: boolean;
+      sentry_auto_import_last_at?: string | null;
+    } | null;
+    const sentryPolling = sentryImportRow?.sentry_auto_import === true;
+    const sentryPolledAt =
+      typeof sentryImportRow?.sentry_auto_import_last_at === 'string'
+        ? sentryImportRow.sentry_auto_import_last_at
+        : null;
 
     const row = (effectiveSettings ?? {}) as Record<string, unknown>;
     // Also collect env-backed fields so we count them as connected in stats.
@@ -301,7 +328,10 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
         probeStatus: probe?.status,
         probeCheckedAt: probe?.checked_at,
         needsInbound: kind === 'sentry',
-        inboundAccepted: (sentryDelivered ?? []).length > 0,
+        inboundAccepted: kind === 'sentry' && sentryInboundAccepted,
+        inboundRejected: kind === 'sentry' && sentryInboundRejected,
+        inboundPolling: kind === 'sentry' && sentryPolling,
+        inboundPolledAt: kind === 'sentry' ? sentryPolledAt : null,
       });
       if (verdict === 'working') platformHealthy += 1;
       else if (verdict === 'down') {
@@ -505,7 +535,7 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
         k.endsWith('_token') ||
         k.endsWith('_key')
       ) {
-        return typeof v === 'string' ? `…${v.slice(-4)}` : '****';
+        return integrationSecretHint(v);
       }
       return v;
     };
@@ -597,7 +627,7 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     for (const k of allowed) {
       if (!(k in body)) continue;
       const v = body[k];
-      if (typeof v === 'string' && v.startsWith('…') && v.length <= 6) continue;
+      if (isIntegrationSecretPlaceholder(v)) continue;
 
       if (v === '' || v === null) {
         updates[k] = null;
@@ -758,7 +788,7 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     const maskField = (k: string, v: unknown): unknown => {
       if (v == null) return null;
       if (k.endsWith('_ref') || k.endsWith('_secret') || k.endsWith('_token') || k.endsWith('_key')) {
-        return typeof v === 'string' ? `…${v.slice(-4)}` : '****';
+        return integrationSecretHint(v);
       }
       return v;
     };
@@ -810,7 +840,7 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     for (const k of allowed) {
       if (!(k in body)) continue;
       const v = body[k];
-      if (typeof v === 'string' && v.startsWith('…') && v.length <= 6) continue;
+      if (isIntegrationSecretPlaceholder(v)) continue;
 
       if (v === '' || v === null) {
         updates[k] = null;

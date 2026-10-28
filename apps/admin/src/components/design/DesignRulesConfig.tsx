@@ -82,7 +82,7 @@ export function DesignRulesConfig({ rules, editable, change, onPreview, onConfir
           : null
 
   return (
-    <Section title="Deviance rules">
+    <Section title="Drift rules">
       <div className="flex flex-col gap-3">
         <p className="text-xs text-fg-secondary">
           Rules live in your repo&apos;s mushi.recipe.json; tightening them each iteration is how the app converges on

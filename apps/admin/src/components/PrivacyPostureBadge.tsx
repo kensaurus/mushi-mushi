@@ -4,6 +4,7 @@
  *          Green = "All systems BYOK" (every LLM call runs under the project's
  *          own API key). Yellow = "Platform key in use" (at least one LLM
  *          pipeline is using the Mushi-platform Anthropic/OpenAI key).
+ *          Grey = the key check failed, so the chip does not guess.
  *
  *          Clicking the chip opens a small popover with the full posture detail
  *          (storage host, LLM provider, region, retention window, last audit).
@@ -20,8 +21,9 @@ import { CHIP_TONE } from '../lib/chipTone';
 import { useActiveProjectId } from './ProjectSwitcher';
 
 interface PrivacyStatus {
-  byok_configured: boolean;
-  llm_provider?: 'byok' | 'platform' | string;
+  /** Null when the key check failed. False means the platform key is in use. */
+  byok_configured: boolean | null;
+  llm_provider?: 'byok' | 'platform' | 'unknown' | string;
   storage_provider: string | null;
   region: string | null;
   retention_days: number | null;
@@ -40,8 +42,14 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
   // stale stored project id still gets the server's `no_projects` answer, so
   // that is treated the same way.
   const activeProjectId = useActiveProjectId();
+  // The path names the app on screen. The hook's cache key is the path, and
+  // the server prefers ?project_id= over the header, so two sessions looking
+  // at one app ask for that app even when a stored header still names another.
   const { data, loading, error, errorMessage, reload } = usePageData<PrivacyStatus>(
-    activeProjectId ? '/v1/admin/privacy-status' : null,
+    activeProjectId
+      ? `/v1/admin/privacy-status?project_id=${encodeURIComponent(activeProjectId)}`
+      : null,
+    { deps: [activeProjectId] },
   );
 
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -53,28 +61,44 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
   if (!activeProjectId || errorMessage === 'no_projects') return null;
   if (loading) return null;
 
-  const isByok = data?.byok_configured ?? false;
-  const label = error ? 'Privacy unavailable' : isByok ? 'BYOK' : 'Platform key';
+  // Null is a failed check, not the platform key. A missing payload (no
+  // error either) stays on the platform wording only when the server said so.
+  const unknown =
+    data != null && (data.llm_provider === 'unknown' || data.byok_configured === null);
+  const isByok = data?.byok_configured === true;
+  const label = error
+    ? 'Privacy unavailable'
+    : unknown
+      ? 'Key unknown'
+      : isByok
+        ? 'BYOK'
+        : 'Platform key';
   const labelLong = error
     ? 'Privacy status unavailable'
-    : isByok
-      ? 'All systems BYOK'
-      : 'Platform key in use';
-  const dotClass = error ? 'bg-danger' : isByok ? 'bg-ok' : 'bg-warn';
+    : unknown
+      ? 'Key status unknown'
+      : isByok
+        ? 'All systems BYOK'
+        : 'Platform key in use';
+  const dotClass = error ? 'bg-danger' : unknown ? 'bg-fg-faint' : isByok ? 'bg-ok' : 'bg-warn';
   const textClass = error
     ? CHIP_TONE.dangerSubtle
-    : isByok
-      ? CHIP_TONE.okSubtle
-      : CHIP_TONE.warnSubtle;
+    : unknown
+      ? CHIP_TONE.neutral
+      : isByok
+        ? CHIP_TONE.okSubtle
+        : CHIP_TONE.warnSubtle;
 
   // Base explanation, free of any click affordance — the two variants do
   // different things on click (the expanded badge opens a popover, the rail
   // item navigates to Settings), so each appends its own call to action.
   const postureExplanation = error
     ? 'Could not load privacy posture. Open BYOK settings or retry.'
-    : isByok
-      ? 'All LLM calls run under your own API key — your data never transits the Mushi platform account.'
-      : 'At least one pipeline is using the Mushi platform API key. Configure BYOK in Settings to keep your data in your own LLM account.';
+    : unknown
+      ? 'Could not check which API key this app uses. Retry, or open BYOK settings.'
+      : isByok
+        ? 'All LLM calls run under your own API key — your data never transits the Mushi platform account.'
+        : 'At least one pipeline is using the Mushi platform API key. Configure BYOK in Settings to keep your data in your own LLM account.';
 
   const tooltipContent =
     error || isByok ? postureExplanation : `${postureExplanation} Click for details.`;
@@ -96,7 +120,7 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
             title="Privacy posture"
             description={railDescription}
             status={{
-              tone: error ? 'danger' : isByok ? 'ok' : 'warn',
+              tone: error ? 'danger' : unknown ? 'idle' : isByok ? 'ok' : 'warn',
               label: labelLong,
             }}
           />
@@ -162,9 +186,19 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
               <div className="flex justify-between">
                 <span>LLM provider</span>
                 <span
-                  className={`font-mono ${isByok ? 'text-ok-foreground' : 'text-warn-foreground'}`}
+                  className={`font-mono ${
+                    unknown
+                      ? 'text-fg-secondary'
+                      : isByok
+                        ? 'text-ok-foreground'
+                        : 'text-warn-foreground'
+                  }`}
                 >
-                  {data?.llm_provider === 'byok' || isByok ? 'BYOK' : 'platform'}
+                  {unknown
+                    ? 'unknown'
+                    : data?.llm_provider === 'byok' || isByok
+                      ? 'BYOK'
+                      : 'platform'}
                 </span>
               </div>
               {data?.storage_provider && (
@@ -194,9 +228,9 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
               className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity hover:no-underline"
               onClick={() => setPopoverOpen(false)}
             >
-              {isByok ? 'View BYOK settings →' : 'Configure BYOK →'}
+              {isByok || unknown ? 'View BYOK settings →' : 'Configure BYOK →'}
             </Link>
-            {error && (
+            {(error || unknown) && (
               <button
                 type="button"
                 className="text-2xs text-danger underline hover:no-underline"

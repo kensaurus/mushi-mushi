@@ -25,6 +25,12 @@ export const FEATURE_GROUPS = [
   'codebase',
   /** Deprecated aliases kept for one release — hidden unless `legacy` or `all`. */
   'legacy',
+  /**
+   * A preset, not a group: no tool maps to it. It lists PRESET_TOOLS.vibe
+   * (about a dozen tools across triage, fixes, setup and docs) for chat
+   * connectors such as Lovable and for clients that cap their tool count.
+   */
+  'vibe',
 ] as const
 
 export type FeatureGroup = (typeof FEATURE_GROUPS)[number]
@@ -39,7 +45,7 @@ export const DEFAULT_FEATURE_GROUPS: readonly FeatureGroup[] = [
 ] as const
 
 export const ALL_FEATURE_GROUPS: readonly FeatureGroup[] = FEATURE_GROUPS.filter(
-  (g) => g !== 'legacy',
+  (g) => g !== 'legacy' && g !== 'vibe',
 )
 
 /**
@@ -121,7 +127,12 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   refresh_ci: 'fixes',
   get_ci_overview: 'fixes',
   get_ci_costs: 'fixes',
+  get_ci_bill: 'fixes',
   request_ci_placement_change: 'fixes',
+  open_ci_cost_fix: 'fixes',
+  preview_ci_cost_fix_rollout: 'fixes',
+  apply_ci_cost_fix_rollout: 'fixes',
+  get_ci_cost_fix_bundle: 'fixes',
   get_fix_verification: 'fixes',
   reopen_report: 'fixes',
   reply_to_reporter: 'fixes',
@@ -206,6 +217,30 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
 }
 
 /**
+ * Presets: a named tool list that crosses groups. `?features=vibe` lists only
+ * these; `?features=vibe,fixes` adds a whole group. The vibe set is the
+ * "a user said my app is broken" loop: what came in, why it broke, the fix
+ * prompt, mark it fixed, tell the reporter, plus setup and docs. Keep it
+ * small: chat connectors and Cursor degrade past about 40 tools.
+ */
+export const PRESET_TOOLS: Partial<Record<FeatureGroup, readonly string[]>> = {
+  vibe: [
+    'triage_next_steps',
+    'get_recent_reports',
+    'search_reports',
+    'get_report_detail',
+    'get_fix_context',
+    'transition_status',
+    'reply_to_reporter',
+    'file_report',
+    'diagnose_setup',
+    'use_mushi',
+    'search_mushi_docs',
+    'get_mushi_doc',
+  ],
+}
+
+/**
  * Tools that were renamed or removed. The old name maps to its successor so
  * callers / docs can resolve the new tool, and a one-release deprecation
  * window keeps old agent configs from silently breaking. These names are NOT
@@ -266,6 +301,7 @@ export function toolMatchesFeatures(toolName: string, filter: FeatureFilter): bo
   // An unmapped name matches no group. It used to match every filter, which
   // put all the deprecated aliases (and any tool nobody mapped) on the lean
   // default surface.
+  if (filter.some((g) => PRESET_TOOLS[g]?.includes(toolName))) return true
   const group = TOOL_FEATURE_MAP[toolName]
   return group !== undefined && filter.includes(group)
 }

@@ -5,7 +5,7 @@
  *          needs without depending on the page itself.
  */
 
-export interface ReportDay {
+interface ReportDay {
   day: string
   total: number
   critical: number
@@ -15,7 +15,7 @@ export interface ReportDay {
   unscored: number
 }
 
-export interface LlmDay {
+interface LlmDay {
   day: string
   calls: number
   tokens: number
@@ -23,7 +23,7 @@ export interface LlmDay {
   failures: number
 }
 
-export interface FixSummary {
+interface FixSummary {
   total: number
   completed: number
   failed: number
@@ -50,7 +50,7 @@ export interface ActivityItem {
   at: string
 }
 
-export interface TriageItem {
+interface TriageItem {
   id: string
   summary: string
   severity: string | null
@@ -59,7 +59,7 @@ export interface TriageItem {
   created_at: string
 }
 
-export interface DashboardCounts {
+interface DashboardCounts {
   reports14d: number
   openBacklog: number
   /** Critical reports from the 14-day window still needing a decision. */
@@ -72,7 +72,6 @@ export interface DashboardCounts {
 }
 
 import type { PdcaStageId } from '../../lib/pdca'
-export type { PdcaStageId }
 export type PdcaStageTone = 'ok' | 'warn' | 'urgent'
 
 export interface PdcaStage {
@@ -100,7 +99,8 @@ export interface DashboardData {
   reportsByDay?: ReportDay[]
   llmByDay?: LlmDay[]
   fixSummary?: FixSummary
-  topComponents?: Array<{ component: string; count: number }>
+  /** `draftedFixes` / `mergedFixes` are open and merged PRs in that component. */
+  topComponents?: Array<{ component: string; count: number; draftedFixes?: number; mergedFixes?: number }>
   triageQueue?: TriageItem[]
   activity?: ActivityItem[]
   integrations?: IntegrationStatus[]

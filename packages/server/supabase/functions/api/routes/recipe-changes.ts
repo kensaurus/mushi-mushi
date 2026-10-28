@@ -46,6 +46,7 @@ import { runInBackground } from '../../_shared/background.ts'
 import { sanitizeSseString, sseHeartbeat, toSseEvent } from '../../_shared/sse.ts'
 import { approveConnectorAction, executeConnectorAction, rejectConnectorAction, requestConnectorAction, type ExecuteDeps } from '../../_shared/connector-actions.ts'
 import { calendarAppsFrom, releaseCalendar } from '../../_shared/store-review.ts'
+import { HOUSEKEEPING_ACTIONS } from '../../_shared/repo-housekeeping-acts.ts'
 import { callerCanAccessProject, dbError, jsonError } from '../shared.ts'
 import type { Variables } from '../types.ts'
 import { portfolioAccess } from './portfolio.ts'
@@ -309,7 +310,10 @@ export function registerRecipeChangeRoutes(app: Hono<{ Variables: Variables }>, 
     if (!access.ok) return access.response
     const { data } = await db.from('connector_actions')
       .select('id, connector_instance_id, project_id, action, payload, payload_sha256, reason, status, requested_by, requested_at, approved_by, approved_at, expires_at, executed_at, result, error')
-      .eq('organization_id', access.orgId).order('requested_at', { ascending: false }).limit(100)
+      .eq('organization_id', access.orgId)
+      // Repo clean-ups are decided and run on /repo → Clean up (ADR 0051); this list's buttons cannot run them.
+      .not('action', 'in', `(${HOUSEKEEPING_ACTIONS.join(',')})`)
+      .order('requested_at', { ascending: false }).limit(100)
     return c.json({ ok: true, data: { actions: data ?? [] } })
   })
 

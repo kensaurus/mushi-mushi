@@ -1,76 +1,57 @@
 /**
  * FILE: FeedbackSnapshotStrip.tsx
- * PURPOSE: Product feedback KPI strip using MetricStrip — replaces hand-rolled grid on FeedbackPage.
+ * PURPOSE: Help & support status: what you asked the Mushi team and what is
+ *          waiting on whom (PageStatus, P1).
  */
 
-import { Section, StatCard, SnapshotSectionHint } from '../ui'
-import { MetricStrip } from '../MetricStrip'
+import { PageStatus } from '../ui'
 import type { FeedbackStats } from './types'
-import {
-  totalTicketsTooltip,
-  totalTicketsDetail,
-  activeTicketsTooltip,
-  activeTicketsDetail,
-  shippedTicketsTooltip,
-  shippedTicketsDetail,
-  ticketMixTooltip,
-  ticketMixDetail,
-} from '../../lib/statTooltips/feedback'
+import { pluralizeWithCount } from '../../lib/format'
 import { feedbackLinks } from '../../lib/statCardLinks'
 
 interface Props {
   stats: FeedbackStats
   statsFetchedAt: string | null
   statsValidating?: boolean
-  sectionTitle?: string
-  hint?: string
   statLabels?: Record<string, string>
 }
 
-export function FeedbackSnapshotStrip({
-  stats,
-  statsFetchedAt,
-  statsValidating,
-  sectionTitle = 'FEEDBACK SNAPSHOT',
-  hint,
-  statLabels,
-}: Props) {
+function feedbackSentence(stats: FeedbackStats): string {
+  if (stats.totalTickets === 0) return 'You have not sent the Mushi team a bug or a request yet.'
+  const open = `${pluralizeWithCount(stats.activeTickets, 'ticket')} open`
+  const reply = stats.awaitingReply > 0 ? `, ${stats.awaitingReply} waiting for your reply` : ''
+  const shipped = stats.shippedTickets > 0 ? `; ${stats.shippedTickets} shipped` : ''
+  return `${open}${reply}${shipped}.`
+}
+
+export function FeedbackSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels }: Props) {
   return (
-    <Section title={sectionTitle} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-      {hint ? <SnapshotSectionHint text={hint} /> : null}
-      <MetricStrip cols={4} ariaLabel="Feedback snapshot">
-        <StatCard
-          label={statLabels?.total ?? 'Total'}
-          value={stats.totalTickets}
-          accent={stats.totalTickets > 0 ? 'text-fg' : undefined}
-          tooltip={totalTicketsTooltip(stats)}
-          detail={totalTicketsDetail(stats)}
-          to={feedbackLinks.total}
-        />
-        <StatCard
-          label={statLabels?.active ?? 'Active'}
-          value={stats.activeTickets}
-          accent={stats.activeTickets > 0 ? 'text-warn' : 'text-ok'}
-          tooltip={activeTicketsTooltip(stats)}
-          detail={activeTicketsDetail(stats)}
-          to={feedbackLinks.active}
-        />
-        <StatCard
-          label={statLabels?.shipped ?? 'Shipped'}
-          value={stats.shippedTickets}
-          accent={stats.shippedTickets > 0 ? 'text-ok' : undefined}
-          tooltip={shippedTicketsTooltip(stats)}
-          detail={shippedTicketsDetail(stats)}
-          to={feedbackLinks.shipped}
-        />
-        <StatCard
-          label={statLabels?.mix ?? 'Mix'}
-          value={`${stats.bugTickets}/${stats.featureTickets}`}
-          tooltip={ticketMixTooltip(stats)}
-          detail={ticketMixDetail()}
-          to={feedbackLinks.mix}
-        />
-      </MetricStrip>
-    </Section>
+    <PageStatus
+      ariaLabel="Help and support status"
+      tone={stats.awaitingReply > 0 ? 'warn' : stats.activeTickets > 0 ? 'info' : 'neutral'}
+      sentence={feedbackSentence(stats)}
+      freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      metrics={[
+        {
+          label: statLabels?.active ?? 'Open',
+          value: stats.activeTickets,
+          hint: 'Bugs and requests you sent that the team has not closed.',
+          to: feedbackLinks.active,
+        },
+        {
+          label: 'Waiting for you',
+          value: stats.awaitingReply,
+          tone: stats.awaitingReply > 0 ? 'warn' : 'neutral',
+          hint: 'Tickets where the team replied and asked you something.',
+          to: feedbackLinks.active,
+        },
+        {
+          label: statLabels?.shipped ?? 'Shipped',
+          value: stats.shippedTickets,
+          hint: 'Requests the team built and shipped.',
+          to: feedbackLinks.shipped,
+        },
+      ]}
+    />
   )
 }

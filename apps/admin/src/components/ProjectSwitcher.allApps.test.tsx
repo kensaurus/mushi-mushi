@@ -163,6 +163,42 @@ describe('ProjectSwitcher — All apps', () => {
     expect(chip().textContent).toContain('glot.it')
   })
 
+  it('shows All apps while the project list is still loading, and a click retries', async () => {
+    const reload = vi.fn()
+    setStoredProjectScopeMode('all')
+    setup.value = { loading: true, error: null, data: null, reload }
+    await render('/reports?apps=all')
+    expect(chip().textContent).toContain('All apps')
+    expect(chip().getAttribute('aria-label')).toBe('Project: All apps — switch project')
+    expect(chip().getAttribute('aria-busy')).toBeNull()
+    expect(host.textContent).not.toContain('Loading project')
+    await click(chip())
+    expect(reload).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the loading chip for one app until the list arrives', async () => {
+    setup.value = { loading: true, error: null, data: null, reload: vi.fn() }
+    await render(`/reports?project=${PROJECT_A}`)
+    expect(host.querySelector('[aria-label="Loading project"]')).not.toBeNull()
+    expect(host.querySelector('[data-testid="project-switcher-chip"]')).toBeNull()
+  })
+
+  it('names the app the page actually shows on a route that cannot combine apps', async () => {
+    await render(`/fixes?project=${PROJECT_B}&apps=all`)
+    expect(chip().textContent).toContain('yen-yen')
+    expect(chip().textContent).not.toContain('All apps')
+    expect(chip().getAttribute('aria-label')).toBe('Project: yen-yen — switch project')
+    expect(chip().getAttribute('title')).toContain('This page shows one app at a time: yen-yen')
+    // The choice itself is untouched — it still applies on pages that combine.
+    expect(params().get('apps')).toBe('all')
+    expect(getStoredProjectScopeMode()).toBe('all')
+  })
+
+  it('keeps All apps in the header on account-wide pages', async () => {
+    await render(`/portfolio?project=${PROJECT_A}&apps=all`)
+    expect(chip().textContent).toContain('All apps')
+  })
+
   it('opens when the one-app notice asks it to', async () => {
     await render(`/reports?project=${PROJECT_A}&apps=all`)
     expect(allRow()).toBeNull()

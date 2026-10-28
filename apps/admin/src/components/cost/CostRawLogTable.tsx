@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import type { ColumnDef, OnChangeFn, SortingState } from '@tanstack/react-table'
+import type { OnChangeFn, SortingState } from '@tanstack/react-table'
 import { usePageData } from '../../lib/usePageData'
 import {
   Badge,
@@ -20,7 +20,7 @@ import { CHIP_TONE } from '../../lib/chipTone'
 import { SINCE_HOURS, costLogQuery } from './costLogQuery'
 import { OperationChip } from '../OperationChip'
 import { ModelChip, TokenIn, TokenOut, UsdAmount } from './CostDisplayChips'
-import { DataTable } from '../DataTable'
+import { DataTable, type ColumnDef } from '../DataTable'
 import { TableSkeleton } from '../skeletons/TableSkeleton'
 
 export interface CostRow {

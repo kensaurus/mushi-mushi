@@ -202,6 +202,10 @@ export function projectsHealthOverlay(
   }
   if (signalId === 'sdk') {
     if (stats.sdkConnectedCount === 0) return { posture: 'open', metric: 'No heartbeat' }
+    // Not "ok" while any app has no SDK heartbeat.
+    if (stats.sdkConnectedCount < stats.projectCount) {
+      return { posture: 'warn', metric: `${stats.sdkConnectedCount}/${stats.projectCount} live` }
+    }
     return { posture: 'ok', metric: `${stats.sdkConnectedCount} live` }
   }
   if (signalId === 'github') {
@@ -328,36 +332,6 @@ export function exploreTabOverlay(
       : { posture: 'info', metric: 'After index' }
   }
   return { posture: 'clear', metric: 'Ready' }
-}
-
-/** Onboarding step overlay. */
-export function onboardingStepOverlay(
-  stepId: string,
-  stats: {
-    requiredComplete: number
-    requiredTotal: number
-    sdkInstalled: boolean
-    reportCount: number
-    nextStepId: string | null
-  },
-  optional = false,
-): WorkflowStageOverlay {
-  if (optional) {
-    return { posture: 'info', metric: 'Optional' }
-  }
-  if (stepId === stats.nextStepId) {
-    return { posture: 'open', metric: 'Next', actionLine: 'Complete this step to continue setup.' }
-  }
-  if (stats.requiredComplete >= stats.requiredTotal) {
-    return { posture: 'clear', metric: 'Done' }
-  }
-  if (stepId === 'sdk' && stats.sdkInstalled) {
-    return { posture: 'ok', metric: 'Installed' }
-  }
-  if (stepId === 'ingest' && stats.reportCount > 0) {
-    return { posture: 'ok', metric: pluralizeWithCount(stats.reportCount, 'report') }
-  }
-  return { posture: 'clear', metric: 'Pending' }
 }
 
 /** Skills pipeline mode overlay. */

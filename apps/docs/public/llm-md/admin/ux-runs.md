@@ -89,6 +89,58 @@ The review is advisory: it never keeps or reverts anything.
 **File as bug** adds the screen to your normal bug queue (source `ux_loop`) with the
 measurements and the review's notes. It makes no AI call.
 
+## Audit signed-in screens
+
+`mushi-ux audit` finds UI bugs on the screens behind your sign-in and files them as
+reports, without editing code. It reuses a browser profile you are already signed in
+with, so it never asks you to sign in again:
+
+```bash
+mushi-ux audit --url https://example.com/admin \
+  --profile-dir ~/.playwright-cli-profiles/example --file --dry-run
+```
+
+It maps the screens under that URL read-only, captures each on desktop and phone, and
+files what it measures: serious accessibility rules, a page that scrolls sideways,
+console errors, and content that jumps while loading. Add `--review claude-code` for a
+model to point out concrete visual defects on whole pages. `--file` files at most 15
+reports a run and skips one still open or filed in the last 14 days; `--dry-run` lists
+them instead.
+
+## Fresh eyes
+
+A fresh-eyes run tests the path a stranger takes: a model that has never seen your app
+tries one goal from your landing page, such as "get my first bug explained", reading only
+what is on screen. Code decides everything else:
+
+- **Time to first value**: how long the app made the visitor wait, plus the time to read
+  each new screen, until the goal check passes (a URL, visible text, a selector or an API
+  that answers with data). The model's own thinking time is never counted.
+- **Where it stalled**: a sign-in it cannot pass, a captcha (never solved), a dead end, an
+  error, or a step that needs something outside the app (an inbox, an API key, a
+  terminal, another account).
+- **What gets filed**: measured problems once a replay of the steps without the model
+  shows them again; opinions such as "confusing" only when two sessions agree. Reports
+  come in as source `fresh_eyes`, at most 15 a run.
+
+```bash
+mushi ux fresh-eyes --url https://your-app.com --goal "get my first report" --dry-run
+# with a test account for your app, mirrored here and filed:
+MUSHI_FRESH_EYES_EMAIL=… MUSHI_FRESH_EYES_PASSWORD=… \
+  mushi ux fresh-eyes --url https://your-app.com --goal "get my first report" --sync --file
+```
+
+The run is signed out in a clean browser. It may only write to your app's own origins
+(`--app-host` adds its API); payments, "Continue with Google/GitHub/Apple", public sign-up
+forms and anything labelled delete or revoke are refused. Without an account it stops at
+your sign-up page and says so; `--dry-run` never writes at all.
+
+The **Fresh eyes** tab shows each run: time to first value, steps, how many sessions
+reached the goal, the trend over runs, and every step with its screenshot and wait. Once
+an app has a finished run, Home shows a **First-time setup** light with the minutes and
+steps. Runs start on your computer, where the browser and the Cursor CLI run; the tab's
+**Run now** gives the exact command.
+
 ## Where the changes are
 
 Kept edits are commits on the branch shown above the screen list

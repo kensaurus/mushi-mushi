@@ -280,14 +280,17 @@ describe('POST /v1/admin/fixes/:id/ci/rerun', () => {
     expect((await rerun(s)).body.error?.code).toBe('CI_RUNNING')
   })
 
-  it('says when the token cannot write Actions', async () => {
+  it('says when the token cannot write Actions, and remembers it so /pipeline stops offering the re-run (69fcafcb)', async () => {
     const s = setup({ fix_attempts: [fix] })
     s.github['/actions/runs?head_sha=head1'] = { status: 200, body: { workflow_runs: [{ id: 9001, status: 'completed', conclusion: 'failure' }] } }
     s.github['/rerun-failed-jobs'] = { status: 403, body: { message: 'Resource not accessible by personal access token' } }
     const res = await rerun(s)
     expect(res.status).toBe(403)
     expect(res.body.error?.code).toBe('GITHUB_ACTIONS_WRITE_MISSING')
-    expect(s.db.table('fix_events')).toHaveLength(0)
+    const events = s.db.table('fix_events')
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({ fix_attempt_id: FIX, project_id: P1, kind: 'ci_started', status: 'fail', payload: { rerunRefused: 'actions_write' } })
+    expect(String(events[0].dedupe_key)).toMatch(/^ci_rerun_refused:/)
   })
 })
 
@@ -364,7 +367,11 @@ describe('GET /v1/admin/ci/compare', () => {
 
   it('reads the SQL aggregate over a window clamped to 30 days, scoped to the project', async () => {
     const s = setup({}, {
-      rpc: () => ({ groups: [{ project_id: P1, repo: 'kensaurus/glot.it', runner_class: 'github_hosted', os: 'linux', labels: ['ubuntu-latest'], jobs: '3', billed_minutes: '6', raw_seconds: '255' }], pairs: [], workflows: [], intervals: [], oldest: NOW.toISOString(), jobs: 3 }),
+      // ci_cost_facts (the cost rules' job facts) answers its own shape.
+      rpc: (fn) =>
+        fn === 'ci_cost_facts'
+          ? { events: [], prs: [], steps: [], jobs: 0 }
+          : { groups: [{ project_id: P1, repo: 'kensaurus/glot.it', runner_class: 'github_hosted', os: 'linux', labels: ['ubuntu-latest'], jobs: '3', billed_minutes: '6', raw_seconds: '255' }], pairs: [], workflows: [], intervals: [], oldest: NOW.toISOString(), jobs: 3 },
     })
     const res = await s.app.call('GET', '/v1/admin/ci/compare', { query: { project_id: P1, days: '99' } })
     expect(res.status).toBe(200)
@@ -387,6 +394,16 @@ describe('GET /v1/admin/ci/compare', () => {
     expect(res.body.data.settingsWritable).toBe(false)
     expect(res.body.data.settings[0]).toMatchObject({ source: 'default', organizationId: ORG })
     expect(res.body.data.rows[0]).toMatchObject({ jobs: 2, billedMinutes: 3, tinyJobs: 1 })
+  })
+
+  it('still answers when only the cost rules\' job facts fail, and says the job-based advice is left out', async () => {
+    const s = setup({}, {
+      rpc: () => ({ groups: [], pairs: [], workflows: [], intervals: [], oldest: null, jobs: 0 }),
+      rpcError: (fn) => (fn === 'ci_cost_facts' ? { code: '57014', message: 'canceling statement due to statement timeout' } : null),
+    })
+    const res = await s.app.call('GET', '/v1/admin/ci/compare', {})
+    expect(res.status).toBe(200)
+    expect(res.body.data.sourceNote).toMatch(/job-based cost advice is left out/)
   })
 
   it('answers 500, never an empty comparison, when the aggregate fails for another reason', async () => {

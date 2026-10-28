@@ -52,7 +52,6 @@ import { registerExperimentsRoutes } from './routes/experiments.ts';
 import { registerAnomaliesRoutes } from './routes/anomalies.ts';
 import { registerCostsRoutes } from './routes/costs.ts';
 import { registerEvolutionRoutes } from './routes/evolution.ts';
-import { registerTesterMarketplaceRoutes } from './routes/tester-marketplace.ts';
 import { registerCommunityRoutes } from './routes/community.ts';
 import { registerPublishedAppsRoutes } from './routes/published-apps.ts';
 import { registerDbAdvisorsRoutes } from './routes/db-advisors.ts';
@@ -706,7 +705,28 @@ registerExperimentsRoutes(app);
 registerAnomaliesRoutes(app);
 registerCostsRoutes(app);
 registerEvolutionRoutes(app);
-registerTesterMarketplaceRoutes(app);
+// tester-marketplace.ts (tester portal, public marketplace and roadmap,
+// submission and redemption review, Tremendous webhook); deploy size limit,
+// 2026-10-26. Exact /v1/tester/* paths: community.ts serves others there.
+forwardToApiExt([
+  '/v1/public/marketplace/*',
+  '/v1/public/roadmap/*',
+  '/v1/me/tester-status',
+  '/v1/tester/enroll',
+  '/v1/tester/me',
+  '/v1/tester/kyc',
+  '/v1/tester/export',
+  '/v1/tester/delete',
+  '/v1/tester/wallet',
+  '/v1/tester/wallet/*',
+  '/v1/tester/apps',
+  '/v1/tester/apps/*',
+  '/v1/tester/submissions',
+  '/v1/admin/tester-submissions',
+  '/v1/admin/tester-submissions/*',
+  '/v1/admin/tester-redemptions/*',
+  '/v1/webhooks/tremendous',
+]);
 registerCommunityRoutes(app);
 registerPublishedAppsRoutes(app);
 registerDbAdvisorsRoutes(app);
@@ -721,7 +741,11 @@ forwardToApiExt([
 // site-audit.ts (ADR 0040); deploy size limit, 2026-10-23.
 forwardToApiExt(['/v1/admin/projects/:id/site-audit', '/v1/admin/projects/:id/site-audit/run']);
 // merge-queue.ts (ADR 0041); deploy size limit, 2026-10-23.
-forwardToApiExt(['/v1/admin/merge-queue', '/v1/admin/merge-queue/:id']);
+forwardToApiExt(['/v1/admin/merge-queue', '/v1/admin/merge-queue/:id', '/v1/admin/projects/:id/release-settings']);
+// pipeline.ts (console /pipeline); deploy size limit, 2026-10-26.
+forwardToApiExt(['/v1/admin/pipeline', '/v1/admin/pipeline/actions', '/v1/admin/pipeline/fix/:id']);
+
+forwardToApiExt(['/v1/admin/projects/:id/local-followups', '/v1/admin/fixes/:id/local-followup', '/v1/admin/fixes/:id/local-followup/done']);
 // skill-runs.ts (ADR 0042); deploy size limit, 2026-10-23.
 forwardToApiExt(['/v1/admin/skill-runs', '/v1/admin/projects/:id/skill-runs', '/v1/admin/projects/:id/skill-runs/:runId/stop']);
 // search-rank.ts; deploy size limit, 2026-10-23.
@@ -757,6 +781,14 @@ forwardToApiExt([
   '/v1/admin/projects/:pid/ux-runs/:runId/surfaces/:key/report',
   '/v1/admin/projects/:pid/ux-runs/:runId/uploads',
 ]);
+// Fresh-eyes runs (fresh-eyes.ts, ADR 0053).
+forwardToApiExt([
+  '/v1/admin/fresh-eyes/test-account',
+  '/v1/admin/projects/:pid/fresh-eyes',
+  '/v1/admin/projects/:pid/fresh-eyes/:runId',
+  '/v1/admin/projects/:pid/fresh-eyes/:runId/uploads',
+  '/v1/admin/projects/:pid/fresh-eyes/:runId/findings',
+]);
 registerPullRequestRoutes(app);
 registerProjectGroupRoutes(app);
 registerBootstrapRoutes(app);
@@ -784,6 +816,16 @@ forwardToApiExt([
 ]);
 // Known holes in dependencies and the runtime (ADR 0038).
 forwardToApiExt(['/v1/admin/projects/:id/vulnerabilities', '/v1/admin/projects/:id/vulnerabilities/*']);
+// sdk-health.ts: SDK problems and their fix tasks; deploy size limit, 2026-10-26.
+forwardToApiExt(['/v1/admin/projects/:id/sdk-health', '/v1/admin/projects/:id/sdk-health/tasks']);
+// project-home.ts: the per-app Home in one call; deploy size limit, 2026-10-27.
+forwardToApiExt(['/v1/admin/projects/:id/home', '/v1/admin/projects/:id/home/thumbnail']);
+// setup-gaps.ts and release-batch.ts (console ops plan P1, read-only); deploy size limit, 2026-10-27.
+forwardToApiExt(['/v1/admin/setup-gaps', '/v1/admin/release-batch']);
+// work.ts: local workers (`mushi work --daemon`, ADR 0048); deploy size limit, 2026-10-27.
+forwardToApiExt(['/v1/worker/*', '/v1/admin/work/*']);
+// repo-housekeeping.ts (ADR 0051, console ops plan P4): repo clean-up from /repo; deploy size limit, 2026-10-27.
+forwardToApiExt(['/v1/admin/projects/:id/repo-cleanup', '/v1/admin/projects/:id/repo-cleanup/*']);
 
 registerA2ATaskRoutes(app);
 

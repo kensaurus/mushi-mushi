@@ -15,6 +15,11 @@ The vibe-coding era — AI-assisted development where you build and ship in hour
 
 For a shorter version see [The evolution loop](/concepts/evolution-loop). For the manifesto see the [EVOLUTION-LOOP.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/EVOLUTION-LOOP.md) doc.
 
+## What happens to a bug
+
+Every bug moves through six steps: reported, triaged, fix PR, reviewed and CI,
+merged and deployed, and the person who reported it is told.
+
 ---
 
 ## The NTSB moment software is missing

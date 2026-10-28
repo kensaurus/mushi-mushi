@@ -21,12 +21,16 @@
  *                                which is a later pass (see the exec plan, C4).
  *
  *          The in-edge `fix-worker` LLM path stays the zero-config default
- *          and never goes through here.
+ *          and never goes through here. A spend-down dispatch names its
+ *          Cursor key (`pinnedCursorKeyIdFromDispatch`); the adapter uses
+ *          that key and does not resolve the pool again.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
-import { resolveLlmKey } from './byok.ts'
+import { resolveLlmKey, resolveLlmKeys } from './byok.ts'
+import { keyScopeFor, ownerUserColumnReady, projectKeyOwner, withOwnerUserColumn } from './byok-scope.ts'
+import { isCursorKeyLimitError } from './spend-down.ts'
 import { fetchPullRequestFiles, parseGithubRepoUrl, prNumberFromUrl, resolveProjectGithubToken } from './github.ts'
 import { canonicalPrUrl, classifyPrSubstance, parsePullRequestUrl, type PrChangedFile } from './pr-substance.ts'
 import { classifyNoPrSummary, noPrErrorText } from './cloud-agent-no-pr.ts'
@@ -69,6 +73,13 @@ export type CloudAgentKind = 'cursor_cloud' | 'github_cloud_agent' | 'anthropic_
 /** Cloud kinds a project can actually select today (CHECK constraint on
  *  project_settings.autofix_agent). `anthropic_managed` is interface-only. */
 export const DISPATCHABLE_CLOUD_AGENTS: ReadonlySet<string> = new Set(['cursor_cloud', 'github_cloud_agent'])
+
+/**
+ * `fix_attempts.agent` values written by fix-worker's own LLM path (it opens
+ * the PR itself, as a draft; ADR 0047). Kept beside the cloud kinds so the
+ * review worker can tell the two apart.
+ */
+export const FIX_WORKER_AGENTS: ReadonlySet<string> = new Set(['claude_code', 'rest_fix_worker', 'llm'])
 
 export function isDispatchableCloudAgent(agent: string | null | undefined): agent is 'cursor_cloud' | 'github_cloud_agent' {
   return !!agent && DISPATCHABLE_CLOUD_AGENTS.has(agent)
@@ -158,6 +169,23 @@ export interface CloudDispatchInput {
   model?: string
   /** Short label for vendor dashboards. */
   name?: string
+  /**
+   * Spend-down already chose this `byok_keys` id. The Cursor adapter uses it
+   * instead of resolving the pool: the pool still returns a quota-held row
+   * after its cooldown, which would bill the key spend-down skipped.
+   */
+  pinnedCursorKeyId?: string
+}
+
+/**
+ * The `byok_keys` id spend-down stored on the dispatch (`spend_down_key_id`),
+ * or undefined when this dispatch did not name one. fix-worker passes the
+ * result as `pinnedCursorKeyId`. A blank or non-string value is not a pin.
+ */
+export function pinnedCursorKeyIdFromDispatch(metadata: unknown): string | undefined {
+  if (!metadata || typeof metadata !== 'object') return undefined
+  const id = (metadata as { spend_down_key_id?: unknown }).spend_down_key_id
+  return typeof id === 'string' && id.length > 0 ? id : undefined
 }
 
 export interface CloudDispatchResult {
@@ -259,6 +287,106 @@ export async function resolveCursorApiKeyWithSource(
 }
 
 /**
+ * How long a Cursor key Cursor refused for its plan's usage limit is skipped
+ * for NEW agents (`byok_keys.exhausted_until`). Runs it already started keep
+ * polling with it. On 2026-10-24 three accounts were run to their limits one
+ * after another; the used-up key stayed first and the next one idled.
+ */
+const CURSOR_KEY_EXHAUSTED_MS = 6 * 3_600_000
+
+async function exhaustedCursorKeyIds(db: SupabaseClient): Promise<Set<string>> {
+  const { data, error } = await db
+    .from('byok_keys')
+    .select('id')
+    .eq('provider_slug', 'cursor')
+    .gt('exhausted_until', new Date().toISOString())
+  // Before the column exists every key counts as available.
+  if (error) return new Set()
+  return new Set(((data ?? []) as Array<{ id: string }>).map((r) => r.id))
+}
+
+/**
+ * The Cursor key spend-down named, when this project may use it. Null when
+ * the row is missing, not Cursor, not active, used up, out of scope, or has
+ * no secret — the caller must not fall back to the pool, which would bill
+ * the quota-held key spend-down skipped.
+ */
+async function cursorKeyPinned(
+  db: SupabaseClient,
+  projectId: string,
+  keyId: string,
+): Promise<{ key: string; keyId: string; source: 'pool' } | null> {
+  const ready = await ownerUserColumnReady(db)
+  const { data, error } = await db
+    .from('byok_keys')
+    .select(withOwnerUserColumn('id, provider_slug, project_id, organization_id, status, vault_secret_id, exhausted_until', ready))
+    .eq('id', keyId)
+    .maybeSingle()
+  const row = data as {
+    id: string
+    provider_slug: string
+    project_id: string | null
+    organization_id: string | null
+    owner_user_id?: string | null
+    status: string
+    vault_secret_id: string | null
+    exhausted_until?: string | null
+  } | null
+  if (error || !row || row.provider_slug !== 'cursor' || row.status !== 'active') return null
+  if (row.exhausted_until && Date.parse(row.exhausted_until) > Date.now()) return null
+  const owner = await projectKeyOwner(db, projectId)
+  if (!keyScopeFor(row, owner)) return null
+  const secret = await resolveVaultRef(db, row.vault_secret_id ? `vault://${row.vault_secret_id}` : null)
+  if (!secret) return null
+  return { key: secret, keyId: row.id, source: 'pool' }
+}
+
+/** The key for a new agent: the resolver's pick, or the next one when that one is used up. */
+export async function cursorKeyForNewWork(
+  db: SupabaseClient,
+  projectId: string,
+): Promise<{ key: string; keyId: string | null; source: 'pool' | 'legacy' | 'env' } | null> {
+  const first = await resolveCursorApiKeyWithSource(db, projectId)
+  if (!first?.keyId) return first
+  const exhausted = await exhaustedCursorKeyIds(db)
+  if (!exhausted.has(first.keyId)) return first
+  const next = (await resolveLlmKeys(db, projectId, 'cursor')).find((c) => c.keyId && !exhausted.has(c.keyId))
+  // Every key used up: try the first anyway; Cursor answers for itself.
+  return next ? { key: next.key, keyId: next.keyId ?? null, source: 'pool' } : first
+}
+
+/** Mark a key used up for new agents (Cursor refused it for its usage limit). */
+export async function markCursorKeyExhausted(db: SupabaseClient, keyId: string, reason: string): Promise<void> {
+  const { error } = await db
+    .from('byok_keys')
+    .update({ exhausted_until: new Date(Date.now() + CURSOR_KEY_EXHAUSTED_MS).toISOString(), last_error: reason.slice(0, 500) })
+    .eq('id', keyId)
+  if (error) alog.warn('Cursor key not marked used up', { keyId, err: error.message })
+}
+
+/** The key that started this attempt's run (recorded on it), else the app's current first key. */
+async function markRunKeyExhausted(db: SupabaseClient, target: CloudAgentOutcomeTarget, reason: string): Promise<void> {
+  const { data } = await db.from('fix_attempts').select('external_agent_ref').eq('id', target.attemptId).maybeSingle()
+  const recorded = ((data as { external_agent_ref?: { key_id?: unknown } } | null)?.external_agent_ref?.key_id)
+  const keyId = typeof recorded === 'string' && recorded ? recorded : (await resolveCursorApiKeyWithSource(db, target.projectId))?.keyId
+  if (keyId) await markCursorKeyExhausted(db, keyId, reason)
+}
+
+/** The key a run was started with (recorded on the attempt), else the resolver's pick. */
+async function cursorKeyForRun(db: SupabaseClient, projectId: string, ref: unknown): Promise<string | null> {
+  const keyId = (ref as { key_id?: unknown } | null)?.key_id
+  if (typeof keyId === 'string' && keyId) {
+    const { data } = await db.from('byok_keys').select('vault_secret_id, provider_slug').eq('id', keyId).maybeSingle()
+    const row = data as { vault_secret_id?: string | null; provider_slug?: string } | null
+    if (row?.provider_slug === 'cursor' && row.vault_secret_id) {
+      const key = await resolveVaultRef(db, `vault://${row.vault_secret_id}`)
+      if (key) return key
+    }
+  }
+  return resolveCursorApiKey(db, projectId)
+}
+
+/**
  * GitHub USER-TO-SERVER token for Agent Tasks: `project_settings.
  * github_user_token_ref` (vault ref; column added by a sibling migration —
  * a missing column is treated as "not configured") → env `GITHUB_TOKEN`.
@@ -354,104 +482,143 @@ const cursorAdapter: CloudAgentAdapter = {
   kind: 'cursor_cloud',
 
   async dispatch(input) {
-    const apiKey = await resolveCursorApiKey(input.db, input.projectId)
-    if (!apiKey) {
+    // A spend-down run names its key. Do not resolve the pool: that still
+    // returns a quota-held row, and the call would be billed to the key
+    // spend-down skipped.
+    const pinned = input.pinnedCursorKeyId
+      ? await cursorKeyPinned(input.db, input.projectId, input.pinnedCursorKeyId)
+      : null
+    if (input.pinnedCursorKeyId && !pinned) {
+      throw new Error('Spend-down Cursor key is not usable for this app.')
+    }
+    const picked = pinned ?? (await cursorKeyForNewWork(input.db, input.projectId))
+    if (!picked?.key) {
       throw new Error(
         'Cursor API key not configured. Add a crsr_… key under Settings → Integrations → Cursor Cloud (or BYOK provider "cursor").',
       )
     }
-    const client = { apiKey }
-
-    if (preferV0WebhookPath()) {
-      // v0: the only API that pushes a completion webhook back to us today.
-      const secret = await buildV0WebhookSecret(input.projectId)
-      const created = await createCursorAgentV0(client, {
-        prompt: input.prompt,
-        repoUrl: input.repoUrl,
-        ref: input.baseRef,
-        branchName: input.branchName,
-        model: input.model,
-        autoCreatePr: true,
-        webhook: { url: cursorWebhookCallbackUrl(input.projectId), secret },
-      })
-      return {
-        externalAgentId: created.id,
-        statusUrl: created.target?.url,
-        prUrl: created.target?.prUrl ?? null,
-        ref: { api: 'v0', webhook: true },
+    // A key Cursor refuses for its usage limit is marked used up and the same
+    // dispatch goes once more on the next key, so nothing waits for a retry.
+    // A pinned spend-down key does not swap here: the pool's next key can be
+    // the quota-held row this run was started to avoid. The throw fails this
+    // dispatch. The next spend-down tick sees exhausted_until, pins the
+    // following key, and picks the report up again
+    // (reportsToRetryAfterKeyLimit). A pin that is already unusable throws
+    // before Cursor; that message is the same retry.
+    let key = picked
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const result = await cursorDispatchWithKey(input, { apiKey: key.key })
+        // The run is polled and cancelled with the key that started it.
+        return key.keyId ? { ...result, ref: { ...(result.ref ?? {}), key_id: key.keyId } } : result
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        if (!key.keyId || !isCursorKeyLimitError(message)) throw err
+        await markCursorKeyExhausted(input.db, key.keyId, message)
+        if (input.pinnedCursorKeyId) throw err
+        const next = attempt === 0 ? await cursorKeyForNewWork(input.db, input.projectId) : null
+        if (!next?.key || next.keyId === key.keyId) throw err
+        alog.info('Cursor key used up; dispatching on the next key', { usedUp: key.keyId, next: next.keyId })
+        key = next
       }
-    }
-
-    const agentId = await deterministicCursorAgentId(input.dispatchId)
-    try {
-      // Cursor v1 refuses envVars together with a client-chosen agentId
-      // (400 validation_error, 2026-10-03). The deterministic agentId is what
-      // keeps a retried dispatch from starting a second agent, so the ids the
-      // agent needs travel in the prompt instead; none of them is a secret.
-      const created = await createCursorAgentV1(client, {
-        prompt: `${input.prompt}
-
-Mushi ids for this fix: project ${input.projectId}, report ${input.reportId}, fix attempt ${input.attemptId}.`,
-        repoUrl: input.repoUrl,
-        startingRef: input.baseRef,
-        agentId,
-        name: input.name ?? `Mushi fix ${input.reportId.slice(0, 8)}`,
-        model: input.model,
-        autoCreatePR: true,
-        skipReviewerRequest: true,
-      })
-      return {
-        externalAgentId: created.agent.id,
-        externalRunId: created.run.id,
-        statusUrl: created.agent.url,
-        prUrl: extractCursorPrUrl(created.run),
-        ref: { api: 'v1', runStatus: created.run.status },
-      }
-    } catch (err) {
-      // Same dispatchId re-POSTed (sweeper re-invoke, lost response):
-      // Cursor already has this agent. Recover its run id instead of failing.
-      if (err instanceof CursorApiError && err.status === 409 && err.code === 'agent_id_conflict') {
-        alog.info('Cursor agent already exists for dispatch — reusing', { dispatchId: input.dispatchId, agentId })
-        const existing = await getCursorAgent(client, agentId)
-        return {
-          externalAgentId: existing.id,
-          externalRunId: existing.latestRunId,
-          statusUrl: existing.url,
-          prUrl: null,
-          ref: { api: 'v1', reused: true },
-        }
-      }
-      throw err
     }
   },
 
   async poll({ db, projectId, attempt }) {
-    const apiKey = await resolveCursorApiKey(db, projectId)
+    const apiKey = await cursorKeyForRun(db, projectId, attempt.external_agent_ref)
     if (!apiKey) return { status: 'working', error: 'Cursor API key not configured' }
-    const client = { apiKey }
-    const agentId = attempt.cursor_agent_id
-    if (!agentId) return { status: 'failed', error: 'fix_attempts.cursor_agent_id is empty' }
-
-    let runId = attempt.cursor_run_id ?? null
-    const learned: Record<string, unknown> = {}
-    if (!runId) {
-      // v0-created agents carry no run id; the v1 agent resource exposes it.
-      const agent = await getCursorAgent(client, agentId)
-      runId = agent.latestRunId ?? null
-      if (!runId) return { status: 'working' }
-      learned.cursor_run_id = runId
-    }
-    const run = await getCursorRun(client, agentId, runId)
-    const status = mapCursorRunStatus(run.status)
-    return {
-      status,
-      prUrl: extractCursorPrUrl(run),
-      branch: extractCursorBranch(run),
-      summary: typeof run.result === 'string' ? run.result.slice(0, 2000) : undefined,
-      error: status === 'failed' ? `Cursor run ${run.status}` : undefined,
-      ref: { ...learned, runStatus: run.status, durationMs: run.durationMs ?? null },
-    }
+    return cursorPollWithKey(db, attempt, { apiKey })
   },
+}
+
+async function cursorDispatchWithKey(input: CloudDispatchInput, client: { apiKey: string }): Promise<CloudDispatchResult> {
+
+  if (preferV0WebhookPath()) {
+    // v0: the only API that pushes a completion webhook back to us today.
+    const secret = await buildV0WebhookSecret(input.projectId)
+    const created = await createCursorAgentV0(client, {
+      prompt: input.prompt,
+      repoUrl: input.repoUrl,
+      ref: input.baseRef,
+      branchName: input.branchName,
+      model: input.model,
+      autoCreatePr: true,
+      webhook: { url: cursorWebhookCallbackUrl(input.projectId), secret },
+    })
+    return {
+      externalAgentId: created.id,
+      statusUrl: created.target?.url,
+      prUrl: created.target?.prUrl ?? null,
+      ref: { api: 'v0', webhook: true },
+    }
+  }
+
+  const agentId = await deterministicCursorAgentId(input.dispatchId)
+  try {
+    // Cursor v1 refuses envVars together with a client-chosen agentId
+    // (400 validation_error, 2026-10-03). The deterministic agentId is what
+    // keeps a retried dispatch from starting a second agent, so the ids the
+    // agent needs travel in the prompt instead; none of them is a secret.
+    const created = await createCursorAgentV1(client, {
+      prompt: `${input.prompt}
+
+Mushi ids for this fix: project ${input.projectId}, report ${input.reportId}, fix attempt ${input.attemptId}.`,
+      repoUrl: input.repoUrl,
+      startingRef: input.baseRef,
+      agentId,
+      name: input.name ?? `Mushi fix ${input.reportId.slice(0, 8)}`,
+      model: input.model,
+      autoCreatePR: true,
+      skipReviewerRequest: true,
+    })
+    return {
+      externalAgentId: created.agent.id,
+      externalRunId: created.run.id,
+      statusUrl: created.agent.url,
+      prUrl: extractCursorPrUrl(created.run),
+      ref: { api: 'v1', runStatus: created.run.status },
+    }
+  } catch (err) {
+    // Same dispatchId re-POSTed (sweeper re-invoke, lost response):
+    // Cursor already has this agent. Recover its run id instead of failing.
+    if (err instanceof CursorApiError && err.status === 409 && err.code === 'agent_id_conflict') {
+      alog.info('Cursor agent already exists for dispatch — reusing', { dispatchId: input.dispatchId, agentId })
+      const existing = await getCursorAgent(client, agentId)
+      return {
+        externalAgentId: existing.id,
+        externalRunId: existing.latestRunId,
+        statusUrl: existing.url,
+        prUrl: null,
+        ref: { api: 'v1', reused: true },
+      }
+    }
+    throw err
+  }
+}
+
+async function cursorPollWithKey(db: SupabaseClient, attempt: CloudPollInput['attempt'], client: { apiKey: string }): Promise<CloudPollResult> {
+  const agentId = attempt.cursor_agent_id
+  if (!agentId) return { status: 'failed', error: 'fix_attempts.cursor_agent_id is empty' }
+
+  let runId = attempt.cursor_run_id ?? null
+  const learned: Record<string, unknown> = {}
+  if (!runId) {
+    // v0-created agents carry no run id; the v1 agent resource exposes it.
+    const agent = await getCursorAgent(client, agentId)
+    runId = agent.latestRunId ?? null
+    if (!runId) return { status: 'working' }
+    learned.cursor_run_id = runId
+  }
+  const run = await getCursorRun(client, agentId, runId)
+  const status = mapCursorRunStatus(run.status)
+  return {
+    status,
+    prUrl: extractCursorPrUrl(run),
+    branch: extractCursorBranch(run),
+    summary: typeof run.result === 'string' ? run.result.slice(0, 2000) : undefined,
+    error: status === 'failed' ? `Cursor run ${run.status}` : undefined,
+    ref: { ...learned, runStatus: run.status, durationMs: run.durationMs ?? null },
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -831,6 +998,11 @@ export async function applyCloudAgentOutcome(
   // main", "the code is in the backend repo"); keep that verdict instead of
   // filing an API error the console would offer to retry.
   const isFailure = outcome.kind === 'failed'
+  // A run that failed on the account's usage limit: mark the key that started
+  // it, so new agents go to the next key (cursorKeyForNewWork).
+  if (isFailure && target.agent === 'cursor_cloud' && isCursorKeyLimitError(outcome.error)) {
+    await markRunKeyExhausted(db, target, outcome.error)
+  }
   const noPr = isFailure ? null : classifyNoPrSummary(outcome.summary)
   const errorText = isFailure ? outcome.error.slice(0, 1000) : noPrErrorText(noPr!).slice(0, 1000)
   const failureCategory = isFailure
@@ -894,6 +1066,8 @@ export async function applyCloudAgentOutcome(
     payload: { agent: target.agent, ...(noPr?.category ? { verdict: noPr.category } : {}) },
   })
 
+  if (noPr?.category === 'already_fixed') await resolveAlreadyFixed(db, target, now)
+
   dispatchPluginEventDetached(db, target.projectId, 'fix.failed', {
     report: { id: target.reportId },
     fix: { id: target.attemptId, agent: target.agent, error: errorText.slice(0, 500) },
@@ -905,6 +1079,49 @@ export async function applyCloudAgentOutcome(
   }).catch((e) => alog.warn('Team fix notification failed', { event: 'fix_failed', err: String(e) }))
 
   return { applied: true }
+}
+
+/** Statuses a report can leave for `resolved` when an agent finds the bug already gone. */
+const RESOLVABLE_REPORT_STATUSES = ['new', 'queued', 'pending', 'submitted', 'classified', 'triaged', 'grouped', 'fixing', 'in_progress', 'reopened']
+
+/**
+ * The agent found the bug already gone (no PR): mark the report `resolved`
+ * (not `fixed`: nothing merged) so it stops counting as open, unless another
+ * attempt or an open PR is still live for it. On 2026-10-24 nine critical
+ * site-watch reports stayed open for days after this verdict. The reporter is
+ * not told: no fix shipped. A recurrence files or reopens a report as usual.
+ */
+async function resolveAlreadyFixed(db: SupabaseClient, target: CloudAgentOutcomeTarget, now: string): Promise<void> {
+  try {
+    const { count } = await db
+      .from('fix_attempts')
+      .select('id', { count: 'exact', head: true })
+      .eq('report_id', target.reportId)
+      .neq('id', target.attemptId)
+      .is('merged_at', null)
+      .or('status.in.(queued,running),pr_state.in.(open,draft),and(pr_url.not.is.null,pr_state.is.null)')
+    if ((count ?? 0) > 0) return
+    const { data: changed } = await db
+      .from('reports')
+      .update({ status: 'resolved', updated_at: now })
+      .eq('id', target.reportId)
+      .eq('project_id', target.projectId)
+      .in('status', RESOLVABLE_REPORT_STATUSES)
+      .select('id')
+    if (!changed || (changed as unknown[]).length === 0) return
+    await insertFixEvent(db, {
+      fix_attempt_id: target.attemptId,
+      project_id: target.projectId,
+      kind: 'completed',
+      status: 'ok',
+      label: 'Resolved: the agent found it already fixed',
+      detail: 'No pull request was needed. The report reopens if the bug comes back.',
+      dedupe_key: `already-fixed-resolved:${target.attemptId}`,
+      payload: { agent: target.agent, verdict: 'already_fixed' },
+    })
+  } catch (err) {
+    alog.warn('already-fixed report not resolved', { reportId: target.reportId, err: err instanceof Error ? err.message : String(err) })
+  }
 }
 
 /**
@@ -1185,7 +1402,9 @@ export async function cancelCloudAgentAttempt(
   let vendorCancelled = false
   if (input.kind === 'cursor_cloud' && input.externalAgentId && input.externalRunId) {
     try {
-      const apiKey = await resolveCursorApiKey(db, input.projectId)
+      // Cancel with the key that started the run (a used-up key may no longer be first).
+      const { data: att } = await db.from('fix_attempts').select('external_agent_ref').eq('id', input.attemptId).maybeSingle()
+      const apiKey = await cursorKeyForRun(db, input.projectId, (att as { external_agent_ref?: unknown } | null)?.external_agent_ref)
       if (apiKey) {
         await cancelCursorRun({ apiKey }, input.externalAgentId, input.externalRunId)
         vendorCancelled = true

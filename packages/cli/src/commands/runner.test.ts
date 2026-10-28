@@ -132,6 +132,67 @@ describe('mushi runner compare', () => {
   })
 })
 
+describe('mushi runner bill', () => {
+  const USAGE = {
+    usageItems: [
+      { date: '2026-10-01T00:47:27Z', product: 'actions', sku: 'Actions Linux', quantity: 100, unitType: 'Minutes', grossAmount: 0.6, discountAmount: 0, netAmount: 0.6, repositoryName: 'api' },
+      { date: '2026-10-01T00:00:00Z', product: 'copilot', sku: 'Copilot Premium Request', quantity: 3, unitType: 'requests', grossAmount: 0.12, discountAmount: 0, netAmount: 0.12 },
+    ],
+  }
+  const github = (call: { path: string }) => {
+    if (call.path === 'https://api.github.com/user') return { body: { login: 'acme' } }
+    if (call.path === 'https://api.github.com/users/acme') return { body: { type: 'User' } }
+    if (call.path.startsWith('https://api.github.com/users/acme/settings/billing/usage')) return { body: USAGE }
+    if (call.path === '/v1/admin/ci/bill') return okReply({ owner: 'acme', month: '2026-10', rows: 1, netUsd: 0.6 })
+    return { status: 404, body: {} }
+  }
+
+  it('reads the month with GITHUB_TOKEN, prints net per repo, and never sends the token to Mushi', async () => {
+    vi.stubEnv('GITHUB_TOKEN', 'ghp_fake_bill_token')
+    const run = await runCli(registerRunnerCommands, ['runner', 'bill', '--month', '2026-10'], github)
+    expect(run.error).toBeNull()
+    expect(run.calls.map((c) => c.path)).toEqual([
+      'https://api.github.com/user',
+      'https://api.github.com/users/acme',
+      'https://api.github.com/users/acme/settings/billing/usage?year=2026&month=10',
+    ])
+    expect(run.calls[0]!.headers.Authorization).toBe('Bearer ghp_fake_bill_token')
+    expect(run.stdout).toContain('GitHub Actions bill for acme, 2026-10')
+    expect(run.stdout).toMatch(/acme\/api\s+\$0\.60 net/)
+    expect(run.stdout).not.toContain('ghp_fake_bill_token')
+    expect(run.stdout).toContain('--push')
+  })
+
+  it('--push uploads only the Actions items to the configured project; gh auth token is the fallback', async () => {
+    vi.stubEnv('GITHUB_TOKEN', '')
+    const { gh, calls } = fakeGh({ 'auth token': 'gho_from_gh\n' })
+    restore?.()
+    restore = __setRunnerDeps({ host: fakeHost(), gh })
+    const run = await runCli(registerRunnerCommands, ['runner', 'bill', '--month', '2026-10', '--push', '--json'], github)
+    expect(calls).toEqual([['auth', 'token']])
+    const push = run.calls.find((c) => c.path === '/v1/admin/ci/bill')!
+    expect(push.method).toBe('POST')
+    expect(push.body).toMatchObject({ projectId: TEST_PROJECT_ID, owner: 'acme', ownerType: 'User', year: 2026, month: 10 })
+    expect((push.body as { items: unknown[] }).items).toEqual([expect.objectContaining({ product: 'actions', sku: 'Actions Linux', repositoryName: 'api' })])
+    expect(JSON.stringify(push.body)).not.toContain('gho_from_gh')
+    expect(JSON.parse(run.stdout)).toMatchObject({ owner: 'acme', netUsd: 0.6, pushed: { rows: 1 } })
+  })
+
+  it('refuses a bad month or owner before any call, and says how to sign in without a GitHub login', async () => {
+    vi.stubEnv('GITHUB_TOKEN', '')
+    const bad = await runCli(registerRunnerCommands, ['runner', 'bill', '--month', '10-2026'])
+    expect(bad.error?.message).toMatch(/2026-10/)
+    expect(bad.calls).toEqual([])
+    const owner = await runCli(registerRunnerCommands, ['runner', 'bill', '--owner', '-x'])
+    expect(owner.error?.message).toMatch(/GitHub user or organization/)
+    restore?.()
+    restore = __setRunnerDeps({ host: fakeHost(), gh: fakeGh({}).gh })
+    const none = await runCli(registerRunnerCommands, ['runner', 'bill'])
+    expect(none.error?.message).toMatch(/No GitHub login/)
+    expect(none.calls).toEqual([])
+  })
+})
+
 describe('mushi runner placement', () => {
   const REQ = '33333333-4444-4555-8666-777777777777'
 
@@ -174,6 +235,258 @@ describe('mushi runner placement', () => {
     expect(run.calls[0]!.path).toBe(`/v1/admin/ci/placement/requests/${REQ}/revert`)
     expect(run.calls[0]!.method).toBe('POST')
     expect(run.stdout).toContain(`Requested revert new-id of ${REQ}`)
+  })
+})
+
+describe('mushi runner fix', () => {
+  const JOB = '44444444-5555-4666-8777-888888888888'
+  const job = (over: Record<string, unknown> = {}) => ({
+    id: JOB,
+    repo: 'acme/api',
+    workflowPath: '.github/workflows/ci.yml',
+    kind: 'skip_drafts',
+    status: 'queued',
+    summary: null,
+    errorCode: null,
+    error: null,
+    prUrl: null,
+    prNumber: null,
+    monthSavingUsd: 3.5,
+    baseline: null,
+    measured: null,
+    saving: null,
+    mergedAt: null,
+    closedAt: null,
+    ...over,
+  })
+  const FIX = ['runner', 'fix', '--repo', 'acme/api', '--workflow', '.github/workflows/ci.yml', '--kind', 'skip_drafts']
+
+  it('POSTs the fix for the configured project and says how to follow it', async () => {
+    const run = await runCli(registerRunnerCommands, FIX, () => okReply({ job: job() }))
+    expect(run.calls).toHaveLength(1)
+    expect(run.calls[0]).toMatchObject({ method: 'POST', path: '/v1/admin/ci/cost-fixes' })
+    expect(run.calls[0]!.body).toEqual({ projectId: TEST_PROJECT_ID, repo: 'acme/api', workflowPath: '.github/workflows/ci.yml', kind: 'skip_drafts' })
+    expect(run.stdout).toContain('Opening a draft PR for acme/api/.github/workflows/ci.yml (skip_drafts)')
+    expect(run.stdout).toContain(`mushi runner fix-status ${JOB}`)
+    expect(run.stdout).toContain('Estimated saving: about $3.50 a month.')
+  })
+
+  it('--wait reads the job until the PR is open; --project picks another project', async () => {
+    const OTHER = '22222222-3333-4444-8555-666666666666'
+    const run = await runCli(registerRunnerCommands, [...FIX, '--wait', '--project', OTHER], (call) =>
+      call.method === 'POST'
+        ? okReply({ job: job() })
+        : okReply({ job: job({ status: 'pr_opened', prUrl: 'https://github.com/acme/api/pull/42', prNumber: 42, summary: 'The workflow now skips drafts.' }) }),
+    )
+    expect(run.calls.map((c) => `${c.method} ${c.path}`)).toEqual(['POST /v1/admin/ci/cost-fixes', `GET /v1/admin/ci/cost-fixes/${JOB}`])
+    expect(run.calls[0]!.body).toMatchObject({ projectId: OTHER })
+    expect(run.stdout).toContain('Draft PR for acme/api/.github/workflows/ci.yml (skip_drafts): https://github.com/acme/api/pull/42')
+    expect(run.stdout).toContain('Review it, mark it ready and merge it.')
+  })
+
+  it('refuses a bad repo, workflow path or kind before any call', async () => {
+    for (const argv of [
+      ['runner', 'fix', '--repo', 'acme', '--workflow', '.github/workflows/ci.yml', '--kind', 'skip_drafts'],
+      ['runner', 'fix', '--repo', 'acme/api', '--workflow', 'ci.yml', '--kind', 'skip_drafts'],
+      ['runner', 'fix', '--repo', 'acme/api', '--workflow', '.github/workflows/../x.yml', '--kind', 'skip_drafts'],
+      ['runner', 'fix', '--repo', 'acme/api', '--workflow', '.github/workflows/ci.yml', '--kind', 'rm_rf'],
+    ]) {
+      const bad = await runCli(registerRunnerCommands, argv)
+      expect(bad.calls).toEqual([])
+      expect(bad.error?.code).toBe('E_INVALID_INPUT')
+    }
+  })
+
+  it('shows the server\'s refusal, and fix-status shows the measured saving', async () => {
+    const refused = await runCli(registerRunnerCommands, FIX, () => errorReply(404, 'REPO_NOT_IN_PROJECT', 'acme/api is not connected to this project.'))
+    expect(refused.exitCode).toBe(1)
+    expect(refused.stderr).toContain('REPO_NOT_IN_PROJECT')
+
+    const status = await runCli(registerRunnerCommands, ['runner', 'fix-status', JOB], () =>
+      okReply({
+        job: job({
+          status: 'pr_opened',
+          prUrl: 'https://github.com/acme/api/pull/42',
+          mergedAt: '2026-10-20T00:00:00Z',
+          baseline: { days: 14, minutes: 280, usd: 1.68, jobs: 100 },
+          saving: { minutesPerDay: 12, usdPerMonth: 2.16, measuredDays: 3 },
+        }),
+      }),
+    )
+    expect(status.calls[0]!.path).toBe(`/v1/admin/ci/cost-fixes/${JOB}`)
+    expect(status.stdout).toContain('Before: about 280 billed minutes over 14 days')
+    expect(status.stdout).toContain('Saved 12 billed minutes a day (about $2.16 a month), measured over 3 days.')
+    expect(status.stdout).not.toContain('Review it')
+  })
+
+  it('fix-status without an id lists the configured project\'s fixes', async () => {
+    const run = await runCli(registerRunnerCommands, ['runner', 'fix-status'], () => okReply({ jobs: [job({ status: 'no_change', summary: 'The workflow already skips draft pull requests.' })] }))
+    expect(run.calls[0]!.path).toBe(`/v1/admin/ci/cost-fixes?project_id=${TEST_PROJECT_ID}`)
+    expect(run.stdout).toContain('Nothing to change in acme/api/.github/workflows/ci.yml (skip_drafts)')
+    expect(run.stdout).toContain(`job ${JOB}`)
+    const none = await runCli(registerRunnerCommands, ['runner', 'fix-status'], () => okReply({ jobs: [] }))
+    expect(none.stdout).toContain('No CI cost fixes yet.')
+  })
+
+  it('--json prints the job', async () => {
+    const run = await runCli(registerRunnerCommands, [...FIX, '--json'], () => okReply({ job: job({ status: 'refused', error: 'no schedule' }) }))
+    expect(JSON.parse(run.stdout)).toMatchObject({ id: JOB, status: 'refused' })
+  })
+})
+
+describe('mushi runner fix --all', () => {
+  const A = '11111111-2222-4333-8444-555555555555'
+  const B = '22222222-3333-4444-8555-666666666666'
+  const BUNDLE = '55555555-6666-4777-8888-999999999999'
+  const item = (repo: string, workflowPath: string, kind: string, monthSavingUsd: number | null, state = 'ready', prUrl: string | null = null) => ({
+    key: `${repo}:${workflowPath}:${kind}`,
+    projectId: repo === 'acme/web' ? B : A,
+    repo,
+    workflowPath,
+    kind,
+    title: kind,
+    monthSavingUsd,
+    state,
+    prUrl,
+  })
+  const preview = (over: Record<string, unknown> = {}) => ({
+    generatedAt: '2026-10-27T12:00:00Z',
+    repos: [
+      {
+        projectId: A,
+        projectName: 'Api',
+        repo: 'acme/api',
+        items: [
+          item('acme/api', '.github/workflows/nightly.yml', 'weekly_cron', 2.5),
+          item('acme/api', '.github/workflows/ci.yml', 'skip_drafts', null),
+          item('acme/api', '.github/workflows/ci.yml', 'add_concurrency', null, 'pr_open', 'https://github.com/acme/api/pull/3'),
+        ],
+        readyItems: 2,
+        monthSavingUsd: 2.5,
+        unpricedItems: 1,
+        block: null,
+      },
+      {
+        projectId: B,
+        projectName: 'Web',
+        repo: 'acme/web',
+        items: [item('acme/web', '.github/workflows/ci.yml', 'skip_drafts', 1)],
+        readyItems: 1,
+        monthSavingUsd: 1,
+        unpricedItems: 0,
+        block: { code: 'GITHUB_WORKFLOWS_WRITE_MISSING', message: 'The GitHub access Mushi uses cannot change workflow files in this repo.', source: 'setup_check' },
+      },
+    ],
+    totals: { repos: 2, readyItems: 3, monthSavingUsd: 3.5, unpricedItems: 1 },
+    caps: { reposPerRequest: 10, itemsPerRepo: 20 },
+    partial: null,
+    ...over,
+  })
+
+  it('previews by default: per repo, with the saving, open PRs and the workflow-access warning; sends nothing', async () => {
+    const run = await runCli(registerRunnerCommands, ['runner', 'fix', '--all'], () => okReply(preview()))
+    expect(run.calls.map((c) => `${c.method} ${c.path}`)).toEqual(['GET /v1/admin/ci/cost-fix-rollout'])
+    expect(run.stdout).toContain('3 fixes ready in 2 repos: about $3.50 a month (estimated), 1 not priced. Each repo gets one draft pull request.')
+    expect(run.stdout).toContain('acme/api (Api): 2 ready')
+    expect(run.stdout).toContain('.github/workflows/nightly.yml weekly_cron, $2.50/mo')
+    expect(run.stdout).toContain('.github/workflows/ci.yml skip_drafts, not priced')
+    expect(run.stdout).toContain('(PR open: https://github.com/acme/api/pull/3)')
+    expect(run.stdout).toContain('Warning: The GitHub access Mushi uses cannot change workflow files')
+    expect(run.stdout).toContain('mushi runner fix --all --apply')
+  })
+
+  it('--apply sends the ready items per repo, leaves out a repo Mushi knows will fail, and says so', async () => {
+    const run = await runCli(registerRunnerCommands, ['runner', 'fix', '--all', '--apply'], (call) =>
+      call.method === 'GET'
+        ? okReply(preview())
+        : okReply({ queued: 1, results: [{ projectId: A, repo: 'acme/api', status: 'queued', bundleId: BUNDLE, jobs: [{}, {}], skipped: [], error: null }] }),
+    )
+    expect(run.calls.map((c) => `${c.method} ${c.path}`)).toEqual(['GET /v1/admin/ci/cost-fix-rollout', 'POST /v1/admin/ci/cost-fix-rollout'])
+    expect(run.calls[1]!.body).toEqual({
+      repos: [{ projectId: A, repo: 'acme/api', items: [{ workflowPath: '.github/workflows/nightly.yml', kind: 'weekly_cron' }, { workflowPath: '.github/workflows/ci.yml', kind: 'skip_drafts' }] }],
+    })
+    expect(run.stdout).toContain(`acme/api: opening one draft PR with 2 fixes. Follow it with: mushi runner fix-status --bundle ${BUNDLE}`)
+    expect(run.stdout).toContain('Not sent this time:')
+    expect(run.stdout).toContain('acme/web: The GitHub access Mushi uses cannot change workflow files in this repo. (pass --include-blocked to try anyway)')
+  })
+
+  it('--include-blocked and --repo choose the repos; caps hold', async () => {
+    const run = await runCli(registerRunnerCommands, ['runner', 'fix', '--all', '--apply', '--include-blocked', '--repo', 'ACME/web'], (call) =>
+      call.method === 'GET' ? okReply(preview()) : okReply({ queued: 0, results: [{ projectId: B, repo: 'acme/web', status: 'error', bundleId: null, jobs: [], skipped: [], error: { code: 'RATE_LIMITED', message: 'Try this repo again later.' } }] }),
+    )
+    expect(run.calls[1]!.body).toEqual({ repos: [{ projectId: B, repo: 'acme/web', items: [{ workflowPath: '.github/workflows/ci.yml', kind: 'skip_drafts' }] }] })
+    expect(run.stdout).toContain('acme/web: Try this repo again later.')
+
+    const many = preview({
+      repos: Array.from({ length: 12 }, (_, n) => ({
+        projectId: A,
+        projectName: null,
+        repo: `acme/r${n}`,
+        items: Array.from({ length: 22 }, (_, i) => item(`acme/r${n}`, `.github/workflows/w${i}.yml`, 'skip_drafts', null)),
+        readyItems: 22,
+        monthSavingUsd: 0,
+        unpricedItems: 22,
+        block: null,
+      })),
+    })
+    const capped = await runCli(registerRunnerCommands, ['runner', 'fix', '--all', '--apply'], (call) => (call.method === 'GET' ? okReply(many) : okReply({ queued: 0, results: [] })))
+    const sent = capped.calls[1]!.body as { repos: Array<{ items: unknown[] }> }
+    expect(sent.repos).toHaveLength(10)
+    expect(sent.repos.every((r) => r.items.length === 20)).toBe(true)
+    expect(capped.stdout).toContain('acme/r10: at most 10 repos per request')
+    expect(capped.stdout).toContain('acme/r0: at most 20 fixes per repo; 2 wait for the next run')
+  })
+
+  it('--wait shows each bundle and still prints the items the server skipped in a queued repo', async () => {
+    const run = await runCli(registerRunnerCommands, ['runner', 'fix', '--all', '--apply', '--wait'], (call) => {
+      if (call.method === 'POST') {
+        return okReply({
+          queued: 1,
+          results: [{ projectId: A, repo: 'acme/api', status: 'queued', bundleId: BUNDLE, jobs: [{}], skipped: [{ workflowPath: '.github/workflows/ci.yml', kind: 'skip_drafts', code: 'PR_ALREADY_OPEN', message: 'Mushi already opened this fix.', prUrl: 'https://github.com/acme/api/pull/3' }], error: null }],
+        })
+      }
+      if (call.path.startsWith('/v1/admin/ci/cost-fix-bundles/')) {
+        return okReply({ bundle: { id: BUNDLE, repo: 'acme/api', status: 'pr_opened', prUrl: 'https://github.com/acme/api/pull/9', measuredUsdPerMonth: null, items: [] } })
+      }
+      return okReply(preview())
+    })
+    expect(run.stdout).toContain('acme/api: draft PR https://github.com/acme/api/pull/9.')
+    expect(run.stdout).toContain('.github/workflows/ci.yml skip_drafts: Mushi already opened this fix. https://github.com/acme/api/pull/3')
+  })
+
+  it('refuses mixed flags before any call', async () => {
+    for (const argv of [
+      ['runner', 'fix', '--all', '--kind', 'skip_drafts'],
+      ['runner', 'fix', '--all', '--preview', '--apply'],
+      ['runner', 'fix', '--apply'],
+      ['runner', 'fix', '--repo', 'acme/api'],
+    ]) {
+      const bad = await runCli(registerRunnerCommands, argv)
+      expect(bad.calls, argv.join(' ')).toEqual([])
+      expect(bad.error?.code).toBe('E_INVALID_INPUT')
+    }
+  })
+
+  it('fix-status --bundle shows the PR, each fix and its refusal', async () => {
+    const run = await runCli(registerRunnerCommands, ['runner', 'fix-status', '--bundle', BUNDLE], () =>
+      okReply({
+        bundle: {
+          id: BUNDLE,
+          repo: 'acme/api',
+          status: 'pr_opened',
+          prUrl: 'https://github.com/acme/api/pull/9',
+          measuredUsdPerMonth: null,
+          items: [
+            { workflowPath: '.github/workflows/ci.yml', kind: 'skip_drafts', status: 'pr_opened', summary: 'The workflow now skips drafts.', error: null },
+            { workflowPath: '.github/workflows/deploy.yml', kind: 'add_concurrency', status: 'refused', summary: null, error: 'This workflow looks like it deploys.' },
+          ],
+        },
+      }),
+    )
+    expect(run.calls[0]!.path).toBe(`/v1/admin/ci/cost-fix-bundles/${BUNDLE}`)
+    expect(run.stdout).toContain('acme/api: draft PR https://github.com/acme/api/pull/9.')
+    expect(run.stdout).toContain('.github/workflows/ci.yml skip_drafts: The workflow now skips drafts.')
+    expect(run.stdout).toContain('.github/workflows/deploy.yml add_concurrency: refused: This workflow looks like it deploys.')
   })
 })
 

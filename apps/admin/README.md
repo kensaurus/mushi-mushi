@@ -345,7 +345,7 @@ The sidebar (`src/components/Layout.tsx`) follows the order a builder works in (
 
 The sidebar is the same for every account (console audit 2026-10-20): nine pages in one flat list, then a **Labs** group with whatever the user switched on in Settings › Labs.
 
-- **Pages** — Home, Bugs, Fixes, Apps, Connect, Integrations, Checks, Team, Settings (`CORE_NAV_PATHS` in `navRegistry.ts`). "Checks" (`/checks`) is a launcher for every automatic check: Scheduled tests, App health, Full-stack audit, User stories, App blueprint, Design system, Content checks, Triage grading, Lessons, AI prompts.
+- **Pages** — Home, Bugs, Fixes, Apps, Connect, Integrations, Checks, Team, Settings (`CORE_NAV_PATHS` in `navRegistry.ts`). "Checks" (`/checks`) is a launcher for every automatic check: Scheduled tests, Mushi health, Full-stack audit, User stories, App blueprint, Design system, Content checks, Triage grading, Lessons, AI prompts.
 - **Labs** — per-feature opt-in (`src/lib/labs.ts`, `LAB_FEATURES`): To-do list, Bug clusters, Voice reports, Spam & abuse, Pull requests, Code map, UX runs, Improvement runs, Editor agents, Agent skills, AI prompts, Experiments, Research, Releases, Reporter updates, Plugins, Processing jobs, Tester rewards, SQL query. Stored in `localStorage:'mushi:labs'`. Every page stays reachable by URL and from ⌘K whether or not its Lab is on; a page reached that way shows a one-line "Add it in Settings › Labs" pointer in the sidebar.
 - **Footer** — "Set up · n/m" while required setup is incomplete, Help & support, privacy posture, density / theme / focus, the user card.
 
@@ -579,7 +579,7 @@ Async UX & reliability:
 
 **Rules:** never import raw `motion.*` without `useMotionTransition` / variant helpers; never spring `height: auto`; prefer explicit property lists over `transition-all` (baseline grep: 0 hits in `apps/admin/src` as of 2026-06).
 - `SettingsPage` tablist uses an absolutely-positioned underline that translates between active tabs in 200ms via `useLayoutEffect` measurement, instead of jumping per-button border styles — full a11y preserved (`role="tab"`, `aria-selected`, `aria-controls`, focus-visible ring)
-- Pre-setup dashboard gate: when any `setup.checklist` item is incomplete, `DashboardPage` renders only its `<NextStep variant="card">` + `HeroIntro` with a "Show full dashboard" reveal, so brand-new admins aren't drowned by 9 KPI tiles before they've even sent a test report
+- Pre-setup Home: while a required setup step is open, `DashboardPage` leads with the `SetupChecklist`, which marks the next step "Do this next" with its fix
 - **Layout-shaped skeletons** (`src/components/skeletons/`): `DashboardSkeleton`, `TableSkeleton`, `DetailSkeleton`, `PanelSkeleton`, **`GraphSkeleton`**, **`HealthSkeleton`**, **`OnboardingSkeleton`** — every page now first-paints into the shape it'll fill, not into a centered spinner
 - **Hero illustrations** (`src/components/illustrations/HeroIllustrations.tsx`,) — lightweight 64×64 SVG glyphs (`HeroBugFunnel`, `HeroFixWrench`, `HeroSearch`, `HeroPlugIntegration`) pinned to `currentColor` so they inherit theme. Used by `EmptyState` on Projects, Audit, Notifications, and Onboarding to give beginner-mode pages a visual anchor instead of a blank "no data yet" wall
 

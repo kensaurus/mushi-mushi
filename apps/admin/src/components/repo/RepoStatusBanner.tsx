@@ -6,6 +6,7 @@
 import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
+import { failingCiTitle } from '../../lib/countDefinitions'
 import type { RepoStats, RepoTabId } from './RepoStatsTypes'
 
 interface Props {
@@ -101,11 +102,7 @@ export function RepoStatusBanner({
     return (
       <StatusBannerShell
         tone="warn"
-        title={
-          plainBanner
-            ? `${stats.ciFailed} branch${stats.ciFailed === 1 ? '' : 'es'} failing CI`
-            : `${stats.ciFailed} branch${stats.ciFailed === 1 ? '' : 'es'} with failing CI`
-        }
+        title={failingCiTitle(stats.ciFailed)}
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (

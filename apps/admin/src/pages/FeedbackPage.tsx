@@ -323,8 +323,6 @@ export function FeedbackPage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'FEEDBACK SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
               />
             ),

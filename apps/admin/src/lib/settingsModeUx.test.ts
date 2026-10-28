@@ -24,7 +24,7 @@ describe('resolveQuickSettingsTab', () => {
     byokAnthropicConfigured: true,
   };
   const summary = (over: Partial<KeySummary>): KeySummary =>
-    ({ working: 1, attention: 0, expiring: 0, checking: 0, off: 0, total: 1, ...over });
+    ({ working: 1, attention: 0, replaced: 0, expiring: 0, checking: 0, off: 0, total: 1, ...over });
 
   it('opens AI keys when a key is failing (from the saved-keys list)', () => {
     expect(resolveQuickSettingsTab(ready, summary({ attention: 1 }), true, true)).toBe('byok');
@@ -45,6 +45,10 @@ describe('resolveQuickSettingsTab', () => {
 
   it('opens General for the optional alerts step', () => {
     expect(resolveQuickSettingsTab({ ...ready, slackConfigured: false }, summary({}), true, true)).toBe('general');
+  });
+
+  it('opens General when Slack is saved but cannot send', () => {
+    expect(resolveQuickSettingsTab({ ...ready, slackCanPost: false }, summary({}), true, true)).toBe('general');
   });
 
   it('skips the optional own-key step on a plan without own keys', () => {

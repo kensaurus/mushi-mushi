@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { isInboxStatusBannerCritical } from '../components/inbox/InboxStatusBanner'
 import { isComplianceStatusBannerCritical } from '../components/compliance/ComplianceStatusBanner'
-import { isStorageStatusBannerCritical } from '../components/storage/StorageStatusBanner'
 import { EMPTY_INBOX_STATS } from '../components/inbox/types'
 
 describe('isInboxStatusBannerCritical', () => {
@@ -41,42 +40,3 @@ describe('isComplianceStatusBannerCritical', () => {
     ).toBe(false)
   })
 })
-
-describe('isStorageStatusBannerCritical', () => {
-  it('returns true when active bucket is failing', () => {
-    expect(
-      isStorageStatusBannerCritical({
-        projectId: 'p1',
-        activeProjectHealthStatus: 'failing',
-        activeProjectConfigured: true,
-        lastHealthCheckAt: '2026-01-01',
-        failingCount: 1,
-      } as Parameters<typeof isStorageStatusBannerCritical>[0]),
-    ).toBe(true)
-  })
-
-  it('shows the cluster-default prompt (that branch used to be unreachable)', () => {
-    expect(
-      isStorageStatusBannerCritical({
-        projectId: 'p1',
-        activeProjectHealthStatus: 'unknown',
-        activeProjectConfigured: false,
-        lastHealthCheckAt: null,
-        failingCount: 0,
-      } as Parameters<typeof isStorageStatusBannerCritical>[0]),
-    ).toBe(true)
-  })
-
-  it('leaves a healthy bucket to the page hero', () => {
-    expect(
-      isStorageStatusBannerCritical({
-        projectId: 'p1',
-        activeProjectHealthStatus: 'healthy',
-        activeProjectConfigured: true,
-        lastHealthCheckAt: '2026-10-01',
-        failingCount: 0,
-      } as Parameters<typeof isStorageStatusBannerCritical>[0]),
-    ).toBe(false)
-  })
-})
-

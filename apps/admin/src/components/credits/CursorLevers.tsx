@@ -1,9 +1,9 @@
 /**
  * FILE: apps/admin/src/components/credits/CursorLevers.tsx
  * PURPOSE: /credits, Cursor half: each Cursor key's expiry and spend-down
- *          (ADR 0028) as one switch, and review follow-ups (ADR 0032) with
- *          the model each round uses. The forms with every field stay in
- *          Settings → AI keys; this is the on/off view.
+ *          (ADR 0028) as one switch, naming the model it runs on, and review
+ *          follow-ups (ADR 0032) with the model each round uses. The forms
+ *          with every field stay in Settings → AI keys; this is the on/off view.
  */
 
 import { Link } from 'react-router-dom'
@@ -23,7 +23,8 @@ interface Props {
   onChanged: () => void
 }
 
-function canChange(k: SpendDownKeyStatus, canManageOrg: boolean): boolean {
+/** Who may flip a key's spend-down: its owner (universal), an org admin (shared), anyone on the app (app key). */
+export function canChangeSpendDown(k: Pick<SpendDownKeyStatus, 'scope' | 'ownedByMe'>, canManageOrg: boolean): boolean {
   if (k.scope === 'universal') return k.ownedByMe === true
   if (k.scope === 'organization') return canManageOrg
   return true
@@ -65,8 +66,9 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
       <ul className="divide-y divide-edge-subtle">
         {keys.map((k) => {
           const line = spendDownLine(k)
+          const modelName = cursorModelLabel(k.model) ?? "each app's Cursor model"
           const expiry = expiryLabel(k.creditsExpireAt, now)
-          const editable = canChange(k, canManageOrg)
+          const editable = canChangeSpendDown(k, canManageOrg)
           return (
             <li key={k.id} className="space-y-1 py-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -88,7 +90,10 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
                   }
                 />
               </div>
-              <p className="text-xs text-fg-secondary">{line.text}</p>
+              <p className="text-xs text-fg-secondary">
+                {line.text} Runs on {modelName}.{' '}
+                <Link className="text-brand hover:underline" to="/settings?tab=byok">Change</Link>
+              </p>
               {!k.enabled && !k.creditsExpireAt && (
                 <p className="text-xs text-fg-muted">
                   Set the expiry date first in{' '}

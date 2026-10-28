@@ -3,17 +3,14 @@ title: Mushi Mushi — know why your AI-built app broke, with the fix ready
 description: "Your AI shipped it. Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional."
 ---
 
-import {
-  LANDING_HERO,
-  LANDING_MEDIA_INTRO,
-  LANDING_WHAT_THIS_IS,
-  LANDING_WHERE_TO_START_INTRO,
-  LANDING_QUICKSTART_INTRO,
-  LANDING_COMPARISON_ROWS,
-} from '@/lib/landing-copy'
+import { LANDING_HERO, LANDING_WHAT_THIS_IS } from '@/lib/landing-copy'
 
-{/* Native scroll + component-scoped Motion reveals (docs/MOTION.md).
-    No Lenis / ScrollTrigger — sticky nav, anchors, and nested code scroll stay intact. */}
+{/* One job (ADR 0052, owner 2026-10-27): a user says the app is broken,
+    Mushi says why and hands the AI the fix. One primary action (the install
+    box in the hero), one secondary link (the sample diagnosis), how it works,
+    proof, FAQ. Everything else lives on docs pages linked from "More".
+    Native scroll + component-scoped Motion reveals (docs/MOTION.md).
+    House rule: no block longer than about three short lines. */}
 
 <LandingJsonLd />
 
@@ -23,36 +20,17 @@ import {
   lead={LANDING_HERO.lead}
 />
 
-## The problem it solves
+<DiagnosisScrollStage />
 
-AI coding assistants let one person build and ship an app in days. Then a real
-user hits something broken: a button that does nothing, a page in the wrong
-language, a score that shows 0. Often nothing crashed, so error monitoring
-(services such as Sentry that record when code fails) never notices. The user
-gives up or sends a vague message, and the builder loses an afternoon trying to
-understand code they did not write themselves.
+## What it takes
 
-Mushi closes that gap. The user's report becomes a clear explanation and a fix
-your AI assistant can start from.
-
-<LandingInstallStrip />
-
-## A real example from our own sites
-
-This happened on the websites run by Kensaurus, the company behind Mushi.
-Mushi's site audit, an automatic weekly check of every page, found two problems
-that no error alert had caught:
-
-- an "Edit this page" link that led nowhere, and
-- Japanese text showing up on English pages.
-
-Nothing had crashed, so ordinary monitoring stayed quiet. Mushi filed each
-problem as a bug report. Within the hour, an AI coding agent in Cursor had
-written the fixes and opened them as pull requests: proposed code changes that
-wait for approval. A second AI, Claude Opus, reviewed each change and approved
-it before it was merged.
+- **No monitoring stack.** No Sentry, no logging service, no AI key of your own. Mushi's AI writes the diagnosis.
+- **Free to start.** 50 diagnoses a month with no card. Repeat reports of one bug count once.
+- **Your AI does the fix, you approve it.** Mushi hands Cursor, Claude Code or Lovable the prompt. Nothing ships until you say so.
 
 <OssTrustStrip />
+
+<PricingStrip />
 
 ## What this is (and is not)
 
@@ -64,86 +42,29 @@ Mushi Mushi is the bug mediator for AI-built apps, an open-source tool that give
 
 **Who it is for.** {LANDING_WHAT_THIS_IS.who} {LANDING_WHAT_THIS_IS.boundary}
 
-A few words you will see on this page:
+**Where it stands.** Live and free to try: hosted service, npm packages and public source. Built by Kensaurus 合同会社 in Japan. Native iOS, Android and Flutter libraries are previews.
 
-- **SDK**: the small piece of code you add to your app. It shows the report button and sends reports to Mushi.
+<details>
+<summary>Words you will see on this page</summary>
+
 - **Diagnosis**: Mushi's written explanation of one bug, with how serious it is, the likely cause and a suggested fix.
+- **Fix prompt**: the diagnosis plus the evidence, written as instructions you paste into your AI editor.
+- **SDK** or **script tag**: the small piece of code you add to your app. It shows the report button and sends reports to Mushi.
 - **MCP**: the standard way AI code editors such as Cursor and Claude Code connect to outside tools. It is how your editor reads Mushi's reports.
-- **Pull request (PR)**: a proposed change to your code that waits for you to approve and merge it.
-- **Self-host**: run Mushi on your own server instead of using the hosted service.
 
-## Where it stands today
-
-Mushi Mushi is live and free to try. The hosted service runs at
-kensaur.us/mushi-mushi, the libraries are published on npm, and the source code
-is public on GitHub. It is built by Kensaurus 合同会社, a small company in Japan,
-and runs on the company's own apps and sites. The native iOS, Android and
-Flutter libraries are still previews.
-
-## This is what a diagnosis looks like
-
-A user writes one or two sentences about what went wrong. Mushi reads them
-together with the screenshot and the technical log from their browser, and
-writes back a plain-English title, how serious it is, the likely cause and a
-suggested fix. Below is a real one.
-
-<ScrollReveal>
-  <RealDiagnosisCard />
-</ScrollReveal>
-
-<DiagnosisScrollStage />
-
-<ProofPinSection />
-
-## See it in action
-
-{LANDING_MEDIA_INTRO}
-
-<ScrollReveal>
-  <DocsMediaShowcase />
-</ScrollReveal>
-
-## Get started
-
-{LANDING_WHERE_TO_START_INTRO}
-
-<WhereToStartGrid />
-
-## Install it in your app
-
-{LANDING_QUICKSTART_INTRO}
-
-<QuickstartGrid />
-
-## Works with Sentry, or without it
-
-Sentry is a popular service that records errors when an app's code crashes.
-Many developers already use it, and Mushi does not ask you to give it up.
-
-Sentry is built around what the code threw, with a User Feedback widget and
-replay alongside. Mushi starts from what the user reported, ingests Sentry's
-errors too, explains each one in plain English, and hands your agent a fix
-prompt to start from. With or without Sentry.
-
-Sentry is one way in among several. Bugs come in from your users, your
-monitoring tools and even your voice; fixes and status updates go out to your
-editor, your AI coding agents, your task tracker and your team chat. Nothing has
-to be ripped out.
-
-<MediatorMap />
-
-<ComparisonScrub>
-  <ComparisonTable
-    foil="Sentry alone"
-    rows={LANDING_COMPARISON_ROWS}
-  />
-</ComparisonScrub>
-
-For the technical detail, see **[Concepts &rarr; Architecture](/concepts/architecture)**:
-the full sequence diagram and a component-by-component spec.
-
-<PricingStrip />
+</details>
 
 <LandingFaq />
+
+<div className="landing-more">
+
+More: [How a bug moves, step by step](/concepts/closed-loop) ·
+[Sentry, Linear, Slack and other tools](/plugins) ·
+[Compared with Sentry](/compare/sentry-vs-mushi) ·
+[More ways to install](/quickstart) ·
+[A tour of the console](/admin) ·
+[Self-host](/self-hosting)
+
+</div>
 
 <ClosingCta />

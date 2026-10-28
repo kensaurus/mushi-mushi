@@ -6,6 +6,7 @@
  *   POST   /v1/admin/merge-queue        { fixIds: string[] } queue fixes' PRs to merge when they can
  *   GET    /v1/admin/merge-queue        ?projectId= the queue (active rows, and merges of the last 24 h)
  *   DELETE /v1/admin/merge-queue/:id    take a PR out of the queue
+ *   PUT    /v1/admin/projects/:id/release-settings  { mode: 'train' | 'each', intervalMinutes?, maxMembers? } (ADR 0044)
  *
  * The worker is `merge-queue` (cron every 5 minutes, and right after a
  * queue). It merges only what the review gate lets a service caller merge:
@@ -147,7 +148,62 @@ export function registerMergeQueueRoutes(app: Hono<{ Variables: Variables }>): v
       .order('queued_at', { ascending: true })
       .limit(500);
     if (error) return dbError(c, error);
-    return c.json({ ok: true, data: { rows: data ?? [] } });
+    // Release trains (ADR 0044): the active ones and those of the last 24 h, and each app's cadence.
+    const [{ data: trains }, { data: settings }] = await Promise.all([
+      db
+        .from('release_trains')
+        .select('id, project_id, repo, pr_number, state, members, attempt, detail, created_at, updated_at, merged_at')
+        .in('project_id', projectIds)
+        .or(`state.in.(building,testing),updated_at.gte.${since}`)
+        .order('created_at', { ascending: false })
+        .limit(100),
+      db.from('project_settings').select('project_id, release_mode, train_interval_minutes, train_max_members').in('project_id', projectIds),
+    ]);
+    return c.json({
+      ok: true,
+      data: {
+        rows: data ?? [],
+        trains: ((trains ?? []) as Array<Record<string, unknown>>).map((t) => ({ ...t, members: Array.isArray(t.members) ? (t.members as Array<{ prNumber: number }>).map((m) => m.prNumber) : [] })),
+        release: ((settings ?? []) as Array<{ project_id: string; release_mode: string | null; train_interval_minutes: number | null; train_max_members: number | null }>).map((s) => ({
+          projectId: s.project_id,
+          mode: s.release_mode ?? 'train',
+          intervalMinutes: s.train_interval_minutes ?? 360,
+          maxMembers: s.train_max_members ?? 15,
+        })),
+      },
+    });
+  });
+
+  app.put('/v1/admin/projects/:id/release-settings', jwtAuth, async (c: Ctx) => {
+    const userId = c.get('userId') as string;
+    const projectId = c.req.param('id') ?? '';
+    if (!UUID_RE.test(projectId)) return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Not a project id.' } }, 400);
+    const db = getServiceClient();
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    const denied = denyViewerWrite(c, access.role, 'change how fixes are released');
+    if (denied) return denied;
+    const body = (await c.req.json().catch(() => ({}))) as { mode?: unknown; intervalMinutes?: unknown; maxMembers?: unknown };
+    const patch: Record<string, unknown> = {};
+    if (body.mode !== undefined) {
+      if (body.mode !== 'train' && body.mode !== 'each') return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'mode is train or each.' } }, 400);
+      patch.release_mode = body.mode;
+    }
+    if (body.intervalMinutes !== undefined) {
+      const n = Number(body.intervalMinutes);
+      if (!Number.isInteger(n) || n < 15 || n > 10080) return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'intervalMinutes is 15 to 10080.' } }, 400);
+      patch.train_interval_minutes = n;
+    }
+    if (body.maxMembers !== undefined) {
+      const n = Number(body.maxMembers);
+      if (!Number.isInteger(n) || n < 1 || n > 50) return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'maxMembers is 1 to 50.' } }, 400);
+      patch.train_max_members = n;
+    }
+    if (!Object.keys(patch).length) return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Nothing to change.' } }, 400);
+    const { error } = await db.from('project_settings').update(patch).eq('project_id', projectId);
+    if (error) return dbError(c, error);
+    await logAudit(db, projectId, userId, 'settings.updated', 'release_settings', undefined, patch).catch(() => {});
+    return c.json({ ok: true, data: { projectId, ...patch } });
   });
 
   app.delete('/v1/admin/merge-queue/:id', jwtAuth, async (c: Ctx) => {

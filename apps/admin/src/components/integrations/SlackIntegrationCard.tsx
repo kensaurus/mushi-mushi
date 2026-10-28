@@ -19,10 +19,37 @@ import { HealthSparkline } from './HealthSparkline'
 import type { HealthRow } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { ConnectionStatus } from '../ui/ConnectionStatus'
-import { connectionFromProbe, newestProbe, probeFromTestSend, type ProbeLike } from '../../lib/integrationConnection'
+import { newestProbe, probeFromTestSend, type ProbeLike } from '../../lib/integrationConnection'
+import { slackCardConnection } from './slackConnection'
 
-/** Slack is only verified by a test send, so a check stays good for 30 days. */
-const SLACK_VERIFIED_FRESH_MS = 30 * 24 * 60 * 60 * 1000
+
+/** Remembered for the tab's session so "Add to Slack" isn't offered again after it said no. */
+const INSTALL_UNAVAILABLE_KEY = 'mushi:slack-install-unavailable'
+
+/**
+ * @internal Exported for tests. True when the server has no Slack app to
+ * install (report 2d5e2bd7): "Add to Slack" can never work there, so the
+ * card offers the webhook instead of a dead button.
+ */
+export function isSlackInstallUnavailable(error: { code?: string } | null | undefined): boolean {
+  return error?.code === 'NOT_CONFIGURED'
+}
+
+function readInstallUnavailable(): boolean {
+  try {
+    return sessionStorage.getItem(INSTALL_UNAVAILABLE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function rememberInstallUnavailable(): void {
+  try {
+    sessionStorage.setItem(INSTALL_UNAVAILABLE_KEY, '1')
+  } catch {
+    // Storage blocked: the card still switches for this render.
+  }
+}
 
 interface Props {
   projectId: string | null
@@ -86,6 +113,8 @@ export function SlackIntegrationCard({
   // The channel just saved here, so the card reflects it before the page reloads.
   const [justSavedChannelId, setJustSavedChannelId] = useState<string | null>(null)
   const [localProbe, setLocalProbe] = useState<ProbeLike | undefined>(undefined)
+  const [installUnavailable, setInstallUnavailable] = useState(readInstallUnavailable)
+  const [webhookOpen, setWebhookOpen] = useState(installUnavailable && !slackConfigured)
   const channelId = justSavedChannelId ?? savedChannelId ?? null
   // Name from the same conversations.list the picker uses. Slack has no
   // stored name for the channel, and a raw "C0B82A322RW" means nothing.
@@ -135,6 +164,11 @@ export function SlackIntegrationCard({
       const res = await apiFetch<{ url: string }>('/v1/admin/integrations/slack/install')
       if (res.ok && res.data?.url) {
         window.location.href = res.data.url
+      } else if (isSlackInstallUnavailable(res.error)) {
+        rememberInstallUnavailable()
+        setInstallUnavailable(true)
+        setWebhookOpen(true)
+        setConnectingSlack(false)
       } else {
         const t = describeApiFailure(res.error, 'Could not start the Slack connection')
         toast.error(t.title, t.description)
@@ -245,22 +279,17 @@ export function SlackIntegrationCard({
     }
   }
 
-  const probed = connectionFromProbe({
-    configured: true,
+  const connection = slackCardConnection({
+    slackConfigured,
+    canPost,
+    channelId,
     probe: newestProbe(latestProbe, localProbe),
-    staleAfterMs: SLACK_VERIFIED_FRESH_MS,
+    installUnavailable,
   })
-  const connection = !slackConfigured
-    ? { state: 'not_connected' as const, detail: 'Add Mushi to a Slack workspace to get alerts.' }
-    : !canPost && !channelId
-      ? { state: 'attention' as const, detail: 'Pick a channel below so Mushi knows where to post.' }
-      : !canPost
-        ? { state: 'attention' as const, detail: 'No Slack bot can post to this channel yet.' }
-        : probed.state === 'checking'
-          ? { state: 'checking' as const, detail: 'Connected, but no test message sent yet.' }
-          : probed
   const connectionAction =
-    connection.state === 'not_connected' || (connection.state === 'attention' && channelId && !canPost)
+    installUnavailable && !slackConfigured
+      ? { label: 'Use a webhook URL', onClick: () => setWebhookOpen(true) }
+      : connection.state === 'not_connected' || (connection.state === 'attention' && channelId && !canPost)
       ? { label: 'Add to Slack', onClick: () => void handleAddToSlack() }
       : connection.state === 'checking' || (connection.state === 'attention' && canPost)
         ? { label: 'Send test', onClick: () => void handleTest() }
@@ -313,7 +342,7 @@ export function SlackIntegrationCard({
               {testingSlack ? 'Sending…' : 'Send test'}
             </Btn>
           )}
-          {connectionAction?.label !== 'Add to Slack' && (
+          {connectionAction?.label !== 'Add to Slack' && !installUnavailable && (
           <Btn
             type="button"
             variant={slackConfigured ? 'ghost' : 'accent'}
@@ -333,7 +362,7 @@ export function SlackIntegrationCard({
         </div>
       </div>
 
-      <div title={probed.raw && probed.raw !== connection.detail ? probed.raw : undefined}>
+      <div title={connection.raw && connection.raw !== connection.detail ? connection.raw : undefined}>
         <ConnectionStatus
           state={testingSlack ? 'checking' : connection.state}
           label={testingSlack ? 'Sending a test…' : undefined}
@@ -466,10 +495,15 @@ export function SlackIntegrationCard({
       )}
 
       {/* Legacy webhook fallback */}
-      <details className="group">
+      <details
+        className="group"
+        open={webhookOpen}
+        onToggle={(e) => setWebhookOpen((e.currentTarget as HTMLDetailsElement).open)}
+        data-testid="slack-webhook-option"
+      >
         <summary className="cursor-pointer text-xs text-fg-tertiary hover:text-fg-secondary transition-opacity list-none flex items-center gap-1">
           <span className="group-open:rotate-90 transition-transform inline-block">›</span>
-          Use incoming webhook URL instead (legacy)
+          {installUnavailable ? 'Incoming webhook URL' : 'Use incoming webhook URL instead (legacy)'}
         </summary>
         <div className="mt-3 flex gap-2 items-end">
           <div className="flex-1 min-w-0">
@@ -495,7 +529,9 @@ export function SlackIntegrationCard({
           </Btn>
         </div>
         <p className="mt-2 text-xs text-fg-tertiary">
-          Webhook URL sends to a fixed channel; it cannot be changed per-project or thread replies. Use "Add to Slack" for the full experience.
+          {installUnavailable
+            ? 'In Slack, create an incoming webhook for the channel you want, then paste its URL here. New bugs post to that channel.'
+            : 'Webhook URL sends to a fixed channel; it cannot be changed per-project or thread replies. Use "Add to Slack" for the full experience.'}
         </p>
       </details>
     </div>

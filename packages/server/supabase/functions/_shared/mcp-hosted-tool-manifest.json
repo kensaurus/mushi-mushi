@@ -238,7 +238,8 @@
     "description": "Recent QA story runs.",
     "method": "GET",
     "path": "/v1/admin/projects/{projectId}/qa-stories/{storyId}/runs?limit={limit|10}",
-    "required": ["storyId"]
+    "required": ["storyId"],
+    "requiresProject": true
   },
   "get_qa_story_run": {
     "scope": "mcp:read",
@@ -246,7 +247,8 @@
     "method": "GET",
     "path": "/v1/admin/projects/{projectId}/qa-stories/{storyId}/runs?limit=50",
     "required": ["storyId", "runId"],
-    "transform": "qa_run_pick"
+    "transform": "qa_run_pick",
+    "requiresProject": true
   },
   "test_notification_channel": {
     "scope": "mcp:write",
@@ -479,6 +481,28 @@
     "description": "What CI costs and how fast it runs, per repo: GitHub-hosted vs your own machines, included minutes, speed factors, what-ifs and advice (estimated).",
     "method": "GET",
     "path": "/v1/admin/ci/compare?project_id={projectId}&days={days|30}",
+    "hints": { "destructive": false, "idempotent": true }
+  },
+  "get_ci_bill": {
+    "scope": "mcp:read",
+    "description": "What GitHub actually charged for Actions (measured from GitHub's bill): net, gross and discount per repo, SKU and day, this month, the change, and the agent PR share.",
+    "method": "GET",
+    "path": "/v1/admin/ci/bill?project_id={projectId}&days={days|30}",
+    "hints": { "destructive": false, "idempotent": true }
+  },
+  "preview_ci_cost_fix_rollout": {
+    "scope": "mcp:read",
+    "description": "Every CI cost fix Mushi can open across the apps you may change, grouped per repo with the estimated saving; one draft PR per repo.",
+    "method": "GET",
+    "path": "/v1/admin/ci/cost-fix-rollout?project_id={projectId}",
+    "hints": { "destructive": false, "idempotent": true }
+  },
+  "get_ci_cost_fix_bundle": {
+    "scope": "mcp:read",
+    "description": "One CI cost fix bundle: its draft PR, each fix's state or refusal, and the saving measured after the merge.",
+    "method": "GET",
+    "path": "/v1/admin/ci/cost-fix-bundles/{bundleId}",
+    "required": ["bundleId"],
     "hints": { "destructive": false, "idempotent": true }
   },
   "get_fix_verification": {

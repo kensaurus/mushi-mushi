@@ -14,14 +14,93 @@ import {
   dashboardNavBadge,
   mcpNavBadge,
   costsNavBadge,
+  settingsNavBadge,
   doSectionAttention,
   startSectionAttention,
   planSectionAttention,
   actSectionAttention,
   workspaceSlicesAttention,
   usersNavBadge,
+  integrationsNavBadge,
 } from './extendedNavMeta'
-import { EMPTY_NAV_STAT_SLICES } from './extendedNavMeta'
+import { EMPTY_NAV_STAT_SLICES, type NavStatSlices } from './extendedNavMeta'
+
+describe('integrationsNavBadge', () => {
+  it('uses the banner attention count, not how many integrations are saved', () => {
+    const badge = integrationsNavBadge({
+      platformDown: 0,
+      platformConnected: 3,
+      platformTotal: 3,
+      routingPaused: 0,
+      platformAttention: 2,
+    })
+    expect(badge?.mode).toBe('attention')
+    expect(badge?.count).toBe(2)
+  })
+
+  it('a failing connection still outranks attention', () => {
+    const badge = integrationsNavBadge({
+      platformDown: 1,
+      platformConnected: 3,
+      platformTotal: 3,
+      routingPaused: 0,
+      platformAttention: 2,
+    })
+    expect(badge?.count).toBe(1)
+    expect(badge?.tone).toBe('danger')
+  })
+
+  it('shows connected inventory when nothing needs attention', () => {
+    const badge = integrationsNavBadge({
+      platformDown: 0,
+      platformConnected: 3,
+      platformTotal: 3,
+      routingPaused: 0,
+      platformAttention: 0,
+    })
+    expect(badge?.mode).toBe('inventory')
+    expect(badge?.count).toBe(3)
+  })
+
+  it('uses the attention count when platform integrations are not all configured', () => {
+    // Nothing saved: the not-configured count is 3. The banner's number is
+    // platformAttention, and that is the badge.
+    const noneSaved = integrationsNavBadge({
+      platformDown: 0,
+      platformConnected: 0,
+      platformTotal: 3,
+      routingPaused: 0,
+      platformAttention: 2,
+    })
+    expect(noneSaved?.mode).toBe('attention')
+    expect(noneSaved?.count).toBe(2)
+    expect(noneSaved?.label).toBe('2 connections need attention')
+
+    // Some saved, some not (platformConnected < platformTotal): still attention,
+    // not (platformTotal - platformConnected).
+    const partlySaved = integrationsNavBadge({
+      platformDown: 0,
+      platformConnected: 1,
+      platformTotal: 3,
+      routingPaused: 0,
+      platformAttention: 2,
+    })
+    expect(partlySaved?.count).toBe(2)
+    expect(partlySaved?.label).toBe('2 connections need attention')
+  })
+
+  it('shows the not-configured count only when nothing needs attention', () => {
+    const badge = integrationsNavBadge({
+      platformDown: 0,
+      platformConnected: 0,
+      platformTotal: 3,
+      routingPaused: 0,
+      platformAttention: 0,
+    })
+    expect(badge?.count).toBe(3)
+    expect(badge?.label).toMatch(/not configured/)
+  })
+})
 
 describe('qaCoverageNavBadge', () => {
   it('prioritizes failing stories over inventory', () => {
@@ -237,6 +316,44 @@ describe('costsNavBadge', () => {
     })
     expect(badge?.mode).toBe('attention')
     expect(badge?.tone).toBe('warn')
+  })
+})
+
+describe('settingsNavBadge', () => {
+  const slice = (over: Partial<NavStatSlices['settings']> = {}) => ({
+    byokKeysFailing: 0,
+    byokKeysUntested: 0,
+    byokKeysConfigured: 5,
+    slackConfigured: true,
+    githubRepoConfigured: true,
+    ...over,
+  })
+
+  // The page banner says "everything that is set up is working"; a sidebar
+  // number next to it was read as five problems to fix.
+  it('shows nothing when every saved key is healthy', () => {
+    expect(settingsNavBadge(slice())).toBeNull()
+  })
+
+  it('asks for attention when a key expires soon, like the Settings banner', () => {
+    const badge = settingsNavBadge(slice({ byokKeysExpiring: 1 }))
+    expect(badge?.mode).toBe('attention')
+    expect(badge?.tone).toBe('warn')
+    expect(badge?.count).toBe(1)
+    expect(badge?.label).toBe('1 BYOK key expiring soon')
+  })
+
+  it('still badges keys that need attention', () => {
+    expect(settingsNavBadge(slice({ byokKeysFailing: 2 }))).toMatchObject({
+      mode: 'attention',
+      tone: 'danger',
+      count: 2,
+    })
+    expect(settingsNavBadge(slice({ byokKeysUntested: 1 }))).toMatchObject({
+      mode: 'attention',
+      tone: 'warn',
+      count: 1,
+    })
   })
 })
 

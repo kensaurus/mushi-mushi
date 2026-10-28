@@ -1,22 +1,35 @@
 ---
 title: Checks
-description: The Checks page lists every automatic check on this app. Each card opens that check, with the same live count the sidebar shows.
+description: The Checks page shows every automatic check on this app with its state, when it last ran and its open count, failing checks first.
 ---
 
 # Checks
 
 **Route:** `/checks`
 
-Every automatic check on this app, in one place. This page is a launcher: open a card to see that check's findings. A chip on the card is the sidebar's live count or status for it. A Pro pill means the check needs a plan upgrade.
+Is my app OK, and which check is red? Every automatic check on this app, in one grid, failing checks first. A sentence at the top names the checks that need you, with one button to open the first.
 
-## App checks
+Each card has a dot and a state:
 
-Is the app itself sound: scheduled tests, user stories, audits, its blueprint, app health, design tokens and content.
+| Dot | State | Meaning |
+| --- | --- | --- |
+| Red | Failed | The last run failed or could not finish. |
+| Amber | N findings | The check ran and found something to fix. |
+| Green | Pass | A finished run was read and found nothing. Shown with when it last ran. |
+| Grey | Not run yet, Not set up, Status unavailable | Never a pass. Not set up comes with a Set up link. |
+
+A Pro pill means the check needs a plan upgrade. AI prompts and CI runners are Labs: their cards appear once you keep them in the sidebar in Settings → Display & sidebar. While you are on Checks or one of its pages, the sidebar lists every check under Checks.
+
+## The checks
+
+### App checks
+
+Is the app itself sound: scheduled tests, user stories, audits, its blueprint, design tokens and content, plus Mushi’s own health.
 
 | Card | Route | What it covers |
 | --- | --- | --- |
 | [Scheduled tests](/admin/qa-coverage) | `/qa-coverage` | Browser tests of your user stories that run on a schedule and alert when one breaks. |
-| [App health](/admin/health) | `/health` | Whether your integrations and background jobs are working: uptime, errors and failed checks. |
+| [Mushi health](/admin/health) | `/health` | Is Mushi itself working: its AI calls and background jobs. Also your code size, schema changes and unusual spikes. |
 | [CI runners](/admin/ci) | `/ci` | Where your tests run, how long they wait for a machine, and what slows your fixes down. |
 | [Full-stack audit](/admin/fullstack-audit) | `/fullstack-audit` | An end-to-end audit across the frontend, the API and the database. |
 | [User stories](/admin/inventory) | `/inventory` | The things users can do in your app, found by crawling it, and which ones broke. |
@@ -24,7 +37,7 @@ Is the app itself sound: scheduled tests, user stories, audits, its blueprint, a
 | Design system | `/design` | Design tokens, contrast pairs, type scale and off-token code. Token and rule edits open a draft pull request. |
 | [Content checks](/admin/content) | `/content` | AI-generated and user-submitted content flagged as wrong or low quality. |
 
-## AI quality
+### AI quality
 
 How good the AI's triage is: grading, lessons learned and the prompts behind it.
 

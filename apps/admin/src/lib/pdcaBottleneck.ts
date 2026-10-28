@@ -6,6 +6,7 @@
 
 import type { PdcaStageId } from './pdca'
 import { CHIP_TONE } from './chipTone'
+import { stoppedTitle } from './countDefinitions'
 
 export const PDCA_BOTTLENECK_TONE: Record<PdcaStageId, string> = {
   plan: CHIP_TONE.infoSubtle,
@@ -50,7 +51,7 @@ export function bottleneckHumanHeadline(ctx: BottleneckContext): string {
   switch (ctx.stage) {
     case 'do':
       if (isStoppedFixLabel(ctx.label)) {
-        return `Auto-fix stopped on ${count} report${count === 1 ? '' : 's'}`
+        return stoppedTitle(count)
       }
       if (ctx.label?.includes('in flight')) {
         return `${count} fix${count === 1 ? '' : 'es'} running now`
@@ -95,29 +96,6 @@ export function bottleneckHumanHint(ctx: BottleneckContext): string {
       return 'A PR or integration step is blocking the ship loop.'
     default:
       return ctx.label ?? 'Open the linked page to clear this bottleneck.'
-  }
-}
-
-/** Compact label for header/switcher chips (human, not P/D/C/A). */
-export function bottleneckChipLabel(ctx: BottleneckContext): string {
-  const count = ctx.count ?? parseCountFromLabel(ctx.label) ?? 1
-  switch (ctx.stage) {
-    case 'do':
-      if (isStoppedFixLabel(ctx.label)) {
-        return count === 1 ? '1 fix stopped' : `${count} fixes stopped`
-      }
-      if (ctx.label?.includes('in flight')) {
-        return count === 1 ? '1 fixing' : `${count} fixing`
-      }
-      return 'Fix queue'
-    case 'plan':
-      return count === 1 ? '1 to triage' : `${count} to triage`
-    case 'check':
-      return count === 1 ? '1 disagree' : `${count} disagree`
-    case 'act':
-      return 'Ship blocked'
-    default:
-      return 'Needs action'
   }
 }
 
