@@ -100,7 +100,9 @@ export const BUDGETS = [
   // 2026-10-28: 965 → 975 kB unpacked: the bundled docs index (search_mushi_docs)
   // now carries the Free/Builder/Studio pricing and Production Check pages.
   { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 250_000, unpacked: 975_000 },
-  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 262_000, unpacked: 990_000 },
+  // 2026-10-28: packed 262 → 270 kB: release 5's version bump adds its CHANGELOG
+  // entries (the changelog ships in the tarball), measured 265.4 kB packed.
+  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 270_000, unpacked: 990_000 },
 ]
 
 const fmt = (n) => `${(n / 1000).toFixed(1)} kB`
