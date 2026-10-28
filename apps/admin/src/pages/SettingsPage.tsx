@@ -15,10 +15,10 @@
  *          so the banner can never say "all good" while a row says otherwise.
  */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout';
-import { Card, PageScopeHint, SegmentedControl, StatCard, ErrorAlert } from '../components/ui';
+import { Btn, Card, PageScopeHint, SegmentedControl, StatCard, ErrorAlert } from '../components/ui';
 import { PageHeaderBar } from '../components/PageHeaderBar';
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture';
 import { GeneralPanel } from '../components/settings/GeneralPanel';
@@ -85,6 +85,13 @@ import { useRealtimeReload } from '../lib/realtime';
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton';
 import { IconSettings } from '../components/icons';
 
+/** Sections behind the General tab's "Fixes and CI" toggle that links point at. */
+const FIXES_AND_CI_ANCHORS: readonly string[] = [
+  SETTINGS_SECTION_IDS.verifiedMerge,
+  SETTINGS_SECTION_IDS.ciCost,
+  SETTINGS_SECTION_IDS.ciPolicy,
+];
+
 export function SettingsPage() {
   const entitlements = useEntitlements();
   const byokEnabled = !entitlements.loading && entitlements.has('byok');
@@ -108,6 +115,15 @@ function SettingsPageBody({
   const copy = usePageCopy('/settings');
   const ux = useSettingsUx();
   const activeProjectId = useActiveProjectId();
+  // Pull request review, verified merge, CI cost and CI policy are four long
+  // cards most people never change; on a ~2,600-word General tab they wait
+  // behind one toggle, and open by themselves when a link points at one of
+  // them (integrator's new-user walk, 2026-10-28).
+  const fixesAndCiLinked = FIXES_AND_CI_ANCHORS.includes(location.hash.slice(1));
+  const [showFixesAndCi, setShowFixesAndCi] = useState(fixesAndCiLinked);
+  useEffect(() => {
+    if (fixesAndCiLinked) setShowFixesAndCi(true);
+  }, [fixesAndCiLinked, location.key]);
   const [focusMode, setFocusMode] = useFocusMode();
   const setup = useSetupStatus(activeProjectId);
   const projectName = setup.activeProject?.project_name ?? null;
@@ -330,10 +346,27 @@ function SettingsPageBody({
             {generalLoaded && (
               <>
                 <SpendLimitsPanel />
-                <AgentPrReviewCard projectId={activeProjectId} />
-                <VerifiedMergeCard projectId={activeProjectId} />
-                <CiCostSettingsCard projectId={activeProjectId} />
-                <CiPolicyCard projectId={activeProjectId} />
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-edge-subtle px-4 py-3">
+                  <p className="min-w-0 text-sm text-fg-secondary">
+                    Fixes and CI: pull request review, verified merge, CI cost and CI policy.
+                  </p>
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    aria-expanded={showFixesAndCi}
+                    onClick={() => setShowFixesAndCi(!showFixesAndCi)}
+                  >
+                    {showFixesAndCi ? 'Hide' : 'Show'}
+                  </Btn>
+                </div>
+                {showFixesAndCi && (
+                  <>
+                    <AgentPrReviewCard projectId={activeProjectId} />
+                    <VerifiedMergeCard projectId={activeProjectId} />
+                    <CiCostSettingsCard projectId={activeProjectId} />
+                    <CiPolicyCard projectId={activeProjectId} />
+                  </>
+                )}
               </>
             )}
           </>

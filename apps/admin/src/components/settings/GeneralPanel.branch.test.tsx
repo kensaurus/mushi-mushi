@@ -149,4 +149,19 @@ describe('GeneralPanel with a legacy branch pattern', () => {
     })
     expect(buttonByText('Save changes').disabled).toBe(true)
   })
+
+  // The four model pickers were about 340 of the tab's ~2,600 words
+  // (integrator's new-user walk, 2026-10-28). One row stands in for them.
+  it('keeps the four model pickers behind one row until asked', async () => {
+    localStorage.clear()
+    await render()
+    const headings = () => Array.from(container.querySelectorAll('h3')).map((h) => h.textContent?.trim())
+    expect(headings()).toContain('AI models')
+    expect(headings()).not.toContain('Triage model')
+    await act(async () => {
+      buttonByText('Change models').click()
+      await flush()
+    })
+    expect(headings()).toEqual(expect.arrayContaining(['Triage model', 'Quick check model', 'Judge model', 'Fix model']))
+  })
 })

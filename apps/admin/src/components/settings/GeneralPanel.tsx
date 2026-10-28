@@ -125,6 +125,14 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
     false,
     { projectId: getActiveProjectIdSnapshot(), validate: (v): v is boolean => typeof v === 'boolean' },
   )
+  // The four model pickers were about 340 words a new user scrolled past on
+  // a ~2,600-word tab; the defaults work, so they wait behind one row
+  // (integrator's new-user walk, 2026-10-28).
+  const [showModels, setShowModels] = usePersistentState(
+    'settings:general:models-open',
+    false,
+    { projectId: getActiveProjectIdSnapshot(), validate: (v): v is boolean => typeof v === 'boolean' },
+  )
 
   // Masked secrets start empty in the form; their `_set` flags say whether one is stored.
   const saved: ProjectSettings = useMemo(() => settingsFormBase(data), [data])
@@ -405,63 +413,77 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
       <SettingsList title="Bug sorting" description="How the AI scores, groups and fixes incoming bugs.">
         <SettingsRow
           icon={<IconJudge size={16} />}
-          title="Triage model"
-          purpose="The AI model that decides each bug's severity and category."
-        >
-          <ClaudeModelSelect
-            role="diagnosis"
-            helpId="settings.general.stage2_model"
-            value={settings.stage2_model}
-            onChange={(id) => update({ stage2_model: id })}
-            extraOptions={
-              <optgroup label="OpenAI fallback">
-                <option value="gpt-5.4">GPT-5.4</option>
-                <option value="gpt-5.4-mini">GPT-5.4-mini</option>
-                <option value="gpt-4.1">GPT-4.1 (legacy)</option>
-              </optgroup>
-            }
-          />
-          <SettingsChangeHint current={eff(settings.stage2_model, 'diagnosis')} saved={eff(saved.stage2_model, 'diagnosis')} />
-        </SettingsRow>
-        <SettingsRow
-          icon={<IconCost size={16} />}
-          title="Quick check model"
-          purpose="The fast first pass that sorts easy bugs and filters noise before the triage model."
-        >
-          <ClaudeModelSelect
-            role="quick_check"
-            helpId="settings.general.stage1_model"
-            value={settings.stage1_model}
-            onChange={(id) => update({ stage1_model: id })}
-          />
-          <SettingsChangeHint current={eff(settings.stage1_model, 'quick_check')} saved={eff(saved.stage1_model, 'quick_check')} />
-        </SettingsRow>
-        <SettingsRow
-          icon={<IconJudge size={16} />}
-          title="Judge model"
-          purpose="The model that double-checks a sample of triage results on the Judge page."
-        >
-          <ClaudeModelSelect
-            role="judge"
-            helpId="settings.general.judge_model"
-            value={settings.judge_model}
-            onChange={(id) => update({ judge_model: id })}
-          />
-          <SettingsChangeHint current={eff(settings.judge_model, 'judge')} saved={eff(saved.judge_model, 'judge')} />
-        </SettingsRow>
-        <SettingsRow
-          icon={<IconGit size={16} />}
-          title="Fix model"
-          purpose="The model Mushi's own fix agent writes fixes with. Fixes cost the most of any AI call."
-        >
-          <ClaudeModelSelect
-            role="fix"
-            helpId="settings.general.fix_model"
-            value={settings.claude_default_model}
-            onChange={(id) => update({ claude_default_model: id })}
-          />
-          <SettingsChangeHint current={eff(settings.claude_default_model, 'fix')} saved={eff(saved.claude_default_model, 'fix')} />
-        </SettingsRow>
+          title="AI models"
+          purpose="Mushi picks a model for each job. Change one only to trade cost for quality."
+          action={
+            <Btn size="sm" variant="ghost" aria-expanded={showModels} onClick={() => setShowModels(!showModels)}>
+              {showModels ? 'Hide models' : 'Change models'}
+            </Btn>
+          }
+        />
+        {showModels ? (
+          <>
+            <SettingsRow
+              icon={<IconJudge size={16} />}
+              title="Triage model"
+              purpose="The AI model that decides each bug's severity and category."
+            >
+              <ClaudeModelSelect
+                role="diagnosis"
+                helpId="settings.general.stage2_model"
+                value={settings.stage2_model}
+                onChange={(id) => update({ stage2_model: id })}
+                extraOptions={
+                  <optgroup label="OpenAI fallback">
+                    <option value="gpt-5.4">GPT-5.4</option>
+                    <option value="gpt-5.4-mini">GPT-5.4-mini</option>
+                    <option value="gpt-4.1">GPT-4.1 (legacy)</option>
+                  </optgroup>
+                }
+              />
+              <SettingsChangeHint current={eff(settings.stage2_model, 'diagnosis')} saved={eff(saved.stage2_model, 'diagnosis')} />
+            </SettingsRow>
+            <SettingsRow
+              icon={<IconCost size={16} />}
+              title="Quick check model"
+              purpose="The fast first pass that sorts easy bugs and filters noise before the triage model."
+            >
+              <ClaudeModelSelect
+                role="quick_check"
+                helpId="settings.general.stage1_model"
+                value={settings.stage1_model}
+                onChange={(id) => update({ stage1_model: id })}
+              />
+              <SettingsChangeHint current={eff(settings.stage1_model, 'quick_check')} saved={eff(saved.stage1_model, 'quick_check')} />
+            </SettingsRow>
+            <SettingsRow
+              icon={<IconJudge size={16} />}
+              title="Judge model"
+              purpose="The model that double-checks a sample of triage results on the Judge page."
+            >
+              <ClaudeModelSelect
+                role="judge"
+                helpId="settings.general.judge_model"
+                value={settings.judge_model}
+                onChange={(id) => update({ judge_model: id })}
+              />
+              <SettingsChangeHint current={eff(settings.judge_model, 'judge')} saved={eff(saved.judge_model, 'judge')} />
+            </SettingsRow>
+            <SettingsRow
+              icon={<IconGit size={16} />}
+              title="Fix model"
+              purpose="The model Mushi's own fix agent writes fixes with. Fixes cost the most of any AI call."
+            >
+              <ClaudeModelSelect
+                role="fix"
+                helpId="settings.general.fix_model"
+                value={settings.claude_default_model}
+                onChange={(id) => update({ claude_default_model: id })}
+              />
+              <SettingsChangeHint current={eff(settings.claude_default_model, 'fix')} saved={eff(saved.claude_default_model, 'fix')} />
+            </SettingsRow>
+          </>
+        ) : null}
         <SettingsRow
           icon={<IconGauge size={16} />}
           title="Quick check confidence"
