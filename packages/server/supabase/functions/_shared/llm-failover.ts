@@ -22,6 +22,7 @@
  *   })
  */
 
+import { isQuotaMessage } from './llm-quota.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { isClaudeRefusal } from './claude-request.ts';
 import {
@@ -99,21 +100,9 @@ export function classifyLlmError(err: unknown): 'quota' | 'auth' | 'transient' |
   const msg = String(err).toLowerCase();
 
   // HTTP status codes in the error message (Vercel AI SDK wraps them)
-  if (msg.includes('429') || msg.includes('rate limit') || msg.includes('quota')) {
-    return 'quota';
-  }
-  // Anthropic answers a spent key with a 400 invalid_request_error, not a 429:
-  // "You have reached your specified API usage limits. You will regain access
-  // on …" or "Your credit balance is too low to access the Anthropic API". As
-  // 'other' it never failed over, so triage and reviews stopped for days
-  // (MUSHI-MUSHI-SERVER-3C/3D, 2026-10-28) while an OpenAI key sat unused.
-  if (
-    msg.includes('api usage limits') ||
-    msg.includes('usage limit') ||
-    msg.includes('credit balance is too low') ||
-    msg.includes('insufficient_quota') ||
-    msg.includes('billing_hard_limit')
-  ) {
+  // 429s, rate limits, and a spent Anthropic key (a 400 "usage limits", not a
+  // 429; as 'other' it never failed over, MUSHI-MUSHI-SERVER-3C/3D 2026-10-28).
+  if (isQuotaMessage(msg)) {
     return 'quota';
   }
   // Anthropic returns "invalid x-api-key" (note the hyphenated header name) —
