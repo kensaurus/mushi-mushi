@@ -54,11 +54,14 @@ export function ReportsFileIssue({ projectId, projectName, onClose, onFiled }: P
   const [error, setError] = useState<string | null>(null)
   const [filed, setFiled] = useState<Filed[]>([])
   const lanes = usePageData<WorkLanesData>(LANES_PATH)
-  // Fix lanes for this app on the caller's own machines: the server queues only
-  // onto a machine you own (a lane runs code there), and follow-up, conflict
-  // and audit lanes take no filed report.
+  // This app's fix lanes; follow-up, conflict and audit lanes take no filed report.
+  // Filing queues straight onto a lane only on a machine you own; any other
+  // lane gets the report through the lane queue (PUT …/queue), which the
+  // Workers page already lets a team editor change.
   const myHosts = new Set((lanes.data?.hosts ?? []).filter((h) => h.mine).map((h) => h.id))
-  const fixLanes = (lanes.data?.lanes ?? []).filter((l) => l.projectId === projectId && myHosts.has(l.hostId) && (l.config?.mode ?? 'fix') === 'fix')
+  const fixLanes = (lanes.data?.lanes ?? []).filter((l) => l.projectId === projectId && (l.config?.mode ?? 'fix') === 'fix')
+  const chosen = fixLanes.find((l) => l.id === laneId)
+  const queueOnFile = chosen && myHosts.has(chosen.hostId)
 
   const canSend = title.trim().length >= 3 && description.trim().length > 0 && !busy
 
@@ -73,14 +76,22 @@ export function ReportsFileIssue({ projectId, projectName, onClose, onFiled }: P
         category: kind,
         ...(component.trim() ? { component: component.trim() } : {}),
         ...(severity ? { severity } : {}),
-        ...(laneId ? { queue: { laneId } } : {}),
+        ...(chosen && queueOnFile ? { queue: { laneId: chosen.id } } : {}),
       }),
     })
-    setBusy(false)
     if (!res.ok || !res.data) {
+      setBusy(false)
       setError(res.error?.message ?? 'The report was not filed. Try again in a moment.')
       return
     }
+    if (chosen && !queueOnFile) {
+      const q = await apiFetch(`/v1/admin/work/lanes/${encodeURIComponent(chosen.id)}/queue`, {
+        method: 'PUT',
+        body: JSON.stringify({ reportIds: [res.data.reportId], append: true }),
+      })
+      if (!q.ok) setError(`Filed, but not queued on ${chosen.name}: ${q.error?.message ?? 'try again from Workers.'} Any free lane can still take it.`)
+    }
+    setBusy(false)
     setFiled((f) => [res.data!, ...f])
     setTitle('')
     setDescription('')

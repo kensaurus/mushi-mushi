@@ -90,7 +90,7 @@ describe('ReportsFileIssue', () => {
     expect(container.querySelector('a[href="/reports/r-new"]')).not.toBeNull()
   })
 
-  it("offers only this app's fix lanes on the caller's own machines, and queues the report on the chosen one", async () => {
+  it("offers this app's fix lanes; files straight onto a lane on your own machine", async () => {
     state.hosts = [
       { id: 'h-mine', mine: true },
       { id: 'h-teammate', mine: false },
@@ -99,20 +99,33 @@ describe('ReportsFileIssue', () => {
       { id: 'lane-fix', hostId: 'h-mine', projectId: 'p1', name: 'yenyen', config: { mode: 'fix' } },
       { id: 'lane-fu', hostId: 'h-mine', projectId: 'p1', name: 'yenyen-fu', config: { mode: 'followups' } },
       { id: 'lane-other', hostId: 'h-mine', projectId: 'p2', name: 'glot', config: { mode: 'fix' } },
-      // A teammate's machine: the server refuses to queue there (LANE_NOT_FOUND).
       { id: 'lane-teammate', hostId: 'h-teammate', projectId: 'p1', name: 'yenyen-2', config: { mode: 'fix' } },
     ]
     render()
     const options = [...container.querySelectorAll('option')].map((o) => o.getAttribute('value'))
     expect(options).toContain('lane-fix')
+    expect(options).toContain('lane-teammate')
     expect(options).not.toContain('lane-fu')
     expect(options).not.toContain('lane-other')
-    expect(options).not.toContain('lane-teammate')
     type('In one line', 'Undo for a mistaken change')
     type('What happened', 'After a transfer, show a toast with Undo for a few seconds.')
     type('Fix it on', 'lane-fix')
     await send()
+    expect(calls).toHaveLength(1)
     expect(calls[0].body).toMatchObject({ category: 'bug', queue: { laneId: 'lane-fix' } })
+  })
+
+  it("puts the report on a teammate's lane through the lane queue, since filing may only queue on your own machine", async () => {
+    state.hosts = [{ id: 'h-teammate', mine: false }]
+    state.lanes = [{ id: 'lane-teammate', hostId: 'h-teammate', projectId: 'p1', name: 'yenyen', config: { mode: 'fix' } }]
+    render()
+    type('In one line', 'Account page is slow')
+    type('What happened', 'Five seconds to open.')
+    type('Fix it on', 'lane-teammate')
+    await send()
+    expect(calls[0].body).not.toHaveProperty('queue')
+    expect(calls[1]).toEqual({ path: '/v1/admin/work/lanes/lane-teammate/queue', body: { reportIds: ['r-new'], append: true } })
+    expect(container.querySelector('[role="alert"]')).toBeNull()
   })
 
   it("shows the server's reason when the report is refused", async () => {
