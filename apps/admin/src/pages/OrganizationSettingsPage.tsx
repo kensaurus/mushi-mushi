@@ -1092,7 +1092,7 @@ export function OrganizationSettingsPage() {
       {activeTab === 'roster' && (
       <>
       <OrgRoleGuideCard />
-      <Card className="overflow-hidden">
+      <Card className="min-w-0 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-edge-subtle px-3 py-2 text-2xs uppercase tracking-wider text-fg-faint">
           <span>
             {showInactiveOnly
@@ -1116,17 +1116,20 @@ export function OrganizationSettingsPage() {
             </label>
           )}
         </div>
-        <table className="w-full text-sm">
+        {/* Phone width is about 390px. An auto table hid Active below sm and
+            let a long email push Actions past this card. Fixed columns keep
+            Member, Role, Active, and Remove on screen; the email wraps. */}
+        <table className="w-full table-fixed text-sm">
           <thead className="border-b border-edge-subtle bg-surface-overlay/20 text-left text-2xs uppercase tracking-wider text-fg-faint">
             <tr>
-              <th className="px-3 py-2">Member</th>
-              <th className="px-3 py-2">
+              <th className="px-2 py-2 sm:px-3">Member</th>
+              <th className="w-24 px-2 py-2 sm:w-36 sm:px-3">
                 <Tooltip content="Owner, Admin, Member, or Viewer — controls invite rights, billing access, and whether someone can triage or only view.">
                   <span className="cursor-help">Role</span>
                 </Tooltip>
               </th>
-              <th className="hidden px-3 py-2 sm:table-cell">Active</th>
-              <th className="px-3 py-2 text-right">Actions</th>
+              <th className="w-20 px-2 py-2 sm:w-28 sm:px-3">Active</th>
+              <th className="w-24 px-2 py-2 text-right sm:px-3">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-edge-subtle">
@@ -1161,9 +1164,9 @@ export function OrganizationSettingsPage() {
               const memberLabel = member.email ?? 'this teammate'
               return (
                 <tr key={member.user_id}>
-                  <td className="px-3 py-2">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-medium text-fg">{member.email ?? 'Unknown email'}</span>
+                  <td className="min-w-0 px-2 py-2 sm:px-3">
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                      <span className="min-w-0 font-medium text-fg wrap-break-word">{member.email ?? 'Unknown email'}</span>
                       {isSelf && <Badge className="bg-surface-overlay text-fg-muted text-2xs">you</Badge>}
                       {joinedMeta && (
                         <Tooltip content={joinedMeta.tooltip}>
@@ -1177,7 +1180,7 @@ export function OrganizationSettingsPage() {
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-2 py-2 sm:px-3">
                     {perms.roleOptions.length > 0 ? (
                       <select
                         value={member.role}
@@ -1193,7 +1196,7 @@ export function OrganizationSettingsPage() {
                             toRole: next,
                           })
                         }}
-                        className="rounded border border-edge-subtle bg-surface-raised px-2 py-1 text-xs text-fg"
+                        className="w-full max-w-full rounded border border-edge-subtle bg-surface-raised px-2 py-1 text-xs text-fg"
                       >
                         {perms.roleOptions.map((r) => (
                           <option key={r} value={r} title={orgRoleDefinition(r).tagline}>
@@ -1207,7 +1210,7 @@ export function OrganizationSettingsPage() {
                       </Tooltip>
                     )}
                   </td>
-                  <td className="hidden px-3 py-2 text-xs sm:table-cell">
+                  <td className="px-2 py-2 text-xs wrap-break-word sm:px-3">
                     {isNeverActive ? (
                       <Tooltip content="This member has not made an authenticated request in this organization since activity tracking shipped.">
                         <span className="text-warn">Never seen</span>
@@ -1218,7 +1221,7 @@ export function OrganizationSettingsPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-2 py-2 text-right sm:px-3">
                     {perms.removeAction === 'leave' ? (
                       <Btn
                         size="sm"
@@ -1226,7 +1229,7 @@ export function OrganizationSettingsPage() {
                         onClick={() => setPendingRemove(member)}
                         aria-label="Leave this team"
                         title="Leave this team"
-                        className="text-fg-secondary hover:text-danger"
+                        className="shrink-0 text-fg-secondary hover:text-danger"
                       >
                         Leave
                       </Btn>
@@ -1237,14 +1240,14 @@ export function OrganizationSettingsPage() {
                         onClick={() => setPendingRemove(member)}
                         aria-label={`Remove ${memberLabel}`}
                         title={`Remove ${memberLabel}`}
-                        className="px-2 text-fg-secondary hover:text-danger hover:bg-danger-muted/15"
+                        className="shrink-0 px-2 text-fg-secondary hover:text-danger hover:bg-danger-muted/15"
                       >
                         <IconTrash />
                       </Btn>
                     ) : (
                       <Tooltip content={perms.removeLockedReason ?? 'You cannot remove this person.'}>
-                        <span className="inline-flex">
-                          <Btn size="sm" variant="ghost" disabled aria-label={`Remove ${memberLabel}`} className="px-2 text-fg-faint">
+                        <span className="inline-flex max-w-full">
+                          <Btn size="sm" variant="ghost" disabled aria-label={`Remove ${memberLabel}`} className="shrink-0 px-2 text-fg-faint">
                             <IconTrash />
                           </Btn>
                         </span>
