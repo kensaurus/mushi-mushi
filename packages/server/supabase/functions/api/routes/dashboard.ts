@@ -23,6 +23,7 @@ import {
 } from '../../_shared/integration-health-rollup.ts';
 import { DashboardChartReadError, loadDashboardCharts } from '../../_shared/dashboard-chart-rollup.ts';
 import { isSdkKey } from '../../_shared/setup-signals.ts';
+import { inboxBannerLabel } from '../../_shared/inbox-banner.ts';
 
 /** Activity-feed line for one fix attempt, read against its report's current state. */
 function fixActivityLabel(
@@ -528,7 +529,9 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       nextStepTo = scoped('/onboarding?tab=steps');
     } else if (openActions > 0 && top) {
       topPriority = 'actions';
-      topPriorityLabel = top.hint;
+      // The title counts every open stage. The first hint alone called failing
+      // connections code bugs to dispatch or close.
+      topPriorityLabel = inboxBannerLabel(openFlags);
       nextStepTo = top.to;
     } else {
       topPriority = 'clear';
