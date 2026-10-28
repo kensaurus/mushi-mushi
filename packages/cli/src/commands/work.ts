@@ -158,6 +158,41 @@ export function failureTail(r: { stdout: string; stderr: string }, max = 600): s
   return kept.length < lines.length ? `[…] ${kept.join(' / ')}` : kept.join(' / ')
 }
 
+/**
+ * @internal Exported for tests only. A git hook run by lefthook that failed:
+ * the names of the steps that failed (its summary's "🥊 name" lines) and, for
+ * each, the error lines from that step's own output, instead of the tail of
+ * the summary. yen-yen's pre-push printed "🥊 test" and nothing else
+ * (2026-10-28), so neither the console nor the owner could see which test.
+ * Returns null when the output is not lefthook's.
+ */
+export function hookFailureDetail(r: { stdout: string; stderr: string }, max = 900): string | null {
+  const text = stripVTControlCharacters([r.stdout, r.stderr].join('\n'))
+  const failed = [...text.matchAll(/^\s*🥊\s+([\w:.-]+)/gmu)].map((m) => m[1]!)
+  if (!failed.length) return null
+  const lines = text.split('\n')
+  const HEADER = /^\s*┃\s+(\S+)\s+❯/u
+  const ERROR = /\b(?:FAIL|ERR!?|Error|error TS\d+|AssertionError|Expected|Received|failed|Unused (?:files|exports|dependencies)|not ok)\b|×|✗|✖/
+  const parts: string[] = []
+  for (const name of failed) {
+    // A step's output starts at its "┃  name ❯" header and runs to the next header.
+    const start = lines.findIndex((l) => HEADER.exec(l)?.[1] === name)
+    let block: string[] = []
+    if (start >= 0) {
+      const next = lines.findIndex((l, i) => i > start && HEADER.test(l))
+      block = lines
+        .slice(start + 1, next < 0 ? lines.length : next)
+        .map((l) => l.replace(/^\s*┃\s?/u, '').trim())
+        .filter(Boolean)
+    }
+    const errors = block.filter((l) => ERROR.test(l)).slice(0, 6)
+    const shown = (errors.length ? errors : block.slice(-4)).map((l) => (l.length > 160 ? `${l.slice(0, 160)}…` : l))
+    parts.push(shown.length ? `${name}: ${shown.join(' | ')}` : name)
+  }
+  const out = `hook steps failed: ${failed.join(', ')}. ${parts.join(' / ')}`.replace(/[ \t]+/g, ' ')
+  return out.length > max ? `${out.slice(0, max)} [cut]` : out
+}
+
 /** Where a run was when it failed. Before the agent starts, every failure is the machine's. */
 export type WorkStage = 'prepare' | 'agent' | 'commit' | 'push' | 'pr'
 
@@ -526,7 +561,7 @@ export async function git(cwd: string, args: string[]): Promise<string> {
     const what = hooks ? `the repo's ${args[0] === 'push' ? 'pre-push' : 'commit'} hook` : 'it'
     throw new MushiCliError('E_INTERNAL', `git ${args[0]} timed out after ${Math.round(limit / 60_000)} min (${what} did not finish); stopped it`)
   }
-  if (r.code !== 0) throw new MushiCliError('E_INTERNAL', `git ${args[0]} failed: ${failureTail(r)}`)
+  if (r.code !== 0) throw new MushiCliError('E_INTERNAL', `git ${args[0]} failed: ${(hooks && hookFailureDetail(r)) || failureTail(r)}`)
   return r.stdout.trim()
 }
 
@@ -796,7 +831,7 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
     }
     stage = 'push'
     o.onStage?.(stage)
-    await git(wt, ['push', '--quiet', '-u', 'origin', branch])
+    await pushWithHooks(wt, ['--quiet', '-u', 'origin', branch], o.log)
     stage = 'pr'
     o.onStage?.(stage)
     const body = `Mushi report: ${detail.id}\n\n${cap(last, 1500) || 'See the commits.'}\n\nOpened by \`mushi work\` with a local Cursor agent; Mushi's Opus review decides whether it merges.`
@@ -908,7 +943,7 @@ export async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOp
     const sha = await git(wt, ['rev-parse', 'HEAD'])
     // Fast-forward only: a push rejected because the branch moved fails loudly.
     o.onStage?.('push')
-    await git(wt, ['push', '--quiet', 'origin', `HEAD:refs/heads/${claim.branch}`])
+    await pushWithHooks(wt, ['--quiet', 'origin', `HEAD:refs/heads/${claim.branch}`], o.log)
     await done(sha, cap(last, 300))
     return { fixId: f.fixId, outcome: `pushed ${sha.slice(0, 7)} (round ${claim.round})`, ...(f.prUrl ? { prUrl: f.prUrl } : {}) }
   } catch (err) {
@@ -965,6 +1000,29 @@ export async function commitWithHooks(wt: string, args: string[], log: (line: st
     log('  commit: a hook could not find a package; installing dependencies and committing again')
     await installDeps(wt, log)
     await git(wt, ['commit', ...args])
+  }
+}
+
+/** @internal Exported for tests only. A push the repo's own pre-push hook refused (not the remote, not auth). */
+export function isHookRejection(message: string): boolean {
+  return /hook steps failed:|pre-push hook|husky - pre-push/i.test(message) && !/non-fast-forward|\[rejected\]|Authentication failed|permission denied/i.test(message)
+}
+
+/**
+ * Push; when the repo's own pre-push hook refused it, run the hook once more
+ * on the same commit. Several agents share one machine, and a test that times
+ * out under that load passes on its own: yen-yen's full suite passed on a
+ * change its hook had refused (2026-10-28), and the fix was dropped. A second
+ * failure is the change's, and is thrown as before.
+ */
+export async function pushWithHooks(wt: string, args: string[], log: (line: string) => void): Promise<void> {
+  try {
+    await git(wt, ['push', ...args])
+  } catch (err) {
+    if (!(err instanceof Error) || !isHookRejection(err.message)) throw err
+    log(`  push: the pre-push hook failed (${err.message.replace(/^git push failed: /, '').slice(0, 200)}); running it once more on the same commit`)
+    await git(wt, ['push', ...args])
+    log('  push: the hook passed the second time, so the first failure was this machine, not the change')
   }
 }
 

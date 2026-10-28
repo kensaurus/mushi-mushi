@@ -12,6 +12,9 @@ import {
   freeBranchName,
   isMissingModuleFailure,
   failureTail,
+  hookFailureDetail,
+  isHookRejection,
+  pushWithHooks,
   agentEnv,
   branchNameFor,
   runProc,
@@ -507,4 +510,87 @@ describe('a run stopped from the console (ADR 0048 amendment 2026-10-28)', () =>
       rmSync(root, { recursive: true, force: true })
     }
   }, 30_000)
+})
+
+// A lefthook pre-push run, as yen-yen's printed it on 2026-10-28 (shortened).
+const LEFTHOOK_FAIL = [
+  '┃  lint ❯ ',
+  'apps/web lint: Done',
+  '┃  test ❯ ',
+  '> turbo run test',
+  ' FAIL  lib/powersync/queries.test.ts > closed accounts > hides a closed account',
+  'AssertionError: expected [ 2 ] to deeply equal [ 1 ]',
+  '┃  knip ❯ ',
+  'Unused exports (1)',
+  'closedAccountIds  apps/mobile/lib/powersync/queries.ts:12:14',
+  '────────────────────────────────────',
+  'summary: (done in 206.89 seconds)',
+  '✔️ lint (206.89 seconds)',
+  '🥊 test (22.29 seconds)',
+  '🥊 knip (25.07 seconds)',
+].join('\n')
+
+describe('hookFailureDetail', () => {
+  it("names each failed lefthook step with its own error lines, not the summary's tail", () => {
+    const d = hookFailureDetail({ stdout: LEFTHOOK_FAIL, stderr: "error: failed to push some refs to 'https://github.com/o/r.git'" })!
+    expect(d).toMatch(/^hook steps failed: test, knip\./)
+    expect(d).toContain('test: FAIL lib/powersync/queries.test.ts > closed accounts > hides a closed account | AssertionError: expected [ 2 ] to deeply equal [ 1 ]')
+    expect(d).toContain('knip: Unused exports (1)')
+    expect(d).not.toContain('apps/web lint')
+  })
+
+  it('is null for output that is not a lefthook run', () => {
+    expect(hookFailureDetail({ stdout: '', stderr: 'fatal: not a git repository' })).toBeNull()
+  })
+})
+
+describe('isHookRejection', () => {
+  it('retries only a refusal by the repo\'s own hook, never the remote or auth', () => {
+    expect(isHookRejection('git push failed: hook steps failed: test. test: FAIL a.test.ts')).toBe(true)
+    expect(isHookRejection('git push failed: error: failed to push some refs (pre-push hook declined)')).toBe(true)
+    expect(isHookRejection('git push failed: ! [rejected] HEAD -> main (non-fast-forward)')).toBe(false)
+    expect(isHookRejection('git push failed: remote: Permission denied to bot. fatal: Authentication failed')).toBe(false)
+    expect(isHookRejection('git push failed: fatal: unable to access github.com')).toBe(false)
+  })
+})
+
+describe('pushWithHooks', () => {
+  const setup = (hook: (root: string) => string) => {
+    const root = mkdtempSync(join(tmpdir(), 'mushi-work-push-'))
+    const sh = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, stdio: 'pipe' }).toString()
+    const origin = join(root, 'origin.git')
+    sh(root, 'init', '-q', '--bare', '-b', 'main', origin)
+    const clone = join(root, 'clone')
+    sh(root, 'clone', '-q', origin, clone)
+    sh(clone, 'config', 'user.email', 'w@example.com')
+    sh(clone, 'config', 'user.name', 'worker')
+    sh(clone, 'commit', '-q', '--allow-empty', '-m', 'first')
+    writeFileSync(join(clone, '.git', 'hooks', 'pre-push'), hook(root), { mode: 0o755 })
+    return { root, clone, origin, sh }
+  }
+
+  it.skipIf(process.platform === 'win32')('runs a failed pre-push hook once more and pushes when it passes the second time', async () => {
+    // Fails the first time (as a test under load does), passes the second.
+    // An absolute marker: git does not always set GIT_DIR for a pre-push hook.
+    const { root, clone, origin, sh } = setup((r) => `#!/bin/sh\nif [ -f '${r}/flaky-seen' ]; then exit 0; fi\ntouch '${r}/flaky-seen'\necho '┃  test ❯ '\necho ' FAIL  slow.test.ts > times out under load'\necho '🥊 test (60 seconds)'\nexit 1\n`)
+    const logs: string[] = []
+    try {
+      await pushWithHooks(clone, ['--quiet', 'origin', 'HEAD:refs/heads/fix'], (l) => logs.push(l))
+      expect(sh(origin, 'branch', '--list', 'fix').trim()).toContain('fix')
+      expect(logs[0]).toContain('hook steps failed: test')
+      expect(logs[1]).toContain('passed the second time')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it.skipIf(process.platform === 'win32')('a hook that fails twice is the change\'s failure, with the failing step named', async () => {
+    const { root, clone, origin, sh } = setup(() => `#!/bin/sh\necho '┃  test ❯ '\necho ' FAIL  a.test.ts > breaks'\necho '🥊 test (2 seconds)'\nexit 1\n`)
+    try {
+      await expect(pushWithHooks(clone, ['--quiet', 'origin', 'HEAD:refs/heads/fix'], () => {})).rejects.toThrow(/hook steps failed: test\. test: FAIL a\.test\.ts > breaks/)
+      expect(sh(origin, 'branch', '--list', 'fix').trim()).toBe('')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
 })
