@@ -77,10 +77,19 @@ export function judgeWeekTitle(label: string | null | undefined): string {
 }
 
 /**
+ * Same minimum as `JUDGE_RECENT_MIN_GRADES` in
+ * `packages/server/supabase/functions/api/routes/judge.ts`. A 14-day window
+ * with fewer grades than this is too thin to quote; the all-time rate is used.
+ */
+export const JUDGE_RECENT_MIN_GRADES = 5
+
+/**
  * Disagreement share the status sentence counts.
- * A last-14-days window that holds every grade is the all-time rate. Calling
- * that "recent" showed 76/144 (53%) while one week inside it was different
- * (64c2b3df). A window that is actually narrower stays "in the last N days".
+ * A last-14-days window that holds every grade, or fewer than
+ * JUDGE_RECENT_MIN_GRADES grades, is the all-time rate. Calling a thin or
+ * complete window "recent" showed 76/144 (53%), or 0% when the window was
+ * empty, while the subtitle counted every grade (64c2b3df). A window that
+ * is actually narrower, and thick enough, stays "in the last N days".
  */
 export function judgeDisagreementWindow(stats: JudgeStats): {
   disagreed: number
@@ -95,7 +104,12 @@ export function judgeDisagreementWindow(stats: JudgeStats): {
   const recentDisagreed = stats.recentDisagreements
   const coversAll =
     recentGraded != null && stats.totalEvaluations > 0 && recentGraded >= stats.totalEvaluations
-  if (recentGraded != null && recentDisagreed != null && !coversAll) {
+  if (
+    recentGraded != null &&
+    recentDisagreed != null &&
+    recentGraded >= JUDGE_RECENT_MIN_GRADES &&
+    !coversAll
+  ) {
     return {
       disagreed: recentDisagreed,
       graded: recentGraded,
@@ -113,4 +127,18 @@ export function judgeDisagreementWindow(stats: JudgeStats): {
     recent: false,
     words: 'so far',
   }
+}
+
+/**
+ * Grades tab label. A bare count beside "Grades" was read as how many grades
+ * exist; it was the disagreement subset (76 vs 144 graded, 64c2b3df).
+ */
+export function judgeEvaluationsTab(
+  label: string,
+  stats: Pick<JudgeStats, 'disagreementCount' | 'totalEvaluations'>,
+): { label: string; count?: number } {
+  if (stats.disagreementCount > 0) {
+    return { label: `${label} · ${stats.disagreementCount} disagree` }
+  }
+  return { label }
 }
