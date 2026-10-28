@@ -58,7 +58,7 @@ describe('ConnectionGrid', () => {
       )
     })
     const tiles = host.querySelectorAll('[data-state]')
-    expect(tiles).toHaveLength(5)
+    expect(tiles).toHaveLength(6)
     expect(host.querySelector('[data-state="attention"]')?.getAttribute('aria-label')).toBe('GitHub: Needs you. Open its card.')
     // One broken connection: its reason is in the sentence, with no second
     // "needs you" list saying it again (console sweep 2026-10-28).

@@ -47,7 +47,7 @@ describe('buildConnectionGrid', () => {
   // The row led with Sentry, a monitoring tool we never require (AGENTS.md;
   // first-time user test, 2026-10-28). GitHub and alerts lead; Sentry is last.
   it('lists the tools in a fixed order, GitHub first and monitoring last', () => {
-    expect(buildConnectionGrid(input()).map((t) => t.id)).toEqual(['github', 'slack', 'cursor_cloud', 'linear', 'sentry'])
+    expect(buildConnectionGrid(input()).map((t) => t.id)).toEqual(['github', 'slack', 'discord', 'cursor_cloud', 'linear', 'sentry'])
   })
 
   // Mushi's own Langfuse (set in its environment) counted as one of the user's
@@ -121,6 +121,15 @@ describe('connectionGridSentence', () => {
       sentence: '2 set up, not tested yet.',
       tone: 'neutral',
     })
+  })
+
+  // Connecting only Discord read "Nothing is connected yet. Start with GitHub"
+  // beside a Discord card saying Connected (first-time user test, 2026-10-28).
+  it('counts an alert channel that is only Discord or Teams', () => {
+    const only = input({ platform: { platform: {} }, history: [], discordConfigured: true, teamsConfigured: true })
+    const tiles = buildConnectionGrid(only)
+    expect(tiles.map((t) => t.id)).toEqual(expect.arrayContaining(['discord', 'teams']))
+    expect(connectionGridSentence(tiles).sentence).toBe('2 set up, not tested yet.')
   })
 
   it('with nothing connected, points at GitHub first', () => {

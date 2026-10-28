@@ -21,7 +21,7 @@ import { sentryConnectionFromPageData } from '../../lib/useSentryConnection'
 import { slackCardConnection } from './slackConnection'
 import { PLATFORM_DEFS, type HealthRow, type Kind, type PlatformResponse } from './types'
 
-type GridToolId = 'sentry' | 'github' | 'slack' | 'langfuse' | 'cursor_cloud' | 'claude_code_agent' | 'linear'
+type GridToolId = 'sentry' | 'github' | 'slack' | 'discord' | 'teams' | 'langfuse' | 'cursor_cloud' | 'claude_code_agent' | 'linear'
 
 export interface GridTile {
   id: GridToolId
@@ -42,6 +42,9 @@ export interface ConnectionGridInput {
   sentryDeliveries: InboundDeliveryLike[] | null
   sentryDeliveriesFailed?: boolean
   slack: { configured: boolean; canPost: boolean; channelId: string | null }
+  /** Alert channels the page offers beside Slack; the sentence counts them too. */
+  discordConfigured?: boolean
+  teamsConfigured?: boolean
   linearConnected: boolean
   now?: number
 }
@@ -123,6 +126,23 @@ export function buildConnectionGrid(input: ConnectionGridInput): GridTile[] {
     lastLabel: input.slack.configured && slackProbe ? 'Checked' : null,
   }
 
+  // A builder who connects only Discord read "Nothing is connected yet"
+  // (first-time user test, 2026-10-28): every alert channel is a tile.
+  const webhookTile = (id: 'discord' | 'teams', label: string, brand: string, configured: boolean): GridTile => {
+    const probe = latestProbe(input.history, id)
+    return {
+      id,
+      label,
+      brand,
+      anchor: `integrations-${id}`,
+      view: connectionFromProbe({ configured, probe, now: input.now }),
+      lastAt: configured ? (probe?.checked_at ?? null) : null,
+      lastLabel: configured && probe ? 'Checked' : null,
+    }
+  }
+  const discord = webhookTile('discord', 'Discord', 'discord', Boolean(input.discordConfigured))
+  const teams = webhookTile('teams', 'Teams', 'microsoftteams', Boolean(input.teamsConfigured))
+
   const linearProbe = latestProbe(input.history, 'linear')
   const linear: GridTile = {
     id: 'linear',
@@ -151,6 +171,8 @@ export function buildConnectionGrid(input: ConnectionGridInput): GridTile[] {
   return [
     platformTile(input, 'github', 'github', 'GitHub', 'github'),
     slack,
+    discord,
+    ...(teams.view.state === 'not_connected' ? [] : [teams]),
     platformTile(input, 'cursor_cloud', 'cursor_cloud', 'Cursor', 'cursor'),
     ...(claude.view.state === 'not_connected' ? [] : [claude]),
     linear,

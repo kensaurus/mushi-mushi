@@ -475,6 +475,8 @@ export function IntegrationsPage() {
                   canPost: Boolean(settingsQuery.data?.slackCanPost),
                   channelId: settingsQuery.data?.slackChannelId ?? null,
                 }}
+                discordConfigured={Boolean(settingsQuery.data?.discordConfigured)}
+                teamsConfigured={Boolean(settingsQuery.data?.teamsConfigured)}
                 linearConnected={linearConnected}
               />
             ),
