@@ -4767,6 +4767,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('list_qa_story_runs', TDD_TOOL_CATALOG),
       annotations: annotationsFor('list_qa_story_runs', TDD_TOOL_CATALOG),
       inputSchema: z.object({
+        // `project_id` is not a second field. registerTool wraps this schema
+        // with acceptSnakeCaseAliases, which calls normalizeArgAliases
+        // (arg-aliases.ts) and renames project_id to projectId before zod.
+        projectId: z
+          .string()
+          .optional()
+          .describe('Project UUID that owns the story. Defaults to the configured project. On an account connection, pass the project the story belongs to.'),
         storyId: z.string().describe('QA story id (uuid)'),
         limit: z
           .number()
@@ -4778,9 +4785,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .describe('Max runs to return (default 10)'),
       }),
     },
-    async ({ storyId, limit }) => {
+    async ({ projectId, storyId, limit }) => {
+      // Account connections have no config.projectId. Hardcoding it produced
+      // /projects/undefined or /projects// and the runs route's 404, which
+      // hosted MCP reports as "Upstream 404".
+      const { projectId: pid, headers } = await projectScopeHeaders(projectId);
       const data = await apiCall<unknown>(
-        `/v1/admin/projects/${config.projectId}/qa-stories/${storyId}/runs?limit=${limit ?? 10}`,
+        `/v1/admin/projects/${pid}/qa-stories/${storyId}/runs?limit=${limit ?? 10}`,
+        { headers },
       );
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
     },
@@ -4793,19 +4805,31 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('get_qa_story_run', TDD_TOOL_CATALOG),
       annotations: annotationsFor('get_qa_story_run', TDD_TOOL_CATALOG),
       inputSchema: z.object({
+        // `project_id` is not a second field. registerTool wraps this schema
+        // with acceptSnakeCaseAliases, which calls normalizeArgAliases
+        // (arg-aliases.ts) and renames project_id to projectId before zod.
+        projectId: z
+          .string()
+          .optional()
+          .describe(
+            'Project UUID that owns the story. Defaults to the configured project. On an account connection, pass the project the story belongs to.',
+          ),
         storyId: z.string().describe('QA story id (uuid)'),
         runId: z.string().describe('Run id (uuid) to fetch detail for'),
       }),
     },
-    async ({ storyId, runId }) => {
+    async ({ projectId, storyId, runId }) => {
       // There is no single-run detail route that accepts an API key (the
       // evidence route is JWT-only), so fetch the recent runs list and select
       // the requested run — the list rows already include summary, assertion
       // failures, error message, and the provider session URL.
-      const data = await apiCall<{ data?: { runs?: Array<{ id: string }> } }>(
-        `/v1/admin/projects/${config.projectId}/qa-stories/${storyId}/runs?limit=50`,
+      // apiCall unwraps `{ ok, data }`, and the route's data is `{ runs }`.
+      const { projectId: pid, headers } = await projectScopeHeaders(projectId);
+      const data = await apiCall<{ runs?: Array<{ id: string }> }>(
+        `/v1/admin/projects/${pid}/qa-stories/${storyId}/runs?limit=50`,
+        { headers },
       );
-      const run = data?.data?.runs?.find((r) => r.id === runId) ?? null;
+      const run = data?.runs?.find((r) => r.id === runId) ?? null;
       if (!run) {
         throw new MushiApiError(
           404,
