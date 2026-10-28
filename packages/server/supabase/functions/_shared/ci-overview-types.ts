@@ -128,7 +128,23 @@ export interface CiOverview {
     repo?: string | null
     runner?: string | null
     hostId?: string | null
+    /** Projected saving per 30 days if the fix is applied (USD, estimated); null when it cannot be priced. */
+    monthSavingUsd?: number | null
+    /** Mushi can open a PR that applies this fix to one workflow file (POST /v1/admin/ci/cost-fixes). */
+    autofix?: CiCostAutofix | null
   }>
+}
+
+/** The workflow edits Mushi can open as a reviewed PR (`_shared/ci-cost-fix.ts`). */
+export const CI_COST_FIX_KINDS = ['add_concurrency', 'skip_drafts', 'weekly_cron', 'ignore_docs_paths'] as const
+export type CiCostFixKind = (typeof CI_COST_FIX_KINDS)[number]
+
+export interface CiCostAutofix {
+  kind: CiCostFixKind
+  projectId: string
+  repo: string
+  /** Repo-relative path, e.g. `.github/workflows/ci.yml`. */
+  workflowPath: string
 }
 
 export type CiOverviewAdvice = CiOverview['advice'][number]

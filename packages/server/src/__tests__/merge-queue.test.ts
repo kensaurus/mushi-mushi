@@ -32,7 +32,7 @@ describe('nextQueueStep', () => {
   it('waits while GitHub computes or CI runs, and blocks on failed CI', () => {
     expect(nextQueueStep(pr({ mergeable: null, mergeableState: 'unknown' }), green).do).toBe('wait')
     expect(nextQueueStep(pr(), { pending: 1, failed: [] })).toEqual({ do: 'wait', reason: 'CI is running (1 check left).' })
-    expect(nextQueueStep(pr(), { pending: 0, failed: ['required', 'lint'] })).toMatchObject({ do: 'blocked', reason: expect.stringMatching(/^CI failed: required, lint\. A CI-repair agent/) })
+    expect(nextQueueStep(pr(), { pending: 0, failed: ['required', 'lint'] })).toMatchObject({ do: 'blocked', reason: expect.stringMatching(/^CI failed: "required", "lint"\. A CI-repair agent/) })
     expect(nextQueueStep(pr({ mergeableState: 'blocked' }), green).do).toBe('blocked')
   })
   it('is done when merged, drops a closed PR, and marks a draft ready', () => {

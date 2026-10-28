@@ -103,3 +103,28 @@ Sources cited in the owner's brief (2026-10-14):
 - A new page must be placed in the cycle step where a builder needs it, and
   its `paletteGroup` must match its section; `navRegistry.test.ts` pins the
   section order, the Quick group order and the palette groups.
+
+## Amendment (owner, 2026-10-27): every page has a place in the sidebar
+
+The owner found pages missing from the sidebar ("some of the pages and
+subpages are not showing on the sidebar", Pipeline first). The 2026-10-20
+console audit had cut the sidebar to nine core pages plus opt-in Labs; 17
+pages were neither, so only ⌘K or a link reached them, and nothing was
+highlighted while you were on one.
+
+- **Pipeline is a core page**, after Fixes.
+- **Sub-pages open under their page** while you are in that family
+  (`lib/sidebarTree.ts`, `NAV_CHILDREN`): Home's views, Apps › Manage apps,
+  Checks › every check, Team's views. The sub-page you are on is the
+  highlighted one.
+- **More pages lists every other page**, grouped by the cycle sections above,
+  and opens by itself when you are on one of them. A Lab kept in the sidebar
+  leaves the list. The "This page is not in your sidebar" notice is gone.
+- `sidebarTree.test.ts` fails when a sidebar page has no place, or a console
+  route has no registry page and no stated reason.
+- **Display settings left the page.** Theme, density, table rows and focus mode
+  moved from icon rows in the sidebar footer (and a table-row switch inside the
+  Bugs, Fixes and Compliance tables) to the menu under the user's name and
+  Settings › Display & sidebar (formerly Labs; `?tab=labs` still opens it).
+  The Admin / Tester switch at the top of the admin sidebar became a link in
+  that menu; the tester portal keeps its switch back.

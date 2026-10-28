@@ -55,7 +55,7 @@ const INBOX_TABS: Array<{ id: InboxTabId; label: string; description: string }> 
   {
     id: 'stages',
     label: 'Stages',
-    description: 'Filter by PDCA stage — open cards and cleared stage chips in one view.',
+    description: 'Filter by step (bugs, fixes, checks, shipping): open cards and cleared ones in one view.',
   },
   {
     id: 'activity',

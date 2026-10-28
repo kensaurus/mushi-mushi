@@ -12,20 +12,20 @@ export interface AnomalyMethodDefinition {
 export const ANOMALY_METHOD_DEFINITIONS: AnomalyMethodDefinition[] = [
   {
     id: 'zscore',
-    label: 'Z-score',
+    label: 'Sudden jump',
     plain: 'Flags values that jump far from the recent average — good for sudden error-rate spikes.',
     bestFor: 'Stable metrics with predictable variance (API 5xx rate, p95 latency).',
   },
   {
     id: 'page_hinkley',
-    label: 'Page-Hinkley',
-    plain: 'Detects sustained shifts after a deploy — catches gradual regressions Z-score might miss.',
+    label: 'Slow drift',
+    plain: 'Notices a value that keeps creeping up after a deploy, which a sudden-jump check can miss.',
     bestFor: 'Release regression watch on conversion or crash-free sessions.',
   },
   {
     id: 'ingest',
-    label: 'Metric ingest',
-    plain: 'Your app or CI posts time-series points via POST /v1/ingest/metrics. Detection cannot run until points exist.',
+    label: 'Your metrics',
+    plain: 'Your app or CI sends values (error rate, latency…) to POST /v1/ingest/metrics. Mushi needs some values before it can spot a spike.',
     bestFor: 'Wire SDK or server heartbeat before expecting open anomalies.',
   },
 ]

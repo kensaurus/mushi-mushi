@@ -16,21 +16,20 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { testReportHref, useSendTestReport } from '../lib/useSendTestReport'
 import { usePageData } from '../lib/usePageData'
+import type { TimeToFirstDiagnosis } from '../lib/setupRail'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { Card, Btn, Input, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, SegmentedControl, HelpBanner, Loading } from '../components/ui'
+import { SetupProgressRail } from '../components/onboarding/SetupProgressRail'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { SnapshotSectionHint,Card, Btn, Input, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, Section, StatCard, SegmentedControl, Badge, HelpBanner, Loading } from '../components/ui'
-import { OnboardingStatusBanner } from '../components/onboarding/OnboardingStatusBanner'
-import { OnboardingStepsGuide } from '../components/onboarding/OnboardingStepsGuide'
 import { OnboardingSetupReadout } from '../components/onboarding/OnboardingSetupReadout'
+import { SetupGapsSection } from '../components/onboarding/SetupGapsSection'
 import { EMPTY_ONBOARDING_STATS, type OnboardingStats, type OnboardingTabId } from '../components/onboarding/types'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
-import { PageHero } from '../components/PageHero'
 import { ContainedBlock } from '../components/report-detail/ReportSurface'
 import { OnboardingSkeleton } from '../components/skeletons/OnboardingSkeleton'
 import { ConnectionStatus } from '../components/ConnectionStatus'
 import { SetupChecklist } from '../components/SetupChecklist'
-import { CHIP_TONE, SELECTED_TONE } from '../lib/chipTone'
 import { ProjectNarrativeStrip } from '../components/dashboard/ProjectNarrativeStrip'
 import { PdcaFlow } from '../components/pdca-flow/PdcaFlow'
 import { SdkInstallCard } from '../components/SdkInstallCard'
@@ -42,17 +41,6 @@ import { useToast } from '../lib/toast'
 import { useCreateProject } from '../lib/useCreateProject'
 import { usePageCopy } from '../lib/copy'
 import { useOnboardingUx, resolveQuickOnboardingTab } from '../lib/onboardingModeUx'
-import {
-  optionalDetail,
-  optionalTooltip,
-  reportsDetail,
-  reportsTooltip,
-  requiredDetail,
-  requiredTooltip,
-  sdkDetail,
-  sdkTooltip,
-} from '../lib/statTooltips/onboarding'
-import { onboardingLinks } from '../lib/statCardLinks'
 import { restartFirstRunTour } from '../components/FirstRunTour'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { FirstDiagnosisScreen } from '../components/onboarding/FirstDiagnosisScreen'
@@ -97,7 +85,7 @@ const ONBOARDING_TABS: Array<{ id: OnboardingTabId; label: string; description: 
     description: 'Install snippet and init copy — bookmark this tab after setup completes.',
   },
   {
-    id: 'copilot',
+    id: 'diagnose',
     label: 'Diagnose',
     description: 'Something not working? Check the SDK heartbeat, version and fix dispatch for one project, with copy-paste commands.',
   },
@@ -105,6 +93,11 @@ const ONBOARDING_TABS: Array<{ id: OnboardingTabId; label: string; description: 
 
 function isOnboardingTab(value: string | null): value is OnboardingTabId {
   return ONBOARDING_TABS.some((t) => t.id === value)
+}
+
+/** `?tab=copilot` was the Diagnose tab's id until 2026-10-27; old links still open it. */
+function resolveTabParam(value: string | null): string | null {
+  return value === 'copilot' ? 'diagnose' : value
 }
 
 export function OnboardingPage() {
@@ -133,7 +126,7 @@ export function OnboardingPage() {
   const ux = useOnboardingUx()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  const tabParam = searchParams.get('tab')
+  const tabParam = resolveTabParam(searchParams.get('tab'))
   const setupCliMode = isCliSetupMode(searchParams)
   const activeTab: OnboardingTabId = isOnboardingTab(tabParam) ? tabParam : 'overview'
 
@@ -413,9 +406,6 @@ export function OnboardingPage() {
   // reference for fully onboarded users.
   const setupComplete = Boolean(project?.done && project.complete >= project.total)
 
-  const setupSeverity: 'ok' | 'warn' | 'neutral' | 'info' =
-    stats.setupDone ? 'ok' : stats.sdkHostMismatch ? 'warn' : !stats.hasAnyProject ? 'neutral' : 'info'
-
   usePublishPageContext({
     route: '/onboarding',
     title: `${activeTabMeta.label} · Set up`,
@@ -599,11 +589,7 @@ export function OnboardingPage() {
           'Confirm reports arrive before shipping any code',
         ]}
         helpHowToUse={copy?.help?.howToUse ?? 'Complete the required steps in order. The API key is only shown once — copy it before continuing. You can rerun the test report any time from Settings.'}
-      >
-        <Badge className={stats.setupDone ? CHIP_TONE.okSubtle : stats.hasAnyProject ? CHIP_TONE.warnSubtle : CHIP_TONE.infoSubtle}>
-          {stats.setupDone ? 'READY' : stats.hasAnyProject ? `${stats.requiredComplete}/${stats.requiredTotal}` : 'START'}
-        </Badge>
-      </PageHeaderBar>
+      />
 
       {firstRun ? firstRunWizard : (
       <>
@@ -620,154 +606,31 @@ export function OnboardingPage() {
         </p>
       )}
 
-      {/* Mode intro card — renders only on first visit; dismissed via localStorage */}
-
+      {/* The four steps to a wired-up app, with the next one's button (Set up page intent). */}
       <PagePosture
-        maxRows={3}
         slots={[
           {
-            id: 'onboarding-status',
+            id: 'setup-rail',
             priority: POSTURE_PRIORITY.status,
+            show: stats.hasAnyProject,
             children: (
-              <OnboardingStatusBanner
-                stats={stats}
+              <SetupProgressRail
+                project={project}
+                apiKey={apiKey?.key ?? null}
                 onTab={setActiveTab}
-                onRunTest={project ? () => void submitTestReport() : undefined}
+                onMintKey={() => void generateKey()}
+                minting={generatingKey}
+                onSendTest={() => void submitTestReport()}
                 testing={testStatus === 'running'}
-                plainLanguage={ux.plainBanner}
-              />
-            ),
-          },
-          {
-            id: 'onboarding-snapshot',
-            priority: POSTURE_PRIORITY.heroOrSnapshot,
-            children: (
-              <Section
-                title={copy?.sections?.snapshot ?? 'Setup snapshot'}
-                freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
-              >
-                {!ux.hideOverviewTab ? (
-                  <SnapshotSectionHint text={activeTabMeta.description} />
-                ) : null}
-                <div className={`grid grid-cols-2 gap-2 ${ux.hideOptionalStat ? 'sm:grid-cols-3' : 'sm:grid-cols-4'}`}>
-                  <StatCard
-                    label={copy?.statLabels?.required ?? 'Required'}
-                    value={`${stats.requiredComplete}/${stats.requiredTotal}`}
-                    accent={stats.setupDone ? 'text-ok' : 'text-warn'}
-                    tooltip={requiredTooltip(stats)}
-                    detail={requiredDetail(stats)}
-                    to={onboardingLinks.required}
-                  />
-                  <StatCard
-                    label={copy?.statLabels?.sdk ?? 'SDK'}
-                    value={stats.sdkInstalled ? 'Live' : stats.hasApiKey ? 'Pending' : '—'}
-                    accent={stats.sdkInstalled ? 'text-ok' : stats.sdkHostMismatch ? 'text-danger' : 'text-info'}
-                    tooltip={sdkTooltip(stats)}
-                    detail={sdkDetail(stats)}
-                    to={onboardingLinks.sdk}
-                  />
-                  <StatCard
-                    label={copy?.statLabels?.reports ?? 'Reports'}
-                    value={stats.reportCount}
-                    accent={stats.reportCount > 0 ? 'text-brand' : undefined}
-                    tooltip={reportsTooltip(stats)}
-                    detail={reportsDetail(stats)}
-                    to={onboardingLinks.reports}
-                  />
-                  {!ux.hideOptionalStat ? (
-                    <StatCard
-                      label={copy?.statLabels?.optional ?? 'Optional'}
-                      value={`${stats.optionalComplete}/${stats.optionalTotal}`}
-                      accent="text-fg-secondary"
-                      tooltip={optionalTooltip(stats)}
-                      detail={optionalDetail(stats)}
-                      to={onboardingLinks.optional}
-                    />
-                  ) : null}
-                </div>
-              </Section>
-            ),
-          },
-          {
-            id: 'onboarding-guide',
-            priority: POSTURE_PRIORITY.guide,
-            children: (
-              <OnboardingStepsGuide
-                stats={{
-                  setupDone: stats.setupDone,
-                  hasAnyProject: stats.hasAnyProject,
-                  requiredComplete: stats.requiredComplete,
-                  requiredTotal: stats.requiredTotal,
-                  nextStepId: stats.nextStepId,
-                  sdkInstalled: stats.sdkInstalled,
-                  reportCount: stats.reportCount,
-                }}
-                completedStepIds={
-                  legacySetup.activeProject && legacySetup.activeProject.project_id === (stats.projectId ?? legacySetup.activeProject.project_id)
-                    ? legacySetup.activeProject.steps.filter((s) => s.complete).map((s) => s.id)
-                    : undefined
-                }
+                compact={effectiveTab !== 'overview'}
               />
             ),
           },
         ]}
       />
 
-      <OnboardingSetupReadout
-        stats={stats}
-        statsFetchedAt={statsFetchedAt}
-        statsValidating={statsValidating}
-      />
-
-      {/* Linear step rail — always visible when there is at least one project */}
-      {stats.hasAnyProject && (
-        <nav aria-label="Setup steps" className="flex flex-wrap items-center gap-2">
-          {([
-            { tab: 'steps',  label: 'Create',       stepId: 'project_created' },
-            { tab: 'verify', label: 'API key',       stepId: 'api_key_generated' },
-            { tab: 'sdk',    label: 'Install SDK',   stepId: 'sdk_installed' },
-            { tab: 'verify', label: 'First report',  stepId: 'first_report_received' },
-          ] as const).map(({ tab, label, stepId }, i) => {
-            const isDone = setup.getStep(stepId)?.complete ?? false
-            const isActive = !isDone && effectiveTab === tab
-            return (
-              <span key={`${tab}-${stepId}`} className="flex items-center gap-2">
-                {i > 0 && <span className="text-fg-faint text-xs" aria-hidden="true">›</span>}
-                <Btn
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setActiveTab(tab)}
-                  className={`flex items-center gap-1.5 rounded px-2 py-0.5 text-2xs font-medium border-0 shadow-none ${
-                    isDone
-                      ? 'text-ok bg-transparent hover:bg-transparent'
-                      : isActive
-                        ? `${SELECTED_TONE} ring-1 ring-inset ring-brand/20`
-                        : 'text-fg-muted hover:text-fg bg-transparent'
-                  }`}
-                  aria-current={isActive ? 'step' : undefined}
-                >
-                  {isDone
-                    ? <span aria-hidden="true">✓</span>
-                    : <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-current text-3xs">{i + 1}</span>
-                  }
-                  {label}
-                </Btn>
-              </span>
-            )
-          })}
-          {stats.setupDone && (
-            <span className="flex items-center gap-2">
-              <span className="text-fg-faint text-xs" aria-hidden="true">›</span>
-              <Link
-                to="/connect"
-                className="flex items-center gap-1 rounded px-2 py-0.5 text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
-              >
-                Continue to Connect hub →
-              </Link>
-            </span>
-          )}
-        </nav>
-      )}
+      {/* Configuration that is missing or broken, before a button fails (console ops plan P1). */}
+      {stats.hasAnyProject ? <SetupGapsSection projectId={activeProjectId ?? stats.projectId ?? null} /> : null}
 
       {/* CLI-waiting callout when wizard was opened from the terminal */}
       {setupCliMode && !stats.setupDone && (
@@ -797,44 +660,6 @@ export function OnboardingPage() {
         <>
       {!stats.hasAnyProject ? (
         <CliSetupGuide projectId={stats.projectId} className="mb-4" />
-      ) : null}
-
-      {!ux.hideOverviewChrome ? (
-      <PageHero
-        scope="onboarding"
-        title="Get started"
-        kicker="Start here"
-        decide={{
-          label: stats.setupDone ? 'Pipeline wired' : stats.nextStepLabel ?? 'Begin setup',
-          metric: `${stats.requiredComplete}/${stats.requiredTotal} required`,
-          summary: stats.setupDone
-            ? `${stats.projectName ?? 'Project'} ingests reports — optional integrations remain on the Steps tab.`
-            : stats.hasAnyProject
-              ? `Finish ${stats.nextStepLabel ?? 'the next step'} so Dashboard and Reports stop showing empty shells.`
-              : 'Create a project first — everything else (keys, SDK, test report) hangs off that row.',
-          severity: setupSeverity,
-          anchor: 'onboarding:decide',
-          evidence: {
-            kind: 'metric-breakdown',
-            items: [
-              { label: 'Required', value: `${stats.requiredComplete}/${stats.requiredTotal}`, tone: stats.setupDone ? 'ok' : 'warn' },
-              { label: 'Reports', value: stats.reportCount, tone: stats.reportCount > 0 ? 'ok' : 'neutral' },
-              { label: 'Fixes', value: stats.fixCount, tone: stats.fixCount > 0 ? 'info' : 'neutral' },
-              { label: 'SDK', value: stats.sdkInstalled ? '✓' : '—', tone: stats.sdkInstalled ? 'ok' : 'neutral' },
-            ],
-          },
-        }}
-        verify={{
-          label: stats.reportCount > 0 ? 'Pipeline verified' : 'Awaiting first report',
-          detail: stats.reportCount > 0
-            ? `${stats.reportCount} report${stats.reportCount === 1 ? '' : 's'} on ${stats.projectName ?? 'project'}`
-            : 'Verify tab sends an admin test report without copying the key',
-          to: '/reports',
-          secondaryTo: '/dashboard',
-          secondaryLabel: 'Dashboard',
-          anchor: 'onboarding:verify',
-        }}
-      />
       ) : null}
 
       {setupComplete && (
@@ -1024,7 +849,7 @@ export function OnboardingPage() {
 
       {effectiveTab === 'verify' && (
         <>
-      {project && <TimeToFirstDiagnosisCard hasApiKey={stats.hasApiKey} />}
+      {project && <TimeToFirstDiagnosisCard hasApiKey={stats.hasApiKey} onOpenSdk={() => setActiveTab('sdk')} />}
 
       {project && nextRequired?.id === 'api_key_generated' && (
         <Card className="p-5 space-y-4">
@@ -1188,7 +1013,7 @@ export function OnboardingPage() {
         </>
       )}
 
-      {effectiveTab === 'copilot' && (
+      {effectiveTab === 'diagnose' && (
         <Suspense fallback={<Loading text="Loading…" />}>
           <SetupCopilotPage embedded />
         </Suspense>
@@ -1244,6 +1069,11 @@ export function OnboardingPage() {
       </>
       )}
 
+      {/* Where reports go: endpoint and host provenance, at the foot. */}
+      {!firstRun ? (
+        <OnboardingSetupReadout stats={stats} statsFetchedAt={statsFetchedAt} statsValidating={statsValidating} />
+      ) : null}
+
       {!ux.hideFooterLinks ? (
       <p className="text-center flex items-center justify-center gap-3">
         <Btn
@@ -1296,18 +1126,12 @@ function formatDiagnosisDuration(ms: number): string {
   return rem ? `${h}h ${rem}m` : `${h}h`
 }
 
-interface TimeToFirstDiagnosis {
-  keyMintedAt: string | null
-  firstDiagnosisAt: string | null
-  ms: number | null
-}
-
 /**
  * Surfaces the phase-1 north-star: time from minting an ingest key to the
  * first plain-English diagnosis. Target is "under 2 minutes" for a fresh
  * install — the one number to protect before spending on reach.
  */
-function TimeToFirstDiagnosisCard({ hasApiKey }: { hasApiKey: boolean }) {
+function TimeToFirstDiagnosisCard({ hasApiKey, onOpenSdk }: { hasApiKey: boolean; onOpenSdk: () => void }) {
   const { data, loading } = usePageData<TimeToFirstDiagnosis>(
     '/v1/admin/onboarding/time-to-first-diagnosis',
   )
@@ -1339,13 +1163,32 @@ function TimeToFirstDiagnosisCard({ hasApiKey }: { hasApiKey: boolean }) {
     )
   }
 
+  // Only test or seed reports so far: the pipeline works, and the clock is
+  // still waiting on the app (report 9b7624e6). Sending another test report
+  // never clears this card, so it points at the SDK instead.
+  if (data?.testDiagnosisAt) {
+    return (
+      <Card className="p-5 border border-ok/25 bg-ok/5" data-testid="ttfd-test-only">
+        <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report from your app</p>
+        <p className="mt-0.5 text-sm text-fg-secondary">Your test report was diagnosed, so the pipeline works.</p>
+        <p className="mt-1 text-xs text-fg-muted leading-relaxed">
+          The 2-minute clock starts with the first report from your app. Install the SDK, then report a bug from your
+          app with its bug button.
+        </p>
+        <Btn size="sm" variant="ghost" className="mt-2" onClick={onOpenSdk}>
+          Install the SDK
+        </Btn>
+      </Card>
+    )
+  }
+
   return (
     <Card className="p-5 border border-edge-subtle">
-      <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report in your queue</p>
-      <p className="mt-0.5 text-sm text-fg-secondary">Waiting on your first classified report.</p>
+      <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report from your app</p>
+      <p className="mt-0.5 text-sm text-fg-secondary">Waiting on the first report from your app.</p>
       <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-        Send a test report below (or trigger one from your app). Target: a plain-English diagnosis in under
-        2 minutes from key mint.
+        Send a test report below to check the pipeline, then report a bug from your app. Target: a plain-English
+        diagnosis in under 2 minutes from making the key.
       </p>
     </Card>
   )

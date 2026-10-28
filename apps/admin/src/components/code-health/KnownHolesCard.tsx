@@ -1,6 +1,6 @@
 /**
  * KnownHolesCard — known holes in this app's dependencies and runtime
- * (ADR 0038), on App health → Code. Not a "Security" page: a hole is a bug
+ * (ADR 0038), on Full-stack audit (Code size links here). Not a "Security" page: a hole is a bug
  * the user has not hit yet, so each one fileable becomes a normal report.
  *
  * One row per upgrade (package or runtime → the version that fixes every
@@ -240,7 +240,7 @@ function RunLine({ view, pkgReason, eolReason }: { view: KnownHolesView; pkgReas
       </p>
       {run.error && <Callout tone="danger">The last check failed: {run.error}</Callout>}
       {pkgReason && (pkgReason.state === 'unknown' || pkgReason.state === 'error') && <Callout tone={pkgReason.state === 'error' ? 'danger' : 'warn'}>{pkgReason.reason}</Callout>}
-      {eolReason?.state === 'finding' && <Callout tone="warn">{eolReason.reason} See Risk checks on the Recipe page for which pins.</Callout>}
+      {eolReason?.state === 'finding' && <Callout tone="warn">{eolReason.reason} Risk checks at the end of the <Link to="/recipe" className={LINK_ACCENT}>App blueprint</Link> page list which pins.</Callout>}
       {run.warnings.length > 0 && (
         <details className="text-2xs text-fg-faint">
           <summary className="cursor-pointer hover:text-fg-secondary">{run.warnings.length} note{run.warnings.length === 1 ? '' : 's'} from the check</summary>

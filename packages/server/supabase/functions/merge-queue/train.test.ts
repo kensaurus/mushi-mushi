@@ -159,7 +159,7 @@ test('a red train is bisected: its first half rides again, the rest waits', asyn
   assertEquals(out, 'started')
   assertEquals(d.calls.slice(0, 2), ['close 900', 'delete mushi/train/20261024-0000'])
   assertEquals(d.calls.filter((c) => c.startsWith('merge ')), ['merge h1', 'merge h2'])
-  assertEquals([tables.release_trains[0].state, tables.release_trains[0].detail], ['failed', 'Members failed CI: gate.'])
+  assertEquals([tables.release_trains[0].state, tables.release_trains[0].detail], ['failed', 'Members failed CI: "gate".'])
   const retry = tables.release_trains[1]
   assertEquals([retry.attempt, (retry.members as Row[]).length], [2, 2])
   assertEquals(tables.fix_merge_queue.find((r) => r.id === 'c')?.state, 'queued')
@@ -175,7 +175,7 @@ test('a member that fails alone is held with the failing check named', async () 
   const out = await runTrainTick(db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings }, d)
   assertEquals(out, 'held')
   assertEquals(tables.fix_merge_queue[0].state, 'blocked')
-  assertEquals(String(tables.fix_merge_queue[0].detail).startsWith('CI failed: Lint & Build.'), true)
+  assertEquals(String(tables.fix_merge_queue[0].detail).startsWith('CI failed: "Lint & Build".'), true)
 })
 
 test('a member taken out of the queue never rides: the train is rebuilt without it', async () => {
@@ -264,7 +264,7 @@ test('a PR red on its own head stays out of the train and is sent to CI repair; 
   assertEquals(out, 'started')
   assertEquals((tables.release_trains[0].members as Row[]).map((m) => m.prNumber), [1, 3])
   const b = tables.fix_merge_queue.find((r) => r.id === 'b')!
-  assertEquals([b.state, String(b.detail).startsWith('CI fails on its own commit (Lint & Build, gate). With review follow-ups on')], ['blocked', true])
+  assertEquals([b.state, String(b.detail).startsWith('CI fails on its own commit ("Lint & Build", "gate"). With review follow-ups on')], ['blocked', true])
 })
 
 test('when both follow-up rounds are used, a red PR says a person must fix it', async () => {
@@ -287,7 +287,7 @@ test('a PR whose only failures are red on main too (an aggregator skipped there)
   })
   const out = await runTrainTick(db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings }, d)
   assertEquals(out, 'nothing_ready')
-  assertEquals([tables.fix_merge_queue[0].state, tables.fix_merge_queue[0].detail], ['queued', 'main is red too (Checks (security)); it rides a release train once main passes.'])
+  assertEquals([tables.fix_merge_queue[0].state, tables.fix_merge_queue[0].detail], ['queued', 'main is red too ("Checks (security)"); it rides a release train once main passes.'])
 })
 
 test('CI still running, or not started while main has checks, keeps a PR out of the train', async () => {

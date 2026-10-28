@@ -41,16 +41,9 @@ import {
   type ResearchTabId,
 } from '../components/research/ResearchStatsTypes'
 import { ResearchSnippetCard } from '../components/research/ResearchSnippetCard'
+import { reportPickerTitle, type PickableReport } from '../components/reports/ReportPicker'
 import { ResearchSessionTable } from '../components/research/ResearchSessionTable'
 import type { SearchResponse, SessionRow } from '../components/research/types'
-
-const REPORT_OPTIONS_ID = 'research-recent-reports'
-
-interface RecentReport {
-  id: string
-  summary?: string | null
-  description?: string | null
-}
 
 type SessionMode = 'all' | 'search' | 'scrape'
 type SessionAge = 'all' | '24h' | '7d'
@@ -96,7 +89,6 @@ export function ResearchPage() {
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [active, setActive] = useState<SearchResponse | null>(null)
-  const [attachInput, setAttachInput] = useState<Record<string, string>>({})
   const [modeFilter, setModeFilter] = useState<SessionMode>('all')
   const [ageFilter, setAgeFilter] = useState<SessionAge>('all')
 
@@ -113,7 +105,6 @@ export function ResearchPage() {
   // Every mode lands on the work tab that matches the posture; the URL wins.
   const postureTab = resolveQuickResearchTab(stats)
   const activeTab: ResearchTabId = explicitResearchTab(searchParams.get('tab')) ?? (postureTab === 'overview' ? 'search' : postureTab)
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const sessionsPath = activeProjectId && activeTab === 'history' ? '/v1/admin/research/sessions?limit=50' : null
 
@@ -128,13 +119,6 @@ export function ResearchPage() {
 
   const sessions = historyData?.sessions ?? []
 
-  // Recent reports for the attach picker, read only while a snippet can be attached.
-  const needsReportPicker = activeTab === 'search' && (active?.results.some((r) => !r.attached_to_report_id) ?? false)
-  const { data: recentReportsData } = usePageData<{ reports: RecentReport[] }>(
-    activeProjectId && needsReportPicker ? '/v1/admin/reports?limit=25&sort=created_at&dir=desc' : null,
-    { deps: [activeProjectId] },
-  )
-  const recentReports = recentReportsData?.reports ?? []
 
   const reloadAll = useCallback(() => {
     reloadStats()
@@ -252,19 +236,14 @@ export function ResearchPage() {
     else setActiveTab('history')
   }, [stats.latestUnattachedSessionId, loadSession, setActiveTab])
 
-  const attach = useCallback(async (snippetId: string) => {
-    const reportId = (attachInput[snippetId] ?? '').trim()
-    if (!reportId) {
-      toast.error('Pick a report or paste its id first.')
-      return
-    }
+  const attach = useCallback(async (snippetId: string, report: PickableReport): Promise<boolean> => {
+    const reportId = report.id
     const res = await apiFetch(`/v1/admin/research/snippets/${snippetId}/attach`, {
       method: 'POST',
       body: JSON.stringify({ reportId }),
     })
     if (res.ok) {
-      toast.success(`Snippet attached to report ${reportId.slice(0, 8)}…`)
-      setAttachInput((s) => ({ ...s, [snippetId]: '' }))
+      toast.success('Finding saved on the bug', reportPickerTitle(report))
       if (active) {
         setActive({
           ...active,
@@ -274,13 +253,16 @@ export function ResearchPage() {
         })
       }
       reloadStats()
-    } else if (res.error?.code === 'REPORT_NOT_FOUND') {
-      toast.error('No report with that id in your project.')
+      return true
+    }
+    if (res.error?.code === 'REPORT_NOT_FOUND') {
+      toast.error('That bug is not in this app any more.')
     } else {
-      const e = describeApiError(res.error, 'Could not attach the snippet')
+      const e = describeApiError(res.error, 'Could not attach the finding')
       toast.error(e.title, e.hint)
     }
-  }, [active, attachInput, reloadStats, toast])
+    return false
+  }, [active, reloadStats, toast])
 
   if (statsLoading && !statsData) {
     return (
@@ -346,6 +328,8 @@ export function ResearchPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            // Empty page: the snapshot below is its one first step (P3).
+            show: stats.topPriority !== 'ready_no_sessions',
             children: (
               <ResearchStatusBanner
                 stats={stats}
@@ -365,9 +349,8 @@ export function ResearchPage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'RESEARCH SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
+                onSearch={() => setActiveTab('search')}
               />
             ),
           },
@@ -483,24 +466,8 @@ export function ResearchPage() {
                     />
                   ) : (
                     <div className="space-y-3">
-                      <datalist id={REPORT_OPTIONS_ID}>
-                        {recentReports.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {(r.summary ?? r.description ?? 'Untitled report').slice(0, 80)}
-                          </option>
-                        ))}
-                      </datalist>
                       {active.results.map((r) => (
-                        <ResearchSnippetCard
-                          key={r.id}
-                          snippet={r}
-                          attachValue={attachInput[r.id] ?? ''}
-                          onAttachValueChange={(v) =>
-                            setAttachInput((s) => ({ ...s, [r.id]: v }))
-                          }
-                          onAttach={() => void attach(r.id)}
-                          reportListId={REPORT_OPTIONS_ID}
-                        />
+                        <ResearchSnippetCard key={r.id} snippet={r} onAttach={(report) => attach(r.id, report)} />
                       ))}
                     </div>
                   )}

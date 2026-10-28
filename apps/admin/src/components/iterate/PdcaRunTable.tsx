@@ -28,7 +28,7 @@ export function PdcaRunTable({ runs, projectName, onOpen, onAbort, onTrigger, bu
   if (runs.length === 0) {
     return (
       <EmptyState
-        title={projectName ? `No PDCA runs for ${projectName} yet` : 'No PDCA runs yet'}
+        title={projectName ? `No improvement runs for ${projectName} yet` : 'No improvement runs yet'}
         description="Switch to New Run, enter a target URL and critic persona, then trigger the producer/critic loop."
         hints={[
           'Queued runs need a manual Trigger unless cron picks them up',

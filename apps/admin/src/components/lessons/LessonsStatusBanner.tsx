@@ -57,7 +57,7 @@ export function LessonsStatusBanner({ stats, onTab, onRefresh, refreshing, plain
       <StatusBannerShell
         tone="info"
         title={`${stats.candidateClusters} cluster${stats.candidateClusters === 1 ? '' : 's'} forming, nothing to promote yet`}
-        subtitle="A cluster can be promoted once it has 3 or more reports and a coherence of 75% or higher."
+        subtitle="A pattern can become a lesson once 3 or more of its reports read alike (75% similar or more)."
       />
     )
   }

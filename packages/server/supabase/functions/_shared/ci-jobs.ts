@@ -32,6 +32,12 @@ import {
 type Db = { from: (table: string) => any }
 
 const API = 'https://api.github.com'
+/**
+ * fix_events.dedupe_key prefix of a CI re-run GitHub refused because the
+ * token lacks Actions write (api/routes/ci.ts writes it; the /pipeline read
+ * stops offering Re-run CI for that app until its settings change).
+ */
+export const RERUN_REFUSED_DEDUPE_PREFIX = 'ci_rerun_refused:'
 /** Runs read per PR head in the fix loop. */
 export const MAX_RUNS_PER_SHA = 5
 /** Annotation reads per PR head (one per cancelled / failed job). */
@@ -194,6 +200,47 @@ export async function fetchRepoVisibility(gh: CiGithub, repo: string): Promise<{
   if (res.status !== 200 || !res.body) return { status: res.status, visibility: 'unknown', owner: null, ownerType: null }
   const v = typeof res.body.private === 'boolean' ? (res.body.private ? 'private' : 'public') : res.body.visibility === 'public' ? 'public' : res.body.visibility ? 'private' : 'unknown'
   return { status: res.status, visibility: v, owner: res.body.owner?.login ?? null, ownerType: res.body.owner?.type ?? null }
+}
+
+export interface GhPull {
+  number: number
+  state?: string | null
+  draft?: boolean | null
+  merged_at?: string | null
+  closed_at?: string | null
+  updated_at?: string | null
+  head?: { ref?: string | null } | null
+}
+
+/** The newest closed pull requests (one page, by update time): which were merged and which were not. */
+export async function listClosedPullRequests(gh: CiGithub, repo: string, perPage = 100): Promise<GhResult<GhPull[]>> {
+  const res = await ghRequest<GhPull[]>(gh, `${API}/repos/${repo}/pulls?state=closed&sort=updated&direction=desc&per_page=${perPage}`)
+  return { status: res.status, body: Array.isArray(res.body) ? res.body.filter((p) => Number.isSafeInteger(p?.number) && p.number > 0) : null }
+}
+
+/**
+ * Paths a docs-only change touches: Markdown anywhere, a top-level `docs/`
+ * folder, licence files and issue templates. The `ignore_docs_paths` fix
+ * (`_shared/ci-cost-fix.ts`) ignores the same set.
+ */
+export const DOCS_ONLY_PATHS = ['**/*.md', '**/*.mdx', 'docs/**', 'LICENSE*', '.github/ISSUE_TEMPLATE/**'] as const
+const DOCS_PATH_RE = /(?:\.mdx?$|^docs\/|^LICENSE[^/]*$|^\.github\/ISSUE_TEMPLATE\/)/
+
+export function isDocsPath(path: string): boolean {
+  return DOCS_PATH_RE.test(path)
+}
+
+/**
+ * Whether every file a pull request changed is documentation. One page of
+ * 100 files: a full page is answered false (there may be code after it).
+ * Null when GitHub did not answer.
+ */
+export async function pullRequestDocsOnly(gh: CiGithub, repo: string, number: number): Promise<{ status: number; docsOnly: boolean | null }> {
+  const res = await ghRequest<Array<{ filename?: string }>>(gh, `${API}/repos/${repo}/pulls/${number}/files?per_page=100`)
+  if (res.status !== 200 || !Array.isArray(res.body)) return { status: res.status, docsOnly: null }
+  const files = res.body.map((f) => f?.filename ?? '').filter(Boolean)
+  if (files.length === 0 || files.length >= 100) return { status: res.status, docsOnly: false }
+  return { status: res.status, docsOnly: files.every(isDocsPath) }
 }
 
 /** POST rerun-failed-jobs for a run. 201 = queued; 403 = the token cannot write Actions. */

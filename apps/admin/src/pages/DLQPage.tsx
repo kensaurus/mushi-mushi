@@ -272,7 +272,8 @@ export function DLQPage() {
             Retry page ({retryableItems.length})
           </Btn>
         )}
-        {canEditProject ? (
+        {/* Only when reports are parked: on an empty queue the button could only say "nothing to flush". */}
+        {canEditProject && stats.reportsQueued > 0 ? (
         <Btn
           size="sm"
           variant="ghost"
@@ -281,7 +282,7 @@ export function DLQPage() {
           loading={flushingQueued}
           title="Replays reports parked because the circuit breaker tripped (rate limits, LLM outages)."
         >
-          Flush queued
+          Flush queued ({stats.reportsQueued})
         </Btn>
         ) : null}
         {stats.recoverable > 0 && canEditProject ? (

@@ -36,6 +36,15 @@
  *   A skipped or failed run keeps the last completed verdict, so a hold stays
  *   a hold. A model error retries after 10 min × tries.
  *
+ * Readying (host repos skip CI on drafts, ADR 0047): a draft PR is marked
+ * ready only on "merge", and only while the reviewed commit is still the PR's
+ * head. "fix_first" leaves it a draft: its follow-up (ADR 0032) pushes a new
+ * commit, so CI on this one would be spent on a head nobody merges.
+ * fix-worker opens every PR as a draft and queues this review; its PR is
+ * also never readied when the model's own check flagged the fix. When no review can run for it (review off, no
+ * Anthropic key, AI budget used up) and it has no verdict yet, the
+ * self-check alone decides, as before ADR 0047.
+ *
  * Nothing here merges. A "hold" verdict makes every Mushi merge path refuse
  * until a person overrides it from the console with a reason.
  *
@@ -74,7 +83,7 @@ import {
   type PullRequestFile,
 } from '../_shared/github.ts'
 import { canonicalPrUrl, parsePullRequestUrl } from '../_shared/pr-substance.ts'
-import { DISPATCHABLE_CLOUD_AGENTS } from '../_shared/agent-adapters.ts'
+import { DISPATCHABLE_CLOUD_AGENTS, FIX_WORKER_AGENTS } from '../_shared/agent-adapters.ts'
 import { AGENT_PR_REVIEW_EFFORT, AGENT_PR_REVIEW_MODEL } from '../_shared/models.ts'
 import { enqueueFixReview } from '../_shared/fix-review-db.ts'
 import { enqueueReviewFollowup } from '../_shared/review-followup-db.ts'
@@ -130,7 +139,7 @@ export const BACKFILL_MAX_LIMIT = 200
 const BACKFILL_MAX_PAGES = 10
 
 const ATTEMPT_COLUMNS =
-  'id, project_id, report_id, agent, status, pr_url, pr_number, pr_state, merged_at, branch, branch_name, repo_id, check_run_status, check_run_conclusion, ci_infra'
+  'id, project_id, report_id, agent, status, pr_url, pr_number, pr_state, merged_at, branch, branch_name, repo_id, check_run_status, check_run_conclusion, ci_infra, review_passed'
 const REPORT_COLUMNS = 'id, summary, description, category, severity, component, reproduction_steps, stage2_analysis'
 const QUEUE_COLUMNS = 'id, fix_attempt_id, project_id, report_id, attempts, comment_id'
 
@@ -160,6 +169,8 @@ interface AttemptRow {
   check_run_conclusion: string | null
   /** The CI verdict for the PR head (Plan 022); an infra verdict never holds a merge. */
   ci_infra?: unknown
+  /** fix-worker's own check of its fix (false: flagged, the PR stays a draft). */
+  review_passed?: boolean | null
 }
 
 export interface ModelCallInput {
@@ -392,7 +403,7 @@ async function recoverStale(db: SupabaseClient, now: Date): Promise<{ requeued: 
   return { requeued: requeued?.length ?? 0, gaveUp: gaveUp?.length ?? 0 }
 }
 
-/** Queue a review for each open cloud-agent PR that has none. */
+/** Queue a review for each open cloud-agent or fix-worker PR that has none. */
 export async function enqueueBackfill(db: SupabaseClient, limit: number, now: Date): Promise<number> {
   // Page through open cloud-agent PRs newest first, skipping ones that already
   // have a review, until `limit` new reviews are queued. Reading only the
@@ -406,7 +417,7 @@ export async function enqueueBackfill(db: SupabaseClient, limit: number, now: Da
     const { data: open, error } = await db
       .from('fix_attempts')
       .select('id, project_id, report_id, pr_url')
-      .in('agent', [...DISPATCHABLE_CLOUD_AGENTS])
+      .in('agent', [...DISPATCHABLE_CLOUD_AGENTS, ...FIX_WORKER_AGENTS])
       .eq('status', 'completed')
       .not('pr_url', 'is', null)
       .in('pr_state', ['open', 'draft'])
@@ -459,6 +470,60 @@ export function pickFairBatch<T extends { project_id: string }>(rows: T[], batch
 
 const EVENT_STATUS: Record<ReviewVerdict, 'ok' | 'pending' | 'fail'> = { merge: 'ok', fix_first: 'pending', hold: 'fail' }
 
+export const READY_AFTER_REVIEW_LABEL = 'Marked ready after review; CI runs now'
+export const READY_WITHOUT_REVIEW_LABEL = 'Marked ready without an Opus review; CI runs now'
+
+/** Skips after which a never-reviewed fix-worker PR falls back to the model's own check (ADR 0047). */
+export const NO_REVIEW_FALLBACK_REASONS: ReadonlySet<ReviewSkipReason> = new Set(['review_off', 'no_anthropic_key', 'llm_budget_exceeded'])
+
+/**
+ * Whether a verdict readies the PR (ADR 0047): only "merge". A "fix_first"
+ * head is about to be replaced by its follow-up's push, and nothing reads CI
+ * on it (the findings follow-up sends findings, not CI; CI repair and
+ * fix-verifier start from a "merge" review). fix-worker: never a fix its
+ * model flagged either.
+ */
+export function readiesOnVerdict(attempt: { agent: string; review_passed?: boolean | null }, verdict: ReviewVerdict): boolean {
+  if (verdict !== 'merge') return false
+  return !FIX_WORKER_AGENTS.has(attempt.agent) || attempt.review_passed !== false
+}
+
+/**
+ * No review can run for this project. A fix-worker PR that was never
+ * reviewed is readied when its model's own check passed, as before ADR 0047,
+ * so it is not stranded as a draft; a PR with any verdict on record keeps it.
+ */
+async function readyWithoutReview(
+  db: SupabaseClient,
+  row: QueueRow,
+  attempt: AttemptRow,
+  reason: ReviewSkipReason,
+  deps: ReviewDeps,
+): Promise<void> {
+  if (!FIX_WORKER_AGENTS.has(attempt.agent) || attempt.review_passed !== true) return
+  const { data: last } = await db.from('fix_reviews').select('verdict').eq('id', row.id).maybeSingle()
+  if ((last as { verdict?: string | null } | null)?.verdict) return
+  const pr = attempt.pr_url ? parsePullRequestUrl(attempt.pr_url) : null
+  if (!pr) return
+  const token = await (deps.resolveGithubToken ?? defaultResolveGithubToken)(db, attempt)
+  if (!token) return
+  const ref: GithubRepoRef = { owner: pr.owner, repo: pr.repo }
+  const details = await (deps.fetchPr ?? fetchPullRequestDetails)(token, ref, pr.number)
+  if (!details || details.merged || details.state === 'closed' || details.draft !== true) return
+  const ready = await (deps.markReady ?? markPullRequestReady)(token, ref, pr.number)
+  if (ready.ok && !ready.alreadyReady) {
+    await insertReviewEvent(db, row, {
+      status: 'ok',
+      label: READY_WITHOUT_REVIEW_LABEL,
+      detail: `${REVIEW_SKIP_REASONS[reason]}. The fix passed its own check.`,
+      dedupe: `review-ready-noreview:${row.id}:${details.headSha ?? 'none'}`,
+      payload: { reviewId: row.id, skipReason: reason, headSha: details.headSha ?? null },
+    })
+  } else if (!ready.ok) {
+    log.warn('PR not marked ready (no review)', { reviewId: row.id, message: ready.message })
+  }
+}
+
 function reportContext(report: Record<string, unknown> | null) {
   const s2 = ((report?.stage2_analysis ?? null) as Record<string, unknown> | null) ?? {}
   const steps = (s2.reproductionSteps ?? report?.reproduction_steps ?? null) as unknown
@@ -505,6 +570,13 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
         dedupe: `review-skip:${row.id}:${reason}:${tries}`,
         payload: { reviewId: row.id, skipReason: reason },
       })
+    }
+    if (attempt && NO_REVIEW_FALLBACK_REASONS.has(reason)) {
+      try {
+        await readyWithoutReview(db, row, attempt, reason, deps)
+      } catch (err) {
+        log.warn('PR not marked ready (no review)', { reviewId: row.id, err: err instanceof Error ? err.message : String(err) })
+      }
     }
     return { outcome: 'skipped', reason }
   }
@@ -721,20 +793,28 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
 
   // Host repos skip CI on draft PRs and run it on ready_for_review (glot.it,
   // 2026-10-20: 131 queued runs on one runner). A PR the review would let
-  // through is marked ready so its CI runs; a hold stays a draft.
-  if (review.verdict === 'merge' || review.verdict === 'fix_first') {
+  // through is marked ready so its CI runs; fix_first and hold stay drafts
+  // (ADR 0047). A fix-worker PR the model flagged stays a draft even on merge.
+  if (readiesOnVerdict(attempt, review.verdict)) {
     try {
-      const ready = await (deps.markReady ?? markPullRequestReady)(token, ref, pr.number)
-      if (ready.ok && !ready.alreadyReady) {
-        await insertReviewEvent(db, row, {
-          status: 'ok',
-          label: 'Marked ready for review (CI runs)',
-          detail: `Opus review: ${VERDICT_LABEL[review.verdict]}`,
-          dedupe: `review-ready:${row.id}:${details.headSha ?? nowIso}`,
-          payload: { reviewId: row.id, verdict: review.verdict, headSha: details.headSha },
-        })
-      } else if (!ready.ok) {
-        log.warn('PR not marked ready', { reviewId: row.id, message: ready.message })
+      // Only the reviewed commit: a push during the review re-queued it, and
+      // the next review decides about the new head.
+      const current = await (deps.fetchPr ?? fetchPullRequestDetails)(token, ref, pr.number)
+      if (!current || current.headSha !== details.headSha || current.merged || current.state === 'closed') {
+        log.info('PR not marked ready: its head moved or it closed during the review', { reviewId: row.id })
+      } else if (current.draft === true) {
+        const ready = await (deps.markReady ?? markPullRequestReady)(token, ref, pr.number)
+        if (ready.ok && !ready.alreadyReady) {
+          await insertReviewEvent(db, row, {
+            status: 'ok',
+            label: READY_AFTER_REVIEW_LABEL,
+            detail: `Opus review: ${VERDICT_LABEL[review.verdict]}`,
+            dedupe: `review-ready:${row.id}:${details.headSha ?? nowIso}`,
+            payload: { reviewId: row.id, verdict: review.verdict, headSha: details.headSha },
+          })
+        } else if (!ready.ok) {
+          log.warn('PR not marked ready', { reviewId: row.id, message: ready.message })
+        }
       }
     } catch (err) {
       // The verdict gates merges either way; readying the PR only starts CI.
