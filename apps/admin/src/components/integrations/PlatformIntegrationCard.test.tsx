@@ -101,6 +101,16 @@ describe('PlatformIntegrationCard — Remove key', () => {
     expect(moreActions()).toBeNull()
   })
 
+  // A not-connected card had a red "Configure" and a red "Connect" doing the
+  // same thing (integrator's walk, 2026-10-28).
+  it('offers one way to connect a card that is not connected', async () => {
+    const onStartEdit = vi.fn()
+    await render({ config: {}, sourceByField: {}, onStartEdit })
+    const labels = Array.from(container.querySelectorAll('button')).map((b) => b.textContent?.trim())
+    expect(labels).toContain('Connect')
+    expect(labels).not.toContain('Configure')
+  })
+
   it('hides the menu from members, who cannot change credentials', async () => {
     await render({ onRemoveKey: vi.fn(), onApplyToAll: vi.fn(), canManage: false })
     expect(moreActions()).toBeNull()

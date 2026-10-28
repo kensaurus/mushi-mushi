@@ -44,8 +44,24 @@ function input(over: Partial<ConnectionGridInput> = {}): ConnectionGridInput {
 }
 
 describe('buildConnectionGrid', () => {
-  it('lists the six tools in a fixed order', () => {
-    expect(buildConnectionGrid(input()).map((t) => t.id)).toEqual(['sentry', 'github', 'slack', 'langfuse', 'cursor_cloud', 'linear'])
+  it('lists the tools in a fixed order', () => {
+    expect(buildConnectionGrid(input()).map((t) => t.id)).toEqual(['sentry', 'github', 'slack', 'cursor_cloud', 'linear'])
+  })
+
+  // Mushi's own Langfuse (set in its environment) counted as one of the user's
+  // connections: a new app read "2 connected" with nothing connected
+  // (integrator's new-user walk, 2026-10-28).
+  it("leaves out Mushi's own Langfuse and counts the user's", () => {
+    const viaEnv: PlatformResponse = {
+      platform: { langfuse: { langfuse_host: 'https://us.cloud.langfuse.com', langfuse_public_key_ref: 'ref', langfuse_secret_key_ref: 'ref' } },
+      sourceByField: { langfuse_host: 'env', langfuse_public_key_ref: 'env', langfuse_secret_key_ref: 'env' },
+    }
+    const envTiles = buildConnectionGrid(input({ platform: viaEnv, history: [probe('langfuse')] }))
+    expect(envTiles.map((t) => t.id)).not.toContain('langfuse')
+    expect(connectionGridSentence(envTiles).sentence).toMatch(/^Nothing is connected yet/)
+
+    const own: PlatformResponse = { ...viaEnv, sourceByField: { langfuse_host: 'project', langfuse_public_key_ref: 'project', langfuse_secret_key_ref: 'project' } }
+    expect(buildConnectionGrid(input({ platform: own, history: [probe('langfuse')] })).map((t) => t.id)).toContain('langfuse')
   })
 
   it('shows Claude Code only once it is set up, so a failing agent is never hidden from the grid', () => {
@@ -67,7 +83,7 @@ describe('buildConnectionGrid', () => {
   it('a configured tool with a failing check needs you; an unconfigured one does not', () => {
     const tiles = buildConnectionGrid(input({ history: [probe('sentry'), probe('github', 'down', 'HTTP 401 Bad credentials')] }))
     expect(brokenConnections(tiles).map((t) => t.id)).toEqual(['github'])
-    expect(tiles.find((t) => t.id === 'langfuse')!.view.state).toBe('not_connected')
+    expect(tiles.find((t) => t.id === 'cursor_cloud')!.view.state).toBe('not_connected')
   })
 
   it('a Slack channel nothing can post to needs you, with the card’s words', () => {

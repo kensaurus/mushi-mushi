@@ -102,6 +102,8 @@ export function IntegrationsPage() {
   const platform = platformQuery.data?.platform ?? null
   /** Flat map: field name → where the effective value came from ('project'|'org'|'env'|null) */
   const sourceByField = platformQuery.data?.sourceByField ?? {}
+  // The user's own Langfuse (not Mushi's environment default) keeps its fold open.
+  const langfuseOwn = Object.entries(sourceByField).some(([field, source]) => field.startsWith('langfuse_') && (source === 'project' || source === 'org'))
   const organizationId = platformQuery.data?.organizationId ?? null
   const history = historyQuery.data?.history ?? []
   const routing = routingQuery.data?.integrations ?? []
@@ -491,14 +493,20 @@ export function IntegrationsPage() {
         />
       )}
 
-      <PanelSectionLabel>Core platform</PanelSectionLabel>
+      {/* Positioning (AGENTS.md): no monitoring stack required. This block said
+          that all three be connected, with Mushi's own Langfuse
+          as one of them (integrator's walk, 2026-10-28). GitHub leads; Sentry
+          is optional; Langfuse sits in the Advanced fold below. */}
+      <PanelSectionLabel>Your code and errors</PanelSectionLabel>
       <Panel className="mb-6" data-dav-anchor="integrations:decide">
         <div className="p-4">
-          <p className="text-2xs text-fg-muted mb-2 pl-2 border-l-2 border-brand/30 leading-snug">
-            Connect all three to close the full loop: Sentry surfaces error context, Langfuse traces every LLM call, and GitHub lets the fix-worker open draft PRs.
+          <p className="text-2xs text-fg-muted mb-2 pl-2 border-l-2 border-brand/30 leading-snug" data-testid="integrations-core-lede">
+            GitHub is the one Mushi needs: fixes arrive as pull requests on your repo. Sentry is optional: errors it already catches become bugs here.
           </p>
           <div className="space-y-2" id="integrations-required">
-            {PLATFORM_DEFS.filter((d) => d.group === 'required').map((def) => (
+            {PLATFORM_DEFS.filter((d) => d.group === 'required')
+              .sort((a, b) => Number(b.kind === 'github') - Number(a.kind === 'github'))
+              .map((def) => (
               <div key={def.kind} id={`platform-card-${def.kind}`}>
                 <PlatformIntegrationCard
                   def={def}
@@ -528,6 +536,46 @@ export function IntegrationsPage() {
               </div>
             ))}
           </div>
+        </div>
+        <div className="px-4 pb-4">
+          {/* Open when the user connected their own, so its grid tile's Fix lands on a visible card. */}
+          <DisclosurePanel
+            key={langfuseOwn ? 'langfuse-own' : 'langfuse-default'}
+            title="Advanced: trace Mushi's AI calls in your own Langfuse"
+            defaultOpen={langfuseOwn}
+          >
+            <div className="space-y-2" id="integrations-advanced">
+              {PLATFORM_DEFS.filter((d) => d.group === 'advanced').map((def) => (
+                <div key={def.kind} id={`platform-card-${def.kind}`}>
+                  <PlatformIntegrationCard
+                    def={def}
+                    config={platform?.[def.kind] ?? {}}
+                    sourceByField={sourceByField}
+                    latestProbe={latestByKind[def.kind]}
+                    sparkline={sparklineByKind[def.kind] ?? []}
+                    isEditing={editing === def.kind}
+                    draft={drafts[def.kind] ?? {}}
+                    saving={saving === def.kind}
+                    testing={testing === def.kind}
+                    onStartEdit={() => startEdit(def.kind)}
+                    onCancelEdit={cancelEdit}
+                    onChangeField={(name, value) => {
+                      setDrafts((d) => ({ ...d, [def.kind]: { ...d[def.kind], [name]: value } }))
+                      clearInlineError(def.kind)
+                    }}
+                    inlineError={inlineErrors[def.kind] ?? null}
+                    onSave={() => void saveKind(def.kind)}
+                    onTest={() => void testKind(def.kind)}
+                    onApplyToAll={organizationId ? () => setPendingApplyKind(def.kind) : undefined}
+                    applyingToAll={applyingKind === def.kind}
+                    onRemoveKey={() => setPendingRemoveKeyKind(def.kind)}
+                    removingKey={removingKeyKind === def.kind}
+                    canManage={canManage}
+                  />
+                </div>
+              ))}
+            </div>
+          </DisclosurePanel>
         </div>
       </Panel>
 

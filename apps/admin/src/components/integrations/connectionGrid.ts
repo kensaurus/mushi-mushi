@@ -138,11 +138,19 @@ export function buildConnectionGrid(input: ConnectionGridInput): GridTile[] {
   // sidebar badge) count it when it is set up, so the grid shows it then too.
   const claude = platformTile(input, 'claude_code_agent', 'claude_code_agent', 'Claude Code', 'claude')
 
+  // Langfuse counts only when it is the user's own: Mushi's environment default
+  // made a new app read "2 connected" with nothing connected (2026-10-28).
+  const langfuseDef = PLATFORM_DEFS.find((d) => d.kind === 'langfuse')
+  const langfuseOwn = (langfuseDef?.fields ?? []).some((f) => {
+    const source = input.platform?.sourceByField?.[f.name]
+    return source === 'project' || source === 'org'
+  })
+
   return [
     sentry,
     platformTile(input, 'github', 'github', 'GitHub', 'github'),
     slack,
-    platformTile(input, 'langfuse', 'langfuse', 'Langfuse', 'langfuse'),
+    ...(langfuseOwn ? [platformTile(input, 'langfuse', 'langfuse', 'Langfuse', 'langfuse')] : []),
     platformTile(input, 'cursor_cloud', 'cursor_cloud', 'Cursor', 'cursor'),
     ...(claude.view.state === 'not_connected' ? [] : [claude]),
     linear,

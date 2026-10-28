@@ -42,7 +42,7 @@ const history: HealthRow[] = [
 ]
 
 describe('ConnectionGrid', () => {
-  it('shows six tiles, the broken one first in the sentence, and one Fix button', () => {
+  it("shows the user's tiles (not Mushi's own Langfuse), the broken one first in the sentence, and one Fix button", () => {
     act(() => {
       root.render(
         createElement(
@@ -58,7 +58,7 @@ describe('ConnectionGrid', () => {
       )
     })
     const tiles = host.querySelectorAll('[data-state]')
-    expect(tiles).toHaveLength(6)
+    expect(tiles).toHaveLength(5)
     expect(host.querySelector('[data-state="attention"]')?.getAttribute('aria-label')).toBe('GitHub: Needs you. Open its card.')
     // One broken connection: its reason is in the sentence, with no second
     // "needs you" list saying it again (console sweep 2026-10-28).

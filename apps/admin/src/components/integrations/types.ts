@@ -111,10 +111,12 @@ export interface PlatformDef {
   setupSteps?: string[]
   /**
    * Grouping hint for the Integrations page UI.
-   *  - 'required' — infra integrations the loop needs to function (Sentry, GitHub, Langfuse)
+   *  - 'required' — your code and errors: GitHub (fixes as PRs), Sentry (optional)
    *  - 'fix-agent' — pick one AI agent to run the fix step (Cursor Cloud, Claude Code)
+   *  - 'advanced' — tracing Mushi's own AI calls in your Langfuse; never needed,
+   *    so it sits folded away (it read as one of three to connect, 2026-10-28)
    */
-  group?: 'required' | 'fix-agent'
+  group?: 'required' | 'fix-agent' | 'advanced'
   /**
    * Another integration kind that must be configured before this one works.
    * When set, the card renders a blocking banner with a link to the dependency.
@@ -232,7 +234,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Paste org slug + token below, then Save → Test connection.',
       'To route errors INTO Mushi: Sentry → Settings → Developer Settings → create an internal integration with the receive URL below as its webhook URL (resources: issue, event_alert), then paste its Client Secret as the webhook secret here. Existing issues: use Import below.',
     ],
-    whyItMatters: 'Sentry errors become Mushi reports: an alert firing lands in your queue with plain-English triage and a dispatchable fix, deduped per Sentry issue, and the loop closes both ways — Mushi fix → Sentry resolve, Sentry resolve → Mushi resolved. Seer analysis and event context enrich classification.',
+    whyItMatters: 'Sentry errors become Mushi reports: an alert firing lands in your queue with plain-English triage and a fix ready to start, deduped per Sentry issue, and the loop closes both ways — Mushi fix → Sentry resolve, Sentry resolve → Mushi resolved. Seer analysis and event context enrich classification.',
     capabilitiesOnceConnected: [
       'Sentry issue alerts land in the report queue as triaged, fix-ready reports (deduped per issue; regressions reopen instead of duplicating)',
       'Auto-attach matching Sentry events (stack trace + breadcrumbs) to each report',
@@ -253,7 +255,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
   {
     kind: 'langfuse',
     label: 'Langfuse',
-    group: 'required',
+    group: 'advanced',
     Icon: IconLangfuse,
     color: 'text-ok',
     domain: 'langfuse.com',
@@ -267,7 +269,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Copy the public key (pk-lf-…) and secret key (sk-lf-…).',
       'Paste host + both keys below. US cloud host: https://us.cloud.langfuse.com',
     ],
-    whyItMatters: 'Every LLM call (Stage 1 classify, Stage 2 vision, fix-worker) emits a trace. Click any trace from a report or fix attempt to see the exact prompt + response + token cost.',
+    whyItMatters: 'Optional. Sends a trace of every AI call Mushi makes for this app (the diagnosis, the screenshot read, the fix) to your own Langfuse, with the exact prompt, answer and cost.',
     capabilitiesOnceConnected: [
       'One-click trace links on every classification, judge run, and fix attempt',
       'Per-call cost + latency surfaced in /health and /billing',
@@ -296,7 +298,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Paste the full repo URL (https://github.com/owner/repo) and the token below.',
       'Optional: add a webhook secret so CI check-runs sync back to Fix cards.',
     ],
-    whyItMatters: 'The fix-worker creates draft PRs against this repo. Add a webhook secret to sync CI check-runs back into the Auto-Fix Pipeline so reviewers see green/red without leaving Mushi.',
+    whyItMatters: 'Mushi opens each fix as a draft pull request on this repo. Add a webhook secret and every fix shows whether its checks passed, without leaving Mushi.',
     capabilitiesOnceConnected: [
       'Dispatch auto-fix attempts that open draft PRs on a feature branch',
       'CI check-run conclusions sync back into the Fix card (PR open / CI passing / failing)',

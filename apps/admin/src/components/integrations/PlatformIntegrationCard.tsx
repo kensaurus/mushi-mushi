@@ -377,7 +377,10 @@ export function PlatformIntegrationCard({
                 </Btn>
               </Tooltip>
             )}
-            {!isEditing && (
+            {/* Not connected: the status row's "Connect" opens the form. A red
+                "Configure" here was a second primary button doing the same
+                (2026-10-28). Members still see it, disabled, with the reason. */}
+            {!isEditing && (requiredOk || !canManage) && (
               <Tooltip content={!canManage ? ADMIN_ONLY_HINT : requiredOk ? 'Edit credentials' : 'Configure integration'}>
                 <Btn
                   variant={requiredOk ? 'ghost' : 'primary'}
