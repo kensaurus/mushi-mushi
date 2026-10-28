@@ -102,6 +102,8 @@ export interface KpiTileProps {
   /** Inline style forwarded to the card root — e.g. the `animationDelay` that
    *  `MetricStrip`'s stagger injects via `cloneElement`. */
   style?: CSSProperties
+  /** Forwarded to the card root so tests can find a tile without walking markup. */
+  'data-testid'?: string
 }
 
 /** Plot height of a KPI tile's axis-less sparkline, in px. The reserved
@@ -135,6 +137,7 @@ export function KpiTile({
   density = 'default',
   className,
   style,
+  'data-testid': testId,
 }: KpiTileProps) {
   const isPrimary = variant === 'primary'
   const isFlat = density === 'flat'
@@ -246,26 +249,26 @@ export function KpiTile({
     )
     if (isFlat) {
       return (
-        <div className={`stat-card-link min-w-0 ${cardClassNameOrUndefined ?? ''}`} style={style}>
+        <div className={`stat-card-link min-w-0 ${cardClassNameOrUndefined ?? ''}`} style={style} data-testid={testId}>
           {linkInner}
         </div>
       )
     }
     return (
-      <Card elevated interactive className={cardClassNameOrUndefined} style={style}>
+      <Card elevated interactive className={cardClassNameOrUndefined} style={style} data-testid={testId}>
         {linkInner}
       </Card>
     )
   }
   if (isFlat) {
     return (
-      <div className={`min-w-0 ${cardClassNameOrUndefined ?? ''}`} style={style}>
+      <div className={`min-w-0 ${cardClassNameOrUndefined ?? ''}`} style={style} data-testid={testId}>
         {inner}
       </div>
     )
   }
   return (
-    <Card elevated className={cardClassNameOrUndefined} style={style}>
+    <Card elevated className={cardClassNameOrUndefined} style={style} data-testid={testId}>
       {inner}
     </Card>
   )

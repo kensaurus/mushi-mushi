@@ -4,9 +4,10 @@
 
 /**
  * FILE: apps/admin/src/components/fixes/FixSummaryRow.test.tsx
- * PURPOSE: The failed total's subtitle names one cause only when that cause
- *          is the only one. Several causes stay mixed, and the list of
- *          causes is not labelled as a single "PR closed without merge".
+ * PURPOSE: "Auto-fix stopped" always means reports still unfixed. The
+ *          "Why auto-fix stopped" tile names one cause only when that cause
+ *          is the only one; with several causes its number is the full
+ *          unfixed total, not the most common cause's count.
  */
 
 import { act, createElement } from 'react'
@@ -14,6 +15,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { FixSummaryRow } from './FixSummaryRow'
 import type { FixSummary } from './types'
+
+;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 function summary(over: Partial<FixSummary>): FixSummary {
   return {
@@ -49,34 +52,54 @@ function render(data: FixSummary) {
 }
 
 /** The KPI card that shows `label`, including its number and subtitle. */
+const TILE_TEST_ID: Record<string, string> = {
+  'Auto-fix stopped': 'kpi-auto-fix-stopped',
+  'Why auto-fix stopped': 'kpi-why-auto-fix-stopped',
+}
+
 function tileText(label: string): string {
-  const labelEl = [...host.querySelectorAll('div')].find(
-    (el) => el.className.includes('uppercase') && el.textContent === label,
-  )
-  return labelEl?.parentElement?.parentElement?.parentElement?.textContent ?? ''
+  const el = host.querySelector(`[data-testid="${TILE_TEST_ID[label]}"]`)
+  expect(el, label).not.toBeNull()
+  return el?.textContent ?? ''
 }
 
 describe('FixSummaryRow failed subtitle', () => {
-  it('does not call the whole failed total one cause when several causes are present', () => {
+  it('keeps the unfixed total when several causes exist, and does not show only the top cause', () => {
     render(summary({
+      failed: 20,
+      total: 20,
       failureBreakdown: [
-        { category: 'pr_closed_unmerged', count: 3 },
-        { category: 'ci_failed', count: 1 },
+        { category: 'pr_closed_unmerged', count: 17 },
+        { category: 'ci_failed', count: 3 },
       ],
     }))
-    expect(tileText('Auto-fix stopped')).toContain('several causes')
-    expect(tileText('Auto-fix stopped')).not.toContain('PR closed without merge')
-    expect(tileText('Why auto-fix stopped')).toContain('several causes')
-    expect(tileText('Why auto-fix stopped')).not.toContain('PR closed without merge')
+    const stopped = tileText('Auto-fix stopped')
+    expect(stopped).toContain('20')
+    expect(stopped).toContain('reports still unfixed')
+    expect(stopped).not.toContain('several causes')
+    expect(stopped).not.toContain('PR closed without merge')
+
+    const why = tileText('Why auto-fix stopped')
+    expect(why).toContain('20')
+    expect(why).not.toContain('17')
+    expect(why).toContain('several causes')
+    expect(why).not.toContain('PR closed without merge')
   })
 
-  it('names the cause when every stopped report failed that way', () => {
+  it('names the cause and its count when every stopped report failed that way', () => {
     render(summary({
-      failed: 2,
-      total: 2,
+      failed: 9,
+      total: 9,
       failureBreakdown: [{ category: 'pr_closed_unmerged', count: 2 }],
     }))
-    expect(tileText('Why auto-fix stopped')).toContain('PR closed without merge')
-    expect(tileText('Why auto-fix stopped')).not.toContain('several causes')
+    const stopped = tileText('Auto-fix stopped')
+    expect(stopped).toContain('9')
+    expect(stopped).toContain('reports still unfixed')
+
+    const why = tileText('Why auto-fix stopped')
+    expect(why).toContain('2')
+    expect(why).not.toContain('9')
+    expect(why).toContain('PR closed without merge')
+    expect(why).not.toContain('several causes')
   })
 })
