@@ -140,3 +140,66 @@ describe('#248 low-score banner target', () => {
     expect(res.json.data.topPriorityTo).toBe(`/judge?tab=evaluations&sort=score_asc&project=${P}`)
   })
 })
+
+describe('64c2b3df "recent" disagreement share is really recent', () => {
+  const day = 86_400_000
+  const ago = (days: number) => new Date(Date.now() - days * day).toISOString()
+
+  it('labels the share with its window and returns the weekly agreement trend', async () => {
+    // Old history: 10 disagreements 60 days ago. Last 14 days: 1 of 10.
+    const rows: Row[] = [
+      ...Array.from({ length: 10 }, (_, i) => evaluation(100 + i, { classification_agreed: false, created_at: ago(60) })),
+      ...Array.from({ length: 9 }, (_, i) => evaluation(200 + i, { created_at: ago(2) })),
+      evaluation(300, { classification_agreed: false, created_at: ago(1) }),
+    ]
+    db = makeFakeDb(
+      { classification_evaluations: rows, reports: [], prompt_versions: [] },
+      { rpc: () => [{ week_start: '2026-10-19', avg_score: 0.9, eval_count: 10 }] },
+    )
+    const res = await get('/v1/admin/judge/stats')
+    const d = res.json.data
+    // All-time stays all-time…
+    expect(d.disagreementCount).toBe(11)
+    expect(d.disagreementRatePct).toBe(55)
+    // …and the recent window is its own number, so a 10% recent share is not flagged.
+    expect(d.recentWindowDays).toBe(14)
+    expect(d.recentEvaluations).toBe(10)
+    expect(d.recentDisagreements).toBe(1)
+    expect(d.topPriority).not.toBe('disagreements')
+    // Weekly trend, oldest first: the 60-day-old week was all disagreements.
+    expect(d.agreementWeeks[0]).toMatchObject({ graded: 10, agreed: 0 })
+    const graded = d.agreementWeeks.reduce((n: number, w: { graded: number }) => n + w.graded, 0)
+    expect(graded).toBe(20)
+  })
+
+  it('says "in the last 14 days" when the recent share is high', async () => {
+    const rows: Row[] = Array.from({ length: 6 }, (_, i) =>
+      evaluation(400 + i, { classification_agreed: i >= 3, created_at: ago(3) }),
+    )
+    db = makeFakeDb(
+      { classification_evaluations: rows, reports: [], prompt_versions: [] },
+      { rpc: () => [{ week_start: '2026-10-19', avg_score: 0.9, eval_count: 6 }] },
+    )
+    const d = (await get('/v1/admin/judge/stats')).json.data
+    expect(d.topPriority).toBe('disagreements')
+    expect(d.topPriorityLabel).toContain('50% of the 6 grades in the last 14 days')
+    expect(d.topPriorityLabel).not.toMatch(/recent grades/)
+  })
+})
+
+describe('agreement trend reads past the 1,000-row page', () => {
+  it('counts every grade in the 12 weeks when PostgREST caps each answer at 1,000 rows', async () => {
+    const day = 86_400_000
+    const rows: Row[] = Array.from({ length: 1500 }, (_, i) =>
+      evaluation(1000 + i, { created_at: new Date(Date.now() - (i % 70) * day - 3_600_000).toISOString(), classification_agreed: i % 5 !== 0 }),
+    )
+    db = makeFakeDb(
+      { classification_evaluations: rows, reports: [], prompt_versions: [] },
+      { maxRows: 1000, rpc: () => [{ week_start: '2026-10-19', avg_score: 0.9, eval_count: 10 }] },
+    )
+    const d = (await get('/v1/admin/judge/stats')).json.data
+    const graded = d.agreementWeeks.reduce((n: number, w: { graded: number }) => n + w.graded, 0)
+    expect(graded).toBe(1500)
+    expect(d.agreementCapped).toBe(false)
+  })
+})

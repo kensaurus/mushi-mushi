@@ -18,7 +18,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout';
-import { PageScopeHint, SegmentedControl, StatCard, ErrorAlert } from '../components/ui';
+import { Card, PageScopeHint, SegmentedControl, StatCard, ErrorAlert } from '../components/ui';
 import { PageHeaderBar } from '../components/PageHeaderBar';
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture';
 import { GeneralPanel } from '../components/settings/GeneralPanel';
@@ -36,6 +36,8 @@ import { VoiceIntakePanel } from '../components/settings/VoiceIntakePanel';
 import { HealthPanel } from '../components/settings/HealthPanel';
 import { DevToolsPanel } from '../components/settings/DevToolsPanel';
 import { LabsPanel } from '../components/settings/LabsPanel';
+import { DisplayPreferences } from '../components/DisplayPreferences';
+import { useFocusMode } from '../lib/focusMode';
 import { SettingsIntegrationsReadout } from '../components/settings/SettingsIntegrationsReadout';
 import { SettingsStatusBanner } from '../components/settings/SettingsStatusBanner';
 import { DeveloperDetails } from '../components/settings/SettingsRow';
@@ -106,6 +108,7 @@ function SettingsPageBody({
   const copy = usePageCopy('/settings');
   const ux = useSettingsUx();
   const activeProjectId = useActiveProjectId();
+  const [focusMode, setFocusMode] = useFocusMode();
   const setup = useSetupStatus(activeProjectId);
   const projectName = setup.activeProject?.project_name ?? null;
   const projectSlug = setup.activeProject?.project_slug ?? null;
@@ -362,7 +365,18 @@ function SettingsPageBody({
             </div>
           </>
         )}
-        {active === 'labs' && <LabsPanel />}
+        {active === 'display' && (
+          <>
+            <Card className="px-4 py-2" data-testid="settings-display">
+              <h2 className="pt-1 text-sm font-semibold text-fg">Display</h2>
+              <p className="text-xs text-fg-muted">Saved in this browser. The same controls are in the menu under your name at the foot of the sidebar.</p>
+              <DisplayPreferences layout="page" focusMode={focusMode} onFocusChange={setFocusMode} />
+            </Card>
+            <div id={SETTINGS_SECTION_IDS.sidebarPages} className="scroll-mt-6 space-y-4">
+              <LabsPanel />
+            </div>
+          </>
+        )}
       </div>
 
       {stats.projectId ? (

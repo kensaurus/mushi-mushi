@@ -11,27 +11,11 @@ Your AI wrote it. Mushi tells you why it broke.</>}
   lead={LANDING_HERO.lead}
 />
 
-## What happens to a bug
+## What it takes
 
-Every bug moves through six steps: reported, triaged, fix PR, reviewed and CI,
-merged and deployed, and the person who reported it is told.
-
-## The problem it solves
-
-- A user hits a broken button. Nothing crashed, so error monitoring (such as Sentry) stays quiet.
-- They give up, or write "it's broken" with no detail.
-- You lose an afternoon reading code your AI wrote, not you.
-
-Mushi turns that report into a plain-English cause and a fix your AI can start from.
-
-## A real example from our own sites
-
-Mushi's weekly site audit found two bugs on our own websites that no error alert had caught:
-
-- an "Edit this page" link that led nowhere;
-- Japanese text on English pages.
-
-Within the hour, an AI agent in Cursor opened a fix for each, and a second AI (Claude Opus) reviewed them before merge.
+- **No monitoring stack.** No Sentry, no logging service, no AI key of your own. Mushi's AI writes the diagnosis.
+- **Free to start.** 50 diagnoses a month with no card. Repeat reports of one bug count once.
+- **Your AI does the fix, you approve it.** Mushi hands Cursor, Claude Code or Lovable the prompt. Nothing ships until you say so.
 
 ## What this is (and is not)
 
@@ -43,34 +27,14 @@ Mushi Mushi is the bug mediator for AI-built apps, an open-source tool that give
 
 Words you will see on this page
 
-- **SDK**: the small piece of code you add to your app. It shows the report button and sends reports to Mushi.
 - **Diagnosis**: Mushi's written explanation of one bug, with how serious it is, the likely cause and a suggested fix.
+- **Fix prompt**: the diagnosis plus the evidence, written as instructions you paste into your AI editor.
+- **SDK** or **script tag**: the small piece of code you add to your app. It shows the report button and sends reports to Mushi.
 - **MCP**: the standard way AI code editors such as Cursor and Claude Code connect to outside tools. It is how your editor reads Mushi's reports.
-- **Pull request (PR)**: a proposed change to your code that waits for you to approve and merge it.
-- **CI**: the automatic tests that run on every pull request.
-- **Self-host**: run Mushi on your own server instead of using the hosted service.
 
-## This is what a diagnosis looks like
-
-A user writes a sentence or two. Mushi reads it with the screenshot and the browser log, and writes back a title, severity, likely cause and fix. This one is real:
-
-  
-
-## See it in action
-
-  
-
-## Get started
-
-## Install it in your app
-
-## Works with Sentry, or without it
-
-You don't need Sentry. If you already use it, keep it: its errors land in the same list as user reports, each explained in plain English.
-
-Bugs come in from users, monitoring tools and even your voice. Fixes and updates go out to your editor, coding agents, tracker and team chat.
-
-  
-
-For the technical detail, see **[Concepts &rarr; Architecture](/concepts/architecture)**:
-the full sequence diagram and a component-by-component spec.
+More: [How a bug moves, step by step](/concepts/closed-loop) ·
+[Sentry, Linear, Slack and other tools](/plugins) ·
+[Compared with Sentry](/compare/sentry-vs-mushi) ·
+[More ways to install](/quickstart) ·
+[A tour of the console](/admin) ·
+[Self-host](/self-hosting)

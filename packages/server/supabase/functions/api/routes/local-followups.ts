@@ -16,6 +16,9 @@
  * live head is the reviewed one, at most 2 rounds per PR, once per head, no
  * forks, and only findings that pass screenFindings reach the agent. A round
  * is claimed with a deduped fix_events row, so two CLIs cannot both run it.
+ *
+ * A local worker's key (worker:run, `mushi work --daemon`, ADR 0048) reaches
+ * these three routes as an mcp:write CLI key does.
  */
 
 import type { Context, Hono } from 'npm:hono@4';
@@ -167,7 +170,7 @@ async function writableFix(c: Ctx, db: ReturnType<typeof getServiceClient>): Pro
 }
 
 export function registerLocalFollowupRoutes(app: Hono<{ Variables: Variables }>): void {
-  app.get('/v1/admin/projects/:id/local-followups', adminOrApiKey({ scope: 'mcp:read' }), async (c: Ctx) => {
+  app.get('/v1/admin/projects/:id/local-followups', adminOrApiKey({ scope: ['mcp:read', 'worker:run'] }), async (c: Ctx) => {
     const parsed = parseUuidParam(c);
     if (!parsed.ok) return parsed.error;
     const projectId = parsed.value;
@@ -249,7 +252,7 @@ export function registerLocalFollowupRoutes(app: Hono<{ Variables: Variables }>)
     return c.json({ ok: true, data: { fixes } });
   });
 
-  app.post('/v1/admin/fixes/:id/local-followup', adminOrApiKey({ scope: 'mcp:write' }), async (c: Ctx) => {
+  app.post('/v1/admin/fixes/:id/local-followup', adminOrApiKey({ scope: ['mcp:write', 'worker:run'] }), async (c: Ctx) => {
     const db = getServiceClient();
     const found = await writableFix(c, db);
     if ('response' in found) return found.response;
@@ -410,7 +413,7 @@ export function registerLocalFollowupRoutes(app: Hono<{ Variables: Variables }>)
     });
   });
 
-  app.post('/v1/admin/fixes/:id/local-followup/done', adminOrApiKey({ scope: 'mcp:write' }), async (c: Ctx) => {
+  app.post('/v1/admin/fixes/:id/local-followup/done', adminOrApiKey({ scope: ['mcp:write', 'worker:run'] }), async (c: Ctx) => {
     const db = getServiceClient();
     const found = await writableFix(c, db);
     if ('response' in found) return found.response;

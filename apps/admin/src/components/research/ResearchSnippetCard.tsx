@@ -1,23 +1,40 @@
 /**
  * FILE: apps/admin/src/components/research/ResearchSnippetCard.tsx
- * PURPOSE: Single Firecrawl result with attach-to-report affordance.
+ * PURPOSE: Single Firecrawl result with "Attach to bug": the bug is picked
+ *          by its title (ReportPicker), never by a pasted id (console
+ *          journeys 2026-10-27). The picker opens on demand, so a page of
+ *          results does not read the bug list once per result.
  */
 
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Card, Btn, Input, Badge } from '../ui'
+import { Card, Btn, Badge } from '../ui'
+import { ReportPicker, type PickableReport } from '../reports/ReportPicker'
 import type { Snippet } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
 
 interface Props {
   snippet: Snippet
-  attachValue: string
-  onAttachValueChange: (value: string) => void
-  onAttach: () => void
-  /** id of a <datalist> of recent reports, so a report can be picked instead of pasted. */
-  reportListId?: string
+  /** Saves the finding on the picked bug; resolves true when it was attached. */
+  onAttach: (report: PickableReport) => Promise<boolean>
 }
 
-export function ResearchSnippetCard({ snippet, attachValue, onAttachValueChange, onAttach, reportListId }: Props) {
+export function ResearchSnippetCard({ snippet, onAttach }: Props) {
+  const [picking, setPicking] = useState(false)
+  const [picked, setPicked] = useState<PickableReport | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const attach = async () => {
+    if (!picked) return
+    setBusy(true)
+    const ok = await onAttach(picked)
+    setBusy(false)
+    if (ok) {
+      setPicking(false)
+      setPicked(null)
+    }
+  }
+
   return (
     <Card className="p-4">
       <div className="mb-2 flex items-start justify-between gap-2">
@@ -35,7 +52,7 @@ export function ResearchSnippetCard({ snippet, attachValue, onAttachValueChange,
         {snippet.attached_to_report_id ? (
           <Badge className={`shrink-0 ${CHIP_TONE.okSubtle}`}>Attached</Badge>
         ) : (
-          <Badge className="shrink-0 bg-surface-raised text-fg-muted">Unattached</Badge>
+          <Badge className="shrink-0 bg-surface-raised text-fg-muted">Not attached</Badge>
         )}
       </div>
 
@@ -45,7 +62,7 @@ export function ResearchSnippetCard({ snippet, attachValue, onAttachValueChange,
 
       {snippet.attached_to_report_id ? (
         <div className="flex flex-wrap items-center gap-2 text-2xs text-fg-muted">
-          <span>Linked to report</span>
+          <span>Saved on bug</span>
           <Link
             to={`/reports/${snippet.attached_to_report_id}`}
             className="font-mono text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
@@ -53,20 +70,29 @@ export function ResearchSnippetCard({ snippet, attachValue, onAttachValueChange,
             {snippet.attached_to_report_id.slice(0, 8)}…
           </Link>
         </div>
+      ) : !picking ? (
+        <Btn size="sm" variant="ghost" onClick={() => setPicking(true)}>
+          Attach to bug
+        </Btn>
       ) : (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Input
-            type="text"
-            value={attachValue}
-            onChange={(e) => onAttachValueChange(e.target.value)}
-            list={reportListId}
-            placeholder="Pick a recent report or paste its id"
-            className="flex-1 font-mono text-2xs"
-            label="Attach to report"
-          />
-          <Btn size="sm" variant="primary" onClick={onAttach} className="shrink-0 sm:self-end">
-            Attach evidence
-          </Btn>
+        <div className="space-y-2" data-testid="research-attach">
+          <ReportPicker label="Which bug does this help?" value={picked} onChange={setPicked} disabled={busy} />
+          <div className="flex flex-wrap items-center gap-2">
+            <Btn size="sm" variant="primary" onClick={() => void attach()} disabled={!picked} loading={busy}>
+              Attach to this bug
+            </Btn>
+            <Btn
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setPicking(false)
+                setPicked(null)
+              }}
+              disabled={busy}
+            >
+              Cancel
+            </Btn>
+          </div>
         </div>
       )}
     </Card>

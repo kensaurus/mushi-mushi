@@ -1,0 +1,156 @@
+# Ask Lovable why it broke
+
+Source: https://kensaur.us/mushi-mushi/docs/quickstart/lovable-mcp
+
+---
+title: Ask Lovable why it broke
+description: Add Mushi to Lovable as an MCP connector in three steps; Lovable reads the plain-English diagnosis and fixes the bug. Claude Code and Cursor in one paste.
+---
+
+# Ask Lovable why it broke
+
+A user says your app is broken. Ask Lovable *"what did my users report?"* and it
+reads Mushi's diagnosis of each report, gets the fix prompt and fixes the code.
+The same connection works in Claude Code and Cursor.
+
+- Add Mushi to Lovable as a custom MCP server: one URL, sign in, approve.
+- Ask in the Lovable chat: "what did my users report?"
+- Lovable gets the report, the plain-English cause and a fix prompt, then fixes it.
+
+You need a Mushi project that receives reports. A Lovable app gets the
+reporting widget from one [script tag](/quickstart/web#no-bundler-script-tag).
+No real report yet? Step 4 files a test one.
+
+## Add Mushi to Lovable
+
+Custom MCP servers are available on every Lovable plan
+([Lovable docs](https://docs.lovable.dev/integrations/custom-mcp)).
+
+### Open the custom MCP form
+
+In Lovable, open [Connectors](https://lovable.dev/dashboard?connectors), select
+**Add custom** at the top right, and choose **MCP server**.
+
+If **MCP server** is greyed out, a workspace admin has turned off custom MCP
+servers. Ask them to turn on **Custom MCP** under **Connectors → Admin settings**.
+
+### Fill in the form
+
+| Field | Value |
+| --- | --- |
+| **Server name** | `Mushi` |
+| **Connection** (shown only on some workspaces) | **Direct connection** |
+| **Server URL** | `https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe` |
+| **Authentication** | **OAuth** (the default) |
+
+Click **Add & authorize**.
+
+### Sign in and approve
+
+A Mushi page opens. Sign in, choose which projects Lovable may see, and click
+**Approve**. You never copy a key: the sign-in creates one for this connection,
+and you can revoke it from the Mushi console at any time.
+
+**You'll see:** Mushi in your list of chat connectors in Lovable.
+
+### Ask Lovable
+
+In a project chat, try:
+
+```text
+Using the Mushi connector, what did my users report this week?
+```
+
+```text
+Get the Mushi fix context for the checkout report and fix it.
+```
+
+```text
+That's deployed. Mark the report fixed in Mushi and tell the reporter.
+```
+
+No reports yet? Ask for a test one. Mushi diagnoses it like a real user report:
+
+```text
+Using Mushi, file a test report: "The Save button on the settings page does nothing."
+```
+
+**You'll see:** the report, the likely cause in plain English and the files to change, then Lovable's edit.
+
+Lovable runs read-only tools without asking. Before a tool that changes
+something (mark fixed, reply to the reporter, file a report) it shows an
+approval card; choose **Always allow** to skip it next time.
+
+## Claude Code: one paste
+
+```bash
+claude mcp add --transport http mushi "https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe"
+```
+
+Then run `/mcp` in a session, pick `mushi` and sign in in your browser. Ask:
+*"What did my users report in Mushi? Fix the top one."*
+
+## Cursor: one click
+
+[Add Mushi to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=mushi&config=eyJ1cmwiOiJodHRwczovL2tlbnNhdXIudXMvbXVzaGktbXVzaGkvaG9zdGVkLW1jcC8%2FZmVhdHVyZXM9dmliZSJ9)
+(opens Cursor), or paste this into `.cursor/mcp.json`:
+
+```json filename=".cursor/mcp.json"
+{
+  "mcpServers": {
+    "mushi": {
+      "url": "https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe"
+    }
+  }
+}
+```
+
+Cursor asks you to sign in the first time the agent calls Mushi. Leave out any
+`headers` block: a static `Authorization` header turns the sign-in off.
+
+## Bolt
+
+Bolt also accepts a custom MCP server under **Connectors (MCP) → Custom MCP
+server** ([Bolt docs](https://support.bolt.new/integrations/mcp)). Use the same
+URL. We have not tested Mushi in Bolt yet.
+
+## What `?features=vibe` gives you
+
+`?features=vibe` keeps the connection to the 12 tools this loop needs. Without
+it the connection lists about 80. A chat assistant picks the right tool more
+often from a short list, and some clients, Cursor among them, warn once all
+their servers together pass about 40 tools.
+
+| Tool | What it does | Changes anything? |
+| --- | --- | --- |
+| `triage_next_steps` | What to fix first | No |
+| `get_recent_reports` | The latest reports from your users | No |
+| `search_reports` | Find reports by words ("checkout") | No |
+| `get_report_detail` | One report: what the user saw, logs, screenshot, diagnosis | No |
+| `get_fix_context` | The cause, the files to change and a ready fix prompt | No |
+| `transition_status` | Mark a report fixed, or dismiss a duplicate | Yes |
+| `reply_to_reporter` | Tell the user in your app that it's fixed | Yes |
+| `file_report` | File a report yourself (or a test one) | Yes |
+| `diagnose_setup` | Why reports aren't arriving, and the next step | No |
+| `use_mushi` | Which tool to use for a task | No |
+| `search_mushi_docs` / `get_mushi_doc` | Answers from these docs | No |
+
+If you approved more than one app, the connection also lists `list_projects`
+and `get_account_overview`, so Lovable can find the app you mean.
+
+Want more? Drop `?features=vibe` for the default set (reports, fixes, app
+inventory, setup, docs), or use `?features=all` for every tool. You can also
+combine them, for example `?features=vibe,qa`.
+
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| Sign-in fails with "404" | Use the `kensaur.us` URL above. Sign-in does not work on a `supabase.co` URL. |
+| "tool … is not enabled for this connection" | The tool is outside `vibe`. Ask `use_mushi` which group it needs and add that group to `?features=`, or use `?features=all`. |
+| Answers mix up your apps | Pin the connection to one app: add `&project=<project-id>` to the URL. |
+| You can't use OAuth | Choose **Bearer token or API key** in Lovable and paste a Mushi API key with MCP access, minted in the Mushi console. Sign-in is safer: its key is made for this one connection. |
+| You want to disconnect | Remove the connector in Lovable, and revoke its key under **MCP → Account keys** in the Mushi console. |
+
+  More on the sign-in, project scopes and other clients: [MCP server](/quickstart/mcp).
+  The full fix loop from your editor: [Incident loop](/quickstart/incident-loop).
