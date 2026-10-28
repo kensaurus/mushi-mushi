@@ -146,6 +146,8 @@ describe('Slack health probe notices a channel the bot cannot post to', () => {
     const result = await probeIntegration('slack', db as never, { slack_channel_id: 'C0PRIVATE' }, {}, PROJECT)
     expect(result.status).toBe('down')
     expect(result.detail).toMatch(/\/invite/)
+    expect(result.detail).toMatch(/run Send test to resume/)
+    expect(result.detail!.length).toBeLessThanOrEqual(160)
     expect(result.historyDetail).toEqual({ slack_error: 'not_in_channel', channel_id: 'C0PRIVATE' })
   })
 
@@ -180,6 +182,61 @@ describe('Slack health probe notices a channel the bot cannot post to', () => {
     }
     const result = await probeIntegration('slack', db as never, { slack_channel_id: 'C0PUBLIC' }, {}, PROJECT)
     expect(result.status).toBe('ok')
+    expect(result.historyDetail).toBeUndefined()
+  })
+
+  it('stays ok when conversations.info throws after auth.test passed', async () => {
+    process.env.MUSHI_OPERATOR_USER_IDS = OPERATOR
+    process.env.SLACK_BOT_TOKEN = 'xoxb-operator'
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('conversations.info')) throw new Error('socket hang up')
+      return new Response(JSON.stringify({ ok: true, team: 'acme', bot_id: 'B1' }), { status: 200 })
+    }))
+    vi.resetModules()
+    vi.stubGlobal('Deno', { env: { get: (key: string) => process.env[key] } })
+    const { probeIntegration } = await import('../../supabase/functions/_shared/integration-probes.ts')
+    const db = {
+      from: (table: string) => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => table === 'projects'
+              ? { data: { owner_id: OPERATOR }, error: null }
+              : { data: null, error: null },
+          }),
+        }),
+      }),
+    }
+    const result = await probeIntegration('slack', db as never, { slack_channel_id: 'C0DEAD' }, {}, PROJECT)
+    expect(result.status).toBe('ok')
+    expect(result.detail).toMatch(/Connected to workspace/)
+    expect(result.httpStatus).toBe(200)
+    expect(result.historyDetail).toBeUndefined()
+  })
+
+  it('stays ok when conversations.info returns a body that is not JSON', async () => {
+    process.env.MUSHI_OPERATOR_USER_IDS = OPERATOR
+    process.env.SLACK_BOT_TOKEN = 'xoxb-operator'
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('conversations.info')) return new Response('upstream reset', { status: 502 })
+      return new Response(JSON.stringify({ ok: true, team: 'acme', bot_id: 'B1' }), { status: 200 })
+    }))
+    vi.resetModules()
+    vi.stubGlobal('Deno', { env: { get: (key: string) => process.env[key] } })
+    const { probeIntegration } = await import('../../supabase/functions/_shared/integration-probes.ts')
+    const db = {
+      from: (table: string) => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => table === 'projects'
+              ? { data: { owner_id: OPERATOR }, error: null }
+              : { data: null, error: null },
+          }),
+        }),
+      }),
+    }
+    const result = await probeIntegration('slack', db as never, { slack_channel_id: 'C0DEAD' }, {}, PROJECT)
+    expect(result.status).toBe('ok')
+    expect(result.detail).toMatch(/Connected to workspace/)
     expect(result.historyDetail).toBeUndefined()
   })
 })
@@ -232,6 +289,8 @@ describe('sendBotMessage when the channel cannot take a post', () => {
     expect(reportMessage).not.toHaveBeenCalled()
     expect(store.inserts[0].message).toMatch(/\/invite/)
     expect(store.inserts[0].message).toMatch(/C0PRIVATE/)
+    expect(store.inserts[0].message).toMatch(/run Send test to resume/)
+    expect(store.inserts[0].message!.length).toBeLessThanOrEqual(160)
   })
 
   it('does not call Slack again while that channel is still marked down', async () => {
@@ -398,5 +457,22 @@ describe('sendBotMessage when the channel cannot take a post', () => {
     expect(result.error).toBe('ratelimited')
     expect(reportMessage).toHaveBeenCalled()
     expect(store.inserts).toHaveLength(0)
+  })
+})
+
+describe('slack channel copy the card shows', () => {
+  it('says to run Send test after inviting the bot or unarchiving, and fits the card', async () => {
+    // The Slack card clips probe messages at 160 characters. A normal Slack
+    // channel id is 11 characters; the hint has to survive that clip.
+    const { slackChannelUnusableCopy } = await load()
+    const channel = 'C0123456789'
+    const invite = slackChannelUnusableCopy('not_in_channel', channel)
+    const archived = slackChannelUnusableCopy('is_archived', channel)
+    expect(invite).toMatch(/\/invite/)
+    expect(invite).toMatch(/run Send test to resume notifications immediately/)
+    expect(archived).toMatch(/unarchive/i)
+    expect(archived).toMatch(/run Send test to resume notifications immediately/)
+    expect(invite!.length).toBeLessThanOrEqual(160)
+    expect(archived!.length).toBeLessThanOrEqual(160)
   })
 })

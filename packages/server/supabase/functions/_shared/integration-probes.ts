@@ -631,24 +631,31 @@ export async function probeIntegration(
           detail = `Connected to workspace "${data.team ?? '?'}" as bot ${data.bot_id ?? '?'} (${Date.now() - t0}ms)`
           // auth.test only proves the token. A deleted, archived, or private
           // channel the bot was never invited to still fails every post.
+          // A throw here (network blip, non-JSON body) is not a Slack outage:
+          // auth.test already passed, so the probe stays ok.
           const channelId = settings.slack_channel_id?.trim()
           if (channelId) {
-            const infoRes = await fetch(
-              `https://slack.com/api/conversations.info?channel=${encodeURIComponent(channelId)}`,
-              { headers: { Authorization: `Bearer ${botToken}` } },
-            )
-            httpStatus = infoRes.status
-            const info = await infoRes.json() as {
-              ok: boolean
-              error?: string
-              channel?: { is_archived?: boolean; is_member?: boolean; is_private?: boolean }
-            }
-            const code = slackChannelProbeCode(info)
-            const copy = code ? slackChannelUnusableCopy(code, channelId) : null
-            if (copy && code) {
-              status = 'down'
-              detail = copy
-              historyDetail = slackChannelHealthDetail(code, channelId)
+            try {
+              const infoRes = await fetch(
+                `https://slack.com/api/conversations.info?channel=${encodeURIComponent(channelId)}`,
+                { headers: { Authorization: `Bearer ${botToken}` } },
+              )
+              const info = await infoRes.json() as {
+                ok: boolean
+                error?: string
+                channel?: { is_archived?: boolean; is_member?: boolean; is_private?: boolean }
+              }
+              const code = slackChannelProbeCode(info)
+              const copy = code ? slackChannelUnusableCopy(code, channelId) : null
+              if (copy && code) {
+                status = 'down'
+                detail = copy
+                historyDetail = slackChannelHealthDetail(code, channelId)
+                httpStatus = infoRes.status
+              }
+            } catch {
+              // Leave status 'ok' and the auth.test detail. Do not report
+              // this read as the integration being down.
             }
           }
         } else {
