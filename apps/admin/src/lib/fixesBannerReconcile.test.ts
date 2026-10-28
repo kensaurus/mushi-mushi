@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { EMPTY_FIXES_STATS, type FixesStats } from '../components/fixes/FixesStatsTypes'
-import { reconcileFixesStats, stoppedDispatches } from './fixesBannerReconcile'
+import { reconcileFixesStats, reconcileListedInFlight, stoppedDispatches } from './fixesBannerReconcile'
 
 const healthy: FixesStats = { ...EMPTY_FIXES_STATS, hasAnyProject: true, topPriority: 'healthy', failed: 0 }
 
@@ -34,6 +34,26 @@ describe('reconcileFixesStats (audit 2026-10-20, B3)', () => {
 
   it('counts only attention statuses', () => {
     expect(reconcileFixesStats(healthy, [{ status: 'queued' }, { status: 'cancelled' }, { status: 'skipped_no_sandbox' }]).failed).toBe(1)
+  })
+})
+
+describe('reconcileListedInFlight', () => {
+  const base = { ...healthy, inProgress: 0, inflightDispatches: 0 }
+
+  it('keeps the server count when the list does not show more', () => {
+    expect(reconcileListedInFlight({ ...base, inProgress: 2, inflightDispatches: 1 }, 2)).toEqual({
+      ...base,
+      inProgress: 2,
+      inflightDispatches: 1,
+    })
+  })
+
+  it('raises In flight to the rows on the page and does not add those dispatches again', () => {
+    expect(reconcileListedInFlight({ ...base, inflightDispatches: 8 }, 8)).toEqual({
+      ...base,
+      inProgress: 8,
+      inflightDispatches: 0,
+    })
   })
 })
 

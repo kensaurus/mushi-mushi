@@ -6,7 +6,8 @@
  *          "Fix pipeline healthy · Auto-fix stopped 0" above five red Failed
  *          cards (console audit 2026-10-20, B3). A status banner must derive
  *          from the list it sits above, so the page reconciles the server
- *          stats with the dispatches it is about to render.
+ *          stats with the dispatches it is about to render. It also raises
+ *          the In flight number to the rows the list actually shows.
  */
 
 import type { DispatchJob } from '../components/fixes/types'
@@ -47,6 +48,27 @@ export function stoppedDispatches<T extends DispatchLike>(dispatches: readonly T
 
 /** Priorities that already outrank "something stopped": setup is missing. */
 const SETUP_PRIORITIES: ReadonlySet<FixesStats['topPriority']> = new Set(['no_project', 'no_github', 'no_index'])
+
+/**
+ * The In flight number on the summary and the status line, raised to the
+ * rows the list is about to show. The summary is the last 30 days; a run
+ * still going that started earlier is on the list and in the filter, and
+ * used to read 0 above that filter (report 8daa23e6). Dispatches already
+ * standing in for those same reports are not added a second time — the
+ * status line sums `inProgress` and `inflightDispatches`.
+ */
+export function reconcileListedInFlight<T extends { inProgress: number; inflightDispatches: number }>(
+  stats: T,
+  listedInFlight: number,
+): T {
+  if (listedInFlight <= stats.inProgress) return stats
+  const extra = listedInFlight - stats.inProgress
+  return {
+    ...stats,
+    inProgress: listedInFlight,
+    inflightDispatches: Math.max(0, stats.inflightDispatches - extra),
+  }
+}
 
 export function reconcileFixesStats(
   stats: FixesStats,

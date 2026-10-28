@@ -17,6 +17,7 @@ import {
   fixCiInfraLabel,
   CI_INFRA_STOPPED_LABEL,
   fixReportLabel,
+  isInFlightFix,
   isSuperseded,
   needsAttention,
   openPrReports,
@@ -134,6 +135,27 @@ describe('glot.it rows', () => {
   it('names the report, never its id', () => {
     expect(fixReportLabel(AUDIO_SKIPPED)).toBe('Audio playback is severely degraded')
     expect(fixReportLabel(fix({ report_title: null }))).toBe('Untitled report')
+  })
+})
+
+describe('isInFlightFix', () => {
+  it('counts the latest attempt of a report that is in flight, once', () => {
+    const latest = fix({ id: 'live', status: 'running', report_fix_state: 'in_flight', is_latest_attempt: true })
+    const earlier = fix({ id: 'old', status: 'running', report_fix_state: 'in_flight', is_latest_attempt: false })
+    expect(isInFlightFix(latest)).toBe(true)
+    expect(isInFlightFix(earlier)).toBe(false)
+    expect(isInFlightFix(fix({ status: 'pending', report_fix_state: 'in_flight', is_latest_attempt: true }))).toBe(true)
+  })
+
+  it('does not count a queued or running attempt on a report that is already fixed', () => {
+    expect(isInFlightFix(fix({ status: 'running', report_fix_state: 'resolved', is_latest_attempt: true }))).toBe(false)
+    expect(isInFlightFix(fix({ status: 'queued', report_fix_state: 'failed', is_latest_attempt: true }))).toBe(false)
+    expect(isInFlightFix(fix({ status: 'running', report_fix_state: 'pr_open', is_latest_attempt: false }))).toBe(false)
+  })
+
+  it('falls back to a live status when the server sent no report state', () => {
+    expect(isInFlightFix(fix({ status: 'dispatched' }))).toBe(true)
+    expect(isInFlightFix(fix({ status: 'completed' }))).toBe(false)
   })
 })
 

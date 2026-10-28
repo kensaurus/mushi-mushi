@@ -212,6 +212,18 @@ describe('FixesPage', () => {
     expect(box().disabled).toBe(false)
   })
 
+  it('In flight counts the report that is running, not a stale attempt on a shipped report', async () => {
+    mocks.fixes = [
+      fix({ id: 'live', report_id: 'r1', status: 'running', report_fix_state: 'in_flight', is_latest_attempt: true, report_title: 'Still running' }),
+      fix({ id: 'stale', report_id: 'r2', status: 'running', report_fix_state: 'resolved', is_latest_attempt: false, report_title: 'Already shipped' }),
+      fix({ id: 'earlier', report_id: 'r1', status: 'queued', report_fix_state: 'in_flight', is_latest_attempt: false, report_title: 'Earlier attempt' }),
+    ]
+    mocks.total = 3
+    await render('/fixes')
+    const segments = [...document.querySelectorAll('[aria-label="Filter fix attempts by status"] [role="radio"]')]
+    expect(segments.find((b) => b.textContent?.startsWith('In flight'))?.textContent).toBe('In flight1')
+  })
+
   it('QA 94: the old pipeline tab link opens the In flight filter', async () => {
     mocks.fixes = [fix({ id: 'a', status: 'running', report_fix_state: 'in_flight' }), fix({ id: 'b', report_id: 'r2', report_title: 'Login loops' })]
     mocks.total = 2
