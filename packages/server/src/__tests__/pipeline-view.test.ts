@@ -135,6 +135,15 @@ describe('buildPipeline', () => {
     expect(hit?.group.actions).toEqual(['rerun_ci'])
   })
 
+  it('a review skipped for want of a Claude key is a stuck review with the way to AI keys, never a reviewed PR', () => {
+    const stages = run({ reviews: [review({ status: 'skipped', verdict: null, skip_reason: 'no_anthropic_key' })] })
+    const hit = group(stages, 'review_no_key')
+    expect(hit?.stage.id).toBe('review')
+    expect(hit?.group).toMatchObject({ tone: 'stuck', label: '1 PR: not reviewed: no working Claude key in Settings, AI keys', actions: ['re_review'], settings: { to: '/settings?tab=byok' } })
+    // Review switched off on purpose is not this warning.
+    expect(group(run({ reviews: [review({ status: 'skipped', verdict: null, skip_reason: 'review_off' })] }), 'review_no_key')).toBeNull()
+  })
+
   it('skipped is not green', () => {
     const stages = run({ attempts: [attempt({ check_run_conclusion: 'skipped' })], ciJobs: new Map() })
     expect(group(stages, 'ci_never_ran')?.stage.id).toBe('ci')

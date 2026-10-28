@@ -334,6 +334,7 @@ export const NEEDS_YOU_MAX = 5
 
 /** Pipeline groups that need a person, by how much they cost if ignored. */
 const GROUP_IMPACT: Record<string, { impact: number; action: string }> = {
+  review_no_key: { impact: 82, action: 'Add a Claude key' },
   hold: { impact: 80, action: 'Decide' },
   autofix_no_agent: { impact: 76, action: 'Set up agents' },
   agent_failed: { impact: 70, action: 'See why' },

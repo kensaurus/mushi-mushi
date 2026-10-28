@@ -152,6 +152,8 @@ export interface ReviewRow {
   queued_at?: string | null
   /** The commit the verdict is about. */
   head_sha?: string | null
+  /** Why a skipped review did not run (fix-review.ts REVIEW_SKIP_REASONS). */
+  skip_reason?: string | null
 }
 
 export interface QueueRow {
@@ -255,6 +257,8 @@ export const FOLLOWUPS_SETTING = {
 }
 /** Spend-down (ADR 0028) is the server's automatic dispatcher; its on/off switch per Cursor key. */
 export const DISPATCH_SETTING = { label: 'Cursor keys and spend-down', to: '/credits#cursor-fix-bugs' }
+/** Fix reviews read a Claude key from Settings, AI keys only; the server's own key is never used for them. */
+export const CLAUDE_KEY_SETTING = { label: 'AI keys', to: '/settings?tab=byok' }
 /** Local workers (ADR 0048): their lanes, queues and runs. */
 export const WORKERS_SETTING = { label: 'Local workers', to: '/pipeline?tab=workers' }
 
@@ -649,6 +653,13 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
         text: failed ? 'the review failed' : rv ? (stuck ? 'review not finished after 2 hours' : 'Opus is reviewing') : stuck ? 'never reviewed' : 'waiting for a review',
         actions: stuck ? ['re_review'] : [],
       }, itemOf(a, askedAt, { lastError: clip(rv?.error) }))
+      continue
+    }
+    // Skipped for want of a key, a PR was silently treated as reviewed and no one
+    // was told: reviews stopped for hours on 2026-10-28 while the new Claude key
+    // sat only in the server secrets.
+    if (rv.status === 'skipped' && rv.skip_reason === 'no_anthropic_key') {
+      groups.add('review_no_key', { stage: 'review', tone: 'stuck', noun: PR, text: 'not reviewed: no working Claude key in Settings, AI keys', actions: ['re_review'], settings: CLAUDE_KEY_SETTING }, itemOf(a, rv.completed_at ?? rv.created_at))
       continue
     }
     if (rv.verdict === 'hold') {
