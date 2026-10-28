@@ -236,11 +236,11 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     ],
     whyItMatters: 'Optional. Errors Sentry already catches become bugs here, one per Sentry issue, each with a plain-English read and a fix ready to start. When either side marks it resolved, so does the other.',
     capabilitiesOnceConnected: [
-      'Sentry issue alerts land in the report queue as triaged, fix-ready reports (deduped per issue; regressions reopen instead of duplicating)',
-      'Auto-attach matching Sentry events (stack trace + breadcrumbs) to each report',
-      'Include Seer root-cause hints in the classifier prompt',
-      'Mirror Sentry user-feedback submissions into the report queue',
-      'Two-way resolve: merging a Mushi fix resolves the Sentry issue, and resolving in Sentry resolves the linked report',
+      'Each Sentry alert becomes one bug here, sorted and ready to fix; a regression reopens it instead of adding a copy',
+      'Each bug gets the matching Sentry stack trace and breadcrumbs',
+      "Sentry's own root-cause hints (Seer) help sort the bug",
+      'Sentry user feedback becomes bugs here too',
+      'Merging a Mushi fix resolves the Sentry issue, and resolving it in Sentry closes the bug here',
     ],
     webhookPath: '/v1/webhooks/sentry?projectId={projectId}',
     fields: [

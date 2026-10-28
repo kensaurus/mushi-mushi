@@ -40,7 +40,10 @@ describe('Integrations positioning', () => {
 
   it('describes the cards without pipeline internals', () => {
     for (const def of PLATFORM_DEFS) {
-      expect(def.whyItMatters, def.kind).not.toMatch(/fix-worker|Stage [12]|Auto-Fix Pipeline|dispatchable/)
+      expect(def.whyItMatters, def.kind).not.toMatch(/fix-worker|Stage [12]|Auto-Fix Pipeline|dispatchable|dispatches|triage required/)
+      for (const line of def.capabilitiesOnceConnected ?? []) {
+        if (def.kind === 'sentry') expect(line, def.kind).not.toMatch(/report queue|classifier prompt|deduped|triaged/)
+      }
     }
   })
 })
