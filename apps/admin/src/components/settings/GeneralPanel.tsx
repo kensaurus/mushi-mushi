@@ -254,7 +254,8 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             type="text"
             value={settings.slack_channel_id ?? ''}
             onChange={(e) => update({ slack_channel_id: e.target.value.trim() })}
-            placeholder="C0B82A322RW"
+            // An empty field showing a real-looking ID read as already filled in (2026-10-28).
+            placeholder="e.g. C0123ABCDEF"
           />
           <p className="text-xs text-fg-muted">
             {slackInput.botSet || slackCanPost
@@ -329,7 +330,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             helpId="settings.general.sentry_dsn"
             value={settings.sentry_dsn ?? ''}
             onChange={(e) => update({ sentry_dsn: e.target.value })}
-            placeholder="https://abc@o0.ingest.sentry.io/4511023875"
+            placeholder="e.g. https://<key>@o0.ingest.sentry.io/<project-id>"
             validate={sentryDsn()}
           />
           <SettingsChangeHint current={settings.sentry_dsn ?? ''} saved={saved.sentry_dsn ?? ''} kind="secret" />
@@ -385,7 +386,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             type="text"
             value={settings.supabase_project_ref ?? ''}
             onChange={(e) => update({ supabase_project_ref: e.target.value.trim() })}
-            placeholder="abcdefghijklmnopqrst"
+            placeholder="e.g. abcdefghijklmnopqrst"
             autoComplete="off"
             spellCheck={false}
             validate={supabaseProjectRef()}

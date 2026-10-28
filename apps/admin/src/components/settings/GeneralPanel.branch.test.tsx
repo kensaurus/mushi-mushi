@@ -110,9 +110,22 @@ describe('GeneralPanel with a legacy branch pattern', () => {
     expect(container.textContent).toContain('Your saved pattern is no longer allowed')
   })
 
+  // Empty fields showed "C0B82A322RW" and a full-looking DSN beside "Not
+  // connected", reading as real values (integrator's walk, 2026-10-28).
+  it('shows example placeholders that read as examples', async () => {
+    await render()
+    const placeholderOf = (label: string) =>
+      Array.from(container.querySelectorAll('label'))
+        .find((l) => l.textContent?.trim().startsWith(label))
+        ?.querySelector('input')?.placeholder ?? ''
+    for (const label of ['Channel ID', 'Sentry DSN', 'Supabase project ref']) {
+      expect(placeholderOf(label).startsWith('e.g. '), label).toBe(true)
+    }
+  })
+
   it('saves a new Sentry DSN without touching the branch pattern', async () => {
     await render()
-    const dsn = container.querySelector<HTMLInputElement>('input[placeholder^="https://abc@o0.ingest.sentry.io"]')!
+    const dsn = container.querySelector<HTMLInputElement>('input[placeholder*="ingest.sentry.io"]')!
     await act(async () => {
       typeInto(dsn, 'https://abc123@o0.ingest.sentry.io/1')
       await flush()
