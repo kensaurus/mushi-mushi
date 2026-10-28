@@ -142,6 +142,9 @@ export function isApiErrorCode(value: string): value is ApiErrorCode {
  * Pattern sources:
  *   - "delayed connect error: 111" / "upstream connect error" — Supabase pooler
  *     cold-start or transient reset (Supabase Discussions #26769).
+ *   - "upstream request timeout" — Kong/Envoy body when the upstream answered
+ *     too late (a gateway timeout with no SQLSTATE). Distinct from Postgres
+ *     statement_timeout (57014), which stays reported (MUSHI-cd3477a9).
  *   - Cloudflare / gateway HTML (body starts with `<!DOCTYPE` or `<html`, or
  *     names "Error code 502/503/504/520-524", "502 Bad Gateway", …). The raw
  *     page leaks into PostgREST error.message (MUSHI-61dfa948).
@@ -275,6 +278,7 @@ export function isTransientDbConnectionError(
   if (isHtmlGatewayDbMessage(err.message)) return true
   return (
     msg.includes('upstream connect error') ||
+    msg.includes('upstream request timeout') ||
     msg.includes('delayed connect error') ||
     msg.includes('remote connection failure') ||
     msg.includes('transport failure reason') ||

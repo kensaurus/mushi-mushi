@@ -43,8 +43,9 @@ import {
  * single out e.g. `42703` (undefined column) vs `42501` (permission).
  *
  * TRANSIENT CONNECTIVITY ERRORS: pooler resets (`delayed connect error: 111`,
- * `upstream connect error`), HTML gateway pages (`<!DOCTYPE html>`, 502/503/
- * 504/520-524), and TCP-level connection failures are NOT reported to
+ * `upstream connect error`), the gateway body `upstream request timeout`,
+ * HTML gateway pages (`<!DOCTYPE html>`, 502/503/504/520-524), and TCP-level
+ * connection failures are NOT reported to
  * Sentry — they are external infra noise that self-resolves and would
  * regress repeatedly (same pattern as the client-abort fix in
  * sentryHonoErrorHandler). They are emitted as a structured console.warn to
