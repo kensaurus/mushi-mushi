@@ -15890,8 +15890,7 @@ Mushi is built in the open. [VISION.md](https://github.com/kensaurus/mushi-mushi
 
 ## Live boards
 
-- **[Public roadmap board](https://github.com/users/kensaurus/projects/1)** — every active issue, sorted by Wave + milestone.
-- **[Open issues](https://github.com/kensaurus/mushi-mushi/issues)** — file a bug, feature request, or RFC.
+- **[Open issues](https://github.com/kensaurus/mushi-mushi/issues)** — file a bug, feature request, or RFC. Active work is tracked here.
 - **[Discussions](https://github.com/kensaurus/mushi-mushi/discussions)** — design conversation, Q&A, show-and-tell.
 
 ## Release waves

@@ -122,6 +122,9 @@ screenshots/
 *.png
 !docs/**/*.png
 !apps/docs/public/**/*.png
+# Bounties share card. apps/testers/app/layout.tsx points og:image here;
+# a blanket *.png ignore made that URL 404 on the public site.
+!apps/testers/public/og-card.png
 !apps/admin/public/**/*.png
 !apps/admin/public/**/*.gif
 !packages/**/assets/**/*.png
