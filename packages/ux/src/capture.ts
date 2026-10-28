@@ -24,8 +24,10 @@ export interface BrowserSession {
    * A clean browser gets its own context, seeded from the session's storage,
    * so captures share no client state (glot.it /words lost its empty state
    * after other screens wrote to localStorage, 2026-10-07). A cached profile
-   * cannot be copied that way, so these pages open in the profile, and
-   * closing the context closes only the pages it opened.
+   * cannot be copied that way, so these pages open in the profile. Closing
+   * the slice closes the pages it opened, including tabs they opened. Calls
+   * that would change the profile (cookies, routes, init scripts, headers,
+   * listeners) are refused.
    */
   freshContext(): Promise<BrowserContext>
   /**
@@ -70,25 +72,110 @@ const CLS_SCRIPT = `(() => {
 })()`
 
 /**
+ * Context calls that would change the shared profile, or stack up on it, for
+ * every later capture. Per-capture work belongs on the page.
+ */
+const PROFILE_SLICE_BLOCKED = new Set([
+  'addCookies',
+  'addInitScript',
+  'addListener',
+  'clearCookies',
+  'clearPermissions',
+  'exposeBinding',
+  'exposeFunction',
+  'grantPermissions',
+  'off',
+  'on',
+  'once',
+  'prependListener',
+  'removeAllListeners',
+  'removeListener',
+  'route',
+  'routeFromHAR',
+  'routeWebSocket',
+  'setDefaultNavigationTimeout',
+  'setDefaultTimeout',
+  'setExtraHTTPHeaders',
+  'setGeolocation',
+  'setHTTPCredentials',
+  'setOffline',
+  'unroute',
+  'unrouteAll',
+])
+
+/**
  * Pages opened for one capture inside a persistent profile. Closing the
  * slice closes those pages only — closing the profile context would end the
  * session, and a second browser seeded from storageState would not be signed in.
+ * Tabs a captured page opens (`window.open`, `target=_blank`) are adopted from
+ * the context `page` event when their opener is one of this slice's pages, so
+ * a parallel capture's own page is left alone.
  */
 function profilePages(context: BrowserContext): BrowserContext {
-  const opened: Page[] = []
+  const opened = new Set<Page>()
+  const pending: Promise<void>[] = []
+  // A nested tab can report its opener before that opener is registered.
+  const waiting: Array<{ page: Page; opener: Page }> = []
+  let closed = false
+  const adopt = () => {
+    let progressed = true
+    while (progressed) {
+      progressed = false
+      for (let i = waiting.length - 1; i >= 0; i--) {
+        const item = waiting[i]
+        if (!item || !opened.has(item.opener)) continue
+        opened.add(item.page)
+        waiting.splice(i, 1)
+        progressed = true
+      }
+    }
+  }
+  const onPage = (page: Page) => {
+    // Start the opener read during the event. `opener()` is async, and a nested
+    // tab's read can finish before the tab that opened it is registered.
+    let read: Promise<Page | null> | null = null
+    try {
+      read = page.opener?.() ?? null
+    } catch {
+      read = null
+    }
+    const job = Promise.resolve(read)
+      .then((opener) => {
+        if (!opener) return
+        waiting.push({ page, opener })
+        adopt()
+      })
+      .catch(() => undefined)
+    pending.push(job)
+  }
+  context.on('page', onPage)
   return new Proxy(context, {
     get(target, prop, receiver) {
       if (prop === 'newPage') {
         return async () => {
           const page = await target.newPage()
-          opened.push(page)
+          if (!closed) opened.add(page)
           return page
         }
       }
       if (prop === 'close') {
         return async () => {
-          const mine = opened.splice(0)
+          if (closed) return
+          closed = true
+          context.off('page', onPage)
+          await Promise.all(pending)
+          adopt()
+          const mine = [...opened]
+          opened.clear()
           await Promise.all(mine.map((page) => page.close().catch(() => undefined)))
+        }
+      }
+      if (typeof prop === 'string' && PROFILE_SLICE_BLOCKED.has(prop)) {
+        const method = prop
+        return async () => {
+          throw new Error(
+            `A capture in a shared profile cannot call ${method}(): it would change the signed-in profile for every later capture.`,
+          )
         }
       }
       const value: unknown = Reflect.get(target, prop, receiver)

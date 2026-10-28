@@ -103,7 +103,7 @@ mushi-ux audit --url https://example.com/admin \
 - Maps the screens under the URL's path behind the write guard, one per route (`--max-pages`, default 15; `--states N` also opens up to N dialogs or tabs a page), and captures each on desktop (1440×900) and phone (390×844).
 - Files measured problems first: serious accessibility rules, a page that scrolls sideways, console errors, content that jumps while loading. `--review` adds concrete visual defects a model finds on whole pages (overlap, clipping, unreadable text, contradicting numbers), each with a "Done when". `--review cursor` asks the Cursor CLI in read-only ask mode (`--review-model`, default `grok-4.7-high-fast`).
 - `--file` files at most 15 reports a run, one per screen and problem, and skips one filed in the last 14 days or still open. It needs `MUSHI_API_KEY` and `MUSHI_PROJECT_ID`; without them it writes `to-file.json` next to the summary. `--dry-run` files nothing.
-- `--profile-dir` opens the profile with your installed Chrome (`--channel chromium` for one Chromium made). A signed-out profile stops the run: sign it in once by hand.
+- `--profile-dir` opens the profile with your installed Chrome (`--channel chromium` for one Chromium made). A signed-out profile stops the run: sign it in once by hand. Captures are not isolated: they share the profile's localStorage and IndexedDB with each other and with discovery. Audit runs those captures one after another, not in parallel; a screen can still see client state an earlier screen left behind.
 - Output: `~/.cache/mushi/ux-audits/<run>/` (summary, findings, screenshots).
 
 ## Explore signed-in screens
@@ -118,7 +118,7 @@ mushi-ux explore --url https://example.com/admin \
 
 - Charters: `forms`, `navigation`, `stress`, `filters` (default: all, one session each). `--path` adds start pages. `--model` is any Cursor CLI model (default `grok-4.7-high-fast`).
 - Actions come from a closed set (click, fill, select, press, back, forward, reload, scroll, resize); anything labelled like delete, revoke or sign out is refused, and the write guard still blocks every write request.
-- A finding is a console error, an uncaught error, a 5xx from the app (or an `--api-host`), or a blank page after an action. It is filed only when replaying the steps without the model shows it again, with the steps as the repro.
+- A finding is a console error, an uncaught error, a 5xx from the app (or an `--api-host`), or a blank page after an action. It is filed only when replaying the steps without the model shows it again, with the steps as the repro. With `--profile-dir` that replay is not isolated from the session that just ran: they share the profile's localStorage and IndexedDB. Sessions and replays run one after another, not in parallel.
 - `--file` and `--dry-run` work as for the audit, sharing its 14-day ledger.
 
 ## Fresh eyes: a first-time visitor

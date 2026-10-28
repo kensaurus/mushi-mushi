@@ -23,7 +23,7 @@ import { chromium } from 'playwright'
 import { openSession } from './capture.js'
 
 function fakePage() {
-  return { close: vi.fn(async () => {}), goto: vi.fn(async () => null) }
+  return { close: vi.fn(async () => {}), goto: vi.fn(async () => null), opener: (): unknown => null }
 }
 
 function fakeContext() {
@@ -31,7 +31,13 @@ function fakeContext() {
     newPage: vi.fn(async () => fakePage()),
     close: vi.fn(async () => {}),
     route: vi.fn(async () => {}),
+    unrouteAll: vi.fn(async () => {}),
     addInitScript: vi.fn(async () => {}),
+    addCookies: vi.fn(async () => {}),
+    clearCookies: vi.fn(async () => {}),
+    setExtraHTTPHeaders: vi.fn(async () => {}),
+    on: vi.fn(),
+    off: vi.fn(),
     storageState: vi.fn(async () => ({ cookies: [{ name: 'sid', value: 'live' }], origins: [] })),
   }
 }
@@ -81,6 +87,58 @@ describe('openSession profile', () => {
       headless: true,
       serviceWorkers: 'block',
     })
+    await session.close()
+  })
+
+  it('refuses per-capture changes that would alter the shared profile', async () => {
+    const profile = fakeContext()
+    vi.mocked(chromium.launchPersistentContext).mockResolvedValue(profile as unknown as Playwright.BrowserContext)
+    const session = await openSession({ profileDir: '/tmp/chrome-profile' })
+    const slice = await session.freshContext()
+    const methods = ['route', 'addInitScript', 'addCookies', 'clearCookies', 'setExtraHTTPHeaders', 'on', 'unrouteAll'] as const
+    for (const method of methods) {
+      const before = profile[method].mock.calls.length
+      await expect((slice[method] as () => Promise<unknown>)()).rejects.toThrow(new RegExp(`${method}\\(\\)`))
+      expect(profile[method]).toHaveBeenCalledTimes(before)
+    }
+    await session.close()
+  })
+
+  it('closes popups the captured page opened and leaves the rest of the profile alone', async () => {
+    const listeners: Array<(page: { opener: () => unknown; close: ReturnType<typeof vi.fn> }) => void> = []
+    const profile = fakeContext()
+    profile.on.mockImplementation((event: string, fn: (page: { opener: () => unknown; close: ReturnType<typeof vi.fn> }) => void) => {
+      if (event === 'page') listeners.push(fn)
+    })
+    profile.off.mockImplementation((event: string, fn: (page: { opener: () => unknown; close: ReturnType<typeof vi.fn> }) => void) => {
+      if (event !== 'page') return
+      const at = listeners.indexOf(fn)
+      if (at >= 0) listeners.splice(at, 1)
+    })
+    vi.mocked(chromium.launchPersistentContext).mockResolvedValue(profile as unknown as Playwright.BrowserContext)
+    const session = await openSession({ profileDir: '/tmp/chrome-profile' })
+    const slice = await session.freshContext()
+    const page = await slice.newPage()
+    let openPopup: (value: unknown) => void = () => {}
+    let openNested: (value: unknown) => void = () => {}
+    const popup = fakePage()
+    popup.opener = () => new Promise((resolve) => { openPopup = resolve })
+    const nested = fakePage()
+    nested.opener = () => new Promise((resolve) => { openNested = resolve })
+    const stranger = fakePage()
+    for (const fn of [...listeners]) fn(popup)
+    for (const fn of [...listeners]) fn(nested)
+    for (const fn of [...listeners]) fn(stranger)
+    // The nested tab's opener can resolve before the tab that opened it is registered.
+    openNested(popup)
+    openPopup(page)
+    await slice.close()
+    expect(page.close).toHaveBeenCalledOnce()
+    expect(popup.close).toHaveBeenCalledOnce()
+    expect(nested.close).toHaveBeenCalledOnce()
+    expect(stranger.close).not.toHaveBeenCalled()
+    expect(listeners).toEqual([])
+    expect(profile.close).not.toHaveBeenCalled()
     await session.close()
   })
 })
