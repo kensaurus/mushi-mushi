@@ -370,8 +370,12 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
         ...prev,
         { role: 'bot', text: botText, options: reply.options },
       ])
-    } catch {
-      setAssistantError('Could not reach the assistant. Try again.')
+    } catch (err) {
+      setAssistantError(
+        err instanceof Error && err.name === 'QuotaExhausted' && err.message
+          ? err.message
+          : 'Could not reach the assistant. Try again.',
+      )
     } finally {
       setAssistantSending(false)
     }

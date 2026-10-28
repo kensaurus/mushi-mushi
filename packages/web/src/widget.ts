@@ -495,8 +495,11 @@ export class MushiWidget {
       } else {
         this.assistantError = this.locale.assistant.errors.noResponse;
       }
-    } catch {
-      this.assistantError = this.locale.assistant.errors.generic;
+    } catch (err) {
+      this.assistantError =
+        err instanceof Error && err.name === 'QuotaExhausted' && err.message
+          ? err.message
+          : this.locale.assistant.errors.generic;
     } finally {
       this.assistantSending = false;
       this.render();

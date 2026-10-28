@@ -1149,6 +1149,11 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         threadId,
         context: currentPageContext,
       });
+      if (!res.ok && res.error?.code === 'LLM_UNAVAILABLE' && res.error.message) {
+        const error = new Error(res.error.message);
+        error.name = 'QuotaExhausted';
+        throw error;
+      }
       return res.ok ? (res.data ?? null) : null;
     },
   });

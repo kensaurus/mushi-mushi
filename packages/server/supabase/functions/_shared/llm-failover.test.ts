@@ -11,6 +11,7 @@ const {
   callWithTransientRetry,
   classifyLlmError,
   isStage1LlmUnavailable,
+  providerQuotaHint,
   sanitizeLlmError,
 } = await import('./llm-failover.ts');
 
@@ -26,6 +27,22 @@ const candidate: ResolvedKey = {
 Deno.test('classifyLlmError detects quota errors from message text', () => {
   assertEquals(classifyLlmError(new Error('429 Too Many Requests')), 'quota');
   assertEquals(classifyLlmError(new Error('You exceeded your current quota')), 'quota');
+  // Monthly spend caps do not say "429" or "quota". They must not fall
+  // through as 'other' — that rethrows AI_APICallError and skips the next key.
+  assertEquals(
+    classifyLlmError(
+      new Error(
+        'AI_APICallError: upstream LLM provider usage limit reached (access resumes 2026-11-01 00:00 UTC)',
+      ),
+    ),
+    'quota',
+  );
+  assertEquals(
+    classifyLlmError(
+      new Error('API usage limits reached. You will regain access on 2026-11-01'),
+    ),
+    'quota',
+  );
 });
 
 Deno.test('classifyLlmError detects auth errors from message text', () => {
@@ -52,6 +69,14 @@ Deno.test('isStage1LlmUnavailable covers failover, wallet, and raw 401', () => {
   );
   assertEquals(isStage1LlmUnavailable(new WalletDeniedError('insufficient', 0)), true);
   assertEquals(isStage1LlmUnavailable(new Error('401 invalid x-api-key')), true);
+  assertEquals(
+    isStage1LlmUnavailable(
+      new Error(
+        'AI_APICallError: upstream LLM provider usage limit reached (access resumes 2026-11-01 00:00 UTC)',
+      ),
+    ),
+    true,
+  );
   assertEquals(isStage1LlmUnavailable(new Error('No object generated')), false);
 });
 
@@ -59,6 +84,15 @@ Deno.test('classifyLlmError detects quota/auth from structured status codes', ()
   assertEquals(classifyLlmError({ status: 429 }), 'quota');
   assertEquals(classifyLlmError({ statusCode: 403 }), 'auth');
   assertEquals(classifyLlmError({ response: { status: 401 } }), 'auth');
+  // 403 plus a usage-cap body is a spend limit, not a bad key.
+  assertEquals(
+    classifyLlmError({
+      statusCode: 403,
+      message: 'upstream LLM provider usage limit reached',
+      responseBody: 'API usage limits reached. You will regain access on 2026-11-01',
+    }),
+    'quota',
+  );
 });
 
 Deno.test('classifyLlmError detects transient 5xx and network errors', () => {
@@ -68,6 +102,29 @@ Deno.test('classifyLlmError detects transient 5xx and network errors', () => {
   assertEquals(classifyLlmError({ code: 'ECONNRESET' }), 'transient');
   assertEquals(classifyLlmError(new Error('model is overloaded, please retry')), 'transient');
   assertEquals(classifyLlmError(new Error('Bad Gateway 502')), 'transient');
+});
+
+Deno.test('providerQuotaHint names the reset date and stays quiet for a plain 429', () => {
+  const capped = new Error(
+    'AI_APICallError: upstream LLM provider usage limit reached (access resumes 2026-11-01 00:00 UTC)',
+  );
+  assertEquals(
+    providerQuotaHint(capped, 'operator'),
+    'Provider quota exhausted until 2026-11-01 00:00 UTC. Update your key in Settings → AI keys.',
+  );
+  assertEquals(
+    providerQuotaHint(capped, 'visitor'),
+    'The assistant is unavailable until 2026-11-01 00:00 UTC.',
+  );
+  assertEquals(
+    providerQuotaHint(new Error('API usage limits reached. You will regain access on 2026-11-01'), 'visitor'),
+    'The assistant is unavailable until 2026-11-01.',
+  );
+  assertEquals(providerQuotaHint(new Error('429 Too Many Requests')), null);
+  assertEquals(
+    providerQuotaHint(new Error('upstream LLM provider usage limit reached'), 'operator'),
+    'Provider quota exhausted. Update your key in Settings → AI keys.',
+  );
 });
 
 Deno.test('classifyLlmError falls back to other for schema/validation errors', () => {
@@ -162,6 +219,23 @@ Deno.test(
     assertEquals(outcome.kind, 'transient_exhausted');
   },
 );
+
+Deno.test('callWithTransientRetry treats a provider usage cap as quota, not fatal', async () => {
+  let calls = 0;
+  const outcome = await callWithTransientRetry(
+    async () => {
+      calls++;
+      throw new Error(
+        'AI_APICallError: upstream LLM provider usage limit reached (access resumes 2026-11-01 00:00 UTC)',
+      );
+    },
+    candidate,
+    'anthropic',
+  );
+  assertEquals(calls, 1);
+  if (outcome.ok) throw new Error('expected failure outcome');
+  assertEquals(outcome.kind, 'quota');
+});
 
 Deno.test('callWithTransientRetry surfaces quota errors immediately without retrying', async () => {
   let calls = 0;

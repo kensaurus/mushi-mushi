@@ -1148,6 +1148,11 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
           threadId: threadId ?? null,
           context: pageContextRef.current,
         })
+        if (!res.ok && res.error?.code === 'LLM_UNAVAILABLE' && res.error.message) {
+          const error = new Error(res.error.message)
+          error.name = 'QuotaExhausted'
+          throw error
+        }
         return res.ok ? (res.data as MushiAssistantReply) : null
       },
     }),

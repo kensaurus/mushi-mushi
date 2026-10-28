@@ -17,7 +17,7 @@ import { log as rootLog } from '../_shared/logger.ts'
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import { extractAnthropicCacheUsage, logLlmInvocation } from '../_shared/telemetry.ts'
 import { reportError, withSentry } from '../_shared/sentry.ts'
-import { isStage1LlmUnavailable, sanitizeLlmError, withAnthropicOrOpenAi } from '../_shared/llm-failover.ts'
+import { isStage1LlmUnavailable, providerQuotaHint, sanitizeLlmError, withAnthropicOrOpenAi } from '../_shared/llm-failover.ts'
 import { HEURISTIC_STAGE1_MODEL, heuristicStage1Classification } from '../_shared/stage1-heuristic.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { parseBody, FastFilterBodySchema } from '../_shared/validate.ts'
@@ -320,10 +320,14 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
         err: fallbackReason,
         sentry: false,
       })
-      reportError(llmErr instanceof Error ? llmErr : new Error(fallbackReason), {
-        tags: { function: 'fast-filter', llm_fallback: 'heuristic' },
-        extra: { reportId, projectId },
-      })
+      // A monthly usage cap is an account state, already shown to the operator.
+      // captureException would page it as an unhandled AI_APICallError.
+      if (!providerQuotaHint(llmErr)) {
+        reportError(llmErr instanceof Error ? llmErr : new Error(fallbackReason), {
+          tags: { function: 'fast-filter', llm_fallback: 'heuristic' },
+          extra: { reportId, projectId },
+        })
+      }
       await logLlmInvocation(db, {
         projectId, reportId, functionName: 'fast-filter', stage: 'stage1',
         primaryModel: PRIMARY_MODEL, usedModel,
