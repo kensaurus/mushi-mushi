@@ -6,8 +6,16 @@
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { createEmbedding } from './embeddings.ts'
+import { log } from './logger.ts'
 import { formatCodeContext, type CodeContext } from './rag.ts'
 import { pathMatchesScope, type CodebaseScopeSettings } from './codebase-scope.ts'
+
+const understandLog = log.child('codebase-understand')
+
+/** Postgres statement_timeout (57014), including the message-only pooler form. */
+function isStatementTimeout(error: { code?: string; message?: string }): boolean {
+  return error.code === '57014' || /statement timeout/i.test(error.message ?? '')
+}
 
 export interface CodebaseCitation {
   file_path: string
@@ -373,7 +381,11 @@ export async function retrieveCodeForQuestion(
   query: string,
   k = 12,
   opts?: { scopePrefix?: string | null; includeWiki?: boolean },
-): Promise<{ files: CodeContext[]; wikiChunks: Array<{ article_path: string; title: string | null; preview: string; similarity: number }>; reason: string }> {
+): Promise<{
+  files: CodeContext[]
+  wikiChunks: Array<{ article_path: string; title: string | null; preview: string; similarity: number }>
+  reason: 'empty_query' | 'embedding_failed' | 'rpc_failed' | 'rpc_timeout' | 'no_matches' | 'ok'
+}> {
   const trimmed = query.trim()
   if (!trimmed) return { files: [], wikiChunks: [], reason: 'empty_query' }
 
@@ -396,7 +408,20 @@ export async function retrieveCodeForQuestion(
     match_count: k,
     path_prefix: pathPrefix,
   })
-  if (error) return { files: [], wikiChunks: [], reason: 'rpc_failed' }
+  if (error) {
+    const pg = error as { code?: string; message?: string }
+    // Chat reads `files` only. Empty is the fallback, so the answer continues
+    // without code context instead of failing the request.
+    if (isStatementTimeout(pg)) {
+      understandLog.warn('match_codebase_files statement timeout', {
+        projectId,
+        code: pg.code ?? null,
+        err: (pg.message ?? '').slice(0, 240),
+      })
+      return { files: [], wikiChunks: [], reason: 'rpc_timeout' }
+    }
+    return { files: [], wikiChunks: [], reason: 'rpc_failed' }
+  }
 
   const mapped = (hits ?? [])
     .map((f: Record<string, unknown>) => ({
