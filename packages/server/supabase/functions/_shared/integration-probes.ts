@@ -18,7 +18,7 @@ import { resolveRoutingSecrets } from './routing-secrets.ts'
 import { safeFetch } from './inventory-guards.ts'
 import { isCodebaseIndexFailing } from './sweep-error-classifier.ts'
 import { dereferenceMaybeVault } from './settings-secrets.ts'
-import { slackChannelUnusableCopy } from './slack.ts'
+import { slackChannelHealthDetail, slackChannelProbeCode, slackChannelUnusableCopy } from './slack.ts'
 
 // Deno global — declared only where consumed (edge functions).
 declare const Deno: { env: { get(name: string): string | undefined } }
@@ -72,6 +72,11 @@ export interface ProbeResult {
   detail: string
   httpStatus: number
   latencyMs: number
+  /**
+   * Structured facts for integration_health_history.detail. Set when a Slack
+   * channel cannot take a post. Absent for every other probe.
+   */
+  historyDetail?: { slack_error: string; channel_id: string } | null
 }
 
 /**
@@ -147,6 +152,7 @@ export async function probeIntegration(
   let status: ProbeResult['status'] = 'unknown'
   let detail = ''
   let httpStatus = 0
+  let historyDetail: ProbeResult['historyDetail']
   // Routing tokens live in Vault as `vault://` refs; probe with the value.
   routingConfig = await resolveRoutingSecrets(db, routingConfig)
 
@@ -632,12 +638,17 @@ export async function probeIntegration(
               { headers: { Authorization: `Bearer ${botToken}` } },
             )
             httpStatus = infoRes.status
-            const info = await infoRes.json() as { ok: boolean; error?: string; channel?: { is_archived?: boolean } }
-            const code = !info.ok ? info.error : info.channel?.is_archived ? 'is_archived' : null
+            const info = await infoRes.json() as {
+              ok: boolean
+              error?: string
+              channel?: { is_archived?: boolean; is_member?: boolean; is_private?: boolean }
+            }
+            const code = slackChannelProbeCode(info)
             const copy = code ? slackChannelUnusableCopy(code, channelId) : null
-            if (copy) {
+            if (copy && code) {
               status = 'down'
               detail = copy
+              historyDetail = slackChannelHealthDetail(code, channelId)
             }
           }
         } else {
@@ -651,7 +662,13 @@ export async function probeIntegration(
     }
   }
 
-  return { status, detail, httpStatus, latencyMs: Date.now() - start }
+  return {
+    status,
+    detail,
+    httpStatus,
+    latencyMs: Date.now() - start,
+    ...(historyDetail ? { historyDetail } : {}),
+  }
 }
 
 // ── Linear probe ──────────────────────────────────────────────────────────────

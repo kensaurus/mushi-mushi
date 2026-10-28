@@ -309,6 +309,8 @@ async function handler(req: Request): Promise<Response> {
       source: string
       /** Vendor HTTP status (null = no response); BYOK rows leave it unset. */
       http_status?: number | null
+      /** Slack channel error code + channel id. Omitted when the probe has none. */
+      detail?: { slack_error: string; channel_id: string } | null
     }> = []
 
     for (let i = 0; i < tasks.length; i += CONCURRENCY) {
@@ -330,6 +332,7 @@ async function handler(req: Request): Promise<Response> {
             message: probe.detail || (probe.httpStatus ? `HTTP ${probe.httpStatus}` : null),
             source: 'cron',
             http_status: historyHttpStatus(probe),
+            ...(probe.historyDetail ? { detail: probe.historyDetail } : {}),
           })
           probed++
         } else {

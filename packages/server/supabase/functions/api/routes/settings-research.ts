@@ -35,7 +35,7 @@ import { SDK_CONFIG_CONSOLE_SELECT } from '../../_shared/sdk-config.ts';
 import { validateFixBranchTemplate } from '../../_shared/github-pr.ts';
 import { parseSupabaseProjectRefSetting } from '../../_shared/supabase-project-ref.ts';
 import { parseSentryDsnSetting, sentrySelfHostedHosts } from '../../_shared/sentry-dsn.ts';
-import { slackChannelUnusableCopy } from '../../_shared/slack.ts';
+import { slackChannelHealthDetail, slackChannelReselectedHealthRow, slackChannelUnusableCopy } from '../../_shared/slack.ts';
 import { prepareByokSecret } from '../../_shared/byok-key-rules.ts';
 import { parseByokExpiry } from '../../_shared/byok-expiry.ts';
 import {
@@ -353,15 +353,20 @@ async function recordChannelTest(
   ok: boolean,
   message: string | null,
   startedAt: number,
+  detail?: { slack_error: string; channel_id: string } | null,
 ): Promise<void> {
-  const { error } = await db.from('integration_health_history').insert({
+  const row: Record<string, unknown> = {
     project_id: projectId,
     kind,
     status: ok ? 'ok' : 'down',
     latency_ms: Math.max(0, Date.now() - startedAt),
     message: ok ? 'Test message delivered' : (message ?? 'Test message failed').slice(0, 300),
     source: 'manual',
-  });
+  };
+  // An ok row (no slack_error) is the newest health row, so the send
+  // cooldown ends. A channel error keeps the code off the sentence.
+  if (detail) row.detail = detail;
+  const { error } = await db.from('integration_health_history').insert(row);
   if (error) log.error('channel test result not stored', { projectId, kind, err: error.message });
 }
 
@@ -795,6 +800,22 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       fix_branch_template: 200,
     };
     const updates: Record<string, unknown> = {};
+    // Read before the upsert. A changed channel id writes a health row that
+    // is not `down`, so a stale channel cooldown does not keep skipping sends.
+    let previousSlackChannel: string | null = null;
+    let knowPreviousSlackChannel = false;
+    if (body && typeof body === 'object' && 'slack_channel_id' in body) {
+      const { data: channelRow, error: channelErr } = await db
+        .from('project_settings')
+        .select('slack_channel_id')
+        .eq('project_id', project.id)
+        .maybeSingle();
+      if (!channelErr) {
+        knowPreviousSlackChannel = true;
+        const stored = (channelRow as { slack_channel_id?: string | null } | null)?.slack_channel_id;
+        previousSlackChannel = typeof stored === 'string' ? stored.trim() : null;
+      }
+    }
     for (const [key, value] of Object.entries(body)) {
       if (!allowed.includes(key)) continue;
       // The GET above returns SECRET_MASK for set secrets; a form that sends
@@ -1062,6 +1083,13 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       .upsert({ project_id: project.id, ...updates }, { onConflict: 'project_id' });
 
     if (error) return dbError(c, error);
+    const nextChannel = typeof updates.slack_channel_id === 'string' ? updates.slack_channel_id.trim() : '';
+    if (knowPreviousSlackChannel && nextChannel && nextChannel !== (previousSlackChannel ?? '')) {
+      const { error: healthErr } = await db
+        .from('integration_health_history')
+        .insert(slackChannelReselectedHealthRow(project.id, nextChannel));
+      if (healthErr) log.error('slack channel change not stored', { projectId: project.id, err: healthErr.message });
+    }
     return c.json({ ok: true });
   });
 
@@ -1122,7 +1150,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       const json = (await res.json()) as { ok: boolean; error?: string };
       const slackError = json.error ?? 'slack error';
       const readable = slackChannelUnusableCopy(slackError, targetChannel) ?? slackError;
-      await recordChannelTest(db, project.id, 'slack', json.ok, json.ok ? null : readable, startedAt);
+      const channelDetail = json.ok ? null : slackChannelHealthDetail(slackError, targetChannel);
+      await recordChannelTest(db, project.id, 'slack', json.ok, json.ok ? null : readable, startedAt, channelDetail);
       if (!json.ok)
         return c.json(
           { ok: false, error: { code: 'SLACK_API_ERROR', message: readable } },
@@ -1428,6 +1457,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
         const settings = (settingsRow ?? {}) as {
           slack_bot_token_ref?: string | null;
+          slack_channel_id?: string | null;
           sentry_auth_token_ref?: string | null;
           sentry_org_slug?: string | null;
           langfuse_public_key_ref?: string | null;
@@ -1571,6 +1601,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       if (!botToken) botToken = Deno.env.get('SLACK_BOT_TOKEN') ?? null;
 
       if (botToken && channelId) {
+        const startedAt = Date.now();
         const res = await fetch('https://slack.com/api/chat.postMessage', {
           method: 'POST',
           headers: {
@@ -1586,8 +1617,18 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         if (!json.ok) {
           const slackError = json.error ?? 'Slack API error';
           const readable = slackChannelUnusableCopy(slackError, channelId) ?? slackError;
+          await recordChannelTest(
+            db,
+            projectId,
+            'slack',
+            false,
+            readable,
+            startedAt,
+            slackChannelHealthDetail(slackError, channelId),
+          );
           return c.json({ ok: true, data: { ok: false, error: readable } });
         }
+        await recordChannelTest(db, projectId, 'slack', true, null, startedAt);
         return c.json({ ok: true, data: { ok: true } });
       }
       if (webhookUrl) {

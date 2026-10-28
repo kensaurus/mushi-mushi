@@ -78,12 +78,12 @@ interface SlackChannel {
 
 /**
  * Decode a Slack error code into an actionable UI message.
- * Exported for tests. The test-send route reports the Slack code as
- * `SLACK_API_ERROR` with the code in `message`; the channel list route
- * reports the Slack code itself.
+ * Exported for tests. The test-send route reports `SLACK_API_ERROR` with
+ * the readable sentence already in `message` (show that sentence). The
+ * channel list route reports the Slack code itself as `error.code`.
  */
 export function slackErrorToMessage(errorCode: string | undefined, rawMessage: string): string {
-  const code = errorCode === 'SLACK_API_ERROR' ? rawMessage : errorCode
+  const code = errorCode === 'SLACK_API_ERROR' ? undefined : errorCode
   if (code === 'channel_not_found' || rawMessage === 'channel_not_found') {
     return 'This Slack channel was not found. It may have been deleted or belong to another workspace. Pick the channel again on Integrations.'
   }

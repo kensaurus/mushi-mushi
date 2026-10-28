@@ -65,9 +65,11 @@ describe('slackErrorToMessage', () => {
     expect(slackErrorToMessage('not_in_channel', '')).toMatch(/\/invite/)
   })
 
-  it('reads the Slack code when the test endpoint wraps it as SLACK_API_ERROR', () => {
-    expect(slackErrorToMessage('SLACK_API_ERROR', 'channel_not_found')).toMatch(/pick the channel again/i)
-    expect(slackErrorToMessage('SLACK_API_ERROR', 'not_in_channel')).toMatch(/\/invite/)
+  it('shows the sentence the test endpoint already wrote', () => {
+    const missing = 'Slack channel C0DEAD was not found. It may have been deleted or belong to another workspace. Pick the channel again on Integrations.'
+    const invite = 'The Mushi bot is not in Slack channel C0PRIVATE. Invite it with /invite, or pick another channel.'
+    expect(slackErrorToMessage('SLACK_API_ERROR', missing)).toBe(missing)
+    expect(slackErrorToMessage('SLACK_API_ERROR', invite)).toBe(invite)
   })
 })
 
@@ -91,7 +93,13 @@ describe('SlackIntegrationCard send test', () => {
   it('explains a stale channel instead of a raw Slack code', async () => {
     mocks.apiFetch.mockImplementation(async (url: string) => {
       if (String(url).includes('channels')) return { ok: true, data: { channels: [] } }
-      return { ok: false, error: { code: 'SLACK_API_ERROR', message: 'channel_not_found' } }
+      return {
+        ok: false,
+        error: {
+          code: 'SLACK_API_ERROR',
+          message: 'Slack channel C0DEAD was not found. It may have been deleted or belong to another workspace. Pick the channel again on Integrations.',
+        },
+      }
     })
     act(() => {
       root.render(createElement(SlackIntegrationCard, {
@@ -109,8 +117,9 @@ describe('SlackIntegrationCard send test', () => {
       await flush()
     })
     const description = mocks.toast.error.mock.calls[0]?.[1] as string
+    expect(description).toMatch(/Slack channel C0DEAD was not found/)
     expect(description).toMatch(/pick the channel again/i)
-    expect(description).not.toMatch(/channel_not_found/)
+    expect(description).not.toMatch(/\bchannel_not_found\b/)
   })
 })
 

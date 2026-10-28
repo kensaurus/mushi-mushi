@@ -226,6 +226,98 @@ describe('PATCH /v1/admin/settings', () => {
     expect(db.rpcCalls.filter((c) => c.fn === 'vault_store_secret')).toHaveLength(0)
   })
 
+  it('ends the Slack cooldown when the saved channel id changes', async () => {
+    const res = await app.call('PATCH', '/v1/admin/settings', ctx({ slack_channel_id: 'C999' }))
+    expect(res.status).toBe(200)
+    expect(db.table('project_settings')[0].slack_channel_id).toBe('C999')
+    expect(db.table('integration_health_history')).toEqual([
+      expect.objectContaining({
+        project_id: PROJECT,
+        kind: 'slack',
+        status: 'unknown',
+        source: 'manual',
+        detail: { channel_id: 'C999' },
+      }),
+    ])
+  })
+
+  it('does not write a health row when the Slack channel id is unchanged', async () => {
+    const res = await app.call('PATCH', '/v1/admin/settings', ctx({ slack_channel_id: 'C123' }))
+    expect(res.status).toBe(200)
+    expect(db.table('integration_health_history')).toHaveLength(0)
+  })
+
+  it('a successful Slack test replaces a down channel row', async () => {
+    db = makeFakeDb(
+      {
+        project_settings: [{ project_id: PROJECT, slack_channel_id: 'C0DEAD', slack_bot_token_ref: 'ref-1' }],
+      },
+      { rpc: (fn) => (fn === 'vault_get_secret' ? 'xoxb-test' : null) },
+    )
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true, ts: '1.2' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const res = await app.call('POST', '/v1/admin/settings/test-slack', ctx())
+      expect(res.status).toBe(200)
+      expect(db.table('integration_health_history')[0]).toMatchObject({
+        project_id: PROJECT,
+        kind: 'slack',
+        status: 'ok',
+        source: 'manual',
+        message: 'Test message delivered',
+      })
+    } finally {
+      vi.unstubAllGlobals()
+      ;(globalThis as { Deno?: unknown }).Deno = { env: { get: (k: string) => process.env[k] } }
+    }
+  })
+
+  it('mushi slack test success ends the cooldown the same way', async () => {
+    db = makeFakeDb(
+      {
+        project_settings: [{ project_id: PROJECT, slack_channel_id: 'C0DEAD', slack_bot_token_ref: 'ref-1' }],
+      },
+      { rpc: (fn) => (fn === 'vault_get_secret' ? 'xoxb-test' : null) },
+    )
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ ok: true, ts: '1.2' }), { status: 200 }))
+    try {
+      const res = await app.call('POST', '/v1/admin/projects/:pid/integrations/slack/test', ctx())
+      expect(res.status).toBe(200)
+      expect(db.table('integration_health_history')[0]).toMatchObject({
+        project_id: PROJECT,
+        kind: 'slack',
+        status: 'ok',
+        message: 'Test message delivered',
+      })
+    } finally {
+      vi.unstubAllGlobals()
+      ;(globalThis as { Deno?: unknown }).Deno = { env: { get: (k: string) => process.env[k] } }
+    }
+  })
+
+  it('a Slack test that hits a missing channel stores the error code on the health row', async () => {
+    db = makeFakeDb(
+      {
+        project_settings: [{ project_id: PROJECT, slack_channel_id: 'C0DEAD', slack_bot_token_ref: 'ref-1' }],
+      },
+      { rpc: (fn) => (fn === 'vault_get_secret' ? 'xoxb-test' : null) },
+    )
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ ok: false, error: 'channel_not_found' }), { status: 200 }))
+    try {
+      const res = await app.call('POST', '/v1/admin/settings/test-slack', ctx())
+      expect(res.status).toBe(502)
+      expect(db.table('integration_health_history')[0]).toMatchObject({
+        project_id: PROJECT,
+        kind: 'slack',
+        status: 'down',
+        detail: { slack_error: 'channel_not_found', channel_id: 'C0DEAD' },
+      })
+    } finally {
+      vi.unstubAllGlobals()
+      ;(globalThis as { Deno?: unknown }).Deno = { env: { get: (k: string) => process.env[k] } }
+    }
+  })
+
   it('refuses a Vault ref the server did not store for this row', async () => {
     const res = await app.call(
       'PATCH',

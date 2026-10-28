@@ -90,6 +90,14 @@ describe('manual probe route', () => {
   it('reads the Slack token column the Slack probe needs', () => {
     expect(route).toContain('slack_bot_token_ref')
   })
+
+  it('reads the Slack channel the conversations.info check needs', () => {
+    expect(route).toContain('slack_channel_id')
+  })
+
+  it('stores the probe slack error on the health row', () => {
+    expect(src).toContain('detail: probe.historyDetail')
+  })
 })
 
 describe('hourly probe cron', () => {
@@ -100,6 +108,7 @@ describe('hourly probe cron', () => {
   it('probes Slack for projects with a bot token or a channel', () => {
     expect(cron).toContain("if (hasSlack(s)) tasks.push({ projectId: s.project_id, kind: 'slack'")
     expect(cron).toContain('slack_bot_token_ref, slack_channel_id')
+    expect(cron).toContain('detail: probe.historyDetail')
   })
 
   it('looks settings up by project from a map, not a scan per routing row', () => {
