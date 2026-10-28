@@ -97,7 +97,7 @@ Anything that stops a worker from fixing bugs is listed at the top of the tab, w
 | Machine offline | No heartbeat for 3 minutes; how long, and how many queued reports wait | The command that shows the worker's service and its last log lines on that machine |
 | Stuck run | A run has held an agent space for over 45 minutes: its stage (getting the repo ready, the coding agent, the repo's **commit hook**, its **pre-push hook**, opening the PR), how long it has been in that stage, and its last few log lines | **Stop this run**, open the report, or the command that finds it on the machine |
 | Waiting for an agent space | Lanes waited over 15 minutes, with the runs that hold the spaces and in which stage | Stop the stuck runs, or let the machine run more at once |
-| Cursor account | The account check said another account, signed out, not installed, or did not answer in time (with the load on the machine) | **Re-check the account**, or the command to sign in on the machine |
+| Cursor account | The account check said another account, signed out, not installed, or did not answer in time (with the load on the machine) | **Switch account** (the machine's owner signs it in as the right account from the console: it finishes its runs, then shows a Cursor sign-in link), **Re-check the account**, or the command to sign in on the machine |
 | GitHub sign-in | `gh` is not signed in on the machine, so no branch can be pushed | `gh auth login` on the machine |
 | Machine waiting | Low memory, the GitHub API quota or a sign-in has held the machine for over 5 minutes | The command that shows what uses the memory or the quota |
 | Machine overloaded | Load of 2 or more per core: checks and git hooks time out | The command that lists what runs there |

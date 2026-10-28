@@ -18,6 +18,7 @@ import { useState } from 'react'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { Badge, Btn, Callout, CodeValue } from '../ui'
 import { IconExternalLink } from '../icons'
+import { SwitchCursorAccountDialog } from './SwitchCursorAccount'
 import { useToast } from '../../lib/toast'
 import { durationLabel, patchLane, recheckAccount, STAGE_LABEL, stopRun, type WorkerFlag, type WorkerFlagAction, type WriteResult } from '../../lib/workers'
 
@@ -42,6 +43,7 @@ function FlagAction({ flag, action, onChanged }: { flag: WorkerFlag; action: Wor
   const toast = useToast()
   const [busy, setBusy] = useState(false)
   const [asking, setAsking] = useState(false)
+  const [switching, setSwitching] = useState(false)
   const testId = `worker-flag-${flag.kind}-${action.kind}`
   const run = async (write: () => Promise<WriteResult>) => {
     setBusy(true)
@@ -82,6 +84,15 @@ function FlagAction({ flag, action, onChanged }: { flag: WorkerFlag; action: Wor
         <Btn size="sm" variant="ghost" loading={busy} onClick={() => void run(() => recheckAccount(action.hostId))} data-testid={testId}>
           {action.label}
         </Btn>
+      )
+    case 'switch_account':
+      return (
+        <>
+          <Btn size="sm" variant="primary" onClick={() => setSwitching(true)} data-testid={testId}>
+            {action.label}
+          </Btn>
+          {switching && <SwitchCursorAccountDialog hostId={action.hostId} hostname={flag.hostname ?? 'this machine'} onClose={() => setSwitching(false)} onChanged={onChanged} />}
+        </>
       )
     case 'open_report':
       return (

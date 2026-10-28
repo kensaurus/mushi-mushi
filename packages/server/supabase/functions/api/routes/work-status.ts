@@ -13,6 +13,14 @@
  *     POST /v1/admin/work/hosts/:id/recheck  "Re-check the account": the next heartbeat asks
  *                                            the machine to run `cursor-agent status` again
  *                                            (console session, the machine's owner)
+ *     POST /v1/admin/work/hosts/:id/cursor-account
+ *                                            "Switch account": names the Cursor account the
+ *                                            lanes may spend and asks the machine to sign in
+ *                                            as it (console session, the machine's owner;
+ *                                            audited, never the sign-in link)
+ *     GET  /v1/admin/work/hosts/:id/cursor-login
+ *                                            where that sign-in stands; the approve link only
+ *                                            here, only for the machine's owner
  *
  *          The reads behind the flags (readFlagExtras, readWorkerFlags) are
  *          shared with GET /v1/admin/work/lanes and the per-app Home, so the
@@ -24,7 +32,9 @@ import type { Variables } from '../types.ts'
 import type { getServiceClient } from '../../_shared/db.ts'
 import type { logAudit } from '../../_shared/audit.ts'
 import { ownerUserColumnReady, withOwnerUserColumn } from '../../_shared/byok-scope.ts'
-import { laneConfigFromRow } from '../../_shared/work-lanes.ts'
+import { hostOnline, laneConfigFromRow } from '../../_shared/work-lanes.ts'
+import { currentCursorLogin, cursorLoginView, isFinal, newCursorLogin, parseCursorAccount, parseStoredCursorLogin } from '../../_shared/cursor-login.ts'
+import { maskEmail } from '../../_shared/work-telemetry.ts'
 import { deriveWorkerFlags, durationText, flagSummary, type FlagClaim, type FlagCreditExpiry, type FlagHost, type FlagLane, type FlagLocalRun, type WorkerFlag } from '../../_shared/work-flags.ts'
 
 type Db = ReturnType<typeof getServiceClient>
@@ -269,8 +279,110 @@ async function recheck(c: Ctx, deps: WorkStatusDeps): Promise<Response> {
   return c.json({ ok: true, data: { id: host.id, message: `Asked. ${host.hostname} runs cursor-agent status within a minute or two and reports the result here.` } })
 }
 
+/** The host row the account routes read; the new columns on their own so a missing migration is named, not a 500. */
+interface AccountHost {
+  id: string
+  owner_user_id: string
+  hostname: string
+  revoked_at: string | null
+  last_heartbeat_at: string
+  status: Record<string, unknown> | null
+  cursor_account: string | null
+  cursor_login: unknown
+}
+
+/**
+ * The machine, for its owner's console session only. An API key (the CLI,
+ * MCP, a worker) never switches an account or sees the link: signing a
+ * machine in is a person's act.
+ */
+async function ownedHost(c: Ctx, db: Db): Promise<{ host: AccountHost } | { refusal: Response }> {
+  const no = (r: Response) => ({ refusal: r })
+  if (c.get('authMethod') === 'apiKey') return no(err(c, 'CONSOLE_ONLY', "Switching a machine's Cursor account is done in the console, signed in as the machine's owner.", 403))
+  const id = c.req.param('id') ?? ''
+  if (!UUID_RE.test(id)) return no(err(c, 'VALIDATION_ERROR', 'host id must be a uuid.', 400))
+  const { data, error } = await db.from('work_hosts').select('id, owner_user_id, hostname, revoked_at, last_heartbeat_at, status, cursor_account, cursor_login').eq('id', id).maybeSingle()
+  if (error) {
+    if (isMissing(error)) return no(err(c, 'MIGRATION_PENDING', 'This server cannot switch accounts yet (migration 20261028150000_worker_cursor_account is not applied). Run cursor-agent login on the machine instead.', 409))
+    return no(err(c, 'DB_ERROR', 'Could not read the worker.', 500))
+  }
+  const host = data as AccountHost | null
+  if (!host) return no(err(c, 'NOT_FOUND', 'Worker not found.', 404))
+  if (host.owner_user_id !== (c.get('userId') as string)) return no(err(c, 'FORBIDDEN', "Only the machine's owner switches its Cursor account: the sign-in happens on their machine.", 403))
+  if (host.revoked_at) return no(err(c, 'CLAIM_ENDED', 'This worker was revoked.', 409))
+  return { host }
+}
+
+const canSwitch = (h: AccountHost) => Array.isArray(h.status?.can) && (h.status!.can as unknown[]).includes('cursor_login')
+
+/** "Switch account": the account the lanes may spend, and a sign-in request the machine picks up within a minute. */
+async function switchAccount(c: Ctx, deps: WorkStatusDeps): Promise<Response> {
+  const db = deps.getServiceClient()
+  const now = deps.now()
+  const owned = await ownedHost(c, db)
+  if ('refusal' in owned) return owned.refusal
+  const host = owned.host
+  const body = (await c.req.json().catch(() => null)) as { account?: unknown; restart?: unknown } | null
+  const account = parseCursorAccount(body?.account)
+  if (!account) return err(c, 'VALIDATION_ERROR', 'Give the e-mail address of the Cursor account the machine should use.', 400)
+  if (!canSwitch(host)) {
+    return err(c, 'CLI_TOO_OLD', `${host.hostname}'s Mushi CLI is too old to switch accounts from here. Update it there (npm i -g @mushi-mushi/cli@latest) and restart the worker, or run cursor-agent login on the machine.`, 409)
+  }
+  const current = currentCursorLogin(parseStoredCursorLogin(host.cursor_login), now)
+  const inFlight = !!current && !isFinal(current.state)
+  if (inFlight && body?.restart !== true) return err(c, 'IN_PROGRESS', 'A switch is already under way on this machine. Finish it, or start again.', 409)
+  const stored = newCursorLogin(crypto.randomUUID(), account, now)
+  const { error } = await db.from('work_hosts').update({ cursor_account: account, cursor_login_requested_at: now.toISOString(), cursor_login: stored }).eq('id', host.id)
+  if (error) {
+    if (isMissing(error)) return err(c, 'MIGRATION_PENDING', 'This server cannot switch accounts yet (migration 20261028150000_worker_cursor_account is not applied).', 409)
+    return err(c, 'DB_ERROR', 'The request could not be stored.', 500)
+  }
+  const { data: lane } = await db.from('work_lanes').select('project_id').eq('host_id', host.id).limit(1).maybeSingle()
+  const projectId = (lane as { project_id: string } | null)?.project_id ?? null
+  if (projectId) {
+    await deps
+      .logAudit(db, projectId, c.get('userId') as string, 'worker.cursor_account_switch', 'work_host', host.id, { host: host.hostname, account: maskEmail(account), restarted: inFlight })
+      .catch(() => {})
+  }
+  const online = hostOnline(host.last_heartbeat_at, now)
+  return c.json({
+    ok: true,
+    data: {
+      login: cursorLoginView(stored, now, { owner: true, withUrl: false }),
+      online,
+      message: online
+        ? `Asked. ${host.hostname} finishes its current runs, then shows a Cursor sign-in link here within a minute or two.`
+        : `Saved. ${host.hostname} is offline; it starts the switch when it checks in again.`,
+    },
+  })
+}
+
+/** Where the switch stands, with the approve link while that is the step to take (the owner only). */
+async function readAccountSwitch(c: Ctx, deps: WorkStatusDeps): Promise<Response> {
+  const db = deps.getServiceClient()
+  const now = deps.now()
+  const owned = await ownedHost(c, db)
+  if ('refusal' in owned) return owned.refusal
+  const host = owned.host
+  const cur = ((host.status?.checks ?? {}) as { cursor?: { result?: string; ageSec?: number; detail?: string } }).cursor
+  return c.json({
+    ok: true,
+    data: {
+      account: host.cursor_account,
+      login: cursorLoginView(parseStoredCursorLogin(host.cursor_login), now, { owner: true, withUrl: true }),
+      online: hostOnline(host.last_heartbeat_at, now),
+      canSwitch: canSwitch(host),
+      // The runs a switch waits for (the machine takes nothing new meanwhile).
+      runs: typeof host.status?.agents === 'number' ? host.status.agents : null,
+      check: cur ? { result: cur.result ?? null, ageSec: cur.ageSec ?? null, detail: cur.detail ?? null } : null,
+    },
+  })
+}
+
 export function registerWorkStatusRoutes(app: Hono<{ Variables: Variables }>, deps: WorkStatusDeps): void {
   app.get('/v1/admin/work/stats', deps.adminOrApiKeyRead, (c) => stats(c as Ctx, deps))
   app.post('/v1/admin/work/claims/:id/stop', deps.jwtAuth, (c) => stopRun(c as Ctx, deps))
   app.post('/v1/admin/work/hosts/:id/recheck', deps.jwtAuth, (c) => recheck(c as Ctx, deps))
+  app.post('/v1/admin/work/hosts/:id/cursor-account', deps.jwtAuth, (c) => switchAccount(c as Ctx, deps))
+  app.get('/v1/admin/work/hosts/:id/cursor-login', deps.jwtAuth, (c) => readAccountSwitch(c as Ctx, deps))
 }

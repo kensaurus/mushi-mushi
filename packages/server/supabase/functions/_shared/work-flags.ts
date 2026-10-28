@@ -70,6 +70,8 @@ export type WorkerFlagAction =
   | { kind: 'open_pr'; label: string; prUrl: string }
   | { kind: 'copy_command'; label: string; command: string }
   | { kind: 'recheck_account'; label: string; hostId: string }
+  /** Opens the console's "Switch account" dialog (the machine's owner signs it in as the right account). */
+  | { kind: 'switch_account'; label: string; hostId: string }
   | { kind: 'open_page'; label: string; to: string }
 
 export interface WorkerFlag {
@@ -269,9 +271,10 @@ export function deriveWorkerFlags(input: FlagInput): WorkerFlag[] {
       })
     }
 
-    // The Cursor account check, as the machine last ran it.
+    // The Cursor account check, as the machine last ran it. While the machine
+    // switches accounts (asked from the console) another account is expected, not a problem.
     const cur = checks.cursor
-    if (cur && cur.result !== 'expected' && cur.result !== 'unclear') {
+    if (cur && cur.result !== 'expected' && cur.result !== 'unclear' && state !== 'switching-account') {
       const danger = cur.result !== 'timed_out'
       const title =
         cur.result === 'other_account'
@@ -302,6 +305,7 @@ export function deriveWorkerFlags(input: FlagInput): WorkerFlag[] {
         cause: cur.detail && cur.result !== 'missing' ? `${cause} It said: "${cur.detail}".` : cause,
         sinceSec: cur.ageSec,
         actions: [
+          ...(cur.result === 'other_account' || cur.result === 'signed_out' ? [{ kind: 'switch_account' as const, label: 'Switch account', hostId: host.id }] : []),
           { kind: 'recheck_account', label: 'Re-check the account', hostId: host.id },
           { kind: 'copy_command', label: cur.result === 'timed_out' ? 'Check it on the machine' : 'Sign in on the machine', command: cur.result === 'timed_out' ? 'cursor-agent status' : cur.result === 'missing' ? 'cursor-agent --version' : 'cursor-agent login' },
         ],

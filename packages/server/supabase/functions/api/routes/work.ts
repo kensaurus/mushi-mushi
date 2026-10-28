@@ -68,6 +68,8 @@ import {
 } from '../../_shared/work-lanes.ts'
 import { callerCanAccessProject, callerProjectIds } from '../shared.ts'
 import { flagClaim, flagsFor, registerWorkStatusRoutes } from './work-status.ts'
+import { cursorLoginView, mergeCursorLoginReport, parseStoredCursorLogin, pendingCursorLogin, type CursorLoginReport } from '../../_shared/cursor-login.ts'
+import { maskEmail } from '../../_shared/work-telemetry.ts'
 
 const wlog = log.child('work-routes')
 
@@ -565,11 +567,31 @@ async function heartbeat(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   // instead of after their idle wait. Lane ids only: never a command.
   const wake = await lanesToWake(db, lanes, hb.host.takes.includes('fresh_eyes'), now)
   const recheckAccount = await recheckAsked(db, host.id, hb.status, now)
+  const account = await syncCursorLogin(db, host.id, hb.cursorLogin, now)
   return c.json({
     ok: true,
-    // recheckAccount is a new top-level field: daemons that predate it ignore it (worker/protocol.ts).
-    data: { hostId: host.id, heartbeatSeconds: 60, guards: hostGuardsFrom(host.guards), lanes, refused, renewed, lost, wake, recheckAccount },
+    // recheckAccount, cursorAccount and cursorLogin are new top-level fields: daemons that predate them ignore them (worker/protocol.ts).
+    data: { hostId: host.id, heartbeatSeconds: 60, guards: hostGuardsFrom(host.guards), lanes, refused, renewed, lost, wake, recheckAccount, ...account },
   })
+}
+
+/**
+ * The Cursor account the console set for this machine, and the sign-in it
+ * asked for (ADR 0048 amendment 2026-10-28): stores what the machine reports
+ * about that sign-in, then answers with the open request, if any. Read on its
+ * own: before migration 20261028150000_worker_cursor_account the columns are
+ * missing, and that must never fail a heartbeat.
+ */
+async function syncCursorLogin(db: Db, hostId: string, report: CursorLoginReport | null, now: Date): Promise<{ cursorAccount: string | null; cursorLogin: { requestId: string } | null }> {
+  const { data, error } = await db.from('work_hosts').select('cursor_account, cursor_login').eq('id', hostId).maybeSingle()
+  if (error || !data) return { cursorAccount: null, cursorLogin: null }
+  const row = data as { cursor_account: string | null; cursor_login: unknown }
+  const stored = parseStoredCursorLogin(row.cursor_login)
+  const merged = mergeCursorLoginReport(stored, report, now)
+  if (merged && JSON.stringify(merged) !== JSON.stringify(stored)) {
+    await db.from('work_hosts').update({ cursor_login: merged }).eq('id', hostId)
+  }
+  return { cursorAccount: row.cursor_account ?? null, cursorLogin: pendingCursorLogin(merged, now) }
 }
 
 /** How long a "Re-check the account" request stays open for a machine that has not run the check yet. */
@@ -891,6 +913,12 @@ async function listLanes(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   if (byId.error || mine.error) return err(c, 'DB_ERROR', 'Could not read the workers.', 500)
   const hosts = new Map<string, HostRow>()
   for (const h of [...((byId.data ?? []) as HostRow[]), ...((mine.data ?? []) as HostRow[])]) hosts.set(h.id, h)
+  // The Cursor account each machine spends (ADR 0048 amendment 2026-10-28), read on its own: missing columns read as none.
+  const accounts = new Map<string, { cursor_account: string | null; cursor_login: unknown }>()
+  if (hosts.size) {
+    const { data, error } = await db.from('work_hosts').select('id, cursor_account, cursor_login').in('id', [...hosts.keys()])
+    if (!error) for (const r of (data ?? []) as Array<{ id: string; cursor_account: string | null; cursor_login: unknown }>) accounts.set(r.id, r)
+  }
 
   const laneIds = lanes.map((l) => l.id)
   const since = new Date(now.getTime() - RECENT_DAYS * 86_400_000).toISOString()
@@ -960,6 +988,10 @@ async function listLanes(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
         guards: hostGuardsFrom(h.guards),
         revoked: !!h.revoked_at,
         mine: h.owner_user_id === userId,
+        // The account in full only for the machine's owner; the sign-in link never here (GET …/cursor-login, owner only).
+        cursorAccount: accounts.get(h.id)?.cursor_account ? (h.owner_user_id === userId ? accounts.get(h.id)!.cursor_account : maskEmail(accounts.get(h.id)!.cursor_account!)) : null,
+        cursorLogin: cursorLoginView(parseStoredCursorLogin(accounts.get(h.id)?.cursor_login), now, { owner: h.owner_user_id === userId, withUrl: false }),
+        canSwitchAccount: Array.isArray((h.status ?? {}).can) && ((h.status ?? {}).can as unknown[]).includes('cursor_login'),
       })),
       lanes: lanes
         .map((l) => {

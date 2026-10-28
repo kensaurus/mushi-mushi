@@ -81,6 +81,8 @@ const MASKED_ACCOUNT_RE = /^[A-Za-z0-9._+-]{0,3}\*{3}@[A-Za-z0-9.*-]{1,60}$/
 const SOURCE_LINE = /^\s*>?\s*\d+\s*\|/
 const TSC_SOURCE_LINE = /^\s*\d+\s{2,}\S/
 const URL_CREDENTIALS = /\b(https?:\/\/)[^\s/@]+@/gi
+/** A Cursor sign-in link signs the machine in for whoever opens it: shown only on the owner's switch dialog (cursor-login.ts). */
+const LOGIN_LINK = /\bhttps?:\/\/(?:www\.)?cursor\.com\/\S*(?:login|auth)\S*/gi
 const BEARER = /\b(bearer\s+)\S+/gi
 const AUTH_WORD = /\b((?:token|authorization|password|passwd|secret|api[_-]?key)\s*[:=]\s*)(?!bearer\b)\S+/gi
 const EMAIL = /\b([A-Za-z0-9])[A-Za-z0-9._%+-]*@([A-Za-z0-9])[A-Za-z0-9-]*(?:\.[A-Za-z0-9-]+)*\.([A-Za-z]{2,})\b/g
@@ -106,6 +108,7 @@ export function cleanLogLine(raw: unknown): string | null {
   const one = raw.replace(/[\u0000-\u001f\u007f]+/g, ' ')
   if (SOURCE_LINE.test(one) || TSC_SOURCE_LINE.test(one)) return null
   let s = one
+    .replace(LOGIN_LINK, '[sign-in link hidden]')
     .replace(URL_CREDENTIALS, '$1')
     .replace(BEARER, '$1[hidden]')
     .replace(AUTH_WORD, '$1[hidden]')

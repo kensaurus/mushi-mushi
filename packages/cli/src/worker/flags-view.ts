@@ -41,6 +41,8 @@ function actionLine(a: WorkerFlagView['actions'][number]): string | null {
       return `${a.label}: in the console (Pipeline → Workers)`
     case 'recheck_account':
       return `${a.label}: in the console (Pipeline → Workers), or run cursor-agent status on the machine`
+    case 'switch_account':
+      return `${a.label}: in the console (Pipeline → Workers → the machine → Switch account), or run cursor-agent login on the machine`
     case 'open_report':
       return a.reportId ? `${a.label}: mushi reports show ${a.reportId}` : null
     case 'open_pr':

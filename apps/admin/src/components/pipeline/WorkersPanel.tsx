@@ -49,11 +49,42 @@ import {
 import { WorkerFlags } from './WorkerFlags'
 import { WorkerKeyForm } from './WorkerKeyForm'
 import { WorkerLaneCard } from './WorkerLaneCard'
+import { SwitchCursorAccountDialog } from './SwitchCursorAccount'
 
 interface Props {
   /** One app, or null for every app the caller can open. */
   projectId: string | null
   now: number
+}
+
+const SWITCH_STATE: Record<string, string> = {
+  requested: 'switch asked, waiting for the machine',
+  waiting_for_runs: 'switch waiting for runs to finish',
+  link_ready: 'sign-in link ready',
+  signed_in: 'last switch done',
+  wrong_account: 'last switch signed in as the wrong account',
+  failed: 'last switch failed',
+  expired: 'last switch expired',
+}
+
+/** The account the lanes spend (set in the console) and "Switch account", for the machine's owner. */
+function CursorAccountRow({ host, onChanged }: { host: WorkerHost; onChanged: () => void }) {
+  const [open, setOpen] = useState(false)
+  const testId = `worker-host-${host.id}`
+  const login = host.cursorLogin
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-2xs text-fg-muted" data-testid={`${testId}-account`}>
+      <span>Lanes spend:</span>
+      <span className="text-fg">{host.cursorAccount ?? 'the account the machine is signed in as'}</span>
+      {login && <Badge tone={login.state === 'signed_in' ? 'ok' : login.state === 'link_ready' || login.state === 'requested' || login.state === 'waiting_for_runs' ? 'warn' : 'danger'}>{SWITCH_STATE[login.state] ?? login.state}</Badge>}
+      {host.mine && !host.revoked && (
+        <Btn size="sm" variant="ghost" onClick={() => setOpen(true)} data-testid={`${testId}-switch-account`}>
+          {login?.state === 'link_ready' ? 'Open the sign-in' : 'Switch account'}
+        </Btn>
+      )}
+      {open && <SwitchCursorAccountDialog hostId={host.id} hostname={host.hostname} onClose={() => setOpen(false)} onChanged={onChanged} />}
+    </div>
+  )
 }
 
 const INSTALL_ONE = 'mushi worker install --lane my-app --project <app id> --repo-dir ~/src/my-app'
@@ -160,6 +191,7 @@ function HostCard({ host, now, onChanged }: { host: WorkerHost; now: number; onC
         {host.version ? ` · mushi ${host.version}` : ''}
       </p>
       <HostChecks host={host} />
+      <CursorAccountRow host={host} onChanged={onChanged} />
       {host.mine && !host.revoked ? (
         <div className="flex flex-wrap items-end gap-2">
           <div className="w-28">

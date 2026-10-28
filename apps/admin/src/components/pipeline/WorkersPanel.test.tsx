@@ -119,6 +119,24 @@ async function click(el: Element | null) {
 }
 
 describe('WorkersPanel', () => {
+  it('shows the Cursor account the lanes spend, and Switch account for the machine\'s owner only', async () => {
+    const data = fixture()
+    data.hosts[0] = { ...data.hosts[0]!, cursorAccount: 'kensaurus@gmail.com', cursorLogin: { requestId: 'x', state: 'link_ready', account: 'kensaurus@gmail.com', requestedAt: '2026-10-27T11:58:00Z', at: '2026-10-27T11:59:00Z', detail: null }, canSwitchAccount: true }
+    state.data = data
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    expect(q('worker-host-h1-account')!.textContent).toContain('Lanes spend:kensaurus@gmail.com')
+    expect(q('worker-host-h1-account')!.textContent).toContain('sign-in link ready')
+    expect(q('worker-host-h1-switch-account')!.textContent).toBe('Open the sign-in')
+    act(() => root.unmount())
+    root = createRoot(host)
+    const other = fixture()
+    other.hosts[0] = { ...other.hosts[0]!, mine: false, cursorAccount: 'k***@g***.com' }
+    state.data = other
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    expect(q('worker-host-h1-account')!.textContent).toContain('k***@g***.com')
+    expect(q('worker-host-h1-switch-account')).toBeNull()
+  })
+
   it('reads this app and shows the machine, its lane, what it runs, its queue and its runs', async () => {
     await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
     expect(state.paths[0]).toBe('/v1/admin/work/lanes?projectId=p1')

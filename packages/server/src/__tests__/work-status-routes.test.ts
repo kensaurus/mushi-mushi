@@ -195,3 +195,140 @@ describe('POST /v1/admin/work/hosts/:id/recheck', () => {
     expect(done.body.data.recheckAccount).toBe(false)
   })
 })
+
+// ── "Switch account" (ADR 0048 amendment 2026-10-28) ────────────────────────
+
+const LINK = 'https://cursor.com/loginDeepControl?challenge=abcDEF123_-xyz&uuid=1f95da85-6fc6-4e9c-8795-0ef1b7913f90&mode=login&redirectTarget=cli'
+/** A heartbeat from a daemon that can switch (or an older one, can: undefined), with its switch report. */
+const hbSwitch = (cursorLogin?: Record<string, unknown>, can: string[] | null = ['cursor_login']) => {
+  const b = hb([], [], { cursor: { result: 'expected', ageSec: 30, detail: 'Logged in', account: 's***@g***.com' } }) as Record<string, any>
+  return { ...b, host: { ...b.host, ...(can ? { can } : {}) }, status: { ...b.status, ...(cursorLogin ? { cursorLogin } : {}) } }
+}
+
+async function withSwitchableHost(can: string[] | null = ['cursor_login']) {
+  const s = setup()
+  const first = await s.app.call('POST', '/v1/worker/heartbeat', { body: hbSwitch(undefined, can) })
+  expect(first.status).toBe(200)
+  const hostId = s.db.table('work_hosts')[0]!.id as string
+  return { ...s, hostId }
+}
+
+const switchTo = (s: { app: FakeApp; hostId: string }, account: unknown, who = 'u1', extra: Record<string, unknown> = {}) =>
+  s.app.call('POST', '/v1/admin/work/hosts/:id/cursor-account', { params: { id: s.hostId }, body: { account, ...extra }, ...console_(who) })
+const readSwitch = (s: { app: FakeApp; hostId: string }, who = 'u1') => s.app.call('GET', '/v1/admin/work/hosts/:id/cursor-login', { params: { id: s.hostId }, ...console_(who) })
+
+describe('Switch the Cursor account from the console', () => {
+  it('only the machine\'s owner, only from a console session, only with an e-mail address', async () => {
+    const s = await withSwitchableHost()
+    expect((await switchTo(s, 'kensaurus@gmail.com', 'u3')).status).toBe(403) // an admin of the app, not the machine's owner
+    expect((await switchTo(s, 'kensaurus@gmail.com', 'u2')).status).toBe(403)
+    const byKey = await s.app.call('POST', '/v1/admin/work/hosts/:id/cursor-account', { params: { id: s.hostId }, body: { account: 'kensaurus@gmail.com' } })
+    expect(byKey.status).toBe(403)
+    expect(byKey.body.error!.code).toBe('CONSOLE_ONLY')
+    for (const bad of ['', 'kensaurus', 'a b@c.com', `${'x'.repeat(250)}@g.com`, 42]) expect((await switchTo(s, bad)).status).toBe(400)
+    expect((await readSwitch(s, 'u3')).status).toBe(403)
+    expect(s.db.table('work_hosts')[0]!.cursor_account ?? null).toBeNull()
+  })
+
+  it('a machine whose CLI cannot switch says to update it', async () => {
+    const s = await withSwitchableHost(null)
+    const res = await switchTo(s, 'kensaurus@gmail.com')
+    expect(res.status).toBe(409)
+    expect(res.body.error!.code).toBe('CLI_TOO_OLD')
+    expect(res.body.error!.message).toMatch(/npm i -g @mushi-mushi\/cli@latest/)
+    expect((await readSwitch(s)).body.data.canSwitch).toBe(false)
+  })
+
+  it('the whole switch: request → the machine picks it up → link (owner only) → signed in; audited without the link', async () => {
+    const s = await withSwitchableHost()
+    const asked = await switchTo(s, 'Kensaurus@Gmail.com')
+    expect(asked.status).toBe(200)
+    expect(asked.body.data.login).toMatchObject({ state: 'requested', account: 'kensaurus@gmail.com' })
+    expect(s.audits).toEqual([expect.objectContaining({ action: 'worker.cursor_account_switch', resourceId: s.hostId, metadata: expect.objectContaining({ account: 'k***@g***.com' }) })])
+
+    const pick = await s.app.call('POST', '/v1/worker/heartbeat', { body: hbSwitch() })
+    expect(pick.body.data.cursorAccount).toBe('kensaurus@gmail.com')
+    const requestId = pick.body.data.cursorLogin.requestId as string
+    expect(requestId).toMatch(/^[0-9a-f-]{36}$/)
+
+    await s.app.call('POST', '/v1/worker/heartbeat', { body: hbSwitch({ requestId, state: 'link_ready', url: LINK }) })
+    const owner = await readSwitch(s)
+    expect(owner.body.data.login).toMatchObject({ state: 'link_ready', url: LINK })
+    // The link is nowhere else: not in the machine's status, the lanes read, the badge or the audit rows.
+    expect(JSON.stringify(s.db.table('work_hosts')[0]!.status)).not.toContain('cursor.com')
+    const lanes = await s.app.call('GET', '/v1/admin/work/lanes', console_('u1'))
+    expect(JSON.stringify(lanes.body)).not.toContain('cursor.com/login')
+    expect(lanes.body.data.hosts[0]).toMatchObject({ cursorAccount: 'kensaurus@gmail.com', canSwitchAccount: true, cursorLogin: { state: 'link_ready' } })
+    const asAdmin = await s.app.call('GET', '/v1/admin/work/lanes', console_('u3'))
+    expect(asAdmin.body.data.hosts[0].cursorAccount).toBe('k***@g***.com')
+    const stats = await s.app.call('GET', '/v1/admin/work/stats', console_('u1'))
+    expect(JSON.stringify(stats.body)).not.toContain('cursor.com')
+    expect(JSON.stringify(s.audits)).not.toContain('cursor.com')
+
+    const done = await s.app.call('POST', '/v1/worker/heartbeat', { body: hbSwitch({ requestId, state: 'signed_in', detail: 'Signed in as kensaurus@gmail.com.' }) })
+    expect(done.body.data.cursorLogin).toBeNull()
+    const after = await readSwitch(s)
+    expect(after.body.data.login).toMatchObject({ state: 'signed_in', detail: 'Signed in as k***@g***.com.' })
+    expect(after.body.data.login.url).toBeUndefined()
+    expect(JSON.stringify(s.db.table('work_hosts')[0]!.cursor_login)).not.toContain('cursor.com')
+  })
+
+  it('one switch at a time: a second is refused until it ends, and Start again replaces it', async () => {
+    const s = await withSwitchableHost()
+    expect((await switchTo(s, 'kensaurus@gmail.com')).status).toBe(200)
+    const second = await switchTo(s, 'other@example.com')
+    expect(second.status).toBe(409)
+    expect(second.body.error!.code).toBe('IN_PROGRESS')
+    const first = (s.db.table('work_hosts')[0]!.cursor_login as { requestId: string }).requestId
+    const again = await switchTo(s, 'other@example.com', 'u1', { restart: true })
+    expect(again.status).toBe(200)
+    const next = (s.db.table('work_hosts')[0]!.cursor_login as { requestId: string }).requestId
+    expect(next).not.toBe(first)
+    // The machine's report about the replaced request changes nothing.
+    await s.app.call('POST', '/v1/worker/heartbeat', { body: hbSwitch({ requestId: first, state: 'signed_in' }) })
+    expect((await readSwitch(s)).body.data.login).toMatchObject({ state: 'requested', account: 'other@example.com' })
+    expect(s.audits.at(-1)!.metadata).toMatchObject({ restarted: true })
+  })
+
+  it('an offline machine keeps the request until it checks in, and it expires after an hour', async () => {
+    const s = await withSwitchableHost()
+    NOW = new Date(NOW.getTime() + 10 * 60_000) // the machine missed its heartbeats
+    const asked = await switchTo(s, 'kensaurus@gmail.com')
+    expect(asked.body.data.online).toBe(false)
+    expect(asked.body.data.message).toMatch(/offline; it starts the switch when it checks in/)
+    expect((await readSwitch(s)).body.data).toMatchObject({ online: false, login: { state: 'requested' } })
+    NOW = new Date(NOW.getTime() + 61 * 60_000)
+    const late = await readSwitch(s)
+    expect(late.body.data.login).toMatchObject({ state: 'expired', detail: expect.stringMatching(/did not pick up the request within an hour/) })
+    const beat = await s.app.call('POST', '/v1/worker/heartbeat', { body: hbSwitch() })
+    expect(beat.body.data.cursorLogin).toBeNull()
+    // An expired switch can be started again without "restart".
+    expect((await switchTo(s, 'kensaurus@gmail.com')).status).toBe(200)
+  })
+
+  it('a wrong account or a failure ends the switch with why; a malformed report changes nothing', async () => {
+    const s = await withSwitchableHost()
+    await switchTo(s, 'kensaurus@gmail.com')
+    const requestId = (s.db.table('work_hosts')[0]!.cursor_login as { requestId: string }).requestId
+    await s.app.call('POST', '/v1/worker/heartbeat', { body: hbSwitch({ requestId, state: 'link_ready', url: 'https://evil.example/login' }) })
+    expect((await readSwitch(s)).body.data.login.state).toBe('requested')
+    await s.app.call('POST', '/v1/worker/heartbeat', { body: hbSwitch({ requestId, state: 'wrong_account', detail: 'Signed in as suzu.haruka1130@gmail.com, not kensaurus@gmail.com.' }) })
+    expect((await readSwitch(s)).body.data.login).toMatchObject({ state: 'wrong_account', detail: 'Signed in as s***@g***.com, not k***@g***.com.' })
+  })
+
+  it('the account flag offers Switch account', async () => {
+    const s = setup()
+    await s.app.call('POST', '/v1/worker/heartbeat', { body: hb([], [], { cursor: { result: 'other_account', ageSec: 60, detail: 'Logged in as suzu.haruka1130@gmail.com', account: 'k***@g***.com' } }) })
+    const lanes = await s.app.call('GET', '/v1/admin/work/lanes', console_('u1'))
+    const flag = (lanes.body.data.flags as Array<{ kind: string; actions: Array<{ kind: string }> }>).find((f) => f.kind === 'account_check')!
+    expect(flag.actions.map((a) => a.kind)).toEqual(['switch_account', 'recheck_account', 'copy_command'])
+  })
+
+  it('stays quiet about another account while the machine is switching on purpose', async () => {
+    const s = setup()
+    const body = hb([], [], { cursor: { result: 'other_account', ageSec: 60, detail: 'Logged in as suzu.haruka1130@gmail.com', account: 'k***@g***.com' } }) as Record<string, any>
+    await s.app.call('POST', '/v1/worker/heartbeat', { body: { ...body, status: { ...body.status, state: 'switching-account' } } })
+    const lanes = await s.app.call('GET', '/v1/admin/work/lanes', console_('u1'))
+    expect((lanes.body.data.flags as Array<{ kind: string }>).some((f) => f.kind === 'account_check')).toBe(false)
+  })
+})

@@ -51,6 +51,35 @@ export interface WorkerHost {
   guards: HostGuards
   revoked: boolean
   mine: boolean
+  /** The Cursor account its lanes may spend, set in the console: in full for its owner, masked otherwise. Null until set. */
+  cursorAccount?: string | null
+  /** The last "Switch account" (never its link here: readCursorSwitch, owner only). */
+  cursorLogin?: CursorLoginView | null
+  /** False for a machine whose Mushi CLI predates "Switch account". */
+  canSwitchAccount?: boolean
+}
+
+type CursorLoginState = 'requested' | 'waiting_for_runs' | 'link_ready' | 'signed_in' | 'wrong_account' | 'failed' | 'expired'
+
+export interface CursorLoginView {
+  requestId: string
+  state: CursorLoginState
+  account: string
+  requestedAt: string
+  at: string
+  detail: string | null
+  /** The Cursor approve link: only for the machine's owner, only while it is the step to take. */
+  url?: string
+}
+
+export interface CursorSwitchStatus {
+  account: string | null
+  login: CursorLoginView | null
+  online: boolean
+  canSwitch: boolean
+  /** Agents running on the machine now (a switch waits for them). */
+  runs: number | null
+  check: { result: string | null; ageSec: number | null; detail: string | null } | null
 }
 
 export interface WorkerLane {
@@ -119,6 +148,7 @@ export type WorkerFlagAction =
   | { kind: 'open_pr'; label: string; prUrl: string }
   | { kind: 'copy_command'; label: string; command: string }
   | { kind: 'recheck_account'; label: string; hostId: string }
+  | { kind: 'switch_account'; label: string; hostId: string }
   | { kind: 'open_page'; label: string; to: string }
 
 /** One problem with a local worker, in plain words, with the actions that fix it. */
@@ -304,6 +334,22 @@ export async function stopRun(claimId: string): Promise<WriteResult> {
 export async function recheckAccount(hostId: string): Promise<WriteResult> {
   const res = await apiFetch<{ id: string; message: string }>(`/v1/admin/work/hosts/${encodeURIComponent(hostId)}/recheck`, { method: 'POST', scope: 'enumeration', body: '{}' })
   return res.ok ? { ok: true, message: res.data?.message ?? 'Asked.' } : fail(res)
+}
+
+/** "Switch account": the account the machine's lanes may spend, and a sign-in the machine starts within a minute. */
+export async function switchCursorAccount(hostId: string, account: string, restart = false): Promise<WriteResult & { code?: string; login?: CursorLoginView | null }> {
+  const res = await apiFetch<{ login: CursorLoginView | null; message: string }>(`/v1/admin/work/hosts/${encodeURIComponent(hostId)}/cursor-account`, {
+    method: 'POST',
+    scope: 'enumeration',
+    body: JSON.stringify({ account, restart }),
+  })
+  return res.ok ? { ok: true, message: res.data?.message ?? 'Asked.', login: res.data?.login ?? null } : { ...fail(res), code: res.error?.code }
+}
+
+/** Where the switch stands, with the approve link while that is the step (the machine's owner only). */
+export async function readCursorSwitch(hostId: string): Promise<{ ok: true; data: CursorSwitchStatus } | { ok: false; message: string }> {
+  const res = await apiFetch<CursorSwitchStatus>(`/v1/admin/work/hosts/${encodeURIComponent(hostId)}/cursor-login`, { scope: 'enumeration' })
+  return res.ok && res.data ? { ok: true, data: res.data } : { ok: false, message: res.error?.message ?? 'Could not read the switch.' }
 }
 
 /** A worker key (worker:run) for these apps; the key comes back once. */

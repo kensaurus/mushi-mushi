@@ -55,6 +55,7 @@ import { CURSOR_CONFIRM_GRACE_MS, hostGate, memAvailableGb, pastStop, type Machi
 import { auditPass } from './audit.js'
 import { repoOfRemote, resolveConflict } from './conflicts.js'
 import { runFreshEyesClaim } from './fresh-eyes.js'
+import { createCursorLogin, type CursorLogin } from './cursor-login.js'
 import {
   cleanLine,
   cursorCheckResult,
@@ -126,6 +127,10 @@ export interface DaemonDeps {
   notReady?: ReadonlyMap<string, string>
   /** The account the agents must run as; only its masked form leaves the machine. */
   cursorAccount?: string
+  /** The console named another account (heartbeat answer `cursorAccount`): the readings expect it from now on. */
+  setCursorAccount?: (account: string) => void
+  /** "Switch account" from the console. Without it the daemon does not offer to switch (no `can: cursor_login`). */
+  cursorLogin?: CursorLogin
   /** Runs a first-time user test the console queued. Without it the daemon does not offer to take them. */
   freshEyes?: (t: FreshEyesTarget, o: { projectId: string; signal: AbortSignal; log: (line: string) => void }) => Promise<JobOutcome>
 }
@@ -188,6 +193,8 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
   let waitWhy: string | null = null
   let lastReadings: HostReadings | null = null
   let stopped: string | null = null
+  /** The account the agents must run as: worker.json's, until the console names another. */
+  let account = deps.cursorAccount
   const reported = new Set<string>()
   const pending = new Set<Promise<void>>()
 
@@ -235,7 +242,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
       ...(lastReadings?.cpus ? { cpus: lastReadings.cpus } : {}),
       ...(waitWhy ? { waitWhy } : {}),
       checks: {
-        ...(c?.cursor ? { cursor: { result: c.cursor.result, ageSec: age(c.cursor.at), detail: cleanLine(c.cursor.detail) ?? '', account: deps.cursorAccount ? maskEmail(deps.cursorAccount) : null } } : {}),
+        ...(c?.cursor ? { cursor: { result: c.cursor.result, ageSec: age(c.cursor.at), detail: cleanLine(c.cursor.detail) ?? '', account: account ? maskEmail(account) : null } } : {}),
         ...(c?.gh ? { gh: { result: c.gh.result, ageSec: age(c.gh.at), detail: cleanLine(c.gh.detail) ?? '' } } : {}),
         ...(notReady.length ? { notReady } : {}),
       },
@@ -248,7 +255,8 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     const now = deps.now()
     return {
       // `takes`: the claim kinds beyond the lanes' modes this daemon runs (a closed list on the server).
-      host: { ...deps.host, takes: deps.freshEyes ? ['fresh_eyes'] : [] },
+      // `can`: what this daemon does when the console asks (a closed list on the server).
+      host: { ...deps.host, takes: deps.freshEyes ? ['fresh_eyes'] : [], can: deps.cursorLogin ? ['cursor_login'] : [] },
       status: {
         state: hostState,
         agents: agents(),
@@ -257,6 +265,8 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
         ...(lastReadings?.ghRemaining != null ? { ghRemaining: lastReadings.ghRemaining } : {}),
         ...(lastReadings ? { cursor: lastReadings.cursor } : {}),
         ...hostTelemetry(now),
+        // The switch the console asked for, with its approve link while that is the step: the server keeps it for the owner only.
+        ...(deps.cursorLogin?.report() ? { cursorLogin: deps.cursorLogin.report() } : {}),
       },
       lanes: lanes.map((l) => {
         const { agentMs, ...counts } = l.counters
@@ -542,6 +552,12 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     for (const r of answer.refused) once(`refused:${r.name}:${r.reason}`, null, `lane ${r.name} not registered: ${r.reason}`)
     guards = answer.guards
     if (answer.recheckAccount) deps.recheck?.()
+    if (answer.cursorAccount && answer.cursorAccount !== account) {
+      account = answer.cursorAccount
+      deps.setCursorAccount?.(answer.cursorAccount)
+      say(null, `the console set the Cursor account to ${maskEmail(answer.cursorAccount)}`)
+    }
+    if (answer.cursorLogin && account) deps.cursorLogin?.start(answer.cursorLogin.requestId, account)
     for (const l of lanes) {
       const server = answer.lanes.find((s) => s.name === l.local.name && s.projectId === l.local.projectId)
       l.serverId = server?.id ?? null
@@ -559,6 +575,14 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
       }
     }
     lastReadings = await deps.readings()
+    // A switch of the Cursor account takes nothing new; the runs in flight finish first.
+    if (deps.cursorLogin?.busy()) {
+      if (hostState !== 'switching-account') say(null, 'waiting: switching the Cursor account (asked from the console)')
+      hostState = 'switching-account'
+      waitWhy = 'Switching the Cursor account (asked from the console)'
+      for (const l of lanes) if (!l.running.size && !l.followup && !deps.notReady?.has(l.local.name)) l.state = 'switching-account'
+      return
+    }
     const gate = hostGate(guards, { ...lastReadings, agents: agents() })
     if (!gate.ok) {
       if (hostState !== gate.state) say(null, `waiting: ${gate.why}`)
@@ -591,6 +615,8 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
   return {
     tick,
     shutdown,
+    /** Agents running now (a switch of the Cursor account waits for them). */
+    agents,
     stopAll,
     get stopped() {
       return stopped
@@ -670,6 +696,7 @@ export function createHostReadings(o: {
 }) {
   const run = o.run ?? runProc
   const checkCursor = o.checkCursor ?? (() => checkCursorSignIn())
+  let acct = o.cursorAccount
   const st = {
     ghAt: -Infinity,
     gh: null as number | null,
@@ -687,10 +714,10 @@ export function createHostReadings(o: {
     st.running = checkCursor()
       .then((s) => {
         const at = o.now()
-        st.cursor = cursorStateFor(s, o.cursorAccount)
-        if (s.state === 'signed_in' && st.cursor === 'signed_out') o.log(`worker: the Cursor CLI is signed in, but not as ${o.cursorAccount}; taking nothing new.`)
+        st.cursor = cursorStateFor(s, acct)
+        if (s.state === 'signed_in' && st.cursor === 'signed_out') o.log(`worker: the Cursor CLI is signed in, but not as ${acct ? maskEmail(acct) : 'the expected account'}; taking nothing new.`)
         if (st.cursor === 'signed_in') st.confirmedAt = at
-        st.checks.cursor = { result: cursorCheckResult(s, o.cursorAccount), at, detail: s.detail }
+        st.checks.cursor = { result: cursorCheckResult(s, acct), at, detail: s.detail }
       })
       .catch((err: unknown) => {
         st.checks.cursor = { result: 'unclear', at: o.now(), detail: err instanceof Error ? err.message : String(err) }
@@ -702,6 +729,13 @@ export function createHostReadings(o: {
   }
   return {
     recheck(): void {
+      st.asked = true
+    },
+    /** The console named another account: expect it, and check again at once. */
+    setAccount(account: string): void {
+      if (account === acct) return
+      acct = account
+      st.confirmedAt = null
       st.asked = true
     },
     async read(): Promise<HostReadings> {
@@ -769,6 +803,17 @@ export async function runDaemon(opts: { configPath?: string } = {}): Promise<voi
   const conf: CliConfig = { apiKey: key, endpoint }
   let wake: () => void = () => undefined
   const readings = createHostReadings({ cursorAccount: cfg.cursorAccount, now: () => Date.now(), log: (l) => process.stdout.write(`${l}\n`) })
+  // "Switch account" from the console. It counts the daemon's runs, which exist once the daemon does.
+  const live = { agents: () => 0 }
+  const cursorLogin = createCursorLogin({
+    now: () => Date.now(),
+    log: (l) => process.stdout.write(`${l}\n`),
+    activeRuns: () => live.agents(),
+    onSignedIn: (a) => {
+      readings.setAccount(a)
+      readings.recheck()
+    },
+  })
   const daemon = createDaemon(cfg, {
     call: (path, init) => apiCall(path, conf, init, { timeoutMs: 30_000 }),
     workOne,
@@ -777,6 +822,8 @@ export async function runDaemon(opts: { configPath?: string } = {}): Promise<voi
     recheck: () => readings.recheck(),
     notReady,
     ...(cfg.cursorAccount ? { cursorAccount: cfg.cursorAccount } : {}),
+    setCursorAccount: (a) => readings.setAccount(a),
+    cursorLogin,
     now: () => Date.now(),
     log: (l) => process.stdout.write(`${l}\n`),
     host: { hostId, hostname: nodeHostIO.hostname.split('.')[0]!.slice(0, 80) || 'host', platform, version: MUSHI_CLI_VERSION },
@@ -784,6 +831,7 @@ export async function runDaemon(opts: { configPath?: string } = {}): Promise<voi
     repos,
     freshEyes: (t, o) => runFreshEyesClaim(t, { ...o, apiKey: key, endpoint }),
   })
+  live.agents = daemon.agents
   onInterrupt((signal) => daemon.shutdown(signal))
   process.stdout.write(`mushi worker: ${cfg.lanes.length} lane(s) on ${platform}; heartbeat every ${HEARTBEAT_MS / 1000} s. Stop with Ctrl-C or systemctl --user stop mushi-worker.\n`)
 

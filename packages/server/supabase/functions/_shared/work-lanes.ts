@@ -14,6 +14,7 @@
  */
 
 import { cleanHostTelemetry, cleanLaneTelemetry } from './work-telemetry.ts'
+import { parseCursorLoginReport, type CursorLoginReport } from './cursor-login.ts'
 
 /**
  * What a lane does (ADR 0048; P3 modes: ADR 0049 conflicts, ADR 0050 audit,
@@ -199,7 +200,7 @@ export function hostGuardsFrom(raw: unknown): HostGuards {
 
 // ── What the daemon sends ───────────────────────────────────────────────────
 
-export const HOST_STATES = ['starting', 'working', 'idle', 'paused', 'mem-wait', 'gh-quota-wait', 'auth-wait', 'slot-wait', 'backoff', 'stopped', 'draining', 'not-ready'] as const
+export const HOST_STATES = ['starting', 'working', 'idle', 'paused', 'mem-wait', 'gh-quota-wait', 'auth-wait', 'slot-wait', 'backoff', 'stopped', 'draining', 'not-ready', 'switching-account'] as const
 export const MAX_LANES_PER_HOST = 20
 
 export interface HeartbeatLane {
@@ -220,6 +221,9 @@ export interface HeartbeatLane {
  */
 export const HOST_TAKES = ['fresh_eyes'] as const
 export type HostTake = (typeof HOST_TAKES)[number]
+/** What the daemon can do when the console asks (ADR 0048 amendment 2026-10-28): a closed list, stored in the host's status as `can`. */
+export const HOST_CAN = ['cursor_login'] as const
+export type HostCan = (typeof HOST_CAN)[number]
 
 export interface Heartbeat {
   host: { hostId: string; hostname: string; platform: 'linux' | 'wsl2' | 'macos' | 'windows'; version: string | null; takes: HostTake[] }
@@ -228,6 +232,8 @@ export interface Heartbeat {
   lanes: HeartbeatLane[]
   /** Active claims the daemon is still working on: their leases are renewed. */
   claims: string[]
+  /** The Cursor sign-in the console asked for, as the machine reports it. Never stored in `status` (the link is the owner's only). */
+  cursorLogin: CursorLoginReport | null
 }
 
 const STATUS_NUMBERS = ['runs', 'prs', 'pushes', 'timeouts', 'errors', 'idle', 'agentMin', 'agents', 'maxAgents', 'memAvailableGb', 'ghRemaining', 'worktrees', 'branches', 'load1', 'cpus', 'stateSec']
@@ -283,10 +289,12 @@ export function parseHeartbeat(raw: unknown): Parsed<Heartbeat> {
     lanes.push({ name, projectId: l.projectId.toLowerCase(), status: { ...cleanStatus(l.status), ...cleanLaneTelemetry(l.status) }, initial, repo: typeof l.repo === 'string' ? l.repo.toLowerCase() : null })
   }
   const claims = (Array.isArray(b.claims) ? b.claims : []).filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)).slice(0, 50)
-  const status = { ...cleanStatus(b.status), ...cleanHostTelemetry(b.status) }
+  const can = [...new Set((Array.isArray(h.can) ? h.can : []).filter((t): t is HostCan => typeof t === 'string' && (HOST_CAN as readonly string[]).includes(t)))]
+  const status = { ...cleanStatus(b.status), ...cleanHostTelemetry(b.status), ...(can.length ? { can } : {}) }
+  const cursorLogin = parseCursorLoginReport((b.status as Record<string, unknown> | null | undefined)?.cursorLogin)
   return {
     ok: true,
-    value: { host: { hostId: h.hostId, hostname, platform: h.platform as Heartbeat['host']['platform'], version, takes }, status, lanes, claims },
+    value: { host: { hostId: h.hostId, hostname, platform: h.platform as Heartbeat['host']['platform'], version, takes }, status, lanes, claims, cursorLogin },
   }
 }
 

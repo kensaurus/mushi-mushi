@@ -128,7 +128,13 @@ export interface HeartbeatAnswer {
   wake: string[]
   /** The console asked for a new Cursor account check (ADR 0048 amendment 2026-10-28). Only `true` counts. */
   recheckAccount: boolean
+  /** The Cursor account the machine's owner set in the console; it overrides the local worker.json. */
+  cursorAccount: string | null
+  /** A "Switch account" the console asked for, while it is open. */
+  cursorLogin: { requestId: string } | null
 }
+
+const ACCOUNT_RE = /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/
 
 /**
  * The heartbeat answer, checked field by
@@ -156,7 +162,11 @@ export function parseHeartbeatAnswer(raw: unknown): { answer: HeartbeatAnswer; b
     .filter((r) => typeof r?.name === 'string')
     .map((r) => ({ name: String(r.name).slice(0, 40), reason: String(r.reason ?? '').slice(0, 300) }))
   return {
-    answer: { hostId: typeof d.hostId === 'string' ? d.hostId : '', guards: guards.value, lanes, refused, renewed: ids(d.renewed), lost: ids(d.lost), wake: ids(d.wake), recheckAccount: d.recheckAccount === true },
+    answer: { hostId: typeof d.hostId === 'string' ? d.hostId : '', guards: guards.value, lanes, refused, renewed: ids(d.renewed), lost: ids(d.lost), wake: ids(d.wake),
+      recheckAccount: d.recheckAccount === true,
+      cursorAccount: typeof d.cursorAccount === 'string' && d.cursorAccount.length <= 254 && ACCOUNT_RE.test(d.cursorAccount) ? d.cursorAccount.toLowerCase() : null,
+      cursorLogin: d.cursorLogin && typeof (d.cursorLogin as { requestId?: unknown }).requestId === 'string' && UUID_RE.test((d.cursorLogin as { requestId: string }).requestId) ? { requestId: (d.cursorLogin as { requestId: string }).requestId } : null,
+    },
     bad,
   }
 }

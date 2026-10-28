@@ -249,3 +249,36 @@ why.
   the agent, not git; the hook ends at git's time limit (BL-151).
 - **A new run-history table**: `work_claims` already is the history, and its
   `detail` carries the hook failures.
+
+## Amendment 2026-10-28 (b): switch the Cursor account from the console
+
+Status: Accepted 2026-10-28 by team-lead (Claude), on the owner's choice
+between two designs ("Sign-in link in console", over sending a stored key to
+the machine).
+
+The owner moved the lanes from one Cursor account to another by hand in a
+terminal, then asked for it to be one action in the console, easy to watch
+and to change.
+
+- **A sign-in, never a key.** The machine's owner names the account
+  (`POST /v1/admin/work/hosts/:id/cursor-account`, console session only, the
+  machine's owner, audited with the account masked). The heartbeat answer
+  carries `cursorAccount` (it overrides `worker.json`'s `cursorAccount`) and,
+  while open, `cursorLogin: { requestId }`. The daemon finishes its runs (30
+  minutes at most), runs `cursor-agent logout` and `cursor-agent login` with
+  `NO_OPEN_BROWSER=1` (no shell) and reports the approve link in
+  `status.cursorLogin`; the person approves on cursor.com. No BYOK key is
+  sent to a worker: the rule that a worker key never reads keys stands.
+- **The link is the owner's alone.** The server keeps the link in
+  `work_hosts.cursor_login` only while it is the step to take, outside the
+  general `status`, and returns it only from
+  `GET /v1/admin/work/hosts/:id/cursor-login` to the machine's owner. Log
+  lines lose any Cursor sign-in link on the machine and on the server.
+- **Truth from the CLI.** After the sign-in the daemon runs `cursor-agent
+  status`: the named account → `signed_in`, another → `wrong_account` (the
+  account check keeps the lanes off), anything else → `failed`; 15 minutes
+  without an approval → `expired`. A request no machine finishes within an
+  hour reads as expired.
+- **Capability, not version sniffing.** A daemon that can switch sends
+  `host.can: ["cursor_login"]`; without it the console says to update the CLI.
+  Migration `20261028150000_worker_cursor_account.sql` (additive).

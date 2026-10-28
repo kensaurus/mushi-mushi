@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-28 · **793** routes.
+> Generated: 2026-10-28 · **795** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,7 +10,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 216 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 403 |
+| `jwtAuth` | 405 |
 | `jwtOrApiKey` | 3 |
 | `public` | 61 |
 | `unknown` | 51 |
@@ -642,6 +642,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/work/claims/:id/stop` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work-status.ts` |
 | DELETE | `/v1/admin/work/hosts/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work.ts` |
 | PATCH | `/v1/admin/work/hosts/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work.ts` |
+| POST | `/v1/admin/work/hosts/:id/cursor-account` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work-status.ts` |
+| GET | `/v1/admin/work/hosts/:id/cursor-login` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work-status.ts` |
 | POST | `/v1/admin/work/hosts/:id/recheck` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work-status.ts` |
 | POST | `/v1/admin/work/key` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/work.ts` |
 | GET | `/v1/admin/work/lanes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/work.ts` |

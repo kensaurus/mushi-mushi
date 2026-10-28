@@ -27,6 +27,8 @@ const LOG_LINES = 4
 const SOURCE_LINE = /^\s*>?\s*\d+\s*\|/
 const TSC_SOURCE_LINE = /^\s*\d+\s{2,}\S/
 const URL_CREDENTIALS = /\b(https?:\/\/)[^\s/@]+@/gi
+/** A Cursor sign-in link signs the machine in for whoever opens it; it reaches the console only as the sign-in report (cursor-login.ts). */
+const LOGIN_LINK = /\bhttps?:\/\/(?:www\.)?cursor\.com\/\S*(?:login|auth)\S*/gi
 const BEARER = /\b(bearer\s+)\S+/gi
 const AUTH_WORD = /\b((?:token|authorization|password|passwd|secret|api[_-]?key)\s*[:=]\s*)(?!bearer\b)\S+/gi
 const EMAIL = /\b([A-Za-z0-9])[A-Za-z0-9._%+-]*@([A-Za-z0-9])[A-Za-z0-9-]*(?:\.[A-Za-z0-9-]+)*\.([A-Za-z]{2,})\b/g
@@ -45,7 +47,7 @@ export function maskEmail(text: string): string {
 export function cleanLine(raw: string): string | null {
   const one = raw.replace(/[\u0000-\u001f\u007f]+/g, ' ')
   if (SOURCE_LINE.test(one) || TSC_SOURCE_LINE.test(one)) return null
-  let s = one.replace(URL_CREDENTIALS, '$1').replace(BEARER, '$1[hidden]').replace(AUTH_WORD, '$1[hidden]')
+  let s = one.replace(LOGIN_LINK, '[sign-in link hidden]').replace(URL_CREDENTIALS, '$1').replace(BEARER, '$1[hidden]').replace(AUTH_WORD, '$1[hidden]')
   s = maskEmail(s)
     .replace(ABS_PATH, (_m, lead: string, path: string) => `${lead}…/${path.split(/[\\/]/).filter(Boolean).pop() ?? ''}`)
     .replace(LONG_TOKEN, '[hidden]')
