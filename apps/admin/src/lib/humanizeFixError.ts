@@ -309,21 +309,28 @@ export function humanizeFixError(
     };
   }
 
-  // LLM: rate limit / all keys exhausted
+  // LLM: rate limit / workspace usage cap / all keys exhausted.
+  // Anthropic's cap is a 400 ("specified API usage limits"), not a 429.
+  const usageCap = m.includes('specified api usage limits') || m.includes('claude quota exceeded');
   if (
     m.includes('ALL_KEYS_EXHAUSTED') ||
     m.includes('rate limit') ||
     m.includes('429') ||
+    usageCap ||
     category === 'llm_rate_limit'
   ) {
     const allExhausted = m.includes('ALL_KEYS_EXHAUSTED');
     return {
-      title: allExhausted
-        ? 'All configured API keys have hit their quota.'
-        : 'The LLM provider rate-limited this request.',
-      hint: allExhausted
-        ? 'Add a backup key in Settings → API Key Pool to continue without waiting.'
-        : 'Mushi tried all your configured keys. Add a backup key in Settings → API Key Pool, or wait for the cooldown to clear.',
+      title: usageCap
+        ? 'The Anthropic workspace has reached its usage limit.'
+        : allExhausted
+          ? 'All configured API keys have hit their quota.'
+          : 'The LLM provider rate-limited this request.',
+      hint: usageCap
+        ? 'This key cannot call Claude until the limit resets. Raise the spend limit, or add another key in Settings → API Key Pool.'
+        : allExhausted
+          ? 'Add a backup key in Settings → API Key Pool to continue without waiting.'
+          : 'Mushi tried all your configured keys. Add a backup key in Settings → API Key Pool, or wait for the cooldown to clear.',
       severity: 'soft',
       action: {
         label: allExhausted ? 'Add backup key' : 'Manage keys',

@@ -13,6 +13,9 @@
 // Failure contract (what `llm-failover.ts` relies on):
 //   • HTTP errors surface as the SDK's `APIError` with a numeric `status`, so
 //     `classifyLlmError` sees 429 / 401 / 5xx exactly as before.
+//   • A 400 whose message is the workspace usage cap ("You have reached your
+//     specified API usage limits") throws `ClaudeQuotaExceededError`. That is
+//     not a malformed request and must not be retried on the same key.
 //   • Schema-invalid or truncated output throws ai@4 `NoObjectGeneratedError`,
 //     which `withAnthropicOrOpenAi` already hands to OpenAI.
 //   • `stop_reason: "refusal"` throws `ClaudeRefusalError` (see that class).
@@ -20,7 +23,9 @@
 
 import type { ZodType } from 'npm:zod@3'
 import {
+  anthropicUsageLimitDetail,
   buildClaudeRequest,
+  ClaudeQuotaExceededError,
   ClaudeRefusalError,
   responseText,
   toClaudeOutputSchema,
@@ -73,6 +78,26 @@ async function client(opts: ClaudeCallOptions): Promise<InstanceType<AiSdk['Anth
 /** Per-request SDK options: only the caller's abort signal, when it has one. */
 function requestOptions(opts: ClaudeCallOptions): { signal: AbortSignal } | undefined {
   return opts.abortSignal ? { signal: opts.abortSignal } : undefined
+}
+
+/**
+ * A workspace usage cap arrives as HTTP 400 `invalid_request_error`, which
+ * looks like a bad request. Map that one sentence to a typed, non-retryable
+ * error. Every other SDK error, including other 400s, is rethrown unchanged.
+ */
+function mapClaudeCallError(err: unknown): unknown {
+  const detail = anthropicUsageLimitDetail(err)
+  if (!detail) return err
+  log.warn('Claude workspace usage limit reached', { detail })
+  return new ClaudeQuotaExceededError(detail)
+}
+
+async function createMessage(opts: ClaudeCallOptions, body: unknown): Promise<FinalMessageLike> {
+  try {
+    return (await (await client(opts)).beta.messages.create(body as never, requestOptions(opts))) as unknown as FinalMessageLike
+  } catch (err) {
+    throw mapClaudeCallError(err)
+  }
 }
 
 function requestFor(opts: ClaudeCallOptions, outputSchema?: Record<string, unknown>) {
@@ -150,7 +175,7 @@ function outputSchemaFor<T>(ai: AiSdk, schema: ZodType<T>): Record<string, unkno
 export async function claudeGenerateObject<T>(opts: ClaudeCallOptions & { schema: ZodType<T> }) {
   const ai = await loadAiSdk()
   const body = requestFor(opts, outputSchemaFor(ai, opts.schema))
-  const message = (await (await client(opts)).beta.messages.create(body as never, requestOptions(opts))) as unknown as FinalMessageLike
+  const message = await createMessage(opts, body)
   assertNotRefused(message, opts.model)
   return { object: parseObject(ai, opts.schema, message), ...legacyResult(message) }
 }
@@ -158,7 +183,7 @@ export async function claudeGenerateObject<T>(opts: ClaudeCallOptions & { schema
 /** Plain text (`generateText` replacement). */
 export async function claudeGenerateText(opts: ClaudeCallOptions) {
   const body = requestFor(opts)
-  const message = (await (await client(opts)).beta.messages.create(body as never, requestOptions(opts))) as unknown as FinalMessageLike
+  const message = await createMessage(opts, body)
   assertNotRefused(message, opts.model)
   return { text: responseText(message.content), ...legacyResult(message) }
 }
@@ -209,8 +234,9 @@ function streamDeltas(
       assertNotRefused(message, opts.model)
       final.resolve(message)
     } catch (err) {
-      final.reject(err)
-      throw err
+      const mapped = mapClaudeCallError(err)
+      final.reject(mapped)
+      throw mapped
     }
   }
   return { deltas: deltas(), final: final.promise }

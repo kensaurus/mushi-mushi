@@ -28,6 +28,19 @@ Deno.test('classifyLlmError detects quota errors from message text', () => {
   assertEquals(classifyLlmError(new Error('You exceeded your current quota')), 'quota');
 });
 
+Deno.test('classifyLlmError treats an Anthropic 400 usage cap as quota, not a bad request', () => {
+  const detail = 'You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.';
+  const raw = Object.assign(new Error(`400 {"error":{"message":"${detail}"}}`), {
+    status: 400,
+    error: { type: 'error', error: { type: 'invalid_request_error', message: detail } },
+  });
+  assertEquals(classifyLlmError(raw), 'quota');
+  assertEquals(
+    classifyLlmError(Object.assign(new Error('temperature is deprecated for this model'), { status: 400 })),
+    'other',
+  );
+});
+
 Deno.test('classifyLlmError detects auth errors from message text', () => {
   assertEquals(classifyLlmError(new Error('401 Unauthorized')), 'auth');
   assertEquals(classifyLlmError(new Error('Invalid API Key provided')), 'auth');

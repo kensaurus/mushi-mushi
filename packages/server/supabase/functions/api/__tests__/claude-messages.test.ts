@@ -9,7 +9,7 @@ import { assert, assertEquals, assertRejects } from 'https://deno.land/std@0.224
 import { NoObjectGeneratedError, zodSchema } from 'npm:ai@4'
 import { z } from 'npm:zod@3'
 import { claudeGenerateObject, claudeStreamObject } from '../../_shared/claude-messages.ts'
-import { ClaudeRefusalError, toClaudeOutputSchema } from '../../_shared/claude-request.ts'
+import { ClaudeQuotaExceededError, ClaudeRefusalError, toClaudeOutputSchema } from '../../_shared/claude-request.ts'
 import { stage2Schema } from '../../_shared/classify-stage2-schema.ts'
 import { fixSchema } from '../../_shared/fix-schema.ts'
 
@@ -125,6 +125,42 @@ Deno.test('refusal surfaces as ClaudeRefusalError with its category', async () =
     assertEquals(err.category, 'cyber')
     // No digits: `classifyLlmError` must not read it as an HTTP status.
     assert(!/\d/.test(err.message), err.message)
+  } finally {
+    stub.restore()
+  }
+})
+
+Deno.test('workspace usage-limit 400 is a non-retryable ClaudeQuotaExceededError', async () => {
+  const stub = stubFetch(() =>
+    Response.json({
+      type: 'error',
+      error: {
+        type: 'invalid_request_error',
+        message: 'You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.',
+      },
+    }, { status: 400 })
+  )
+  try {
+    const err = await assertRejects(call, ClaudeQuotaExceededError)
+    assertEquals(err.retryable, false)
+    assert(err.message.toLowerCase().includes('usage limits'), err.message)
+    assert(!/invalid_request_error/.test(err.message), err.message)
+  } finally {
+    stub.restore()
+  }
+})
+
+Deno.test('a different invalid_request_error 400 stays an SDK bad request', async () => {
+  const stub = stubFetch(() =>
+    Response.json({
+      type: 'error',
+      error: { type: 'invalid_request_error', message: 'temperature is deprecated for this model' },
+    }, { status: 400 })
+  )
+  try {
+    const err = await assertRejects(call)
+    assert(!(err instanceof ClaudeQuotaExceededError), String(err))
+    assert((err as { status?: number }).status === 400)
   } finally {
     stub.restore()
   }
