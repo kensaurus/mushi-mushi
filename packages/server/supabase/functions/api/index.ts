@@ -744,7 +744,7 @@ forwardToApiExt(['/v1/admin/projects/:id/site-audit', '/v1/admin/projects/:id/si
 // merge-queue.ts (ADR 0041); deploy size limit, 2026-10-23.
 forwardToApiExt(['/v1/admin/merge-queue', '/v1/admin/merge-queue/:id', '/v1/admin/projects/:id/release-settings']);
 // pipeline.ts (console /pipeline); deploy size limit, 2026-10-26.
-forwardToApiExt(['/v1/admin/pipeline', '/v1/admin/pipeline/actions']);
+forwardToApiExt(['/v1/admin/pipeline', '/v1/admin/pipeline/actions', '/v1/admin/pipeline/fix/:id']);
 
 forwardToApiExt(['/v1/admin/projects/:id/local-followups', '/v1/admin/fixes/:id/local-followup', '/v1/admin/fixes/:id/local-followup/done']);
 // skill-runs.ts (ADR 0042); deploy size limit, 2026-10-23.
@@ -782,6 +782,14 @@ forwardToApiExt([
   '/v1/admin/projects/:pid/ux-runs/:runId/surfaces/:key/report',
   '/v1/admin/projects/:pid/ux-runs/:runId/uploads',
 ]);
+// Fresh-eyes runs (fresh-eyes.ts, ADR 0053).
+forwardToApiExt([
+  '/v1/admin/fresh-eyes/test-account',
+  '/v1/admin/projects/:pid/fresh-eyes',
+  '/v1/admin/projects/:pid/fresh-eyes/:runId',
+  '/v1/admin/projects/:pid/fresh-eyes/:runId/uploads',
+  '/v1/admin/projects/:pid/fresh-eyes/:runId/findings',
+]);
 registerPullRequestRoutes(app);
 registerProjectGroupRoutes(app);
 registerBootstrapRoutes(app);
@@ -811,6 +819,14 @@ forwardToApiExt([
 forwardToApiExt(['/v1/admin/projects/:id/vulnerabilities', '/v1/admin/projects/:id/vulnerabilities/*']);
 // sdk-health.ts: SDK problems and their fix tasks; deploy size limit, 2026-10-26.
 forwardToApiExt(['/v1/admin/projects/:id/sdk-health', '/v1/admin/projects/:id/sdk-health/tasks']);
+// project-home.ts: the per-app Home in one call; deploy size limit, 2026-10-27.
+forwardToApiExt(['/v1/admin/projects/:id/home', '/v1/admin/projects/:id/home/thumbnail']);
+// setup-gaps.ts and release-batch.ts (console ops plan P1, read-only); deploy size limit, 2026-10-27.
+forwardToApiExt(['/v1/admin/setup-gaps', '/v1/admin/release-batch']);
+// work.ts: local workers (`mushi work --daemon`, ADR 0048); deploy size limit, 2026-10-27.
+forwardToApiExt(['/v1/worker/*', '/v1/admin/work/*']);
+// repo-housekeeping.ts (ADR 0051, console ops plan P4): repo clean-up from /repo; deploy size limit, 2026-10-27.
+forwardToApiExt(['/v1/admin/projects/:id/repo-cleanup', '/v1/admin/projects/:id/repo-cleanup/*']);
 
 registerA2ATaskRoutes(app);
 

@@ -460,10 +460,10 @@ export function CommandPalette() {
     },
     {
       id: 'action:labs',
-      label: 'Add pages to the sidebar (Labs)',
-      hint: 'Switch on extra pages such as Bug clusters, Pull requests or AI prompts',
-      keywords: ['labs', 'mode', 'advanced', 'sidebar', 'menu', 'more pages', 'all pages'],
-      onSelect: () => handleSelect('action:labs', () => navigate('/settings?tab=labs')),
+      label: 'Display & sidebar settings',
+      hint: 'Theme, density, focus mode, and extra pages to keep in the sidebar',
+      keywords: ['labs', 'mode', 'advanced', 'sidebar', 'menu', 'more pages', 'all pages', 'theme', 'dark', 'light', 'density', 'compact', 'comfortable', 'focus', 'display', 'appearance'],
+      onSelect: () => handleSelect('action:labs', () => navigate('/settings?tab=display#sidebar-pages')),
     },
   ]
   const visibleActions = actions.filter((a) => matchesQuery(a.label, a.hint, a.keywords))

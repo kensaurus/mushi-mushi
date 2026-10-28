@@ -361,6 +361,15 @@ console.log(`\n── Check 5: Feature-group map ──────────�
       unmapped++
     }
   }
+  // A preset (?features=vibe) names tools directly; a renamed tool would
+  // silently drop out of the Lovable connector's list.
+  const presetSource = stdioGroups.split('export const PRESET_TOOLS')[1]?.split('\n}')[0] ?? ''
+  for (const [, name] of presetSource.matchAll(/^ {4}'([a-z_]+)',/gm)) {
+    if (!canonicalToolNames.has(name)) {
+      fail(`PRESET_TOOLS names "${name}", which is not a catalog tool`)
+      unmapped++
+    }
+  }
   if (unmapped === 0 && stdioGroups === hostedGroups) info(`every tool mapped; stdio and hosted feature maps identical`)
 }
 

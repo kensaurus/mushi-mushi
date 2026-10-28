@@ -15,7 +15,7 @@ Wire Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected
 your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
-The live **Catalog** tab mirrors the server registry (**124 tools**, 8 resources, 4 prompts).
+The live **Catalog** tab mirrors the server registry (**129 tools**, 8 resources, 4 prompts).
 
 ---
 
@@ -75,6 +75,9 @@ Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See
 ```
 
 Full catalog: append `?features=all` (or set `MUSHI_FEATURES=all` for stdio).
+Smallest set: `?features=vibe` lists a dozen tools for the reported-bug loop (reports,
+diagnosis, fix context, mark fixed, reply, setup, docs); chat connectors such as
+Lovable use it ([guide](/quickstart/lovable-mcp)).
 
 ---
 

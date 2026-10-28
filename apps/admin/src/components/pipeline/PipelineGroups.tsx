@@ -5,15 +5,19 @@
  *          link to the setting that blocks it. Opening a group lists its
  *          items: the report, the PR, how long it has waited, and the latest
  *          evidence (failing checks, the Opus verdict and its findings, the
- *          merge queue's last word), each with its own actions.
+ *          merge queue's last word), each with its own actions. A group of
+ *          reports not fixed yet also offers "Send to my local worker" when
+ *          you have a worker lane for its app (ADR 0048).
  */
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Btn } from '../ui'
 import { IconAlertTriangle, IconCheck, IconChevronDown, IconChevronRight, IconClock, IconExternalLink } from '../icons'
-import { ACTION_META, ageLabel, type ActionOutcome, type PipelineAction, type PipelineGroup, type PipelineItem } from '../../lib/pipeline'
+import { ACTION_META, actionableIds, ageLabel, sharedBlockReason, type ActionOutcome, type PipelineAction, type PipelineGroup, type PipelineItem } from '../../lib/pipeline'
 import type { PendingAction } from './PipelineActionDialog'
+import { SendToWorkerButton } from './SendToWorkerButton'
+import type { WorkerLane } from '../../lib/workers'
 
 interface Props {
   groups: PipelineGroup[]
@@ -24,7 +28,12 @@ interface Props {
   busyKey: string | null
   results: Map<string, ActionOutcome>
   onAction: (pending: PendingAction, key: string) => void
+  /** Your own local worker lanes (every app); empty hides "Send to my local worker". */
+  workerLanes?: WorkerLane[]
 }
+
+/** Stages whose reports have no fix to keep yet: a local worker may take them. */
+const SENDABLE_STAGES = new Set(['reported', 'triaged', 'pr'])
 
 const TONE_ICON = {
   stuck: <span className="text-danger-foreground"><IconAlertTriangle size={14} /></span>,
@@ -41,43 +50,56 @@ const TONE_BORDER = {
 const VERDICT_TONE: Record<string, 'ok' | 'warn' | 'danger' | 'neutral'> = { merge: 'ok', fix_first: 'warn', hold: 'danger' }
 const VERDICT_LABEL: Record<string, string> = { merge: 'Opus: merge', fix_first: 'Opus: fix first', hold: 'Opus: hold' }
 
-/** Fix-level actions apply to fix attempts only; report groups have none. */
-function fixIdsOf(group: PipelineGroup): string[] {
-  return group.items.map((i) => i.id)
+/** Where the person fixes what blocks an action, when it is a setting. */
+function blockedFixLink(reason: string): { label: string; to: string } | null {
+  if (/GitHub token/i.test(reason)) return { label: 'GitHub connection', to: '/integrations/config#platform-card-github' }
+  if (/follow-ups are off|Cursor key/i.test(reason)) return { label: 'Review follow-ups setting', to: '/settings?tab=byok#review-followups' }
+  return null
 }
 
-function ActionButtons({
+/**
+ * One button per group action. An action the server would refuse for every
+ * item is disabled with its reason (report 69fcafcb); a bulk button runs on
+ * the items that can take it and says how many.
+ */
+export function ActionButtons({
   actions,
-  ids,
+  items,
   target,
   keyPrefix,
   busyKey,
   onAction,
-  size = 'sm',
   testIdPrefix,
 }: {
   actions: PipelineAction[]
-  ids: string[]
+  items: PipelineItem[]
   target: string
   keyPrefix: string
   busyKey: string | null
   onAction: Props['onAction']
-  size?: 'sm'
   testIdPrefix: string
 }) {
-  if (actions.length === 0 || ids.length === 0) return null
+  const shown = actions.filter((a) => items.some((i) => (a === 'dismiss' || a === 'requeue' ? i.reportId : i.prUrl)))
+  if (shown.length === 0) return null
   return (
     <span className="flex flex-wrap gap-1">
-      {actions.map((a) => {
+      {shown.map((a) => {
         const key = `${a}:${keyPrefix}`
+        const ids = actionableIds(items, a)
+        const off = ids.length === 0
+        const reason = off ? (sharedBlockReason(items, a) ?? 'None of these can take it right now.') : undefined
+        const some = !off && ids.length < items.length ? `${ids.length} of ${items.length} can take it; the others are listed with the reason.` : undefined
+        const byId = new Map(items.map((i) => [i.id, i]))
         return (
           <Btn
             key={a}
-            size={size}
-            variant={ACTION_META[a].variant}
+            size="sm"
+            variant={off ? 'ghost' : ACTION_META[a].variant}
             loading={busyKey === key}
-            disabled={busyKey != null && busyKey !== key}
-            onClick={() => onAction({ action: a, fixIds: ids, target }, key)}
+            disabled={off || (busyKey != null && busyKey !== key)}
+            title={reason ?? some}
+            aria-describedby={off ? `${testIdPrefix}-${a}-why` : undefined}
+            onClick={() => onAction({ action: a, fixIds: ids, reportIds: ids.map((id) => byId.get(id)?.reportId ?? null), target }, key)}
             data-testid={`${testIdPrefix}-${a}`}
           >
             {ACTION_META[a].label}
@@ -86,6 +108,33 @@ function ActionButtons({
         )
       })}
     </span>
+  )
+}
+
+/** "Re-run CI is off: <why>" for each action the server would refuse for this item. */
+export function BlockedReasons({ item, actions, testIdPrefix }: { item: PipelineItem; actions: PipelineAction[]; testIdPrefix: string }) {
+  const off = actions.filter((a) => item.blocked?.[a])
+  if (off.length === 0) return null
+  return (
+    <ul className="space-y-0.5 text-2xs text-fg-muted" data-testid={`${testIdPrefix}-blocked`}>
+      {off.map((a) => {
+        const why = item.blocked![a]!
+        const fix = blockedFixLink(why)
+        return (
+          <li key={a} id={`${testIdPrefix}-${a}-why`} className="wrap-break-word">
+            <span className="font-medium text-fg-secondary">{ACTION_META[a].label}</span> is off: {why}
+            {fix && (
+              <>
+                {' '}
+                <Link to={fix.to} className="font-medium text-brand hover:underline">
+                  {fix.label} →
+                </Link>
+              </>
+            )}
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 
@@ -152,30 +201,36 @@ function ItemRow({ item, group, props }: { item: PipelineItem; group: PipelineGr
       </div>
       <Evidence item={item} />
       <div className="flex flex-wrap items-center gap-2">
-        {item.prUrl && (
-          <ActionButtons
-            actions={group.actions}
-            ids={[item.id]}
-            target={item.title}
-            keyPrefix={item.id}
-            busyKey={props.busyKey}
-            onAction={props.onAction}
-            testIdPrefix={`pipeline-item-${item.id}`}
-          />
-        )}
+        <ActionButtons
+          actions={group.actions}
+          items={[item]}
+          target={item.title}
+          keyPrefix={item.id}
+          busyKey={props.busyKey}
+          onAction={props.onAction}
+          testIdPrefix={`pipeline-item-${item.id}`}
+        />
         {result && (
           <span className={`text-2xs ${result.ok ? 'text-ok-foreground' : 'text-danger-foreground'}`} role="status" data-testid={`pipeline-item-${item.id}-result`}>
             {result.message}
           </span>
         )}
       </div>
+      <BlockedReasons item={item} actions={group.actions} testIdPrefix={`pipeline-item-${item.id}`} />
     </li>
   )
 }
 
+/** Items shown per group before "Show more": the page scrolls, the group does not (2375c9c5). */
+const ITEMS_STEP = 20
+
 function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
   const [open, setOpen] = useState(false)
-  const ids = group.items.some((i) => i.prUrl) ? fixIdsOf(group) : []
+  const [shown, setShown] = useState(ITEMS_STEP)
+  const apps = new Set(group.items.map((i) => i.projectId))
+  const appId = apps.size === 1 ? [...apps][0]! : null
+  const sendIds = [...new Set(group.items.map((i) => i.reportId).filter((x): x is string => !!x))]
+  const lanes = appId && SENDABLE_STAGES.has(group.stage) ? (props.workerLanes ?? []).filter((l) => l.projectId === appId) : []
   return (
     <li className={`rounded-md border border-edge-subtle border-l-4 bg-surface-raised ${TONE_BORDER[group.tone]}`} data-testid={`pipeline-group-${group.id}`}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 p-2.5">
@@ -206,13 +261,16 @@ function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
           )}
           <ActionButtons
             actions={group.actions}
-            ids={ids}
+            items={group.items}
             target={group.label}
             keyPrefix={group.id}
             busyKey={props.busyKey}
             onAction={props.onAction}
             testIdPrefix={`pipeline-group-${group.id}`}
           />
+          {appId && lanes.length > 0 && sendIds.length > 0 && (
+            <SendToWorkerButton projectId={appId} reportIds={sendIds} lanes={lanes} data-testid={`pipeline-group-${group.id}-send-to-worker`} />
+          )}
         </span>
       </div>
       {group.settings?.hint && (
@@ -221,11 +279,18 @@ function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
         </p>
       )}
       {open && (
-        <ul className="max-h-128 divide-y divide-edge-subtle overflow-y-auto border-t border-edge-subtle px-2.5">
-          {group.items.map((item) => (
+        <ul className="divide-y divide-edge-subtle border-t border-edge-subtle px-2.5">
+          {group.items.slice(0, shown).map((item) => (
             <ItemRow key={item.id} item={item} group={group} props={props} />
           ))}
-          {group.count > group.items.length && (
+          {shown < group.items.length && (
+            <li className="py-2">
+              <Btn size="sm" variant="ghost" onClick={() => setShown((n) => n + ITEMS_STEP)} data-testid={`pipeline-group-${group.id}-more`}>
+                Show {Math.min(ITEMS_STEP, group.items.length - shown)} more of {group.items.length}
+              </Btn>
+            </li>
+          )}
+          {group.count > group.items.length && shown >= group.items.length && (
             <li className="py-2 text-2xs text-fg-muted">Showing the oldest {group.items.length} of {group.count}.</li>
           )}
         </ul>

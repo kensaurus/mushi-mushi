@@ -469,24 +469,34 @@ export function PlatformIntegrationCard({
 
           {def.webhookPath && requiredOk && <WebhookReceiveUrl path={def.webhookPath} latest={latestDelivery} />}
 
-          {!requiredOk && def.setupSteps && def.setupSteps.length > 0 && (
-            <IntegrationSetupGuide
-              label={def.label}
-              steps={def.setupSteps}
-              consoleUrl={def.consoleUrl}
-              consoleLabel={def.consoleLabel}
-            />
-          )}
-
-          {!requiredOk && def.capabilitiesOnceConnected.length > 0 && (
-            <ul className="mt-1.5 space-y-1 text-2xs">
-              {def.capabilitiesOnceConnected.map((capability) => (
-                <li key={capability} className="flex gap-1.5 items-baseline">
-                  <span aria-hidden="true" className="shrink-0 text-ok font-semibold leading-tight">✓</span>
-                  <span className="text-fg-secondary leading-snug">{capability}</span>
-                </li>
-              ))}
-            </ul>
+          {/* The vendor how-to and "what you get" stay folded until asked for:
+              open by default they made the page 4,600 px tall (console
+              journeys 2026-10-27). "Connect" opens the guide beside the form. */}
+          {!requiredOk && ((def.setupSteps?.length ?? 0) > 0 || def.capabilitiesOnceConnected.length > 0) && (
+            <details className="group mt-1.5" data-testid={`platform-howto-${def.kind}`}>
+              <summary className="flex cursor-pointer list-none items-center gap-1 text-2xs font-medium text-fg-secondary hover:text-fg">
+                <span aria-hidden="true" className="inline-block transition-transform group-open:rotate-90">›</span>
+                How to connect {def.label}
+              </summary>
+              {def.setupSteps && def.setupSteps.length > 0 && (
+                <IntegrationSetupGuide
+                  label={def.label}
+                  steps={def.setupSteps}
+                  consoleUrl={def.consoleUrl}
+                  consoleLabel={def.consoleLabel}
+                />
+              )}
+              {def.capabilitiesOnceConnected.length > 0 && (
+                <ul className="mt-1.5 space-y-1 text-2xs">
+                  {def.capabilitiesOnceConnected.map((capability) => (
+                    <li key={capability} className="flex gap-1.5 items-baseline">
+                      <span aria-hidden="true" className="shrink-0 text-ok font-semibold leading-tight">✓</span>
+                      <span className="text-fg-secondary leading-snug">{capability}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </details>
           )}
         </div>
 

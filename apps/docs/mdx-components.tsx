@@ -37,7 +37,6 @@ import {
   RealDiagnosisCard,
   MediatorMap,
   PricingStrip,
-  LandingInstallStrip,
 } from './components/landing'
 
 export const useMDXComponents = (components?: Record<string, unknown>) => ({
@@ -75,7 +74,6 @@ export const useMDXComponents = (components?: Record<string, unknown>) => ({
   YouWillSee,
   FrameworkPicker,
   CinematicEditorialHero,
-  LandingInstallStrip,
   DiagnosisScrollStage,
   ScrollReveal,
   ClosingCta,

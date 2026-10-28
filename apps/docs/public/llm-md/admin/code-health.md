@@ -24,9 +24,13 @@ This page **reads only** — it never triggers a scan. Data arrives via
 
 | Section | Source |
 |---------|--------|
-| **Summary scorecard** | Error/warn finding count, max LOC, latest bundle KB |
-| **Bundle-size trends** | Sparkline per `bundle.*` metric from `metric_series` |
-| **God-file findings** | Files over the LOC budget (`code_health.*` gate) |
+| **Status sentence** | How many files are over or close to the 2,000-line budget, the largest file, and the latest bundle KB |
+| **Oversized files** | A bar per large file, longest first, against the budget line (`code_health.*` gate) |
+| **Bundle size over time** | Sparkline per `bundle.*` metric from `metric_series` |
+| **How to split each file** | Each oversized file with its split hint |
+
+Known security holes in your dependencies are not repeated here: one line links to
+[Full-stack audit](/admin/fullstack-audit), where they are listed and managed.
 
 ---
 

@@ -709,7 +709,7 @@ async function checkProject(db: Db, projectId: string, deps: VulnWatchDeps, trig
       // Every open row of the upgrade points at the new report, including rows that carried a closed one.
       await db.from('dependency_vulns').update({ report_id: (report as { id: string }).id }).eq('repo_id', repoId).eq('group_key', g.key).eq('status', 'open')
     }
-    if (capped > 0) warnings.push(`${capped} more report${capped === 1 ? '' : 's'} wait for tomorrow (limit ${limit} a day; Settings or App health → Known holes).`)
+    if (capped > 0) warnings.push(`${capped} more report${capped === 1 ? '' : 's'} wait for tomorrow (limit ${limit} a day; Settings or Mushi health → Code size → Known holes).`)
   }
 
   const run = await record(sha, {

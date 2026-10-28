@@ -30,9 +30,10 @@ import { canonicalJson } from './connectors/canonical.ts'
 import { sha256Hex } from './connectors/jwt.ts'
 import { getConnector } from './connectors/index.ts'
 import { resolveCredential } from './connectors/credentials.ts'
-import type { ConnectorActionResult } from './connectors/types.ts'
+import type { ApprovedConnectorAction, ConnectorActionResult } from './connectors/types.ts'
 import { resolveProjectGithubToken } from './github.ts'
 import { PLACEMENT_ACTIONS } from './ci-placement.ts'
+import { isHousekeepingAction, USE_REPO_CLEANUP_MESSAGE } from './repo-housekeeping-acts.ts'
 
 /** CI placement actions: only through the /v1/admin/ci/placement routes (ADR 0037). */
 function isPlacementAction(action: string): boolean {
@@ -80,6 +81,9 @@ export async function requestConnectorAction(
   db: Db,
   input: { organizationId: string; instanceId: string; action: string; payload: Record<string, unknown>; requestedBy: string; reason?: string | null; projectId?: string | null },
 ): Promise<ActionOutcome<{ id: string; payloadSha256: string }>> {
+  if (isHousekeepingAction(input.action)) {
+    return { ok: false, code: 'USE_REPO_CLEANUP', message: USE_REPO_CLEANUP_MESSAGE, status: 400 }
+  }
   const { data: inst } = await db.from('connector_instances').select('id, kind, organization_id').eq('id', input.instanceId).eq('organization_id', input.organizationId).maybeSingle()
   if (!inst) return { ok: false, code: 'NOT_FOUND', message: 'Connector not found in this team.', status: 404 }
   const connector = getConnector((inst as { kind: string }).kind)
@@ -174,6 +178,8 @@ export interface ExecuteDeps {
   resolveCredential?: typeof resolveCredential
   /** The token a legacy-backed GitHub action runs with (default: the project's stored PAT, no platform fallback). */
   legacyGithubToken?: (db: Db, projectId: string) => Promise<string | null>
+  /** The repo clean-up executor (ADR 0051); only api-ext passes it. Without it those actions are refused unclaimed. */
+  housekeepingAct?: (input: { db: Db; organizationId: string; projectId: string; userId: string; action: ApprovedConnectorAction }) => Promise<ConnectorActionResult>
 }
 
 const defaultLegacyGithubToken = (db: Db, projectId: string) => resolveProjectGithubToken(db, projectId, null, { allowEnvFallback: false })
@@ -185,6 +191,10 @@ export async function executeConnectorAction(db: Db, id: string, organizationId:
   if (!row) return { ok: false, code: 'NOT_FOUND', message: 'Action not found.', status: 404 }
   if (row.status !== 'approved') return { ok: false, code: 'NOT_APPROVED', message: `This action is ${row.status}; it needs a fresh approval.`, status: 409 }
   if (!row.expires_at || Date.parse(row.expires_at) <= now.getTime()) return { ok: false, code: 'APPROVAL_EXPIRED', message: 'The approval expired. Approve it again to run it.', status: 410 }
+  // Repo clean-up runs only where its executor is injected; refused here before the claim, so the approval stays usable.
+  if (isHousekeepingAction(row.action) && (!deps.housekeepingAct || row.connector_instance_id || row.connector_kind !== 'github' || !row.project_id)) {
+    return { ok: false, code: 'USE_REPO_CLEANUP', message: USE_REPO_CLEANUP_MESSAGE, status: 400 }
+  }
   // The stored hash must still describe the stored payload (tamper check).
   if (await payloadHash(row.payload) !== row.payload_sha256) {
     await db.from('connector_actions').update({ status: 'failed', error: 'payload does not match its approved hash' }).eq('id', id)
@@ -211,6 +221,11 @@ export async function executeConnectorAction(db: Db, id: string, organizationId:
     }
     let result: ConnectorActionResult
     try {
+      if (isHousekeepingAction(row.action) && deps.housekeepingAct) {
+        result = await deps.housekeepingAct({ db, organizationId, projectId: row.project_id, userId, action: { id: row.id, action: row.action, payload: row.payload, payloadSha256: row.payload_sha256 } })
+        await finish(result)
+        return result.ok ? { ok: true, value: result } : { ok: false, code: result.code ?? 'ACTION_FAILED', message: result.detail, status: result.status ?? 502 }
+      }
       const token = await (deps.legacyGithubToken ?? defaultLegacyGithubToken)(db, row.project_id)
       result = await getConnector('github').act!({
         db, organizationId, projectId: row.project_id, instanceId: null, config: {},

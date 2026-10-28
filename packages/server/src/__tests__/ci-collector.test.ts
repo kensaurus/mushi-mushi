@@ -104,20 +104,23 @@ describe('runCiCollector', () => {
     const db = makeFakeDb({ project_repos: [{ project_id: P1, repo_url: 'https://github.com/kensaurus/glot.it', github_app_installation_id: null }] })
     const gh = github({ runs: [run(1, 'completed', 30), run(2, 'in_progress', 5), run(3, 'completed', 300)] })
     const first = await runCiCollector(db as never, deps(gh.fetchImpl))
-    // runs list + runner list + repo visibility + jobs of run 1 and run 2 (run 3 is outside the window).
-    expect(gh.calls).toHaveLength(5)
+    // runs list + runner list + repo visibility + jobs of run 1 and run 2 (run 3 is outside the window)
+    // + the daily closed pull request list.
+    expect(gh.calls).toHaveLength(6)
+    expect(gh.calls.filter((u) => u.includes('/pulls?state=closed'))).toHaveLength(1)
     expect(first.stored).toBe(2)
     expect(db.table('ci_jobs').map((j) => j.run_id).sort()).toEqual([1, 2])
     const state = db.table('ci_collector_state')[0]
-    expect(state.permissions).toMatchObject({ 'kensaurus/glot.it': { jobs: 'ok', runners: 'missing', visibility: 'public', owner: 'kensaurus' } })
+    expect(state.permissions).toMatchObject({ 'kensaurus/glot.it': { jobs: 'ok', runners: 'missing', visibility: 'public', owner: 'kensaurus', ownerType: 'User' } })
 
     gh.calls.length = 0
     await runCiCollector(db as never, deps(gh.fetchImpl, new Date(NOW.getTime() + 10 * 60_000)))
     // The refused runner list is not asked again; finished run 1 is not re-read; running run 2 is.
     expect(gh.calls.some((u) => u.includes('/actions/runners'))).toBe(false)
     expect(gh.calls.filter((u) => u.includes('/jobs'))).toEqual([expect.stringContaining('/actions/runs/2/jobs')])
-    // Visibility is read once a day, not every tick.
+    // Visibility and the closed pull requests are read once a day, not every tick.
     expect(gh.calls.some((u) => u.endsWith('/repos/kensaurus/glot.it'))).toBe(false)
+    expect(gh.calls.some((u) => u.includes('/pulls?'))).toBe(false)
   })
 
   it('records a private repo, reads visibility again after a day, and keeps the last known value when GitHub refuses', async () => {
