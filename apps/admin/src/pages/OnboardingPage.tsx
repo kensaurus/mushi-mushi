@@ -662,44 +662,11 @@ export function OnboardingPage() {
         <CliSetupGuide projectId={stats.projectId} className="mb-4" />
       ) : null}
 
-      {setupComplete && (
-        <>
-          <Card className="p-4 border-ok/30 bg-ok/5">
-            <div className="flex items-start gap-3">
-              <div
-                aria-hidden="true"
-                className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-ok-muted/50 text-ok-foreground border border-ok/25 text-xs font-bold"
-              >
-                ✓
-              </div>
-              <div className="min-w-0 flex-1">
-                <h3 className="text-sm font-semibold text-fg">
-                  Pipeline live &middot; {project?.complete ?? 0} of {project?.total ?? 8} steps
-                </h3>
-                <p className="text-xs text-fg-muted mt-0.5">
-                  Required steps done — reports flow in and the loop runs automatically.
-                  {(project?.complete ?? 0) < (project?.total ?? 8) && (
-                    <span> Optional integrations (fix agents, routing) are on the Steps tab.</span>
-                  )}
-                </p>
-                <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <Btn size="sm" variant="primary" onClick={() => navigate('/integrations/config')}>
-                    Connect fix agents →
-                  </Btn>
-                  <Btn size="sm" variant="ghost" onClick={() => navigate('/dashboard')}>Open dashboard</Btn>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Migration Hub progress — only renders when the user has rows;
-              the card returns null otherwise so the post-setup hero stays
-              focused. Account-scoped here (no project_id) because a user
-              browsing the docs without an active project is the common
-              path for upgrade rails like @mushi-mushi/* 0.x → 1.0. */}
-          <MigrationsInProgressCard />
-        </>
-      )}
+      {/* An "all steps done" card used to sit here, between the rail ("Your
+          app is wired up") and the steps strip below: the third progress
+          block on the page, under setup gaps saying no fix would start
+          (2026-10-28). The rail and the gaps say it once. */}
+      {setupComplete && <MigrationsInProgressCard />}
 
       {project && (
         <ProjectNarrativeStrip
