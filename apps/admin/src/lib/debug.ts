@@ -4,7 +4,12 @@
  *          Gated by localStorage key 'mushi:debug' or ?debug=true URL param.
  *          When enabled, logs all apiFetch calls with URL, status, timing,
  *          auth state changes, and response summaries.
+ *          Colour styles are built when a line is logged. This module loads
+ *          before index.css, so a module-scope readVizToken() would freeze
+ *          the stand-in grey for the rest of the page.
  */
+
+import { readVizToken } from './vizTokens'
 
 const STORAGE_KEY = 'mushi:debug'
 
@@ -22,11 +27,12 @@ export function setDebugEnabled(enabled: boolean): void {
   else localStorage.removeItem(STORAGE_KEY)
 }
 
-import { readVizToken } from './vizTokens'
-
 const PREFIX = '%c[mushi:debug]'
-const STYLE = `color: ${readVizToken('accent')}; font-weight: bold;`
 const RESET_STYLE = 'color: inherit;'
+
+function prefixStyle(): string {
+  return `color: ${readVizToken('accent')}; font-weight: bold;`
+}
 
 // `category` and `message` are passed as `%s` data arguments (never
 // interpolated into the format string) so a value containing `%` console
@@ -36,19 +42,20 @@ const FORMAT = `${PREFIX} %c%s%c %s`
 export function debugLog(category: string, message: string, data?: Record<string, unknown>): void {
   if (!isDebugEnabled()) return
   const catStyle = `color: ${readVizToken('accent-foreground')}; font-weight: 600;`
+  const style = prefixStyle()
   if (data) {
-    console.log(FORMAT, STYLE, catStyle, category, RESET_STYLE, message, data)
+    console.log(FORMAT, style, catStyle, category, RESET_STYLE, message, data)
   } else {
-    console.log(FORMAT, STYLE, catStyle, category, RESET_STYLE, message)
+    console.log(FORMAT, style, catStyle, category, RESET_STYLE, message)
   }
 }
 
 export function debugWarn(category: string, message: string, data?: Record<string, unknown>): void {
   if (!isDebugEnabled()) return
-  console.warn(FORMAT, STYLE, `color: ${readVizToken('viz-score-warn')}; font-weight: 600;`, category, RESET_STYLE, message, data ?? '')
+  console.warn(FORMAT, prefixStyle(), `color: ${readVizToken('viz-score-warn')}; font-weight: 600;`, category, RESET_STYLE, message, data ?? '')
 }
 
 export function debugError(category: string, message: string, data?: Record<string, unknown>): void {
   if (!isDebugEnabled()) return
-  console.error(FORMAT, STYLE, `color: ${readVizToken('viz-flow-danger')}; font-weight: 600;`, category, RESET_STYLE, message, data ?? '')
+  console.error(FORMAT, prefixStyle(), `color: ${readVizToken('viz-flow-danger')}; font-weight: 600;`, category, RESET_STYLE, message, data ?? '')
 }
