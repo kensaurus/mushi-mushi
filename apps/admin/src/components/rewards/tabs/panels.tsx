@@ -375,7 +375,7 @@ export function ActivityRulesTab({ canEdit }: { canEdit: boolean }) {
     <div className="space-y-4">
       {!canEdit && (
         <div className="rounded-xl p-3 text-xs bg-warn-muted/50 text-warn-foreground border border-warn/25">
-          Upgrade to Starter or higher to configure activity rules.
+          Upgrade to Builder or higher to configure activity rules.
         </div>
       )}
 
@@ -515,7 +515,7 @@ export function TierLadderTab({ canEdit }: { canEdit: boolean }) {
     <div className="space-y-4">
       {!canEdit && (
         <div className="rounded-xl p-3 text-xs bg-warn-muted/50 text-warn-foreground border border-warn/25">
-          Upgrade to Starter or higher to edit tier thresholds.
+          Upgrade to Builder or higher to edit tier thresholds.
         </div>
       )}
 
@@ -651,7 +651,7 @@ function ContributorDrawer({
   displayName: string | null
   onClose: () => void
   onDataChange?: () => void
-  /** Award / Set tier are writes: hidden on read-only (Hobby) plans. */
+  /** Award / Set tier are writes: hidden on read-only (Free) plans. */
   canEdit?: boolean
 }) {
   const toast = useToast()

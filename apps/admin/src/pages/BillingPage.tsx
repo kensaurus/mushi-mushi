@@ -17,7 +17,7 @@
  *          Stripe-hosted URLs we redirect to.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
@@ -33,6 +33,8 @@ import { describeBillingError } from '../lib/billingErrors'
 import { formatPlanQuotaChip } from '../lib/billingUsageForecast'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
+import { trackAdHoc } from '../lib/track'
+import { checkoutOutcome, withoutCheckoutMarker } from '../lib/billingFunnel'
 import { BillingStatusBanner } from '../components/billing/BillingStatusBanner'
 import { BillingSnapshotStrip } from '../components/billing/BillingSnapshotStrip'
 import { BillingSeatFaqCallout } from '../components/billing/BillingSeatFaqCallout'
@@ -75,7 +77,7 @@ const BILLING_TABS: Array<{ id: BillingTabId; label: string; description: string
   {
     id: 'plans',
     label: 'Plans',
-    description: 'Compare Hobby, Starter, Pro, and Enterprise entitlements side by side.',
+    description: 'Compare Free, Builder, Studio and Enterprise side by side: apps, diagnoses and what each includes.',
   },
   {
     id: 'support',
@@ -115,7 +117,13 @@ export function BillingPage() {
     () => projects.find(p => p.project_id === activeProjectId) ?? projects[0] ?? null,
     [projects, activeProjectId],
   )
-  const activeTierId = activeProject?.tier?.id ?? 'hobby'
+  const activeTierId = activeProject?.tier?.id ?? 'free_cloud'
+  // Apps this team watches: the plan's headline limit (docs/plan-pricing.md).
+  const teamAppCount = useMemo(() => {
+    const orgId = activeProject?.organization_id
+    if (!activeProject) return 0
+    return orgId ? projects.filter((p) => p.organization_id === orgId).length : 1
+  }, [projects, activeProject])
   // Setup status drives the connectivity diagnostic empty state below the
   // active project's billing card. We only need it when the active project
   // has zero reports this period — otherwise React skips the render and
@@ -129,6 +137,23 @@ export function BillingPage() {
   }, [billingQuery, statsQuery, membersStatsQuery])
 
   useRealtimeReload(['usage_events', 'billing_subscriptions'], reloadAll)
+
+  // The 60-day price test (lib/billingFunnel.ts): the Plans tab shown, and a
+  // Stripe Checkout return, each counted once.
+  useEffect(() => {
+    if (activeTab === 'plans') trackAdHoc('pricing_viewed', { surface: 'console_plans' })
+  }, [activeTab])
+  const checkoutParam = searchParams.get('checkout')
+  useEffect(() => {
+    const outcome = checkoutOutcome(checkoutParam)
+    if (!outcome) return
+    if (outcome === 'success') {
+      trackAdHoc('checkout_completed', { surface: 'console' })
+      toast.success('Thanks, your plan is updated', 'It shows here as soon as Stripe confirms the payment.')
+      reloadAll()
+    }
+    setSearchParams(withoutCheckoutMarker(searchParams), { replace: true })
+  }, [checkoutParam, searchParams, setSearchParams, toast, reloadAll])
 
   const setActiveTab = useCallback(
     (id: BillingTabId) => {
@@ -198,6 +223,7 @@ export function BillingPage() {
       toast.error('Checkout did not open', describeBillingError(res.error))
       return
     }
+    trackAdHoc('checkout_started', { plan_id: planId, interval: billingInterval, surface: 'console' })
     window.location.href = res.data.url
   }, [user?.email, toast])
 
@@ -267,11 +293,11 @@ export function BillingPage() {
         helpTitle={copy?.help?.title ?? 'About Billing'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
-          'Per-project subscription + usage view. The free tier gives every project a monthly quota of report ingests; subscriptions unlock unlimited reports + usage-based pricing on Stripe Meter Events.'
+          'Your plan and its usage. A plan sets how many apps you watch and how many plain-English diagnoses a month are included; reports are always captured. Free covers one app, Builder three, Studio ten.'
         }
         helpUseCases={
           copy?.help?.useCases ?? [
-            'Upgrade to Cloud Starter when you hit the free quota and reports are being rejected with HTTP 402',
+            'Move to Builder for a second app, or when this month\'s diagnoses run out',
             'Open the Stripe Billing Portal to update your card, download invoices, or cancel',
             'Cross-check usage between Mushi (reports/fixes/tokens) and Stripe (line items)',
           ]
@@ -286,7 +312,7 @@ export function BillingPage() {
           {formatPlanQuotaChip(
             stats.planDisplayName,
             stats.diagnosesLimit,
-            // Hobby has no explicit report limit on stats: the free quota is it.
+            // The retired Hobby plan has no explicit report limit on stats: the free quota is it.
             stats.reportsLimit ??
               (stats.planId === 'hobby'
                 ? billing?.free_limit_reports_per_month ?? stats.freeLimitReports
@@ -484,7 +510,8 @@ export function BillingPage() {
             currentUsage={
               activeProject
                 ? {
-                    reports: activeProject.usage?.reports ?? 0,
+                    diagnoses: activeProject.diagnoses_used ?? 0,
+                    apps: teamAppCount,
                     contextLabel: activeProject.project_name,
                   }
                 : undefined

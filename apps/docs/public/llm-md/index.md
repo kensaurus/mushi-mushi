@@ -14,7 +14,7 @@ Your AI wrote it. Mushi tells you why it broke.</>}
 ## What it takes
 
 - **No monitoring stack.** No Sentry, no logging service, no AI key of your own. Mushi's AI writes the diagnosis.
-- **Free to start.** 50 diagnoses a month with no card. Repeat reports of one bug count once.
+- **Free to start.** One app and 100 diagnoses a month with no card. Repeat reports of one bug count once.
 - **Your AI does the fix, you approve it.** Mushi hands Cursor, Claude Code or Lovable the prompt. Nothing ships until you say so.
 
 ## What this is (and is not)

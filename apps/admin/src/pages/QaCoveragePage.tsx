@@ -909,7 +909,7 @@ export function QaCoveragePage() {
       ? `/v1/admin/inventory/${projectId}/stories/pending-review`
       : null,
     { deps: [projectId, inventoryEnabled] },
-  ) // gated by inventory_v2 — avoids 402 + UpgradeNudge on Hobby plans
+  ) // gated by inventory_v2 — avoids 402 + UpgradeNudge on Free and Builder
 
   const reloadAll = useCallback(() => {
     reload()

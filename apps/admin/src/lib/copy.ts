@@ -988,7 +988,7 @@ const COPY: CopyRegistry = {
       },
       help: {
         title: 'About billing',
-        whatIsIt: 'Per-project subscription and usage meters. Hobby includes a monthly report quota; paid plans add higher limits, your own LLM keys, and Stripe-managed billing.',
+        whatIsIt: 'Your plan and its usage. Free watches one app with 100 diagnoses a month; Builder ($29) watches three, Studio ($79) ten. Your own AI keys work on every plan.',
         useCases: [
           'See reports used vs quota before new reports start returning HTTP 402',
           'Upgrade via Stripe Checkout or manage card/invoices in the Billing Portal',

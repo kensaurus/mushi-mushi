@@ -16,7 +16,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Ask Lovable why it broke](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-mcp): Add Mushi to Lovable as an MCP connector in three steps; Lovable reads the plain-English diagnosis and fixes the bug. Claude Code and Cursor in one paste.
 - [Connect your AI client](https://kensaur.us/mushi-mushi/docs/connect): One-click MCP setup for Cursor, VS Code, Windsurf, Cline, Claude and Zed, with a keyless demo.
 - [Choose your stack](https://kensaur.us/mushi-mushi/docs/quickstart): Install Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.
-- [Pricing](https://kensaur.us/mushi-mushi/docs/pricing): Mushi Mushi pricing — 50 AI bug diagnoses a month free, no card. Open-source Sentry alternative you can self-host for free, or upgrade for teams.
+- [Pricing](https://kensaur.us/mushi-mushi/docs/pricing): Mushi Mushi pricing — free for one app and 100 AI bug diagnoses a month. Builder $29/mo for 3 apps, Studio $79/mo for 10. Free to self-host.
 - [Compare Mushi with Sentry, Jam and PostHog](https://kensaur.us/mushi-mushi/docs/compare): Honest, dated comparisons of Mushi Mushi with Sentry, Jam and PostHog, plus Sentry alternatives for solo founders. Every number links to its source.
 
 ## SDK quickstarts
@@ -113,7 +113,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Launch Week 1 — five features, five days](https://kensaur.us/mushi-mushi/docs/blog/launch-week-1): Everything Mushi Mushi shipped in Launch Week 1 — one feature a day, from bug-report capture to editor-ready fixes, with demos and setup commands.
 - [I shipped a bug tool for 5 months and got 9 signups. Here's what the data said.](https://kensaur.us/mushi-mushi/docs/blog/nine-signups-what-the-data-said): Five months after launch, Mushi Mushi had 30 npm packages, an MCP server in every registry and nine signups. What the data said, and what changed.
 - [Changelog](https://kensaur.us/mushi-mushi/docs/changelog): What shipped in Mushi Mushi — new SDK releases, console features, MCP tools, and fixes, in plain English with dates.
-- [Mushi Cloud](https://kensaur.us/mushi-mushi/docs/cloud): Hosted Mushi Mushi — bug reports, plain-English diagnoses, and fix dispatch without running servers. Free tier includes 50 diagnoses a month.
+- [Mushi Cloud](https://kensaur.us/mushi-mushi/docs/cloud): Hosted Mushi Mushi — bug reports, plain-English diagnoses, and fix dispatch without running servers. Free for one app with 100 diagnoses a month.
 - [Compare](https://kensaur.us/mushi-mushi/docs/compare): Honest, dated comparisons of Mushi Mushi with Sentry, Jam and PostHog, plus Sentry alternatives for solo founders. Every number links to its source.
 - [Jam vs Mushi Mushi](https://kensaur.us/mushi-mushi/docs/compare/jam-vs-mushi): Jam.dev vs Mushi Mushi in 2026 — a teammate recording a bug in the Jam extension versus a user reporting from your app, MCP handoff and free tiers.
 - [PostHog session replay vs Mushi Mushi](https://kensaur.us/mushi-mushi/docs/compare/posthog-session-replay-vs-mushi): PostHog session replay vs Mushi Mushi in 2026 — every session recorded versus the one a user flagged as broken, free tiers, and why teams run both.
@@ -188,7 +188,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Sentry](https://kensaur.us/mushi-mushi/docs/plugins/sentry): Two-way Sentry integration — Sentry errors flow into Mushi's queue, merging a Mushi fix resolves the Sentry issue, and critical reports mirror back.
 - [Slack app](https://kensaur.us/mushi-mushi/docs/plugins/slack): Triage Mushi bug reports from Slack — add the app from the Integrations page, and each report posts as a card with buttons to fix, resolve or dismiss.
 - [Zapier](https://kensaur.us/mushi-mushi/docs/plugins/zapier): Send every Mushi event to Zapier and on to thousands of apps such as Notion, Google Sheets and HubSpot — Catch Hook setup and event filters.
-- [Pricing — free tier, Pro, and self-host](https://kensaur.us/mushi-mushi/docs/pricing): Mushi Mushi pricing — 50 AI bug diagnoses a month free, no card. Open-source Sentry alternative you can self-host for free, or upgrade for teams.
+- [Pricing — Free, Builder, Studio and self-host](https://kensaur.us/mushi-mushi/docs/pricing): Mushi Mushi pricing — free for one app and 100 AI bug diagnoses a month. Builder $29/mo for 3 apps, Studio $79/mo for 10. Free to self-host.
 - [Quickstart — fix your first bug in 60 seconds](https://kensaur.us/mushi-mushi/docs/quickstart): Install Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.
 - [Android (Kotlin) quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/android): Try Mushi's native Kotlin SDK on Android — shake-to-report, a bottom-sheet widget and an offline queue. A preview built from source, not on Maven Central yet.
 - [Angular quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/angular): Add Mushi to an Angular 17+ app: one provideMushi() call registers the Mushi service and error handler, so uncaught errors and bug reports reach your queue.

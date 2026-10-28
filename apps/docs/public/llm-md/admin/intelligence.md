@@ -61,8 +61,8 @@ against that week's data. Useful when:
 Regeneration overwrites the cached HTML and PDF for that week. The previous version
 is not archived.
 
-  Regeneration is rate-limited to **3 times per week per project** on Indie plans
-  and **unlimited** on Pro and Enterprise.
+  Regeneration is rate-limited to **3 times per week per project** on Builder
+  and **unlimited** on Studio and Enterprise.
 
 ---
 

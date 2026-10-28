@@ -22,7 +22,7 @@ import { ConfigHelp } from '../ConfigHelp';
 import { SettingsChangeHint } from './SettingsChangeHint';
 import { SettingsFormFooter } from './SettingsFormFooter';
 import { countChangedFields, valuesEqual } from './settingsDiff';
-import { useEntitlements } from '../../lib/useEntitlements';
+import { isByokLocked, useEntitlements } from '../../lib/useEntitlements';
 import { UpgradePrompt } from '../billing/UpgradePrompt';
 import { describeByokError } from '../../lib/byokErrors';
 import { providerPoolKeys, selectPrimaryProviderKey } from './byokPool';
@@ -47,7 +47,7 @@ const FIRECRAWL_KEY_HREF = '/settings?tab=byok#key-firecrawl';
 
 export function FirecrawlPanel() {
   const entitlements = useEntitlements();
-  const byokLocked = !entitlements.loading && !entitlements.has('byok');
+  const byokLocked = isByokLocked(entitlements);
   const {
     data,
     loading,

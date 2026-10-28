@@ -44,6 +44,8 @@ describe('every page has a place in the sidebar', () => {
       '/', '/login', '/signup', '/reset-password', '/email/reporter', '/invite/accept', '/integrations',
       '/tester', '/console', '/fine-tuning', '/mcp/manual', '/mcp-auth',
       '/projects/:pid/qa-coverage/:storyId', '/rewards/tester-review', '/org/:slug/settings/',
+      // Stripe Checkout's return URLs, redirected to Billing (lib/billingFunnel.ts).
+      '/billing/success', '/billing/cancel',
     ])
     const bases = [...registryPaths].map((p) => p.split('?')[0] as string)
     const orphans = routes.filter(

@@ -37,7 +37,7 @@ import { withSetupRequiredCounts } from '../lib/setupProgress'
 import { isActivationCockpitV2Enabled, useActivationStatus } from '../lib/useActivationStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
-import { useCreateProject } from '../lib/useCreateProject'
+import { PLAN_APP_LIMIT_TITLE, PLANS_HREF, useCreateProject } from '../lib/useCreateProject'
 import { usePageCopy } from '../lib/copy'
 import { useOnboardingUx, resolveQuickOnboardingTab } from '../lib/onboardingModeUx'
 import { restartFirstRunTour } from '../components/FirstRunTour'
@@ -296,6 +296,11 @@ export function OnboardingPage() {
   const createErrorActions = (() => {
     if (!createError) return undefined
     switch (createError.code) {
+      case 'PLAN_APP_LIMIT':
+        return [
+          { label: 'See plans', onClick: () => navigate(PLANS_HREF) },
+          { label: 'Dismiss', onClick: clearCreateError },
+        ]
       case 'NO_ORGANIZATION':
         return [
           {
@@ -328,6 +333,8 @@ export function OnboardingPage() {
   const createErrorTitle = (() => {
     if (!createError) return undefined
     switch (createError.code) {
+      case 'PLAN_APP_LIMIT':
+        return PLAN_APP_LIMIT_TITLE
       case 'NO_ORGANIZATION':
         return 'No writable team found'
       case 'FORBIDDEN':

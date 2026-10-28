@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/cloud
 
 ---
 title: Mushi Cloud
-description: Hosted Mushi Mushi — bug reports, plain-English diagnoses, and fix dispatch without running servers. Free tier includes 50 diagnoses a month.
+description: Hosted Mushi Mushi — bug reports, plain-English diagnoses, and fix dispatch without running servers. Free for one app with 100 diagnoses a month.
 ---
 
 # Mushi Cloud

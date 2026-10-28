@@ -4,7 +4,8 @@
  *   and unit tests. Mirrors classify-report diagnosis quota + overage cap logic.
  *
  * OVERVIEW:
- * - Tier catalog constants (Free Cloud, Indie, Pro)
+ * - Tier catalog constants (Free, Builder, Studio): apps watched is the
+ *   headline limit, diagnoses the one meter (docs/plan-pricing.md, 2026-10-28)
  * - estimateCost() — base + overage with spend-cap clamp
  * - Annual billing helpers (2 months free ≈ 17% off)
  * - getNextTierId() — upgrade nudge when capped
@@ -16,6 +17,8 @@
 export interface PricingTier {
   id: string
   name: string
+  /** Apps a team can watch on this plan. */
+  apps: number
   baseUsd: number
   included: number
   overageUsd: number | null
@@ -23,13 +26,13 @@ export interface PricingTier {
 }
 
 export const TIERS: PricingTier[] = [
-  { id: 'free_cloud', name: 'Free Cloud', baseUsd: 0, included: 50, overageUsd: null, capUsd: null },
-  { id: 'indie', name: 'Indie', baseUsd: 15, included: 500, overageUsd: 0.03, capUsd: 50 },
-  { id: 'pro', name: 'Pro', baseUsd: 49, included: 2000, overageUsd: 0.025, capUsd: 200 },
+  { id: 'free_cloud', name: 'Free', apps: 1, baseUsd: 0, included: 100, overageUsd: null, capUsd: null },
+  { id: 'indie', name: 'Builder', apps: 3, baseUsd: 29, included: 1000, overageUsd: 0.03, capUsd: 50 },
+  { id: 'pro', name: 'Studio', apps: 10, baseUsd: 79, included: 5000, overageUsd: 0.02, capUsd: 200 },
 ]
 
-/** Pro spend cap ($200) triggers at ~8,040 diagnoses — slider must reach that. */
-export const MAX_SLIDER = 10_000
+/** Studio's spend cap ($200) triggers at 11,050 diagnoses — the slider must reach that. */
+export const MAX_SLIDER = 12_000
 
 export const ANNUAL_DISCOUNT_MONTHS = 2
 

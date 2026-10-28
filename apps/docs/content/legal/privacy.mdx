@@ -127,7 +127,7 @@ reserved.
 
 | Data | Kept for | Mechanism |
 | --- | --- | --- |
-| End-user reports and everything attached to them | The retention window of your plan: **Free 7 days · Indie 30 days · Pro 90 days · Enterprise as agreed**, or a shorter per-project policy you set in **Compliance → Data retention** | A daily `retention-sweep` job hard-deletes rows past the window. Legal-hold rows are skipped |
+| End-user reports and everything attached to them | The retention window of your plan: **Free 14 days · Builder 90 days · Studio 180 days · Enterprise as agreed**, or a shorter per-project policy you set in **Compliance → Data retention** | A daily `retention-sweep` job hard-deletes rows past the window. Legal-hold rows are skipped |
 | Product usage events (Mushi's own console analytics) | **730 days (2 years)** | Nightly `prune_product_events` job, using the 730-day retention set on Mushi's own analytics project |
 | Docs-site analytics | 730 days (2 years) | Same table and job as above |
 | Analytics events your app sends with `Mushi.track()` | 90 days by default, or the per-project override (1–3650 days) | Same nightly job |

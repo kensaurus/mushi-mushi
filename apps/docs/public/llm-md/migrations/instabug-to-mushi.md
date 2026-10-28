@@ -17,7 +17,7 @@ description: Replace Instabug (Luciq) with Mushi for in-app bug reporting — co
 
 ## Why switch
 
-- **Pricing.** Mushi SDKs are MIT, the server is AGPLv3 open source — self-host free, cloud free up to 50 diagnoses/month; Luciq is per-seat enterprise.
+- **Pricing.** Mushi SDKs are MIT, the server is AGPLv3 open source — self-host free, cloud free for one app and 100 diagnoses/month; Luciq is per-seat enterprise.
 - **AI triage.** Mushi ships a built-in two-stage classifier
   (fast-filter + classify-report) that turns raw user reports into
   triaged tickets without manual review. Luciq's "Agentic AI" is a recent

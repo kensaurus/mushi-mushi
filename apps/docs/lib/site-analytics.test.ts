@@ -1,6 +1,9 @@
 /**
  * Unit tests for the docs-site funnel helpers (no DOM — storage is injected).
  */
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { MUSHI_EVENTS } from '@mushi-mushi/core'
 import {
@@ -21,6 +24,7 @@ import {
   sanitizeReferrer,
   sanitizeRefSlug,
   planRouteViews,
+  planSelectionFromCta,
   writeStoredConsent,
   type KeyValueStore,
 } from './site-analytics'
@@ -416,6 +420,28 @@ describe('CTA links', () => {
     expect(sanitizeRefSlug('')).toBeNull()
     expect(sanitizeRefSlug(undefined)).toBeNull()
     expect(sanitizeRefSlug('x'.repeat(100))).toHaveLength(64)
+  })
+})
+
+const HERE = dirname(fileURLToPath(import.meta.url))
+
+describe('plan_selected (60-day price test)', () => {
+  it('maps public tier ids to the console plan ids', () => {
+    expect(planSelectionFromCta({ mushiPlan: 'free' })).toEqual({ plan_id: 'free_cloud', interval: 'monthly' })
+    expect(planSelectionFromCta({ mushiPlan: 'indie', mushiInterval: 'annual' })).toEqual({ plan_id: 'indie', interval: 'annual' })
+    expect(planSelectionFromCta({ mushiPlan: 'enterprise' })?.plan_id).toBe('enterprise')
+  })
+
+  it('ignores CTAs without a plan, and self-host', () => {
+    expect(planSelectionFromCta({})).toBeNull()
+    expect(planSelectionFromCta({ mushiPlan: 'self-host' })).toBeNull()
+  })
+
+  it('is wired to the pricing table and the click handler', () => {
+    const table = readFileSync(join(HERE, '..', 'components', 'PricingTiersTable.tsx'), 'utf8')
+    const handler = readFileSync(join(HERE, '..', 'components', 'MushiSiteAnalytics.tsx'), 'utf8')
+    expect(table).toContain("'data-mushi-plan': tierId")
+    expect(handler).toContain("emit('plan_selected'")
   })
 })
 

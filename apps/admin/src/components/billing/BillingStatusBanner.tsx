@@ -177,12 +177,12 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab, plainBa
     )
   }
 
-  if (stats.reportsUsed === 0 && stats.planId === 'hobby') {
+  if (stats.reportsUsed === 0 && (stats.planId === 'hobby' || stats.planId === 'free_cloud')) {
     return (
       <StatusBannerShell
         tone="info"
-        title={plainBanner ? 'Hobby plan — no usage yet' : 'Hobby plan — no usage this period yet'}
-        subtitle={`${stats.freeLimitReports.toLocaleString()} free reports/mo included. Send a test report from Health or wire the SDK widget.`}
+        title={plainBanner ? 'Free plan — no usage yet' : 'Free plan — no usage this period yet'}
+        subtitle={`1 app and ${(stats.diagnosesLimit ?? 100).toLocaleString()} diagnoses a month included. Send a test report from Health or wire the SDK widget.`}
         action={
           <Btn to="/health" size="sm" variant="ghost">{actions.health ?? 'Run Health test'}</Btn>
         }

@@ -47,12 +47,21 @@ type CreateProjectErrorCode =
   | 'FORBIDDEN'
   | 'INVALID_ORGANIZATION_ID'
   | 'INVALID_NAME'
+  | 'PLAN_APP_LIMIT'
   | (string & {})
 
 export interface CreateProjectError {
   code: CreateProjectErrorCode
   message: string
 }
+
+/**
+ * The team's plan watches as many apps as it allows (402 PLAN_APP_LIMIT,
+ * docs/plan-pricing.md 2026-10-28). Every create surface shows the server's
+ * plain message under this title, with one way out: the plans.
+ */
+export const PLAN_APP_LIMIT_TITLE = 'Your plan’s apps are all in use'
+export const PLANS_HREF = '/team?view=billing&tab=plans'
 
 interface Options {
   /** Called after the project is created successfully with the new id/slug. */

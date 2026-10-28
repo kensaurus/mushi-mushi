@@ -317,6 +317,32 @@ export function firstTouchReservedProps(touch: FirstTouch | null | undefined): R
   return out
 }
 
+// ─── Plan picks (60-day price test, docs/plan-pricing.md 2026-10-28) ────────
+
+/** Public tier ids (PRICING_TIERS) → the console's plan ids. Self-host is not a plan. */
+const PLAN_ID_BY_TIER: Readonly<Record<string, string>> = {
+  free: 'free_cloud',
+  indie: 'indie',
+  pro: 'pro',
+  enterprise: 'enterprise',
+}
+
+export interface PlanSelection {
+  plan_id: string
+  interval: 'monthly' | 'annual'
+}
+
+/**
+ * `plan_selected` props for a clicked CTA carrying `data-mushi-plan`, or null
+ * when it carries none. Ids match the console's own `plan_selected`, so one
+ * funnel reads both surfaces.
+ */
+export function planSelectionFromCta(dataset: { mushiPlan?: string; mushiInterval?: string }): PlanSelection | null {
+  const planId = dataset.mushiPlan ? PLAN_ID_BY_TIER[dataset.mushiPlan] : undefined
+  if (!planId) return null
+  return { plan_id: planId, interval: dataset.mushiInterval === 'annual' ? 'annual' : 'monthly' }
+}
+
 // ─── CTA links ───────────────────────────────────────────────────────────────
 
 export type CtaHrefKind = 'signup' | 'connect' | null

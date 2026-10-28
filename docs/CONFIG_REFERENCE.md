@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_120 configuration knobs across 19 sections · last regenerated 2026-10-23._
+_120 configuration knobs across 19 sections · last regenerated 2026-10-28._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -1585,7 +1585,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Hard USD ceiling on overage charges. When projected spend hits the cap, new diagnoses pause gracefully — no surprise invoice.
 
-**How it works** — Stored on billing_subscriptions.monthly_spend_cap_usd_override and enforced in classify-report before Stage-2 runs. Overrides the plan default (Indie $50, Pro $200). Clear the field to revert to the plan default.
+**How it works** — Stored on billing_subscriptions.monthly_spend_cap_usd_override and enforced in classify-report before Stage-2 runs. Overrides the plan default (Builder $50, Studio $200). Clear the field to revert to the plan default.
 
 **Default** — `plan default`
 

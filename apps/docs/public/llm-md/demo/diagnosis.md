@@ -16,7 +16,7 @@ can fix it from.
 ## Get this for your own app
 
 When a real user reports a bug, Mushi writes a diagnosis like this one. It
-needs no Sentry and no AI key of yours: the free plan covers 50 diagnoses a
+needs no Sentry and no AI key of yours: the free plan covers one app and 100 diagnoses a
 month.
 
 - **Claude Code or Cursor:** [install in three steps](/#install), then ask your AI

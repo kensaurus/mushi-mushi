@@ -29,6 +29,8 @@
  *   cta_click        any click inside `[data-mushi-cta]`
  *   signup_click     …when that element links to `/signup`
  *   connect_demo_click …when it links to `/connect`
+ *   plan_selected    …when it carries `data-mushi-plan` (the 60-day price
+ *                    test; `pricing_view` is its docs-side pricing_viewed)
  * View events carry reserved `$utm_*`, `$referrer`, `$route`, `$ref` and
  * `$first_touch` (true on the first tracked view after the first-touch
  * record was created — i.e. this visitor's very first session). The first
@@ -54,6 +56,7 @@ import {
   dntActive,
   firstTouchReservedProps,
   planRouteViews,
+  planSelectionFromCta,
   readFirstTouch,
   readSiteAnalyticsConfig,
   readStoredConsent,
@@ -290,6 +293,8 @@ export function MushiSiteAnalytics() {
       if (!ctaId) return
       const ctaLocation = el.dataset.mushiLocation ?? 'unknown'
       emit('cta_click', { cta_id: ctaId, location: ctaLocation })
+      const plan = planSelectionFromCta(el.dataset)
+      if (plan) emit('plan_selected', { ...plan, surface: 'docs_pricing' })
       if (!(el instanceof HTMLAnchorElement)) return
       const kind = ctaHrefKind(el.getAttribute('href'))
       if (kind === 'signup') {

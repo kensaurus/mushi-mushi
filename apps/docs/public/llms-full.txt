@@ -30,7 +30,7 @@ Your AI wrote it. Mushi tells you why it broke.</>}
 ## What it takes
 
 - **No monitoring stack.** No Sentry, no logging service, no AI key of your own. Mushi's AI writes the diagnosis.
-- **Free to start.** 50 diagnoses a month with no card. Repeat reports of one bug count once.
+- **Free to start.** One app and 100 diagnoses a month with no card. Repeat reports of one bug count once.
 - **Your AI does the fix, you approve it.** Mushi hands Cursor, Claude Code or Lovable the prompt. Nothing ships until you say so.
 
 ## What this is (and is not)
@@ -1882,24 +1882,26 @@ prints this tag with your project ID and key filled in.
 
 ---
 
-## Pricing — free tier, Pro, and self-host
+## Pricing — Free, Builder, Studio and self-host
 
 Source: https://kensaur.us/mushi-mushi/docs/pricing
 
 ---
-title: Pricing — free tier, Pro, and self-host
-description: Mushi Mushi pricing — 50 AI bug diagnoses a month free, no card. Open-source Sentry alternative you can self-host for free, or upgrade for teams.
+title: Pricing — Free, Builder, Studio and self-host
+description: Mushi Mushi pricing — free for one app and 100 AI bug diagnoses a month. Builder $29/mo for 3 apps, Studio $79/mo for 10. Free to self-host.
 ---
 
 # Pricing
 
 ## Plans
 
-  **Annual billing saves two months.** Pay for 10 months, get 12 — about 17% off base fees. Annual plans have no pay-as-you-go overage: they include the plan's diagnoses each month and pause new diagnoses at that limit. Pick annual at checkout, or switch an existing plan with **Change plan** on the Billing page. For Enterprise commits, contact us.
+A plan is the number of **apps** Mushi watches for your team: one on Free, three on Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
 
-  **Overage is capped.** Indie and Pro include a default spend cap. You can lower or raise it in the console. At the cap, Mushi pauses new diagnoses with a graceful message — never a surprise invoice. Email alerts fire at **50%, 80%, and 100%** of your included quota.
+  **Annual billing saves two months.** Pay for 10 months, get 12: Builder is $290 a year, Studio $790. Annual plans have no pay-as-you-go overage: they include the plan's diagnoses each month and pause new diagnoses at that limit. Pick annual at checkout, or switch an existing plan with **Change plan** on the Billing page. For Enterprise commits, contact us.
 
-  **Free Cloud has a hard stop** — not a soft limit. At 50 diagnoses Mushi stops classifying new reports until the next calendar month. No card, no charge, no bill shock.
+  **Overage is capped.** Builder and Studio include a default spend cap ($50 and $200). You can lower or raise it in the console. At the cap, Mushi pauses new diagnoses with a graceful message — never a surprise invoice. Email alerts fire at **50%, 80%, and 100%** of your included diagnoses.
+
+  **Free has a hard stop** — not a soft limit. At 100 diagnoses Mushi stops diagnosing new reports until the next calendar month. No card, no charge, no bill shock.
 
 ## What counts as a diagnosis
 
@@ -1927,40 +1929,46 @@ Use the slider below to model your bill. Toggle **Annual** to see the effective 
 Fixed formulas (overage metered on top of base):
 
 ```
-Indie:  $15 + max(0, diagnoses − 500) × $0.03   (capped at $50/mo total)
-Pro:    $49 + max(0, diagnoses − 2,000) × $0.025 (capped at $200/mo total)
+Builder: $29 + max(0, diagnoses − 1,000) × $0.03  (capped at $50/mo total)
+Studio:  $79 + max(0, diagnoses − 5,000) × $0.02  (capped at $200/mo total)
 ```
 
-| Diagnoses / mo | Indie | Pro |
+| Diagnoses / mo | Builder | Studio |
 |---:|---:|---:|
-| 100 | $15.00 | $49.00 |
-| 500 | $15.00 | $49.00 |
-| 1,000 | $30.00 | $49.00 |
-| 2,000 | $50.00 *(cap)* | $49.00 |
-| 3,000 | $50.00 *(cap)* | $74.00 |
-| 5,000 | $50.00 *(cap)* | $124.00 |
-| 8,000 | $50.00 *(cap)* | $199.00 |
-| 10,000 | $50.00 *(cap)* | $200.00 *(cap)* |
+| 100 | $29.00 | $79.00 |
+| 500 | $29.00 | $79.00 |
+| 1,000 | $29.00 | $79.00 |
+| 1,500 | $44.00 | $79.00 |
+| 2,000 | $50.00 *(cap)* | $79.00 |
+| 5,000 | $50.00 *(cap)* | $79.00 |
+| 8,000 | $50.00 *(cap)* | $139.00 |
+| 12,000 | $50.00 *(cap)* | $200.00 *(cap)* |
 
-A typical vibe-coder project on Indie runs **200–400 diagnoses / month** → **$15 / mo** (inside the 500 included diagnoses).
+A typical vibe-coder app runs **200–400 diagnoses / month**, well inside Builder's 1,000. Most people move up for a second or fourth app, not for more diagnoses.
+
+## Why apps, not reports?
+
+Reports are noisy: one broken button can send fifty, and a busy week is hard to predict. The number of apps you ship is something you already know, and it grows with what you get out of Mushi. So a plan is sized by apps watched, diagnoses are a generous allowance under it, and reports are never billed at all.
 
 ## Why diagnoses, not events
 
 Sentry meters errors. We meter comprehension — a unit you can actually predict and that maps 1:1 to the value delivered (a plain-English root cause + paste-ready fix). Duplicate errors from the same broken button collapse to one diagnosis. You pay once.
 
-## BYOK and the self-host path
+## Your own AI key and the self-host path
 
-When self-hosting, Mushi uses **your** Anthropic / OpenAI key (BYOK). You pay those vendors directly at list rate; we never mark up tokens. Most teams run the full loop for under $20 / month in LLM costs.
+On every Cloud plan, Free included, you can add your own Anthropic, OpenAI or Cursor key under **Settings → API keys**. Mushi then uses it for fix PRs and agent work; you pay those vendors directly at list rate, and we never mark up tokens.
+
+When self-hosting, Mushi uses **your** keys for everything. Most teams run the full loop for under $20 / month in LLM costs.
 
 The self-host path is completely free, always will be — [see the guide](/self-hosting).
 
 ## Compared to Sentry + Seer
 
-| | Sentry Team + Seer | Mushi Indie |
+| | Sentry Team + Seer | Mushi Builder |
 |---|---|---|
-| Base plan | $26 / mo | $15 / mo |
+| Base plan | $26 / mo | $29 / mo for 3 apps |
 | AI diagnosis | Seer add-on: + $40 / active contributor / mo | Included |
-| Solo dev total | **$66 + / mo** | **$15 / mo** |
+| Solo dev total | **$66 + / mo** | **$29 / mo** |
 | Catches non-crash friction | Via its User Feedback widget and Session Replay | Yes — shake-to-report with screenshot and console/network tail, then a diagnosis |
 | Bugs in your editor | Sentry MCP server: issues and Seer analysis in Cursor / Claude Code | Mushi MCP server: diagnosis, fix prompt and lessons; no second LLM key |
 
@@ -1972,35 +1980,47 @@ Sentry + Seer is strong at code-thrown errors, tracing, breadcrumbs and session 
 
 ### What happens when I hit my diagnosis limit?
 
-**Free Cloud:** New plain-English classifications pause until the next calendar month. Reports are still captured.
+**Free:** New plain-English diagnoses pause until the next calendar month. Reports are still captured.
 
-**Indie / Pro (monthly):** You can keep diagnosing into overage until your **spend cap** stops new classification runs. Reports are never dropped.
+**Builder / Studio (monthly):** You can keep diagnosing into overage until your **spend cap** stops new classification runs. Reports are never dropped.
 
-**Indie / Pro (annual):** New diagnoses pause at the included amount until the next calendar month. Reports are never dropped. Switch to monthly (pay-as-you-go overage) or to Pro from **Change plan**.
+**Builder / Studio (annual):** New diagnoses pause at the included amount until the next calendar month. Reports are never dropped. Switch to monthly (pay-as-you-go overage) or to Studio from **Change plan**.
+
+### What happens when I add one app too many?
+
+The console says how many apps your plan watches and how many your team has, and offers the plans. Nothing already running stops: your existing apps keep their reports and diagnoses. Move up a plan, or remove an app you no longer use.
+
+### Can I use my own AI key on Free?
+
+Yes. Bring-your-own-key works on every plan, Free included. Add an Anthropic, OpenAI or Cursor key under **Settings → API keys** and Mushi can open fix PRs with it, so you see the whole loop on your first app before paying anything. Automatic fix PRs without you in the loop start on Builder.
 
 ### When does my quota reset?
 
-Cloud plans reset on your **Stripe billing period** (shown on the Billing page as “Quota resets in N days”). Free Cloud resets on the calendar month (UTC).
+Cloud plans reset on your **Stripe billing period** (shown on the Billing page as “Quota resets in N days”). Free resets on the calendar month (UTC).
 
 ### Can I change my spend cap?
 
-Yes. Open **Billing → Spending cap** on your project card. Set any USD cap from $0–100,000 or clear it to use the plan default ($50 Indie, $200 Pro).
+Yes. Open **Billing → Spending cap** on your project card. Set any USD cap from $0–100,000 or clear it to use the plan default ($50 Builder, $200 Studio).
 
 ### Who receives usage alert emails?
 
 By default, the **project owner**. Override the address under **Usage alert email** on the same card. Alerts fire once per threshold (50%, 80%, 100%) per billing month.
 
-### Is usage per project or per organization?
+### Is usage per app or per team?
 
-**Per project.** Each app you connect has its own diagnosis counter and spend cap. Organizations aggregate billing in the console but meter usage per project.
+**Diagnoses are per app; the app limit is per team.** Each app you connect has its own diagnosis counter and spend cap, and the plan's app limit counts the apps in your team.
 
 ### Can I downgrade mid-cycle?
 
-Change plans in the console with **Change plan** on the Billing page (Indie ↔ Pro, monthly ↔ annual). The change applies immediately and is pro-rated: unused time is credited and the new plan is charged for the rest of the period. Moving between monthly and annual starts a new billing period that day. Stripe's customer portal (**Manage**) handles your card, invoices and cancellation.
+Change plans in the console with **Change plan** on the Billing page (Builder ↔ Studio, monthly ↔ annual). The change applies immediately and is pro-rated: unused time is credited and the new plan is charged for the rest of the period. Moving between monthly and annual starts a new billing period that day. Stripe's customer portal (**Manage**) handles your card, invoices and cancellation.
 
 ### Do annual plans include overage?
 
-No. Annual plans include the plan's diagnoses every month (500 on Indie, 2,000 on Pro) and pause new diagnoses at that limit until the next month, so an annual invoice never grows. If you need more, switch to monthly for pay-as-you-go overage or upgrade to Pro from **Change plan**.
+No. Annual plans include the plan's diagnoses every month (1,000 on Builder, 5,000 on Studio) and pause new diagnoses at that limit until the next month, so an annual invoice never grows. If you need more, switch to monthly for pay-as-you-go overage or upgrade to Studio from **Change plan**.
+
+### What does Enterprise cost?
+
+From $499 a month, billed annually: unlimited apps, SAML SSO, the SOC 2 readiness pack, self-host support and up to 365 days of history. [Contact us](mailto:kensaurus@gmail.com?subject=Mushi%20Enterprise%20inquiry) for a quote.
 
 ### How do I estimate before signing up?
 
@@ -2262,7 +2282,7 @@ It does not claim Mushi is cheaper at scale, and it does not claim feature
 parity with Sentry on tracing, profiling or platform coverage. If you need
 those, Sentry is the right answer and Mushi runs alongside it: a Sentry
 issue-alert webhook sends errors into Mushi's queue, and with the outbound
-Sentry plugin (Indie and above, or self-hosted) merging the fix resolves the
+Sentry plugin (Builder and above, or self-hosted) merging the fix resolves the
 Sentry issue. See [Sentry vs Mushi](/compare/sentry-vs-mushi).
 
 ## Frequently asked questions
@@ -2315,7 +2335,7 @@ case for an app built with Cursor, Claude Code or Lovable.
 
 Keep Sentry where it is. Point a Sentry issue-alert webhook at Mushi and every
 error lands in the same queue as user reports, deduped and diagnosed; with the
-outbound Sentry plugin (Indie and above, or self-hosted), Mushi resolves the
+outbound Sentry plugin (Builder and above, or self-hosted), Mushi resolves the
 linked Sentry issue when the fix merges. The setup is three steps
 on the [Sentry plugin page](/plugins/sentry), and there is a
 [migration guide](/migrations/sentry-to-mushi) for the enrich-or-standalone
@@ -2446,7 +2466,7 @@ npx mushi-mushi
 ```
 
 The wizard installs the right SDK, writes env vars, and can file a test
-report so you see the loop before real users do. 50 diagnoses a month free;
+report so you see the loop before real users do. One app and 100 diagnoses a month free;
 self-host if you prefer.
 
 **Next:** [Incident loop quickstart](/quickstart/incident-loop) ·
@@ -2504,7 +2524,7 @@ npx mushi-mushi
 npx mushi-mushi setup --ide claude
 ```
 
-Free tier: 50 diagnoses a month, no card. MIT SDKs, AGPLv3 server,
+Free tier: one app, 100 diagnoses a month, no card. MIT SDKs, AGPLv3 server,
 self-hostable with one command.
 
 **Next:** [MCP server quickstart](/quickstart/mcp) ·
@@ -2563,7 +2583,7 @@ npx mushi-mushi
 npx mushi-mushi setup --ide cursor
 ```
 
-Free tier: 50 diagnoses a month, no card. Open source, self-hostable.
+Free tier: one app, 100 diagnoses a month, no card. Open source, self-hostable.
 
 **Next:** [Cursor integration guide](/integrations/cursor) ·
 [MCP server quickstart](/quickstart/mcp) ·
@@ -2659,7 +2679,7 @@ it:
 npx mushi-mushi
 ```
 
-Free Cloud is 50 diagnoses a month with no card; self-hosting is free. Other
+Free is one app and 100 diagnoses a month with no card; self-hosting is free. Other
 tools that solve parts of this are compared on
 [Sentry alternatives for solo founders](/compare/sentry-alternatives-for-solo-founders).
 
@@ -2716,7 +2736,7 @@ worst one."* The full tool list and configuration options live in the
 
 ## Hosted or self-hosted
 
-Point the server at Mushi Cloud (50 diagnoses a month free) or at your own
+Point the server at Mushi Cloud (one app and 100 diagnoses a month free) or at your own
 self-hosted stack — the MCP surface is identical. Reports come from the
 [SDKs](/sdks) your users already trigger; install those with:
 
@@ -2785,7 +2805,7 @@ vars:
 npx mushi-mushi
 ```
 
-The free tier includes 50 diagnoses a month with no card, and you can
+The free tier watches one app with 100 diagnoses a month and no card, and you can
 [self-host the whole stack](/self-hosting) with one command if you'd rather
 keep everything on your own infrastructure.
 
@@ -3907,7 +3927,7 @@ Bounties reuse the existing anti-gaming engine (`reporter_devices`, `anti_gaming
 ```
 apps/testers/             Next.js static export — public browse + signup (kensaur.us/mushi-mushi/testers/)
 apps/admin /tester/*      Vite SPA — logged-in tester dashboard (same auth.users pool)
-apps/admin /rewards       Dev console — Publishing tab (live, gated behind the marketplace_publish Pro+ entitlement)
+apps/admin /rewards       Dev console — Publishing tab (live, gated behind the marketplace_publish entitlement, Studio and up)
 packages/server/          API routes: tester-marketplace.ts, published-apps.ts
                           Edge functions: tremendous-redemption-worker (cron)
 Supabase DB               mushi_testers, published_apps, tester_submissions,
@@ -5149,8 +5169,8 @@ See [CONTRIBUTING.md](https://github.com/kensaurus/mushi-mushi/blob/master/CONTR
 |---|---|---|
 | SDK packages (MIT) | Yes — embed in any app | — |
 | Self-hosted server (AGPLv3) | Yes — run on your own infra, unlimited diagnoses | Your own LLM API costs (BYOK) |
-| Mushi Cloud — Free tier | Yes — 50 diagnoses / mo, **hard stop** at limit | — |
-| Mushi Cloud — Indie / Pro / Enterprise | Flat base + usage overage | $15–$49 / mo base + $0.03–$0.025 / extra diagnosis |
+| Mushi Cloud — Free tier | Yes — 1 app, 100 diagnoses / mo, **hard stop** at limit | — |
+| Mushi Cloud — Builder / Studio / Enterprise | Flat base by apps watched + usage overage | $29 (3 apps) or $79 (10 apps) / mo base + $0.03–$0.02 / extra diagnosis; Enterprise from $499 / mo |
 
 **One sentence:** the MIT + AGPL core self-hosts free; the cloud sells managed hosting, LLM key pooling, retention beyond 7 days, team collaboration, and security features (SSO, SOC 2).
 
@@ -11630,7 +11650,7 @@ description: Replace Instabug (Luciq) with Mushi for in-app bug reporting — co
 
 ## Why switch
 
-- **Pricing.** Mushi SDKs are MIT, the server is AGPLv3 open source — self-host free, cloud free up to 50 diagnoses/month; Luciq is per-seat enterprise.
+- **Pricing.** Mushi SDKs are MIT, the server is AGPLv3 open source — self-host free, cloud free for one app and 100 diagnoses/month; Luciq is per-seat enterprise.
 - **AI triage.** Mushi ships a built-in two-stage classifier
   (fast-filter + classify-report) that turns raw user reports into
   triaged tickets without manual review. Luciq's "Agentic AI" is a recent
@@ -14291,7 +14311,7 @@ Source: https://kensaur.us/mushi-mushi/docs/cloud
 
 ---
 title: Mushi Cloud
-description: Hosted Mushi Mushi — bug reports, plain-English diagnoses, and fix dispatch without running servers. Free tier includes 50 diagnoses a month.
+description: Hosted Mushi Mushi — bug reports, plain-English diagnoses, and fix dispatch without running servers. Free for one app with 100 diagnoses a month.
 ---
 
 # Mushi Cloud
@@ -14866,7 +14886,7 @@ on that. Every row links to the page with the mechanism and the evidence.
 | **Data residency** | Pick a region at project creation; rows never replicate across regions | Live: single Tokyo (`ap-northeast-1`) cluster today. EU / JP dedicated clusters reserved, nightly no-cross-region attestation already runs | [Data residency](/security/data-residency) |
 | **Bring-your-own-key (BYOK)** | Diagnoses run against *your* Anthropic / OpenAI / OpenRouter account. Keys are stored in Vault, never shown back in plaintext, and nothing is billed to Mushi's provider account | Live | [BYOK](/security/byok) |
 | **BYO storage** | Screenshots and crash dumps pinned to your own S3 / R2 / GCS / MinIO bucket; URLs signed server-side | Live | [BYO storage](/security/byo-storage) |
-| **Retention sweep** | Reports older than your plan window (Free 7 d · Indie 30 d · Pro 90 d · Enterprise custom) or your per-project policy are hard-deleted daily; legal holds are skipped | Live, daily 03:00 UTC | [SOC 2 → retention](/security/soc2#data-retention-policies) |
+| **Retention sweep** | Reports older than your plan window (Free 14 d · Builder 90 d · Studio 180 d · Enterprise custom) or your per-project policy are hard-deleted daily; legal holds are skipped | Live, daily 03:00 UTC | [SOC 2 → retention](/security/soc2#data-retention-policies) |
 | **Tenant isolation** | Every table carries a row-level-security policy keyed on `(SELECT auth.uid())`; every policy column is indexed | Live | [No client data leakage](/security/no-leakage-claim) |
 | **Nightly RLS coverage check** | `mushi_rls_coverage_snapshot()` verifies each public table still has a policy and writes the delta to the evidence table | Live, nightly | [SOC 2 → automated controls](/security/soc2#automated-controls) |
 | **Prompt-injection sanitizer** | Report text, console lines, OCR output, and screenshots pass `sanitizeForLLM()` and a vision-safe path before any model sees them; the OWASP LLM01 corpus runs in CI | Live | [Prompt-injection defence](/security/prompt-injection) |
@@ -15506,7 +15526,7 @@ reserved.
 
 | Data | Kept for | Mechanism |
 | --- | --- | --- |
-| End-user reports and everything attached to them | The retention window of your plan: **Free 7 days · Indie 30 days · Pro 90 days · Enterprise as agreed**, or a shorter per-project policy you set in **Compliance → Data retention** | A daily `retention-sweep` job hard-deletes rows past the window. Legal-hold rows are skipped |
+| End-user reports and everything attached to them | The retention window of your plan: **Free 14 days · Builder 90 days · Studio 180 days · Enterprise as agreed**, or a shorter per-project policy you set in **Compliance → Data retention** | A daily `retention-sweep` job hard-deletes rows past the window. Legal-hold rows are skipped |
 | Product usage events (Mushi's own console analytics) | **730 days (2 years)** | Nightly `prune_product_events` job, using the 730-day retention set on Mushi's own analytics project |
 | Docs-site analytics | 730 days (2 years) | Same table and job as above |
 | Analytics events your app sends with `Mushi.track()` | 90 days by default, or the per-project override (1–3650 days) | Same nightly job |
@@ -15678,7 +15698,7 @@ configuration, brand, or content beyond what these terms allow.
 - You need a working email address or a Google / GitHub login. Keep your
   credentials and API keys secret; you are responsible for what happens under
   them. Rotate a key from **Settings → API keys** the moment you suspect a leak.
-- One person per seat. Team seats on Pro and Enterprise are for named people
+- One person per seat. Team seats on Studio and Enterprise are for named people
   in your organisation.
 - You must be **16 or older**.
 - We may suspend an account that breaks section 5, does not pay, or is used
@@ -15723,8 +15743,8 @@ users, or your app.
 
 ## 7. Free tier
 
-The **Free Cloud** plan includes **50 diagnoses per month**, one seat, and
-7-day report retention. At 50, the pipeline **stops** for the rest of the
+The **Free** plan includes **one app and 100 diagnoses per month**, one seat, and
+14-day report retention. At 100, the pipeline **stops** for the rest of the
 calendar month: reports are still accepted and stored, but no new diagnoses
 run until the counter resets or you upgrade. We do not silently bill overage
 on Free. We may change Free limits with 30 days' notice on the pricing page.
@@ -15735,8 +15755,8 @@ on Free. We may change Free limits with 30 days' notice on the pricing page.
   through **Stripe**; we never see your full card number.
 - Plans bill **monthly** or **annually** in advance, in US dollars, plus any
   tax we must collect.
-- **Overage** on Indie and Pro is metered per diagnosis at the rate shown on
-  the pricing page and capped by a **spend cap** ($50 on Indie, $200 on Pro).
+- **Overage** on Builder and Studio is metered per diagnosis at the rate shown on
+  the pricing page and capped by a **spend cap** ($50 on Builder, $200 on Studio).
   When the cap is reached the pipeline stops, like Free, until the next period
   or until you raise the cap in **Billing**. You get email alerts at 50 %,
   80 %, and 100 % of your included diagnoses.
@@ -16928,8 +16948,8 @@ description: Mushi Cloud status and uptime — the live status page for the API,
 
 ## Uptime commitment
 
-Mushi Cloud is operated on a **reasonable-efforts basis** for the Free and Indie tiers.
-Pro subscribers receive priority incident response.
+Mushi Cloud is operated on a **reasonable-efforts basis** for the Free and Builder plans.
+Studio subscribers receive priority incident response.
 Enterprise SLAs (99.9 % monthly uptime with credits) are negotiated per-contract —
 contact `kensaurus@gmail.com` for details.
 
@@ -16971,7 +16991,7 @@ can fix it from.
 ## Get this for your own app
 
 When a real user reports a bug, Mushi writes a diagnosis like this one. It
-needs no Sentry and no AI key of yours: the free plan covers 50 diagnoses a
+needs no Sentry and no AI key of yours: the free plan covers one app and 100 diagnoses a
 month.
 
 - **Claude Code or Cursor:** [install in three steps](/#install), then ask your AI
@@ -17483,7 +17503,7 @@ Everything you need to manage your subscription is on this page: live usage with
 Each project has a billing card. The key element is the **usage bar**:
 
 ```
-Diagnoses used: ████████░░░░  85%  (425 / 500)
+Diagnoses used: ████████░░░░  85%  (850 / 1,000)
 ```
 
 Below the bar you will see:
@@ -17496,9 +17516,9 @@ Below the bar you will see:
 
 **What happens at 100%?**
 
-- **Free Cloud:** New reports are captured but **not diagnosed** until the period resets.
-- **Indie / Pro (monthly):** Overage continues until your **spend cap** pauses Stage-2 classification. No reports are lost.
-- **Indie / Pro (annual):** No overage. Stage-2 classification pauses at the included diagnoses until the next calendar month. No reports are lost.
+- **Free:** New reports are captured but **not diagnosed** until the period resets.
+- **Builder / Studio (monthly):** Overage continues until your **spend cap** pauses Stage-2 classification. No reports are lost.
+- **Builder / Studio (annual):** No overage. Stage-2 classification pauses at the included diagnoses until the next calendar month. No reports are lost.
 
 ### Usage breakdown
 
@@ -17520,7 +17540,7 @@ The **30-day sparkline** shows daily report volume — useful for spotting a spi
 
 On each paid project card, **Predictability controls** let you:
 
-1. **Monthly spend cap (USD)** — override the plan default ($50 Indie, $200 Pro). Diagnoses pause gracefully at the cap.
+1. **Monthly spend cap (USD)** — override the plan default ($50 Builder, $200 Studio). Diagnoses pause gracefully at the cap.
 2. **Usage alert email** — where 50% / 80% / 100% quota alerts are sent (defaults to project owner).
 
 Both settings save immediately via the Billing API. Leave the cap blank to revert to the plan default; leave the email blank to use the owner address.
@@ -17529,19 +17549,25 @@ Both settings save immediately via the Billing API. Leave the cap blank to rever
 
 ---
 
+## Apps on your plan
+
+A plan sets how many apps your team watches: **Free 1, Builder 3, Studio 10, Enterprise no limit**. Creating one more app than the plan allows stops with a message that names your plan, how many apps the team has, and the plan that fits, plus a **See plans** button that opens the Plans tab. Apps you already have keep working.
+
+The **Plans** tab compares Free, Builder, Studio and Enterprise by apps, diagnoses, overage and history, and shows whether your team's apps and this period's diagnoses fit each plan.
+
 ## Upgrading your plan
 
 1. Click **Upgrade** on the project card.
 2. Pick **Monthly** or **Annual** (about two months free), then **Select** the plan you want.
 3. Complete payment in **Stripe Checkout**.
-4. The new plan activates when you return to Mushi.
+4. Stripe sends you back to Billing, which shows the new plan as soon as Stripe confirms the payment.
 
 ## Changing plan
 
 A project that already pays switches in the console, not in Checkout:
 
 1. Click **Change plan** on the project card.
-2. Choose Indie or Pro, monthly or annual. The current choice shows as **Current plan**.
+2. Choose Builder or Studio, monthly or annual. The current choice shows as **Current plan**.
 3. The dialog shows what Stripe charges now (or credits) for the prorated difference. Click **Confirm change**.
 
 The change applies immediately. Moving between monthly and annual starts a new billing period that day. If the card is declined, nothing changes. Annual plans have no overage and stop at the included diagnoses each month. Enterprise is arranged with our team — use **Contact us** on the Plans tab.
@@ -17604,7 +17630,7 @@ Each card has a dot and a state:
 | Green | Pass | A finished run was read and found nothing. Shown with when it last ran. |
 | Grey | Not run yet, Not set up, Status unavailable | Never a pass. Not set up comes with a Set up link. |
 
-A Pro pill means the check needs a plan upgrade. AI prompts and CI runners are Labs: their cards appear once you keep them in the sidebar in Settings → Display & sidebar. While you are on Checks or one of its pages, the sidebar lists every check under Checks.
+An Upgrade pill means the check needs a higher plan. AI prompts and CI runners are Labs: their cards appear once you keep them in the sidebar in Settings → Display & sidebar. While you are on Checks or one of its pages, the sidebar lists every check under Checks.
 
 ## The checks
 
@@ -20401,8 +20427,8 @@ against that week's data. Useful when:
 Regeneration overwrites the cached HTML and PDF for that week. The previous version
 is not archived.
 
-  Regeneration is rate-limited to **3 times per week per project** on Indie plans
-  and **unlimited** on Pro and Enterprise.
+  Regeneration is rate-limited to **3 times per week per project** on Builder
+  and **unlimited** on Studio and Enterprise.
 
 ---
 
@@ -23342,7 +23368,7 @@ reports, leaving comments — earns them points. Points advance tiers. Tiers
 open perks you configure: free plan upgrades, early-access flags, and
 (optionally) monetary payouts via Stripe Connect.
 
-  The Rewards page is available on **Pro** and **Enterprise** plans. The admin
+  The Rewards page is available on **Builder**, **Studio** and **Enterprise**. The admin
   toggle at the bottom of [Settings](#settings) is always visible so you can
   prepare your configuration before flipping the SDK flag in your app.
 
@@ -24159,7 +24185,7 @@ The SSO page lets you register SAML 2.0 or OIDC identity providers for your
 organisation, so teammates can log in with your company's IdP instead of email +
 password.
 
-SSO is available on the **Pro** and **Enterprise** plans. An upgrade prompt appears if
+SSO is available on the **Enterprise** plan. An upgrade prompt appears if
 the `sso` entitlement is not active on your account.
 
 ---
@@ -24241,7 +24267,7 @@ DELETE /v1/admin/sso/:id
 
 - [Organization members](/admin/teams) — manage roles after SSO is set up
 - [Settings](/admin/settings) — other project and org configuration
-- [Billing](/admin/billing) — upgrade to Pro/Enterprise to enable SSO
+- [Billing](/admin/billing) — upgrade to Enterprise to enable SSO
 
 ---
 
@@ -24404,21 +24430,21 @@ Teams are modeled as organizations. An organization owns projects, billing, invi
 
 ## Plans
 
-Teams are available on Pro and Enterprise.
+Teams are available on Studio and Enterprise.
 
 | Plan | Teams |
 | ---
 
  | --- |
-| Free Cloud | Solo workspace |
-| Indie | Solo workspace |
-| Pro | Invite teammates and share projects |
+| Free | Solo workspace, 1 app |
+| Builder | Solo workspace, 3 apps |
+| Studio | Invite up to 5 teammates and share 10 apps |
 | Enterprise | Teams plus SSO and SOC 2 controls |
 
 The product enforces this in three places:
 
 - The admin UI hides the invite form and shows an upgrade prompt.
-- The API returns `402 feature_not_in_plan` for invitation attempts below Pro.
+- The API returns `402 feature_not_in_plan` for invitation attempts below Studio.
 - The database rejects invitation inserts with the `invitations_plan_gate` trigger.
 
 ## Roles
@@ -24497,7 +24523,7 @@ A searchable, filterable table of all users:
 
 **Filters:**
 - **Search by email** — 250ms debounce
-- **Plan filter** — All / Paid / Free Cloud / Indie / Pro / Enterprise
+- **Plan filter** — All / Paid / Free / Builder / Studio / Enterprise
 
 ---
 

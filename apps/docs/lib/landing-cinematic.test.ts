@@ -22,6 +22,7 @@ import {
   LANDING_QUICKSTART_PLATFORMS,
   LANDING_COMPARISON_ROWS,
   LANDING_TRUST_LINKS,
+  LANDING_FAQ,
 } from './landing-copy'
 import { MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
 import { ADMIN_DEMO_BASE } from '../data/admin-screenshots'
@@ -47,7 +48,14 @@ describe('landing cinematic copy SSOT', () => {
   })
 
   it('keeps the free-plan pricing claim under the hero install box', () => {
-    expect(LANDING_HERO.reassure).toMatch(/50 diagnoses/i)
+    // Free since 2026-10-28: one app, 100 diagnoses a month (docs/plan-pricing.md).
+    expect(LANDING_HERO.reassure).toMatch(/one app: 100 diagnoses/i)
+  })
+
+  it('sells the pricing strip by apps watched, with no retired plan names', () => {
+    expect(LANDING_PRICING_STRIP.lead).toMatch(/number of apps/)
+    expect(read('components', 'landing', 'PricingStrip.tsx')).toContain('apps')
+    expect(JSON.stringify(LANDING_FAQ)).not.toMatch(/\bIndie\b|50 diagnoses/)
   })
 
   it('explains the one job in three steps: a user reports, Mushi explains, your AI fixes (ADR 0052)', () => {

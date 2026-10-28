@@ -13,7 +13,7 @@ export function rewardsHeaderChip(input: { entitled: boolean; projectEnabled: bo
   label: string
   tone: 'active' | 'off' | 'readonly'
 } {
-  if (!input.entitled) return { label: 'Hobby — read-only', tone: 'readonly' }
+  if (!input.entitled) return { label: 'Free — read-only', tone: 'readonly' }
   if (!input.hasProject) return { label: 'No app picked', tone: 'off' }
   return input.projectEnabled ? { label: 'On for this app', tone: 'active' } : { label: 'Off for this app', tone: 'off' }
 }

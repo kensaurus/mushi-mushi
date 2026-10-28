@@ -23,7 +23,7 @@ export interface BillingUsageBarProps {
   periodEnd: string | null
   /** §3: real $ spent on LLM calls this billing month. */
   llmCostUsd?: number
-  /** API-flagged: ingest is currently being rejected (Hobby) or overage-billed (paid). */
+  /** API-flagged: ingest is currently being rejected (Free) or overage-billed (paid). */
   overQuota: boolean
   /** USD per report once over included quota. `null` for plans without metered overage. */
   overageRate: number | null
@@ -84,7 +84,7 @@ const USAGE_NUMBER_TONE: Record<UsageTone, string> = {
 
 /**
  * Build the severity tone + plan-aware narrative for a single project's quota.
- * Hobby gets "rejected" copy because the gateway HTTP-402s past the limit;
+ * Free (and the retired Hobby) gets "rejected" copy because the gateway HTTP-402s past the limit;
  * paid plans get "billed" copy because the meter just keeps going.
  */
 function buildUsageHeadline(
@@ -99,7 +99,8 @@ function buildUsageHeadline(
   if (limit == null) {
     return { tone: 'muted', chipLabel: 'Unlimited', narrative: 'No monthly cap on this plan.' }
   }
-  const isHobby = tierId === 'hobby'
+  const isHobby = tierId === 'hobby' || tierId === 'free_cloud'
+  const unit = (n: number) => (diagnoses ? (n === 1 ? 'diagnosis' : 'diagnoses') : n === 1 ? 'report' : 'reports')
   if (overQuota || (pct != null && pct >= 100)) {
     const overageReports = Math.max(0, used - limit)
     if (diagnoses && (overageRate == null || overageRate <= 0)) {
@@ -134,7 +135,7 @@ function buildUsageHeadline(
     return {
       tone: 'warn',
       chipLabel: `Approaching quota`,
-      narrative: `${remaining.toLocaleString()} report${remaining === 1 ? '' : 's'} of headroom left this period.`,
+      narrative: `${remaining.toLocaleString()} ${unit(remaining)} of headroom left this period.`,
     }
   }
   if (pct != null && pct >= 50) {
@@ -142,7 +143,7 @@ function buildUsageHeadline(
     return {
       tone: 'ok',
       chipLabel: `${pct}% used`,
-      narrative: `${remaining.toLocaleString()} reports of headroom left.`,
+      narrative: `${remaining.toLocaleString()} ${unit(remaining)} of headroom left.`,
     }
   }
   return {

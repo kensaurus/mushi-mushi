@@ -22,6 +22,8 @@ import type { LandingComparisonRow } from '@/lib/landing-copy'
 import type { FaqEntry } from '@/lib/structured-data'
 
 export const FACTS_REVIEWED_AT = '2026-09-21'
+/** Mushi's own facts follow its pricing page (Free / Builder / Studio, 2026-10-28); competitor facts keep FACTS_REVIEWED_AT. */
+const MUSHI_FACTS_REVIEWED_AT = '2026-10-28'
 export const NEXT_REVIEW_DUE = '2026-12-21'
 
 interface Fact {
@@ -31,7 +33,7 @@ interface Fact {
   value: string
   /** The page the fact was read from on `reviewedAt`. */
   sourceUrl: string
-  reviewedAt: typeof FACTS_REVIEWED_AT
+  reviewedAt: typeof FACTS_REVIEWED_AT | typeof MUSHI_FACTS_REVIEWED_AT
   /** True when the source page did not confirm the value on `reviewedAt`. */
   unverified?: boolean
 }
@@ -62,8 +64,8 @@ export const MUSHI: Vendor = {
   whatItIs:
     'An in-app bug reporter for production apps: a user reports from the widget, Mushi attaches the screenshot and console/network tail, writes a plain-English diagnosis, and hands a fix prompt to Cursor or Claude Code over MCP.',
   facts: [
-    { claim: 'Free tier', value: 'Free Cloud: 50 diagnoses per month (hard stop; later reports are kept, not diagnosed), 1 seat, 7-day retention, no card', sourceUrl: MUSHI_PRICING, reviewedAt: R },
-    { claim: 'Paid tiers', value: 'Indie $15/mo (500 diagnoses) · Pro $49/mo (2,000 diagnoses)', sourceUrl: MUSHI_PRICING, reviewedAt: R },
+    { claim: 'Free tier', value: 'Free: 1 app, 100 diagnoses per month (hard stop; later reports are kept, not diagnosed), 1 seat, 14-day retention, your own AI key allowed, no card', sourceUrl: MUSHI_PRICING, reviewedAt: MUSHI_FACTS_REVIEWED_AT },
+    { claim: 'Paid tiers', value: 'Builder $29/mo (3 apps, 1,000 diagnoses) · Studio $79/mo (10 apps, 5,000 diagnoses) · Enterprise from $499/mo', sourceUrl: MUSHI_PRICING, reviewedAt: MUSHI_FACTS_REVIEWED_AT },
     { claim: 'License', value: 'SDKs MIT; server AGPLv3', sourceUrl: `${MUSHI_REPO}/blob/master/LICENSE`, reviewedAt: R },
     { claim: 'Self-host', value: 'Free, whole stack, one command onto your own Supabase project (free tier works); bring your own Anthropic key (SELF_HOSTED.md)', sourceUrl: `${MUSHI_REPO}/blob/master/SELF_HOSTED.md`, reviewedAt: R },
     { claim: 'Editor loop', value: 'MCP server for Cursor / Claude Code; no second LLM key in the MCP process', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/quickstart/mcp', reviewedAt: R },
@@ -105,7 +107,7 @@ export const SENTRY_PRICING_ROWS: readonly LandingComparisonRow[] = [
   {
     label: 'Free tier',
     foil: 'Developer: 5k errors/mo, one user',
-    mushi: 'Free Cloud: 50 diagnoses/mo, 1 seat, 7-day retention, no card',
+    mushi: 'Free: 1 app, 100 diagnoses/mo, 1 seat, 14-day retention, no card',
   },
   {
     label: 'AI diagnosis',
@@ -126,7 +128,7 @@ export const SENTRY_FAQ: readonly FaqEntry[] = [
   },
   {
     q: 'Can I run Mushi alongside Sentry?',
-    a: 'Yes. Point a Sentry issue-alert webhook at Mushi and errors land in the same queue as user reports, deduped and diagnosed; that inbound path works on every plan. Resolving the Sentry issue when the Mushi fix merges needs the outbound Sentry plugin, which is on Indie and above or self-hosted. Setup is on the Sentry plugin page.',
+    a: 'Yes. Point a Sentry issue-alert webhook at Mushi and errors land in the same queue as user reports, deduped and diagnosed; that inbound path works on every plan. Resolving the Sentry issue when the Mushi fix merges needs the outbound Sentry plugin, which is on Builder and above or self-hosted. Setup is on the Sentry plugin page.',
   },
   {
     q: 'Does Sentry have an AI fix loop?',
@@ -134,7 +136,7 @@ export const SENTRY_FAQ: readonly FaqEntry[] = [
   },
   {
     q: 'What does Mushi cost?',
-    a: 'Free Cloud is 50 diagnoses a month with no card. Indie is $15 a month, Pro is $49 a month. Self-hosting the AGPLv3 server is free.',
+    a: 'Free covers one app and 100 diagnoses a month with no card. Builder is $29 a month for 3 apps, Studio $79 a month for 10. Self-hosting the AGPLv3 server is free.',
   },
 ]
 
@@ -185,12 +187,12 @@ export const JAM_ROWS: readonly LandingComparisonRow[] = [
   {
     label: 'Free tier',
     foil: '30 Jams/mo, 5-min recordings, 5 creator seats',
-    mushi: '50 diagnoses/mo, 1 seat, 7-day retention, no card',
+    mushi: '1 app, 100 diagnoses/mo, 1 seat, 14-day retention, no card',
   },
   {
     label: 'Paid entry',
     foil: '$14 per creator per month, billed yearly',
-    mushi: '$15/mo Indie (500 diagnoses)',
+    mushi: '$29/mo Builder (3 apps, 1,000 diagnoses)',
   },
   {
     label: 'Self-host',
@@ -214,7 +216,7 @@ export const JAM_FAQ: readonly FaqEntry[] = [
   },
   {
     q: 'What do the free tiers cover?',
-    a: 'Jam Free (2026-09-21): 30 Jams a month, recordings up to 5 minutes, 5 Recording Links, 5 creator seats. Mushi Free Cloud: 50 diagnoses a month, no card, unlimited reports.',
+    a: 'Jam Free (2026-09-21): 30 Jams a month, recordings up to 5 minutes, 5 Recording Links, 5 creator seats. Mushi Free: one app, 100 diagnoses a month, no card, unlimited reports.',
   },
 ]
 
@@ -285,7 +287,7 @@ export const POSTHOG_ROWS: readonly LandingComparisonRow[] = [
   {
     label: 'Free tier',
     foil: '5K replays + 100K exceptions/mo, 500 AI credits, 3 AI PRs, no card, 1 project',
-    mushi: '50 diagnoses/mo, 1 seat, 7-day retention, no card',
+    mushi: '1 app, 100 diagnoses/mo, 1 seat, 14-day retention, no card',
   },
   {
     label: 'Self-host',
@@ -301,7 +303,7 @@ export const POSTHOG_FAQ: readonly FaqEntry[] = [
   },
   {
     q: 'Does PostHog fix errors with AI?',
-    a: 'Yes, in two ways. Every error-tracking issue has a "Fix with AI" button that writes a fix or explain prompt for PostHog AI or a coding assistant, and PostHog AI can search errors and find their root cause. Self-driving, in open beta, turns recurring high-impact errors into Inbox reports and opens a draft pull request when a code fix is possible: 3 a month free, then $15 per PR. Both are on PostHog\'s free plan (500 AI credits and 3 PRs a month). The difference with Mushi is where it starts: PostHog works from the exceptions it captured; Mushi starts from what a user reported, with their screenshot, writes a plain-English diagnosis (50 a month on Free Cloud, unlimited self-hosted with your own key), and pulls the fix context into Cursor or Claude Code over MCP.',
+    a: 'Yes, in two ways. Every error-tracking issue has a "Fix with AI" button that writes a fix or explain prompt for PostHog AI or a coding assistant, and PostHog AI can search errors and find their root cause. Self-driving, in open beta, turns recurring high-impact errors into Inbox reports and opens a draft pull request when a code fix is possible: 3 a month free, then $15 per PR. Both are on PostHog\'s free plan (500 AI credits and 3 PRs a month). The difference with Mushi is where it starts: PostHog works from the exceptions it captured; Mushi starts from what a user reported, with their screenshot, writes a plain-English diagnosis (100 a month on Free, unlimited self-hosted with your own key), and pulls the fix context into Cursor or Claude Code over MCP.',
   },
   {
     q: 'Can I run PostHog and Mushi together?',
@@ -313,7 +315,7 @@ export const POSTHOG_FAQ: readonly FaqEntry[] = [
   },
   {
     q: 'What do the free tiers cover?',
-    a: 'PostHog (2026-09-21): 5K session recordings, 100K exceptions and 1M analytics events a month, 500 PostHog AI credits (worth $5) and 3 Inbox pull requests a month, no card, one project, one-year retention. Mushi: 50 diagnoses a month, no card; self-hosting is free.',
+    a: 'PostHog (2026-09-21): 5K session recordings, 100K exceptions and 1M analytics events a month, 500 PostHog AI credits (worth $5) and 3 Inbox pull requests a month, no card, one project, one-year retention. Mushi: one app and 100 diagnoses a month, no card; self-hosting is free.',
   },
 ]
 
@@ -412,9 +414,9 @@ export const ALTERNATIVES: readonly AlternativeRow[] = [
   {
     vendor: 'Mushi Mushi',
     url: 'https://kensaur.us/mushi-mushi/',
-    freeTier: 'Free Cloud: 50 diagnoses/mo (hard stop), 1 seat, 7-day retention, no card',
+    freeTier: 'Free: 1 app, 100 diagnoses/mo (hard stop), 1 seat, 14-day retention, no card',
     selfHost: 'Yes, free, AGPLv3 server on your own Supabase project, one command; bring your own Anthropic key',
-    aiFix: 'Included within the plan\'s diagnosis quota (50/mo on Free Cloud): plain-English diagnosis + fix prompt, which can be wrong; MCP into Cursor / Claude Code; optional agent-drafted PR',
+    aiFix: 'Included within the plan\'s diagnosis quota (100/mo on Free): plain-English diagnosis + fix prompt, which can be wrong; MCP into Cursor / Claude Code; optional agent-drafted PR',
     pickIf: 'You did not write most of the code, your users tell you about bugs, and you want the fix in your editor.',
     sourceUrl: MUSHI_PRICING,
   },
@@ -423,15 +425,15 @@ export const ALTERNATIVES: readonly AlternativeRow[] = [
 export const ALTERNATIVES_FAQ: readonly FaqEntry[] = [
   {
     q: 'What is the cheapest way to get error tracking as a solo founder?',
-    a: 'Every tool on this page has a $0 plan: Sentry Developer, Bugsnag Free, Rollbar Free, LaunchDarkly Developer (where hosted highlight.io went), PostHog and Mushi Free Cloud. Sentry, PostHog and Mushi can also be self-hosted for free, and highlight.io\'s open-source repo documents a free hobby install. Bugsnag\'s on-premise edition is Enterprise-only, and Rollbar is cloud-only. The real cost is the afternoon you spend reading what they collected.',
+    a: 'Every tool on this page has a $0 plan: Sentry Developer, Bugsnag Free, Rollbar Free, LaunchDarkly Developer (where hosted highlight.io went), PostHog and Mushi Free. Sentry, PostHog and Mushi can also be self-hosted for free, and highlight.io\'s open-source repo documents a free hobby install. Bugsnag\'s on-premise edition is Enterprise-only, and Rollbar is cloud-only. The real cost is the afternoon you spend reading what they collected.',
   },
   {
     q: 'Which of these explain the bug instead of showing a stack trace?',
-    a: 'Most now have something. Sentry\'s Seer is an add-on to Team, Business or Enterprise at $40 per active contributor per month. Rollbar Resolve (public beta) finds the root cause, writes a code change, runs your tests in a sandbox and opens a pull request, using AI credits the Free plan does not include. PostHog has a "Fix with AI" prompt on every error issue and, in open beta, draft pull requests for recurring errors: 3 a month free, then $15 each. Bugsnag\'s pricing page lists no AI feature; SmartBear\'s MCP server, in beta, offers AI fix suggestions in the IDE. Mushi writes a plain-English diagnosis on every plan: up to 50 a month on Free Cloud (a hard stop; later reports are kept but not diagnosed until next month), 500 included on Indie, and unlimited self-hosted with your own LLM key. Like the others, it is an AI reading and can be wrong. The report it starts from is what a user said and saw, not only what threw.',
+    a: 'Most now have something. Sentry\'s Seer is an add-on to Team, Business or Enterprise at $40 per active contributor per month. Rollbar Resolve (public beta) finds the root cause, writes a code change, runs your tests in a sandbox and opens a pull request, using AI credits the Free plan does not include. PostHog has a "Fix with AI" prompt on every error issue and, in open beta, draft pull requests for recurring errors: 3 a month free, then $15 each. Bugsnag\'s pricing page lists no AI feature; SmartBear\'s MCP server, in beta, offers AI fix suggestions in the IDE. Mushi writes a plain-English diagnosis on every plan: up to 100 a month on Free (a hard stop; later reports are kept but not diagnosed until next month), 1,000 included on Builder, and unlimited self-hosted with your own LLM key. Like the others, it is an AI reading and can be wrong. The report it starts from is what a user said and saw, not only what threw.',
   },
   {
     q: 'Do I have to rip out Sentry to try Mushi?',
-    a: 'No. Mushi runs standalone or alongside Sentry: a Sentry issue-alert webhook sends errors into Mushi\'s queue on every plan, and with the outbound Sentry plugin (Indie and above, or self-hosted) merging the fix resolves the Sentry issue.',
+    a: 'No. Mushi runs standalone or alongside Sentry: a Sentry issue-alert webhook sends errors into Mushi\'s queue on every plan, and with the outbound Sentry plugin (Builder and above, or self-hosted) merging the fix resolves the Sentry issue.',
   },
   {
     q: 'How current is this page?',

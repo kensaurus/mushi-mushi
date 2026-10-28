@@ -93,7 +93,7 @@ export function seatBillingExplainer(ctx: SeatBillingContext): {
   if (!ctx.teamsEnabled) {
     return {
       headline: 'Teammates require a Teams plan',
-      body: `${plan} is solo-only. Upgrading to Pro or Enterprise unlocks invites — you pay one flat monthly price for the plan, not per person.`,
+      body: `${plan} is solo-only. Upgrading to Studio or Enterprise unlocks invites — you pay one flat monthly price for the plan, not per person.`,
       billingLink: true,
       tone: 'info',
       calloutLabel: 'Upgrade for teams',

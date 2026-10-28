@@ -19,11 +19,11 @@ const BILLING_ERROR_TEXT: Record<string, string> = {
   PLAN_SALES_LED: 'That plan is arranged with our team, not bought online. Email kensaurus@gmail.com and we will set it up with you.',
   COMPLIMENTARY_ACCOUNT: 'This account is on a free complimentary plan, so there is nothing to pay.',
   ALREADY_SUBSCRIBED:
-    'This project already has a paid plan. Use Change plan to switch between Indie and Pro or between monthly and annual.',
+    'This project already has a paid plan. Use Change plan to switch between Builder and Studio or between monthly and annual.',
   NO_SUBSCRIPTION: 'This project has no paid plan to change. Pick a plan to start one.',
   SUBSCRIPTION_NOT_CHANGEABLE:
     'This subscription has an unpaid invoice or is not active. Open Manage billing to settle it, then change the plan.',
-  PLAN_NOT_SELF_SERVE: 'Only Indie and Pro can be changed here. For Enterprise, use "Contact us" on the Plans tab.',
+  PLAN_NOT_SELF_SERVE: 'Only Builder and Studio can be changed here. For Enterprise, use "Contact us" on the Plans tab.',
   NO_CHANGE: 'The project is already on that plan and billing interval.',
   PAYMENT_FAILED:
     'Your card was declined for the prorated charge, so the plan did not change. Update the card in Manage billing and try again.',

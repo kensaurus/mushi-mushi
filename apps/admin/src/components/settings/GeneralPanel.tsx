@@ -94,7 +94,7 @@ interface ProjectSettings {
   /** Branch name template for fix-worker PRs: <type>/MUSHI-{reportId}-… plus {category}, {date}, {shortId}. */
   fix_branch_template?: string
   /** "Bug reports by Mushi" mark on the feedback widget. `null`/absent =
-   *  plan default (on for Free Cloud, off for paid and self-host). */
+   *  plan default (on for Free, off for paid and self-host). */
   widget_brand_footer?: boolean | null
   /** Linked Supabase project (20-char ref). The token is a key under AI keys. */
   supabase_project_ref?: string | null
@@ -626,7 +626,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
         <SettingsRow
           icon={<IconChat size={16} />}
           title="“Bug reports by Mushi” line"
-          purpose="A small line at the foot of the widget that links to Mushi. On by default for Free Cloud, off for paid and self-hosted."
+          purpose="A small line at the foot of the widget that links to Mushi. On by default for Free, off for paid and self-hosted."
         >
           <SelectField
             label="Show the line"
@@ -634,7 +634,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             value={brandFooterToChoice(settings.widget_brand_footer)}
             onChange={(e) => update({ widget_brand_footer: choiceToBrandFooter(e.target.value as BrandFooterChoice) })}
           >
-            <option value="default">Plan default (on for Free Cloud, off for paid and self-host)</option>
+            <option value="default">Plan default (on for Free, off for paid and self-host)</option>
             <option value="on">Always show</option>
             <option value="off">Never show</option>
           </SelectField>

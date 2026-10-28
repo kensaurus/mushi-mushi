@@ -133,7 +133,7 @@ export function buildUsageForecast(
 
 /**
  * Header chip on the Billing page: the active plan and its monthly quota —
- * "Pro: 2,000 diagnoses / mo", "Hobby: 1,000 reports / mo", "Enterprise:
+ * "Studio: 5,000 diagnoses / mo", "Free: 100 diagnoses / mo", "Enterprise:
  * unlimited". Diagnoses win over reports when the plan meters both.
  */
 export function formatPlanQuotaChip(
