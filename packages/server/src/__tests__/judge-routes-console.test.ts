@@ -172,7 +172,7 @@ describe('64c2b3df "recent" disagreement share is really recent', () => {
     expect(graded).toBe(20)
   })
 
-  it('says "in the last 14 days" when the recent share is high', async () => {
+  it('names that week when its disagreement share is high', async () => {
     const rows: Row[] = Array.from({ length: 6 }, (_, i) =>
       evaluation(400 + i, { classification_agreed: i >= 3, created_at: ago(3) }),
     )
@@ -182,8 +182,30 @@ describe('64c2b3df "recent" disagreement share is really recent', () => {
     )
     const d = (await get('/v1/admin/judge/stats')).json.data
     expect(d.topPriority).toBe('disagreements')
-    expect(d.topPriorityLabel).toContain('50% of the 6 grades in the last 14 days')
-    expect(d.topPriorityLabel).not.toMatch(/recent grades/)
+    expect(d.topPriorityLabel).toMatch(/50% of the 6 grades in the week of /)
+    expect(d.topPriorityLabel).not.toMatch(/recent/)
+    expect(d.topPriorityTo).toContain('filter=disagreement')
+    expect(d.topPriorityTo).toContain('from=')
+  })
+
+  it('names the latest week, not the all-time share', async () => {
+    // 10 disagreements 60 days ago, then 7 of 10 this week. All-time is 85%.
+    const rows: Row[] = [
+      ...Array.from({ length: 10 }, (_, i) => evaluation(500 + i, { classification_agreed: false, created_at: ago(60) })),
+      ...Array.from({ length: 7 }, (_, i) => evaluation(600 + i, { classification_agreed: false, created_at: ago(1) })),
+      ...Array.from({ length: 3 }, (_, i) => evaluation(700 + i, { created_at: ago(1) })),
+    ]
+    db = makeFakeDb(
+      { classification_evaluations: rows, reports: [], prompt_versions: [] },
+      { rpc: () => [{ week_start: '2026-10-26', avg_score: 0.9, eval_count: 10 }] },
+    )
+    const d = (await get('/v1/admin/judge/stats')).json.data
+    expect(d.disagreementCount).toBe(17)
+    expect(d.disagreementRatePct).toBe(85)
+    expect(d.topPriority).toBe('disagreements')
+    expect(d.topPriorityLabel).toContain('70% of the 10 grades this week')
+    expect(d.topPriorityLabel).not.toContain('85%')
+    expect(d.topPriorityLabel).not.toMatch(/recent/)
   })
 })
 

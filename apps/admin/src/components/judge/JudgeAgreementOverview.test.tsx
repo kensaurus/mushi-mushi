@@ -26,8 +26,10 @@ vi.mock('../../lib/usePageData', () => ({
 }))
 
 import { JudgeAgreementOverview, agreementPoints } from './JudgeAgreementOverview'
+import { judgeDisagreementBannerTitle } from './JudgeStatusBanner'
 import { judgeStatusSentence } from './JudgeSnapshotStrip'
-import { EMPTY_JUDGE_STATS, type JudgeStats } from './JudgeStatsTypes'
+import { EMPTY_JUDGE_STATS, judgeDisagreementHref, type JudgeStats } from './JudgeStatsTypes'
+import { judgeDisagreementHint } from '../../lib/humanPageHints'
 
 let host: HTMLDivElement
 let root: Root
@@ -124,5 +126,43 @@ describe('judgeStatusSentence', () => {
     expect(judgeStatusSentence(base)).toBe(
       'Diagnoses scored 66% this week across 53 grades. So far the grader disagreed with 18 of 57 diagnoses (32%).',
     )
+  })
+
+  it('shows the latest week, not the all-time rate, when both exist', () => {
+    const monday = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()))
+    monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7))
+    const weekStart = monday.toISOString().slice(0, 10)
+    // 76/144 is 53% all-time. The same 144 grades sit inside 14 days, so that
+    // window is not "recent". This week is 63 of 100.
+    const stats: JudgeStats = {
+      ...base,
+      totalEvaluations: 144,
+      disagreementCount: 76,
+      disagreementRatePct: 53,
+      latestWeekScore: 0.8,
+      latestWeekLabel: 'this week',
+      latestWeekEvalCount: 100,
+      recentWindowDays: 14,
+      recentEvaluations: 144,
+      recentDisagreements: 76,
+      agreementWeeks: [
+        { weekStart: '2020-01-06', graded: 44, agreed: 31 },
+        { weekStart, graded: 100, agreed: 37 },
+      ],
+    }
+    expect(judgeStatusSentence(stats)).toBe(
+      'Diagnoses scored 80% this week across 100 grades. This week the grader disagreed with 63 of 100 diagnoses (63%).',
+    )
+    expect(judgeDisagreementBannerTitle(stats, false)).toBe('63% disagreement rate this week')
+    expect(judgeDisagreementBannerTitle(stats, true)).toBe('63% of grades this week disagree with the classifier')
+    expect(judgeDisagreementHint(63, 'this week')).toBe(
+      'The judge disagreed with the classifier on 63% of grades this week. Review mismatches before merging fixes.',
+    )
+    const q = new URLSearchParams(judgeDisagreementHref(stats).split('?')[1])
+    expect(q.get('tab')).toBe('evaluations')
+    expect(q.get('disagreement')).toBeNull()
+    expect(q.get('filter')).toBe('disagreement')
+    expect(q.get('from')).toBe(`${weekStart}T00:00:00.000Z`)
+    expect(Date.parse(q.get('to')!) - Date.parse(q.get('from')!)).toBe(7 * 86_400_000 - 1)
   })
 })

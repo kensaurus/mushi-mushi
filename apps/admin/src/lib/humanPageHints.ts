@@ -36,8 +36,9 @@ export function triageBacklogHint(count: number): string {
     : 'These reports are waiting for triage. Triage the oldest first so auto-fix can pick them up.'
 }
 
-export function judgeDisagreementHint(ratePct: number): string {
-  return `The judge disagreed with the classifier on ${ratePct}% of recent grades. Review mismatches before merging fixes.`
+/** `windowPhrase` names the count (`this week`, `in the last 14 days`, `so far`). */
+export function judgeDisagreementHint(ratePct: number, windowPhrase: string): string {
+  return `The judge disagreed with the classifier on ${ratePct}% of grades ${windowPhrase}. Review mismatches before merging fixes.`
 }
 
 export function llmErrorsHint(ratePct: number): string {

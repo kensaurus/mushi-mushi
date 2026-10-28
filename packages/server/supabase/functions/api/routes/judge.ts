@@ -84,6 +84,74 @@ function agreementSummary(rows: AgreementRow[], now: number) {
   };
 }
 
+type DisagreementShare = {
+  rate: number;
+  graded: number;
+  /** Fits after "on": "70% of the 10 grades this week". */
+  text: string;
+  from: string | null;
+  to: string | null;
+};
+
+/** Inclusive UTC range of the calendar week that starts on `weekStart` (Monday). */
+function weekRangeIso(weekStart: string): { from: string; to: string } | null {
+  const start = Date.parse(`${weekStart.slice(0, 10)}T00:00:00.000Z`);
+  if (!Number.isFinite(start)) return null;
+  return {
+    from: new Date(start).toISOString(),
+    to: new Date(start + 7 * 86_400_000 - 1).toISOString(),
+  };
+}
+
+/**
+ * The share the banner names. The latest week with enough grades wins:
+ * a 14-day window that holds every grade is the all-time rate, which the
+ * banner used to call "recent" (64c2b3df).
+ */
+function disagreementShareForBanner(
+  agreement: ReturnType<typeof agreementSummary> | null,
+  disagreementRatePct: number | null,
+  totalEvaluations: number,
+): DisagreementShare | null {
+  const week = agreement?.agreementWeeks.length
+    ? agreement.agreementWeeks[agreement.agreementWeeks.length - 1]
+    : undefined;
+  if (week && week.graded >= 5) {
+    const disagreed = Math.max(0, week.graded - week.agreed);
+    const rate = Math.round((disagreed / week.graded) * 100);
+    const label = judgeWeekLabel(week.weekStart);
+    const when = label === 'this week' ? 'this week' : `in the ${label}`;
+    const bounds = weekRangeIso(week.weekStart);
+    return {
+      rate,
+      graded: week.graded,
+      text: `${rate}% of the ${week.graded} grades ${when}`,
+      from: bounds?.from ?? null,
+      to: bounds?.to ?? null,
+    };
+  }
+  if (agreement && agreement.recentEvaluations >= 5) {
+    const rate = Math.round((agreement.recentDisagreements / agreement.recentEvaluations) * 100);
+    return {
+      rate,
+      graded: agreement.recentEvaluations,
+      text: `${rate}% of the ${agreement.recentEvaluations} grades in the last ${RECENT_DAYS} days`,
+      from: null,
+      to: null,
+    };
+  }
+  if (disagreementRatePct != null && totalEvaluations >= 5) {
+    return {
+      rate: disagreementRatePct,
+      graded: totalEvaluations,
+      text: `${disagreementRatePct}% of all ${totalEvaluations} grades so far`,
+      from: null,
+      to: null,
+    };
+  }
+  return null;
+}
+
 export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
   // GET /v1/admin/judge/stats — posture banner + JUDGE SNAPSHOT.
   app.get('/v1/admin/judge/stats', jwtAuth, async (c) => {
@@ -226,6 +294,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
       totalEvaluations > 0
         ? Math.round((disagreementCount / totalEvaluations) * 100)
         : null;
+    const disagreementShare = disagreementShareForBanner(agreement, disagreementRatePct, totalEvaluations);
 
     const lastEvalAt = lastEvalRes.data?.created_at ?? null;
     let staleHours: number | null = null;
@@ -257,19 +326,17 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
       topPriority = 'drifting';
       topPriorityLabel = `Scores dropped ${weekOverWeekDriftPct}% week-over-week — review mismatches before merging fixes.`;
       topPriorityTo = scoped('/judge?tab=evaluations&filter=disagreement');
-    } else if (
-      agreement && agreement.recentEvaluations >= 5
-        ? (agreement.recentDisagreements / agreement.recentEvaluations) * 100 >= 20
-        : disagreementRatePct != null && disagreementRatePct >= 20
-    ) {
+    } else if (disagreementShare && disagreementShare.rate >= 20) {
       topPriority = 'disagreements';
-      // Say which window the share covers: the old label said "recent" over
-      // an all-time count (64c2b3df).
-      topPriorityLabel =
-        agreement && agreement.recentEvaluations >= 5
-          ? `The grader disagreed with the diagnosis on ${Math.round((agreement.recentDisagreements / agreement.recentEvaluations) * 100)}% of the ${agreement.recentEvaluations} grades in the last ${RECENT_DAYS} days. Review them before merging their fixes.`
-          : `The grader disagreed with the diagnosis on ${disagreementRatePct}% of all ${totalEvaluations} grades so far. Review them before merging their fixes.`;
-      topPriorityTo = scoped('/judge?tab=evaluations&filter=disagreement');
+      // Name the week the chart is on. "Recent" over the all-time count
+      // showed 76/144 while that week was a different rate (64c2b3df).
+      topPriorityLabel = `The grader disagreed with the diagnosis on ${disagreementShare.text}. Review them before merging their fixes.`;
+      const q = new URLSearchParams({ tab: 'evaluations', filter: 'disagreement' });
+      if (disagreementShare.from && disagreementShare.to) {
+        q.set('from', disagreementShare.from);
+        q.set('to', disagreementShare.to);
+      }
+      topPriorityTo = scoped(`/judge?${q.toString()}`);
     } else if (staleHours != null && staleHours > 72 && ungradedReports > 0) {
       topPriority = 'stale';
       topPriorityLabel = `Last judge run was ${staleHours}h ago and ${ungradedReports} report${ungradedReports === 1 ? ' is' : 's are'} waiting — run again so you know triage quality still holds.`;
