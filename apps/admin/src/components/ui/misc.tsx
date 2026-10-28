@@ -128,6 +128,11 @@ interface DisclosurePanelProps {
   children: ReactNode
   /** Trailing affordance beside the title (status dots, badges). */
   trailing?: ReactNode
+  /**
+   * Accessible name for the toggle. CSS gap between `title` and `trailing`
+   * is visual only, so the button name otherwise glues those strings together.
+   */
+  accessibleName?: string
 }
 
 /**
@@ -141,6 +146,7 @@ export function DisclosurePanel({
   onOpenChange,
   children,
   trailing,
+  accessibleName,
 }: DisclosurePanelProps) {
   const [internalOpen, setInternalOpen] = useState(defaultOpen)
   const open = controlledOpen ?? internalOpen
@@ -154,6 +160,7 @@ export function DisclosurePanel({
       <button
         type="button"
         aria-expanded={open}
+        aria-label={accessibleName}
         onClick={() => setOpen(!open)}
         className="flex w-full items-center justify-between gap-3 rounded-md px-4 py-3 text-sm font-medium text-fg hover:bg-surface-hover motion-safe:transition-opacity focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
       >
