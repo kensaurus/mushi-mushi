@@ -19,12 +19,12 @@ on {{AppName}} (only the pages anyone can open) and two things stood out:
 Full report (free, no sign-up): {{report link}}
 
 I built Mushi for exactly this: your users report a bug in the app, it
-explains what broke and opens a reviewed fix PR. It runs my own 9 apps
-(231 fixes merged in 60 days).
+explains what broke and opens a reviewed fix PR. It runs my own 9 apps:
+232 fixes merged in the last 60 days, and the median time from a user's
+report to a fix PR is 3.3 hours.
 
 If you'd like, I'll set it up on {{AppName}} with you on a 20-minute call.
-The first 25 builders keep $29/month for life, and if a real user's bug isn't
-explained with a fix PR open within 24 hours, that month is free.
+The first 25 builders keep $29/month for life.
 
 — Kenji
 

@@ -12,7 +12,7 @@ the owner approves each phase. Written 2026-10-28; numbers queried that day._
 | Outside apps that ever sent a real report | 0 | reports |
 | Launches ever (HN, PH, Reddit) | 0 | critical audit 2026-10-27 |
 | Landing visits measured | 0 (tracker waits for consent) | product_events |
-| **Proof on the owner's 9 live apps, last 60 days** | **676 user bug reports from 314 people; 231 fixes merged; median 26 h from report to merged fix; 738 AI reviews, 265 of them "do not merge"** | reports, fix_attempts, fix_reviews |
+| **Proof on the owner's 9 live apps, last 60 days** | **676 user bug reports from 314 people; 231 fixes merged (232 by evening); median 26 h from report to merged fix, 3.3 h to a fix PR; 738 AI reviews, 265 of them "do not merge"** | reports, fix_attempts, fix_reviews |
 | Price | Free (1 app, 100 diagnoses) / Builder $29 (3 apps, 1,000) / Studio $79 (10 apps, 3,000) / Enterprise from $499, live 2026-10-28 | pricing_plans, Stripe |
 
 ## 1b. Does it pay for itself? (unit economics, measured 2026-10-28)
@@ -95,7 +95,7 @@ it, with a reviewer that says no. $29 a month instead of a $3,500 rescue."*
 | | |
 |---|---|
 | **Free Production Check** (lead magnet, like the rescue shops' free diagnostic) | Paste your live URL → in 2 minutes: broken pages, console errors, missing security headers, a first-time-user walk-through with timings, all from public pages only. Email the report to yourself. Built on what exists: site watch, site audit, first-time user test, radar. Runs on Mushi's Firecrawl key with strict caps (1 per URL per day, 3 pages deep, captcha-free rate limit per IP). |
-| **Founding Builder** | $29/mo locked for life for the first 25 customers, plus a **24-hour fix promise**: if a real user's bug in your app isn't explained and a fix PR opened within 24 h, the month is free. Our own median is 26 h *to merge*; PR-open is faster [verify before publishing]. |
+| **Founding Builder** | $29/mo locked for life for the first 25 customers. **No 24-hour guarantee** (decided 2026-10-28): on the owner's apps the median from a user's report to a fix PR is 3.3 h, but only 72% of actionable reports got a PR within 24 h, so a month-free promise would break about 1 time in 4. Say the measured median instead. |
 | **Done-with-you onboarding** | A 20-minute call where the owner installs Mushi on their live app with them. This is how the first 10 are won. |
 
 ## 5. Channels, ranked for 10 paid in 33 days
@@ -124,7 +124,7 @@ Product Hunt waits until December, after the funnel converts.
 4. **Public scoreboard page** with the live 60-day numbers above
    (aggregates only; no app or user detail without the owner's say-so).
 5. **Founding offer** in Stripe: a "Founding Builder" coupon (price lock) and
-   the 24-hour promise wording in the terms.
+   no fix-time guarantee (see the offer row); the measured median goes in the copy instead.
 
 ## 7. Calendar (to 2026-11-30)
 
@@ -146,7 +146,7 @@ the wedge is wrong, stop building and interview.
 | # | Decision | My recommendation |
 |---|---|---|
 | D1 | Add the offer sub-hero to the canonical tagline ladder | Yes |
-| D2 | Founding Builder: $29 locked for life + 24-hour fix promise | Yes, capped at 25 |
+| D2 | Founding Builder: $29 locked for life (24-hour promise dropped 2026-10-28: 72% met, measured) | Yes, capped at 25 |
 | D3 | Free Production Check on Mushi's own Firecrawl key, capped | Yes (≈2–5 credits per check) |
 | D4 | Public scoreboard with your 9 apps' aggregate numbers | Yes, aggregates only |
 | D5 | You do the outreach and calls yourself (founder-led); I draft every message | Yes — this is what wins the first 10 |

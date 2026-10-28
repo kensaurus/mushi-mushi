@@ -1,5 +1,7 @@
 # Reddit — drafts (owner posts; one subreddit per day; read each sub's self-promotion rule first)
 
+> **Before posting:** refresh every number from the live scoreboard (`/proof`, or `GET /v1/public/scoreboard`); they move daily. Don't promise a fix time; quote the measured median (3.3 h to a fix PR on 2026-10-28).
+
 ## r/vibecoding and r/lovable (story first, product last)
 
 **Title:** My AI agent fixed 231 bugs in my live apps. Another AI blocked 265 of its fixes. Here's what the bad ones looked like.

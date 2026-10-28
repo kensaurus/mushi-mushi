@@ -1,5 +1,7 @@
 # Show HN — draft (owner posts; Tue or Wed, ~8am PT)
 
+> **Before posting:** refresh every number from the live scoreboard (`/proof`, or `GET /v1/public/scoreboard`); they move daily. Don't promise a fix time; quote the measured median (3.3 h to a fix PR on 2026-10-28).
+
 **Title (78 chars max):**
 Show HN: I let AI fix 231 bugs in my 9 live apps – a second AI blocked 265
 
