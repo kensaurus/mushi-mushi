@@ -48,7 +48,7 @@ export function ProjectsSetupReadout({
     },
     {
       label: 'SDK heartbeat',
-      value: activeProjectSdkConnected ? 'Live on active project' : 'No heartbeat yet',
+      value: activeProjectSdkConnected ? 'Live on active project' : 'Not heard from yet',
       tone: activeProjectSdkConnected ? 'ok' : 'warn',
     },
     {

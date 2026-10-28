@@ -322,7 +322,7 @@ function SdkDiagnostic({ tone, lines }: { tone: 'ok' | 'warn' | 'info'; lines: s
       : tone === 'ok'
         ? `border-ok/30 ${CHIP_TONE.okSubtle}`
         : 'border-edge-subtle bg-surface-overlay/40 text-fg-secondary'
-  const label = tone === 'warn' ? 'Backend mismatch' : tone === 'ok' ? 'SDK heartbeat' : 'Heartbeat'
+  const label = tone === 'warn' ? 'Wrong server' : 'App check-in'
   return (
     <div className={`mt-1.5 rounded-sm border px-2 py-1 text-2xs ${palette}`}>
       <span className="mr-1.5 font-semibold uppercase tracking-wider">{label}</span>

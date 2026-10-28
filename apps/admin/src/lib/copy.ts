@@ -1468,7 +1468,7 @@ const COPY: CopyRegistry = {
     },
     '/onboarding': {
       title: 'Set up',
-      description: 'Three short steps: create a project, install the widget, send a test bug to see the loop run.',
+      description: 'Three short steps: create a project, install the widget, send a test bug to see it work.',
       sections: { snapshot: 'Setup snapshot' },
       statLabels: {
         required: 'Required steps',
@@ -1476,12 +1476,8 @@ const COPY: CopyRegistry = {
         reports: 'Reports',
         optional: 'Optional',
       },
-      tabLabels: {
-        overview: 'Overview',
-        steps: 'Steps',
-        verify: 'Verify',
-        sdk: 'SDK',
-      },
+      // No tabLabels: the page's own plain names apply ("All steps", "Test it",
+      // "Install"); "Steps / Verify / SDK" here overrode them (2026-10-28).
       help: {
         title: 'About setup',
         whatIsIt:

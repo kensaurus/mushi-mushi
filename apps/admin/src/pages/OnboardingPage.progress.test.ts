@@ -29,5 +29,22 @@ describe('Set up page progress', () => {
     const tabs = src.slice(src.indexOf('const ONBOARDING_TABS'), src.indexOf('function isOnboardingTab'))
     const labels = [...tabs.matchAll(/label: '([^']+)'/g)].map((m) => m[1])
     expect(labels).toEqual(['Overview', 'All steps', 'Test it', 'Install', 'Fix a problem'])
+    // Page copy overrides these names; the base copy used to put the old
+    // jargon back ("Steps", "Verify", "SDK"), so the page still showed it.
+    const copy = readFileSync(join(__dirname, '../lib/copy.ts'), 'utf8')
+    expect(copy).not.toMatch(/steps: 'Steps'|verify: 'Verify'|sdk: 'SDK'/)
+    expect(copy).not.toContain('see the loop run')
+  })
+
+  // "Heartbeat", "loop", "pipeline" and "report key" were jargon on the
+  // new-user path (integrator's walk, 2026-10-28).
+  it('says what happens in plain words on the new-user path', () => {
+    for (const phrase of ['evolution loop', 'Watch the loop', 'pipeline live', 'generate a report key']) {
+      expect(src, phrase).not.toContain(phrase)
+    }
+    const checklist = readFileSync(join(__dirname, '../components/SetupChecklist.tsx'), 'utf8')
+    expect(checklist).not.toMatch(/'(SDK heartbeat|Heartbeat|Backend mismatch)'/)
+    const readout = readFileSync(join(__dirname, '../components/onboarding/OnboardingSetupReadout.tsx'), 'utf8')
+    expect(readout).not.toContain('No heartbeat yet')
   })
 })

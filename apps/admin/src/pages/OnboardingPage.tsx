@@ -575,7 +575,7 @@ export function OnboardingPage() {
         icon={<IconBolt />}
         projectScope={stats.projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
-        description={copy?.description ?? 'Create a project, generate a report key, install the SDK, and watch your first bug get a plain-English read — target: under 2 minutes.'}
+        description={copy?.description ?? 'Create a project, make a key, install the SDK, and watch your first bug get a plain-English read — target: under 2 minutes.'}
         helpTitle={copy?.help?.title ?? 'About this wizard'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'A guided checklist that creates your first project, generates an API key, sends a test report, and shows the SDK snippet. Progress saves across devices.'}
         helpUseCases={copy?.help?.useCases ?? [
@@ -912,22 +912,21 @@ export function OnboardingPage() {
         </Card>
       )}
 
-      {/* "Show me one loop running" — demo the full 5-stage evolution loop.
+      {/* Follow the test bug from report to fix once it has gone through.
           Available once the pipeline is verified (test report passes). */}
       {project && testStatus === 'pass' && (
         <Card className="p-5 space-y-3 border border-ok/30 bg-ok/4">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-fg">See the evolution loop close</span>
+              <span className="text-sm font-semibold text-fg">Follow your test bug to a fix</span>
               <span className="inline-flex items-center gap-1 text-2xs font-medium text-ok">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-ok" />
-                pipeline live
+                working
               </span>
             </div>
             <p className="text-xs text-fg-muted mt-1">
-              Your test report is in the pipeline. Follow it through all 5 stages
-              — capture → classify → fix → verify → remember — to see exactly what
-              happens to a real user's bug.
+              Mushi is working on your test bug. Follow it from report to diagnosis
+              to fix to see what happens to a real user's bug.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -938,7 +937,7 @@ export function OnboardingPage() {
               size="sm"
               variant="primary"
             >
-              Watch the loop →
+              Follow the test bug →
             </Btn>
             <Link to="/judge" className="text-xs text-fg-muted underline hover:no-underline">
               See judge scores
