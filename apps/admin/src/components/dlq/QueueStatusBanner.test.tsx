@@ -9,7 +9,7 @@
  * problem still gets one.
  */
 
-import { act, createElement } from 'react'
+import { act, createElement, type ComponentType } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -34,9 +34,9 @@ afterEach(() => {
   container.remove()
 })
 
-function show(node: Parameters<typeof createElement>[0], props: object) {
+function show<P extends object>(node: ComponentType<P>, props: Partial<P>) {
   act(() => {
-    root.render(createElement(MemoryRouter, null, createElement(node, props)))
+    root.render(createElement(MemoryRouter, null, createElement(node as ComponentType<Partial<P>>, props)))
   })
 }
 
