@@ -13,7 +13,6 @@ import { fileURLToPath } from 'node:url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.join(__dirname, '..')
 const DIRS = [
-  'apps/admin/src/components/dashboard/HeroIntro.tsx',
   'apps/admin/src/components/hero-flow/HeroDetailPanel.tsx',
   'apps/admin/src/components/query/QueryPromptLibrary.tsx',
 ]

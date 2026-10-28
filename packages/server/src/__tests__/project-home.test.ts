@@ -25,6 +25,7 @@ import {
   normalizeRoute,
   pickLiveUrl,
   sdkSignal,
+  setupSignal,
   shouldAutoCapture,
   siteSignal,
   waitingBySeverity,
@@ -291,5 +292,26 @@ describe('app info', () => {
     expect(keyKind([])).toBe('other')
     expect(median([3, 1, 2])).toBe(2)
     expect(median([])).toBeNull()
+  })
+})
+
+describe('setupSignal (fresh-eyes, ADR 0053)', () => {
+  const run = { ttfv_seconds: 372, steps: 11, reached: 2, stalled_at: null, finished_at: '2026-10-27T21:00:00.000Z', counts: { sessions: 3 } }
+
+  it('shows nothing for an app that never ran one', () => {
+    expect(setupSignal({ run: null })).toBeNull()
+  })
+
+  it('reads minutes and steps, with the light by time', () => {
+    const s = setupSignal({ run })!
+    expect(s).toMatchObject({ id: 'setup', label: 'First-time setup', headline: '6 min, 11 steps', light: 'warn', href: '/ux-runs?tab=fresh-eyes' })
+    expect(s.detail).toBe('2 of 3 first-time visitors reached the goal in the last run.')
+    expect(setupSignal({ run: { ...run, ttfv_seconds: 200 } })!.light).toBe('good')
+    expect(setupSignal({ run: { ...run, ttfv_seconds: 1200 } })!.light).toBe('bad')
+  })
+
+  it('names the screen when nobody reached the goal', () => {
+    const s = setupSignal({ run: { ...run, reached: 0, ttfv_seconds: null, stalled_at: { screen: '/admin/login', reason: 'signup_wall' } } })!
+    expect(s).toMatchObject({ light: 'bad', headline: 'Stalls at /admin/login' })
   })
 })

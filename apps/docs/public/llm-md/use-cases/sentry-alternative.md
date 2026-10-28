@@ -34,6 +34,8 @@ asks you to rip anything out.
 
 ## Side by side
 
+  
+
 ## What "diagnosis" means here
 
 When a report lands, Mushi reads the report, the screenshot, and your repo,
