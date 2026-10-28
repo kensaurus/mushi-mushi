@@ -5,7 +5,8 @@
  * - "Add to Slack" OAuth button (per-project bot token flow)
  * - Channel picker (proxied conversations.list)
  * - Send-test button (channel_not_found / not_in_channel / is_archived say to
- *   reselect the channel or /invite the bot)
+ *   reselect the channel or /invite the bot; Send test resumes notifications
+ *   immediately after the bot is invited or the channel is unarchived)
  * - Health sparkline (slack probe from integration-probes)
  * - Legacy webhook URL fallback behind a <details>
  */
@@ -88,10 +89,10 @@ export function slackErrorToMessage(errorCode: string | undefined, rawMessage: s
     return 'This Slack channel was not found. It may have been deleted or belong to another workspace. Pick the channel again on Integrations.'
   }
   if (code === 'is_archived' || rawMessage === 'is_archived') {
-    return 'This Slack channel is archived. Pick another channel on Integrations.'
+    return 'This Slack channel is archived. Pick another channel, or unarchive it and run Send test to resume notifications immediately.'
   }
   if (code === 'not_in_channel' || rawMessage === 'not_in_channel') {
-    return 'The Mushi bot is not in this Slack channel. Invite it with /invite, or pick another channel.'
+    return 'The Mushi bot is not in this Slack channel. Invite it with /invite, then run Send test to resume notifications immediately.'
   }
   if (errorCode === 'missing_scope') {
     return "Your Slack app doesn't have 'channels:read' permission. Click \"Re-add to Slack\" below to reinstall with the correct scopes."

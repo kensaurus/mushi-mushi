@@ -58,11 +58,14 @@ function render() {
 describe('slackErrorToMessage', () => {
   it('tells the user to reselect a missing or archived channel', () => {
     expect(slackErrorToMessage('channel_not_found', '')).toMatch(/pick the channel again/i)
-    expect(slackErrorToMessage('is_archived', '')).toMatch(/pick another channel/i)
+    expect(slackErrorToMessage('is_archived', '')).toMatch(/unarchive/i)
+    expect(slackErrorToMessage('is_archived', '')).toMatch(/run Send test to resume/)
   })
 
-  it('tells the user to invite the bot when it is not in the channel', () => {
-    expect(slackErrorToMessage('not_in_channel', '')).toMatch(/\/invite/)
+  it('tells the user to invite the bot, then Send test, when it is not in the channel', () => {
+    const message = slackErrorToMessage('not_in_channel', '')
+    expect(message).toMatch(/\/invite/)
+    expect(message).toMatch(/run Send test to resume/)
   })
 
   it('shows the sentence the test endpoint already wrote', () => {
@@ -70,6 +73,54 @@ describe('slackErrorToMessage', () => {
     const invite = 'The Mushi bot is not in Slack channel C0PRIVATE. Invite it with /invite, or pick another channel.'
     expect(slackErrorToMessage('SLACK_API_ERROR', missing)).toBe(missing)
     expect(slackErrorToMessage('SLACK_API_ERROR', invite)).toBe(invite)
+  })
+})
+
+describe('SlackIntegrationCard when the bot cannot post', () => {
+  it('shows that Send test resumes notifications after the bot is invited', async () => {
+    mocks.apiFetch.mockResolvedValue({
+      ok: false,
+      error: { code: 'not_in_channel', message: 'not_in_channel' },
+    })
+    act(() => {
+      root.render(createElement(SlackIntegrationCard, {
+        projectId: 'p1',
+        slackConfigured: true,
+        teamName: 'Acme',
+        canPost: true,
+      }))
+    })
+    await act(async () => {
+      await flush()
+    })
+    expect(host.textContent).toMatch(/run Send test to resume notifications immediately/)
+  })
+
+  it('shows the same hint from a down probe, including a normal channel id', async () => {
+    mocks.apiFetch.mockResolvedValue({ ok: true, data: { channels: [] } })
+    const message = 'The Mushi bot is not in Slack channel C0123456789. Invite it with /invite, then run Send test to resume notifications immediately.'
+    act(() => {
+      root.render(createElement(SlackIntegrationCard, {
+        projectId: 'p1',
+        slackConfigured: true,
+        teamName: 'Acme',
+        canPost: true,
+        channelId: 'C0123456789',
+        latestProbe: {
+          id: 'h1',
+          kind: 'slack',
+          status: 'down',
+          latency_ms: 12,
+          message,
+          source: 'cron',
+          checked_at: new Date().toISOString(),
+        },
+      }))
+    })
+    await act(async () => {
+      await flush()
+    })
+    expect(host.textContent).toContain('run Send test to resume notifications immediately')
   })
 })
 

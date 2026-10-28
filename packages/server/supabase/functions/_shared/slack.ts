@@ -730,10 +730,14 @@ export function slackChannelUnusableCopy(error: string, channel?: string): strin
   }
   if (error === 'not_in_channel') {
     const where = channel ? `Slack channel ${channel}` : 'this Slack channel'
-    return `The Mushi bot is not in ${where}. Invite it with /invite, or pick another channel.`
+    // Kept under 160 characters with a normal channel id: the Slack card
+    // clips probe messages there, and this sentence is that status line.
+    // "Send test" writes an ok health row, so notifications resume at once
+    // instead of waiting out the hour cooldown.
+    return `The Mushi bot is not in ${where}. Invite it with /invite, then run Send test to resume notifications immediately.`
   }
   if (error === 'is_archived') {
-    return `${named} is archived. Pick another channel on Integrations.`
+    return `${named} is archived. Pick another channel, or unarchive it and run Send test to resume notifications immediately.`
   }
   return null
 }

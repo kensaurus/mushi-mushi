@@ -46,6 +46,7 @@ import {
 import { lookupGithubRepoFacts } from '../_shared/github-branch.ts'
 import { resolveProjectGithubToken } from '../_shared/github.ts'
 import { runRadarPass } from './radar-pass.ts'
+import { insertIntegrationHealthHistory } from '../_shared/integration-health-insert.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -147,7 +148,7 @@ function routingTypeToKind(type: string): IntegrationKind | null {
 // Handler
 // ──────────────────────────────────────────────────────────────────────────
 
-async function handler(req: Request): Promise<Response> {
+export async function handler(req: Request): Promise<Response> {
   const authResult = requireServiceRoleAuth(req)
   if (authResult) return authResult
 
@@ -386,11 +387,13 @@ async function handler(req: Request): Promise<Response> {
     historyRows.push(...healthRowsFromOutcomes(byokOutcomes))
     probed += byokOutcomes.length
 
-    // Bulk insert all history rows in one round-trip. A failed insert fails
-    // the run: the console's status chips read these rows.
+    // One insert for the whole tick. A missing `detail` column (function
+    // deployed before migration 20261029020000) must not drop every row:
+    // insertIntegrationHealthHistory retries the batch without that key.
+    // Any other failure still fails the run. The console's status chips
+    // read these rows.
     if (historyRows.length > 0) {
-      const { error: insertErr } = await db.from('integration_health_history').insert(historyRows)
-      if (insertErr) throw new Error(`integration_health_history insert failed: ${insertErr.message}`)
+      await insertIntegrationHealthHistory(db, historyRows)
     }
     if (byokPatchFailures.length > 0) {
       throw new Error(
