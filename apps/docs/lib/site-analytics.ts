@@ -125,6 +125,24 @@ export function parseUtm(search: string): UtmParams {
   return out
 }
 
+/**
+ * Same shape the console stores as the signup source (signupAttribution.ts
+ * cleanFirstTouchSource) and the server keeps per page view
+ * (_shared/landing-visits.ts cleanVisitSrc).
+ */
+const LANDING_SRC_RE = /^[a-z0-9][a-z0-9_.:-]{0,63}$/
+
+/**
+ * The visit's inbound campaign tag: `?src=` (what launch posts and outreach
+ * links carry), else `utm_source`, lowercased. Null when absent or not a
+ * short slug.
+ */
+export function readLandingSrc(search: string): string | null {
+  const params = new URLSearchParams(search)
+  const raw = (params.get('src') ?? params.get('utm_source'))?.trim().toLowerCase()
+  return raw && LANDING_SRC_RE.test(raw) ? raw : null
+}
+
 /** Origin + path only — a referrer's query string can carry someone else's tokens. @internal */
 export function sanitizeReferrer(referrer: string): string {
   if (!referrer) return ''
@@ -233,8 +251,11 @@ export function buildFirstTouch(input: {
   now?: Date
 }): FirstTouch {
   const utm = parseUtm(input.search)
+  // A launch link carries `?src=` (docs/plan-gtm-november-2026.md §6.1);
+  // utm_source still wins when both are present.
+  const source = utm.utm_source ?? readLandingSrc(input.search) ?? undefined
   return {
-    ...(utm.utm_source ? { utm_source: utm.utm_source } : {}),
+    ...(source ? { utm_source: source } : {}),
     ...(utm.utm_medium ? { utm_medium: utm.utm_medium } : {}),
     ...(utm.utm_campaign ? { utm_campaign: utm.utm_campaign } : {}),
     referrer: sanitizeReferrer(input.referrer),
@@ -367,6 +388,13 @@ export interface SignupDecoration {
    */
   firstTouch?: FirstTouch | null
   /**
+   * This visit's inbound campaign tag (`?src=`, else `utm_source`, from
+   * {@link readLandingSrc}), held in memory for the visit. Forwarded as
+   * `ft_src` when no consented first touch exists: it comes from the page
+   * URL, not device storage, so it rides without consent like `landingRef`.
+   */
+  landingSrc?: string | null
+  /**
    * The `?ref=` this page load arrived with, forwarded unchanged. The widget's
    * "Bug reports by Mushi" mark puts the host project's hash there; the
    * console decides whether it is a loop ref (signupAttribution.isLoopRef).
@@ -381,6 +409,10 @@ export interface SignupDecoration {
  * the console reads `ref=` as a growth-loop referral, and until 2026-09-22 a
  * `ref=<utm_source>` here turned every UTM visitor who signed up into a loop
  * signup while a real widget ref was overwritten.
+ *
+ * When there is no consented first touch, this visit's inbound `?src=`
+ * (`landingSrc`) becomes `ft_src`, so a visitor from a launch post who never
+ * answers the consent bar is still attributed (signup_first_touch).
  *
  * `src=` and the landing `ref=` come from the page itself (the clicked
  * button and this page load's URL), are not personal, and read nothing from
@@ -404,7 +436,8 @@ export function decorateSignupHref(href: string, input: SignupDecoration): strin
   }
   setIfAbsent('src', input.ctaId)
   const touch = input.consent === 'granted' ? input.firstTouch : null
-  setIfAbsent('ft_src', touch?.utm_source)
+  // The stored first touch came first, so it wins over this visit's tag.
+  setIfAbsent('ft_src', touch?.utm_source ?? input.landingSrc)
   setIfAbsent('utm_source', touch?.utm_source)
   setIfAbsent('utm_medium', touch?.utm_medium)
   setIfAbsent('utm_campaign', touch?.utm_campaign)
@@ -426,4 +459,39 @@ export function dntActive(
   if (nav.globalPrivacyControl === true) return true
   const dnt = nav.doNotTrack ?? nav.msDoNotTrack ?? win?.doNotTrack
   return dnt === '1' || dnt === 'yes'
+}
+
+// ─── Cookieless page-view beacon ─────────────────────────────────────────────
+
+/**
+ * POST /v1/public/page-view on the configured API base, or null when the
+ * site has no API endpoint (forks). The beacon needs no project key.
+ */
+export function pageViewBeaconUrl(apiEndpoint: string | null | undefined): string | null {
+  const base = apiEndpoint?.trim().replace(/\/+$/, '')
+  return base ? `${base}/v1/public/page-view` : null
+}
+
+/**
+ * The beacon body: the site path, this visit's `?src=` tag and the referrer's
+ * host name only. Nothing else leaves the browser and nothing is stored on
+ * the device, so it needs no consent; the server keeps a daily count per
+ * (path, src, referrer host) and no IP or id (landing_page_views_daily).
+ * A referrer on this site is dropped: a click between pages is not a source.
+ */
+export function pageViewBeaconBody(input: {
+  pathname: string
+  src: string | null
+  referrer: string
+  siteHost: string
+}): string {
+  const body: { path: string; src?: string; ref?: string } = { path: normalizePathname(input.pathname) }
+  if (input.src) body.src = input.src
+  try {
+    const host = input.referrer ? new URL(input.referrer).hostname.toLowerCase() : ''
+    if (host && host !== input.siteHost.toLowerCase()) body.ref = host
+  } catch {
+    /* unparseable referrer: send none */
+  }
+  return JSON.stringify(body)
 }

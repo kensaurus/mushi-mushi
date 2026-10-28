@@ -84,6 +84,7 @@ import { registerIdentitySecretRoutes } from './routes/identity-secret.ts';
 import { registerSessionRoutes } from './routes/sessions.ts';
 import { registerEventRoutes } from './routes/events.ts';
 import { registerGrowthRoutes } from './routes/growth.ts';
+import { forwardPageView } from './page-view-forward.ts';
 import { registerEventsAdminRoutes } from './routes/events-admin.ts';
 import { registerLifecycleEmailRoutes } from './routes/lifecycle-emails.ts';
 import { registerSlackEventsRoutes } from './routes/slack-events.ts';
@@ -802,6 +803,11 @@ registerIdentitySecretRoutes(app);
 registerSessionRoutes(app);
 registerEventRoutes(app);
 registerGrowthRoutes(app);
+// Daily GTM scorecard and the cookieless landing page-view beacon
+// (landing-visits.ts in api-ext; api only hashes the visitor IP into the
+// beacon's rate-limit bucket, page-view-forward.ts).
+forwardToApiExt(['/v1/admin/growth/daily']);
+app.post('/v1/public/page-view', forwardPageView);
 registerEventsAdminRoutes(app);
 registerLifecycleEmailRoutes(app);
 registerSlackEventsRoutes(app);

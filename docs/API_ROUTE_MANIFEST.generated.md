@@ -8,7 +8,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 216 |
+| `adminOrApiKey` | 217 |
 | `apiKeyAuth` | 59 |
 | `jwtAuth` | 405 |
 | `jwtOrApiKey` | 3 |
@@ -187,6 +187,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/graph/traverse` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/graph-query.ts` |
 | GET | `/v1/admin/groups` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | POST | `/v1/admin/groups/:id/merge` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
+| GET | `/v1/admin/growth/daily` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/landing-visits.ts` |
 | GET | `/v1/admin/growth/funnel` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/growth.ts` |
 | GET | `/v1/admin/health/cron` | `jwtAuth` | `packages/server/supabase/functions/api/routes/health.ts` |
 | POST | `/v1/admin/health/cron/:job/trigger` | `jwtAuth` | `packages/server/supabase/functions/api/routes/health.ts` |

@@ -21,8 +21,10 @@
  *          roadmap, submission and redemption review, Tremendous webhook),
  *          the per-app Home, setup gaps and the release batch (console ops
  *          plan P1), local workers (`mushi work --daemon`, ADR 0048), repo clean-up (ADR 0051)
- *          fresh-eyes runs (ADR 0053), and the public free Production Check and
- *          scoreboard (docs /check and /proof, GTM plan November 2026).
+ *          fresh-eyes runs (ADR 0053), the public free Production Check and
+ *          scoreboard (docs /check and /proof, GTM plan November 2026), and the
+ *          cookieless landing page-view count with the daily GTM scorecard
+ *          (landing-visits.ts).
  */
 
 import { Hono } from 'npm:hono@4'
@@ -62,6 +64,7 @@ import { registerRepoHousekeepingRoutes } from '../api/routes/repo-housekeeping.
 import { registerFreshEyesRoutes } from '../api/routes/fresh-eyes.ts'
 import { registerProductionCheckRoutes } from '../api/routes/production-check.ts'
 import { registerPublicScoreboardRoutes } from '../api/routes/public-scoreboard.ts'
+import { registerLandingVisitRoutes } from '../api/routes/landing-visits.ts'
 
 ensureSentry('api-ext')
 
@@ -103,6 +106,7 @@ registerRepoHousekeepingRoutes(app)
 registerFreshEyesRoutes(app)
 registerProductionCheckRoutes(app)
 registerPublicScoreboardRoutes(app)
+registerLandingVisitRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 
