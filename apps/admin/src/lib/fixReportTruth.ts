@@ -33,6 +33,76 @@ const PROVIDER_ROUTE: Record<string, string> = {
   github: '/integrations/config',
 }
 
+/**
+ * Statuses a live attempt can have. Same set as the server's
+ * `LIVE_ATTEMPT_STATUSES` in `_shared/fix-report-truth.ts`: a row inserted
+ * as `pending` (or still `dispatched`) is in flight before the worker
+ * moves it to `running`.
+ */
+const IN_FLIGHT_ATTEMPT_STATUSES: ReadonlySet<string> = new Set(['queued', 'running', 'pending', 'dispatched'])
+
+/**
+ * This attempt is in flight for the report's current state. A live status
+ * on a report a merged PR already fixed does not count: the server's
+ * `resolved` check wins over a leftover pending row.
+ */
+export function countsAsInFlight(fix: Pick<FixAttempt, 'status' | 'report_fix_state'>): boolean {
+  if (fix.report_fix_state === 'resolved') return false
+  return IN_FLIGHT_ATTEMPT_STATUSES.has((fix.status ?? '').toLowerCase())
+}
+
+/** Reports (not attempts) with a live attempt in `fixes`. */
+export function inFlightReportCount(
+  fixes: ReadonlyArray<Pick<FixAttempt, 'report_id' | 'status' | 'report_fix_state'>>,
+): number {
+  const ids = new Set<string>()
+  for (const fix of fixes) if (countsAsInFlight(fix)) ids.add(fix.report_id)
+  return ids.size
+}
+
+/**
+ * Queued or running dispatches whose report has no live attempt in `fixes`.
+ * A dispatch that already has a pending/running attempt is not counted
+ * again.
+ */
+export function extraInFlightDispatches(
+  fixes: ReadonlyArray<Pick<FixAttempt, 'report_id' | 'status' | 'report_fix_state'>>,
+  dispatches: ReadonlyArray<{ report_id?: string | null; status?: string | null }>,
+): number {
+  const live = new Set<string>()
+  for (const fix of fixes) if (countsAsInFlight(fix)) live.add(fix.report_id)
+  const extra = new Set<string>()
+  for (const dispatch of dispatches) {
+    const status = (dispatch.status ?? '').toLowerCase()
+    if ((status === 'queued' || status === 'running') && dispatch.report_id && !live.has(dispatch.report_id)) {
+      extra.add(dispatch.report_id)
+    }
+  }
+  return extra.size
+}
+
+/**
+ * The in-flight number the browser tab, the In flight card, and the
+ * snapshot share. The tab used to count only `queued`/`running` rows in
+ * the loaded list, so it read 0 while the card (server `inProgress`,
+ * which includes `pending` and `dispatched`) read 1. Whichever source is
+ * higher wins: a live row the summary has not caught, or a summary count
+ * for an attempt that is not on this page yet.
+ */
+export function inFlightHeadline(input: {
+  attempts: ReadonlyArray<Pick<FixAttempt, 'report_id' | 'status' | 'report_fix_state'>>
+  dispatches: ReadonlyArray<{ report_id?: string | null; status?: string | null }>
+  /** Null until `/v1/admin/fixes/summary` has loaded. */
+  summaryInProgress: number | null
+  statsInProgress: number
+  /** Dispatches the stats endpoint already excluded from `statsInProgress`. */
+  statsInflightDispatches: number
+}): number {
+  const fromList = inFlightReportCount(input.attempts) + extraInFlightDispatches(input.attempts, input.dispatches)
+  const fromServer = (input.summaryInProgress ?? input.statsInProgress) + input.statsInflightDispatches
+  return Math.max(fromList, fromServer)
+}
+
 /** Newest attempt on a report whose last auto-fix stopped and is still unfixed. */
 export function needsAttention(fix: FixAttempt): boolean {
   return fix.report_fix_state === 'failed' && fix.is_latest_attempt === true

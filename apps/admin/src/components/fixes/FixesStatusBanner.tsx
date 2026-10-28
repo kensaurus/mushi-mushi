@@ -99,11 +99,14 @@ export function FixesStatusBanner({
   }
 
   if (stats.topPriority === 'inflight') {
+    // The subtitle counts attempts plus dispatches that have no attempt yet.
+    // The title used to count attempts only, so it read 0 above a summary of 1.
+    const running = stats.inProgress + stats.inflightDispatches
     return (
       <StatusBannerShell
         tone="info"
         pulseDot
-        title={`${stats.inProgress} fix${stats.inProgress === 1 ? '' : 'es'} running now`}
+        title={`${running} fix${running === 1 ? '' : 'es'} running now`}
         subtitle={
           stats.topPriorityLabel ??
           'Agents are drafting branches and opening PRs — filter the list to In flight for live progress.'
