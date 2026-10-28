@@ -23,6 +23,7 @@ import {
   pageFindings,
   pickSubpages,
   readHtmlMeta,
+  decodeEntities,
   readScriptSrcs,
   runProductionCheck,
   samePageLinks,
@@ -238,5 +239,12 @@ describe('runProductionCheck on a fixture site', () => {
     expect(result.summary.rendered).toBe(false)
     expect(result.summary.incomplete).toContain('the rendered home page')
     expect(result.findings.map((f) => f.rule)).toContain('missing_csp')
+  })
+})
+
+describe('decodeEntities', () => {
+  it('decodes each entity once: an escaped entity stays escaped (CodeQL js/double-escaping)', () => {
+    expect(decodeEntities('Tom &amp;lt;3 Jerry')).toBe('Tom &lt;3 Jerry')
+    expect(decodeEntities('A &amp; B &lt;b&gt; &quot;x&quot; it&#39;s')).toBe('A & B <b> "x" it\'s')
   })
 })
