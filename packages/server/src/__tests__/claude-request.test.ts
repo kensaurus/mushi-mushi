@@ -269,6 +269,11 @@ describe('refusal handling', () => {
     expect(classifyLlmError(refusal)).toBe('other')
   })
 
+  it('a spent Anthropic key (a 400 "usage limits", not a 429) is quota, so failover tries the next key', () => {
+    expect(classifyLlmError(new Error('You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.'))).toBe('quota')
+    expect(classifyLlmError(new Error('Your credit balance is too low to access the Anthropic API.'))).toBe('quota')
+  })
+
   it('withAnthropicOrOpenAi hands a Claude refusal to OpenAI', async () => {
     const anthropic = vi.fn(async () => {
       throw refusal

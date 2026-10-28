@@ -102,6 +102,20 @@ export function classifyLlmError(err: unknown): 'quota' | 'auth' | 'transient' |
   if (msg.includes('429') || msg.includes('rate limit') || msg.includes('quota')) {
     return 'quota';
   }
+  // Anthropic answers a spent key with a 400 invalid_request_error, not a 429:
+  // "You have reached your specified API usage limits. You will regain access
+  // on …" or "Your credit balance is too low to access the Anthropic API". As
+  // 'other' it never failed over, so triage and reviews stopped for days
+  // (MUSHI-MUSHI-SERVER-3C/3D, 2026-10-28) while an OpenAI key sat unused.
+  if (
+    msg.includes('api usage limits') ||
+    msg.includes('usage limit') ||
+    msg.includes('credit balance is too low') ||
+    msg.includes('insufficient_quota') ||
+    msg.includes('billing_hard_limit')
+  ) {
+    return 'quota';
+  }
   // Anthropic returns "invalid x-api-key" (note the hyphenated header name) —
   // that string does NOT contain the substring "invalid api key", so we match
   // both forms. Also catch authentication_error / permission_error JSON codes.
