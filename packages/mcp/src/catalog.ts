@@ -1298,6 +1298,8 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     description:
       'Return the most recent runs for a given QA story, newest first. Each row includes status (passed/failed/error/running), ' +
       'latency_ms, created_at, error_message headline, and assertion_failures (up to 10). ' +
+      'Optional projectId (project_id is accepted too) defaults to the configured project. ' +
+      'An account-level key passes the project the story belongs to; a project-bound key refuses a different project. ' +
       'Use this to understand whether a story is currently healthy, what the last failure was, ' +
       'and whether a manual run has completed.',
     scope: 'mcp:read',
@@ -1310,6 +1312,8 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     description:
       'Fetch the full detail for a single qa_story_run: status, error_message, assertion_failures, ' +
       'latency_ms, provider_session_url (Browserbase replay link when available), and screenshot URLs from qa_story_evidence. ' +
+      'Optional projectId (project_id is accepted too) defaults to the configured project. ' +
+      'An account-level key passes the project the story belongs to; a project-bound key refuses a different project. ' +
       'Use this to drill into a specific failing run and understand the exact error before deciding whether to improve the story script or fix the app.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
