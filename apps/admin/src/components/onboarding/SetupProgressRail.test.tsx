@@ -13,8 +13,8 @@ import type { SetupProject } from '../../lib/useSetupStatus'
 
 const state = vi.hoisted(() => ({ ttfd: null as unknown }))
 
-vi.mock('../../lib/usePageData', () => ({
-  usePageData: () => ({ data: state.ttfd, loading: false, error: null, isValidating: false, reload: vi.fn(), lastFetchedAt: null }),
+vi.mock('../../lib/useTimeToFirstDiagnosis', () => ({
+  useTimeToFirstDiagnosis: () => ({ data: state.ttfd, loading: false, error: null, isValidating: false, reload: vi.fn(), lastFetchedAt: null }),
 }))
 
 import { SetupProgressRail } from './SetupProgressRail'

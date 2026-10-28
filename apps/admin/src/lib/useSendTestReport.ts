@@ -9,6 +9,11 @@
  *
  *          The first-diagnosis screen (components/onboarding) keeps its own
  *          poll-and-render flow and does not use this hook.
+ *
+ *          A successful send also invalidates time-to-first-diagnosis. The
+ *          diagnosis is stored before this POST returns, and the Set up card
+ *          only leaves "Waiting…" when that route is read again (report
+ *          9b7624e6).
  */
 
 import { useCallback } from 'react'
@@ -17,6 +22,7 @@ import { apiFetch } from './supabase'
 import { useToast } from './toast'
 import { scopedHref } from './humanPageHints'
 import { invalidateSetupStatus } from './useSetupStatus'
+import { invalidateTimeToFirstDiagnosis } from './useTimeToFirstDiagnosis'
 
 type SendTestReportResult =
   | { ok: true; reportId: string; projectName: string }
@@ -48,6 +54,7 @@ export function useSendTestReport(): (projectId: string) => Promise<SendTestRepo
       // it again (decision 394, docs/marketing/scorecard.md).
       // The checklist's "first report" step reads this; refresh every copy.
       invalidateSetupStatus()
+      invalidateTimeToFirstDiagnosis()
       toast.success(
         projectName ? `Test report sent to ${projectName}` : 'Test report sent',
         'Mushi is writing the diagnosis now, usually in under 30 seconds.',

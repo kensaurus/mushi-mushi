@@ -16,7 +16,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { testReportHref, useSendTestReport } from '../lib/useSendTestReport'
 import { usePageData } from '../lib/usePageData'
-import type { TimeToFirstDiagnosis } from '../lib/setupRail'
+import { invalidateTimeToFirstDiagnosis, useTimeToFirstDiagnosis } from '../lib/useTimeToFirstDiagnosis'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { Card, Btn, Input, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, SegmentedControl, HelpBanner, Loading } from '../components/ui'
 import { SetupProgressRail } from '../components/onboarding/SetupProgressRail'
@@ -163,6 +163,9 @@ export function OnboardingPage() {
   const reloadAll = useCallback(() => {
     reloadStats()
     setup.reload()
+    // Classification lands on `reports` after the page has already painted
+    // "Waiting…". The Test it card reads a different route (report 9b7624e6).
+    invalidateTimeToFirstDiagnosis()
   }, [reloadStats, setup])
 
   useRealtimeReload(['projects', 'project_api_keys', 'reports', 'fix_attempts'], reloadAll)
@@ -1074,9 +1077,7 @@ function formatDiagnosisDuration(ms: number): string {
  * install — the one number to protect before spending on reach.
  */
 function TimeToFirstDiagnosisCard({ hasApiKey, onOpenSdk }: { hasApiKey: boolean; onOpenSdk: () => void }) {
-  const { data, loading } = usePageData<TimeToFirstDiagnosis>(
-    '/v1/admin/onboarding/time-to-first-diagnosis',
-  )
+  const { data, loading } = useTimeToFirstDiagnosis()
   if (!hasApiKey || loading) return null
 
   const ms = data?.ms ?? null

@@ -55,6 +55,13 @@ describe('Set up page progress', () => {
     }
   })
 
+  it('refetches time-to-first-diagnosis when a report changes (9b7624e6)', () => {
+    expect(src).toContain('invalidateTimeToFirstDiagnosis()')
+    expect(src).toContain('useTimeToFirstDiagnosis()')
+    const send = readFileSync(join(__dirname, '../lib/useSendTestReport.ts'), 'utf8')
+    expect(send).toContain('invalidateTimeToFirstDiagnosis()')
+  })
+
   it('says what happens in plain words on the new-user path', () => {
     for (const phrase of ['evolution loop', 'Watch the loop', 'pipeline live', 'generate a report key']) {
       expect(src, phrase).not.toContain(phrase)
