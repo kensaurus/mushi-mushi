@@ -7,7 +7,8 @@
  *          State source-of-truth is `useSetupStatus()` (DB-backed). The wizard
  *          drives next-step focus off `activeProject.steps`, so progress survives
  *          across browsers/devices and stays in sync with what the rest of the
- *          admin sees.
+ *          admin sees. The pipeline-live button uses those same step counts
+ *          (`onboardingPrimaryCta`): a finished list shows View fixes.
  */
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -41,6 +42,7 @@ import { useToast } from '../lib/toast'
 import { useCreateProject } from '../lib/useCreateProject'
 import { usePageCopy } from '../lib/copy'
 import { useOnboardingUx, resolveQuickOnboardingTab } from '../lib/onboardingModeUx'
+import { onboardingPrimaryCta } from '../lib/onboardingPrimaryCta'
 import { restartFirstRunTour } from '../components/FirstRunTour'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { FirstDiagnosisScreen } from '../components/onboarding/FirstDiagnosisScreen'
@@ -405,6 +407,16 @@ export function OnboardingPage() {
   // left for this project to do. Keeps the page useful as a permanent SDK
   // reference for fully onboarded users.
   const setupComplete = Boolean(project?.done && project.complete >= project.total)
+  // Same counts as the "N of N steps" header. A full list, or a merged fix,
+  // is finished setup — the hero must not keep asking to connect agents.
+  const pipelineCta = project
+    ? onboardingPrimaryCta({
+        done: project.done,
+        complete: project.complete,
+        total: project.total,
+        mergedFixCount: project.merged_fix_count,
+      })
+    : null
 
   usePublishPageContext({
     route: '/onboarding',
@@ -683,9 +695,11 @@ export function OnboardingPage() {
                   )}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <Btn size="sm" variant="primary" onClick={() => navigate('/integrations/config')}>
-                    Connect fix agents →
-                  </Btn>
+                  {pipelineCta && (
+                    <Btn size="sm" variant={pipelineCta.variant} onClick={() => navigate(pipelineCta.to)}>
+                      {pipelineCta.label}{pipelineCta.variant === 'primary' ? ' →' : ''}
+                    </Btn>
+                  )}
                   <Btn size="sm" variant="ghost" onClick={() => navigate('/dashboard')}>Open dashboard</Btn>
                 </div>
               </div>
