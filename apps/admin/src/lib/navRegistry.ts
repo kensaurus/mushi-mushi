@@ -118,7 +118,7 @@ export const CHECK_SUB_GROUPS: Record<
 > = {
   'system-health': {
     title: 'App checks',
-    hint: 'Is the app itself sound: scheduled tests, user stories, audits, its blueprint, design tokens and content, plus Mushi’s own health.',
+    hint: 'Is the app itself sound: scheduled tests, user stories, audits, its blueprint, design tokens and content, a first-time user test, plus Mushi’s own health.',
   },
   'quality-gates': {
     title: 'AI quality',
@@ -1152,7 +1152,7 @@ export const CORE_NAV_PATHS: readonly string[] = [
 export const CHECK_GROUPS: ReadonlyArray<{ id: CheckSubGroupId; paths: readonly string[] }> = [
   {
     id: 'system-health',
-    paths: ['/qa-coverage', '/health', '/ci', '/fullstack-audit', '/inventory', '/recipe', '/design', '/content'],
+    paths: ['/qa-coverage', '/health', '/ci', '/fullstack-audit', '/inventory', '/recipe', '/design', '/content', '/first-user-test'],
   },
   { id: 'quality-gates', paths: ['/judge', '/lessons', '/prompt-lab'] },
 ]

@@ -280,3 +280,37 @@ describe('buildCheckCardViews', () => {
     }
   })
 })
+
+describe('first-time user test card', () => {
+  const run = (over: Partial<NonNullable<CheckCardsInput['firstUserTest']>['runs'][number]> = {}) => ({
+    status: 'done' as const,
+    finished_at: RECENT,
+    started_at: RECENT,
+    findings: [] as unknown[],
+    stalled_at: null,
+    ...over,
+  })
+  const view = (firstUserTest: CheckCardsInput['firstUserTest']) => buildCheckCardViews(input({ firstUserTest }), NOW)['/first-user-test']
+
+  it('stays blank while loading and says why when it cannot read', () => {
+    expect(view(undefined)).toBeNull()
+    expect(view({ phase: 'loading', runs: [] })).toBeNull()
+    expect(view({ phase: 'error', runs: [] })?.state).toBe('unavailable')
+    expect(view({ phase: 'no_project', runs: [] })).toMatchObject({ state: 'not_set_up', setupTo: '/projects' })
+  })
+
+  it('is not a pass until a test finished; a queued, running or stopped test is not a result', () => {
+    expect(view({ phase: 'ready', runs: [] })?.state).toBe('not_checked')
+    expect(view({ phase: 'ready', runs: [run({ status: 'queued', finished_at: null }), run({ status: 'stopped' })] })?.state).toBe('not_checked')
+  })
+
+  it('reads the newest finished test: clean is Pass, findings or a stall count, a failure says why', () => {
+    expect(view({ phase: 'ready', runs: [run()] })).toMatchObject({ state: 'pass', chip: 'Pass' })
+    expect(view({ phase: 'ready', runs: [run({ findings: [{}, {}] })] })).toMatchObject({ state: 'findings', chip: '2 findings' })
+    expect(view({ phase: 'ready', runs: [run({ stalled_at: { screen: 'Sign up' } })] })).toMatchObject({ state: 'findings', chip: '1 finding' })
+    expect(view({ phase: 'ready', runs: [run({ status: 'running', finished_at: null }), run({ status: 'failed', detail: 'The sign-up page did not load.' }), run()] })).toMatchObject({
+      state: 'failed',
+      detail: 'The sign-up page did not load.',
+    })
+  })
+})

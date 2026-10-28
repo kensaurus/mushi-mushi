@@ -27,6 +27,7 @@ const state = vi.hoisted(() => ({
   slices: null as unknown,
   navError: null as string | null,
   recipe: null as unknown,
+  firstUserTest: { runs: [], trend: [] } as unknown,
   features: new Set<string>(),
   labs: new Set<string>(),
 }))
@@ -38,6 +39,7 @@ vi.mock('../lib/usePageData', () => ({
       return state.navError ? { ...base, data: null, error: state.navError } : { ...base, data: { generatedAt: '', slices: state.slices, projects: null } }
     }
     if (path?.endsWith('/recipe')) return { ...base, data: state.recipe }
+    if (path?.endsWith('/fresh-eyes')) return { ...base, data: state.firstUserTest }
     return { ...base, data: null }
   },
 }))
@@ -61,7 +63,7 @@ import { ChecksPage, checksStatus, sortCheckCards } from './ChecksPage'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-const CORE_PATHS = ['/qa-coverage', '/health', '/fullstack-audit', '/inventory', '/recipe', '/design', '/content', '/judge', '/lessons']
+const CORE_PATHS = ['/qa-coverage', '/health', '/fullstack-audit', '/inventory', '/recipe', '/design', '/content', '/first-user-test', '/judge', '/lessons']
 const LAB_PATHS = ['/ci', '/prompt-lab']
 const RECENT = new Date(Date.now() - 3_600_000).toISOString()
 
@@ -87,6 +89,7 @@ beforeEach(() => {
   state.slices = slices()
   state.navError = null
   state.recipe = null
+  state.firstUserTest = { runs: [], trend: [] }
   state.features = new Set()
   state.labs = new Set()
   container = document.createElement('div')
