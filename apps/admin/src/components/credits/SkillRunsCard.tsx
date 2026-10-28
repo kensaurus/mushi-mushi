@@ -10,7 +10,8 @@
  *          the next round builds on it. "Run on" can pick one of your local
  *          worker lanes for the app instead of the cloud (ADR 0042
  *          amendment): its rounds then wait in that lane's queue. Below,
- *          every run of the team with where it is.
+ *          every run of the team with where it is. The app list and the run
+ *          list each say when they are loading, empty, or failed (Retry).
  */
 
 import { Link, useSearchParams } from 'react-router-dom'
@@ -27,12 +28,17 @@ const STATUS_TONE = { active: 'info', done: 'ok', stopped: 'warn' } as const
 
 interface Props {
   projects: Array<{ id: string; name: string }> | null
+  /** Set when the app list failed. Null projects then is not "still loading". */
+  projectsError?: string | null
+  onRetryProjects?: () => void
 }
 
-export function SkillRunsCard({ projects }: Props) {
+export function SkillRunsCard({ projects, projectsError = null, onRetryProjects }: Props) {
   const toast = useToast()
   const [runs, setRuns] = useState<SkillRun[] | null>(null)
   const [skills, setSkills] = useState<SkillRunSkill[]>([])
+  const [runsError, setRunsError] = useState<string | null>(null)
+  const [loadingRuns, setLoadingRuns] = useState(true)
   // Same read as useActiveProjectId: ?project= wins, then the stored app.
   // Inlined so this card does not import the header switcher.
   const [searchParams] = useSearchParams()
@@ -62,9 +68,13 @@ export function SkillRunsCard({ projects }: Props) {
     const res = await loadSkillRuns()
     if (res.ok && res.data) {
       // An API without skill runs answers another shape: show none rather than break the page.
+      setRunsError(null)
       setRuns(Array.isArray(res.data.runs) ? res.data.runs : [])
       setSkills(Array.isArray(res.data.skills) ? res.data.skills : [])
+    } else {
+      setRunsError(res.error?.message ?? 'Could not read skill runs.')
     }
+    setLoadingRuns(false)
   }, [])
   useEffect(() => {
     void load()
@@ -105,6 +115,23 @@ export function SkillRunsCard({ projects }: Props) {
         Improve an app with one skill at a time, on the app&apos;s own Cursor key. Each round is a pull request: the agent measures first, changes only the part you name, and
         Opus reviews it. The next round builds on the last; the run ends when the agent finds nothing left.
       </p>
+      {projectsError && !projects ? (
+        <p role="alert" className="text-xs text-warn">
+          Could not read your apps. {projectsError}{' '}
+          <button type="button" className="font-medium text-brand hover:underline" onClick={onRetryProjects}>Retry</button>
+        </p>
+      ) : !projects ? (
+        <p className="text-xs text-fg-muted">Reading your apps…</p>
+      ) : projects.length === 0 ? (
+        <p className="text-xs text-fg-muted">No apps yet.</p>
+      ) : (
+      <>
+      {projectsError && (
+        <p role="alert" className="text-xs text-warn">
+          Could not refresh your apps. Showing the last result. {projectsError}{' '}
+          <button type="button" className="font-medium text-brand hover:underline" onClick={onRetryProjects}>Retry</button>
+        </p>
+      )}
       <div className="grid gap-2 sm:grid-cols-2">
         <SelectField label="App" value={projectId} onChange={(e) => setChosenId(e.target.value)} disabled={!projects?.length}>
           {(projects ?? []).map((p) => (
@@ -155,6 +182,17 @@ export function SkillRunsCard({ projects }: Props) {
       <Btn size="sm" type="button" loading={busy} disabled={!projectId || scope.trim().length < 3} onClick={() => void start()}>
         Start skill run
       </Btn>
+      </>
+      )}
+
+      {loadingRuns && runs == null && <p className="text-xs text-fg-muted">Reading skill runs…</p>}
+      {runsError && (
+        <p role="alert" className="text-xs text-warn" data-testid="skill-runs-error">
+          {runs == null ? 'Could not read skill runs.' : 'Could not refresh skill runs. Showing the last result.'} {runsError}{' '}
+          <button type="button" className="font-medium text-brand hover:underline" onClick={() => void load()}>Retry</button>
+        </p>
+      )}
+      {runs && runs.length === 0 && !runsError && <p className="text-xs text-fg-muted">No skill runs yet.</p>}
 
       {runs && runs.length > 0 && (
         <ul className="divide-y divide-edge-subtle border-t border-edge-subtle">

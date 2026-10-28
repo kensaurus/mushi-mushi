@@ -15,15 +15,19 @@ export function HealthStrip({ section }: { section: HomeSection<HealthSignal[]> 
   return (
     <section aria-label="App health" data-testid="home-health" className="min-w-0">
       <HomeSectionBody section={section} what="the app's health" notConnectedText="No health signals yet.">
-        {(signals) => (
-          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 [&>*]:min-w-0">
-            {signals.map((s) => (
-              <li key={s.id}>
-                <HealthTile signal={s} />
-              </li>
-            ))}
-          </ul>
-        )}
+        {(signals) =>
+          signals.length === 0 ? (
+            <p className="text-sm text-fg-muted">Nothing to show for the app&apos;s health yet.</p>
+          ) : (
+            <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 [&>*]:min-w-0">
+              {signals.map((s) => (
+                <li key={s.id}>
+                  <HealthTile signal={s} />
+                </li>
+              ))}
+            </ul>
+          )
+        }
       </HomeSectionBody>
     </section>
   )

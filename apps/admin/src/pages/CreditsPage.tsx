@@ -101,16 +101,35 @@ export function CreditsPage() {
       {error && <PageLoadError error={error} resource="credit settings" endpoint="/v1/admin/byok/spend-down" onRetry={() => { spendDown.reload(); credits.reload() }} />}
 
       <Section title="Cursor: fix bugs" id="cursor-fix-bugs">
-        {spendDown.loading && !spendDown.data && <p className="text-xs text-fg-muted">Reading your Cursor keys…</p>}
-        <CursorLevers
-          spendDown={spendDown.data ?? null}
-          followups={followups.data ?? null}
-          now={now}
-          onChanged={() => {
-            spendDown.reload()
-            followups.reload()
-          }}
-        />
+        {spendDown.loading && !spendDown.data ? (
+          <p className="text-xs text-fg-muted">Reading your Cursor keys…</p>
+        ) : spendDown.error && !spendDown.data ? null : (
+          <>
+            {spendDown.error && spendDown.data && (
+              <p role="alert" className="text-xs text-warn">
+                Could not refresh Cursor keys. Showing the last result.{' '}
+                <button type="button" className="font-medium text-brand hover:underline" onClick={() => spendDown.reload()}>Retry</button>
+              </p>
+            )}
+            <CursorLevers
+              spendDown={spendDown.data ?? null}
+              followups={followups.data ?? null}
+              now={now}
+              onChanged={() => {
+                spendDown.reload()
+                followups.reload()
+              }}
+            />
+            {followups.loading && !followups.data && <p className="text-xs text-fg-muted">Reading review follow-ups…</p>}
+            {followups.error && (
+              <p role="alert" className="text-xs text-warn">
+                {followups.data ? 'Could not refresh review follow-ups. Showing the last result.' : 'Could not read review follow-ups.'}{' '}
+                {followups.error}{' '}
+                <button type="button" className="font-medium text-brand hover:underline" onClick={() => followups.reload()}>Retry</button>
+              </p>
+            )}
+          </>
+        )}
       </Section>
 
       <Section title="Local workers: models" id="local-worker-models">
@@ -118,11 +137,24 @@ export function CreditsPage() {
       </Section>
 
       <Section title="Cursor: improve your apps with skills">
-        <SkillRunsCard projects={projects.data ? (projects.data.projects ?? []) : null} />
+        <SkillRunsCard
+          projects={projects.data ? (projects.data.projects ?? []) : null}
+          projectsError={projects.error}
+          onRetryProjects={() => projects.reload()}
+        />
       </Section>
 
       <Section title="Firecrawl: find bugs on your live sites">
-        <FirecrawlLevers balance={balance} projects={projects.data ? (projects.data.projects ?? []) : null} now={now} />
+        <FirecrawlLevers
+          balance={balance}
+          balanceLoading={credits.loading && !credits.data}
+          balanceError={credits.error}
+          onRetryBalance={() => credits.reload()}
+          projects={projects.data ? (projects.data.projects ?? []) : null}
+          projectsError={projects.error}
+          onRetryProjects={() => projects.reload()}
+          now={now}
+        />
       </Section>
 
       <p className="text-xs text-fg-muted">

@@ -99,6 +99,12 @@ describe('HealthStrip', () => {
     await render(createElement(HealthStrip, { section: failed<HealthSignal[]>('timeout') }))
     expect(container.querySelector('[role="alert"]')!.textContent).toContain("Could not read the app's health")
   })
+
+  it('says there is nothing to show when the read came back empty', async () => {
+    await render(createElement(HealthStrip, { section: ok<HealthSignal[]>([]) }))
+    expect(text()).toContain('Nothing to show for the app\'s health yet')
+    expect(container.querySelector('[data-testid="home-health-site"]')).toBeNull()
+  })
 })
 
 const need = (id: string, impact: number): NeedsYouItem => ({ id, impact, text: `Thing ${id}.`, action: { label: 'Open', to: `/${id}` } })
@@ -194,6 +200,12 @@ describe('SitemapCard', () => {
     await render(createElement(SitemapCard, { section: notConnected<HomeSitemap>('Install the SDK', '/connect') }))
     expect(text()).toContain('No page visits, bug reports or site checks yet')
   })
+
+  it('says the map is empty when the read succeeded with no pages', async () => {
+    await render(createElement(SitemapCard, { section: ok<HomeSitemap>({ pages: [], totalPages: 0, sampled: false }) }))
+    expect(text()).toContain('No pages in this map yet')
+    expect(container.querySelector('[data-testid="home-sitemap"]')).toBeNull()
+  })
 })
 
 describe('WeekCard', () => {
@@ -214,6 +226,12 @@ describe('WeekCard', () => {
     expect(rows[1].querySelector('span')!.className).toContain('warn')
     expect(rows[2].textContent).toContain('same')
     expect(hrefs()).toEqual(['/reports?days=7', '/fixes', '/reports?days=7&severity=critical'])
+  })
+
+  it('says there are no numbers yet instead of an empty table', async () => {
+    await render(createElement(WeekCard, { section: ok<WeekRow[]>([]) }))
+    expect(text()).toContain('No numbers for this week yet')
+    expect(container.querySelector('table')).toBeNull()
   })
 })
 

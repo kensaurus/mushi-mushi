@@ -3,7 +3,10 @@
  * PURPOSE: /credits, Firecrawl half: the balance and when it resets, what the
  *          site watches will use before then, and one row per app to turn its
  *          live-site watch (ADR 0024) on or off or widen it to the most pages
- *          a check allows. The full card, with the broken pages it found,
+ *          a check allows. A failed balance, app list, site-audit or search-rank
+ *          read says so (with Retry) instead of looking like "no key", "still
+ *          reading", an audit that is off, or a rank check with no keywords.
+ *          The full card, with the broken pages it found,
  *          stays under Inventory → Discovery.
  */
 
@@ -40,16 +43,45 @@ interface AppWatch {
   ranks: RankKeyword[]
   rankTarget: string | null
   error?: string
+  auditError?: string
+  rankError?: string
 }
 
 interface Props {
   balance: FirecrawlBalance | null
+  /** True while the credits read has not returned. A null balance then is not "no key". */
+  balanceLoading?: boolean
+  /** Set when the credits read failed. A null balance then is not "no key". */
+  balanceError?: string | null
+  onRetryBalance?: () => void
   /** null while the project list is still loading. */
   projects: Array<{ id: string; name: string }> | null
+  projectsError?: string | null
+  onRetryProjects?: () => void
   now: Date
 }
 
-export function FirecrawlLevers({ balance, projects, now }: Props) {
+function readFailure(res: { ok: boolean; error?: { message?: string } | null }): string | undefined {
+  return res.ok ? undefined : (res.error?.message ?? 'Could not read')
+}
+
+function FetchNote({ children, onRetry }: { children: string; onRetry?: () => void }) {
+  return (
+    <p role="alert" className="text-xs text-warn">
+      {children}
+      {onRetry ? (
+        <>
+          {' '}
+          <button type="button" className="font-medium text-brand hover:underline" onClick={onRetry}>
+            Retry
+          </button>
+        </>
+      ) : null}
+    </p>
+  )
+}
+
+export function FirecrawlLevers({ balance, balanceLoading = false, balanceError = null, onRetryBalance, projects, projectsError = null, onRetryProjects, now }: Props) {
   const [apps, setApps] = useState<AppWatch[] | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [busy, setBusy] = useState<string | null>(null)
@@ -71,8 +103,10 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
         const auditPart = {
           audit: audit.ok ? (audit.data?.audit ?? null) : null,
           auditFindings: audit.ok ? (audit.data?.findings?.length ?? 0) : 0,
+          auditError: readFailure(audit),
           ranks: ranks.ok ? (ranks.data?.keywords ?? []) : [],
           rankTarget: ranks.ok ? (ranks.data?.target ?? null) : null,
+          rankError: readFailure(ranks),
         }
         if (!res.ok || !res.data) return { projectId: p.id, name: p.name, watch: null, suggestedUrl: null, firecrawlReady: false, error: 'Could not read', ...auditPart }
         return { projectId: p.id, name: p.name, ...res.data, ...auditPart }
@@ -114,12 +148,19 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
 
   return (
     <div className="space-y-3">
-      {balance ? (
-        <p className="text-sm text-fg">
-          <span className="tabular-nums">{balance.remaining?.toLocaleString() ?? '?'}</span>
-          {balance.limit != null && <span className="text-fg-muted"> of {balance.limit.toLocaleString()}</span>} credits left
-          {resets && <span className="text-fg-muted"> · {resets}; unused credits do not roll over</span>}
-        </p>
+      {balanceLoading && !balance ? (
+        <p className="text-xs text-fg-muted">Reading the Firecrawl balance…</p>
+      ) : balanceError && !balance ? (
+        <FetchNote onRetry={onRetryBalance}>{`Could not read the Firecrawl balance. ${balanceError}`}</FetchNote>
+      ) : balance ? (
+        <>
+          {balanceError && <FetchNote onRetry={onRetryBalance}>{`Could not refresh the Firecrawl balance. Showing the last result. ${balanceError}`}</FetchNote>}
+          <p className="text-sm text-fg">
+            <span className="tabular-nums">{balance.remaining?.toLocaleString() ?? '?'}</span>
+            {balance.limit != null && <span className="text-fg-muted"> of {balance.limit.toLocaleString()}</span>} credits left
+            {resets && <span className="text-fg-muted"> · {resets}; unused credits do not roll over</span>}
+          </p>
+        </>
       ) : (
         <p className="text-sm text-fg-muted">
           No Firecrawl key yet.{' '}
@@ -128,8 +169,15 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
       )}
       {apps && <p className="text-xs text-fg-secondary tabular-nums">{paceLine(pace, balance?.periodEnd ?? null)}</p>}
 
-      {!apps && <p className="text-xs text-fg-muted">Reading each app&apos;s site watch…</p>}
-      {apps && (
+      {projectsError && !projects ? (
+        <FetchNote onRetry={onRetryProjects}>{`Could not read your apps. ${projectsError}`}</FetchNote>
+      ) : !apps ? (
+        <p className="text-xs text-fg-muted">Reading each app&apos;s site watch…</p>
+      ) : apps.length === 0 ? (
+        <p className="text-xs text-fg-muted">No apps yet.</p>
+      ) : (
+        <>
+        {projectsError && <FetchNote onRetry={onRetryProjects}>{`Could not refresh your apps. Showing the last result. ${projectsError}`}</FetchNote>}
         <ul className="divide-y divide-edge-subtle" aria-label="Site watch per app">
           {apps.map((a) => {
             const w = a.watch
@@ -173,33 +221,42 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
                   </div>
                 )}
                 {a.error && <p className="text-xs text-warn">{a.error} this app&apos;s site watch.</p>}
-                <SiteAuditControl
-                  projectId={a.projectId}
-                  name={a.name}
-                  audit={a.audit}
-                  openFindings={a.auditFindings}
-                  url={url}
-                  firecrawlReady={a.firecrawlReady}
-                  onChanged={(m) => {
-                    setNotice(m)
-                    if (m.ok) setReloadKey((n) => n + 1)
-                  }}
-                />
-                <SearchRankControl
-                  projectId={a.projectId}
-                  name={a.name}
-                  keywords={a.ranks}
-                  target={a.rankTarget}
-                  firecrawlReady={a.firecrawlReady}
-                  onChanged={(m) => {
-                    setNotice(m)
-                    if (m.ok) setReloadKey((n) => n + 1)
-                  }}
-                />
+                {a.auditError ? (
+                  <FetchNote onRetry={() => setReloadKey((n) => n + 1)}>{`Could not read this app's site audit. ${a.auditError}`}</FetchNote>
+                ) : (
+                  <SiteAuditControl
+                    projectId={a.projectId}
+                    name={a.name}
+                    audit={a.audit}
+                    openFindings={a.auditFindings}
+                    url={url}
+                    firecrawlReady={a.firecrawlReady}
+                    onChanged={(m) => {
+                      setNotice(m)
+                      if (m.ok) setReloadKey((n) => n + 1)
+                    }}
+                  />
+                )}
+                {a.rankError ? (
+                  <FetchNote onRetry={() => setReloadKey((n) => n + 1)}>{`Could not read this app's search ranks. ${a.rankError}`}</FetchNote>
+                ) : (
+                  <SearchRankControl
+                    projectId={a.projectId}
+                    name={a.name}
+                    keywords={a.ranks}
+                    target={a.rankTarget}
+                    firecrawlReady={a.firecrawlReady}
+                    onChanged={(m) => {
+                      setNotice(m)
+                      if (m.ok) setReloadKey((n) => n + 1)
+                    }}
+                  />
+                )}
               </li>
             )
           })}
         </ul>
+        </>
       )}
       <p className="text-xs text-fg-muted">
         The watch checks pages daily for errors, 404s and blank screens; a broken page becomes a bug report after a second check

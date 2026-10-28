@@ -88,13 +88,14 @@ const home = {
   partial: [],
 }
 const pageData = (data: unknown) => ({ data, loading: false, error: null, errorMessage: null, isValidating: false, lastFetchedAt: null, reload: vi.fn() })
+const dash = vi.hoisted(() => ({ homeError: null as string | null, reload: vi.fn() }))
 
 vi.mock('../lib/usePageData', () => ({
   usePageData: (path: string | null) =>
     path?.includes('/sdk-health')
       ? pageData({ problems: [], notes: [], installed: null, lastSeenAt: null, repoUrl: null, siteUrl: null, checkedAt: '2026-10-26T00:00:00Z' })
       : path?.endsWith('/home')
-        ? pageData(home)
+        ? { ...pageData(home), error: dash.homeError, reload: dash.reload }
         : pageData(null),
 }))
 vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => setup }))
@@ -135,6 +136,8 @@ describe('Home while a required setup step is open', () => {
   let root: Root
 
   beforeEach(() => {
+    dash.homeError = null
+    dash.reload.mockReset()
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -185,5 +188,19 @@ describe('Home while a required setup step is open', () => {
     expect(text).toContain('Could not read access and details just now.')
     // An app with reports opens Home with the explainer closed.
     expect(container.querySelector('[data-testid="home-how-this-works"] button')!.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('keeps the last Home and offers Retry when a refresh fails', async () => {
+    dash.homeError = 'timeout'
+    await mount()
+    const note = container.querySelector('[data-testid="home-refresh-error"]')
+    expect(note?.textContent).toContain('Could not refresh Home')
+    expect(note?.textContent).toContain('Showing the last result')
+    expect(container.textContent).toContain('Your app is not sending to Mushi yet')
+    expect(container.textContent).not.toContain("Couldn't load Home")
+    const retry = Array.from(note?.querySelectorAll('button') ?? []).find((b) => b.textContent === 'Retry')
+    expect(retry).toBeTruthy()
+    act(() => retry!.click())
+    expect(dash.reload).toHaveBeenCalled()
   })
 })

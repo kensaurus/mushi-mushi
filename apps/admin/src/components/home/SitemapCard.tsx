@@ -21,7 +21,9 @@ export function SitemapCard({ section }: { section: HomeSection<HomeSitemap> }) 
         what="your pages"
         notConnectedText="No page visits, bug reports or site checks yet. The SDK or the live-site watch fills this map."
       >
-        {(map) => (
+        {(map) => map.pages.length === 0 ? (
+          <p className="text-sm text-fg-muted">No pages in this map yet.</p>
+        ) : (
           <>
             <ul className="space-y-0.5" data-testid="home-sitemap" aria-label="Your app's busiest pages">
               {map.pages.map((p) => (

@@ -6,7 +6,8 @@
  *
  *          One call (GET /v1/admin/projects/:id/home) feeds every section;
  *          a section whose read failed says so on its own, and one that is
- *          not connected says how to connect it. Page-level orchestration
+ *          not connected says how to connect it. A refresh that fails keeps
+ *          the last Home on screen and says so, with Retry. Page-level orchestration
  *          only; each section is a component in components/home/*.
  */
 
@@ -167,6 +168,14 @@ export function DashboardPage() {
         <HomeSkeleton />
       ) : (
         <>
+          {error && (
+            <p role="alert" data-testid="home-refresh-error" className="rounded-md border border-warn/40 px-3 py-2 text-xs text-fg">
+              Could not refresh Home. Showing the last result.{' '}
+              <button type="button" className="font-medium text-brand hover:underline" onClick={() => void reload()}>
+                Retry
+              </button>
+            </p>
+          )}
           <div className="grid gap-3 lg:grid-cols-12 [&>*]:min-w-0">
             <div className="lg:col-span-5">
               <AppCard section={data.app} projectId={activeProjectId} canEdit={ent.canEditProject} onRefreshed={() => void reload()} />
