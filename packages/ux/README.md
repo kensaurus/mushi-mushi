@@ -136,7 +136,7 @@ mushi-ux fresh-eyes --url https://example.com --goal "get my first report" \
 - **Writes** reach only the start URL's origin and `--app-host` hosts. Payments, third-party sign-in, public sign-up endpoints (`/auth/v1/signup`, OTP, recovery) and anything labelled delete, revoke, upgrade or sign out are refused in every mode. `--dry-run` writes nothing, uses no account and files nothing.
 - **Accounts:** the model types `{{email}}` and `{{password}}`; code fills in `MUSHI_FRESH_EYES_EMAIL` / `MUSHI_FRESH_EYES_PASSWORD` (your app's test account) or, for Mushi itself, `--mint-account` (an operator key; the account is flagged synthetic and deleted after a day). The real values never reach the prompt, the timeline or the console.
 - **Terminal setup:** `--terminal` runs a CLI setup step itself when a screen asks for a terminal: a sample app in a temp folder, the setup command (`--setup-command`, `{projectId}` and `{apiKey}` filled from the screen), one report through the widget, each phase timed.
-- Output: `timeline.md` (each step, its screenshot, app wait and reading time, where it stalled), `result.json` and `shots/`. `--out <dir>` chooses the folder. `--sync` mirrors the run to the console's UX runs → Fresh eyes tab.
+- Output: `timeline.md` (each step, its screenshot, app wait and reading time, where it stalled), `result.json` and `shots/`. `--out <dir>` chooses the folder. `--sync` mirrors the run to the console's First-time user test page (a `--dry-run` too, marked "look around only"). `--request-stdin` reads the run (its id, start page, goal, visitors and test accounts) as JSON on stdin: how a local worker runs a test the console queued, so nothing it was given sits in argv.
 
 ## On GitHub Actions
 

@@ -16,7 +16,9 @@
  *          A claim answer is parsed the same way (parseClaim): a fix claim
  *          carries a report, a conflict claim (ADR 0049) a PR of the lane's own
  *          repository with the head commit Mushi saw, an audit claim (ADR
- *          0050) only models and a count. Anything else is refused.
+ *          0050) only models and a count, a first-time user test (ADR 0053
+ *          amendment) a start page, a goal in plain words and, for Mushi's
+ *          own operator, test accounts. Anything else is refused.
  */
 
 import { existsSync, readFileSync } from 'node:fs'
@@ -122,6 +124,8 @@ export interface HeartbeatAnswer {
   refused: Array<{ name: string; reason: string }>
   renewed: string[]
   lost: string[]
+  /** Lane ids whose app has a first-time user test waiting: ask for work now. */
+  wake: string[]
 }
 
 /**
@@ -150,7 +154,7 @@ export function parseHeartbeatAnswer(raw: unknown): { answer: HeartbeatAnswer; b
     .filter((r) => typeof r?.name === 'string')
     .map((r) => ({ name: String(r.name).slice(0, 40), reason: String(r.reason ?? '').slice(0, 300) }))
   return {
-    answer: { hostId: typeof d.hostId === 'string' ? d.hostId : '', guards: guards.value, lanes, refused, renewed: ids(d.renewed), lost: ids(d.lost) },
+    answer: { hostId: typeof d.hostId === 'string' ? d.hostId : '', guards: guards.value, lanes, refused, renewed: ids(d.renewed), lost: ids(d.lost), wake: ids(d.wake) },
     bad,
   }
 }
@@ -166,10 +170,61 @@ export interface ConflictTarget {
   prUrl: string | null
 }
 
+/** A first-time user test the console queued (ADR 0053 amendment 2026-10-28). */
+export interface FreshEyesTarget {
+  /** The console's run id; the run syncs into that row. */
+  runId: string
+  url: string
+  goal: string
+  sessions: number
+  /** Plain words that mean the visitor made it, or null. */
+  successText: string | null
+  dryRun: boolean
+  /** One synthetic account per session, for Mushi's own operator only. Never logged. */
+  accounts: Array<{ email: string; password: string; name: string }>
+}
+
 type ParsedClaim =
   | { kind: 'fix'; id: string; model: string | null; raw: Record<string, unknown> }
   | { kind: 'conflict'; id: string; model: string | null; conflict: ConflictTarget }
   | { kind: 'audit'; id: string; model: string | null; audit: { reviewModel: string | null; findingsLeft: number } }
+  | { kind: 'fresh_eyes'; id: string; model: string | null; freshEyes: FreshEyesTarget }
+
+const RUN_ID_RE = /^[0-9]{8}-[0-9]{6}-[a-z0-9]{4}$/
+const CONTROL_RE = /[\u0000-\u001f\u007f]/
+
+/** Plain text from the server: no control characters, never read as an option. */
+function plainText(raw: unknown, max: number): string | null {
+  if (typeof raw !== 'string' || !raw.trim() || raw.length > max || CONTROL_RE.test(raw) || raw.trim().startsWith('-')) return null
+  return raw.trim()
+}
+
+function parseFreshEyesTarget(raw: unknown): Parsed<FreshEyesTarget> {
+  const t = (raw ?? {}) as Record<string, unknown>
+  if (typeof t.runId !== 'string' || !RUN_ID_RE.test(t.runId)) return { ok: false, message: 'the test claim has no run id' }
+  let url: URL
+  try {
+    url = new URL(String(t.url))
+  } catch {
+    return { ok: false, message: 'the test claim\'s start page is not a web address' }
+  }
+  if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.username || url.password || String(t.url).length > 500) return { ok: false, message: 'the test claim\'s start page is not an http(s) address' }
+  const goal = plainText(t.goal, 300)
+  if (!goal) return { ok: false, message: 'the test claim\'s goal is not plain text' }
+  if (typeof t.sessions !== 'number' || !Number.isInteger(t.sessions) || t.sessions < 1 || t.sessions > 5) return { ok: false, message: 'the test claim\'s visitors are not 1 to 5' }
+  const successText = t.successText == null ? null : plainText(t.successText, 120)
+  if (t.successText != null && !successText) return { ok: false, message: 'the test claim\'s success words are not plain text' }
+  if (typeof t.dryRun !== 'boolean') return { ok: false, message: 'the test claim\'s dryRun is not true or false' }
+  const accounts: FreshEyesTarget['accounts'] = []
+  for (const a of Array.isArray(t.accounts) ? (t.accounts as Array<Record<string, unknown>>) : []) {
+    if (typeof a?.email !== 'string' || !/^[^\s@]{1,100}@[^\s@]{1,200}$/.test(a.email) || typeof a.password !== 'string' || a.password.length < 12 || a.password.length > 200 || CONTROL_RE.test(a.password)) {
+      return { ok: false, message: 'a test account in the claim is malformed' }
+    }
+    accounts.push({ email: a.email, password: a.password, name: plainText(a.name, 80) ?? 'Test visitor' })
+  }
+  if (accounts.length > t.sessions || (t.dryRun && accounts.length)) return { ok: false, message: 'the test claim carries more accounts than it may use' }
+  return { ok: true, value: { runId: t.runId, url: url.toString(), goal, sessions: t.sessions, successText, dryRun: t.dryRun, accounts } }
+}
 
 /**
  * @internal Exported for tests. A claim answer, checked by kind. A fix claim's
@@ -206,6 +261,11 @@ export function parseClaim(raw: unknown): Parsed<ParsedClaim> {
     if (reviewModel === undefined) return { ok: false, message: 'the audit claim\'s review model is not a model id' }
     const left = typeof a.findingsLeft === 'number' && Number.isInteger(a.findingsLeft) && a.findingsLeft >= 0 ? a.findingsLeft : 0
     return { ok: true, value: { kind: 'audit', id: c.id, model, audit: { reviewModel, findingsLeft: left } } }
+  }
+  if (kind === 'fresh_eyes') {
+    const t = parseFreshEyesTarget(c.freshEyes)
+    if (!t.ok) return t
+    return { ok: true, value: { kind: 'fresh_eyes', id: c.id, model, freshEyes: t.value } }
   }
   return { ok: false, message: `unknown claim kind "${String(kind).slice(0, 20)}"` }
 }

@@ -14,8 +14,9 @@ const CONFIG: WorkerConfig = { version: 1, lanes: [{ name: 'glot', projectId: P1
 type Reply = ApiResult<unknown>
 const ok = (data: unknown): Reply => ({ ok: true, data })
 
-function harness(opts: { heartbeat?: Reply | ((n: number) => Reply | undefined); claim?: Reply[]; readings?: Partial<Awaited<ReturnType<DaemonDeps['readings']>>>; lane?: Record<string, unknown>; workOne?: DaemonDeps['workOne']; resolveConflict?: DaemonDeps['resolveConflict']; auditPass?: DaemonDeps['auditPass'] } = {}) {
+function harness(opts: { heartbeat?: Reply | ((n: number) => Reply | undefined); claim?: Reply[]; readings?: Partial<Awaited<ReturnType<DaemonDeps['readings']>>>; lane?: Record<string, unknown>; workOne?: DaemonDeps['workOne']; resolveConflict?: DaemonDeps['resolveConflict']; auditPass?: DaemonDeps['auditPass']; freshEyes?: DaemonDeps['freshEyes'] } = {}) {
   const calls: Array<{ path: string; body: unknown }> = []
+  const logs: string[] = []
   const claims = [...(opts.claim ?? [ok({ claim: null, reason: 'Nothing to work on.' })])]
   const runs: Array<Parameters<DaemonDeps['workOne']>> = []
   const deps: DaemonDeps = {
@@ -39,13 +40,14 @@ function harness(opts: { heartbeat?: Reply | ((n: number) => Reply | undefined);
     followUpOne: async () => ({ fixId: 'x', outcome: 'no change' }),
     readings: async () => ({ memAvailableGb: 12, ghRemaining: 4000, cursor: 'signed_in', ...opts.readings }),
     now: () => Date.parse('2026-10-27T12:00:00Z'),
-    log: () => {},
+    log: (l) => logs.push(l),
     host: { hostId: 'a'.repeat(64), hostname: 'alienware', platform: 'wsl2', version: '0.31.0' },
     repos: new Map([['glot', 'kensaurus/glot.it']]),
     resolveConflict: opts.resolveConflict ?? (async () => { throw new Error('unexpected conflict run') }),
     auditPass: opts.auditPass ?? (async () => { throw new Error('unexpected audit run') }),
+    ...(opts.freshEyes ? { freshEyes: opts.freshEyes } : {}),
   }
-  return { daemon: createDaemon(CONFIG, deps), calls, runs }
+  return { daemon: createDaemon(CONFIG, deps), calls, runs, logs }
 }
 
 const claimReply = ok({
@@ -221,5 +223,64 @@ describe('the Cursor account a worker may spend', () => {
     expect(cursorStateFor({ state: 'signed_in', output: out }, 'someone@else.com')).toBe('signed_out')
     expect(cursorStateFor({ state: 'unknown', output: '' }, 'someone@else.com')).toBe('unknown')
     expect(cursorStateFor({ state: 'signed_in', output: out }, undefined)).toBe('signed_in')
+  })
+})
+
+describe('a first-time user test the console queued (ADR 0053 amendment)', () => {
+  const PASSWORD = 'aB3dE6gH9jK2-9a'
+  const testClaim = ok({
+    claim: {
+      id: CLAIM,
+      kind: 'fresh_eyes',
+      laneId: LANE,
+      model: null,
+      freshEyes: { runId: '20261028-090000-ab12', url: 'https://glot.it/', goal: 'sign up', sessions: 1, successText: null, dryRun: false, accounts: [{ email: 'fresh-eyes-abc@synthetic.kensaur.us', password: PASSWORD, name: 'Fresh Eyes' }] },
+    },
+  })
+
+  it('says in its heartbeat that it runs these tests only when it can', async () => {
+    const without = harness()
+    await without.daemon.tick()
+    expect((without.calls[0]!.body as { host: { takes: string[] } }).host.takes).toEqual([])
+    const able = harness({ freshEyes: async () => ({ result: 'ran', detail: 'ok' }) })
+    await able.daemon.tick()
+    expect((able.calls[0]!.body as { host: { takes: string[] } }).host.takes).toEqual(['fresh_eyes'])
+  })
+
+  it('a fix lane runs it before its own work, reports ran, and never logs the test account', async () => {
+    const seen: unknown[] = []
+    const { daemon, calls, logs, runs } = harness({
+      claim: [testClaim],
+      freshEyes: async (t, o) => {
+        seen.push({ t, projectId: o.projectId })
+        return { result: 'ran', detail: '1 of 1 session(s) reached the goal' }
+      },
+    })
+    await daemon.tick()
+    await daemon.settle()
+    expect(runs).toHaveLength(0)
+    expect(seen).toEqual([{ t: expect.objectContaining({ runId: '20261028-090000-ab12', accounts: [expect.objectContaining({ password: PASSWORD })] }), projectId: P1 }])
+    expect(calls.find((c) => c.path === `/v1/worker/claims/${CLAIM}/done`)!.body).toMatchObject({ outcome: 'ran', failureKind: null })
+    expect(logs.join(' / ')).not.toContain(PASSWORD)
+    expect(logs.join(' / ')).not.toContain('synthetic.kensaur.us')
+    expect(logs.join(' / ')).toContain('first-time user test 20261028-090000-ab12')
+  })
+
+  it('gives a test back when this CLI cannot run it', async () => {
+    const { daemon, calls } = harness({ claim: [testClaim] })
+    await daemon.tick()
+    expect(calls.find((c) => c.path === `/v1/worker/claims/${CLAIM}/done`)!.body).toMatchObject({ outcome: 'skipped' })
+  })
+
+  it('asks for work at once when the heartbeat says a test waits for its lane', async () => {
+    const wake = ok({ hostId: 'h', guards: { max_agents: 6, min_free_mem_gb: 5, gh_floor: 800 }, lanes: [{ id: LANE, name: 'glot', projectId: P1, config: CFG }], refused: [], renewed: [], lost: [], wake: [LANE] })
+    const { daemon, calls } = harness({ heartbeat: (n) => (n === 2 ? wake : undefined), freshEyes: async () => ({ result: 'ran', detail: 'ok' }) })
+    await daemon.tick()
+    expect(calls.filter((c) => c.path === '/v1/worker/claim')).toHaveLength(1)
+    // Idle: the lane would wait 15 minutes; the wake makes it ask on the next beat.
+    await daemon.tick()
+    expect(calls.filter((c) => c.path === '/v1/worker/claim')).toHaveLength(2)
+    await daemon.tick()
+    expect(calls.filter((c) => c.path === '/v1/worker/claim')).toHaveLength(2)
   })
 })

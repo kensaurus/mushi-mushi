@@ -604,7 +604,7 @@ export interface FreshEyesOptions {
   /** Hosts that are the app's own (e.g. its Supabase project); writes may reach them. */
   appHosts?: string[]
   /** A synthetic identity per session (minted by the caller). Without it the run has no account and stays read-only. */
-  identity?: (session: number) => Promise<Identity>
+  identity?: (session: number) => Promise<Identity | null>
   /** Read-only and no account, whatever else is set. */
   dryRun?: boolean
   allow?: readonly AllowRule[]
@@ -616,6 +616,8 @@ export interface FreshEyesOptions {
   onProgress?: (line: string) => void
   /** Open the browser this way (tests). */
   session?: () => Promise<BrowserSession>
+  /** The run id to use, when the console queued the run and already named it (`20261028-091500-ab12`). */
+  runId?: string
 }
 
 const VIEWPORT = { width: 1280, height: 800 }
@@ -686,7 +688,8 @@ const pathOf = (url: string) => {
 
 export async function runFreshEyes(opts: FreshEyesOptions): Promise<FreshEyesResult> {
   const progress = opts.onProgress ?? (() => {})
-  const runId = newRunId()
+  if (opts.runId !== undefined && !/^[0-9]{8}-[0-9]{6}-[a-z0-9]{4}$/.test(opts.runId)) throw new Error(`Bad run id "${opts.runId.slice(0, 40)}".`)
+  const runId = opts.runId ?? newRunId()
   const dir = resolve(opts.outDir ?? join(process.env.LOCALAPPDATA ?? join(process.env.HOME ?? '.', '.cache'), 'mushi', 'fresh-eyes', runId))
   mkdirSync(join(dir, 'shots'), { recursive: true })
   const sessions = Math.max(1, Math.min(10, opts.sessions ?? 3))

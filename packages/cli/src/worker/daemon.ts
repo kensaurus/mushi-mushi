@@ -11,7 +11,9 @@
  *            2. the guards run here (worker/guards.ts): free memory, the
  *               GitHub API quota, the Cursor sign-in, one agent cap for the
  *               whole host, each lane's stop date;
- *            3. a lane runs review follow-ups first, then claims by its mode:
+ *            3. a lane runs review follow-ups first, then claims: a first-time
+ *               user test the console queued for its app comes first
+ *               (worker/fresh-eyes.ts, ADR 0053 amendment), then by its mode:
  *               `fix` a report (its queue first, then the ranked ones) and runs
  *               `mushi work`'s own workOne on it in its clone; `skill` only the
  *               skill-run rounds in its queue (ADR 0042 amendment); `conflicts`
@@ -52,11 +54,13 @@ import {
 import { CURSOR_CONFIRM_GRACE_MS, hostGate, memAvailableGb, pastStop, type MachineReadings } from './guards.js'
 import { auditPass } from './audit.js'
 import { repoOfRemote, resolveConflict } from './conflicts.js'
+import { runFreshEyesClaim } from './fresh-eyes.js'
 import {
   loadWorkerConfig,
   parseClaim,
   parseHeartbeatAnswer,
   WORKER_KEY_PATH,
+  type FreshEyesTarget,
   type HostGuards,
   type LaneConfig,
   type LocalLane,
@@ -90,6 +94,8 @@ export interface DaemonDeps {
   auditPass?: typeof auditPass
   /** owner/name of each lane's clone (its origin remote), by lane name; sent so conflict claims match the clone. */
   repos?: ReadonlyMap<string, string>
+  /** Runs a first-time user test the console queued. Without it the daemon does not offer to take them. */
+  freshEyes?: (t: FreshEyesTarget, o: { projectId: string; signal: AbortSignal; log: (line: string) => void }) => Promise<JobOutcome>
 }
 
 /** What a P3 run reports back (conflicts and audit). */
@@ -164,7 +170,8 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
 
   function heartbeatBody() {
     return {
-      host: deps.host,
+      // `takes`: the claim kinds beyond the lanes' modes this daemon runs (a closed list on the server).
+      host: { ...deps.host, takes: deps.freshEyes ? ['fresh_eyes'] : [] },
       status: {
         state: hostState,
         agents: agents(),
@@ -386,6 +393,11 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
         startJob(lane, k.id, `audit pass (${k.audit.findingsLeft} finding(s) left this hour)`, (signal) =>
           (deps.auditPass ?? auditPass)(api, k.id, { repoDir: lane.local.repoDir, laneName: lane.local.name, model, reviewModel: k.audit.reviewModel, log: (l) => say(lane, l.trim()), signal }),
         )
+      } else if (k.kind === 'fresh_eyes' && deps.freshEyes) {
+        // Any lane of the app runs it: the test needs no clone. Never log the target (it can hold passwords).
+        const run = deps.freshEyes
+        const t = k.freshEyes
+        startJob(lane, k.id, `first-time user test ${t.runId}`, (signal) => run(t, { projectId: lane.local.projectId, signal, log: (l) => say(lane, l.trim()) }))
       } else {
         await giveBack(lane, k.id, `a ${k.kind} claim for a lane in ${c.mode} mode`)
         lane.nextClaimAt = now + BACKOFF_MS
@@ -423,6 +435,8 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
       l.serverId = server?.id ?? null
       l.config = server?.config ?? null
     }
+    // A first-time user test waits for these lanes' app: ask now, not after the idle wait.
+    for (const l of lanes) if (l.serverId && answer.wake.includes(l.serverId)) l.nextClaimAt = 0
     for (const id of answer.lost) {
       for (const l of lanes) {
         const ac = l.running.get(id)
@@ -586,6 +600,7 @@ export async function runDaemon(opts: { configPath?: string } = {}): Promise<voi
     host: { hostId, hostname: nodeHostIO.hostname.split('.')[0]!.slice(0, 80) || 'host', platform, version: MUSHI_CLI_VERSION },
     wake: () => wake(),
     repos,
+    freshEyes: (t, o) => runFreshEyesClaim(t, { ...o, apiKey: key, endpoint }),
   })
   onInterrupt((signal) => daemon.shutdown(signal))
   process.stdout.write(`mushi worker: ${cfg.lanes.length} lane(s) on ${platform}; heartbeat every ${HEARTBEAT_MS / 1000} s. Stop with Ctrl-C or systemctl --user stop mushi-worker.\n`)

@@ -428,13 +428,14 @@ function stopChildren(): void {
 const CLOSE_GRACE_MS = 30_000
 
 /** Used by the local worker (worker/daemon.ts). */
-export function runProc(cmd: string, args: readonly string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number; maxBytes?: number; signal?: AbortSignal; closeGraceMs?: number } = {}): Promise<Proc> {
+export function runProc(cmd: string, args: readonly string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number; maxBytes?: number; signal?: AbortSignal; closeGraceMs?: number; input?: string } = {}): Promise<Proc> {
   return new Promise((resolve) => {
     // With a time limit, the child leads its own process group (not on
     // Windows) so a timeout ends what it started too: on 2026-10-28 a repo's
     // commit hook (tsc, eslint) ran on for hours after its git was killed.
     const group = !!opts.timeoutMs && process.platform !== 'win32'
-    const child = spawn(cmd, args, { cwd: opts.cwd, env: opts.env ?? process.env, stdio: ['ignore', 'pipe', 'pipe'], detached: group, ...(opts.signal ? { signal: opts.signal } : {}) })
+    const base = { cwd: opts.cwd, env: opts.env ?? process.env, detached: group, ...(opts.signal ? { signal: opts.signal } : {}) }
+    const child = opts.input === undefined ? spawn(cmd, args, { ...base, stdio: ['ignore', 'pipe', 'pipe'] }) : spawn(cmd, args, { ...base, stdio: ['pipe', 'pipe', 'pipe'] })
     if (group) groupLeaders.add(child)
     const stop = (sig: NodeJS.Signals) => {
       try {
@@ -445,6 +446,11 @@ export function runProc(cmd: string, args: readonly string[], opts: { cwd?: stri
       }
     }
     liveChildren.add(child)
+    // Input goes through the pipe, never argv or the environment, so `ps` cannot read it.
+    if (opts.input !== undefined) {
+      child.stdin?.on('error', () => undefined)
+      child.stdin?.end(opts.input)
+    }
     let stdout = ''
     let stderr = ''
     const max = opts.maxBytes ?? 2_000_000
