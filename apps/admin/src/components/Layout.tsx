@@ -6,7 +6,7 @@
 
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   IconMenu, IconClose,
@@ -27,10 +27,10 @@ import { ProjectScopeNotice } from './ProjectScopeNotice'
 import { OrgSwitcher } from './OrgSwitcher'
 import { useMediaQuery } from '../lib/useMediaQuery'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
-import { buildOperatorNav, type BuiltNavItem, type BuiltNavSection } from '../lib/buildNav'
+import { NAV_ITEM_BY_PATH, buildOperatorNav, type BuiltNavItem, type BuiltNavSection } from '../lib/buildNav'
 import { CORE_NAV_PATHS } from '../lib/navRegistry'
-import { LAB_FEATURES, labForPath, useLabs } from '../lib/labs'
-import { useAdminMode } from '../lib/mode'
+import { LAB_FEATURES, useLabs } from '../lib/labs'
+import { NAV_CHILDREN, activeParent, isNavPathActive, morePages } from '../lib/sidebarTree'
 import { Tooltip, Btn } from './ui'
 import { RouteProgress } from './RouteProgress'
 import { PAGE_FOOT_SLOT_ID } from './readout/ReadoutPanel'
@@ -40,8 +40,7 @@ import { CommandPalette } from './CommandPalette'
 import { SearchButton } from './SearchButton'
 import { HotkeysModal } from './HotkeysModal'
 import { ActivityDrawer } from './ActivityDrawer'
-import { SidebarFooterControls } from './SidebarFooterControls'
-import { SidebarBrandToggles } from './SidebarBrandToggles'
+import { DisplayPreferences } from './DisplayPreferences'
 import { SidebarUserCard, SignOutAllDialog } from './SidebarUserCard'
 import { PrivacyPostureBadge } from './PrivacyPostureBadge'
 import { DemoProjectHint } from './DemoProjectHint'
@@ -69,9 +68,10 @@ import { CHIP_TONE } from '../lib/chipTone'
 type NavItem = BuiltNavItem
 
 /**
- * One sidebar for every account (console audit 2026-10-20): the nine core
- * pages in a flat list, then a "Labs" group with whatever the user switched
- * on in Settings › Labs. No modes, no accordion, no numbering.
+ * One sidebar for every account (console audit 2026-10-20): the core pages in
+ * a flat list (a page's sub-pages open under it while you are in it), then a
+ * "Labs" group with whatever the user keeps in the sidebar, then "More pages"
+ * with every other page (lib/sidebarTree.ts). No modes, no numbering.
  */
 interface NavSection extends Omit<BuiltNavSection, 'id'> {
   id: BuiltNavSection['id'] | 'core' | 'labs'
@@ -94,10 +94,6 @@ const STAGE_TONE: Record<NonNullable<NavSection['stage']>, string> = {
   A: CHIP_TONE.okSubtle,
 }
 
-function isActive(currentPath: string, itemPath: string) {
-  if (itemPath === '/') return currentPath === '/'
-  return currentPath === itemPath || currentPath.startsWith(itemPath + '/')
-}
 
 
 /** Step number (1–5) / letter glyph for the icon-rail section picker. */
@@ -142,7 +138,7 @@ function ScrollToHashAnchor() {
 
 export function Layout({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth()
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
   // The phone and desktop headers both stay in the DOM (CSS picks one), but
@@ -152,8 +148,6 @@ export function Layout({ children }: { children: ReactNode }) {
   const [railSignOutOpen, setRailSignOutOpen] = useState(false)
   const labs = useLabs()
   const [morePagesOpen, setMorePagesOpen] = useState(false)
-  // One mode for everyone (lib/mode.ts); the brand row keeps only the Admin / Tester portal switch.
-  const { mode, setMode } = useAdminMode()
   const palette = useCommandPalette()
   const askPanel = useAskMushiPanel()
   const [hotkeysOpen, setHotkeysOpen] = useState(false)
@@ -349,7 +343,7 @@ export function Layout({ children }: { children: ReactNode }) {
         .filter(visibleByFeature)
     const core = pick(CORE_NAV_PATHS)
     const labItems = pick(LAB_FEATURES.filter((f) => labs.isEnabled(f.id)).map((f) => f.paths[0]))
-    const sections: NavSection[] = [{ id: 'core', title: 'Pages', hint: 'The nine pages every account has.', items: core }]
+    const sections: NavSection[] = [{ id: 'core', title: 'Pages', hint: 'The pages every account has.', items: core }]
     if (labItems.length > 0) {
       sections.push({
         id: 'labs',
@@ -372,12 +366,38 @@ export function Layout({ children }: { children: ReactNode }) {
   const navCounts = useNavCounts({ live: true, slices: navSlices })
 
 
-  // A page reached by link or ⌘K that is not in the sidebar (a Lab that is
-  // off, or a page only the palette lists) gets a one-line pointer to Labs.
-  const onHiddenRoute =
-    pathname !== '/' &&
-    !visibleNav.some((s) => s.items.some((i) => isActive(pathname, i.path))) &&
-    labForPath(pathname) != null
+  // Sub-pages of the core page you are in, listed under it (Checks › Scheduled
+  // tests, Team › Billing, …); every other page sits under "More pages".
+  const openParent = activeParent(pathname, search)
+  const childItems = useMemo((): NavItem[] => {
+    if (!openParent) return []
+    return (NAV_CHILDREN[openParent] ?? [])
+      .map((path) => NAV_ITEM_BY_PATH.get(path))
+      .filter((i): i is NavItem => i != null)
+      .filter(visibleByRole)
+      .filter(visibleByFeature)
+  }, [openParent, isSuperAdmin, isOperator, has])
+  const moreGroups = useMemo(
+    () =>
+      morePages({ isOperator, isSuperAdmin }, labs.enabled).map((g) => ({
+        ...g,
+        items: g.entries
+          .map((e) => NAV_ITEM_BY_PATH.get(e.path))
+          .filter((i): i is NavItem => i != null)
+          .filter(visibleByFeature),
+      })),
+    [isOperator, isSuperAdmin, has, labs.enabled],
+  )
+  const isCurrent = (path: string) => isNavPathActive(pathname, search, path)
+  // A parent is the current page only when none of its sub-pages is.
+  const isCurrentNav = (path: string) =>
+    isCurrent(path) && !(path === openParent && childItems.some((c) => isCurrent(c.path)))
+  const onMorePage = moreGroups.some((g) => g.items.some((i) => isCurrent(i.path)))
+  // Opening a page that lives under "More pages" opens the list, so the
+  // sidebar always shows where you are.
+  useEffect(() => {
+    if (onMorePage) setMorePagesOpen(true)
+  }, [onMorePage])
 
   function selectSection(id: string, options?: { expandSidebar?: boolean }) {
     if (options?.expandSidebar) {
@@ -395,7 +415,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
   function renderFullNavLink(item: NavItem) {
     const { label, path, icon: Icon, requiresFeature } = item
-    const active = isActive(pathname, path)
+    const active = isCurrentNav(path)
     const gated = !!requiresFeature && !has(requiresFeature) && !isSuperAdmin
     return (
       <Link
@@ -422,7 +442,7 @@ export function Layout({ children }: { children: ReactNode }) {
         label={label}
         description={description}
         icon={icon}
-        active={isActive(pathname, path)}
+        active={isCurrentNav(path)}
         gated={!!requiresFeature && !has(requiresFeature) && !isSuperAdmin}
         badge={resolveNavBadge(path, navCounts, { criticalReports30d })}
         onNavigate={() => setMobileOpen(false)}
@@ -446,19 +466,6 @@ export function Layout({ children }: { children: ReactNode }) {
         <div className={`chrome-top-row ${compact ? 'px-2 justify-center' : 'px-4'}`}>
           <SidebarWordmark compact={compact} />
         </div>
-        <div className={compact ? 'px-2.5 pb-2.5' : 'px-4 pb-2'}>
-          <SidebarBrandToggles compact={compact} showMode={false} mode={mode} onSelectMode={setMode} />
-        </div>
-        {!compact && onHiddenRoute && (
-          <div className="px-4 pb-2">
-            <div className="rounded-sm border border-chrome-border bg-chrome px-2 py-1.5 text-2xs text-fg-muted space-y-1 text-balance">
-              <p className="leading-snug">This page is not in your sidebar.</p>
-              <Link to="/settings?tab=labs" className="block underline hover:no-underline">
-                Add it in Settings › Labs →
-              </Link>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Navigation — ghost scrollbar at rest; thin bar on hover/focus only. */}
@@ -500,7 +507,49 @@ export function Layout({ children }: { children: ReactNode }) {
                   animate={!compact}
                   className={compact ? 'flex flex-col gap-1' : 'space-y-0.5'}
                 >
-                  {section.items.map((item) => renderNavLink(item, compact))}
+                  {section.items.map((item) => (
+                    <Fragment key={item.path}>
+                      {renderNavLink(item, compact)}
+                      {!compact && item.path === openParent && childItems.length > 0 ? (
+                        <div className="ml-3 space-y-0.5 border-l border-edge/40 pl-2" data-testid="nav-children">
+                          {childItems.map((child) => renderNavLink(child, false))}
+                        </div>
+                      ) : null}
+                      {/* The icon rail has no room for the list: it shows
+                          only the sub-page you are on, under its page. */}
+                      {compact && item.path === openParent
+                        ? childItems.filter((child) => isCurrent(child.path)).map((child) => renderNavLink(child, true))
+                        : null}
+                    </Fragment>
+                  ))}
+                  {section.id === 'core' && compact ? (
+                    <>
+                      {moreGroups
+                        .flatMap((group) => group.items)
+                        .filter((item) => isCurrent(item.path))
+                        .map((item) => renderNavLink(item, true))}
+                      <Tooltip
+                        side="right"
+                        portal
+                        content={<NavRailFlyout title="More pages" description="Every other page, by section. Opens the full sidebar." />}
+                      >
+                        <Btn
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSidebarCollapsed(false)
+                            setMorePagesOpen(true)
+                          }}
+                          className="nav-rail-item nav-rail-item--btn border-0"
+                          aria-label="More pages"
+                          data-testid="nav-rail-more"
+                        >
+                          <IconChevronRight className="nav-rail-icon" />
+                        </Btn>
+                      </Tooltip>
+                    </>
+                  ) : null}
                   {section.id === 'core' && !compact ? (
                     <>
                       {/* Opens in place: every page not in the sidebar, one
@@ -517,13 +566,14 @@ export function Layout({ children }: { children: ReactNode }) {
                         <span>More pages</span>
                       </button>
                       {morePagesOpen ? (
-                        <div id="nav-more-pages" className="ml-3 space-y-0.5 border-l border-edge/40 pl-2">
-                          {LAB_FEATURES.filter((f) => !labs.isEnabled(f.id)).map((f) => (
-                            <Link key={f.id} to={f.paths[0]} className="nav-link w-full justify-start text-fg-secondary hover:text-fg" title={f.description}>
-                              <span className="truncate">{f.label}</span>
-                            </Link>
+                        <div id="nav-more-pages" className="ml-3 space-y-1.5 border-l border-edge/40 pl-2" data-testid="nav-more-pages">
+                          {moreGroups.map((group) => (
+                            <div key={group.sectionId} className="space-y-0.5">
+                              <p className="px-2 pt-1 text-3xs font-medium uppercase tracking-wider text-fg-faint">{group.title}</p>
+                              {group.items.map((item) => renderNavLink(item, false))}
+                            </div>
                           ))}
-                          <Link to="/settings?tab=labs" className="nav-link w-full justify-start text-2xs text-fg-muted hover:text-fg-secondary">
+                          <Link to="/settings?tab=display#sidebar-pages" className="nav-link w-full justify-start text-2xs text-fg-muted hover:text-fg-secondary">
                             Keep pages in the sidebar…
                           </Link>
                         </div>
@@ -538,8 +588,8 @@ export function Layout({ children }: { children: ReactNode }) {
       </nav>
       </div>
 
-      {/* User footer — density, theme, focus in one micro row; identity card
-          below. In the rail this is the utility cluster, and it gets a full
+      {/* User footer — the identity card; its menu holds theme, density and
+          focus mode (DisplayPreferences). In the rail this is the utility cluster, and it gets a full
           `border-edge` rule (not the /60 hairline the nav groups use) so
           "account + app chrome" reads as a different class of thing from the
           PDCA navigation above it. */}
@@ -563,12 +613,6 @@ export function Layout({ children }: { children: ReactNode }) {
           </Link>
         )}
         <PrivacyPostureBadge compact={compact} />
-        {!compact && (
-          <SidebarFooterControls
-            focusMode={focusMode}
-            onToggleFocus={() => setFocusMode((value) => !value)}
-          />
-        )}
         {compact && (
           <Tooltip
             side="right"
@@ -599,7 +643,25 @@ export function Layout({ children }: { children: ReactNode }) {
             </Btn>
           </Tooltip>
         )}
-        {!compact && <SidebarUserCard user={user} signOut={signOut} />}
+        {!compact && (
+          <SidebarUserCard
+            user={user}
+            signOut={signOut}
+            menuTop={
+              <>
+                <DisplayPreferences focusMode={focusMode} onFocusChange={setFocusMode} />
+                <div className="flex items-center justify-between gap-2 px-2 pb-1 pt-1.5 text-2xs">
+                  <Link to="/settings?tab=display" className="text-fg-muted underline-offset-2 hover:text-fg hover:underline">
+                    All display settings
+                  </Link>
+                  <Link to="/tester" className="text-fg-muted underline-offset-2 hover:text-fg hover:underline">
+                    Open the tester portal →
+                  </Link>
+                </div>
+              </>
+            }
+          />
+        )}
         {compact && (
           <Tooltip
             side="right"
