@@ -39,7 +39,7 @@ import { claudeGenerateObject } from '../../_shared/claude-messages.ts'
 import { logLlmInvocation } from '../../_shared/telemetry.ts'
 import { createTrace } from '../../_shared/observability.ts'
 import { tagLangfuseTrace } from '../../_shared/sentry.ts'
-import { withAnthropicOrOpenAi } from '../../_shared/llm-failover.ts'
+import { providerQuotaHint, withAnthropicOrOpenAi } from '../../_shared/llm-failover.ts'
 import { generateValidatedObject } from '../../_shared/structured-output.ts'
 import { verifyEndUserToken, MUSHI_USER_TOKEN_HEADER } from '../../_shared/end-user-identity.ts'
 import { projectConfigDenied } from '../helpers.ts'
@@ -326,6 +326,13 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
         langfuseTraceId: trace.id,
         keySource,
       })
+      const quotaHint = providerQuotaHint(err, 'visitor')
+      if (quotaHint) {
+        // A monthly spend cap is expected. 402 stays off the SDK circuit
+        // breaker (5xx/429 mark the API unreachable) and is not a Sentry error.
+        log.warn('sdk_assistant_quota', { projectId, error: msg })
+        return c.json({ ok: false, error: { code: 'LLM_UNAVAILABLE', message: quotaHint } }, 402)
+      }
       log.error('sdk_assistant_llm_error', { projectId, error: msg })
       return c.json({ ok: false, error: { code: 'ASSISTANT_ERROR', message: 'The assistant is temporarily unavailable.' } }, 502)
     }

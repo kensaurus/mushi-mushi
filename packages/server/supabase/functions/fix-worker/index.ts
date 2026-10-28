@@ -1659,7 +1659,7 @@ ${
  *   - validation_rejected — a single file exceeded the circuit-breaker line cap.
  *   - spec_violation      — token-shaped string / inventory-contract violation.
  *   - no_relevant_code    — RAG + Firecrawl produced no grounding context.
- *   - llm_rate_limit      — transient provider quota / 429.
+ *   - llm_rate_limit      — transient provider quota / 429 / monthly usage cap.
  *
  * Each is already persisted on `fix_attempts.failure_category`, surfaced on the
  * admin Fixes page, and fanned out via the `fix.failed` plugin event. They must
@@ -1701,7 +1701,15 @@ function categorizeFailure(err: unknown, msg: string): string {
   // the inner error name is in the message.
   if (m.includes('noobjectgeneratederror') || m.includes('no_object')) return 'llm_no_object';
   if (m.includes('aijsonparseerror') || m.includes('jsonparseerror')) return 'llm_invalid_json';
-  if (m.includes('rate limit') || m.includes('rate_limit') || m.includes('429')) return 'llm_rate_limit';
+  if (
+    m.includes('rate limit') ||
+    m.includes('rate_limit') ||
+    m.includes('429') ||
+    m.includes('usage limit') ||
+    m.includes('usage_limit')
+  ) {
+    return 'llm_rate_limit';
+  }
   // Validation gates — thrown by us, not the model.
   if (m.startsWith('validation failed:')) {
     if (m.includes('outside scope')) return 'scope_blocked';

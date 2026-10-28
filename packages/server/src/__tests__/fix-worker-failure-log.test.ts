@@ -97,6 +97,9 @@ describe('fix-worker failure logging (MUSHI-MUSHI-SERVER-8)', () => {
       // stored as cursor_api_error, and retried on the next spend-down tick.
       expect(src).toContain("if (isSpendDownPinnedKeyUnavailable(msg)) return 'cursor_api_error'");
       expect(src).toContain("log.warn('Fix worker stopped: spend-down key is not usable'");
+      // A provider "usage limit reached" is a spend cap, same bucket as 429,
+      // so it stays a warn instead of paging Sentry as llm_other_error.
+      expect(src).toContain("m.includes('usage limit')");
     });
   });
 });

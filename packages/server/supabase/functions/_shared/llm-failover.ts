@@ -4,7 +4,9 @@
  *
  * `withLlmFailover(db, projectId, provider, fn)` iterates the ordered list
  * of active keys, calls `fn(resolvedKey)`, and on error:
- *   - 429 → marks key as `quota_exhausted` (1-hour cooldown), advances.
+ *   - 429, or a monthly usage cap ("usage limit reached") → marks key as
+ *     `quota_exhausted` (1-hour cooldown), advances. A 403 whose body is a
+ *     spend cap is quota, not a bad key.
  *   - 401/403 → marks key as `auth_failed`, advances.
  *   - Transient (5xx, timeout, ECONNRESET/ETIMEDOUT, "overloaded") → bounded
  *     exponential-backoff+jitter retry on the SAME key first (the key isn't
@@ -79,14 +81,60 @@ export class LlmFailoverError extends Error {
 /**
  * True when Stage 1 should degrade to heuristic classification instead of
  * crashing. Covers exhausted/missing provider pools, hosted-wallet denial,
- * and raw 401/403 that escaped failover (MUSHI-MUSHI-SERVER-19).
+ * a provider usage cap, and raw 401/403 that escaped failover
+ * (MUSHI-MUSHI-SERVER-19).
  */
 export function isStage1LlmUnavailable(err: unknown): boolean {
   if (err instanceof WalletDeniedError) return true;
   // Over budget: Stage 1 falls back to heuristic triage instead of going dark.
   if (err instanceof LlmBudgetExceededError) return true;
   if (err instanceof LlmFailoverError) return true;
-  return classifyLlmError(err) === 'auth';
+  const kind = classifyLlmError(err);
+  return kind === 'auth' || kind === 'quota';
+}
+
+const USAGE_CAP_RE = /usage[ _-]limits?|usage_limit_exceeded/i;
+const QUOTA_RESET_RE =
+  /(?:access resumes|regain access(?: on)?)\s+(\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?(?:\s*UTC)?)/i;
+
+/** Message, response body, and cause. `String(err)` drops fields on plain objects. */
+function providerErrorText(err: unknown): string {
+  const parts: string[] = [String(err)];
+  if (!err || typeof err !== 'object') return parts.join('\n');
+  const obj = err as { message?: unknown; responseBody?: unknown; data?: unknown; cause?: unknown };
+  if (typeof obj.message === 'string') parts.push(obj.message);
+  if (typeof obj.responseBody === 'string') parts.push(obj.responseBody.slice(0, 2_000));
+  if (typeof obj.data === 'string') parts.push(obj.data.slice(0, 2_000));
+  else if (obj.data && typeof obj.data === 'object') {
+    try {
+      parts.push(JSON.stringify(obj.data).slice(0, 2_000));
+    } catch {
+      /* provider payload that cannot be serialized */
+    }
+  }
+  if (obj.cause) parts.push(String(obj.cause));
+  return parts.join('\n');
+}
+
+/**
+ * Sentence for a monthly provider spend cap. Null for ordinary 429s.
+ * `visitor` is the in-app assistant; `operator` is the person who holds the key.
+ */
+export function providerQuotaHint(
+  err: unknown,
+  audience: 'operator' | 'visitor' = 'operator',
+): string | null {
+  const raw = providerErrorText(err);
+  if (!USAGE_CAP_RE.test(raw)) return null;
+  const reset = raw.match(QUOTA_RESET_RE)?.[1]?.replace(/\s+/g, ' ')?.trim() ?? null;
+  if (audience === 'visitor') {
+    return reset
+      ? `The assistant is unavailable until ${reset}.`
+      : 'The assistant is unavailable because the AI provider is out of quota.';
+  }
+  return reset
+    ? `Provider quota exhausted until ${reset}. Update your key in Settings → AI keys.`
+    : 'Provider quota exhausted. Update your key in Settings → AI keys.';
 }
 
 /**
@@ -97,9 +145,18 @@ export function isStage1LlmUnavailable(err: unknown): boolean {
  */
 export function classifyLlmError(err: unknown): 'quota' | 'auth' | 'transient' | 'other' {
   const msg = String(err).toLowerCase();
+  const detail = providerErrorText(err).toLowerCase();
 
-  // HTTP status codes in the error message (Vercel AI SDK wraps them)
-  if (msg.includes('429') || msg.includes('rate limit') || msg.includes('quota')) {
+  // HTTP status codes in the error message (Vercel AI SDK wraps them).
+  // A monthly cap ("usage limit reached", often HTTP 403) is quota too:
+  // treating it as auth or other rethrows AI_APICallError and skips the next key.
+  if (
+    msg.includes('429') ||
+    msg.includes('rate limit') ||
+    msg.includes('quota') ||
+    detail.includes('usage limit') ||
+    detail.includes('usage_limit')
+  ) {
     return 'quota';
   }
   // Anthropic returns "invalid x-api-key" (note the hyphenated header name) —
@@ -407,6 +464,9 @@ export async function withAnthropicOrOpenAi<T>(
   anthropicFn: (key: ResolvedKey) => Promise<T>,
   openAiFn: (key: ResolvedKey) => Promise<T>,
 ): Promise<{ result: T; usedProvider: 'anthropic' | 'openai' }> {
+  // Kept when Anthropic died on a monthly spend cap, so a later "no OpenAI
+  // key" failure still tells the caller about the cap instead of hiding it.
+  let quotaErr: unknown;
   // Try Anthropic pool first
   try {
     const result = await withLlmFailover(db, projectId, 'anthropic', anthropicFn);
@@ -419,6 +479,7 @@ export async function withAnthropicOrOpenAi<T>(
       err instanceof LlmFailoverError &&
       (err.code === 'NO_KEYS_CONFIGURED' || err.code === 'ALL_KEYS_EXHAUSTED')
     ) {
+      if (providerQuotaHint(err)) quotaErr = err;
       // No Anthropic keys available — fall through to OpenAI.
       log.warn('Anthropic exhausted, trying OpenAI', { projectId, reason: err.code });
     } else if ((await import('./ai-sdk.ts')).NoObjectGeneratedError.isInstance(err)) {
@@ -439,6 +500,11 @@ export async function withAnthropicOrOpenAi<T>(
   }
 
   // Try OpenAI pool
-  const result = await withLlmFailover(db, projectId, 'openai', openAiFn);
-  return { result, usedProvider: 'openai' };
+  try {
+    const result = await withLlmFailover(db, projectId, 'openai', openAiFn);
+    return { result, usedProvider: 'openai' };
+  } catch (err) {
+    if (quotaErr && err instanceof LlmFailoverError && !providerQuotaHint(err)) throw quotaErr;
+    throw err;
+  }
 }

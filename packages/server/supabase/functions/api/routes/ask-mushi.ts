@@ -17,7 +17,7 @@ import {
 } from '../../_shared/models.ts';
 import { claudeGenerateObject, claudeStreamText } from '../../_shared/claude-messages.ts';
 import { logLlmInvocation, extractAnthropicCacheUsage } from '../../_shared/telemetry.ts';
-import { withAnthropicOrOpenAi } from '../../_shared/llm-failover.ts';
+import { providerQuotaHint, withAnthropicOrOpenAi } from '../../_shared/llm-failover.ts';
 import { createTrace, scoreExistingTrace } from '../../_shared/observability.ts';
 import { generateValidatedObject } from '../../_shared/structured-output.ts';
 import {
@@ -904,6 +904,10 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
         latencyMs,
         langfuseTraceId: null,
       });
+      const quotaHint = providerQuotaHint(err, 'operator');
+      if (quotaHint) {
+        return c.json({ ok: false, error: { code: 'LLM_UNAVAILABLE', message: quotaHint } }, 402);
+      }
       return c.json({ ok: false, error: { code: 'LLM_ERROR', message: msg } }, 500);
     }
   }
@@ -1203,7 +1207,13 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
           latencyMs,
           langfuseTraceId: streamTrace.id,
         });
-        await stream.write(toSseEvent({ code: 'LLM_ERROR', message: msg }, { event: 'error' }));
+        const quotaHint = providerQuotaHint(err, 'operator');
+        await stream.write(
+          toSseEvent(
+            { code: quotaHint ? 'LLM_UNAVAILABLE' : 'LLM_ERROR', message: quotaHint ?? msg },
+            { event: 'error' },
+          ),
+        );
       }
     });
   });

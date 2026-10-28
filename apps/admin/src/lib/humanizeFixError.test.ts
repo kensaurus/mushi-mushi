@@ -1,6 +1,30 @@
 import { describe, expect, it } from 'vitest'
 import { humanizeFixError } from './humanizeFixError'
 
+describe('humanizeFixError: provider usage cap', () => {
+  it('names the reset date and points at AI keys', () => {
+    const h = humanizeFixError(
+      'AI_APICallError: upstream LLM provider usage limit reached (access resumes 2026-11-01 00:00 UTC)',
+    )
+    expect(h?.title).toBe('The AI provider is out of quota.')
+    expect(h?.hint).toBe(
+      'Provider quota exhausted until 2026-11-01 00:00 UTC. Update your key in Settings → AI keys.',
+    )
+    expect(h?.severity).toBe('hard')
+    expect(h?.action?.target).toEqual({ kind: 'route', to: '/settings?tab=byok' })
+  })
+
+  it('still explains a usage cap that has no reset date', () => {
+    const h = humanizeFixError('upstream LLM provider usage limit reached')
+    expect(h?.hint).toBe('Provider quota exhausted. Update your key in Settings → AI keys.')
+  })
+
+  it('leaves a Cursor account usage limit on its own path', () => {
+    const h = humanizeFixError("Cursor run ERROR: You've hit your usage limit for this plan.")
+    expect(h?.title).not.toBe('The AI provider is out of quota.')
+  })
+})
+
 describe('humanizeFixError: no relevant code', () => {
   it('points at the web search setting when the fix worker says it is off', () => {
     const h = humanizeFixError(

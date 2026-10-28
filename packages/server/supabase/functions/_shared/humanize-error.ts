@@ -308,14 +308,36 @@ export function humanizeFixError(
     };
   }
 
+  // Provider monthly spend cap. "usage limit reached" does not say 429 or
+  // "rate limit", so it used to fall through to the generic failure copy.
+  const usageCap =
+    /usage[ _-]limits?|usage_limit_exceeded/i.test(raw) && !/\bcursor\b/i.test(raw);
+  const quotaReset = raw
+    .match(
+      /(?:access resumes|regain access(?: on)?)\s+(\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?(?:\s*UTC)?)/i,
+    )?.[1]
+    ?.replace(/\s+/g, ' ')
+    ?.trim();
+  if (usageCap) {
+    return {
+      title: 'The AI provider is out of quota.',
+      hint: quotaReset
+        ? `Provider quota exhausted until ${quotaReset}. Update your key in Settings → AI keys.`
+        : 'Provider quota exhausted. Update your key in Settings → AI keys.',
+      severity: 'hard',
+      action: { label: 'Open AI keys', target: { kind: 'route', to: '/settings?tab=byok' } },
+      raw,
+    };
+  }
+
   // LLM: rate limit / all keys exhausted
   if (
-    m.includes('ALL_KEYS_EXHAUSTED') ||
+    m.includes('all_keys_exhausted') ||
     m.includes('rate limit') ||
     m.includes('429') ||
     category === 'llm_rate_limit'
   ) {
-    const allExhausted = m.includes('ALL_KEYS_EXHAUSTED');
+    const allExhausted = m.includes('all_keys_exhausted');
     return {
       title: allExhausted
         ? 'All configured API keys have hit their quota.'
