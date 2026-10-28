@@ -88,14 +88,19 @@ export interface ReadyToMergeSignals {
   review_head_sha?: string | null
 }
 
-/** Ready to merge (see the glossary). A review about an older commit is stale, never "merge". */
-function readyToMerge(fix: ReadyToMergeSignals): boolean {
+/**
+ * Ready to merge (see the glossary). A review about an older commit is stale,
+ * never "merge". `pipelineGreen` relaxes the CI condition only: the Opus
+ * verdict is still required, because /pipeline also files a PR whose review
+ * was skipped (no key) as approved and green.
+ */
+function readyToMerge(fix: ReadyToMergeSignals, pipelineGreen = false): boolean {
   if (!fix.pr_url || fix.merged_at) return false
   if ((fix.pr_state ?? 'open') !== 'open') return false
   if (fix.review_verdict !== 'merge') return false
   if (fix.review_head_sha && fix.commit_sha && fix.review_head_sha !== fix.commit_sha) return false
   if (fix.ci_infra?.infra) return false
-  return (fix.check_run_conclusion ?? '').toLowerCase() === 'success'
+  return pipelineGreen || (fix.check_run_conclusion ?? '').toLowerCase() === 'success'
 }
 
 /** The part of a /v1/admin/pipeline read "Ready to merge" needs. */
@@ -117,9 +122,9 @@ export function pipelineApprovedGreen(pipeline: PipelineGroupsRead | null): Set<
   return ids
 }
 
-/** Ready to merge by the fix's own fields, or because /pipeline counts it approved and green. */
+/** Ready to merge, taking CI as green when its check summary says success or /pipeline's CI read does. */
 export function isReadyToMerge(fix: ReadyToMergeSignals & { id: string }, approvedGreen: ReadonlySet<string>): boolean {
-  return readyToMerge(fix) || (approvedGreen.has(fix.id) && Boolean(fix.pr_url) && !fix.merged_at)
+  return readyToMerge(fix, approvedGreen.has(fix.id))
 }
 
 /** One-line definitions, for a hint beside the number. */

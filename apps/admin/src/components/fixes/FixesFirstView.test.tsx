@@ -76,6 +76,15 @@ describe('FixesFirstView', () => {
     expect(container.textContent).toContain('Ready to merge: 1')
   })
 
+  // /pipeline also files a PR whose Opus review was skipped (no key) as
+  // approved and green; that is not an Opus "merge" (2026-10-28 review).
+  it('does not list a PR without an Opus merge verdict, even when /pipeline counts it green', async () => {
+    const unreviewed = { ...approvedSkippedSummary, review_verdict: null, review_head_sha: null } as FixAttempt
+    await render([unreviewed], pipelineWith([{ id: 'not_queued', items: ['fix-839'] }]))
+    expect(container.querySelector('[data-testid="fixes-ready-empty"]')).not.toBeNull()
+    expect(container.textContent).not.toContain('Opus: merge')
+  })
+
   it('does not list it when /pipeline does not count it ready', async () => {
     await render([approvedSkippedSummary], pipelineWith([{ id: 'hold', items: ['fix-839'] }]))
     expect(container.querySelector('[data-testid="fixes-ready-empty"]')).not.toBeNull()
