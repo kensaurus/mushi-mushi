@@ -15,7 +15,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const calls: Array<{ path: string; body: unknown }> = []
-const state = vi.hoisted(() => ({ reply: { ok: true, data: { reportId: 'r-new' } } as unknown, lanes: [] as unknown[] }))
+const state = vi.hoisted(() => ({ reply: { ok: true, data: { reportId: 'r-new' } } as unknown, lanes: [] as unknown[], hosts: [] as unknown[] }))
 vi.mock('../../lib/supabase', () => ({
   apiFetch: async (path: string, init?: { body?: string }) => {
     calls.push({ path, body: init?.body ? JSON.parse(init.body) : null })
@@ -23,7 +23,7 @@ vi.mock('../../lib/supabase', () => ({
   },
 }))
 vi.mock('../../lib/usePageData', () => ({
-  usePageData: () => ({ data: { lanes: state.lanes, hosts: [], projects: [], generatedAt: '' }, loading: false, error: null, reload: vi.fn() }),
+  usePageData: () => ({ data: { lanes: state.lanes, hosts: state.hosts, projects: [], generatedAt: '' }, loading: false, error: null, reload: vi.fn() }),
 }))
 
 import { ReportsFileIssue } from './ReportsFileIssue'
@@ -62,6 +62,7 @@ beforeEach(() => {
   onFiled.mockClear()
   state.reply = { ok: true, data: { reportId: 'r-new' } }
   state.lanes = []
+  state.hosts = []
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -89,17 +90,24 @@ describe('ReportsFileIssue', () => {
     expect(container.querySelector('a[href="/reports/r-new"]')).not.toBeNull()
   })
 
-  it("offers only this app's fix lanes, and queues the report on the chosen one", async () => {
+  it("offers only this app's fix lanes on the caller's own machines, and queues the report on the chosen one", async () => {
+    state.hosts = [
+      { id: 'h-mine', mine: true },
+      { id: 'h-teammate', mine: false },
+    ]
     state.lanes = [
-      { id: 'lane-fix', projectId: 'p1', name: 'yenyen', config: { mode: 'fix' } },
-      { id: 'lane-fu', projectId: 'p1', name: 'yenyen-fu', config: { mode: 'followups' } },
-      { id: 'lane-other', projectId: 'p2', name: 'glot', config: { mode: 'fix' } },
+      { id: 'lane-fix', hostId: 'h-mine', projectId: 'p1', name: 'yenyen', config: { mode: 'fix' } },
+      { id: 'lane-fu', hostId: 'h-mine', projectId: 'p1', name: 'yenyen-fu', config: { mode: 'followups' } },
+      { id: 'lane-other', hostId: 'h-mine', projectId: 'p2', name: 'glot', config: { mode: 'fix' } },
+      // A teammate's machine: the server refuses to queue there (LANE_NOT_FOUND).
+      { id: 'lane-teammate', hostId: 'h-teammate', projectId: 'p1', name: 'yenyen-2', config: { mode: 'fix' } },
     ]
     render()
     const options = [...container.querySelectorAll('option')].map((o) => o.getAttribute('value'))
     expect(options).toContain('lane-fix')
     expect(options).not.toContain('lane-fu')
     expect(options).not.toContain('lane-other')
+    expect(options).not.toContain('lane-teammate')
     type('In one line', 'Undo for a mistaken change')
     type('What happened', 'After a transfer, show a toast with Undo for a few seconds.')
     type('Fix it on', 'lane-fix')

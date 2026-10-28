@@ -54,8 +54,11 @@ export function ReportsFileIssue({ projectId, projectName, onClose, onFiled }: P
   const [error, setError] = useState<string | null>(null)
   const [filed, setFiled] = useState<Filed[]>([])
   const lanes = usePageData<WorkLanesData>(LANES_PATH)
-  // Lanes that fix reports for this app; follow-up, conflict and audit lanes do not take a filed report.
-  const fixLanes = (lanes.data?.lanes ?? []).filter((l) => l.projectId === projectId && (l.config?.mode ?? 'fix') === 'fix')
+  // Fix lanes for this app on the caller's own machines: the server queues only
+  // onto a machine you own (a lane runs code there), and follow-up, conflict
+  // and audit lanes take no filed report.
+  const myHosts = new Set((lanes.data?.hosts ?? []).filter((h) => h.mine).map((h) => h.id))
+  const fixLanes = (lanes.data?.lanes ?? []).filter((l) => l.projectId === projectId && myHosts.has(l.hostId) && (l.config?.mode ?? 'fix') === 'fix')
 
   const canSend = title.trim().length >= 3 && description.trim().length > 0 && !busy
 
