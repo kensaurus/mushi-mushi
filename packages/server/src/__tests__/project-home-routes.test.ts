@@ -55,7 +55,7 @@ vi.mock('../../supabase/functions/api/routes/pipeline.ts', () => ({
     if (state.pipelineFails) throw new Error('fix_attempts: timeout')
     return {
       stages: [
-        { id: 'review', label: 'Reviewed', count: 45, stuck: 45, oldestAt: null, groups: [{ id: 'hold', stage: 'review', tone: 'stuck', label: '45 PRs: Opus says hold; a person decides', count: 45, oldestAt: null, actions: [], settings: null, items: [] }] },
+        { id: 'review', label: 'Reviewed', count: 45, stuck: 45, oldestAt: null, groups: [{ id: 'hold', stage: 'review', tone: 'stuck', label: '45 PRs: the review says do not merge; you decide', count: 45, oldestAt: null, actions: [], settings: null, items: [] }] },
         { id: 'train', label: 'Release train', count: 2, stuck: 0, oldestAt: null, groups: [] },
         { id: 'merged', label: 'Merged', count: 3, stuck: 0, oldestAt: null, groups: [] },
       ],
@@ -198,7 +198,7 @@ describe('GET /v1/admin/projects/:id/home', () => {
 
     const needs = d.needsYou.data as Array<{ id: string; text: string }>
     expect(needs.map((n) => n.id)).toEqual(['site_broken', 'critical_waiting', 'pipeline_hold', 'sdk_upgrade'])
-    expect(needs.find((n) => n.id === 'pipeline_hold')!.text).toBe('45 PRs: Opus says hold; a person decides.')
+    expect(needs.find((n) => n.id === 'pipeline_hold')!.text).toBe('45 PRs: the review says do not merge; you decide.')
 
     expect(d.access.data).toMatchObject({
       repo: { url: 'https://github.com/kensaurus/glot.it', branch: 'main' },

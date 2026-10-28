@@ -403,7 +403,7 @@ describe('who opens fixes', () => {
       opener: 'both',
       server: { agentKeys: 0, offKeys: 1, dispatches48h: 0, lastAt: '2026-10-24T01:00:00Z' },
       local: { runs24h: 1, running: 1, lastAt: '2026-10-26T09:00:00Z' },
-      problem: 'Auto-fix is on but has no agent key (1 Cursor key off or spend-down off); 0 dispatches in 48h',
+      problem: 'Auto-fix is on but has no Cursor key to start fixes (1 Cursor key off or spend-down off); no fix started in the last 2 days',
     })
     expect(glot.opener).toBe('nobody')
     // Auto-fix off and a key that does not serve it: no problem to report.
@@ -413,7 +413,7 @@ describe('who opens fixes', () => {
   it('an active spend-down key that dispatched recently is healthy; one that did not is flagged', () => {
     const live = { ...base, cursorKeys: [{ ...base.cursorKeys[0], status: 'active', spend_down_enabled: true }] }
     expect(buildDispatchers({ ...live, jobs: [{ project_id: P, created_at: '2026-10-26T10:00:00Z' }] })[0]).toMatchObject({ problem: null, server: { agentKeys: 1, dispatches24h: 1 } })
-    expect(buildDispatchers(live)[0].problem).toBe('Auto-fix has an agent key but dispatched nothing in 48h')
+    expect(buildDispatchers(live)[0].problem).toBe('Auto-fix has a Cursor key but started no fix in the last 2 days')
     // A key Cursor refused for usage is not usable until it is back.
     const tired = { ...live, cursorKeys: [{ ...live.cursorKeys[0], exhausted_until: '2026-10-26T18:00:00Z' }] }
     expect(buildDispatchers(tired)[0].server.agentKeys).toBe(0)
@@ -422,7 +422,10 @@ describe('who opens fixes', () => {
   it('becomes a red group first in the Fix PR stage, linking the spend-down switch', () => {
     const group = dispatcherGroup(buildDispatchers(base), NOW)!
     expect(group).toMatchObject({ id: 'autofix_no_agent', tone: 'stuck', count: 2, settings: { to: '/credits#cursor-fix-bugs' } })
-    expect(group.label).toBe('2 apps: auto-fix is on but has no agent key; 0 dispatches in 48h')
+    expect(group.label).toBe('2 apps: auto-fix is on but has no Cursor key to start fixes; no fix started in the last 2 days')
+    const started = (n: number) => dispatcherGroup([{ ...buildDispatchers(base)[0], server: { ...buildDispatchers(base)[0].server, dispatches48h: n } }], NOW)!.label
+    expect(started(1)).toBe('1 app: auto-fix is on but has no Cursor key to start fixes; 1 fix started in the last 2 days')
+    expect(started(3)).toMatch(/; 3 fixes started in the last 2 days$/)
     expect(group.items.find((i) => i.id === P)?.queueDetail).toBe('Local mushi work lanes opened 1 in 24h (1 running).')
     const stages = withDispatcherGroup(run(), group)
     const pr = stages.find((s) => s.id === 'pr')!

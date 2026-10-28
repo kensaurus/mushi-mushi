@@ -189,7 +189,7 @@ describe('buildNeedsYou', () => {
       health: [sig('site', 'bad'), sig('ci', 'bad'), sig('sdk', 'good'), sig('errors', 'good')],
       criticalWaiting: 2,
       pipeline: [
-        stage('review', 45, 45, [group('hold', '45 PRs: Opus says hold; a person decides', 45), group('fix_first_working', '3 PRs: moving', 3, 'moving')]),
+        stage('review', 45, 45, [group('hold', '45 PRs: the review says do not merge; you decide', 45), group('fix_first_working', '3 PRs: moving', 3, 'moving')]),
         stage('pr', 7, 7, [group('agent_failed', '7 fixes: agent failed, no PR opened', 7)]),
         stage('train', 2, 2, [group('not_queued', '2 PRs: approved and green, not queued to merge', 2)]),
       ],
@@ -198,7 +198,7 @@ describe('buildNeedsYou', () => {
     expect(items).toHaveLength(NEEDS_YOU_MAX)
     expect(items.map((i) => i.id)).toEqual(['site_broken', 'critical_waiting', 'pipeline_hold', 'ci_red', 'pipeline_agent_failed'])
     const hold = items.find((i) => i.id === 'pipeline_hold')!
-    expect(hold.text).toBe('45 PRs: Opus says hold; a person decides.')
+    expect(hold.text).toBe('45 PRs: the review says do not merge; you decide.')
     expect(hold.action.to).toBe('/pipeline?project=p1')
     expect(items.find((i) => i.id === 'critical_waiting')!.action.to).toBe('/reports?status=open&severity=critical')
   })
