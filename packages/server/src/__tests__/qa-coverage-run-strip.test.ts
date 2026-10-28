@@ -25,7 +25,14 @@ vi.mock('../../supabase/functions/_shared/auth.ts', () => {
     c.set('userId', 'u1')
     await next()
   }
-  return { jwtAuth: pass, apiKeyAuth: pass, requireApiKeyScope: () => pass }
+  // The runs route is adminOrApiKey. Registration calls it; without this
+  // export the suite fails to load (the strip tests themselves use jwtAuth).
+  return {
+    jwtAuth: pass,
+    apiKeyAuth: pass,
+    requireApiKeyScope: () => pass,
+    adminOrApiKey: () => pass,
+  }
 })
 vi.mock('../../supabase/functions/api/shared.ts', () => ({
   dbError: (c: { json: (b: unknown, s: number) => Response }, e: { message: string }) =>
