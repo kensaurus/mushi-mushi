@@ -127,6 +127,12 @@ describe('a claim ends with an outcome of its own kind', () => {
     expect(outcomeKindRefusal('filed', 'conflict')).toMatch(/Only an audit claim/)
     expect(outcomeKindRefusal('no_change', 'audit')).toBeNull()
     expect(outcomeKindRefusal('failed', 'conflict')).toBeNull()
+    // A first-time user test (ADR 0053 amendment) ends as ran, and only it does.
+    expect(outcomeKindRefusal('ran', 'fresh_eyes')).toBeNull()
+    expect(outcomeKindRefusal('ran', 'fix')).toMatch(/Only a first-time user test/)
+    expect(outcomeKindRefusal('pr_opened', 'fresh_eyes')).toMatch(/Only a fix claim/)
+    expect(outcomeKindRefusal('no_change', 'fresh_eyes')).toMatch(/ends as ran/)
+    expect(outcomeKindRefusal('failed', 'fresh_eyes')).toBeNull()
   })
 })
 

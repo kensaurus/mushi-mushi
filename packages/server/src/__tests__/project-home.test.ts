@@ -304,7 +304,7 @@ describe('setupSignal (fresh-eyes, ADR 0053)', () => {
 
   it('reads minutes and steps, with the light by time', () => {
     const s = setupSignal({ run })!
-    expect(s).toMatchObject({ id: 'setup', label: 'First-time setup', headline: '6 min, 11 steps', light: 'warn', href: '/ux-runs?tab=fresh-eyes' })
+    expect(s).toMatchObject({ id: 'setup', label: 'First-time setup', headline: '6 min, 11 steps', light: 'warn', href: '/first-user-test' })
     expect(s.detail).toBe('2 of 3 first-time visitors reached the goal in the last run.')
     expect(setupSignal({ run: { ...run, ttfv_seconds: 200 } })!.light).toBe('good')
     expect(setupSignal({ run: { ...run, ttfv_seconds: 1200 } })!.light).toBe('bad')

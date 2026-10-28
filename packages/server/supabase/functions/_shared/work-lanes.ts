@@ -211,8 +211,16 @@ export interface HeartbeatLane {
   repo: string | null
 }
 
+/**
+ * Claim kinds beyond its lanes' modes a daemon says it can run (ADR 0053
+ * amendment 2026-10-28): `fresh_eyes`, a first-time user test the console
+ * queued. A daemon that predates the list sends none and is offered none.
+ */
+export const HOST_TAKES = ['fresh_eyes'] as const
+export type HostTake = (typeof HOST_TAKES)[number]
+
 export interface Heartbeat {
-  host: { hostId: string; hostname: string; platform: 'linux' | 'wsl2' | 'macos' | 'windows'; version: string | null }
+  host: { hostId: string; hostname: string; platform: 'linux' | 'wsl2' | 'macos' | 'windows'; version: string | null; takes: HostTake[] }
   status: Record<string, string | number | boolean>
   lanes: HeartbeatLane[]
   /** Active claims the daemon is still working on: their leases are renewed. */
@@ -250,6 +258,8 @@ export function parseHeartbeat(raw: unknown): Parsed<Heartbeat> {
   if (!hostname) return { ok: false, message: 'host.hostname is required.' }
   if (!['linux', 'wsl2', 'macos', 'windows'].includes(String(h.platform))) return { ok: false, message: 'host.platform must be linux, wsl2, macos or windows.' }
   const version = typeof h.version === 'string' && /^[0-9A-Za-z.+-]{1,40}$/.test(h.version) ? h.version : null
+  // Capability, not control: a kind this server does not know is dropped, so a newer daemon still registers.
+  const takes = [...new Set((Array.isArray(h.takes) ? h.takes : []).filter((t): t is HostTake => typeof t === 'string' && (HOST_TAKES as readonly string[]).includes(t)))]
   const lanesRaw = Array.isArray(b.lanes) ? b.lanes : []
   if (lanesRaw.length > MAX_LANES_PER_HOST) return { ok: false, message: `At most ${MAX_LANES_PER_HOST} lanes per host.` }
   const lanes: HeartbeatLane[] = []
@@ -273,7 +283,7 @@ export function parseHeartbeat(raw: unknown): Parsed<Heartbeat> {
   const status = cleanStatus(b.status)
   return {
     ok: true,
-    value: { host: { hostId: h.hostId, hostname, platform: h.platform as Heartbeat['host']['platform'], version }, status, lanes, claims },
+    value: { host: { hostId: h.hostId, hostname, platform: h.platform as Heartbeat['host']['platform'], version, takes }, status, lanes, claims },
   }
 }
 
@@ -379,9 +389,10 @@ export async function claimFirstFree<T extends { id: string }>(
 /**
  * How a run ended. `pushed` and `refused` are conflict runs (ADR 0049: a merge
  * commit pushed, or the worker's own checks refused the agent's result);
- * `filed` is an audit run that filed at least one reproduced finding (ADR 0050).
+ * `filed` is an audit run that filed at least one reproduced finding (ADR 0050);
+ * `ran` is a first-time user test that finished and synced (ADR 0053 amendment).
  */
-export const CLAIM_OUTCOMES = ['pr_opened', 'no_change', 'verdict', 'timeout', 'skipped', 'stopped', 'failed', 'pushed', 'refused', 'filed'] as const
+export const CLAIM_OUTCOMES = ['pr_opened', 'no_change', 'verdict', 'timeout', 'skipped', 'stopped', 'failed', 'pushed', 'refused', 'filed', 'ran'] as const
 export type ClaimOutcome = (typeof CLAIM_OUTCOMES)[number]
 export const FAILURE_KINDS = ['infra', 'code'] as const
 export type FailureKind = (typeof FAILURE_KINDS)[number]

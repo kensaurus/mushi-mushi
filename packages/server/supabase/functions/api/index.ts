@@ -788,6 +788,7 @@ forwardToApiExt([
   '/v1/admin/projects/:pid/fresh-eyes/:runId',
   '/v1/admin/projects/:pid/fresh-eyes/:runId/uploads',
   '/v1/admin/projects/:pid/fresh-eyes/:runId/findings',
+  '/v1/admin/projects/:pid/fresh-eyes/:runId/cancel',
 ]);
 registerPullRequestRoutes(app);
 registerProjectGroupRoutes(app);

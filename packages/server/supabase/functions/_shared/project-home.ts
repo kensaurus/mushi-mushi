@@ -241,7 +241,7 @@ export interface SetupInput {
 /** First-time setup under this is a good light; over SETUP_SLOW_S, a bad one. */
 export const SETUP_GOOD_S = 5 * 60
 export const SETUP_SLOW_S = 15 * 60
-export const FRESH_EYES_HREF = '/ux-runs?tab=fresh-eyes'
+export const FRESH_EYES_HREF = '/first-user-test'
 
 /**
  * "First-time setup: 6 min, 11 steps", from the latest fresh-eyes run. Null

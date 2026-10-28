@@ -2,15 +2,15 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-27 · **788** routes.
+> Generated: 2026-10-28 · **790** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 214 |
+| `adminOrApiKey` | 215 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 400 |
+| `jwtAuth` | 401 |
 | `jwtOrApiKey` | 3 |
 | `public` | 61 |
 | `unknown` | 51 |
@@ -451,8 +451,10 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | PUT | `/v1/admin/projects/:id/vulnerabilities/settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/vulnerabilities.ts` |
 | POST | `/v1/admin/projects/:pid/content-quality/dismiss` | `jwtAuth` | `packages/server/supabase/functions/api/routes/content-quality.ts` |
 | GET | `/v1/admin/projects/:pid/fresh-eyes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
+| POST | `/v1/admin/projects/:pid/fresh-eyes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
 | GET | `/v1/admin/projects/:pid/fresh-eyes/:runId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
 | PUT | `/v1/admin/projects/:pid/fresh-eyes/:runId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
+| POST | `/v1/admin/projects/:pid/fresh-eyes/:runId/cancel` | `jwtAuth` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
 | POST | `/v1/admin/projects/:pid/fresh-eyes/:runId/findings` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
 | POST | `/v1/admin/projects/:pid/fresh-eyes/:runId/uploads` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
 | POST | `/v1/admin/projects/:pid/gate-findings/:id/dismiss` | `jwtAuth` | `packages/server/supabase/functions/api/routes/gate-finding-dismiss.ts` |

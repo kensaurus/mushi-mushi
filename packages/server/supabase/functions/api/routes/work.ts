@@ -6,7 +6,9 @@
  *   The daemon (`mushi work --daemon`), with a worker:run key only:
  *     POST /v1/worker/heartbeat            register the host and its lanes, renew leases;
  *                                          answers each lane's closed settings and the host guards
- *     POST /v1/worker/claim                { laneId } by the lane's mode (P3): fix and skill take a
+ *     POST /v1/worker/claim                { laneId } a first-time user test the console queued for the
+ *                                          lane's app first, when the daemon runs them (ADR 0053
+ *                                          amendment); then by the lane's mode (P3): fix and skill take a
  *                                          report (the queue first, then ranked ones for fix);
  *                                          conflicts a merge-queue conflict (ADR 0049); audit
  *                                          one audit pass (ADR 0050)
@@ -41,6 +43,9 @@ import { composeFixPacket, fixPacketContextFromReport } from '../../_shared/fix-
 import { activeWorkClaims, enqueueReports, queuedForLocalLanes, QUEUE_MODES, WORK_LEASE_MS, type QueueLane } from '../../_shared/work-claims.ts'
 import { AUDIT_FINDINGS_PER_HOUR, outcomeKindRefusal, parseAuditFinding } from '../../_shared/work-modes.ts'
 import { auditFiledLastHour, fileAuditFinding } from './work-audit.ts'
+import { claimFreshEyes, endFreshEyesRun, lanesToWake, type FreshEyesClaimDeps } from './work-fresh-eyes.ts'
+import { mintSyntheticAccount } from '../../_shared/synthetic-accounts.ts'
+import { isOperatorUser } from '../../_shared/operator-gate.ts'
 import { claimConflict, endConflictClaim, type ModeLane } from '../../_shared/work-conflicts.ts'
 import {
   claimFirstFree,
@@ -98,6 +103,8 @@ export interface WorkRouteDeps {
   logAudit: typeof logAudit
   /** Files a reproduced audit finding (work-modes.ts); injectable for tests. */
   fileFinding: typeof fileAuditFinding
+  /** First-time user tests (ADR 0053 amendment): who may mint test accounts, read at call time. */
+  freshEyes: () => FreshEyesClaimDeps
   now: () => Date
 }
 
@@ -112,6 +119,11 @@ export const defaultWorkRouteDeps: WorkRouteDeps = {
   claimRateLimit: (db, key, limit, windowSec) => claimTenantRateLimit(db, key, limit, windowSec),
   logAudit,
   fileFinding: fileAuditFinding,
+  freshEyes: () => ({
+    mint: (db, createdBy, now) => mintSyntheticAccount(db, createdBy, now, Deno.env.get('MUSHI_FRESH_EYES_EMAIL_DOMAIN')),
+    isOperator: isOperatorUser,
+    selfProjectId: Deno.env.get('MUSHI_SELF_PROJECT_ID'),
+  }),
   now: () => new Date(),
 }
 
@@ -151,6 +163,8 @@ interface HostRow {
   status: Record<string, unknown> | null
   guards: Record<string, unknown> | null
   revoked_at: string | null
+  /** Claim kinds beyond its lanes' modes the daemon runs (fresh_eyes). */
+  takes: string[] | null
 }
 
 interface LaneRow {
@@ -176,10 +190,12 @@ interface ClaimRow {
   lane_id: string
   host_id: string
   project_id: string
-  /** Null for conflict and audit claims (P3). */
+  /** Null for conflict, audit and fresh_eyes claims. */
   report_id: string | null
-  kind: 'fix' | 'conflict' | 'audit'
+  kind: 'fix' | 'conflict' | 'audit' | 'fresh_eyes'
   merge_queue_id: string | null
+  /** A first-time user test the console queued (fresh_eyes claims). */
+  ux_run_id: string | null
   head_after: string | null
   status: string
   from_queue: boolean
@@ -194,9 +210,9 @@ interface ClaimRow {
   detail: string | null
 }
 
-const HOST_COLUMNS = 'id, owner_user_id, api_key_id, host_id, hostname, platform, mushi_version, last_heartbeat_at, status, guards, revoked_at'
+const HOST_COLUMNS = 'id, owner_user_id, api_key_id, host_id, hostname, platform, mushi_version, last_heartbeat_at, status, guards, revoked_at, takes'
 const LANE_COLUMNS = 'id, host_id, project_id, name, model, mode, concurrency, paused, stop_at, drain, prune_own, review_model, repo, status, last_seen_at'
-const CLAIM_COLUMNS = 'id, lane_id, host_id, project_id, report_id, kind, merge_queue_id, head_after, status, from_queue, claimed_at, lease_until, finished_at, outcome, failure_kind, auto_requeued, fix_attempt_id, pr_url, detail'
+const CLAIM_COLUMNS = 'id, lane_id, host_id, project_id, report_id, kind, merge_queue_id, ux_run_id, head_after, status, from_queue, claimed_at, lease_until, finished_at, outcome, failure_kind, auto_requeued, fix_attempt_id, pr_url, detail'
 const REPORT_DETAIL_COLUMNS =
   'id, project_id, summary, description, category, severity, status, component, confidence, stage2_analysis, reproduction_steps, screenshot_url, bug_ontology_tags, created_at'
 const ATTEMPT_COLUMNS = 'id, report_id, status, agent, pr_url, pr_state, merged_at, error, created_at'
@@ -296,6 +312,8 @@ export async function expireLeases(db: Db, projectId: string, now: Date): Promis
     if (claim.kind === 'conflict') {
       const { data: lane } = await db.from('work_lanes').select('name').eq('id', claim.lane_id).maybeSingle()
       await endConflictClaim(db, claim, { outcome: 'lease_expired', failureKind: 'infra', detail: 'its lease ran out', headAfter: null }, (lane as { name?: string } | null)?.name ?? 'a lane', now)
+    } else if (claim.kind === 'fresh_eyes') {
+      await endFreshEyesRun(db, claim.ux_run_id, 'lease_expired', null, now)
     } else {
       await autoRequeue(db, claim, 'infra', 'lease_expired', now)
     }
@@ -469,6 +487,7 @@ async function heartbeat(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
     hostname: hb.host.hostname,
     platform: hb.host.platform,
     mushi_version: hb.host.version,
+    takes: hb.host.takes,
     status: hb.status,
     // Server time: a machine with a wrong clock must not look fresh or stale.
     last_heartbeat_at: now.toISOString(),
@@ -539,9 +558,12 @@ async function heartbeat(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
     renewed = ((data ?? []) as Array<{ id: string }>).map((r) => r.id)
   }
   const lost = hb.claims.filter((id) => !renewed.includes(id))
+  // Lanes whose app has a first-time user test waiting ask for work now
+  // instead of after their idle wait. Lane ids only: never a command.
+  const wake = await lanesToWake(db, lanes, hb.host.takes.includes('fresh_eyes'), now)
   return c.json({
     ok: true,
-    data: { hostId: host.id, heartbeatSeconds: 60, guards: hostGuardsFrom(host.guards), lanes, refused, renewed, lost },
+    data: { hostId: host.id, heartbeatSeconds: 60, guards: hostGuardsFrom(host.guards), lanes, refused, renewed, lost, wake },
   })
 }
 
@@ -573,6 +595,21 @@ async function claim(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   const block = laneClaimBlock(cfg, ((active ?? []) as unknown[]).length, now)
   if (block) return c.json({ ok: true, data: { claim: null, reason: block } })
   const leaseUntil = new Date(now.getTime() + WORK_LEASE_MS).toISOString()
+  // A first-time user test someone pressed Run now on goes before the lane's own work.
+  if ((host.takes ?? []).includes('fresh_eyes')) {
+    let fe
+    try {
+      fe = await claimFreshEyes(db, lane, host, now, leaseUntil, deps.freshEyes())
+    } catch (e) {
+      wlog.warn('fresh-eyes claim failed', { laneId: lane.id, err: e instanceof Error ? e.message : String(e) })
+      return err(c, 'DB_ERROR', 'Could not read the queued tests. Try again in a minute.', 503)
+    }
+    if (fe) {
+      // The answer may hold test-account passwords: never cached, shown once.
+      if (fe.target.accounts.length) c.header('Cache-Control', 'no-store')
+      return c.json({ ok: true, data: { claim: { id: fe.claimId, kind: 'fresh_eyes', laneId: lane.id, projectId: lane.project_id, leaseUntil, model: null, freshEyes: fe.target } } })
+    }
+  }
   if (cfg.mode === 'conflicts') return claimConflictMode(c, db, lane, now, leaseUntil, cfg)
   if (cfg.mode === 'audit') return claimAuditMode(c, db, lane, host, now, leaseUntil, cfg)
 
@@ -749,6 +786,10 @@ async function done(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
     await endConflictClaim(db, own, d, (laneRow as { name?: string } | null)?.name ?? 'a lane', now)
     return c.json({ ok: true, data: { requeued: false } })
   }
+  if (own.kind === 'fresh_eyes') {
+    await endFreshEyesRun(db, own.ux_run_id, d.outcome, d.detail, now)
+    return c.json({ ok: true, data: { requeued: false } })
+  }
   const requeued = d.failureKind === 'infra' ? await autoRequeue(db, own, d.failureKind, 'requeue', now) : false
   return c.json({ ok: true, data: { requeued } })
 }
@@ -862,6 +903,7 @@ async function listLanes(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
       return pr ? `Merge conflict on ${pr.repo}#${pr.pr_number}` : 'Merge conflict'
     }
     if (x.kind === 'audit') return 'Code-read audit pass'
+    if (x.kind === 'fresh_eyes') return 'First-time user test'
     return title(x.report_id ?? '')
   }
   const isActive = (x: ClaimRow) => x.status === 'active' && Date.parse(x.lease_until) > now.getTime()
