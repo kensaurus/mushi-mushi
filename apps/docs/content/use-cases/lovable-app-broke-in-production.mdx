@@ -70,8 +70,16 @@ Steps 1 to 3 are the expensive part, and a user cannot do them for you. An
 in-app bug reporter can: [Mushi Mushi](/) is an open-source SDK that lets the
 user report from a widget or a phone shake, attaches the screenshot and the
 console/network tail, writes a plain-English diagnosis of what broke and
-why, and hands the fix prompt to Cursor or Claude Code over MCP. One command
-installs it:
+why, and gives you a fix prompt to paste back into Lovable, Bolt, Cursor or
+Claude Code. [Here is a sample diagnosis](/demo/diagnosis).
+
+In Lovable or Bolt there is no terminal, so you install it with a prompt:
+sign up, copy your script tag from the console, and ask the builder to add
+it to the `<head>` of `index.html`. The
+[Lovable or Bolt quickstart](/quickstart/lovable-bolt) walks through it, and
+[Mushi as a Lovable connector](/quickstart/lovable-mcp) lets you read reports
+from Lovable's chat. With a terminal (Cursor, Claude Code), one command does
+it:
 
 ```bash
 npx mushi-mushi

@@ -25,7 +25,7 @@
  *          the session store via lib/authIdentity.ts so both render the same.
  */
 
-import { useEffect, useRef, useState, type ReactElement } from 'react'
+import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { ConfirmDialog } from './ConfirmDialog'
 import { PlanBadge } from './PlanBadge'
@@ -243,6 +243,8 @@ function AccountRow({ account, isActive, busy, onSwitch, onRemove }: AccountRowP
 interface SidebarUserCardProps {
   user: User | null
   signOut: () => Promise<void> | void
+  /** Shown at the top of the menu (the admin console puts its display settings here). */
+  menuTop?: ReactNode
 }
 
 /**
@@ -282,7 +284,7 @@ export function SignOutAllDialog({
   )
 }
 
-export function SidebarUserCard({ user, signOut }: SidebarUserCardProps) {
+export function SidebarUserCard({ user, signOut, menuTop }: SidebarUserCardProps) {
   const { signInWithGoogle, signInWithGitHub } = useAuth()
   const { accounts, activeUserId } = useAccounts()
   const [open, setOpen] = useState(false)
@@ -346,9 +348,15 @@ export function SidebarUserCard({ user, signOut }: SidebarUserCardProps) {
         {open && (
           <div
             role="menu"
-            aria-label="Switch account"
-            className="absolute bottom-full left-0 right-0 z-50 mb-1.5 rounded-md border border-edge-subtle bg-surface-raised p-1 shadow-raised"
+            aria-label={menuTop ? 'Account and display' : 'Switch account'}
+            className={`absolute bottom-full left-0 z-50 mb-1.5 rounded-md border border-edge-subtle bg-surface-raised p-1 shadow-raised ${menuTop ? 'w-80' : 'right-0'}`}
           >
+            {menuTop ? (
+              <>
+                {menuTop}
+                <div className="my-1 border-t border-edge-subtle" />
+              </>
+            ) : null}
             <div className="max-h-64 overflow-y-auto">
               {accounts.map((a) => (
                 <AccountRow
@@ -410,7 +418,7 @@ export function SidebarUserCard({ user, signOut }: SidebarUserCardProps) {
             aria-haspopup="menu"
             aria-expanded={open}
             className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-surface-overlay/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-edge"
-            title="Switch account"
+            title={menuTop ? 'Account and display settings' : 'Switch account'}
           >
             <Avatar
               avatarUrl={(user?.user_metadata as { avatar_url?: string })?.avatar_url ?? null}

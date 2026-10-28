@@ -11,6 +11,7 @@ import { CHIP_TONE } from '../../lib/chipTone'
 import { ADMIN_ONLY_HINT } from '../../lib/orgPermissions'
 import {
   CATEGORY_LABEL,
+  pluginEventLabel,
   type InstalledPlugin,
   type MarketplacePlugin,
   type ReliabilityStats,
@@ -79,7 +80,7 @@ export function PluginCard({
         <div className="flex flex-wrap gap-1">
           {p.manifest.subscribes.slice(0, 4).map((evt) => (
             <code key={evt} className="text-3xs bg-surface-raised px-1.5 py-0.5 rounded">
-              {evt}
+              {pluginEventLabel(evt)}
             </code>
           ))}
           {p.manifest.subscribes.length > 4 && (

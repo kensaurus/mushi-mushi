@@ -8,6 +8,12 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 
 ## Unreleased *(pending release)*
 
+### Highlights
+
+- **Resolve merge conflicts** — (`conflicts`): takes a merge-queue PR of the lane's own repository that waits for a conflict agent. It merges the base branch into the commit Mushi saw, and lets the agent change only the conflicted files. It refuses the result when a conflict marker is left or any other file changed. Then it commits with your hooks and pushes the merge commit, fast-forward only.
+- **Audit the code, screen by screen** — (`audit`): a model proposes bugs in read-only mode. Each comes with the line, the code there and a check (a pattern, or one of the repo's lint, typecheck, test or check scripts). The machine runs the check itself, an optional second model may only veto, and only reproduced findings are filed.
+- **Run skill runs** — (`skill`): runs only the rounds of skill runs started on /credits with this lane.
+
 ## v1.33.x
 
 Latest tag: `v1.33.3`

@@ -1,0 +1,55 @@
+{
+  "_comment": "SAMPLE, not a real user's report. Written by the Mushi team in the shape Mushi stores a classified report (reports row: description, environment, console_logs, network_logs, stage2_analysis, fix_packet) plus the widget's breadcrumbs. Rendered by apps/docs/content/demo/diagnosis.mdx. The fix prompts in sample-fix-prompt.json are generated from this file by the console's own builder (apps/admin/src/components/report-detail/fixPrompt.ts); apps/admin/src/components/report-detail/fixPrompt.sample.test.ts fails if they drift. After editing this file run that test with -u.",
+  "id": "sample-checkout-pay-now",
+  "description": "Checkout button does nothing on my phone. I put my card in and tapped Pay now three times. No error, no spinner, nothing. Did it on my laptop instead and it worked.",
+  "title": "Pay now does nothing on phones: the postcode check fails silently",
+  "summary": "On a phone, tapping Pay now runs the checkout handler, but it stops before sending anything because the postcode is empty, and the postcode field is hidden on small screens. Laptops show the field, so checkout works there.",
+  "severity": "high",
+  "category": "bug",
+  "component": "CheckoutForm",
+  "confidence": 0.81,
+  "status": "classified",
+  "environment": {
+    "url": "https://shop.example.com/checkout",
+    "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
+    "platform": "iPhone",
+    "viewport": { "width": 390, "height": 844 }
+  },
+  "breadcrumbs": [
+    { "tsOffsetMs": -41000, "category": "navigation", "message": "/cart → /checkout" },
+    { "tsOffsetMs": -30000, "category": "ui.tap", "message": "input[name=cardNumber]" },
+    { "tsOffsetMs": -22000, "category": "ui.tap", "message": "input[name=expiry]" },
+    { "tsOffsetMs": -9000, "category": "ui.tap", "message": "button[type=submit] \"Pay now\"" },
+    { "tsOffsetMs": -6000, "category": "ui.tap", "message": "button[type=submit] \"Pay now\"" },
+    { "tsOffsetMs": -3000, "category": "ui.tap", "message": "button[type=submit] \"Pay now\"" }
+  ],
+  "console_logs": [],
+  "network_logs": [
+    { "method": "GET", "url": "https://shop.example.com/api/cart", "status": 200, "duration": 64, "timestamp": 1 }
+  ],
+  "stage1_classification": { "category": "bug", "severity": "high" },
+  "stage2_analysis": {
+    "title": "Pay now does nothing on phones: the postcode check fails silently",
+    "summary": "On a phone, tapping Pay now runs the checkout handler, but it stops before sending anything because the postcode is empty, and the postcode field is hidden on small screens. Laptops show the field, so checkout works there.",
+    "severity": "high",
+    "category": "bug",
+    "component": "CheckoutForm",
+    "rootCause": "Three taps on Pay now were recorded, but no request to /api/checkout followed and nothing was logged, so the handler returns early. In src/components/CheckoutForm.tsx, handlePay returns when address.postcode is empty without showing an error, and the postcode input has the class \"hidden sm:block\", so on screens narrower than 640px it is never shown and can never be filled in. On a laptop the field is visible, which is why checkout works there.",
+    "suggestedFix": "In src/components/CheckoutForm.tsx, remove \"hidden\" from the postcode input so it shows at every width, and replace the silent return in handlePay with a visible error next to the field. Add a test that renders the form at a 390px-wide viewport and submits it.",
+    "reproductionSteps": [
+      "Open /checkout on a phone, or in a window 390px wide",
+      "Fill in the card number and expiry",
+      "Tap Pay now: nothing happens and no request is sent",
+      "Repeat on a laptop: checkout goes through"
+    ],
+    "confidence": 0.81
+  },
+  "fix_packet": "# Fix this Mushi report: sample-checkout-pay-now\n\n## Relevant code\n### `src/components/CheckoutForm.tsx`\n```\nasync function handlePay(e: React.FormEvent) {\n  e.preventDefault()\n  if (!address.postcode) return\n  setPaying(true)\n  await startCheckout({ cart, card, address })\n}\n\n<input\n  name=\"postcode\"\n  className=\"hidden sm:block\"\n  value={address.postcode}\n  onChange={(e) => setAddress({ ...address, postcode: e.target.value })}\n/>\n```",
+  "affected": {
+    "file": "src/components/CheckoutForm.tsx",
+    "lines": [
+      { "code": "if (!address.postcode) return", "note": "Stops checkout without telling the user why." },
+      { "code": "className=\"hidden sm:block\"", "note": "Hides the postcode field on screens narrower than 640px." }
+    ]
+  }
+}

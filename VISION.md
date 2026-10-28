@@ -127,11 +127,19 @@ mediator's on-ramps and off-ramps: how bugs get *into* the queue and how fixes
 get *out*. What stays banned is leading with enterprise plumbing (SSO, region
 routing, Helm) — that remains operator-page material.
 
+The landing page and the README's first screen go further (ADR 0052, owner
+2026-10-27): they carry only Bucket A, as one job — *a user said your app is
+broken; Mushi tells you why in plain English and hands Cursor, Claude Code or
+Lovable the fix* — with one install action and one sample diagnosis anyone can
+read. Buckets B and C live on docs pages one click away. The operator cockpit
+(release trains, workers, credits, CI cost) stays behind the operator account
+and never appears on the public path.
+
 | Bucket | What's in it | Where it appears |
 |---|---|---|
 | **A. The Wedge** (lead with this) | Capture a bug → AI diagnoses it in plain English → ready-to-apply fix → editor-native (MCP) → optional draft PR. Standalone, no Sentry. | README hero, landing hero, npm first paragraph, the GIF, the 60-second quickstart |
 | **B. The Depth** (earns trust, shown second) | Multi-framework SDKs, dedup via knowledge graph, the app recipe (schema, tokens, routes, gates, CI, deploy, env presence) and its drift, "where it stops" honesty table, self-host, BYOK, Sentry enrichment. | README mid-body, landing second screen, `docs/` |
-| **C. The Mediator Fabric** (the on-ramps and off-ramps — shown as "works with everything you already run") | Sentry error ingest + 11 adapters, 13 plugins, Slack act-from-channel, Linear agent sessions, A2A/AG-UI, coding-agent dispatch. Enterprise plumbing (SSO/audit/retention/region, Helm) stays operator-only. | Landing "one queue" section + README integrations strip; enterprise plumbing in `docs/operators/`. |
+| **C. The Mediator Fabric** (the on-ramps and off-ramps — shown as "works with everything you already run") | Sentry error ingest + 11 adapters, 13 plugins, Slack act-from-channel, Linear agent sessions, A2A/AG-UI, coding-agent dispatch. Enterprise plumbing (SSO/audit/retention/region, Helm) stays operator-only. | Docs pages linked from the landing's "More" line (`/plugins`, `/compare/sentry-vs-mushi`) + README integrations strip; not a landing section (ADR 0052); enterprise plumbing in `docs/operators/`. |
 
 ### The naming of the wedge feature
 

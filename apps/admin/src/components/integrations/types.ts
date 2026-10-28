@@ -292,7 +292,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     consoleLabel: 'Create GitHub PAT',
     setupSteps: [
       'Create a fine-grained PAT at github.com/settings/tokens?type=beta.',
-      'Grant Contents: Read and write + Pull requests: Read and write on the target repo.',
+      'Grant Contents: Read and write + Pull requests: Read and write on the target repo, and Actions: Read and write so Mushi can re-run failed CI.',
       'Paste the full repo URL (https://github.com/owner/repo) and the token below.',
       'Optional: add a webhook secret so CI check-runs sync back to Fix cards.',
     ],

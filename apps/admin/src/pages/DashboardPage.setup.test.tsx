@@ -59,25 +59,33 @@ const setup = {
   isStepIncomplete: (id: string) => !steps.find((s) => s.id === id)?.complete,
   getStep: (id: string) => steps.find((s) => s.id === id) ?? null,
 }
-const healthyStages = ['plan', 'do', 'check', 'act'].map((id) => ({
-  id,
-  label: id,
-  icon: '',
-  description: '',
-  count: 0,
-  countLabel: 'items',
-  bottleneck: null,
-  tone: 'ok',
-  cta: { to: '/reports', label: 'Open' },
-}))
-const dashboard = {
-  empty: false,
-  counts: { openBacklog: 0, openCritical14d: 0, reports14d: 5 },
-  fixSummary: { inProgress: 0, failed: 0 },
-  pdcaStages: healthyStages,
-  focusStage: null,
-  activity: [],
-  integrations: [],
+const section = <T,>(data: T) => ({ status: 'ok', data, connect: null, error: null })
+// Home for an app whose SDK never checked in: SDK light off, nothing else wrong.
+const home = {
+  generatedAt: '2026-10-26T00:00:00Z',
+  projectId: PROJECT,
+  app: section({
+    name: 'mushi-demo',
+    slug: 'mushi-demo',
+    iconUrl: null,
+    liveUrl: null,
+    platforms: [],
+    version: null,
+    sdkOrigin: null,
+    repoUrl: null,
+    thumbnail: null,
+    thumbnailState: { available: true, canRefresh: false, reason: 'Add your live site address to take a screenshot.', lastError: null, lastAttemptAt: null },
+  }),
+  health: section([
+    { id: 'sdk', label: 'SDK sending', status: 'not_connected', light: 'off', headline: 'Never checked in', detail: null, at: null, href: '/connect', connect: { label: 'Set up the SDK', to: '/connect' } },
+  ]),
+  needsYou: section([{ id: 'sdk_silent', impact: 65, text: 'Your app is not sending to Mushi yet, so users cannot report bugs.', action: { label: 'Fix it', to: '/connect' } }]),
+  release: { status: 'not_connected', data: null, connect: { label: 'Connect GitHub', to: '/connect' }, error: null },
+  sitemap: { status: 'not_connected', data: null, connect: { label: 'Install the SDK', to: '/connect' }, error: null },
+  week: section([]),
+  activity: section([]),
+  access: { status: 'error', data: null, connect: null, error: 'timeout' },
+  partial: [],
 }
 const pageData = (data: unknown) => ({ data, loading: false, error: null, errorMessage: null, isValidating: false, lastFetchedAt: null, reload: vi.fn() })
 
@@ -85,18 +93,18 @@ vi.mock('../lib/usePageData', () => ({
   usePageData: (path: string | null) =>
     path?.includes('/sdk-health')
       ? pageData({ problems: [], notes: [], installed: null, lastSeenAt: null, repoUrl: null, siteUrl: null, checkedAt: '2026-10-26T00:00:00Z' })
-      : pageData(dashboard),
+      : path?.endsWith('/home')
+        ? pageData(home)
+        : pageData(null),
 }))
 vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => setup }))
+vi.mock('../lib/useEntitlements', () => ({ useEntitlements: () => ({ canEditProject: true, has: () => false }) }))
 vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => PROJECT }))
 vi.mock('../lib/realtime', () => ({ useRealtimeReload: () => ({ channelState: 'idle' }) }))
 vi.mock('../lib/pageContext', () => ({ usePublishPageContext: () => {} }))
 vi.mock('../lib/copy', () => ({ usePageCopy: () => null }))
 vi.mock('../lib/toast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }))
 vi.mock('../lib/useMilestoneCelebration', () => ({ useMilestoneCelebration: () => ({ triggerKey: 0 }) }))
-vi.mock('../lib/dashboardModeUx', () => ({
-  useDashboardUx: () => ({ isQuickstart: false, isBeginner: true, isAdvanced: false, hideTabs: false, plainBanner: true, hideOverviewChrome: false, hideLoopSnapshot: true }),
-}))
 vi.mock('../lib/useNextStep', () => ({
   useNextStep: () => ({ step: null, stepId: 'sdk_installed', projectId: PROJECT, loading: false }),
   useClaimNextStep: () => {},
@@ -107,26 +115,14 @@ vi.mock('../lib/supabase', () => ({
   supabase: { auth: { getSession: async () => ({ data: { session: null } }) } },
 }))
 vi.mock('../components/PagePosture', () => ({
-  POSTURE_PRIORITY: { status: 0, heroOrSnapshot: 1 },
-  PagePosture: ({ slots }: { slots: Array<{ show: boolean; children: ReactNode }> }) =>
-    createElement('div', null, ...slots.filter((s) => s.show).map((s) => s.children)),
+  POSTURE_PRIORITY: { status: 0, nudge: 5, recommended: 10, heroOrSnapshot: 20, guide: 30 },
+  PagePosture: ({ slots }: { slots: Array<{ show?: boolean; children: ReactNode }> }) =>
+    createElement('div', null, ...slots.filter((s) => s.show !== false).map((s) => s.children)),
 }))
-// Charts and tiles the setup state does not depend on.
+// Chrome the setup state does not depend on.
 vi.mock('../components/PageHeaderBar', () => ({ PageHeaderBar: () => null }))
-vi.mock('../components/NextStep', () => ({ NextStep: () => null }))
 vi.mock('../components/Confetti', () => ({ Confetti: () => null }))
 vi.mock('../components/dashboard/QuotaBanner', () => ({ QuotaBanner: () => null }))
-vi.mock('../components/dashboard/SdkUpgradeBanner', () => ({ SdkUpgradeBanner: () => null }))
-vi.mock('../components/dashboard/PdcaCockpit', () => ({ PdcaCockpit: () => null }))
-vi.mock('../components/pdca-flow/PdcaFlow', () => ({ PdcaFlow: () => null }))
-vi.mock('../components/dashboard/LivePdcaPipeline', () => ({ LivePdcaPipeline: () => null }))
-vi.mock('../components/dashboard/KpiRow', () => ({ KpiRow: () => null }))
-vi.mock('../components/dashboard/TriageAndFixRow', () => ({ TriageAndFixRow: () => null }))
-vi.mock('../components/dashboard/TeamActivityTile', () => ({ TeamActivityTile: () => null }))
-vi.mock('../components/dashboard/InsightsRow', () => ({ InsightsRow: () => null }))
-vi.mock('../components/dashboard/QaCoverageTile', () => ({ QaCoverageTile: () => null }))
-vi.mock('../components/dashboard/PlatformHealthTile', () => ({ PlatformHealthTile: () => null }))
-vi.mock('../components/dashboard/DashboardLoopReadout', () => ({ DashboardLoopReadout: () => null }))
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -169,13 +165,25 @@ describe('Home while a required setup step is open', () => {
     expect(container.querySelector('[data-testid="sdk-health-panel"]')).toBeTruthy()
   })
 
-  it('the hero names the open step with its fix, never "healthy"', async () => {
+  it('names the open step once, in the checklist, never "healthy"', async () => {
     await mount()
-    const hero = container.querySelector('[data-testid="dashboard-hero-setup"]')!
-    expect(hero.textContent).toContain('Setup 3 of 4 done')
-    expect(hero.textContent).toContain('Install the SDK in your app')
-    expect(hero.querySelector('a')!.getAttribute('href')).toBe(`/connect?project=${PROJECT}#connect-sdk-health`)
+    // The hero card that repeated the step, its button and a second count is
+    // gone (owner, 2026-10-27); the checklist marks the step itself.
+    expect(container.querySelector('[data-testid="dashboard-hero-setup"]')).toBeNull()
+    expect(container.textContent).not.toContain('Setup 3 of 4 done')
+    expect(container.textContent).toContain('Install the SDK in your app')
     expect(container.textContent).not.toContain('Loop is clean')
     expect(container.textContent).not.toContain('Nothing waiting on you')
+  })
+
+  it('still shows the Home sections: what needs you, how to connect, and which read failed', async () => {
+    await mount()
+    const text = container.textContent ?? ''
+    expect(container.querySelector('[data-testid="home-needs-you"]')!.textContent).toContain('Your app is not sending to Mushi yet')
+    expect(container.querySelector('[data-testid="home-health-sdk"]')!.textContent).toContain('Set up the SDK')
+    expect(text).toContain('Connect your GitHub repo to see fixes move toward a release.')
+    expect(text).toContain('Could not read access and details just now.')
+    // An app with reports opens Home with the explainer closed.
+    expect(container.querySelector('[data-testid="home-how-this-works"] button')!.getAttribute('aria-expanded')).toBe('false')
   })
 })

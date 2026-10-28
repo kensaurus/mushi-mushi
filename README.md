@@ -4,23 +4,28 @@
 
 **Your AI wrote it. Mushi tells you why it broke.**
 
-When a user hits a bug, Mushi explains the cause in plain English and hands your editor a fix to start from.<br/>
-Built for the vibe coder who ships fast with Cursor, Claude Code, Lovable or Bolt, so a bug costs five minutes instead of an afternoon.
+A user says your app is broken. Mushi tells you why in plain English and hands the fix to Cursor, Claude Code or Lovable. No Sentry or monitoring needed.
 
-[![Add to Cursor](https://img.shields.io/badge/Add%20to-Cursor-0098FF)](https://kensaur.us/mushi-mushi/docs/connect)
-[![Try the demo — no signup](https://img.shields.io/badge/Try%20the%20demo-no%20signup-E34234)](https://kensaur.us/mushi-mushi/docs/connect)
+```bash
+npx mushi-mushi
+```
+
+**[See a sample diagnosis →](https://kensaur.us/mushi-mushi/docs/demo/diagnosis)** No signup, nothing to install.
+
+<sub>Built for the vibe coder who ships fast with Cursor, Claude Code, Lovable or Bolt. No terminal? [Add it to Lovable or Bolt with one prompt](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt).</sub>
+
 [![npm](https://img.shields.io/npm/v/@mushi-mushi/react?label=%40mushi-mushi%2Freact&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react)
 [![Server](https://img.shields.io/badge/server-AGPL--3.0-brightgreen.svg)](./packages/server/LICENSE)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/kensaurus/mushi-mushi/badge)](https://scorecard.dev/viewer/?uri=github.com/kensaurus/mushi-mushi)
 [![npm provenance](https://img.shields.io/badge/npm-provenance-2ea44f?logo=npm)](./SECURITY.md#verifying-a-mushi-mushi-tarball-before-installing)
 
-[Quick start](#quick-start) · [How it works](#how-it-works) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Demo](https://kensaur.us/mushi-mushi/docs/connect) · [Why not Sentry?](#why-not-just-sentry) · [Self-host](#self-host) · [Vision](./VISION.md)
+[Quick start](#quick-start) · [How it works](#how-it-works) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Sample diagnosis](https://kensaur.us/mushi-mushi/docs/demo/diagnosis) · [Why not Sentry?](#why-not-just-sentry) · [Self-host](#self-host) · [Vision](./VISION.md)
 
-<a href="https://kensaur.us/mushi-mushi/docs/connect" title="Try the read-only demo — no signup">
-  <img alt="Report detail — plain-English root cause, confidence chip, paste-ready Cursor fix prompt, and PDCA receipt strip." src="./docs/screenshots/report-detail-dark.png" width="100%" />
+<a href="https://kensaur.us/mushi-mushi/docs/demo/diagnosis" title="See a sample diagnosis: no signup">
+  <img alt="The Mushi console's report list: each user report with a plain-English summary, how serious it is and how sure Mushi is." src="./docs/screenshots/report-detail-dark.png" width="100%" />
 </a>
 
-<sub>↑ a diagnosis: the root cause in plain English and a paste-ready fix prompt. Click to open the read-only demo.</sub>
+<sub>↑ reports in the Mushi console, each with a plain-English summary. Click for one full sample diagnosis you can read without signing up.</sub>
 
 </div>
 
@@ -45,10 +50,11 @@ It catches the bugs that never throw an error: the pay button hidden under the k
 
 ```bash
 npx mushi-mushi                      # detects your framework, installs the SDK, writes env vars, sends a test report
-npx mushi-mushi setup --ide cursor   # or --ide claude: your editor can now read diagnoses
 ```
 
-Then ask your editor: *"what's broken in prod?"*
+Then connect your editor so it can read diagnoses: one click on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect), or `npx mushi-mushi setup --ide cursor` (or `--ide claude`). Ask it: *"Get the latest Mushi report and fix it."*
+
+Building in Lovable or Bolt, with no terminal? Paste one script tag through your prompt instead: [Mushi in Lovable or Bolt](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt).
 
 The SDK needs two env vars (`VITE_MUSHI_PROJECT_ID` / `VITE_MUSHI_API_KEY`, or `NEXT_PUBLIC_MUSHI_*`; see [`examples/sdk.env.example`](./examples/sdk.env.example)). No Sentry, no LLM key, no monitoring stack. The hosted free tier covers 50 diagnoses a month with no card, or you can [self-host](#self-host).
 
@@ -144,7 +150,7 @@ Walkthroughs: [`SELF_HOSTED.md`](./SELF_HOSTED.md) and [Docker Compose guide](ht
 | Inventory and QA gates | Behind the `inventory_v2` plan flag; reachable from Checks |
 | Multi-region | Region pinning works. Active/active write replication is not automated |
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~570K TS lines · ~2,500 source files · 45 workspace / 37 npm packages · 76 edge functions · 509 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~600K TS lines · ~2,600 source files · 45 workspace / 37 npm packages · 77 edge functions · 518 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ## Community and contributing
 

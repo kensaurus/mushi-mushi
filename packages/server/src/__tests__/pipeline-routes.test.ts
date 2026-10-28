@@ -81,12 +81,12 @@ class FakeApp {
   routes: Array<{ method: string; path: string; handlers: Handler[] }> = []
   get(path: string, ...h: Handler[]) { this.routes.push({ method: 'GET', path, handlers: h }) }
   post(path: string, ...h: Handler[]) { this.routes.push({ method: 'POST', path, handlers: h }) }
-  async call(method: string, path: string, body?: unknown): Promise<Res> {
+  async call(method: string, path: string, body?: unknown, params: Record<string, string> = {}): Promise<Res> {
     const route = this.routes.find((r) => r.method === method && r.path === path)
     if (!route) throw new Error(`no route ${method} ${path}`)
     const vars: Record<string, unknown> = { userId: 'u1' }
     const c = {
-      req: { json: async () => body ?? {}, param: () => undefined, header: () => undefined, query: (k: string) => state.query[k] },
+      req: { json: async () => body ?? {}, param: (k: string) => params[k], header: () => undefined, query: (k: string) => state.query[k] },
       get: (k: string) => vars[k],
       set: (k: string, v: unknown) => { vars[k] = v },
       json: (b: unknown, status = 200) => ({ body: b, status }),
@@ -384,5 +384,161 @@ describe('POST /v1/admin/pipeline/actions', () => {
     expect(calls).toEqual([`run:${P1}`])
     const results = (res.body.data as { results: Array<{ id: string; ok: boolean; message: string }> }).results
     expect(results).toEqual([{ id: 'kensaurus/glot.it', ok: false, message: 'No train left: the next one may leave at 16:00 UTC (one train every 360 min).' }])
+  })
+})
+
+// Report 69fcafcb: /pipeline offered Re-run CI that always 403'd and CI repair
+// the server refused for reasons it already knew. Every item now carries the
+// refusals the read can see, in the action routes' own words.
+type Item = { id: string; blocked: Record<string, string> }
+type Group = { id: string; actions: string[]; items: Item[] }
+
+const ROUTE_ACTIONS = ['ci_repair', 'followup', 'conflict_agent', 'remove', 'update_branch', 'mark_ready', 'close']
+
+async function offered(projectId: string | undefined, prepare: (db: FakeDb) => void) {
+  const { app, db } = setup()
+  prepare(db)
+  state.query = projectId ? { projectId } : {}
+  const res = await app.call('GET', '/v1/admin/pipeline')
+  const stages = (res.body.data as { stages: Array<{ groups: Group[] }> }).stages
+  const out: Array<{ fixId: string; action: string; blocked: string | undefined }> = []
+  for (const s of stages)
+    for (const g of s.groups)
+      for (const i of g.items)
+        for (const action of g.actions)
+          if (ROUTE_ACTIONS.includes(action) && i.id.startsWith('3000000')) out.push({ fixId: i.id, action, blocked: i.blocked[action] })
+  return out
+}
+
+const twoRounds = (db: FakeDb) => {
+  db.table('fix_review_followups').push(
+    { id: 'fu1', fix_attempt_id: F1, status: 'completed', kind: 'ci_repair', head_sha_before: 'old-1', cursor_agent_id: 'bc-1' },
+    { id: 'fu2', fix_attempt_id: F1, status: 'completed', kind: 'ci_repair', head_sha_before: 'old-2', cursor_agent_id: 'bc-2' },
+  )
+}
+
+describe('what /pipeline offers is what the action routes do', () => {
+  const scenarios: Array<[string, (db: FakeDb) => void]> = [
+    ['follow-ups off, no usable Cursor key', () => {}],
+    ['CI green on the reviewed head', (db) => {
+      db.table('ci_jobs').find((j) => j.head_sha === `head-${F1}`)!.conclusion = 'success'
+    }],
+    ['both follow-up rounds used', twoRounds],
+    ['conflict row under the cap, no cloud agent', (db) => {
+      db.table('fix_merge_queue').find((q) => q.id === 'q3')!.conflict_agents = 1
+    }],
+  ]
+  for (const [name, prepare] of scenarios) {
+    it(`an offered action is never refused for a reason the read had, and a blocked one is refused with that reason (${name})`, async () => {
+      const cases = await offered(undefined, prepare)
+      expect(cases.length).toBeGreaterThan(0)
+      for (const c of cases) {
+        const { app, db } = setup()
+        prepare(db)
+        const res = await app.call('POST', '/v1/admin/pipeline/actions', { action: c.action, fixIds: [c.fixId], reason: 'Checked by the test' })
+        const [r] = (res.body.data as { results: Array<{ ok: boolean; message: string }> }).results
+        const seen = { ...c, ok: r.ok, message: r.message }
+        if (c.blocked) expect(seen).toMatchObject({ ok: false, message: c.blocked })
+        else expect(seen).toMatchObject({ ok: true })
+      }
+    })
+  }
+
+  it('says why CI repair cannot run when both rounds were used', async () => {
+    const cases = await offered(P1, twoRounds)
+    expect(cases.find((c) => c.fixId === F1 && c.action === 'ci_repair')?.blocked).toBe(
+      'Review follow-ups are off for this team, and the local mushi work lanes cannot take it: Both follow-up rounds were used on this pull request; a person decides what happens next.',
+    )
+  })
+
+  it('Re-run CI is blocked for an app whose token GitHub refused, until its settings change', async () => {
+    const read = async (settingsAt: string) => {
+      const { app, db } = setup()
+      db.table('fix_events').push({ fix_attempt_id: F1, project_id: P1, kind: 'ci_started', status: 'fail', at: '2026-10-26T10:00:00Z', label: 'Re-run refused', dedupe_key: `ci_rerun_refused:${F1}:2026-10-26T10:00:00Z` })
+      db.table('project_settings').find((r) => r.project_id === P1)!.updated_at = settingsAt
+      state.query = { projectId: P1 }
+      const res = await app.call('GET', '/v1/admin/pipeline')
+      const ci = (res.body.data as { stages: Array<{ id: string; groups: Group[] }> }).stages.find((s) => s.id === 'ci')!
+      return ci.groups.find((g) => g.id === 'ci_red_queued')!.items[0].blocked.rerun_ci
+    }
+    expect(await read('2026-10-01T00:00:00Z')).toMatch(/^The GitHub token cannot re-run workflows: give it Actions: Read and write/)
+    // A settings save after the refusal (a new token) offers it again.
+    expect(await read('2026-10-26T11:00:00Z')).toBeUndefined()
+  })
+})
+
+describe('GET /v1/admin/pipeline/fix/:id', () => {
+  it("returns one fix's group, actions, refusals and failing checks", async () => {
+    const { app } = setup()
+    const res = await app.call('GET', '/v1/admin/pipeline/fix/:id', undefined, { id: F1 })
+    expect(res.status).toBe(200)
+    expect(res.body.data).toMatchObject({
+      stage: 'ci',
+      groupId: 'ci_red_queued',
+      tone: 'stuck',
+      actions: expect.arrayContaining(['ci_repair', 'rerun_ci']),
+      item: { id: F1, failingChecks: ['Build & Test'], blocked: {} },
+    })
+  })
+
+  it("a fix in no group answers with nulls; another team's fix is a 404", async () => {
+    const { app, db } = setup()
+    const F4 = '3000000d-0000-4000-8000-000000000000'
+    db.table('fix_attempts').push(attempt(F4, { pr_state: 'closed' }))
+    const none = await app.call('GET', '/v1/admin/pipeline/fix/:id', undefined, { id: F4 })
+    expect(none.body.data).toMatchObject({ stage: null, groupId: null, item: null, actions: [] })
+    state.accessible = [P2]
+    expect((await app.call('GET', '/v1/admin/pipeline/fix/:id', undefined, { id: F1 })).status).toBe(404)
+    expect((await app.call('GET', '/v1/admin/pipeline/fix/:id', undefined, { id: 'nope' })).status).toBe(400)
+  })
+})
+
+describe('local workers on /pipeline (ADR 0048)', () => {
+  const C1 = '5000000a-0000-4000-8000-000000000000'
+  const seedInfra = (db: FakeDb, over: Record<string, unknown> = {}) => {
+    db.table('work_lanes').push({ id: 'lane-1', host_id: 'host-1', project_id: P1, name: 'glot', paused: false, drain: false, stop_at: null, mode: 'fix', model: 'grok-4.7-xhigh-fast' })
+    db.table('work_hosts').push({ id: 'host-1', last_heartbeat_at: '2026-10-26T11:59:00Z', revoked_at: null })
+    db.table('work_claims').push({
+      id: C1, project_id: P1, report_id: 'r-new', lane_id: 'lane-1', host_id: 'host-1', status: 'done', outcome: 'failed', failure_kind: 'infra',
+      detail: 'git fetch: Permission denied', auto_requeued: false, claimed_at: '2026-10-26T10:00:00Z', finished_at: '2026-10-26T10:05:00Z', ...over,
+    })
+  }
+
+  it('lists runs the machine stopped, with Requeue, and counts the registered lane as an opener', async () => {
+    const { app, db } = setup()
+    seedInfra(db)
+    const res = await app.call('GET', '/v1/admin/pipeline')
+    const stages = (res.body.data as { stages: Array<{ groups: Array<{ id: string; actions: string[]; items: Array<{ id: string; reportId: string | null }> }> }> }).stages
+    const group = stages.flatMap((s) => s.groups).find((g) => g.id === 'local_infra')
+    expect(group?.actions).toEqual(['requeue'])
+    expect(group?.items.map((i) => [i.id, i.reportId])).toEqual([[C1, 'r-new']])
+    const openers = (res.body.data as { dispatchers: Array<{ projectId: string; opener: string; problem: string | null; local: { lanes: number; lanesActive: number; models: string[] } }> }).dispatchers
+    const p1 = openers.find((d) => d.projectId === P1)!
+    expect(p1.local).toMatchObject({ lanes: 1, lanesActive: 1, models: ['grok-4.7-xhigh-fast'] })
+    // Auto-fix is on with no agent key, but a lane takes the app's reports: nothing is left unopened.
+    expect(p1.problem).toBeNull()
+  })
+
+  it('a run already put back once on its own is not listed', async () => {
+    const { app, db } = setup()
+    seedInfra(db, { auto_requeued: true })
+    const res = await app.call('GET', '/v1/admin/pipeline')
+    const stages = (res.body.data as { stages: Array<{ groups: Array<{ id: string }> }> }).stages
+    expect(stages.flatMap((s) => s.groups).some((g) => g.id === 'local_infra')).toBe(false)
+  })
+
+  it('requeue puts the report at the front of its lane; a viewer is refused', async () => {
+    const { app, db } = setup()
+    seedInfra(db)
+    db.table('work_queue').push({ id: 'q-old', lane_id: 'lane-1', project_id: P1, report_id: 'r-other', position: 1_800_000_000, source: 'console' })
+    state.roles = { [P1]: 'viewer' }
+    const refused = await app.call('POST', '/v1/admin/pipeline/actions', { action: 'requeue', claimIds: [C1] })
+    expect((refused.body.data as { results: Array<{ ok: boolean }> }).results[0]!.ok).toBe(false)
+    state.roles = {}
+    const res = await app.call('POST', '/v1/admin/pipeline/actions', { action: 'requeue', claimIds: [C1] })
+    expect((res.body.data as { results: Array<{ ok: boolean; message: string }> }).results[0]).toMatchObject({ ok: true })
+    const queue = [...db.table('work_queue')].sort((a, b) => Number(a.position) - Number(b.position))
+    expect(queue.map((q) => q.report_id)).toEqual(['r-new', 'r-other'])
+    expect(queue[0]).toMatchObject({ source: 'requeue', lane_id: 'lane-1' })
   })
 })

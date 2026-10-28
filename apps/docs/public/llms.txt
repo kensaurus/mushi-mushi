@@ -9,8 +9,11 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 
 ## Start here (MCP-first)
 
+- [Sample diagnosis](https://kensaur.us/mushi-mushi/docs/demo/diagnosis): A sample Mushi diagnosis you can read without signing up. A user's complaint, what the widget captured, the plain-English cause and the fix prompt.
 - [Incident loop](https://kensaur.us/mushi-mushi/docs/quickstart/incident-loop): Run npx mushi-mushi, ship, and turn your first user-reported bug into a plain-English diagnosis and a paste-ready fix for Cursor or Claude Code.
+- [Lovable or Bolt (no terminal)](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt): Add Mushi to a Lovable or Bolt app without a terminal. Paste one script tag through your prompt, then read each bug's plain-English cause and fix prompt.
 - [MCP server](https://kensaur.us/mushi-mushi/docs/quickstart/mcp): Set up the Mushi MCP server with npx mushi-mushi setup — read bug reports, get fix context, and dispatch fixes from Cursor, Claude Code, or Codex.
+- [Ask Lovable why it broke](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-mcp): Add Mushi to Lovable as an MCP connector in three steps; Lovable reads the plain-English diagnosis and fixes the bug. Claude Code and Cursor in one paste.
 - [Connect your AI client](https://kensaur.us/mushi-mushi/docs/connect): One-click MCP setup for Cursor, VS Code, Windsurf, Cline, Claude and Zed, with a keyless demo.
 - [Choose your stack](https://kensaur.us/mushi-mushi/docs/quickstart): Install Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.
 - [Pricing](https://kensaur.us/mushi-mushi/docs/pricing): Mushi Mushi pricing — 50 AI bug diagnoses a month free, no card. Open-source Sentry alternative you can self-host for free, or upgrade for teams.
@@ -42,7 +45,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Anti-gaming](https://kensaur.us/mushi-mushi/docs/admin/anti-gaming): The Anti-gaming page flags reporters whose patterns look abusive — near-duplicate spam, reward farming or synthetic sessions — for you to review.
 - [Audit log](https://kensaur.us/mushi-mushi/docs/admin/audit): The Audit log records every admin action and agent run in Mushi — who minted API keys, who dispatched a fix, and what triggered a pull request.
 - [Billing](https://kensaur.us/mushi-mushi/docs/admin/billing): The Billing page shows your diagnosis quota, usage alerts at 50% and 80%, your projected bill, and spend caps for your Mushi plan.
-- [Checks](https://kensaur.us/mushi-mushi/docs/admin/checks): The Checks page lists every automatic check on this app. Each card opens that check, with the same live count the sidebar shows.
+- [Checks](https://kensaur.us/mushi-mushi/docs/admin/checks): The Checks page shows every automatic check on this app with its state, when it last ran and its open count, failing checks first.
 - [CI runners](https://kensaur.us/mushi-mushi/docs/admin/ci): The console CI runners page shows where tests run, how long they wait for a machine, and whether a red check was your code or the test machine.
 - [CLI device auth](https://kensaur.us/mushi-mushi/docs/admin/cli-auth): The page that mushi login opens so you can approve a CLI device code while signed in to the console, and how the device authorization flow works.
 - [Code health](https://kensaur.us/mushi-mushi/docs/admin/code-health): The Code health page charts bundle size and oversized files from your CI over time, so you notice an app getting heavier before your users do.
@@ -51,7 +54,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Content quality](https://kensaur.us/mushi-mushi/docs/admin/content): The Content quality page queues AI-generated copy, release notes and knowledge snippets that scored poorly or were flagged, so you can fix them.
 - [Cost & usage](https://kensaur.us/mushi-mushi/docs/admin/cost): The Cost page shows LLM token use and estimated spend per model and pipeline for a Mushi project, so you can see what each diagnosis costs.
 - [Spend credits](https://kensaur.us/mushi-mushi/docs/admin/credits): Spend credits lists expiring Cursor and Firecrawl credits and every way Mushi can spend them fixing bugs, improving apps with skills and checking sites.
-- [Dashboard](https://kensaur.us/mushi-mushi/docs/admin/dashboard): The Mushi dashboard answers whether anything broke since your last release — new reports, overnight fix runs and pipeline health on one screen.
+- [Dashboard](https://kensaur.us/mushi-mushi/docs/admin/dashboard): Home in the Mushi console shows how one app is doing — is it up, what needs you, what is shipping, which pages have bugs and who can reach it.
 - [Design system](https://kensaur.us/mushi-mushi/docs/admin/design): The Design system page shows your tokens, contrast pairs, type scale and a deviance score for off-token code. Token and rule edits open a draft pull request.
 - [Docs bridge](https://kensaur.us/mushi-mushi/docs/admin/docs-bridge): The docs bridge is the console's silent sign-in relay that lets the Mushi docs site fill live snippets with your project details when you are signed in.
 - [Drift scanner](https://kensaur.us/mushi-mushi/docs/admin/drift): The Drift scanner compares your live routes and components against the last snapshot to find the pages that a refactor silently broke.
@@ -63,7 +66,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Fix drafts & PRs](https://kensaur.us/mushi-mushi/docs/admin/fixes): The Fixes page tracks every draft pull request Mushi opened from a bug report, from the moment a fix run starts until the PR is ready or the run fails.
 - [Full-stack audit](https://kensaur.us/mushi-mushi/docs/admin/fullstack-audit): The Full-stack audit runs one health check across RLS gaps, recent backend errors and API contract drift, and returns a readable scorecard.
 - [Knowledge graph](https://kensaur.us/mushi-mushi/docs/admin/graph): The Knowledge graph page draws your project's bugs, components and fixes as an interactive graph, so you can see which areas cluster problems.
-- [Integration health](https://kensaur.us/mushi-mushi/docs/admin/health): The Integration health page monitors Mushi's LLM pipelines, cron jobs and provider connections so you catch a degraded integration early.
+- [Mushi health](https://kensaur.us/mushi-mushi/docs/admin/health): The Mushi health page shows whether Mushi itself is working (its AI calls, background jobs and provider connections), so you catch a degraded integration early.
 - [To-do](https://kensaur.us/mushi-mushi/docs/admin/inbox): The To-do list gathers everything in Mushi that needs a human decision — reports, queue failures, health and drift alerts — in one list.
 - [Integrations](https://kensaur.us/mushi-mushi/docs/admin/integrations): Set up Mushi integrations from one page — send new bugs to Linear, bring in Sentry feedback, and open fix pull requests on your GitHub repo.
 - [Intelligence reports](https://kensaur.us/mushi-mushi/docs/admin/intelligence): Intelligence reports are Mushi's weekly plain-English bug digest for each project — what broke, what got fixed and what to watch, sent to your inbox.
@@ -140,6 +143,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Runtime config](https://kensaur.us/mushi-mushi/docs/concepts/runtime-config): How the Mushi SDK fetches widget and capture settings from the console at startup, how they merge with your init options, and when to turn it off.
 - [One login and one purchase across your apps](https://kensaur.us/mushi-mushi/docs/concepts/shared-login): How to let people sign in once and keep what they bought across several of your apps, and what Mushi checks so it keeps working.
 - [Where the report button lives](https://kensaur.us/mushi-mushi/docs/concepts/trigger-modes): Choose where Mushi's bug-report button lives — corner stamp, edge tab, banner, your own button via attach, or fully manual — on web and mobile.
+- [Sample diagnosis: Pay now does nothing on a phone](https://kensaur.us/mushi-mushi/docs/demo/diagnosis): A sample Mushi diagnosis you can read without signing up. A user's complaint, what the widget captured, the plain-English cause and the fix prompt.
 - [Cursor integration](https://kensaur.us/mushi-mushi/docs/integrations/cursor): Wire Mushi's evolution loop into Cursor with one command — get fix context, lessons, and dispatch right from the editor.
 - [Voice intake](https://kensaur.us/mushi-mushi/docs/integrations/voice-intake): Say the bug on your phone, get a draft PR back. iOS Shortcut, Telegram, Slack, or the installed console — one pipeline, one confirmation gate, no audio kept.
 - [Launch Week](https://kensaur.us/mushi-mushi/docs/launch-week): How Mushi Mushi launches now — one public post per release (Show HN, then Product Hunt), the gate each release must pass, and what we publish after.
@@ -193,6 +197,8 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Flutter quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/flutter): Add Mushi's Flutter SDK as a git dependency — shake-to-report, a Material bottom sheet and an offline queue for iOS and Android. Preview, not on pub.dev yet.
 - [Incident loop — bug to fix prompt](https://kensaur.us/mushi-mushi/docs/quickstart/incident-loop): Run npx mushi-mushi, ship, and turn your first user-reported bug into a plain-English diagnosis and a paste-ready fix for Cursor or Claude Code.
 - [iOS (Swift) quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/ios): Add Mushi's native Swift SDK to an iOS app with Swift Package Manager — shake-to-report, offline queue and device context. Preview build, not on CocoaPods yet.
+- [Mushi in Lovable or Bolt](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt): Add Mushi to a Lovable or Bolt app without a terminal. Paste one script tag through your prompt, then read each bug's plain-English cause and fix prompt.
+- [Ask Lovable why it broke](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-mcp): Add Mushi to Lovable as an MCP connector in three steps; Lovable reads the plain-English diagnosis and fixes the bug. Claude Code and Cursor in one paste.
 - [MCP server for bug fixing in Cursor & Claude Code](https://kensaur.us/mushi-mushi/docs/quickstart/mcp): Set up the Mushi MCP server with npx mushi-mushi setup — read bug reports, get fix context, and dispatch fixes from Cursor, Claude Code, or Codex.
 - [Mobile (overview)](https://kensaur.us/mushi-mushi/docs/quickstart/mobile): Shake-to-report bug capture for mobile apps — React Native and Capacitor from npm with npx mushi-mushi, plus preview native SDKs for iOS, Android and Flutter.
 - [React quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/react): Add the Mushi React SDK in one command — npx mushi-mushi installs the bug-reporting widget, writes env vars, and files your first test report.
