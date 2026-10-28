@@ -12,6 +12,11 @@
  *          Release trains (ADR 0044, the default): approved PRs ride one
  *          train PR per interval, so a batch ships as one deploy and one
  *          release. The panel shows each repo's train and the app's cadence.
+ *
+ *          The queue list is the same set the summary counts. A short inner
+ *          scroll box used to show about four rows while the heading said
+ *          "15 to merge", so the rest looked missing. The page scrolls; past
+ *          QUEUE_PAGE rows a "Show more" reveals the rest.
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -41,6 +46,9 @@ const MODE_OPTIONS = [
 ] as const
 
 const POLL_MS = 30_000
+
+/** Rows drawn before "Show more". The page scrolls; the list does not hide the rest in a box. */
+const QUEUE_PAGE = 20
 
 /**
  * Whether this app's queue was non-empty on the last visit, so the loading
@@ -82,6 +90,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
   const [release, setRelease] = useState<ReleaseSettings | null>(null)
   const [saving, setSaving] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [listLimit, setListLimit] = useState(QUEUE_PAGE)
 
   const load = useCallback(async () => {
     if (!projectId) return
@@ -103,6 +112,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
     setTrains([])
     setRelease(null)
     setLoaded(false)
+    setListLimit(QUEUE_PAGE)
     void load()
   }, [load, refreshKey])
 
@@ -232,9 +242,10 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
       )}
       {shown.length === 0 && <p className="text-2xs text-fg-muted">Nothing in the merge queue.</p>}
       {listed.length > 0 && (
-        // A long queue scrolls inside the panel instead of pushing the list down.
-        <ul className="max-h-40 overflow-y-auto divide-y divide-edge-subtle">
-          {listed.map((r) => (
+        // Every counted PR is in this list. Past QUEUE_PAGE the page grows
+        // on "Show more" instead of a 10rem box that hid all but about four.
+        <ul className="divide-y divide-edge-subtle" data-testid="merge-queue-rows">
+          {listed.slice(0, listLimit).map((r) => (
             <li key={r.id} className="flex flex-wrap items-start gap-x-2 gap-y-1 py-1.5">
               <Badge tone={MERGE_QUEUE_STATE_TONE[r.state]} className="shrink-0">{MERGE_QUEUE_STATE_LABEL[r.state]}</Badge>
               {/* A long owner/repo#N is unbreakable monospace: let it break on a
@@ -253,6 +264,11 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
             </li>
           ))}
         </ul>
+      )}
+      {listed.length > listLimit && (
+        <Btn size="sm" variant="ghost" onClick={() => setListLimit((n) => n + QUEUE_PAGE)} data-testid="merge-queue-more">
+          Show {Math.min(QUEUE_PAGE, listed.length - listLimit)} more of {listed.length}
+        </Btn>
       )}
       {merged.length > 0 && (
         <div>
