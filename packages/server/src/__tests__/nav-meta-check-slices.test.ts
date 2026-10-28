@@ -2,7 +2,8 @@
  * FILE: packages/server/src/__tests__/nav-meta-check-slices.test.ts
  * PURPOSE: Nav-meta forwards the last-run fields the checks cards read:
  *          audit lastRunAt, QA lastRunAt, inventory gate time, this app's
- *          last AI call, and the judge run (including staleHours).
+ *          last AI call (and this app's call window), and the judge run
+ *          (including staleHours).
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
@@ -65,6 +66,9 @@ beforeAll(async () => {
       amberCount: 0,
       lastLlmCallAt: '2026-10-25T09:00:00Z',
       lastCronAt: '2026-10-25T08:00:00Z',
+      totalCalls: 6,
+      errorRatePct: 1,
+      fallbackRatePct: 12,
       topPriority: 'cron_error',
     },
   }))
@@ -123,6 +127,9 @@ describe('nav-meta check slices', () => {
     expect(body.data.slices.health).toMatchObject({
       cronErrorCount: 2,
       lastLlmCallAt: '2026-10-25T09:00:00Z',
+      totalCalls: 6,
+      errorRatePct: 1,
+      fallbackRatePct: 12,
       topPriority: 'cron_error',
     })
     expect(body.data.slices.health).not.toHaveProperty('lastCronAt')

@@ -143,7 +143,13 @@ export interface NavStatSlices {
   health: (Pick<
     HealthStats,
     'cronErrorCount' | 'redCount' | 'amberCount' | 'topPriority'
-  > & { lastLlmCallAt?: string | null }) | null
+  > & {
+    lastLlmCallAt?: string | null
+    /** This app's AI calls in the health window. Platform cron is not in these. */
+    totalCalls?: number
+    errorRatePct?: number
+    fallbackRatePct?: number
+  }) | null
   judge: (Pick<
     JudgeStats,
     'lastEvalAt' | 'disagreementCount' | 'totalEvaluations' | 'topPriority'

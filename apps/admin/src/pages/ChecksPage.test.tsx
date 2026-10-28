@@ -26,6 +26,7 @@ import type * as LabsModule from '../lib/labs'
 const state = vi.hoisted(() => ({
   slices: null as unknown,
   navError: null as string | null,
+  navPath: null as string | null,
   recipe: null as unknown,
   features: new Set<string>(),
   labs: new Set<string>(),
@@ -35,6 +36,7 @@ vi.mock('../lib/usePageData', () => ({
   usePageData: (path: string | null) => {
     const base = { reload: vi.fn(), lastFetchedAt: null, isValidating: false, loading: false, error: null }
     if (path?.startsWith('/v1/admin/workspace/nav-meta')) {
+      state.navPath = path
       return state.navError ? { ...base, data: null, error: state.navError } : { ...base, data: { generatedAt: '', slices: state.slices, projects: null } }
     }
     if (path?.endsWith('/recipe')) return { ...base, data: state.recipe }
@@ -86,6 +88,7 @@ function render() {
 beforeEach(() => {
   state.slices = slices()
   state.navError = null
+  state.navPath = null
   state.recipe = null
   state.features = new Set()
   state.labs = new Set()
@@ -150,6 +153,16 @@ describe('ChecksPage', () => {
     state.labs = new Set(['ai-prompts', 'ci-runners'])
     render()
     for (const path of LAB_PATHS) expect(container.querySelector(`a[href="${path}"]`), path).not.toBeNull()
+  })
+
+  it('asks nav-meta for each check slice, and for judge via include=counts', () => {
+    render()
+    const url = new URL(state.navPath!, 'http://local')
+    expect((url.searchParams.get('include') ?? '').split(',')).toEqual(expect.arrayContaining(['counts']))
+    const slicesParam = (url.searchParams.get('slices') ?? '').split(',')
+    for (const key of ['qaCoverage', 'health', 'fullstackAudit', 'inventory', 'contentQuality', 'lessons', 'promptLab']) {
+      expect(slicesParam, key).toContain(key)
+    }
   })
 
   it('reads a failed nav-meta as Status unavailable, never as a pass', () => {
