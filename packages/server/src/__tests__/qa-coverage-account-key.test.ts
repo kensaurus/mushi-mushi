@@ -1,15 +1,16 @@
 /**
  * FILE: packages/server/src/__tests__/qa-coverage-account-key.test.ts
- * PURPOSE: GET …/qa-stories/:sid/runs accepts an account key for a project
- *          that key can reach, and a console JWT for an org or project
- *          member who does not own the app. The other QA routes keep their
- *          previous gates.
+ * PURPOSE: GET …/qa-stories/:sid/runs and GET …/qa-coverage accept an account
+ *          key for a project that key can reach. A console JWT works for an
+ *          org or project member who does not own the app. Story create,
+ *          edit, and delete stay on jwtAuth.
  *
- * list_qa_story_runs / get_qa_story_run call this route. jwtOrApiKey delegates
- * to apiKeyAuth, which refuses org-scoped keys, so an account connection got
- * no runs. This mounts the real adminOrApiKey gate. GET already required
- * mcp:read there, and mcp:write implies it, so a project key that only lists
- * mcp:write still reads. Other routes are checked by calling them.
+ * list_qa_story_runs / get_qa_story_run call the runs route. The coverage
+ * list and the manual run share jwtOrApiKey (adminOrApiKey): mcp:read lists,
+ * mcp:write starts a run. A read-only account key therefore lists coverage
+ * and is refused on a run with INSUFFICIENT_SCOPE, not ORG_KEY_NOT_ALLOWED.
+ * mcp:write implies mcp:read, so a project key that only lists mcp:write
+ * still reads. Other routes are checked by calling them.
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
@@ -183,7 +184,10 @@ describe('GET qa story runs with an account key', () => {
     expect(body.data?.runs?.map((r) => r.id)).toEqual([RUN])
   })
 
-  it('does not let an account key start a run', async () => {
+  it('does not let a read-only account key start a run', async () => {
+    // ACCOUNT_KEY has mcp:read only. The run route accepts an account key,
+    // then requires mcp:write, so this is a scope refusal rather than
+    // ORG_KEY_NOT_ALLOWED (that code is the SDK ingest gate).
     seed()
     const res = await app.request(`/v1/admin/projects/${PID}/qa-stories/${STORY}/run`, {
       method: 'POST',
@@ -191,14 +195,13 @@ describe('GET qa story runs with an account key', () => {
     })
     const body = await res.json() as { error?: { code?: string } }
     expect(res.status).toBe(403)
-    expect(body.error?.code).toBe('ORG_KEY_NOT_ALLOWED')
+    expect(body.error?.code).toBe('INSUFFICIENT_SCOPE')
   })
 
-  it('leaves every other QA route on its previous gate', async () => {
-    // Ask each route with the account key. jwtAuth has no Bearer and answers
-    // 401. jwtOrApiKey sees the key and refuses an account key. adminOrApiKey
-    // would let this key through, so a gate swap fails here without parsing
-    // the route file.
+  it('lets an account key read coverage and leaves story writes on jwtAuth', async () => {
+    // jwtAuth has no Bearer and answers 401. GET /qa-coverage shares the run
+    // route's account-key gate (mcp:read). A read-only account key may list
+    // and may not start a run.
     seed()
     const jwtOnly = [
       ['GET', `/v1/admin/projects/${PID}/qa-coverage/stats`],
@@ -217,21 +220,25 @@ describe('GET qa story runs with an account key', () => {
       expect(body.error?.code, url).toBe('MISSING_AUTH')
     }
 
-    const keyOrJwt = [
-      ['GET', `/v1/admin/projects/${PID}/qa-coverage`],
-      ['POST', `/v1/admin/projects/${PID}/qa-stories/${STORY}/run`],
-    ] as const
-    for (const [method, url] of keyOrJwt) {
-      const res = await app.request(url, { method, headers: { 'X-Mushi-Api-Key': ACCOUNT_KEY } })
-      const body = await res.json() as { error?: { code?: string } }
-      expect(res.status, url).toBe(403)
-      expect(body.error?.code, url).toBe('ORG_KEY_NOT_ALLOWED')
-    }
-
     const coverage = await app.request(`/v1/admin/projects/${PID}/qa-coverage`, {
+      headers: { 'X-Mushi-Api-Key': ACCOUNT_KEY },
+    })
+    const coverageBody = await coverage.json() as { ok?: boolean; data?: { coverage?: unknown[] } }
+    expect(coverage.status).toBe(200)
+    expect(coverageBody).toMatchObject({ ok: true, data: { coverage: [] } })
+
+    const run = await app.request(`/v1/admin/projects/${PID}/qa-stories/${STORY}/run`, {
+      method: 'POST',
+      headers: { 'X-Mushi-Api-Key': ACCOUNT_KEY },
+    })
+    const runBody = await run.json() as { error?: { code?: string } }
+    expect(run.status).toBe(403)
+    expect(runBody.error?.code).toBe('INSUFFICIENT_SCOPE')
+
+    const projectCoverage = await app.request(`/v1/admin/projects/${PID}/qa-coverage`, {
       headers: { 'X-Mushi-Api-Key': PROJECT_KEY },
     })
-    expect(coverage.status).toBe(200)
+    expect(projectCoverage.status).toBe(200)
   })
 })
 
