@@ -32,6 +32,7 @@ import {
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import {
   EMPTY_JUDGE_STATS,
+  judgeEvaluationsTab,
   type JudgeStats,
   type JudgeTabId,
 } from '../components/judge/JudgeStatsTypes'
@@ -504,17 +505,22 @@ export function JudgePage() {
 
   const tabOptions = useMemo(
     () =>
-      JUDGE_TABS.map((t) => ({
-        id: t.id,
-        label: copy?.tabLabels?.[t.id] ?? t.label,
-        count:
-          t.id === 'evaluations' && stats.disagreementCount > 0
-            ? stats.disagreementCount
-            : t.id === 'prompts' && stats.promptVersionCount > 0
-              ? stats.promptVersionCount
-              : undefined,
-      })),
-    [stats.disagreementCount, stats.promptVersionCount, copy?.tabLabels],
+      JUDGE_TABS.map((t) => {
+        const label = copy?.tabLabels?.[t.id] ?? t.label
+        if (t.id === 'evaluations') {
+          const tab = judgeEvaluationsTab(label, {
+            disagreementCount: stats.disagreementCount,
+            totalEvaluations: stats.totalEvaluations,
+          })
+          return { id: t.id, label: tab.label, count: tab.count }
+        }
+        return {
+          id: t.id,
+          label,
+          count: t.id === 'prompts' && stats.promptVersionCount > 0 ? stats.promptVersionCount : undefined,
+        }
+      }),
+    [stats.disagreementCount, stats.totalEvaluations, stats.promptVersionCount, copy?.tabLabels],
   )
 
   if (statsLoading && !statsData) {

@@ -16,6 +16,11 @@ function isoOrNull(raw: string | undefined): string | null {
 const AGREEMENT_WEEKS = 12;
 /** "Recent" on /judge means this many days, and the sentence says so. */
 const RECENT_DAYS = 14;
+/**
+ * A 14-day window thinner than this is not quoted as recent; the banner uses
+ * the all-time rate. The console copies this as JUDGE_RECENT_MIN_GRADES.
+ */
+export const JUDGE_RECENT_MIN_GRADES = 5;
 /** Rows read for the trend; a project grading more than this in 12 weeks gets its newest rows only. */
 const AGREEMENT_ROW_CAP = 5000;
 /** PostgREST answers at most 1,000 rows a request, so the trend is read in pages of this size. */
@@ -231,7 +236,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
     const recentCoversAll =
       agreement != null && totalEvaluations > 0 && agreement.recentEvaluations >= totalEvaluations;
     const useRecentWindow =
-      agreement != null && agreement.recentEvaluations >= 5 && !recentCoversAll;
+      agreement != null && agreement.recentEvaluations >= JUDGE_RECENT_MIN_GRADES && !recentCoversAll;
 
     const lastEvalAt = lastEvalRes.data?.created_at ?? null;
     let staleHours: number | null = null;

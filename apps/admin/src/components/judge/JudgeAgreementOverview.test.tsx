@@ -144,4 +144,20 @@ describe('judgeStatusSentence', () => {
       }),
     ).toBe('Diagnoses scored 80% this week across 100 grades. So far the grader disagreed with 76 of 144 diagnoses (53%).')
   })
+
+  it('keeps the all-time rate when the last 14 days hold fewer than 5 grades', () => {
+    // The server only quotes the 14-day window at 5 or more grades. 1 of 4 is
+    // 25%, and 0 of 0 would print as 0%, against 76/144 (53%) all-time.
+    const allTime = {
+      ...base,
+      totalEvaluations: 144,
+      disagreementCount: 76,
+      disagreementRatePct: 53,
+      recentWindowDays: 14,
+    }
+    const sentence =
+      'Diagnoses scored 66% this week across 53 grades. So far the grader disagreed with 76 of 144 diagnoses (53%).'
+    expect(judgeStatusSentence({ ...allTime, recentEvaluations: 4, recentDisagreements: 1 })).toBe(sentence)
+    expect(judgeStatusSentence({ ...allTime, recentEvaluations: 0, recentDisagreements: 0 })).toBe(sentence)
+  })
 })
