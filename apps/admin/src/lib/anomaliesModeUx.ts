@@ -29,11 +29,11 @@ export function useAnomaliesUx(): AnomaliesUxFlags {
   }
 }
 
-/** Quick mode: land on triage, ingest, or detect based on posture. */
+/** Quick mode: land on triage (where Check now sits) or ingest, based on posture. */
 export function resolveQuickAnomaliesTab(stats: AnomaliesStats): AnomaliesTabId {
   if (stats.topPriority === 'open_critical' || stats.topPriority === 'open_anomalies') return 'anomalies'
   if (stats.topPriority === 'no_metrics') return 'metrics'
   if (stats.openAnomalies > 0) return 'anomalies'
   if (stats.metricPointCount === 0) return 'metrics'
-  return 'detect'
+  return 'anomalies'
 }

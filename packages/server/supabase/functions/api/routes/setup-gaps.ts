@@ -128,8 +128,12 @@ function within<T>(p: PromiseLike<T>, what: string, ms = CHECK_MS): Promise<T> {
   return Promise.race([Promise.resolve(p), deadline]).finally(() => clearTimeout(timer))
 }
 
+/** The reason in plain words: a database statement timeout is not shown as its raw Postgres text. */
 function why(err: unknown): string {
-  return (err instanceof Error ? err.message : String(err)).slice(0, 160)
+  const text = err instanceof Error ? err.message : typeof err === 'object' && err && 'message' in err ? String((err as { message: unknown }).message) : String(err)
+  const code = typeof err === 'object' && err && 'code' in err ? String((err as { code: unknown }).code) : ''
+  if (code === '57014' || /statement timeout|canceling statement/i.test(text)) return 'the database was too slow to answer; try again in a minute'
+  return text.slice(0, 160)
 }
 
 const reachable = (status: number | null | undefined): boolean | null =>

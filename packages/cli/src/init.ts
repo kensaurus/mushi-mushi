@@ -25,6 +25,10 @@ import {
   type FrameworkId,
   type PackageManager,
 } from './detect.js';
+import { hostingEnvHint } from './hosting-env-hint.js';
+
+/** Store builds bake env at build time on EAS / Xcode / Gradle, not on a web host. */
+const NATIVE_FRAMEWORK_IDS: ReadonlySet<FrameworkId> = new Set(['expo', 'react-native', 'capacitor']);
 import {
   ensureClientId,
   loadConfig,
@@ -189,7 +193,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
 
   // Only the ingest key goes into app env; the CLI key stays in the private
   // CLI config (see planCliConfigUpdate).
-  await writeEnvFile(
+  const envFile = await writeEnvFile(
     cwd,
     credentials.sdkKey,
     credentials.projectId,
@@ -197,6 +201,14 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     endpoint,
     Boolean(options.yes),
   );
+  // Installs stalled on localhost because .env.local never reaches the
+  // deployed site: name the variables and where they go (names only).
+  if (!NATIVE_FRAMEWORK_IDS.has(framework.id)) {
+    p.note(
+      hostingEnvHint(envVarsToWrite(credentials.sdkKey, credentials.projectId, framework, endpoint), envFile),
+      'Before you deploy:',
+    );
+  }
   persistCliConfig(credentials, endpoint);
   emitWizardFunnelEvent(credentials, endpoint, 'wizard_env_written', { framework: framework.id });
 
@@ -958,7 +970,7 @@ async function writeEnvFile(
   framework: Framework,
   endpoint: string,
   overwrite: boolean,
-): Promise<void> {
+): Promise<string> {
   const target = ENV_FILES.find((f) => existsSync(join(cwd, f))) ?? ENV_FILES[0];
   const targetPath = join(cwd, target);
   const newVars = envVarsToWrite(apiKey, projectId, framework, endpoint);
@@ -981,13 +993,13 @@ async function writeEnvFile(
       });
       if (p.isCancel(answer)) {
         p.log.info(`Kept existing env vars in ${target}.`);
-        return;
+        return target;
       }
       shouldOverwrite = Boolean(answer);
     }
     if (!shouldOverwrite) {
       p.log.info(`Kept existing env vars in ${target}. Re-run and confirm to overwrite.`);
-      return;
+      return target;
     }
     // Replace existing MUSHI_* lines (framework-prefixed and bare).
     const MUSHI_LINE_RE = /^(NEXT_PUBLIC_|NUXT_PUBLIC_|VITE_|EXPO_PUBLIC_)?MUSHI_[A-Z_]+=.*/gm;
@@ -999,7 +1011,7 @@ async function writeEnvFile(
     writeFileSync(targetPath, `${stripped}${prefix}\n# Mushi Mushi\n${newVars}\n`);
     p.log.success(`Updated MUSHI_* env vars in ${target}`);
     warnIfMissingFromGitignore(cwd, target);
-    return;
+    return target;
   }
 
   const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
@@ -1007,6 +1019,7 @@ async function writeEnvFile(
 
   p.log.success(`Wrote env vars to ${target}`);
   warnIfMissingFromGitignore(cwd, target);
+  return target;
 }
 
 /**

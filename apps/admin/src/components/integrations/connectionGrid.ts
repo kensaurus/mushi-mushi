@@ -21,7 +21,7 @@ import { sentryConnectionFromPageData } from '../../lib/useSentryConnection'
 import { slackCardConnection } from './slackConnection'
 import { PLATFORM_DEFS, type HealthRow, type Kind, type PlatformResponse } from './types'
 
-type GridToolId = 'sentry' | 'github' | 'slack' | 'langfuse' | 'cursor_cloud' | 'claude_code_agent' | 'linear'
+type GridToolId = 'sentry' | 'github' | 'slack' | 'discord' | 'teams' | 'langfuse' | 'cursor_cloud' | 'claude_code_agent' | 'linear'
 
 export interface GridTile {
   id: GridToolId
@@ -42,6 +42,9 @@ export interface ConnectionGridInput {
   sentryDeliveries: InboundDeliveryLike[] | null
   sentryDeliveriesFailed?: boolean
   slack: { configured: boolean; canPost: boolean; channelId: string | null }
+  /** Alert channels the page offers beside Slack; the sentence counts them too. */
+  discordConfigured?: boolean
+  teamsConfigured?: boolean
   linearConnected: boolean
   now?: number
 }
@@ -123,6 +126,23 @@ export function buildConnectionGrid(input: ConnectionGridInput): GridTile[] {
     lastLabel: input.slack.configured && slackProbe ? 'Checked' : null,
   }
 
+  // A builder who connects only Discord read "Nothing is connected yet"
+  // (first-time user test, 2026-10-28): every alert channel is a tile.
+  const webhookTile = (id: 'discord' | 'teams', label: string, brand: string, configured: boolean): GridTile => {
+    const probe = latestProbe(input.history, id)
+    return {
+      id,
+      label,
+      brand,
+      anchor: `integrations-${id}`,
+      view: connectionFromProbe({ configured, probe, now: input.now }),
+      lastAt: configured ? (probe?.checked_at ?? null) : null,
+      lastLabel: configured && probe ? 'Checked' : null,
+    }
+  }
+  const discord = webhookTile('discord', 'Discord', 'discord', Boolean(input.discordConfigured))
+  const teams = webhookTile('teams', 'Teams', 'microsoftteams', Boolean(input.teamsConfigured))
+
   const linearProbe = latestProbe(input.history, 'linear')
   const linear: GridTile = {
     id: 'linear',
@@ -138,14 +158,26 @@ export function buildConnectionGrid(input: ConnectionGridInput): GridTile[] {
   // sidebar badge) count it when it is set up, so the grid shows it then too.
   const claude = platformTile(input, 'claude_code_agent', 'claude_code_agent', 'Claude Code', 'claude')
 
+  // Langfuse counts only when it is the user's own: Mushi's environment default
+  // made a new app read "2 connected" with nothing connected (2026-10-28).
+  const langfuseDef = PLATFORM_DEFS.find((d) => d.kind === 'langfuse')
+  const langfuseOwn = (langfuseDef?.fields ?? []).some((f) => {
+    const source = input.platform?.sourceByField?.[f.name]
+    return source === 'project' || source === 'org'
+  })
+
+  // Same order as the page: what a solo builder needs first, monitoring last
+  // (AGENTS.md positioning; first-time user test, 2026-10-28).
   return [
-    sentry,
     platformTile(input, 'github', 'github', 'GitHub', 'github'),
     slack,
-    platformTile(input, 'langfuse', 'langfuse', 'Langfuse', 'langfuse'),
+    discord,
+    ...(teams.view.state === 'not_connected' ? [] : [teams]),
     platformTile(input, 'cursor_cloud', 'cursor_cloud', 'Cursor', 'cursor'),
     ...(claude.view.state === 'not_connected' ? [] : [claude]),
     linear,
+    sentry,
+    ...(langfuseOwn ? [platformTile(input, 'langfuse', 'langfuse', 'Langfuse', 'langfuse')] : []),
   ]
 }
 
@@ -168,12 +200,11 @@ export function connectionGridSentence(tiles: readonly GridTile[]): { sentence: 
   if (connected.length === 0) {
     return { sentence: 'Nothing is connected yet. Start with GitHub so Mushi can open fix PRs.', tone: 'neutral' }
   }
+  // Count each tool once: "1 connected, 1 not tested yet" was one tool, set
+  // up and never tested, read as two (integrator's new-user walk, 2026-10-28).
   const unchecked = connected.filter((t) => t.view.state === 'checking').length
-  return {
-    sentence:
-      unchecked > 0
-        ? `${connected.length} connected, ${unchecked} not tested yet. Nothing is broken.`
-        : `${connected.length} connected and working.`,
-    tone: unchecked > 0 ? 'neutral' : 'ok',
-  }
+  const working = connected.length - unchecked
+  if (unchecked === 0) return { sentence: `${working} connected and working.`, tone: 'ok' }
+  if (working === 0) return { sentence: `${unchecked} set up, not tested yet.`, tone: 'neutral' }
+  return { sentence: `${working} connected and working, ${unchecked} not tested yet.`, tone: 'neutral' }
 }

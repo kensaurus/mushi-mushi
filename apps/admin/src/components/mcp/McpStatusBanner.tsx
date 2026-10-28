@@ -57,7 +57,7 @@ export function McpStatusBanner({ stats, onTab, plainBanner = false }: Props) {
         title={plainBanner ? 'MCP key hits the wrong server' : 'MCP key talking to a different backend'}
         subtitle={
           label ??
-          `Last heartbeat hit ${stats.lastSeenEndpointHost} — expected ${stats.expectedEndpointHost}. Check MUSHI_API_ENDPOINT in your snippet.`
+          `This key last checked in with ${stats.lastSeenEndpointHost}, not ${stats.expectedEndpointHost}. Check MUSHI_API_ENDPOINT in your snippet.`
         }
         action={
           onTab ? (

@@ -172,3 +172,113 @@ machine's own git and `gh`, never a Mushi credential.
   it. The daemon refuses the CLI key.
 - **Keeping the duplicate check on the client only.** Only the CLI would ever
   see it; the cloud dispatchers would still take a report a lane is working on.
+
+## Amendment 2026-10-28: every worker problem is visible, flagged and answerable in the console
+
+Status: Accepted 2026-10-28 by team-lead (Claude) under the owner's explicit
+delegation ("these kind of wrong should be flagged and shown easily on mushi
+console. you shouldnt hide or omit it or make it invisible").
+
+On 2026-10-28 three lanes held a machine's four agent spaces for 4 to 6 hours
+inside their repos' own git hooks (a type check, a lint in pre-push), six
+lanes waited behind them, the Cursor account check timed out under load 37 on
+16 cores, `gh` reported signed out for a while, and expiring Cursor credits
+went unused. The lanes ran on a hand-made script, but the console-steered
+worker would have hidden most of it too: its heartbeat carried counters and
+one state word, so the console could not say which run was stuck, where, or
+why.
+
+### Decision
+
+- **Telemetry, never control.** The heartbeat adds, per lane, each run in
+  flight (`status.inflight`: claim, stage `prepare | agent | commit | push |
+  pr | run`, seconds since the run and the stage began, model, the last 4 log
+  lines of 160 characters) and, per host, load and cores, why it waits, the
+  Cursor account check and the `gh` sign-in as they really answered with
+  their age (`status.checks`), which lane holds each agent space
+  (`status.slots`) and lanes that could not start. Times are ages measured on
+  the machine, never clock values. Unknown keys are dropped and every list is
+  capped (`_shared/work-telemetry.ts`).
+- **Nothing private leaves the machine.** Each line is cleaned on the machine
+  (`worker/telemetry.ts`) and again on the server: credentials in URLs,
+  `token=`/`Bearer` values, secret-shaped strings (the shared
+  `secret-patterns.ts`), absolute paths (cut to their last part, so ADR 0048's
+  "Mushi never stores a path" holds) and compiler code frames that quote
+  source are removed; e-mail addresses are masked (`s***@g***.com`).
+- **Flags are derived on the server, once** (`_shared/work-flags.ts`, pure):
+  host offline, a lane that cannot start, a run holding an agent space over
+  45 minutes (with its stage), lanes waiting over 15 minutes (one flag per
+  machine naming the holders), the account check (another account, signed
+  out, missing: danger; timed out: warn), `gh` signed out, a guard holding the
+  machine over 5 minutes, load of 2 or more per core, 2+ runs failing in the
+  repo's git hooks in 24 hours (read from `work_claims.detail`), a `mushi work`
+  run no worker claims (`fix_attempts.agent = 'mcp'`, running, over 45
+  minutes) and credits idle (no agent work for 2 hours while a Cursor key the
+  caller sees, or a lane's stop date, ends within 7 days), named with what
+  blocks the work. A field an older daemon does not send raises no flag.
+- **Every surface reads that one result**: `GET /v1/admin/work/lanes`
+  (`flags`), `GET /v1/admin/work/stats` (the Pipeline sidebar badge), the
+  per-app Home's Needs you, Spend credits, `mushi worker status` and the MCP
+  tool `get_worker_status`. The Workers tab shows them first and never folds
+  them away; a strip repeats them above the Pipeline tabs.
+- **Stop this run reuses the lease.** `POST /v1/admin/work/claims/:id/stop`
+  (the app's owner or admin, or the machine's owner; audited) ends the claim
+  as `stopped`; the report is free for any lane or cloud agent, not requeued
+  (a run that just hung would only hang again). The next heartbeat lists it as lost, as for any ended lease,
+  so every daemon version stops the agent; a current one also commits and
+  pushes nothing more. A git hook already running keeps the agent space until
+  git's time limit; a run whose claim ended but which the machine still
+  reports stays flagged until it is gone. No new verb reaches the machine.
+- **Re-check the account is a value.** `work_hosts.recheck_requested_at`
+  (migration `20261028120000_worker_recheck.sql`, additive) makes the
+  heartbeat answer `recheckAccount: true` until the machine's next check (at
+  most 30 minutes). It is a new top-level field, not a guard or a lane verb,
+  so a daemon that predates it ignores it instead of refusing the answer. The
+  daemon runs the same `cursor-agent status` it always runs, in the
+  background, so a slow check never holds the heartbeat.
+- **A machine that is not ready says so.** `gh` signed out makes the machine
+  wait (`auth-wait`) instead of the daemon exiting before its first heartbeat;
+  a lane whose clone is not a git clone stays out while the others run.
+
+### Rejected
+
+- **A load guard** (`max_load_per_core`): the CLI's guard parser refuses an
+  unknown key, so a new guard would make every deployed daemon drop the whole
+  heartbeat answer. Load is reported and flagged instead (BL-150).
+- **Stopping a git hook already running from the console**: the abort reaches
+  the agent, not git; the hook ends at git's time limit (BL-151).
+- **A new run-history table**: `work_claims` already is the history, and its
+  `detail` carries the hook failures.
+
+## Amendment 2026-10-28 (b): switch the Cursor account from the console
+
+Status: Accepted 2026-10-28 by team-lead (Claude), on the owner's choice
+between two designs ("Sign-in link in console", over sending a stored key to
+the machine).
+
+The owner moved the lanes from one Cursor account to another by hand in a
+terminal, then asked for it to be one action in the console, easy to watch
+and to change.
+
+- **A sign-in, never a key.** The machine's owner names the account
+  (`POST /v1/admin/work/hosts/:id/cursor-account`, console session only, the
+  machine's owner, audited with the account masked). The heartbeat answer
+  carries `cursorAccount` (it overrides `worker.json`'s `cursorAccount`) and,
+  while open, `cursorLogin: { requestId }`. The daemon finishes its runs (30
+  minutes at most), runs `cursor-agent logout` and `cursor-agent login` with
+  `NO_OPEN_BROWSER=1` (no shell) and reports the approve link in
+  `status.cursorLogin`; the person approves on cursor.com. No BYOK key is
+  sent to a worker: the rule that a worker key never reads keys stands.
+- **The link is the owner's alone.** The server keeps the link in
+  `work_hosts.cursor_login` only while it is the step to take, outside the
+  general `status`, and returns it only from
+  `GET /v1/admin/work/hosts/:id/cursor-login` to the machine's owner. Log
+  lines lose any Cursor sign-in link on the machine and on the server.
+- **Truth from the CLI.** After the sign-in the daemon runs `cursor-agent
+  status`: the named account → `signed_in`, another → `wrong_account` (the
+  account check keeps the lanes off), anything else → `failed`; 15 minutes
+  without an approval → `expired`. A request no machine finishes within an
+  hour reads as expired.
+- **Capability, not version sniffing.** A daemon that can switch sends
+  `host.can: ["cursor_login"]`; without it the console says to update the CLI.
+  Migration `20261028150000_worker_cursor_account.sql` (additive).

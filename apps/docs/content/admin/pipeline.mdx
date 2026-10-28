@@ -67,7 +67,7 @@ The **Workers** tab shows your local workers: machines that run `mushi work --da
 
 | Part | What it shows |
 | --- | --- |
-| **Machines** | Each registered machine: online or offline, its last heartbeat, what it is doing now (working, idle, waiting for memory, for the GitHub quota, for the Cursor sign-in, or for a free agent slot), and its guards: how many agents may run at once, the free-memory floor and the GitHub API floor. The machine's owner changes the guards or revokes it. |
+| **Machines** | Each registered machine: online or offline, its last heartbeat, what it is doing now (working, idle, waiting for memory, for the GitHub quota, for the Cursor sign-in, or for a free agent space), its load, the Cursor account check and the `gh` sign-in as they last answered, which lane holds each agent space and in which stage, and its guards: how many agents may run at once, the free-memory floor and the GitHub API floor. The machine's owner changes the guards or revokes it. |
 | **Lanes** | One app on one machine: its model, mode, how many it runs at once, paused or not, its stop date, and drain (finish what runs, take nothing new). An audit lane also has a second model that may only veto a finding. |
 | **Queue** | Reports the lane takes first, in order. Move a report up or down, remove it, or paste report ids (one or many) into **Add reports by id**. A report already being fixed somewhere else waits in the queue until it is free. |
 | **Recent runs** | The last 7 days: runs, PRs opened, no change, timeouts, errors, and failures of the machine (infra) kept apart from failures of the code. |
@@ -83,6 +83,29 @@ A lane's **mode** says what it does:
 | Run skill runs | Only the rounds of skill runs started on Spend credits with **Run on** set to this lane |
 
 A lane change reaches the machine at its next heartbeat, within a minute. The machine opens no port: it asks Mushi for its settings, and the settings are values (a model id, a number, a date), never a command or a path. Viewers can read this tab but cannot change it.
+
+### When a worker stops doing useful work
+
+Anything that stops a worker from fixing bugs is listed at the top of the tab, worst first, and never folded away. An **agent space** is one coding agent running at a time; each machine allows a set number at once (**Agents at once** in its limits). When every space is taken, other lanes wait.
+
+| Problem | What you see | What fixes it |
+| --- | --- | --- |
+| Machine offline | No heartbeat for 3 minutes; how long, and how many queued reports wait | The command that shows the worker's service and its last log lines on that machine |
+| Stuck run | A run has held an agent space for over 45 minutes: its stage (getting the repo ready, the coding agent, the repo's **commit hook**, its **pre-push hook**, opening the PR), how long it has been in that stage, and its last few log lines | **Stop this run**, open the report, or the command that finds it on the machine |
+| Waiting for an agent space | Lanes waited over 15 minutes, with the runs that hold the spaces and in which stage | Stop the stuck runs, or let the machine run more at once |
+| Cursor account | The account check said another account, signed out, not installed, or did not answer in time (with the load on the machine) | **Switch account** (the machine's owner signs it in as the right account from the console: it finishes its runs, then shows a Cursor sign-in link), **Re-check the account**, or the command to sign in on the machine |
+| GitHub sign-in | `gh` is not signed in on the machine, so no branch can be pushed | `gh auth login` on the machine |
+| Machine waiting | Low memory, the GitHub API quota or a sign-in has held the machine for over 5 minutes | The command that shows what uses the memory or the quota |
+| Machine overloaded | Load of 2 or more per core: checks and git hooks time out | The command that lists what runs there |
+| Git hooks failing | Two or more runs of a lane failed in the repo's own commit or pre-push check in 24 hours | **Pause this lane**, open the latest report or PR |
+| Run outside the worker | A `mushi work` run that no worker claims has run for over 45 minutes: a script started it, so its stage cannot be seen or stopped here | Move that machine to `mushi worker install` |
+| Credits idle | No agent has worked for 2 hours while Cursor credits expire within 7 days, with what blocks the work | Open Workers, or Spend credits |
+
+The same problems show above the Pipeline tabs, as a count on the **Pipeline** item in the sidebar, in **Needs you** on Home (for that app), as "credits idle" on [Spend credits](/admin/credits), in `mushi worker status` and in the MCP tool `get_worker_status`.
+
+**Stop this run** (the app's owner or an admin, or the machine's owner; asks first, and is recorded in the audit log) ends the run's claim at once, so the report is free again: the next lane or a cloud agent can take it (it is not put back in a queue). The machine stops the agent at its next heartbeat, within a minute, and commits or pushes nothing more. A git hook that is already running keeps its agent space until git's own time limit (25 minutes); the flag stays up as "a run that was stopped still holds an agent space" until it ends, with the command to end it on the machine. A review follow-up is not a claim: pause its lane and end it on the machine.
+
+Log lines are cleaned on the machine and again by Mushi before they are stored: no keys, tokens or paths, e-mail addresses masked, and no lines a compiler quotes from your code. A machine whose Mushi CLI is older than these checks says so on its card instead of showing a problem.
 
 ### Send to my local worker
 

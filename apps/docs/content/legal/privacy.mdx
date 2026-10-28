@@ -9,12 +9,12 @@ import { Callout } from 'nextra/components'
 
 <Callout type="warning">
   **Draft, not yet reviewed by a lawyer.** This page is a complete plain-English
-  description of how Mushi Mushi handles personal data as of 2026-10-10. Treat
+  description of how Mushi Mushi handles personal data as of 2026-10-28. Treat
   it as a description of current practice, not a finished legal document.
   Questions: kensaurus@gmail.com.
 </Callout>
 
-**Effective date:** 2026-10-10 · **Version:** 2 (version 1, 2026-09-21, did not list the opt-in known-fix search sent to Firecrawl)
+**Effective date:** 2026-10-28 · **Version:** 3 (version 2, 2026-10-10, did not list the free production check or the cookieless visit count; version 1, 2026-09-21, did not list the opt-in known-fix search sent to Firecrawl)
 
 This policy covers **Mushi Cloud** (the hosted service at
 `kensaur.us/mushi-mushi`), the **admin console**, the **docs site**, the
@@ -44,6 +44,7 @@ requests personally.
 | **Fix and repo data** | Repository names, file paths and an index of your code, draft pull requests, MCP tool calls from your editor | The GitHub integration and the MCP server, when you connect them | Produce fixes that fit your codebase |
 | **Product usage events** | Console page views, setup-funnel steps (project created, key minted, first report), feature clicks, and a session heartbeat with your browser user agent, tagged with your user ID | The console, through Mushi's own SDK | Improve activation and find dead ends |
 | **Docs-site analytics** | Views of the landing, quickstart and pricing pages (route, referring page without its query string, `utm_*` tags), clicks on sign-up and demo buttons, a session heartbeat with your browser user agent, and a random browser ID stored in your browser. These are **pseudonymous, not anonymous**: if you later sign in to the console in the same browser, the console links your earlier docs events to your account | The docs and landing pages, through Mushi's own SDK — only after you accept the consent bar | Measure the funnel from landing to signup |
+| **Docs-site page-view count** | For each page view: the page path, the `?src=` campaign tag of the link you arrived by, and the host name of the site that linked to you (for example `news.ycombinator.com`). Stored only as a count per day, path, tag and host. No IP address, cookie, browser ID, user agent or fingerprint is stored, and nothing is written to your browser. To stop one visitor flooding the count, the rate limiter keeps a one-way hash of your IP address salted with a secret and the date, so it cannot be turned back into the address or linked across days, and it is never stored with the counts | The docs and landing pages, without the SDK, before and without consent; skipped when Do Not Track or Global Privacy Control is on | Count how many people each launch post or link brings |
 | **Console error telemetry** | Stack traces, browser and OS, the console route you were on when something broke | Sentry, from the admin console | Fix bugs in the console itself |
 | **Support and security mail** | Whatever you put in an email to us | You | Answer you |
 | **Bounties tester data** | Tester display name, points balance, gift-card redemptions, and KYC details (legal name, jurisdiction, tax ID) once redemptions pass US$599 in a calendar year | You, on the Bounties marketplace | Pay out gift cards and meet US tax reporting rules |
@@ -65,11 +66,25 @@ telemetry, support mail, and Bounties tester data.
   understanding which onboarding steps fail. We ran a balancing test on the
   product-usage events: they are scoped to your own account, never shared, and
   expire (section 7).
+- **(f) legitimate interests** — the docs-site page-view count: an
+  aggregate count per day and page that cannot identify you, with no
+  browser storage. Do Not Track and Global Privacy Control turn it off.
 - **(a) consent** — docs-site analytics. Until you accept the consent bar
   the docs site loads no analytics code, sends no analytics events, and
   stores nothing for analytics except your answer; Do Not Track and Global
   Privacy Control are honoured as a refusal. "No thanks" keeps it that way.
+  The only exception is the page-view count above: it is not the analytics
+  SDK, sends only the path, the `?src=` tag and the referring host, and
+  stores nothing in your browser.
 - **(c) legal obligation** — tax records for paid plans and tester payouts.
+
+**Free production check (added 2026-10-28).** The free production check
+reads only the public pages of the address you enter (through Firecrawl,
+section 5) and stores the address, the findings, a one-way hash of your IP
+address for rate limiting (never the IP itself) and, only if you give it, your
+email so we can send you the report link once; the email is cleared after that
+send. Legal basis: (f) legitimate interests (preventing abuse of a free tool);
+the email is (b) contract — you asked for the report.
 
 ## 4. Data where Mushi is the processor
 
@@ -127,9 +142,11 @@ reserved.
 
 | Data | Kept for | Mechanism |
 | --- | --- | --- |
-| End-user reports and everything attached to them | The retention window of your plan: **Free 7 days · Indie 30 days · Pro 90 days · Enterprise as agreed**, or a shorter per-project policy you set in **Compliance → Data retention** | A daily `retention-sweep` job hard-deletes rows past the window. Legal-hold rows are skipped |
+| End-user reports and everything attached to them | The retention window of your plan: **Free 14 days · Builder 90 days · Studio 180 days · Enterprise as agreed**, or a shorter per-project policy you set in **Compliance → Data retention** | A daily `retention-sweep` job hard-deletes rows past the window. Legal-hold rows are skipped |
 | Product usage events (Mushi's own console analytics) | **730 days (2 years)** | Nightly `prune_product_events` job, using the 730-day retention set on Mushi's own analytics project |
 | Docs-site analytics | 730 days (2 years) | Same table and job as above |
+| Free production checks (address, findings, IP hash, optional email) | 90 days | Daily `retention-sweep` |
+| Docs-site page-view count | Kept as daily counts; they hold no personal data | The `landing_page_views_daily` table. The salted daily hash used against flooding sits in the rate-limit table, apart from the counts |
 | Analytics events your app sends with `Mushi.track()` | 90 days by default, or the per-project override (1–3650 days) | Same nightly job |
 | Console error telemetry | 90 days | Sentry retention |
 | Account data | Until you delete your account, then 30 days for backups to roll off | Delete from **Settings**, or email us |
@@ -194,7 +211,8 @@ email us and we will delete it.
 
 ## 11. Cookies and browser storage
 
-We use no advertising or cross-site cookies. What each surface stores in your
+We use no advertising or cross-site cookies. The docs-site page-view count
+(section 2) stores nothing in your browser. What each surface stores in your
 browser:
 
 | Surface | Key | Purpose | Lifetime |

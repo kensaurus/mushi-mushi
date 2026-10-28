@@ -60,6 +60,7 @@ const DesignPage = lazy(() => import('./pages/DesignPage').then(m => ({ default:
 const TeamPage = lazy(() => import('./pages/TeamPage').then(m => ({ default: m.TeamPage })))
 const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })))
 const UxRunsPage = lazy(() => import('./pages/UxRunsPage').then(m => ({ default: m.UxRunsPage })))
+const FirstUserTestPage = lazy(() => import('./pages/FirstUserTestPage').then(m => ({ default: m.FirstUserTestPage })))
 const PortfolioPage = lazy(() => import('./pages/PortfolioPage').then(m => ({ default: m.PortfolioPage })))
 const PromptLabPage = lazy(() => import('./pages/PromptLabPage').then(m => ({ default: m.PromptLabPage })))
 const MarketplacePage = lazy(() => import('./pages/MarketplacePage').then(m => ({ default: m.MarketplacePage })))
@@ -239,7 +240,7 @@ function TesterRoute({ children }: { children: ReactNode }) {
           <h1 className="text-lg font-semibold">Mushi Bounties requires Mushi Cloud</h1>
           <p className="text-sm text-fg-muted">
             The tester marketplace and reward system are hosted features — they
-            require a Mushi Cloud account with Pro or higher.
+            require a Mushi Cloud account on Studio or higher.
           </p>
           <a
             href="https://kensaur.us/mushi-mushi/pricing"
@@ -373,6 +374,9 @@ export function App() {
                     <Route key={path} path={path} element={<HubRedirect hub={hub} viewId={viewId} />} />
                   ))}
                   <Route path="/team" element={<TeamPage />} />
+                  {/* Stripe Checkout returns here (STRIPE_SUCCESS_URL / STRIPE_CANCEL_URL defaults); lib/billingFunnel.ts. */}
+                  <Route path="/billing/success" element={<Navigate to="/team?view=billing&checkout=success" replace />} />
+                  <Route path="/billing/cancel" element={<Navigate to="/team?view=billing&checkout=cancelled" replace />} />
                   <Route path="/dashboard" element={<HomePage />} />
                   <Route path="/console" element={<Navigate to="/dashboard" replace />} />
                   <Route path="/reports" element={<ReportsPage />} />
@@ -398,6 +402,7 @@ export function App() {
                   <Route path="/credits" element={<CreditsPage />} />
                   <Route path="/design" element={<DesignPage />} />
                   <Route path="/ux-runs" element={<UxRunsPage />} />
+                  <Route path="/first-user-test" element={<FirstUserTestPage />} />
                   <Route path="/portfolio" element={<PortfolioPage />} />
                   <Route path="/prompt-lab" element={<PromptLabPage />} />
                   <Route path="/fine-tuning" element={<Navigate to="/prompt-lab" replace />} />

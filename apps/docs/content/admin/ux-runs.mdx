@@ -111,11 +111,12 @@ model to point out concrete visual defects on whole pages. `--file` files at mos
 reports a run and skips one still open or filed in the last 14 days; `--dry-run` lists
 them instead.
 
-## Fresh eyes
+## First-time user test
 
-A fresh-eyes run tests the path a stranger takes: a model that has never seen your app
-tries one goal from your landing page, such as "get my first bug explained", reading only
-what is on screen. Code decides everything else:
+The **First-time user test** page (it was the Fresh eyes tab of this page) tests the path
+a stranger takes: a model that has never seen your app tries one goal from your start
+page, such as "sign up and start using the app", reading only what is on screen. Code
+decides everything else:
 
 - **Time to first value**: how long the app made the visitor wait, plus the time to read
   each new screen, until the goal check passes (a URL, visible text, a selector or an API
@@ -127,6 +128,16 @@ what is on screen. Code decides everything else:
   shows them again; opinions such as "confusing" only when two sessions agree. Reports
   come in as source `fresh_eyes`, at most 15 a run.
 
+**Run now** starts it from the console. The start page comes from your app (its last
+test, its live-site watch or site audit address) and the goal is plain words you can
+change. The test runs on your own computer, where its browser and AI run: if Mushi runs
+there for this app (`mushi worker install`, shown on Pipeline → Workers), it picks the
+test up within a minute and the page follows it live. If not, the page says so and shows
+the one thing to set up. Pick **Look around, file nothing** to see where a visitor gets
+stuck, or **File what stops them** to turn each problem into a bug report.
+
+From a terminal it is the same run:
+
 ```bash
 mushi ux fresh-eyes --url https://your-app.com --goal "get my first report" --dry-run
 # with a test account for your app, mirrored here and filed:
@@ -137,13 +148,12 @@ MUSHI_FRESH_EYES_EMAIL=… MUSHI_FRESH_EYES_PASSWORD=… \
 The run is signed out in a clean browser. It may only write to your app's own origins
 (`--app-host` adds its API); payments, "Continue with Google/GitHub/Apple", public sign-up
 forms and anything labelled delete or revoke are refused. Without an account it stops at
-your sign-up page and says so; `--dry-run` never writes at all.
+your sign-up page and says so; `--dry-run` never writes to your app.
 
-The **Fresh eyes** tab shows each run: time to first value, steps, how many sessions
-reached the goal, the trend over runs, and every step with its screenshot and wait. Once
-an app has a finished run, Home shows a **First-time setup** light with the minutes and
-steps. Runs start on your computer, where the browser and the Cursor CLI run; the tab's
-**Run now** gives the exact command.
+The page shows each test: time to first value, steps, how many visitors reached the goal,
+the trend over tests, and every step with its screenshot and wait. A waiting test can be
+cancelled; a failed one says why. Once an app has a finished test, Home shows a
+**First-time setup** light with the minutes and steps.
 
 ## Where the changes are
 

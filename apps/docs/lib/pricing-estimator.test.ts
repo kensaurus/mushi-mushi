@@ -15,25 +15,31 @@ describe('estimateCost', () => {
   const pro = getTierById('pro')
   const free = getTierById('free_cloud')
 
-  it('returns base only within included quota', () => {
-    expect(estimateCost(indie, 300)).toEqual({ total: 15, overage: 0, capped: false })
+  it('returns base only within included diagnoses', () => {
+    expect(estimateCost(indie, 800)).toEqual({ total: 29, overage: 0, capped: false })
   })
 
   it('computes overage below cap', () => {
-    expect(estimateCost(indie, 700)).toEqual({ total: 21, overage: 6, capped: false })
+    expect(estimateCost(indie, 1200)).toEqual({ total: 35, overage: 6, capped: false })
   })
 
-  it('clamps Indie at $50 spend cap', () => {
-    expect(estimateCost(indie, 5000)).toEqual({ total: 50, overage: 35, capped: true })
+  it('clamps Builder at its $50 spend cap', () => {
+    expect(estimateCost(indie, 5000)).toEqual({ total: 50, overage: 21, capped: true })
   })
 
-  it('hard-stops Free Cloud with capped flag', () => {
-    expect(estimateCost(free, 100)).toEqual({ total: 0, overage: 0, capped: true })
+  it('hard-stops Free past 100 diagnoses', () => {
+    expect(estimateCost(free, 100)).toEqual({ total: 0, overage: 0, capped: false })
+    expect(estimateCost(free, 101)).toEqual({ total: 0, overage: 0, capped: true })
   })
 
-  it('shows Pro spend cap within slider range', () => {
-    // Pro's included diagnoses plus (cap - base) / overage price.
-    const atCap = 8040
+  it('meters Studio at $0.03 past 3,000 (owner cost fix, 2026-10-28)', () => {
+    expect(estimateCost(pro, 3000)).toEqual({ total: 79, overage: 0, capped: false })
+    expect(estimateCost(pro, 5000)).toEqual({ total: 139, overage: 60, capped: false })
+  })
+
+  it('shows the Studio spend cap within slider range', () => {
+    // Studio's included diagnoses plus (cap - base) / overage price: 3,000 + 121 / 0.03, rounded up.
+    const atCap = 7034
     expect(atCap).toBeLessThanOrEqual(MAX_SLIDER)
     const atCapResult = estimateCost(pro, atCap)
     expect(atCapResult.total).toBe(200)
@@ -41,22 +47,24 @@ describe('estimateCost', () => {
   })
 
   // Annual plans stop at the included diagnoses (no overage, 2026-10-10).
-  it('annual Indie: discounted base, no overage, hard stop above 500', () => {
-    expect(estimateCost(indie, 300, true)).toEqual({ total: 12.5, overage: 0, capped: false })
-    expect(estimateCost(indie, 5000, true)).toEqual({ total: 12.5, overage: 0, capped: true })
+  it('annual Builder: discounted base, no overage, hard stop above 1,000', () => {
+    expect(estimateCost(indie, 300, true).total).toBeCloseTo(24.17, 2)
+    expect(estimateCost(indie, 5000, true)).toMatchObject({ overage: 0, capped: true })
   })
 
   it('annual toggle leaves the free plan unchanged', () => {
-    expect(estimateCost(free, 100, true)).toEqual({ total: 0, overage: 0, capped: true })
+    expect(estimateCost(free, 101, true)).toEqual({ total: 0, overage: 0, capped: true })
   })
 })
 
 describe('annual pricing', () => {
   it('applies two months free on annual display', () => {
     const indie = getTierById('indie')
-    expect(annualTotalUsd(indie)).toBe(15 * (12 - ANNUAL_DISCOUNT_MONTHS))
-    expect(displayBaseUsd(indie, true)).toBeCloseTo(12.5, 2)
-    expect(displayBaseUsd(indie, false)).toBe(15)
+    expect(annualTotalUsd(indie)).toBe(290)
+    expect(annualTotalUsd(getTierById('pro'))).toBe(790)
+    expect(displayBaseUsd(indie, true)).toBeCloseTo(24.17, 2)
+    expect(displayBaseUsd(indie, false)).toBe(29)
+    expect(ANNUAL_DISCOUNT_MONTHS).toBe(2)
   })
 })
 
@@ -69,7 +77,12 @@ describe('getNextTierId', () => {
 })
 
 describe('TIERS catalog', () => {
-  it('has three self-serve cloud tiers', () => {
+  it('has three self-serve cloud tiers named Free, Builder and Studio, sold by apps', () => {
     expect(TIERS.map((t) => t.id)).toEqual(['free_cloud', 'indie', 'pro'])
+    expect(TIERS.map((t) => [t.name, t.apps, t.baseUsd, t.included])).toEqual([
+      ['Free', 1, 0, 100],
+      ['Builder', 3, 29, 1000],
+      ['Studio', 10, 79, 3000],
+    ])
   })
 })

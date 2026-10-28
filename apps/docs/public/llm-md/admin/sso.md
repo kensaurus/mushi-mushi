@@ -15,7 +15,7 @@ The SSO page lets you register SAML 2.0 or OIDC identity providers for your
 organisation, so teammates can log in with your company's IdP instead of email +
 password.
 
-SSO is available on the **Pro** and **Enterprise** plans. An upgrade prompt appears if
+SSO is available on the **Enterprise** plan. An upgrade prompt appears if
 the `sso` entitlement is not active on your account.
 
 ---
@@ -97,4 +97,4 @@ DELETE /v1/admin/sso/:id
 
 - [Organization members](/admin/teams) — manage roles after SSO is set up
 - [Settings](/admin/settings) — other project and org configuration
-- [Billing](/admin/billing) — upgrade to Pro/Enterprise to enable SSO
+- [Billing](/admin/billing) — upgrade to Enterprise to enable SSO

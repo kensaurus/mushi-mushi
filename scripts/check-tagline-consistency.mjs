@@ -2,11 +2,13 @@
 /**
  * check-tagline-consistency.mjs
  *
- * CI guard for narrative consistency on primary surfaces. Three rules:
+ * CI guard for narrative consistency on primary surfaces. Four rules:
  *   1. No stale tagline variants anywhere (hard fail).
  *   2. Every primary README MUST lead with the v2 hero (hard fail if missing).
  *   3. The legacy v1 line is comparison-tables-only — allowed to coexist as
  *      supporting copy, but it can never substitute for the v2 hero.
+ *   4. The hero's offer line (MUSHI_TAGLINE_V2.heroOffer) is quoted verbatim
+ *      in VOICE.md and carries no price or number.
  *
  * This is the guardrail that keeps the v1/v2 conflict from drifting back.
  *
@@ -16,7 +18,7 @@
 
 import { readFileSync } from 'fs'
 import { join, relative } from 'path'
-import { fileURLToPath } from 'url'
+import { fileURLToPath, pathToFileURL } from 'url'
 
 const __dir = fileURLToPath(new URL('.', import.meta.url))
 const ROOT = join(__dir, '..')
@@ -96,8 +98,37 @@ for (const dir of SDK_DIRS) {
 }
 check(join(ROOT, 'README.md'))
 
+// Rule 4: the offer line that follows the hero (owner decision D1,
+// docs/plan-gtm-november-2026.md §3) lives in the brand ladder, is quoted
+// verbatim in VOICE.md's ladder table, and never carries a price. Prices
+// change with the plan; the ladder is copied onto npm, READMEs and posts.
+const { MUSHI_TAGLINE_V2 } = await import(pathToFileURL(join(ROOT, 'packages/brand/src/index.js')).href)
+const offer = MUSHI_TAGLINE_V2.heroOffer
+const voice = readFileSync(join(ROOT, 'docs/marketing/VOICE.md'), 'utf8')
+if (typeof offer !== 'string' || offer.length === 0) {
+  console.error('FAIL  packages/brand/src/index.js')
+  console.error('      MUSHI_TAGLINE_V2.heroOffer is missing (the line that follows the hero).')
+  console.error()
+  failures++
+} else {
+  if (/[$€£¥]|\d/.test(offer)) {
+    console.error('FAIL  packages/brand/src/index.js')
+    console.error(`      MUSHI_TAGLINE_V2.heroOffer carries a price or number: "${offer}"`)
+    console.error('      Prices belong on the pricing page, never in the tagline ladder.')
+    console.error()
+    failures++
+  }
+  if (!voice.includes(`*"${offer}"*`)) {
+    console.error('FAIL  docs/marketing/VOICE.md')
+    console.error('      The ladder table does not quote MUSHI_TAGLINE_V2.heroOffer verbatim:')
+    console.error(`      "${offer}"`)
+    console.error()
+    failures++
+  }
+}
+
 if (failures === 0) {
-  console.log(`✓  Tagline consistency: all ${checked} primary READMEs lead with the v2 hero, no stale variants.`)
+  console.log(`✓  Tagline consistency: all ${checked} primary READMEs lead with the v2 hero, no stale variants; the offer line matches VOICE.md and carries no price.`)
   process.exit(0)
 } else {
   console.error(`\n${failures} tagline inconsistency(ies) found`)

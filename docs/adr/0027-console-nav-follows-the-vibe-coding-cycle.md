@@ -114,9 +114,11 @@ highlighted while you were on one.
 
 - **Pipeline is a core page**, after Fixes.
 - **Sub-pages open under their page** while you are in that family
-  (`lib/sidebarTree.ts`, `NAV_CHILDREN`): Home's views, Apps › Manage apps,
-  Checks › every check, Team's views. The sub-page you are on is the
-  highlighted one.
+  (`lib/sidebarTree.ts`, `NAV_CHILDREN`): Apps › Manage apps and Checks ›
+  every check. The sub-page you are on is the highlighted one. Pages that
+  switch views with their own tab strip (Home, Team) list none: on
+  2026-10-28 the owner found every tab repeated in the sidebar. The
+  current page is scrolled into view.
 - **More pages lists every other page**, grouped by the cycle sections above,
   and opens by itself when you are on one of them. A Lab kept in the sidebar
   leaves the list. The "This page is not in your sidebar" notice is gone.

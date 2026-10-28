@@ -24,8 +24,8 @@ description: Mushi Cloud status and uptime — the live status page for the API,
 
 ## Uptime commitment
 
-Mushi Cloud is operated on a **reasonable-efforts basis** for the Free and Indie tiers.
-Pro subscribers receive priority incident response.
+Mushi Cloud is operated on a **reasonable-efforts basis** for the Free and Builder plans.
+Studio subscribers receive priority incident response.
 Enterprise SLAs (99.9 % monthly uptime with credits) are negotiated per-contract —
 contact `kensaurus@gmail.com` for details.
 

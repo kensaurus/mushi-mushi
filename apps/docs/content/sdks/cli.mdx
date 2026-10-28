@@ -317,6 +317,10 @@ GitHub API floor). The daemon then works by each lane's mode:
 | `audit` | A model (read-only) proposes bugs for one screen with the line, the code there and a check; the machine runs the check itself and files only what reproduces; a second model may only veto |
 | `skill` | Only the rounds of skill runs started with this lane on Spend credits |
 
+Whatever its mode (except `followups`), a lane first takes a **first-time user test**
+someone started with Run now in the console: it runs `mushi-ux fresh-eyes` on this
+machine and the console follows it live. The heartbeat tells the lane within a minute.
+
 While a lane holds a report, no cloud agent is sent to it. Every outcome goes back to
 Mushi; a failure of the machine (a clone permission, the network, a hook that
 timed out under load) is kept apart from a failure of the code and never
@@ -359,6 +363,16 @@ record their fixes and file reports, and nothing else. It cannot merge, change
 settings or read keys. `install` makes one with your CLI login (which needs
 `mcp:write` on every lane's app), or takes one from stdin. The daemon refuses
 your CLI key. The agent gets neither key.
+
+`mushi worker status` starts with what stops your workers from fixing bugs, the
+same list as the console's Workers tab, worst first: a run stuck in a repo's
+commit or pre-push hook (with its stage and last log lines), an offline
+machine, a Cursor account check that failed or timed out, lanes waiting for an
+agent space (one coding agent at a time; each machine allows a set number),
+`gh` signed out, idle credits. Each comes with what to do. It exits with code 2
+while one of them needs you now. The worker sends the stage and log lines with
+its heartbeat; keys, tokens and paths are removed and e-mail addresses masked
+before anything leaves the machine.
 
 | Command | Flags |
 | --- | --- |

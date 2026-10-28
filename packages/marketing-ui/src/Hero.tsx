@@ -89,7 +89,7 @@ export function Hero() {
           <ul className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--mushi-ink-muted)]">
             <li>Editor-first · Cursor + Claude</li>
             <li aria-hidden="true" className="text-[var(--mushi-ink-faint)] opacity-50">／</li>
-            <li>50 free diagnoses / mo</li>
+            <li>Free for 1 app · 100 diagnoses / mo</li>
             <li aria-hidden="true" className="text-[var(--mushi-ink-faint)] opacity-50">／</li>
             <li>MIT-licensed · self-hostable</li>
           </ul>
