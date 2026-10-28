@@ -13,7 +13,7 @@ vi.mock('./supabase', () => ({
   },
 }))
 
-import { ageLabel, openerSummary, outcomeSummary, runPipelineAction, type DispatcherStatus } from './pipeline'
+import { ageLabel, deployIntakeWarning, openerSummary, outcomeSummary, runPipelineAction, type DispatcherStatus } from './pipeline'
 
 beforeEach(() => {
   state.posts = []
@@ -25,6 +25,15 @@ describe('pipeline helpers', () => {
     expect(outcomeSummary([{ id: 'a', ok: true, message: 'x' }, { id: 'b', ok: true, message: 'x' }])).toBe('2 done.')
     expect(outcomeSummary([{ id: 'a', ok: true, message: 'x' }, { id: 'b', ok: false, message: 'Not in the merge queue.' }])).toBe('1 done · 1 not: Not in the merge queue.')
     expect(outcomeSummary([{ id: 'b', ok: false, message: 'GitHub refused.' }])).toBe('GitHub refused.')
+  })
+
+  it('deployIntakeWarning: 14 days of silence says why and how to send deploy.completed', () => {
+    const now = Date.parse('2026-10-29T00:00:00Z')
+    const day = 24 * 3600_000
+    expect(deployIntakeWarning(null, now)).toContain('no deploy recorded in 14 days')
+    expect(deployIntakeWarning(null, now)).toContain('"type":"deploy.completed"')
+    expect(deployIntakeWarning({ at: new Date(now - 14 * day).toISOString() }, now)).toContain('Too old (14 days)')
+    expect(deployIntakeWarning({ at: new Date(now - 13 * day).toISOString() }, now)).toBeNull()
   })
 
   it('ageLabel: minutes, hours, then days', () => {

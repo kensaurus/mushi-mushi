@@ -258,10 +258,24 @@ describe('buildPipeline', () => {
     const merged = attempt({ pr_state: 'merged', merged_at: '2026-10-25T00:00:00Z' })
     const none = run({ attempts: [merged] })
     expect(group(none, 'merged')?.group.label).toBe('1 fix: merged (this app records no deploys)')
+    // Report 9f64a77b: say why, and how to send the event, on the group itself.
+    expect(group(none, 'merged')?.group.settings).toMatchObject({
+      to: '/recipe',
+      hint: expect.stringContaining('deploy.completed'),
+    })
     const seen = run({ attempts: [merged], deploys: [{ project_id: P, observed_version: '1.2.0', ok: true, observed_at: '2026-10-25T02:00:00Z' }] })
     expect(group(seen, 'deployed')?.stage.id).toBe('deployed')
     const before = run({ attempts: [merged], deploys: [{ project_id: P, observed_version: '1.1.0', ok: true, observed_at: '2026-10-20T00:00:00Z' }] })
-    expect(group(before, 'not_deployed')?.group.tone).toBe('stuck')
+    const stuck = group(before, 'not_deployed')
+    expect(stuck?.group.tone).toBe('stuck')
+    expect(stuck?.group.settings?.to).toBe('/recipe')
+    expect(stuck?.group.settings?.hint).toContain('POST /v1/ingest/recipe/events')
+    expect(stuck?.group.settings?.hint).toContain('"type":"deploy.completed"')
+    // A deploy already recorded, and the merge is still inside a day: waiting, not the how-to.
+    const recent = attempt({ pr_state: 'merged', merged_at: '2026-10-26T11:00:00Z' })
+    const waiting = run({ attempts: [recent], deploys: [{ project_id: P, observed_version: '1.1.0', ok: true, observed_at: '2026-10-20T00:00:00Z' }] })
+    expect(group(waiting, 'merged')?.group.label).toBe('1 fix: merged, waiting for the next deploy')
+    expect(group(waiting, 'merged')?.group.settings).toBeNull()
   })
 
   // Report f5575c9e: "43 agent failed" counted attempts, and dismissed and

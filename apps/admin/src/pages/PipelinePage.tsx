@@ -9,7 +9,8 @@
  * their own CI is red"), each with its items, their evidence and only the
  * fixes the server would not refuse (the rest disabled, with the reason);
  * then the release trains of the last 7 days per repo, who opens fixes
- * (folded), and what intake and deploys report.
+ * (folded), and what intake and deploys report. A deploy silent for 14 days
+ * says why reporters are not told, and how to send deploy.completed.
  *
  * Scope follows the header switcher (lib/projectScope.ts): one app, or "All
  * apps". Every action asks first, shows its busy state and each PR's
@@ -50,6 +51,7 @@ import {
   ACTION_META,
   actionableIds,
   ageLabel,
+  deployIntakeWarning,
   openerSummary,
   outcomeSummary,
   retryTrains,
@@ -373,14 +375,7 @@ export function PipelinePage() {
                         0 rejected since {new Date(`${data.intake.since}T00:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })} ·
                       </span>
                     ))}
-                  {p.lastDeploy ? (
-                    <span>
-                      last deploy seen {ageLabel(p.lastDeploy.at, now)} ago{p.lastDeploy.version ? ` (${p.lastDeploy.version})` : ''}
-                      {!p.lastDeploy.ok && ' and it failed'}
-                    </span>
-                  ) : (
-                    <span>no deploy recorded in 14 days</span>
-                  )}
+                  <DeploySeen projectId={p.id} lastDeploy={p.lastDeploy} now={now} />
                 </li>
                 )
               })}
@@ -404,6 +399,35 @@ export function PipelinePage() {
         />
       )}
     </div>
+  )
+}
+
+/** Last deploy on the Intake line: a 14-day silence says why, and how to send `deploy.completed`. */
+function DeploySeen({ projectId, lastDeploy, now }: { projectId: string; lastDeploy: { at: string; version: string | null; ok: boolean } | null; now: number }) {
+  const warning = deployIntakeWarning(lastDeploy, now)
+  const how = (
+    <Link to="/recipe" className="font-medium text-brand hover:underline" data-testid={`pipeline-intake-${projectId}-deploy-how`}>
+      Recipe →
+    </Link>
+  )
+  if (!lastDeploy) {
+    return (
+      <span className="font-medium text-warn-foreground" data-testid={`pipeline-intake-${projectId}-deploy-stale`}>
+        {warning} {how}
+      </span>
+    )
+  }
+  return (
+    <span data-testid={`pipeline-intake-${projectId}-deploy`}>
+      last deploy seen {ageLabel(lastDeploy.at, now)} ago{lastDeploy.version ? ` (${lastDeploy.version})` : ''}
+      {!lastDeploy.ok && ' and it failed'}
+      {warning && (
+        <span className="font-medium text-warn-foreground" data-testid={`pipeline-intake-${projectId}-deploy-stale`}>
+          {' '}
+          {warning} {how}
+        </span>
+      )}
+    </span>
   )
 }
 

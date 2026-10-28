@@ -9,6 +9,10 @@
  *            dismiss                          → the report's own close route (PATCH /v1/admin/reports/:id)
  *            everything else                  → POST /v1/admin/pipeline/actions
  *                                               (requeue sends local worker run ids as claimIds)
+ *
+ *          deployIntakeWarning is the 14-day silence on the Intake line
+ *          (report 9f64a77b): why reporters are not told, and the
+ *          deploy.completed event that records a deploy.
  */
 
 import { apiFetch } from './supabase'
@@ -348,6 +352,29 @@ export function outcomeSummary(results: ActionOutcome[]): string {
   const first = failed[0].message
   if (ok === 0 && failed.length === 1) return first
   return `${ok} done · ${failed.length} not: ${first}`
+}
+
+/** Same 14-day silence as setup-gaps `deployGap` (report 9f64a77b). */
+export const DEPLOY_SILENCE_MS = 14 * 24 * 3600_000
+
+/**
+ * The CI event that records a deploy. Kept in step with
+ * `DEPLOY_EVENT_SETTING.hint` in `_shared/pipeline-view.ts`.
+ */
+export const DEPLOY_EVENT_HOWTO =
+  'Send one from CI with an agent key (mcp:write): POST /v1/ingest/recipe/events {"events":[{"type":"deploy.completed","targetId":"web","ok":true,"commit":"<sha>"}]}.'
+
+/**
+ * Warning for the Intake and deploys line. null when a deploy was seen inside
+ * 14 days. `last` null means nothing in that window.
+ */
+export function deployIntakeWarning(last: { at: string } | null, now: number): string | null {
+  if (!last) return `no deploy recorded in 14 days, so reporters are not told their fix is live. ${DEPLOY_EVENT_HOWTO}`
+  const t = Date.parse(last.at)
+  if (!Number.isFinite(t)) return null
+  const days = Math.floor((now - t) / (24 * 3600_000))
+  if (days < 14) return null
+  return `Too old (${days} days): reporters are not told their fix is live. ${DEPLOY_EVENT_HOWTO}`
 }
 
 /** "3 h", "2 d": how long an item has been in its stage. */

@@ -18,6 +18,10 @@
  *          on their own head, and its trains failed 37 times in 5 days).
  *          A test machine stop is not a code failure (ADR 0033), and
  *          `skipped` is not green.
+ *
+ *          A merged fix with no deploy after it links to how to send
+ *          `deploy.completed` (report 9f64a77b). The console's Intake line
+ *          uses the same words when no deploy was recorded in 14 days.
  */
 
 import { RESOLVED_REPORT_STATUSES } from './fix-report-truth.ts'
@@ -261,6 +265,16 @@ export const DISPATCH_SETTING = { label: 'Cursor keys and spend-down', to: '/cre
 export const CLAUDE_KEY_SETTING = { label: 'AI keys', to: '/settings?tab=byok' }
 /** Local workers (ADR 0048): their lanes, queues and runs. */
 export const WORKERS_SETTING = { label: 'Local workers', to: '/pipeline?tab=workers' }
+/**
+ * Why a merged fix is not Deployed, and the one event that records a deploy
+ * (report 9f64a77b). The Intake line uses the same POST snippet
+ * (`deployIntakeWarning` in apps/admin) when nothing arrived in 14 days.
+ */
+export const DEPLOY_EVENT_SETTING = {
+  label: 'How to send a deploy',
+  to: '/recipe',
+  hint: 'Reporters are not told their fix is live until a deploy event arrives. Send one from CI with an agent key (mcp:write): POST /v1/ingest/recipe/events {"events":[{"type":"deploy.completed","targetId":"web","ok":true,"commit":"<sha>"}]}.',
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -476,7 +490,7 @@ interface GroupSpec {
   noun: [string, string]
   text: string
   actions: PipelineAction[]
-  settings?: { label: string; to: string } | null
+  settings?: { label: string; to: string; hint?: string } | null
 }
 
 class Groups {
@@ -588,9 +602,11 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       if (after) {
         groups.add('deployed', { stage: 'deployed', tone: 'done', noun: ['fix', 'fixes'], text: 'deployed', actions: [] }, itemOf(a, after.observed_at, { lastEventAt: after.observed_at, queueDetail: after.observed_version ? `Seen live in ${after.observed_version}.` : null }))
       } else if (deploys.length > 0 && age(now, at) > DEPLOY_STUCK_MS) {
-        groups.add('not_deployed', { stage: 'merged', tone: 'stuck', noun: ['fix', 'fixes'], text: 'merged over a day ago, no deploy seen since', actions: [] }, itemOf(a, at))
+        groups.add('not_deployed', { stage: 'merged', tone: 'stuck', noun: ['fix', 'fixes'], text: 'merged over a day ago, no deploy seen since', actions: [], settings: DEPLOY_EVENT_SETTING }, itemOf(a, at))
       } else {
-        groups.add('merged', { stage: 'merged', tone: 'done', noun: ['fix', 'fixes'], text: deploys.length ? 'merged, waiting for the next deploy' : 'merged (this app records no deploys)', actions: [] }, itemOf(a, at))
+        // No deploy rows in the window: still say how to send one. Not stuck —
+        // deploy targets are optional until the 14-day silence warning.
+        groups.add('merged', { stage: 'merged', tone: 'done', noun: ['fix', 'fixes'], text: deploys.length ? 'merged, waiting for the next deploy' : 'merged (this app records no deploys)', actions: [], settings: deploys.length ? null : DEPLOY_EVENT_SETTING }, itemOf(a, at))
       }
       continue
     }
