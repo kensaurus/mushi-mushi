@@ -9,15 +9,14 @@ description: The User stories page manages your inventory.yaml — every page, a
 
 # User stories · Inventory
 
-The **User stories** surface (sidebar → User stories) is the v2 positive
+The **User stories** surface (sidebar → Checks → User stories) is the v2 positive
 side of the loop. Where Reports / Graph / Fixes catch what your users
 *felt* break, the inventory describes what should *exist* — every page,
 every action, every expected outcome — so the gates can fail when the
 two diverge.
 
-  Inventory routes are gated behind **Advanced** mode in the sidebar
-  while the surface is still maturing. A workspace owner can promote
-  them via Settings → Workspace → *Surface advanced features*.
+  User stories sits under **Checks** in the sidebar: open Checks and the
+  sidebar lists it with the other checks.
 
 ## What you see
 

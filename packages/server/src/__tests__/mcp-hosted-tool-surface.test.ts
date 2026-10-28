@@ -19,10 +19,13 @@ import { resolve } from 'node:path'
 import {
   DEFAULT_FEATURE_GROUPS,
   DEPRECATED_TOOL_ALIASES,
+  PRESET_TOOLS,
   TOOL_FEATURE_MAP,
+  parseFeaturesParam,
   toolMatchesFeatures,
 } from '../../supabase/functions/mcp/feature-groups.ts'
 import { HOSTED_RESOURCE_URIS, hostedResourceTarget } from '../../supabase/functions/mcp/hosted-resources.ts'
+import { toolEnabledForConnection } from '../../supabase/functions/_shared/mcp-connection-scope.ts'
 
 const FUNCTIONS = resolve(__dirname, '../../supabase/functions')
 const SOURCE = readFileSync(resolve(FUNCTIONS, 'mcp/index.ts'), 'utf8')
@@ -81,6 +84,30 @@ describe('hosted MCP tool surface', () => {
     expect(call).toMatch(
       /toolEnabledForConnection\(DEPRECATED_TOOL_ALIASES\[name\] \?\? name, ctx, \(n\) => toolMatchesFeatures\(n, ctx\.features\)\)/,
     )
+  })
+
+  // The Lovable connector URL (docs/quickstart/lovable-mcp) is ?features=vibe.
+  it('lists exactly the vibe preset on ?features=vibe, every tool registered and read tools read-only', () => {
+    const vibe = PRESET_TOOLS.vibe ?? []
+    const listed = names.filter((n) => !isAlias(n) && toolMatchesFeatures(n, parseFeaturesParam('vibe')))
+    expect([...listed].sort()).toEqual([...vibe].sort())
+    const discovery = JSON.parse(
+      readFileSync(resolve(FUNCTIONS, '_shared/mcp-discovery-tools.json'), 'utf8'),
+    ) as { tools: Record<string, { annotations?: { readOnlyHint?: boolean }; scope?: string }> }
+    const readTools = vibe.filter((n) => discovery.tools[n]?.annotations?.readOnlyHint === true)
+    expect(readTools).toEqual(expect.arrayContaining(['get_recent_reports', 'get_report_detail', 'get_fix_context', 'diagnose_setup']))
+  })
+
+  // Lovable's sign-in defaults to "All my projects": an account key with no
+  // project of its own. The agent then needs list_projects to pick one,
+  // and that tool is outside the preset, so the connection rule has to add it.
+  it('adds list_projects to ?features=vibe on an account connection, not on a pinned one', () => {
+    const vibe = parseFeaturesParam('vibe')
+    const listed = (scope: Parameters<typeof toolEnabledForConnection>[1]) =>
+      names.filter((n) => !isAlias(n) && toolEnabledForConnection(n, scope, (t) => toolMatchesFeatures(t, vibe)))
+    expect(listed({ accountMode: true })).toEqual(expect.arrayContaining(['list_projects', ...(PRESET_TOOLS.vibe ?? [])]))
+    expect(listed({ accountMode: false })).not.toContain('list_projects')
+    expect(listed({ accountMode: true, pinnedProjectId: '11111111-1111-4111-8111-111111111111' })).not.toContain('list_projects')
   })
 
   it('no longer carries the unreachable linear_* tools', () => {

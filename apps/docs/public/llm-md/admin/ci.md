@@ -15,6 +15,18 @@ Every fix Mushi opens is tested by your CI before it can merge. This page shows 
 
 The page reloads every 30 seconds while the tab is visible, and **Refresh** does the same. Each reload asks GitHub for queued and running jobs. The server does that live read at most once a minute per app.
 
+## Spend less on CI
+
+AI agents open a lot of pull requests, and every one runs your tests on GitHub Actions. This page keeps that bill small:
+
+- **See what you really pay.** Your GitHub Actions bill per repo and per day, with public repos and free minutes shown as $0.
+- **Find the waste.** Tests that run on drafts, schedules that run every hour, docs-only changes that run every test.
+- **Fix it in one pull request.** Mushi opens a small workflow change for you to review, then shows the minutes saved after it merges.
+
+Mushi's own fix pull requests run your tests only after a review says they are worth merging.
+
+## How it reads your runs
+
 A collector also runs every 10 minutes. It reads GitHub Actions runs updated in the last 2 hours, on every branch of each app's repositories, classifies each job, and deletes job rows and samples older than 30 days.
 
 ## Test machine or your code

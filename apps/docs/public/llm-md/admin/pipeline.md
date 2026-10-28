@@ -9,7 +9,7 @@ description: The console Pipeline page shows every bug from report to deploy, wh
 
 # Pipeline
 
-**Route:** `/pipeline`
+**Route:** `/pipeline` (sidebar: Pipeline, under Fixes)
 
 Every bug moves from a report to a fix PR, an Opus review, CI, a release train, a merge and a deploy. This page shows how many items are in each step now, which are stuck, and why. **This app** follows the app you have open. **All apps** reads every project you can see.
 

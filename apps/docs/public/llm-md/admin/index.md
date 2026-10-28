@@ -8,6 +8,8 @@ description: Guide to the Mushi admin console — the reports inbox, fix drafts 
 
 # Admin console
 
+## See it
+
 ## Day-to-day
 
 - [Reports inbox](/admin/reports)

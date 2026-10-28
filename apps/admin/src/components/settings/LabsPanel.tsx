@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/components/settings/LabsPanel.tsx
- * PURPOSE: Settings › Labs. One switch per page outside the core
+ * PURPOSE: Settings › Display & sidebar, sidebar half. One switch per page outside the core
  *          bug → diagnosis → fix loop (lib/labs.ts), grouped the way the
  *          registry groups them. On adds the page to the sidebar; off only
  *          hides it there — every page stays reachable from ⌘K and by link.
@@ -20,8 +20,8 @@ export function LabsPanel() {
   return (
     <div className="space-y-4" data-testid="settings-labs">
       <p className="text-sm text-fg-muted">
-        Labs are pages outside the core bug → diagnosis → fix loop. Each one works whether its switch is
-        on or off: on pins it to your sidebar. Every page stays reachable from ⌘K and by link.
+        Pages to keep in your sidebar under Labs. Every other page is one click away under More pages
+        in the sidebar, and in ⌘K.
       </p>
       {GROUPS.map((group) => {
         const features = LAB_FEATURES.filter((f) => f.group === group)
