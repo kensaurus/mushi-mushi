@@ -111,6 +111,15 @@ describe('PlatformIntegrationCard — Remove key', () => {
     expect(labels).not.toContain('Configure')
   })
 
+  // GitHub read "Via environment" beside "Not connected": Mushi's server held
+  // a webhook secret, but the repo was never connected (first-time user test).
+  it('does not badge a card that is not connected with a server default', async () => {
+    const github = PLATFORM_DEFS.find((d) => d.kind === 'github')!
+    await render({ def: github, config: { github_webhook_secret: 'set' }, sourceByField: { github_webhook_secret: 'env' } })
+    expect(container.textContent).not.toContain('Via environment')
+    expect(container.textContent).not.toContain("Mushi's default")
+  })
+
   it('hides the menu from members, who cannot change credentials', async () => {
     await render({ onRemoveKey: vi.fn(), onApplyToAll: vi.fn(), canManage: false })
     expect(moreActions()).toBeNull()

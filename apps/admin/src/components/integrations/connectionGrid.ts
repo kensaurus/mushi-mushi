@@ -146,14 +146,16 @@ export function buildConnectionGrid(input: ConnectionGridInput): GridTile[] {
     return source === 'project' || source === 'org'
   })
 
+  // Same order as the page: what a solo builder needs first, monitoring last
+  // (AGENTS.md positioning; first-time user test, 2026-10-28).
   return [
-    sentry,
     platformTile(input, 'github', 'github', 'GitHub', 'github'),
     slack,
-    ...(langfuseOwn ? [platformTile(input, 'langfuse', 'langfuse', 'Langfuse', 'langfuse')] : []),
     platformTile(input, 'cursor_cloud', 'cursor_cloud', 'Cursor', 'cursor'),
     ...(claude.view.state === 'not_connected' ? [] : [claude]),
     linear,
+    sentry,
+    ...(langfuseOwn ? [platformTile(input, 'langfuse', 'langfuse', 'Langfuse', 'langfuse')] : []),
   ]
 }
 

@@ -234,7 +234,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Paste org slug + token below, then Save → Test connection.',
       'To route errors INTO Mushi: Sentry → Settings → Developer Settings → create an internal integration with the receive URL below as its webhook URL (resources: issue, event_alert), then paste its Client Secret as the webhook secret here. Existing issues: use Import below.',
     ],
-    whyItMatters: 'Sentry errors become Mushi reports: an alert firing lands in your queue with plain-English triage and a fix ready to start, deduped per Sentry issue, and the loop closes both ways — Mushi fix → Sentry resolve, Sentry resolve → Mushi resolved. Seer analysis and event context enrich classification.',
+    whyItMatters: 'Optional. Errors Sentry already catches become bugs here, one per Sentry issue, each with a plain-English read and a fix ready to start. When either side marks it resolved, so does the other.',
     capabilitiesOnceConnected: [
       'Sentry issue alerts land in the report queue as triaged, fix-ready reports (deduped per issue; regressions reopen instead of duplicating)',
       'Auto-attach matching Sentry events (stack trace + breadcrumbs) to each report',
@@ -329,7 +329,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Connect GitHub in the GitHub card first — Cursor agents need a repo URL + token.',
       'Click Save → Test connection. Then use ◆ Send to Cursor on any report.',
     ],
-    whyItMatters: 'When a critical report is classified, Mushi dispatches a Cursor Cloud Agent that opens a signed draft PR against your repo automatically. No manual triage required.',
+    whyItMatters: 'When a critical bug comes in, Mushi starts a Cursor cloud agent that writes the fix and opens a draft pull request on your repo.',
     capabilitiesOnceConnected: [
       'Auto-dispatch a Cursor agent when severity ≥ critical',
       'Cursor opens a signed draft PR — visible in the Fix card timeline',

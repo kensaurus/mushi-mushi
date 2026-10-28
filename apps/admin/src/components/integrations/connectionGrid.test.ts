@@ -44,8 +44,10 @@ function input(over: Partial<ConnectionGridInput> = {}): ConnectionGridInput {
 }
 
 describe('buildConnectionGrid', () => {
-  it('lists the tools in a fixed order', () => {
-    expect(buildConnectionGrid(input()).map((t) => t.id)).toEqual(['sentry', 'github', 'slack', 'cursor_cloud', 'linear'])
+  // The row led with Sentry, a monitoring tool we never require (AGENTS.md;
+  // first-time user test, 2026-10-28). GitHub and alerts lead; Sentry is last.
+  it('lists the tools in a fixed order, GitHub first and monitoring last', () => {
+    expect(buildConnectionGrid(input()).map((t) => t.id)).toEqual(['github', 'slack', 'cursor_cloud', 'linear', 'sentry'])
   })
 
   // Mushi's own Langfuse (set in its environment) counted as one of the user's
