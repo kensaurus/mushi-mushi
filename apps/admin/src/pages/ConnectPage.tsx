@@ -21,7 +21,6 @@ import { SdkInstallCard } from '../components/SdkInstallCard'
 import { SdkNativeConnectivityCard } from '../components/SdkNativeConnectivityCard'
 import { SdkHealthPanel } from '../components/SdkHealthPanel'
 import { SDK_HEALTH_ANCHOR } from '../lib/sdkHealth'
-import { CliSetupGuide } from '../components/CliSetupGuide'
 import { EMPTY_MCP_STATS, type McpStats } from '../components/mcp/types'
 import { ConnectStudio } from '../components/connect/ConnectStudio'
 import { ConnectStatusPills } from '../components/connect/ConnectStatusPills'
@@ -34,8 +33,6 @@ import { useConnectUx } from '../lib/connectModeUx'
 import { LINK_ACCENT } from '../lib/chipTone'
 import { useDispatchPreflight } from '../lib/useDispatchPreflight'
 import { usePublishPageContext } from '../lib/pageContext'
-import { useSetupStatus } from '../lib/useSetupStatus'
-import { nextRequiredSetupStep } from '../lib/setupProgress'
 import {
   IconAlertTriangle,
   IconArrowRight,
@@ -208,29 +205,12 @@ export function ConnectPage() {
   useScrollToHash(!projectsFeed.loading && !mcpStatsQuery.loading)
   // An app that only has SDK keys is set up correctly; MCP is an optional extra for the editor.
   const mcpOptional = mcpStats.topPriority === 'report_only_keys' || mcpStats.topPriority === 'no_mcp_key'
-  const setupStatus = useSetupStatus(activeProjectId)
-  const nextSetupStep = nextRequiredSetupStep(
-    setupStatus.activeProject ?? { steps: [], required_total: 0, required_complete: 0, total: 0, complete: 0, done: false, report_count: 0, fix_count: 0, merged_fix_count: 0, project_id: '', project_name: '', project_slug: '', created_at: '' },
-  )
-  const requiredSetupDone = setupStatus.selectors.done
 
   // Native CI shows once the project has loaded and is a native app, so the tab never appears and then vanishes.
   const visibleSections = CONNECT_SECTIONS.filter((s) => s.id !== 'connect-native-ci' || isNativeProject(project))
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-connect">
-      {!requiredSetupDone && nextSetupStep && (
-        <HelpBanner tone="warn" title="Finish setup first">
-          <p className="text-xs text-fg-muted">
-            Complete <strong>{nextSetupStep.label}</strong> in the setup wizard before
-            wiring integrations here.
-          </p>
-          <Btn size="sm" variant="ghost" className="mt-2" to={nextSetupStep.cta_to}>
-            {nextSetupStep.cta_label} →
-          </Btn>
-        </HelpBanner>
-      )}
-
       <PageHeaderBar
         title={copy?.title ?? 'Connect'}
         icon={<IconLink />}
@@ -300,8 +280,17 @@ export function ConnectPage() {
         ) : null}
       </div>
 
-      {!sdkConnected && !feedError ? (
-        <CliSetupGuide projectId={project?.id ?? activeProjectId} />
+      {/* Installing the SDK is taught once, on Set up, where the snippet comes
+          with a key filled in. This page also had a setup warning banner and
+          its own "Set up the SDK" section too (integrator's walk, 2026-10-28). */}
+      {!sdkConnected && !feedError && !snapshotLoading ? (
+        <p className="text-xs text-fg-muted" data-testid="connect-install-pointer">
+          Your app has not checked in yet.{' '}
+          <Link to="/onboarding" className={LINK_ACCENT}>
+            Install the SDK on Set up
+          </Link>
+          ; it gives you the snippet with a key filled in.
+        </p>
       ) : null}
 
       {feedError && (
