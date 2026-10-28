@@ -89,6 +89,11 @@ describe('fix-worker failure logging (MUSHI-MUSHI-SERVER-8)', () => {
       expect(src).toContain("log.error('Fix worker failed'");
     });
 
+    it('classifies an Anthropic workspace usage cap as llm_rate_limit, not a malformed request', () => {
+      expect(src).toContain('specified api usage limits')
+      expect(src).toContain('claude quota exceeded')
+    })
+
     it('logs a Cursor account usage limit at warn, other Cursor errors at error (MUSHI-MUSHI-SERVER-28)', () => {
       expect(src).toMatch(
         /failureCategory === 'cursor_api_error' && isCursorKeyLimitError\(errMsg\)\)\s*\{[\s\S]{0,400}log\.warn\(/,

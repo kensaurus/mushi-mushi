@@ -343,6 +343,78 @@ export function isClaudeRefusal(err: unknown): err is ClaudeRefusalError {
     (typeof err === 'object' && err !== null && (err as { name?: unknown }).name === 'ClaudeRefusalError')
 }
 
+/**
+ * Anthropic rejected the call because the workspace or key hit its configured
+ * usage cap: HTTP 400 `invalid_request_error`, "You have reached your
+ * specified API usage limits". Not a malformed request. Not retryable — the
+ * same key fails until the cap resets. `classifyLlmError` maps it to `quota`
+ * so failover rotates keys instead of treating it as a bad request.
+ *
+ * The message includes "quota" and the provider sentence, and no HTTP status
+ * digits, so string classifiers that already key on "quota" agree and nothing
+ * misreads the date as a 401/429/500.
+ */
+export class ClaudeQuotaExceededError extends Error {
+  /** Same key will fail until the cap resets. Failover must not retry it. */
+  readonly retryable = false
+  /** Provider sentence, including when access returns, when Anthropic sent one. */
+  readonly detail: string
+  constructor(detail: string) {
+    super(`Claude quota exceeded: ${detail}`)
+    this.name = 'ClaudeQuotaExceededError'
+    this.detail = detail
+  }
+}
+
+export function isClaudeQuotaExceeded(err: unknown): err is ClaudeQuotaExceededError {
+  return err instanceof ClaudeQuotaExceededError ||
+    (typeof err === 'object' && err !== null && (err as { name?: unknown }).name === 'ClaudeQuotaExceededError')
+}
+
+const USAGE_LIMIT_RE = /You have reached your specified API usage limits[^"\\]*/i
+
+function pushText(out: string[], value: unknown): void {
+  if (typeof value === 'string' && value) out.push(value)
+}
+
+/**
+ * The usage-limit sentence from an Anthropic 400, or null.
+ * Requires status 400 so a report that merely quotes the sentence is not
+ * treated as the workspace cap. Reads both the SDK `Error.message`
+ * (`400 {…json…}`) and `error.error.message`.
+ */
+export function anthropicUsageLimitDetail(err: unknown): string | null {
+  if (!err || typeof err !== 'object') return null
+  if ((err as { status?: unknown }).status !== 400) return null
+  const texts: string[] = []
+  const e = err as { message?: unknown; error?: unknown }
+  pushText(texts, e.message)
+  const body = e.error
+  if (body && typeof body === 'object') {
+    const b = body as { message?: unknown; error?: { message?: unknown } }
+    pushText(texts, b.message)
+    if (b.error && typeof b.error === 'object') pushText(texts, b.error.message)
+  }
+  for (const text of texts) {
+    const match = text.match(USAGE_LIMIT_RE)
+    if (match) return match[0].trim()
+  }
+  return null
+}
+
+/**
+ * True for the typed error, a raw Anthropic 400 with that sentence, or any
+ * thrown error whose message carries the sentence (a failover wrapper).
+ * Safe for Sentry suppression. Not safe on its own for marking a key:
+ * `classifyLlmError` uses the status-400 check and the typed error only.
+ */
+export function isOperationalAnthropicQuota(err: unknown): boolean {
+  if (isClaudeQuotaExceeded(err)) return true
+  if (anthropicUsageLimitDetail(err)) return true
+  const msg = err instanceof Error ? err.message : ''
+  return USAGE_LIMIT_RE.test(msg)
+}
+
 export interface ClaudeUsageLike {
   input_tokens?: number | null
   output_tokens?: number | null

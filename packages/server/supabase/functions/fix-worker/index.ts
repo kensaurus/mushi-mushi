@@ -1701,7 +1701,16 @@ function categorizeFailure(err: unknown, msg: string): string {
   // the inner error name is in the message.
   if (m.includes('noobjectgeneratederror') || m.includes('no_object')) return 'llm_no_object';
   if (m.includes('aijsonparseerror') || m.includes('jsonparseerror')) return 'llm_invalid_json';
-  if (m.includes('rate limit') || m.includes('rate_limit') || m.includes('429')) return 'llm_rate_limit';
+  // Anthropic's workspace cap is a 400 "specified API usage limits", not a 429.
+  // `ClaudeQuotaExceededError` says "Claude quota exceeded". Either way this
+  // is the provider account, already retried on the next key — not a bug.
+  if (
+    m.includes('rate limit') ||
+    m.includes('rate_limit') ||
+    m.includes('429') ||
+    m.includes('claude quota exceeded') ||
+    m.includes('specified api usage limits')
+  ) return 'llm_rate_limit';
   // Validation gates — thrown by us, not the model.
   if (m.startsWith('validation failed:')) {
     if (m.includes('outside scope')) return 'scope_blocked';

@@ -38,17 +38,22 @@ vi.mock('../../supabase/functions/_shared/hosted-llm-billing.ts', () => ({
 }))
 
 import {
+  anthropicUsageLimitDetail,
   buildClaudeRequest,
   claudeModelTraits,
+  ClaudeQuotaExceededError,
   ClaudeRefusalError,
+  isClaudeQuotaExceeded,
   isClaudeRefusal,
+  isOperationalAnthropicQuota,
   resolveClaudeModel,
   SERVER_SIDE_FALLBACK_BETA,
   toClaudeMessages,
   toClaudeOutputSchema,
   toLegacyUsage,
 } from '../../supabase/functions/_shared/claude-request.ts'
-import { classifyLlmError, withAnthropicOrOpenAi } from '../../supabase/functions/_shared/llm-failover.ts'
+import { callWithTransientRetry, classifyLlmError, withAnthropicOrOpenAi } from '../../supabase/functions/_shared/llm-failover.ts'
+import { markKeyStatus } from '../../supabase/functions/_shared/byok.ts'
 import {
   ASSIST_MODEL,
   FIX_MODEL,
@@ -285,5 +290,65 @@ describe('refusal handling', () => {
     await expect(
       withAnthropicOrOpenAi(db, 'project-1', async () => { throw err }, async () => 'x'),
     ).rejects.toBe(err)
+  })
+})
+
+const USAGE_LIMIT = 'You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.'
+
+describe('workspace usage limit', () => {
+  const db = {} as never
+
+  it('recognises the typed error and a raw Anthropic 400, and ignores other 400s', () => {
+    const typed = new ClaudeQuotaExceededError(USAGE_LIMIT)
+    expect(typed.retryable).toBe(false)
+    expect(isClaudeQuotaExceeded(typed)).toBe(true)
+    expect(isClaudeQuotaExceeded({ name: 'ClaudeQuotaExceededError' })).toBe(true)
+    expect(classifyLlmError(typed)).toBe('quota')
+    expect(isOperationalAnthropicQuota(typed)).toBe(true)
+
+    const raw = Object.assign(new Error(`400 {"error":{"message":"${USAGE_LIMIT}"}}`), {
+      status: 400,
+      error: { type: 'error', error: { type: 'invalid_request_error', message: USAGE_LIMIT } },
+    })
+    expect(anthropicUsageLimitDetail(raw)).toBe(USAGE_LIMIT)
+    expect(classifyLlmError(raw)).toBe('quota')
+
+    const malformed = Object.assign(new Error('temperature is deprecated for this model'), { status: 400 })
+    expect(anthropicUsageLimitDetail(malformed)).toBeNull()
+    expect(classifyLlmError(malformed)).toBe('other')
+    expect(isOperationalAnthropicQuota(new Error('temperature is deprecated'))).toBe(false)
+  })
+
+  it('does not retry a usage-limit error on the same key', async () => {
+    let calls = 0
+    const outcome = await callWithTransientRetry(
+      async () => {
+        calls++
+        throw new ClaudeQuotaExceededError(USAGE_LIMIT)
+      },
+      { keyId: 'key-1', key: 'sk-test', source: 'byok', hint: 'test' },
+      'anthropic',
+    )
+    expect(calls).toBe(1)
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok) return
+    expect(outcome.kind).toBe('quota')
+  })
+
+  it('marks the key exhausted and falls through to OpenAI', async () => {
+    const anthropic = vi.fn(async () => {
+      throw new ClaudeQuotaExceededError(USAGE_LIMIT)
+    })
+    const openai = vi.fn(async () => 'openai-answer')
+    const { result, usedProvider } = await withAnthropicOrOpenAi(db, 'project-1', anthropic, openai)
+    expect(anthropic).toHaveBeenCalledTimes(1)
+    expect(usedProvider).toBe('openai')
+    expect(result).toBe('openai-answer')
+    expect(markKeyStatus).toHaveBeenCalledWith(
+      db,
+      'anthropic-1',
+      'quota_exhausted',
+      expect.stringContaining('usage limits'),
+    )
   })
 })

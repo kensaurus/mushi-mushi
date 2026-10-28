@@ -17,11 +17,31 @@
 
 import * as Sentry from 'npm:@sentry/deno@^9'
 import type { Context } from 'npm:hono@4'
+import { isOperationalAnthropicQuota } from './claude-request.ts'
 import { dbDiagnosticMessage, isHtmlGatewayDbMessage, SAFE_DB_MESSAGE } from './error-codes.ts'
 
 const TOKEN_QUERY_RX = /([?&](?:api_key|apiKey|token|key|access_token|session)=)[^&]+/gi
 
 let inited = false
+
+/**
+ * A workspace usage cap is an account state, not an app bug. Log it for
+ * Supabase Logs and do not open a Sentry issue (the 400 otherwise groups
+ * with malformed-request bugs).
+ */
+function warnAnthropicQuota(err: unknown, where: string): void {
+  console.warn(
+    JSON.stringify({
+      ts: new Date().toISOString(),
+      level: 'warn',
+      scope: 'mushi:sentry',
+      event: 'llm_quota_exceeded',
+      msg: 'Anthropic workspace usage limit reached — not an app bug',
+      where,
+      err_message: (err instanceof Error ? err.message : String(err)).slice(0, 500),
+    }),
+  )
+}
 
 export function ensureSentry(functionName?: string): void {
   if (inited) return
@@ -203,6 +223,24 @@ export function sentryHonoErrorHandler(err: Error, c: Context): Response {
     )
   }
 
+  // Workspace usage cap (HTTP 400 "specified API usage limits"). Operational,
+  // already classified as quota by failover. Do not page it as a bug.
+  if (isOperationalAnthropicQuota(err)) {
+    warnAnthropicQuota(err, `${c.req.method} ${c.req.path}`)
+    return c.json(
+      {
+        ok: false,
+        error: {
+          code: 'LLM_QUOTA_EXCEEDED',
+          message:
+            'The AI provider has reached its usage limit. Try again after it resets, or switch to another key.',
+          ...(requestId ? { requestId } : {}),
+        },
+      },
+      503,
+    )
+  }
+
   // A gateway HTML page never becomes the Sentry exception text.
   const reported = isHtmlGatewayDbMessage(err.message)
     ? Object.assign(new Error(dbDiagnosticMessage(err.message)), { name: err.name, stack: err.stack, cause: err.cause })
@@ -255,10 +293,14 @@ export function withSentry(
     try {
       return await handler(req)
     } catch (err) {
-      reportError(err, {
-        tags: { function: functionName, method: req.method },
-        extra: { url: req.url.replace(TOKEN_QUERY_RX, '$1[redacted]') },
-      })
+      if (isOperationalAnthropicQuota(err)) {
+        warnAnthropicQuota(err, functionName)
+      } else {
+        reportError(err, {
+          tags: { function: functionName, method: req.method },
+          extra: { url: req.url.replace(TOKEN_QUERY_RX, '$1[redacted]') },
+        })
+      }
       throw err
     }
   }

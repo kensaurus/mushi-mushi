@@ -37,6 +37,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { ClaudeQuotaExceededError } from '../../supabase/functions/_shared/claude-request.ts'
 import { ProjectAccessReadError } from '../../supabase/functions/_shared/project-access.ts'
 import { sentryHonoErrorHandler } from '../../supabase/functions/_shared/sentry.ts'
 
@@ -120,6 +121,20 @@ describe('sentryHonoErrorHandler — status-0 RangeError contract (Sentry MUSHI-
     // (which would short-circuit the logger's Sentry forwarder if anyone
     // ever wires this handler into the structured logger pipeline).
     expect(errorSpy).not.toHaveBeenCalled()
+  })
+
+  it('returns 503 and a warning, not a Sentry error, for an Anthropic usage cap', async () => {
+    const err = new ClaudeQuotaExceededError(
+      'You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.',
+    )
+    const res = sentryHonoErrorHandler(err, fakeContext('/v1/admin/reports', 'POST') as never)
+    expect(res.status).toBe(503)
+    const body = (await res.json()) as { ok: boolean; error: { code: string } }
+    expect(body.error.code).toBe('LLM_QUOTA_EXCEEDED')
+    expect(errorSpy).not.toHaveBeenCalled()
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    const payload = JSON.parse(String(warnSpy.mock.calls[0][0])) as Record<string, unknown>
+    expect(payload.event).toBe('llm_quota_exceeded')
   })
 
   it('still returns 500 internal for genuine TypeErrors so real bugs keep paging', async () => {
