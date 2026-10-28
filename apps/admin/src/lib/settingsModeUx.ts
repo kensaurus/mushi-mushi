@@ -7,6 +7,7 @@ import { useAdminMode } from './mode';
 import type { SettingsStats, SettingsTabId } from '../components/settings/types';
 import type { KeySummary } from '../components/settings/keyStatus';
 import { settingsBannerPriority } from '../components/settings/SettingsStatusBanner';
+import type { ConnectionView } from './integrationConnection';
 
 export interface SettingsUxFlags {
   isQuickstart: boolean;
@@ -43,9 +44,10 @@ export function resolveQuickSettingsTab(
   keySummary: KeySummary | null,
   hasAnthropicKey: boolean,
   byokEnabled: boolean,
+  sentry?: ConnectionView | null,
 ): SettingsTabId {
-  let priority = settingsBannerPriority(stats, keySummary, hasAnthropicKey);
-  if (priority === 'no_anthropic' && !byokEnabled) priority = settingsBannerPriority(stats, keySummary, true);
+  let priority = settingsBannerPriority(stats, keySummary, hasAnthropicKey, sentry);
+  if (priority === 'no_anthropic' && !byokEnabled) priority = settingsBannerPriority(stats, keySummary, true, sentry);
   switch (priority) {
     case 'keys_attention':
     case 'keys_expiring':

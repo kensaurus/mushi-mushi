@@ -13,6 +13,8 @@
  *          The banner and the AI keys tab badge are worked out from the same
  *          saved-keys list the key rows use (ByokPoolProvider + keyStatus.ts),
  *          so the banner can never say "all good" while a row says otherwise.
+ *          Sentry on that banner is the same verdict as Integrations
+ *          (useSentryConnectionQuery), not only the saved DSN.
  */
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
@@ -80,6 +82,7 @@ import {
   sdkTooltip,
 } from '../lib/statTooltips/settings';
 import { slackStatLabel } from '../components/settings/slackAlertStatus';
+import { useSentryConnectionQuery } from '../lib/useSentryConnection';
 import { settingsLinks } from '../lib/statCardLinks';
 import { useRealtimeReload } from '../lib/realtime';
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton';
@@ -152,6 +155,10 @@ function SettingsPageBody({
   const generalLoaded = !generalSettings.loading;
 
   const pool = useByokPool(byokEnabled);
+  // Same Sentry verdict as the Integrations card and the Error tracking row.
+  // Quick mode waits until it has settled so it does not lock the
+  // "connect Sentry" tab before a Working verdict arrives.
+  const sentryConn = useSentryConnectionQuery(Boolean(activeProjectId));
   const keySummary: KeySummary | null = useMemo(() => {
     if (!byokEnabled || !pool.data) return null;
     return summarizeKeys(pool.data.keys ?? [], pool.data.legacyKeys ?? []);
@@ -182,8 +189,8 @@ function SettingsPageBody({
   );
 
   // Quick mode picks a starting tab when no link says which one to show.
-  // It waits for the saved-keys list too, so it picks from the same counts
-  // the banner shows.
+  // It waits for the saved-keys list and the shared Sentry verdict, so it
+  // picks from the same facts the banner shows.
   // It picks once per visit: after that, a tab the user opens stays open.
   const poolPending = byokEnabled && pool.loading && !pool.data;
   // Scroll to a #section (#firecrawl, #key-supabase, …) once the panels that
@@ -191,10 +198,10 @@ function SettingsPageBody({
   useScrollToHash(Boolean(statsData) && !entitlementsLoading && !poolPending);
   const quickPicked = useRef(false);
   useEffect(() => {
-    if (!ux.isQuickstart || !activeProjectId || statsLoading || poolPending || quickPicked.current) return;
+    if (!ux.isQuickstart || !activeProjectId || statsLoading || poolPending || !sentryConn.settled || quickPicked.current) return;
     quickPicked.current = true;
     if (!shouldResolveQuickSettingsTab(param) || rememberedTab !== null) return;
-    const quickTab = resolveQuickSettingsTab(stats, keySummary, hasAnthropicKey, byokEnabled);
+    const quickTab = resolveQuickSettingsTab(stats, keySummary, hasAnthropicKey, byokEnabled, sentryConn.view);
     if (active !== quickTab) setActive(quickTab);
   }, [
     ux.isQuickstart,
@@ -205,6 +212,8 @@ function SettingsPageBody({
     keySummary,
     hasAnthropicKey,
     byokEnabled,
+    sentryConn.settled,
+    sentryConn.view,
     active,
     param,
     rememberedTab,
@@ -296,6 +305,7 @@ function SettingsPageBody({
                 stats={stats}
                 keySummary={keySummary}
                 hasAnthropicKey={hasAnthropicKey}
+                sentry={sentryConn.view}
                 onTab={setActive}
                 plainBanner={ux.plainBanner}
               />
