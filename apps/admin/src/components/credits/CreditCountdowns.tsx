@@ -83,7 +83,11 @@ export function CreditCountdowns({ keys, balance, canManageOrg, now, onChanged }
   const soonest = cards[0]
   const sentence =
     idle.length > 0
-      ? `${plural(idle.length, 'Cursor key has', 'Cursor keys have')} an expiry date but spend-down is off. Turn it on so the credits fix bugs.`
+      ? `${plural(idle.length, 'Cursor key has', 'Cursor keys have')} an expiry date but spend-down is off. ${
+          // Only ask for what this person can do: the switch is greyed out
+          // for a key someone else owns (2026-10-28).
+          turnOn ? 'Turn it on so the credits fix bugs.' : `Only ${idle.length === 1 ? "the key's owner" : 'their owners'} or a team admin can turn it on.`
+        }`
       : `Every key with an expiry date is being spent. The soonest, ${soonest.name}, ${soonest.verb} in ${plural(soonest.daysLeft, 'day')}.`
 
   return (
