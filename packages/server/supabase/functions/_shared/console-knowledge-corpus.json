@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-28T03:59:12.346Z",
+  "generatedAt": "2026-10-28T05:51:32.849Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -195,10 +195,10 @@
       "doc_path": "pages/ux-runs.md",
       "section": "main",
       "title": "UX runs",
-      "body": "# UX runs\n\nYour coding agent worked through every screen; see which were improved, rolled back or moved by another fix, with before/after screenshots.\n\nRoute: /ux-runs\nSection: Do\n\nKeywords: ux, ux runs, ui, screens, screenshots, before after, agent, mushi ux, visual, accessibility, fresh eyes, first-time user\n\nUse this page when the user asks about: ux, ux runs, ui, screens, screenshots, before after",
+      "body": "# UX runs\n\nYour coding agent worked through every screen; see which were improved, rolled back or moved by another fix, with before/after screenshots.\n\nRoute: /ux-runs\nSection: Do\n\nKeywords: ux, ux runs, ui, screens, screenshots, before after, agent, mushi ux, visual, accessibility\n\nUse this page when the user asks about: ux, ux runs, ui, screens, screenshots, before after",
       "route_path": "/ux-runs",
       "kind": "page",
-      "content_hash": "898294809d90a2f4a23568c0a87f8f50e33f843474cf3ddb5c127c346dc8d3a6"
+      "content_hash": "dd55f95acb2491084e08dbfe80d0bd727d99807de450998fad6c1aac41c50668"
     },
     {
       "doc_path": "pages/iterate.md",
