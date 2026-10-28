@@ -275,7 +275,7 @@ const RESULT_CHIP_CLS: Record<ResultChipTone, string> = {
   idle: 'border-edge-subtle bg-surface-overlay/60 text-fg-muted',
   running: 'border-info/35 bg-info-muted/50 text-info-foreground border border-info/25 font-medium',
   success: 'border-ok/35 bg-ok-muted/50 text-ok-foreground border border-ok/25 font-medium',
-  error: `border-danger/35 ${CHIP_TONE.dangerSubtle} font-medium`,
+  error: `${CHIP_TONE.dangerSubtle} font-medium`,
   info: 'border-brand/35 bg-brand-subtle text-brand font-medium',
 }
 

@@ -228,10 +228,13 @@ const BTN_VARIANTS = {
   ghost:
     'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg hover:border-brand/40 hover:shadow-brand-glow-sm hover:-translate-y-px',
   cancel:
-    `${CHIP_TONE.danger} border-danger/40 hover:bg-danger-muted hover:border-danger/50 hover:-translate-y-px`,
+    // mushi-mushi-allowlist: hover border is the hover state; CHIP_TONE already owns the resting border
+    `${CHIP_TONE.danger} hover:bg-danger-muted hover:border-danger/50 hover:-translate-y-px`,
   danger:
+    // mushi-mushi-allowlist: hover border is the hover state; CHIP_TONE already owns the resting border
     `${CHIP_TONE.dangerSubtle} hover:bg-danger-muted/80 hover:border-danger/40 hover:shadow-glow-danger hover:-translate-y-px`,
   success:
+    // mushi-mushi-allowlist: hover border is the hover state; CHIP_TONE already owns the resting border
     `${CHIP_TONE.okSubtle} hover:bg-ok-muted/80 hover:border-ok/40 hover:shadow-glow-ok hover:-translate-y-px`,
   // The confirm of a dialog that cannot be undone: a solid danger fill, so it never looks like Cancel.
   destructive:
