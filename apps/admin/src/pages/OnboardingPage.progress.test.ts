@@ -64,4 +64,17 @@ describe('Set up page progress', () => {
     const readout = readFileSync(join(__dirname, '../components/onboarding/OnboardingSetupReadout.tsx'), 'utf8')
     expect(readout).not.toContain('No heartbeat yet')
   })
+
+  // Report 0bac738d: the setup snapshot painted the Reports total in
+  // text-brand (light-mode vermillion, next to danger) under the caption
+  // "Pipeline proven", and the Optional card said "0 fixes dispatched"
+  // under a 2/6 count. Those cards are gone; a report count that is shown
+  // uses the ok tone.
+  it('does not paint a proven pipeline total in brand red or caption optional steps as fixes', () => {
+    expect(src).not.toContain('Pipeline proven')
+    expect(src).not.toContain('fixes dispatched')
+    expect(src).not.toMatch(/reportCount > 0 \? 'text-brand'/)
+    const readout = readFileSync(join(__dirname, '../components/onboarding/OnboardingSetupReadout.tsx'), 'utf8')
+    expect(readout).toContain("tone: stats.reportCount > 0 ? 'ok' : 'muted'")
+  })
 })

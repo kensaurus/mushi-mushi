@@ -22,6 +22,10 @@
  *          it says what happened and what to do next in plain sentences.
  *          "Classified" comes from `isReportClassified` so it can never
  *          disagree with the recommendation card or the classification card.
+ *          Idle Check and Act rows stay at full opacity. Fading them
+ *          (`opacity-75` on `text-fg-muted`) measured 4.05:1 in light mode
+ *          and 3.86:1 in dark, under the 4.5:1 text minimum. The dashed
+ *          ring marks a stage that has not started.
  */
 
 import { PDCA_ORDER, PDCA_STAGES, type PdcaStageId } from '../../lib/pdca'
@@ -87,7 +91,7 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
   const isIdle = node.state === 'idle'
   const detailsClean = (node.details ?? []).filter((d): d is string => Boolean(d && d.trim()))
   return (
-    <li className={`relative pl-7 pb-3 last:pb-0 ${isIdle ? 'opacity-75' : ''}`}>
+    <li className="relative pl-7 pb-3 last:pb-0">
       {/* Vertical connector line. Coloured green for completed stages so the
           loop visually "fills in" top-down as work lands — gives the whole
           timeline a progress-bar feel. Skipped on last row. */}
