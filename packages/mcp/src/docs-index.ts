@@ -760,7 +760,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "compare/sentry-vs-mushi.md",
     keywords: ["compare", "sentry-vs-mushi", "sentry"],
     headings: ["What each one is", "Side by side", "Where they overlap, and where they do not", "Running Mushi alongside Sentry", "Pick Sentry if", "Pick Mushi if", "Frequently asked questions"],
-    excerpt: "Sentry vs Mushi Mushi in 2026 — what each captures, Sentry's free tier and Seer pricing next to Mushi's free plan (1 app, 100 diagnoses a month), and running both.",
+    excerpt: "Sentry vs Mushi Mushi in 2026 — what each captures, Sentry's free tier and Seer pricing next to Mushi's free plan (1 app, 100 diagnoses), and running both.",
   },
   {
     title: "Concepts",

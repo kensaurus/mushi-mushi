@@ -15,7 +15,7 @@ import { usePageData } from '../../lib/usePageData'
 import { LANES_PATH, type WorkLanesData } from '../../lib/workers'
 import { Btn, Card, Input, SelectField, Textarea } from '../ui'
 
-export const ISSUE_KINDS = [
+const ISSUE_KINDS = [
   { id: 'bug', label: 'Something is broken' },
   { id: 'slow', label: 'Something is slow' },
   { id: 'visual', label: 'Something looks wrong' },

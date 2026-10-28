@@ -113,6 +113,7 @@
     "DELETE /v1/admin/work/hosts/:id": {"allow": "credentials", "note": "ADR 0048: revokes a worker and its key from the console. On the machine itself, mushi worker revoke does the same with the worker key."},
     "POST /v1/admin/work/key": {"cli": ["worker install"], "note": "ADR 0048: mints a worker:run key for the apps a lane serves; shown once."},
     "GET /v1/admin/projects/:id/repo-cleanup": {"cli": ["repo cleanup show"], "note": "ADR 0051: the branches and fix PRs a clean-up may touch, each with its reason and commit."},
+    "POST /v1/admin/projects/:id/reports": {"mcp": ["file_report"], "cli": ["reports file"], "note": "Report an issue on Bugs: the owner files a report as a user would; the CLI and MCP file the same report."},
     "POST /v1/admin/projects/:id/repo-cleanup/requests": {"cli": ["repo cleanup request"], "note": "ADR 0051: asks for a clean-up built from a fresh preview; nothing changes until it is approved."},
     "POST /v1/admin/projects/:id/repo-cleanup/restore": {"cli": ["repo cleanup restore"], "note": "ADR 0051: asks to recreate branches Mushi deleted, at the commit it kept."},
     "POST /v1/admin/projects/:id/repo-cleanup/requests/:actionId/approve": {"allow": "jwt-only", "note": "ADR 0051 (as ADR 0037): an owner or admin signed in to the console approves the exact list; an API key can only ask."},
