@@ -47,15 +47,14 @@ export function FixSummaryRow({ summary, successRate }: Props) {
   const showSpec = specWarnings > 0;
 
   // Loop-closure: when there are *any* failures with a categorised reason
-  // in the trailing 30d, show a "Why fixes failed" tile that names the
-  // dominant cause. Without this, a project with 16 failures has no clue
-  // whether it's a model issue (llm_no_object), an infra issue
-  // (sandbox_timeout), or a config issue (scope_blocked).
+  // in the trailing 30d, show a "Why auto-fix stopped" tile. One cause is
+  // named on the tile. Several causes show the full unfixed total, and the
+  // per-cause counts stay in the tile's explanation.
   const breakdown = summary.failureBreakdown ?? [];
   const showBreakdown = breakdown.length > 0;
-  // One cause can name the failures. Several causes must not: the whole
-  // failed total used to read as only the most common one ("PR closed
-  // without merge") while other reports had stopped for a different reason.
+  // One cause can name the failures. Several causes must not: the count on
+  // "Why auto-fix stopped" is then the full unfixed total (the same number
+  // as "Auto-fix stopped"), not only the most common cause.
   const mixedCauses = breakdown.length > 1;
   const cols = (5 + (showSpec ? 1 : 0) + (showBreakdown ? 1 : 0)) as 5 | 6 | 7;
   const topFailure = breakdown[0];
@@ -87,10 +86,11 @@ export function FixSummaryRow({ summary, successRate }: Props) {
         meaning="Reports that are fixed now (a fix PR merged, or the report was marked fixed), each counted once. The success rate compares fixed vs still-unfixed reports; the sparkline shows completed attempts per day."
       />
       <KpiTile
+        data-testid="kpi-auto-fix-stopped"
         label="Auto-fix stopped"
         value={summary.failed}
         accent={summary.failed > 0 ? 'danger' : 'muted'}
-        sublabel={summary.failed > 0 ? (mixedCauses ? 'several causes' : 'reports still unfixed') : 'nothing waiting'}
+        sublabel={summary.failed > 0 ? 'reports still unfixed' : 'nothing waiting'}
         series={failed}
         delta={pctDelta(failed, { invert: true })}
         seriesAriaLabel="Daily stopped fix attempts, last 30 days"
@@ -121,8 +121,9 @@ export function FixSummaryRow({ summary, successRate }: Props) {
       )}
       {showBreakdown && topFailure && (
         <KpiTile
+          data-testid="kpi-why-auto-fix-stopped"
           label="Why auto-fix stopped"
-          value={topFailure.count}
+          value={mixedCauses ? summary.failed : topFailure.count}
           accent="danger"
           sublabel={mixedCauses ? 'several causes' : fixCauseLabel(topFailure.category)}
           meaning={`Why the last attempt stopped on each still-unfixed report, most common first.
