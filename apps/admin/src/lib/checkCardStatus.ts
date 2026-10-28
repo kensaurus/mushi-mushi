@@ -12,7 +12,8 @@
  * runs, so those cards never say Pass or Last run.
  *
  * Platform cron rows have no project id. They never mark this app's Health
- * card Failed. Judge freshness uses the server's staleHours when it sent one.
+ * card Failed, and they never hide this app's own AI calls. Judge freshness
+ * uses the server's staleHours when it sent one.
  */
 
 import { relativeTime } from './setupGuideSteps'
@@ -50,6 +51,10 @@ export interface CheckCardsInput {
     redCount?: number
     amberCount?: number
     lastLlmCallAt?: string | null
+    /** AI calls in this app's health window. Omitted on an older payload. */
+    totalCalls?: number
+    errorRatePct?: number
+    fallbackRatePct?: number
     topPriority?: string
   } | null
   audit: {
@@ -198,13 +203,32 @@ function fromHealth(health: CheckCardsInput['health'], now: number): CheckCardVi
   // cronErrorCount describe platform jobs (judge-batch, intelligence-report,
   // data-retention), so they are not this app's failed run. redCount and
   // amberCount fold those jobs in, so they are not used here either.
+  // topPriority is a single value and a platform cron problem outranks this
+  // app's fallbacks, so the card follows this app's own window instead.
   const at = health.lastLlmCallAt ?? null
   const priority = health.topPriority
-  if (priority === 'no_project' || priority === 'idle') return NOT_CHECKED
-  if (priority === 'cron_error' || priority === 'cron_stale' || priority === 'cron_warn') return NOT_CHECKED
-  if (priority === 'llm_errors' || priority === 'llm_fallbacks') return findings(1, at, now)
-  if (priority === 'healthy' && at) return pass(at, now)
-  return NOT_CHECKED
+  if (priority === 'no_project') return NOT_CHECKED
+  if (priority === 'idle') return withTime(NOT_CHECKED, at, now)
+
+  const errorRate = health.errorRatePct
+  const fallbackRate = health.fallbackRatePct
+  if (priority === 'llm_errors' || (typeof errorRate === 'number' && errorRate > 5)) {
+    return findings(1, at, now)
+  }
+  if (priority === 'llm_fallbacks' || (typeof fallbackRate === 'number' && fallbackRate > 10)) {
+    return findings(1, at, now)
+  }
+
+  const ownWindow =
+    priority === 'healthy' || priority === 'cron_error' || priority === 'cron_stale' || priority === 'cron_warn'
+  if (ownWindow) {
+    // Zero calls in the window is not a pass. A timestamp alone can be older
+    // than the window; totalCalls is the window. An older payload omits it.
+    if (health.totalCalls === 0) return withTime(NOT_CHECKED, at, now)
+    if (at) return pass(at, now)
+    return NOT_CHECKED
+  }
+  return withTime(NOT_CHECKED, at, now)
 }
 
 function fromAudit(audit: CheckCardsInput['audit'], now: number): CheckCardView {

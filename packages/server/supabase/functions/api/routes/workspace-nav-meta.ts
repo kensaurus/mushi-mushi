@@ -595,11 +595,16 @@ export function registerWorkspaceNavMetaRoutes(
         'lastGateRunAt',
         'topPriority',
       ]),
+      // This app's AI-call window rides with the cron counters. A cron
+      // priority is platform-wide, so the checks card reads these instead.
       health: pick(byPath['/v1/admin/health/stats'], [
         'cronErrorCount',
         'redCount',
         'amberCount',
         'lastLlmCallAt',
+        'totalCalls',
+        'errorRatePct',
+        'fallbackRatePct',
         'topPriority',
       ]),
       // Judge stats are already fetched for the disagreement counter

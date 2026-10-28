@@ -353,6 +353,9 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
           redCount: healthStats.redCount,
           amberCount: healthStats.amberCount,
           lastLlmCallAt: healthStats.lastLlmCallAt,
+          totalCalls: healthStats.totalCalls,
+          errorRatePct: healthStats.errorRatePct,
+          fallbackRatePct: healthStats.fallbackRatePct,
           topPriority: healthStats.topPriority,
         }
       : null,

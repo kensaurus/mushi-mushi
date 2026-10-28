@@ -2,7 +2,8 @@
  * FILE: apps/admin/src/lib/checkCardStatus.test.ts
  * PURPOSE: /checks card states. Pass requires a finished run. A zero count
  *          is not "All clear". Not set up carries a setup link. A platform
- *          cron error is not this app's failed health check.
+ *          cron error is not this app's failed health check, and it does not
+ *          hide this app's own AI calls.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -89,11 +90,26 @@ describe('buildCheckCardViews', () => {
     expect(regen).toMatchObject({ state: 'failed', chip: 'Failed', detail: null })
 
     const cron = buildCheckCardViews(input({
-      health: { topPriority: 'cron_error', cronErrorCount: 3, redCount: 3, lastLlmCallAt: RECENT },
+      health: {
+        topPriority: 'cron_error',
+        cronErrorCount: 3,
+        redCount: 3,
+        lastLlmCallAt: RECENT,
+        totalCalls: 4,
+        errorRatePct: 0,
+        fallbackRatePct: 0,
+      },
     }), NOW)['/health']
-    expect(cron).toMatchObject({ state: 'not_checked', chip: 'Not run yet', detail: null })
+    expect(cron).toMatchObject({ state: 'pass', chip: 'Pass', detail: 'Last run 12h ago' })
     expect(cron?.chip).not.toBe('Failed')
-    expect(cron?.chip).not.toBe('Pass')
+    expect(cron?.chip).not.toBe('Not run yet')
+
+    const cronOnly = buildCheckCardViews(input({
+      health: { topPriority: 'cron_error', cronErrorCount: 3, redCount: 3, lastLlmCallAt: null, totalCalls: 0 },
+    }), NOW)['/health']
+    expect(cronOnly).toMatchObject({ state: 'not_checked', chip: 'Not run yet', detail: null })
+    expect(cronOnly?.chip).not.toBe('Failed')
+    expect(cronOnly?.chip).not.toBe('Pass')
   })
 
   it('hides slice cards until nav-meta has answered', () => {
@@ -248,13 +264,59 @@ describe('buildCheckCardViews', () => {
     expect(failed).toMatchObject({ state: 'failed', chip: 'Failed' })
   })
 
-  it('a platform cron problem is Not run yet, and this app passes only from its own AI calls', () => {
-    const stale = buildCheckCardViews(input({
-      health: { topPriority: 'cron_stale', amberCount: 2, lastLlmCallAt: STALE },
+  it('a platform cron problem does not hide this app\'s own AI calls', () => {
+    const ran = buildCheckCardViews(input({
+      health: {
+        topPriority: 'cron_stale',
+        amberCount: 2,
+        lastLlmCallAt: RECENT,
+        totalCalls: 3,
+        errorRatePct: 0,
+        fallbackRatePct: 1,
+      },
     }), NOW)['/health']
-    expect(stale).toMatchObject({ state: 'not_checked', chip: 'Not run yet', detail: null })
-    expect(stale?.chip).not.toMatch(/finding/)
-    expect(stale?.chip).not.toBe('Failed')
+    expect(ran).toMatchObject({ state: 'pass', chip: 'Pass', detail: 'Last run 12h ago' })
+    expect(ran?.chip).not.toBe('Failed')
+    expect(ran?.chip).not.toBe('Not run yet')
+
+    // topPriority is one value. cron_error outranks fallbacks on the server,
+    // so the card reads the rates themselves.
+    const hiddenFallback = buildCheckCardViews(input({
+      health: {
+        topPriority: 'cron_error',
+        cronErrorCount: 2,
+        lastLlmCallAt: RECENT,
+        totalCalls: 10,
+        errorRatePct: 1,
+        fallbackRatePct: 15,
+      },
+    }), NOW)['/health']
+    expect(hiddenFallback).toMatchObject({ state: 'findings', chip: '1 finding', detail: 'Last run 12h ago' })
+
+    const hiddenErrors = buildCheckCardViews(input({
+      health: {
+        topPriority: 'cron_warn',
+        lastLlmCallAt: RECENT,
+        totalCalls: 10,
+        errorRatePct: 9,
+        fallbackRatePct: 0,
+      },
+    }), NOW)['/health']
+    expect(hiddenErrors).toMatchObject({ state: 'findings', chip: '1 finding', detail: 'Last run 12h ago' })
+
+    const emptyWindow = buildCheckCardViews(input({
+      health: {
+        topPriority: 'cron_error',
+        cronErrorCount: 1,
+        lastLlmCallAt: STALE,
+        totalCalls: 0,
+        errorRatePct: 0,
+        fallbackRatePct: 0,
+      },
+    }), NOW)['/health']
+    expect(emptyWindow).toMatchObject({ state: 'not_checked', chip: 'Not run yet', detail: 'Last run 6d ago' })
+    expect(emptyWindow?.chip).not.toBe('Pass')
+    expect(emptyWindow?.chip).not.toBe('Failed')
 
     const platformOnly = buildCheckCardViews(input({
       health: { topPriority: 'healthy', lastLlmCallAt: null, amberCount: 0, cronErrorCount: 0 },

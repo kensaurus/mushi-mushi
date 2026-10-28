@@ -10,9 +10,9 @@
  *       sidebar uses, asked for these slices only) and the app blueprint read
  *       for the recipe, design and CI cards. The state rules live in
  *       lib/checkCardStatus.ts: Pass only after a run was read, a platform
- *       cron error never fails this app's Health card, an unread slice is
- *       "Status unavailable", never "Failed". (Rules first written in PR 756 for
- *       bug 011fd428.)
+ *       cron error never fails this app's Health card or hides its own AI
+ *       calls, an unread slice is "Status unavailable", never "Failed".
+ *       (Rules first written in PR 756 for bug 011fd428.)
  *
  * Labels, descriptions, icons and plan gates come from NAV_REGISTRY. A check
  * whose page is a Lab (AI prompts, CI runners) is listed only while that Lab
