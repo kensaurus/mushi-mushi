@@ -121,6 +121,63 @@ describe('SkillRunsCard app picker', () => {
     expect(Array.from(appSelect().options).map((o) => o.value)).toEqual([LETS, GLOT])
   })
 
+  it('says when skill runs are loading, then when there are none', async () => {
+    let resolveLoad: (value: unknown) => void = () => {}
+    mocks.loadSkillRuns.mockReturnValue(new Promise((resolve) => { resolveLoad = resolve }))
+    await render('/credits')
+    expect(host.textContent).toContain('Reading skill runs')
+    expect(host.textContent).not.toContain('the booking flow')
+    await act(async () => {
+      resolveLoad({ ok: true, data: { skills: [{ slug: 'audit-accessibility', label: 'Accessibility', measure: 'axe violations', inCatalog: true }], runs: [] } })
+      await Promise.resolve()
+    })
+    expect(host.textContent).toContain('No skill runs yet')
+    expect(host.textContent).not.toContain('the booking flow')
+  })
+
+  it('says when skill runs could not be read, and Retry loads them', async () => {
+    mocks.loadSkillRuns.mockResolvedValue({ ok: false, error: { message: 'skills down' } })
+    await render('/credits')
+    expect(host.textContent).toContain('Could not read skill runs')
+    expect(host.textContent).toContain('skills down')
+    expect(host.textContent).not.toContain('the booking flow')
+    mocks.loadSkillRuns.mockResolvedValue({
+      ok: true,
+      data: {
+        skills: [{ slug: 'audit-accessibility', label: 'Accessibility', measure: 'axe violations', inCatalog: true }],
+        runs: [run('r-lets', LETS)],
+      },
+    })
+    const retry = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Retry')
+    expect(retry).toBeTruthy()
+    await act(async () => {
+      retry!.click()
+      await Promise.resolve()
+    })
+    expect(host.textContent).toContain('the booking flow')
+    expect(host.textContent).not.toContain('Could not read skill runs')
+  })
+
+  it('says when the app list is still loading or failed, instead of an empty form', async () => {
+    await act(async () => {
+      root.render(createElement(MemoryRouter, { initialEntries: ['/credits'] }, createElement(SkillRunsCard, { projects: null })))
+    })
+    await act(async () => { await Promise.resolve() })
+    expect(host.textContent).toContain('Reading your apps')
+    expect(host.textContent).not.toContain('Start skill run')
+
+    const retryProjects = vi.fn()
+    await act(async () => {
+      root.render(createElement(MemoryRouter, { initialEntries: ['/credits'] }, createElement(SkillRunsCard, { projects: null, projectsError: 'projects down', onRetryProjects: retryProjects })))
+    })
+    expect(host.textContent).toContain('Could not read your apps')
+    expect(host.textContent).toContain('projects down')
+    expect(host.textContent).not.toContain('Reading your apps')
+    const retry = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Retry')
+    act(() => retry!.click())
+    expect(retryProjects).toHaveBeenCalled()
+  })
+
   it('starts on the first app when nothing is open, and a manual pick sticks', async () => {
     await render('/credits')
     const select = appSelect()

@@ -27,6 +27,14 @@ const state = vi.hoisted(() => ({
       { id: 'run1', project_id: 'p2', skill_slug: 'audit-accessibility', scope: 'the booking flow', rounds_max: 3, round: 2, auto_merge: true, status: 'active', stop_reason: null, current_report_id: 'rep2', history: [{ round: 1, reportId: 'rep1', outcome: 'merged', prUrl: 'https://github.com/o/r/pull/9' }], created_at: '2026-10-23T09:00:00Z', updated_at: '2026-10-23T10:00:00Z' },
     ],
   } as unknown,
+  failAudit: new Set<string>(),
+  failRanks: new Set<string>(),
+  lanesError: null as string | null,
+  creditsPhase: 'ok' as 'ok' | 'loading' | 'error',
+  spendPhase: 'ok' as 'ok' | 'loading' | 'error',
+  followupsPhase: 'ok' as 'ok' | 'loading' | 'error',
+  projectsPhase: 'ok' as 'ok' | 'loading' | 'error',
+  reloads: [] as string[],
 }))
 
 const KEY: SpendDownKeyStatus = {
@@ -61,6 +69,7 @@ vi.mock('../lib/supabase', async (importOriginal) => ({
     }
     if (method === 'GET' && path.endsWith('/search-ranks')) {
       const pid = path.split('/')[4]
+      if (state.failRanks.has(pid)) return { ok: false, error: { message: 'ranks timed out' } }
       return { ok: true, data: state.ranks[pid] ?? { keywords: [], target: null } }
     }
     if (method === 'PUT' && path.endsWith('/site-audit')) {
@@ -90,6 +99,7 @@ vi.mock('../lib/supabase', async (importOriginal) => ({
     }
     if (method === 'GET' && path.endsWith('/site-audit')) {
       const pid = path.split('/')[4]
+      if (state.failAudit.has(pid)) return { ok: false, error: { message: 'audit timed out' } }
       return { ok: true, data: state.audits[pid] ?? { audit: null, findings: [] } }
     }
     if (method === 'GET' && path === '/v1/admin/skill-runs') {
@@ -104,6 +114,19 @@ vi.mock('../lib/supabase', async (importOriginal) => ({
 
 vi.mock('../lib/usePageData', () => ({
   usePageData: (path: string | null) => {
+    const reload = () => { if (path) state.reloads.push(path) }
+    if (path === '/v1/admin/byok/credits' && state.creditsPhase === 'loading') return { data: null, loading: true, error: null, isValidating: true, reload, lastFetchedAt: null }
+    if (path === '/v1/admin/byok/credits' && state.creditsPhase === 'error') return { data: null, loading: false, error: 'credits down', isValidating: false, reload, lastFetchedAt: null }
+    if (path === '/v1/admin/byok/spend-down' && state.spendPhase === 'loading') return { data: null, loading: true, error: null, isValidating: true, reload, lastFetchedAt: null }
+    if (path === '/v1/admin/byok/spend-down' && state.spendPhase === 'error') return { data: null, loading: false, error: 'spend down', isValidating: false, reload, lastFetchedAt: null }
+    if (path === '/v1/admin/byok/review-followups' && state.followupsPhase !== 'ok') {
+      return state.followupsPhase === 'loading'
+        ? { data: null, loading: true, error: null, isValidating: true, reload, lastFetchedAt: null }
+        : { data: null, loading: false, error: 'followups down', isValidating: false, reload, lastFetchedAt: null }
+    }
+    if (path === '/v1/admin/projects' && state.projectsPhase === 'loading') return { data: null, loading: true, error: null, isValidating: true, reload, lastFetchedAt: null }
+    if (path === '/v1/admin/projects' && state.projectsPhase === 'error') return { data: null, loading: false, error: 'projects down', isValidating: false, reload, lastFetchedAt: null }
+    if (path === '/v1/admin/work/lanes' && state.lanesError) return { data: null, loading: false, error: state.lanesError, isValidating: false, reload, lastFetchedAt: null }
     const data =
       path === '/v1/admin/byok/credits'
         ? { keys: [{ id: 'fc', provider: 'firecrawl', credits: { kind: 'credits', remaining: 64175, limit: 100000, used: null, periodEnd: '2026-11-03T00:25:32Z', unit: 'credits', source: 'x' } }] }
@@ -123,7 +146,7 @@ vi.mock('../lib/usePageData', () => ({
                     ],
                   }
                 : null
-    return { data, loading: false, error: null, isValidating: false, reload: () => {}, lastFetchedAt: null }
+    return { data, loading: false, error: null, isValidating: false, reload, lastFetchedAt: null }
   },
 }))
 vi.mock('../lib/pageContext', () => ({ usePublishPageContext: () => {} }))
@@ -143,6 +166,14 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date('2026-10-23T02:00:00Z'))
   state.calls = []
+  state.failAudit = new Set()
+  state.failRanks = new Set()
+  state.lanesError = null
+  state.creditsPhase = 'ok'
+  state.spendPhase = 'ok'
+  state.followupsPhase = 'ok'
+  state.projectsPhase = 'ok'
+  state.reloads = []
   state.watches = {
     p1: { watch: { base_url: 'https://kensaur.us/mushi-mushi', page_limit: 100, status: 'active', estimated_credits_per_month: 6000 }, openPages: [], suggestedUrl: null, firecrawlReady: true },
     p2: { watch: { base_url: 'https://tsumagoi.kensaur.us', page_limit: 30, status: 'active', estimated_credits_per_month: 1800 }, openPages: [], suggestedUrl: null, firecrawlReady: true },
@@ -382,6 +413,71 @@ describe('Local workers on /credits', () => {
     expect(row.textContent).toContain('claude-opus-5-5-medium')
     expect(row.textContent).toContain('taking reports')
     expect(host.querySelector('[data-testid="credits-worker-models"] a[href="/pipeline?tab=workers"]')).not.toBeNull()
+  })
+})
+
+describe('failed reads on /credits', () => {
+  function row(name: string): Element {
+    const found = Array.from(host.querySelectorAll('[aria-label="Site watch per app"] > li')).find((li) => li.textContent?.includes(name))
+    if (!found) throw new Error(`no row ${name}`)
+    return found
+  }
+
+  it('says a site audit or search rank could not be read, and Retry loads it', async () => {
+    state.failAudit.add('p1')
+    state.failRanks.add('p2')
+    await render()
+    const mushi = row('mushi-mushi')
+    expect(mushi.textContent).toContain('Could not read this app\'s site audit')
+    expect(mushi.textContent).toContain('audit timed out')
+    expect(mushi.textContent).not.toContain('Audit links')
+    const tsumagoi = row('tsumagoi')
+    expect(tsumagoi.textContent).toContain('Could not read this app\'s search ranks')
+    expect(tsumagoi.textContent).toContain('ranks timed out')
+    expect(tsumagoi.textContent).not.toContain('Add keywords')
+    expect(tsumagoi.textContent).not.toContain('Edit keywords')
+    state.failAudit.clear()
+    state.failRanks.clear()
+    const retryAudit = Array.from(mushi.querySelectorAll('button')).find((b) => b.textContent === 'Retry')!
+    await act(async () => { retryAudit.click() })
+    await act(async () => { await Promise.resolve() })
+    await act(async () => { await Promise.resolve() })
+    expect(row('mushi-mushi').textContent).toContain('Audit links')
+    expect(row('tsumagoi').textContent).toContain('Edit keywords')
+  })
+
+  it('does not call a still-loading or failed read an empty list', async () => {
+    state.creditsPhase = 'loading'
+    state.spendPhase = 'loading'
+    state.followupsPhase = 'loading'
+    state.projectsPhase = 'loading'
+    await render()
+    expect(host.textContent).toContain('Reading the Firecrawl balance')
+    expect(host.textContent).not.toContain('No Firecrawl key yet')
+    expect(host.textContent).toContain('Reading your Cursor keys')
+    expect(host.textContent).not.toContain('No Cursor key yet')
+    expect(host.textContent).toContain('Reading your apps')
+    expect(host.textContent).toContain('Reading each app')
+
+    state.creditsPhase = 'error'
+    state.spendPhase = 'ok'
+    state.followupsPhase = 'error'
+    state.projectsPhase = 'error'
+    state.lanesError = 'lanes down'
+    await render()
+    expect(host.textContent).toContain('Could not read the Firecrawl balance')
+    expect(host.textContent).toContain('credits down')
+    expect(host.textContent).not.toContain('No Firecrawl key yet')
+    expect(host.textContent).toContain('Could not read review follow-ups')
+    expect(host.textContent).toContain('followups down')
+    expect(host.textContent).toContain('Could not read your apps')
+    expect(host.textContent).toContain('projects down')
+    expect(host.textContent).not.toContain('Reading each app')
+    expect(host.textContent).toContain('Could not read your local workers')
+    expect(host.textContent).not.toContain('No local worker lane yet')
+    const retry = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Retry')!
+    act(() => retry.click())
+    expect(state.reloads.length).toBeGreaterThan(0)
   })
 })
 

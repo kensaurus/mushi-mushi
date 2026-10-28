@@ -17,7 +17,9 @@ export function WeekCard({ section }: { section: HomeSection<WeekRow[]> }) {
   return (
     <Section title="This week vs last week" id="home-week">
       <HomeSectionBody section={section} what="this week's numbers" notConnectedText="No numbers yet.">
-        {(rows) => (
+        {(rows) => rows.length === 0 ? (
+          <p className="text-sm text-fg-muted">No numbers for this week yet.</p>
+        ) : (
           <table className="w-full text-sm" data-testid="home-week">
             <thead>
               <tr className="text-left text-2xs uppercase tracking-wider text-fg-muted">
