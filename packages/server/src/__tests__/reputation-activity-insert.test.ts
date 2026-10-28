@@ -2,8 +2,12 @@
  * awardPointsForEndUser used to log PostgREST's raw gateway HTML with
  * rlog.error, which Sentry stored as the issue message on every
  * session_minute heartbeat. Transient gateway failures are a short status
- * line at warn (no Sentry). Heartbeats are not retried; other awards get
- * one retry, except a 504 which may already have committed.
+ * line at warn (no Sentry). Heartbeats are not retried. Another award is
+ * retried once only when the failure is known to precede the write (HTTP 503
+ * or connection refused): a 502, a pooler error, or a connection reset can
+ * arrive after commit, and end_user_activity has no idempotency key. Eight
+ * transient failures in ten minutes log one error so a sustained outage
+ * still reaches Sentry.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -15,7 +19,7 @@ const fakeLog = vi.hoisted(() => {
 })
 vi.mock('../../supabase/functions/_shared/logger.ts', () => ({ log: fakeLog, createLogger: () => fakeLog }))
 
-import { awardPointsForEndUser } from '../../supabase/functions/_shared/reputation.ts'
+import { awardPointsForEndUser, resetTransientActivityInsertAlert } from '../../supabase/functions/_shared/reputation.ts'
 
 const GATEWAY_HTML =
   '<!DOCTYPE html><html><head><title>supabase.co | 502: Bad gateway</title></head>' +
@@ -74,13 +78,14 @@ function award(db: unknown, action: string, projectId: string) {
   })
 }
 
-function logged(level: 'warn' | 'error') {
-  return fakeLog[level].mock.calls.filter((call) => call[0] === 'activity_insert_failed')
+function logged(level: 'warn' | 'error', msg = 'activity_insert_failed') {
+  return fakeLog[level].mock.calls.filter((call) => call[0] === msg)
 }
 
 beforeEach(() => {
   fakeLog.warn.mockClear()
   fakeLog.error.mockClear()
+  resetTransientActivityInsertAlert()
 })
 
 describe('awardPointsForEndUser activity insert', () => {
@@ -133,6 +138,133 @@ describe('awardPointsForEndUser activity insert', () => {
       error: 'HTTP 504: [upstream gateway error] supabase.co | 502: Bad gateway',
     })
     expect(JSON.stringify(logged('warn'))).not.toContain('<')
+  })
+
+  it('does not retry a 502, which can arrive after the insert committed', async () => {
+    for (const [message, projectId] of [
+      [GATEWAY_HTML, 'proj-activity-502-html'],
+      ['connect ECONNREFUSED 10.0.0.1:443', 'proj-activity-502-refused'],
+    ] as const) {
+      fakeLog.warn.mockClear()
+      fakeLog.error.mockClear()
+      const { db, inserts } = dbForInserts([{ error: { message, code: null }, status: 502 }])
+      const result = await award(db, 'report.submitted', projectId)
+
+      expect(inserts).toHaveLength(1)
+      expect(result.rejectedReason).toBe('insert_error')
+      expect(logged('error')).toEqual([])
+      expect(logged('warn')).toHaveLength(1)
+      expect(JSON.stringify(logged('warn'))).not.toContain('<')
+    }
+  })
+
+  it('does not retry a pooler error or a connection reset', async () => {
+    for (const message of [
+      'upstream connect error or disconnect/reset before headers',
+      'delayed connect error: 111',
+      'read ECONNRESET',
+    ]) {
+      fakeLog.warn.mockClear()
+      fakeLog.error.mockClear()
+      const { db, inserts } = dbForInserts([{ throw: message }])
+      const result = await award(db, 'report.submitted', `proj-activity-${message.slice(0, 8)}`)
+
+      expect(inserts).toHaveLength(1)
+      expect(result.rejectedReason).toBe('insert_error')
+      expect(logged('error')).toEqual([])
+      expect(logged('warn')).toHaveLength(1)
+    }
+  })
+
+  it('does not retry a failed fetch unless the connection was refused', async () => {
+    const { db, inserts } = dbForInserts([{ error: { message: 'fetch failed', code: null }, status: 0 }])
+    const result = await award(db, 'report.submitted', 'proj-activity-fetch-failed')
+
+    expect(inserts).toHaveLength(1)
+    expect(result.rejectedReason).toBe('insert_error')
+    expect(logged('error')).toEqual([])
+    expect(logged('warn')).toHaveLength(1)
+  })
+
+  it('retries a refused connection once, because the insert was never sent', async () => {
+    const { db, inserts } = dbForInserts([
+      { throw: 'connect ECONNREFUSED 127.0.0.1:54321' },
+      { error: null, status: 201 },
+    ])
+    const result = await award(db, 'report.submitted', 'proj-activity-refused')
+
+    expect(inserts).toHaveLength(2)
+    expect(result.pointsAwarded).toBe(10)
+    expect(result.rejectedReason).toBeNull()
+    expect(logged('error')).toEqual([])
+    expect(logged('warn')).toEqual([])
+  })
+
+  it('retries connection refused twice at most and still reports the failure', async () => {
+    const { db, inserts } = dbForInserts([{ throw: 'connection refused' }])
+    const result = await award(db, 'report.submitted', 'proj-activity-refused-down')
+
+    expect(inserts).toHaveLength(2)
+    expect(result.rejectedReason).toBe('insert_error')
+    expect(logged('warn')).toEqual([])
+    expect(logged('error')).toEqual([
+      [
+        'activity_insert_failed',
+        expect.objectContaining({
+          action: 'report.submitted',
+          error: 'connection refused',
+        }),
+      ],
+    ])
+  })
+
+  it('raises one error after repeated transient insert failures, not one per heartbeat', async () => {
+    const { db } = dbForInserts([{ error: { message: GATEWAY_HTML, code: null }, status: 502 }])
+    for (let i = 0; i < 7; i++) await award(db, 'session_minute', 'proj-activity-outage')
+    expect(logged('warn')).toHaveLength(7)
+    expect(logged('error', 'activity_insert_outage')).toEqual([])
+
+    await award(db, 'session_minute', 'proj-activity-outage')
+    expect(logged('warn')).toHaveLength(8)
+    expect(logged('error', 'activity_insert_outage')).toEqual([
+      [
+        'activity_insert_outage',
+        expect.objectContaining({
+          action: 'session_minute',
+          transient: true,
+          sustained: true,
+          count: 8,
+          status: 502,
+          error: 'HTTP 502: [upstream gateway error] supabase.co | 502: Bad gateway',
+        }),
+      ],
+    ])
+    expect(JSON.stringify(logged('error', 'activity_insert_outage'))).not.toContain('<')
+    expect(logged('error')).toEqual([])
+
+    await award(db, 'session_minute', 'proj-activity-outage')
+    expect(logged('warn')).toHaveLength(9)
+    expect(logged('error', 'activity_insert_outage')).toHaveLength(1)
+  })
+
+  it('arms the outage error again in the next ten-minute window', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-29T00:00:00Z'))
+    try {
+      const { db } = dbForInserts([{ error: { message: GATEWAY_HTML, code: null }, status: 502 }])
+      for (let i = 0; i < 8; i++) await award(db, 'session_minute', 'proj-activity-outage-window')
+      expect(logged('error', 'activity_insert_outage')).toHaveLength(1)
+
+      await award(db, 'session_minute', 'proj-activity-outage-window')
+      expect(logged('error', 'activity_insert_outage')).toHaveLength(1)
+
+      vi.setSystemTime(new Date('2026-10-29T00:10:00Z'))
+      for (let i = 0; i < 8; i++) await award(db, 'session_minute', 'proj-activity-outage-window')
+      expect(logged('error', 'activity_insert_outage')).toHaveLength(2)
+      expect(logged('error')).toEqual([])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('still reports a real constraint failure, once, with its own message', async () => {
