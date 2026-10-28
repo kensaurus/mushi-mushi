@@ -3,9 +3,11 @@
  * Browser sessions and screenshots. Every session goes through the write
  * guard (guard.ts) before any page opens.
  *
- * A session can reuse the persistent profile `mushi-ux login` created, so
- * captures see the signed-in app. The profile lives outside the repo and is
- * never named to the coding agent (ADR 0006).
+ * A session can reuse the persistent profile `mushi-ux login` created, or a
+ * cached Chrome profile (`--profile-dir`), so captures see the signed-in app.
+ * Those pages stay in that profile: a second browser seeded with storageState
+ * drops localStorage and IndexedDB, and the run looks signed out. The profile
+ * lives outside the repo and is never named to the coding agent (ADR 0006).
  */
 
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
@@ -18,19 +20,20 @@ export interface BrowserSession {
   /** Discovery browses here; app state it leaves behind stays here. */
   context: BrowserContext
   /**
-   * A clean context for one capture: the cookies and storage the session
-   * started with (a saved login included), the same guard and init scripts.
-   * Captures share no client state, so a screen looks the same however many
-   * other screens were visited before it (glot.it /words lost its empty
-   * state after other screens wrote to localStorage, 2026-10-07).
+   * One capture's context: the same guard and init scripts as the session.
+   * A clean browser gets its own context, seeded from the session's storage,
+   * so captures share no client state (glot.it /words lost its empty state
+   * after other screens wrote to localStorage, 2026-10-07). A cached profile
+   * cannot be copied that way, so these pages open in the profile, and
+   * closing the context closes only the pages it opened.
    */
   freshContext(): Promise<BrowserContext>
   /**
-   * Visit each path once in the shared context, then seed every later capture
-   * from the storage that leaves behind. A first-ever visit can sit on a boot
-   * screen past the content wait (glot.it /chat: a skeleton on desktop, blank
-   * on the phone, 2026-10-07), so captures start from a visited app, the same
-   * one for every screen.
+   * Visit each path once in the shared context. A clean browser then seeds
+   * every later capture from the storage that leaves behind. A cached profile
+   * already holds that storage. A first-ever visit can sit on a boot screen
+   * past the content wait (glot.it /chat: a skeleton on desktop, blank on the
+   * phone, 2026-10-07), so captures start from a visited app.
    */
   warmUp(baseUrl: string, paths: readonly string[]): Promise<void>
   guard: GuardLog
@@ -66,42 +69,78 @@ const CLS_SCRIPT = `(() => {
   } catch {}
 })()`
 
+/**
+ * Pages opened for one capture inside a persistent profile. Closing the
+ * slice closes those pages only — closing the profile context would end the
+ * session, and a second browser seeded from storageState would not be signed in.
+ */
+function profilePages(context: BrowserContext): BrowserContext {
+  const opened: Page[] = []
+  return new Proxy(context, {
+    get(target, prop, receiver) {
+      if (prop === 'newPage') {
+        return async () => {
+          const page = await target.newPage()
+          opened.push(page)
+          return page
+        }
+      }
+      if (prop === 'close') {
+        return async () => {
+          const mine = opened.splice(0)
+          await Promise.all(mine.map((page) => page.close().catch(() => undefined)))
+        }
+      }
+      const value: unknown = Reflect.get(target, prop, receiver)
+      return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(target) : value
+    },
+  })
+}
+
+/** Visit each path once. Callers decide whether to snapshot storage afterwards. */
+async function browsePaths(context: BrowserContext, baseUrl: string, paths: readonly string[]): Promise<void> {
+  const page = await context.newPage()
+  try {
+    for (const p of paths) {
+      await gotoPatiently(page, surfaceUrl(baseUrl, p)).catch(() => null)
+      await settle(page).catch(() => undefined)
+    }
+  } finally {
+    await page.close()
+  }
+}
+
 export async function openSession(opts: SessionOptions = {}): Promise<BrowserSession> {
   const headless = opts.headless ?? true
-  let context: BrowserContext
-  let closeBrowser: () => Promise<void>
-  let browser: Browser
   // Playwright's docs say requests a Service Worker handles can bypass
   // context.route. Chromium on 1.61 routed them in a probe (Plan 021 §5), but
   // the guard must not depend on that: block Service Workers outright.
   const channel = opts.channel === 'chrome' ? { channel: 'chrome' as const } : {}
   if (opts.profileDir) {
-    context = await chromium.launchPersistentContext(opts.profileDir, { headless, serviceWorkers: 'block', ...channel })
-    // A persistent profile cannot spawn contexts: captures run in a second browser seeded from it.
-    browser = await chromium.launch({ headless, ...channel })
-    closeBrowser = async () => {
-      await context.close()
-      await browser.close()
+    // The profile is the signed-in session. launchPersistentContext cannot
+    // share it with browser.newContext, and copying storageState into a
+    // second browser drops localStorage and IndexedDB — audit and explore
+    // then run signed out.
+    const context = await chromium.launchPersistentContext(opts.profileDir, { headless, serviceWorkers: 'block', ...channel })
+    const guard = await installGuard(context, opts.allow ?? [], { blocked: [] }, opts.policy)
+    await context.addInitScript({ content: CLS_SCRIPT })
+    return {
+      context,
+      freshContext: async () => profilePages(context),
+      warmUp: (baseUrl, paths) => browsePaths(context, baseUrl, paths),
+      guard,
+      ignore: ignoreList(opts.ignore),
+      close: () => context.close(),
     }
-  } else {
-    browser = await chromium.launch({ headless, ...channel })
-    context = await browser.newContext({ serviceWorkers: 'block' })
-    closeBrowser = () => browser.close()
   }
+  const browser: Browser = await chromium.launch({ headless, ...channel })
+  const context = await browser.newContext({ serviceWorkers: 'block' })
   const guard = await installGuard(context, opts.allow ?? [], { blocked: [] }, opts.policy)
   await context.addInitScript({ content: CLS_SCRIPT })
   // The state every capture starts from; warmUp replaces it with a visited app.
   let seed = await context.storageState({ indexedDB: true })
   const warmUp = async (baseUrl: string, paths: readonly string[]) => {
-    const page = await context.newPage()
-    try {
-      for (const p of paths) {
-        await gotoPatiently(page, surfaceUrl(baseUrl, p)).catch(() => null)
-        await settle(page).catch(() => undefined)
-      }
-    } finally {
-      await page.close()
-    }
+    await browsePaths(context, baseUrl, paths)
     seed = await context.storageState({ indexedDB: true })
   }
   const freshContext = async () => {
@@ -110,7 +149,7 @@ export async function openSession(opts: SessionOptions = {}): Promise<BrowserSes
     await fresh.addInitScript({ content: CLS_SCRIPT })
     return fresh
   }
-  return { context, freshContext, warmUp, guard, ignore: ignoreList(opts.ignore), close: closeBrowser }
+  return { context, freshContext, warmUp, guard, ignore: ignoreList(opts.ignore), close: () => browser.close() }
 }
 
 /**
