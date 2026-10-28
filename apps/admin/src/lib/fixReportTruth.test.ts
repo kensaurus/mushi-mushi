@@ -10,13 +10,17 @@
 import { describe, expect, it } from 'vitest'
 import type { FixAttempt } from '../components/fixes/types'
 import {
+  countsAsInFlight,
   credentialAdvice,
+  extraInFlightDispatches,
   failureCause,
   failureHeadline,
   fixCauseLabel,
   fixCiInfraLabel,
   CI_INFRA_STOPPED_LABEL,
   fixReportLabel,
+  inFlightHeadline,
+  inFlightReportCount,
   isSuperseded,
   needsAttention,
   openPrReports,
@@ -34,6 +38,42 @@ function fix(overrides: Partial<FixAttempt>): FixAttempt {
     ...overrides,
   }
 }
+
+describe('in flight counts', () => {
+  it('counts pending and dispatched attempts, and not a live row on a fixed report', () => {
+    const pending = fix({ id: 'p', report_id: 'r1', status: 'pending', report_fix_state: 'in_flight' })
+    const dispatched = fix({ id: 'd', report_id: 'r2', status: 'dispatched', report_fix_state: 'in_flight' })
+    const resolved = fix({ id: 'x', report_id: 'r3', status: 'pending', report_fix_state: 'resolved' })
+    expect(countsAsInFlight(pending)).toBe(true)
+    expect(countsAsInFlight(dispatched)).toBe(true)
+    expect(countsAsInFlight(resolved)).toBe(false)
+    expect(countsAsInFlight(fix({ status: 'failed', report_fix_state: 'failed' }))).toBe(false)
+    expect(inFlightReportCount([pending, dispatched, resolved, fix({ id: 'p2', report_id: 'r1', status: 'running', report_fix_state: 'in_flight' })])).toBe(2)
+  })
+
+  it('the headline matches the card when the loaded list missed the live attempt', () => {
+    expect(inFlightHeadline({
+      attempts: [],
+      dispatches: [],
+      summaryInProgress: 1,
+      statsInProgress: 0,
+      statsInflightDispatches: 0,
+    })).toBe(1)
+  })
+
+  it('a queued dispatch with no attempt is in flight, and is not counted twice', () => {
+    const pending = fix({ report_id: 'r1', status: 'pending', report_fix_state: 'in_flight' })
+    expect(extraInFlightDispatches([], [{ report_id: 'r9', status: 'queued' }])).toBe(1)
+    expect(extraInFlightDispatches([pending], [{ report_id: 'r1', status: 'running' }])).toBe(0)
+    expect(inFlightHeadline({
+      attempts: [],
+      dispatches: [{ report_id: 'r9', status: 'queued' }],
+      summaryInProgress: 0,
+      statsInProgress: 0,
+      statsInflightDispatches: 1,
+    })).toBe(1)
+  })
+})
 
 // glot.it, report 9c848825 (fixed by PR 140) and 030bcf3d (unfixed, OpenAI 401).
 const LCP_FAILED = fix({

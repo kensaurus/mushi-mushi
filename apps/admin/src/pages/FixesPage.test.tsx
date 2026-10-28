@@ -43,7 +43,12 @@ function fix(over: Partial<FixAttempt>): FixAttempt {
   } as FixAttempt
 }
 
-const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), fixes: [] as unknown[], total: 0 }))
+const mocks = vi.hoisted(() => ({
+  apiFetch: vi.fn(),
+  fixes: [] as unknown[],
+  total: 0,
+  published: null as { summary?: string } | null,
+}))
 
 vi.mock('../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../lib/usePageData', () => ({
@@ -58,7 +63,11 @@ vi.mock('../lib/usePageData', () => ({
   }),
 }))
 vi.mock('../lib/realtime', () => ({ useRealtimeReload: () => ({ channelState: 'idle' }) }))
-vi.mock('../lib/pageContext', () => ({ usePublishPageContext: () => undefined }))
+vi.mock('../lib/pageContext', () => ({
+  usePublishPageContext: (ctx: { summary?: string } | null) => {
+    mocks.published = ctx
+  },
+}))
 vi.mock('../lib/usePlatformIntegrations', () => ({ usePlatformIntegrations: () => ({ traceUrl: () => null }) }))
 vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => ({ activeProject: { project_name: 'App' } }) }))
 vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => 'p1' }))
@@ -219,6 +228,43 @@ describe('FixesPage', () => {
     const inflight = document.querySelector('[role="radiogroup"][aria-label="Filter fix attempts by status"] [aria-checked="true"]')
     expect(inflight?.textContent).toContain('In flight')
     expect(document.body.textContent).not.toContain('Login loops')
+  })
+
+  it('a pending attempt is in flight on the tab title and the In flight filter', async () => {
+    mocks.fixes = [fix({ id: 'a', status: 'pending', report_fix_state: 'in_flight', retryable: false })]
+    mocks.total = 1
+    const base = mocks.apiFetch.getMockImplementation()!
+    mocks.apiFetch.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === '/v1/admin/fixes/summary') {
+        return {
+          ok: true,
+          data: { total: 1, completed: 0, failed: 0, inProgress: 1, prsOpen: 0, prsCiPassing: 0, days: [] },
+        }
+      }
+      return base(path, init)
+    })
+    await render('/fixes')
+    const segments = [...document.querySelectorAll('[aria-label="Filter fix attempts by status"] [role="radio"]')]
+    expect(segments.find((b) => b.textContent?.startsWith('In flight'))?.textContent).toBe('In flight1')
+    expect(mocks.published?.summary).toContain('1 in flight')
+  })
+
+  it('a queued dispatch with no attempt counts as in flight in the tab title', async () => {
+    mocks.fixes = []
+    mocks.total = 0
+    const base = mocks.apiFetch.getMockImplementation()!
+    mocks.apiFetch.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === '/v1/admin/fixes/dispatches') {
+        return {
+          ok: true,
+          data: { dispatches: [{ id: 'd1', project_id: 'p1', report_id: 'r1', status: 'queued', created_at: '2026-10-28T00:00:00Z' }] },
+        }
+      }
+      return base(path, init)
+    })
+    await render('/fixes')
+    expect(mocks.published?.summary).toContain('1 in flight')
+    expect(document.body.textContent).toContain('In-flight dispatches')
   })
 
   it('PR open counts an open PR with red CI, like Pull requests', async () => {

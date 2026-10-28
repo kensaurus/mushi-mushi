@@ -40,7 +40,7 @@ import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
 import { queueMerges } from '../lib/mergeQueue'
 import { MergeQueuePanel } from '../components/fixes/MergeQueuePanel'
-import { failureCause, fixCauseLabel, fixReportLabel, needsAttention, retryCandidates } from '../lib/fixReportTruth'
+import { countsAsInFlight, failureCause, fixCauseLabel, fixReportLabel, inFlightHeadline, needsAttention, retryCandidates } from '../lib/fixReportTruth'
 import {
   RETRY_AGENT_OPTIONS,
   commonRetryAgent,
@@ -112,8 +112,9 @@ function bucketFromUrl(status: string | null, tab: string | null): StatusBucket 
 
 /** The one exclusive bucket of an attempt; PR open is matched separately. */
 function bucketize(fix: FixAttempt): StatusBucket {
-  const status = fix.status?.toLowerCase()
-  if (status === 'queued' || status === 'running') return 'inflight'
+  // Pending and dispatched are in flight too: the summary card counts them
+  // (server LIVE_ATTEMPT_STATUSES) and the tab title must not read 0.
+  if (countsAsInFlight(fix)) return 'inflight'
   // "Failed / skipped" holds the latest attempt of each report that is
   // still unfixed after it failed, was skipped (2026-08-16 audit P1-4), or
   // its PR went red / closed unmerged (2026-10-02). Earlier attempts on a
@@ -745,6 +746,20 @@ export function FixesPage() {
     void loadFixes()
   }, [selectedFailed, activeProjectId, pushOptimistic, settleOptimistic, clearSelection, loadFixes, toast])
 
+  // One in-flight number for the browser tab and the In flight card.
+  // The tab used to count only queued/running rows, so it read 0 while
+  // the card (pending, dispatched, or a dispatch with no attempt yet) read 1.
+  const inFlightCount = useMemo(
+    () => inFlightHeadline({
+      attempts: scopedFixes,
+      dispatches: [...optimisticDispatches, ...dispatches],
+      summaryInProgress: summary ? summary.inProgress : null,
+      statsInProgress: fixesStats.inProgress,
+      statsInflightDispatches: fixesStats.inflightDispatches,
+    }),
+    [scopedFixes, optimisticDispatches, dispatches, summary, fixesStats],
+  )
+
   // Publish page context so Ask Mushi and command palette can react
   // to the current bucket + counts (e.g. "Retry all failed fixes" only
   // makes sense when `failedFixes.length > 0`).
@@ -754,7 +769,7 @@ export function FixesPage() {
     summary: loading
       ? 'Loading fix pipeline…'
       // Same number as the banner and the stopped-dispatch cards (B3).
-      : `${pluralizeWithCount(fixes.length, 'fix', 'fixes')} · ${bucketCounts.inflight} in flight · ${Math.max(bucketCounts.failed, fixesStats.failed)} failed`,
+      : `${pluralizeWithCount(fixes.length, 'fix', 'fixes')} · ${inFlightCount} in flight · ${Math.max(bucketCounts.failed, fixesStats.failed)} failed`,
     filters: {
       bucket: statusBucket,
     },
@@ -765,8 +780,8 @@ export function FixesPage() {
       bucketCounts.failed > 0
         ? `Why did the ${pluralizeWithCount(bucketCounts.failed, 'failed fix', 'failed fixes')} fail?`
         : 'Is the auto-fix pipeline healthy right now?',
-      bucketCounts.inflight > 0
-        ? `What is taking the longest among the ${bucketCounts.inflight} in-flight fixes?`
+      inFlightCount > 0
+        ? `What is taking the longest among the ${inFlightCount} in-flight fixes?`
         : 'Which report should I dispatch next?',
       'Which fixes are waiting on a human review?',
     ],
@@ -817,8 +832,7 @@ export function FixesPage() {
   const inFlightReportIds = useMemo(() => {
     const ids = new Set<string>()
     for (const f of fixes) {
-      const s = f.status?.toLowerCase()
-      if (s === 'queued' || s === 'running' || s === 'dispatched') ids.add(f.report_id)
+      if (countsAsInFlight(f)) ids.add(f.report_id)
     }
     for (const d of mergedDispatches) {
       const s = d.status?.toLowerCase()
@@ -929,7 +943,7 @@ export function FixesPage() {
 
       {/* Quick mode has no snapshot strip, so the KPI row stands in for it. */}
       {summary && ux.hideFixesSnapshot && (
-        <FixSummaryRow summary={{ ...summary, prsOpen: prCounts.open }} successRate={successRate} />
+        <FixSummaryRow summary={{ ...summary, prsOpen: prCounts.open, inProgress: inFlightCount }} successRate={successRate} />
       )}
 
       {fixes.length > 0 && (
