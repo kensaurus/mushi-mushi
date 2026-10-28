@@ -16,23 +16,57 @@
  *              expansion into URL params / keyboard hotkeys.
  *            - Empty / error states are the caller's responsibility
  *              because page context determines the right message.
+ *
+ * NOTES:
+ * - TanStack Table v9: sorting is opt-in via `dataTableFeatures`
+ *   (`useTable` + `tableFeatures`). Callers still write
+ *   `ColumnDef<Row, unknown>`; the features generic stays inside this file.
+ * - The sort registry is the v8 built-in set. A `sortFn` name resolves only
+ *   when it is registered. Numeric columns use `basic`.
+ * - Rows use `getAllCells()`. `getVisibleCells()` exists only when the
+ *   column-visibility feature is registered, which this table does not use.
  */
 
 import {
-  type ColumnDef,
-  flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  useReactTable,
-  type SortingState,
-  type Row,
+  type CellData,
+  type ColumnDef as TanstackColumnDef,
   type OnChangeFn,
+  type RowData,
+  type SortingState,
+  createSortedRowModel,
+  flexRender,
+  rowSortingFeature,
+  sortFn_alphanumeric,
+  sortFn_alphanumericCaseSensitive,
+  sortFn_basic,
+  sortFn_datetime,
+  sortFn_text,
+  sortFn_textCaseSensitive,
+  tableFeatures,
+  useTable,
 } from '@tanstack/react-table'
 import { Fragment, type ReactNode, useState } from 'react'
 
-export type { ColumnDef } from '@tanstack/react-table'
+/** Client-side sorting only. Core rows are always included; other features stay out of the bundle. */
+const dataTableFeatures = tableFeatures({
+  rowSortingFeature,
+  sortedRowModel: createSortedRowModel(),
+  sortFns: {
+    alphanumeric: sortFn_alphanumeric,
+    alphanumericCaseSensitive: sortFn_alphanumericCaseSensitive,
+    basic: sortFn_basic,
+    datetime: sortFn_datetime,
+    text: sortFn_text,
+    textCaseSensitive: sortFn_textCaseSensitive,
+  },
+})
 
-interface DataTableProps<T> {
+type DataTableFeatures = typeof dataTableFeatures
+
+export type ColumnDef<TData extends RowData, TValue extends CellData = CellData> =
+  TanstackColumnDef<DataTableFeatures, TData, TValue>
+
+interface DataTableProps<T extends RowData> {
   data: T[]
   columns: ColumnDef<T, unknown>[]
   /** Stable unique id accessor — used as React key and for expansion. */
@@ -72,7 +106,7 @@ const DENSITY_HEAD: Record<'default' | 'compact' | 'comfortable', string> = {
   comfortable: 'py-2 text-2xs',
 }
 
-export function DataTable<T>({
+export function DataTable<T extends RowData>({
   data,
   columns,
   getRowId,
@@ -98,13 +132,12 @@ export function DataTable<T>({
     }
   }
 
-  const table = useReactTable({
+  const table = useTable({
+    features: dataTableFeatures,
     data,
     columns,
     state: { sorting },
     onSortingChange: handleSortingChange,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
     getRowId,
   })
 
@@ -158,7 +191,7 @@ export function DataTable<T>({
           </thead>
         )}
         <tbody>
-          {rows.map((row: Row<T>) => {
+          {rows.map((row) => {
             const id = row.id
             const isExpanded = Boolean(expandedIds?.has(id))
             return (
@@ -182,7 +215,7 @@ export function DataTable<T>({
                       : ''
                   }`}
                 >
-                  {row.getVisibleCells().map((cell) => (
+                  {row.getAllCells().map((cell) => (
                     <td
                       key={cell.id}
                       className={`px-3 align-middle ${rowClasses}`}

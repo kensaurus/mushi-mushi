@@ -53,8 +53,8 @@ describe('LabsPanel', () => {
   it('renders the intro, every group heading and every Lab with its own switch', () => {
     render()
     const text = container.textContent ?? ''
-    expect(text).toContain('Labs are pages outside the core bug → diagnosis → fix loop')
-    expect(text).toContain('reachable from ⌘K and by link')
+    expect(text).toContain('Pages to keep in your sidebar under Labs')
+    expect(text).toContain('under More pages')
     for (const heading of Object.values(LAB_GROUP_LABEL)) expect(text).toContain(heading)
     for (const f of LAB_FEATURES) {
       expect(text).toContain(f.label)

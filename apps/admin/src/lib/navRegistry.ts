@@ -1117,19 +1117,31 @@ export function routeFallbackTitle(pathname: string): string | null {
  */
 
 /**
- * The nine sidebar pages every account has, in order (console audit
- * 2026-10-20). Everything else is a Lab (lib/labs.ts) or palette-only.
+ * The sidebar pages every account has, in order (console audit 2026-10-20;
+ * Pipeline added 2026-10-27, ADR 0027 amendment). A page with sub-pages lists
+ * them under itself while you are in it (lib/sidebarTree.ts); every other page
+ * is under "More pages", and a Lab (lib/labs.ts) can be kept in the sidebar.
  */
 export const CORE_NAV_PATHS: readonly string[] = [
   '/dashboard',
   '/reports',
   '/fixes',
+  '/pipeline',
   '/portfolio',
   '/connect',
   '/integrations/config',
   '/checks',
   '/team',
   '/settings',
+]
+
+/** Every check on the Checks page, in order within its group. Every path must exist in NAV_REGISTRY. */
+export const CHECK_GROUPS: ReadonlyArray<{ id: CheckSubGroupId; paths: readonly string[] }> = [
+  {
+    id: 'system-health',
+    paths: ['/qa-coverage', '/health', '/ci', '/fullstack-audit', '/inventory', '/recipe', '/design', '/content'],
+  },
+  { id: 'quality-gates', paths: ['/judge', '/lessons', '/prompt-lab'] },
 ]
 
 const SECTION_BY_STAGE: Record<PdcaStageId, NavSectionId> = {

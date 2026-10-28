@@ -2,8 +2,8 @@ import { useMemo } from 'react'
 import {
   createColumnHelper,
   flexRender,
-  getCoreRowModel,
-  useReactTable,
+  tableFeatures,
+  useTable,
 } from '@tanstack/react-table'
 import { Badge } from '../ui'
 import { InventoryStatusPill } from './InventoryStatusPill'
@@ -24,7 +24,9 @@ export interface TreeRow {
   testList?: Array<{ file: string; name: string; framework?: string }>
 }
 
-const col = createColumnHelper<TreeRow>()
+const inventoryFeatures = tableFeatures({})
+
+const col = createColumnHelper<typeof inventoryFeatures, TreeRow>()
 
 interface Props {
   rows: TreeRow[]
@@ -48,7 +50,7 @@ function frameworkChip(framework: string | undefined): string {
 
 export function InventoryTree({ rows, onRowClick }: Props) {
   const columns = useMemo(
-    () => [
+    () => col.columns([
       col.accessor('pagePath', {
         header: 'Page',
         cell: (c) => <span className="font-mono text-2xs">{c.getValue()}</span>,
@@ -126,14 +128,14 @@ export function InventoryTree({ rows, onRowClick }: Props) {
           )
         },
       }),
-    ],
+    ]),
     [],
   )
 
-  const table = useReactTable({
+  const table = useTable({
+    features: inventoryFeatures,
     data: rows,
     columns,
-    getCoreRowModel: getCoreRowModel(),
   })
 
   if (!rows.length) {
@@ -161,7 +163,7 @@ export function InventoryTree({ rows, onRowClick }: Props) {
               onClick={() => onRowClick?.(row.original)}
               className="border-t border-edge-subtle hover:bg-surface-overlay/40 cursor-pointer"
             >
-              {row.getVisibleCells().map((cell) => (
+              {row.getAllCells().map((cell) => (
                 <td key={cell.id} className="px-2 py-1.5 align-middle">
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>

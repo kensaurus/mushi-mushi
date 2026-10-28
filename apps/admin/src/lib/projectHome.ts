@@ -20,7 +20,7 @@ export interface HomeSection<T> {
 }
 
 export type Light = 'good' | 'warn' | 'bad' | 'busy' | 'off'
-type HealthId = 'site' | 'errors' | 'sdk' | 'ci'
+type HealthId = 'site' | 'errors' | 'sdk' | 'ci' | 'setup'
 
 export interface HealthSignal {
   id: HealthId
