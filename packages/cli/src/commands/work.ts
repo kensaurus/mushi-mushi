@@ -404,9 +404,18 @@ export interface Proc {
 
 /** Processes this command started that are still running: a stop ends them too (`kill <pid>` reaches only this process). */
 const liveChildren = new Set<ChildProcess>()
+/** Of those, the ones that lead their own process group (started with a time limit). */
+const groupLeaders = new WeakSet<ChildProcess>()
 
 function stopChildren(): void {
-  for (const child of liveChildren) child.kill('SIGTERM')
+  for (const child of liveChildren) {
+    try {
+      if (groupLeaders.has(child) && child.pid) process.kill(-child.pid, 'SIGTERM')
+      else child.kill('SIGTERM')
+    } catch {
+      child.kill('SIGTERM')
+    }
+  }
 }
 
 /**
@@ -421,7 +430,20 @@ const CLOSE_GRACE_MS = 30_000
 /** Used by the local worker (worker/daemon.ts). */
 export function runProc(cmd: string, args: readonly string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number; maxBytes?: number; signal?: AbortSignal; closeGraceMs?: number } = {}): Promise<Proc> {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { cwd: opts.cwd, env: opts.env ?? process.env, stdio: ['ignore', 'pipe', 'pipe'], ...(opts.signal ? { signal: opts.signal } : {}) })
+    // With a time limit, the child leads its own process group (not on
+    // Windows) so a timeout ends what it started too: on 2026-10-28 a repo's
+    // commit hook (tsc, eslint) ran on for hours after its git was killed.
+    const group = !!opts.timeoutMs && process.platform !== 'win32'
+    const child = spawn(cmd, args, { cwd: opts.cwd, env: opts.env ?? process.env, stdio: ['ignore', 'pipe', 'pipe'], detached: group, ...(opts.signal ? { signal: opts.signal } : {}) })
+    if (group) groupLeaders.add(child)
+    const stop = (sig: NodeJS.Signals) => {
+      try {
+        if (group && child.pid) process.kill(-child.pid, sig)
+        else child.kill(sig)
+      } catch {
+        child.kill(sig)
+      }
+    }
     liveChildren.add(child)
     let stdout = ''
     let stderr = ''
@@ -449,8 +471,8 @@ export function runProc(cmd: string, args: readonly string[], opts: { cwd?: stri
     const timer = opts.timeoutMs
       ? setTimeout(() => {
           timedOut = true
-          child.kill('SIGTERM')
-          setTimeout(() => child.kill('SIGKILL'), 10_000).unref()
+          stop('SIGTERM')
+          setTimeout(() => stop('SIGKILL'), 10_000).unref()
         }, opts.timeoutMs)
       : null
     child.stdout.on('data', (d: Buffer) => {
@@ -481,9 +503,23 @@ export async function clearWorktree(repoDir: string, wt: string): Promise<void> 
   await runProc('git', ['worktree', 'prune'], { cwd: repoDir })
 }
 
+/**
+ * How long one git command may run. Commit and push run the repo's own hooks
+ * (type check, lint, tests), so they get longer; a hook that hangs used to
+ * hold a worker slot for hours.
+ */
+const GIT_TIMEOUT_MS = 10 * 60_000
+const GIT_HOOK_TIMEOUT_MS = 25 * 60_000
+
 /** Used by the local worker (worker/conflicts.ts, worker/audit.ts). */
 export async function git(cwd: string, args: string[]): Promise<string> {
-  const r = await runProc('git', args, { cwd })
+  const hooks = args[0] === 'commit' || args[0] === 'push'
+  const limit = hooks ? GIT_HOOK_TIMEOUT_MS : GIT_TIMEOUT_MS
+  const r = await runProc('git', args, { cwd, timeoutMs: limit })
+  if (r.timedOut) {
+    const what = hooks ? `the repo's ${args[0] === 'push' ? 'pre-push' : 'commit'} hook` : 'it'
+    throw new MushiCliError('E_INTERNAL', `git ${args[0]} timed out after ${Math.round(limit / 60_000)} min (${what} did not finish); stopped it`)
+  }
   if (r.code !== 0) throw new MushiCliError('E_INTERNAL', `git ${args[0]} failed: ${failureTail(r)}`)
   return r.stdout.trim()
 }

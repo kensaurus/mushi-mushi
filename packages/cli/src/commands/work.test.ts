@@ -416,6 +416,27 @@ describe('local workers (ADR 0048): infra failures never count against a report'
 })
 
 describe('runProc', () => {
+  it.skipIf(process.platform === 'win32')('a timeout ends what the process started, not only the process (a hung commit hook)', async () => {
+    // The child starts a grandchild in its own process group and waits on it, as git waits on a hook.
+    const script = "const c = require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { stdio: 'ignore' }); console.log('grandchild ' + c.pid); setTimeout(() => {}, 60000)"
+    const r = await runProc(process.execPath, ['-e', script], { timeoutMs: 1500, closeGraceMs: 300 })
+    expect(r.timedOut).toBe(true)
+    const pid = Number(/grandchild (\d+)/.exec(r.stdout)?.[1])
+    expect(pid).toBeGreaterThan(0)
+    await new Promise((res) => setTimeout(res, 300))
+    let alive = true
+    try {
+      process.kill(pid, 0)
+    } catch {
+      alive = false
+    }
+    expect(alive).toBe(false)
+  }, 20_000)
+
+  it('a git command that times out names it as infra, so the report is retried', () => {
+    expect(classifyFailure("git commit timed out after 25 min (the repo's commit hook did not finish); stopped it", 'commit')).toBe('infra')
+  })
+
   it('answers when the process exited but something it started still holds the output (the 51-minute audit hang)', async () => {
     // The grandchild inherits stdout and lives on; Node then never fires 'close'.
     const hold = "require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 8000)'], { stdio: 'inherit', detached: true }).unref(); console.log('parent done')"
