@@ -178,7 +178,22 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
         />
       )}
 
-      {page.loading && !page.data && <Loading text="Reading every app's recipe…" />}
+      {/* The apps are known before their details: list them at once instead of
+          a bare spinner, which sat for 5 s on a first load (2026-10-28). */}
+      {page.loading && !page.data ? (
+        teamApps.length > 0 ? (
+          <ul className="space-y-1" aria-busy="true" data-testid="portfolio-loading-apps">
+            {teamApps.map((app) => (
+              <li key={app.projectId} className="flex items-center justify-between gap-3 rounded-sm border border-edge-subtle bg-surface-raised px-3 py-2 text-xs">
+                <span className="font-medium text-fg">{app.name}</span>
+                <span className="text-2xs text-fg-faint">Checking…</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <Loading text="Checking each app…" />
+        )
+      ) : null}
       {page.error && (
         <PageLoadError error={page.error} code={page.errorCode} resource="portfolio" endpoint={page.errorEndpoint} requestId={page.requestId} onRetry={page.reload} />
       )}

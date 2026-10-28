@@ -494,7 +494,7 @@ export function IntegrationsPage() {
       )}
 
       {/* Positioning (AGENTS.md): no monitoring stack required. This block said
-          that all three be connected, with Mushi's own Langfuse
+          to connect all three tools, with Mushi's own Langfuse
           as one of them (integrator's walk, 2026-10-28). GitHub leads; Sentry
           is optional; Langfuse sits in the Advanced fold below. */}
       <PanelSectionLabel>Your code and errors</PanelSectionLabel>
