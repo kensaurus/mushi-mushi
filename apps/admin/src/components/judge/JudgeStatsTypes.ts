@@ -75,3 +75,42 @@ export function judgeWeekTitle(label: string | null | undefined): string {
   const l = label || 'this week'
   return l.charAt(0).toUpperCase() + l.slice(1)
 }
+
+/**
+ * Disagreement share the status sentence counts.
+ * A last-14-days window that holds every grade is the all-time rate. Calling
+ * that "recent" showed 76/144 (53%) while one week inside it was different
+ * (64c2b3df). A window that is actually narrower stays "in the last N days".
+ */
+export function judgeDisagreementWindow(stats: JudgeStats): {
+  disagreed: number
+  graded: number
+  ratePct: number | null
+  /** True only when the recent window is a narrower slice than all grades. */
+  recent: boolean
+  words: string
+} {
+  const days = stats.recentWindowDays ?? 14
+  const recentGraded = stats.recentEvaluations
+  const recentDisagreed = stats.recentDisagreements
+  const coversAll =
+    recentGraded != null && stats.totalEvaluations > 0 && recentGraded >= stats.totalEvaluations
+  if (recentGraded != null && recentDisagreed != null && !coversAll) {
+    return {
+      disagreed: recentDisagreed,
+      graded: recentGraded,
+      ratePct: recentGraded > 0 ? Math.round((recentDisagreed / recentGraded) * 100) : null,
+      recent: true,
+      words: `in the last ${days} days`,
+    }
+  }
+  const graded = stats.totalEvaluations
+  const disagreed = stats.disagreementCount
+  return {
+    disagreed,
+    graded,
+    ratePct: stats.disagreementRatePct ?? (graded > 0 ? Math.round((disagreed / graded) * 100) : null),
+    recent: false,
+    words: 'so far',
+  }
+}

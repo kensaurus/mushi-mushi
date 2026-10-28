@@ -125,4 +125,23 @@ describe('judgeStatusSentence', () => {
       'Diagnoses scored 66% this week across 53 grades. So far the grader disagreed with 18 of 57 diagnoses (32%).',
     )
   })
+
+  it('does not call 76/144 recent when every grade is inside 14 days', () => {
+    // 76/144 is 53% all-time. The same 144 grades sit inside 14 days, so that
+    // window is the whole history, not a recent slice (64c2b3df).
+    expect(
+      judgeStatusSentence({
+        ...base,
+        totalEvaluations: 144,
+        disagreementCount: 76,
+        disagreementRatePct: 53,
+        latestWeekScore: 0.8,
+        latestWeekLabel: 'this week',
+        latestWeekEvalCount: 100,
+        recentWindowDays: 14,
+        recentEvaluations: 144,
+        recentDisagreements: 76,
+      }),
+    ).toBe('Diagnoses scored 80% this week across 100 grades. So far the grader disagreed with 76 of 144 diagnoses (53%).')
+  })
 })

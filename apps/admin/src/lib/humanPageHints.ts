@@ -36,8 +36,10 @@ export function triageBacklogHint(count: number): string {
     : 'These reports are waiting for triage. Triage the oldest first so auto-fix can pick them up.'
 }
 
-export function judgeDisagreementHint(ratePct: number): string {
-  return `The judge disagreed with the classifier on ${ratePct}% of recent grades. Review mismatches before merging fixes.`
+/** `words` is the window the rate covers (`in the last 14 days` or `so far`). The rate passed in is all-time unless `words` says otherwise. */
+export function judgeDisagreementHint(ratePct: number, words = 'so far'): string {
+  const scope = words === 'so far' ? 'all grades so far' : `grades ${words}`
+  return `The judge disagreed with the classifier on ${ratePct}% of ${scope}. Review mismatches before merging fixes.`
 }
 
 export function llmErrorsHint(ratePct: number): string {

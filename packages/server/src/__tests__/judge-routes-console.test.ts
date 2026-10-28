@@ -172,10 +172,13 @@ describe('64c2b3df "recent" disagreement share is really recent', () => {
     expect(graded).toBe(20)
   })
 
-  it('says "in the last 14 days" when the recent share is high', async () => {
-    const rows: Row[] = Array.from({ length: 6 }, (_, i) =>
-      evaluation(400 + i, { classification_agreed: i >= 3, created_at: ago(3) }),
-    )
+  it('says "in the last 14 days" when that window is narrower than all grades', async () => {
+    const rows: Row[] = [
+      ...Array.from({ length: 10 }, (_, i) => evaluation(400 + i, { created_at: ago(60) })),
+      ...Array.from({ length: 6 }, (_, i) =>
+        evaluation(500 + i, { classification_agreed: i >= 3, created_at: ago(3) }),
+      ),
+    ]
     db = makeFakeDb(
       { classification_evaluations: rows, reports: [], prompt_versions: [] },
       { rpc: () => [{ week_start: '2026-10-19', avg_score: 0.9, eval_count: 6 }] },
@@ -184,6 +187,24 @@ describe('64c2b3df "recent" disagreement share is really recent', () => {
     expect(d.topPriority).toBe('disagreements')
     expect(d.topPriorityLabel).toContain('50% of the 6 grades in the last 14 days')
     expect(d.topPriorityLabel).not.toMatch(/recent grades/)
+  })
+
+  it('calls a 14-day window that holds every grade all-time, not recent', async () => {
+    // 76/144 = 53%. Every grade is 3 days old, so "last 14 days" is the whole history.
+    const rows: Row[] = Array.from({ length: 144 }, (_, i) =>
+      evaluation(800 + i, { classification_agreed: i >= 76, created_at: ago(3) }),
+    )
+    db = makeFakeDb(
+      { classification_evaluations: rows, reports: [], prompt_versions: [] },
+      { rpc: () => [{ week_start: '2026-10-19', avg_score: 0.9, eval_count: 144 }] },
+    )
+    const d = (await get('/v1/admin/judge/stats')).json.data
+    expect(d.disagreementCount).toBe(76)
+    expect(d.disagreementRatePct).toBe(53)
+    expect(d.recentEvaluations).toBe(144)
+    expect(d.topPriority).toBe('disagreements')
+    expect(d.topPriorityLabel).toContain('53% of all 144 grades so far')
+    expect(d.topPriorityLabel).not.toMatch(/14 days|recent/)
   })
 })
 

@@ -7,7 +7,7 @@ import { usePageCopy } from '../../lib/copy'
 import { judgeDisagreementHint, scopedHref } from '../../lib/humanPageHints'
 import { StatusBannerShell } from '../StatusBannerShell'
 import { StatusBannerAction } from '../StatusBannerAction'
-import type { JudgeStats, JudgeTabId } from './JudgeStatsTypes'
+import { judgeDisagreementWindow, type JudgeStats, type JudgeTabId } from './JudgeStatsTypes'
 
 /** Healthy posture is covered by the page hero + snapshot — skip the banner. */
 export function isJudgeStatusBannerCritical(stats: JudgeStats): boolean {
@@ -140,16 +140,21 @@ export function JudgeStatusBanner({
   }
 
   if (stats.topPriority === 'disagreements') {
-    const rate = stats.disagreementRatePct ?? 0
+    const share = judgeDisagreementWindow(stats)
+    const rate = share.ratePct ?? 0
     return (
       <StatusBannerShell
         tone="warn"
         title={
           plainBanner
-            ? `${rate}% of grades disagree with the classifier`
-            : `${rate}% disagreement rate`
+            ? share.recent
+              ? `${rate}% of grades ${share.words} disagree with the classifier`
+              : `${rate}% of all grades disagree with the classifier`
+            : share.recent
+              ? `${rate}% disagreement rate ${share.words}`
+              : `${rate}% disagreement rate, all grades`
         }
-        subtitle={stats.topPriorityLabel ?? judgeDisagreementHint(rate)}
+        subtitle={stats.topPriorityLabel ?? judgeDisagreementHint(rate, share.words)}
         action={
           stats.topPriorityTo ? (
             <StatusBannerAction
