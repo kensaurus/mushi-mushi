@@ -237,7 +237,8 @@ export function OverviewTab() {
               <div className="text-2xs text-fg-muted mt-0.5">total events</div>
             </div>
             <div className="rounded-lg bg-surface-overlay p-2 text-center">
-              <div className="text-lg font-semibold tabular-nums text-ok">{feedData.stats_24h.accepted}</div>
+              {/* text-ok is under 4.5:1 on this overlay in light mode. */}
+              <div className="text-lg font-semibold tabular-nums text-ok-foreground">{feedData.stats_24h.accepted}</div>
               <div className="text-2xs text-fg-muted mt-0.5">accepted</div>
             </div>
             <div className={`rounded-lg bg-surface-overlay p-2 text-center ${feedData.stats_24h.rejected > 0 ? 'ring-1 ring-danger/30' : ''}`}>
@@ -269,7 +270,13 @@ export function OverviewTab() {
         {recentEvents.length === 0 ? (
           <EmptyState title="No events in last 24 hours" description="Activity events will appear here as SDK clients send data." />
         ) : (
-          <div className="max-h-64 overflow-y-auto divide-y divide-edge-subtle text-xs">
+          <div
+            role="region"
+            aria-label="Activity in the last 24 hours"
+            tabIndex={0}
+            className="max-h-64 overflow-y-auto divide-y divide-edge-subtle text-xs rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+          >
+            {/* Focusable so keyboard users can scroll the feed (axe scrollable-region-focusable). */}
             {recentEvents.map((ev) => {
               const rejected = !!ev.rejected_reason
               return (
