@@ -159,6 +159,49 @@ last confirmation) and each lane's stop date. With `--cursor-account <email>`
 (kept in the local worker.json, never sent), a CLI signed in as any other
 account counts as signed out, so only that account's credits are spent.
 
+Since the 2026-10-28 amendment of ADR 0048, `gh` signed out makes the machine
+wait (it used to stop the daemon at start), and a lane whose clone is not a git
+clone stays out while the others run. The Cursor check runs in the background
+after the first one, so a slow `cursor-agent status` never holds the heartbeat.
+
+## What the console shows when a worker stops working
+
+Every heartbeat also carries (ADR 0048 amendment 2026-10-28, cleaned on the
+machine in `worker/telemetry.ts` and again by the server in
+`_shared/work-telemetry.ts`):
+
+- each run in flight (`status.inflight` of the lane): claim, stage
+  (`prepare`, `agent`, `commit`, `push`, `pr`; `run` for conflict, audit and
+  test runs), seconds since it started and since the stage began, model and
+  the last 4 log lines, at most 160 characters each;
+- per machine: load and cores, why it waits, the Cursor account check and the
+  `gh` sign-in as they really answered with their age (`status.checks`), which
+  lane holds each agent space (`status.slots`) and lanes that could not start.
+
+Ages are seconds measured on the machine; no clock is compared. Log lines lose
+credentials in URLs, `token=` and `Bearer` values, anything shaped like a
+secret, e-mail addresses (masked), absolute paths (cut to their last part) and
+compiler code-frame lines that quote source.
+
+The server turns that, plus claims, local `mushi work` runs and credit expiry
+dates, into flags (`_shared/work-flags.ts`): host offline, a lane that cannot
+start, a run holding an agent space over 45 minutes (with its stage), lanes
+waiting over 15 minutes, the account check, `gh` signed out, a guard holding
+the machine over 5 minutes, load of 2 or more per core, 2+ runs failing in the
+repo's git hooks in 24 h, a `mushi work` run no worker claims, and credits idle
+for 2 hours within 7 days of expiry. `GET /v1/admin/work/lanes` returns them
+(`flags`), `GET /v1/admin/work/stats` counts them for the sidebar badge, Home
+"Needs you" and Spend credits show them, `mushi worker status` prints them
+(exit code 2 while one is danger), and the MCP tool `get_worker_status`
+returns them.
+
+Two console actions answer them:
+
+| Action | Route | Who | What the machine does |
+| --- | --- | --- | --- |
+| Stop this run | `POST /v1/admin/work/claims/:id/stop` | the app's owner or admin, or the machine's owner; audited (`fix_dispatch.cancelled`, `source: worker_stop`) | The claim ends as `stopped`; the next heartbeat lists it as lost, the daemon aborts the agent, and `mushi work` commits and pushes nothing more. A git hook already running ends at git's own time limit (10 min, 25 min for commit and push). Works with every daemon version |
+| Re-check the account | `POST /v1/admin/work/hosts/:id/recheck` | the machine's owner | `work_hosts.recheck_requested_at` (migration `20261028120000_worker_recheck.sql`); the heartbeat answers `recheckAccount: true` until the machine has checked again (at most 30 minutes). An older daemon ignores the field |
+
 ## Outcomes and requeue
 
 Each run is reported back with its outcome. A failure of the machine (a clone

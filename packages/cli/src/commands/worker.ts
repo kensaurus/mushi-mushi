@@ -10,7 +10,10 @@
  *            on Linux and WSL2, a scheduled task on Windows. Everything is
  *            printed first and written only after a yes (or --yes).
  *   status   this machine's lanes, key and service, then every worker the
- *            console sees (GET /v1/admin/work/lanes): `lanectl status`.
+ *            console sees (GET /v1/admin/work/lanes): `lanectl status`. Its
+ *            problems come first, the same flags the console shows (a stuck
+ *            run with its stage, an offline machine, a failing account
+ *            check, idle credits), each with what to do.
  *   revoke   the key revokes itself, is removed from this machine, and the
  *            service is stopped.
  *
@@ -29,6 +32,7 @@ import { loadConfig } from '../config.js'
 import { MushiCliError } from '../errors.js'
 import { isKeychainEnabled, tryDeleteWorkerKey, trySaveWorkerKey } from '../keychain.js'
 import { assertWorkerKey, readWorkerKey } from '../worker/daemon.js'
+import { flagLines, type WorkerFlagView } from '../worker/flags-view.js'
 import { parseLanesConf, SYSTEMD_UNIT_NAME, systemdUnit, WINDOWS_TASK_NAME, windowsTaskArgs } from '../worker/install.js'
 import { loadWorkerConfig, MODEL_RE, validateWorkerConfig, WORKER_CONFIG_PATH, WORKER_KEY_PATH, type LocalLane, type WorkerConfig } from '../worker/protocol.js'
 
@@ -36,6 +40,8 @@ const UNIT_PATH = join(process.env['XDG_CONFIG_HOME'] || join(homedir(), '.confi
 
 interface WorkLanesView {
   generatedAt: string
+  /** Worker flags, worst first; missing from a server that predates them. */
+  flags?: WorkerFlagView[]
   hosts: Array<{ id: string; hostname: string; platform: string; online: boolean; lastHeartbeatAt: string; status: Record<string, unknown>; guards: Record<string, number>; revoked: boolean; mine: boolean }>
   lanes: Array<{
     id: string
@@ -240,6 +246,14 @@ export function registerWorkerCommands(program: Command): void {
         console.log(`Could not read the workers: ${res.error.code} ${res.error.message}`)
         process.exitCode = 1
         return
+      }
+      const problems = flagLines(res.data.flags)
+      if (problems.length) {
+        console.log(`\n${problems.join('\n')}`)
+        // A machine that cannot work is not a success.
+        if (res.data.flags!.some((f) => f.severity === 'danger')) process.exitCode = 2
+      } else if (res.data.flags) {
+        console.log('\nNo problems: every worker the console sees is doing useful work or has nothing to take.')
       }
       const hosts = new Map(res.data.hosts.map((h) => [h.id, h]))
       for (const h of res.data.hosts) {

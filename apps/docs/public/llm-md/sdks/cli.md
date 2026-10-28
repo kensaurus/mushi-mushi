@@ -364,6 +364,16 @@ settings or read keys. `install` makes one with your CLI login (which needs
 `mcp:write` on every lane's app), or takes one from stdin. The daemon refuses
 your CLI key. The agent gets neither key.
 
+`mushi worker status` starts with what stops your workers from fixing bugs, the
+same list as the console's Workers tab, worst first: a run stuck in a repo's
+commit or pre-push hook (with its stage and last log lines), an offline
+machine, a Cursor account check that failed or timed out, lanes waiting for an
+agent space (one coding agent at a time; each machine allows a set number),
+`gh` signed out, idle credits. Each comes with what to do. It exits with code 2
+while one of them needs you now. The worker sends the stage and log lines with
+its heartbeat; keys, tokens and paths are removed and e-mail addresses masked
+before anything leaves the machine.
+
 | Command | Flags |
 | --- | --- |
 | `mushi work --daemon` | `--worker-config ` (default `~/.config/mushi/worker.json`) |

@@ -378,7 +378,7 @@ mushi billing cap 0                    # clear spend cap
 
 ### MCP Tools
 
-Full catalog: **129 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
+Full catalog: **130 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
 
 Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_fix_context`, `query_lessons`, `list_lessons`, `list_qa_story_runs`, `get_qa_story_run`
 
@@ -919,7 +919,10 @@ lease every dispatcher reads). Migration `20261027150000_local_workers.sql`.
 | `POST /v1/worker/claims/:id/renew` / `…/done` | `worker:run` key only | Extend the lease; record the outcome with an infra/code split (infra requeues once a week, then /pipeline `requeue`); a conflict claim's `pushed` needs `headAfter`, and only a claim's own kind of outcome is taken (fix: `pr_opened`/`verdict`; conflict: `pushed`/`refused`; audit: `filed`; fresh_eyes: `ran`, and the run row says why a test failed, stopped or lost its lease) |
 | `POST /v1/worker/claims/:id/findings` | `worker:run` key only | An audit claim files one finding its worker reproduced (ADR 0050): screened like a review finding, deduped by file + rule + a hash of the evidence line (`code_audit_keys`), ≤12 an hour per app under `FILED_REPORTS_PER_HOUR`, `source = 'code_audit'`, queued for a fix lane on the same machine |
 | `POST /v1/worker/revoke` | `worker:run` key only | The key revokes itself |
-| `GET /v1/admin/work/lanes` | `adminOrApiKey(mcp:read)` | Hosts, lanes, queues, recent runs (`mushi worker status`, the /pipeline Workers tab) |
+| `GET /v1/admin/work/lanes` | `adminOrApiKey(mcp:read)` | Hosts, lanes, queues, recent runs, and `flags` worst first (`mushi worker status`, MCP `get_worker_status`, the /pipeline Workers tab) |
+| `GET /v1/admin/work/stats` | `adminOrApiKey(mcp:read)` | Flag count, danger count and the worst title: the Pipeline sidebar badge (nav-meta slice `workers`) |
+| `POST /v1/admin/work/claims/:id/stop` | `jwtAuth`, the app's owner/admin or the machine's owner | "Stop this run": ends the claim as `stopped` (audited); the next heartbeat lists it as lost and the machine stops the agent and pushes nothing more |
+| `POST /v1/admin/work/hosts/:id/recheck` | `jwtAuth`, the machine's owner | "Re-check the account": the heartbeat answers `recheckAccount: true` until the machine ran `cursor-agent status` again |
 | `PATCH /v1/admin/work/lanes/:id`, `PUT …/queue` | `jwtAuth`, non-viewers | Lane settings; the queue (replace or append) |
 | `PATCH` / `DELETE /v1/admin/work/hosts/:id` | `jwtAuth`, the host's owner | Host guards; revoke the host and its key |
 | `POST /v1/admin/work/key` | `adminOrApiKey(mcp:write)` | Mint a `worker:run` account key for apps the caller reaches as a non-viewer |
@@ -930,6 +933,7 @@ lease every dispatcher reads). Migration `20261027150000_local_workers.sql`.
 | `code_audit_keys` | Code-read audit findings already filed (ADR 0050): one row per app and file + rule + evidence hash; the unique key makes filing race-proof. Service role only |
 | `worker:run` scope | Reaches `/v1/worker/*`, the local follow-up routes, report filing (`queue.laneId`, own lanes only), `POST/PATCH /v1/admin/fixes` + `POST /v1/admin/fixes/:id/review` only on its own active claim (`workerClaimDenial`), and the fresh-eyes PUT, uploads and findings only for the test its machine claimed. Never merge, settings, keys or minting test accounts; mcp:write does not imply it |
 | Lease checks | `dispatchFixForReport`, `POST /v1/admin/fixes/dispatch`, spend-down's candidates, `fix-worker` before an agent starts, `skill-runs` (waits). A claim counts while `status = 'active' AND lease_until > now()`; a failed read skips the report; a missing table (42P01 / PGRST205) means no claims |
+| Worker flags (ADR 0048 amendment 2026-10-28) | The heartbeat carries each run's stage (`prepare`/`agent`/`commit`/`push`/`pr`), ages in seconds, model and last 4 log lines (lane `status.inflight`), and per host the Cursor account check and `gh` sign-in as they answered (`status.checks`), who holds each agent space (`status.slots`), load, cores and why it waits; cleaned on the machine (`packages/cli/src/worker/telemetry.ts`) and again on the server (`_shared/work-telemetry.ts`: no keys, tokens, paths or source lines, e-mails masked). `_shared/work-flags.ts` derives `host_offline`, `machine_not_ready`, `run_stuck` (>45 min, with stage), `lanes_waiting` (>15 min, naming the holders), `account_check`, `gh_signed_out`, `machine_waiting`, `machine_busy`, `hook_failures`, `unmanaged_run` (a `fix_attempts.agent = 'mcp'` run with no claim) and `credits_idle`; routes in `api/routes/work-status.ts`. Console: the Workers tab (`WorkerFlags`), a strip above the Pipeline tabs, the Pipeline sidebar badge, Home Needs you, Spend credits. Migration `20261028120000_worker_recheck.sql` (`work_hosts.recheck_requested_at`) |
 
 ## Repo clean-up (Oct 2026)
 

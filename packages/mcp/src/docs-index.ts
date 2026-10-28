@@ -417,7 +417,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/pipeline",
     markdown: "admin/pipeline.md",
     keywords: ["admin", "pipeline"],
-    headings: ["Stages", "Who opens fixes", "Stuck groups", "Release trains", "Intake and deploys", "Workers", "Send to my local worker", "Create a worker key"],
+    headings: ["Stages", "Who opens fixes", "Stuck groups", "Release trains", "Intake and deploys", "Workers", "When a worker stops doing useful work", "Send to my local worker"],
     excerpt: "The console Pipeline page shows every bug from report to deploy, where it is stuck and why, with one-click fixes.",
   },
   {
@@ -633,7 +633,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/ux-runs",
     markdown: "admin/ux-runs.md",
     keywords: ["admin", "ux-runs", "runs", "ux"],
-    headings: ["Run in the cloud", "What you see", "File as bug", "Audit signed-in screens", "Fresh eyes", "Where the changes are"],
+    headings: ["Run in the cloud", "What you see", "File as bug", "Audit signed-in screens", "First-time user test", "Where the changes are"],
     excerpt: "Each screen your coding agent worked on in a mushi ux run, with its plan, every attempt, before and after screenshots, and what was kept.",
   },
   {

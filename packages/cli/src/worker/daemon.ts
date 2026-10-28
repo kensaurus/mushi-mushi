@@ -94,7 +94,7 @@ const CURSOR_CHECK_MS = 20 * 60_000
 type Call = <T>(path: string, init?: RequestInit) => Promise<ApiResult<T>>
 
 /** What the machine reads before each pass: the gate's inputs, and what the console shows about them. */
-export type HostReadings = Omit<MachineReadings, 'agents'> & {
+type HostReadings = Omit<MachineReadings, 'agents'> & {
   /** The account and gh checks as they really answered, with when (ms since epoch, this machine's clock). */
   checks?: {
     cursor?: { result: CursorCheckResult; at: number; detail: string }

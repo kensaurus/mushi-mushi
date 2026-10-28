@@ -2,15 +2,15 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-28 · **790** routes.
+> Generated: 2026-10-28 · **793** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 215 |
+| `adminOrApiKey` | 216 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 401 |
+| `jwtAuth` | 403 |
 | `jwtOrApiKey` | 3 |
 | `public` | 61 |
 | `unknown` | 51 |
@@ -639,12 +639,15 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/tester-submissions/:id/spam` | `jwtAuth` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | GET | `/v1/admin/two-way-health` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | GET | `/v1/admin/verifications` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
+| POST | `/v1/admin/work/claims/:id/stop` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work-status.ts` |
 | DELETE | `/v1/admin/work/hosts/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work.ts` |
 | PATCH | `/v1/admin/work/hosts/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work.ts` |
+| POST | `/v1/admin/work/hosts/:id/recheck` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work-status.ts` |
 | POST | `/v1/admin/work/key` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/work.ts` |
 | GET | `/v1/admin/work/lanes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/work.ts` |
 | PATCH | `/v1/admin/work/lanes/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work.ts` |
 | PUT | `/v1/admin/work/lanes/:id/queue` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work.ts` |
+| GET | `/v1/admin/work/stats` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/work-status.ts` |
 | GET | `/v1/admin/workspace/projects` | `unknown` | `packages/server/supabase/functions/api/routes/workspace-nav-meta.ts` |
 | GET | `/v1/agent-card` | `public` | `packages/server/supabase/functions/api/routes/discovery.ts` |
 | POST | `/v1/cli/auth/device/approve` | `jwtAuth` | `packages/server/supabase/functions/api/routes/cli-auth.ts` |

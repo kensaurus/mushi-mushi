@@ -39,7 +39,7 @@ export function maskEmail(text: string): string {
 }
 
 /**
- * @internal Exported for tests. One log line, safe to send; null for a line
+ * One log line, safe to send; null for a line
  * that quotes source code or holds nothing.
  */
 export function cleanLine(raw: string): string | null {
@@ -102,7 +102,7 @@ export function slotStatus(lane: string, run: RunTrack, now: number) {
 export type CursorCheckResult = 'expected' | 'other_account' | 'signed_out' | 'timed_out' | 'missing' | 'unclear'
 
 /**
- * @internal Exported for tests. What `cursor-agent status` really said, before
+ * What `cursor-agent status` really said, before
  * the gate's rules (a signed-in other account counts as signed out there; a
  * timeout counts as signed in for 2 hours after the last confirmation).
  */
@@ -115,7 +115,7 @@ export function cursorCheckResult(s: { state: CursorSignIn; detail: string; outp
 
 export type GhCheckResult = 'signed_in' | 'signed_out' | 'unknown'
 
-/** @internal Exported for tests. A `gh` call's answer: signed in, clearly signed out, or unknown (a hang is not an answer). */
+/** A `gh` call's answer: signed in, clearly signed out, or unknown (a hang is not an answer). */
 export function ghCheckResult(p: { code: number | null; timedOut?: boolean; stderr: string }): GhCheckResult {
   if (p.code === 0) return 'signed_in'
   if (p.timedOut || p.code === null) return 'unknown'
