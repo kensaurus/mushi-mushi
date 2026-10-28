@@ -14,7 +14,7 @@ description: What Mushi Mushi collects, why, who processes it, how long it is ke
   it as a description of current practice, not a finished legal document.
   Questions: kensaurus@gmail.com.
 
-**Effective date:** 2026-10-10 · **Version:** 2 (version 1, 2026-09-21, did not list the opt-in known-fix search sent to Firecrawl)
+**Effective date:** 2026-10-28 · **Version:** 3 (version 2, 2026-10-10, did not list the free production check or the cookieless visit count; version 1, 2026-09-21, did not list the opt-in known-fix search sent to Firecrawl)
 
 This policy covers **Mushi Cloud** (the hosted service at
 `kensaur.us/mushi-mushi`), the **admin console**, the **docs site**, the
@@ -70,6 +70,17 @@ telemetry, support mail, and Bounties tester data.
   stores nothing for analytics except your answer; Do Not Track and Global
   Privacy Control are honoured as a refusal. "No thanks" keeps it that way.
 - **(c) legal obligation** — tax records for paid plans and tester payouts.
+
+**Free production check and visit counts (added 2026-10-28).** The free
+production check reads only the public pages of the address you enter (through
+Firecrawl, section 5) and stores the address, the findings, a one-way hash of
+your IP address for rate limiting (never the IP itself) and, only if you give
+it, your email so we can send you the report link once. The docs site also
+counts page views without cookies or identifiers: the page, the campaign tag
+in the link (`src`) and the referring site's host name, added up per day.
+Legal basis: (f) legitimate interests (preventing abuse of a free tool and
+knowing which pages people read); the email is (b) contract — you asked for
+the report.
 
 ## 4. Data where Mushi is the processor
 
@@ -130,6 +141,8 @@ reserved.
 | End-user reports and everything attached to them | The retention window of your plan: **Free 14 days · Builder 90 days · Studio 180 days · Enterprise as agreed**, or a shorter per-project policy you set in **Compliance → Data retention** | A daily `retention-sweep` job hard-deletes rows past the window. Legal-hold rows are skipped |
 | Product usage events (Mushi's own console analytics) | **730 days (2 years)** | Nightly `prune_product_events` job, using the 730-day retention set on Mushi's own analytics project |
 | Docs-site analytics | 730 days (2 years) | Same table and job as above |
+| Free production checks (address, findings, IP hash, optional email) | 90 days | Daily `retention-sweep` |
+| Cookieless page-view counts (page, `src`, referrer host, daily totals) | 730 days | Daily totals only; nothing per person |
 | Analytics events your app sends with `Mushi.track()` | 90 days by default, or the per-project override (1–3650 days) | Same nightly job |
 | Console error telemetry | 90 days | Sentry retention |
 | Account data | Until you delete your account, then 30 days for backups to roll off | Delete from **Settings**, or email us |

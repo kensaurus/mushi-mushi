@@ -13,7 +13,7 @@ description: The terms for Mushi Cloud, the admin console, the SDKs and the Boun
   draft. The governing-law and venue clause (section 14) has not been confirmed
   yet. Questions: kensaurus@gmail.com.
 
-**Effective date:** 2026-09-21 · **Version:** 1
+**Effective date:** 2026-10-28 · **Version:** 2 (version 1, 2026-09-21, described the Indie and Pro plans; version 2 describes Free, Builder, Studio and Enterprise, each limited by apps watched and diagnoses a month, and lengthens Free history from 7 to 14 days)
 
 These terms are between you and **kensaurus LLC (kensaurus合同会社)** (Japan,
 "Mushi", "we") and cover **Mushi Cloud** at `kensaur.us/mushi-mushi`,

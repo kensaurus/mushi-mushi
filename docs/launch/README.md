@@ -74,7 +74,7 @@ it is posted.
 | The MCP server needs no second LLM key | `get_fix_context` catalog entry: "no second LLM key needed" | verified |
 | `npx mushi-mushi` detects the framework, installs the SDK, writes env vars | Landing FAQ and quickstart docs | docs only — film it once (R1 gate) |
 | SDKs are MIT, server AGPLv3, self-host is one command | LICENSE files, landing FAQ, `/self-hosting` | verified |
-| Free Cloud: 50 diagnoses a month, no card | VISION.md §2.2, `PRICING_TIERS` | verified |
+| Free: 1 app, 100 diagnoses a month, no card | VISION.md §2.2, `PRICING_TIERS` | verified |
 | Plugins (Linear, Jira, Slack…) need Indie or above, or self-host | `pricing_plans.feature_flags.plugins` in production: free_cloud false, indie/pro/enterprise true | verified |
 | Sentry's Seer is a paid add-on ($40 per active contributor per month), not in self-hosted Sentry | VISION.md §1.6, sentry.io/pricing checked 2026-09-21 | re-check before posting |
 | A project's first real report always gets the full diagnosis | commit `6eea0b30` (fast-filter forwards it to classify-report) | in the 2026-10-02 batch — needs deploy |
