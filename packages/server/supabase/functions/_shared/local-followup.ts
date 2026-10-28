@@ -96,7 +96,7 @@ export function localFollowupGate(input: LocalFollowupInput): LocalFollowupGate 
       ok: false,
       status: 409,
       code: 'REVIEW_PENDING',
-      message: review ? 'The Opus review of this pull request is still running; try again when it finishes.' : 'This pull request has no Opus review yet.',
+      message: review ? 'The AI review of this pull request is still running; try again when it finishes.' : 'This pull request has no Opus review yet.',
     }
   }
   // A CI repair: Opus said merge, CI fails on the code, and a person asked for it.
