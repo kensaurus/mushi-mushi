@@ -4,7 +4,8 @@
  *          POST /v1/admin/projects/:id/fixes/dry-run and surfaces the
  *          simulated steps inline. Lets users confirm the full dispatch
  *          pipeline works without burning a real Anthropic call or opening
- *          a PR.
+ *          a PR. Below the `sm` breakpoint the heading and button stack so
+ *          "Run dry-run" stays one line at a 390px viewport.
  */
 
 import { useState } from 'react'
@@ -62,8 +63,10 @@ export function DryRunPanel({ projectId }: { projectId: string }) {
 
   return (
     <Card className="p-3 mt-2 space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <div>
+      {/* Side by side, a 390px row shrinks this button to ~58px and the
+          hyphen in "Run dry-run" wraps the label onto three lines. */}
+      <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h4 className="text-xs font-semibold text-fg">Validate pipeline</h4>
           <p className="text-2xs text-fg-muted mt-0.5">
             Simulates the auto-fix pipeline without calling the LLM or opening a PR.
@@ -72,6 +75,7 @@ export function DryRunPanel({ projectId }: { projectId: string }) {
         <Btn
           variant="ghost"
           size="sm"
+          className="shrink-0 whitespace-nowrap"
           onClick={() => void run()}
           loading={running}
           disabled={running}
