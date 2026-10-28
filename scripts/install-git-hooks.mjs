@@ -48,7 +48,7 @@ const HOOK_BODY = `#!/bin/sh
 # Auto-installed by scripts/install-git-hooks.mjs. Do not edit by hand.
 # Runs fast repo-wide lint guards before every commit:
 #   - secret scanner       (scripts/check-no-secrets.mjs)
-#   - design-token drift   (scripts/check-design-tokens.mjs)
+#   - design-token drift   (scripts/check-design-tokens.mjs --pre-commit)
 #   - MCP catalog sync     (scripts/check-mcp-catalog-sync.mjs)
 #   - config docs drift    (scripts/check-config-docs.mjs)
 #   - community-file drift (scripts/sync-community-files.mjs --check)
@@ -56,7 +56,7 @@ const HOOK_BODY = `#!/bin/sh
 #   - JSX unicode escapes  (scripts/check-jsx-unicode-escapes.mjs)
 # Bypass once with \`git commit --no-verify\` in an emergency.
 node scripts/check-no-secrets.mjs || exit 1
-node scripts/check-design-tokens.mjs || exit 1
+node scripts/check-design-tokens.mjs --pre-commit || exit 1
 node scripts/check-mcp-catalog-sync.mjs || exit 1
 node scripts/check-config-docs.mjs || exit 1
 node scripts/sync-community-files.mjs --check || exit 1

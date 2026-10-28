@@ -8,32 +8,94 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readFileSync } from 'node:fs'
 import {
   compileThemeCss,
   missingEmittedVizTokens,
   moduleScopeReadVizTokenCalls,
   moduleScopeReadVizTokenHits,
   resolveTailwindNodeEntry,
+  shouldRunVizEmissionCheck,
+  vizTokenNamesInAdmin,
   vizTokenNamesInSource,
   vizTokensMissingFromCss,
 } from './viz-token-emission.mjs'
 
 const base = resolve(dirname(fileURLToPath(import.meta.url)), '../apps/admin')
 
-test('scanner finds quoted viz tokens and skips comments', () => {
+test('scanner reads readVizToken and vizColorMap arguments, not every viz- string', () => {
   const src = [
     "readVizToken('viz-node-bg-dark')",
     'readVizToken(dark ? "viz-edge-dark" : \'viz-edge-light\')',
     "// readVizToken('viz-not-real')",
     "/* 'viz-also-not' */",
     'const x = `viz-graph-muted`',
+    '<div data-testid="viz-panel" className="viz-fragment" />',
+    "vizColorMap({ edge: 'viz-minimap-border' })",
+    "const STEP = { passed: 'viz-step-passed' }",
+    "function color(status: string) {",
+    "  const key = STEP[status] ?? 'viz-step-pending'",
+    '  return readVizToken(key)',
+    '}',
+    "const rows = [{ token: 'viz-flow-danger', id: 'viz-row' }]",
+    'rows.map((row) => readVizToken(row.token))',
   ].join('\n')
   assert.deepEqual(vizTokenNamesInSource(src), [
     'viz-edge-dark',
     'viz-edge-light',
-    'viz-graph-muted',
+    'viz-flow-danger',
+    'viz-minimap-border',
     'viz-node-bg-dark',
+    'viz-step-passed',
+    'viz-step-pending',
   ])
+})
+
+test('admin scan still sees tokens that are only named in lookup tables', () => {
+  const names = vizTokenNamesInAdmin()
+  for (const name of ['viz-step-passed', 'viz-step-skipped', 'viz-lang-go', 'viz-lang-typescript', 'viz-lang-rust']) {
+    assert.ok(names.includes(name), name)
+  }
+})
+
+test('pre-commit skips the viz compile unless css or admin source changed', () => {
+  assert.equal(
+    shouldRunVizEmissionCheck({
+      preCommit: true,
+      changedPaths: ['packages/server/src/index.ts', 'README.md'],
+    }),
+    false,
+  )
+  assert.equal(
+    shouldRunVizEmissionCheck({
+      preCommit: true,
+      changedPaths: ['apps/admin/src/styles/theme-tokens.css'],
+    }),
+    true,
+  )
+  assert.equal(
+    shouldRunVizEmissionCheck({
+      preCommit: true,
+      changedPaths: ['apps/admin/src/lib/vizTokens.ts'],
+    }),
+    true,
+  )
+  assert.equal(
+    shouldRunVizEmissionCheck({
+      preCommit: true,
+      changedPaths: ['apps/admin/src/pages/GraphPage.tsx'],
+    }),
+    true,
+  )
+  assert.equal(shouldRunVizEmissionCheck({ preCommit: false, changedPaths: ['README.md'] }), true)
+  assert.equal(shouldRunVizEmissionCheck({ preCommit: true, changedPaths: null }), true)
+  assert.equal(shouldRunVizEmissionCheck({ preCommit: true, changedPaths: [] }), false)
+
+  const check = readFileSync(new URL('./check-design-tokens.mjs', import.meta.url), 'utf8')
+  assert.match(check, /shouldRunVizEmissionCheck/)
+  assert.match(check, /--pre-commit/)
+  const hook = readFileSync(new URL('./install-git-hooks.mjs', import.meta.url), 'utf8')
+  assert.match(hook, /check-design-tokens\.mjs --pre-commit/)
 })
 
 test('missing helper reports tokens absent from css', () => {

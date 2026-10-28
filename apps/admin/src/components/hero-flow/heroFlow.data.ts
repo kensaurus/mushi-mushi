@@ -15,7 +15,7 @@ export type HeroSeverity = 'ok' | 'info' | 'warn' | 'crit' | 'neutral'
 /** Concrete colours for SVG `<defs>` (a var(--color-*) stop does not resolve
  *  in every browser). Read on access from @theme static viz tokens — this
  *  module is evaluated before index.css. Same tokens as flowTokens.ts. */
-export const HERO_SEVERITY_HEX: Record<HeroSeverity, string> = vizColorMap<HeroSeverity>({
+export const HERO_SEVERITY_HEX: Readonly<Record<HeroSeverity, string>> = vizColorMap<HeroSeverity>({
   ok: 'viz-score-ok',
   info: 'viz-flow-info',
   warn: 'viz-score-warn',
@@ -23,7 +23,7 @@ export const HERO_SEVERITY_HEX: Record<HeroSeverity, string> = vizColorMap<HeroS
   neutral: 'viz-neutral',
 })
 
-export const HERO_ACTION_TONE_HEX: Record<PageAction['tone'], string> = vizColorMap<PageAction['tone']>({
+export const HERO_ACTION_TONE_HEX: Readonly<Record<PageAction['tone'], string>> = vizColorMap<PageAction['tone']>({
   plan: 'viz-flow-info',
   do: 'viz-flow-brand',
   check: 'viz-score-warn',

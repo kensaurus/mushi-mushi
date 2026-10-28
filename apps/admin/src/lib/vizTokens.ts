@@ -47,11 +47,13 @@ export function readVizToken(name: string, fallback?: string): string {
 
 /**
  * Colour map that reads each token when the property is used.
+ * Properties are getter-only, so the type is readonly: assignment is a type error
+ * and throws at runtime.
  * main.tsx imports the app graph before index.css, so a module-scope
  * readVizToken() runs before the stylesheet exists and would freeze the
  * stand-in for the rest of the page.
  */
-export function vizColorMap<K extends string>(tokens: Record<K, string>): Record<K, string> {
+export function vizColorMap<K extends string>(tokens: Record<K, string>): Readonly<Record<K, string>> {
   const out = {} as Record<K, string>
   for (const key of Object.keys(tokens) as K[]) {
     const name = tokens[key]

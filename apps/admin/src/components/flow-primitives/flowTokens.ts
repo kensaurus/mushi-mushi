@@ -11,7 +11,7 @@
 import type { PdcaStageId } from '../../lib/pdca'
 import { vizColorMap } from '../../lib/vizTokens'
 
-export const STAGE_HEX: Record<PdcaStageId, string> = vizColorMap<PdcaStageId>({
+export const STAGE_HEX: Readonly<Record<PdcaStageId, string>> = vizColorMap<PdcaStageId>({
   plan: 'viz-flow-info',
   do: 'viz-flow-brand',
   check: 'viz-score-warn',
