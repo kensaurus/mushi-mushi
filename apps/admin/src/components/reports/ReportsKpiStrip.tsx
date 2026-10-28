@@ -163,8 +163,10 @@ export function ReportsKpiStrip({ scope = 'project', activeSeverity, onFilter, w
             <KpiTile
               density="flat"
               // The quick-filter chips count all time; these tiles count a
-              // window, so the label says which.
-              label={openCount == null ? `${tile.label} · ${windowDays}d` : `${tile.label} · open`}
+              // window, so the label says which. "Not fixed", not "open": the
+              // Open chip below means "waiting on a decision" and counted 280
+              // beside tiles adding up to 511 (2026-10-28).
+              label={openCount == null ? `${tile.label} · ${windowDays}d` : `${tile.label} · not fixed`}
               value={loading ? '…' : (openCount ?? count)}
               sublabel={
                 loading
