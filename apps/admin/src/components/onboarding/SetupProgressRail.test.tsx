@@ -112,7 +112,7 @@ describe('SetupProgressRail', () => {
     expect(onMintKey).toHaveBeenCalled()
     expect(button('Copy without a key')).toBeTruthy()
     expect(host.textContent).not.toMatch(/SDK tab/)
-    expect(host.querySelector('[data-testid="setup-heartbeat"]')?.textContent).toMatch(/^No heartbeat from your app yet/)
+    expect(host.querySelector('[data-testid="setup-heartbeat"]')?.textContent).toMatch(/^Mushi has not heard from your app yet/)
   })
 
   it('with the key just made, the snippet carries it and Copy snippet leads', () => {

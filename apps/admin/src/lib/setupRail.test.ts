@@ -83,7 +83,7 @@ describe('buildSetupRail', () => {
       now: NOW,
     })
     expect(rail.steps[2]).toMatchObject({ state: 'done', detail: 'Last heard 2m ago' })
-    expect(heartbeatSentence(rail.heartbeat)).toBe('Last heartbeat 2m ago · key “web-prod” · from https://app.example.com.')
+    expect(heartbeatSentence(rail.heartbeat)).toBe('Your app last checked in 2m ago · key “web-prod” · from https://app.example.com.')
     expect(rail.next?.id).toBe('report')
   })
 
@@ -106,7 +106,8 @@ describe('buildSetupRail', () => {
   })
 
   it('with no heartbeat says so plainly, without blaming a deploy', () => {
-    expect(heartbeatSentence(null)).toMatch(/^No heartbeat from your app yet\./)
+    expect(heartbeatSentence(null)).toMatch(/^Mushi has not heard from your app yet\./)
+    expect(heartbeatSentence(null)).not.toMatch(/heartbeat/i)
     expect(heartbeatSentence(null)).not.toMatch(/deploy|removed|cold/i)
   })
 })
