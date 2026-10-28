@@ -17,6 +17,7 @@ import {
   loadCheck,
   reportShareUrl,
   srcFromSearch,
+  urlFromSearch,
   startCheck,
   type CheckReport,
   type Severity,
@@ -98,7 +99,7 @@ export function CheckClient() {
             {notice}
           </p>
         )}
-        {view.kind === 'form' &&<CheckForm error={view.error} onSubmit={onSubmit} />}
+        {view.kind === 'form' &&<CheckForm error={view.error} onSubmit={onSubmit} defaultUrl={urlFromSearch(window.location.search) ?? undefined} />}
         {view.kind === 'loading' && <p className="text-sm text-mushi-ink-muted">One moment…</p>}
         {view.kind === 'running' && <Running host={view.host} />}
         {view.kind === 'missing' && <Missing message={view.message} />}
@@ -108,7 +109,7 @@ export function CheckClient() {
   )
 }
 
-function CheckForm({ error, onSubmit }: { error?: string; onSubmit: (e: FormEvent<HTMLFormElement>) => void }) {
+function CheckForm({ error, onSubmit, defaultUrl }: { error?: string; onSubmit: (e: FormEvent<HTMLFormElement>) => void; defaultUrl?: string }) {
   return (
     <div className="space-y-6">
       <header className="space-y-3">
@@ -132,6 +133,7 @@ function CheckForm({ error, onSubmit }: { error?: string; onSubmit: (e: FormEven
             inputMode="url"
             autoComplete="url"
             placeholder="https://your-app.com"
+            defaultValue={defaultUrl}
             required
             className="w-full rounded-md border border-mushi-rule bg-mushi-paper-wash px-3 py-2 text-base text-mushi-ink"
           />

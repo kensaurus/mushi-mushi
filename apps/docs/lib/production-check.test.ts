@@ -9,6 +9,7 @@ import {
   loadCheck,
   reportShareUrl,
   srcFromSearch,
+  urlFromSearch,
   startCheck,
   type CheckFinding,
 } from './production-check'
@@ -35,6 +36,17 @@ describe('report location', () => {
     expect(srcFromSearch('?src=hn')).toBe('hn')
     expect(srcFromSearch('?src=<script>')).toBeNull()
     expect(srcFromSearch('')).toBeNull()
+  })
+})
+
+describe('urlFromSearch', () => {
+  it('pre-fills an http(s) address from ?url=, and nothing else', () => {
+    expect(urlFromSearch('?src=outreach&url=https%3A%2F%2Fgetboativa.com%2F')).toBe('https://getboativa.com/')
+    expect(urlFromSearch('?url=http://example.com/a?b=1')).toBe('http://example.com/a?b=1')
+    expect(urlFromSearch('?url=javascript%3Aalert(1)')).toBeNull()
+    expect(urlFromSearch('?url=not a url')).toBeNull()
+    expect(urlFromSearch('?url=https://x.com/' + 'a'.repeat(2050))).toBeNull()
+    expect(urlFromSearch('')).toBeNull()
   })
 })
 

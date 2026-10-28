@@ -72,6 +72,23 @@ export function isCheckReportPath(pathname: string): boolean {
 }
 
 /** `?src=` passed through to the check (where the visitor came from), sanitized. */
+/**
+ * The address a link pre-fills (`/check?url=…`, e.g. from an outreach email):
+ * http(s) only and at most 2048 characters. It only fills the field: the
+ * visitor still presses the button, so a link preview or a bot opening the
+ * link spends no check.
+ */
+export function urlFromSearch(search: string): string | null {
+  const v = new URLSearchParams(search).get('url')?.trim()
+  if (!v || v.length > 2048) return null
+  try {
+    const u = new URL(v)
+    return u.protocol === 'https:' || u.protocol === 'http:' ? v : null
+  } catch {
+    return null
+  }
+}
+
 export function srcFromSearch(search: string): string | null {
   const v = new URLSearchParams(search).get('src')
   return v && /^[A-Za-z0-9._:-]{1,64}$/.test(v) ? v : null
