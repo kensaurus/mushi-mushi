@@ -354,7 +354,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     pdcaStage: 'do',
     iconKey: 'camera',
     paletteDescription: 'Your coding agent worked through every screen; see which were improved, rolled back or moved by another fix, with before/after screenshots.',
-    paletteKeywords: ['ux', 'ux runs', 'ui', 'screens', 'screenshots', 'before after', 'agent', 'mushi ux', 'visual', 'accessibility', 'fresh eyes', 'first-time user'],
+    paletteKeywords: ['ux', 'ux runs', 'ui', 'screens', 'screenshots', 'before after', 'agent', 'mushi ux', 'visual', 'accessibility'],
     paletteGroup: 'Do',
   },
   {

@@ -122,7 +122,7 @@ describe('CommandPalette search', () => {
     ['workers', 'Pipeline'],
     ['prs', 'Pull requests'],
     ['testers', 'Tester rewards'],
-    ['fresh eyes', 'UX runs'],
+    ['fresh eyes', 'First-time user test'],
     ['delete project', 'Manage apps'],
   ])('finds what "%s" means', async (query, label) => {
     await render()

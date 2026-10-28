@@ -10,6 +10,9 @@ import {
   cliSetupDeepLink,
 } from './console-url.js'
 
+// The machine's own ~/.config/mushi/config.json (a consoleUrl, a profile) must not decide these results.
+vi.mock('./config.js', async (importOriginal) => ({ ...(await importOriginal<typeof import('./config.js')>()), loadConfig: () => ({}) }))
+
 describe('console-url', () => {
   const originalEnv = process.env['MUSHI_CONSOLE_URL']
 
@@ -35,6 +38,7 @@ describe('console-url', () => {
   })
 
   it('resolveConsoleUrlSync falls back to hosted when not in monorepo', () => {
+    delete process.env['MUSHI_CONSOLE_URL']
     vi.spyOn(process, 'cwd').mockReturnValue('/tmp/some-other-app')
     expect(resolveConsoleUrlSync()).toBe(HOSTED_CONSOLE_BASE)
     vi.restoreAllMocks()

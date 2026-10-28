@@ -41,7 +41,11 @@ function breadcrumbTrail(pathname: string, search: string): Trail {
   const title = routeFallbackTitle(pathname)
   // A page the console does not know (the 404 page) read "Console › Console".
   if (!title) return { parent: null, current: 'Console' }
-  if (CORE_NAV_PATHS.includes(pathname)) return { parent: null, current: title }
+  if (CORE_NAV_PATHS.includes(pathname)) {
+    // A view of a page with tabs (Home › Overview, Team › Billing) is not a sidebar child: its own registry entry names it.
+    const view = NAV_REGISTRY.find((e) => e.path.startsWith(`${pathname}?`) && isNavPathActive(pathname, search, e.path))
+    return view ? { parent: { label: registryLabel(pathname) ?? title, to: pathname }, current: view.label } : { parent: null, current: title }
+  }
   const section = routeSection(pathname)
   return { parent: { label: section?.title ?? 'Console', to: section ? null : '/dashboard' }, current: title }
 }
