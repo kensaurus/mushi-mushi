@@ -386,15 +386,19 @@ export function ResearchPage() {
                 }}
                 className="flex flex-col gap-2 sm:flex-row sm:items-end"
               >
-                <Input
-                  label="Web query"
-                  type="text"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="error signature, library name, doc topic…"
-                  className="flex-1"
-                  disabled={searching || !stats.firecrawlReady}
-                />
+                {/* Input puts className on the <input>. The label is the flex
+                    item, so flex-1 there left the field at its intrinsic width
+                    and clipped the placeholder at a 1440px console. */}
+                <div className="min-w-0 flex-1">
+                  <Input
+                    label="Web query"
+                    type="text"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="error signature, library name, doc topic…"
+                    disabled={searching || !stats.firecrawlReady}
+                  />
+                </div>
                 <Btn
                   type="submit"
                   variant="primary"
