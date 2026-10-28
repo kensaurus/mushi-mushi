@@ -16,7 +16,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const api = vi.hoisted(() => ({ apiFetch: vi.fn() }))
-vi.mock('../lib/supabase', () => ({ apiFetch: api.apiFetch }))
+vi.mock('../lib/supabase', () => ({ apiFetch: api.apiFetch, supabase: {} }))
 vi.mock('../lib/paletteAssist', () => ({ sendPaletteAssist: vi.fn() }))
 vi.mock('../lib/pageContext', () => ({ usePageContext: () => null }))
 vi.mock('../lib/recentEntities', () => ({ useRecentEntities: () => [] }))
@@ -111,6 +111,24 @@ describe('CommandPalette search', () => {
     await act(async () => typeInto(input(), 'api key'))
     const items = [...document.querySelectorAll('[cmdk-item]')].map((el) => el.textContent ?? '')
     expect(items[0]).toContain('Settings')
+  })
+
+  // Console sweep 2026-10-28: each of these answered "Nothing matches" or
+  // opened the wrong page ("prs" → Connect, "testers" → Spam & abuse).
+  it.each([
+    ['sign out', 'Sign out'],
+    ['log out', 'Sign out'],
+    ['keyboard shortcuts', 'Keyboard shortcuts'],
+    ['workers', 'Pipeline'],
+    ['prs', 'Pull requests'],
+    ['testers', 'Tester rewards'],
+    ['fresh eyes', 'UX runs'],
+    ['delete project', 'Manage apps'],
+  ])('finds what "%s" means', async (query, label) => {
+    await render()
+    await act(async () => typeInto(input(), query))
+    const items = [...document.querySelectorAll('[cmdk-item]')].map((el) => el.textContent ?? '')
+    expect(items[0]).toContain(label)
   })
 
   it('searches reports after a pause, shows titles, and Enter opens the best result', async () => {
