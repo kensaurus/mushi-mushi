@@ -11,6 +11,7 @@ parked work is visible in one place.
 - **Added 2026-10-27 (per-app Home):** BL-135, parts the Home redesign left out.
 - **Added 2026-10-27 (repo clean-up, ADR 0051):** BL-140, the worker's `prune_own`; BL-141, a clean-up run killed mid-flight.
 - **Added 2026-10-27 (release 2):** BL-136 and BL-137: the Set up rail and the server's first-report step count different reports, and the local-worker claim race ADR 0048 names.
+- **Closed 2026-10-29:** BL-011 (Supabase storage bucket pre-flight).
 - **Added 2026-10-28 (first-time user test, ADR 0053 amendment):** BL-145 and BL-146, parts of console Run now left out. BL-138's fresh-eyes part is done (claim kind `fresh_eyes`); its charter-driven `ux` mode stays open.
 - **Added 2026-10-27 (fresh-eyes runs, ADR 0053):** BL-142..BL-144, parts of fresh-eyes left out; BL-138 notes that fresh-eyes "Run now" shows the command until the `ux` lane exists.
 - **Added 2026-10-27 (worker modes, console ops plan P3):** BL-138 and BL-139: the `ux` lane mode left out of P3, and what the conflicts, audit and skill modes left open.
@@ -26,13 +27,13 @@ parked work is visible in one place.
 - **Added 2026-10-23 (site audit, ADR 0040):** BL-116, a parked part of the site audit. Closed BL-117 on 2026-10-23.
 - **Added 2026-10-24 (local fix worker, `mushi work`):** BL-118..BL-119, parked parts of the local worker.
 - **Delta 2026-10-17:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 74 · **Recently closed:** 25 (BL-117, BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 73 · **Recently closed:** 26 (BL-011 on 2026-10-29; BL-117, BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
 | deferred-plan-phase | 12 |
 | test-gap | 3 |
-| tech-debt | 16 |
+| tech-debt | 15 |
 | known-bug | 3 |
 | decision-needed | 12 |
 | unfinished-feature | 25 |
@@ -41,7 +42,7 @@ parked work is visible in one place.
 
 | Status | Open |
 |---|---|
-| relevant | 71 |
+| relevant | 70 |
 | verify-done | 3 |
 | stale (propose removal) | 0 |
 
@@ -101,7 +102,6 @@ parked work is visible in one place.
 | BL-005 | deferred-plan-phase | Plan 021 `mushi ux`: owner-owed probes (Cursor `--list-models`, billing go/no-go, persistent-profile login, non-GET census); the single `NextStep` component waits on an owner decision; cloud-mode live dispatch not yet run | relevant | med | `docs/execplans/ux-loop.md:63`; `docs/execplans/PLANS.md:642`-`:646` | — |
 | BL-006 | deferred-plan-phase | Billing launch gate never ticked. The runbook says public Stripe checkout and paid tiers wait until all 12 items are green: hard-stop tests (Free at 50 → `NO_SUBSCRIPTION_OVER_FREE`, Indie overage, spend cap → `SPEND_CAP_REACHED`), billing UI states, 50/80/100% alerts, `stripe-bootstrap.mjs` lookup keys, metered overage only after Stage 2. PLANS.md adds quota validation over two cycles, one enterprise customer, the Sentry upsell, and annual prices. 2026-10-17: `pricing_plans` has `free_cloud`, `indie` and `pro`, the tiers migration is recorded, and there are 0 `billing_subscriptions`, so nothing is charged yet. Raised to med because it blocks paid launch | relevant | med | `docs/runbooks/billing-launch-gate.md:20`-`:57`; `docs/execplans/PLANS.md:515`-`:518` | — |
 | BL-009 | test-gap | Code-health ingest's ship checklist is unticked. 2026-10-17: the migration is live and 50 `code_health` gate runs plus 156 `bundle.*` / `code_health.*` metric rows from yen-yen are in production (last run 2026-07-16), so the "migration applied" and "one real yen-yen push" boxes are done. Not re-run: `POST /v1/ingest/metrics` 201 / 429, the owner vs non-member RLS spot-check, advisors. Tick those or reopen. Ingest has since stopped (BL-082) | verify-done | med | `docs/execplans/PLANS.md:421`-`:431` | — |
-| BL-011 | tech-debt | `_shared/storage.ts`: replace the bucket assumption with a pre-flight bucket existence probe | relevant | low | `packages/server/supabase/functions/_shared/storage.ts:87` | — |
 | BL-012 | tech-debt | knip remainder after the 2026-10-23 admin export pass (31 default / 45 production; ceilings match, 30 and 44 fail). apps/admin production exports 6→3: deleted `bottleneckChipLabel` (no caller after the header chips left) and tagged `groupTitle` and `fixPrompt` `@internal` because `KnownHolesCard` still calls them. Kept admin files are unchanged: the manual capture script, six design primitives, `dispatch-prerequisites.mdx` (BL-041), vite dev entries, posture recipes, and the CI test fixture. Other kept findings are in BL-040 and BL-042 | relevant | low | `docs/plan-dead-code-2026-10-16.md`; `docs/execplans/knip-baseline/README.md` | — |
 | BL-013 | tech-debt | knip dependency findings after the 2026-10-16 pass: 2 dependencies and 6 devDependencies kept with a reason (CSS `@import`, vitest alias, peer backing, workspace links, a dynamic import knip misses), plus `@modelcontextprotocol/core` in published `@mushi-mushi/mcp` (BL-042). 2 unlisted: `esbuild` in `packages/web/src/build-strip.test.ts` resolves through tsup, and `@e2b/code-interpreter` is an optional runtime import. Declare `esbuild` as a devDependency of web | relevant | low | `docs/plan-dead-code-2026-10-16.md` | — |
 | BL-015 | unfinished-feature | Enterprise tenancy follow-ups (22 items: SSO / MFA / invite-only org policy, verified domains, …). Enterprise work stays in `docs/operators/` and never leads (AGENTS.md positioning), so this is low until an enterprise customer asks | relevant | low | `docs/enterprise-tenancy-backlog.md` | — |
@@ -194,6 +194,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-011 | `_shared/storage.ts` assumed the Supabase bucket existed and only remapped the known-uncreated name `mushi-screenshots` | 2026-10-29 | `probeSupabaseBucket` calls `storage.getBucket` before upload, signed URL, delete, and the Supabase health list. A hit is cached for the isolate; a miss throws `STORAGE_BUCKET_MISSING` and a probe failure throws `STORAGE_BUCKET_PROBE_FAILED`. The legacy `mushi-screenshots` remap is unchanged. A missing name is not swapped for `screenshots`. Tests: `_shared/storage-bucket.test.ts`. |
 | BL-117 | Site audit cadence and page limit are API-only; /credits shows the switch and Run now only | 2026-10-23 | `SiteAuditControl` on /credits, while the audit is on: Daily / Every 3 days / Weekly (`cadenceDays` 1, 3, 7) and a page-limit select (`pageLimit`), both through `PUT /v1/admin/projects/:id/site-audit`, plus the credits a run (one per page). A stored cadence outside those three stays selectable. Tests: `CreditsPage.test.tsx`. |
 | BL-083 | `PATH_SLICES` could still ask nav-meta for slices only the deleted route hero read | 2026-10-23 | Audited against `resolveNavBadge`. Every remaining key is read by that badge or by the counters it fills (`projects`, `members`). Dropped the extra `dashboard` on `/health` (`navSlicesForPaths` already requests it). Layout no longer unions the current pathname into the sidebar request — that union existed for `layoutHeroFromStats`, deleted 2026-10-17. The one sidebar (core pages plus enabled Labs) asks only for visible badges. `apps/admin/src/lib/navBadges.test.ts`, `apps/admin/src/components/Layout.navSlices.test.tsx`. |
 | BL-089 | Radar `spend_down_idle` finding: a Cursor key with spend-down on, inside its window, that dispatched nothing | 2026-10-22 | `evaluateSpendDownIdle` (`_shared/radar/operator-detectors.ts`) runs with the operator detectors and writes rule `spend_down_idle`. It reuses `spendDownWindow` and `spendDownIdleReasons` (`_shared/spend-down.ts`): in-window and nothing dispatched because no app uses the key, auto-fix is off, or every open report is settled. Tests: `spend-down.test.ts`, `radar-operator-detectors.test.ts`, `radar-run.test.ts`. ADR 0028 consequences. |

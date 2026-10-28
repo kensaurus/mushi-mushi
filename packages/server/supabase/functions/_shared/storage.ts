@@ -12,6 +12,14 @@
  * `project_storage_settings` row — raw access keys are never persisted in
  * application tables. The S3-compatible backends (s3/r2/minio) all use the
  * same SigV4 path; only the endpoint and signing region differ.
+ *
+ * A Supabase bucket is probed with `storage.getBucket` before upload, signed
+ * URL, delete, or the health list. A hit is cached for the life of the
+ * isolate. A missing bucket or a failed probe throws `StorageBucketError`
+ * (`STORAGE_BUCKET_MISSING` / `STORAGE_BUCKET_PROBE_FAILED`) instead of
+ * failing later inside the storage call. Only the known-uncreated legacy
+ * name `mushi-screenshots` is remapped to `screenshots`; any other missing
+ * name is an error, not a silent swap.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
@@ -82,11 +90,84 @@ export interface StorageAdapter {
 const settingsCache = new Map<string, { settings: StorageSettings | null; expiresAt: number }>()
 const SETTINGS_TTL_MS = 60 * 1000
 const CLUSTER_DEFAULT_BUCKET = 'screenshots'
+/** Positive getBucket results only. Misses are not cached, so a bucket created later is seen on the next call. */
+const supabaseBucketHits = new Map<string, true>()
 
-/** Normalize legacy / typo bucket names to the cluster default Supabase bucket.
- * TODO: replace with a pre-flight bucket existence probe so any future
- * misconfigured name is caught at config-save time rather than silently at upload.
+export type StorageBucketErrorCode = 'STORAGE_BUCKET_MISSING' | 'STORAGE_BUCKET_PROBE_FAILED'
+
+export class StorageBucketError extends Error {
+  readonly code: StorageBucketErrorCode
+  readonly bucket: string
+
+  constructor(code: StorageBucketErrorCode, bucket: string, message: string) {
+    super(`${code}: ${message}`)
+    this.name = 'StorageBucketError'
+    this.code = code
+    this.bucket = bucket
+  }
+}
+
+/** Narrow slice of `SupabaseClient.storage` the probe needs. */
+export interface SupabaseBucketProbe {
+  getBucket(id: string): Promise<{
+    data: { name?: string } | null
+    error: { message: string; status?: number; statusCode?: string | number } | null
+  }>
+}
+
+/**
+ * Pre-flight: confirm `bucket` exists before a Supabase storage call.
+ * Caches a hit for the isolate. Does not create the bucket and does not
+ * substitute another name.
  */
+export async function probeSupabaseBucket(
+  storage: SupabaseBucketProbe,
+  bucket: string,
+  cache: Map<string, true> = supabaseBucketHits,
+): Promise<void> {
+  if (cache.has(bucket)) return
+
+  let result: Awaited<ReturnType<SupabaseBucketProbe['getBucket']>>
+  try {
+    result = await storage.getBucket(bucket)
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    throw new StorageBucketError(
+      'STORAGE_BUCKET_PROBE_FAILED',
+      bucket,
+      `Could not check storage bucket "${bucket}": ${detail}`,
+    )
+  }
+
+  if (result.data) {
+    cache.set(bucket, true)
+    return
+  }
+
+  const error = result.error
+  if (!error || isMissingBucket(error)) {
+    throw new StorageBucketError(
+      'STORAGE_BUCKET_MISSING',
+      bucket,
+      `Storage bucket "${bucket}" does not exist.`,
+    )
+  }
+
+  throw new StorageBucketError(
+    'STORAGE_BUCKET_PROBE_FAILED',
+    bucket,
+    `Could not check storage bucket "${bucket}": ${error.message}`,
+  )
+}
+
+function isMissingBucket(error: { message?: string; status?: number; statusCode?: string | number }): boolean {
+  const status = typeof error.status === 'number' ? error.status : Number(error.statusCode)
+  if (status === 404) return true
+  const message = (error.message ?? '').toLowerCase()
+  return message.includes('not found') || message.includes('does not exist')
+}
+
+/** Map the one known-uncreated legacy name to the cluster default. Other names pass through and are probed. */
 function resolveSupabaseBucket(configured?: string | null): string {
   if (!configured || configured === CLUSTER_DEFAULT_BUCKET) return CLUSTER_DEFAULT_BUCKET
   // Admin once seeded mushi-screenshots for glot.it; that bucket was never created.
@@ -335,7 +416,12 @@ async function resolveVaultSecret(ref: string | null, projectId: string): Promis
 class SupabaseStorageAdapter implements StorageAdapter {
   constructor(private db: SupabaseClient, private bucket: string) {}
 
+  private async ensureBucket(): Promise<void> {
+    await probeSupabaseBucket(this.db.storage as SupabaseBucketProbe, this.bucket)
+  }
+
   async upload(input: UploadInput): Promise<UploadResult> {
+    await this.ensureBucket()
     const { error } = await this.db.storage.from(this.bucket).upload(input.key, input.body, {
       contentType: input.contentType,
       upsert: false,
@@ -367,12 +453,14 @@ class SupabaseStorageAdapter implements StorageAdapter {
   }
 
   async signedUrl(key: string, ttlSecs = 3600): Promise<string> {
+    await this.ensureBucket()
     const { data, error } = await this.db.storage.from(this.bucket).createSignedUrl(key, ttlSecs)
     if (error || !data) throw new Error(`Supabase signed URL failed: ${error?.message}`)
     return data.signedUrl
   }
 
   async delete(key: string): Promise<void> {
+    await this.ensureBucket()
     const { error } = await this.db.storage.from(this.bucket).remove([key])
     if (error) throw new Error(`Supabase delete failed: ${error.message}`)
   }
@@ -380,6 +468,17 @@ class SupabaseStorageAdapter implements StorageAdapter {
   async healthCheck(): Promise<HealthCheckResult> {
     const debug: HealthDebugStep[] = []
     debug.push({ step: 'provider', ok: true, ms: 0, detail: `supabase bucket=${this.bucket}` })
+
+    const tProbe = Date.now()
+    try {
+      await this.ensureBucket()
+      debug.push({ step: 'bucket', ok: true, ms: Date.now() - tProbe })
+    } catch (err) {
+      const ms = Date.now() - tProbe
+      const msg = err instanceof Error ? err.message : String(err)
+      debug.push({ step: 'bucket', ok: false, ms, detail: msg.slice(0, 200) })
+      return { ok: false, error: msg, debug }
+    }
 
     const t0 = Date.now()
     try {
@@ -398,6 +497,11 @@ class SupabaseStorageAdapter implements StorageAdapter {
       return { ok: false, error: msg, debug }
     }
   }
+}
+
+/** Test seam for the default Supabase adapter (bucket probe included). */
+export function createSupabaseStorageAdapter(db: SupabaseClient, bucket: string): StorageAdapter {
+  return new SupabaseStorageAdapter(db, bucket)
 }
 
 // ──────────────────────────────────────────────────────────────────────────
