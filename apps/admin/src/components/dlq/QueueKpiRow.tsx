@@ -36,7 +36,6 @@ function pctDelta(values: number[], opts: { invert?: boolean } = {}): KpiDelta |
 export function QueueKpiRow({ stats, throughput = [] }: Props) {
   // Throughput data is per-day created/completed/failed. We project each KPI
   // to its matching daily series so the tile spark matches the row underneath.
-  const createdSeries = useMemo(() => throughput.map((d) => d.created), [throughput])
   const completedSeries = useMemo(() => throughput.map((d) => d.completed), [throughput])
   const failedSeries = useMemo(() => throughput.map((d) => d.failed), [throughput])
 
@@ -49,9 +48,7 @@ export function QueueKpiRow({ stats, throughput = [] }: Props) {
         value={stats.pending}
         accent={stats.pending > 0 ? 'info' : 'muted'}
         sublabel="waiting for worker"
-        series={createdSeries}
-        delta={pctDelta(createdSeries, { invert: true })}
-        seriesAriaLabel="Daily intake, last window"
+        // No trend here: intake growth on this tile read as "Pending 0 ↑774%".
         meaning="Jobs queued but not yet picked up by a worker. Healthy systems clear pending fast — sustained backlog means workers are over-subscribed."
       />
       <KpiTile
