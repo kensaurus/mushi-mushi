@@ -5,7 +5,7 @@
  */
 
 import { Btn, PageStatus, type PageStatusMetric, type PageStatusTone } from '../ui'
-import { judgeWeekTitle, type JudgeStats } from './JudgeStatsTypes'
+import { judgeDisagreementWindow, judgeWeekTitle, type JudgeStats } from './JudgeStatsTypes'
 import { judgeLinks } from '../../lib/statCardLinks'
 
 interface Props {
@@ -24,16 +24,7 @@ function scoreTone(score: number | null): PageStatusTone {
   return 'danger'
 }
 
-/** The recent window when the server sent it, else all time; the words say which (64c2b3df). */
-function disagreementWindow(stats: JudgeStats): { disagreed: number; graded: number; words: string; recent: boolean } {
-  if (stats.recentEvaluations != null && stats.recentDisagreements != null) {
-    const days = stats.recentWindowDays ?? 14
-    return { disagreed: stats.recentDisagreements, graded: stats.recentEvaluations, words: `in the last ${days} days`, recent: true }
-  }
-  return { disagreed: stats.disagreementCount, graded: stats.totalEvaluations, words: 'so far', recent: false }
-}
-
-/** @internal Exported for tests only. */
+/** @internal Exported for tests only. Names the 14-day slice only when it is narrower than all grades (64c2b3df). */
 export function judgeStatusSentence(stats: JudgeStats): string {
   if (stats.totalEvaluations === 0) {
     return stats.ungradedReports > 0
@@ -45,18 +36,18 @@ export function judgeStatusSentence(stats: JudgeStats): string {
   const scored = score
     ? `Diagnoses scored ${score} ${week} across ${stats.latestWeekEvalCount} grade${stats.latestWeekEvalCount === 1 ? '' : 's'}`
     : `No grades ${week}`
-  const w = disagreementWindow(stats)
+  const w = judgeDisagreementWindow(stats)
   const disagree =
     w.graded === 0
       ? `. Nothing was graded ${w.words}.`
       : w.disagreed > 0
-        ? `. ${w.recent ? 'In the last' : 'So far'}${w.recent ? ` ${stats.recentWindowDays ?? 14} days` : ''} the grader disagreed with ${w.disagreed} of ${w.graded} diagnoses (${Math.round((w.disagreed / w.graded) * 100)}%).`
+        ? `. ${w.recent ? 'In the last' : 'So far'}${w.recent ? ` ${stats.recentWindowDays ?? 14} days` : ''} the grader disagreed with ${w.disagreed} of ${w.graded} diagnoses (${w.ratePct ?? 0}%).`
         : `. The grader agreed with all ${w.graded} diagnoses ${w.words}.`
   return scored + disagree
 }
 
 export function JudgeSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, onSeeDisagreements }: Props) {
-  const w = disagreementWindow(stats)
+  const w = judgeDisagreementWindow(stats)
   const disagreements: PageStatusMetric = {
     label: w.recent ? `Disagreed, last ${stats.recentWindowDays ?? 14} days` : (statLabels?.disagree ?? 'Disagreements, all time'),
     value: w.disagreed,
