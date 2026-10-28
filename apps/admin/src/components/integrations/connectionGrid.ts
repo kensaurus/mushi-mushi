@@ -176,12 +176,11 @@ export function connectionGridSentence(tiles: readonly GridTile[]): { sentence: 
   if (connected.length === 0) {
     return { sentence: 'Nothing is connected yet. Start with GitHub so Mushi can open fix PRs.', tone: 'neutral' }
   }
+  // Count each tool once: "1 connected, 1 not tested yet" was one tool, set
+  // up and never tested, read as two (integrator's new-user walk, 2026-10-28).
   const unchecked = connected.filter((t) => t.view.state === 'checking').length
-  return {
-    sentence:
-      unchecked > 0
-        ? `${connected.length} connected, ${unchecked} not tested yet. Nothing is broken.`
-        : `${connected.length} connected and working.`,
-    tone: unchecked > 0 ? 'neutral' : 'ok',
-  }
+  const working = connected.length - unchecked
+  if (unchecked === 0) return { sentence: `${working} connected and working.`, tone: 'ok' }
+  if (working === 0) return { sentence: `${unchecked} set up, not tested yet.`, tone: 'neutral' }
+  return { sentence: `${working} connected and working, ${unchecked} not tested yet.`, tone: 'neutral' }
 }

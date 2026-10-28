@@ -108,6 +108,19 @@ describe('connectionGridSentence', () => {
     expect(connectionGridSentence(buildConnectionGrid(input()))).toEqual({ sentence: '2 connected and working.', tone: 'ok' })
   })
 
+  // One tool set up and never tested read "1 connected, 1 not tested yet"
+  // beside tiles that showed nothing connected (integrator, 2026-10-28).
+  it('counts a tool that is set up but not tested once', () => {
+    expect(connectionGridSentence(buildConnectionGrid(input({ history: [probe('sentry')] })))).toEqual({
+      sentence: '1 connected and working, 1 not tested yet.',
+      tone: 'neutral',
+    })
+    expect(connectionGridSentence(buildConnectionGrid(input({ history: [] })))).toEqual({
+      sentence: '2 set up, not tested yet.',
+      tone: 'neutral',
+    })
+  })
+
   it('with nothing connected, points at GitHub first', () => {
     const empty = input({ platform: { platform: {} }, history: [] })
     expect(connectionGridSentence(buildConnectionGrid(empty)).sentence).toMatch(/^Nothing is connected yet/)
