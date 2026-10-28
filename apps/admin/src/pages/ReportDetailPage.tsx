@@ -7,8 +7,12 @@
  * recommended skill shows a truncated preview of that URL (full value in the
  * title and the copy button tooltip) beside a small copy button. Section
  * icons distinguish console logs from the two timelines.
+ *
+ * The first request is reportDetailRequestPath (`?rag=0`) so the page does
+ * not wait on the code-index embedding. Code quotes are filled in from
+ * fix-context (`fix_prompt`) after the header is on screen.
  */
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useNow } from '../lib/useNow'
 import { useParams, useNavigate, useSearchParams as useReactSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
@@ -92,6 +96,11 @@ import { AgentTracePanel } from '../components/report-detail/AgentTracePanel'
 import { TraceWaterfall } from '../components/report-detail/TraceWaterfall'
 import { CodeFramePanel } from '../components/report-detail/CodeFramePanel'
 import { deriveRecommendation } from '../components/report-detail/deriveRecommendation'
+import {
+  fixPacketFromFixContext,
+  reportDetailRequestPath,
+  reportFixContextRequestPath,
+} from '../components/report-detail/reportDetailLoad'
 import type { ReportDetail } from '../components/report-detail/types'
 import { DispatchPreflightBanner } from '../components/reports/DispatchPreflightBanner'
 import { useDispatchPreflight, type PreflightState } from '../lib/useDispatchPreflight'
@@ -120,11 +129,14 @@ export function ReportDetailPage() {
   // can never resolve, and the API answers it with a 400 that used to render
   // as "console / API version mismatch". Treat it as the not-found it is.
   const idIsValid = !!id && REPORT_ID_RE.test(id)
-  const path = idIsValid ? `/v1/admin/reports/${id}` : null
+  const path = id && idIsValid ? reportDetailRequestPath(id) : null
   const { data: serverReport, loading, error, reload } = usePageData<ReportDetail>(path)
   const [report, setReport] = useState<ReportDetail | null>(null)
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
+  // fix-context can return before the detail row. Hold the packet until the
+  // row is here, and reapply it if the row is replaced (a reload).
+  const fixPacketRef = useRef<{ id: string; packet: string } | null>(null)
 
   useEffect(() => {
     const fromUrl = searchParams.get('project')
@@ -147,8 +159,34 @@ export function ReportDetailPage() {
   }, [serverReport?.project_id, activeProjectId, searchParams, setSearchParams])
 
   useEffect(() => {
-    if (serverReport) setReport(serverReport)
+    if (!serverReport) return
+    const pending = fixPacketRef.current
+    const packet = pending?.id === serverReport.id ? pending.packet : null
+    setReport(packet && packet !== serverReport.fix_packet ? { ...serverReport, fix_packet: packet } : serverReport)
   }, [serverReport])
+
+  // Code-index quotes. The detail response skipped the embedding so the
+  // header can paint; this route still runs it and returns the packet as
+  // fix_prompt. A failure leaves the packet from the detail response.
+  useEffect(() => {
+    if (!id || !idIsValid) return
+    let cancelled = false
+    void apiFetch<{ fix_prompt?: unknown }>(reportFixContextRequestPath(id))
+      .then((res) => {
+        if (cancelled || !res.ok) return
+        const packet = fixPacketFromFixContext(res.data)
+        if (!packet) return
+        fixPacketRef.current = { id, packet }
+        setReport((current) => {
+          if (!current || current.id !== id || current.fix_packet === packet) return current
+          return { ...current, fix_packet: packet }
+        })
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [id, idIsValid])
 
   // Funnel: `report_opened` is one of the HABIT_EVENTS (diagnosis consumed).
   // Keyed on the report id so refetches / triage saves don't re-fire.

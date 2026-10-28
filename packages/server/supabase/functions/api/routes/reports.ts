@@ -966,20 +966,22 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
 
     // Compose a first-class, paste-ready fix packet so every surface
     // (report-detail UI, MCP get_fix_context, GET …/fix-context, CLI mushi fix)
-    // shares one generator instead of each reshaping the row. Best-effort: RAG
-    // hints and blast radius enrich the packet when available but never block
-    // the response.
+    // shares one generator instead of each reshaping the row. The console
+    // passes rag=0 so this response does not wait on the code-index
+    // embedding; MCP, the CLI and fix-context omit it and still get the quotes.
     // Merged fix → is it live? Places each deploy target's newest commit
     // before or after the merge (deploy_drift run heads, earlier
     // deploy_observations). null unless the report reads as fixed, a fix
     // merged and a declared production deploy target reported a commit;
     // `unknown` (never `live`) on a failed read or when a merged attempt's PR
     // is in a repo other than the one the deploy heads come from.
+    const includeRag = c.req.query('rag') !== '0';
     const [{ fixPacket: fix_packet }, deploy_live, knownIssuesRes, knownIssuesOptInRes, sentryLinksRes] = await Promise.all([
       buildReportFixPacket(
         db,
         data as Record<string, unknown>,
         inventoryAnchorOf(inventoryAnchorRes.data),
+        { includeRag },
       ),
       loadReportDeployLive(
         db,

@@ -59,14 +59,20 @@ function notFound(message: string) {
  * `mushi fix`): diagnosis, repro, suggested fix, relevant code and the
  * inventory blast-radius note. RAG is best-effort — a missing codebase index
  * must not fail the caller. Never throws.
+ *
+ * `includeRag: false` skips the code-index embedding. That call retries
+ * 429/5xx for up to ~15s (`embeddings.ts`) and was holding the detail
+ * response, so the console asks with `?rag=0`. fix-context leaves it on.
  */
 export async function buildReportFixPacket(
   db: Db,
   row: Record<string, unknown>,
   anchor: InventoryAnchor | null,
+  options?: { includeRag?: boolean },
 ): Promise<{ fixPacket: string | null; ragFiles: FixPacketFile[] }> {
   let ragFiles: FixPacketFile[] = [];
-  if (typeof row.summary === 'string' && row.summary && typeof row.project_id === 'string') {
+  const includeRag = options?.includeRag !== false;
+  if (includeRag && typeof row.summary === 'string' && row.summary && typeof row.project_id === 'string') {
     try {
       const rag = await getRelevantCode(db, row.project_id, { symptom: row.summary });
       ragFiles = rag.slice(0, 5).map((f) => ({
