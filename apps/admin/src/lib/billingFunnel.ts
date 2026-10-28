@@ -5,7 +5,7 @@
  *          and how a Stripe Checkout return is read from the URL.
  *
  *   pricing_viewed      the Plans tab is shown
- *   plan_selected       a plan button is pressed (PlanComparisonTable)
+ *   plan_selected       a plan is picked on Overview or Plans (BillingPage pickPlan)
  *   checkout_started    just before the browser leaves for Stripe Checkout
  *   checkout_completed  Stripe sends the person back with ?checkout=success
  *

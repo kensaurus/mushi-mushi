@@ -194,13 +194,13 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
     monthly: '$79 / mo',
     annual: '$790 / yr ($65.83/mo)',
     cloudCost: '$79 / mo',
-    diagnoses: '5,000 / mo',
+    diagnoses: '3,000 / mo',
     retention: '180 days',
     seats: '5',
     highlights:
-      'A portfolio of apps: 5 seats, the weekly report across your apps, longer history; then $0.02/diagnosis up to a $200 cap',
+      'A portfolio of apps: 5 seats, the weekly report across your apps, longer history; then $0.03/diagnosis up to a $200 cap',
     cloudNotes:
-      'Ten apps, 5 seats, weekly report, shared views, Sentry / Linear / Jira — $0.02 / extra diagnosis'
+      'Ten apps, 5 seats, weekly report, shared views, Sentry / Linear / Jira — $0.03 / extra diagnosis'
   },
   {
     id: 'enterprise',

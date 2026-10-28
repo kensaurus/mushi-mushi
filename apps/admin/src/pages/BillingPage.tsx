@@ -246,6 +246,9 @@ export function BillingPage() {
   const [changeTarget, setChangeTarget] = useState<ChangePlanTarget | null>(null)
   const pickPlan = useCallback(
     (projectId: string, planId: string, billingInterval: 'monthly' | 'annual') => {
+      // One place for both pickers (Overview card and Plans table), so the
+      // price test sees the interval actually chosen.
+      trackAdHoc('plan_selected', { plan_id: planId, interval: billingInterval, surface: 'console' })
       const project = projects.find((p) => p.project_id === projectId)
       const sub = project?.subscription
       const paying = !!sub && !sub.synthetic && ['active', 'trialing', 'past_due'].includes(sub.status ?? '')

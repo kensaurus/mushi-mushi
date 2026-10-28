@@ -32,9 +32,14 @@ describe('estimateCost', () => {
     expect(estimateCost(free, 101)).toEqual({ total: 0, overage: 0, capped: true })
   })
 
+  it('meters Studio at $0.03 past 3,000 (owner cost fix, 2026-10-28)', () => {
+    expect(estimateCost(pro, 3000)).toEqual({ total: 79, overage: 0, capped: false })
+    expect(estimateCost(pro, 5000)).toEqual({ total: 139, overage: 60, capped: false })
+  })
+
   it('shows the Studio spend cap within slider range', () => {
-    // Studio's included diagnoses plus (cap - base) / overage price: 5,000 + 121 / 0.02.
-    const atCap = 11050
+    // Studio's included diagnoses plus (cap - base) / overage price: 3,000 + 121 / 0.03, rounded up.
+    const atCap = 7034
     expect(atCap).toBeLessThanOrEqual(MAX_SLIDER)
     const atCapResult = estimateCost(pro, atCap)
     expect(atCapResult.total).toBe(200)
@@ -77,7 +82,7 @@ describe('TIERS catalog', () => {
     expect(TIERS.map((t) => [t.name, t.apps, t.baseUsd, t.included])).toEqual([
       ['Free', 1, 0, 100],
       ['Builder', 3, 29, 1000],
-      ['Studio', 10, 79, 5000],
+      ['Studio', 10, 79, 3000],
     ])
   })
 })

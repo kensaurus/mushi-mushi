@@ -28,11 +28,11 @@ export interface PricingTier {
 export const TIERS: PricingTier[] = [
   { id: 'free_cloud', name: 'Free', apps: 1, baseUsd: 0, included: 100, overageUsd: null, capUsd: null },
   { id: 'indie', name: 'Builder', apps: 3, baseUsd: 29, included: 1000, overageUsd: 0.03, capUsd: 50 },
-  { id: 'pro', name: 'Studio', apps: 10, baseUsd: 79, included: 5000, overageUsd: 0.02, capUsd: 200 },
+  { id: 'pro', name: 'Studio', apps: 10, baseUsd: 79, included: 3000, overageUsd: 0.03, capUsd: 200 },
 ]
 
-/** Studio's spend cap ($200) triggers at 11,050 diagnoses — the slider must reach that. */
-export const MAX_SLIDER = 12_000
+/** Studio's spend cap ($200) triggers at 7,034 diagnoses — the slider must reach that. */
+export const MAX_SLIDER = 10_000
 
 export const ANNUAL_DISCOUNT_MONTHS = 2
 

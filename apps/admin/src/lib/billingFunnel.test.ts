@@ -26,10 +26,18 @@ describe('checkout return', () => {
 describe('wiring', () => {
   const page = readFileSync(join(__dirname, '../pages/BillingPage.tsx'), 'utf8')
   const app = readFileSync(join(__dirname, '../App.tsx'), 'utf8')
+  const read = (rel: string) => readFileSync(join(__dirname, rel), 'utf8')
 
   it('records the price-test events on the Billing page', () => {
     expect(page).toContain("trackAdHoc('pricing_viewed'")
     expect(page).toContain("trackAdHoc('checkout_completed'")
+    // Both pickers (Overview and Plans) go through pickPlan, which records the
+    // interval actually chosen; it used to be hardcoded 'monthly'.
+    const pick = page.indexOf('const pickPlan = useCallback(')
+    const selected = page.indexOf("trackAdHoc('plan_selected', { plan_id: planId, interval: billingInterval")
+    expect(pick).toBeGreaterThan(0)
+    expect(selected).toBeGreaterThan(pick)
+    expect(read('../components/billing/PlanComparisonTable.tsx')).not.toContain("interval: 'monthly'")
     const started = page.indexOf("trackAdHoc('checkout_started'")
     expect(started).toBeGreaterThan(0)
     // Recorded before the browser leaves for Stripe.

@@ -1930,7 +1930,7 @@ Fixed formulas (overage metered on top of base):
 
 ```
 Builder: $29 + max(0, diagnoses − 1,000) × $0.03  (capped at $50/mo total)
-Studio:  $79 + max(0, diagnoses − 5,000) × $0.02  (capped at $200/mo total)
+Studio:  $79 + max(0, diagnoses − 3,000) × $0.03  (capped at $200/mo total)
 ```
 
 | Diagnoses / mo | Builder | Studio |
@@ -1940,9 +1940,9 @@ Studio:  $79 + max(0, diagnoses − 5,000) × $0.02  (capped at $200/mo total)
 | 1,000 | $29.00 | $79.00 |
 | 1,500 | $44.00 | $79.00 |
 | 2,000 | $50.00 *(cap)* | $79.00 |
-| 5,000 | $50.00 *(cap)* | $79.00 |
-| 8,000 | $50.00 *(cap)* | $139.00 |
-| 12,000 | $50.00 *(cap)* | $200.00 *(cap)* |
+| 3,000 | $50.00 *(cap)* | $79.00 |
+| 5,000 | $50.00 *(cap)* | $139.00 |
+| 8,000 | $50.00 *(cap)* | $200.00 *(cap)* |
 
 A typical vibe-coder app runs **200–400 diagnoses / month**, well inside Builder's 1,000. Most people move up for a second or fourth app, not for more diagnoses.
 
@@ -2016,7 +2016,7 @@ Change plans in the console with **Change plan** on the Billing page (Builder �
 
 ### Do annual plans include overage?
 
-No. Annual plans include the plan's diagnoses every month (1,000 on Builder, 5,000 on Studio) and pause new diagnoses at that limit until the next month, so an annual invoice never grows. If you need more, switch to monthly for pay-as-you-go overage or upgrade to Studio from **Change plan**.
+No. Annual plans include the plan's diagnoses every month (1,000 on Builder, 3,000 on Studio) and pause new diagnoses at that limit until the next month, so an annual invoice never grows. If you need more, switch to monthly for pay-as-you-go overage or upgrade to Studio from **Change plan**.
 
 ### What does Enterprise cost?
 
@@ -5170,7 +5170,7 @@ See [CONTRIBUTING.md](https://github.com/kensaurus/mushi-mushi/blob/master/CONTR
 | SDK packages (MIT) | Yes — embed in any app | — |
 | Self-hosted server (AGPLv3) | Yes — run on your own infra, unlimited diagnoses | Your own LLM API costs (BYOK) |
 | Mushi Cloud — Free tier | Yes — 1 app, 100 diagnoses / mo, **hard stop** at limit | — |
-| Mushi Cloud — Builder / Studio / Enterprise | Flat base by apps watched + usage overage | $29 (3 apps) or $79 (10 apps) / mo base + $0.03–$0.02 / extra diagnosis; Enterprise from $499 / mo |
+| Mushi Cloud — Builder / Studio / Enterprise | Flat base by apps watched + usage overage | $29 (3 apps) or $79 (10 apps) / mo base + $0.03 / extra diagnosis; Enterprise from $499 / mo |
 
 **One sentence:** the MIT + AGPL core self-hosts free; the cloud sells managed hosting, LLM key pooling, retention beyond 7 days, team collaboration, and security features (SSO, SOC 2).
 

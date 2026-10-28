@@ -20,7 +20,6 @@ import { Badge, Btn } from '../ui'
 import { ContainedBlock } from '../report-detail/ReportSurface'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { ENTERPRISE_MAILTO, isSalesLedPlan } from '../../lib/salesContact'
-import { trackAdHoc } from '../../lib/track'
 
 interface PlanCatalogEntry {
   id: string
@@ -360,10 +359,7 @@ export function PlanComparisonTable({
                 <Btn
                   size="sm"
                   className="mt-2 w-full"
-                  onClick={() => {
-                    trackAdHoc('plan_selected', { plan_id: p.id, interval: 'monthly', surface: 'console_plans' })
-                    onSelectPlan(p.id)
-                  }}
+                  onClick={() => onSelectPlan(p.id)}
                   disabled={busy}
                   loading={busy}
                 >

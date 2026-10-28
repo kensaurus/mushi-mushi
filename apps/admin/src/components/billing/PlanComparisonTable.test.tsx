@@ -13,9 +13,6 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const tracked = vi.hoisted(() => [] as Array<[string, unknown]>)
-vi.mock('../../lib/track', () => ({ trackAdHoc: (name: string, props: unknown) => tracked.push([name, props]) }))
-
 import { PlanComparisonTable, planFit, planPriceLabel } from './PlanComparisonTable'
 import { PAID_PLAN_IDS } from '../../lib/useActivePlan'
 
@@ -25,14 +22,13 @@ const base = { is_self_serve: true, active: true, feature_flags: {} as Record<st
 const PLANS = [
   { ...base, id: 'free_cloud', display_name: 'Free', position: 10, monthly_price_usd: 0, max_projects: 1, included_diagnoses_per_month: 100, overage_unit_amount_decimal_diagnoses: null, retention_days: 14, seat_limit: 1, feature_flags: { byok: true } },
   { ...base, id: 'indie', display_name: 'Builder', position: 11, monthly_price_usd: 29, max_projects: 3, included_diagnoses_per_month: 1000, overage_unit_amount_decimal_diagnoses: 0.03, retention_days: 90, seat_limit: 1 },
-  { ...base, id: 'pro', display_name: 'Studio', position: 12, monthly_price_usd: 79, max_projects: 10, included_diagnoses_per_month: 5000, overage_unit_amount_decimal_diagnoses: 0.02, retention_days: 180, seat_limit: 5, feature_flags: { teams: true } },
+  { ...base, id: 'pro', display_name: 'Studio', position: 12, monthly_price_usd: 79, max_projects: 10, included_diagnoses_per_month: 3000, overage_unit_amount_decimal_diagnoses: 0.03, retention_days: 180, seat_limit: 5, feature_flags: { teams: true } },
   { ...base, id: 'enterprise', display_name: 'Enterprise', position: 13, monthly_price_usd: 499, is_self_serve: false, max_projects: null, included_diagnoses_per_month: null, overage_unit_amount_decimal_diagnoses: null, retention_days: 365, seat_limit: null },
 ]
 
 let root: Root
 let container: HTMLDivElement
 beforeEach(() => {
-  tracked.length = 0
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -81,13 +77,12 @@ describe('PlanComparisonTable', () => {
     expect(text).toContain('2 / 1 apps')
   })
 
-  it('records plan_selected when a plan button is pressed', () => {
+  it('hands the picked plan to the page, which records plan_selected with the real interval', () => {
     const onSelectPlan = vi.fn()
     render({ onSelectPlan })
     const builder = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Start Builder')!
     act(() => builder.click())
     expect(onSelectPlan).toHaveBeenCalledWith('indie')
-    expect(tracked).toContainEqual(['plan_selected', { plan_id: 'indie', interval: 'monthly', surface: 'console_plans' }])
   })
 
   it('counts Builder (indie) as a paid plan', () => {
