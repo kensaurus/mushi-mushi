@@ -29,6 +29,7 @@ import { runInBackground } from '../../_shared/background.ts'
 import { resolveFirecrawl } from '../../_shared/firecrawl.ts'
 import { emitProductEvent } from '../../_shared/product-events.ts'
 import { sendTransactionalEmail } from '../../_shared/email.ts'
+import { renderEmailHtml, renderEmailText, type EmailDoc } from '../../_shared/email-layout.ts'
 import { hmacSha256Hex } from '../../_shared/connectors/jwt.ts'
 import { clientIpOf, verifiedClientIp } from '../../_shared/edge-proxy.ts'
 import { checkPublicUrl, resolvesPublic, runtimeResolver } from '../../_shared/public-url-guard.ts'
@@ -41,6 +42,9 @@ export const CHECKS_PER_DAY = 100
 /** A running check older than this is treated as failed (its isolate died). */
 export const RUNNING_STALE_MS = 2 * 60_000
 const REPORT_PAGE = 'https://kensaur.us/mushi-mushi/docs/check'
+const SIGNUP_FROM_EMAIL = 'https://kensaur.us/mushi-mushi/admin/signup?src=check-email'
+/** Findings shown in the email itself; the rest are in the report. */
+export const EMAIL_MAX_FINDINGS = 5
 /** Fixed actor for the global daily budget in scoped_rate_limits. */
 const GLOBAL_ACTOR = '00000000-0000-4000-8000-0000000c4ec0'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -88,23 +92,85 @@ function cleanSrc(v: unknown): string | null {
   return typeof v === 'string' && /^[A-Za-z0-9._:-]{1,64}$/.test(v) ? v : null
 }
 
-export function buildReportEmail(host: string, id: string, result: Pick<CheckResult, 'findings'>): { subject: string; text: string } {
+const SEVERITY_RANK = { high: 0, medium: 1, low: 2 } as const
+
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`
+}
+
+/** What passed, in plain words, for a report with nothing to fix. */
+function passedChecks(summary: CheckResult['summary']): string[] {
+  const out: string[] = []
+  const ok = summary.pages.filter((p) => p.status !== null && p.status < 400).length
+  if (summary.pages.length) out.push(`${plural(ok, 'page', 'pages')} of ${summary.pages.length} opened without an error`)
+  const headers = Object.values(summary.headers)
+  if (headers.length && headers.every(Boolean)) out.push(`All ${headers.length} security headers are sent`)
+  if (summary.https === 'ok') out.push('http:// sends visitors to https://')
+  if (summary.linksChecked) out.push(`${plural(summary.linksChecked, 'link', 'links')} checked, none broken`)
+  if (summary.scriptsChecked && summary.scriptsWithSourceMaps === 0) out.push('No source maps published')
+  return out
+}
+
+/**
+ * The one report email: the findings themselves (worst first, at most
+ * EMAIL_MAX_FINDINGS), or what passed, then one button to the full report.
+ */
+export function buildReportEmail(
+  host: string,
+  id: string,
+  result: Pick<CheckResult, 'findings'> & { summary?: CheckResult['summary'] },
+): { subject: string; text: string; html: string } {
   const c = severityCounts(result.findings)
-  const line = result.findings.length
-    ? `Mushi checked ${host}: ${c.high} to fix first, ${c.medium} to fix soon, ${c.low} nice to fix.`
-    : `Mushi checked ${host} and found nothing to fix on the pages it could read.`
+  const n = result.findings.length
+  const shown = [...result.findings]
+    .sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity])
+    .slice(0, EMAIL_MAX_FINDINGS)
+  const counts = [c.high && `${c.high} to fix first`, c.medium && `${c.medium} to fix soon`, c.low && `${c.low} nice to fix`]
+    .filter(Boolean)
+    .join(', ')
+  const doc: EmailDoc = n
+    ? {
+        preheader: `${counts}. Each one comes with how to fix it.`,
+        heading: `${plural(n, 'thing', 'things')} to fix on ${host}`,
+        blocks: [
+          { kind: 'p', text: `Mushi read the public pages of ${host} the way a first-time visitor sees them: ${counts}.` },
+          {
+            kind: 'findings',
+            rows: shown.map((f) => ({ severity: f.severity, title: f.title, detail: `How to fix: ${f.fix}` })),
+            ...(n > shown.length ? { more: `And ${n - shown.length} more in the full report.` } : {}),
+          },
+          { kind: 'button', label: 'Open the full report', url: reportUrl(id) },
+          {
+            kind: 'p',
+            text: 'Want this caught before your users hit it? Mushi watches your live app, explains each bug in plain English and opens a reviewed fix. Free for one app:',
+          },
+          { kind: 'link', label: 'Set up Mushi', url: SIGNUP_FROM_EMAIL },
+        ],
+        footer: [
+          'You asked for this email on the Mushi Production Check page. It is the only one you will get about this check: your address is not on any mailing list, and it was deleted after this email was sent.',
+        ],
+      }
+    : {
+        preheader: `Nothing to fix on the pages Mushi could read.`,
+        heading: `${host} passed the Production Check`,
+        blocks: [
+          { kind: 'p', text: `Mushi read the public pages of ${host} the way a first-time visitor sees them and found nothing to fix.` },
+          ...(result.summary ? [{ kind: 'checks' as const, items: passedChecks(result.summary) }] : []),
+          { kind: 'button', label: 'Open the full report', url: reportUrl(id) },
+          {
+            kind: 'p',
+            text: 'A clean first visit is half of it; the other half is the bugs your users hit after they sign in. Mushi turns their reports into plain-English diagnoses and reviewed fixes. Free for one app:',
+          },
+          { kind: 'link', label: 'Set up Mushi', url: SIGNUP_FROM_EMAIL },
+        ],
+        footer: [
+          'You asked for this email on the Mushi Production Check page. It is the only one you will get about this check: your address is not on any mailing list, and it was deleted after this email was sent.',
+        ],
+      }
   return {
-    subject: `Your Production Check for ${host}`,
-    text: [
-      line,
-      '',
-      `Read the report: ${reportUrl(id)}`,
-      '',
-      'You asked for this email on the Mushi Production Check page. It is the only one you will get about this check:',
-      'your address is not on any mailing list, and it was deleted after this email was sent.',
-      '',
-      'Mushi Mushi',
-    ].join('\n'),
+    subject: n ? `${host}: ${plural(n, 'thing', 'things')} to fix (Production Check)` : `${host} passed the Production Check`,
+    text: renderEmailText(doc),
+    html: renderEmailHtml(doc),
   }
 }
 
@@ -120,11 +186,11 @@ async function sendReportEmail(
   to: string,
   url: string,
   id: string,
-  result: Pick<CheckResult, 'findings'>,
+  result: Pick<CheckResult, 'findings'> & { summary?: CheckResult['summary'] },
   send: typeof sendTransactionalEmail = sendTransactionalEmail,
 ): Promise<boolean> {
   const mail = buildReportEmail(new URL(url).host, id, result)
-  const sent = await send({ to, subject: mail.subject, text: mail.text, tags: { kind: 'production_check' } })
+  const sent = await send({ to, subject: mail.subject, text: mail.text, html: mail.html, tags: { kind: 'production_check' } })
   if (!sent.ok) plog.warn('report email not sent', { checkId: id, reason: sent.reason })
   return sent.ok
 }
@@ -237,10 +303,12 @@ export function registerProductionCheckRoutes(app: Hono<{ Variables: Variables }
       if (email && hit.status === 'done') {
         const spend = await claim(db, actorFromHash(await visitorHash()), 'production_check_ip', CHECKS_PER_IP_PER_HOUR, '1 hour')
         if (spend === 'ok') {
-          const { data: done } = await db.from('production_checks').select('findings').eq('id', hit.id).maybeSingle()
+          const { data: done } = await db.from('production_checks').select('findings, summary').eq('id', hit.id).maybeSingle()
           if (done) {
-            const findings = ((done as { findings?: unknown }).findings ?? []) as CheckResult['findings']
-            runInBackground(sendReportEmail(email, checked.url.href, hit.id, { findings }), 'production-check-email')
+            const row = done as { findings?: unknown; summary?: unknown }
+            const findings = (row.findings ?? []) as CheckResult['findings']
+            const summary = (row.summary && typeof row.summary === 'object' && Array.isArray((row.summary as CheckResult['summary']).pages)) ? row.summary as CheckResult['summary'] : undefined
+            runInBackground(sendReportEmail(email, checked.url.href, hit.id, { findings, summary }), 'production-check-email')
             emailed = true
           }
         }

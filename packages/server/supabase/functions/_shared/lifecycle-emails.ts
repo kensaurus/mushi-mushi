@@ -20,6 +20,7 @@
  * Voice: docs/marketing/VOICE.md, sober register. Plain text first; the HTML
  * is the same words with links. No mascot in subject lines, no pixels.
  */
+import { renderEmailHtml, type EmailBlock, type EmailDoc } from './email-layout.ts'
 
 export const LIFECYCLE_EMAIL_KEYS = ['day0_welcome', 'day2_nudge', 'day7_stalled', 'day7_activated'] as const
 export type LifecycleEmailKey = (typeof LIFECYCLE_EMAIL_KEYS)[number]
@@ -130,14 +131,6 @@ const SNIPPET = [
   "Mushi.init({ projectId: '<your project id>', apiKey: '<your api key>' })",
 ].join('\n')
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
 type Block =
   | { p: string }
   | { link: string; label?: string }
@@ -156,23 +149,21 @@ function blocksToText(blocks: Block[]): string {
     .join('\n\n')
 }
 
-function blocksToHtml(blocks: Block[]): string {
-  const body = blocks
-    .map((b) => {
-      if ('p' in b) return `<p>${escapeHtml(b.p)}</p>`
-      if ('link' in b) {
-        const label = escapeHtml(b.label ?? b.link)
-        return `<p><a href="${escapeHtml(b.link)}">${label}</a></p>`
-      }
-      return `<pre style="background:#f4f4f5;padding:12px;border-radius:6px;overflow:auto">${escapeHtml(b.pre)}</pre>`
-    })
-    .join('\n')
-  return [
-    '<!doctype html>',
-    '<html><body style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#18181b;max-width:560px;margin:0 auto;padding:24px 16px">',
-    body,
-    '</body></html>',
-  ].join('\n')
+/** The branded layout (email-layout.ts): the first link is the button, the rest stay links. */
+function blocksToHtml(subject: string, blocks: Block[], footer: EmailDoc['footer']): string {
+  let buttoned = false
+  const out: EmailBlock[] = blocks.map((b) => {
+    if ('p' in b) return { kind: 'p', text: b.p }
+    if ('pre' in b) return { kind: 'pre', text: b.pre }
+    const label = b.label ?? b.link
+    if (!buttoned) {
+      buttoned = true
+      return { kind: 'button', label, url: b.link }
+    }
+    return { kind: 'link', label, url: b.link }
+  })
+  const first = blocks.find((b): b is { p: string } => 'p' in b && b.p !== 'Hi,')
+  return renderEmailHtml({ preheader: first ? first.p : subject, heading: subject, blocks: out, footer })
 }
 
 export function buildLifecycleEmail(input: LifecycleEmailInput): LifecycleEmailContent {
@@ -265,6 +256,12 @@ export function buildLifecycleEmail(input: LifecycleEmailInput): LifecycleEmailC
     : [{ p: 'This is a one-time account email about your new Mushi project.' }]
 
   const all = [...blocks, ...footer]
+  const htmlFooter: EmailDoc['footer'] = unsub
+    ? [
+        `You get these few setup emails because you created a Mushi account${input.signedUpOn ? ` on ${input.signedUpOn}` : ''}.`,
+        { label: 'Unsubscribe with one click', url: unsub },
+      ]
+    : ['This is a one-time account email about your new Mushi project.']
   const headers: Record<string, string> = unsub
     ? {
         'List-Unsubscribe': `<${unsub}>`,
@@ -272,5 +269,5 @@ export function buildLifecycleEmail(input: LifecycleEmailInput): LifecycleEmailC
       }
     : {}
 
-  return { subject, text: blocksToText(all), html: blocksToHtml(all), headers }
+  return { subject, text: blocksToText(all), html: blocksToHtml(subject, blocks, htmlFooter), headers }
 }

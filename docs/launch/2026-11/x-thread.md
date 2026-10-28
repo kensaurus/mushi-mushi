@@ -44,4 +44,4 @@ and runs on your own keys.
 
 Free for 1 app. $29/mo for 3.
 
-Free check for your live app (no sign-up): https://kensaur.us/mushi-mushi/check?src=x
+Free check for your live app (no sign-up): https://kensaur.us/mushi-mushi/docs/check?src=x

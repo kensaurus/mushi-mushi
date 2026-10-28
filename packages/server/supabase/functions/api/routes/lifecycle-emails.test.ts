@@ -83,7 +83,10 @@ Deno.test('templates carry the deep links, plain text + html, and List-Unsubscri
     assertEquals(email.headers['List-Unsubscribe'], `<${unsub}>`)
     assertEquals(email.headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click')
     assert(email.text.includes(unsub))
-    assert(email.html.includes('<a href="https://api.test/v1/public/email/unsubscribe?t=abc">'))
+    assert(email.html.includes('href="https://api.test/v1/public/email/unsubscribe?t=abc"'))
+    // The founder's words are kept, on the branded layout.
+    assert(email.html.includes('Kenji, Mushi Mushi'))
+    assert(email.html.includes('Mushi Mushi</span>'))
     assert(email.text.includes('2026-09-14'))
     assert(!/🐛|✨|🚀/.test(email.subject))
     // No tracking pixels.

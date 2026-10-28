@@ -26,7 +26,7 @@ const state = vi.hoisted(() => ({
   db: null as unknown,
   firecrawl: { key: 'fc-self', source: 'byok' } as null | { key: string; source: string },
   tasks: [] as Promise<unknown>[],
-  emails: [] as Array<{ to: string; subject: string; text?: string }>,
+  emails: [] as Array<{ to: string; subject: string; text?: string; html?: string }>,
   events: [] as Array<{ eventName: string; properties?: Record<string, unknown> }>,
   runs: [] as string[],
   emailOk: true,
@@ -55,7 +55,7 @@ vi.mock('../../supabase/functions/_shared/product-events.ts', () => ({
   },
 }))
 vi.mock('../../supabase/functions/_shared/email.ts', () => ({
-  sendTransactionalEmail: async (mail: { to: string; subject: string; text?: string }) => {
+  sendTransactionalEmail: async (mail: { to: string; subject: string; text?: string; html?: string }) => {
     state.emails.push(mail)
     return state.emailOk ? { ok: true, id: 'em_1' } : { ok: false, reason: 'no_sender', error: 'RESEND_FROM_EMAIL not configured' }
   },
@@ -81,6 +81,8 @@ import {
   CHECKS_PER_DAY,
   CHECKS_PER_IP_PER_HOUR,
   RUNNING_STALE_MS,
+  EMAIL_MAX_FINDINGS,
+  buildReportEmail,
   callerIp,
   registerProductionCheckRoutes,
 } from '../../supabase/functions/api/routes/production-check.ts'
@@ -241,7 +243,12 @@ describe('POST /v1/public/production-check', () => {
     expect(state.emails).toHaveLength(1)
     expect(state.emails[0].to).toBe('founder@acme.app')
     expect(state.emails[0].text).toContain(`https://kensaur.us/mushi-mushi/docs/check?id=${data.id}`)
-    expect(state.emails[0].text).toContain('1 to fix first, 1 to fix soon, 0 nice to fix')
+    expect(state.emails[0].text).toContain('1 to fix first, 1 to fix soon.')
+    expect(state.emails[0].subject).toBe('acme.app: 2 things to fix (Production Check)')
+    // The HTML twin carries the same report link as a button, and no image (no tracking pixel).
+    expect(state.emails[0].html).toContain(`href="https://kensaur.us/mushi-mushi/docs/check?id=${data.id}"`)
+    expect(state.emails[0].html).toContain('Open the full report')
+    expect(state.emails[0].html).not.toMatch(/<img/i)
     const finished = state.events.find((e) => e.eventName === 'production_check_finished')
     expect(finished?.properties).toMatchObject({ project_id: SELF, outcome: 'done', rendered: true, high: 1, medium: 1, low: 0, src: 'reddit' })
     for (const e of state.events) {
@@ -349,5 +356,47 @@ describe('callerIp', () => {
   it('a forged client-IP header is ignored', async () => {
     const forged = h({ 'x-mushi-client-ip': '9.9.9.9', 'x-mushi-client-ip-sig': 'a'.repeat(64), 'cf-connecting-ip': '5.5.5.5' })
     expect(await callerIp(forged, 'service-secret')).toBe('5.5.5.5')
+  })
+})
+
+describe('buildReportEmail', () => {
+  const finding = (severity: 'high' | 'medium' | 'low', title: string) => ({ rule: 'r', severity, title, why: 'w', fix: `fix ${title}` })
+
+  it('shows the worst findings first, at most EMAIL_MAX_FINDINGS, and says how many more', () => {
+    const findings = [
+      finding('low', 'L1'), finding('medium', 'M1'), finding('high', 'H1'), finding('low', 'L2'),
+      finding('medium', 'M2'), finding('low', 'L3'), finding('high', 'H2'),
+    ]
+    const mail = buildReportEmail('shop.app', 'id-1', { findings })
+    expect(mail.subject).toBe('shop.app: 7 things to fix (Production Check)')
+    const order = ['H1', 'H2', 'M1', 'M2', 'L1'].map((t) => mail.text.indexOf(`] ${t}`))
+    expect(order.every((i, k) => i > 0 && (k === 0 || i > order[k - 1]))).toBe(true)
+    expect(mail.text).not.toContain('] L3')
+    expect(EMAIL_MAX_FINDINGS).toBe(5)
+    expect(mail.text).toContain('And 2 more in the full report.')
+    expect(mail.text).toContain('How to fix: fix H1')
+    expect(mail.html).toContain('Fix first')
+  })
+
+  it('a clean site lists what passed, from the stored summary', () => {
+    const mail = buildReportEmail('ok.app', 'id-2', {
+      findings: [],
+      summary: {
+        pages: [{ path: '/', status: 200 }, { path: '/docs', status: 200 }, { path: '/a', status: 200 }],
+        headers: { 'content-security-policy': true, 'strict-transport-security': true, 'x-content-type-options': true, 'referrer-policy': true },
+        https: 'ok', linksChecked: 20, scriptsChecked: 3, scriptsWithSourceMaps: 0, rendered: true, incomplete: [],
+      },
+    })
+    expect(mail.subject).toBe('ok.app passed the Production Check')
+    expect(mail.text).toContain('- 3 pages of 3 opened without an error')
+    expect(mail.text).toContain('- All 4 security headers are sent')
+    expect(mail.text).toContain('- 20 links checked, none broken')
+    expect(mail.text).toContain('- No source maps published')
+  })
+
+  it('escapes what a site controls (finding titles) in the HTML', () => {
+    const mail = buildReportEmail('x.app', 'id-3', { findings: [finding('high', '<script>alert(1)</script>')] })
+    expect(mail.html).not.toContain('<script>alert(1)')
+    expect(mail.html).toContain('&lt;script&gt;')
   })
 })

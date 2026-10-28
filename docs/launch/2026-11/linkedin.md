@@ -18,6 +18,6 @@ I packaged it as Mushi: open source, runs on your own keys, works inside
 Cursor and Claude Code. Free for one app, $29 a month for three.
 
 If you run an app built with Lovable, Bolt, Cursor or Claude Code, there's a
-free production check for your live site: kensaur.us/mushi-mushi/check?src=li
+free production check for your live site: kensaur.us/mushi-mushi/docs/check?src=li
 
 #buildinpublic #vibecoding #indiehackers
