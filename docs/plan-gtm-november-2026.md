@@ -13,7 +13,34 @@ the owner approves each phase. Written 2026-10-28; numbers queried that day._
 | Launches ever (HN, PH, Reddit) | 0 | critical audit 2026-10-27 |
 | Landing visits measured | 0 (tracker waits for consent) | product_events |
 | **Proof on the owner's 9 live apps, last 60 days** | **676 user bug reports from 314 people; 231 fixes merged; median 26 h from report to merged fix; 738 AI reviews, 265 of them "do not merge"** | reports, fix_attempts, fix_reviews |
-| Price | Free / Builder $29 / Studio $79 / Enterprise from $499, live 2026-10-28 | pricing_plans, Stripe |
+| Price | Free (1 app, 100 diagnoses) / Builder $29 (3 apps, 1,000) / Studio $79 (10 apps, 3,000) / Enterprise from $499, live 2026-10-28 | pricing_plans, Stripe |
+
+## 1b. Does it pay for itself? (unit economics, measured 2026-10-28)
+
+| Input | Value | Source |
+|---|---|---|
+| Cost of one diagnosis on Mushi's own AI key | $0.017 (triage) to $0.022 (with quality grading) | llm_invocations, 30 days |
+| Mushi's platform-key AI spend today | $6.25 / 30 days | llm_invocations key_source = env |
+| Stripe fees (Japanese account) | 3.6% per card payment + 0.7% Billing = 4.3% | stripe.com/jp/pricing |
+| Firecrawl | $99 / month (Standard) | firecrawl.dev/pricing |
+| Supabase | Pro organization, $25 / month base + compute, shared by 6 projects | Supabase org plan "pro"; compute share not measured |
+| Hosting, domain, email | not measured | owner to confirm |
+
+| Plan | Net after fees | AI cost, typical (100 diagnoses) | AI cost, worst case (all included used) | Margin, worst case |
+|---|---|---|---|---|
+| Builder $29 | $27.75 | $2.20 | 1,000 × $0.022 = $22.00 | **+$5.75** |
+| Studio $79 | $75.60 | $2.20 | 3,000 × $0.022 = $66.00 | **+$9.60** |
+| Overage, per diagnosis | $0.0287 | — | $0.022 | **+$0.0067** |
+
+A customer who brings their own AI key costs Mushi almost nothing in AI. Studio
+was cut from 5,000 to 3,000 included diagnoses and its overage raised from
+$0.02 to $0.03 on 2026-10-28, because the old numbers lost money at full use
+and on every extra diagnosis.
+
+**Break-even:** known fixed costs are about $124 a month (Firecrawl + Supabase
+base). At typical use a Builder customer contributes about $25, so **5
+paying customers cover the known fixed costs**, and 10 cover them about twice
+over. Supabase compute and hosting are the unmeasured part.
 
 Ten paying customers in 33 days from zero is a **sales** goal, not a
 self-serve goal. Self-serve funnels at this size convert visitors to paid at
