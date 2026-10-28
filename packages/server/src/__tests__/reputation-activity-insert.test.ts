@@ -6,9 +6,13 @@
  * retried once only when the failure is known to precede the write (HTTP 503
  * or connection refused): a 502, a pooler error, or a connection reset can
  * arrive after commit, and end_user_activity has no idempotency key. Eight
- * transient failures in ten minutes log one error so a sustained outage
- * still reaches Sentry.
+ * transient failures in ten minutes inside one isolate log one
+ * `activity_insert_outage`. That counter is best-effort: isolates are
+ * short-lived and do not share it, so alert on the `activity_insert_failed`
+ * warning.
  */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const fakeLog = vi.hoisted(() => {
@@ -200,7 +204,7 @@ describe('awardPointsForEndUser activity insert', () => {
     expect(logged('warn')).toEqual([])
   })
 
-  it('retries connection refused twice at most and still reports the failure', async () => {
+  it('retries a refused connection at most once and still reports the failure', async () => {
     const { db, inserts } = dbForInserts([{ throw: 'connection refused' }])
     const result = await award(db, 'report.submitted', 'proj-activity-refused-down')
 
@@ -216,6 +220,17 @@ describe('awardPointsForEndUser activity insert', () => {
         }),
       ],
     ])
+  })
+
+  it('documents the outage counter as best-effort per isolate', () => {
+    const src = readFileSync(resolve(__dirname, '../../supabase/functions/_shared/reputation.ts'), 'utf8')
+    const at = src.indexOf('const TRANSIENT_INSERT_ALERT_AFTER')
+    const block = src.slice(Math.max(0, at - 700), at)
+    expect(block).toMatch(/best-effort/i)
+    expect(block).toMatch(/short-lived/)
+    expect(block).toMatch(/many run at once/)
+    expect(block).toMatch(/activity_insert_failed/)
+    expect(block).toMatch(/activity_insert_outage/)
   })
 
   it('raises one error after repeated transient insert failures, not one per heartbeat', async () => {
