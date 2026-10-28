@@ -99,9 +99,10 @@ const ERROR_PAGE_TEXT = /this page couldn['’]t load|application error: a (clie
 /**
  * Why a scraped page is an error screen rather than the app, or null. Long
  * pages that merely mention an error (docs, FAQs) are not refused: only a
- * page whose whole text is short and carries an error message.
+ * page whose whole text is short and carries an error message. Also used by
+ * the free Production Check (`_shared/production-check.ts`).
  */
-function errorPageReason(statusCode: unknown, markdown: unknown): string | null {
+export function errorPageReason(statusCode: unknown, markdown: unknown): string | null {
   if (typeof statusCode === 'number' && statusCode >= 400) return `The page answered ${statusCode}.`
   const text = typeof markdown === 'string' ? markdown.trim() : ''
   if (text.length > 0 && text.length < 600) {

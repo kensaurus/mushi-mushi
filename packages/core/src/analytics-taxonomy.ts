@@ -81,6 +81,9 @@ export const MUSHI_EVENTS = {
   repo_diagram_generated: { surface: 'server', required: ['project_id'] },
   repo_diagram_published: { surface: 'server', required: ['project_id'] },
   public_diagram_viewed: { surface: 'server', required: ['project_id'] },
+  // Free Production Check on the docs site (/check); project_id is Mushi's own.
+  production_check_started: { surface: 'server', required: ['project_id'] },
+  production_check_finished: { surface: 'server', required: ['project_id', 'outcome'] },
   // ── Growth loop (widget "Bug reports by Mushi" mark) ─────────────────────
   loop_impression: { surface: 'web', required: [] },
   loop_click: { surface: 'web', required: [] },

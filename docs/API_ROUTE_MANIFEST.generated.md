@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-28 · **795** routes.
+> Generated: 2026-10-28 · **798** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -12,7 +12,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | `apiKeyAuth` | 59 |
 | `jwtAuth` | 405 |
 | `jwtOrApiKey` | 3 |
-| `public` | 61 |
+| `public` | 64 |
 | `unknown` | 51 |
 
 ## Routes by path
@@ -709,12 +709,15 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/public/marketplace/apps` | `public` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | GET | `/v1/public/marketplace/apps/:slug` | `public` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | GET | `/v1/public/marketplace/leaderboard` | `public` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
+| POST | `/v1/public/production-check` | `public` | `packages/server/supabase/functions/api/routes/production-check.ts` |
+| GET | `/v1/public/production-check/:id` | `public` | `packages/server/supabase/functions/api/routes/production-check.ts` |
 | GET | `/v1/public/reporter/email/unsubscribe` | `public` | `packages/server/supabase/functions/api/routes/reporter-prefs.ts` |
 | POST | `/v1/public/reporter/email/unsubscribe` | `public` | `packages/server/supabase/functions/api/routes/reporter-prefs.ts` |
 | GET | `/v1/public/reporter/email/verify` | `public` | `packages/server/supabase/functions/api/routes/reporter-prefs.ts` |
 | POST | `/v1/public/reporter/email/verify` | `public` | `packages/server/supabase/functions/api/routes/reporter-prefs.ts` |
 | GET | `/v1/public/roadmap/:projectSlug` | `public` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | POST | `/v1/public/roadmap/:projectSlug/:id/vote` | `public` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
+| GET | `/v1/public/scoreboard` | `public` | `packages/server/supabase/functions/api/routes/public-scoreboard.ts` |
 | GET | `/v1/public/tester-leaderboard` | `public` | `packages/server/supabase/functions/api/routes/community.ts` |
 | DELETE | `/v1/push/subscriptions` | `jwtAuth` | `packages/server/supabase/functions/api/routes/push.ts` |
 | POST | `/v1/push/subscriptions` | `jwtAuth` | `packages/server/supabase/functions/api/routes/push.ts` |

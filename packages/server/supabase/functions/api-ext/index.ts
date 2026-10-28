@@ -21,7 +21,8 @@
  *          roadmap, submission and redemption review, Tremendous webhook),
  *          the per-app Home, setup gaps and the release batch (console ops
  *          plan P1), local workers (`mushi work --daemon`, ADR 0048), repo clean-up (ADR 0051)
- *          and fresh-eyes runs (ADR 0053).
+ *          fresh-eyes runs (ADR 0053), and the public free Production Check and
+ *          scoreboard (docs /check and /proof, GTM plan November 2026).
  */
 
 import { Hono } from 'npm:hono@4'
@@ -59,6 +60,8 @@ import { registerReleaseBatchRoutes } from '../api/routes/release-batch.ts'
 import { registerWorkRoutes } from '../api/routes/work.ts'
 import { registerRepoHousekeepingRoutes } from '../api/routes/repo-housekeeping.ts'
 import { registerFreshEyesRoutes } from '../api/routes/fresh-eyes.ts'
+import { registerProductionCheckRoutes } from '../api/routes/production-check.ts'
+import { registerPublicScoreboardRoutes } from '../api/routes/public-scoreboard.ts'
 
 ensureSentry('api-ext')
 
@@ -98,6 +101,8 @@ registerReleaseBatchRoutes(app)
 registerWorkRoutes(app)
 registerRepoHousekeepingRoutes(app)
 registerFreshEyesRoutes(app)
+registerProductionCheckRoutes(app)
+registerPublicScoreboardRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 

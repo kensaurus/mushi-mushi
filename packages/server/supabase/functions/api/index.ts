@@ -781,6 +781,9 @@ forwardToApiExt([
   '/v1/admin/projects/:pid/ux-runs/:runId/surfaces/:key/report',
   '/v1/admin/projects/:pid/ux-runs/:runId/uploads',
 ]);
+// Free Production Check and the public scoreboard (production-check.ts,
+// public-scoreboard.ts): the docs /check and /proof pages.
+forwardToApiExt(['/v1/public/production-check', '/v1/public/production-check/:id', '/v1/public/scoreboard']);
 // Fresh-eyes runs (fresh-eyes.ts, ADR 0053).
 forwardToApiExt([
   '/v1/admin/fresh-eyes/test-account',
