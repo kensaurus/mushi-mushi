@@ -87,4 +87,17 @@ describe('setup count', () => {
     expect(count).toBe('3 of 4 done')
     expect(container.textContent).not.toMatch(/4\/10|75%|% required/)
   })
+
+  // Set up showed the rail, this checklist's count and progress bar, and the
+  // same four steps again (first-time user test, 2026-10-28).
+  it('lists only the optional steps under Set up, with no second count', () => {
+    act(() => {
+      root.render(createElement(MemoryRouter, null, createElement(SetupChecklist, { project: DEMO, mode: 'wizard', extrasOnly: true })))
+    })
+    expect(container.querySelector('[data-testid="setup-checklist-count"]')).toBeNull()
+    expect(container.querySelector('[role="progressbar"]')).toBeNull()
+    const items = container.querySelectorAll('[data-testid="setup-extras"] li')
+    expect(items).toHaveLength(6)
+    expect(container.textContent).not.toContain('sdk_installed')
+  })
 })

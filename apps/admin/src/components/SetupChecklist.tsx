@@ -27,6 +27,8 @@ import { SdkHealthPanel } from './SdkHealthPanel'
 interface SetupChecklistProps {
   project: SetupProject
   mode: 'banner' | 'wizard'
+  /** Wizard only: list just the optional steps (Set up's rail counts the required ones). */
+  extrasOnly?: boolean
   onRefresh?: () => void
   /**
    * Hostname this admin is reading from (from /v1/admin/setup's
@@ -58,7 +60,7 @@ function formatRelativeTime(iso: string | null | undefined): string | null {
   return `${Math.round(seconds / 86400)} days ago`
 }
 
-export function SetupChecklist({ project, mode, onRefresh, adminEndpointHost }: SetupChecklistProps) {
+export function SetupChecklist({ project, mode, extrasOnly, onRefresh, adminEndpointHost }: SetupChecklistProps) {
   const requiredDone = project.required_complete >= project.required_total
   const allDone = project.complete >= project.total
   const pct = Math.round((project.required_complete / Math.max(1, project.required_total)) * 100)
@@ -88,6 +90,7 @@ export function SetupChecklist({ project, mode, onRefresh, adminEndpointHost }: 
       nextRequiredId={nextRequiredId}
       onRefresh={onRefresh}
       adminEndpointHost={adminEndpointHost}
+      extrasOnly={extrasOnly}
     />
   )
 }
@@ -99,6 +102,7 @@ interface InternalProps {
   nextRequiredId: string | null
   onRefresh?: () => void
   adminEndpointHost?: string | null
+  extrasOnly?: boolean
 }
 
 function BannerChecklist({
@@ -204,8 +208,25 @@ function BannerChecklist({
   )
 }
 
-function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndpointHost }: InternalProps) {
+function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndpointHost, extrasOnly }: InternalProps) {
   useClaimNextStep('setup', nextRequiredId !== null)
+  // On Set up the rail already counts the required steps; a second count
+  // and progress bar here made three trackers (first-time user test).
+  if (extrasOnly) {
+    const extras = project.steps.filter((step) => !step.required)
+    return (
+      <div className="space-y-3" data-testid="setup-extras">
+        <p className="text-xs text-fg-muted">Optional. Each one adds something once your app is set up.</p>
+        <ol className="space-y-2">
+          {extras.map((step) => (
+            <li key={step.id}>
+              <ChecklistCard step={step} current={false} adminEndpointHost={adminEndpointHost} projectId={project.project_id} />
+            </li>
+          ))}
+        </ol>
+      </div>
+    )
+  }
   return (
     <div className="space-y-3">
       <Card  className="px-3 py-2.5">

@@ -70,8 +70,8 @@ const ONBOARDING_TABS: Array<{ id: OnboardingTabId; label: string; description: 
   },
   {
     id: 'steps',
-    label: 'All steps',
-    description: 'Checklist with required + optional milestones — synced from live DB state.',
+    label: 'More to connect',
+    description: 'Optional tools to connect once the app is set up.',
   },
   {
     id: 'verify',
@@ -223,7 +223,11 @@ export function OnboardingPage() {
     },
   })
 
-  const project = setup.activeProject
+  // The steps come from /v1/admin/setup, like the rail, the sidebar and Home.
+  // The activation payload marks the SDK step optional, so this page said
+  // "You're set up, 3 of 3" under a rail saying 3 of 4 (first-time user
+  // test, 2026-10-28).
+  const project = legacySetup.activeProject ?? setup.activeProject
 
   // What's the next required step? We use it to highlight the right card.
   const nextRequired = useMemo(
@@ -415,14 +419,9 @@ export function OnboardingPage() {
       : ONBOARDING_TABS
     return visibleTabs.map((t) => {
       let count: number | undefined
-      if (t.id === 'steps') {
-        count =
-          stats.requiredTotal - stats.requiredComplete > 0
-            ? stats.requiredTotal - stats.requiredComplete
-            : stats.stepsComplete > 0
-              ? stats.stepsComplete
-              : undefined
-      } else if (t.id === 'verify') {
+      // No count on the extras tab: the rail above is the one place that
+      // says how far setup is.
+      if (t.id === 'verify') {
         count = stats.hasApiKey && stats.reportCount === 0 ? 1 : undefined
       }
       return {
@@ -791,6 +790,7 @@ export function OnboardingPage() {
         <SetupChecklist
           project={project}
           mode="wizard"
+          extrasOnly
           adminEndpointHost={setup.data?.admin_endpoint_host ?? null}
         />
       )}
@@ -839,14 +839,14 @@ export function OnboardingPage() {
             <h3 className="text-sm font-semibold text-fg">Test your connection</h3>
             <ContainedBlock tone="muted" className="mt-2">
               <p className="text-xs text-fg-muted">
-                Verify that the backend is reachable and the pipeline can accept reports.
+                Check that Mushi is reachable, then send a test bug and watch it get a plain-English read.
               </p>
             </ContainedBlock>
           </div>
           <ConnectionStatus />
           <div className="border-t border-edge-subtle pt-3">
             <ContainedBlock tone="muted" className="mb-2">
-              <p className="text-xs text-fg-muted">Submit a test report to verify the full pipeline:</p>
+              <p className="text-xs text-fg-muted">Send a test bug:</p>
             </ContainedBlock>
             <div className="flex items-center gap-3 flex-wrap">
               <Btn
@@ -863,7 +863,7 @@ export function OnboardingPage() {
                   at={testStatus === 'pass' || testStatus === 'fail' ? testRanAt : null}
                 >
                   {testStatus === 'running' && 'Submitting test report…'}
-                  {testStatus === 'pass' && 'Pipeline is working — open /reports to see the row'}
+                  {testStatus === 'pass' && 'Mushi got it. It is on the Bugs page.'}
                   {testStatus === 'fail' && (error || 'Submission failed')}
                 </ResultChip>
               )}
@@ -874,24 +874,15 @@ export function OnboardingPage() {
 
       {project && setup.isStepIncomplete('api_key_generated') && (
         <Card className="p-4 border border-edge-subtle">
-          <p className="text-xs text-fg-muted">Generate an API key on the Steps tab first — verification needs an active ingest key.</p>
-          <Btn size="sm" variant="ghost" className="mt-2" onClick={() => setActiveTab('steps')}>Go to Steps</Btn>
+          <p className="text-xs text-fg-muted">Make a key first, with the second step at the top of this page.</p>
         </Card>
       )}
 
-      {/* Pipeline already verified — both steps complete but no in-session test ran yet.
-          Prevents the tab from looking completely empty for returning users. */}
+      {/* A test bug already arrived: the card above says so, this one only
+          offers another test, so the tab is never empty for a returning user. */}
       {project && !setup.isStepIncomplete('api_key_generated') && !setup.isStepIncomplete('first_report_received') && testStatus !== 'pass' && (
         <Card className="p-5 space-y-4 border border-ok/20 bg-ok/5">
-          <div className="flex items-start gap-3">
-            <span className="text-ok text-base mt-0.5" aria-hidden="true">✓</span>
-            <div>
-              <h3 className="text-sm font-semibold text-fg">Pipeline verified</h3>
-              <p className="text-xs text-fg-muted mt-0.5">
-                Your ingest key is active and at least one report has arrived. The pipeline is working.
-              </p>
-            </div>
-          </div>
+          <h3 className="text-sm font-semibold text-fg">Send another test bug</h3>
           <ConnectionStatus />
           <div className="border-t border-edge-subtle pt-3 flex items-center gap-3 flex-wrap">
             <Btn
@@ -1051,18 +1042,6 @@ export function OnboardingPage() {
         >
           Restart tour
         </Btn>
-        <span className="text-2xs text-fg-faint" aria-hidden="true">·</span>
-        {/* The Steps tab is the setup checklist (with Fix it on the SDK step).
-            This used to open a docked guide that is no longer mounted. */}
-        <Btn
-          variant="ghost"
-          size="sm"
-          onClick={() => setActiveTab('steps')}
-          className="border-0 bg-transparent shadow-none hover:bg-transparent px-0 py-0 text-2xs text-fg-faint hover:text-fg-muted"
-          data-testid="onboarding-show-setup-steps"
-        >
-          Show setup steps
-        </Btn>
       </p>
       ) : null}
     </div>
@@ -1082,7 +1061,7 @@ function formatDiagnosisDuration(ms: number): string {
 }
 
 /**
- * Surfaces the phase-1 north-star: time from minting an ingest key to the
+ * Surfaces the phase-1 north-star: time from making a key to the
  * first plain-English diagnosis. Target is "under 2 minutes" for a fresh
  * install — the one number to protect before spending on reach.
  */
@@ -1111,8 +1090,7 @@ function TimeToFirstDiagnosisCard({ hasApiKey, onOpenSdk }: { hasApiKey: boolean
           </span>
         </div>
         <p className="mt-2 text-xs text-fg-muted leading-relaxed">
-          From generating your report key to your first plain-English read. This is the one number worth
-          protecting — the faster a fresh install gets an answer, the more the loop earns its place.
+          From making your key to your first plain-English read of a bug from your app.
         </p>
       </Card>
     )
@@ -1125,7 +1103,7 @@ function TimeToFirstDiagnosisCard({ hasApiKey, onOpenSdk }: { hasApiKey: boolean
     return (
       <Card className="p-5 border border-ok/25 bg-ok/5" data-testid="ttfd-test-only">
         <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report from your app</p>
-        <p className="mt-0.5 text-sm text-fg-secondary">Your test report was diagnosed, so the pipeline works.</p>
+        <p className="mt-0.5 text-sm text-fg-secondary">Your test bug got its plain-English read, so Mushi works for this app.</p>
         <p className="mt-1 text-xs text-fg-muted leading-relaxed">
           The 2-minute clock starts with the first report from your app. Install the SDK, then report a bug from your
           app with its bug button.
@@ -1142,8 +1120,8 @@ function TimeToFirstDiagnosisCard({ hasApiKey, onOpenSdk }: { hasApiKey: boolean
       <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report from your app</p>
       <p className="mt-0.5 text-sm text-fg-secondary">Waiting on the first report from your app.</p>
       <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-        Send a test report below to check the pipeline, then report a bug from your app. Target: a plain-English
-        diagnosis in under 2 minutes from making the key.
+        Send a test bug below, then report a bug from your app. Target: a plain-English read in under 2 minutes
+        from making the key.
       </p>
     </Card>
   )

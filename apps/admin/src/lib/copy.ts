@@ -1476,7 +1476,7 @@ const COPY: CopyRegistry = {
         reports: 'Reports',
         optional: 'Optional',
       },
-      // No tabLabels: the page's own plain names apply ("All steps", "Test it",
+      // No tabLabels: the page's own plain names apply ("More to connect", "Test it",
       // "Install"); "Steps / Verify / SDK" here overrode them (2026-10-28).
       help: {
         title: 'About setup',
