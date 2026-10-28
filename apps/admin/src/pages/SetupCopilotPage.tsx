@@ -11,7 +11,7 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Section, Card, Btn } from '../components/ui'
 import { LINK_ACCENT } from '../lib/chipTone'
 import { VerifySetupPanel } from '../components/VerifySetupPanel'
-import { SdkHealthSummary } from '../components/SdkHealthSummary'
+import { activeSdkKeys, SdkHealthSummary } from '../components/SdkHealthSummary'
 import { SdkUpgradeCTA } from '../components/SdkUpgradeCTA'
 import { SdkVersionBadge, type SdkStatus } from '../components/SdkVersionBadge'
 import { CodeInline } from '../components/CodePanel'
@@ -41,6 +41,8 @@ interface ProjectRow {
     id: string
     key_prefix: string
     label?: string | null
+    /** Present on GET /v1/admin/projects. MCP and CLI keys are not the app SDK. */
+    scopes?: string[] | null
     is_active: boolean
     created_at: string
     last_seen_at?: string | null
@@ -52,6 +54,17 @@ interface ProjectRow {
   sdk_package?: string | null
   sdk_version?: string | null
   sdk_latest_version?: string | null
+}
+
+/**
+ * True only when an SDK key (`report:write`, no `mcp:*`) has checked in.
+ * An MCP or CLI key's last call is not the app (report fe489587): counting
+ * it made Diagnose say the SDK was live while the health card said it was
+ * not connected. Same key rule as `activeSdkKeys`.
+ * @internal Exported for tests.
+ */
+export function sdkHasCheckedIn(keys: ProjectRow['api_keys'] | undefined): boolean {
+  return activeSdkKeys(keys ?? []).some((k) => Boolean(k.last_seen_at))
 }
 
 /**
@@ -91,9 +104,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
   const pageSummary = useMemo(() => {
     if (!projectId) return 'Select a project'
     const { required_complete, required_total } = setup.selectors
-    const sdkLive = Boolean(
-      projectRow?.api_keys?.some((k) => k.is_active && k.last_seen_at),
-    )
+    const sdkLive = sdkHasCheckedIn(projectRow?.api_keys)
     const parts: string[] = []
     if (required_total > 0) {
       parts.push(`Ingest ${required_complete}/${required_total}`)
@@ -198,9 +209,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
                     projectName={projectRow.name}
                     projectSlug={projectRow.slug}
                     reportCount={projectRow.report_count}
-                    sdkConnected={Boolean(
-                      projectRow.api_keys?.some((k) => k.is_active && k.last_seen_at),
-                    )}
+                    sdkConnected={sdkHasCheckedIn(projectRow.api_keys)}
                     connectCmd={connectCmd}
                   />
                 ),
@@ -270,7 +279,9 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
                         <code className="font-mono">{env.ciVars.apiKey.name}</code> (secret)
                       </li>
                     ) : null}
-                    <li>Rebuild store apps after changing — EXPO_PUBLIC_* is compile-time.</li>
+                    {isExpoReporterProject(projectRow.slug) ? (
+                      <li>Rebuild store apps after changing — EXPO_PUBLIC_* is compile-time.</li>
+                    ) : null}
                   </ul>
                 </ContainedBlock>
                 <ContainedBlock tone="muted">
