@@ -7,7 +7,7 @@
  *               tracks, the same picture and counts as Home and /pipeline.
  *            2. Ready to merge: open fix PRs Opus said to merge about their
  *               latest commit, with CI green (countDefinitions
- *               `readyToMerge`). "Merge when ready" queues them (ADR 0041).
+ *               `isReadyToMerge`). "Merge when ready" queues them (ADR 0041).
  *            3. Stopped, by reason: the reports auto-fix stopped on, one row
  *               per reason, each with its own Retry, which spends LLM budget,
  *               only where a retry can help. "Retry 8 unfixed" used to be
@@ -19,7 +19,7 @@ import { Badge, Btn, Section } from '../ui'
 import { IconAlertTriangle, IconCheck, IconReleases } from '../icons'
 import { ReleaseStations, ReleaseTrainLine } from '../release/ReleaseStations'
 import { stationsFromStages, trainNow } from '../../lib/releaseStations'
-import { COUNT_HINTS, readyToMerge } from '../../lib/countDefinitions'
+import { COUNT_HINTS, isReadyToMerge, pipelineApprovedGreen } from '../../lib/countDefinitions'
 import { failureCause, fixCauseLabel, fixReportLabel, needsAttention } from '../../lib/fixReportTruth'
 import { pluralize } from '../../lib/format'
 import type { PipelineData } from '../../lib/pipeline'
@@ -72,10 +72,11 @@ function stoppedReasons(fixes: FixAttempt[]): StoppedReason[] {
 }
 
 /** Ready to merge, one row per PR. */
-function readyFixes(fixes: FixAttempt[]): FixAttempt[] {
+function readyFixes(fixes: FixAttempt[], pipeline: PipelineData | null): FixAttempt[] {
+  const approvedGreen = pipelineApprovedGreen(pipeline)
   const seen = new Set<string>()
   return fixes.filter((f) => {
-    if (!readyToMerge(f) || !f.pr_url || seen.has(f.pr_url)) return false
+    if (!isReadyToMerge(f, approvedGreen) || !f.pr_url || seen.has(f.pr_url)) return false
     seen.add(f.pr_url)
     return true
   })
@@ -92,6 +93,8 @@ interface Props {
   fixes: FixAttempt[]
   pipeline: PipelineData | null
   projectId: string | null
+  /** Reports auto-fix stopped on, from /v1/admin/fixes/stats: the status line's "Stopped". */
+  stoppedTotal?: number
   busy: boolean
   /** Queue these PRs to merge when ready (ADR 0041). */
   onQueue: (fixes: FixAttempt[]) => void
@@ -101,12 +104,15 @@ interface Props {
   onRetry: (fixes: FixAttempt[], label: string) => void
 }
 
-export function FixesFirstView({ fixes, pipeline, projectId, busy, onQueue, onShowCause, onRetry }: Props) {
-  const ready = readyFixes(fixes)
+export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy, onQueue, onShowCause, onRetry }: Props) {
+  const ready = readyFixes(fixes, pipeline)
   const queued = queuedFixIds(pipeline)
   const toQueue = ready.filter((f) => !queued.has(f.id))
   const reasons = stoppedReasons(fixes)
-  const stopped = reasons.reduce((n, r) => n + r.fixes.length, 0)
+  const listed = reasons.reduce((n, r) => n + r.fixes.length, 0)
+  // The reasons come from the attempts loaded below (the newest 200), so they
+  // can cover fewer reports than the status line's "Stopped 48" (it read 47).
+  const stopped = Math.max(listed, stoppedTotal ?? 0)
   const pipelineHref = projectId ? `/pipeline?project=${encodeURIComponent(projectId)}` : '/pipeline'
 
   return (
@@ -166,7 +172,10 @@ export function FixesFirstView({ fixes, pipeline, projectId, busy, onQueue, onSh
 
       {reasons.length > 0 && (
         <Section title={`Stopped: ${stopped} ${pluralize(stopped, 'report')}`} id="fixes-stopped" icon={<IconAlertTriangle />}>
-          <p className="mb-2 text-2xs text-fg-muted">{COUNT_HINTS.stopped}</p>
+          <p className="mb-2 text-2xs text-fg-muted">
+            {COUNT_HINTS.stopped}
+            {stopped > listed ? ` The reasons below cover the ${listed} in the newest attempts loaded on this page.` : ''}
+          </p>
           <ul className="divide-y divide-edge-subtle" data-testid="fixes-stopped-reasons">
             {reasons.map((r) => (
               <li key={r.cause} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2" data-testid={`fixes-stopped-${r.cause}`}>
