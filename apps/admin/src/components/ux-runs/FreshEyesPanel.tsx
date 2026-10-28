@@ -56,7 +56,8 @@ export function FreshEyesPanel({ projectId }: { projectId: string }) {
     detail.reload()
   })
 
-  const latest = runs.find((r) => r.status === 'done') ?? null
+  // The numbers come from the newest finished test that could sign up: a look-around test stops at sign-up by design (Home and the trend leave it out too).
+  const latest = runs.find((r) => r.status === 'done' && !r.dry_run) ?? null
   const trend = ttfvTrend(list.data?.trend ?? [])
 
   return (

@@ -205,6 +205,15 @@ describe('tests in the list', () => {
     expect(mocks.calls).toEqual([{ path: `${LIST}/${QUEUED.local_run_id}/cancel`, method: 'POST', body: null }])
   })
 
+  it('a look-around test shows in the list but never drives the numbers', () => {
+    const look = { ...RUN, local_run_id: '20261028-100000-cd34', dry_run: true, reached: 0, ttfv_seconds: null, steps: 30 }
+    render({ ...GLOT, runs: [look] }, { [`${LIST}/${look.local_run_id}`]: { run: { ...look, timeline: [] }, shots: {}, reports: [] } })
+    expect(host.textContent).not.toContain('Time to first value')
+    expect(host.textContent).toContain('Look around')
+    render({ ...GLOT, runs: [look, RUN] }, { [`${LIST}/${look.local_run_id}`]: { run: { ...look, timeline: [] }, shots: {}, reports: [] } })
+    expect(host.textContent).toContain('6 min 12 s')
+  })
+
   it('a failed test says why', () => {
     const failed = { ...QUEUED, status: 'failed', counts: null, detail: 'mushi-ux could not start on this computer: spawn npx ENOENT' }
     render({ ...GLOT, runs: [failed] }, { [`${LIST}/${failed.local_run_id}`]: { run: { ...failed, timeline: null }, shots: {}, reports: [] } })
