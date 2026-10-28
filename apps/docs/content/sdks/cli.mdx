@@ -317,6 +317,10 @@ GitHub API floor). The daemon then works by each lane's mode:
 | `audit` | A model (read-only) proposes bugs for one screen with the line, the code there and a check; the machine runs the check itself and files only what reproduces; a second model may only veto |
 | `skill` | Only the rounds of skill runs started with this lane on Spend credits |
 
+Whatever its mode (except `followups`), a lane first takes a **first-time user test**
+someone started with Run now in the console: it runs `mushi-ux fresh-eyes` on this
+machine and the console follows it live. The heartbeat tells the lane within a minute.
+
 While a lane holds a report, no cloud agent is sent to it. Every outcome goes back to
 Mushi; a failure of the machine (a clone permission, the network, a hook that
 timed out under load) is kept apart from a failure of the code and never

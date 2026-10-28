@@ -1,18 +1,25 @@
-# Fresh-eyes runs (operators)
+# First-time user tests (fresh-eyes runs, operators)
 
-A fresh-eyes run (ADR [0053](../adr/0053-fresh-eyes-runs-may-sign-up.md)) tries one goal
-as a first-time visitor and times the path. This page is for running it on Mushi itself,
-where it needs a synthetic account, and for checking that those accounts never count.
+A first-time user test (ADR [0053](../adr/0053-fresh-eyes-runs-may-sign-up.md) and its
+2026-10-28 amendment) tries one goal as a first-time visitor and times the path. This page
+is for running it on Mushi itself, where it needs a synthetic account, for starting it from
+the console, and for checking that those accounts never count.
 
 ## Release order
 
 1. Apply migration `20261027200000_fresh_eyes.sql` (additive: `synthetic_accounts`,
    `ux_runs.kind` and the fresh-eyes columns, `reports.source` gains `fresh_eyes`,
-   `is_synthetic_subject()`).
-2. Deploy `api-ext` (the routes), `api` (forwards the paths), `retention-sweep` (deletes
-   expired synthetic accounts), and every function that imports
-   `_shared/product-events.ts` (server events skip synthetic accounts).
-3. Optional secret `MUSHI_FRESH_EYES_EMAIL_DOMAIN` (default `synthetic.kensaur.us`): the
+   `is_synthetic_subject()`), then `20261028090000_fresh_eyes_queue.sql` (additive:
+   `ux_runs.status` gains `queued` and the request columns, `work_claims` kind
+   `fresh_eyes` with `ux_run_id` and outcome `ran`, `work_hosts.takes`).
+2. Deploy `api-ext` (the routes, the worker claim), `api` (forwards the paths, including
+   `…/fresh-eyes/:runId/cancel`), `retention-sweep` (deletes expired synthetic accounts),
+   and every function that imports `_shared/product-events.ts` (server events skip
+   synthetic accounts). The worker heartbeat reads `work_hosts.takes`, so the second
+   migration goes first.
+3. Publish `@mushi-mushi/ux` and `@mushi-mushi/cli` with `--request-stdin` and the
+   `fresh_eyes` claim; a worker with an older CLI shows as "too old" on Run now.
+4. Optional secret `MUSHI_FRESH_EYES_EMAIL_DOMAIN` (default `synthetic.kensaur.us`): the
    domain synthetic emails use. Pick one no mailbox answers on.
 
 Verify after the migration:
@@ -21,6 +28,7 @@ Verify after the migration:
 select relrowsecurity from pg_class where relname = 'synthetic_accounts';            -- t
 select pg_get_constraintdef(oid) from pg_constraint where conname = 'reports_source_check'; -- lists fresh_eyes
 select has_function_privilege('authenticated', 'public.is_synthetic_subject(uuid, uuid)', 'execute'); -- f
+select pg_get_constraintdef(oid) from pg_constraint where conname = 'work_claims_kind_target';      -- has fresh_eyes
 ```
 
 ## A run on Mushi
@@ -42,7 +50,8 @@ mushi ux fresh-eyes --url https://kensaur.us/mushi-mushi/ --goal "get my first b
 - The URL preset for `kensaur.us/mushi-mushi` adds the Supabase project as the app's own
   host and sets the goal check: a report page (`/mushi-mushi/admin/reports/*`) showing
   "Why it broke".
-- `--dry-run` creates no account, writes nothing and stops at the sign-up page.
+- `--dry-run` creates no account, writes nothing to the app, files nothing and stops at
+  the sign-up page; with `--sync` it still shows in the console, marked "look around only".
 
 ## What excludes a synthetic account
 
@@ -70,6 +79,26 @@ select user_id, email, expires_at from public.synthetic_accounts order by expire
 
 ## Starting runs from the console
 
-Not built yet (BL-138): the Fresh eyes tab shows the command. A `ux` lane on a local
-worker would need its own claim kind, a closed charter schema on both sides, and a key
-that can mint accounts, which `worker:run` deliberately cannot.
+Console → **First-time user test** → **Run now** queues the test (`ux_runs.status =
+'queued'`). A local worker (`mushi work --daemon`, ADR 0048) for that app takes it before
+its lane's own work and runs `mushi-ux fresh-eyes --request-stdin --sync` on its machine;
+the page follows the run row live. Any lane that claims will do (not a follow-ups lane,
+not paused or draining); the worker's CLI must be new enough to say it runs these tests
+(`work_hosts.takes`).
+
+| Run now says | Why | What to do |
+| --- | --- | --- |
+| No computer of yours runs Mushi for this app yet | no worker lane for the app | `mushi worker install` on your machine (Pipeline → Workers) |
+| … is not online | no heartbeat for 3 minutes | turn the machine on or start the worker |
+| … is too old to run this test | the daemon did not send `takes: ['fresh_eyes']` | `npm i -g @mushi-mushi/cli@latest`, restart the worker |
+| Every lane … is paused | every lane is paused, draining, past its stop date or follow-ups only | turn one on, on Pipeline → Workers |
+
+A waiting test can be cancelled. One nobody took within a day stops with that reason.
+
+**Test accounts from the console.** Only an operator's console session on Mushi's own
+project sees "Sign up with test accounts". Queueing stores a single-use grant for two
+hours, never a password. When a worker claims the run, the server mints one account per
+visitor, through the same code and hourly limit as the route above, and only when the
+claiming machine is that same operator's worker; otherwise the test runs without an
+account and the run says why. The passwords go once, in the claim answer, to that worker
+and from it to `mushi-ux` on stdin; they are never stored, logged or shown.

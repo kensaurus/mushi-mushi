@@ -112,6 +112,7 @@ and model-free replay.
   scope cannot reach the operator-only account route, and a `ux` lane needs a
   claim kind, a closed charter schema on both sides and an ADR 0020 amendment
   for unattended runs (BL-138 stays open). The console shows the exact command.
+  Superseded by the amendment below.
 
 ## Consequences
 
@@ -120,3 +121,83 @@ and model-free replay.
   within a day; every count that matters excludes it.
 - Other apps get fresh-eyes up to their sign-up wall until they pass a test
   account.
+
+## Amendment 2026-10-28: Run now from the console, on the user's own worker
+
+Status: Accepted 2026-10-28, asked for by the owner after walking the feature
+as a normal user: the tab showed Mushi's landing, goal and `--mint-account` for
+every app, and the only way to run was a terminal with a signed-in Cursor CLI. Related: ADR
+[0048](0048-local-workers.md) (local workers), ADR
+[0020](0020-local-ux-loop-runs-agents-in-the-cli-process.md), migration
+`20261028090000_fresh_eyes_queue.sql`, `_shared/fresh-eyes-queue.ts`,
+`api/routes/work-fresh-eyes.ts`, `packages/cli/src/worker/fresh-eyes.ts`,
+`packages/ux/src/fresh-eyes-request.ts`.
+
+**Decision.** The console names it the **First-time user test** (its own page,
+`/first-user-test`; "fresh eyes" stays a search word) and starts it with one
+button. Run now queues a `ux_runs` row (`kind = 'fresh_eyes'`, `status =
+'queued'`); a local worker (ADR 0048) takes it and runs `mushi-ux fresh-eyes`
+on the user's machine, where the browser and the model run, as before.
+
+- **Defaults come from the app.** The start page is the app's last test, its
+  live-site watch, its site audit or its crawler address; Mushi's landing and
+  goal only for Mushi's own project. The goal defaults to a plain one ("sign up
+  and start using the app") and is editable. The server decides both.
+- **A claim kind, not a lane mode.** Any lane of the app that claims (not a
+  follow-ups lane, not paused, draining or past its stop date) takes a queued
+  test before its own work: the test needs no clone, and a person who already
+  runs a worker for the app gets one click. The daemon says it can run it
+  (`host.takes = ['fresh_eyes']`, a closed list, `work_hosts.takes`); an older
+  daemon is never offered one. The claim answer is closed too: a run id, an
+  http(s) start page, a goal in plain text (no control characters, never read
+  as an option), 1 to 5 visitors, optional words that mean done, dry run or
+  not, and accounts. The heartbeat answer adds `wake`: lane ids whose app has a
+  test waiting, so a click is picked up within a minute instead of after a
+  lane's 15-minute idle wait. Lease, renewals and outcomes are ADR 0048's;
+  `ran` is the test's own outcome, and the run row says in plain words why a
+  test failed, stopped or lost its lease.
+- **No command, no shell, no secrets in argv.** The worker starts
+  `mushi-ux fresh-eyes --request-stdin --sync [--file | --dry-run]` with Node
+  itself (refusing the Windows shell fallback); everything the server chose
+  goes on stdin as one JSON document, never argv or the environment. The
+  child gets the worker key to sync; `mushi-ux` drops every `MUSHI_*` variable
+  before its model runs.
+- **The worker key reaches one run.** `worker:run` may PUT, upload and file
+  findings for a fresh-eyes run only while its own machine holds an active
+  claim on that run (the same rule as `workerClaimDenial` for fixes).
+- **Graceful states.** Run now answers 409 `NO_WORKER` with one plain sentence
+  and one action when no computer can take it: none set up (Pipeline →
+  Workers, `mushi worker install`), offline, too old to run tests, or every
+  lane paused. A queued test can be cancelled; one nobody took within a day
+  stops with that reason.
+- **Test accounts: minted at claim time, never stored.** Only an operator's
+  console session on Mushi's own project may ask for them (the panel offers
+  the option only then; the server checks again). Queueing stores a
+  single-use grant (`account_granted_by`, `account_grant_until`, 2 hours) and
+  no password. When a worker claims the run, the server mints one synthetic
+  account per visitor through the same code as the operator route
+  (`_shared/synthetic-accounts.ts`, the same hourly limit, flags and 24-hour
+  sweep) **only if the claiming machine belongs to that same operator**, the
+  grant is unexpired and the granting user is still an operator; the grant is
+  spent in the same compare-and-set that starts the run. The passwords travel
+  once, in the claim answer (`Cache-Control: no-store`), to the operator's own
+  worker, and from it to `mushi-ux` on stdin; they are never written to the
+  database, `work_claims.detail`, a log line or the console. Any other case
+  runs without an account (read-only up to the sign-up page) and the run row
+  says why. The `worker:run` scope itself still cannot mint: the authority is
+  the operator's own click, bound to the operator's own machine.
+- **A dry run syncs.** `--dry-run --sync` now mirrors the run to the console
+  (marked "look around only"); it still writes nothing to the app and files
+  nothing, and writes no trend point.
+
+**Rejected.**
+
+- *Minting at queue time.* The password would sit in the database until a
+  worker claimed the run.
+- *A `fresh_eyes` lane mode.* It needs a lane (and a clone) per app just for
+  this; any claiming lane can run it.
+- *Running it in the cloud.* The model is the user's Cursor CLI and the
+  browser runs where the person's account and network are; a hosted runner is
+  a separate decision.
+- *Passing the goal or accounts as arguments or environment variables.* `ps`
+  and a Windows shell would read them.
