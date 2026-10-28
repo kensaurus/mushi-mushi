@@ -148,12 +148,13 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab, plainBa
 
   if (stats.isComplimentary) {
     return (
+      // Not a problem, so not the red brand tone; usage is the tile right below.
       <StatusBannerShell
-        tone="brand"
+        tone="info"
         title={plainBanner ? 'Admin account — no charges' : 'Admin account — complimentary billing'}
-        subtitle={`${stats.planDisplayName} entitlements for ${projectLabel} · no Stripe charges · ${limitLine} this period`}
+        subtitle={`${stats.planDisplayName} features on ${projectLabel}; nothing is billed.`}
         action={
-          <Btn to="/cost" size="sm" variant="ghost">{actions.cost ?? 'View LLM cost'}</Btn>
+          <Btn to="/team?view=spend" size="sm" variant="ghost">{actions.cost ?? 'See AI spend'}</Btn>
         }
       />
     )

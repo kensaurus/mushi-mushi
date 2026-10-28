@@ -76,6 +76,8 @@ export interface SeatBillingContext {
   seatLimit: number | null
   seatsUsed: number
   teamsEnabled: boolean
+  /** Shown on Billing itself: "upgrade on Billing" and a link to it point back here. */
+  onBillingPage?: boolean
 }
 
 /** Answers "will adding an admin cost me money?" in plain language. */
@@ -112,8 +114,8 @@ export function seatBillingExplainer(ctx: SeatBillingContext): {
   const nearCap = ctx.seatsUsed >= ctx.seatLimit - 1
   return {
     headline: `${ctx.seatsUsed} of ${ctx.seatLimit} seats used`,
-    body: `Each person counts as one seat (any role). Pending invites also reserve a seat. You're on ${plan} with ${remaining} seat${remaining === 1 ? '' : 's'} left — upgrade on Billing if you need more.`,
-    billingLink: nearCap,
+    body: `Each person counts as one seat (any role). Pending invites also reserve a seat. You're on ${plan} with ${remaining} seat${remaining === 1 ? '' : 's'} left — ${ctx.onBillingPage ? 'pick a bigger plan under Plans' : 'upgrade on Billing'} if you need more.`,
+    billingLink: nearCap && !ctx.onBillingPage,
     tone: nearCap ? 'warn' : 'neutral',
     calloutLabel: nearCap ? 'Seat limit' : 'Seat usage',
   }

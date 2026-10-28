@@ -28,4 +28,14 @@ describe('orgRoleGuide', () => {
     })
     expect(copy.headline).toMatch(/2 of 3/)
   })
+
+  // On Billing itself the card said "upgrade on Billing" and linked to Billing (2026-10-28).
+  it('does not send someone on Billing to Billing', () => {
+    const ctx = { planDisplayName: 'Pro', planId: 'pro', seatLimit: 5, seatsUsed: 4, teamsEnabled: true }
+    expect(seatBillingExplainer(ctx).body).toMatch(/upgrade on Billing/)
+    const onBilling = seatBillingExplainer({ ...ctx, onBillingPage: true })
+    expect(onBilling.body).not.toMatch(/on Billing/)
+    expect(onBilling.body).toMatch(/under Plans/)
+    expect(onBilling.billingLink).toBe(false)
+  })
 })

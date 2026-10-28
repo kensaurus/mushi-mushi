@@ -978,7 +978,7 @@ const COPY: CopyRegistry = {
         plans: 'Compare plans',
         payment: 'Update payment',
         projects: 'Create project',
-        cost: 'View LLM cost',
+        cost: 'See AI spend',
         health: 'Run Health test',
       },
       tabLabels: {

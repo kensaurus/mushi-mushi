@@ -338,6 +338,7 @@ export function BillingPage() {
           seatLimit={membersStats.seatLimit ?? activePlan?.seatLimit ?? null}
           seatsUsed={membersStats.seatsUsed}
           teamsEnabled={Boolean(activePlan?.featureFlags?.teams)}
+          onBillingPage
         />
       )}
 
