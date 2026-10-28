@@ -8,7 +8,7 @@
  * does not rewrite the user's persisted preference.
  */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useSyncExternalStore } from 'react'
 
 const KEY = 'mushi:focusMode:v1'
 
@@ -21,16 +21,44 @@ export function isConsentFocusPath(pathname: string): boolean {
 
 function readFocusMode(): boolean {
   if (typeof window === 'undefined') return false
-  return window.localStorage.getItem(KEY) === '1'
+  try {
+    return window.localStorage.getItem(KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+// One value for every caller in the tab (the shell and Settings › Display),
+// so a toggle in one place is the state everywhere.
+let current: boolean | null = null
+const listeners = new Set<() => void>()
+
+function snapshot(): boolean {
+  if (current === null) current = readFocusMode()
+  return current
+}
+
+function apply(next: boolean): void {
+  current = next
+  if (typeof document !== 'undefined') document.documentElement.dataset.focusMode = next ? 'true' : 'false'
+  try {
+    window.localStorage.setItem(KEY, next ? '1' : '0')
+  } catch {
+    /* private mode: this tab keeps it */
+  }
+  for (const listener of listeners) listener()
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener)
+  if (typeof document !== 'undefined') document.documentElement.dataset.focusMode = snapshot() ? 'true' : 'false'
+  return () => listeners.delete(listener)
 }
 
 export function useFocusMode(): [boolean, (next: boolean | ((current: boolean) => boolean)) => void] {
-  const [enabled, setEnabled] = useState(readFocusMode)
-
-  useEffect(() => {
-    document.documentElement.dataset.focusMode = enabled ? 'true' : 'false'
-    window.localStorage.setItem(KEY, enabled ? '1' : '0')
-  }, [enabled])
-
+  const enabled = useSyncExternalStore(subscribe, snapshot, () => false)
+  const setEnabled = useCallback((next: boolean | ((value: boolean) => boolean)) => {
+    apply(typeof next === 'function' ? next(snapshot()) : next)
+  }, [])
   return [enabled, setEnabled]
 }

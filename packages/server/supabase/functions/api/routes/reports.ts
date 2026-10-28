@@ -26,7 +26,7 @@ import { getStorageAdapter } from '../../_shared/storage.ts';
 import { runInBackground } from '../../_shared/background.ts';
 import { loadReportDeployLive, type MergedFixRow } from '../../_shared/report-deploy-live.ts';
 import { CLASSIFIER_REPORT_CATEGORIES, featureRequestDispatchBlock } from '../../_shared/report-category.ts';
-import { bulkClosedReason } from '../../_shared/report-close-reasons.ts';
+import { CLOSED_REASONS, bulkClosedReason, closedReasonAllowed } from '../../_shared/report-close-reasons.ts';
 import { isSdkKey } from '../../_shared/setup-signals.ts';
 import { REPORT_ORIGIN_FILTERS, reportOriginFilter } from '../../_shared/report-origin.ts';
 import {
@@ -41,9 +41,6 @@ import {
   platformOrClause,
   reportWindowStartIso,
 } from '../../_shared/report-list-filters.ts';
-
-/** `reports_closed_reason_check` values (migration 20261002120000). */
-const CLOSED_REASONS = new Set(['duplicate', 'not_reproducible', 'wont_fix', 'working_as_intended', 'spam']);
 
 /** "Search again" web searches per app per hour (each costs a few Firecrawl credits). */
 const KNOWN_ISSUE_SEARCHES_PER_HOUR = 30;
@@ -869,7 +866,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       db
         .from('fix_attempts')
         .select(
-          'id, status, agent, pr_url, pr_number, branch, commit_sha, files_changed, lines_changed, review_passed, check_run_status, check_run_conclusion, ci_infra, pr_state, merged_at, llm_model, error, started_at, completed_at, created_at, langfuse_trace_id, inventory_action_node_id, spec_validation_warnings',
+          'id, status, agent, pr_url, pr_number, branch, commit_sha, files_changed, lines_changed, review_passed, review_reasoning, check_run_status, check_run_conclusion, ci_infra, pr_state, merged_at, llm_model, error, started_at, completed_at, created_at, langfuse_trace_id, inventory_action_node_id, spec_validation_warnings',
         )
         .eq('report_id', reportId)
         .order('created_at', { ascending: false })
@@ -1429,7 +1426,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     // Fetch report before update for reputation tracking
     const { data: report } = await db
       .from('reports')
-      .select('project_id, reporter_token_hash, status, report_group_id')
+      .select('project_id, reporter_token_hash, status, report_group_id, source')
       .eq('id', reportId)
       .in('project_id', projectIds)
       .single();
@@ -1439,6 +1436,23 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       if (targetStatus !== 'dismissed') {
         return c.json(
           { ok: false, error: { code: 'VALIDATION_ERROR', message: 'closed_reason applies only to dismissed reports' } },
+          400,
+        );
+      }
+      // A false alarm means Mushi's check was wrong. On a person's report it
+      // would dismiss their bug and tell them nothing.
+      if (
+        updates.closed_reason === 'false_alarm' &&
+        !closedReasonAllowed('false_alarm', (report as { source?: string | null } | null)?.source)
+      ) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'closed_reason "false_alarm" is only for a report Mushi\'s own check filed',
+            },
+          },
           400,
         );
       }

@@ -35,6 +35,7 @@ import { ReportsQuickFilters } from '../components/reports/ReportsQuickFilters'
 import { ReportPreviewDrawer } from '../components/reports/ReportPreviewDrawer'
 import { SavedViewsRow } from '../components/SavedViewsRow'
 import { ReportsKpiStrip } from '../components/reports/ReportsKpiStrip'
+import { FixFirstQueue } from '../components/reports/FixFirstQueue'
 import { ReportsStatusBanner } from '../components/reports/ReportsStatusBanner'
 import { ReportsSentryImport } from '../components/reports/ReportsSentryImport'
 import {
@@ -849,13 +850,19 @@ export function ReportsPage() {
         ]}
       />
 
+      {/* Which bug to fix first: worst severity, most people hit, no fix on the way (journeys 2026-10-27). */}
+      <FixFirstQueue scope={fetchScope} />
+
       <DogfoodNarrativeBanner />
 
       {recommendation && (
         <RecommendedAction
           title={recommendation.title}
           description={recommendation.description}
-          cta={recommendation.cta}
+          // With bugs listed, "Open the worst" (Fix first) is the page's one
+          // main button and this card's step is a quiet link (journeys 2026-10-27).
+          cta={total > 0 ? undefined : recommendation.cta}
+          actions={total > 0 && recommendation.cta ? [{ ...recommendation.cta, tone: 'ghost' }] : undefined}
           tone={recommendation.tone}
         />
       )}

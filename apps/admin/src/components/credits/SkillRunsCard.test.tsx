@@ -4,6 +4,7 @@
  * The skill-run app picker on /credits starts on the open app — the one the
  * "one app at a time" notice names — from ?project= or the stored app. Every
  * other app stays choosable, and runs from the whole team stay listed.
+ * "Run on" offers your fix and skill lanes for the app and sends laneId.
  */
 
 import { act, createElement } from 'react'
@@ -22,12 +23,17 @@ const projects = [
 
 const mocks = vi.hoisted(() => ({
   loadSkillRuns: vi.fn(),
+  startSkillRun: vi.fn(),
+  lanes: null as unknown,
 }))
 
 vi.mock('../../lib/skillRuns', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
-  return { ...actual, loadSkillRuns: mocks.loadSkillRuns }
+  return { ...actual, loadSkillRuns: mocks.loadSkillRuns, startSkillRun: mocks.startSkillRun }
 })
+vi.mock('../../lib/usePageData', () => ({
+  usePageData: (path: string | null) => ({ data: path === '/v1/admin/work/lanes' ? mocks.lanes : null, loading: false, error: null, isValidating: false, reload: () => {}, lastFetchedAt: null }),
+}))
 
 import { SkillRunsCard } from './SkillRunsCard'
 
@@ -56,6 +62,9 @@ let host: HTMLDivElement
 
 beforeEach(() => {
   window.localStorage.clear()
+  mocks.lanes = null
+  mocks.startSkillRun.mockReset()
+  mocks.startSkillRun.mockResolvedValue({ ok: true, data: { run: { id: 'new' } } })
   mocks.loadSkillRuns.mockReset()
   mocks.loadSkillRuns.mockResolvedValue({
     ok: true,
@@ -123,5 +132,46 @@ describe('SkillRunsCard app picker', () => {
     })
     expect(appSelect().value).toBe(GLOT)
     expect(appSelect().disabled).toBe(false)
+  })
+})
+
+describe('SkillRunsCard run on a local lane (ADR 0042 amendment)', () => {
+  const lane = (id: string, name: string, mode: string, projectId = GLOT) => ({
+    id, hostId: 'h1', projectId, projectName: 'glot.it', name,
+    config: { paused: false, concurrency: 1, model: null, mode, stop_at: null, drain: false, prune_own: false },
+    status: {}, lastSeenAt: '2026-10-27T11:59:00Z', active: [], queue: [], recent: [], counts7d: { runs: 0, prs: 0, noChange: 0, timeouts: 0, errors: 0, infra: 0 },
+  })
+  const lanesData = (lanes: unknown[]) => ({
+    generatedAt: '2026-10-27T12:00:00Z',
+    projects: [],
+    hosts: [{ id: 'h1', hostname: 'alienware', platform: 'wsl2', version: null, online: true, lastHeartbeatAt: '2026-10-27T11:59:00Z', status: {}, guards: { max_agents: 6, min_free_mem_gb: 5, gh_floor: 800 }, revoked: false, mine: true }],
+    lanes,
+  })
+
+  it('offers only your fix and skill lanes for the app, and sends the one picked', async () => {
+    mocks.lanes = lanesData([lane('l-skill', 'glot-skill', 'skill'), lane('l-audit', 'glot-audit', 'audit'), lane('l-other', 'lets', 'fix', LETS)])
+    await render(`/credits?project=${GLOT}`)
+    const runOn = host.querySelector('[data-testid="skill-run-on"]') as HTMLSelectElement
+    expect(Array.from(runOn.options).map((o) => o.value)).toEqual(['', 'l-skill'])
+    const setSelect = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!
+    const setInput = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+    await act(async () => {
+      setSelect.call(runOn, 'l-skill')
+      runOn.dispatchEvent(new Event('change', { bubbles: true }))
+      const scope = host.querySelector('input') as HTMLInputElement
+      setInput.call(scope, 'the /settings pages')
+      scope.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    const startBtn = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Start skill run')!
+    await act(async () => {
+      startBtn.click()
+      await Promise.resolve()
+    })
+    expect(mocks.startSkillRun).toHaveBeenCalledWith(GLOT, { skillSlug: 'audit-accessibility', scope: 'the /settings pages', rounds: 3, autoMerge: true, laneId: 'l-skill' })
+  })
+
+  it('shows no choice without a lane, and runs in the cloud', async () => {
+    await render(`/credits?project=${GLOT}`)
+    expect(host.querySelector('[data-testid="skill-run-on"]')).toBeNull()
   })
 })

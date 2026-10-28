@@ -50,6 +50,16 @@ describe('VERIFY_WORKFLOW_TEMPLATE', () => {
     expect(VERIFY_WORKFLOW_TEMPLATE).toMatch(/^\s+name: Mushi verify run$/m)
     expect(VERIFY_WORKFLOW_PATH).toBe('.github/workflows/mushi-verify.yml')
   })
+
+  it('spends no minutes on drafts, release trains or reverts, and runs when a draft is marked ready', () => {
+    expect(VERIFY_WORKFLOW_TEMPLATE).toContain('    types: [opened, synchronize, reopened, ready_for_review]\n')
+    expect(VERIFY_WORKFLOW_TEMPLATE).toContain('      github.event.pull_request.draft == false &&\n')
+    expect(VERIFY_WORKFLOW_TEMPLATE).toContain("      !startsWith(github.head_ref, 'mushi/train/') &&\n")
+    expect(VERIFY_WORKFLOW_TEMPLATE).toContain("      !startsWith(github.head_ref, 'mushi/revert-')\n")
+    // The skips sit in the one job's `if:`, so the filled copy keeps them.
+    const filled = fillVerifyWorkflow({ verifyRunsOn: ['self-hosted'], verifyTestCommand: 'npx jest {files}' }, { ...DEFAULT_TOOLCHAIN, packageManager: 'npm' })
+    for (const line of ['ready_for_review]', 'pull_request.draft == false', "'mushi/train/'", "'mushi/revert-'"]) expect(filled).toContain(line)
+  })
 })
 
 describe('fillVerifyWorkflow', () => {

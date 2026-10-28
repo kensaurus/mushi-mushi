@@ -683,7 +683,6 @@ export function OrganizationSettingsPage() {
                 stats={stats}
                 fetchedAt={lastFetchedAt}
                 isValidating={isValidating}
-                hint={activeMeta.description}
               />
             ),
           },

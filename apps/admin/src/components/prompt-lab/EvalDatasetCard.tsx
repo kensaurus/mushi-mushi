@@ -31,7 +31,7 @@ export function EvalDatasetCard({ labelled, recentSamples }: EvalDatasetCardProp
         {recentSamples.length === 0 ? (
           <EmptyState
             title="No labelled reports yet"
-            description="Once Stage 2 classifies reports, they appear here as the eval dataset for your next prompt experiment."
+            description="Once Mushi diagnoses reports, they appear here as the eval dataset for your next prompt experiment."
           />
         ) : (
           <ul className="space-y-1.5 text-xs">

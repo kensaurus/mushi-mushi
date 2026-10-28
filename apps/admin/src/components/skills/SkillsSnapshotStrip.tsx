@@ -1,11 +1,12 @@
 /**
  * FILE: SkillsSnapshotStrip.tsx
- * PURPOSE: Skill pipeline KPI strip using MetricStrip — backed by /v1/admin/skills/stats.
+ * PURPOSE: Agent skills status: skill runs going now and the ones waiting on
+ *          you (PageStatus, P1).
  */
 
-import { Section, StatCard, SnapshotSectionHint, formatRelative } from '../ui'
-import { MetricStrip } from '../MetricStrip'
+import { PageStatus, formatRelative } from '../ui'
 import type { SkillsStats } from './SkillsStatsTypes'
+import { pluralizeWithCount } from '../../lib/format'
 
 const skillsLinks = {
   catalog: '/skills?tab=catalog',
@@ -18,58 +19,51 @@ interface Props {
   stats: SkillsStats
   statsFetchedAt: string | null
   statsValidating?: boolean
-  sectionTitle?: string
-  hint?: string
   statLabels?: Record<string, string>
 }
 
-export function SkillsSnapshotStrip({
-  stats,
-  statsFetchedAt,
-  statsValidating,
-  sectionTitle = 'SKILLS SNAPSHOT',
-  hint,
-  statLabels,
-}: Props) {
+function skillsSentence(stats: SkillsStats): string {
+  const parts: string[] = []
+  if (stats.activeRuns > 0) parts.push(`${pluralizeWithCount(stats.activeRuns, 'skill run')} going`)
+  if (stats.awaitingCheckin > 0) {
+    const since = stats.oldestAwaitingCheckinAt ? `, the oldest since ${formatRelative(stats.oldestAwaitingCheckinAt)}` : ''
+    parts.push(`${pluralizeWithCount(stats.awaitingCheckin, 'step')} waiting for you to check in${since}`)
+  }
+  if (stats.failedRuns > 0) parts.push(`${stats.failedRuns} failed`)
+  if (parts.length === 0) return `No skill runs going; ${pluralizeWithCount(stats.catalogTotal, 'skill')} to choose from.`
+  const s = parts.join('; ')
+  return `${s.charAt(0).toUpperCase()}${s.slice(1)}.`
+}
+
+export function SkillsSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels }: Props) {
   return (
-    <Section title={sectionTitle} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-      {hint ? <SnapshotSectionHint text={hint} /> : null}
-      <MetricStrip cols={4} ariaLabel="Skills snapshot">
-        <StatCard
-          label={statLabels?.catalog ?? 'Catalog'}
-          value={stats.catalogTotal}
-          hint="Synced agent skills available to attach to reports."
-          detail="synced from GitHub sources"
-          to={skillsLinks.catalog}
-        />
-        <StatCard
-          label={statLabels?.activeRuns ?? 'Active runs'}
-          value={stats.activeRuns}
-          hint="Pipeline runs currently executing skill steps."
-          detail="live pipeline runs"
-          to={skillsLinks.activeRuns}
-        />
-        <StatCard
-          label={statLabels?.failedRuns ?? 'Failed runs'}
-          value={stats.failedRuns}
-          accent={stats.failedRuns > 0 ? 'text-danger' : 'text-ok'}
-          hint="Pipeline runs that failed — open Pipelines tab for step errors."
-          detail="needs your review"
-          to={skillsLinks.failedRuns}
-        />
-        <StatCard
-          label={statLabels?.awaitingCheckin ?? 'Awaiting check-in'}
-          value={stats.awaitingCheckin}
-          accent={stats.awaitingCheckin > 0 ? 'text-warn' : undefined}
-          hint="Handoff-mode steps paused until you mark them passed or failed."
-          detail={
-            stats.awaitingCheckin > 0 && stats.oldestAwaitingCheckinAt
-              ? `oldest from ${formatRelative(stats.oldestAwaitingCheckinAt)}`
-              : 'handoff mode'
-          }
-          to={skillsLinks.awaitingCheckin}
-        />
-      </MetricStrip>
-    </Section>
+    <PageStatus
+      ariaLabel="Agent skills status"
+      tone={stats.failedRuns > 0 ? 'danger' : stats.awaitingCheckin > 0 ? 'warn' : stats.activeRuns > 0 ? 'info' : 'neutral'}
+      sentence={skillsSentence(stats)}
+      freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      metrics={[
+        {
+          label: statLabels?.activeRuns ?? 'Running',
+          value: stats.activeRuns,
+          tone: stats.activeRuns > 0 ? 'info' : 'neutral',
+          hint: 'Skill runs working on a bug now.',
+          to: skillsLinks.activeRuns,
+        },
+        {
+          label: statLabels?.awaitingCheckin ?? 'Waiting for you',
+          value: stats.awaitingCheckin,
+          tone: stats.awaitingCheckin > 0 ? 'warn' : 'neutral',
+          hint: 'Steps your editor finished that need you to mark them done or failed.',
+          to: skillsLinks.awaitingCheckin,
+        },
+        {
+          label: statLabels?.catalog ?? 'Skills',
+          value: stats.catalogTotal,
+          hint: 'Skills you can run on a bug.',
+          to: skillsLinks.catalog,
+        },
+      ]}
+    />
   )
 }

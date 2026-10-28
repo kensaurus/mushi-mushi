@@ -107,3 +107,11 @@ a6079623f9b4b675b1a4489b183d23a516ef3d55:packages/server/src/__tests__/byok-univ
 # working tree carries an inline gitleaks:allow marker; this fingerprint pins
 # the commit that added it so PR-range scans stop flagging the audited fixture.
 76497989c82fc2f560a25a2fcd34d230b1754ca0:packages/adapters/src/__tests__/honeycomb.test.ts:generic-api-key:13
+
+# fresh-eyes test fixtures (ADR 0053): made-up passwords for a synthetic
+# identity on reserved test domains (synthetic.example, mushi.invalid), used
+# to prove the runner redacts them from everything the model and the logs see.
+# Never a real account. Renamed to TEST-FIXTURE-NOT-A-REAL-SECRET in the
+# working tree; these fingerprints pin the release-4 commits that held them.
+977c6a2e52486e6c588f1faa59eec4a968d56cc7:packages/ux/src/fresh-eyes.browser.test.ts:generic-api-key:26
+339e94c055aca4ce81847394af834ecc998c2fb3:packages/ux/src/fresh-eyes.test.ts:generic-api-key:33

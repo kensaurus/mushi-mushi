@@ -1,65 +1,37 @@
 /**
  * FILE: FeatureBoardSnapshotStrip.tsx
- * PURPOSE: Community feature board KPI strip — MetricStrip layout for FeatureBoardPage.
- *
- * OVERVIEW:
- * - Four StatCards derived from loaded ticket list counts
- *
- * DEPENDENCIES:
- * - MetricStrip, Section, StatCard, SnapshotSectionHint
- * - FeatureBoardClientStats from ./FeatureBoardStatsTypes
- *
- * USAGE:
- * - Mount via PagePosture on FeatureBoardPage with clientStats from ticket useMemo hooks
+ * PURPOSE: Feature requests status: what people ask for and what shipped
+ *          (PageStatus, P1).
  */
 
-import { Section, StatCard, SnapshotSectionHint } from '../ui'
-import { MetricStrip } from '../MetricStrip'
+import { PageStatus } from '../ui'
 import type { FeatureBoardClientStats } from './FeatureBoardStatsTypes'
+import { pluralizeWithCount } from '../../lib/format'
 
 interface Props {
   stats: FeatureBoardClientStats
   fetchedAt: string | null
   isValidating?: boolean
-  sectionTitle?: string
-  hint?: string
 }
 
-export function FeatureBoardSnapshotStrip({
-  stats,
-  fetchedAt,
-  isValidating,
-  sectionTitle = 'FEATURE BOARD SNAPSHOT',
-  hint,
-}: Props) {
+function boardSentence(stats: FeatureBoardClientStats): string {
+  if (stats.totalTickets === 0) return 'No feature requests yet.'
+  const top = stats.topRequestSubject ? ` The most wanted: “${stats.topRequestSubject}”.` : ''
+  return `${pluralizeWithCount(stats.openCount, 'request')} open, ${stats.shippedCount} shipped.${top}`
+}
+
+export function FeatureBoardSnapshotStrip({ stats, fetchedAt, isValidating }: Props) {
   return (
-    <Section title={sectionTitle} freshness={{ at: fetchedAt, isValidating }}>
-      {hint ? <SnapshotSectionHint text={hint} /> : null}
-      <MetricStrip cols={4} ariaLabel="Feature board snapshot">
-        <StatCard
-          label="Requests"
-          value={stats.totalTickets}
-          detail={stats.projectId ? 'All feature-category tickets' : 'Select a project'}
-        />
-        <StatCard
-          label="Open"
-          value={stats.openCount}
-          accent={stats.openCount > 0 ? 'text-warn' : undefined}
-          detail="Open or in progress"
-        />
-        <StatCard
-          label="Shipped"
-          value={stats.shippedCount}
-          accent={stats.shippedCount > 0 ? 'text-ok' : undefined}
-          detail="Linked to a release"
-        />
-        <StatCard
-          label="Total votes"
-          value={stats.totalVotes}
-          accent={stats.totalVotes > 0 ? 'text-info' : undefined}
-          detail="Across all requests"
-        />
-      </MetricStrip>
-    </Section>
+    <PageStatus
+      ariaLabel="Feature requests status"
+      tone={stats.openCount > 0 ? 'info' : 'neutral'}
+      sentence={boardSentence(stats)}
+      freshness={{ at: fetchedAt, isValidating }}
+      metrics={[
+        { label: 'Open', value: stats.openCount, hint: 'Requests not shipped or declined yet.' },
+        { label: 'Shipped', value: stats.shippedCount, hint: 'Requests that shipped.' },
+        { label: 'Votes', value: stats.totalVotes, hint: 'Votes across all requests.' },
+      ]}
+    />
   )
 }

@@ -12,10 +12,13 @@ interface FileReportFlags {
   description?: string;
   severity?: string;
   component?: string;
+  lane?: string;
 }
 
+const LANE_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** The POST /v1/admin/projects/:id/reports body, validated with the server's bounds before any call. */
-function buildFileReportBody(flags: FileReportFlags): Record<string, string> {
+function buildFileReportBody(flags: FileReportFlags): Record<string, unknown> {
   const title = (flags.title ?? '').trim();
   const description = (flags.description ?? '').trim();
   if (title.length < 3 || title.length > 200) {
@@ -24,7 +27,7 @@ function buildFileReportBody(flags: FileReportFlags): Record<string, string> {
   if (description.length < 1 || description.length > 10_000) {
     throw new MushiCliError('E_INVALID_INPUT', '--description must be 1 to 10000 characters.');
   }
-  const body: Record<string, string> = { title, description };
+  const body: Record<string, unknown> = { title, description };
   if (flags.severity !== undefined) {
     const severity = flags.severity.trim().toLowerCase();
     if (!(FILE_REPORT_SEVERITIES as readonly string[]).includes(severity)) {
@@ -37,6 +40,10 @@ function buildFileReportBody(flags: FileReportFlags): Record<string, string> {
     if (component.length > 200) throw new MushiCliError('E_INVALID_INPUT', '--component is at most 200 characters.');
     if (component) body['component'] = component;
   }
+  if (flags.lane !== undefined) {
+    if (!LANE_ID_RE.test(flags.lane.trim())) throw new MushiCliError('E_INVALID_INPUT', '--lane must be a lane id (mushi worker status lists them).');
+    body['queue'] = { laneId: flags.lane.trim() };
+  }
   return body;
 }
 
@@ -47,6 +54,7 @@ interface FiledReport {
   status: string;
   severity: string | null;
   component: string | null;
+  queued?: { laneId: string } | null;
 }
 
 export function registerReportsCommands(program: Command): void {
@@ -396,11 +404,13 @@ reports
   .requiredOption('--description <text>', 'What happens, steps, what you expected (up to 10000 characters)')
   .option('--severity <severity>', 'Your hint: critical|high|medium|low (triage may refine it)')
   .option('--component <name>', 'Area of the app, e.g. checkout')
+  .option('--lane <id>', 'Also put it at the end of one of your local worker lanes (mushi worker status lists them)')
   .option('--project <id>', 'Project ID (defaults to the configured project)')
   .option('--project-id <id>', 'Same as --project')
   .option('--json', 'Output as JSON (alias for -o json)')
   .addHelpText('after', `
-Needs a key with the mcp:write scope (or an account key that reaches the app).
+Needs a key with the mcp:write scope (or an account key that reaches the app),
+or a local worker key (worker:run).
 At most 30 reports an hour per app.
 
 Examples:
@@ -421,6 +431,7 @@ Examples:
         console.log(`✓ Filed report ${d.reportId}`)
         console.log(`  ${d.title}`)
         console.log(`  Triage runs now; see it with: mushi reports show ${d.reportId}`)
+        if (d.queued) console.log(`  Queued at the end of lane ${d.queued.laneId}.`)
       },
     })
   })

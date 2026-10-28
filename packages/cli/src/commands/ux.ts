@@ -6,7 +6,7 @@ import { requireConfig } from '../cli-shared.js'
 import { loadConfig } from '../config.js'
 
 /** `mushi ux …` runs the `mushi-ux` bin of @mushi-mushi/ux (kept out of this CLI: it ships Playwright). MUSHI_UX_BIN = local build. */
-const UX_PACKAGE = '@mushi-mushi/ux@^0.1.0'
+const UX_PACKAGE = '@mushi-mushi/ux@^0.3.0'
 
 interface UxSpawn {
   cmd: string
@@ -48,7 +48,7 @@ export function registerUxCommands(program: Command): void {
   program
     .command('ux')
     .description('Run your coding agent over every screen of your app and keep only measured UX improvements (local, uses @mushi-mushi/ux)')
-    .argument('[args...]', 'Passed to mushi-ux: ui | run | discover | login | models | skills | open')
+    .argument('[args...]', 'Passed to mushi-ux: ui | run | discover | audit | explore | fresh-eyes | login | models | skills | open')
     .allowUnknownOption()
     .helpOption(false)
     .addHelpText(
@@ -60,6 +60,8 @@ Examples:
   mushi ux discover --url http://localhost:5173
   mushi ux run --dev "pnpm dev --port {port}" --agent claude-code
   mushi ux run --dev "pnpm dev --port {port}" --agent cursor --model <id from \`agent --list-models\`>
+  mushi ux fresh-eyes --url https://your-app.com --goal "get my first report" --dry-run
+                                                # a first-time visitor: time the path, file what stops them
   mushi ux --help`,
     )
     .action((args: string[]) => {
@@ -67,10 +69,11 @@ Examples:
       // The CLI login rides in the child's env; mushi-ux strips MUSHI_* before any agent runs.
       // --sync needs it; the studio (ui) uses it when present and offers sync then.
       let env = process.env
-      if (args.includes('--sync')) {
+      // --sync and --mint-account need the login; --file and the studio use it when there is one.
+      if (args.includes('--sync') || args.includes('--mint-account')) {
         const config = requireConfig({ needsProject: true })
         env = { ...process.env, MUSHI_API_KEY: config.apiKey, MUSHI_PROJECT_ID: config.projectId, MUSHI_API_ENDPOINT: config.endpoint }
-      } else if (args[0] === 'ui') {
+      } else if (args[0] === 'ui' || args.includes('--file')) {
         const config = loadConfig()
         if (config.apiKey && config.projectId) {
           env = { ...process.env, MUSHI_API_KEY: config.apiKey, MUSHI_PROJECT_ID: config.projectId, ...(config.endpoint ? { MUSHI_API_ENDPOINT: config.endpoint } : {}) }

@@ -11,7 +11,7 @@
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import type { PullRequestDetails } from '../_shared/github.ts'
-import { processRow, runMergeQueue, type MergeQueueDeps, type QueueRow } from './worker.ts'
+import { pickConflictRows, processRow, runMergeQueue, type MergeQueueDeps, type QueueRow } from './worker.ts'
 
 const { test } = Deno
 
@@ -38,6 +38,8 @@ function fakeDb(tables: Record<string, Row[]>) {
     b.or = chain(() => {})
     b.eq = (col: string, v: unknown) => ((rows = rows.filter((r) => r[col] === v)), b)
     b.in = (col: string, vs: unknown[]) => ((rows = rows.filter((r) => vs.includes(r[col]))), b)
+    // PostgREST `is.null`: a column the fixture leaves out reads as null.
+    b.is = (col: string, v: unknown) => ((rows = rows.filter((r) => (v === null ? r[col] == null : r[col] === v))), b)
     b.update = (p: Row) => ((patch = p), b)
     b.insert = (p: Row) => ((inserted = p), b)
     b.maybeSingle = () => Promise.resolve({ data: rows[0] ?? null, error: null })
@@ -177,7 +179,7 @@ test('a hold blocks; failed CI blocks with the check names', async () => {
   const red = setup(row())
   const out2 = await processRow(red.db, row(), deps({ checks: () => Promise.resolve({ pending: 0, failed: ['required'] }) }))
   assertEquals(out2, 'blocked')
-  assertEquals(String(lastState(red.writes)?.detail).startsWith('CI failed: required.'), true)
+  assertEquals(String(lastState(red.writes)?.detail).startsWith('CI failed: "required".'), true)
 })
 
 test('a conflict starts one Cursor agent on the PR branch; at the cap it needs a person', async () => {
@@ -319,4 +321,94 @@ test('in a train app, a conflict no agent may take stays blocked with the reason
   assertEquals(await tick(30), [])
   // An hour later it is offered again, in case follow-ups were turned on.
   assertEquals(await tick(65), ['resolving', 'blocked'])
+})
+
+// ── A local worker lane holds the conflict (ADR 0049) ──────────────────────
+
+const LOCAL = 'c0000000-0000-4000-8000-000000000001'
+const localRow = (over: Partial<QueueRow> = {}) =>
+  row({ state: 'resolving', local_claim_id: LOCAL, agent_head_sha: 'h1', agent_started_at: '2026-10-23T08:30:00Z', conflict_agents: 1, ...over })
+const claim = (over: Row = {}) => ({ id: LOCAL, status: 'active', lease_until: '2026-10-23T09:20:00Z', outcome: null, failure_kind: null, detail: null, ...over })
+
+test('a row a local lane holds waits for it: no cloud agent starts, even when the PR still conflicts', async () => {
+  const r = localRow()
+  const { db, writes } = fakeDb({ fix_attempts: [{ ...attempt }], fix_merge_queue: [{ ...r }], fix_events: [], work_claims: [claim()] })
+  const out = await processRow(db, r, deps({
+    pull: () => Promise.resolve(pull({ mergeable: false, mergeableState: 'dirty' })),
+    createAgent: () => Promise.reject(new Error('a cloud agent must not start on a local row')),
+  }))
+  assertEquals(out, 'resolving_local')
+  assertEquals(lastState(writes), undefined)
+})
+
+test("a local lane's pushed merge moves the row on and re-queues the Opus review of the new head", async () => {
+  const r = localRow()
+  const { db, writes } = fakeDb({ fix_attempts: [{ ...attempt }], fix_merge_queue: [{ ...r }], fix_events: [], work_claims: [claim()] })
+  const asked: unknown[] = []
+  const out = await processRow(db, r, deps({
+    pull: () => Promise.resolve(pull({ headSha: 'h2' })),
+    requeueReview: ((_db: unknown, _t: unknown, head: unknown) => (asked.push(head), Promise.resolve('requeued'))) as never,
+  }))
+  assertEquals(out, 'resolved')
+  assertEquals([lastState(writes)?.state, lastState(writes)?.local_claim_id, lastState(writes)?.head_sha], ['waiting', null, 'h2'])
+  assertEquals(asked, ['h2'])
+})
+
+test('a local claim whose lease ran out frees the row and gives the cap slot back (the machine, not the PR)', async () => {
+  const r = localRow()
+  const claims = [claim({ lease_until: '2026-10-23T08:59:00Z' })]
+  const { db, writes } = fakeDb({ fix_attempts: [{ ...attempt }], fix_merge_queue: [{ ...r }], fix_events: [], work_claims: claims })
+  const out = await processRow(db, r, deps({ pull: () => Promise.resolve(pull({ mergeable: false, mergeableState: 'dirty' })) }))
+  assertEquals(out, 'blocked')
+  const last = lastState(writes)!
+  assertEquals([last.state, last.local_claim_id, last.conflict_agents], ['blocked', null, 0])
+  assertEquals(String(last.detail).startsWith('Merge conflict:'), true)
+  assertEquals(claims[0].status, 'expired')
+})
+
+test('a local claim the lane ended on refused checks keeps its cap slot', async () => {
+  const r = localRow()
+  const { db, writes } = fakeDb({
+    fix_attempts: [{ ...attempt }],
+    fix_merge_queue: [{ ...r }],
+    fix_events: [],
+    work_claims: [claim({ status: 'done', outcome: 'refused', detail: 'conflict markers remain in a.ts' })],
+  })
+  const out = await processRow(db, r, deps({ pull: () => Promise.resolve(pull({ mergeable: false, mergeableState: 'dirty' })) }))
+  assertEquals(out, 'blocked')
+  const last = lastState(writes)!
+  assertEquals('conflict_agents' in last, false)
+  assertEquals(String(last.detail).includes('could not resolve it (conflict markers remain in a.ts)'), true)
+})
+
+test("a local lane's conflict counts as a running agent in its repo", () => {
+  const at = '2026-10-23T08:00:00Z'
+  const rows = [
+    { id: 'l', repo: 'o/r', cursor_agent_id: null, local_claim_id: LOCAL, state: 'resolving', queued_at: at, pr_number: 1 },
+    { id: 'a', repo: 'o/r', cursor_agent_id: null, local_claim_id: null, state: 'resolving', queued_at: at, pr_number: 2 },
+    { id: 'b', repo: 'o/r', cursor_agent_id: null, local_claim_id: null, state: 'resolving', queued_at: at, pr_number: 3 },
+  ]
+  const { work, inLine } = pickConflictRows(rows)
+  assertEquals(work.map((r) => r.id), ['l', 'a'])
+  assertEquals(inLine.map((x) => [x.row.id, x.ahead]), [['b', 2]])
+})
+
+test('a merge-queue tick never leases a row a lane claimed after the tick read it', async () => {
+  const tables: Record<string, Row[]> = {
+    fix_attempts: [{ ...attempt }],
+    fix_merge_queue: [{ ...row({ id: 'q', state: 'waiting', pr_number: 7 }), queued_at: '2026-10-23T08:00:00Z', claimed_until: null }],
+    fix_events: [],
+  }
+  const { db: inner } = fakeDb(tables)
+  // The lane's compare-and-set lands between the tick's read and its lease.
+  let reads = 0
+  const db = {
+    from: (t: string) => {
+      if (t === 'fix_merge_queue' && ++reads === 2) tables.fix_merge_queue[0] = { ...tables.fix_merge_queue[0], local_claim_id: LOCAL }
+      return inner.from(t)
+    },
+  } as unknown as SupabaseClient
+  let pulled = 0
+  await runMergeQueue(db, deps({ pull: () => (pulled++, Promise.resolve(pull({ state: 'closed' }))) }))
+  assertEquals(pulled, 0)
 })

@@ -47,7 +47,7 @@ const CDN_PREFIX = `https://cdn.jsdelivr.net/npm/${PKG_NAME}@`
 // version and a file path. Stops at characters that end a URL in prose/code.
 const CDN_URL_RE = /https:\/\/(?:cdn\.jsdelivr\.net\/npm|unpkg\.com)\/@mushi-mushi\/web(?:@[^/\s'"`)<>]*)?(?:\/[^\s'"`)<>]*)?/g
 
-const SCAN_DIRS = ['apps/docs/content', 'apps/admin/src', 'packages/web/src', 'skills', 'docs']
+const SCAN_DIRS = ['apps/docs/content', 'apps/docs/lib', 'apps/docs/components', 'apps/admin/src', 'packages/web/src', 'skills', 'docs']
 const SCAN_EXT = /\.(md|mdx|ts|tsx|js|mjs|txt)$/
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.next', '.turbo', 'out'])
 
