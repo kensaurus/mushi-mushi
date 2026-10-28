@@ -1,3 +1,10 @@
+/**
+ * FILE: apps/admin/src/components/prompt-lab/PromptStageTable.tsx
+ * PURPOSE: One pipeline stage's prompt versions. Rows stay readable at 390px
+ *          because the table scrolls inside the card instead of clipping
+ *          version ids and the Judge score header.
+ */
+
 import { Card, Badge, Btn, RelativeTime } from '../ui'
 import { ConfigHelp } from '../ConfigHelp'
 import {
@@ -67,7 +74,7 @@ export function PromptStageTable({
   onDelete,
 }: PromptStageTableProps) {
   return (
-    <Card elevated className="p-3">
+    <Card elevated className="min-w-0 p-3">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-xs font-semibold text-fg-secondary">
           {STAGE_LABELS[stage] ?? stage}
@@ -79,22 +86,27 @@ export function PromptStageTable({
       {prompts.length === 0 ? (
         <p className="text-2xs text-fg-faint">No prompts registered for this stage.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-2xs">
+        // A 390px card is narrower than version ids such as
+        // v1-baseline-auto-20261028 plus the action buttons. `truncate`
+        // ellipsized the id and let the table shrink to the card, so
+        // overflow-x never had anything to scroll. The table keeps its
+        // content width; this region scrolls.
+        <div className="min-w-0 overflow-x-auto overscroll-x-contain">
+          <table className="w-full min-w-max text-2xs">
             <thead className="text-fg-faint">
               <tr>
-                <th className="text-left font-normal px-2 py-1">Version</th>
-                <th className="text-left font-normal px-2 py-1">State</th>
-                <th className="text-right font-normal px-2 py-1">
+                <th className="whitespace-nowrap text-left font-normal px-2 py-1">Version</th>
+                <th className="whitespace-nowrap text-left font-normal px-2 py-1">State</th>
+                <th className="whitespace-nowrap text-right font-normal px-2 py-1">
                   <span className="inline-flex items-center gap-1">
                     Traffic
                     <ConfigHelp helpId="prompt-lab.traffic_percentage" />
                   </span>
                 </th>
-                <th className="text-right font-normal px-2 py-1">Judge score</th>
-                <th className="text-right font-normal px-2 py-1">Evals</th>
-                <th className="text-left font-normal px-2 py-1">Updated</th>
-                <th className="text-right font-normal px-2 py-1">Actions</th>
+                <th className="whitespace-nowrap text-right font-normal px-2 py-1">Judge score</th>
+                <th className="whitespace-nowrap text-right font-normal px-2 py-1">Evals</th>
+                <th className="whitespace-nowrap text-left font-normal px-2 py-1">Updated</th>
+                <th className="whitespace-nowrap text-right font-normal px-2 py-1">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -103,7 +115,7 @@ export function PromptStageTable({
                 const score = p.avg_judge_score
                 return (
                   <tr key={p.id} className="border-t border-edge-subtle">
-                    <td className="px-2 py-1.5 font-mono text-fg-secondary truncate max-w-40">
+                    <td className="whitespace-nowrap px-2 py-1.5 font-mono text-fg-secondary">
                       {p.version}
                     </td>
                     <td className="px-2 py-1.5">
