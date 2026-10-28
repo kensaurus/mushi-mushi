@@ -267,6 +267,10 @@ export function DLQPage() {
             onChange={(e) => setStage(e.currentTarget.value)}
           />
         )}
+        {/* Refresh sat only in the green banner, which a healthy queue no longer shows. */}
+        <Btn size="sm" variant="ghost" onClick={() => void loadAll()} loading={loading} data-testid="dlq-refresh">
+          Refresh
+        </Btn>
         {retryableItems.length > 0 && canEditProject && (
           <Btn size="sm" variant="success" onClick={() => setConfirmRetryPage(true)}>
             Retry page ({retryableItems.length})
