@@ -97,7 +97,9 @@ const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 // group. No new dependencies, no source maps; the growth is that code,
 // measured at cli 257.0/968.9 kB.
 export const BUDGETS = [
-  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 250_000, unpacked: 965_000 },
+  // 2026-10-28: 965 → 975 kB unpacked: the bundled docs index (search_mushi_docs)
+  // now carries the Free/Builder/Studio pricing and Production Check pages.
+  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 250_000, unpacked: 975_000 },
   { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 262_000, unpacked: 990_000 },
 ]
 
