@@ -26,7 +26,11 @@ describe('orgRoleGuide', () => {
       seatsUsed: 2,
       teamsEnabled: true,
     })
-    expect(copy.headline).toMatch(/2 of 3/)
+    // Members shows "2/3" in its Seats tile; the card explains instead of
+    // repeating the count (console sweep, 2026-10-28). Billing keeps it.
+    expect(copy.headline).toBe('How seats work')
+    expect(copy.body).toMatch(/1 seat left/)
+    expect(seatBillingExplainer({ planDisplayName: 'Hobby', planId: 'hobby', seatLimit: 3, seatsUsed: 2, teamsEnabled: true, onBillingPage: true }).headline).toMatch(/2 of 3/)
   })
 
   // On Billing itself the card said "upgrade on Billing" and linked to Billing (2026-10-28).

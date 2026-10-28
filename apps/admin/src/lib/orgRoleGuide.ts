@@ -113,7 +113,9 @@ export function seatBillingExplainer(ctx: SeatBillingContext): {
   const remaining = Math.max(0, ctx.seatLimit - ctx.seatsUsed)
   const nearCap = ctx.seatsUsed >= ctx.seatLimit - 1
   return {
-    headline: `${ctx.seatsUsed} of ${ctx.seatLimit} seats used`,
+    // Members shows the count in its Seats tile; the card explains instead of
+    // saying it a third time (console sweep, 2026-10-28).
+    headline: ctx.onBillingPage ? `${ctx.seatsUsed} of ${ctx.seatLimit} seats used` : 'How seats work',
     body: `Each person counts as one seat (any role). Pending invites also reserve a seat. You're on ${plan} with ${remaining} seat${remaining === 1 ? '' : 's'} left — ${ctx.onBillingPage ? 'pick a bigger plan under Plans' : 'upgrade on Billing'} if you need more.`,
     billingLink: nearCap && !ctx.onBillingPage,
     tone: nearCap ? 'warn' : 'neutral',
