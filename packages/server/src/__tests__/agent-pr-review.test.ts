@@ -347,7 +347,8 @@ describe('a completed review', () => {
     expect(ev.payload).toMatchObject({ verdict: 'hold', blockers: 1, model: 'claude-opus-5-5' })
 
     expect(d.calls.comment).toHaveLength(1)
-    expect(d.calls.comment[0]).toContain('### Mushi review (claude-opus-5-5): hold')
+    expect(d.calls.comment[0]).toContain("### Mushi review: Hold: don't merge this as it is")
+    expect(d.calls.comment[0]).toContain('Reviewed by Claude Opus 5.5')
     expect(d.calls.comment[0]).toContain('https://console.example/reports/' + REPORT)
     // The comment never quotes the report or the summary.
     expect(d.calls.comment[0]).not.toContain('Lesson page crashes')
