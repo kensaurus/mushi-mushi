@@ -35,7 +35,7 @@ const CONTENT = path.join(ROOT, "apps/docs/content")
 
 // Routes served by the Next.js app router (apps/docs/app/**) rather than Nextra
 // content MDX. Keep in sync with check-internal-doc-links.mjs.
-const APP_ROUTER_ROUTES = ["/connect"]
+const APP_ROUTER_ROUTES = ["/connect", "/check", "/proof"]
 // Static/served-elsewhere targets that don't resolve to a content MDX route.
 const SKIP_PREFIXES = ["/integrations/cursor.cursorrules"]
 // Asset extensions live under public/ or are served externally — resolving them

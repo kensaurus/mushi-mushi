@@ -12,6 +12,7 @@ import {
   LANDING_HERO_START,
   LANDING_INSTALL,
   LANDING_INSTALL_LOVABLE,
+  LANDING_CHECK_LINK,
   LANDING_SAMPLE_LINK,
   LANDING_SETUP_PROMPT,
   LANDING_FIX_PROMPT,
@@ -133,11 +134,16 @@ describe('landing cinematic copy SSOT', () => {
     expect(LANDING_HERO.lead).toMatch(/No Sentry/)
   })
 
-  it('has one primary action and one secondary link in the hero: the install box and the sample diagnosis', () => {
+  it('has one primary action and one secondary link in the hero: the install box and the free check (ADR 0052 amendment)', () => {
     const hero = read('components', 'landing', 'CinematicEditorialHero.tsx')
     expect(hero.match(/<LandingInstallStrip \/>/g)).toHaveLength(1)
     expect(hero.match(/<Link /g)).toHaveLength(1)
-    expect(hero).toContain('LANDING_SAMPLE_LINK.href')
+    expect(hero).toContain('LANDING_CHECK_LINK.href')
+    expect(LANDING_CHECK_LINK.href).toMatch(/^\/check\?src=/)
+    expect(LANDING_CHECK_LINK.note).toMatch(/nothing to install, no sign-up/)
+    expect(existsSync(join(DOCS, 'app', 'check', 'page.tsx'))).toBe(true)
+    // The sample stays one scroll down, in How it works.
+    expect(read('components', 'landing', 'DiagnosisScrollStage.tsx')).toContain('LANDING_SAMPLE_LINK.href')
     // No signup, star or other-editor links compete with the install box.
     expect(hero).not.toMatch(/<a\s/)
     expect(hero).not.toContain('LANDING_HERO_START')

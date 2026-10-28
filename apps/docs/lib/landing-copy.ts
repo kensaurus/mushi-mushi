@@ -33,6 +33,20 @@ export const LANDING_SAMPLE_LINK = {
 } as const
 
 /**
+ * The hero's one secondary link since ADR 0052's 2026-10-28 amendment (owner
+ * decision): value before trust. A stranger checks their own live site with
+ * nothing to install and no sign-up; the sample diagnosis moves one scroll down
+ * to "How it works".
+ */
+export const LANDING_CHECK_LINK = {
+  id: 'landing-check',
+  lead: 'Not ready to install?',
+  label: 'Check your live site free',
+  note: 'nothing to install, no sign-up',
+  href: '/check?src=landing-hero',
+} as const
+
+/**
  * The actions inside the hero's install box, one per tab, so no two share an
  * intent. `id` becomes `cta_click.cta_id` (and `?src=` on the signup link);
  * `landing-hero` stays on signup so the funnel keeps its history — it is the
