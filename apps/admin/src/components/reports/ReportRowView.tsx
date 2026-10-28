@@ -38,6 +38,9 @@ import {
 } from './types'
 import {
   REPORTS_ACTION_STACK_MAX,
+  REPORTS_CHECKBOX,
+  REPORTS_HIT_ICON,
+  REPORTS_HIT_LABEL,
   REPORTS_TABLE_COL,
   TABLE_CELL,
 } from './reportsTableLayout'
@@ -174,14 +177,14 @@ function ReportRowViewInner({
           aria-hidden="true"
         />
       </td>
-      <td className={`${REPORTS_TABLE_COL.checkbox} ${TABLE_CELL.pxLead} py-2 align-top pl-3`}>
+      <td className={`${REPORTS_TABLE_COL.checkbox} px-0 py-2 text-center align-middle`}>
         <input
           type="checkbox"
           checked={isSelected}
           onChange={onToggleSelect}
           onClick={(e) => e.stopPropagation()}
           aria-label={isSelected ? 'Deselect report' : 'Select report'}
-          className="h-3.5 w-3.5 accent-brand"
+          className={REPORTS_CHECKBOX}
         />
       </td>
       <td className={`${REPORTS_TABLE_COL.summary} ${TABLE_CELL.pxLead} py-2 align-top min-w-0 overflow-hidden ${isVariant ? 'pl-7' : ''}`}>
@@ -197,7 +200,7 @@ function ReportRowViewInner({
                   }}
                   aria-expanded={expanded}
                   aria-label={expanded ? 'Collapse variants' : 'Expand variants'}
-                  className="shrink-0 mt-0.5 inline-flex items-center justify-center w-4 h-4 rounded-sm text-fg-faint hover:text-fg hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                  className={`${REPORTS_HIT_ICON} rounded-sm text-fg-faint hover:text-fg hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60`}
                 >
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" className={`motion-safe:transition-transform ${expanded ? 'rotate-90' : ''}`}>
                     <path d="M3 2l3 3-3 3" strokeLinecap="round" strokeLinejoin="round" />
@@ -330,7 +333,7 @@ function ReportRowViewInner({
               <Link
                 to={detailPath}
                 onClick={(e) => e.stopPropagation()}
-                className={`inline-flex h-5 shrink-0 items-center justify-center truncate px-1.5 text-3xs font-medium leading-none rounded-sm ${closedAction.className}`}
+                className={`${REPORTS_HIT_LABEL} truncate px-2 text-2xs font-medium leading-none rounded-sm ${closedAction.className}`}
                 data-testid="report-row-closed-action"
               >
                 {closedAction.label}
@@ -339,7 +342,7 @@ function ReportRowViewInner({
               <Link
                 to={detailPath}
                 onClick={(e) => e.stopPropagation()}
-                className="inline-flex h-5 shrink-0 items-center justify-center truncate px-1.5 text-3xs font-medium leading-none rounded-sm bg-brand text-brand-fg hover:bg-brand-hover"
+                className={`${REPORTS_HIT_LABEL} truncate px-2 text-2xs font-medium leading-none rounded-sm bg-brand text-brand-fg hover:bg-brand-hover`}
               >
                 Triage →
               </Link>
@@ -376,7 +379,7 @@ function RowKebab({ newTabHref, onCopyLink, onDismiss }: KebabProps) {
             e.stopPropagation()
             onCopyLink()
           }}
-          className="p-1 text-fg-faint hover:text-fg-muted hover:bg-surface-overlay rounded-sm"
+          className={`${REPORTS_HIT_ICON} text-fg-faint hover:text-fg-muted hover:bg-surface-overlay rounded-sm`}
           aria-label="Copy link"
         >
           <IconShare size={12} />
@@ -388,7 +391,7 @@ function RowKebab({ newTabHref, onCopyLink, onDismiss }: KebabProps) {
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="p-1 text-fg-faint hover:text-fg-muted hover:bg-surface-overlay rounded-sm inline-flex"
+          className={`${REPORTS_HIT_ICON} text-fg-faint hover:text-fg-muted hover:bg-surface-overlay rounded-sm`}
           aria-label="Open in new tab"
         >
           <IconExternalLink size={12} />
@@ -401,7 +404,7 @@ function RowKebab({ newTabHref, onCopyLink, onDismiss }: KebabProps) {
             e.stopPropagation()
             onDismiss()
           }}
-          className="p-1 text-fg-faint hover:text-danger hover:bg-danger-muted/20 rounded-sm"
+          className={`${REPORTS_HIT_ICON} text-fg-faint hover:text-danger hover:bg-danger-muted/20 rounded-sm`}
           aria-label="Dismiss"
         >
           <IconClose size={12} />

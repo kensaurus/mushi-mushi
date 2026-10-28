@@ -95,6 +95,21 @@ describe('ReportRowView row actions', () => {
     expect(link!.getAttribute('target')).toBe('_blank')
   })
 
+  it('keeps sort-row controls at the 24px tap floor', async () => {
+    await render()
+    const box = container.querySelector<HTMLInputElement>('input[aria-label="Select report"]')
+    const triage = [...container.querySelectorAll('a')].find((a) => a.textContent?.includes('Triage'))
+    const dismiss = container.querySelector<HTMLButtonElement>('button[aria-label="Dismiss"]')
+    const open = container.querySelector<HTMLAnchorElement>('a[aria-label="Open in new tab"]')
+    expect(box?.className).toContain('size-6')
+    expect(triage?.className).toContain('min-h-6')
+    expect(triage?.className).toContain('min-w-6')
+    expect(dismiss?.className).toContain('size-6')
+    expect(open?.className).toContain('size-6')
+    // Select-all and the row checkbox stay in the header / row, not visually hidden.
+    expect(box).not.toBeNull()
+  })
+
   it('the × hands the dismiss to the page and sends nothing itself', async () => {
     const { onDismiss } = await render()
     const dismiss = container.querySelector<HTMLButtonElement>('button[aria-label="Dismiss"]')

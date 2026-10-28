@@ -58,11 +58,11 @@ export function SortHeader({
       <button
         type="button"
         onClick={() => onSort(field)}
-        className={`inline-flex items-center gap-1 hover:text-fg ${active ? 'text-fg' : 'text-fg-faint'} ${btnCls}`}
+        className={`inline-flex min-h-6 items-center gap-1 overflow-hidden hover:text-fg ${active ? 'text-fg' : 'text-fg-faint'} ${btnCls}`}
         aria-label={fullLabel ? `Sort by ${fullLabel}` : `Sort by ${label}`}
       >
-        {labelNode}
-        {arrow && <span className="text-2xs font-mono leading-none">{arrow}</span>}
+        <span className="min-w-0 truncate">{labelNode}</span>
+        {arrow && <span className="shrink-0 text-2xs font-mono leading-none">{arrow}</span>}
       </button>
     </th>
   )

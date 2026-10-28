@@ -20,7 +20,7 @@ import type { ReportRow, SortDir, SortField } from './types'
 import { PAGE_SIZE } from './types'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
 import { preflightForReportRow } from './allAppsRowActions'
-import { REPORTS_TABLE_COL, REPORTS_STICKY_LEAD, REPORTS_TABLE_MIN_W, TABLE_CELL } from './reportsTableLayout'
+import { REPORTS_CHECKBOX, REPORTS_TABLE_COL, REPORTS_STICKY_LEAD, REPORTS_TABLE_MIN_W, TABLE_CELL } from './reportsTableLayout'
 
 interface Props {
   reports: ReportRow[]
@@ -150,7 +150,7 @@ export function ReportsTable({
   )
 
   return (
-    <div className="border border-edge-subtle rounded-md overflow-hidden bg-surface-raised">
+    <div className="min-w-0 max-w-full border border-edge-subtle rounded-md overflow-hidden bg-surface-raised">
       <div className="px-3 py-1.5 border-b border-edge-subtle bg-surface-raised">
         <span className="block text-2xs text-fg-muted min-w-0 truncate">
           {total} report{total === 1 ? '' : 's'} — click a row to triage; scroll for status & actions
@@ -177,7 +177,7 @@ export function ReportsTable({
           <thead className="bg-surface-raised text-2xs uppercase tracking-wider text-fg-faint sticky top-0 z-10">
             <tr>
               <th scope="col" className={`${REPORTS_TABLE_COL.stripe} p-0`} aria-label="Severity stripe" />
-              <th scope="col" className={`${REPORTS_TABLE_COL.checkbox} ${TABLE_CELL.pxLead} py-2 text-left pl-3`}>
+              <th scope="col" className={`${REPORTS_TABLE_COL.checkbox} px-0 py-2 text-center`}>
                 <input
                   type="checkbox"
                   aria-label={allSelected ? 'Deselect all on page' : 'Select all on page'}
@@ -186,7 +186,7 @@ export function ReportsTable({
                     if (el) el.indeterminate = someSelected
                   }}
                   onChange={onToggleSelectAll}
-                  className="h-3.5 w-3.5 accent-brand"
+                  className={REPORTS_CHECKBOX}
                 />
               </th>
               {/* Summary text isn't a sortable field — the column shows the
@@ -274,8 +274,8 @@ export function ReportsTable({
         </table>
       </ResponsiveTable>
 
-      <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-edge-subtle text-2xs text-fg-muted">
-        <span>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-t border-edge-subtle text-2xs text-fg-muted">
+        <span className="min-w-0 basis-full sm:basis-auto">
           Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
           {groupCollapse && visibleGroupCount !== reports.length && (
             <span className="ml-2 text-fg-faint">· grouped into {visibleGroupCount} fingerprint{visibleGroupCount === 1 ? '' : 's'}</span>
