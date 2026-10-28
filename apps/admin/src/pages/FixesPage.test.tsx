@@ -227,7 +227,7 @@ describe('FixesPage', () => {
     await render('/fixes')
     const segments = [...document.querySelectorAll('[aria-label="Filter fix attempts by status"] [role="radio"]')]
     expect(segments.find((b) => b.textContent?.startsWith('PR open'))?.textContent).toBe('PR open1')
-    expect(segments.find((b) => b.textContent?.startsWith('Failed'))?.textContent).toBe('Failed / skipped1')
+    expect(segments.find((b) => b.textContent?.startsWith('Stopped'))?.textContent).toBe('Stopped1')
   })
 
   it('Opus: merge lists only open PRs the review said to merge (?status=review_merge)', async () => {

@@ -4,7 +4,7 @@
  *          pipeline. Pure presentation — accepts a pre-computed FixSummary.
  */
 
-import { fixCauseLabel } from '../../lib/fixReportTruth'
+import { fixCauseLabel, formatFixCauseBreakdown } from '../../lib/fixReportTruth'
 import { useMemo } from 'react';
 import { KpiRow, KpiTile, type KpiDelta, type Tone } from '../charts';
 import type { FixSummary } from './types';
@@ -55,6 +55,7 @@ export function FixSummaryRow({ summary, successRate }: Props) {
   const showBreakdown = breakdown.length > 0;
   const cols = (5 + (showSpec ? 1 : 0) + (showBreakdown ? 1 : 0)) as 5 | 6 | 7;
   const topFailure = breakdown[0];
+  const causeCaption = formatFixCauseBreakdown(breakdown);
   const breakdownTitle = breakdown
     .map((b) => `${b.count}× ${fixCauseLabel(b.category)}`)
     .join('\n');
@@ -86,7 +87,7 @@ export function FixSummaryRow({ summary, successRate }: Props) {
         label="Auto-fix stopped"
         value={summary.failed}
         accent={summary.failed > 0 ? 'danger' : 'muted'}
-        sublabel={summary.failed > 0 ? 'reports still unfixed' : 'nothing waiting'}
+        sublabel={summary.failed > 0 ? (causeCaption || 'reports still unfixed') : 'nothing waiting'}
         series={failed}
         delta={pctDelta(failed, { invert: true })}
         seriesAriaLabel="Daily stopped fix attempts, last 30 days"

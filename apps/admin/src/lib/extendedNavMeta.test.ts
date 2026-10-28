@@ -12,6 +12,7 @@ import {
   rewardsNavBadge,
   fullstackAuditNavBadge,
   dashboardNavBadge,
+  fixesStatsNavBadge,
   mcpNavBadge,
   costsNavBadge,
   settingsNavBadge,
@@ -281,6 +282,30 @@ describe('fullstackAuditNavBadge', () => {
 })
 
 describe('dashboardNavBadge', () => {
+  it('names the mix on Home instead of calling every stop a failed fix', () => {
+    const breakdown = [
+      { category: 'ci_failed', count: 24 },
+      { category: 'needs_human', count: 11 },
+    ]
+    const home = dashboardNavBadge({
+      openBacklog: 0,
+      fixesFailed: 35,
+      fixesInProgress: 0,
+      fixFailureBreakdown: breakdown,
+      integrationIssues: 0,
+      topPriority: 'fixes_failed',
+    })
+    const fixes = fixesStatsNavBadge({
+      failed: 35,
+      inProgress: 0,
+      specWarnings: 0,
+      topPriority: 'failed',
+      failureBreakdown: breakdown,
+    })
+    expect(home?.label).toBe('Auto-fix stopped on 35 reports (CI failed (24), Needs your decision (11))')
+    expect(fixes?.label).toBe(home?.label)
+  })
+
   it('surfaces integration issues', () => {
     const badge = dashboardNavBadge({
       openBacklog: 0,

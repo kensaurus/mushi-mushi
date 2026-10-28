@@ -40,7 +40,7 @@ import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
 import { queueMerges } from '../lib/mergeQueue'
 import { MergeQueuePanel } from '../components/fixes/MergeQueuePanel'
-import { failureCause, fixCauseLabel, fixReportLabel, needsAttention, retryCandidates } from '../lib/fixReportTruth'
+import { failureCause, fixCauseLabel, fixReportLabel, formatFixCauseBreakdown, needsAttention, retryCandidates } from '../lib/fixReportTruth'
 import {
   RETRY_AGENT_OPTIONS,
   commonRetryAgent,
@@ -87,7 +87,7 @@ const STATUS_BUCKETS: { id: StatusBucket; label: string }[] = [
   // Open PRs the Opus review said to merge: the ones waiting on you.
   { id: 'review_merge', label: 'Opus: merge' },
   { id: 'merged', label: 'Shipped' },
-  { id: 'failed', label: 'Failed / skipped' },
+  { id: 'failed', label: 'Stopped' },
 ]
 
 /** Attempts per request; the list route allows up to 200. */
@@ -402,11 +402,7 @@ export function FixesPage() {
       const cause = failureCause(f)
       counts.set(cause, (counts.get(cause) ?? 0) + 1)
     }
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([cause, n]) => `${fixCauseLabel(cause)} (${n})`)
-      .join(', ')
+    return formatFixCauseBreakdown([...counts.entries()].map(([category, count]) => ({ category, count })))
   }, [fixes])
 
   // "Common causes" chips narrow the failed list to one cause (console QA 93).

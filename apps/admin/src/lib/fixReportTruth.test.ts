@@ -14,6 +14,8 @@ import {
   failureCause,
   failureHeadline,
   fixCauseLabel,
+  formatFixCauseBreakdown,
+  stoppedBadgeLabel,
   fixCiInfraLabel,
   CI_INFRA_STOPPED_LABEL,
   fixReportLabel,
@@ -157,6 +159,22 @@ describe('failureHeadline', () => {
 
   it('returns null without an error', () => {
     expect(failureHeadline(fix({ error: undefined }))).toBeNull()
+  })
+})
+
+describe('formatFixCauseBreakdown', () => {
+  const breakdown = [
+    { category: 'ci_failed', count: 24 },
+    { category: 'needs_human', count: 11 },
+    { category: 'sandbox_timeout', count: 7 },
+    { category: 'unknown', count: 1 },
+  ]
+
+  it('uses the same words and order the banner and the Stopped card print', () => {
+    const caption = formatFixCauseBreakdown(breakdown)
+    expect(caption).toBe('CI failed (24), Needs your decision (11), Ran out of time (7)')
+    expect(stoppedBadgeLabel(43, breakdown)).toBe(`Auto-fix stopped on 43 reports (${caption})`)
+    expect(stoppedBadgeLabel(1, [])).toBe('Auto-fix stopped on 1 report')
   })
 })
 

@@ -143,7 +143,7 @@ describe('deriveReportFixTruth precedence', () => {
   })
 
   it("an agent's own no-PR verdict is failed but not retryable: a new run gives the same answer", () => {
-    for (const failure_category of ['needs_human', 'already_fixed', 'wrong_repo', 'not_actionable']) {
+    for (const failure_category of ['needs_human', 'wrong_repo', 'not_actionable']) {
       const t = deriveReportFixTruth({
         reportId: 'r',
         report: { id: 'r', status: 'classified' },
@@ -151,6 +151,29 @@ describe('deriveReportFixTruth precedence', () => {
       })
       expect(t).toMatchObject({ state: 'failed', retryable: false })
     }
+    const nothing = deriveReportFixTruth({
+      reportId: 'r',
+      report: { id: 'r', status: 'classified' },
+      attempts: [{ ...base, status: 'failed', failure_category: 'already_fixed', error: 'Agent found nothing to change: the page renders.' }],
+    })
+    expect(nothing).toMatchObject({ state: 'none', retryable: false, failureBucket: null })
+    const ci = deriveReportFixTruth({
+      reportId: 'ci',
+      report: { id: 'ci', status: 'classified' },
+      attempts: [{ ...base, id: 'ci', report_id: 'ci', status: 'failed', failure_category: 'ci_failed' }],
+    })
+    const decision = deriveReportFixTruth({
+      reportId: 'nd',
+      report: { id: 'nd', status: 'classified' },
+      attempts: [{ ...base, id: 'nd', report_id: 'nd', status: 'failed', failure_category: 'needs_human' }],
+    })
+    expect(summarizeFixTruths([nothing, ci, decision])).toMatchObject({
+      failed: 2,
+      failureBreakdown: [
+        { category: 'ci_failed', count: 1 },
+        { category: 'needs_human', count: 1 },
+      ],
+    })
     const api = deriveReportFixTruth({
       reportId: 'r',
       report: { id: 'r', status: 'classified' },

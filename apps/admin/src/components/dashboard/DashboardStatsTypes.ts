@@ -16,6 +16,8 @@ export interface DashboardStats {
   reports14d: number
   fixesInProgress: number
   fixesFailed: number
+  /** Why those fixes stopped, most common first. Same words as the Fixes banner. */
+  fixFailureBreakdown?: { category: string; count: number }[]
   openPrs: number
   llmFailures14d: number
   llmCalls14d: number

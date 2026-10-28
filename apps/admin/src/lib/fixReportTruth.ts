@@ -15,6 +15,7 @@
 
 import { humanizeFixError } from './humanizeFixError'
 import { isFixMerged } from './mergeFix'
+import { stoppedTitle } from './countDefinitions'
 import { fixFailureBucket } from './pdcaAct'
 import type { FixAttempt } from '../components/fixes/types'
 
@@ -209,4 +210,31 @@ const CAUSE_LABELS: Record<string, string> = {
 export function fixCauseLabel(cause: string | null | undefined): string {
   if (!cause) return 'Unrecognised error'
   return CAUSE_LABELS[cause] ?? cause.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
+}
+
+/**
+ * The cause list the Fixes banner, the Stopped card and the sidebar badge
+ * all print. Same order and words, so "CI failed (24), Needs your decision (11)"
+ * cannot be shortened to a bare "CI failed" on one of them.
+ */
+export function formatFixCauseBreakdown(
+  entries: ReadonlyArray<{ category: string; count: number }>,
+  limit = 3,
+): string {
+  return [...entries]
+    .filter((e) => e.count > 0 && e.category)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit)
+    .map((e) => `${fixCauseLabel(e.category)} (${e.count})`)
+    .join(', ')
+}
+
+/** "Auto-fix stopped on 51 reports (CI failed (24), Needs your decision (11))". */
+export function stoppedBadgeLabel(
+  count: number,
+  breakdown?: ReadonlyArray<{ category: string; count: number }> | null,
+): string {
+  const causes = formatFixCauseBreakdown(breakdown ?? [])
+  const title = stoppedTitle(count)
+  return causes ? `${title} (${causes})` : title
 }

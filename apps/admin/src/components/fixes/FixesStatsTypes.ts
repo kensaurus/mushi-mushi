@@ -30,6 +30,8 @@ export interface FixesStats {
   inflightDispatches: number
   topFailureCategory: string | null
   topFailureCount: number
+  /** Same buckets as the banner's "Most common" line, most common first. */
+  failureBreakdown?: { category: string; count: number }[]
   successRatePct: number | null
   topPriority: FixesTopPriority
   topPriorityLabel: string | null
@@ -54,6 +56,7 @@ export const EMPTY_FIXES_STATS: FixesStats = {
   inflightDispatches: 0,
   topFailureCategory: null,
   topFailureCount: 0,
+  failureBreakdown: [],
   successRatePct: null,
   topPriority: 'no_project',
   topPriorityLabel: null,
