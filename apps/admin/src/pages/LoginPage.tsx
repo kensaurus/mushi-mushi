@@ -672,7 +672,7 @@ export function LoginPage() {
             {mode === 'signup' && (
               <p className="text-center text-2xs text-fg-faint">
                 {cloud
-                  ? 'Create a free account to get started with Mushi Mushi.'
+                  ? LOGIN_HERO.signupReassurance
                   : (
                     <>
                       This creates an account on your Supabase project.

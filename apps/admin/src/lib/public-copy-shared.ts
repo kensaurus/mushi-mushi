@@ -15,6 +15,9 @@ export const CONNECT_SKILLS = {
 } as const
 
 export const LOGIN_HERO = {
-  cloudTagline: MUSHI_TAGLINE_V2.oneLiner,
+  /** The landing's own promise, so a visitor who clicked "Start free" reads the same thing here. */
+  cloudTagline: `${MUSHI_TAGLINE_V2.hero} ${MUSHI_TAGLINE_V2.heroOffer}`,
+  /** Under the sign-up form: the three doubts a stranger has before trusting a new tool. */
+  signupReassurance: 'Free for one app, no card. Open source, so you can read every line it runs.',
   selfHostTagline: 'Sign in to your self-hosted Mushi console.',
 } as const

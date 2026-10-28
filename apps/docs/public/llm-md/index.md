@@ -23,7 +23,7 @@ Mushi Mushi is the bug mediator for AI-built apps, an open-source tool that give
 
 **Who it is for.** {LANDING_WHAT_THIS_IS.who} {LANDING_WHAT_THIS_IS.boundary}
 
-**Where it stands.** Live and free to try: hosted service, npm packages and public source. Built by Kensaurus 合同会社 in Japan. Native iOS, Android and Flutter libraries are previews.
+**Where it stands.** Live and free to try: hosted service, npm packages and public source. Built by Kenji Sakuramoto, a solo developer in Japan ([kensaur.us](https://kensaur.us), [X](https://x.com/sakuramotokenji), [GitHub](https://github.com/kensaurus)), who runs it on his own 9 live apps; [the numbers are public](/proof). Native iOS, Android and Flutter libraries are previews.
 
 Words you will see on this page
 

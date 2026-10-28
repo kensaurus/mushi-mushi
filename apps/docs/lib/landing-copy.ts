@@ -167,7 +167,7 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
   },
   {
     q: 'What does npx mushi-mushi do?',
-    a: 'It runs a setup wizard. The wizard works out which framework your app uses (React, Next.js, Vue, Nuxt, Svelte, Angular, React Native, Expo, Capacitor or Node), installs the matching Mushi library, saves your settings (environment variables) and prints the snippet to paste.',
+    a: 'It runs a setup wizard on your computer. The wizard works out which framework your app uses (React, Next.js, Vue, Nuxt, Svelte, Angular, React Native, Expo, Capacitor or Node), installs the matching Mushi library, saves your settings in your env file (and warns you if that file is not in .gitignore), and asks before it adds the setup snippet to your code. It never commits, pushes or touches your Git history, and its source is public on GitHub.',
   },
   {
     q: 'How do I debug an app that Cursor or Claude Code wrote?',
@@ -545,9 +545,9 @@ export const LANDING_TRUST_LINKS = [
     href: MUSHI_CANONICAL_URLS.repo,
   },
   {
-    label: 'Dogfood',
-    text: 'Runs on glot.it',
-    href: 'https://kensaur.us/glot-it',
+    label: 'Proof',
+    text: 'Runs on 9 live apps · numbers public',
+    href: '/proof',
   },
   {
     label: 'Security',
