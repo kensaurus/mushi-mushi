@@ -88,14 +88,22 @@ export function extraInFlightDispatches(
  * which includes `pending` and `dispatched`) read 1. Whichever source is
  * higher wins: a live row the summary has not caught, or a summary count
  * for an attempt that is not on this page yet.
+ *
+ * Both server bases are `summarizeFixTruths().inFlight`: reports with a
+ * live attempt (`/v1/admin/fixes/summary` `inProgress` and `/fixes/stats`
+ * `inProgress`). Neither includes a queued dispatch that has no attempt
+ * yet. `statsInflightDispatches` is only those extras — the stats route
+ * drops a dispatch whose report is already `in_flight` — so adding it to
+ * whichever base has loaded is the server total, not a second count.
  */
 export function inFlightHeadline(input: {
   attempts: ReadonlyArray<Pick<FixAttempt, 'report_id' | 'status' | 'report_fix_state'>>
   dispatches: ReadonlyArray<{ report_id?: string | null; status?: string | null }>
-  /** Null until `/v1/admin/fixes/summary` has loaded. */
+  /** Null until `/v1/admin/fixes/summary` has loaded. Attempts only, not dispatches. */
   summaryInProgress: number | null
+  /** Attempts only. Used when the summary has not loaded. */
   statsInProgress: number
-  /** Dispatches the stats endpoint already excluded from `statsInProgress`. */
+  /** Queued or running dispatches whose report is not already in `inProgress`. */
   statsInflightDispatches: number
 }): number {
   const fromList = inFlightReportCount(input.attempts) + extraInFlightDispatches(input.attempts, input.dispatches)

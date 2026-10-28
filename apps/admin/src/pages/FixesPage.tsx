@@ -903,6 +903,7 @@ export function FixesPage() {
               <FixesSnapshotStrip
                 stats={snapshotStats}
                 ready={readyCount}
+                inFlight={inFlightCount}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
               />

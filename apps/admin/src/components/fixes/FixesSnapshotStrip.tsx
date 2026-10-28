@@ -15,6 +15,12 @@ interface Props {
   stats: FixesStats
   /** Fix PRs ready to merge (countDefinitions readyToMerge), from the loaded list. */
   ready?: number
+  /**
+   * In-flight reports, the same number as the tab title. Stats alone are
+   * `inProgress` (live attempts) plus dispatches that have no attempt yet,
+   * which misses a live row the list has already counted.
+   */
+  inFlight?: number
   statsFetchedAt: string | null
   statsValidating?: boolean
 }
@@ -32,13 +38,13 @@ function fixesSentence(stats: FixesStats, inFlight: number, ready: number): stri
   return `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`
 }
 
-export function FixesSnapshotStrip({ stats, ready = 0, statsFetchedAt, statsValidating }: Props) {
-  const inFlight = stats.inProgress + stats.inflightDispatches
+export function FixesSnapshotStrip({ stats, ready = 0, inFlight, statsFetchedAt, statsValidating }: Props) {
+  const running = inFlight ?? stats.inProgress + stats.inflightDispatches
   return (
     <PageStatus
       ariaLabel="Fixes status"
-      tone={stats.failed > 0 ? 'danger' : ready > 0 ? 'warn' : inFlight > 0 ? 'info' : 'ok'}
-      sentence={fixesSentence(stats, inFlight, ready)}
+      tone={stats.failed > 0 ? 'danger' : ready > 0 ? 'warn' : running > 0 ? 'info' : 'ok'}
+      sentence={fixesSentence(stats, running, ready)}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       metrics={[
         {

@@ -53,6 +53,10 @@ export function FixSummaryRow({ summary, successRate }: Props) {
   // (sandbox_timeout), or a config issue (scope_blocked).
   const breakdown = summary.failureBreakdown ?? [];
   const showBreakdown = breakdown.length > 0;
+  // One cause can name the failures. Several causes must not: the whole
+  // failed total used to read as only the most common one ("PR closed
+  // without merge") while other reports had stopped for a different reason.
+  const mixedCauses = breakdown.length > 1;
   const cols = (5 + (showSpec ? 1 : 0) + (showBreakdown ? 1 : 0)) as 5 | 6 | 7;
   const topFailure = breakdown[0];
   const breakdownTitle = breakdown
@@ -86,7 +90,7 @@ export function FixSummaryRow({ summary, successRate }: Props) {
         label="Auto-fix stopped"
         value={summary.failed}
         accent={summary.failed > 0 ? 'danger' : 'muted'}
-        sublabel={summary.failed > 0 ? 'reports still unfixed' : 'nothing waiting'}
+        sublabel={summary.failed > 0 ? (mixedCauses ? 'several causes' : 'reports still unfixed') : 'nothing waiting'}
         series={failed}
         delta={pctDelta(failed, { invert: true })}
         seriesAriaLabel="Daily stopped fix attempts, last 30 days"
@@ -120,7 +124,7 @@ export function FixSummaryRow({ summary, successRate }: Props) {
           label="Why auto-fix stopped"
           value={topFailure.count}
           accent="danger"
-          sublabel={fixCauseLabel(topFailure.category)}
+          sublabel={mixedCauses ? 'several causes' : fixCauseLabel(topFailure.category)}
           meaning={`Why the last attempt stopped on each still-unfixed report, most common first.
 ${breakdownTitle}
 
