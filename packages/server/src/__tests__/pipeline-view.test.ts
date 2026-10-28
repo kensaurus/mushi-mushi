@@ -230,7 +230,7 @@ describe('buildPipeline', () => {
     const stages = run({ reviews: [rerun] })
     expect(group(stages, 'review_slow')).toBeNull()
     const hit = group(stages, 'review_running')
-    expect(hit?.group.label).toBe('1 PR: Opus is reviewing')
+    expect(hit?.group.label).toBe('1 PR: the AI review is running')
     expect(hit?.group.items[0].since).toBe('2026-10-26T11:59:00Z')
     // A request left unanswered for over two hours is stuck.
     const old = run({ reviews: [review({ status: 'queued', created_at: '2026-10-20T00:00:00Z', queued_at: '2026-10-26T09:00:00Z' })] })

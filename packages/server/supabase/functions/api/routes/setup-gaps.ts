@@ -27,6 +27,7 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth } from '../../_shared/auth.ts'
 import { log } from '../../_shared/logger.ts'
 import { fetchWithTimeout } from '../../_shared/http.ts'
+import { runInBackground } from '../../_shared/background.ts'
 import { mintInstallationAccess, parseGithubRepoUrl, resolveProjectGithubToken, type GithubRepoRef } from '../../_shared/github.ts'
 import { loadFollowupSettings } from '../../_shared/review-followup-db.ts'
 import {
@@ -70,6 +71,14 @@ const MAX_PROJECTS = 30
 const PROJECT_CONCURRENCY = 4
 /** A refresh within this long of the last check reuses it. */
 const REFRESH_MIN_MS = 60_000
+/**
+ * A stored result older than SETUP_GAPS_CACHE_MS but younger than this is
+ * shown at once and re-checked in the background. The in-memory cache is per
+ * isolate, so most visits missed it and waited 4–9 s for GitHub (console sweep
+ * #37, measured 2026-10-29); `setup_gap_results` holds the last answer across
+ * isolates.
+ */
+const STORED_STALE_MAX_MS = 24 * 3600_000
 
 export interface ProjectGaps {
   projectId: string
@@ -79,11 +88,37 @@ export interface ProjectGaps {
 }
 
 const cache = createTtlCache<ProjectGaps>(SETUP_GAPS_CACHE_MS)
+/** Apps this isolate is already re-checking in the background. */
+const refreshing = new Set<string>()
 
 /** @internal Tests reset the per-isolate cache between cases. */
 export function clearSetupGapsCache(): void {
   cache.clear()
+  refreshing.clear()
   clearRepoAbilities()
+}
+
+/** The last stored answer per app; an unreadable or missing table reads as none. */
+async function readStored(db: Db, ids: string[]): Promise<Map<string, { value: ProjectGaps; at: number }>> {
+  const out = new Map<string, { value: ProjectGaps; at: number }>()
+  if (!ids.length) return out
+  const { data, error } = await db.from('setup_gap_results').select('project_id, value, checked_at').in('project_id', ids)
+  if (error) {
+    slog.warn('stored setup gaps unreadable; checking live', { err: error.message })
+    return out
+  }
+  for (const row of (data ?? []) as Array<{ project_id: string; value: ProjectGaps; checked_at: string }>) {
+    const at = Date.parse(row.checked_at)
+    if (Number.isFinite(at) && row.value && Array.isArray(row.value.gaps)) out.set(row.project_id, { value: row.value, at })
+  }
+  return out
+}
+
+async function storeResult(db: Db, result: ProjectGaps): Promise<void> {
+  const { error } = await db
+    .from('setup_gap_results')
+    .upsert({ project_id: result.projectId, value: result, checked_at: result.checkedAt }, { onConflict: 'project_id' })
+  if (error) slog.warn('setup gaps not stored', { projectId: result.projectId, err: error.message })
 }
 
 interface RepoRow {
@@ -343,12 +378,30 @@ export function registerSetupGapsRoutes(app: Hono<{ Variables: Variables }>, dep
     const projects = (projectRows ?? []) as DispatcherProject[]
     const refresh = c.req.query('refresh') === '1'
     const nowMs = deps.now().getTime()
+    const stored = refresh ? new Map<string, { value: ProjectGaps; at: number }>() : await readStored(db, projects.map((p) => p.id))
+    const checkAndStore = async (p: DispatcherProject): Promise<ProjectGaps> => {
+      const fresh = await checkProject(db, p, deps)
+      cache.set(p.id, fresh, deps.now().getTime())
+      await storeResult(db, fresh)
+      return fresh
+    }
     const results = await mapLimit(projects, PROJECT_CONCURRENCY, async (p) => {
       const hit = cache.get(p.id, nowMs)
       if (hit && (!refresh || nowMs - hit.at < REFRESH_MIN_MS)) return hit.value
-      const fresh = await checkProject(db, p, deps)
-      cache.set(p.id, fresh, nowMs)
-      return fresh
+      const last = stored.get(p.id)
+      if (last && nowMs - last.at < SETUP_GAPS_CACHE_MS) {
+        cache.set(p.id, last.value, last.at)
+        return last.value
+      }
+      if (last && nowMs - last.at < STORED_STALE_MAX_MS) {
+        // Show the last answer now; the next visit sees the re-check.
+        if (!refreshing.has(p.id)) {
+          refreshing.add(p.id)
+          runInBackground(checkAndStore(p).finally(() => refreshing.delete(p.id)), 'setup-gaps-refresh')
+        }
+        return last.value
+      }
+      return await checkAndStore(p)
     })
     const all = results.flatMap((r) => r.gaps)
     slog.info('setup gaps read', { projects: results.length, ...countByStatus(all) })

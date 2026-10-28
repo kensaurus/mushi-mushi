@@ -597,13 +597,8 @@ export function dashboardNavBadge(stats: NavStatSlices['dashboard']): WorkspaceN
       `${stats.openBacklog} open report${stats.openBacklog === 1 ? '' : 's'} in backlog`,
     )
   }
-  if (stats.fixesInProgress > 0) {
-    return attentionBadge(
-      stats.fixesInProgress,
-      'ok',
-      `${stats.fixesInProgress} fix${stats.fixesInProgress === 1 ? '' : 'es'} in progress`,
-    )
-  }
+  // Fixes in progress are the Fixes item's own badge; Home repeating them showed
+  // one number twice in the sidebar (console sweep #30).
   return null
 }
 
