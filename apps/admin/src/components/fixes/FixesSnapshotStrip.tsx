@@ -8,6 +8,7 @@
 import { PageStatus } from '../ui'
 import type { FixesStats } from './FixesStatsTypes'
 import { COUNT_HINTS, stoppedTitle } from '../../lib/countDefinitions'
+import { formatFixCauseBreakdown } from '../../lib/fixReportTruth'
 import { pluralizeWithCount } from '../../lib/format'
 import { fixesLinks } from '../../lib/statCardLinks'
 
@@ -24,7 +25,11 @@ function fixesSentence(stats: FixesStats, inFlight: number, ready: number): stri
   const parts: string[] = []
   if (ready > 0) parts.push(`${pluralizeWithCount(ready, 'fix PR')} ready to merge`)
   // "Auto-fix stopped…" starts the sentence only when nothing comes before it.
-  if (stats.failed > 0) parts.push(parts.length ? stoppedTitle(stats.failed).replace(/^Auto/, 'auto') : stoppedTitle(stats.failed))
+  if (stats.failed > 0) {
+    const lead = parts.length ? stoppedTitle(stats.failed).replace(/^Auto/, 'auto') : stoppedTitle(stats.failed)
+    const causes = formatFixCauseBreakdown(stats.failureBreakdown ?? [])
+    parts.push(causes ? `${lead} (${causes})` : lead)
+  }
   if (stats.prsOpen > ready) parts.push(`${pluralizeWithCount(stats.prsOpen - ready, 'other PR')} waiting for review or CI`)
   if (inFlight > 0) parts.push(`${pluralizeWithCount(inFlight, 'fix', 'fixes')} running`)
   if (parts.length === 0) return `${pluralizeWithCount(stats.completed, 'report')} fixed in the last 30 days; nothing waiting.`

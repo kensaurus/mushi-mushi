@@ -499,6 +499,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       inflightDispatches: 0,
       topFailureCategory: null as string | null,
       topFailureCount: 0,
+      failureBreakdown: [] as Array<{ category: string; count: number }>,
       successRatePct: null as number | null,
       topPriority: 'no_project' as
         | 'no_project' | 'no_github' | 'no_index' | 'failed'
@@ -631,6 +632,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         inflightDispatches,
         topFailureCategory: topEntry?.category ?? null,
         topFailureCount: topEntry?.count ?? 0,
+        failureBreakdown: truth.failureBreakdown,
         successRatePct,
         topPriority,
         topPriorityLabel,

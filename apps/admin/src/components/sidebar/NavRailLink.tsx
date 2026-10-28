@@ -107,6 +107,7 @@ export function NavRailLink({
           ) : status ? (
             <span
               aria-hidden="true"
+              title={status.label}
               className={
                 status.count == null
                   ? `nav-rail-badge nav-rail-badge--dot ring-1 ring-surface-root ${RAIL_DOT_TONE[status.tone]}`

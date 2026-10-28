@@ -116,6 +116,7 @@ describe('rail a11y contract', () => {
     expect(html).toContain('3 critical reports (30d)')
     // The visual pill itself is decorative — the prose above carries it.
     expect(html).toContain('aria-hidden="true"')
+    expect(html).toContain('title="3 critical reports (30d)"')
   })
 })
 

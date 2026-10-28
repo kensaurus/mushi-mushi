@@ -12,6 +12,7 @@ import {
   IconMenu, IconClose,
   IconSignOut, IconBell, IconEye, IconChevronRight,
 } from './icons'
+import { stoppedTitle } from '../lib/countDefinitions'
 import { useNavCounts, toneForBacklog } from '../lib/useNavCounts'
 import { navSlicesForPaths, renderNavBadge, resolveNavBadge } from '../lib/navBadges'
 import { NavRailFlyout } from './sidebar/NavRailFlyout'
@@ -1032,7 +1033,7 @@ function computeStaleness(
         navCounts.fixesFailed > 0 || extended?.tone === 'danger' ? 'danger' : 'warn'
       const parts: string[] = []
       if (navCounts.fixesFailed > 0) {
-        parts.push(`${navCounts.fixesFailed} failed fix${navCounts.fixesFailed === 1 ? '' : 'es'}`)
+        parts.push(stoppedTitle(navCounts.fixesFailed))
       } else if (navCounts.fixesInFlight > 0) {
         parts.push(`${navCounts.fixesInFlight} fix${navCounts.fixesInFlight === 1 ? '' : 'es'} in flight`)
       }
@@ -1200,6 +1201,7 @@ function SectionRailHeader({ section, expanded, isActiveStage, staleness, onSele
           {staleness && (
             <span
               aria-hidden="true"
+              title={staleness.label}
               className={`nav-rail-badge ring-1 ring-surface-root ${STALENESS_TONE[staleness.tone]}`}
             >
               {railBadgeText(staleness.count)}

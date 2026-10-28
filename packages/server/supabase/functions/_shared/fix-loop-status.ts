@@ -134,10 +134,14 @@ const CI_HARD_FAIL = new Set(['failure', 'timed_out', 'cancelled', 'action_requi
 
 /**
  * One definition of a "failed" fix for every count on /fixes (status banner,
- * tab badge, "Failed / skipped" filter). Before 2026-10-02 the counts only
- * looked at `status === 'failed'`, so an attempt that opened a PR whose CI
- * went red (or that was closed unmerged) showed Check = Failed on its card
- * while every count read 0.
+ * tab badge, Stopped filter). Before 2026-10-02 the counts only looked at
+ * `status === 'failed'`, so an attempt that opened a PR whose CI went red
+ * (or that was closed unmerged) showed Check = Failed on its card while
+ * every count read 0.
+ *
+ * `already_fixed` is the agent's "nothing to change" verdict, not a stopped
+ * fix. It stays out of this count so the Stopped total is not captioned as
+ * if every row were a CI failure.
  */
 export function isFixCountedFailed(a: {
   status?: string | null
@@ -145,7 +149,9 @@ export function isFixCountedFailed(a: {
   pr_state?: string | null
   merged_at?: string | null
   check_run_conclusion?: string | null
+  failure_category?: string | null
 }): boolean {
+  if ((a.failure_category ?? '').toLowerCase() === 'already_fixed') return false
   const status = (a.status ?? '').toLowerCase()
   if (status === 'failed' || status.startsWith('skipped')) return true
   if (!a.pr_url || a.merged_at || a.pr_state === 'merged') return false

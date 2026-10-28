@@ -83,6 +83,8 @@ describe('fix-loop-status pure rules', () => {
 
   it('counts red-CI and closed-unmerged PRs as failed, merged ones never', () => {
     expect(isFixCountedFailed({ status: 'failed' })).toBe(true)
+    expect(isFixCountedFailed({ status: 'failed', failure_category: 'needs_human' })).toBe(true)
+    expect(isFixCountedFailed({ status: 'failed', failure_category: 'already_fixed' })).toBe(false)
     expect(isFixCountedFailed({ status: 'skipped_no_context' })).toBe(true)
     // The QA case: completed attempt, PR open, CI failure.
     expect(isFixCountedFailed({ status: 'completed', pr_url: 'u', check_run_conclusion: 'failure' })).toBe(true)

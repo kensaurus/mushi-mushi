@@ -16,7 +16,8 @@
  *   in_flight — an attempt is queued / running / pending
  *   pr_open   — an attempt has an open (or draft) PR that is not blocked
  *   failed    — the latest attempt failed, was skipped, or its PR closed
- *               unmerged / went red (isFixCountedFailed)
+ *               unmerged / went red (isFixCountedFailed). An already_fixed
+ *               verdict ("agent found nothing to change") is none, not failed.
  *   none      — nothing to act on
  *
  * Only `fix-loop-status.ts` is imported, so the Deno CI test runs without

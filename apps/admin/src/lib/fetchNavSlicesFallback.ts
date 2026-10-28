@@ -299,6 +299,7 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
           openBacklog: dashboardStats.openBacklog,
           fixesFailed: dashboardStats.fixesFailed,
           fixesInProgress: dashboardStats.fixesInProgress,
+          fixFailureBreakdown: dashboardStats.fixFailureBreakdown,
           integrationIssues: dashboardStats.integrationIssues,
           topPriority: dashboardStats.topPriority,
         }
@@ -371,6 +372,7 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
           inProgress: fixesStats.inProgress,
           specWarnings: fixesStats.specWarnings,
           topPriority: fixesStats.topPriority,
+          failureBreakdown: fixesStats.failureBreakdown,
         }
       : null,
     repo: repoStats

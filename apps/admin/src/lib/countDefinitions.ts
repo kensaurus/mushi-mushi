@@ -20,6 +20,8 @@
  *     Reports whose latest fix attempt failed, was skipped, or whose PR was
  *     closed unmerged or went red, among reports with an attempt in the last
  *     30 days. Fixed, verified, resolved and dismissed reports never count.
+ *     An already_fixed verdict (the agent found nothing to change) does not
+ *     count; needs_human stays in the number and is named in the breakdown.
  *     Server: _shared/fix-report-truth.ts (state `failed`). Read by
  *     /v1/admin/fixes/stats `failed` (/fixes "Stopped", the active app), the
  *     dashboard's fixSummary.failed (Home) and /v1/admin/fixes/summary
