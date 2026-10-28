@@ -31,11 +31,17 @@
  *          Run locally:  node scripts/check-design-tokens.mjs
  *          In CI:        pnpm check:design-tokens
  *          Pre-commit:   wired via scripts/install-git-hooks.mjs
+ *
+ *          Also compiles theme-tokens.css with no utility classes and fails
+ *          when a viz-* token read in admin source is missing from the
+ *          output. Those tokens are @theme static because Tailwind drops
+ *          unused @theme colours and readVizToken() reads them at runtime.
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve, join, relative } from 'node:path'
+import { missingEmittedVizTokens } from './viz-token-emission.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
@@ -835,11 +841,29 @@ const lintFailures =
   focusOutlineHits.length > 0 ||
   ellipsisHits.length > 0
 
-if (lintFailures) process.exit(1)
+let vizMissing = []
+try {
+  vizMissing = await missingEmittedVizTokens()
+} catch (err) {
+  console.error(`\n[viz-emit] Could not compile apps/admin/src/styles/theme-tokens.css:\n`)
+  console.error(err instanceof Error ? err.message : err)
+  process.exit(1)
+}
+
+if (vizMissing.length > 0) {
+  console.error(`\n[viz-emit] viz tokens read in admin source are missing from the compiled theme:\n`)
+  for (const name of vizMissing) console.error(`  --color-${name}`)
+  console.error(
+    `\nFix: declare them in the @theme static block in apps/admin/src/styles/theme-tokens.css.\n` +
+      `Tailwind drops @theme colours that no utility uses, and readVizToken() reads these at runtime.\n`,
+  )
+}
+
+if (lintFailures || vizMissing.length > 0) process.exit(1)
 
 const totalTypeFloorFiles = typeFloorFiles.length
 console.log(
   `[ok] Admin design tokens are in sync with index.css (${allow.size} color roots, ${files.length} admin files scanned). ` +
     `Type floor: clean across ${totalTypeFloorFiles} files. Web interface guards: transition-all, focus-visible, ellipsis — clean. ` +
-    `Retired aliases: ${RETIRED_CUSTOM_PROPS.size} names, 0 uses.`,
+    `Retired aliases: ${RETIRED_CUSTOM_PROPS.size} names, 0 uses. Viz tokens: emitted.`,
 )

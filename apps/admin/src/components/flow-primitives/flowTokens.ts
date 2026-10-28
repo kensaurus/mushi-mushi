@@ -4,22 +4,22 @@
  *          Flow canvases (PDCA loop + FixAttemptFlow). SVG `stop-color`
  *          attributes and inline `style.stroke` need concrete values —
  *          CSS custom properties don't always resolve inside SVG `defs`
- *          across browsers. Values are read from @theme viz-* tokens via
- *          `readVizToken()` so theme tweaks stay in index.css.
+ *          across browsers. Values are read from @theme static viz tokens
+ *          on access, because this module loads before index.css.
  */
 
 import type { PdcaStageId } from '../../lib/pdca'
-import { readVizToken } from '../../lib/vizTokens'
+import { vizColorMap } from '../../lib/vizTokens'
 
-export const STAGE_HEX: Record<PdcaStageId, string> = {
-  plan: readVizToken('viz-flow-info'),
-  do: readVizToken('viz-flow-brand'),
-  check: readVizToken('viz-score-warn'),
-  act: readVizToken('viz-score-ok'),
-}
+export const STAGE_HEX: Record<PdcaStageId, string> = vizColorMap<PdcaStageId>({
+  plan: 'viz-flow-info',
+  do: 'viz-flow-brand',
+  check: 'viz-score-warn',
+  act: 'viz-score-ok',
+})
 
-export const TONE_HEX = {
-  ok: readVizToken('viz-score-ok'),
-  warn: readVizToken('viz-score-warn'),
-  urgent: readVizToken('viz-flow-danger'),
-} as const
+export const TONE_HEX = vizColorMap({
+  ok: 'viz-score-ok',
+  warn: 'viz-score-warn',
+  urgent: 'viz-flow-danger',
+})

@@ -5,32 +5,31 @@
  */
 import type { Edge, Node } from '@xyflow/react'
 
-import { readVizToken } from '../../lib/vizTokens'
+import { vizColorMap } from '../../lib/vizTokens'
 import type { PageAction } from '../PageActionBar'
 import type { DavEvidence } from '../../lib/davManifest'
 import type { OperatorTraceLine } from './operatorTrace'
 
 export type HeroSeverity = 'ok' | 'info' | 'warn' | 'crit' | 'neutral'
 
-/** Hex tints used inside SVG `<defs>` (CSS variables don't always resolve
- *  in `<linearGradient>` across browsers — we keep the source of truth in
- *  TS so a theme tweak only touches one file. Aligned with the dashboard
- *  flow's `flowTokens.ts` so the two flows feel like one system. */
-export const HERO_SEVERITY_HEX: Record<HeroSeverity, string> = {
-  ok: readVizToken('viz-score-ok'),
-  info: readVizToken('viz-flow-info'),
-  warn: readVizToken('viz-score-warn'),
-  crit: readVizToken('viz-flow-danger'),
-  neutral: readVizToken('viz-neutral'),
-}
+/** Concrete colours for SVG `<defs>` (a var(--color-*) stop does not resolve
+ *  in every browser). Read on access from @theme static viz tokens — this
+ *  module is evaluated before index.css. Same tokens as flowTokens.ts. */
+export const HERO_SEVERITY_HEX: Record<HeroSeverity, string> = vizColorMap<HeroSeverity>({
+  ok: 'viz-score-ok',
+  info: 'viz-flow-info',
+  warn: 'viz-score-warn',
+  crit: 'viz-flow-danger',
+  neutral: 'viz-neutral',
+})
 
-export const HERO_ACTION_TONE_HEX: Record<PageAction['tone'], string> = {
-  plan: readVizToken('viz-flow-info'),
-  do: readVizToken('viz-flow-brand'),
-  check: readVizToken('viz-score-warn'),
-  act: readVizToken('viz-score-ok'),
-  idle: readVizToken('viz-neutral'),
-}
+export const HERO_ACTION_TONE_HEX: Record<PageAction['tone'], string> = vizColorMap<PageAction['tone']>({
+  plan: 'viz-flow-info',
+  do: 'viz-flow-brand',
+  check: 'viz-score-warn',
+  act: 'viz-score-ok',
+  idle: 'viz-neutral',
+})
 
 export interface HeroDecideData {
   label: string
