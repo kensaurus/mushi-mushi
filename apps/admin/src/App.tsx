@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from './lib/auth'
 import { Layout } from './components/Layout'
 import { TesterLayout } from './components/tester/TesterLayout'
 import { LoginPage } from './pages/LoginPage'
+import { SampleReportEntry } from './components/SampleReportEntry'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { SetupGatePage } from './pages/SetupGatePage'
 import { checkEnv } from './lib/env'
@@ -213,6 +214,18 @@ function PasswordRecoveryGate({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+/**
+ * `/` is where the docs navbar "Console" link lands. A session opens the
+ * reports inbox. A first visit has no session: show the public sample
+ * diagnosis instead of bouncing through the protected inbox to /login.
+ */
+function ConsoleEntry() {
+  const { session, loading } = useAuth()
+  if (loading) return <div className="flex h-full min-h-0 items-center justify-center"><Loading text="Loading…" /></div>
+  if (session) return <Navigate to="/reports" replace />
+  return <Navigate to="/reports/sample" replace />
+}
+
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth()
   const location = useLocation()
@@ -304,11 +317,14 @@ export function App() {
         {/* The marketing landing lives at the product root (kensaur.us/mushi-mushi/),
             served by the docs static export via the CloudFront internal rewrite
             (scripts/cloudfront-mushi-spa-router.js). The admin SPA root
-            (/mushi-mushi/admin/) is the app itself, so `/` bounces straight to the
-            dashboard — ProtectedRoute redirects to /login when unauthenticated.
-            (Retired PublicHomePage so the noindex admin shell no longer duplicates
-            the indexable landing.) */}
-        <Route path="/" element={<Navigate to="/reports" replace />} />
+            (/mushi-mushi/admin/) is where "Console" lands: a session opens
+            /reports; a signed-out visit opens the public sample at
+            /reports/sample (ADR 0052 — value before an account, cockpit stays
+            gated). PublicHomePage stays retired so this shell does not
+            duplicate the indexable landing. */}
+        <Route path="/" element={<ConsoleEntry />} />
+        {/* Sibling of the protected splat so it wins over /reports/:id. */}
+        <Route path="/reports/sample" element={<SampleReportEntry />} />
         <Route path="/login" element={<LoginPage />} />
         {/* Bare /signup lands directly on the signup form instead of bouncing
             through ProtectedRoute -> /login (see docs/pricing.mdx CTA and
