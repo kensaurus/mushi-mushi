@@ -1,7 +1,8 @@
 /**
- * Set up's four-step rail (console journeys 2026-10-27). The last step is a
- * report from the app itself: a diagnosed test report proves the pipeline,
- * it never finishes the rail (report 9b7624e6).
+ * Set up's four-step rail (console journeys 2026-10-27). Since the console
+ * sweep (2026-10-28) it counts exactly the server's four required steps, so
+ * "N of 4" matches the sidebar and Home; a step done only by a test report
+ * says so in its line.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -11,7 +12,7 @@ import type { SetupProject } from './useSetupStatus'
 
 const NOW = Date.parse('2026-10-27T12:00:00Z')
 
-function project(over: { key?: boolean; sdk?: boolean; seenAt?: string | null; origin?: string | null; keyLabel?: string | null } = {}): SetupProject {
+function project(over: { key?: boolean; sdk?: boolean; report?: boolean; seenAt?: string | null; origin?: string | null; keyLabel?: string | null } = {}): SetupProject {
   const step = (id: string, complete: boolean) => ({ id, label: id, description: '', complete, required: true, cta_to: '/', cta_label: 'Go' })
   return {
     project_id: 'p1',
@@ -31,10 +32,10 @@ function project(over: { key?: boolean; sdk?: boolean; seenAt?: string | null; o
           last_sdk_key_label: over.keyLabel ?? null,
         },
       },
-      step('first_report_received', false),
+      step('first_report_received', over.report ?? false),
     ],
     required_total: 4,
-    required_complete: 1,
+    required_complete: 1 + Number(over.key ?? false) + Number(over.sdk ?? false) + Number(over.report ?? false),
     total: 8,
     complete: 1,
     done: false,
@@ -50,17 +51,28 @@ describe('buildSetupRail', () => {
     expect(rail.steps.map((s) => s.state)).toEqual(['done', 'current', 'todo', 'todo'])
     expect(rail.steps[0].detail).toBe('Created 1h ago')
     expect(rail.next?.id).toBe('key')
+    expect(rail.next?.action).toBe('make a key')
     expect(rail.doneCount).toBe(1)
   })
 
-  it('a diagnosed test report does not finish the last step, and says so (9b7624e6)', () => {
+  // Set up said "2 of 4 done" beside the sidebar's "Set up · 3/4" (2026-10-28).
+  it('counts what the server counts, and says when the report was only a test', () => {
+    const p = project({ key: true, report: true })
     const rail = buildSetupRail({
-      project: project({ key: true }),
+      project: p,
       ttfd: { keyMintedAt: '2026-10-27T11:30:00Z', firstDiagnosisAt: null, ms: null, testDiagnosisAt: '2026-10-27T11:31:00Z' },
       now: NOW,
     })
-    expect(rail.steps[3]).toMatchObject({ state: 'todo', detail: 'Test bug diagnosed; waiting on your app' })
+    expect(rail.doneCount).toBe(p.required_complete)
+    expect(rail.steps[3]).toMatchObject({ state: 'done', detail: 'A test bug so far; none from your app yet' })
     expect(rail.testDiagnosedAt).toBe('2026-10-27T11:31:00Z')
+    expect(rail.next?.id).toBe('sdk')
+  })
+
+  it('never counts a heartbeat the server has not counted', () => {
+    const p = project({ key: true, sdk: false, seenAt: '2026-10-27T11:58:00Z' })
+    const rail = buildSetupRail({ project: p, ttfd: null, now: NOW })
+    expect(rail.doneCount).toBe(p.required_complete)
     expect(rail.next?.id).toBe('sdk')
   })
 
@@ -77,7 +89,7 @@ describe('buildSetupRail', () => {
 
   it('all four done once a report from the app is diagnosed, with its id to open', () => {
     const rail = buildSetupRail({
-      project: project({ key: true, sdk: true, seenAt: '2026-10-27T11:58:00Z' }),
+      project: project({ key: true, sdk: true, report: true, seenAt: '2026-10-27T11:58:00Z' }),
       ttfd: { keyMintedAt: '2026-10-27T11:30:00Z', firstDiagnosisAt: '2026-10-27T11:40:00Z', ms: 600_000, firstReportId: 'r1', testDiagnosisAt: '2026-10-27T11:31:00Z' },
       now: NOW,
     })

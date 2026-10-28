@@ -10,8 +10,13 @@
  *          first classified report" after the test report it asked for was
  *          diagnosed (report 9b7624e6). The rail counts what the user cares
  *          about: a heartbeat from an SDK key (the server ignores MCP and CLI
- *          keys), and a report from the app itself. A test report proves the
- *          pipeline works; it does not finish the last step.
+ *          keys), and a first bug report.
+ *
+ *          One count everywhere (console sweep 2026-10-28): Set up said "2 of
+ *          4 done" while the sidebar said "Set up · 3/4" and Home "3 of 4",
+ *          because this rail did not count a test report and the server's
+ *          required steps do. The rail now counts exactly the server's four
+ *          required steps; a test-only report still says so in its line.
  */
 
 import type { SetupProject } from './useSetupStatus'
@@ -38,6 +43,8 @@ export interface SetupRailStep {
   detail: string
   /** The Set up tab that finishes or shows this step. */
   tab: OnboardingTabId
+  /** What to do, for "Next: …": "make a key". */
+  action: string
 }
 
 interface SdkHeartbeatView {
@@ -58,11 +65,27 @@ export interface SetupRail {
   testDiagnosedAt: string | null
 }
 
+// Plain words: "Report key", "SDK heartbeat" read as jargon to a new user.
 const LABELS: Record<SetupRailStepId, string> = {
   project: 'App created',
-  key: 'Report key',
-  sdk: 'SDK heartbeat',
-  report: 'First report from your app',
+  key: 'Key made',
+  sdk: 'App connected',
+  report: 'First bug received',
+}
+
+const ACTIONS: Record<SetupRailStepId, string> = {
+  project: 'name your app',
+  key: 'make a key',
+  sdk: 'connect your app',
+  report: 'get your first bug',
+}
+
+/** The server's required step behind each rail step: one count with the sidebar and Home. */
+const SERVER_STEP: Record<SetupRailStepId, string> = {
+  project: 'project_created',
+  key: 'api_key_generated',
+  sdk: 'sdk_installed',
+  report: 'first_report_received',
 }
 
 const TABS: Record<SetupRailStepId, OnboardingTabId> = {
@@ -103,12 +126,13 @@ export function buildSetupRail(input: {
   const realReportAt = ttfd?.firstDiagnosisAt ?? null
   const testDiagnosedAt = realReportAt ? null : (ttfd?.testDiagnosisAt ?? null)
 
+  // The server sets sdk_installed only from an SDK key's check-in, and
+  // first_report_received from any report, a test one included.
   const done: Record<SetupRailStepId, boolean> = {
-    project: project != null,
-    key: stepComplete(project, 'api_key_generated'),
-    // The server sets sdk_installed only from an SDK key's check-in.
-    sdk: stepComplete(project, 'sdk_installed') || heartbeat != null,
-    report: realReportAt != null,
+    project: project != null && (stepComplete(project, SERVER_STEP.project) || !project.steps.some((s) => s.id === SERVER_STEP.project)),
+    key: stepComplete(project, SERVER_STEP.key),
+    sdk: stepComplete(project, SERVER_STEP.sdk),
+    report: realReportAt != null || stepComplete(project, SERVER_STEP.report),
   }
 
   const detail: Record<SetupRailStepId, string> = {
@@ -118,8 +142,10 @@ export function buildSetupRail(input: {
     report: realReportAt
       ? (when('Diagnosed', realReportAt, now) ?? 'Diagnosed')
       : testDiagnosedAt
-        ? 'Test bug diagnosed; waiting on your app'
-        : 'Waiting on your app',
+        ? 'A test bug so far; none from your app yet'
+        : done.report
+          ? 'Received; the diagnosis is on its way'
+          : 'Waiting on your app',
   }
 
   const ids: SetupRailStepId[] = ['project', 'key', 'sdk', 'report']
@@ -130,6 +156,7 @@ export function buildSetupRail(input: {
     state: done[id] ? 'done' : id === firstOpen ? 'current' : 'todo',
     detail: detail[id],
     tab: TABS[id],
+    action: ACTIONS[id],
   }))
 
   return {

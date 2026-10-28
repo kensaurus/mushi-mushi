@@ -53,3 +53,12 @@ export function withSetupRequiredCounts<
     nextStepLabel: next ? next.label : stats.setupDone && setupProject.done ? null : stats.nextStepLabel,
   }
 }
+
+/**
+ * "3 of 4 done": the one way the console counts setup (required steps only).
+ * Set up, the Home checklist and the sidebar showed 2/4, 4/10 and 3/4 for one
+ * app (2026-10-28).
+ */
+export function setupCountLabel(project: Pick<SetupProject, 'required_complete' | 'required_total'>): string {
+  return `${project.required_complete} of ${project.required_total} done`
+}

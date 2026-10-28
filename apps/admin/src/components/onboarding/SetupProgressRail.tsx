@@ -3,8 +3,10 @@
  * PURPOSE: The top of Set up (console journeys 2026-10-27): "Is my app wired
  *          up? What's the one thing left?"
  *
- *            1. A four-step rail (app → key → SDK heartbeat → first report from
- *               the app), each step with its live state and when it happened.
+ *            1. A four-step rail (app → key → app connected → first bug), each
+ *               step with its live state and when it happened. It counts the
+ *               server's four required steps, so its number matches the
+ *               sidebar and Home.
  *            2. The next step only, with its one button: Make the key, copy
  *               the snippet, send a test bug, or open the first report.
  *            3. The last heartbeat: when, which key, from where.
@@ -21,7 +23,6 @@ import { usePageData } from '../../lib/usePageData'
 import { buildSetupRail, heartbeatSentence, type SetupRail, type SetupRailStep, type TimeToFirstDiagnosis } from '../../lib/setupRail'
 import { DEFAULT_SDK_CONFIG, installCommand, renderSnippet } from '../../lib/sdkSnippets'
 import { resolveDefaultSdkFramework } from '../../lib/sdkInstallDefaults'
-import { relativeTime } from '../../lib/setupGuideSteps'
 import type { SetupProject } from '../../lib/useSetupStatus'
 import type { OnboardingTabId } from './types'
 
@@ -54,7 +55,7 @@ export function SetupProgressRail({ project, apiKey, onTab, onMintKey, minting, 
     >
       <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h2 className="text-sm font-semibold text-fg">
-          {rail.next ? `${rail.doneCount} of 4 done. Next: ${rail.next.label}` : 'Your app is wired up'}
+          {rail.next ? `${rail.doneCount} of ${rail.steps.length} done. Next: ${rail.next.action}` : 'Your app is wired up'}
         </h2>
       </div>
       <ol className="mt-3 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
@@ -148,7 +149,9 @@ function NextStepPanel({
     return (
       <div className={panel} data-testid="setup-next-step">
         <p className="text-xs text-fg-secondary">
-          Reports from your app reach Mushi and get a plain-English diagnosis.
+          {rail.testDiagnosedAt
+            ? 'Mushi has only seen a test bug so far. Report one with the bug button in your app to check it end to end.'
+            : 'Reports from your app reach Mushi and get a plain-English diagnosis.'}
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-3">
           {rail.firstReportId ? (
@@ -168,7 +171,7 @@ function NextStepPanel({
   if (next.id === 'project') {
     return (
       <div className={panel} data-testid="setup-next-step">
-        <p className="text-xs text-fg-secondary">Name your app. Mushi makes its report key for you.</p>
+        <p className="text-xs text-fg-secondary">Name your app. Mushi makes its key for you.</p>
         <Btn size="sm" variant="primary" className="mt-2" onClick={() => onTab('steps')}>
           Create your app
         </Btn>
@@ -180,37 +183,46 @@ function NextStepPanel({
     return (
       <div className={panel} data-testid="setup-next-step">
         <p className="text-xs text-fg-secondary">
-          Your app sends bugs with a report key. It is shown once, inside the snippet.
+          Your app sends bugs with a key. It is shown once, inside the snippet.
         </p>
         <Btn size="sm" variant="primary" className="mt-2" onClick={onMintKey} loading={minting} disabled={minting}>
-          Make the report key
+          Make the key
         </Btn>
       </div>
     )
   }
 
   if (next.id === 'sdk' && project) {
-    return <SnippetStep project={project} apiKey={apiKey} onTab={onTab} />
+    return <SnippetStep project={project} apiKey={apiKey} onTab={onTab} onMintKey={onMintKey} minting={minting} />
   }
 
   return (
     <div className={panel} data-testid="setup-next-step">
       <p className="text-xs text-fg-secondary">
-        {rail.testDiagnosedAt
-          ? `Your test bug was diagnosed ${relativeTime(rail.testDiagnosedAt) ?? 'already'}, so the pipeline works. Report a bug from your app with its bug button to finish.`
-          : 'Report a bug from your app with its bug button. Mushi diagnoses it in about a minute.'}
+        Report a bug with the bug button in your app, or send a test bug from here to see a diagnosis in about a minute.
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <Btn size="sm" variant="primary" onClick={onSendTest} loading={testing} disabled={testing}>
-          {rail.testDiagnosedAt ? 'Send another test bug' : 'Send a test bug'}
+          Send a test bug
         </Btn>
-        <span className="text-2xs text-fg-faint">A test bug checks the pipeline; it doesn’t finish this step.</span>
       </div>
     </div>
   )
 }
 
-function SnippetStep({ project, apiKey, onTab }: { project: SetupProject; apiKey: string | null; onTab: (tab: OnboardingTabId) => void }) {
+function SnippetStep({
+  project,
+  apiKey,
+  onTab,
+  onMintKey,
+  minting,
+}: {
+  project: SetupProject
+  apiKey: string | null
+  onTab: (tab: OnboardingTabId) => void
+  onMintKey: () => void
+  minting: boolean
+}) {
   const [copied, setCopied] = useState(false)
   const framework = resolveDefaultSdkFramework(project.project_slug)
   const code = `${installCommand(framework)}\n\n${renderSnippet(framework, project.project_id, apiKey, DEFAULT_SDK_CONFIG, project.project_slug)}`
@@ -225,14 +237,22 @@ function SnippetStep({ project, apiKey, onTab }: { project: SetupProject; apiKey
   }
   return (
     <div className="mt-3 min-w-0 space-y-2 border-t border-edge-subtle pt-3" data-testid="setup-next-step">
+      {/* A snippet with "mushi_xxx" in it cannot work, and keys are shown only
+          once, so a key made earlier is not here to fill in (2026-10-28). */}
       <p className="text-xs text-fg-secondary">
-        Paste this into your app and load any page. The heartbeat shows up here within a minute.
-        {apiKey ? null : ' Your report key replaces the placeholder: make one on the SDK tab, or use the one you saved.'}
+        {apiKey
+          ? 'Paste this into your app and load any page. Mushi hears from your app here within a minute.'
+          : 'This snippet needs a key, and a key is shown only once. Make a new one and it fills in below; your other keys keep working.'}
       </p>
+      {apiKey ? null : (
+        <Btn size="sm" variant="primary" onClick={onMintKey} loading={minting} disabled={minting} data-testid="setup-snippet-make-key">
+          Make a key and fill it in
+        </Btn>
+      )}
       <CodePanel label="Install and start the SDK" language="tsx" code={code} onCopy={copy} copied={copied} maxHeight="max-h-56" />
       <div className="flex flex-wrap items-center gap-3">
-        <Btn size="sm" variant="primary" onClick={copy}>
-          {copied ? 'Copied' : 'Copy snippet'}
+        <Btn size="sm" variant={apiKey ? 'primary' : 'ghost'} onClick={copy}>
+          {copied ? 'Copied' : apiKey ? 'Copy snippet' : 'Copy without a key'}
         </Btn>
         <Link
           to="/onboarding?tab=sdk"

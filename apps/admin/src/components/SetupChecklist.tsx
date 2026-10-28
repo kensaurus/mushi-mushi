@@ -20,6 +20,7 @@ import { Link } from 'react-router-dom'
 import type { SetupProject, SetupStep } from '../lib/useSetupStatus'
 import { CHIP_TONE } from '../lib/chipTone'
 import { useClaimNextStep, useNextStep } from '../lib/useNextStep'
+import { setupCountLabel } from '../lib/setupProgress'
 import { Btn, Card, RefreshIconButton } from './ui'
 import { SdkHealthPanel } from './SdkHealthPanel'
 
@@ -121,7 +122,7 @@ function BannerChecklist({
       ? '✓ Setup complete'
       : requiredDone
         ? '✓ All set — optional integrations available'
-        : `Setup ${project.required_complete}/${project.required_total} required`
+        : `Set up: ${setupCountLabel(project)}`
     return (
       <button
         type="button"
@@ -147,8 +148,10 @@ function BannerChecklist({
             <span className={`text-xs font-semibold ${requiredDone ? 'text-ok-foreground' : 'text-warn-foreground'}`}>
               {requiredDone ? 'Setup complete' : 'Finish setting up Mushi Mushi'}
             </span>
-            <span className="text-2xs font-mono text-fg-muted">
-              {project.complete}/{project.total} done · {pct}% required
+            {/* One count everywhere: "4/10 done · 75% required" sat beside "3 of 4"
+                in the header and "Set up · 3/4" in the sidebar (2026-10-28). */}
+            <span className="text-2xs text-fg-muted" data-testid="setup-checklist-count">
+              {setupCountLabel(project)}
             </span>
           </div>
           <p className="mt-0.5 text-2xs text-fg-muted truncate">
@@ -210,8 +213,8 @@ function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndp
           <span className="text-xs font-semibold text-fg">
             {requiredDone ? 'You\u2019re set up' : 'Setup progress'}
           </span>
-          <span className="text-2xs font-mono text-fg-muted">
-            {project.required_complete}/{project.required_total} required · {pct}%
+          <span className="text-2xs text-fg-muted" data-testid="setup-checklist-count">
+            {setupCountLabel(project)}
           </span>
         </div>
         <div className="mt-2 h-1 w-full overflow-hidden rounded-sm bg-surface-overlay">
