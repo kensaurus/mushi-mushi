@@ -364,7 +364,7 @@ export function buildNeedsYou(input: NeedsYouInput): NeedsYouItem[] {
   const site = sig('site')
   if (site?.light === 'bad') items.push({ id: 'site_broken', impact: 100, text: `Your live site has ${site.headline}.`, action: { label: 'See pages', to: site.href } })
   if (input.criticalWaiting && input.criticalWaiting > 0) {
-    items.push({ id: 'critical_waiting', impact: 90, text: `${plural(input.criticalWaiting, 'critical bug')} ${input.criticalWaiting === 1 ? 'is' : 'are'} waiting for a fix.`, action: { label: 'Open', to: '/reports?status=open&severity=critical' } })
+    items.push({ id: 'critical_waiting', impact: 90, text: `${plural(input.criticalWaiting, 'critical bug')} ${input.criticalWaiting === 1 ? 'is' : 'are'} waiting for a fix, any age.`, action: { label: 'Open', to: '/reports?status=open&severity=critical' } })
   }
   const ci = sig('ci')
   if (ci?.light === 'bad') items.push({ id: 'ci_red', impact: 72, text: `CI on your main branch is failing. ${ci.detail ?? ''}`.trim(), action: { label: 'Open CI', to: '/ci' } })

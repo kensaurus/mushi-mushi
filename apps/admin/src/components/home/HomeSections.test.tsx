@@ -150,7 +150,10 @@ describe('ReleaseCard', () => {
   it('shows bugs waiting as one bar by severity, each linking to its open list', async () => {
     await render(createElement(ReleaseCard, { section: ok(release()), projectId: P }))
     const waiting = byTestId('home-release-waiting')!
-    expect(waiting.textContent).toContain('10 bugs waiting for a fix')
+    expect(waiting.textContent).toContain('10 bugs waiting for a fix, any age')
+    expect(waiting.querySelector('a[href="/reports?status=open&severity=critical"]')?.getAttribute('title')).toBe(
+      'Critical reports waiting on a decision, any age',
+    )
     expect(waiting.querySelector('[role="img"]')!.getAttribute('aria-label')).toBe('Critical 1, High 2, Low 3, Not rated yet 4')
     expect(hrefs()).toEqual(expect.arrayContaining(['/reports?status=open&severity=critical', '/reports?status=open&severity=low', '/reports?status=open']))
   })

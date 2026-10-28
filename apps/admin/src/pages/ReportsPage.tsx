@@ -297,6 +297,19 @@ export function ReportsPage() {
     [searchParams, setSearchParams],
   )
 
+  const setParams = useCallback(
+    (updates: Record<string, string>) => {
+      const next = new URLSearchParams(searchParams)
+      for (const [key, value] of Object.entries(updates)) {
+        if (value) next.set(key, value)
+        else next.delete(key)
+      }
+      next.delete('page')
+      setSearchParams(next)
+    },
+    [searchParams, setSearchParams],
+  )
+
   const setSort = useCallback(
     (field: SortField) => {
       const next = new URLSearchParams(searchParams)
@@ -833,6 +846,8 @@ export function ReportsPage() {
               <ReportsKpiStrip
                 scope={fetchScope}
                 activeSeverity={severity}
+                listStatus={status}
+                listDays={days}
                 onFilter={(sev, windowDays) => {
                   // The tile counts non-dismissed reports of that severity
                   // from the window; open exactly that list.
@@ -867,7 +882,7 @@ export function ReportsPage() {
         />
       )}
 
-      <ReportsQuickFilters status={status} severity={severity} scope={fetchScope} onSetFilter={setFilter} />
+      <ReportsQuickFilters status={status} severity={severity} listDays={days} scope={fetchScope} onSetFilter={setFilter} onSetParams={setParams} />
 
       <ReportsFilterBar
         searchInput={searchInput}

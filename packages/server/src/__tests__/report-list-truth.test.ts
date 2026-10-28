@@ -214,6 +214,50 @@ describe('critical counts only count open work (#77)', () => {
   })
 })
 
+describe('critical numbers that share a word use different queries (7972eaee)', () => {
+  const UNRESOLVED = "(fixed,resolved,verified,dismissed)"
+
+  it('the Bugs tile counts the window the list opens for status=unresolved', () => {
+    const kpi = routeBody(REPORTS, "app.get('/v1/admin/reports/severity-stats'", 4500)
+    const list = routeBody(REPORTS, "app.get('/v1/admin/reports', adminOrApiKey()", 12000)
+    expect(kpi).toContain('reportWindowStartIso(days)')
+    expect(kpi).toContain("['fixed', 'resolved', 'verified', 'dismissed']")
+    expect(list).toContain(`status === 'unresolved'`)
+    expect(list).toContain(`.not('status', 'in', '${UNRESOLVED}')`)
+    expect(list).toContain('reportWindowStartIso(windowDays)')
+  })
+
+  it('the Bugs severity chip counts every status and no window, like a severity-only list', () => {
+    const dashStats = routeBody(DASHBOARD, "app.get('/v1/admin/stats'", 2500)
+    const at = dashStats.indexOf("col: 'severity'")
+    expect(at).toBeGreaterThan(0)
+    const around = dashStats.slice(Math.max(0, at - 500), at + 180)
+    expect(around).toContain("rpc('count_by_column', { col: 'severity', project_ids: projectIds })")
+    // No created_at window on this rollup. The status rollup beside it is a different chip.
+    expect(around).not.toContain('gte(')
+    const list = routeBody(REPORTS, "const severity = c.req.query('severity')", 8000)
+    expect(list).toContain("if (severity) query = query.eq('severity', severity)")
+  })
+
+  it('Home waiting critical is status=open at any age, not the 14-day tile', () => {
+    const home = read('api/routes/project-home.ts')
+    const waiting = home.slice(home.indexOf('const open = [...OPEN_REPORT_STATUSES]'), home.indexOf('const open = [...OPEN_REPORT_STATUSES]') + 500)
+    expect(waiting).toContain(".in('status', open)")
+    expect(waiting).toContain(".eq('severity', s)")
+    expect(waiting).not.toContain('created_at')
+    const list = routeBody(REPORTS, "if (status === 'open')", 200)
+    expect(list).toContain(".in('status', [...OPEN_REPORT_STATUSES])")
+  })
+
+  it('the sidebar 30-day critical count is filings, with no status filter', () => {
+    const projects = read('api/routes/projects-crud.ts')
+    const query = projects.slice(projects.indexOf('Severity breakdown over the last 30 days'), projects.indexOf('Severity breakdown over the last 30 days') + 900)
+    expect(query).toContain(".gte('created_at', thirtyDaysAgo)")
+    expect(query).toContain("select('project_id, severity, created_at, sentry_trace_id')")
+    expect(query).not.toContain('status')
+  })
+})
+
 describe('sync destinations include console-connected Linear (#84)', () => {
   const shared = read('_shared/integrations.ts')
   const routes = read('api/routes/integrations.ts')

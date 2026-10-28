@@ -21,6 +21,7 @@ import {
   buildCriticalTooltip,
   buildTrendTooltip,
 } from '../lib/projectMetaTooltips'
+import { criticalFiled30dLabel } from '../lib/criticalSurfaces'
 import { SdkVersionBadge } from './SdkVersionBadge'
 import { SignalChip } from './report-detail/ReportSurface'
 import { MetricTooltipContent, Tooltip } from './ui'
@@ -61,7 +62,7 @@ export function ProjectSnapshotMeta({
   const bottleneckAria = stage
     ? `PDCA bottleneck: ${stage.label} — ${snapshot.pdca_bottleneck_label}`
     : ''
-  const criticalAria = `${critical} critical report${critical === 1 ? '' : 's'} in the last 30 days`
+  const criticalAria = `${criticalFiled30dLabel(critical)}, any status`
   const trendAria = trend
     ? `Reports ${trend.direction === 'up' ? 'up' : 'down'} ${Math.abs(trend.delta)} versus the previous 7 days`
     : ''
@@ -113,7 +114,7 @@ export function ProjectSnapshotMeta({
         >
           <span className="cursor-help" aria-label={criticalAria} title={criticalAria}>
             <SignalChip tone="danger" className="text-3xs tabular-nums">
-              {critical} critical
+              {critical} critical · 30d
             </SignalChip>
           </span>
         </Tooltip>

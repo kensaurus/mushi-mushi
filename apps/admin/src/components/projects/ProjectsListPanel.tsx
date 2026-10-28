@@ -34,6 +34,7 @@ import { sdkOriginFromApiKeys } from '../../lib/resolveProjectDomain'
 import { bottleneckDeepLink, bottleneckHumanHeadline } from '../../lib/pdcaBottleneck'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { pluralize } from '../../lib/format'
+import { criticalFiled30dLabel } from '../../lib/criticalSurfaces'
 import { useToast } from '../../lib/toast'
 import { HeroPlugIntegration } from '../illustrations/HeroIllustrations'
 import {
@@ -922,7 +923,7 @@ function ProjectContextRail({ project }: { project: Project }) {
         <ContextDetailRow label="Last 30 days" icon={<IconReports className="h-4 w-4" />}>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             {sev.critical > 0 && (
-              <span title={`${sev.critical} critical reports (30d)`}>
+              <span title={`${criticalFiled30dLabel(sev.critical)}, any status`}>
                 <SignalChip tone="danger">Crit {sev.critical}</SignalChip>
               </span>
             )}

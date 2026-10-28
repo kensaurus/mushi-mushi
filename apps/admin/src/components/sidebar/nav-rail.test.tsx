@@ -296,7 +296,7 @@ describe('resolveNavBadge', () => {
       kind: 'health',
       tone: 'danger',
       count: 2,
-      label: '2 critical reports (30d)',
+      label: '2 critical reports filed in 30 days',
     })
     expect(resolveNavBadge('/reports', counts, NO_EXTRAS)).toMatchObject({
       count: 8,

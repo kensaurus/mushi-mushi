@@ -12,6 +12,7 @@ import { KpiTile, type KpiDelta } from '../charts'
 import { MetricStrip } from '../MetricStrip'
 import type { Tone } from '../charts'
 import { useAdminMode } from '../../lib/mode'
+import { criticalTileActive, criticalTileLabel } from '../../lib/criticalSurfaces'
 import { PageLoadError } from '../PageLoadError'
 
 type SeverityKey = 'critical' | 'high' | 'medium' | 'low'
@@ -57,8 +58,15 @@ interface Props {
   scope?: 'enumeration' | 'project'
   /** Currently active severity filter (so we can highlight the matching tile). */
   activeSeverity?: string
+  /**
+   * The list's status and days. When set (including ''), the tile highlights
+   * only if the list is this tile's query (severity + window + unresolved).
+   * Omitted, the tile highlights on severity alone.
+   */
+  listStatus?: string
+  listDays?: string
   /** Click handler — the page applies the severity plus this tile's window
-   *  and status (`days`, `status=active`) so the list matches the count. */
+   *  and status (`days`, `status=unresolved`) so the list matches the count. */
   onFilter: (severity: 'critical' | 'high' | 'medium' | 'low' | '', windowDays: number) => void
   windowDays?: number
 }
@@ -99,7 +107,7 @@ const TILES_PLAIN: typeof TILES_ADVANCED = [
     meaning: 'Visual nits or confusion — low urgency individually.' },
 ]
 
-export function ReportsKpiStrip({ scope = 'project', activeSeverity, onFilter, windowDays = 14 }: Props) {
+export function ReportsKpiStrip({ scope = 'project', activeSeverity, listStatus, listDays, onFilter, windowDays = 14 }: Props) {
   const { isAdvanced } = useAdminMode()
   const tiles = isAdvanced ? TILES_ADVANCED : TILES_PLAIN
   const { data, loading, error, reload } = usePageData<SeverityStats>(
@@ -138,11 +146,19 @@ export function ReportsKpiStrip({ scope = 'project', activeSeverity, onFilter, w
     <>
     <MetricStrip cols={4} panel ariaLabel="Reports severity breakdown" className="mb-3" stagger>
       {tiles.map((tile) => {
-        const isActive = activeSeverity === tile.key
+        const isActive =
+          listStatus !== undefined
+            ? criticalTileActive(
+                { severity: activeSeverity ?? '', status: listStatus, days: listDays ?? '' },
+                tile.key,
+                windowDays,
+              )
+            : activeSeverity === tile.key
         const total = data?.total ?? 0
         const count = counts[tile.key]
         // Lead with what is still open; how many came in is the sub-line.
         const openCount = data?.openBySeverity?.[tile.key]
+        const scopeLabel = openCount == null ? `${tile.label} · ${windowDays}d` : criticalTileLabel(tile.label, windowDays)
         const sharePct = total > 0 ? Math.round((count / total) * 100) : 0
         const isHero = tile.key === 'critical' && (data?.openBySeverity?.critical ?? criticalCount) > 0
         return (
@@ -151,26 +167,25 @@ export function ReportsKpiStrip({ scope = 'project', activeSeverity, onFilter, w
             type="button"
             onClick={() => onFilter(isActive ? '' : tile.key, windowDays)}
             aria-pressed={isActive}
-            aria-label={
-              isActive
-                ? `Clear ${tile.label} filter`
-                : `Filter to ${tile.label} severity reports`
-            }
+            aria-label={isActive ? `Clear ${scopeLabel} filter` : `Show ${scopeLabel}`}
             className={`relative block w-full min-w-0 overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:transition-[transform,opacity] ${
               isActive ? 'ring-2 ring-brand/60' : ''
             }`}
           >
             <KpiTile
               density="flat"
-              // The quick-filter chips count all time; these tiles count a
-              // window, so the label says which.
-              label={openCount == null ? `${tile.label} · ${windowDays}d` : `${tile.label} · open`}
+              // The quick-filter chips count all time, any status. This number is
+              // reports from the window that are not closed, so the label says
+              // both and the line under it is that number's composition.
+              label={scopeLabel}
               value={loading ? '…' : (openCount ?? count)}
               sublabel={
                 loading
                   ? `last ${windowDays} days`
                   : openCount != null
-                    ? `${count} filed in ${windowDays}d · ${count - openCount} closed${isActive ? ' · filtering' : ''}`
+                    ? count > 0
+                      ? `of ${count} filed in ${windowDays}d · ${count - openCount} closed${isActive ? ' · filtering' : ''}`
+                      : `none in ${windowDays}d${isActive ? ' · filtering' : ''}`
                     : total > 0
                       ? `${sharePct}% of ${total} in ${windowDays}d${isActive ? ' · filtering' : ''}`
                       : `none in ${windowDays}d${isActive ? ' · filtering' : ''}`
