@@ -8,7 +8,7 @@
  * says "Available on <plan>" with a link to the plans.
  */
 
-import { act, createElement } from 'react'
+import { act, createElement, StrictMode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -42,7 +42,8 @@ vi.mock('../lib/usePageData', () => ({
 }))
 
 import { PageHubView } from './PageHubView'
-import { TEAM_HUB } from '../lib/pageHubs'
+import { PageHeaderBar } from './PageHeaderBar'
+import { HOME_HUB, TEAM_HUB } from '../lib/pageHubs'
 
 let container: HTMLDivElement
 let root: Root
@@ -91,5 +92,127 @@ describe('PageHubView locked views', () => {
     await renderAt('/team?view=sso')
     expect(container.querySelector('[data-testid="locked-hub-view"]')).toBeNull()
     expect(container.textContent).toContain('Loading')
+  })
+
+  it('keeps the view tabs above a view that has no page header', async () => {
+    entitlements.value = {
+      planId: 'pro',
+      planName: 'Pro',
+      isSuperAdmin: false,
+      isOperator: false,
+      loading: false,
+      has: (flag: string) => flag === 'teams',
+    }
+    await renderAt('/team?view=billing')
+    const tabs = container.querySelector('[data-testid="hub-view-tabs"]')
+    const body = Array.from(container.querySelectorAll('p')).find((p) => p.textContent === 'Billing content')
+    expect(tabs).not.toBeNull()
+    expect(body).toBeTruthy()
+    expect(follows(tabs!, body!)).toBe(true)
+    expect(container.querySelectorAll('[data-testid="hub-view-tabs"]')).toHaveLength(1)
+  })
+})
+
+function follows(earlier: Node, later: Node): boolean {
+  return (earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+}
+
+function header(title: string) {
+  return createElement(PageHeaderBar, { title, showCopyLink: false })
+}
+
+function homeRender(): Record<string, () => ReturnType<typeof createElement>> {
+  return {
+    today: () => header('Home'),
+    apps: () => header('Overview'),
+    users: () => createElement('p', null, 'Users'),
+    funnels: () => createElement('p', null, 'Funnels'),
+    insights: () => createElement('p', null, 'Insights'),
+    growth: () => createElement('p', null, 'Growth'),
+  }
+}
+
+describe('PageHubView tab order', () => {
+  beforeEach(() => {
+    entitlements.value = {
+      planId: 'pro',
+      planName: 'Pro',
+      isSuperAdmin: false,
+      isOperator: false,
+      loading: false,
+      has: (flag: string) => flag === 'teams',
+    }
+    window.matchMedia = ((query: string) => ({
+      matches: true,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+      addListener: () => {},
+      removeListener: () => {},
+      onchange: null,
+    })) as unknown as typeof window.matchMedia
+  })
+
+  async function renderHome(path: string, render = homeRender(), strict = false) {
+    const hub = createElement(PageHubView, { hub: HOME_HUB, render })
+    const page = createElement(MemoryRouter, { initialEntries: [path] }, strict ? createElement(StrictMode, null, hub) : hub)
+    await act(async () => {
+      root.render(page)
+    })
+  }
+
+  it('renders the page title before the view tabs', async () => {
+    await renderHome('/dashboard')
+    const title = container.querySelector('h2')
+    const tabs = container.querySelector('[data-testid="hub-view-tabs"]')
+    expect(title?.textContent).toContain('Home')
+    expect(tabs).not.toBeNull()
+    expect(container.querySelectorAll('[data-testid="hub-view-tabs"]')).toHaveLength(1)
+    expect(follows(title!, tabs!)).toBe(true)
+  })
+
+  it('keeps the title ahead of the tabs after switching views', async () => {
+    await renderHome('/dashboard')
+    const overview = Array.from(container.querySelectorAll('[role="radio"]')).find((b) => b.textContent === 'Overview')
+    expect(overview).toBeTruthy()
+    await act(async () => {
+      ;(overview as HTMLButtonElement).click()
+    })
+    const title = container.querySelector('h2')
+    const tabs = container.querySelector('[data-testid="hub-view-tabs"]')
+    expect(title?.textContent).toContain('Overview')
+    expect(follows(title!, tabs!)).toBe(true)
+    expect(container.querySelectorAll('[data-testid="hub-view-tabs"]')).toHaveLength(1)
+  })
+
+  it('puts the strip under the first header when a view has two', async () => {
+    await renderHome('/dashboard', {
+      ...homeRender(),
+      today: () => createElement('div', null, header('Home'), header('Also')),
+    })
+    const titles = Array.from(container.querySelectorAll('h2'))
+    const tabs = container.querySelector('[data-testid="hub-view-tabs"]')
+    expect(titles.map((t) => t.textContent)).toEqual(['Home', 'Also'])
+    expect(container.querySelectorAll('[data-testid="hub-view-tabs"]')).toHaveLength(1)
+    expect(follows(titles[0], tabs!)).toBe(true)
+    expect(follows(tabs!, titles[1])).toBe(true)
+  })
+
+  it('still renders a single strip under the title in StrictMode', async () => {
+    await renderHome('/dashboard', homeRender(), true)
+    const title = container.querySelector('h2')
+    const tabs = container.querySelector('[data-testid="hub-view-tabs"]')
+    expect(title?.textContent).toContain('Home')
+    expect(container.querySelectorAll('[data-testid="hub-view-tabs"]')).toHaveLength(1)
+    expect(follows(title!, tabs!)).toBe(true)
+  })
+
+  it('moves the tabs back above a view that has no header', async () => {
+    await renderHome('/dashboard?view=users')
+    const tabs = container.querySelector('[data-testid="hub-view-tabs"]')
+    const body = Array.from(container.querySelectorAll('p')).find((p) => p.textContent === 'Users')
+    expect(container.querySelector('h2')).toBeNull()
+    expect(follows(tabs!, body!)).toBe(true)
   })
 })

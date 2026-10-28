@@ -8,6 +8,8 @@
  *     PDCA chip · title [· project scope] · [right children] · copy-link
  *
  *   The optional description renders in a smaller line below.
+ *   On a page hub, the view switcher (Today, Overview, …) renders under
+ *   this header — the first header on the page claims it.
  *
  *   When helpTitle/helpWhatIsIt are supplied, a "How this page works" button
  *   at the header's right edge opens them as a popover. They are also
@@ -44,6 +46,7 @@ import { Tooltip } from './ui'
 import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath, type PdcaStageId } from '../lib/pdca'
 import { stageChipCopy } from '../lib/navRegistry'
 import { PageHelpPopover } from './ui/help-popover'
+import { useHubViewTabs } from './hubViewSlot'
 
 /* ── Inline PDCA chip ─────────────────────────────────────────────────── */
 
@@ -132,6 +135,7 @@ export function PageHeaderBar({
   const { pathname } = useLocation()
   const registerPageHelp = usePageHelpRegister()
   const locationChrome = useLocationChrome()
+  const hubTabs = useHubViewTabs()
 
   const chipKey =
     contextChip === undefined && !suppressContextChipProp && !locationChrome.suppressContextChip
@@ -230,6 +234,7 @@ export function PageHeaderBar({
           {description}
         </p>
       )}
+      {hubTabs ? <div className="mt-2">{hubTabs}</div> : null}
     </div>
   )
 }
