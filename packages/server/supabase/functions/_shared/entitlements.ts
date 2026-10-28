@@ -64,7 +64,7 @@ export interface ResolvedEntitlement {
 /**
  * The plan in force for an organization (or, for a legacy project with no
  * organization, for that project): the newest live subscription, else the
- * organization's `plan_id`, else Hobby. Shared by `resolveActiveEntitlement`
+ * organization's `plan_id`, else Free. Shared by `resolveActiveEntitlement`
  * and org-scoped gates so the console's `has(flag)` and the server agree.
  */
 export async function resolvePlanForScope(
@@ -99,7 +99,7 @@ export async function resolvePlanForScope(
         : Promise.resolve({ data: null }),
   ])
 
-  return sub ? await resolvePlanFromSubscription(sub) : await getPlan(org?.plan_id ?? 'hobby')
+  return sub ? await resolvePlanFromSubscription(sub) : await getPlan(org?.plan_id ?? 'free_cloud')
 }
 
 /** True when the organization's plan sets `feature_flags[flag] === true`. */

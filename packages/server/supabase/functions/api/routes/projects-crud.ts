@@ -16,6 +16,8 @@ import { apiKeyAuth, jwtAuth } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { emitProductEvent } from '../../_shared/product-events.ts';
 import { dbError, enumerateAccessibleProjectIds } from '../shared.ts';
+import { resolvePlanForScope } from '../../_shared/entitlements.ts';
+import { appLimitDenial } from '../../_shared/plan-app-limit.ts';
 import { failedFixPreviews, loadRecentFixTruths } from '../../_shared/fix-report-truth-load.ts';
 import { projectCapabilities } from '../../_shared/project-capabilities.ts';
 import { freshestHeartbeat, isSdkKey, loadProjectCounts } from '../../_shared/setup-signals.ts';
@@ -962,6 +964,23 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         },
         400,
       );
+    }
+
+    // The plan's app limit (docs/plan-pricing.md, 2026-10-28): apps watched
+    // is what a plan sells. Only a new app is refused; existing apps stay.
+    {
+      const [plan, { count, error: countErr }] = await Promise.all([
+        resolvePlanForScope(db, { organizationId }),
+        db.from('projects').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId),
+      ]);
+      if (countErr) return dbError(c, countErr);
+      const denial = appLimitDenial(plan, count ?? 0);
+      if (denial) {
+        return c.json(
+          { ok: false, error: { code: denial.code, message: denial.message }, data: { limit: denial.limit, used: denial.used, upgradeTo: denial.upgradeTo } },
+          402,
+        );
+      }
     }
 
     // Slug derivation:
