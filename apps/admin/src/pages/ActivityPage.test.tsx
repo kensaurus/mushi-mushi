@@ -6,7 +6,8 @@
  * Home's views disagreed with no way to tell why (console sweep, 2026-10-28):
  * Overview said "Sessions (7d) 75" and User activity said "Sessions 139" with
  * no window, and Users & funnels titled a tile "Anonymous 2" with the hint
- * "60% identified", the share of the other group.
+ * "60% identified", the share of the other group. An Overview card said
+ * "65 open" three times (badge, KPI line, footer link).
  */
 
 import { act, createElement } from 'react'
@@ -28,12 +29,14 @@ vi.mock('../lib/usePageData', () => ({
 }))
 vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => 'p1' }))
 vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => ({ activeProject: { project_name: 'mushi-mushi' } }) }))
+vi.mock('../components/OrgSwitcher', () => ({ useActiveOrgId: () => null }))
 vi.mock('../components/PageHeaderBar', () => ({
   PageHeaderBar: ({ title }: { title: string }) => createElement('h1', null, title),
 }))
 
 import { ActivityPage } from './ActivityPage'
 import { AnalyticsPage } from './AnalyticsPage'
+import { OverviewPage } from './OverviewPage'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -83,6 +86,30 @@ describe('Home views', () => {
     const text = await render(ActivityPage)
     expect(text).toContain('Sessions (30d)')
     expect(text).toContain('Unique devices (30d)')
+  })
+
+  it('Overview says an app has 65 open bugs once per card', async () => {
+    data.byPath = {
+      '/v1/admin/portfolio': [
+        {
+          project_id: 'p1',
+          name: 'mushi-mushi',
+          label: 'mushi-mushi',
+          slug: 'mushi-mushi',
+          sessions_7d: 75,
+          users_7d: 18,
+          open_reports: 65,
+          critical_reports: 0,
+          last_report_at: new Date().toISOString(),
+          last_seen_at: new Date().toISOString(),
+          dau_spark: [],
+        },
+      ],
+    }
+    const text = await render(OverviewPage)
+    expect(text.match(/65 open/g)?.length).toBe(1)
+    expect(container.querySelector('a[href="/reports?status=open"]')?.textContent).toBe('Open bugs')
+    expect(container.querySelector('a[href="/dashboard?view=users"]')?.textContent).toContain('User activity')
   })
 
   it('Users & funnels gives the Anonymous tile its own share', async () => {
