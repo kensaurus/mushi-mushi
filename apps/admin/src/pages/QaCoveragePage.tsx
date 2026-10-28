@@ -8,6 +8,8 @@
  * OVERVIEW:
  * - Story card grid: pass rate bar, last-run status chip, provider badge,
  *   "Run now" action that is disabled while a run is pending/queued.
+ *   Open and Run are sibling buttons: the card is not a button wrapped
+ *   around Run (axe nested-interactive).
  * - Story drawer: auto-opens after "Run now" and auto-polls every 3 s
  *   while a run is pending or running so the user sees live progress.
  * - Create story modal: NL prompt + optional provider picker.
@@ -171,7 +173,8 @@ const ACTIVE_STATUSES = new Set(['pending', 'running'])
 
 // ── Story card ─────────────────────────────────────────────────────────────
 
-function StoryCard({
+/** @internal Exported for the nested-control test. */
+export function StoryCard({
   coverage,
   isQueued,
   onRunNow,
@@ -191,9 +194,16 @@ function StoryCard({
 
   return (
     <Card
-      className={`group relative flex flex-col gap-3 p-4 cursor-pointer transition-[transform,opacity] hover:shadow-md ${highlighted ? 'ring-2 ring-brand' : ''}`}
-      onClick={() => onSelect(coverage.story_id)}
+      className={`group relative p-4 cursor-pointer transition-[transform,opacity] hover:shadow-md ${highlighted ? 'ring-2 ring-brand' : ''}`}
     >
+      {/* Sibling of Run and Replay. Card onClick would set role=button and nest those controls. */}
+      <button
+        type="button"
+        className="absolute inset-0 z-0 rounded-md cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+        aria-label={`Open ${coverage.name}`}
+        onClick={() => onSelect(coverage.story_id)}
+      />
+      <div className="pointer-events-none relative z-10 flex flex-col gap-3">
       {/* Header row */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0 space-y-1">
@@ -222,8 +232,10 @@ function StoryCard({
         <Btn
           size="sm"
           variant="ghost"
+          className="pointer-events-auto"
           loading={isQueued}
           disabled={disabled}
+          type="button"
           onClick={(e: React.MouseEvent) => { e.stopPropagation(); onRunNow(coverage.story_id) }}
           aria-label={isQueued ? 'Run queued…' : `Run ${coverage.name} now`}
           title={isQueued ? 'A run is already queued or in progress' : coverage.enabled ? 'Trigger manual run' : 'Story is disabled'}
@@ -282,12 +294,13 @@ function StoryCard({
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-0.5 text-2xs text-danger hover:underline"
+            className="pointer-events-auto relative z-10 flex items-center gap-0.5 text-2xs text-danger hover:underline"
           >
             <IconExternalLink className="h-2.5 w-2.5" />
             Replay
           </a>
         )}
+      </div>
       </div>
     </Card>
   )
