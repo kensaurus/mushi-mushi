@@ -22,10 +22,10 @@ parked work is visible in one place.
 - **Added 2026-10-22 (licensing posture):** BL-102..BL-105, parked parts and owner gates of ADR 0036.
 - **Added 2026-10-22 (CI cost and speed):** BL-106, BL-107, BL-108, parked parts of ADR 0037.
 - **Added 2026-10-22 (known vulnerabilities):** BL-109..BL-115, an owner decision and parked parts of ADR 0038.
-- **Added 2026-10-23 (site audit, ADR 0040):** BL-116..BL-117, parked parts of the site audit.
+- **Added 2026-10-23 (site audit, ADR 0040):** BL-116, a parked part of the site audit. Closed BL-117 on 2026-10-23.
 - **Added 2026-10-24 (local fix worker, `mushi work`):** BL-118..BL-119, parked parts of the local worker.
 - **Delta 2026-10-17:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 75 · **Recently closed:** 24 (BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 74 · **Recently closed:** 25 (BL-117, BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
@@ -34,13 +34,13 @@ parked work is visible in one place.
 | tech-debt | 16 |
 | known-bug | 3 |
 | decision-needed | 12 |
-| unfinished-feature | 26 |
+| unfinished-feature | 25 |
 | dependency | 2 |
 | needs-triage | 1 |
 
 | Status | Open |
 |---|---|
-| relevant | 72 |
+| relevant | 71 |
 | verify-done | 3 |
 | stale (propose removal) | 0 |
 
@@ -149,7 +149,6 @@ parked work is visible in one place.
 | BL-114 | unfinished-feature | Close a `security_advisory` report on its own when every `dependency_vulns` row it carries closes as `fixed` (the upgrade landed outside Mushi), with a timeline note; today the rows close and the report stays open until someone closes it | relevant | low | ADR 0038 (Consequences); `_shared/vuln-watch-db.ts` | — |
 | BL-115 | unfinished-feature | vuln-watch reads every connected repo of a project, not only the primary one (`resolveRecipeRepo` returns the primary repo) | relevant | low | ADR 0038 (Consequences) | — |
 | BL-116 | unfinished-feature | Site audit content check: send each page's Firecrawl markdown (1 credit) to the app's own model setting to find wrong-language copy, stale dates and contradictions, verify the quote in the page, then file. Firecrawl's JSON extraction found 2 real of 287 (2026-10-23) | relevant | low | ADR 0040 (Rejected) | — |
-| BL-117 | unfinished-feature | Site audit cadence and page limit are API-only (`PUT /v1/admin/projects/:id/site-audit` takes `cadenceDays`, `pageLimit`); /credits shows the switch and Run now only | relevant | low | ADR 0040 | — |
 | BL-118 | unfinished-feature | `mushi work` picks reports itself (classified / reopened, worst first) instead of asking the server for spend-down's exact order; held-PR retries (ADR 0028 amendment) and per-app concurrency are not applied locally, and a no-PR verdict cannot set `fix_attempts.failure_category` through the PATCH route | relevant | low | `packages/cli/src/commands/work.ts` | — |
 | BL-119 | unfinished-feature | `mushi work` on a schedule (a systemd user timer or the console starting it) and local agents other than the Cursor CLI (`claude`, `codex`) | relevant | low | `packages/cli/src/commands/work.ts` | — |
 | BL-120 | unfinished-feature | Scheduled UX audits per app from the console: today `mushi-ux audit` runs where a cached signed-in profile lives (a machine timer); the console should schedule it per app (a CI workflow template with a stored session, or the local agent) and show its runs | relevant | medium | ADR 0045 | — |
@@ -184,6 +183,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-117 | Site audit cadence and page limit are API-only; /credits shows the switch and Run now only | 2026-10-23 | `SiteAuditControl` on /credits, while the audit is on: Daily / Every 3 days / Weekly (`cadenceDays` 1, 3, 7) and a page-limit select (`pageLimit`), both through `PUT /v1/admin/projects/:id/site-audit`, plus the credits a run (one per page). A stored cadence outside those three stays selectable. Tests: `CreditsPage.test.tsx`. |
 | BL-083 | `PATH_SLICES` could still ask nav-meta for slices only the deleted route hero read | 2026-10-23 | Audited against `resolveNavBadge`. Every remaining key is read by that badge or by the counters it fills (`projects`, `members`). Dropped the extra `dashboard` on `/health` (`navSlicesForPaths` already requests it). Layout no longer unions the current pathname into the sidebar request — that union existed for `layoutHeroFromStats`, deleted 2026-10-17. The one sidebar (core pages plus enabled Labs) asks only for visible badges. `apps/admin/src/lib/navBadges.test.ts`, `apps/admin/src/components/Layout.navSlices.test.tsx`. |
 | BL-089 | Radar `spend_down_idle` finding: a Cursor key with spend-down on, inside its window, that dispatched nothing | 2026-10-22 | `evaluateSpendDownIdle` (`_shared/radar/operator-detectors.ts`) runs with the operator detectors and writes rule `spend_down_idle`. It reuses `spendDownWindow` and `spendDownIdleReasons` (`_shared/spend-down.ts`): in-window and nothing dispatched because no app uses the key, auto-fix is off, or every open report is settled. Tests: `spend-down.test.ts`, `radar-operator-detectors.test.ts`, `radar-run.test.ts`. ADR 0028 consequences. |
 | BL-008 | Two planned test files never shipped: `packages/web/src/lifecycle-hooks.test.ts` and `packages/cli/src/project-create.test.ts` | 2026-10-22 | `packages/web/src/lifecycle-hooks.test.ts` covers `beforeSendFeedback` drop, modify, throw, and the 2s timeout, plus `onCrashedLastRun` (first run `null`, unclean exit `true`, `pagehide` sets `clean`, a thrown hook does not break init). `packages/cli/src/project-create.test.ts` covers `persistProjectCreate` (the `mushi project create` write step): `.env.local` merge, `.cursor/mcp.json` merge that keeps other servers and does not inline the API key, and `saveConfig` keeping `clientId` / `telemetryNoticeShown`. Plan 012 boxes in `docs/execplans/PLANS.md` are ticked. |

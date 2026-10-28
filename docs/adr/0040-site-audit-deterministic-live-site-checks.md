@@ -48,7 +48,10 @@ style.
   dismissed one is not filed again; a fixed one that fails again files a new
   report. Rules that pass are marked resolved (`site_audit_findings`).
 - Settings and "Run now" (3 an hour per app) live on `/credits` (Spend
-  credits), next to the site watch of the same app.
+  credits), next to the site watch of the same app. While the audit is on,
+  that row sets the cadence (daily, every 3 days, or weekly; any other saved
+  cadence stays shown) and the page limit, and shows the credits a run
+  (one per page).
 
 ## Rejected
 
