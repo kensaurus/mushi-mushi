@@ -51,6 +51,16 @@ describe('StatusBannerShell', () => {
     expect(container.textContent).toContain('3 editors connected')
   })
 
+  // Weekly insights lost its only Refresh with the banner (2026-10-28 review).
+  it('moves the hidden banner’s button into the status block', async () => {
+    const refresh = createElement('button', { type: 'button', key: 'r' }, 'Refresh')
+    await render(createElement(StatusBannerShell, { key: 'b', tone: 'ok', title: 'All good', action: refresh }), status)
+    const buttons = [...container.querySelectorAll('button')].filter((b) => b.textContent === 'Refresh')
+    expect(buttons).toHaveLength(1)
+    expect(buttons[0]!.closest('[data-testid="page-status"]')).not.toBeNull()
+    expect(container.textContent).not.toContain('All good')
+  })
+
   it('still shows a problem next to the status sentence', async () => {
     await render(createElement(StatusBannerShell, { key: 'b', tone: 'danger', title: 'Last summary failed to generate' }), status)
     expect(container.textContent).toContain('Last summary failed to generate')
