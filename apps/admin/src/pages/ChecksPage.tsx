@@ -38,6 +38,7 @@ import { labForPath, useLabs } from '../lib/labs'
 import { normalizeNavSlices, type WorkspaceNavMetaResponse } from '../lib/workspaceNavMetaResponse'
 import { pluralizeWithCount } from '../lib/format'
 import type { RecipeElementSummary, RecipeResponse } from '../lib/recipeTypes'
+import type { FreshEyesListData } from '../lib/freshEyes'
 import { buildCheckCardViews, type CheckCardState, type CheckCardView, type ObservedElement } from '../lib/checkCardStatus'
 
 const ALL_PATHS = CHECK_GROUPS.flatMap((g) => g.paths)
@@ -136,6 +137,7 @@ export function ChecksPage() {
   const projectId = useActiveProjectId()
   const nav = usePageData<WorkspaceNavMetaResponse>(NAV_META_PATH, { deps: [projectId ?? ''] })
   const recipe = usePageData<RecipeResponse>(projectId ? `/v1/admin/projects/${projectId}/recipe` : null)
+  const firstUserTest = usePageData<FreshEyesListData>(projectId ? `/v1/admin/projects/${projectId}/fresh-eyes` : null)
 
   // No selected app: the recipe read never starts, so these cards must not stay blank.
   const recipePhase = !projectId
@@ -166,6 +168,10 @@ export function ChecksPage() {
       : [],
     design: observed(recipe.data?.elements.design, '/design'),
     ci: observed(recipe.data?.elements.ci, '/ci'),
+    firstUserTest: {
+      phase: !projectId ? 'no_project' : firstUserTest.data ? 'ready' : firstUserTest.error ? 'error' : 'loading',
+      runs: firstUserTest.data?.runs ?? [],
+    },
   })
 
   const cards = sortCheckCards(
@@ -195,7 +201,7 @@ export function ChecksPage() {
         icon={<IconShieldCheck />}
         description="Every automatic check on this app, failing ones first."
         helpTitle="About Checks"
-        helpWhatIsIt="Each card is one automatic check Mushi runs on your app or on its own triage: scheduled browser tests, app health, audits, user stories, the app blueprint, design tokens, content, and how well the AI graded, learned from and prompted each fix."
+        helpWhatIsIt="Each card is one automatic check Mushi runs on your app or on its own triage: scheduled browser tests, app health, audits, user stories, the app blueprint, design tokens, content, a first-time user test, and how well the AI graded, learned from and prompted each fix."
         helpHowToUse="Red means the check failed, amber that it found something to fix, green that its last run passed. Grey is not set up, not run yet, or could not be read: never a pass. Open a card to see that check. A Pro pill means the check needs a plan upgrade."
       />
 

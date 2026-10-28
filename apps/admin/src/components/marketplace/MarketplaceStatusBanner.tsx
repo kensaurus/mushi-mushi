@@ -50,7 +50,7 @@ export function MarketplaceStatusBanner({
     return (
       <StatusBannerShell
         tone="warn"
-        title={plainBanner ? 'Plugins need a Pro plan' : 'Plugins require a Pro plan or higher'}
+        title={plainBanner ? 'Plugins need Builder' : 'Plugins need Builder or higher'}
         subtitle="Browse the catalog read-only — installing webhook plugins needs the plugins entitlement."
         action={
           <Btn to="/billing" size="sm" variant="ghost">{actions.plans ?? 'View plans'}</Btn>

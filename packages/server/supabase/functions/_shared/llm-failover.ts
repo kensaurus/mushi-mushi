@@ -22,6 +22,7 @@
  *   })
  */
 
+import { isQuotaMessage } from './llm-quota.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { isClaudeRefusal } from './claude-request.ts';
 import {
@@ -99,7 +100,9 @@ export function classifyLlmError(err: unknown): 'quota' | 'auth' | 'transient' |
   const msg = String(err).toLowerCase();
 
   // HTTP status codes in the error message (Vercel AI SDK wraps them)
-  if (msg.includes('429') || msg.includes('rate limit') || msg.includes('quota')) {
+  // 429s, rate limits, and a spent Anthropic key (a 400 "usage limits", not a
+  // 429; as 'other' it never failed over, MUSHI-MUSHI-SERVER-3C/3D 2026-10-28).
+  if (isQuotaMessage(msg)) {
     return 'quota';
   }
   // Anthropic returns "invalid x-api-key" (note the hyphenated header name) —

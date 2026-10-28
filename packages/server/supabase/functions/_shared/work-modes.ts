@@ -19,11 +19,13 @@ import { screenFindings } from './review-followup.ts'
 
 type Parsed<T> = { ok: true; value: T } | { ok: false; message: string }
 
-/** Why this outcome cannot end a claim of this kind, or null: a fix opens PRs, a conflict pushes merges, an audit files findings. */
-export function outcomeKindRefusal(outcome: string, kind: 'fix' | 'conflict' | 'audit'): string | null {
+/** Why this outcome cannot end a claim of this kind, or null: a fix opens PRs, a conflict pushes merges, an audit files findings, a first-time user test runs. */
+export function outcomeKindRefusal(outcome: string, kind: 'fix' | 'conflict' | 'audit' | 'fresh_eyes'): string | null {
   if ((outcome === 'pr_opened' || outcome === 'verdict') && kind !== 'fix') return 'Only a fix claim opens a pull request or ends on a verdict.'
   if ((outcome === 'pushed' || outcome === 'refused') && kind !== 'conflict') return 'Only a conflict claim pushes a merge or is refused by its checks.'
   if (outcome === 'filed' && kind !== 'audit') return 'Only an audit claim files findings.'
+  if (outcome === 'ran' && kind !== 'fresh_eyes') return 'Only a first-time user test claim ends as ran.'
+  if (kind === 'fresh_eyes' && outcome === 'no_change') return 'A first-time user test ends as ran, failed, timeout, stopped or skipped.'
   return null
 }
 

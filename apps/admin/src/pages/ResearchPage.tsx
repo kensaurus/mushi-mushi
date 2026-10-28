@@ -392,7 +392,7 @@ export function ResearchPage() {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="error signature, library name, doc topic…"
-                  className="flex-1"
+                  containerClassName="min-w-0 flex-1"
                   disabled={searching || !stats.firecrawlReady}
                 />
                 <Btn

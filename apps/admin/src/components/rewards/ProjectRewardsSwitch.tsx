@@ -90,7 +90,7 @@ export function ProjectRewardsSwitch({
           {enabled ? 'Turn off' : 'Turn on rewards'}
         </Btn>
       ) : (
-        <span className="text-2xs text-fg-faint">Upgrade to Starter or higher to change this.</span>
+        <span className="text-2xs text-fg-faint">Upgrade to Builder or higher to change this.</span>
       )}
     </Card>
   )

@@ -64,9 +64,9 @@ export function DryRunPanel({ projectId }: { projectId: string }) {
     <Card className="p-3 mt-2 space-y-2">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h4 className="text-xs font-semibold text-fg">Validate pipeline</h4>
+          <h4 className="text-xs font-semibold text-fg">Practice run</h4>
           <p className="text-2xs text-fg-muted mt-0.5">
-            Simulates the auto-fix pipeline without calling the LLM or opening a PR.
+            Walks a fix through every step without calling the AI or opening a pull request.
           </p>
         </div>
         <Btn

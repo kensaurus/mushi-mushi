@@ -115,7 +115,7 @@ export function CiPolicyCard({ projectId }: { projectId: string | null }) {
               label="Repos allowed on GitHub-hosted anyway (one owner/repo per line)"
               rows={2}
               value={draft.hostedAllowedRepos}
-              placeholder={'AtPeak-Co-Ltd/pck\nkensaurus/mushi-mushi'}
+              placeholder={'e.g. your-org/web-app\nyour-org/api'}
               disabled={disabled}
               error={edits ? errors.hostedAllowedRepos : undefined}
               onChange={(e) => change('hostedAllowedRepos', e.target.value)}
@@ -133,7 +133,7 @@ export function CiPolicyCard({ projectId }: { projectId: string | null }) {
               label="One per line: name | owner | owner/repo, owner/repo"
               rows={2}
               value={draft.externalControllers}
-              placeholder="kci dispatcher | sbc-visual | kensaurus/solo-boss-cloud_backend, kensaurus/tsumagoi"
+              placeholder="e.g. label bot | your-org | your-org/web-app, your-org/api"
               disabled={disabled}
               error={edits ? errors.externalControllers : undefined}
               onChange={(e) => change('externalControllers', e.target.value)}
@@ -147,7 +147,7 @@ export function CiPolicyCard({ projectId }: { projectId: string | null }) {
               label="One runner name or label per line"
               rows={2}
               value={draft.standbyRunners}
-              placeholder="kensaurus-local-*"
+              placeholder="e.g. my-laptop-*"
               disabled={disabled}
               error={edits ? errors.standbyRunners : undefined}
               onChange={(e) => change('standbyRunners', e.target.value)}
@@ -157,7 +157,7 @@ export function CiPolicyCard({ projectId }: { projectId: string | null }) {
 
         <SettingsRow title="Where this comes from" purpose="Shown with every refusal, so people know which agreement said no.">
           <div className="max-w-xl">
-            <Input label="Source" value={draft.sourceNote} placeholder="CI-AGREEMENT.md, 2026-10-22" disabled={disabled} error={edits ? errors.sourceNote : undefined} onChange={(e) => change('sourceNote', e.target.value)} />
+            <Input label="Source" value={draft.sourceNote} placeholder="e.g. CI notes in the wiki, 2026-01-15" disabled={disabled} error={edits ? errors.sourceNote : undefined} onChange={(e) => change('sourceNote', e.target.value)} />
           </div>
         </SettingsRow>
       </SettingsList>

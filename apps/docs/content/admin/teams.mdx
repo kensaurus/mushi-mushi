@@ -8,21 +8,21 @@ Teams are modeled as organizations. An organization owns projects, billing, invi
 
 ## Plans
 
-Teams are available on Pro and Enterprise.
+Teams are available on Studio and Enterprise.
 
 | Plan | Teams |
 | ---
 <AdminDocHero page="teams" />
  | --- |
-| Free Cloud | Solo workspace |
-| Indie | Solo workspace |
-| Pro | Invite teammates and share projects |
+| Free | Solo workspace, 1 app |
+| Builder | Solo workspace, 3 apps |
+| Studio | Invite up to 5 teammates and share 10 apps |
 | Enterprise | Teams plus SSO and SOC 2 controls |
 
 The product enforces this in three places:
 
 - The admin UI hides the invite form and shows an upgrade prompt.
-- The API returns `402 feature_not_in_plan` for invitation attempts below Pro.
+- The API returns `402 feature_not_in_plan` for invitation attempts below Studio.
 - The database rejects invitation inserts with the `invitations_plan_gate` trigger.
 
 ## Roles

@@ -104,10 +104,10 @@ interface UserDetail {
 
 const PLAN_FILTER_OPTIONS = [
   { value: '', label: 'All plans' },
-  { value: 'paid', label: 'Paid (Starter+)' },
-  { value: 'hobby', label: 'Hobby (no sub)' },
-  { value: 'starter', label: 'Starter' },
-  { value: 'pro', label: 'Pro' },
+  { value: 'paid', label: 'Paid (Builder+)' },
+  { value: 'hobby', label: 'Free (no sub)' },
+  { value: 'indie', label: 'Builder' },
+  { value: 'pro', label: 'Studio' },
   { value: 'enterprise', label: 'Enterprise' },
 ]
 
@@ -115,9 +115,9 @@ function planBadgeTone(plan: string | null): {
   chipClass: string
   label: string
 } {
-  if (!plan || plan === 'hobby') return { chipClass: CHIP_TONE.neutral, label: 'Hobby' }
-  if (plan === 'starter') return { chipClass: CHIP_TONE.infoSubtle, label: 'Starter' }
-  if (plan === 'pro') return { chipClass: CHIP_TONE.brandSubtle, label: 'Pro' }
+  if (!plan || plan === 'hobby' || plan === 'free_cloud') return { chipClass: CHIP_TONE.neutral, label: 'Free' }
+  if (plan === 'indie' || plan === 'starter') return { chipClass: CHIP_TONE.infoSubtle, label: 'Builder' }
+  if (plan === 'pro') return { chipClass: CHIP_TONE.brandSubtle, label: 'Studio' }
   if (plan === 'enterprise') return { chipClass: 'bg-editorial-vermillion-wash text-editorial-vermillion border border-editorial-vermillion/30', label: 'Enterprise' }
   return { chipClass: CHIP_TONE.neutral, label: plan }
 }
@@ -252,7 +252,7 @@ export function UsersPage() {
             placeholder="alice@…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="md:flex-1"
+            containerClassName="md:flex-1"
           />
           <SelectField
             label="Plan"

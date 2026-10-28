@@ -106,7 +106,7 @@ const FEATURE_COPY: Record<FeatureFlag, { title: string; tagline: string; bullet
     bullets: [
       'Shared project access with owner, admin, member, and viewer roles.',
       'Email invitations with an auditable accept flow.',
-      'Available on Pro and Enterprise plans.',
+      'Available on Studio and Enterprise.',
     ],
   },
   inventory_v2: {
@@ -152,7 +152,7 @@ const FEATURE_COPY: Record<FeatureFlag, { title: string; tagline: string; bullet
 
 interface InlineProps {
   flag: FeatureFlag
-  /** Caller's current plan id — shown in the "you're on Hobby" subline. */
+  /** Caller's current plan id — shown in the "you're on Free" subline. */
   currentPlan?: string
   /** Resolved cheapest plan that includes the flag, from /v1/admin/entitlements. */
   upgradeTo?: UpgradeTarget | null

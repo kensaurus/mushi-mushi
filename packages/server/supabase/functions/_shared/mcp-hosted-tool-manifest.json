@@ -490,6 +490,13 @@
     "path": "/v1/admin/ci/bill?project_id={projectId}&days={days|30}",
     "hints": { "destructive": false, "idempotent": true }
   },
+  "get_worker_status": {
+    "scope": "mcp:read",
+    "description": "Your local workers' problems, worst first (a run stuck in a git hook with its stage and log, an offline machine, a failing Cursor account check, idle credits), then machines and lanes.",
+    "method": "GET",
+    "path": "/v1/admin/work/lanes?projectId={projectId}",
+    "hints": { "destructive": false, "idempotent": true }
+  },
   "preview_ci_cost_fix_rollout": {
     "scope": "mcp:read",
     "description": "Every CI cost fix Mushi can open across the apps you may change, grouped per repo with the estimated saving; one draft PR per repo.",

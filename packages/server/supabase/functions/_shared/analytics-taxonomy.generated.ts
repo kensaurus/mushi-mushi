@@ -150,6 +150,12 @@ export const MUSHI_EVENTS = {
       "project_id"
     ]
   },
+  "activated": {
+    "surface": "server",
+    "required": [
+      "project_id"
+    ]
+  },
   "fix_merged": {
     "surface": "server",
     "required": [
@@ -185,6 +191,19 @@ export const MUSHI_EVENTS = {
     "surface": "server",
     "required": [
       "project_id"
+    ]
+  },
+  "production_check_started": {
+    "surface": "server",
+    "required": [
+      "project_id"
+    ]
+  },
+  "production_check_finished": {
+    "surface": "server",
+    "required": [
+      "project_id",
+      "outcome"
     ]
   },
   "loop_impression": {

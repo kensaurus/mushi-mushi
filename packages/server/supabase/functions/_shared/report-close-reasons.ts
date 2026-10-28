@@ -21,11 +21,17 @@ export const CLOSED_REASONS: ReadonlySet<string> = new Set([
   'false_alarm',
 ])
 
-/** `reports.source` values Mushi files itself. Kept in step with the console. */
+/**
+ * `reports.source` values Mushi files itself. Kept in step with the console.
+ * fresh_eyes and code_audit joined on 2026-10-28: the first live fresh-eyes
+ * run filed four runner artifacts that could not be closed as a false alarm.
+ */
 const MUSHI_CHECK_SOURCES: ReadonlySet<string> = new Set([
   'site_audit',
   'site_watch',
   'security_advisory',
+  'fresh_eyes',
+  'code_audit',
 ])
 
 /** Closes that tell no reporter: spam, and a check of ours that was wrong. */

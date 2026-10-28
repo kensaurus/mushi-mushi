@@ -21,6 +21,9 @@ const ROUTES_ROOT = resolve(__dirname, '../../supabase/functions/api/routes');
  * justification — these are served to anonymous callers on purpose.
  */
 const PUBLIC_ROUTES: Record<string, string> = {
+  'production-check.ts':
+    'POST /v1/public/production-check, GET /v1/public/production-check/:id — the free Production Check (docs /check): public pages only, SSRF-guarded, capped per origin, per hashed IP and per day',
+  'public-scoreboard.ts': 'GET /v1/public/scoreboard — aggregate numbers for the public /proof page, no app names or user data',
   'openapi.ts': 'GET /openapi.json — public OpenAPI 3.1 spec, advertised via the A2A agent card',
   'schemas.ts': 'GET /v1/schemas/:name — public hand-authored JSON Schemas for agent contracts',
   'slack-events-core.ts':

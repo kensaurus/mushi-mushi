@@ -76,6 +76,8 @@ export interface SeatBillingContext {
   seatLimit: number | null
   seatsUsed: number
   teamsEnabled: boolean
+  /** Shown on Billing itself: "upgrade on Billing" and a link to it point back here. */
+  onBillingPage?: boolean
 }
 
 /** Answers "will adding an admin cost me money?" in plain language. */
@@ -91,7 +93,7 @@ export function seatBillingExplainer(ctx: SeatBillingContext): {
   if (!ctx.teamsEnabled) {
     return {
       headline: 'Teammates require a Teams plan',
-      body: `${plan} is solo-only. Upgrading to Pro or Enterprise unlocks invites — you pay one flat monthly price for the plan, not per person.`,
+      body: `${plan} is solo-only. Upgrading to Studio or Enterprise unlocks invites — you pay one flat monthly price for the plan, not per person.`,
       billingLink: true,
       tone: 'info',
       calloutLabel: 'Upgrade for teams',
@@ -111,9 +113,11 @@ export function seatBillingExplainer(ctx: SeatBillingContext): {
   const remaining = Math.max(0, ctx.seatLimit - ctx.seatsUsed)
   const nearCap = ctx.seatsUsed >= ctx.seatLimit - 1
   return {
-    headline: `${ctx.seatsUsed} of ${ctx.seatLimit} seats used`,
-    body: `Each person counts as one seat (any role). Pending invites also reserve a seat. You're on ${plan} with ${remaining} seat${remaining === 1 ? '' : 's'} left — upgrade on Billing if you need more.`,
-    billingLink: nearCap,
+    // Members shows the count in its Seats tile; the card explains instead of
+    // saying it a third time (console sweep, 2026-10-28).
+    headline: ctx.onBillingPage ? `${ctx.seatsUsed} of ${ctx.seatLimit} seats used` : 'How seats work',
+    body: `Each person counts as one seat (any role). Pending invites also reserve a seat. You're on ${plan} with ${remaining} seat${remaining === 1 ? '' : 's'} left — ${ctx.onBillingPage ? 'pick a bigger plan under Plans' : 'upgrade on Billing'} if you need more.`,
+    billingLink: nearCap && !ctx.onBillingPage,
     tone: nearCap ? 'warn' : 'neutral',
     calloutLabel: nearCap ? 'Seat limit' : 'Seat usage',
   }

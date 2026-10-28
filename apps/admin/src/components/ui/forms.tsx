@@ -404,6 +404,10 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   validate?: (value: string) => { message: string; severity?: 'error' | 'warn' } | null
   /** Internal: render as a secret field. Use `<SecretInput>` instead. */
   secret?: boolean
+  /** Classes for the outer label, the element a flex row sizes. `className`
+   *  styles the <input> itself, so `className="flex-1"` never widened the
+   *  field (Research's query box stayed narrow at 1440, 2026-10-28). */
+  containerClassName?: string
 }
 
 /**
@@ -427,7 +431,7 @@ const SECRET_FIELD_ATTRS = {
 } as const
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, className = '', id, error, tooltip, helpId, validate, onBlur, onChange, type, secret, ...rest },
+  { label, className = '', containerClassName = '', id, error, tooltip, helpId, validate, onBlur, onChange, type, secret, ...rest },
   ref,
 ) {
   const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-')
@@ -462,7 +466,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   const inputClassName = `${FIELD_BASE} ${hasRevealToggle ? 'pr-9' : ''} ${secret ? 'font-mono' : ''} ${maskClass} ${className}`
 
   return (
-    <label className="block">
+    <label className={`block ${containerClassName}`}>
       {label && (
         <span className={`${FIELD_LABEL} flex items-center gap-1`}>
           {label}

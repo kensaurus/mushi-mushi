@@ -153,27 +153,8 @@ export function QueueStatusBanner({
     )
   }
 
-  return (
-    <StatusBannerShell
-      tone="ok"
-      title={`Queue healthy on ${projectLabel}`}
-      subtitle={stats.topPriorityLabel}
-      action={
-        onRefresh ? (
-          <StatusBannerAction
-            label="Refresh"
-            onClick={onRefresh}
-            loading={refreshing}
-            disabled={refreshing}
-            tone="ok"
-            emphasis="ghost"
-          />
-        ) : stats.topPriorityTo ? (
-          <StatusBannerAction label="View backlog" to={stats.topPriorityTo} tone="ok" />
-        ) : onTab ? (
-          <StatusBannerAction label="View backlog" onClick={() => onTab('backlog')} tone="ok" />
-        ) : null
-      }
-    />
-  )
+  // A healthy queue needs no banner: the tiles below say the same, and the
+  // page said "Queue healthy" twice (console sweep, 2026-10-28). Refresh
+  // lives in the page header.
+  return null
 }

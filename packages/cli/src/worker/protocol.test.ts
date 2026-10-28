@@ -172,3 +172,50 @@ describe('the claim a lane accepts (P3)', () => {
     expect(parseClaim({ id: ID, kind: 'fix', model: '--yolo', report: { id: P1 } }).ok).toBe(false)
   })
 })
+
+describe('a first-time user test the console queued (ADR 0053 amendment)', () => {
+  const ID = '8000000a-0000-4000-8000-000000000000'
+  const test = (over: Record<string, unknown> = {}) => ({
+    id: ID,
+    kind: 'fresh_eyes',
+    model: null,
+    freshEyes: { runId: '20261028-090000-ab12', url: 'https://glot.it/', goal: 'sign up and pick a language', sessions: 3, successText: 'Your lessons', dryRun: true, accounts: [], ...over },
+  })
+
+  it('takes a run id, an http(s) start page, a plain goal and the visitors', () => {
+    const r = parseClaim(test())
+    expect(r.ok && r.value.kind === 'fresh_eyes' && r.value.freshEyes).toEqual({ runId: '20261028-090000-ab12', url: 'https://glot.it/', goal: 'sign up and pick a language', sessions: 3, successText: 'Your lessons', dryRun: true, accounts: [] })
+  })
+
+  it('refuses a goal or words that read as an option or carry control characters, and any other address', () => {
+    for (const over of [
+      { goal: '--mint-account' },
+      { goal: 'a\nb' },
+      { successText: '-x' },
+      { url: 'file:///etc/passwd' },
+      { url: 'https://user:pw@glot.it/' },
+      { runId: '../../x' },
+      { sessions: 0 },
+      { sessions: 9 },
+      { dryRun: 'yes' },
+    ]) {
+      expect(parseClaim(test(over)).ok, JSON.stringify(over)).toBe(false)
+    }
+  })
+
+  it('takes test accounts only for a run that signs up, never more than its visitors', () => {
+    const acct = { email: 'fresh-eyes-abc@synthetic.kensaur.us', password: 'test-fixture-not-a-real-password', name: 'Fresh Eyes abc' }
+    const ok = parseClaim(test({ dryRun: false, sessions: 1, accounts: [acct] }))
+    expect(ok.ok && ok.value.kind === 'fresh_eyes' && ok.value.freshEyes.accounts).toEqual([acct])
+    expect(parseClaim(test({ dryRun: true, accounts: [acct] })).ok).toBe(false)
+    expect(parseClaim(test({ dryRun: false, sessions: 1, accounts: [acct, acct] })).ok).toBe(false)
+    expect(parseClaim(test({ dryRun: false, accounts: [{ ...acct, password: 'short' }] })).ok).toBe(false)
+  })
+
+  it('reads the lanes to wake from the heartbeat answer as lane ids only', () => {
+    const r = parseHeartbeatAnswer({ guards: GUARDS, lanes: [], wake: [LANE, 'rm -rf /', 7] })
+    expect('answer' in r && r.answer.wake).toEqual([LANE])
+    const older = parseHeartbeatAnswer({ guards: GUARDS, lanes: [] })
+    expect('answer' in older && older.answer.wake).toEqual([])
+  })
+})

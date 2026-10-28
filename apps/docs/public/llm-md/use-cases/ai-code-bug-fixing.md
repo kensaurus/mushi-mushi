@@ -52,7 +52,7 @@ npx mushi-mushi
 ```
 
 The wizard installs the right SDK, writes env vars, and can file a test
-report so you see the loop before real users do. 50 diagnoses a month free;
+report so you see the loop before real users do. One app and 100 diagnoses a month free;
 self-host if you prefer.
 
 **Next:** [Incident loop quickstart](/quickstart/incident-loop) ·

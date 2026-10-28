@@ -30,7 +30,7 @@ Your AI wrote it. Mushi tells you why it broke.</>}
 ## What it takes
 
 - **No monitoring stack.** No Sentry, no logging service, no AI key of your own. Mushi's AI writes the diagnosis.
-- **Free to start.** 50 diagnoses a month with no card. Repeat reports of one bug count once.
+- **Free to start.** One app and 100 diagnoses a month with no card. Repeat reports of one bug count once.
 - **Your AI does the fix, you approve it.** Mushi hands Cursor, Claude Code or Lovable the prompt. Nothing ships until you say so.
 
 ## What this is (and is not)
@@ -39,7 +39,7 @@ Mushi Mushi is the bug mediator for AI-built apps, an open-source tool that give
 
 **Who it is for.** {LANDING_WHAT_THIS_IS.who} {LANDING_WHAT_THIS_IS.boundary}
 
-**Where it stands.** Live and free to try: hosted service, npm packages and public source. Built by Kensaurus 合同会社 in Japan. Native iOS, Android and Flutter libraries are previews.
+**Where it stands.** Live and free to try: hosted service, npm packages and public source. Built by Kenji Sakuramoto, a solo developer in Japan ([kensaur.us](https://kensaur.us), [X](https://x.com/sakuramotokenji), [GitHub](https://github.com/kensaurus)), who runs it on his own 9 live apps; [the numbers are public](/proof). Native iOS, Android and Flutter libraries are previews.
 
 Words you will see on this page
 
@@ -1882,24 +1882,26 @@ prints this tag with your project ID and key filled in.
 
 ---
 
-## Pricing — free tier, Pro, and self-host
+## Pricing — Free, Builder, Studio and self-host
 
 Source: https://kensaur.us/mushi-mushi/docs/pricing
 
 ---
-title: Pricing — free tier, Pro, and self-host
-description: Mushi Mushi pricing — 50 AI bug diagnoses a month free, no card. Open-source Sentry alternative you can self-host for free, or upgrade for teams.
+title: Pricing — Free, Builder, Studio and self-host
+description: Mushi Mushi pricing — free for one app and 100 AI bug diagnoses a month. Builder $29/mo for 3 apps, Studio $79/mo for 10. Free to self-host.
 ---
 
 # Pricing
 
 ## Plans
 
-  **Annual billing saves two months.** Pay for 10 months, get 12 — about 17% off base fees. Annual plans have no pay-as-you-go overage: they include the plan's diagnoses each month and pause new diagnoses at that limit. Pick annual at checkout, or switch an existing plan with **Change plan** on the Billing page. For Enterprise commits, contact us.
+A plan is the number of **apps** Mushi watches for your team: one on Free, three on Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
 
-  **Overage is capped.** Indie and Pro include a default spend cap. You can lower or raise it in the console. At the cap, Mushi pauses new diagnoses with a graceful message — never a surprise invoice. Email alerts fire at **50%, 80%, and 100%** of your included quota.
+  **Annual billing saves two months.** Pay for 10 months, get 12: Builder is $290 a year, Studio $790. Annual plans have no pay-as-you-go overage: they include the plan's diagnoses each month and pause new diagnoses at that limit. Pick annual at checkout, or switch an existing plan with **Change plan** on the Billing page. For Enterprise commits, contact us.
 
-  **Free Cloud has a hard stop** — not a soft limit. At 50 diagnoses Mushi stops classifying new reports until the next calendar month. No card, no charge, no bill shock.
+  **Overage is capped.** Builder and Studio include a default spend cap ($50 and $200). You can lower or raise it in the console. At the cap, Mushi pauses new diagnoses with a graceful message — never a surprise invoice. Email alerts fire at **50%, 80%, and 100%** of your included diagnoses.
+
+  **Free has a hard stop** — not a soft limit. At 100 diagnoses Mushi stops diagnosing new reports until the next calendar month. No card, no charge, no bill shock.
 
 ## What counts as a diagnosis
 
@@ -1927,40 +1929,46 @@ Use the slider below to model your bill. Toggle **Annual** to see the effective 
 Fixed formulas (overage metered on top of base):
 
 ```
-Indie:  $15 + max(0, diagnoses − 500) × $0.03   (capped at $50/mo total)
-Pro:    $49 + max(0, diagnoses − 2,000) × $0.025 (capped at $200/mo total)
+Builder: $29 + max(0, diagnoses − 1,000) × $0.03  (capped at $50/mo total)
+Studio:  $79 + max(0, diagnoses − 3,000) × $0.03  (capped at $200/mo total)
 ```
 
-| Diagnoses / mo | Indie | Pro |
+| Diagnoses / mo | Builder | Studio |
 |---:|---:|---:|
-| 100 | $15.00 | $49.00 |
-| 500 | $15.00 | $49.00 |
-| 1,000 | $30.00 | $49.00 |
-| 2,000 | $50.00 *(cap)* | $49.00 |
-| 3,000 | $50.00 *(cap)* | $74.00 |
-| 5,000 | $50.00 *(cap)* | $124.00 |
-| 8,000 | $50.00 *(cap)* | $199.00 |
-| 10,000 | $50.00 *(cap)* | $200.00 *(cap)* |
+| 100 | $29.00 | $79.00 |
+| 500 | $29.00 | $79.00 |
+| 1,000 | $29.00 | $79.00 |
+| 1,500 | $44.00 | $79.00 |
+| 2,000 | $50.00 *(cap)* | $79.00 |
+| 3,000 | $50.00 *(cap)* | $79.00 |
+| 5,000 | $50.00 *(cap)* | $139.00 |
+| 8,000 | $50.00 *(cap)* | $200.00 *(cap)* |
 
-A typical vibe-coder project on Indie runs **200–400 diagnoses / month** → **$15 / mo** (inside the 500 included diagnoses).
+A typical vibe-coder app runs **200–400 diagnoses / month**, well inside Builder's 1,000. Most people move up for a second or fourth app, not for more diagnoses.
+
+## Why apps, not reports?
+
+Reports are noisy: one broken button can send fifty, and a busy week is hard to predict. The number of apps you ship is something you already know, and it grows with what you get out of Mushi. So a plan is sized by apps watched, diagnoses are a generous allowance under it, and reports are never billed at all.
 
 ## Why diagnoses, not events
 
 Sentry meters errors. We meter comprehension — a unit you can actually predict and that maps 1:1 to the value delivered (a plain-English root cause + paste-ready fix). Duplicate errors from the same broken button collapse to one diagnosis. You pay once.
 
-## BYOK and the self-host path
+## Your own AI key and the self-host path
 
-When self-hosting, Mushi uses **your** Anthropic / OpenAI key (BYOK). You pay those vendors directly at list rate; we never mark up tokens. Most teams run the full loop for under $20 / month in LLM costs.
+On every Cloud plan, Free included, you can add your own Anthropic, OpenAI or Cursor key under **Settings → API keys**. Mushi then uses it for fix PRs and agent work; you pay those vendors directly at list rate, and we never mark up tokens.
+
+When self-hosting, Mushi uses **your** keys for everything. Most teams run the full loop for under $20 / month in LLM costs.
 
 The self-host path is completely free, always will be — [see the guide](/self-hosting).
 
 ## Compared to Sentry + Seer
 
-| | Sentry Team + Seer | Mushi Indie |
+| | Sentry Team + Seer | Mushi Builder |
 |---|---|---|
-| Base plan | $26 / mo | $15 / mo |
+| Base plan | $26 / mo | $29 / mo for 3 apps |
 | AI diagnosis | Seer add-on: + $40 / active contributor / mo | Included |
-| Solo dev total | **$66 + / mo** | **$15 / mo** |
+| Solo dev total | **$66 + / mo** | **$29 / mo** |
 | Catches non-crash friction | Via its User Feedback widget and Session Replay | Yes — shake-to-report with screenshot and console/network tail, then a diagnosis |
 | Bugs in your editor | Sentry MCP server: issues and Seer analysis in Cursor / Claude Code | Mushi MCP server: diagnosis, fix prompt and lessons; no second LLM key |
 
@@ -1972,35 +1980,47 @@ Sentry + Seer is strong at code-thrown errors, tracing, breadcrumbs and session 
 
 ### What happens when I hit my diagnosis limit?
 
-**Free Cloud:** New plain-English classifications pause until the next calendar month. Reports are still captured.
+**Free:** New plain-English diagnoses pause until the next calendar month. Reports are still captured.
 
-**Indie / Pro (monthly):** You can keep diagnosing into overage until your **spend cap** stops new classification runs. Reports are never dropped.
+**Builder / Studio (monthly):** You can keep diagnosing into overage until your **spend cap** stops new classification runs. Reports are never dropped.
 
-**Indie / Pro (annual):** New diagnoses pause at the included amount until the next calendar month. Reports are never dropped. Switch to monthly (pay-as-you-go overage) or to Pro from **Change plan**.
+**Builder / Studio (annual):** New diagnoses pause at the included amount until the next calendar month. Reports are never dropped. Switch to monthly (pay-as-you-go overage) or to Studio from **Change plan**.
+
+### What happens when I add one app too many?
+
+The console says how many apps your plan watches and how many your team has, and offers the plans. Nothing already running stops: your existing apps keep their reports and diagnoses. Move up a plan, or remove an app you no longer use.
+
+### Can I use my own AI key on Free?
+
+Yes. Bring-your-own-key works on every plan, Free included. Add an Anthropic, OpenAI or Cursor key under **Settings → API keys** and Mushi can open fix PRs with it, so you see the whole loop on your first app before paying anything. Automatic fix PRs without you in the loop start on Builder.
 
 ### When does my quota reset?
 
-Cloud plans reset on your **Stripe billing period** (shown on the Billing page as “Quota resets in N days”). Free Cloud resets on the calendar month (UTC).
+Cloud plans reset on your **Stripe billing period** (shown on the Billing page as “Quota resets in N days”). Free resets on the calendar month (UTC).
 
 ### Can I change my spend cap?
 
-Yes. Open **Billing → Spending cap** on your project card. Set any USD cap from $0–100,000 or clear it to use the plan default ($50 Indie, $200 Pro).
+Yes. Open **Billing → Spending cap** on your project card. Set any USD cap from $0–100,000 or clear it to use the plan default ($50 Builder, $200 Studio).
 
 ### Who receives usage alert emails?
 
 By default, the **project owner**. Override the address under **Usage alert email** on the same card. Alerts fire once per threshold (50%, 80%, 100%) per billing month.
 
-### Is usage per project or per organization?
+### Is usage per app or per team?
 
-**Per project.** Each app you connect has its own diagnosis counter and spend cap. Organizations aggregate billing in the console but meter usage per project.
+**Diagnoses are per app; the app limit is per team.** Each app you connect has its own diagnosis counter and spend cap, and the plan's app limit counts the apps in your team.
 
 ### Can I downgrade mid-cycle?
 
-Change plans in the console with **Change plan** on the Billing page (Indie ↔ Pro, monthly ↔ annual). The change applies immediately and is pro-rated: unused time is credited and the new plan is charged for the rest of the period. Moving between monthly and annual starts a new billing period that day. Stripe's customer portal (**Manage**) handles your card, invoices and cancellation.
+Change plans in the console with **Change plan** on the Billing page (Builder ↔ Studio, monthly ↔ annual). The change applies immediately and is pro-rated: unused time is credited and the new plan is charged for the rest of the period. Moving between monthly and annual starts a new billing period that day. Stripe's customer portal (**Manage**) handles your card, invoices and cancellation.
 
 ### Do annual plans include overage?
 
-No. Annual plans include the plan's diagnoses every month (500 on Indie, 2,000 on Pro) and pause new diagnoses at that limit until the next month, so an annual invoice never grows. If you need more, switch to monthly for pay-as-you-go overage or upgrade to Pro from **Change plan**.
+No. Annual plans include the plan's diagnoses every month (1,000 on Builder, 3,000 on Studio) and pause new diagnoses at that limit until the next month, so an annual invoice never grows. If you need more, switch to monthly for pay-as-you-go overage or upgrade to Studio from **Change plan**.
+
+### What does Enterprise cost?
+
+From $499 a month, billed annually: unlimited apps, SAML SSO, the SOC 2 readiness pack, self-host support and up to 365 days of history. [Contact us](mailto:kensaurus@gmail.com?subject=Mushi%20Enterprise%20inquiry) for a quote.
 
 ### How do I estimate before signing up?
 
@@ -2262,7 +2282,7 @@ It does not claim Mushi is cheaper at scale, and it does not claim feature
 parity with Sentry on tracing, profiling or platform coverage. If you need
 those, Sentry is the right answer and Mushi runs alongside it: a Sentry
 issue-alert webhook sends errors into Mushi's queue, and with the outbound
-Sentry plugin (Indie and above, or self-hosted) merging the fix resolves the
+Sentry plugin (Builder and above, or self-hosted) merging the fix resolves the
 Sentry issue. See [Sentry vs Mushi](/compare/sentry-vs-mushi).
 
 ## Frequently asked questions
@@ -2279,7 +2299,7 @@ Source: https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi
 
 ---
 title: Sentry vs Mushi Mushi
-description: Sentry vs Mushi Mushi in 2026 — what each captures, Sentry's free tier and Seer pricing next to Mushi's 50 free diagnoses a month, and running both.
+description: Sentry vs Mushi Mushi in 2026 — what each captures, Sentry's free tier and Seer pricing next to Mushi's free plan (1 app, 100 diagnoses), and running both.
 ---
 
 # Sentry vs Mushi Mushi
@@ -2315,7 +2335,7 @@ case for an app built with Cursor, Claude Code or Lovable.
 
 Keep Sentry where it is. Point a Sentry issue-alert webhook at Mushi and every
 error lands in the same queue as user reports, deduped and diagnosed; with the
-outbound Sentry plugin (Indie and above, or self-hosted), Mushi resolves the
+outbound Sentry plugin (Builder and above, or self-hosted), Mushi resolves the
 linked Sentry issue when the fix merges. The setup is three steps
 on the [Sentry plugin page](/plugins/sentry), and there is a
 [migration guide](/migrations/sentry-to-mushi) for the enrich-or-standalone
@@ -2446,7 +2466,7 @@ npx mushi-mushi
 ```
 
 The wizard installs the right SDK, writes env vars, and can file a test
-report so you see the loop before real users do. 50 diagnoses a month free;
+report so you see the loop before real users do. One app and 100 diagnoses a month free;
 self-host if you prefer.
 
 **Next:** [Incident loop quickstart](/quickstart/incident-loop) ·
@@ -2504,7 +2524,7 @@ npx mushi-mushi
 npx mushi-mushi setup --ide claude
 ```
 
-Free tier: 50 diagnoses a month, no card. MIT SDKs, AGPLv3 server,
+Free tier: one app, 100 diagnoses a month, no card. MIT SDKs, AGPLv3 server,
 self-hostable with one command.
 
 **Next:** [MCP server quickstart](/quickstart/mcp) ·
@@ -2563,7 +2583,7 @@ npx mushi-mushi
 npx mushi-mushi setup --ide cursor
 ```
 
-Free tier: 50 diagnoses a month, no card. Open source, self-hostable.
+Free tier: one app, 100 diagnoses a month, no card. Open source, self-hostable.
 
 **Next:** [Cursor integration guide](/integrations/cursor) ·
 [MCP server quickstart](/quickstart/mcp) ·
@@ -2659,7 +2679,7 @@ it:
 npx mushi-mushi
 ```
 
-Free Cloud is 50 diagnoses a month with no card; self-hosting is free. Other
+Free is one app and 100 diagnoses a month with no card; self-hosting is free. Other
 tools that solve parts of this are compared on
 [Sentry alternatives for solo founders](/compare/sentry-alternatives-for-solo-founders).
 
@@ -2716,7 +2736,7 @@ worst one."* The full tool list and configuration options live in the
 
 ## Hosted or self-hosted
 
-Point the server at Mushi Cloud (50 diagnoses a month free) or at your own
+Point the server at Mushi Cloud (one app and 100 diagnoses a month free) or at your own
 self-hosted stack — the MCP surface is identical. Reports come from the
 [SDKs](/sdks) your users already trigger; install those with:
 
@@ -2785,7 +2805,7 @@ vars:
 npx mushi-mushi
 ```
 
-The free tier includes 50 diagnoses a month with no card, and you can
+The free tier watches one app with 100 diagnoses a month and no card, and you can
 [self-host the whole stack](/self-hosting) with one command if you'd rather
 keep everything on your own infrastructure.
 
@@ -3907,7 +3927,7 @@ Bounties reuse the existing anti-gaming engine (`reporter_devices`, `anti_gaming
 ```
 apps/testers/             Next.js static export — public browse + signup (kensaur.us/mushi-mushi/testers/)
 apps/admin /tester/*      Vite SPA — logged-in tester dashboard (same auth.users pool)
-apps/admin /rewards       Dev console — Publishing tab (live, gated behind the marketplace_publish Pro+ entitlement)
+apps/admin /rewards       Dev console — Publishing tab (live, gated behind the marketplace_publish entitlement, Studio and up)
 packages/server/          API routes: tester-marketplace.ts, published-apps.ts
                           Edge functions: tremendous-redemption-worker (cron)
 Supabase DB               mushi_testers, published_apps, tester_submissions,
@@ -5149,8 +5169,8 @@ See [CONTRIBUTING.md](https://github.com/kensaurus/mushi-mushi/blob/master/CONTR
 |---|---|---|
 | SDK packages (MIT) | Yes — embed in any app | — |
 | Self-hosted server (AGPLv3) | Yes — run on your own infra, unlimited diagnoses | Your own LLM API costs (BYOK) |
-| Mushi Cloud — Free tier | Yes — 50 diagnoses / mo, **hard stop** at limit | — |
-| Mushi Cloud — Indie / Pro / Enterprise | Flat base + usage overage | $15–$49 / mo base + $0.03–$0.025 / extra diagnosis |
+| Mushi Cloud — Free tier | Yes — 1 app, 100 diagnoses / mo, **hard stop** at limit | — |
+| Mushi Cloud — Builder / Studio / Enterprise | Flat base by apps watched + usage overage | $29 (3 apps) or $79 (10 apps) / mo base + $0.03 / extra diagnosis; Enterprise from $499 / mo |
 
 **One sentence:** the MIT + AGPL core self-hosts free; the cloud sells managed hosting, LLM key pooling, retention beyond 7 days, team collaboration, and security features (SSO, SOC 2).
 
@@ -5211,7 +5231,7 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP<br/>129 tools / 8 resources / 4 prompts"]
+    MCP["MCP — both stdio AND Streamable HTTP<br/>130 tools / 8 resources / 4 prompts"]
     REST["REST /v1/admin/*<br/>OpenAPI 3.1 at /openapi.json<br/>adminOrApiKey({ scope: 'mcp:read|write' })"]
     A2A["A2A v1.0.0 /v1/a2a/tasks<br/>create / get / cancel / SSE subscribe"]
     AGUI["AG-UI v0.4 SSE<br/>fix dispatch stream<br/>API key OR JWT"]
@@ -5259,7 +5279,7 @@ your client:
 }
 ```
 
-The full tool catalog (129 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (130 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
 [`MCP tools reference`](/sdks/mcp-tools). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
@@ -5435,7 +5455,7 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 129 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 130 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
 | **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |
@@ -7286,6 +7306,10 @@ GitHub API floor). The daemon then works by each lane's mode:
 | `audit` | A model (read-only) proposes bugs for one screen with the line, the code there and a check; the machine runs the check itself and files only what reproduces; a second model may only veto |
 | `skill` | Only the rounds of skill runs started with this lane on Spend credits |
 
+Whatever its mode (except `followups`), a lane first takes a **first-time user test**
+someone started with Run now in the console: it runs `mushi-ux fresh-eyes` on this
+machine and the console follows it live. The heartbeat tells the lane within a minute.
+
 While a lane holds a report, no cloud agent is sent to it. Every outcome goes back to
 Mushi; a failure of the machine (a clone permission, the network, a hook that
 timed out under load) is kept apart from a failure of the code and never
@@ -7328,6 +7352,16 @@ record their fixes and file reports, and nothing else. It cannot merge, change
 settings or read keys. `install` makes one with your CLI login (which needs
 `mcp:write` on every lane's app), or takes one from stdin. The daemon refuses
 your CLI key. The agent gets neither key.
+
+`mushi worker status` starts with what stops your workers from fixing bugs, the
+same list as the console's Workers tab, worst first: a run stuck in a repo's
+commit or pre-push hook (with its stage and last log lines), an offline
+machine, a Cursor account check that failed or timed out, lanes waiting for an
+agent space (one coding agent at a time; each machine allows a set number),
+`gh` signed out, idle credits. Each comes with what to do. It exits with code 2
+while one of them needs you now. The worker sends the stage and log lines with
+its heartbeat; keys, tokens and paths are removed and e-mail addresses masked
+before anything leaves the machine.
 
 | Command | Flags |
 | --- | --- |
@@ -8653,7 +8687,7 @@ read the contract before drafting a fix.
 ```
 
 See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
-on npm for the full **129-tool** catalog and
+on npm for the full **130-tool** catalog and
 [Connecting your orchestrator](/concepts/orchestrator-interop) for the
 non-MCP surfaces (REST, A2A, AG-UI SSE).
 
@@ -8806,7 +8840,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 
   Auto-generated from `packages/mcp/src/catalog.ts`. Do not edit by hand — run `pnpm gen:mcp-tools-doc`.
 
-**129 tools** · **8 resources** · **4 prompts**
+**130 tools** · **8 resources** · **4 prompts**
 
 ## Read tools (`mcp:read`)
 
@@ -8840,6 +8874,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `get_ci_overview` | CI runners and why fixes wait | Return where this project's tests run and why a fix is slow to land (ADR 0033): the machines that send a runner heartbeat (hostname, platform, memory, swap, load, free disk, and per runner service its memory use, memory limit and out-of-memory kills), the GitHub runners seen (online \| offline, busy, labels), repos, the latest jobs with their verdict (passed, running, queued, waiting_for_runner, runner_lost, queue_expired, cancelled, code_failure; waiting_for_runner, runner_lost and queue_expired are infra: the test machine stopped and the fix was not tested, which is not a code failure), and stats \{ queueP50s, queueP95s, durationP50s, durationP95s, passRate, infraFailures, codeFailures, byRunner, byWorkflow, slowSteps }, plus advice [\{ id, severity (high \| medium \| low), title, detail, evidence, fix }] with the evidence for each rule. Optional projectId (default: the configured project; with an account-level key and no project, every project you can read), days (1-30, default 7) and refresh (true reads GitHub first instead of the last 10-minute sync, at most once a minute per project). permissions \{ jobs, runners } is ok \| missing \| unknown: jobs need Actions: read on GitHub, the runner list needs Administration: read (without it runners come from jobs only). Repo, workflow, job, step and runner names come from the repos. Returns \{ generatedAt, refreshedAt, window, permissions, hosts, runners, repos, jobs, stats, advice }. Read-only. When a fix's CI failed with an infra verdict, re-run the tests instead of changing code. |
 | `get_ci_costs` | CI cost and speed | Return what this project's CI costs and how fast it runs on GitHub-hosted runners versus your own machines (Plan 022, ADR 0037). Rows per repo × runner class [\{ repo, runnerClass (github_hosted \| self_hosted \| unknown = never picked up), os, labels, runner, machine, jobs, expired, queueP50s, queueP95s, runP50s, runP95s, prPassRate (pull-request jobs only), infraRate, rawMinutes, billedMinutes (each job rounded up to a whole minute), rerunJobs, tinyJobs, monthCost, costBasis (github_list \| github_public_free \| github_larger_unpriced \| self_hosted \| unknown), currency }]; repos with visibility (public repos run GitHub-hosted minutes free); accounts per GitHub owner (plan, includedMinutes, monthMinutes, monthListCost, monthCost after included minutes); machines (busyHours as the union of job intervals, busyShare, monthEnergyCost and monthWearCost from the organization's own figures); speed factors (only passed jobs that ran on both classes, at least 5 each, with sample sizes); whatIfs for moving a workflow (minutes moved, jobs that stay and why, speed, cost delta, target wait and busy share, warnings); explain (re-runs, tiny jobs, expired jobs, pinned-to-GitHub jobs with their YAML reason, main and Dependabot runs that always use GitHub); advice with evidence; fields says which numbers are measured and which estimated; rates gives GitHub's list prices and the date they were read. Optional projectId (default: the configured project; an account-level key with none reads every project) and days (1-30, default 30). lowConfidence is true under 7 days of data. Returns \{ window, dataDays, lowConfidence, source, sourceNote, rates, fields, settings, repos, rows, accounts, machines, speed, whatIfs, explain, advice }. Read-only: it changes nothing on GitHub. Every money figure is an estimate. |
 | `get_ci_bill` | Real GitHub Actions bill | Return what GitHub actually charged for Actions, read from GitHub's billing usage API by the CI collector once a day (or pushed with `mushi runner bill --push`). Unlike get_ci_costs, these money figures are measured, not estimated. Returns \{ window, previousWindow, provenance: "measured", currency: "USD", available, repoScoped (true when you are not a member of the organization: only your projects' repos are shown), unavailableReason (why there is no bill and how to connect one), owners [\{ owner, ownerType, lastOkAt, lastAttemptAt, lastError, lastSource (api \| cli), coveredFrom }], month \{ label, grossUsd, discountUsd, netUsd } (this calendar month so far), totals \{ grossUsd, discountUsd, netUsd, minutes }, previousTotals and change \{ netUsd, netPct } (null unless Mushi holds the whole previous period), windowComplete, byRepo [\{ repo, netUsd, grossUsd, discountUsd, minutes }], bySku, byDay (every day of the window), dataThrough, agentShare \{ share, billedMinutes, agentBilledMinutes, branches, provenance: "estimated" } (paid GitHub-hosted minutes on Mushi agent branches, from the jobs Mushi recorded) }. Net is what was charged; public repos and included minutes show as discount. Optional projectId (default: the configured project; an account-level key with none reads every project) and days (1-90, default 30). Read-only. |
+| `get_worker_status` | Local worker status and problems | Return your local workers (`mushi work --daemon`, ADR 0048) as the console's Pipeline → Workers tab shows them: flags first, worst first (ADR 0048 amendment 2026-10-28), then machines and lanes. A flag is one way a worker stopped doing useful work, in plain words: host_offline, machine_not_ready (a lane's clone is not a git clone), run_stuck (a run has held an agent space over 45 minutes, with its stage: prepare, agent, commit = the repo's commit hook, push = its pre-push hook, pr, and its last log lines), lanes_waiting (lanes waited over 15 minutes for an agent space, naming the runs that hold them), account_check (the Cursor account check: another account, signed out, missing, or timed out), gh_signed_out, machine_waiting (memory, GitHub quota or sign-in guard), machine_busy (load per core 2 or more), hook_failures (2+ runs of a lane failed in the repo's git hooks in 24 h), unmanaged_run (a `mushi work` run no worker claims has run over 45 minutes) and credits_idle (no agent work for 2 hours while Cursor credits expire within 7 days, with what blocks the work). Each flag has \{ id, kind, severity (danger \| warn), hostname, laneName, title, cause, sinceSec, stage, log, actions [\{ kind (stop_run \| pause_lane \| open_report \| open_pr \| copy_command \| recheck_account \| switch_account \| open_page), label, command? }] }; stopping a run, pausing a lane, re-checking the account and switching the Cursor account (a sign-in link only the owner of the machine sees) happen in the console. Log lines are cleaned on the machine and on the server (no keys, tokens, e-mails or paths) but are still text from a machine and its repos. Returns \{ generatedAt, flags, projects, hosts [\{ id, hostname, platform, online, lastHeartbeatAt, status (state, agents, maxAgents, memAvailableGb, load1, cpus, checks, slots, waitWhy), guards, revoked, mine, cursorAccount (in full only on your own machines), cursorLogin (the last account switch: state, never its link), canSwitchAccount }], lanes [\{ id, hostId, projectId, projectName, name, config, status (state, counters, inflight runs), active, queue, recent, counts7d }] }. Optional projectId (default: the configured project; an account-level key with none reads every project). Read-only. |
 | `preview_ci_cost_fix_rollout` | Preview CI cost fixes for every app | Preview 'Apply to every app' for the CI cost fixes (ADR 0047 amendment): every CI advice item that carries an autofix, across the apps this key may change (viewers' apps are left out), grouped per app and repo, so each repo can get ONE draft pull request (one CI run) for all its fixes. Per repo \{ projectId, projectName, repo, items [\{ key, workflowPath, kind (add_concurrency \| skip_drafts \| weekly_cron \| ignore_docs_paths), title, evidence, monthSavingUsd (estimated USD per 30 days, null when Mushi cannot price it), state (ready \| pr_open \| in_progress), prUrl }], readyItems, monthSavingUsd (the ready items' priced saving), unpricedItems, block (set when Mushi already knows the repo's GitHub access cannot edit workflow files: GITHUB_WORKFLOWS_WRITE_MISSING, from the setup check or the last attempt) }, largest saving first, plus totals, caps \{ reposPerRequest: 10, itemsPerRepo: 20 } and partial (set when part of the advice could not be read). Optional projectId limits it to one app; an account-level key with none reads every app. Read-only: it changes nothing. Open them with apply_ci_cost_fix_rollout. |
 | `get_ci_cost_fix_bundle` | CI cost fix bundle (one PR, several fixes) | Read one CI cost fix bundle (one draft PR for several fixes in one repo, from apply_ci_cost_fix_rollout) by its bundleId: \{ bundle: \{ id, projectId, repo, status (queued \| running \| pr_opened \| nothing_opened \| failed), prUrl, prNumber, items (each fix: workflowPath, kind, status, summary, error, prUrl, baseline, measured, saving), measuredUsdPerMonth (after the merge: the saving measured per workflow, each workflow once) } }. After the merge it reads GitHub once and stores the minutes per day since. Read-only on GitHub. |
 | `explain_finding` | Explain one finding | Explain one gate finding by its id (from list_gate_findings, get_radar, get_recipe_drift, get_code_health, get_store_status or the console): which check raised it and what that check is for, the rule, why it fired (reason), the file, line and column or the target it is about, the fix in one sentence (fix.text, with fix.kind, fix.command, fix.consolePath and the stored fix object in fix.detail), and whether it is still open: state open (in the latest run of that check, the latest run found the same problem in the same file or target, or no finished run has looked again yet), not_in_latest_run (the latest run checked that rule clean and no longer has it: fixed or moved), unknown (the latest run could not confirm a fix: it errored or skipped, stored only part of its findings, did not run or could not decide the rule, or read only part of the project; stateReason says which) or allowlisted. The latest run is the newest one that looked at the same thing: a design server scan is compared only with server scans and a CI push only with CI pushes, and a run scoped to another story is skipped. Treat unknown as still open. A finding in a project the key cannot reach is a 404. Returns \{ id, projectId, gate, gateLabel, gateMeaning, ruleId, rule, severity, reason, fix, location, state, stateReason, run, latestRun }. Read-only. |
@@ -11615,7 +11650,7 @@ description: Replace Instabug (Luciq) with Mushi for in-app bug reporting — co
 
 ## Why switch
 
-- **Pricing.** Mushi SDKs are MIT, the server is AGPLv3 open source — self-host free, cloud free up to 50 diagnoses/month; Luciq is per-seat enterprise.
+- **Pricing.** Mushi SDKs are MIT, the server is AGPLv3 open source — self-host free, cloud free for one app and 100 diagnoses/month; Luciq is per-seat enterprise.
 - **AI triage.** Mushi ships a built-in two-stage classifier
   (fast-filter + classify-report) that turns raw user reports into
   triaged tickets without manual review. Luciq's "Agentic AI" is a recent
@@ -14276,7 +14311,7 @@ Source: https://kensaur.us/mushi-mushi/docs/cloud
 
 ---
 title: Mushi Cloud
-description: Hosted Mushi Mushi — bug reports, plain-English diagnoses, and fix dispatch without running servers. Free tier includes 50 diagnoses a month.
+description: Hosted Mushi Mushi — bug reports, plain-English diagnoses, and fix dispatch without running servers. Free for one app with 100 diagnoses a month.
 ---
 
 # Mushi Cloud
@@ -14851,7 +14886,7 @@ on that. Every row links to the page with the mechanism and the evidence.
 | **Data residency** | Pick a region at project creation; rows never replicate across regions | Live: single Tokyo (`ap-northeast-1`) cluster today. EU / JP dedicated clusters reserved, nightly no-cross-region attestation already runs | [Data residency](/security/data-residency) |
 | **Bring-your-own-key (BYOK)** | Diagnoses run against *your* Anthropic / OpenAI / OpenRouter account. Keys are stored in Vault, never shown back in plaintext, and nothing is billed to Mushi's provider account | Live | [BYOK](/security/byok) |
 | **BYO storage** | Screenshots and crash dumps pinned to your own S3 / R2 / GCS / MinIO bucket; URLs signed server-side | Live | [BYO storage](/security/byo-storage) |
-| **Retention sweep** | Reports older than your plan window (Free 7 d · Indie 30 d · Pro 90 d · Enterprise custom) or your per-project policy are hard-deleted daily; legal holds are skipped | Live, daily 03:00 UTC | [SOC 2 → retention](/security/soc2#data-retention-policies) |
+| **Retention sweep** | Reports older than your plan window (Free 14 d · Builder 90 d · Studio 180 d · Enterprise custom) or your per-project policy are hard-deleted daily; legal holds are skipped | Live, daily 03:00 UTC | [SOC 2 → retention](/security/soc2#data-retention-policies) |
 | **Tenant isolation** | Every table carries a row-level-security policy keyed on `(SELECT auth.uid())`; every policy column is indexed | Live | [No client data leakage](/security/no-leakage-claim) |
 | **Nightly RLS coverage check** | `mushi_rls_coverage_snapshot()` verifies each public table still has a policy and writes the delta to the evidence table | Live, nightly | [SOC 2 → automated controls](/security/soc2#automated-controls) |
 | **Prompt-injection sanitizer** | Report text, console lines, OCR output, and screenshots pass `sanitizeForLLM()` and a vision-safe path before any model sees them; the OWASP LLM01 corpus runs in CI | Live | [Prompt-injection defence](/security/prompt-injection) |
@@ -15374,11 +15409,11 @@ description: What Mushi Mushi collects, why, who processes it, how long it is ke
 # Privacy Policy
 
   **Draft, not yet reviewed by a lawyer.** This page is a complete plain-English
-  description of how Mushi Mushi handles personal data as of 2026-10-10. Treat
+  description of how Mushi Mushi handles personal data as of 2026-10-28. Treat
   it as a description of current practice, not a finished legal document.
   Questions: kensaurus@gmail.com.
 
-**Effective date:** 2026-10-10 · **Version:** 2 (version 1, 2026-09-21, did not list the opt-in known-fix search sent to Firecrawl)
+**Effective date:** 2026-10-28 · **Version:** 3 (version 2, 2026-10-10, did not list the free production check or the cookieless visit count; version 1, 2026-09-21, did not list the opt-in known-fix search sent to Firecrawl)
 
 This policy covers **Mushi Cloud** (the hosted service at
 `kensaur.us/mushi-mushi`), the **admin console**, the **docs site**, the
@@ -15408,6 +15443,7 @@ requests personally.
 | **Fix and repo data** | Repository names, file paths and an index of your code, draft pull requests, MCP tool calls from your editor | The GitHub integration and the MCP server, when you connect them | Produce fixes that fit your codebase |
 | **Product usage events** | Console page views, setup-funnel steps (project created, key minted, first report), feature clicks, and a session heartbeat with your browser user agent, tagged with your user ID | The console, through Mushi's own SDK | Improve activation and find dead ends |
 | **Docs-site analytics** | Views of the landing, quickstart and pricing pages (route, referring page without its query string, `utm_*` tags), clicks on sign-up and demo buttons, a session heartbeat with your browser user agent, and a random browser ID stored in your browser. These are **pseudonymous, not anonymous**: if you later sign in to the console in the same browser, the console links your earlier docs events to your account | The docs and landing pages, through Mushi's own SDK — only after you accept the consent bar | Measure the funnel from landing to signup |
+| **Docs-site page-view count** | For each page view: the page path, the `?src=` campaign tag of the link you arrived by, and the host name of the site that linked to you (for example `news.ycombinator.com`). Stored only as a count per day, path, tag and host. No IP address, cookie, browser ID, user agent or fingerprint is stored, and nothing is written to your browser. To stop one visitor flooding the count, the rate limiter keeps a one-way hash of your IP address salted with a secret and the date, so it cannot be turned back into the address or linked across days, and it is never stored with the counts | The docs and landing pages, without the SDK, before and without consent; skipped when Do Not Track or Global Privacy Control is on | Count how many people each launch post or link brings |
 | **Console error telemetry** | Stack traces, browser and OS, the console route you were on when something broke | Sentry, from the admin console | Fix bugs in the console itself |
 | **Support and security mail** | Whatever you put in an email to us | You | Answer you |
 | **Bounties tester data** | Tester display name, points balance, gift-card redemptions, and KYC details (legal name, jurisdiction, tax ID) once redemptions pass US$599 in a calendar year | You, on the Bounties marketplace | Pay out gift cards and meet US tax reporting rules |
@@ -15429,11 +15465,25 @@ telemetry, support mail, and Bounties tester data.
   understanding which onboarding steps fail. We ran a balancing test on the
   product-usage events: they are scoped to your own account, never shared, and
   expire (section 7).
+- **(f) legitimate interests** — the docs-site page-view count: an
+  aggregate count per day and page that cannot identify you, with no
+  browser storage. Do Not Track and Global Privacy Control turn it off.
 - **(a) consent** — docs-site analytics. Until you accept the consent bar
   the docs site loads no analytics code, sends no analytics events, and
   stores nothing for analytics except your answer; Do Not Track and Global
   Privacy Control are honoured as a refusal. "No thanks" keeps it that way.
+  The only exception is the page-view count above: it is not the analytics
+  SDK, sends only the path, the `?src=` tag and the referring host, and
+  stores nothing in your browser.
 - **(c) legal obligation** — tax records for paid plans and tester payouts.
+
+**Free production check (added 2026-10-28).** The free production check
+reads only the public pages of the address you enter (through Firecrawl,
+section 5) and stores the address, the findings, a one-way hash of your IP
+address for rate limiting (never the IP itself) and, only if you give it, your
+email so we can send you the report link once; the email is cleared after that
+send. Legal basis: (f) legitimate interests (preventing abuse of a free tool);
+the email is (b) contract — you asked for the report.
 
 ## 4. Data where Mushi is the processor
 
@@ -15491,9 +15541,11 @@ reserved.
 
 | Data | Kept for | Mechanism |
 | --- | --- | --- |
-| End-user reports and everything attached to them | The retention window of your plan: **Free 7 days · Indie 30 days · Pro 90 days · Enterprise as agreed**, or a shorter per-project policy you set in **Compliance → Data retention** | A daily `retention-sweep` job hard-deletes rows past the window. Legal-hold rows are skipped |
+| End-user reports and everything attached to them | The retention window of your plan: **Free 14 days · Builder 90 days · Studio 180 days · Enterprise as agreed**, or a shorter per-project policy you set in **Compliance → Data retention** | A daily `retention-sweep` job hard-deletes rows past the window. Legal-hold rows are skipped |
 | Product usage events (Mushi's own console analytics) | **730 days (2 years)** | Nightly `prune_product_events` job, using the 730-day retention set on Mushi's own analytics project |
 | Docs-site analytics | 730 days (2 years) | Same table and job as above |
+| Free production checks (address, findings, IP hash, optional email) | 90 days | Daily `retention-sweep` |
+| Docs-site page-view count | Kept as daily counts; they hold no personal data | The `landing_page_views_daily` table. The salted daily hash used against flooding sits in the rate-limit table, apart from the counts |
 | Analytics events your app sends with `Mushi.track()` | 90 days by default, or the per-project override (1–3650 days) | Same nightly job |
 | Console error telemetry | 90 days | Sentry retention |
 | Account data | Until you delete your account, then 30 days for backups to roll off | Delete from **Settings**, or email us |
@@ -15558,7 +15610,8 @@ email us and we will delete it.
 
 ## 11. Cookies and browser storage
 
-We use no advertising or cross-site cookies. What each surface stores in your
+We use no advertising or cross-site cookies. The docs-site page-view count
+(section 2) stores nothing in your browser. What each surface stores in your
 browser:
 
 | Surface | Key | Purpose | Lifetime |
@@ -15619,7 +15672,7 @@ description: The terms for Mushi Cloud, the admin console, the SDKs and the Boun
   draft. The governing-law and venue clause (section 14) has not been confirmed
   yet. Questions: kensaurus@gmail.com.
 
-**Effective date:** 2026-09-21 · **Version:** 1
+**Effective date:** 2026-10-28 · **Version:** 2 (version 1, 2026-09-21, described the Indie and Pro plans; version 2 describes Free, Builder, Studio and Enterprise, each limited by apps watched and diagnoses a month, and lengthens Free history from 7 to 14 days)
 
 These terms are between you and **kensaurus LLC (kensaurus合同会社)** (Japan,
 "Mushi", "we") and cover **Mushi Cloud** at `kensaur.us/mushi-mushi`,
@@ -15663,7 +15716,7 @@ configuration, brand, or content beyond what these terms allow.
 - You need a working email address or a Google / GitHub login. Keep your
   credentials and API keys secret; you are responsible for what happens under
   them. Rotate a key from **Settings → API keys** the moment you suspect a leak.
-- One person per seat. Team seats on Pro and Enterprise are for named people
+- One person per seat. Team seats on Studio and Enterprise are for named people
   in your organisation.
 - You must be **16 or older**.
 - We may suspend an account that breaks section 5, does not pay, or is used
@@ -15708,8 +15761,8 @@ users, or your app.
 
 ## 7. Free tier
 
-The **Free Cloud** plan includes **50 diagnoses per month**, one seat, and
-7-day report retention. At 50, the pipeline **stops** for the rest of the
+The **Free** plan includes **one app and 100 diagnoses per month**, one seat, and
+14-day report retention. At 100, the pipeline **stops** for the rest of the
 calendar month: reports are still accepted and stored, but no new diagnoses
 run until the counter resets or you upgrade. We do not silently bill overage
 on Free. We may change Free limits with 30 days' notice on the pricing page.
@@ -15720,8 +15773,8 @@ on Free. We may change Free limits with 30 days' notice on the pricing page.
   through **Stripe**; we never see your full card number.
 - Plans bill **monthly** or **annually** in advance, in US dollars, plus any
   tax we must collect.
-- **Overage** on Indie and Pro is metered per diagnosis at the rate shown on
-  the pricing page and capped by a **spend cap** ($50 on Indie, $200 on Pro).
+- **Overage** on Builder and Studio is metered per diagnosis at the rate shown on
+  the pricing page and capped by a **spend cap** ($50 on Builder, $200 on Studio).
   When the cap is reached the pipeline stops, like Free, until the next period
   or until you raise the cap in **Billing**. You get email alerts at 50 %,
   80 %, and 100 % of your included diagnoses.
@@ -16913,8 +16966,8 @@ description: Mushi Cloud status and uptime — the live status page for the API,
 
 ## Uptime commitment
 
-Mushi Cloud is operated on a **reasonable-efforts basis** for the Free and Indie tiers.
-Pro subscribers receive priority incident response.
+Mushi Cloud is operated on a **reasonable-efforts basis** for the Free and Builder plans.
+Studio subscribers receive priority incident response.
 Enterprise SLAs (99.9 % monthly uptime with credits) are negotiated per-contract —
 contact `kensaurus@gmail.com` for details.
 
@@ -16956,7 +17009,7 @@ can fix it from.
 ## Get this for your own app
 
 When a real user reports a bug, Mushi writes a diagnosis like this one. It
-needs no Sentry and no AI key of yours: the free plan covers 50 diagnoses a
+needs no Sentry and no AI key of yours: the free plan covers one app and 100 diagnoses a
 month.
 
 - **Claude Code or Cursor:** [install in three steps](/#install), then ask your AI
@@ -17468,7 +17521,7 @@ Everything you need to manage your subscription is on this page: live usage with
 Each project has a billing card. The key element is the **usage bar**:
 
 ```
-Diagnoses used: ████████░░░░  85%  (425 / 500)
+Diagnoses used: ████████░░░░  85%  (850 / 1,000)
 ```
 
 Below the bar you will see:
@@ -17481,9 +17534,9 @@ Below the bar you will see:
 
 **What happens at 100%?**
 
-- **Free Cloud:** New reports are captured but **not diagnosed** until the period resets.
-- **Indie / Pro (monthly):** Overage continues until your **spend cap** pauses Stage-2 classification. No reports are lost.
-- **Indie / Pro (annual):** No overage. Stage-2 classification pauses at the included diagnoses until the next calendar month. No reports are lost.
+- **Free:** New reports are captured but **not diagnosed** until the period resets.
+- **Builder / Studio (monthly):** Overage continues until your **spend cap** pauses Stage-2 classification. No reports are lost.
+- **Builder / Studio (annual):** No overage. Stage-2 classification pauses at the included diagnoses until the next calendar month. No reports are lost.
 
 ### Usage breakdown
 
@@ -17505,7 +17558,7 @@ The **30-day sparkline** shows daily report volume — useful for spotting a spi
 
 On each paid project card, **Predictability controls** let you:
 
-1. **Monthly spend cap (USD)** — override the plan default ($50 Indie, $200 Pro). Diagnoses pause gracefully at the cap.
+1. **Monthly spend cap (USD)** — override the plan default ($50 Builder, $200 Studio). Diagnoses pause gracefully at the cap.
 2. **Usage alert email** — where 50% / 80% / 100% quota alerts are sent (defaults to project owner).
 
 Both settings save immediately via the Billing API. Leave the cap blank to revert to the plan default; leave the email blank to use the owner address.
@@ -17514,19 +17567,25 @@ Both settings save immediately via the Billing API. Leave the cap blank to rever
 
 ---
 
+## Apps on your plan
+
+A plan sets how many apps your team watches: **Free 1, Builder 3, Studio 10, Enterprise no limit**. Creating one more app than the plan allows stops with a message that names your plan, how many apps the team has, and the plan that fits, plus a **See plans** button that opens the Plans tab. Apps you already have keep working.
+
+The **Plans** tab compares Free, Builder, Studio and Enterprise by apps, diagnoses, overage and history, and shows whether your team's apps and this period's diagnoses fit each plan.
+
 ## Upgrading your plan
 
 1. Click **Upgrade** on the project card.
 2. Pick **Monthly** or **Annual** (about two months free), then **Select** the plan you want.
 3. Complete payment in **Stripe Checkout**.
-4. The new plan activates when you return to Mushi.
+4. Stripe sends you back to Billing, which shows the new plan as soon as Stripe confirms the payment.
 
 ## Changing plan
 
 A project that already pays switches in the console, not in Checkout:
 
 1. Click **Change plan** on the project card.
-2. Choose Indie or Pro, monthly or annual. The current choice shows as **Current plan**.
+2. Choose Builder or Studio, monthly or annual. The current choice shows as **Current plan**.
 3. The dialog shows what Stripe charges now (or credits) for the prorated difference. Click **Confirm change**.
 
 The change applies immediately. Moving between monthly and annual starts a new billing period that day. If the card is declined, nothing changes. Annual plans have no overage and stop at the included diagnoses each month. Enterprise is arranged with our team — use **Contact us** on the Plans tab.
@@ -17589,7 +17648,7 @@ Each card has a dot and a state:
 | Green | Pass | A finished run was read and found nothing. Shown with when it last ran. |
 | Grey | Not run yet, Not set up, Status unavailable | Never a pass. Not set up comes with a Set up link. |
 
-A Pro pill means the check needs a plan upgrade. AI prompts and CI runners are Labs: their cards appear once you keep them in the sidebar in Settings → Display & sidebar. While you are on Checks or one of its pages, the sidebar lists every check under Checks.
+An Upgrade pill means the check needs a higher plan. AI prompts and CI runners are Labs: their cards appear once you keep them in the sidebar in Settings → Display & sidebar. While you are on Checks or one of its pages, the sidebar lists every check under Checks.
 
 ## The checks
 
@@ -20386,8 +20445,8 @@ against that week's data. Useful when:
 Regeneration overwrites the cached HTML and PDF for that week. The previous version
 is not archived.
 
-  Regeneration is rate-limited to **3 times per week per project** on Indie plans
-  and **unlimited** on Pro and Enterprise.
+  Regeneration is rate-limited to **3 times per week per project** on Builder
+  and **unlimited** on Studio and Enterprise.
 
 ---
 
@@ -21166,7 +21225,7 @@ Wire Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected
 your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
-The live **Catalog** tab mirrors the server registry (**129 tools**, 8 resources, 4 prompts).
+The live **Catalog** tab mirrors the server registry (**130 tools**, 8 resources, 4 prompts).
 
 ---
 
@@ -21759,7 +21818,7 @@ The **Workers** tab shows your local workers: machines that run `mushi work --da
 
 | Part | What it shows |
 | --- | --- |
-| **Machines** | Each registered machine: online or offline, its last heartbeat, what it is doing now (working, idle, waiting for memory, for the GitHub quota, for the Cursor sign-in, or for a free agent slot), and its guards: how many agents may run at once, the free-memory floor and the GitHub API floor. The machine's owner changes the guards or revokes it. |
+| **Machines** | Each registered machine: online or offline, its last heartbeat, what it is doing now (working, idle, waiting for memory, for the GitHub quota, for the Cursor sign-in, or for a free agent space), its load, the Cursor account check and the `gh` sign-in as they last answered, which lane holds each agent space and in which stage, and its guards: how many agents may run at once, the free-memory floor and the GitHub API floor. The machine's owner changes the guards or revokes it. |
 | **Lanes** | One app on one machine: its model, mode, how many it runs at once, paused or not, its stop date, and drain (finish what runs, take nothing new). An audit lane also has a second model that may only veto a finding. |
 | **Queue** | Reports the lane takes first, in order. Move a report up or down, remove it, or paste report ids (one or many) into **Add reports by id**. A report already being fixed somewhere else waits in the queue until it is free. |
 | **Recent runs** | The last 7 days: runs, PRs opened, no change, timeouts, errors, and failures of the machine (infra) kept apart from failures of the code. |
@@ -21775,6 +21834,29 @@ A lane's **mode** says what it does:
 | Run skill runs | Only the rounds of skill runs started on Spend credits with **Run on** set to this lane |
 
 A lane change reaches the machine at its next heartbeat, within a minute. The machine opens no port: it asks Mushi for its settings, and the settings are values (a model id, a number, a date), never a command or a path. Viewers can read this tab but cannot change it.
+
+### When a worker stops doing useful work
+
+Anything that stops a worker from fixing bugs is listed at the top of the tab, worst first, and never folded away. An **agent space** is one coding agent running at a time; each machine allows a set number at once (**Agents at once** in its limits). When every space is taken, other lanes wait.
+
+| Problem | What you see | What fixes it |
+| --- | --- | --- |
+| Machine offline | No heartbeat for 3 minutes; how long, and how many queued reports wait | The command that shows the worker's service and its last log lines on that machine |
+| Stuck run | A run has held an agent space for over 45 minutes: its stage (getting the repo ready, the coding agent, the repo's **commit hook**, its **pre-push hook**, opening the PR), how long it has been in that stage, and its last few log lines | **Stop this run**, open the report, or the command that finds it on the machine |
+| Waiting for an agent space | Lanes waited over 15 minutes, with the runs that hold the spaces and in which stage | Stop the stuck runs, or let the machine run more at once |
+| Cursor account | The account check said another account, signed out, not installed, or did not answer in time (with the load on the machine) | **Switch account** (the machine's owner signs it in as the right account from the console: it finishes its runs, then shows a Cursor sign-in link), **Re-check the account**, or the command to sign in on the machine |
+| GitHub sign-in | `gh` is not signed in on the machine, so no branch can be pushed | `gh auth login` on the machine |
+| Machine waiting | Low memory, the GitHub API quota or a sign-in has held the machine for over 5 minutes | The command that shows what uses the memory or the quota |
+| Machine overloaded | Load of 2 or more per core: checks and git hooks time out | The command that lists what runs there |
+| Git hooks failing | Two or more runs of a lane failed in the repo's own commit or pre-push check in 24 hours | **Pause this lane**, open the latest report or PR |
+| Run outside the worker | A `mushi work` run that no worker claims has run for over 45 minutes: a script started it, so its stage cannot be seen or stopped here | Move that machine to `mushi worker install` |
+| Credits idle | No agent has worked for 2 hours while Cursor credits expire within 7 days, with what blocks the work | Open Workers, or Spend credits |
+
+The same problems show above the Pipeline tabs, as a count on the **Pipeline** item in the sidebar, in **Needs you** on Home (for that app), as "credits idle" on [Spend credits](/admin/credits), in `mushi worker status` and in the MCP tool `get_worker_status`.
+
+**Stop this run** (the app's owner or an admin, or the machine's owner; asks first, and is recorded in the audit log) ends the run's claim at once, so the report is free again: the next lane or a cloud agent can take it (it is not put back in a queue). The machine stops the agent at its next heartbeat, within a minute, and commits or pushes nothing more. A git hook that is already running keeps its agent space until git's own time limit (25 minutes); the flag stays up as "a run that was stopped still holds an agent space" until it ends, with the command to end it on the machine. A review follow-up is not a claim: pause its lane and end it on the machine.
+
+Log lines are cleaned on the machine and again by Mushi before they are stored: no keys, tokens or paths, e-mail addresses masked, and no lines a compiler quotes from your code. A machine whose Mushi CLI is older than these checks says so on its card instead of showing a problem.
 
 ### Send to my local worker
 
@@ -23304,7 +23386,7 @@ reports, leaving comments — earns them points. Points advance tiers. Tiers
 open perks you configure: free plan upgrades, early-access flags, and
 (optionally) monetary payouts via Stripe Connect.
 
-  The Rewards page is available on **Pro** and **Enterprise** plans. The admin
+  The Rewards page is available on **Builder**, **Studio** and **Enterprise**. The admin
   toggle at the bottom of [Settings](#settings) is always visible so you can
   prepare your configuration before flipping the SDK flag in your app.
 
@@ -24121,7 +24203,7 @@ The SSO page lets you register SAML 2.0 or OIDC identity providers for your
 organisation, so teammates can log in with your company's IdP instead of email +
 password.
 
-SSO is available on the **Pro** and **Enterprise** plans. An upgrade prompt appears if
+SSO is available on the **Enterprise** plan. An upgrade prompt appears if
 the `sso` entitlement is not active on your account.
 
 ---
@@ -24203,7 +24285,7 @@ DELETE /v1/admin/sso/:id
 
 - [Organization members](/admin/teams) — manage roles after SSO is set up
 - [Settings](/admin/settings) — other project and org configuration
-- [Billing](/admin/billing) — upgrade to Pro/Enterprise to enable SSO
+- [Billing](/admin/billing) — upgrade to Enterprise to enable SSO
 
 ---
 
@@ -24366,21 +24448,21 @@ Teams are modeled as organizations. An organization owns projects, billing, invi
 
 ## Plans
 
-Teams are available on Pro and Enterprise.
+Teams are available on Studio and Enterprise.
 
 | Plan | Teams |
 | ---
 
  | --- |
-| Free Cloud | Solo workspace |
-| Indie | Solo workspace |
-| Pro | Invite teammates and share projects |
+| Free | Solo workspace, 1 app |
+| Builder | Solo workspace, 3 apps |
+| Studio | Invite up to 5 teammates and share 10 apps |
 | Enterprise | Teams plus SSO and SOC 2 controls |
 
 The product enforces this in three places:
 
 - The admin UI hides the invite form and shows an upgrade prompt.
-- The API returns `402 feature_not_in_plan` for invitation attempts below Pro.
+- The API returns `402 feature_not_in_plan` for invitation attempts below Studio.
 - The database rejects invitation inserts with the `invitations_plan_gate` trigger.
 
 ## Roles
@@ -24459,7 +24541,7 @@ A searchable, filterable table of all users:
 
 **Filters:**
 - **Search by email** — 250ms debounce
-- **Plan filter** — All / Paid / Free Cloud / Indie / Pro / Enterprise
+- **Plan filter** — All / Paid / Free / Builder / Studio / Enterprise
 
 ---
 
@@ -24607,11 +24689,12 @@ model to point out concrete visual defects on whole pages. `--file` files at mos
 reports a run and skips one still open or filed in the last 14 days; `--dry-run` lists
 them instead.
 
-## Fresh eyes
+## First-time user test
 
-A fresh-eyes run tests the path a stranger takes: a model that has never seen your app
-tries one goal from your landing page, such as "get my first bug explained", reading only
-what is on screen. Code decides everything else:
+The **First-time user test** page (it was the Fresh eyes tab of this page) tests the path
+a stranger takes: a model that has never seen your app tries one goal from your start
+page, such as "sign up and start using the app", reading only what is on screen. Code
+decides everything else:
 
 - **Time to first value**: how long the app made the visitor wait, plus the time to read
   each new screen, until the goal check passes (a URL, visible text, a selector or an API
@@ -24623,6 +24706,16 @@ what is on screen. Code decides everything else:
   shows them again; opinions such as "confusing" only when two sessions agree. Reports
   come in as source `fresh_eyes`, at most 15 a run.
 
+**Run now** starts it from the console. The start page comes from your app (its last
+test, its live-site watch or site audit address) and the goal is plain words you can
+change. The test runs on your own computer, where its browser and AI run: if Mushi runs
+there for this app (`mushi worker install`, shown on Pipeline → Workers), it picks the
+test up within a minute and the page follows it live. If not, the page says so and shows
+the one thing to set up. Pick **Look around, file nothing** to see where a visitor gets
+stuck, or **File what stops them** to turn each problem into a bug report.
+
+From a terminal it is the same run:
+
 ```bash
 mushi ux fresh-eyes --url https://your-app.com --goal "get my first report" --dry-run
 # with a test account for your app, mirrored here and filed:
@@ -24633,13 +24726,12 @@ MUSHI_FRESH_EYES_EMAIL=… MUSHI_FRESH_EYES_PASSWORD=… \
 The run is signed out in a clean browser. It may only write to your app's own origins
 (`--app-host` adds its API); payments, "Continue with Google/GitHub/Apple", public sign-up
 forms and anything labelled delete or revoke are refused. Without an account it stops at
-your sign-up page and says so; `--dry-run` never writes at all.
+your sign-up page and says so; `--dry-run` never writes to your app.
 
-The **Fresh eyes** tab shows each run: time to first value, steps, how many sessions
-reached the goal, the trend over runs, and every step with its screenshot and wait. Once
-an app has a finished run, Home shows a **First-time setup** light with the minutes and
-steps. Runs start on your computer, where the browser and the Cursor CLI run; the tab's
-**Run now** gives the exact command.
+The page shows each test: time to first value, steps, how many visitors reached the goal,
+the trend over tests, and every step with its screenshot and wait. A waiting test can be
+cancelled; a failed one says why. Once an app has a finished test, Home shows a
+**First-time setup** light with the minutes and steps.
 
 ## Where the changes are
 

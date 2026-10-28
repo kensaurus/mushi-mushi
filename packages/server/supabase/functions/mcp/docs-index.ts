@@ -93,7 +93,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/billing",
     markdown: "admin/billing.md",
     keywords: ["admin", "billing"],
-    headings: ["Reading your usage card", "Usage breakdown", "Predictability controls", "Upgrading your plan", "Changing plan", "Managing payment and invoices", "CLI parity", "Related docs"],
+    headings: ["Reading your usage card", "Usage breakdown", "Predictability controls", "Apps on your plan", "Upgrading your plan", "Changing plan", "Managing payment and invoices", "CLI parity"],
     excerpt: "The Billing page shows your diagnosis quota, usage alerts at 50% and 80%, your projected bill, and spend caps for your Mushi plan.",
   },
   {
@@ -417,7 +417,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/pipeline",
     markdown: "admin/pipeline.md",
     keywords: ["admin", "pipeline"],
-    headings: ["Stages", "Who opens fixes", "Stuck groups", "Release trains", "Intake and deploys", "Workers", "Send to my local worker", "Create a worker key"],
+    headings: ["Stages", "Who opens fixes", "Stuck groups", "Release trains", "Intake and deploys", "Workers", "When a worker stops doing useful work", "Send to my local worker"],
     excerpt: "The console Pipeline page shows every bug from report to deploy, where it is stuck and why, with one-click fixes.",
   },
   {
@@ -633,7 +633,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/ux-runs",
     markdown: "admin/ux-runs.md",
     keywords: ["admin", "ux-runs", "runs", "ux"],
-    headings: ["Run in the cloud", "What you see", "File as bug", "Audit signed-in screens", "Fresh eyes", "Where the changes are"],
+    headings: ["Run in the cloud", "What you see", "File as bug", "Audit signed-in screens", "First-time user test", "Where the changes are"],
     excerpt: "Each screen your coding agent worked on in a mushi ux run, with its plan, every attempt, before and after screenshots, and what was kept.",
   },
   {
@@ -715,7 +715,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "cloud.md",
     keywords: ["cloud"],
     headings: ["Plans", "Sign-up flow", "Why metered on diagnoses", "Spend controls", "Self-hosting"],
-    excerpt: "Hosted Mushi Mushi — bug reports, plain-English diagnoses, and fix dispatch without running servers. Free tier includes 50 diagnoses a month.",
+    excerpt: "Hosted Mushi Mushi — bug reports, plain-English diagnoses, and fix dispatch without running servers. Free for one app with 100 diagnoses a month.",
   },
   {
     title: "Compare",
@@ -760,7 +760,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "compare/sentry-vs-mushi.md",
     keywords: ["compare", "sentry-vs-mushi", "sentry"],
     headings: ["What each one is", "Side by side", "Where they overlap, and where they do not", "Running Mushi alongside Sentry", "Pick Sentry if", "Pick Mushi if", "Frequently asked questions"],
-    excerpt: "Sentry vs Mushi Mushi in 2026 — what each captures, Sentry's free tier and Seer pricing next to Mushi's 50 free diagnoses a month, and running both.",
+    excerpt: "Sentry vs Mushi Mushi in 2026 — what each captures, Sentry's free tier and Seer pricing next to Mushi's free plan (1 app, 100 diagnoses), and running both.",
   },
   {
     title: "Concepts",
@@ -1384,13 +1384,13 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "Send every Mushi event to Zapier and on to thousands of apps such as Notion, Google Sheets and HubSpot — Catch Hook setup and event filters.",
   },
   {
-    title: "Pricing — free tier, Pro, and self-host",
+    title: "Pricing — Free, Builder, Studio and self-host",
     url: docUrl("/pricing"),
     route: "/pricing",
     markdown: "pricing.md",
-    keywords: ["pricing", "free", "tier", "pro", "self-host"],
-    headings: ["Plans", "What counts as a diagnosis", "Pricing estimator", "Example bills", "Why diagnoses, not events", "BYOK and the self-host path", "Compared to Sentry + Seer", "Frequently asked questions"],
-    excerpt: "Mushi Mushi pricing — 50 AI bug diagnoses a month free, no card. Open-source Sentry alternative you can self-host for free, or upgrade for teams.",
+    keywords: ["pricing", "free", "builder", "studio", "self-host"],
+    headings: ["Plans", "What counts as a diagnosis", "Pricing estimator", "Example bills", "Why apps, not reports?", "Why diagnoses, not events", "Your own AI key and the self-host path", "Compared to Sentry + Seer"],
+    excerpt: "Mushi Mushi pricing — free for one app and 100 AI bug diagnoses a month. Builder $29/mo for 3 apps, Studio $79/mo for 10. Free to self-host.",
   },
   {
     title: "Quickstart — fix your first bug in 60 seconds",

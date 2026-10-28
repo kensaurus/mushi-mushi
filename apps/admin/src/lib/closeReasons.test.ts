@@ -8,7 +8,7 @@ describe('close reasons', () => {
   })
 
   it('offers a false alarm only for a report Mushi filed', () => {
-    for (const source of ['site_audit', 'site_watch', 'security_advisory']) {
+    for (const source of ['site_audit', 'site_watch', 'security_advisory', 'fresh_eyes', 'code_audit']) {
       expect(closeReasonsFor(source).map((r) => r.value)).toContain('false_alarm')
     }
     for (const source of ['widget', 'sentry', 'sdk', '', null, undefined]) {

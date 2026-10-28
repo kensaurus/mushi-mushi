@@ -74,7 +74,8 @@
     "packages/cli": {
       "ignoreBinaries": [
         "supabase",
-        "icacls"
+        "icacls",
+        "cursor-agent"
       ],
       "ignoreIssues": {
         "src/recipe/engine/**": [

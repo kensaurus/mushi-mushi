@@ -45,7 +45,6 @@ import {
   resolveQaCoverageFilter,
   type QaCoverageFilter,
 } from '../lib/qaCoverageFilter'
-import { useActivationStatus, isActivationCockpitV2Enabled } from '../lib/useActivationStatus'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Drawer } from '../components/Drawer'
@@ -856,9 +855,6 @@ export function QaCoveragePage() {
   const { has, canEditProject } = useEntitlements()
   const inventoryEnabled = has('inventory_v2')
   const qaUx = useQaCoverageUx()
-  const activationEnabled = isActivationCockpitV2Enabled()
-  const activation = useActivationStatus(projectId)
-  const qaStep = activation.getStep('first_qa_story_passing')
   const { success: toastSuccess, error: toastError } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const highlightId = searchParams.get('highlight') ?? searchParams.get('story') ?? ''
@@ -913,7 +909,7 @@ export function QaCoveragePage() {
       ? `/v1/admin/inventory/${projectId}/stories/pending-review`
       : null,
     { deps: [projectId, inventoryEnabled] },
-  ) // gated by inventory_v2 — avoids 402 + UpgradeNudge on Hobby plans
+  ) // gated by inventory_v2 — avoids 402 + UpgradeNudge on Free and Builder
 
   const reloadAll = useCallback(() => {
     reload()
@@ -981,21 +977,6 @@ export function QaCoveragePage() {
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-qa-coverage">
-      {activationEnabled && qaStep && !qaStep.complete ? (
-        <Card className="p-3 border-dashed border-brand/30 bg-surface-raised">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-fg">QA setup nudge</p>
-              <p className="text-2xs text-fg-muted mt-0.5">
-                {activation.topPriority?.label
-                  ? `Activation says: ${activation.topPriority.label}. QA stories catch regressions before users do.`
-                  : 'Write a plain-English test that runs on a schedule — optional but high leverage.'}
-              </p>
-            </div>
-            <Btn to="/onboarding?tab=steps" size="sm" variant="ghost">View setup receipt →</Btn>
-          </div>
-        </Card>
-      ) : null}
       <PageHeaderBar
         title="Scheduled tests"
         icon={<IconQaCoverage />}

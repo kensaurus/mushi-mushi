@@ -5,6 +5,9 @@
  *
  * Data: GET /v1/admin/growth/funnel?weeks=8&source=all|<signup_source>
  *       (operator-only; 403 otherwise). Shape: { weeks[], by_source[], generated_at }.
+ *       The daily scorecard above it (cookieless page views, signups and
+ *       activated organizations per day and by ?src=) reads
+ *       GET /v1/admin/growth/daily (components/growth/DailyScorecard.tsx).
  * Auth: jwtAuth + entitlements `operator` flag (useEntitlements().isOperator).
  * Nav: navRegistry 'nav:growth', sectionId 'check', operatorOnly.
  *
@@ -34,6 +37,7 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
 import { LineSparkline } from '../components/charts'
 import { IconGauge } from '../components/icons'
+import { DailyScorecard } from '../components/growth/DailyScorecard'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -211,6 +215,8 @@ export function GrowthPage() {
           },
         ]}
       />
+
+      <DailyScorecard />
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="w-full max-w-xs">

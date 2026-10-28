@@ -148,17 +148,21 @@ diagnosis."** A bug comes in; Mushi produces *a diagnosis* — plain-English roo
 cause + the fix. This is the unit we meter for quota, the word in the GIF
 caption, and the verb in the docs ("Mushi diagnosed it"). One word, everywhere.
 
-### 2.2 Cloud pricing canon (June 2026)
+### 2.2 Cloud pricing canon (October 2026)
 
 These numbers are the source of truth for docs, billing UI, and quota gates. If a
 surface shows different limits, it has drifted.
 
-| Plan | Base | Included diagnoses / mo | Hard stop or overage |
-| --- | --- | --- | --- |
-| **Free Cloud** | $0 | 50 | **Hard stop** — no overage, no card |
-| **Indie** | $15 | 500 | Overage $0.03/diagnosis, default **$50** spend cap |
-| **Pro** | $49 | 2,000 | Overage $0.025/diagnosis, default **$200** spend cap |
-| **Self-host** | $0 | Unlimited | BYOK — your LLM costs only (typically under $20/mo) |
+| Plan | Base | Apps | Included diagnoses / mo | Hard stop or overage |
+| --- | --- | --- | --- | --- |
+| **Free** | $0 | 1 | 100 | **Hard stop** — no overage, no card |
+| **Builder** | $29 ($290/yr) | 3 | 1,000 | Overage $0.03/diagnosis, default **$50** spend cap |
+| **Studio** | $79 ($790/yr) | 10 | 3,000 | Overage $0.03/diagnosis, default **$200** spend cap |
+| **Enterprise** | from $499 | Unlimited | As agreed | SSO, self-host support |
+| **Self-host** | $0 | Unlimited | Unlimited | BYOK — your LLM costs only |
+
+Apps watched is the headline limit; diagnoses are the one meter (plan ids in the
+database stay `free_cloud`, `indie`, `pro`). See `docs/plan-pricing.md`.
 
 A **diagnosis** = one completed Stage-2 classification. See
 [`apps/docs/content/pricing.mdx`](./apps/docs/content/pricing.mdx) for the full

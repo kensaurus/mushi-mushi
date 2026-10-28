@@ -27,6 +27,7 @@ import { resolveStage1Model } from '../_shared/project-models.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { isEarlyRealReport, type OldestReportRow } from '../_shared/first-report.ts'
+import { isFirstActivationCandidate, type ActivationCandidateRow } from '../_shared/activation.ts'
 import { clipAtWord } from '../_shared/text-clip.ts'
 import { isFeatureRequest, reporterCategoryHint, respectReporterCategory } from '../_shared/report-category.ts'
 
@@ -433,14 +434,17 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
 
     // A project's first real report always gets the full Stage-2 diagnosis.
     // Stopping at Stage 1 here leaves a new user with no root cause and no
-    // fix on the report they judge the product by. The quota gate in
-    // classify-report stays authoritative. A failed lookup keeps the normal
-    // path, loudly: a silent fallback here would hide the feature being off.
+    // fix on the report they judge the product by. So does its first report
+    // from the deployed app (_shared/activation.ts): the first real report is
+    // usually the dev-server test, and only a diagnosed report from the live
+    // site activates the organization. The quota gate in classify-report
+    // stays authoritative. A failed lookup keeps the normal path, loudly: a
+    // silent fallback here would hide the feature being off.
     let forceStage2 = false
     if (classification.confidence > confidenceThreshold && !usedHeuristic) {
       const { data: oldest, error: oldestErr } = await db
         .from('reports')
-        .select('id, custom_metadata')
+        .select('id, custom_metadata, source, url:environment->>url')
         .eq('project_id', projectId)
         .order('created_at', { ascending: true })
         .order('id', { ascending: true })
@@ -448,11 +452,17 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       if (oldestErr) {
         log.error('First-report lookup failed; keeping the Stage 1 result', { err: oldestErr.message })
       } else {
-        forceStage2 = isEarlyRealReport((oldest ?? []) as OldestReportRow[], reportId)
+        const rows = (oldest ?? []) as Array<OldestReportRow & ActivationCandidateRow>
+        const firstReal = isEarlyRealReport(rows, reportId)
+        const firstDeployed = isFirstActivationCandidate(rows, reportId)
+        forceStage2 = firstReal || firstDeployed
         if (forceStage2) {
-          log.info('First real report: forwarding to Stage 2 despite high confidence', {
-            confidence: classification.confidence,
-          })
+          log.info(
+            firstReal
+              ? 'First real report: forwarding to Stage 2 despite high confidence'
+              : 'First report from the deployed app: forwarding to Stage 2 despite high confidence',
+            { confidence: classification.confidence },
+          )
         }
       }
     }

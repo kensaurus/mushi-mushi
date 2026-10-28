@@ -359,7 +359,7 @@ export function ContentQualityPage() {
               needle
                 ? 'No content key on this page contains that text. Clear the search or change page.'
                 : status === 'open'
-                ? 'No open issues. The bridge job syncs every 15 minutes — check back soon, or check that the source project is running.'
+                ? 'No open issues. Mushi looks for new ones every 15 minutes.'
                 : `No issues with status "${status}".`
             }
             action={

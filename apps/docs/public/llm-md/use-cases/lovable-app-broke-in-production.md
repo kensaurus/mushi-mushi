@@ -86,7 +86,7 @@ it:
 npx mushi-mushi
 ```
 
-Free Cloud is 50 diagnoses a month with no card; self-hosting is free. Other
+Free is one app and 100 diagnoses a month with no card; self-hosting is free. Other
 tools that solve parts of this are compared on
 [Sentry alternatives for solo founders](/compare/sentry-alternatives-for-solo-founders).
 

@@ -152,6 +152,8 @@ export interface ReviewRow {
   queued_at?: string | null
   /** The commit the verdict is about. */
   head_sha?: string | null
+  /** Why a skipped review did not run (fix-review.ts REVIEW_SKIP_REASONS). */
+  skip_reason?: string | null
 }
 
 export interface QueueRow {
@@ -255,6 +257,8 @@ export const FOLLOWUPS_SETTING = {
 }
 /** Spend-down (ADR 0028) is the server's automatic dispatcher; its on/off switch per Cursor key. */
 export const DISPATCH_SETTING = { label: 'Cursor keys and spend-down', to: '/credits#cursor-fix-bugs' }
+/** Fix reviews read a Claude key from Settings, AI keys only; the server's own key is never used for them. */
+export const CLAUDE_KEY_SETTING = { label: 'AI keys', to: '/settings?tab=byok' }
 /** Local workers (ADR 0048): their lanes, queues and runs. */
 export const WORKERS_SETTING = { label: 'Local workers', to: '/pipeline?tab=workers' }
 
@@ -651,15 +655,22 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       }, itemOf(a, askedAt, { lastError: clip(rv?.error) }))
       continue
     }
+    // Skipped for want of a key, a PR was silently treated as reviewed and no one
+    // was told: reviews stopped for hours on 2026-10-28 while the new Claude key
+    // sat only in the server secrets.
+    if (rv.status === 'skipped' && rv.skip_reason === 'no_anthropic_key') {
+      groups.add('review_no_key', { stage: 'review', tone: 'stuck', noun: PR, text: 'not reviewed: no working Claude key in Settings, AI keys', actions: ['re_review'], settings: CLAUDE_KEY_SETTING }, itemOf(a, rv.completed_at ?? rv.created_at))
+      continue
+    }
     if (rv.verdict === 'hold') {
-      groups.add('hold', { stage: 'review', tone: 'stuck', noun: PR, text: 'Opus says hold; a person decides', actions: ['re_review', 'close'] }, itemOf(a, reviewedAt))
+      groups.add('hold', { stage: 'review', tone: 'stuck', noun: PR, text: 'the review says do not merge; you decide', actions: ['re_review', 'close'] }, itemOf(a, reviewedAt))
       continue
     }
     if (rv.verdict === 'fix_first') {
       if (followupActive.has(a.id)) {
-        groups.add('fix_first_working', { stage: 'review', tone: 'moving', noun: PR, text: 'a follow-up agent works on the review findings', actions: [] }, itemOf(a, reviewedAt))
+        groups.add('fix_first_working', { stage: 'review', tone: 'moving', noun: PR, text: 'an agent is fixing what the review found', actions: [] }, itemOf(a, reviewedAt))
       } else {
-        groups.add('fix_first', { stage: 'review', tone: 'stuck', noun: PR, text: 'Opus says fix first; no follow-up agent is on it', actions: ['followup', 're_review', 'close'], settings: FOLLOWUPS_SETTING }, itemOf(a, reviewedAt))
+        groups.add('fix_first', { stage: 'review', tone: 'stuck', noun: PR, text: 'the review asked for changes; no agent is making them', actions: ['followup', 're_review', 'close'], settings: FOLLOWUPS_SETTING }, itemOf(a, reviewedAt))
       }
       continue
     }
@@ -738,7 +749,7 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
         ci_failed: { tone: 'stuck', text: 'held: CI failed', actions: ['ci_repair', 'rerun_ci', 'remove'] },
         own_ci_red: { tone: 'stuck', text: 'held: their own CI is red', actions: ['ci_repair', 'rerun_ci', 'remove'], settings: FOLLOWUPS_SETTING },
         fix_first: { tone: 'stuck', text: 'held: Opus says fix first', actions: ['followup', 're_review', 'remove'], settings: FOLLOWUPS_SETTING },
-        hold: { tone: 'stuck', text: 'held: Opus says hold', actions: ['re_review', 'remove', 'close'] },
+        hold: { tone: 'stuck', text: 'held: the review says do not merge', actions: ['re_review', 'remove', 'close'] },
       }
       const s = spec[kind] ?? { tone: 'stuck' as const, text: 'held by the merge queue', actions: ['update_branch', 'remove'] as PipelineAction[] }
       groups.add(`held_${kind in spec ? kind : 'other'}`, { stage: 'train', noun: PR, ...s }, itemOf(a, since, { lastError: clip(q.detail), failingChecks: failedChecksFromDetail(q.detail) }))
@@ -937,9 +948,9 @@ export function buildDispatchers(input: DispatcherInput): DispatcherStatus[] {
       // A local worker lane takes this app's reports: nothing is left unopened.
       problem = null
     } else if (autofixOn && agentKeys === 0) {
-      problem = `Auto-fix is on but has no agent key${keys.length ? ` (${keys.length} Cursor key${keys.length === 1 ? '' : 's'} off or spend-down off)` : ''}; ${dispatches48h} dispatches in 48h`
+      problem = `Auto-fix is on but has no Cursor key to start fixes${keys.length ? ` (${keys.length} Cursor key${keys.length === 1 ? '' : 's'} off or spend-down off)` : ''}; ${startedIn2Days(dispatches48h)}`
     } else if (autofixOn && dispatches48h === 0) {
-      problem = 'Auto-fix has an agent key but dispatched nothing in 48h'
+      problem = 'Auto-fix has a Cursor key but started no fix in the last 2 days'
     }
     return {
       projectId: p.id,
@@ -951,6 +962,10 @@ export function buildDispatchers(input: DispatcherInput): DispatcherStatus[] {
       problem,
     }
   })
+}
+
+function startedIn2Days(n: number): string {
+  return n === 0 ? 'no fix started in the last 2 days' : `${plural(n, 'fix', 'fixes')} started in the last 2 days`
 }
 
 /** The "Fix PR" stage's stuck group for apps whose auto-fix cannot or does not dispatch. */
@@ -986,7 +1001,7 @@ export function dispatcherGroup(dispatchers: DispatcherStatus[], now: Date): Pip
     id: 'autofix_no_agent',
     stage: 'pr',
     tone: 'stuck',
-    label: `${plural(bad.length, 'app')}: ${noKey ? 'auto-fix is on but has no agent key' : 'auto-fix dispatches nothing'}; ${bad.reduce((n, d) => n + d.server.dispatches48h, 0)} dispatches in 48h`,
+    label: `${plural(bad.length, 'app')}: ${noKey ? 'auto-fix is on but has no Cursor key to start fixes' : 'auto-fix starts no fixes'}; ${startedIn2Days(bad.reduce((n, d) => n + d.server.dispatches48h, 0))}`,
     count: bad.length,
     oldestAt: items[0]?.since ?? null,
     actions: [],

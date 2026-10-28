@@ -6,7 +6,9 @@
  *   The daemon (`mushi work --daemon`), with a worker:run key only:
  *     POST /v1/worker/heartbeat            register the host and its lanes, renew leases;
  *                                          answers each lane's closed settings and the host guards
- *     POST /v1/worker/claim                { laneId } by the lane's mode (P3): fix and skill take a
+ *     POST /v1/worker/claim                { laneId } a first-time user test the console queued for the
+ *                                          lane's app first, when the daemon runs them (ADR 0053
+ *                                          amendment); then by the lane's mode (P3): fix and skill take a
  *                                          report (the queue first, then ranked ones for fix);
  *                                          conflicts a merge-queue conflict (ADR 0049); audit
  *                                          one audit pass (ADR 0050)
@@ -22,6 +24,8 @@
  *     PATCH  /v1/admin/work/hosts/:id      host guards (console session, the host's owner)
  *     DELETE /v1/admin/work/hosts/:id      revoke a host and its key (console session, the owner)
  *     POST   /v1/admin/work/key            { projectIds, label? } mint a worker:run key (mcp:write)
+ *     GET    /v1/admin/work/stats, POST …/claims/:id/stop, POST …/hosts/:id/recheck: work-status.ts
+ *            (worker flags, ADR 0048 amendment 2026-10-28; the lanes answer carries `flags` too)
  *
  * Control is pull-only: the server never reaches the machine, and its answer
  * holds values from a closed set (_shared/work-lanes.ts), never a command or
@@ -41,6 +45,9 @@ import { composeFixPacket, fixPacketContextFromReport } from '../../_shared/fix-
 import { activeWorkClaims, enqueueReports, queuedForLocalLanes, QUEUE_MODES, WORK_LEASE_MS, type QueueLane } from '../../_shared/work-claims.ts'
 import { AUDIT_FINDINGS_PER_HOUR, outcomeKindRefusal, parseAuditFinding } from '../../_shared/work-modes.ts'
 import { auditFiledLastHour, fileAuditFinding } from './work-audit.ts'
+import { claimFreshEyes, endFreshEyesRun, lanesToWake, type FreshEyesClaimDeps } from './work-fresh-eyes.ts'
+import { mintSyntheticAccount } from '../../_shared/synthetic-accounts.ts'
+import { isOperatorUser } from '../../_shared/operator-gate.ts'
 import { claimConflict, endConflictClaim, type ModeLane } from '../../_shared/work-conflicts.ts'
 import {
   claimFirstFree,
@@ -60,6 +67,9 @@ import {
   type LaneConfig,
 } from '../../_shared/work-lanes.ts'
 import { callerCanAccessProject, callerProjectIds } from '../shared.ts'
+import { flagClaim, flagsFor, registerWorkStatusRoutes } from './work-status.ts'
+import { cursorLoginView, mergeCursorLoginReport, parseStoredCursorLogin, pendingCursorLogin, type CursorLoginReport } from '../../_shared/cursor-login.ts'
+import { maskEmail } from '../../_shared/work-telemetry.ts'
 
 const wlog = log.child('work-routes')
 
@@ -98,6 +108,8 @@ export interface WorkRouteDeps {
   logAudit: typeof logAudit
   /** Files a reproduced audit finding (work-modes.ts); injectable for tests. */
   fileFinding: typeof fileAuditFinding
+  /** First-time user tests (ADR 0053 amendment): who may mint test accounts, read at call time. */
+  freshEyes: () => FreshEyesClaimDeps
   now: () => Date
 }
 
@@ -112,6 +124,11 @@ export const defaultWorkRouteDeps: WorkRouteDeps = {
   claimRateLimit: (db, key, limit, windowSec) => claimTenantRateLimit(db, key, limit, windowSec),
   logAudit,
   fileFinding: fileAuditFinding,
+  freshEyes: () => ({
+    mint: (db, createdBy, now) => mintSyntheticAccount(db, createdBy, now, Deno.env.get('MUSHI_FRESH_EYES_EMAIL_DOMAIN')),
+    isOperator: isOperatorUser,
+    selfProjectId: Deno.env.get('MUSHI_SELF_PROJECT_ID'),
+  }),
   now: () => new Date(),
 }
 
@@ -151,6 +168,8 @@ interface HostRow {
   status: Record<string, unknown> | null
   guards: Record<string, unknown> | null
   revoked_at: string | null
+  /** Claim kinds beyond its lanes' modes the daemon runs (fresh_eyes). */
+  takes: string[] | null
 }
 
 interface LaneRow {
@@ -176,10 +195,12 @@ interface ClaimRow {
   lane_id: string
   host_id: string
   project_id: string
-  /** Null for conflict and audit claims (P3). */
+  /** Null for conflict, audit and fresh_eyes claims. */
   report_id: string | null
-  kind: 'fix' | 'conflict' | 'audit'
+  kind: 'fix' | 'conflict' | 'audit' | 'fresh_eyes'
   merge_queue_id: string | null
+  /** A first-time user test the console queued (fresh_eyes claims). */
+  ux_run_id: string | null
   head_after: string | null
   status: string
   from_queue: boolean
@@ -194,9 +215,9 @@ interface ClaimRow {
   detail: string | null
 }
 
-const HOST_COLUMNS = 'id, owner_user_id, api_key_id, host_id, hostname, platform, mushi_version, last_heartbeat_at, status, guards, revoked_at'
+const HOST_COLUMNS = 'id, owner_user_id, api_key_id, host_id, hostname, platform, mushi_version, last_heartbeat_at, status, guards, revoked_at, takes'
 const LANE_COLUMNS = 'id, host_id, project_id, name, model, mode, concurrency, paused, stop_at, drain, prune_own, review_model, repo, status, last_seen_at'
-const CLAIM_COLUMNS = 'id, lane_id, host_id, project_id, report_id, kind, merge_queue_id, head_after, status, from_queue, claimed_at, lease_until, finished_at, outcome, failure_kind, auto_requeued, fix_attempt_id, pr_url, detail'
+const CLAIM_COLUMNS = 'id, lane_id, host_id, project_id, report_id, kind, merge_queue_id, ux_run_id, head_after, status, from_queue, claimed_at, lease_until, finished_at, outcome, failure_kind, auto_requeued, fix_attempt_id, pr_url, detail'
 const REPORT_DETAIL_COLUMNS =
   'id, project_id, summary, description, category, severity, status, component, confidence, stage2_analysis, reproduction_steps, screenshot_url, bug_ontology_tags, created_at'
 const ATTEMPT_COLUMNS = 'id, report_id, status, agent, pr_url, pr_state, merged_at, error, created_at'
@@ -296,6 +317,8 @@ export async function expireLeases(db: Db, projectId: string, now: Date): Promis
     if (claim.kind === 'conflict') {
       const { data: lane } = await db.from('work_lanes').select('name').eq('id', claim.lane_id).maybeSingle()
       await endConflictClaim(db, claim, { outcome: 'lease_expired', failureKind: 'infra', detail: 'its lease ran out', headAfter: null }, (lane as { name?: string } | null)?.name ?? 'a lane', now)
+    } else if (claim.kind === 'fresh_eyes') {
+      await endFreshEyesRun(db, claim.ux_run_id, 'lease_expired', null, now)
     } else {
       await autoRequeue(db, claim, 'infra', 'lease_expired', now)
     }
@@ -469,6 +492,7 @@ async function heartbeat(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
     hostname: hb.host.hostname,
     platform: hb.host.platform,
     mushi_version: hb.host.version,
+    takes: hb.host.takes,
     status: hb.status,
     // Server time: a machine with a wrong clock must not look fresh or stale.
     last_heartbeat_at: now.toISOString(),
@@ -539,10 +563,53 @@ async function heartbeat(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
     renewed = ((data ?? []) as Array<{ id: string }>).map((r) => r.id)
   }
   const lost = hb.claims.filter((id) => !renewed.includes(id))
+  // Lanes whose app has a first-time user test waiting ask for work now
+  // instead of after their idle wait. Lane ids only: never a command.
+  const wake = await lanesToWake(db, lanes, hb.host.takes.includes('fresh_eyes'), now)
+  const recheckAccount = await recheckAsked(db, host.id, hb.status, now)
+  const account = await syncCursorLogin(db, host.id, hb.cursorLogin, now)
   return c.json({
     ok: true,
-    data: { hostId: host.id, heartbeatSeconds: 60, guards: hostGuardsFrom(host.guards), lanes, refused, renewed, lost },
+    // recheckAccount, cursorAccount and cursorLogin are new top-level fields: daemons that predate them ignore them (worker/protocol.ts).
+    data: { hostId: host.id, heartbeatSeconds: 60, guards: hostGuardsFrom(host.guards), lanes, refused, renewed, lost, wake, recheckAccount, ...account },
   })
+}
+
+/**
+ * The Cursor account the console set for this machine, and the sign-in it
+ * asked for (ADR 0048 amendment 2026-10-28): stores what the machine reports
+ * about that sign-in, then answers with the open request, if any. Read on its
+ * own: before migration 20261028150000_worker_cursor_account the columns are
+ * missing, and that must never fail a heartbeat.
+ */
+async function syncCursorLogin(db: Db, hostId: string, report: CursorLoginReport | null, now: Date): Promise<{ cursorAccount: string | null; cursorLogin: { requestId: string } | null }> {
+  const { data, error } = await db.from('work_hosts').select('cursor_account, cursor_login').eq('id', hostId).maybeSingle()
+  if (error || !data) return { cursorAccount: null, cursorLogin: null }
+  const row = data as { cursor_account: string | null; cursor_login: unknown }
+  const stored = parseStoredCursorLogin(row.cursor_login)
+  const merged = mergeCursorLoginReport(stored, report, now)
+  if (merged && JSON.stringify(merged) !== JSON.stringify(stored)) {
+    await db.from('work_hosts').update({ cursor_login: merged }).eq('id', hostId)
+  }
+  return { cursorAccount: row.cursor_account ?? null, cursorLogin: pendingCursorLogin(merged, now) }
+}
+
+/** How long a "Re-check the account" request stays open for a machine that has not run the check yet. */
+const RECHECK_OPEN_MS = 30 * 60_000
+
+/**
+ * True when someone asked for a new Cursor account check (POST
+ * /v1/admin/work/hosts/:id/recheck) after the machine's last one. Read on its
+ * own: before migration 20261028120000_worker_recheck the column is missing,
+ * and that must never fail a heartbeat.
+ */
+async function recheckAsked(db: Db, hostId: string, status: Record<string, unknown>, now: Date): Promise<boolean> {
+  const { data, error } = await db.from('work_hosts').select('recheck_requested_at').eq('id', hostId).maybeSingle()
+  const at = error ? null : ((data as { recheck_requested_at?: string | null } | null)?.recheck_requested_at ?? null)
+  const asked = at ? Date.parse(at) : NaN
+  if (!Number.isFinite(asked) || now.getTime() - asked > RECHECK_OPEN_MS) return false
+  const age = (status.checks as { cursor?: { ageSec?: number } } | undefined)?.cursor?.ageSec
+  return typeof age !== 'number' || now.getTime() - age * 1000 < asked
 }
 
 async function claim(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
@@ -573,6 +640,21 @@ async function claim(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   const block = laneClaimBlock(cfg, ((active ?? []) as unknown[]).length, now)
   if (block) return c.json({ ok: true, data: { claim: null, reason: block } })
   const leaseUntil = new Date(now.getTime() + WORK_LEASE_MS).toISOString()
+  // A first-time user test someone pressed Run now on goes before the lane's own work.
+  if ((host.takes ?? []).includes('fresh_eyes')) {
+    let fe
+    try {
+      fe = await claimFreshEyes(db, lane, host, now, leaseUntil, deps.freshEyes())
+    } catch (e) {
+      wlog.warn('fresh-eyes claim failed', { laneId: lane.id, err: e instanceof Error ? e.message : String(e) })
+      return err(c, 'DB_ERROR', 'Could not read the queued tests. Try again in a minute.', 503)
+    }
+    if (fe) {
+      // The answer may hold test-account passwords: never cached, shown once.
+      if (fe.target.accounts.length) c.header('Cache-Control', 'no-store')
+      return c.json({ ok: true, data: { claim: { id: fe.claimId, kind: 'fresh_eyes', laneId: lane.id, projectId: lane.project_id, leaseUntil, model: null, freshEyes: fe.target } } })
+    }
+  }
   if (cfg.mode === 'conflicts') return claimConflictMode(c, db, lane, now, leaseUntil, cfg)
   if (cfg.mode === 'audit') return claimAuditMode(c, db, lane, host, now, leaseUntil, cfg)
 
@@ -749,6 +831,10 @@ async function done(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
     await endConflictClaim(db, own, d, (laneRow as { name?: string } | null)?.name ?? 'a lane', now)
     return c.json({ ok: true, data: { requeued: false } })
   }
+  if (own.kind === 'fresh_eyes') {
+    await endFreshEyesRun(db, own.ux_run_id, d.outcome, d.detail, now)
+    return c.json({ ok: true, data: { requeued: false } })
+  }
   const requeued = d.failureKind === 'infra' ? await autoRequeue(db, own, d.failureKind, 'requeue', now) : false
   return c.json({ ok: true, data: { requeued } })
 }
@@ -807,7 +893,7 @@ async function listLanes(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   } else {
     projectIds = await deps.projectIds(c, db, userId)
   }
-  const empty = { generatedAt: now.toISOString(), hosts: [], lanes: [], projects: [] }
+  const empty = { generatedAt: now.toISOString(), hosts: [], lanes: [], projects: [], flags: [] }
   if (projectIds.length === 0) return c.json({ ok: true, data: empty })
 
   const lanes: LaneRow[] = []
@@ -827,6 +913,12 @@ async function listLanes(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   if (byId.error || mine.error) return err(c, 'DB_ERROR', 'Could not read the workers.', 500)
   const hosts = new Map<string, HostRow>()
   for (const h of [...((byId.data ?? []) as HostRow[]), ...((mine.data ?? []) as HostRow[])]) hosts.set(h.id, h)
+  // The Cursor account each machine spends (ADR 0048 amendment 2026-10-28), read on its own: missing columns read as none.
+  const accounts = new Map<string, { cursor_account: string | null; cursor_login: unknown }>()
+  if (hosts.size) {
+    const { data, error } = await db.from('work_hosts').select('id, cursor_account, cursor_login').in('id', [...hosts.keys()])
+    if (!error) for (const r of (data ?? []) as Array<{ id: string; cursor_account: string | null; cursor_login: unknown }>) accounts.set(r.id, r)
+  }
 
   const laneIds = lanes.map((l) => l.id)
   const since = new Date(now.getTime() - RECENT_DAYS * 86_400_000).toISOString()
@@ -862,15 +954,29 @@ async function listLanes(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
       return pr ? `Merge conflict on ${pr.repo}#${pr.pr_number}` : 'Merge conflict'
     }
     if (x.kind === 'audit') return 'Code-read audit pass'
+    if (x.kind === 'fresh_eyes') return 'First-time user test'
     return title(x.report_id ?? '')
   }
   const isActive = (x: ClaimRow) => x.status === 'active' && Date.parse(x.lease_until) > now.getTime()
+  const flags = await flagsFor(
+    db,
+    userId,
+    projectIds,
+    {
+      hosts: [...hosts.values()].map((h) => ({ id: h.id, hostname: h.hostname, platform: h.platform, lastHeartbeatAt: h.last_heartbeat_at, revoked: !!h.revoked_at, status: h.status ?? {} })),
+      lanes: lanes.map((l) => ({ id: l.id, hostId: l.host_id, projectId: l.project_id, name: l.name, config: laneConfigFromRow(l), status: l.status ?? {}, queued: queue.filter((q) => q.lane_id === l.id).length })),
+      claims: claims.map(flagClaim),
+    },
+    now,
+  )
 
   return c.json({
     ok: true,
     data: {
       generatedAt: now.toISOString(),
       projects: projectIds.map((id) => ({ id, name: names.get(id) ?? id.slice(0, 8) })),
+      // Worst first; the same list the sidebar badge, Home and the CLI read (work-flags.ts).
+      flags,
       hosts: [...hosts.values()].map((h) => ({
         id: h.id,
         hostname: h.hostname,
@@ -882,6 +988,10 @@ async function listLanes(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
         guards: hostGuardsFrom(h.guards),
         revoked: !!h.revoked_at,
         mine: h.owner_user_id === userId,
+        // The account in full only for the machine's owner; the sign-in link never here (GET …/cursor-login, owner only).
+        cursorAccount: accounts.get(h.id)?.cursor_account ? (h.owner_user_id === userId ? accounts.get(h.id)!.cursor_account : maskEmail(accounts.get(h.id)!.cursor_account!)) : null,
+        cursorLogin: cursorLoginView(parseStoredCursorLogin(accounts.get(h.id)?.cursor_login), now, { owner: h.owner_user_id === userId, withUrl: false }),
+        canSwitchAccount: Array.isArray((h.status ?? {}).can) && ((h.status ?? {}).can as unknown[]).includes('cursor_login'),
       })),
       lanes: lanes
         .map((l) => {
@@ -1106,4 +1216,5 @@ export function registerWorkRoutes(app: Hono<{ Variables: Variables }>, deps: Wo
   app.patch('/v1/admin/work/hosts/:id', deps.jwtAuth, (c) => patchHost(c as Ctx, deps))
   app.delete('/v1/admin/work/hosts/:id', deps.jwtAuth, (c) => deleteHost(c as Ctx, deps))
   app.post('/v1/admin/work/key', deps.adminOrApiKeyWrite, (c) => mintWorkerKey(c as Ctx, deps))
+  registerWorkStatusRoutes(app, deps)
 }

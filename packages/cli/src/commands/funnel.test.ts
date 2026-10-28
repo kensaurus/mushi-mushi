@@ -90,3 +90,24 @@ describe('mushi funnel growth', () => {
     expect(run.stderr).toContain('account-level key')
   })
 })
+
+describe('mushi funnel daily', () => {
+  it('reads the daily scorecard: page views, signups and activated per day and by source', async () => {
+    const run = await runCli(registerFunnelCommands, ['funnel', 'daily', '--days', '7'], () => okReply({
+      days: [{ day: '2026-10-28', page_views: 140, signups: 3, activated: 1 }],
+      by_src: [{ src: 'hn', page_views: 120, signups: 2, activated: 1 }],
+      window_start: '2026-10-22',
+      self_project_configured: true,
+    }))
+    expect(run.calls[0]!.path).toBe('/v1/admin/growth/daily?days=7')
+    expect(run.stdout).toContain('2026-10-28')
+    expect(run.stdout).toContain('page views 140 · signups 3 · activated 1')
+    expect(run.stdout).toContain('hn')
+  })
+
+  it('points a project-bound key at the account key', async () => {
+    const run = await runCli(registerFunnelCommands, ['funnel', 'daily'], () => errorReply(403, 'GROWTH_NEEDS_ACCOUNT_KEY', 'bound key'))
+    expect(run.exitCode).toBe(1)
+    expect(run.stderr).toContain('account-level key')
+  })
+})

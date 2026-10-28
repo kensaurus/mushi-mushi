@@ -4,7 +4,10 @@ import {
   LIFECYCLE_EMAIL_KEYS,
   buildLifecycleEmail,
   decideLifecycleEmail,
+  isTesterOnlyAccount,
+  lifecycleIdempotencyKey,
   needsUnsubscribeLink,
+  shouldReleaseClaim,
 } from '../../_shared/lifecycle-emails.ts'
 import {
   signUnsubscribeToken,
@@ -56,33 +59,34 @@ Deno.test('day 7 splits into stalled vs activated and exits on mcp_setup_done', 
   assertEquals(decide(170, { sent: new Set(['day7_stalled']) }), null)
 })
 
-Deno.test('day0 is the only email without an unsubscribe link', () => {
-  assertEquals(needsUnsubscribeLink('day0_welcome'), false)
-  for (const key of LIFECYCLE_EMAIL_KEYS.filter((k) => k !== 'day0_welcome')) {
+Deno.test('every email, the day-0 welcome included, carries an unsubscribe link', () => {
+  for (const key of LIFECYCLE_EMAIL_KEYS) {
     assertEquals(needsUnsubscribeLink(key), true)
+    assertThrows(() => buildLifecycleEmail({ key, adminUrl: 'https://x.test/admin' }))
   }
-  assertThrows(() => buildLifecycleEmail({ key: 'day2_nudge', adminUrl: 'https://x.test/admin' }))
 })
 
 Deno.test('templates carry the deep links, plain text + html, and List-Unsubscribe headers', () => {
   const admin = 'https://kensaur.us/mushi-mushi/admin'
   const unsub = 'https://api.test/v1/public/email/unsubscribe?t=abc'
 
-  const day0 = buildLifecycleEmail({ key: 'day0_welcome', adminUrl: admin })
-  assert(day0.text.includes(`${admin}/onboarding?action=test-report`))
+  const day0 = buildLifecycleEmail({ key: 'day0_welcome', adminUrl: admin, unsubscribeUrl: unsub })
+  assert(day0.text.includes(`${admin}/onboarding?tab=verify`))
   assert(day0.text.includes('npx mushi-mushi setup --ide cursor'))
   assert(day0.text.includes("import { Mushi } from '@mushi-mushi/web'"))
-  assert(day0.html.includes('href="https://kensaur.us/mushi-mushi/admin/onboarding?action=test-report"'))
-  assertEquals(day0.headers, {})
+  assert(day0.html.includes('href="https://kensaur.us/mushi-mushi/admin/onboarding?tab=verify"'))
   // Sober subject lines: no mascot, no emoji.
   assert(!/mushi-chan|🐛/i.test(day0.subject))
 
-  for (const key of ['day2_nudge', 'day7_stalled', 'day7_activated'] as const) {
+  for (const key of LIFECYCLE_EMAIL_KEYS) {
     const email = buildLifecycleEmail({ key, adminUrl: admin, unsubscribeUrl: unsub, signedUpOn: '2026-09-14' })
     assertEquals(email.headers['List-Unsubscribe'], `<${unsub}>`)
     assertEquals(email.headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click')
     assert(email.text.includes(unsub))
-    assert(email.html.includes('<a href="https://api.test/v1/public/email/unsubscribe?t=abc">'))
+    assert(email.html.includes('href="https://api.test/v1/public/email/unsubscribe?t=abc"'))
+    // The founder's words are kept, on the branded layout.
+    assert(email.html.includes('Kenji, Mushi Mushi'))
+    assert(email.html.includes('Mushi Mushi</span>'))
     assert(email.text.includes('2026-09-14'))
     assert(!/🐛|✨|🚀/.test(email.subject))
     // No tracking pixels.
@@ -121,3 +125,38 @@ async function assertThrowsAsync(fn: () => Promise<unknown>) {
   }
   assert(threw, 'expected rejection')
 }
+
+Deno.test('the copy names no retired plan and no price that can drift from the plans', () => {
+  const unsub = 'https://api.test/v1/public/email/unsubscribe?t=abc'
+  for (const key of LIFECYCLE_EMAIL_KEYS) {
+    const email = buildLifecycleEmail({ key, adminUrl: 'https://x.test/admin', unsubscribeUrl: unsub })
+    const all = `${email.subject}\n${email.text}`
+    // Plans since 2026-10-28: Free, Builder, Studio, Enterprise.
+    assert(!/\b(Indie|Pro|Hobby|Starter)\b/.test(all), `${key} names a retired plan`)
+    assert(!/\$\d/.test(all), `${key} quotes a price`)
+  }
+})
+
+Deno.test('a send is retried only when it certainly did not go out', () => {
+  // Resend 409: the same Idempotency-Key was used for another body, or the
+  // first request is still running. The email may have gone out; keep the claim.
+  assertEquals(shouldReleaseClaim({ ok: false, reason: 'http_error', error: 'Resend 409: concurrent' }), false)
+  assertEquals(shouldReleaseClaim({ ok: false, reason: 'http_error', error: 'Resend 422: invalid to' }), true)
+  assertEquals(shouldReleaseClaim({ ok: false, reason: 'no_sender', error: 'x' }), true)
+  // A timeout is ambiguous; the retry is safe because it reuses the
+  // Idempotency-Key, which Resend honours for 24 h.
+  assertEquals(shouldReleaseClaim({ ok: false, reason: 'network_error', error: 'timeout' }), true)
+  assertEquals(
+    lifecycleIdempotencyKey('7C3E2B9A-0000-4000-8000-000000000001', 'day2_nudge'),
+    'lifecycle/7c3e2b9a-0000-4000-8000-000000000001/day2_nudge',
+  )
+})
+
+Deno.test('tester-only accounts and synthetic test accounts are not recipients', () => {
+  assertEquals(isTesterOnlyAccount({ signup_track: 'tester' }, false, false), true)
+  assertEquals(isTesterOnlyAccount({ signup_intent: 'tester' }, false, false), true)
+  assertEquals(isTesterOnlyAccount({}, false, true), true)
+  // A tester who also builds an app gets the builder emails.
+  assertEquals(isTesterOnlyAccount({ signup_track: 'tester' }, true, true), false)
+  assertEquals(isTesterOnlyAccount({ signup_track: 'console' }, false, false), false)
+})

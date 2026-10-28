@@ -77,6 +77,16 @@ export interface UseEntitlementsResult {
 
 const FALLBACK: UseEntitlementsResult['has'] = () => false
 
+/**
+ * Your own AI, Firecrawl and Browserbase keys work on every plan, Free
+ * included, since 2026-10-28 (docs/plan-pricing.md). The key panels lock only
+ * when the plan answered and explicitly lacks `byok`; a failed or pending
+ * entitlements read never puts an upgrade prompt in front of a Free user.
+ */
+export function isByokLocked(e: Pick<UseEntitlementsResult, 'loading' | 'error' | 'has'>): boolean {
+  return !e.loading && !e.error && !e.has('byok')
+}
+
 export function useEntitlements(): UseEntitlementsResult {
   const { data, loading, error, reload } =
     usePageData<EntitlementResponse>('/v1/admin/entitlements')
@@ -84,8 +94,8 @@ export function useEntitlements(): UseEntitlementsResult {
   return useMemo(() => {
     if (!data) {
       return {
-        planId: 'hobby',
-        planName: 'Hobby',
+        planId: 'free_cloud',
+        planName: 'Free',
         isSuperAdmin: false,
         isOperator: false,
         hasProject: false,

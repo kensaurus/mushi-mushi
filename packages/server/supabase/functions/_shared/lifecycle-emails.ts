@@ -14,11 +14,13 @@
  *
  * "Real report" excludes metadata.source admin_test_report /
  * mushi-marketing-seed — the same predicate as first_report_received.
- * Opted-out users and operators are excluded before this policy runs.
+ * Opted-out users, operators, synthetic test accounts and tester-only accounts
+ * are excluded before this policy runs.
  *
  * Voice: docs/marketing/VOICE.md, sober register. Plain text first; the HTML
  * is the same words with links. No mascot in subject lines, no pixels.
  */
+import { renderEmailHtml, type EmailBlock, type EmailDoc } from './email-layout.ts'
 
 export const LIFECYCLE_EMAIL_KEYS = ['day0_welcome', 'day2_nudge', 'day7_stalled', 'day7_activated'] as const
 export type LifecycleEmailKey = (typeof LIFECYCLE_EMAIL_KEYS)[number]
@@ -55,16 +57,60 @@ export function decideLifecycleEmail(c: LifecycleCandidate): LifecycleEmailKey |
   return null
 }
 
-/** Day-0 is an account-service email; the rest carry List-Unsubscribe. */
-export function needsUnsubscribeLink(key: LifecycleEmailKey): boolean {
-  return key !== 'day0_welcome'
+/**
+ * Every lifecycle email carries List-Unsubscribe and a visible link, the
+ * day-0 welcome included (owner's GTM plan, 2026-10-28): it is a product
+ * nudge, not a receipt. Kept as a function so a future account-service email
+ * has one place to opt out.
+ */
+export function needsUnsubscribeLink(_key: LifecycleEmailKey): boolean {
+  return true
+}
+
+/** Resend `Idempotency-Key` for one lifecycle email to one user (Resend keeps keys 24 h). */
+export function lifecycleIdempotencyKey(userId: string, key: LifecycleEmailKey): string {
+  return `lifecycle/${userId.toLowerCase()}/${key}`
+}
+
+/** The failure half of _shared/email.ts SendEmailResult. */
+export interface LifecycleSendFailure {
+  ok: false
+  reason: string
+  error: string
+}
+
+/**
+ * Whether a failed send may give its lifecycle_email_sends claim back so a
+ * later tick retries it. Not on Resend's 409: the same Idempotency-Key was
+ * used while the first request was still running (or with another body), so
+ * the email may already be out. A timeout is retried: the retry carries the
+ * same Idempotency-Key, and Resend answers it with the first send's result
+ * instead of sending again.
+ */
+export function shouldReleaseClaim(result: LifecycleSendFailure): boolean {
+  return !(result.reason === 'http_error' && /^Resend 409\b/.test(result.error))
+}
+
+/**
+ * A Mushi Bounties tester who builds nothing gets no builder emails: the
+ * copy is about installing the SDK in their app. Same rule as the company
+ * funnel's people set (signup_track 'tester', the older signup_intent
+ * stamp, or a mushi_testers row, and no project owned).
+ */
+export function isTesterOnlyAccount(
+  meta: Record<string, unknown> | null | undefined,
+  ownsProject: boolean,
+  isMarketplaceTester: boolean,
+): boolean {
+  if (ownsProject) return false
+  return isMarketplaceTester || meta?.signup_track === 'tester' || meta?.signup_intent === 'tester'
 }
 
 export interface LifecycleEmailInput {
   key: LifecycleEmailKey
   /** Console base, e.g. https://kensaur.us/mushi-mushi/admin (no trailing slash). */
   adminUrl: string
-  /** Signed one-click link; required for every key except day0_welcome. */
+  /** Signed one-click link; required for every key. */
   unsubscribeUrl?: string | null
   /** Account creation date shown in the footer (YYYY-MM-DD). */
   signedUpOn?: string | null
@@ -85,14 +131,6 @@ const SNIPPET = [
   "Mushi.init({ projectId: '<your project id>', apiKey: '<your api key>' })",
 ].join('\n')
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
 type Block =
   | { p: string }
   | { link: string; label?: string }
@@ -111,27 +149,27 @@ function blocksToText(blocks: Block[]): string {
     .join('\n\n')
 }
 
-function blocksToHtml(blocks: Block[]): string {
-  const body = blocks
-    .map((b) => {
-      if ('p' in b) return `<p>${escapeHtml(b.p)}</p>`
-      if ('link' in b) {
-        const label = escapeHtml(b.label ?? b.link)
-        return `<p><a href="${escapeHtml(b.link)}">${label}</a></p>`
-      }
-      return `<pre style="background:#f4f4f5;padding:12px;border-radius:6px;overflow:auto">${escapeHtml(b.pre)}</pre>`
-    })
-    .join('\n')
-  return [
-    '<!doctype html>',
-    '<html><body style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#18181b;max-width:560px;margin:0 auto;padding:24px 16px">',
-    body,
-    '</body></html>',
-  ].join('\n')
+/** The branded layout (email-layout.ts): the first link is the button, the rest stay links. */
+function blocksToHtml(subject: string, blocks: Block[], footer: EmailDoc['footer']): string {
+  let buttoned = false
+  const out: EmailBlock[] = blocks.map((b) => {
+    if ('p' in b) return { kind: 'p', text: b.p }
+    if ('pre' in b) return { kind: 'pre', text: b.pre }
+    const label = b.label ?? b.link
+    if (!buttoned) {
+      buttoned = true
+      return { kind: 'button', label, url: b.link }
+    }
+    return { kind: 'link', label, url: b.link }
+  })
+  const first = blocks.find((b): b is { p: string } => 'p' in b && b.p !== 'Hi,')
+  return renderEmailHtml({ preheader: first ? first.p : subject, heading: subject, blocks: out, footer })
 }
 
 export function buildLifecycleEmail(input: LifecycleEmailInput): LifecycleEmailContent {
-  const testReportUrl = `${input.adminUrl}/onboarding?action=test-report`
+  // The Verify tab sends the test report; the console reads ?tab=, not ?action=
+  // (OnboardingPage resolveTabParam), so the old link opened the wrong tab.
+  const testReportUrl = `${input.adminUrl}/onboarding?tab=verify`
   const unsub = input.unsubscribeUrl ?? null
   if (needsUnsubscribeLink(input.key) && !unsub) {
     throw new Error(`buildLifecycleEmail: ${input.key} requires unsubscribeUrl`)
@@ -146,7 +184,7 @@ export function buildLifecycleEmail(input: LifecycleEmailInput): LifecycleEmailC
       blocks = [
         { p: 'Hi,' },
         {
-          p: 'Thanks for creating a Mushi project. The fastest way to see what it does is to send yourself a test report:',
+          p: 'Thanks for signing up for Mushi. The fastest way to see what it does is to send yourself a test report:',
         },
         { link: testReportUrl, label: 'Send a test report' },
         {
@@ -154,7 +192,7 @@ export function buildLifecycleEmail(input: LifecycleEmailInput): LifecycleEmailC
         },
         { p: 'To get real reports, drop the widget into your app:' },
         { pre: SNIPPET },
-        { p: 'Both values are in the console under Settings → API keys.' },
+        { p: 'Both values are on the same setup page, under Configure & install the SDK.' },
         { p: 'Prefer to work from your editor? Connect Cursor so every diagnosis lands next to your code:' },
         { pre: CURSOR_SETUP },
         { p: 'Reply to this email if anything is unclear. A person reads it.' },
@@ -218,6 +256,12 @@ export function buildLifecycleEmail(input: LifecycleEmailInput): LifecycleEmailC
     : [{ p: 'This is a one-time account email about your new Mushi project.' }]
 
   const all = [...blocks, ...footer]
+  const htmlFooter: EmailDoc['footer'] = unsub
+    ? [
+        `You get these few setup emails because you created a Mushi account${input.signedUpOn ? ` on ${input.signedUpOn}` : ''}.`,
+        { label: 'Unsubscribe with one click', url: unsub },
+      ]
+    : ['This is a one-time account email about your new Mushi project.']
   const headers: Record<string, string> = unsub
     ? {
         'List-Unsubscribe': `<${unsub}>`,
@@ -225,5 +269,5 @@ export function buildLifecycleEmail(input: LifecycleEmailInput): LifecycleEmailC
       }
     : {}
 
-  return { subject, text: blocksToText(all), html: blocksToHtml(all), headers }
+  return { subject, text: blocksToText(all), html: blocksToHtml(subject, blocks, htmlFooter), headers }
 }

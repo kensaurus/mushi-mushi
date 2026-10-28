@@ -22,6 +22,7 @@ import {
   workspaceSlicesAttention,
   usersNavBadge,
   integrationsNavBadge,
+  workersNavBadge,
 } from './extendedNavMeta'
 import { EMPTY_NAV_STAT_SLICES, type NavStatSlices } from './extendedNavMeta'
 
@@ -281,15 +282,13 @@ describe('fullstackAuditNavBadge', () => {
 })
 
 describe('dashboardNavBadge', () => {
-  it('surfaces integration issues', () => {
-    const badge = dashboardNavBadge({
-      openBacklog: 0,
-      fixesFailed: 0,
-      fixesInProgress: 0,
-      integrationIssues: 3,
-      topPriority: 'integrations',
-    })
-    expect(badge?.count).toBe(3)
+  it('does not repeat the counts Fixes and Integrations already show', () => {
+    expect(dashboardNavBadge({ openBacklog: 0, fixesFailed: 48, fixesInProgress: 0, integrationIssues: 3, topPriority: 'integrations' })).toBeNull()
+  })
+
+  it('shows the open backlog when that is the top priority', () => {
+    const badge = dashboardNavBadge({ openBacklog: 7, fixesFailed: 48, fixesInProgress: 0, integrationIssues: 0, topPriority: 'backlog' })
+    expect(badge?.count).toBe(7)
   })
 })
 
@@ -396,7 +395,7 @@ describe('section rollups follow the cycle', () => {
   it('counts Home under 2 · Bugs and no longer under 1 · Connect', () => {
     const slices = {
       ...EMPTY_NAV_STAT_SLICES,
-      dashboard: { openBacklog: 0, fixesFailed: 0, fixesInProgress: 0, integrationIssues: 3, topPriority: 'integrations' as const },
+      dashboard: { openBacklog: 3, fixesFailed: 0, fixesInProgress: 0, integrationIssues: 0, topPriority: 'backlog' as const },
     }
     expect(planSectionAttention(slices)?.count).toBe(3)
     expect(startSectionAttention(slices)).toBeNull()
@@ -409,5 +408,19 @@ describe('section rollups follow the cycle', () => {
     }
     expect(workspaceSlicesAttention(slices)).toMatchObject({ count: 2, tone: 'danger' })
     expect(actSectionAttention(slices)).toBeNull()
+  })
+})
+
+describe('workersNavBadge (ADR 0048 amendment 2026-10-28)', () => {
+  it('is red with a danger flag, amber otherwise, and names the worst one', () => {
+    expect(workersNavBadge(null)).toBeNull()
+    expect(workersNavBadge({ flags: 0, danger: 0, top: null })).toBeNull()
+    expect(workersNavBadge({ flags: 3, danger: 1, top: 'glot: a run has held an agent space for 4 h' })).toEqual({
+      mode: 'attention',
+      count: 3,
+      tone: 'danger',
+      label: '3 local worker problems: glot: a run has held an agent space for 4 h',
+    })
+    expect(workersNavBadge({ flags: 1, danger: 0, top: null })).toMatchObject({ tone: 'warn', label: '1 local worker problem' })
   })
 })

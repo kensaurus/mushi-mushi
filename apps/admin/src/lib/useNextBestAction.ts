@@ -111,8 +111,8 @@ export function computeNextBestAction(input: Input): PageAction | null {
         return {
           tone: 'do',
           title: `${input.redCount} ${input.redCount === 1 ? 'integration is' : 'integrations are'} failing`,
-          reason: 'Red probes block the pipeline — fix auth keys or restart the affected service.',
-          primary: { kind: 'link', to: '/health?status=red', label: 'Open failing probes' },
+          reason: 'Bugs and fixes stop moving while a connection fails. Usually a key expired: open it and reconnect.',
+          primary: { kind: 'link', to: '/health?status=red', label: 'See what is failing' },
         }
       }
       if (input.amberCount > 0) {

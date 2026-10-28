@@ -159,6 +159,78 @@ last confirmation) and each lane's stop date. With `--cursor-account <email>`
 (kept in the local worker.json, never sent), a CLI signed in as any other
 account counts as signed out, so only that account's credits are spent.
 
+Since the 2026-10-28 amendment of ADR 0048, `gh` signed out makes the machine
+wait (it used to stop the daemon at start), and a lane whose clone is not a git
+clone stays out while the others run. The Cursor check runs in the background
+after the first one, so a slow `cursor-agent status` never holds the heartbeat.
+
+## What the console shows when a worker stops working
+
+Every heartbeat also carries (ADR 0048 amendment 2026-10-28, cleaned on the
+machine in `worker/telemetry.ts` and again by the server in
+`_shared/work-telemetry.ts`):
+
+- each run in flight (`status.inflight` of the lane): claim, stage
+  (`prepare`, `agent`, `commit`, `push`, `pr`; `run` for conflict, audit and
+  test runs), seconds since it started and since the stage began, model and
+  the last 4 log lines, at most 160 characters each;
+- per machine: load and cores, why it waits, the Cursor account check and the
+  `gh` sign-in as they really answered with their age (`status.checks`), which
+  lane holds each agent space (`status.slots`) and lanes that could not start.
+
+Ages are seconds measured on the machine; no clock is compared. Log lines lose
+credentials in URLs, `token=` and `Bearer` values, anything shaped like a
+secret, e-mail addresses (masked), absolute paths (cut to their last part) and
+compiler code-frame lines that quote source.
+
+The server turns that, plus claims, local `mushi work` runs and credit expiry
+dates, into flags (`_shared/work-flags.ts`): host offline, a lane that cannot
+start, a run holding an agent space over 45 minutes (with its stage), lanes
+waiting over 15 minutes, the account check, `gh` signed out, a guard holding
+the machine over 5 minutes, load of 2 or more per core, 2+ runs failing in the
+repo's git hooks in 24 h, a `mushi work` run no worker claims, and credits idle
+for 2 hours within 7 days of expiry. `GET /v1/admin/work/lanes` returns them
+(`flags`), `GET /v1/admin/work/stats` counts them for the sidebar badge, Home
+"Needs you" and Spend credits show them, `mushi worker status` prints them
+(exit code 2 while one is danger), and the MCP tool `get_worker_status`
+returns them.
+
+Two console actions answer them:
+
+| Action | Route | Who | What the machine does |
+| --- | --- | --- | --- |
+| Stop this run | `POST /v1/admin/work/claims/:id/stop` | the app's owner or admin, or the machine's owner; audited (`fix_dispatch.cancelled`, `source: worker_stop`) | The claim ends as `stopped` and the report is free for any lane or cloud agent (it is not requeued); the next heartbeat lists the claim as lost, the daemon aborts the agent, and `mushi work` commits and pushes nothing more. A git hook already running keeps the agent space until git's own time limit (10 min, 25 min for commit and push), flagged as a stopped run still holding the space. Works with every daemon version |
+| Re-check the account | `POST /v1/admin/work/hosts/:id/recheck` | the machine's owner | `work_hosts.recheck_requested_at` (migration `20261028120000_worker_recheck.sql`); the heartbeat answers `recheckAccount: true` until the machine has checked again (at most 30 minutes). An older daemon ignores the field |
+| Switch account | `POST /v1/admin/work/hosts/:id/cursor-account` (`GET …/cursor-login` reads where it stands) | the machine's owner, from a console session; audited (`worker.cursor_account_switch`, masked account) | Sets the account its lanes may spend and asks for a sign-in (see **Switch the Cursor account** below). Needs a CLI that sends `can: ["cursor_login"]`; an older one is told to update |
+
+## Switch the Cursor account
+
+On the **Workers** tab, the machine's owner presses **Switch account** on
+the machine (or on a Cursor account flag), types the e-mail address of the
+Cursor account its lanes should spend, and presses **Start the switch**.
+Nobody types a key or a password, and none reaches the machine.
+
+1. Within a minute the machine stops taking new work and lets the runs in
+   progress finish (at most 30 minutes; after that it goes on and says so).
+2. It signs the Cursor CLI out and starts `cursor-agent login` (no browser
+   on the machine). The approve link appears in the dialog:
+   **Open Cursor sign-in**, approve as that account. The link works for 15
+   minutes and only its owner sees it in the console; it is never in a log
+   line, the Workers list, MCP or the audit log.
+3. The machine checks which account it now is. The dialog then says
+   **Signed in as …**, **wrong account** (another account approved: the
+   lanes take nothing until you try again), **expired** or **failed**, with
+   why, and offers **Try again**.
+
+The account you name replaces `--cursor-account` from `worker.json` on
+that machine (it rides the heartbeat answer), so the account check and the
+**Cursor account** flag compare against it. An offline machine starts the
+switch when it checks in; a request nobody finishes expires after an hour.
+A machine whose CLI predates this says **update the CLI there**
+(`npm i -g @mushi-mushi/cli@latest`, then restart the worker). Migration
+`20261028150000_worker_cursor_account.sql` adds `work_hosts.cursor_account`,
+`cursor_login_requested_at` and `cursor_login`.
+
 ## Outcomes and requeue
 
 Each run is reported back with its outcome. A failure of the machine (a clone

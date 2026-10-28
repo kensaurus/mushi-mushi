@@ -721,7 +721,7 @@ export function OrganizationSettingsPage() {
         <UpgradeBanner
           flag="teams"
           density="comfy"
-          taglineOverride="Teams ship with Pro and Enterprise. Upgrade to invite teammates, assign roles, and share every project."
+          taglineOverride="Teams ship with Studio and Enterprise. Upgrade to invite teammates, assign roles, and share every app."
         />
       )}
 
@@ -833,7 +833,7 @@ export function OrganizationSettingsPage() {
             <h2 className="text-sm font-semibold text-fg">Invite teammate</h2>
             <p className="text-xs text-fg-muted">
               {teamsEnabled
-                ? 'Owner and admin roles can invite members on Pro+ plans.'
+                ? 'Owner and admin roles can invite members on Studio and Enterprise.'
                 : 'Preview — invite teammates after upgrading.'}
             </p>
           </div>

@@ -143,7 +143,7 @@ export const SOFTWARE_APPLICATION_JSONLD = {
     '@type': 'Offer',
     price: '0',
     priceCurrency: 'USD',
-    description: '50 diagnoses/month on the free tier — no card required. Self-hosting is free.',
+    description: 'Free for one app with 100 diagnoses a month, no card required. Builder is $29/month for 3 apps, Studio $79/month for 10. Self-hosting is free.',
   },
   softwareHelp: { '@type': 'CreativeWork', url: DOCS_SITE },
   license: `${MUSHI_CANONICAL_URLS.repo}/blob/master/LICENSE`,

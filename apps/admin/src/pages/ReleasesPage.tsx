@@ -713,8 +713,13 @@ export function ReleasesPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
-            // Empty page: the snapshot below is its one first step (P3).
-            show: stats.topPriority !== 'no_releases' && stats.topPriority !== 'no_fixes',
+            // Empty page: the snapshot below is its one first step (P3). "N fixed
+            // bugs ready to ship" is the snapshot's own sentence, and its
+            // "Generate draft" was a third button beside "+ Draft" (2026-10-28).
+            show:
+              stats.topPriority !== 'no_releases' &&
+              stats.topPriority !== 'no_fixes' &&
+              !(stats.topPriority === 'ready_to_draft' && !ux.hideReleasesSnapshot),
             children: (
               <ReleasesStatusBanner
                 stats={stats}

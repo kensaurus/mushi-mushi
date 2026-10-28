@@ -111,10 +111,12 @@ export interface PlatformDef {
   setupSteps?: string[]
   /**
    * Grouping hint for the Integrations page UI.
-   *  - 'required' — infra integrations the loop needs to function (Sentry, GitHub, Langfuse)
+   *  - 'required' — your code and errors: GitHub (fixes as PRs), Sentry (optional)
    *  - 'fix-agent' — pick one AI agent to run the fix step (Cursor Cloud, Claude Code)
+   *  - 'advanced' — tracing Mushi's own AI calls in your Langfuse; never needed,
+   *    so it sits folded away (it read as one of three to connect, 2026-10-28)
    */
-  group?: 'required' | 'fix-agent'
+  group?: 'required' | 'fix-agent' | 'advanced'
   /**
    * Another integration kind that must be configured before this one works.
    * When set, the card renders a blocking banner with a link to the dependency.
@@ -232,28 +234,28 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Paste org slug + token below, then Save → Test connection.',
       'To route errors INTO Mushi: Sentry → Settings → Developer Settings → create an internal integration with the receive URL below as its webhook URL (resources: issue, event_alert), then paste its Client Secret as the webhook secret here. Existing issues: use Import below.',
     ],
-    whyItMatters: 'Sentry errors become Mushi reports: an alert firing lands in your queue with plain-English triage and a dispatchable fix, deduped per Sentry issue, and the loop closes both ways — Mushi fix → Sentry resolve, Sentry resolve → Mushi resolved. Seer analysis and event context enrich classification.',
+    whyItMatters: 'Optional. Errors Sentry already catches become bugs here, one per Sentry issue, each with a plain-English read and a fix ready to start. When either side marks it resolved, so does the other.',
     capabilitiesOnceConnected: [
-      'Sentry issue alerts land in the report queue as triaged, fix-ready reports (deduped per issue; regressions reopen instead of duplicating)',
-      'Auto-attach matching Sentry events (stack trace + breadcrumbs) to each report',
-      'Include Seer root-cause hints in the classifier prompt',
-      'Mirror Sentry user-feedback submissions into the report queue',
-      'Two-way resolve: merging a Mushi fix resolves the Sentry issue, and resolving in Sentry resolves the linked report',
+      'Each Sentry alert becomes one bug here, sorted and ready to fix; a regression reopens it instead of adding a copy',
+      'Each bug gets the matching Sentry stack trace and breadcrumbs',
+      "Sentry's own root-cause hints (Seer) help sort the bug",
+      'Sentry user feedback becomes bugs here too',
+      'Merging a Mushi fix resolves the Sentry issue, and resolving it in Sentry closes the bug here',
     ],
     webhookPath: '/v1/webhooks/sentry?projectId={projectId}',
     fields: [
-      { name: 'sentry_org_slug', label: 'Org slug', placeholder: 'my-company', help: 'The segment after sentry.io/organizations/ in your Sentry URL.', required: true, helpId: 'integrations.sentry.org_slug', validator: 'slug' },
-      { name: 'sentry_project_slug', label: 'Project slug', placeholder: 'web-app', help: 'Optional — narrows event search to one project (faster enrichment).', helpId: 'integrations.sentry.project_slug', validator: 'slug' },
-      { name: 'sentry_extra_project_slugs', label: 'More Sentry projects', placeholder: 'api, worker', help: 'Optional — other Sentry projects this app reports to (say a backend), comma-separated, up to 10. Import can pull from any of them.', validator: 'sentrySlugList', list: true },
+      { name: 'sentry_org_slug', label: 'Org slug', placeholder: 'e.g. my-company', help: 'The segment after sentry.io/organizations/ in your Sentry URL.', required: true, helpId: 'integrations.sentry.org_slug', validator: 'slug' },
+      { name: 'sentry_project_slug', label: 'Project slug', placeholder: 'e.g. web-app', help: 'Optional — narrows event search to one project (faster enrichment).', helpId: 'integrations.sentry.project_slug', validator: 'slug' },
+      { name: 'sentry_extra_project_slugs', label: 'More Sentry projects', placeholder: 'e.g. api, worker', help: 'Optional — other Sentry projects this app reports to (say a backend), comma-separated, up to 10. Import can pull from any of them.', validator: 'sentrySlugList', list: true },
       { name: 'sentry_auth_token_ref', label: 'Auth token', placeholder: 'sntrys_… or sntryu_…', type: 'password', help: 'Auth token with project:read + event:read (import, enrichment) and event:write (resolve on merge). Create at sentry.io/settings/account/api/auth-tokens/.', required: true, helpId: 'integrations.sentry.auth_token', validator: 'token' },
-      { name: 'sentry_dsn', label: 'DSN (optional)', placeholder: 'https://abc@o0.ingest.sentry.io/0', help: 'DSN for the SDK to send events. Only needed if you want Mushi reports forwarded as Sentry events.', helpId: 'settings.general.sentry_dsn', validator: 'sentryDsn' },
+      { name: 'sentry_dsn', label: 'DSN (optional)', placeholder: 'e.g. https://<key>@o0.ingest.sentry.io/<project-id>', help: 'DSN for the SDK to send events. Only needed if you want Mushi reports forwarded as Sentry events.', helpId: 'settings.general.sentry_dsn', validator: 'sentryDsn' },
       { name: 'sentry_webhook_secret', label: 'Webhook secret', placeholder: 'shared-secret', type: 'password', help: 'The Client Secret of the Sentry internal integration whose webhook URL is the receive URL on this card. Sentry signs every delivery with it.', helpId: 'settings.general.sentry_webhook_secret', validator: 'token' },
     ],
   },
   {
     kind: 'langfuse',
     label: 'Langfuse',
-    group: 'required',
+    group: 'advanced',
     Icon: IconLangfuse,
     color: 'text-ok',
     domain: 'langfuse.com',
@@ -267,14 +269,14 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Copy the public key (pk-lf-…) and secret key (sk-lf-…).',
       'Paste host + both keys below. US cloud host: https://us.cloud.langfuse.com',
     ],
-    whyItMatters: 'Every LLM call (Stage 1 classify, Stage 2 vision, fix-worker) emits a trace. Click any trace from a report or fix attempt to see the exact prompt + response + token cost.',
+    whyItMatters: 'Optional. Sends a trace of every AI call Mushi makes for this app (the diagnosis, the screenshot read, the fix) to your own Langfuse, with the exact prompt, answer and cost.',
     capabilitiesOnceConnected: [
       'One-click trace links on every classification, judge run, and fix attempt',
       'Per-call cost + latency surfaced in /health and /billing',
       'Replay any failing prompt against a different model from the Prompt Lab',
     ],
     fields: [
-      { name: 'langfuse_host', label: 'Host', placeholder: 'https://us.cloud.langfuse.com', type: 'url', help: 'Langfuse base URL — US cloud: https://us.cloud.langfuse.com, EU: https://cloud.langfuse.com', required: true, helpId: 'integrations.langfuse.host', validator: 'httpsUrl' },
+      { name: 'langfuse_host', label: 'Host', placeholder: 'e.g. https://us.cloud.langfuse.com', type: 'url', help: 'Langfuse base URL — US cloud: https://us.cloud.langfuse.com, EU: https://cloud.langfuse.com', required: true, helpId: 'integrations.langfuse.host', validator: 'httpsUrl' },
       { name: 'langfuse_public_key_ref', label: 'Public key', placeholder: 'pk-lf-…', type: 'password', help: 'From Langfuse → Project Settings → API Keys.', required: true, helpId: 'integrations.langfuse.public_key', validator: 'token' },
       { name: 'langfuse_secret_key_ref', label: 'Secret key', placeholder: 'sk-lf-…', type: 'password', help: 'Secret half of the API key pair — never share publicly.', required: true, helpId: 'integrations.langfuse.secret_key', validator: 'token' },
     ],
@@ -296,14 +298,14 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Paste the full repo URL (https://github.com/owner/repo) and the token below.',
       'Optional: add a webhook secret so CI check-runs sync back to Fix cards.',
     ],
-    whyItMatters: 'The fix-worker creates draft PRs against this repo. Add a webhook secret to sync CI check-runs back into the Auto-Fix Pipeline so reviewers see green/red without leaving Mushi.',
+    whyItMatters: 'Mushi opens each fix as a draft pull request on this repo. Add a webhook secret and every fix shows whether its checks passed, without leaving Mushi.',
     capabilitiesOnceConnected: [
       'Dispatch auto-fix attempts that open draft PRs on a feature branch',
       'CI check-run conclusions sync back into the Fix card (PR open / CI passing / failing)',
       'Pre-emptive code-context retrieval so the fix prompt has the surrounding lines',
     ],
     fields: [
-      { name: 'github_repo_url', label: 'Repo URL', placeholder: 'https://github.com/owner/repo', type: 'url', help: 'Full HTTPS URL to the repo Mushi should patch. SSH URLs are normalized server-side.', required: true, helpId: 'integrations.github.repo_url', validator: 'githubRepoUrl' },
+      { name: 'github_repo_url', label: 'Repo URL', placeholder: 'e.g. https://github.com/owner/repo', type: 'url', help: 'Full HTTPS URL to the repo Mushi should patch. SSH URLs are normalized server-side.', required: true, helpId: 'integrations.github.repo_url', validator: 'githubRepoUrl' },
       { name: 'github_default_branch', label: 'Default branch', placeholder: 'main', help: 'Defaults to "main" if blank. Change for repos that branch from "master" or "develop".', helpId: 'integrations.github.default_branch' },
       { name: 'github_installation_token_ref', label: 'Installation token', placeholder: 'ghs_… or ghp_…', type: 'password', help: 'GitHub App installation token (preferred) or fine-grained PAT. Needs Contents:write + Pull requests:write.', required: true, helpId: 'integrations.github.installation_token', validator: 'token' },
       { name: 'github_webhook_secret', label: 'Webhook secret', placeholder: 'shared-secret', type: 'password', help: 'HMAC secret. Set the same value in GitHub repo Settings → Webhooks (events: Check runs, Check suites).', helpId: 'integrations.github.webhook_secret', validator: 'token' },
@@ -327,7 +329,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Connect GitHub in the GitHub card first — Cursor agents need a repo URL + token.',
       'Click Save → Test connection. Then use ◆ Send to Cursor on any report.',
     ],
-    whyItMatters: 'When a critical report is classified, Mushi dispatches a Cursor Cloud Agent that opens a signed draft PR against your repo automatically. No manual triage required.',
+    whyItMatters: 'When a critical bug comes in, Mushi starts a Cursor cloud agent that writes the fix and opens a draft pull request on your repo.',
     capabilitiesOnceConnected: [
       'Auto-dispatch a Cursor agent when severity ≥ critical',
       'Cursor opens a signed draft PR — visible in the Fix card timeline',
@@ -336,7 +338,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     ],
     fields: [
       { name: 'cursor_api_key_ref', label: 'API Key', placeholder: 'crsr_…', type: 'password', help: 'Create at cursor.com/dashboard/integrations → API Keys.', required: true, helpId: 'integrations.cursor_cloud.api_key', validator: 'token' },
-      { name: 'cursor_default_model', label: 'Default model', placeholder: 'composer-2.5', help: 'Optional Cursor model id. Add settings after a ?, e.g. grok-4.7?reasoning_effort=xhigh&context=500k. Leave blank to use your Cursor account default.', helpId: 'integrations.cursor_cloud.default_model' },
+      { name: 'cursor_default_model', label: 'Default model', placeholder: 'e.g. composer-2.5', help: 'Optional Cursor model id. Add settings after a ?, e.g. grok-4.7?reasoning_effort=xhigh&context=500k. Leave blank to use your Cursor account default.', helpId: 'integrations.cursor_cloud.default_model' },
       { name: 'cursor_auto_create_pr', label: 'Auto-create PRs', placeholder: 'true', help: 'When enabled (default), Cursor automatically opens a signed draft PR when the agent finishes. Disable to review the branch first.', helpId: 'integrations.cursor_cloud.auto_create_pr' },
     ],
   },
@@ -411,9 +413,9 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
       'Two-way link: closing the Jira issue resolves the Mushi report',
     ],
     fields: [
-      { name: 'baseUrl', label: 'Base URL', placeholder: 'https://acme.atlassian.net', type: 'url', help: 'Your Atlassian Cloud or Server base URL.', required: true, helpId: 'integrations.routing.jira.base_url', validator: 'httpsUrl' },
-      { name: 'email', label: 'User email', placeholder: 'bot@acme.com', help: 'Email of the Jira user owning the API token.', required: true, helpId: 'integrations.routing.jira.email', validator: 'email' },
-      { name: 'apiToken', label: 'API token', placeholder: 'ATATT3xFf...', type: 'password', help: 'Create at id.atlassian.com → Security → API tokens.', required: true, helpId: 'integrations.routing.jira.api_token', validator: 'tokenLong' },
+      { name: 'baseUrl', label: 'Base URL', placeholder: 'e.g. https://your-team.atlassian.net', type: 'url', help: 'Your Atlassian Cloud or Server base URL.', required: true, helpId: 'integrations.routing.jira.base_url', validator: 'httpsUrl' },
+      { name: 'email', label: 'User email', placeholder: 'e.g. jira-bot@your-company.com', help: 'Email of the Jira user owning the API token.', required: true, helpId: 'integrations.routing.jira.email', validator: 'email' },
+      { name: 'apiToken', label: 'API token', placeholder: 'ATATT…', type: 'password', help: 'Create at id.atlassian.com → Security → API tokens.', required: true, helpId: 'integrations.routing.jira.api_token', validator: 'tokenLong' },
       { name: 'projectKey', label: 'Project key', placeholder: 'BUG', help: 'Short uppercase code prefixing every issue (e.g. BUG-123).', required: true, helpId: 'integrations.routing.jira.project_key', validator: 'jiraProjectKey' },
     ],
   },
@@ -439,7 +441,7 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
     ],
     fields: [
       { name: 'token', label: 'Personal access token', placeholder: 'ghp_...', type: 'password', help: 'Fine-grained PAT with Issues:write on the target repo.', required: true, helpId: 'integrations.routing.github_issues.token', validator: 'token' },
-      { name: 'owner', label: 'Owner', placeholder: 'acme', help: 'Org or user that owns the repo.', required: true, helpId: 'integrations.routing.github_issues.owner', validator: 'slug' },
+      { name: 'owner', label: 'Owner', placeholder: 'e.g. your-org', help: 'Org or user that owns the repo.', required: true, helpId: 'integrations.routing.github_issues.owner', validator: 'slug' },
       { name: 'repo', label: 'Repo', placeholder: 'public-tracker', help: 'Repository name (no owner prefix).', required: true, helpId: 'integrations.routing.github_issues.repo', validator: 'slug' },
     ],
   },

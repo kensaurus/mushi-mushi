@@ -11,6 +11,12 @@
  *          console reads it through a signed URL. Firecrawl's URL is never
  *          stored.
  *
+ *          A page that answered with an error (HTTP 4xx/5xx, or a short page
+ *          whose text is an error message such as "This page couldn't
+ *          load") is refused: the last good picture stays and the reason is
+ *          recorded. On 2026-10-28 Mushi's own card showed a captured error
+ *          screen as if it were the app.
+ *
  *          One capture per app at a time: `claimCapture` is a conditional
  *          update on `last_attempt_at`, so two tabs (or a Refresh and a view)
  *          cannot both bill the key.
@@ -87,6 +93,25 @@ async function readCapped(res: Response, max: number): Promise<Uint8Array> {
   return out
 }
 
+/** Error-page wording seen from frameworks, hosts and browsers. */
+const ERROR_PAGE_TEXT = /this page couldn['’]t load|application error: a (client|server)-side exception|internal server error|bad gateway|service (temporarily )?unavailable|gateway time-?out|this site can['’]t be reached|an error occurred while loading|unexpected application error/i
+
+/**
+ * Why a scraped page is an error screen rather than the app, or null. Long
+ * pages that merely mention an error (docs, FAQs) are not refused: only a
+ * page whose whole text is short and carries an error message. Also used by
+ * the free Production Check (`_shared/production-check.ts`).
+ */
+export function errorPageReason(statusCode: unknown, markdown: unknown): string | null {
+  if (typeof statusCode === 'number' && statusCode >= 400) return `The page answered ${statusCode}.`
+  const text = typeof markdown === 'string' ? markdown.trim() : ''
+  if (text.length > 0 && text.length < 600) {
+    const hit = text.match(ERROR_PAGE_TEXT)
+    if (hit) return `The page showed an error ("${hit[0]}").`
+  }
+  return null
+}
+
 export interface CaptureDeps {
   fetchImpl?: typeof fetch
   now?: () => Date
@@ -111,7 +136,7 @@ export async function captureThumbnail(
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify({
         url: pageUrl,
-        formats: [{ type: 'screenshot', fullPage: false, quality: 70, viewport: { width: 1280, height: 800 } }],
+        formats: [{ type: 'screenshot', fullPage: false, quality: 70, viewport: { width: 1280, height: 800 } }, 'markdown'],
         onlyMainContent: false,
         timeout: 30_000,
       }),
@@ -120,7 +145,9 @@ export async function captureThumbnail(
     if (res.status === 401 || res.status === 403) throw new ThumbnailError('FIRECRAWL_AUTH_FAILED', 'Firecrawl refused the key.')
     if (res.status === 402) throw new ThumbnailError('FIRECRAWL_NO_CREDITS', 'The Firecrawl account is out of credits.')
     if (!res.ok) throw new ThumbnailError(`FIRECRAWL_HTTP_${res.status}`, `Firecrawl answered ${res.status}.`)
-    const json = (await res.json()) as { data?: { screenshot?: unknown } }
+    const json = (await res.json()) as { data?: { screenshot?: unknown; markdown?: unknown; metadata?: { statusCode?: unknown } } }
+    const broken = errorPageReason(json.data?.metadata?.statusCode, json.data?.markdown)
+    if (broken) throw new ThumbnailError('ERROR_PAGE', `${broken} The last good picture was kept.`)
     const shot = json.data?.screenshot
     if (typeof shot !== 'string' || !/^https:\/\//i.test(shot)) throw new ThumbnailError('NO_SCREENSHOT', 'Firecrawl returned no screenshot.')
 

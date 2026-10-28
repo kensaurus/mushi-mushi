@@ -11,7 +11,7 @@
 
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const P = '1000000f-0000-4000-8000-000000000000'
@@ -105,6 +105,23 @@ function render(list: unknown, detail: unknown = null, url = '/ux-runs') {
 }
 
 describe('UxRunsPage', () => {
+  it('sends the old Fresh eyes tab to the First-time user test page, and links there', () => {
+    mocks.usePageData.mockImplementation((path: string | null) => ({ data: path?.endsWith('/ux-runs') ? { runs: [] } : null, loading: false, error: null, reload: vi.fn() }))
+    act(() =>
+      root.render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: ['/ux-runs?tab=fresh-eyes'] },
+          createElement(Routes, null, createElement(Route, { path: '/ux-runs', element: createElement(UxRunsPage) }), createElement(Route, { path: '/first-user-test', element: createElement('h2', null, 'First-time user test page') })),
+        ),
+      ),
+    )
+    expect(host.textContent).toBe('First-time user test page')
+    render({ runs: [] })
+    expect(host.querySelector('a[href="/first-user-test"]')).not.toBeNull()
+    expect(host.textContent).not.toContain('Fresh eyes')
+  })
+
   it('explains how to start a run when there is none', () => {
     render({ runs: [] })
     expect(host.textContent).toContain('Start your first run')

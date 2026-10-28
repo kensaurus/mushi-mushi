@@ -4,9 +4,10 @@
  *          "some of the pages and subpages are not showing on the sidebar").
  *
  *          - Core pages (CORE_NAV_PATHS) are always listed.
- *          - A core page with sub-pages lists them under itself while you are
- *            on it or on one of them (NAV_CHILDREN), so /qa-coverage shows
- *            Checks › Scheduled tests instead of nothing highlighted.
+ *          - A core page with sub-pages and no tab strip of its own lists them
+ *            under itself while you are on it or on one of them (NAV_CHILDREN),
+ *            so /qa-coverage shows Checks › Scheduled tests instead of nothing
+ *            highlighted.
  *          - Every other page is under "More pages", grouped by the cycle
  *            sections (ADR 0027). A Lab the user keeps in the sidebar leaves
  *            that list.
@@ -25,26 +26,15 @@ import {
   type NavSectionId,
 } from './navRegistry'
 
-/** Sub-pages listed under a core page while you are in that family. */
+/**
+ * Sub-pages listed under a core page while you are in that family. Only for
+ * pages that do not switch views with tabs of their own: Home and Team show
+ * their views as a tab strip at the top of the page, and listing them again in
+ * the sidebar repeated every tab (owner walk, 2026-10-28).
+ */
 export const NAV_CHILDREN: Readonly<Record<string, readonly string[]>> = {
-  '/dashboard': [
-    '/dashboard?view=apps',
-    '/dashboard?view=users',
-    '/dashboard?view=funnels',
-    '/dashboard?view=insights',
-    '/dashboard?view=growth',
-  ],
   '/portfolio': ['/projects'],
   '/checks': CHECK_GROUPS.flatMap((g) => g.paths),
-  '/team': [
-    '/team?view=members',
-    '/team?view=billing',
-    '/team?view=spend',
-    '/team?view=audit',
-    '/team?view=sso',
-    '/team?view=compliance',
-    '/team?view=storage',
-  ],
 }
 
 /** Pages the sidebar footer links to itself, so "More pages" leaves them out. */

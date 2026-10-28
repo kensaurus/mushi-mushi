@@ -26,6 +26,8 @@ export type AuditAction = 'report.created' | 'report.classified' | 'report.triag
   | 'ux_run.cloud_requested'
   | 'ux_run.merged'
   | 'fresh_eyes.account_created'
+  | 'fresh_eyes.queued'
+  | 'worker.cursor_account_switch'
   | 'pull_request.merged'
   | 'mcp.tool_called'
   | 'mcp.tool_failed'

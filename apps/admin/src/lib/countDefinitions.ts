@@ -53,7 +53,7 @@
  *   Ready to merge — Unit: an open fix PULL REQUEST. Not a draft, its
  *     latest Opus review says "merge" about its current commit, and its own
  *     CI passed on the code (a stopped test machine is not a pass).
- *     readyToMerge picks /fixes "Ready to merge" from the fix list; /repo
+ *     isReadyToMerge picks /fixes "Ready to merge" from the fix list; /repo
  *     "Mergeable now" applies the same rule to GitHub's live checks
  *     (OpenPullRequests openPrGroup). /pipeline's "approved and green, not
  *     queued to merge" is the part of it not in the merge queue yet.
@@ -88,14 +88,43 @@ export interface ReadyToMergeSignals {
   review_head_sha?: string | null
 }
 
-/** Ready to merge (see the glossary). A review about an older commit is stale, never "merge". */
-export function readyToMerge(fix: ReadyToMergeSignals): boolean {
+/**
+ * Ready to merge (see the glossary). A review about an older commit is stale,
+ * never "merge". `pipelineGreen` relaxes the CI condition only: the Opus
+ * verdict is still required, because /pipeline also files a PR whose review
+ * was skipped (no key) as approved and green.
+ */
+function readyToMerge(fix: ReadyToMergeSignals, pipelineGreen = false): boolean {
   if (!fix.pr_url || fix.merged_at) return false
   if ((fix.pr_state ?? 'open') !== 'open') return false
   if (fix.review_verdict !== 'merge') return false
   if (fix.review_head_sha && fix.commit_sha && fix.review_head_sha !== fix.commit_sha) return false
   if (fix.ci_infra?.infra) return false
-  return (fix.check_run_conclusion ?? '').toLowerCase() === 'success'
+  return pipelineGreen || (fix.check_run_conclusion ?? '').toLowerCase() === 'success'
+}
+
+/** The part of a /v1/admin/pipeline read "Ready to merge" needs. */
+interface PipelineGroupsRead {
+  stages: ReadonlyArray<{ groups: ReadonlyArray<{ id: string; items: ReadonlyArray<{ id: string }> }> }>
+}
+
+/**
+ * Fix attempts /pipeline files as "approved and green, not queued to merge".
+ * Its CI comes from the collected jobs; a PR whose checks passed with a few
+ * skipped reads "skipped" in check_run_conclusion, so /fixes said "Ready to
+ * merge 0" while Home and /pipeline said 6 (2026-10-28, mushi-mushi PRs 765 to 840).
+ */
+export function pipelineApprovedGreen(pipeline: PipelineGroupsRead | null): Set<string> {
+  const ids = new Set<string>()
+  for (const stage of pipeline?.stages ?? []) {
+    for (const group of stage.groups) if (group.id === 'not_queued') for (const item of group.items) ids.add(item.id)
+  }
+  return ids
+}
+
+/** Ready to merge, taking CI as green when its check summary says success or /pipeline's CI read does. */
+export function isReadyToMerge(fix: ReadyToMergeSignals & { id: string }, approvedGreen: ReadonlySet<string>): boolean {
+  return readyToMerge(fix, approvedGreen.has(fix.id))
 }
 
 /** One-line definitions, for a hint beside the number. */

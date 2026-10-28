@@ -212,13 +212,15 @@ describe('GET /v1/admin/setup-gaps', () => {
     const db = seed()
     const from = db.from.bind(db)
     db.from = ((name: string) => {
-      if (name === 'deploy_observations' || name === 'project_repos') throw new Error('connection reset')
+      if (name === 'deploy_observations') throw new Error('connection reset')
+      if (name === 'project_repos') throw Object.assign(new Error('canceling statement due to statement timeout'), { code: '57014' })
       return from(name)
     }) as never
     state.db = db
     const m = byId((await get(`/v1/admin/setup-gaps?projectId=${P1}`)).json.data.projects[0].gaps)
+    // A statement timeout reads in plain words, never as the raw Postgres text.
     expect(m.get('deploy_events')).toMatchObject({ status: 'unknown', summary: expect.stringContaining('connection reset') })
-    expect(m.get('github_access')).toMatchObject({ status: 'unknown', summary: expect.stringContaining("could not read this app's repos") })
+    expect(m.get('github_access')).toMatchObject({ status: 'unknown', summary: "Mushi could not read this app's repos (the database was too slow to answer; try again in a minute)." })
   })
 })
 

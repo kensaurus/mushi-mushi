@@ -31,7 +31,9 @@
 //   3. Deletes synthetic fresh-eyes accounts past their 24 h, with the
 //      projects and organizations they alone own (ADR 0053,
 //      _shared/fresh-eyes-cleanup.ts).
-//   4. Writes ONE audit_logs row per project per sweep with
+//   4. Deletes free Production Check reports (`production_checks`)
+//      older than 90 days (sweepProductionChecks).
+//   5. Writes ONE audit_logs row per project per sweep with
 //      { deleted_count, retention_days, plan_id, source }, so the
 //      operator UI can render "last sweep on X projects, deleted N rows".
 //
@@ -105,9 +107,11 @@ const handler = async (req: Request): Promise<Response> => {
     // Fresh-eyes test accounts past their 24 h (ADR 0053).
     const freshEyesShots = await sweepFreshEyesShots(db)
     const synthetic = await sweepSyntheticAccounts(db as unknown as CleanupDb, new Date(), (msg, ctx) => rlog.warn(msg, ctx))
+    // Free Production Check reports after 90 days.
+    const productionChecks = await sweepProductionChecks(db, new Date())
 
     await cron.finish({
-      rowsAffected: totalDeleted + voice.audio_deleted + voice.sessions_expired + traces.deleted + uxCaptures.deleted + freshEyesShots.deleted + synthetic.accounts_deleted,
+      rowsAffected: totalDeleted + voice.audio_deleted + voice.sessions_expired + traces.deleted + uxCaptures.deleted + freshEyesShots.deleted + synthetic.accounts_deleted + productionChecks.deleted,
       metadata: {
         llm_traces_deleted: traces.deleted,
         projects_swept: stats.length,
@@ -119,6 +123,7 @@ const handler = async (req: Request): Promise<Response> => {
         fresh_eyes_shots_deleted: freshEyesShots.deleted,
         synthetic_accounts_deleted: synthetic.accounts_deleted,
         synthetic_cleanup_failed: synthetic.failed,
+        production_checks_deleted: productionChecks.deleted,
       },
     })
 
@@ -134,6 +139,7 @@ const handler = async (req: Request): Promise<Response> => {
         ux_captures: uxCaptures,
         fresh_eyes_shots: freshEyesShots,
         synthetic_accounts: synthetic,
+        production_checks: productionChecks,
       },
     })
   } catch (err) {
@@ -641,6 +647,31 @@ interface FreshEyesShotRow {
  * window as the loop's; the run keeps its timeline and is marked
  * counts.shots_cleared so it is not listed again.
  */
+export const PRODUCTION_CHECK_RETENTION_DAYS = 90
+
+/** Free Production Check reports older than 90 days, oldest first, 1000 a batch. */
+export async function sweepProductionChecks(db: ReturnType<typeof getServiceClient>, now: Date): Promise<{ deleted: number }> {
+  const cutoff = new Date(now.getTime() - PRODUCTION_CHECK_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString()
+  let deleted = 0
+  for (let batch = 0; batch < 50; batch++) {
+    const { data, error } = await db.from('production_checks').select('id').lt('created_at', cutoff).order('created_at', { ascending: true }).limit(1000)
+    if (error) {
+      rlog.warn('production_checks sweep read failed', { err: error.message })
+      break
+    }
+    const ids = (data ?? []).map((r) => (r as { id: string }).id)
+    if (!ids.length) break
+    const { error: delErr } = await db.from('production_checks').delete().in('id', ids)
+    if (delErr) {
+      rlog.warn('production_checks sweep delete failed', { err: delErr.message })
+      break
+    }
+    deleted += ids.length
+    if (ids.length < 1000) break
+  }
+  return { deleted }
+}
+
 export async function sweepFreshEyesShots(db: ReturnType<typeof getServiceClient>): Promise<{ deleted: number }> {
   const stats = { deleted: 0 }
   const { data: settingsRows, error: settingsErr } = await db.from('project_settings').select('project_id, ux_capture_retention_days')

@@ -506,6 +506,9 @@ export function FeatureBoardPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
+            // With no requests the list's empty card says so; the status line
+            // said "No feature requests yet." right above it (2026-10-28).
+            show: clientStats.totalTickets > 0,
             children: (
               <FeatureBoardSnapshotStrip
                 stats={clientStats}
@@ -587,7 +590,7 @@ export function FeatureBoardPage() {
                   description="Feature requests submitted via the Feedback form will appear here for voting."
                   hints={[
                     'Users pick “Request a feature” in the widget or My feedback',
-                    'Votes are idempotent — click again to remove yours',
+                    'One vote per person; click again to take yours back',
                     'Mark shipped when the idea lands in a release',
                   ]}
                   action={

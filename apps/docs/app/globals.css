@@ -1570,6 +1570,11 @@ html:has(.landing-cinematic-hero) {
   text-underline-offset: 3px;
 }
 
+.landing-hero-note {
+  font-weight: 400;
+  color: var(--mushi-ink-muted);
+}
+
 /* "More": the topics the landing no longer carries (ADR 0052), one quiet line. */
 .landing-more {
   margin: 2.5rem 0 0;

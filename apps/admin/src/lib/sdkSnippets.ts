@@ -167,7 +167,9 @@ export function isServerFramework(fw: Framework): fw is ServerFramework {
   return (SERVER_FRAMEWORKS as readonly string[]).includes(fw)
 }
 
-const API_KEY_PLACEHOLDER = 'mushi_xxx'
+// Not "mushi_xxx": that read like a real key and was pasted as one
+// (first-time user test, 2026-10-28). This cannot pass for a key.
+const API_KEY_PLACEHOLDER = 'YOUR_SDK_KEY'
 
 function isExpoBuildTimeEnv(env: ProjectMushiEnvVars): boolean {
   return env.projectIdVar.startsWith('EXPO_PUBLIC_')

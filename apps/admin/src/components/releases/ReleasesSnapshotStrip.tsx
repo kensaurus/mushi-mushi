@@ -28,7 +28,11 @@ function releasesSentence(stats: ReleasesStats): string {
   const published = `${pluralizeWithCount(stats.publishedCount, 'release')} published`
   const drafts = stats.draftCount > 0 ? `, ${pluralizeWithCount(stats.draftCount, 'draft')} waiting` : ''
   const told = stats.creditsPending > 0 ? `; ${pluralizeWithCount(stats.creditsPending, 'reporter')} not told yet` : ''
-  return `${published}${drafts}${told}.`
+  const unshipped =
+    stats.topPriority === 'ready_to_draft' && stats.fixedReportsCount > 0
+      ? `; ${pluralizeWithCount(stats.fixedReportsCount, 'fixed bug')} since then ${stats.fixedReportsCount === 1 ? 'is' : 'are'} not in release notes yet`
+      : ''
+  return `${published}${drafts}${told}${unshipped}.`
 }
 
 export function ReleasesSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, onDraft }: Props) {
