@@ -1666,6 +1666,10 @@
 .responsive-table {
   --row-py: var(--row-py-comfy);
   position: relative;
+  /* A wide table scrolls here. min-width:0 stops the flex item from
+     growing the page to the table's min-width (page scroll at 390px). */
+  min-width: 0;
+  max-width: 100%;
 }
 .responsive-table[data-density="compact"] {
   --row-py: var(--row-py-compact);
@@ -1678,6 +1682,8 @@
 .responsive-table-scroll {
   overflow-x: auto;
   overscroll-behavior-x: contain;
+  min-width: 0;
+  max-width: 100%;
 }
 .responsive-table::before,
 .responsive-table::after {
@@ -1751,6 +1757,11 @@
 @media (hover: none), (pointer: coarse) {
   .row-kebab-reveal {
     opacity: 0.92;
+  }
+  /* Beats the `pointer-events-none` utility (same layer or later). A phone
+     has no hover, so the visible copy / open / dismiss buttons never got the tap. */
+  .row-kebab-reveal.pointer-events-none {
+    pointer-events: auto;
   }
 }
 .row-kebab-reveal {
