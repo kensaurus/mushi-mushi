@@ -67,7 +67,7 @@ export function CursorModelPicker({
           tooltip={tooltip}
           helpId={helpId}
           value={value}
-          placeholder="grok-4.7?reasoning_effort=xhigh&context=500k"
+          placeholder="e.g. grok-4.7?reasoning_effort=xhigh"
           onChange={(e) => onChange(e.target.value)}
         />
         {models.error && (
@@ -112,7 +112,7 @@ export function CursorModelPicker({
           label="Model id"
           aria-label="Model id"
           value={selection.custom}
-          placeholder="grok-4.7?reasoning_effort=xhigh&context=500k"
+          placeholder="e.g. grok-4.7?reasoning_effort=xhigh"
           onChange={(e) => onChange(e.target.value)}
         />
       )}

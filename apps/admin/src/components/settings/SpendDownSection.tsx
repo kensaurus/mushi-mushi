@@ -237,7 +237,7 @@ export function SpendDownSection({ canManageShared, keysToken }: Props) {
                       type="text"
                       value={draft.model}
                       onChange={(e) => setDraft({ ...draft, model: e.target.value })}
-                      placeholder="grok-4.7?reasoning_effort=xhigh&context=500k"
+                      placeholder="e.g. grok-4.7?reasoning_effort=xhigh"
                       tooltip="Empty uses each app's Cursor model."
                     />
                     <Input

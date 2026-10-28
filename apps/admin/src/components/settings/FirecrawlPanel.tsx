@@ -182,7 +182,7 @@ export function FirecrawlPanel() {
               className="w-full min-h-[88px] rounded-sm border border-edge bg-surface-raised px-2 py-1.5 font-mono text-sm outline-none focus:border-accent"
               value={domains}
               onChange={(e) => setDomainsDraft(e.target.value)}
-              placeholder={'github.com\nstackoverflow.com\nreact.dev'}
+              placeholder={'e.g. github.com\nstackoverflow.com\nreact.dev'}
             />
           </label>
           <SettingsChangeHint current={domains} saved={savedDomains} />

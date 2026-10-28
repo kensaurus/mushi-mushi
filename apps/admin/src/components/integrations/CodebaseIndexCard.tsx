@@ -430,7 +430,7 @@ export function CodebaseIndexCard({ projectId, canManage = true }: Props) {
           </GitHubPatDisclosure>
           <Input
             label="GitHub repo URL"
-            placeholder="https://github.com/your-org/your-repo"
+            placeholder="e.g. https://github.com/your-org/your-repo"
             value={repoUrl}
             onChange={(e) => setRepoUrl(e.currentTarget.value)}
           />

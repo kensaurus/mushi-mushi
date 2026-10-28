@@ -437,7 +437,7 @@ export function SlackIntegrationCard({
                     <div className="flex-1 min-w-0">
                       <Input
                         type="text"
-                        placeholder="C0ABC123XYZ"
+                        placeholder="e.g. C0123ABCDEF"
                         className="font-mono text-xs"
                         value={manualChannelId}
                         onChange={(e) => setManualChannelId(e.target.value)}

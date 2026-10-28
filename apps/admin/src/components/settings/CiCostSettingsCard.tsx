@@ -203,7 +203,7 @@ export function CiCostSettingsCard({ projectId }: { projectId: string | null }) 
               label="One machine per line"
               rows={3}
               value={draft.machines}
-              placeholder={'Alienware: aw-, alienware-\nNUC (15-65 W): kensaurus-local-'}
+              placeholder={'e.g. Desktop: desk-, desktop-\nMini PC (15-65 W): mini-'}
               disabled={readOnly || !data.writable}
               error={errors.machines}
               onChange={(e) => change('machines', e.target.value)}

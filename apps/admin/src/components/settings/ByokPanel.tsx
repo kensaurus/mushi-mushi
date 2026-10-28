@@ -829,7 +829,7 @@ export function ByokPanel() {
                             setNewBaseUrl(e.target.value);
                             setBaseUrlError(null);
                           }}
-                          placeholder="https://your-host.example.com/v1"
+                          placeholder="e.g. https://your-host.example.com/v1"
                           autoComplete="url"
                           error={baseUrlError ?? undefined}
                         />
