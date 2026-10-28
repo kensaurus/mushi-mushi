@@ -18,6 +18,7 @@ import { resolveRoutingSecrets } from './routing-secrets.ts'
 import { safeFetch } from './inventory-guards.ts'
 import { isCodebaseIndexFailing } from './sweep-error-classifier.ts'
 import { dereferenceMaybeVault } from './settings-secrets.ts'
+import { slackChannelUnusableCopy } from './slack.ts'
 
 // Deno global — declared only where consumed (edge functions).
 declare const Deno: { env: { get(name: string): string | undefined } }
@@ -96,6 +97,8 @@ export interface PlatformSettings {
   claude_api_key_ref?: string | null
   /** UUID of vault secret containing the per-project Slack bot token (xoxb-*). */
   slack_bot_token_ref?: string | null
+  /** Channel chat.postMessage posts to. auth.test does not prove this still exists. */
+  slack_channel_id?: string | null
   // ── Linear (vault-backed, replaces project_integrations.config for 'linear') ──
   /** Vault ref for a static Linear Personal API key (lin_api_*). */
   linear_api_key_ref?: string | null
@@ -620,6 +623,23 @@ export async function probeIntegration(
         if (data.ok) {
           status = 'ok'
           detail = `Connected to workspace "${data.team ?? '?'}" as bot ${data.bot_id ?? '?'} (${Date.now() - t0}ms)`
+          // auth.test only proves the token. A deleted, archived, or private
+          // channel the bot was never invited to still fails every post.
+          const channelId = settings.slack_channel_id?.trim()
+          if (channelId) {
+            const infoRes = await fetch(
+              `https://slack.com/api/conversations.info?channel=${encodeURIComponent(channelId)}`,
+              { headers: { Authorization: `Bearer ${botToken}` } },
+            )
+            httpStatus = infoRes.status
+            const info = await infoRes.json() as { ok: boolean; error?: string; channel?: { is_archived?: boolean } }
+            const code = !info.ok ? info.error : info.channel?.is_archived ? 'is_archived' : null
+            const copy = code ? slackChannelUnusableCopy(code, channelId) : null
+            if (copy) {
+              status = 'down'
+              detail = copy
+            }
+          }
         } else {
           status = 'down'
           detail = `Slack auth.test error: ${data.error ?? 'unknown'}`

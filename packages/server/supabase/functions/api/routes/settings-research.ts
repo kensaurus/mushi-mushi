@@ -35,6 +35,7 @@ import { SDK_CONFIG_CONSOLE_SELECT } from '../../_shared/sdk-config.ts';
 import { validateFixBranchTemplate } from '../../_shared/github-pr.ts';
 import { parseSupabaseProjectRefSetting } from '../../_shared/supabase-project-ref.ts';
 import { parseSentryDsnSetting, sentrySelfHostedHosts } from '../../_shared/sentry-dsn.ts';
+import { slackChannelUnusableCopy } from '../../_shared/slack.ts';
 import { prepareByokSecret } from '../../_shared/byok-key-rules.ts';
 import { parseByokExpiry } from '../../_shared/byok-expiry.ts';
 import {
@@ -1119,10 +1120,12 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         }),
       });
       const json = (await res.json()) as { ok: boolean; error?: string };
-      await recordChannelTest(db, project.id, 'slack', json.ok, json.error ?? null, startedAt);
+      const slackError = json.error ?? 'slack error';
+      const readable = slackChannelUnusableCopy(slackError, targetChannel) ?? slackError;
+      await recordChannelTest(db, project.id, 'slack', json.ok, json.ok ? null : readable, startedAt);
       if (!json.ok)
         return c.json(
-          { ok: false, error: { code: 'SLACK_API_ERROR', message: json.error ?? 'slack error' } },
+          { ok: false, error: { code: 'SLACK_API_ERROR', message: readable } },
           502,
         );
       return c.json({ ok: true });
@@ -1364,11 +1367,12 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           ok: false,
           error: {
             code: errCode,
-            message: isScopeError
-              ? "Your Slack app doesn't have 'channels:read' permission. Re-add to Slack with the correct scopes."
-              : isAuthError
-                ? 'Slack token is invalid or revoked. Re-add to Slack to reconnect.'
-                : `Slack API error: ${errCode}. Re-add to Slack to fix this.`,
+            message: slackChannelUnusableCopy(errCode)
+              ?? (isScopeError
+                ? "Your Slack app doesn't have 'channels:read' permission. Re-add to Slack with the correct scopes."
+                : isAuthError
+                  ? 'Slack token is invalid or revoked. Re-add to Slack to reconnect.'
+                  : `Slack API error: ${errCode}. Re-add to Slack to fix this.`),
           },
         },
         502,
@@ -1579,8 +1583,11 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           }),
         });
         const json = (await res.json()) as { ok: boolean; error?: string };
-        if (!json.ok)
-          return c.json({ ok: true, data: { ok: false, error: json.error ?? 'Slack API error' } });
+        if (!json.ok) {
+          const slackError = json.error ?? 'Slack API error';
+          const readable = slackChannelUnusableCopy(slackError, channelId) ?? slackError;
+          return c.json({ ok: true, data: { ok: false, error: readable } });
+        }
         return c.json({ ok: true, data: { ok: true } });
       }
       if (webhookUrl) {
