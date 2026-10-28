@@ -41,13 +41,34 @@ export interface ActivationReportRow {
   has_diagnosis: boolean
 }
 
-/** True when this report, once diagnosed, can activate its organization. */
-export function isActivationReport(row: ActivationReportRow): boolean {
+/** The report fields that decide eligibility before any diagnosis exists. */
+export type ActivationCandidateRow = Pick<ActivationReportRow, 'id' | 'source' | 'custom_metadata' | 'url'>
+
+/** An end-user report from a deployed app: it can activate once it is diagnosed. */
+export function isActivationCandidate(row: ActivationCandidateRow): boolean {
   if (!END_USER_REPORT_SOURCES.has(row.source ?? 'widget')) return false
   if (isNotFirstReportSource(row.custom_metadata)) return false
-  if (isLocalDevUrl(row.url)) return false
+  return !isLocalDevUrl(row.url)
+}
+
+/** True when this report, once diagnosed, can activate its organization. */
+export function isActivationReport(row: ActivationReportRow): boolean {
+  if (!isActivationCandidate(row)) return false
   if (!row.has_diagnosis || row.stage2_model === 'precomputed') return false
   return true
+}
+
+/**
+ * True when `reportId` is its project's first activation candidate in the
+ * (created_at ASC, id ASC) rows given. fast-filter sends it to Stage 2 even
+ * when Stage 1 is confident: the project's first real report is usually the
+ * dev-server test (first-report.ts already forces that one), so without this
+ * the first report from the live site could stop at Stage 1 with no
+ * diagnosis and never activate the organization. False when the report is
+ * not in the rows (more earlier rows than were read).
+ */
+export function isFirstActivationCandidate(oldestAscending: readonly ActivationCandidateRow[], reportId: string): boolean {
+  return oldestAscending.find(isActivationCandidate)?.id === reportId
 }
 
 /**

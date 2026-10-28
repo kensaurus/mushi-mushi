@@ -29,9 +29,12 @@
 --    and activated organizations (product_events 'activated' in the self
 --    project, emitted by classify-report, _shared/activation.ts), plus the
 --    same three by source. A page view's source is its `?src=` tag; a
---    signup's or activation's is the owner's signup_source, else the first
---    touch the docs site forwarded (signup_first_touch), the precedence
---    company_funnel_weekly uses, so by_src rows line up. No source = 'unknown'.
+--    signup's or activation's is the first touch the docs site forwarded
+--    (signup_first_touch, the same tag), else the self-reported
+--    signup_source. That is the reverse of company_funnel_weekly, on
+--    purpose: a visitor from ?src=x-thread who answers "X / Bluesky" must
+--    land in the x-thread row next to that post's page views, or conversion
+--    per campaign is wrong. No source = 'unknown'.
 --
 -- Service-role only. Not applied by this commit (owner review first).
 -- ============================================================================
@@ -77,7 +80,7 @@ begin
     v_ref  := '';
   end if;
 
-  insert into public.landing_page_views_daily as t (day, path, src, referrer_host, views)
+  insert into public.landing_page_views_daily (day, path, src, referrer_host, views)
   values (v_day, v_path, v_src, v_ref, 1)
   on conflict (day, path, src, referrer_host)
   do update set views = public.landing_page_views_daily.views + 1;
@@ -116,7 +119,8 @@ begin
       select user_id from public.operator_users
     ),
     -- Builder signups, as company_funnel_weekly's people CTE: operators and
-    -- tester-only accounts out; source = signup_source, else first touch.
+    -- tester-only accounts out. Source = first touch (the ?src= tag), else
+    -- signup_source: the reverse of the weekly RPC (see the header).
     people as (
       select u.id,
              (u.created_at at time zone 'utc')::date as day,
@@ -124,8 +128,8 @@ begin
       from auth.users u
       cross join lateral (
         select coalesce(
-                 nullif(nullif(u.raw_user_meta_data ->> 'signup_source', ''), 'unknown'),
                  nullif(u.raw_user_meta_data ->> 'signup_first_touch', ''),
+                 nullif(nullif(u.raw_user_meta_data ->> 'signup_source', ''), 'unknown'),
                  'unknown') as source
       ) src
       where not exists (select 1 from op where op.user_id = u.id)

@@ -138,6 +138,9 @@ describe('landing_page_views_daily (migration)', () => {
       expect(sql).toContain(`grant execute on function public.${fn} to service_role`)
     }
     expect(sql).toMatch(/on conflict \(day, path, src, referrer_host\)\s+do update set views = public\.landing_page_views_daily\.views \+ 1/)
+    // An alias on the insert target hides the table name, so the SET above
+    // would fail on the first call ("invalid reference to FROM-clause entry").
+    expect(sql).not.toMatch(/insert into public\.landing_page_views_daily as /)
   })
 
   it('caps the rows one day can add, so junk paths cannot grow the table without bound', () => {
@@ -150,7 +153,12 @@ describe('landing_page_views_daily (migration)', () => {
     expect(fn).toContain('public.operator_users')
     expect(fn).toContain("event_name = 'activated'")
     expect(fn).toContain("key = 'self_project_id'")
-    expect(fn).toContain("raw_user_meta_data ->> 'signup_first_touch'")
+    // First touch (the ?src= tag) before the self-reported answer, so a
+    // signup lands in the same row as the page views of the link it came by.
+    const touch = fn.indexOf("raw_user_meta_data ->> 'signup_first_touch'")
+    const answer = fn.indexOf("raw_user_meta_data ->> 'signup_source'")
+    expect(touch).toBeGreaterThan(-1)
+    expect(answer).toBeGreaterThan(touch)
   })
 })
 

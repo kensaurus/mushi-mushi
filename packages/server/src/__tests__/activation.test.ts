@@ -11,7 +11,9 @@ import { describe, expect, it } from 'vitest'
 import {
   activationDedupKey,
   hadEarlierActivation,
+  isActivationCandidate,
   isActivationReport,
+  isFirstActivationCandidate,
   type ActivationReportRow,
 } from '../../supabase/functions/_shared/activation.ts'
 import { MUSHI_EVENTS } from '../../supabase/functions/_shared/analytics-taxonomy.generated.ts'
@@ -68,6 +70,32 @@ describe('isActivationReport', () => {
   it('needs a real diagnosis: none, or the precomputed test fixture, does not count', () => {
     expect(isActivationReport(row({ has_diagnosis: false }))).toBe(false)
     expect(isActivationReport(row({ stage2_model: 'precomputed' }))).toBe(false)
+  })
+})
+
+describe('isFirstActivationCandidate (fast-filter forces Stage 2 for it)', () => {
+  const rows = [
+    { id: 'a', source: 'widget', custom_metadata: { source: 'admin_test_report' }, url: 'https://myapp.app/' },
+    { id: 'b', source: 'widget', custom_metadata: null, url: 'http://localhost:5173/' },
+    { id: 'c', source: 'site_watch', custom_metadata: null, url: 'https://myapp.app/' },
+    { id: 'd', source: 'widget', custom_metadata: null, url: 'https://myapp.app/pay' },
+    { id: 'e', source: 'sdk', custom_metadata: null, url: 'https://myapp.app/' },
+  ]
+
+  it('is the first end-user report from a deployed page, skipping fixtures, dev servers and Mushi-filed reports', () => {
+    expect(isFirstActivationCandidate(rows, 'd')).toBe(true)
+    expect(isFirstActivationCandidate(rows, 'e')).toBe(false)
+    expect(isFirstActivationCandidate(rows, 'b')).toBe(false)
+    expect(isFirstActivationCandidate(rows, 'c')).toBe(false)
+  })
+
+  it('is false when the report is not in the rows read (more earlier rows than the window)', () => {
+    expect(isFirstActivationCandidate(rows, 'zz')).toBe(false)
+  })
+
+  it('needs no diagnosis yet (it decides whether to get one)', () => {
+    expect(isActivationCandidate(row({ has_diagnosis: false }))).toBe(true)
+    expect(isActivationCandidate(row({ url: 'http://localhost:3000/' }))).toBe(false)
   })
 })
 
