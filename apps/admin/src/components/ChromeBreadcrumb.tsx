@@ -38,10 +38,12 @@ function breadcrumbTrail(pathname: string, search: string): Trail {
     if (!child) return { parent: null, current: parentLabel }
     return { parent: { label: parentLabel, to: parent }, current: registryLabel(child) ?? routeFallbackTitle(pathname) ?? 'Console' }
   }
-  const current = routeFallbackTitle(pathname) ?? 'Console'
-  if (CORE_NAV_PATHS.includes(pathname)) return { parent: null, current }
+  const title = routeFallbackTitle(pathname)
+  // A page the console does not know (the 404 page) read "Console › Console".
+  if (!title) return { parent: null, current: 'Console' }
+  if (CORE_NAV_PATHS.includes(pathname)) return { parent: null, current: title }
   const section = routeSection(pathname)
-  return { parent: { label: section?.title ?? 'Console', to: section ? null : '/dashboard' }, current }
+  return { parent: { label: section?.title ?? 'Console', to: section ? null : '/dashboard' }, current: title }
 }
 
 export function ChromeBreadcrumb() {

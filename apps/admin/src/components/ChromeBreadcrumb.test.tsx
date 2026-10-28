@@ -52,4 +52,8 @@ describe('ChromeBreadcrumb', () => {
   it('keeps the More pages group for pages outside the core list', async () => {
     expect(await trailAt('/graph')).toBe('Bugs›Bug clusters')
   })
+
+  it('says Console once on a page it does not know', async () => {
+    expect(await trailAt('/does-not-exist')).toBe('Console')
+  })
 })
