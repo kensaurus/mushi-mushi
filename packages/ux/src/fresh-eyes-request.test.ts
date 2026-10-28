@@ -19,7 +19,7 @@ describe('a queued run on stdin (ADR 0053 amendment)', () => {
   })
 
   it('takes test accounts only for a run that signs up', () => {
-    const acct = { email: 'fresh-eyes-abc@synthetic.kensaur.us', password: 'aB3dE6gH9jK2-9a', name: 'Fresh Eyes' }
+    const acct = { email: 'fresh-eyes-abc@synthetic.kensaur.us', password: 'test-fixture-not-a-real-password', name: 'Fresh Eyes' }
     expect(parseStdinRequest(req({ dryRun: false, accounts: [acct] })).accounts).toEqual([acct])
     expect(() => parseStdinRequest(req({ dryRun: true, accounts: [acct] }))).toThrow(/no account/)
     expect(() => parseStdinRequest(req({ dryRun: false, accounts: [{ ...acct, password: 'x' }] }))).toThrow(/malformed/)

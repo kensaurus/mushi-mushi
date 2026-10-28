@@ -204,7 +204,7 @@ describe('a first-time user test the console queued (ADR 0053 amendment)', () =>
   })
 
   it('takes test accounts only for a run that signs up, never more than its visitors', () => {
-    const acct = { email: 'fresh-eyes-abc@synthetic.kensaur.us', password: 'aB3dE6gH9jK2-9a', name: 'Fresh Eyes abc' }
+    const acct = { email: 'fresh-eyes-abc@synthetic.kensaur.us', password: 'test-fixture-not-a-real-password', name: 'Fresh Eyes abc' }
     const ok = parseClaim(test({ dryRun: false, sessions: 1, accounts: [acct] }))
     expect(ok.ok && ok.value.kind === 'fresh_eyes' && ok.value.freshEyes.accounts).toEqual([acct])
     expect(parseClaim(test({ dryRun: true, accounts: [acct] })).ok).toBe(false)

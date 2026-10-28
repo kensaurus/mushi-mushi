@@ -115,3 +115,16 @@ a6079623f9b4b675b1a4489b183d23a516ef3d55:packages/server/src/__tests__/byok-univ
 # working tree; these fingerprints pin the release-4 commits that held them.
 977c6a2e52486e6c588f1faa59eec4a968d56cc7:packages/ux/src/fresh-eyes.browser.test.ts:generic-api-key:26
 339e94c055aca4ce81847394af834ecc998c2fb3:packages/ux/src/fresh-eyes.test.ts:generic-api-key:33
+
+# fresh-eyes / local-worker test fixture (2026-10-28): the hand-typed
+# placeholder password "aB3dE6gH9jK2-9a" for a synthetic test account in unit
+# tests of the worker claim protocol and the fresh-eyes request parser. It never
+# belonged to any account (synthetic accounts get server-minted passwords that
+# are never stored or committed). The fixture is now
+# `test-fixture-not-a-real-password`; these entries cover the two commits on
+# the release branch that still carry the old placeholder in history.
+6321c26ccb26f6b61b907d7fef97a928a4a81d80:packages/cli/src/worker/daemon.test.ts:generic-api-key:230
+6321c26ccb26f6b61b907d7fef97a928a4a81d80:packages/cli/src/worker/fresh-eyes.test.ts:generic-api-key:5
+6321c26ccb26f6b61b907d7fef97a928a4a81d80:packages/cli/src/worker/protocol.test.ts:generic-api-key:207
+6321c26ccb26f6b61b907d7fef97a928a4a81d80:packages/ux/src/fresh-eyes-request.test.ts:generic-api-key:22
+c58e89f903931ec25561b40b46d5bc2bcca16300:packages/ux/src/fresh-eyes-live-run.test.ts:generic-api-key:142

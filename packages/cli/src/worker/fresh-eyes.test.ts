@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { freshEyesEnv, freshEyesOutcome, freshEyesStdin, runFreshEyesClaim } from './fresh-eyes.js'
 import type { FreshEyesTarget } from './protocol.js'
 
-const PASSWORD = 'aB3dE6gH9jK2-9a'
+const PASSWORD = 'test-fixture-not-a-real-password'
 const target = (over: Partial<FreshEyesTarget> = {}): FreshEyesTarget => ({
   runId: '20261028-090000-ab12',
   url: 'https://glot.it/',

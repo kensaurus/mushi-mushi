@@ -228,7 +228,7 @@ describe('the Cursor account a worker may spend', () => {
 })
 
 describe('a first-time user test the console queued (ADR 0053 amendment)', () => {
-  const PASSWORD = 'aB3dE6gH9jK2-9a'
+  const PASSWORD = 'test-fixture-not-a-real-password'
   const testClaim = ok({
     claim: {
       id: CLAIM,

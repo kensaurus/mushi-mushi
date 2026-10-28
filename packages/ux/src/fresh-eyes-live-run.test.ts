@@ -139,7 +139,7 @@ describe('runs with an account', () => {
   })
 
   it("keep the minted account's id readable in the record; the password and email are hidden", () => {
-    const id = { email: 'fresh-eyes-abc@synthetic.kensaur.us', password: 'aB3dE6gH9jK2-9a', userId: '7be1a8b0-3380-4981-9a42-2b80d8a4edaf' }
+    const id = { email: 'fresh-eyes-abc@synthetic.kensaur.us', password: 'test-fixture-not-a-real-password', userId: '7be1a8b0-3380-4981-9a42-2b80d8a4edaf' }
     const out = redact({ log: `signed in as ${id.email} with ${id.password}`, account: id.userId }, id)
     expect(out).toEqual({ log: 'signed in as {{email}} with {{password}}', account: '7be1a8b0-3380-4981-9a42-2b80d8a4edaf' })
   })
