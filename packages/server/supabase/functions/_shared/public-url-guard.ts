@@ -169,19 +169,37 @@ export function runtimeResolver(): DnsResolver | null {
   return typeof deno?.resolveDns === 'function' ? (h, t) => deno.resolveDns!(h, t) : null
 }
 
+function isNotFound(reason: unknown): boolean {
+  const name = (reason as { name?: string } | null)?.name
+  return name === 'NotFound' || /NXDOMAIN|no data|not found/i.test(String((reason as Error | null)?.message ?? ''))
+}
+
 /**
- * Whether every address the hostname resolves to is public. A name with no
- * A or AAAA record at all is refused (the site cannot be reached). Without a
- * resolver the hostname rules alone decide.
+ * Whether every address the hostname resolves to is public. A name DNS says
+ * does not exist is refused. When the resolver itself fails (not allowed, not
+ * supported, timed out) the hostname rules alone decide and `onResolverError`
+ * hears about it, so a runtime without working DNS does not refuse every
+ * site. Without a resolver the hostname rules alone decide.
  */
-export async function resolvesPublic(hostname: string, resolver: DnsResolver | null): Promise<boolean> {
+export async function resolvesPublic(
+  hostname: string,
+  resolver: DnsResolver | null,
+  onResolverError?: (err: unknown) => void,
+): Promise<boolean> {
   if (!isPublicHostname(hostname)) return false
   const host = hostname.replace(/\.+$/, '')
   if (!resolver || host.startsWith('[') || parseIpv4(host)) return true
   const answers = await Promise.allSettled([resolver(host, 'A'), resolver(host, 'AAAA')])
   const addresses = answers.flatMap((a) => (a.status === 'fulfilled' ? a.value : []))
-  if (addresses.length === 0) return false
-  return addresses.every(isPublicAddress)
+  if (addresses.length > 0) return addresses.every(isPublicAddress)
+  const failures = answers.flatMap((a) => (a.status === 'rejected' ? [a.reason] : []))
+  if (failures.length > 0 && failures.every(isNotFound)) return false
+  const other = failures.find((f) => !isNotFound(f))
+  if (other !== undefined) {
+    onResolverError?.(other)
+    return true
+  }
+  return false // both lookups answered with no records
 }
 
 export interface GuardedFetchOptions {

@@ -97,11 +97,22 @@ describe('isPublicAddress (DNS answers)', () => {
 })
 
 describe('resolvesPublic', () => {
+  const notFound = () => Object.assign(new Error('no record found'), { name: 'NotFound' })
   const dns = (answers: Record<string, string[]>): DnsResolver => async (host, type) => {
     const v = answers[`${host}/${type}`]
-    if (!v) throw new Error('NotFound')
+    if (!v) throw notFound()
     return v
   }
+
+  it('a resolver that fails (not NotFound) falls back to the hostname rules and says so', async () => {
+    const broken: DnsResolver = async () => {
+      throw Object.assign(new Error('Requires net access'), { name: 'PermissionDenied' })
+    }
+    const seen: unknown[] = []
+    expect(await resolvesPublic('acme.app', broken, (e) => seen.push(e))).toBe(true)
+    expect(seen).toHaveLength(1)
+    expect(await resolvesPublic('db.internal', broken)).toBe(false)
+  })
 
   it('refuses a public-looking name that resolves to a private address', async () => {
     expect(await resolvesPublic('rebind.example.com', dns({ 'rebind.example.com/A': ['10.0.0.7'] }))).toBe(false)
@@ -143,7 +154,7 @@ describe('guardedFetch', () => {
         : new Response('internal', { status: 200 }),
     )
     const resolver: DnsResolver = async (host, type) => {
-      if (type === 'AAAA') throw new Error('NotFound')
+      if (type === 'AAAA') throw Object.assign(new Error('no record found'), { name: 'NotFound' })
       return host === 'b.example.com' ? ['192.168.0.10'] : ['93.184.216.34']
     }
     await expect(guardedFetch('https://a.example.com/', { fetchImpl: fetchImpl as unknown as typeof fetch, resolver })).rejects.toBeInstanceOf(BlockedUrlError)

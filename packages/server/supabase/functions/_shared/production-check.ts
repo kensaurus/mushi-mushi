@@ -59,6 +59,8 @@ export interface CheckSummary {
   linksChecked: number
   scriptsChecked: number
   scriptsWithSourceMaps: number
+  /** Firecrawl rendered the home page (false: the report rests on the plain fetch). */
+  rendered: boolean
   /** Parts that did not finish inside the deadline or could not run. */
   incomplete: string[]
 }
@@ -529,7 +531,7 @@ export async function runProductionCheck(startUrl: string, deps: CheckDeps): Pro
       scrapePage(start.href, deps, within(deadline, 15_000), 12_000),
     ])
 
-    if (home.status === 'rejected' && /FIRECRAWL_(HTTP_40[13]|NO_CREDITS)/.test(String((home.reason as Error)?.message))) {
+    if (home.status === 'rejected' && /FIRECRAWL_(HTTP_40[13]|HTTP_429|NO_CREDITS)/.test(String((home.reason as Error)?.message))) {
       throw home.reason
     }
 
@@ -539,7 +541,7 @@ export async function runProductionCheck(startUrl: string, deps: CheckDeps): Pro
       const name = (direct.reason as { name?: string })?.name
       const notTheSite = name === 'TimeoutError' || name === 'AbortError' || direct.reason instanceof BlockedUrlError
       https = notTheSite ? 'unknown' : 'no_https'
-      if (notTheSite) incomplete.push('home page fetch')
+      if (notTheSite) incomplete.push('the plain fetch of the home page')
     } else if (httpProbe.status === 'fulfilled') {
       await httpProbe.value.response.body?.cancel().catch(() => {})
       https = httpProbe.value.finalUrl.startsWith('https:') ? 'ok' : 'not_redirected'
@@ -570,7 +572,7 @@ export async function runProductionCheck(startUrl: string, deps: CheckDeps): Pro
       })
       homeLinks = home.value.links
     } else {
-      incomplete.push('home page render')
+      incomplete.push('the rendered home page')
       if (direct.status === 'fulfilled' && directMeta) {
         pages.push({ url: direct.value.finalUrl, statusCode: direct.value.response.status, ...directMeta, markdown: '', links: [] })
       }
@@ -614,10 +616,10 @@ export async function runProductionCheck(startUrl: string, deps: CheckDeps): Pro
 
     subResults.forEach((r, i) => {
       if (r.status === 'fulfilled') pages.push(r.value)
-      else incomplete.push(`page ${pathOf(subpages[i].href)}`)
+      else incomplete.push(`the page ${pathOf(subpages[i].href)}`)
     })
     const withMaps = scriptResults.flatMap((r) => (r.status === 'fulfilled' && r.value ? [r.value] : []))
-    if (scriptResults.some((r) => r.status === 'rejected')) incomplete.push('script check')
+    if (scriptResults.some((r) => r.status === 'rejected')) incomplete.push('the script check')
 
     const findings = [
       ...pageFindings(pages),
@@ -635,6 +637,7 @@ export async function runProductionCheck(startUrl: string, deps: CheckDeps): Pro
         linksChecked: linkResults.length,
         scriptsChecked: scripts.length,
         scriptsWithSourceMaps: withMaps.length,
+        rendered: home.status === 'fulfilled',
         incomplete,
       },
     }

@@ -88,7 +88,7 @@ function cleanSrc(v: unknown): string | null {
   return typeof v === 'string' && /^[A-Za-z0-9._:-]{1,64}$/.test(v) ? v : null
 }
 
-export function buildReportEmail(host: string, id: string, result: CheckResult): { subject: string; text: string } {
+export function buildReportEmail(host: string, id: string, result: Pick<CheckResult, 'findings'>): { subject: string; text: string } {
   const c = severityCounts(result.findings)
   const line = result.findings.length
     ? `Mushi checked ${host}: ${c.high} to fix first, ${c.medium} to fix soon, ${c.low} nice to fix.`
@@ -113,6 +113,20 @@ export interface RunDeps {
   send?: typeof sendTransactionalEmail
   emit?: typeof emitProductEvent
   selfProjectId: string
+}
+
+/** One report email; true only when the provider accepted it. */
+async function sendReportEmail(
+  to: string,
+  url: string,
+  id: string,
+  result: Pick<CheckResult, 'findings'>,
+  send: typeof sendTransactionalEmail = sendTransactionalEmail,
+): Promise<boolean> {
+  const mail = buildReportEmail(new URL(url).host, id, result)
+  const sent = await send({ to, subject: mail.subject, text: mail.text, tags: { kind: 'production_check' } })
+  if (!sent.ok) plog.warn('report email not sent', { checkId: id, reason: sent.reason })
+  return sent.ok
 }
 
 /** Run one check and store its outcome; then the email, then the event. */
@@ -145,15 +159,13 @@ export async function runAndStore(
     .eq('id', row.id)
   if (error) plog.warn('could not store the check', { checkId: row.id, err: error.message })
 
+  let emailed = false
   if (result && row.email) {
-    const host = new URL(row.url).host
-    const mail = buildReportEmail(host, row.id, result)
-    const sent = await (deps.send ?? sendTransactionalEmail)({ to: row.email, subject: mail.subject, text: mail.text, tags: { kind: 'production_check' } })
-    if (!sent.ok) plog.warn('report email not sent', { checkId: row.id, reason: sent.reason })
+    emailed = await sendReportEmail(row.email, row.url, row.id, result, deps.send)
   }
   if (row.email) {
     // One email only: the address is not kept after the attempt.
-    await db.from('production_checks').update({ email: null, email_sent_at: result ? finishedAt : null }).eq('id', row.id)
+    await db.from('production_checks').update({ email: null, email_sent_at: emailed ? new Date().toISOString() : null }).eq('id', row.id)
   }
 
   const counts = result ? severityCounts(result.findings) : { high: 0, medium: 0, low: 0 }
@@ -164,6 +176,9 @@ export async function runAndStore(
     properties: {
       project_id: deps.selfProjectId,
       outcome: result ? 'done' : 'failed',
+      // false when Firecrawl could not render the home page (the report then
+      // rests on the plain fetch only), so a broken key or API shows in the funnel.
+      rendered: result ? result.summary.rendered : false,
       high: counts.high,
       medium: counts.medium,
       low: counts.low,
@@ -177,7 +192,10 @@ export function registerProductionCheckRoutes(app: Hono<{ Variables: Variables }
     const body = (await c.req.json().catch(() => null)) as { url?: unknown; email?: unknown; src?: unknown } | null
     const checked = checkPublicUrl(body?.url)
     if (!checked.ok) return c.json({ ok: false, error: { code: checked.code, message: checked.message } }, 400)
-    if (!(await resolvesPublic(checked.url.hostname, runtimeResolver()))) {
+    const dnsOk = await resolvesPublic(checked.url.hostname, runtimeResolver(), (err) =>
+      plog.warn('DNS lookup failed; hostname rules only', { err: String(err).slice(0, 200) }),
+    )
+    if (!dnsOk) {
       return c.json({ ok: false, error: { code: 'NOT_PUBLIC', message: 'That address does not lead to a public website we can reach.' } }, 400)
     }
     let email: string | null = null
@@ -204,7 +222,31 @@ export function registerProductionCheckRoutes(app: Hono<{ Variables: Variables }
       return c.json({ ok: false, error: { code: 'UNAVAILABLE', message: 'The check is not available right now. Try again in a minute.' } }, 503)
     }
     const hit = (recent ?? []).find((r) => isFresh(r as { status: string; created_at: string }, Date.now())) as { id: string; status: string } | undefined
-    if (hit) return c.json({ ok: true, data: { id: hit.id, status: hit.status, cached: true } })
+
+    // Keyed with a server secret every edge function has, so the stored hash
+    // cannot be reversed by hashing the IPv4 space.
+    const secret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || undefined
+    const visitorHash = async () => hashIp(await callerIp((n) => c.req.header(n), secret), secret ?? 'mushi-production-check')
+
+    if (hit) {
+      // The site was checked today: its report, and the email when asked for.
+      // Sending spends the visitor's hourly budget, so a cached site cannot be
+      // used to mail any number of addresses. A check still running has no
+      // report to send yet (and its row must not take a second address).
+      let emailed = false
+      if (email && hit.status === 'done') {
+        const spend = await claim(db, actorFromHash(await visitorHash()), 'production_check_ip', CHECKS_PER_IP_PER_HOUR, '1 hour')
+        if (spend === 'ok') {
+          const { data: done } = await db.from('production_checks').select('findings').eq('id', hit.id).maybeSingle()
+          if (done) {
+            const findings = ((done as { findings?: unknown }).findings ?? []) as CheckResult['findings']
+            runInBackground(sendReportEmail(email, checked.url.href, hit.id, { findings }), 'production-check-email')
+            emailed = true
+          }
+        }
+      }
+      return c.json({ ok: true, data: { id: hit.id, status: hit.status, cached: true, emailed } })
+    }
 
     const selfProjectId = Deno.env.get('MUSHI_SELF_PROJECT_ID') ?? ''
     const firecrawl = selfProjectId ? await resolveFirecrawl(db, selfProjectId) : null
@@ -212,11 +254,7 @@ export function registerProductionCheckRoutes(app: Hono<{ Variables: Variables }
       return c.json({ ok: false, error: { code: 'CHECK_UNAVAILABLE', message: 'The Production Check is switched off right now. Try again later.' } }, 503)
     }
 
-    // Keyed with a server secret every edge function has, so the stored hash
-    // cannot be reversed by hashing the IPv4 space.
-    const secret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || undefined
-    const ip = await callerIp((n) => c.req.header(n), secret)
-    const ipHash = await hashIp(ip, secret ?? 'mushi-production-check')
+    const ipHash = await visitorHash()
     const perIp = await claim(db, actorFromHash(ipHash), 'production_check_ip', CHECKS_PER_IP_PER_HOUR, '1 hour')
     if (perIp !== 'ok') {
       c.header('Retry-After', perIp === 'limited' ? '3600' : '60')
@@ -243,7 +281,7 @@ export function registerProductionCheckRoutes(app: Hono<{ Variables: Variables }
       plog.warn('production_check_begin failed', { err: beginErr?.message })
       return c.json({ ok: false, error: { code: 'UNAVAILABLE', message: 'The check is not available right now. Try again in a minute.' } }, 503)
     }
-    if (row.cached) return c.json({ ok: true, data: { id: row.check_id, status: 'running', cached: true } })
+    if (row.cached) return c.json({ ok: true, data: { id: row.check_id, status: 'running', cached: true, emailed: false } })
 
     void emitProductEvent(db, {
       eventName: 'production_check_started',
@@ -255,7 +293,7 @@ export function registerProductionCheckRoutes(app: Hono<{ Variables: Variables }
       runAndStore(db, { id: row.check_id, url: checked.url.href, email, src }, firecrawl.key, { selfProjectId }),
       'production-check',
     )
-    return c.json({ ok: true, data: { id: row.check_id, status: 'running', cached: false } }, 202)
+    return c.json({ ok: true, data: { id: row.check_id, status: 'running', cached: false, emailed: email !== null } }, 202)
   })
 
   app.get('/v1/public/production-check/:id', async (c) => {

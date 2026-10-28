@@ -113,10 +113,23 @@ async function call<T>(path: string, init: RequestInit | undefined, fetchImpl: t
   }
 }
 
+/**
+ * What to tell a visitor whose site was already checked today (one check per
+ * site a day): they get that report, and an email only when one went out.
+ */
+export function cachedNotice(cached: boolean, askedForEmail: boolean, emailed: boolean): string | null {
+  if (!cached) return null
+  const base = 'This site was already checked in the last 24 hours, so this is that report.'
+  if (!askedForEmail) return base
+  return emailed
+    ? `${base} We emailed you the link.`
+    : `${base} No email was sent this time: copy the link with “Share this report” instead.`
+}
+
 export function startCheck(
   input: { url: string; email?: string; src?: string | null },
   fetchImpl: typeof fetch = fetch,
-): Promise<ApiResult<{ id: string; status: string; cached: boolean }>> {
+): Promise<ApiResult<{ id: string; status: string; cached: boolean; emailed?: boolean }>> {
   return call(
     '/v1/public/production-check',
     {

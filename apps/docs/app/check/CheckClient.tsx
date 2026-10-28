@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   CHECK_PAGE_URL,
   CHECK_SIGNUP_HREF,
+  cachedNotice,
   checkIdFromLocation,
   countLine,
   groupBySeverity,
@@ -39,6 +40,7 @@ const SEVERITY_TONE: Record<Severity, string> = {
 
 export function CheckClient() {
   const [view, setView] = useState<View>({ kind: 'loading' })
+  const [notice, setNotice] = useState<string | null>(null)
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const follow = useCallback((id: string, host: string) => {
@@ -81,6 +83,7 @@ export function CheckClient() {
     setView({ kind: 'loading' })
     const r = await startCheck({ url, email: email || undefined, src: srcFromSearch(window.location.search) })
     if (!r.ok) return setView({ kind: 'form', error: r.message })
+    setNotice(cachedNotice(r.data.cached, Boolean(email), r.data.emailed === true))
     const next = new URL(window.location.href)
     next.searchParams.set('id', r.data.id)
     window.history.replaceState(null, '', next)
@@ -90,7 +93,12 @@ export function CheckClient() {
   return (
     <div className="min-h-screen bg-mushi-paper">
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
-        {view.kind === 'form' && <CheckForm error={view.error} onSubmit={onSubmit} />}
+        {notice && view.kind !== 'form' && (
+          <p role="status" className="mb-6 rounded-md border border-mushi-rule bg-mushi-paper-wash px-3 py-2 text-sm text-mushi-ink">
+            {notice}
+          </p>
+        )}
+        {view.kind === 'form' &&<CheckForm error={view.error} onSubmit={onSubmit} />}
         {view.kind === 'loading' && <p className="text-sm text-mushi-ink-muted">One moment…</p>}
         {view.kind === 'running' && <Running host={view.host} />}
         {view.kind === 'missing' && <Missing message={view.message} />}
@@ -225,7 +233,7 @@ function Report({ report }: { report: CheckReport }) {
         <p className="text-xs text-mushi-ink-muted">
           Checked {checkedOn}: {pages.length ? `${pages.length} ${pages.length === 1 ? 'page' : 'pages'}` : 'the home page'}
           {report.summary?.linksChecked ? `, ${report.summary.linksChecked} links` : ''}. Public pages only.
-          {report.summary?.incomplete?.length ? ` Not finished in time: ${report.summary.incomplete.join(', ')}.` : ''}
+          {report.summary?.incomplete?.length ? ` Could not check: ${report.summary.incomplete.join(', ')}.` : ''}
         </p>
         <button type="button" onClick={share} className="text-sm font-medium text-mushi-vermillion underline underline-offset-2">
           {copied ? 'Link copied' : 'Share this report'}

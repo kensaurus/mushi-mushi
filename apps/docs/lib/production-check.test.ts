@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   CHECK_SIGNUP_HREF,
+  cachedNotice,
   checkIdFromLocation,
   countLine,
   groupBySeverity,
@@ -34,6 +35,15 @@ describe('report location', () => {
     expect(srcFromSearch('?src=hn')).toBe('hn')
     expect(srcFromSearch('?src=<script>')).toBeNull()
     expect(srcFromSearch('')).toBeNull()
+  })
+})
+
+describe('cachedNotice', () => {
+  it('says a same-day repeat is the earlier report, and whether an email went out', () => {
+    expect(cachedNotice(false, true, true)).toBeNull()
+    expect(cachedNotice(true, false, false)).toMatch(/already checked in the last 24 hours/)
+    expect(cachedNotice(true, true, true)).toMatch(/We emailed you the link\.$/)
+    expect(cachedNotice(true, true, false)).toMatch(/No email was sent/)
   })
 })
 

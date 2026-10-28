@@ -192,7 +192,7 @@ describe('runProductionCheck on a fixture site', () => {
     expect(rules).not.toContain('http_not_redirected')
     expect(result.findings.find((f) => f.rule === 'broken_links')?.where).toEqual(['/missing (404)'])
     expect(result.findings.find((f) => f.rule === 'source_maps_published')?.where).toEqual(['/assets/app.js'])
-    expect(result.summary).toMatchObject({ https: 'ok', scriptsChecked: 1, scriptsWithSourceMaps: 1 })
+    expect(result.summary).toMatchObject({ https: 'ok', scriptsChecked: 1, scriptsWithSourceMaps: 1, rendered: true })
 
     // Firecrawl: home + 3 pages, markdown + links only, no PDF parsing.
     expect(site.firecrawlBodies).toHaveLength(4)
@@ -211,7 +211,8 @@ describe('runProductionCheck on a fixture site', () => {
   it('a home page Firecrawl reports on a private address is not used', async () => {
     const site = fixtureSite({ firecrawlLanding: 'http://10.0.0.8/' })
     const result = await runProductionCheck('https://acme.app/', { firecrawlKey: 'fc-test', fetchImpl: site.fetchImpl, resolver: null })
-    expect(result.summary.incomplete).toContain('home page render')
+    expect(result.summary.incomplete).toContain('the rendered home page')
+    expect(result.summary.rendered).toBe(false)
     expect(result.summary.pages.some((p) => p.path.includes('10.0.0.8'))).toBe(false)
   })
 
@@ -220,5 +221,22 @@ describe('runProductionCheck on a fixture site', () => {
       String(input).startsWith('https://api.firecrawl.dev') ? new Response('no', { status: 402 }) : new Response(GOOD_HTML, { status: 200, headers: { 'content-type': 'text/html' } }),
     )
     await expect(runProductionCheck('https://acme.app/', { firecrawlKey: 'fc', fetchImpl: fetchImpl as unknown as typeof fetch, resolver: null })).rejects.toThrow('FIRECRAWL_NO_CREDITS')
+  })
+
+  it('Firecrawl rate-limiting Mushi\'s key fails the check too', async () => {
+    const fetchImpl = vi.fn(async (input: string | URL | Request) =>
+      String(input).startsWith('https://api.firecrawl.dev') ? new Response('slow down', { status: 429 }) : new Response(GOOD_HTML, { status: 200, headers: { 'content-type': 'text/html' } }),
+    )
+    await expect(runProductionCheck('https://acme.app/', { firecrawlKey: 'fc', fetchImpl: fetchImpl as unknown as typeof fetch, resolver: null })).rejects.toThrow('FIRECRAWL_HTTP_429')
+  })
+
+  it('a Firecrawl server error leaves a report from the plain fetch, marked not rendered', async () => {
+    const fetchImpl = vi.fn(async (input: string | URL | Request) =>
+      String(input).startsWith('https://api.firecrawl.dev') ? new Response('oops', { status: 500 }) : new Response(GOOD_HTML, { status: 200, headers: { 'content-type': 'text/html' } }),
+    )
+    const result = await runProductionCheck('https://acme.app/', { firecrawlKey: 'fc', fetchImpl: fetchImpl as unknown as typeof fetch, resolver: null })
+    expect(result.summary.rendered).toBe(false)
+    expect(result.summary.incomplete).toContain('the rendered home page')
+    expect(result.findings.map((f) => f.rule)).toContain('missing_csp')
   })
 })

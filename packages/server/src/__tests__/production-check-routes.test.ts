@@ -29,6 +29,7 @@ const state = vi.hoisted(() => ({
   emails: [] as Array<{ to: string; subject: string; text?: string }>,
   events: [] as Array<{ eventName: string; properties?: Record<string, unknown> }>,
   runs: [] as string[],
+  emailOk: true,
 }))
 
 const fakeLog = vi.hoisted(() => {
@@ -56,7 +57,7 @@ vi.mock('../../supabase/functions/_shared/product-events.ts', () => ({
 vi.mock('../../supabase/functions/_shared/email.ts', () => ({
   sendTransactionalEmail: async (mail: { to: string; subject: string; text?: string }) => {
     state.emails.push(mail)
-    return { ok: true, id: 'em_1' }
+    return state.emailOk ? { ok: true, id: 'em_1' } : { ok: false, reason: 'no_sender', error: 'RESEND_FROM_EMAIL not configured' }
   },
 }))
 vi.mock('../../supabase/functions/_shared/production-check.ts', async (importOriginal) => {
@@ -70,7 +71,7 @@ vi.mock('../../supabase/functions/_shared/production-check.ts', async (importOri
           { rule: 'missing_csp', severity: 'medium', title: 'No Content-Security-Policy header', why: 'w', fix: 'f' },
           { rule: 'page_error_status', severity: 'high', title: '1 page answers with an error code', why: 'w', fix: 'f', where: ['/x (500)'] },
         ],
-        summary: { pages: [], headers: {}, https: 'ok', linksChecked: 0, scriptsChecked: 0, scriptsWithSourceMaps: 0, incomplete: [] },
+        summary: { pages: [], headers: {}, https: 'ok', linksChecked: 0, scriptsChecked: 0, scriptsWithSourceMaps: 0, rendered: true, incomplete: [] },
       }
     },
   }
@@ -137,6 +138,7 @@ beforeEach(() => {
   state.emails = []
   state.events = []
   state.runs = []
+  state.emailOk = true
   claimFails = false
   globalUsed = 0
   counts.clear()
@@ -241,12 +243,49 @@ describe('POST /v1/public/production-check', () => {
     expect(state.emails[0].text).toContain(`https://kensaur.us/mushi-mushi/docs/check?id=${data.id}`)
     expect(state.emails[0].text).toContain('1 to fix first, 1 to fix soon, 0 nice to fix')
     const finished = state.events.find((e) => e.eventName === 'production_check_finished')
-    expect(finished?.properties).toMatchObject({ project_id: SELF, outcome: 'done', high: 1, medium: 1, low: 0, src: 'reddit' })
+    expect(finished?.properties).toMatchObject({ project_id: SELF, outcome: 'done', rendered: true, high: 1, medium: 1, low: 0, src: 'reddit' })
     for (const e of state.events) {
       const json = JSON.stringify(e.properties)
       expect(json).not.toContain('acme.app')
       expect(json).not.toContain('@')
     }
+  })
+
+  it('a failed send clears the address but records no send', async () => {
+    state.emailOk = false
+    await post({ url: 'https://acme.app', email: 'founder@acme.app' })
+    await Promise.all(state.tasks)
+    const row = db.table('production_checks')[0] as Row
+    expect(row.email).toBeNull()
+    expect(row.email_sent_at).toBeNull()
+  })
+
+  it('a site checked today: the report is emailed once more, on the visitor\'s hourly budget', async () => {
+    const id = '44444444-4444-4444-8444-444444444444'
+    db.table('production_checks').push({ id, origin: 'https://acme.app', url: 'https://acme.app/', status: 'done', findings: [{ rule: 'missing_csp', severity: 'medium', title: 't', why: 'w', fix: 'f' }], summary: {}, created_at: new Date().toISOString() })
+    const res = await post({ url: 'https://acme.app', email: 'second@acme.app' })
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as { data: Record<string, unknown> }).data).toMatchObject({ id, cached: true, emailed: true })
+    await Promise.all(state.tasks)
+    expect(state.emails.map((e) => e.to)).toEqual(['second@acme.app'])
+    expect(state.emails[0].text).toContain(`check?id=${id}`)
+    expect(claims().map((c) => c.args.p_scope)).toEqual(['production_check_ip'])
+    // The address is never written to the stored row.
+    expect(db.table('production_checks')[0].email).toBeUndefined()
+
+    // Over the hourly budget: the report still comes back, no email.
+    for (let i = 0; i < CHECKS_PER_IP_PER_HOUR; i++) await post({ url: 'https://acme.app', email: 'x@acme.app' })
+    expect(state.emails.length).toBe(CHECKS_PER_IP_PER_HOUR)
+    const over = (await (await post({ url: 'https://acme.app', email: 'x@acme.app' })).json()) as { data: Record<string, unknown> }
+    expect(over.data).toMatchObject({ id, cached: true, emailed: false })
+  })
+
+  it('a site whose check is still running: no email, and the address is not stored', async () => {
+    db.table('production_checks').push({ id: '55555555-5555-4555-8555-555555555555', origin: 'https://acme.app', url: 'https://acme.app/', status: 'running', findings: [], summary: {}, created_at: new Date().toISOString() })
+    const body = (await (await post({ url: 'https://acme.app', email: 'third@acme.app' })).json()) as { data: Record<string, unknown> }
+    expect(body.data).toMatchObject({ cached: true, emailed: false })
+    expect(state.emails).toHaveLength(0)
+    expect(claims()).toHaveLength(0)
   })
 })
 

@@ -131,8 +131,8 @@ function Board({ board }: { board: Scoreboard }) {
 
       <p className="docs-open__caption">
         A bug report from a user is one sent through the Mushi widget in the app. A fix is merged when its pull request
-        lands on the app’s main branch. Every fix PR gets an AI review first; “do not merge” is its hold verdict, and a held
-        PR waits for a person.
+        lands on the app’s main branch. The AI review of fix PRs is switched on for these apps; “do not merge” is its hold
+        verdict, and a held PR waits for a person.
       </p>
     </div>
   )
