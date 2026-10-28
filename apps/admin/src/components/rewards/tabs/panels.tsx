@@ -798,7 +798,7 @@ function ContributorDrawer({
                     placeholder="Reason (e.g. beta participation)"
                     value={bonusReason}
                     onChange={(e) => setBonusReason(e.target.value)}
-                    className="flex-1"
+                    containerClassName="min-w-0 flex-1"
                   />
                   <Btn variant="success" size="sm" loading={awardingBonus} onClick={awardBonus}>
                     Award
@@ -824,7 +824,7 @@ function ContributorDrawer({
                     placeholder="Reason (optional)"
                     value={tierReason}
                     onChange={(e) => setTierReason(e.target.value)}
-                    className="flex-1"
+                    containerClassName="min-w-0 flex-1"
                   />
                   <Btn variant="ghost" size="sm" loading={settingTier} onClick={setTier}>
                     Set

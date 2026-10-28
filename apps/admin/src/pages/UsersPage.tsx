@@ -252,7 +252,7 @@ export function UsersPage() {
             placeholder="alice@…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="md:flex-1"
+            containerClassName="md:flex-1"
           />
           <SelectField
             label="Plan"
