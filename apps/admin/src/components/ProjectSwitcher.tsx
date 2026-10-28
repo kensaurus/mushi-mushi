@@ -60,6 +60,7 @@ import {
   getStoredProjectScopeMode,
   setStoredProjectScopeMode,
   useProjectScopeMode,
+  useSearchParamsKeepingHash,
 } from '../lib/projectScope'
 
 /** Four tiles: "every app". Shared by the header chip and the dropdown row. */
@@ -77,7 +78,8 @@ function AllAppsGlyph({ size }: { size: number }) {
 export function ProjectSwitcher() {
   const setup = useSetupStatus()
   const snapshots = useProjectSnapshots()
-  const [searchParams, setSearchParams] = useSearchParams()
+  // Adding ?project= or ?apps= must keep a link's #section (lib/projectScope.ts).
+  const [searchParams, setSearchParams] = useSearchParamsKeepingHash()
   const [open, setOpen] = useState(false)
   // "All apps" (lib/projectScope.ts) rides on top of the active project:
   // `?project=` keeps the last concrete app for pages that show one.

@@ -204,7 +204,9 @@ function SettingsPageBody({
   const poolPending = byokEnabled && pool.loading && !pool.data;
   // Scroll to a #section (#firecrawl, #key-supabase, …) once the panels that
   // hold those ids can render: the AI keys rows wait for the saved-keys list.
-  useScrollToHash(Boolean(statsData) && !entitlementsLoading && !poolPending);
+  // General's lower cards mount only once its settings land, so a link to one
+  // of them waits for that or it scrolls before the card exists.
+  useScrollToHash(Boolean(statsData) && !entitlementsLoading && !poolPending && (active !== 'general' || generalLoaded));
   const quickPicked = useRef(false);
   useEffect(() => {
     if (!ux.isQuickstart || !activeProjectId || statsLoading || poolPending || quickPicked.current) return;
