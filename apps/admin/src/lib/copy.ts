@@ -875,7 +875,6 @@ const COPY: CopyRegistry = {
         overview: 'Summary',
         anomalies: 'Spikes',
         metrics: 'Metrics',
-        detect: 'Check now',
       },
       help: {
         title: 'About unusual spikes',
@@ -885,7 +884,7 @@ const COPY: CopyRegistry = {
           'Notice latency creeping up after a deploy',
           'Get a bug report opened for a confirmed regression',
         ],
-        howToUse: 'Send some values from the Metrics tab, then click Check now or wait for the hourly check. Confirm a real spike or dismiss noise under its chart.',
+        howToUse: 'Send some values from the Metrics tab, then press Check now on the Spikes tab or wait for the hourly check. Confirm a real spike or dismiss noise under its chart.',
       },
     },
     '/cost': {
