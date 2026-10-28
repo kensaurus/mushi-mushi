@@ -105,6 +105,9 @@ patchedDependencies:
   'nextra-theme-docs@4.6.1': 'patches/nextra-theme-docs@4.6.1.patch'
   # useFSRoute maps the /mushi-mushi/ landing alias to the docs root (see the patch).
   'nextra@4.6.1': 'patches/nextra@4.6.1.patch'
+  # image-size >=2 accepts a buffer only. Metro's getAssetData passed a filename.
+  'metro@0.83.5': 'patches/metro@0.83.5.patch'
+  'metro@0.84.4': 'patches/metro@0.84.4.patch'
 
 auditConfig:
   ignoreGhsas:
@@ -113,23 +116,10 @@ auditConfig:
     # >=4.6.6 and the admin app moved to zod 4. The one left is zod 3.25.76 at
     # apps__docs > @react-three/fiber > expo > @expo/cli > zod: there is no
     # patched 3.x, @expo/cli needs the zod 3 API, and it only runs in the docs
-    # build (the image-size path below); it never validates untrusted input.
+    # build; it never validates untrusted input.
     # Remove when apps/docs drops @react-three/fiber or @expo/cli moves to zod 4.
     - 'GHSA-mrhx-c7xc-m3w5'
     - 'GHSA-qwww-vcr4-c8h2'
-    # image-size: two infinite-loop DoS advisories in the ICNS
-    # (GHSA-w3rx-r6r6-pgpr) and JXL/HEIF (GHSA-5p2g-fcmc-qvqq) parsers.
-    # Both are marked "Patched versions: <0.0.0" — no fixed release exists;
-    # 2.0.2 is the newest published version and is still vulnerable, so
-    # there is nothing to override to. Reachability: the only path is
-    # apps__docs > @react-three/fiber > expo > @expo/metro > metro >
-    # image-size, i.e. the docs site's Metro bundler measuring images
-    # committed to this repo at build time. No untrusted image ever
-    # reaches the parser, and nothing in the server/runtime tree depends
-    # on it. Remove both when image-size ships a fix, or when apps/docs
-    # drops @react-three/fiber (the only reason expo is in the tree).
-    - 'GHSA-w3rx-r6r6-pgpr'
-    - 'GHSA-5p2g-fcmc-qvqq'
     # node-forge <=1.4.0 (GHSA-86w9-cpqp-85rv, high): no fixed release
     # exists. Reachability: packages/react-native declares expo-secure-store
     # and expo-sensors as OPTIONAL peers; autoInstallPeers pulls them into
