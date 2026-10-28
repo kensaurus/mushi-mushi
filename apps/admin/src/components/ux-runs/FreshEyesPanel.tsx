@@ -355,7 +355,10 @@ function SessionTimeline({ session, shots }: { session: FreshEyesSession; shots:
     <div className="flex flex-col gap-2" data-testid="fresh-eyes-timeline">
       <Card className="p-3 text-xs">
         {session.outcome === 'reached' ? (
-          <p className="font-medium text-fg">Reached the goal in {session.steps.length - 1} steps, {formatSeconds(session.ttfv_seconds)} to first value.</p>
+          <p className="font-medium text-fg">
+            Reached the goal in {session.steps.length - 1} steps,{' '}
+            {session.ttfv_seconds == null ? 'but a wait hit the 20 s limit, so the time is not measured' : `${formatSeconds(session.ttfv_seconds)} to first value`}.
+          </p>
         ) : (
           <p className="font-medium text-fg">
             {STALL_LABEL[session.stall?.reason ?? 'out_of_steps']} at <span className="font-mono">{session.stall?.screen}</span>, step {session.stall?.step}.

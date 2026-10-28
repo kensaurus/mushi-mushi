@@ -24,6 +24,8 @@ export interface FreshEyesStep {
   requirements: string[]
   signals: string[]
   shot: string | null
+  /** The wait hit its cap (the page kept a loading sign): the time is the cap, not the app's. */
+  capped?: boolean
 }
 
 export interface FreshEyesSession {
@@ -193,7 +195,9 @@ export function isStartUrl(value: string): boolean {
 export function stepNotes(st: FreshEyesStep): string[] {
   const out: string[] = []
   if (st.outcome === 'refused' || st.outcome === 'blocked' || st.outcome === 'failed') out.push(st.note ?? st.outcome)
-  if (st.outcome === 'left-app') out.push('Left the app, came back')
+  if (st.outcome === 'left-app') out.push(st.note ?? 'Left the app, came back')
+  if (st.outcome === 'ok' && st.note?.startsWith('opened a new window')) out.push(st.note)
+  if (st.capped && st.outcome === 'ok') out.push('The page kept showing a loading sign, so this is the 20 s limit, not the real wait')
   if (st.outcome === 'terminal' && st.note) out.push(st.note)
   if (st.backtrack) out.push('Went back')
   if (st.dead_end) out.push('Dead end')

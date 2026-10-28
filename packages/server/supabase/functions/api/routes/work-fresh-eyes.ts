@@ -110,7 +110,7 @@ export async function claimFreshEyes(
     }
 
     let accountNote: string | null = null
-    const accounts: Array<{ email: string; password: string; name: string }> = []
+    const accounts: Array<{ email: string; password: string; name: string; userId: string }> = []
     if (grantedBy && !grant) {
       accountNote = 'It ran without a test account: only a computer of the operator who started it, within 2 hours, may sign up with one.'
     } else if (grant && !row.dry_run) {
@@ -122,7 +122,7 @@ export async function claimFreshEyes(
           accountNote = `It ran with ${accounts.length} test account(s) of ${sessions}: ${minted.message}`
           break
         }
-        accounts.push({ email: minted.account.email, password: minted.account.password, name: minted.account.name })
+        accounts.push({ email: minted.account.email, password: minted.account.password, name: minted.account.name, userId: minted.account.userId })
       }
     }
     if (accountNote) await db.from('ux_runs').update({ detail: accountNote, has_account: accounts.length > 0 }).eq('id', row.id)

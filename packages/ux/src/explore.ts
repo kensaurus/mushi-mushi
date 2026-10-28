@@ -184,10 +184,31 @@ export function rolesToTry(role: string): readonly string[] {
   return ROLE_FAMILY[role] ?? [role]
 }
 
+/**
+ * Runs in the page: whether a person with a mouse sees the element. An
+ * sr-only skip link is "visible" to Playwright (a 1 px box) but not to them.
+ */
+function seenByMouse(el: Element): boolean {
+  const r = el.getBoundingClientRect()
+  const s = getComputedStyle(el)
+  if (r.width <= 2 || r.height <= 2 || s.visibility === 'hidden' || s.display === 'none' || Number(s.opacity) === 0) return false
+  if (/rect\(0(px)?,? 0(px)?,? 0(px)?,? 0(px)?\)/.test(s.clip) || /inset\(50%\)/.test(s.clipPath)) return false
+  return !el.closest('[inert], [aria-hidden="true"]')
+}
+
+/**
+ * The element a role and name point at: the first one a visitor can see. A
+ * hidden twin (an sr-only "Skip to content", the collapsed copy of a menu)
+ * made clicks time out after 5 s on a docs page (2026-10-28).
+ */
 async function target(page: Page, role: string, name: string) {
   for (const r of rolesToTry(role)) {
-    const loc = page.getByRole(r as AriaRole, { name }).first()
-    if ((await loc.count().catch(() => 0)) > 0) return loc
+    const all = page.getByRole(r as AriaRole, { name })
+    const n = Math.min(await all.count().catch(() => 0), 10)
+    for (let i = 0; i < n; i++) {
+      if (await all.nth(i).evaluate(seenByMouse).catch(() => false)) return all.nth(i)
+    }
+    if (n > 0) return all.first()
   }
   return page.getByRole(role as AriaRole, { name }).first()
 }

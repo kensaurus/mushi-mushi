@@ -60,7 +60,8 @@ export function parseStdinRequest(text: string): FreshEyesStdinRequest {
   for (const a of Array.isArray(r.accounts) ? (r.accounts as Array<Record<string, unknown>>) : []) {
     const email = plain(a?.email, 300)
     if (!email || !/^[^\s@]+@[^\s@]+$/.test(email) || typeof a.password !== 'string' || a.password.length < 12 || CONTROL_RE.test(a.password)) throw new Error('A test account in the request is malformed.')
-    accounts.push({ email, password: a.password, name: plain(a.name, 80) ?? undefined })
+    const userId = typeof a.userId === 'string' && /^[0-9a-f-]{36}$/i.test(a.userId) ? a.userId : undefined
+    accounts.push({ email, password: a.password, name: plain(a.name, 80) ?? undefined, ...(userId ? { userId } : {}) })
   }
   if (r.dryRun && accounts.length) throw new Error('A look-around run uses no account.')
   return { runId: r.runId, url: url.toString(), goal, sessions: r.sessions, successText, dryRun: r.dryRun, accounts }
@@ -73,6 +74,16 @@ export function parseStdinRequest(text: string): FreshEyesStdinRequest {
  */
 export function syncsToConsole(flags: { sync?: boolean; file?: boolean }, hasLogin: boolean): boolean {
   return !!(flags.sync || flags.file) && hasLogin
+}
+
+/**
+ * Steps per visitor: what --steps says, else 30, or 60 with an account. Signing
+ * in, naming a project and the CLI step did not fit in 30 on Mushi's first live
+ * run with accounts (it ran out on "Name your project", 2026-10-28).
+ */
+export function stepsFor(given: string | undefined, hasAccount: boolean): number {
+  if (given !== undefined && given.trim() !== '') return Number(given)
+  return hasAccount ? 60 : 30
 }
 
 /** A phrase as a case-insensitive pattern that matches exactly those words (the goal check takes a pattern). */

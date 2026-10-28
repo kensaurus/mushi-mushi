@@ -180,8 +180,8 @@ export interface FreshEyesTarget {
   /** Plain words that mean the visitor made it, or null. */
   successText: string | null
   dryRun: boolean
-  /** One synthetic account per session, for Mushi's own operator only. Never logged. */
-  accounts: Array<{ email: string; password: string; name: string }>
+  /** One synthetic account per session, for Mushi's own operator only. Never logged (the user id may be). */
+  accounts: Array<{ email: string; password: string; name: string; userId?: string }>
 }
 
 type ParsedClaim =
@@ -220,7 +220,8 @@ function parseFreshEyesTarget(raw: unknown): Parsed<FreshEyesTarget> {
     if (typeof a?.email !== 'string' || !/^[^\s@]{1,100}@[^\s@]{1,200}$/.test(a.email) || typeof a.password !== 'string' || a.password.length < 12 || a.password.length > 200 || CONTROL_RE.test(a.password)) {
       return { ok: false, message: 'a test account in the claim is malformed' }
     }
-    accounts.push({ email: a.email, password: a.password, name: plainText(a.name, 80) ?? 'Test visitor' })
+    const userId = typeof a.userId === 'string' && UUID_RE.test(a.userId) ? a.userId : undefined
+    accounts.push({ email: a.email, password: a.password, name: plainText(a.name, 80) ?? 'Test visitor', ...(userId ? { userId } : {}) })
   }
   if (accounts.length > t.sessions || (t.dryRun && accounts.length)) return { ok: false, message: 'the test claim carries more accounts than it may use' }
   return { ok: true, value: { runId: t.runId, url: url.toString(), goal, sessions: t.sessions, successText, dryRun: t.dryRun, accounts } }

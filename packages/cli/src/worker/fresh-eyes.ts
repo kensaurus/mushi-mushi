@@ -70,7 +70,9 @@ export async function runFreshEyesClaim(
   if (line.shell) {
     return { result: 'failed', failureKind: 'infra', detail: "npm's npx was not found next to Node on this computer. Install @mushi-mushi/ux (npm i -g @mushi-mushi/ux) and set MUSHI_UX_BIN to its cli.js." }
   }
-  opts.log(`first-time user test ${t.runId}: ${t.sessions} visitor(s)${t.dryRun ? ', look around only' : t.accounts.length ? ', with test accounts' : ''}`)
+  // The accounts' user ids are printed so the sweep can be checked; never an email or a password.
+  const ids = t.accounts.map((a) => a.userId).filter((x): x is string => !!x)
+  opts.log(`first-time user test ${t.runId}: ${t.sessions} visitor(s)${t.dryRun ? ', look around only' : t.accounts.length ? `, with test accounts${ids.length ? ` ${ids.join(', ')}` : ''}` : ''}`)
   const r = await (opts.run ?? runProc)(line.cmd, line.argv, {
     env: freshEyesEnv(opts.env ?? process.env, { apiKey: opts.apiKey, projectId: opts.projectId, endpoint: opts.endpoint }),
     input: freshEyesStdin(t),

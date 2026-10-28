@@ -190,6 +190,21 @@ on the user's machine, where the browser and the model run, as before.
   (marked "look around only"); it still writes nothing to the app and files
   nothing, and writes no trend point.
 
+- **Runner fixes from the first live run (2026-10-28, run `20261028-003009-29qw`).**
+  Four of its five filed reports were the runner's, not Mushi's. The model's
+  snapshot now puts `main` / `[role=main]` first and the navigation after it,
+  within the same 8,000 characters, and leaves out controls a mouse user cannot
+  see; a click goes to the visible copy of a role and name. A window a click
+  opens on the app's origins is followed (the docs "Sign in" popup), one
+  elsewhere is closed and noted. An opinion that the screen is empty or only a
+  menu is dropped when the main content has text. `waitForContent` ignores
+  pulsing dots under 16 px and pulses under 0.5 % of the viewport (two
+  decorative dots made every console step wait its 20 s cap); a wait that hits
+  the cap marks its step `capped`, and a path with a capped wait on the app's
+  own screen has no time to first value. With an account the default is 60
+  steps. The minted user id is logged (never the password). The terminal setup
+  command runs with its own HOME and XDG dirs and no session bus.
+
 **Rejected.**
 
 - *Minting at queue time.* The password would sit in the database until a

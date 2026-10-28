@@ -25,7 +25,7 @@ import { createHash } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import type { Page } from 'playwright'
-import { openSession, waitForContent, type BrowserSession } from './capture.js'
+import { contentWaitsCapped, openSession, waitForContent, type BrowserSession } from './capture.js'
 import { DEFAULT_CURSOR_REVIEW_MODEL, firstJson } from './checker.js'
 import { blank, describeAction, normalizeMessage, onSite, parseAction, perform, REFUSED_VALUE, signalKey, snapshotOf, watch, type ExploreAction, type Signal } from './explore.js'
 import { heldSubmits, isCaptchaUrl, isFreshEyesRefusedLabel, requestRefusal, type AllowRule } from './guard.js'
@@ -67,6 +67,8 @@ export interface Identity {
   email: string
   password: string
   name?: string
+  /** The synthetic account's user id, when Mushi minted it: printed in the log and timeline (never the password), so a sweep check needs no SQL. */
+  userId?: string
 }
 
 const PLACEHOLDER_RE = /\{\{\s*(email|password|name)\s*\}\}/gi
@@ -96,7 +98,8 @@ export function redact<T>(value: T, identity: Identity | null): T {
   // Each value as it can appear: as typed, quoted in an accessibility snapshot or JSON (\" and \\), and URL-encoded.
   const forms: Array<[string, string]> = []
   for (const [k, v] of Object.entries(identity) as Array<[string, string | undefined]>) {
-    if (!v || v.length < 3) continue
+    // The user id is no secret: it stays readable so the account can be found and swept.
+    if (!v || v.length < 3 || k === 'userId') continue
     for (const f of new Set([v, v.replace(/\\/g, '\\\\').replace(/"/g, '\\"'), encodeURIComponent(v)])) forms.push([f, `{{${k}}}`])
   }
   // Longest first, so a form is never cut by a shorter one inside it.
@@ -122,6 +125,8 @@ export interface PageFacts {
   /** Visible, enabled controls that lead somewhere or take input. */
   forwardControls: number
   captcha: boolean
+  /** Characters of text in the page's main content (`main`, `[role=main]`, else the body): what an "I see nothing" opinion is checked against. */
+  mainChars?: number
 }
 
 const AUTH_PATH_RE = /\/(log-?in|sign-?in|sign-?up|register|auth|join|get-?started)\b/i
@@ -278,6 +283,80 @@ export function extractSetupValues(text: string): { projectId: string; apiKey: s
 // ── Prompt ──────────────────────────────────────────────────────────────────
 
 const MAX_SNAPSHOT_CHARS = 8000
+/** When the main content alone fills the budget, this much of it is kept for the navigation, so the visitor can still move on. */
+const NAV_RESERVE_CHARS = 1500
+
+/** @internal Exported for tests only. Pure: an aria snapshot without the nodes `drop` matches (each with every deeper-indented line under it). */
+export function dropSnapshotNodes(snapshot: string, drop: (line: string) => boolean): string {
+  const out: string[] = []
+  let skipDeeperThan: number | null = null
+  for (const line of snapshot.split('\n')) {
+    const indent = line.length - line.trimStart().length
+    if (skipDeeperThan !== null) {
+      if (indent > skipDeeperThan || !line.trim()) continue
+      skipDeeperThan = null
+    }
+    if (drop(line)) {
+      skipDeeperThan = indent
+      continue
+    }
+    out.push(line)
+  }
+  return out.join('\n')
+}
+
+const SNAPSHOT_NAME_RE = /^\s*- [a-z]+ "((?:[^"\\]|\\.)*)"/
+
+/**
+ * @internal Exported for tests only. Pure: the screen as the model reads it.
+ * The main content comes first and the navigation after it, within the budget:
+ * on a docs page the sidebar comes first in the DOM, so a plain cut at 8,000
+ * characters showed the model only the menu, and it filed "only a menu", "too
+ * many choices" and "unclear" about a page whose article was right there
+ * (2026-10-28). Controls a mouse user cannot see (an sr-only "Skip to
+ * content") are left out, so the model never picks one.
+ */
+export function composeSnapshot(parts: { main: string | null; body: string; hidden: readonly string[] }, budget = MAX_SNAPSHOT_CHARS): string {
+  const hidden = new Set(parts.hidden)
+  const clean = (snap: string) =>
+    hidden.size
+      ? dropSnapshotNodes(snap, (line) => {
+          const m = SNAPSHOT_NAME_RE.exec(line)
+          return !!m && hidden.has(m[1]!.replace(/\\(.)/g, '$1'))
+        })
+      : snap
+  const body = clean(parts.body)
+  if (!parts.main?.trim()) return body.slice(0, budget)
+  const head = `Main content:\n${clean(parts.main)}`
+  const rest = dropSnapshotNodes(body, (line) => /^\s*- main\b/.test(line))
+  const tail = rest.trim() ? `\n\nThe rest of the page (navigation, header, footer):\n${rest}` : ''
+  if (head.length + tail.length <= budget) return head + tail
+  const mainPart = head.slice(0, budget - Math.min(tail.length, NAV_RESERVE_CHARS))
+  return mainPart + tail.slice(0, budget - mainPart.length)
+}
+
+/** The model's view of the page: main first, then the rest, without controls a mouse user cannot see. */
+async function screenForModel(page: Page): Promise<string> {
+  const mainLoc = page.locator('main, [role="main"]').first()
+  const main = (await mainLoc.count().catch(() => 0)) ? await mainLoc.ariaSnapshot({ timeout: 5000 }).catch(() => null) : null
+  const body = await snapshotOf(page)
+  const hidden = await page
+    .evaluate(() => {
+      const seen = (el: Element) => {
+        const r = el.getBoundingClientRect()
+        const st = getComputedStyle(el)
+        if (r.width <= 2 || r.height <= 2 || st.visibility === 'hidden' || st.display === 'none' || Number(st.opacity) === 0) return false
+        if (/rect\(0(px)?,? 0(px)?,? 0(px)?,? 0(px)?\)/.test(st.clip) || /inset\(50%\)/.test(st.clipPath)) return false
+        return !el.closest('[inert]')
+      }
+      const name = (el: Element) => (el.getAttribute('aria-label') ?? (el as HTMLElement).innerText ?? el.textContent ?? '').replace(/\s+/g, ' ').trim()
+      const controls = [...document.querySelectorAll('a[href], button, [role="button"], [role="link"], [role="tab"], [role="menuitem"], input:not([type="hidden"]), select, textarea')]
+      const visible = new Set(controls.filter(seen).map(name))
+      return [...new Set(controls.filter((el) => !seen(el)).map(name))].filter((n) => n && !visible.has(n))
+    })
+    .catch(() => [] as string[])
+  return composeSnapshot({ main, body, hidden })
+}
 
 /** @internal Exported for tests only. Pure: the next-action prompt for a first-time visitor. */
 export function freshEyesPrompt(input: { goal: string; snapshot: string; done: readonly string[]; step: number; maxSteps: number; hasAccount: boolean }): string {
@@ -369,6 +448,8 @@ export interface FreshEyesStep {
   signals?: Array<Signal['kind']>
   /** File name under shots/, e.g. s1-step07.png. */
   shot?: string
+  /** The wait for the page's content hit its cap (the page kept showing a loading sign): appMs is the cap, not the app's real wait. */
+  capped?: boolean
 }
 
 /** Why a session ended without reaching its goal. Measured causes are page facts; the last two are the model's. */
@@ -387,7 +468,9 @@ export interface FreshEyesSession {
   modelSeconds: number
   backtracks: number
   steps: FreshEyesStep[]
-  opinions: Array<Opinion & { screen: string; step: number }>
+  opinions: Array<Opinion & { screen: string; step: number; mainChars?: number }>
+  /** The synthetic account's user id, when the session had one Mushi minted (never the password). */
+  accountId?: string
 }
 
 export interface FreshEyesFinding extends AuditFinding {
@@ -428,9 +511,19 @@ export function median(xs: readonly number[]): number | null {
   return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2
 }
 
-/** @internal Exported for tests only. Pure: time to first value in seconds: app time plus reading, to one decimal. */
+/**
+ * @internal Exported for tests only. Pure: time to first value in seconds: app time plus reading, to one decimal.
+ * A step the guard stopped (a payment page, a third-party sign-in) that then
+ * waited out the content cap on the error page is the runner's wait, not the
+ * app's: it adds no app time.
+ */
 export function ttfvOf(steps: readonly FreshEyesStep[]): number {
-  return Math.round(steps.reduce((t, s) => t + s.appMs + s.readMs, 0) / 100) / 10
+  return Math.round(steps.reduce((t, s) => t + (s.capped && s.outcome !== 'ok' ? 0 : s.appMs) + s.readMs, 0) / 100) / 10
+}
+
+/** @internal Exported for tests only. Pure: the app's own screen kept a loading sign up to the cap on this path, so its time is not measured. */
+export function appWaitCapped(steps: readonly FreshEyesStep[]): boolean {
+  return steps.some((x) => x.capped && x.outcome === 'ok')
 }
 
 // ── Findings ────────────────────────────────────────────────────────────────
@@ -529,6 +622,22 @@ export function measuredFinding(c: Candidate, ctx: { start: string; goal: string
 /** Sessions that must agree before an opinion is filed. */
 const OPINION_QUORUM = 2
 
+/** An opinion that says the screen shows nothing, or only a menu. */
+const CLAIMS_EMPTY_RE =
+  /\b(nothing|no content|no article|no text)\b[^.]{0,40}\b(visible|on (the )?(screen|page)|here|shown|to read)\b|\bonly (a |the |some )?(long )?(docs? )?(menu|navigation|nav|sidebar|list of links|links)\b|\b(page|screen) (is|looks|seems) (empty|blank)\b|\bno (diagnosis|content|article|text|example) (is )?(visible|shown|here)\b/i
+/** Main-content characters past which "I see nothing" is false: about 50 words. */
+const MAIN_TEXT_CONTRADICTS = 280
+
+/**
+ * @internal Exported for tests only. Pure: an opinion the page itself
+ * contradicts: it says the screen is empty or only a menu while its main
+ * content has text. Never filed (four of five reports of the first live run
+ * on Mushi were this, 2026-10-28).
+ */
+export function contradictedOpinion(o: { why: string; mainChars?: number }): boolean {
+  return (o.mainChars ?? 0) >= MAIN_TEXT_CONTRADICTS && CLAIMS_EMPTY_RE.test(o.why)
+}
+
 const OPINION_TEXT: Record<OpinionCategory, string> = {
   confusing: 'first-time visitors did not understand what to do',
   unclear_copy: 'first-time visitors found the words unclear',
@@ -541,7 +650,7 @@ export function agreedOpinions(sessions: readonly Pick<FreshEyesSession, 'index'
   if (sessions.length < quorum) return []
   const groups = new Map<string, { screen: string; category: OpinionCategory; sessions: Set<number>; whys: string[] }>()
   for (const s of sessions) {
-    for (const o of s.opinions) {
+    for (const o of s.opinions.filter((x) => !contradictedOpinion(x))) {
       const key = `${o.screen}|${o.category}`
       const g = groups.get(key) ?? { screen: o.screen, category: o.category, sessions: new Set<number>(), whys: [] }
       g.sessions.add(s.index)
@@ -572,7 +681,8 @@ export function agreedOpinions(sessions: readonly Pick<FreshEyesSession, 'index'
 /** @internal Exported for tests only. Pure: the run's numbers from its sessions. */
 export function summarize(sessions: readonly FreshEyesSession[]): Pick<FreshEyesResult, 'ttfvSeconds' | 'steps' | 'reached' | 'stalledAt'> {
   const reached = sessions.filter((s) => s.outcome === 'reached')
-  const ttfv = median(reached.map((s) => s.ttfvSeconds ?? 0))
+  // A session whose path hit a capped wait has no time (finish() leaves it null): it never counts as 0.
+  const ttfv = median(reached.map((s) => s.ttfvSeconds).filter((t): t is number => t != null))
   const steps = median(sessions.map((s) => s.steps.length - 1)) ?? 0
   const stalls = new Map<string, { screen: string; reason: StallReason; sessions: number }>()
   for (const s of sessions) {
@@ -664,7 +774,9 @@ async function pageFacts(page: Page): Promise<PageFacts> {
       const captcha =
         [...document.querySelectorAll('iframe')].some((f) => /hcaptcha|recaptcha|challenges\.cloudflare|arkoselabs|funcaptcha/i.test(f.src)) ||
         !!document.querySelector('.g-recaptcha, .h-captcha, .cf-turnstile')
-      return { url: location.href, text, hasPassword, emailFields, forwardControls, captcha }
+      const mainEl = document.querySelector('main, [role="main"]')
+      const mainChars = ((mainEl as HTMLElement | null)?.innerText ?? document.body?.innerText ?? '').replace(/\s+/g, ' ').trim().length
+      return { url: location.href, text, hasPassword, emailFields, forwardControls, captcha, mainChars }
     })
     .catch(() => ({ url: page.url(), text: '', hasPassword: false, emailFields: 0, forwardControls: 1, captcha: false }))
 }
@@ -739,8 +851,9 @@ export async function runFreshEyes(opts: FreshEyesOptions): Promise<FreshEyesRes
       const identity = dryRun ? null : ((await opts.identity?.(index)) ?? null)
       identities.set(index, identity)
       if (identity) result.hasAccount = true
-      progress(`session ${index} of ${sessions}${identity ? ' (synthetic account)' : ' (no account)'}`)
-      const s = await runSession({ readOnly, index, identity, browser, opts, ask, base, apiHosts, maxSteps, dir, addCandidate, progress, refused: result.refused })
+      progress(`session ${index} of ${sessions}${identity ? ` (${identity.userId ? `synthetic account ${identity.userId}` : 'test account'})` : ' (no account)'}`)
+      const s = await runSession({ readOnly, index, identity, browser, opts, ask, base, apiHosts, appOrigins, maxSteps, dir, addCandidate, progress, refused: result.refused })
+      if (identity?.userId) s.accountId = identity.userId
       result.sessions.push(redact(s, identity))
     }
 
@@ -756,6 +869,8 @@ export async function runFreshEyes(opts: FreshEyesOptions): Promise<FreshEyesRes
     await browser.close().catch(() => {})
   }
   Object.assign(result, summarize(result.sessions))
+  const capped = result.sessions.reduce((n, x) => n + x.steps.filter((st) => st.capped && st.outcome === 'ok').length, 0)
+  if (capped) result.warnings.push(`${capped} step(s) waited the full 20 s for the app's page to stop showing a loading sign: those waits are the cap, not the app's real time, and a path through one has no time to first value.`)
   result.finishedAt = new Date().toISOString()
   writeFileSync(join(dir, 'result.json'), JSON.stringify(result, null, 2))
   return result
@@ -771,6 +886,8 @@ interface SessionCtx {
   ask: FreshAsk
   base: URL
   apiHosts: string[]
+  /** The app's own origins: a window a click opens on one of them is followed. */
+  appOrigins: string[]
   maxSteps: number
   dir: string
   addCandidate: (c: Candidate) => void
@@ -784,17 +901,35 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
   const session: FreshEyesSession = { index, outcome: 'stalled', stall: null, ttfvSeconds: null, appSeconds: 0, readSeconds: 0, modelSeconds: 0, backtracks: 0, steps: [], opinions: [] }
   const ctx = await browser.freshContext()
   await likeARealBrowser(ctx, base.origin)
-  const page = await ctx.newPage()
-  await page.setViewportSize(VIEWPORT)
-  const watcher = watch(page, base.origin, x.apiHosts)
   let docStatus: number | null = null
   let captchaSeen = false
-  page.on('response', (r) => {
-    if (r.request().isNavigationRequest() && r.frame() === page.mainFrame()) docStatus = r.status()
-  })
-  page.on('request', (r) => {
-    if (isCaptchaUrl(r.url())) captchaSeen = true
-  })
+  // The window the visitor looks at. A click can open another one (the docs'
+  // "Sign in" opens the console's sign-in bridge in a popup): the visitor
+  // follows it, and comes back when it closes. Watching only the first window
+  // filed "sign-in stuck on Opening" as the app's fault (2026-10-28).
+  const windows: Page[] = []
+  const opened: Page[] = []
+  ctx.on('page', (p) => opened.push(p))
+  let page: Page = await ctx.newPage()
+  opened.length = 0
+  let watcher = watch(page, base.origin, x.apiHosts)
+  const attach = (p: Page) => {
+    p.on('response', (r) => {
+      if (r.request().isNavigationRequest() && r.frame() === p.mainFrame()) docStatus = r.status()
+    })
+    p.on('request', (r) => {
+      if (isCaptchaUrl(r.url())) captchaSeen = true
+    })
+  }
+  attach(page)
+  await page.setViewportSize(VIEWPORT)
+  const switchTo = async (p: Page) => {
+    windows.push(page)
+    page = p
+    attach(p)
+    watcher = watch(p, base.origin, x.apiHosts)
+    await p.setViewportSize(VIEWPORT).catch(() => {})
+  }
   const actions: FreshAction[] = []
   const history: string[] = []
   const seenScreens = new Set<string>()
@@ -846,6 +981,12 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
     await record(landing)
 
     for (let n = 1; n <= x.maxSteps; n++) {
+      // A window the visitor followed closed itself (a sign-in bridge does): back to the one that opened it.
+      while (page.isClosed() && windows.length) {
+        page = windows.pop()!
+        watcher = watch(page, base.origin, x.apiHosts)
+        await waitForContent(page).catch(() => {})
+      }
       const facts = await pageFacts(page)
       const screen = pagePath(new URL(page.url()).pathname)
       if (captchaSeen || facts.captcha) {
@@ -858,7 +999,7 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
         break
       }
       // A filled field shows its value in the snapshot: the model gets the placeholders back, never the values.
-      const snapshot = redact(await snapshotOf(page), identity)
+      const snapshot = redact(await screenForModel(page), identity)
       const tAsk = performance.now()
       const answer = await x.ask(
         freshEyesPrompt({ goal: opts.goal, snapshot, done: session.steps.slice(1).map((s) => s.action), step: n, maxSteps: x.maxSteps, hasAccount: !!identity }),
@@ -878,7 +1019,7 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
       }
       unusable = 0
       const { action, opinion } = parsed
-      if (opinion) session.opinions.push({ ...opinion, screen, step: n })
+      if (opinion) session.opinions.push({ ...opinion, screen, step: n, mainChars: facts.mainChars })
       const wall = isAuthWall(facts)
       const reqs = externalRequirements(facts.text)
       if (action.action === 'stuck') {
@@ -894,7 +1035,7 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
           x.addCandidate({ kind: 'dead_end', screen, detail: 'Nothing on the screen leads forward.', steps: [...actions], session: index })
         } else {
           stall(n, 'model_gave_up', action.reason || 'The visitor did not know what to do next.')
-          session.opinions.push({ category: 'gave_up', why: action.reason, screen, step: n })
+          session.opinions.push({ category: 'gave_up', why: action.reason, screen, step: n, mainChars: facts.mainChars })
         }
         break
       }
@@ -903,17 +1044,49 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
         say(`  step ${n}: the visitor thinks the goal is reached; the goal check says no`)
         if (doneClaims >= 2) {
           stall(n, 'model_gave_up', 'The visitor believed the goal was reached, but the goal check did not pass.')
-          session.opinions.push({ category: 'confusing', why: 'I thought I was done here.', screen, step: n })
+          session.opinions.push({ category: 'confusing', why: 'I thought I was done here.', screen, step: n, mainChars: facts.mainChars })
           break
         }
         continue
       }
       const blockedBefore = browser.guard.blocked.length
       const submitsBefore = x.readOnly ? await heldSubmits(page) : 0
+      const cappedBefore = contentWaitsCapped(page)
+      const actedOn = page
+      opened.length = 0
       const tAct = performance.now()
       const refusal = await perform(page, action, isFreshEyesRefusedLabel, (v) => fillValue(v, identity))
+      // A click that opened a window: follow it when it is the app's, close it when it is not.
+      const popup = refusal ? undefined : opened.find((p) => !p.isClosed() && p !== actedOn && !windows.includes(p))
+      let popupNote: string | null = null
+      let popupLeft = false
+      if (popup) {
+        // A popup starts at about:blank and navigates after: wait for its real address.
+        await popup.waitForURL((u) => u.toString() !== 'about:blank', { timeout: 5000 }).catch(() => {})
+        await popup.waitForLoadState('domcontentloaded', { timeout: 15_000 }).catch(() => {})
+        let origin = ''
+        try {
+          origin = new URL(popup.url()).origin
+        } catch {
+          origin = ''
+        }
+        if (x.appOrigins.includes(origin) || popup.url() === 'about:blank') {
+          await switchTo(popup)
+          await waitForContent(page).catch(() => {})
+          popupNote = `opened a new window at ${pathOf(popup.url()).slice(0, 120)}; the visitor followed it`
+        } else {
+          popupNote = `opened a new window outside the app (${origin.slice(0, 80) || 'unknown'}); closed it`
+          popupLeft = true
+          await popup.close().catch(() => {})
+        }
+      }
       const appMs = since(tAct)
       const step: FreshEyesStep = { n, action: describeFresh(action), path: '', screen: '', modelMs, appMs, readMs: 0, outcome: 'ok', ...(opinion ? { opinion } : {}) }
+      if (contentWaitsCapped(actedOn) > cappedBefore || (page !== actedOn && contentWaitsCapped(page) > 0)) step.capped = true
+      if (popupNote) {
+        step.note = popupNote
+        if (popupLeft) step.outcome = 'left-app'
+      }
       // What the guard refused during the action (a payment page, a third-party sign-in), even when the click itself then failed.
       const refusedRequests = browser.guard.blocked
         .slice(blockedBefore)
@@ -1027,7 +1200,8 @@ function finish(s: FreshEyesSession): FreshEyesSession {
   s.modelSeconds = Math.round((s.modelSeconds + s.steps.reduce((t, x) => t + x.modelMs, 0) / 1000) * 10) / 10
   if (s.outcome === 'reached') {
     s.stall = null
-    s.ttfvSeconds = ttfvOf(s.steps)
+    // A wait that hit its cap is the cap, not the app: such a path has no measured time.
+    s.ttfvSeconds = appWaitCapped(s.steps) ? null : ttfvOf(s.steps)
   }
   return s
 }

@@ -246,7 +246,7 @@ export function accountGrantUsable(row: Pick<QueuedFreshEyesRow, 'account_grante
 }
 
 /** What the worker gets for a fresh-eyes claim. `accounts` are present once, only in this answer. */
-export function freshEyesClaimTarget(row: QueuedFreshEyesRow, accounts: ReadonlyArray<{ email: string; password: string; name: string }>) {
+export function freshEyesClaimTarget(row: QueuedFreshEyesRow, accounts: ReadonlyArray<{ email: string; password: string; name: string; userId: string }>) {
   return {
     runId: row.local_run_id,
     url: row.start_url ?? '',

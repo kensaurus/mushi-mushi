@@ -34,7 +34,7 @@ import { DEFAULT_CURSOR_REVIEW_MODEL } from './checker.js'
 import { CHARTERS, runExplore, type CharterName } from './explore.js'
 import { hasSuccessCheck, presetFor, runFreshEyes, type SuccessCheck } from './fresh-eyes.js'
 import { fileFreshEyesFindings, mintTestAccount, syncFreshEyes, writeTimeline } from './fresh-eyes-report.js'
-import { literalPattern, parseStdinRequest, readStdin, syncsToConsole } from './fresh-eyes-request.js'
+import { literalPattern, parseStdinRequest, readStdin, stepsFor, syncsToConsole } from './fresh-eyes-request.js'
 import { runTerminalSetup } from './fresh-eyes-terminal.js'
 import { DEFAULT_JUDGE_MODEL } from './judge.js'
 import { cachedProfile, parseChannel } from './profile.js'
@@ -459,7 +459,7 @@ program
   .option('--url <url>', 'Where a stranger starts: the landing page (required unless --request-stdin)')
   .option('--goal <text>', 'What they came to do, in plain words, e.g. "get my first bug explained" (required unless --request-stdin)')
   .option('--sessions <n>', 'Independent sessions; opinions are filed only when 2 agree', '3')
-  .option('--steps <n>', 'Actions per session (at most 80)', '30')
+  .option('--steps <n>', 'Actions per session (at most 80; default 30, or 60 with a test account)')
   .option('--model <id>', 'Cursor CLI model that plays the visitor', DEFAULT_CURSOR_REVIEW_MODEL)
   .option('--app-host <host>', "A host that is the app's own (its API, its Supabase project): writes may reach it (repeatable)", collect, [])
   .option('--success-url <glob>', 'The goal is reached at this path, e.g. "/admin/reports/*"')
@@ -480,7 +480,7 @@ program
       url?: string
       goal?: string
       sessions: string
-      steps: string
+      steps?: string
       model: string
       appHost: string[]
       successUrl?: string
@@ -527,7 +527,7 @@ program
         goal,
         success,
         sessions,
-        steps: Number(o.steps),
+        steps: stepsFor(o.steps, !dryRun && (givenAccounts.length > 0 || !!o.mintAccount || !!appAccount)),
         model: o.model,
         appHosts: [...(preset?.appHosts ?? []), ...o.appHost],
         allow: o.allow,
