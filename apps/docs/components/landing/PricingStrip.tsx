@@ -23,7 +23,9 @@ export function PricingStrip() {
           <li key={tier.id} className="landing-pricing__tier">
             <span className="landing-pricing__name">{tier.name}</span>
             <span className="landing-pricing__price">{tier.monthly}</span>
-            <span className="landing-pricing__quota">Diagnoses: {tier.diagnoses}</span>
+            <span className="landing-pricing__quota">
+              {tier.apps === '1' ? '1 app' : `${tier.apps} apps`} · {tier.diagnoses} diagnoses
+            </span>
           </li>
         ))}
       </ul>

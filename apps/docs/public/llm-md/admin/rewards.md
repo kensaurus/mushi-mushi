@@ -15,7 +15,7 @@ reports, leaving comments — earns them points. Points advance tiers. Tiers
 open perks you configure: free plan upgrades, early-access flags, and
 (optionally) monetary payouts via Stripe Connect.
 
-  The Rewards page is available on **Pro** and **Enterprise** plans. The admin
+  The Rewards page is available on **Builder**, **Studio** and **Enterprise**. The admin
   toggle at the bottom of [Settings](#settings) is always visible so you can
   prepare your configuration before flipping the SDK flag in your app.
 

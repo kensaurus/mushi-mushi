@@ -1,7 +1,7 @@
 /**
  * FILE: apps/admin/src/components/billing/ChangePlanDialog.tsx
  * PURPOSE: Confirm an in-app plan change for a project that already pays
- *          (Indie ↔ Pro, monthly ↔ annual). Shows Stripe's prorated preview
+ *          (Builder ↔ Studio, monthly ↔ annual). Shows Stripe's prorated preview
  *          before anything changes, then applies it.
  *
  * Server: POST /v1/admin/billing/change-plan/preview and /change-plan

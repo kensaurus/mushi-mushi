@@ -81,6 +81,24 @@ describe('SdkInstallKeyPanel rotation', () => {
     await flush()
   }
 
+  // "Mint SDK key" was jargon, and the card told people to look for
+  // "mushi_xxx" (first-time user test, 2026-10-28).
+  it('makes a key with a plain-named button and hands it to the snippet', async () => {
+    const onRotatedKeyChange = vi.fn()
+    api.apiFetch.mockImplementation(async (path: string) => {
+      if (path === '/v1/admin/projects') return { ok: true, data: { projects: [{ id: PROJECT, api_keys: [SDK_KEY] }] } }
+      return { ok: true, data: { id: 'k-new', key: 'mushi_newkey0000', prefix: 'mushi_newkey' } }
+    })
+    act(() => {
+      root.render(createElement(MemoryRouter, null, createElement(SdkInstallKeyPanel, { projectId: PROJECT, onRotatedKeyChange, onError: () => {} })))
+    })
+    await flush()
+    expect(buttons().some((b) => /Mint/.test(b.textContent ?? ''))).toBe(false)
+    act(() => buttons().find((b) => b.textContent === 'Make a key and fill it in')!.click())
+    await flush()
+    expect(onRotatedKeyChange).toHaveBeenLastCalledWith('mushi_newkey0000')
+  })
+
   it('has no project-wide "Rotate key" button, only one Rotate per key', async () => {
     await mount()
     expect(buttons().some((b) => b.textContent === 'Rotate key')).toBe(false)

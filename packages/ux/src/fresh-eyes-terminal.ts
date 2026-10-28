@@ -96,14 +96,35 @@ async function timed<T>(fn: () => Promise<T>): Promise<{ value: T; ms: number }>
   return { value, ms: Math.max(0, Math.round(performance.now() - t)) }
 }
 
-/** Environment for the setup command: no MUSHI_* of this run, no agent keys; CI=1 so it never prompts. */
-function setupEnv(): NodeJS.ProcessEnv {
+/**
+ * Environment for the setup command: no MUSHI_* of this run, no agent keys;
+ * CI=1 so it never prompts; and a home of its own. A setup wizard saves the
+ * credentials it was given (`mushi-mushi` writes ~/.config/mushi/config.json
+ * and the keychain), which on the operator's machine would replace their own
+ * CLI login with the test app's ingest key. The npm cache stays shared.
+ * @internal Exported for tests only.
+ */
+export function setupEnv(home: string, base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {}
-  for (const [k, v] of Object.entries(process.env)) {
-    if (/^(MUSHI_|CURSOR_API_KEY$|ANTHROPIC_API_KEY$|OPENAI_API_KEY$|GITHUB_TOKEN$|GH_TOKEN$)/.test(k)) continue
+  for (const [k, v] of Object.entries(base)) {
+    if (/^(MUSHI_|CURSOR_API_KEY$|ANTHROPIC_API_KEY$|OPENAI_API_KEY$|GITHUB_TOKEN$|GH_TOKEN$|XDG_CONFIG_HOME$|XDG_DATA_HOME$|XDG_STATE_HOME$|DBUS_SESSION_BUS_ADDRESS$)/.test(k)) continue
     env[k] = v
   }
-  return { ...env, CI: '1', MUSHI_TELEMETRY: '0' }
+  const realHome = base.HOME ?? base.USERPROFILE ?? ''
+  const npmCache = base.npm_config_cache ?? (realHome ? join(realHome, process.platform === 'win32' ? 'AppData/Local/npm-cache' : '.npm') : undefined)
+  return {
+    ...env,
+    HOME: home,
+    USERPROFILE: home,
+    APPDATA: join(home, 'AppData', 'Roaming'),
+    LOCALAPPDATA: join(home, 'AppData', 'Local'),
+    XDG_CONFIG_HOME: join(home, '.config'),
+    XDG_DATA_HOME: join(home, '.local', 'share'),
+    XDG_STATE_HOME: join(home, '.local', 'state'),
+    ...(npmCache ? { npm_config_cache: npmCache } : {}),
+    CI: '1',
+    MUSHI_TELEMETRY: '0',
+  }
 }
 
 export async function runTerminalSetup(o: TerminalOptions): Promise<TerminalResult> {
@@ -133,7 +154,11 @@ export async function runTerminalSetup(o: TerminalOptions): Promise<TerminalResu
   }
   const exec =
     o.runCommand ??
-    ((cmd: string, args: readonly string[], cwd: string) => run(cmd, args, { cwd, env: setupEnv(), shell: process.platform === 'win32', timeoutMs: o.setupTimeoutMs ?? 300_000 }))
+    ((cmd: string, args: readonly string[], cwd: string) => {
+      const home = join(o.dir, 'home')
+      mkdirSync(join(home, '.config'), { recursive: true })
+      return run(cmd, args, { cwd, env: setupEnv(home), shell: process.platform === 'win32', timeoutMs: o.setupTimeoutMs ?? 300_000 })
+    })
   const st = await timed(() => exec(argv.cmd, argv.args, sample))
   if (st.value.timedOut) return fail('setup', st.ms, `The setup command did not finish in ${Math.round((o.setupTimeoutMs ?? 300_000) / 1000)} s: ${st.value.tail.slice(-200)}`)
   if (st.value.exitCode !== 0) return fail('setup', st.ms, `The setup command exited ${st.value.exitCode}: ${st.value.tail.trim().slice(-300)}`)

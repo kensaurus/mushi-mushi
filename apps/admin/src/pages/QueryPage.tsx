@@ -607,8 +607,10 @@ export function QueryPage() {
           )}
         </div>
 
-        {/* Quick-fire suggestion chips — NL mode only */}
-        {queryMode === 'nl' && (
+        {/* Quick-fire suggestion chips: NL mode, and only once the prompt
+            library below has made way for results. On an empty page both
+            listed the same questions (console sweep, 2026-10-28). */}
+        {queryMode === 'nl' && runs.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-edge-subtle/50">
             {PROMPT_CATEGORIES.flatMap((c) => c.prompts)
               .slice(0, 5)

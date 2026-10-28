@@ -24,6 +24,8 @@ export interface MachineReadings {
   /** GitHub core API calls left, or null when unknown (a hung or failed call). */
   ghRemaining: number | null
   cursor: 'signed_in' | 'signed_out' | 'unknown' | 'missing'
+  /** gh's sign-in, from the GitHub quota call; missing or 'unknown' never blocks. */
+  gh?: 'signed_in' | 'signed_out' | 'unknown'
   /** Agents running now across every lane on this host. */
   agents: number
 }
@@ -43,6 +45,8 @@ export function hostGate(g: HostGuards, r: MachineReadings): { ok: true } | { ok
   if (r.ghRemaining !== null && r.ghRemaining < g.gh_floor) {
     return { ok: false, state: 'gh-quota-wait', why: `${r.ghRemaining} GitHub API calls left, under the ${g.gh_floor} floor` }
   }
+  // The worker pushes and opens PRs with the machine's gh: a clear "signed out" waits (it used to stop the daemon at start).
+  if (r.gh === 'signed_out') return { ok: false, state: 'auth-wait', why: 'gh is not signed in on this machine (run gh auth login)' }
   if (r.cursor === 'missing') return { ok: false, state: 'auth-wait', why: 'cursor-agent is not installed or not on PATH' }
   if (r.cursor === 'signed_out') return { ok: false, state: 'auth-wait', why: 'the Cursor CLI is signed out (run cursor-agent login)' }
   // 'unknown' (a status call that timed out) goes on, as `mushi work` does:

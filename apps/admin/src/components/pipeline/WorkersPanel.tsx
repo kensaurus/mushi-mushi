@@ -10,7 +10,12 @@
  *              and Revoke;
  *            - each lane: model, mode, runs at once, pause, drain, stop date,
  *              what it runs now, its queue in order (move, remove), its last
- *              runs with PRs, timeouts and errors.
+ *              runs with PRs, timeouts and errors;
+ *            - first, loud and never collapsed: every problem that stops a
+ *              worker (WorkerFlags, ADR 0048 amendment 2026-10-28): a stuck
+ *              run with its stage and last log lines, an offline machine, a
+ *              failing account check, lanes waiting for an agent space, idle
+ *              credits, each with its fix.
  *
  *          The machine pulls these settings at its next heartbeat (within a
  *          minute); the server never reaches into the machine.
@@ -26,20 +31,25 @@ import { IconServer } from '../icons'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
 import {
+  durationLabel,
   patchHostGuards,
   patchLane,
   putQueue,
   revokeHost,
   sinceLabel,
   workersSummary,
+  STAGE_LABEL,
   type HostGuards,
   type LaneSettings,
+  type RunStage,
   type WorkerHost,
   type WorkerLane,
   type WorkLanesData,
 } from '../../lib/workers'
+import { WorkerFlags } from './WorkerFlags'
 import { WorkerKeyForm } from './WorkerKeyForm'
 import { WorkerLaneCard } from './WorkerLaneCard'
+import { SwitchCursorAccountDialog } from './SwitchCursorAccount'
 
 interface Props {
   /** One app, or null for every app the caller can open. */
@@ -47,8 +57,94 @@ interface Props {
   now: number
 }
 
+const SWITCH_STATE: Record<string, string> = {
+  requested: 'switch asked, waiting for the machine',
+  waiting_for_runs: 'switch waiting for runs to finish',
+  link_ready: 'sign-in link ready',
+  signed_in: 'last switch done',
+  wrong_account: 'last switch signed in as the wrong account',
+  failed: 'last switch failed',
+  expired: 'last switch expired',
+}
+
+/** The account the lanes spend (set in the console) and "Switch account", for the machine's owner. */
+function CursorAccountRow({ host, onChanged }: { host: WorkerHost; onChanged: () => void }) {
+  const [open, setOpen] = useState(false)
+  const testId = `worker-host-${host.id}`
+  const login = host.cursorLogin
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-2xs text-fg-muted" data-testid={`${testId}-account`}>
+      <span>Lanes spend:</span>
+      <span className="text-fg">{host.cursorAccount ?? 'the account the machine is signed in as'}</span>
+      {login && <Badge tone={login.state === 'signed_in' ? 'ok' : login.state === 'link_ready' || login.state === 'requested' || login.state === 'waiting_for_runs' ? 'warn' : 'danger'}>{SWITCH_STATE[login.state] ?? login.state}</Badge>}
+      {host.mine && !host.revoked && (
+        <Btn size="sm" variant="ghost" onClick={() => setOpen(true)} data-testid={`${testId}-switch-account`}>
+          {login?.state === 'link_ready' ? 'Open the sign-in' : 'Switch account'}
+        </Btn>
+      )}
+      {open && <SwitchCursorAccountDialog hostId={host.id} hostname={host.hostname} onClose={() => setOpen(false)} onChanged={onChanged} />}
+    </div>
+  )
+}
+
 const INSTALL_ONE = 'mushi worker install --lane my-app --project <app id> --repo-dir ~/src/my-app'
 const INSTALL_CONF = 'mushi worker install --lanes-conf ./lanes.conf --clone-root ~/.cache/mushi-work'
+
+const CURSOR_RESULT: Record<string, { text: string; tone: 'ok' | 'warn' | 'danger' | 'neutral' }> = {
+  expected: { text: 'signed in as expected', tone: 'ok' },
+  other_account: { text: 'signed in as another account', tone: 'danger' },
+  signed_out: { text: 'signed out', tone: 'danger' },
+  timed_out: { text: 'check timed out', tone: 'warn' },
+  missing: { text: 'not installed', tone: 'danger' },
+  unclear: { text: 'unclear answer', tone: 'neutral' },
+}
+
+interface HostTelemetry {
+  checks?: {
+    cursor?: { result: string; ageSec: number; detail: string; account: string | null }
+    gh?: { result: string; ageSec: number; detail: string }
+  }
+  slots?: Array<{ lane: string; runId: string; kind: string; ageSec: number; stage: RunStage; stageSec: number }>
+  waitWhy?: string
+}
+
+/** What the machine last said about its account check, gh, why it waits and who holds each agent space. */
+function HostChecks({ host }: { host: WorkerHost }) {
+  const t = host.status as HostTelemetry
+  const testId = `worker-host-${host.id}`
+  if (!t.checks && !t.slots) {
+    return <p className="text-2xs text-fg-faint">This machine's Mushi CLI does not report its checks or what each agent space runs. Update it there (npm i -g @mushi-mushi/cli) to see them.</p>
+  }
+  const cur = t.checks?.cursor
+  const gh = t.checks?.gh
+  const curMeta = cur ? (CURSOR_RESULT[cur.result] ?? CURSOR_RESULT.unclear!) : null
+  return (
+    <div className="space-y-1 text-2xs text-fg-muted" data-testid={`${testId}-checks`}>
+      <p className="flex flex-wrap items-center gap-1.5">
+        <span>Cursor account:</span>
+        {cur && curMeta ? (
+          <>
+            <Badge tone={curMeta.tone}>{curMeta.text}</Badge>
+            <span>
+              {cur.account ? `(${cur.account}) ` : ''}checked {durationLabel(cur.ageSec)} ago{cur.detail ? `: "${cur.detail}"` : ''}
+            </span>
+          </>
+        ) : (
+          <span>not checked yet</span>
+        )}
+        <span className="ml-2">GitHub (gh):</span>
+        {gh ? <Badge tone={gh.result === 'signed_in' ? 'ok' : gh.result === 'signed_out' ? 'danger' : 'neutral'}>{gh.result.replace('_', ' ')}</Badge> : <span>not checked yet</span>}
+      </p>
+      {t.waitWhy && <p data-testid={`${testId}-wait`}>Waiting: {t.waitWhy}.</p>}
+      {t.slots && (
+        <p data-testid={`${testId}-slots`}>
+          Agent spaces: {t.slots.length} of {host.guards.max_agents} in use
+          {t.slots.length > 0 && `: ${t.slots.map((x) => `${x.lane} (${durationLabel(x.ageSec)}, ${STAGE_LABEL[x.stage] ?? x.stage})`).join('; ')}`}.
+        </p>
+      )}
+    </div>
+  )
+}
 
 function HostCard({ host, now, onChanged }: { host: WorkerHost; now: number; onChanged: () => void }) {
   const [guards, setGuards] = useState<HostGuards>(host.guards)
@@ -90,10 +186,12 @@ function HostCard({ host, now, onChanged }: { host: WorkerHost; now: number; onC
       </div>
       <p className="text-2xs text-fg-muted">
         {s.memAvailableGb != null ? `${String(s.memAvailableGb)} GB free` : 'free memory not reported'}
+        {s.load1 != null && s.cpus ? ` · load ${String(s.load1)} on ${String(s.cpus)} cores` : ''}
         {s.ghRemaining != null ? ` · ${String(s.ghRemaining)} GitHub API calls left` : ''}
-        {s.cursor ? ` · Cursor ${String(s.cursor).replace('_', ' ')}` : ''}
         {host.version ? ` · mushi ${host.version}` : ''}
       </p>
+      <HostChecks host={host} />
+      <CursorAccountRow host={host} onChanged={onChanged} />
       {host.mine && !host.revoked ? (
         <div className="flex flex-wrap items-end gap-2">
           <div className="w-28">
@@ -184,9 +282,13 @@ export function WorkersPanel({ projectId, now }: Props) {
     </HelpPopover>
   )
 
+  const flags = Array.isArray(data.flags) ? data.flags : []
+  const flagList = <WorkerFlags flags={flags} onChanged={reload} />
+
   if (data.hosts.length === 0) {
     return (
       <div className="space-y-3" data-testid="workers-empty">
+        {flagList}
         <PageFirstStep
           marksPageEmpty={false}
           icon={<IconServer size={16} />}
@@ -210,11 +312,12 @@ export function WorkersPanel({ projectId, now }: Props) {
 
   return (
     <div className="space-y-4" data-testid="workers-panel">
+      {flagList}
       <PageStatus
         data-testid="workers-status"
         ariaLabel="Local workers"
-        sentence={sum.sentence}
-        tone={sum.tone}
+        sentence={flags.length ? `${flags[0]!.title}.${flags.length > 1 ? ` ${flags.length - 1} more problem${flags.length === 2 ? '' : 's'} above.` : ''}` : sum.sentence}
+        tone={flags.some((f) => f.severity === 'danger') ? 'danger' : flags.length ? 'warn' : sum.tone}
         metrics={[
           { label: 'Workers online', value: sum.online },
           { label: 'Lanes taking reports', value: sum.taking },
@@ -249,7 +352,7 @@ export function WorkersPanel({ projectId, now }: Props) {
         ) : (
           <ul className="space-y-2">
             {data.lanes.map((l) => (
-              <WorkerLaneCard key={`${l.id}:${JSON.stringify(l.config)}:${l.reviewModel ?? ''}`} lane={l} host={hosts.get(l.hostId)} now={now} showApp={showApp} onPatch={onPatch} onQueue={onQueue} />
+              <WorkerLaneCard key={`${l.id}:${JSON.stringify(l.config)}:${l.reviewModel ?? ''}`} lane={l} host={hosts.get(l.hostId)} now={now} showApp={showApp} onPatch={onPatch} onQueue={onQueue} onChanged={reload} />
             ))}
           </ul>
         )}

@@ -19,6 +19,7 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { statLinkLabel } from '../../lib/statCardLinks'
+import { useHandedBannerAction, usePublishPageStatus } from '../../lib/pageStatusPresence'
 import { InfoHint } from './fields'
 import { FreshnessPill, type SectionFreshness } from './layout'
 import { PageFirstStep, type PageFirstStepProps } from './page-first-step'
@@ -92,6 +93,8 @@ export function PageStatus({
   ariaLabel = 'Page status',
   'data-testid': testId = 'page-status',
 }: PageStatusProps) {
+  usePublishPageStatus()
+  const handedAction = useHandedBannerAction()
   const allEmpty = metrics.length > 0 && metrics.every((m) => isEmptyMetricValue(m.value))
   if (allEmpty && empty) return <PageFirstStep {...empty} />
   const shown = allEmpty ? [] : metrics
@@ -107,10 +110,11 @@ export function PageStatus({
           <span aria-hidden="true" className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${TONE_DOT[tone]}`} />
           <span className="min-w-0 text-pretty">{sentence}</span>
         </p>
-        {freshness || action ? (
+        {freshness || action || handedAction ? (
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             {freshness ? <FreshnessPill {...freshness} /> : null}
             {action}
+            {handedAction}
           </div>
         ) : null}
       </div>

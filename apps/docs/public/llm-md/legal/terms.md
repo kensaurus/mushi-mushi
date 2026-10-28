@@ -13,7 +13,7 @@ description: The terms for Mushi Cloud, the admin console, the SDKs and the Boun
   draft. The governing-law and venue clause (section 14) has not been confirmed
   yet. Questions: kensaurus@gmail.com.
 
-**Effective date:** 2026-09-21 · **Version:** 1
+**Effective date:** 2026-10-28 · **Version:** 2 (version 1, 2026-09-21, described the Indie and Pro plans; version 2 describes Free, Builder, Studio and Enterprise, each limited by apps watched and diagnoses a month, and lengthens Free history from 7 to 14 days)
 
 These terms are between you and **kensaurus LLC (kensaurus合同会社)** (Japan,
 "Mushi", "we") and cover **Mushi Cloud** at `kensaur.us/mushi-mushi`,
@@ -57,7 +57,7 @@ configuration, brand, or content beyond what these terms allow.
 - You need a working email address or a Google / GitHub login. Keep your
   credentials and API keys secret; you are responsible for what happens under
   them. Rotate a key from **Settings → API keys** the moment you suspect a leak.
-- One person per seat. Team seats on Pro and Enterprise are for named people
+- One person per seat. Team seats on Studio and Enterprise are for named people
   in your organisation.
 - You must be **16 or older**.
 - We may suspend an account that breaks section 5, does not pay, or is used
@@ -102,8 +102,8 @@ users, or your app.
 
 ## 7. Free tier
 
-The **Free Cloud** plan includes **50 diagnoses per month**, one seat, and
-7-day report retention. At 50, the pipeline **stops** for the rest of the
+The **Free** plan includes **one app and 100 diagnoses per month**, one seat, and
+14-day report retention. At 100, the pipeline **stops** for the rest of the
 calendar month: reports are still accepted and stored, but no new diagnoses
 run until the counter resets or you upgrade. We do not silently bill overage
 on Free. We may change Free limits with 30 days' notice on the pricing page.
@@ -114,8 +114,8 @@ on Free. We may change Free limits with 30 days' notice on the pricing page.
   through **Stripe**; we never see your full card number.
 - Plans bill **monthly** or **annually** in advance, in US dollars, plus any
   tax we must collect.
-- **Overage** on Indie and Pro is metered per diagnosis at the rate shown on
-  the pricing page and capped by a **spend cap** ($50 on Indie, $200 on Pro).
+- **Overage** on Builder and Studio is metered per diagnosis at the rate shown on
+  the pricing page and capped by a **spend cap** ($50 on Builder, $200 on Studio).
   When the cap is reached the pipeline stops, like Free, until the next period
   or until you raise the cap in **Billing**. You get email alerts at 50 %,
   80 %, and 100 % of your included diagnoses.

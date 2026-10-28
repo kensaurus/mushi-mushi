@@ -40,6 +40,7 @@ import type {
   SkillsNavSlice,
   SsoNavSlice,
   StorageNavSlice,
+  WorkersNavSlice,
 } from './remainingNavSliceTypes'
 import type { HealthTone } from './useNavCounts'
 import type { WorkspaceNavBadge } from './workspaceNavMeta'
@@ -161,6 +162,7 @@ export interface NavStatSlices {
   integrations: IntegrationsNavSlice | null
   featureBoard: FeatureBoardNavSlice | null
   skills: SkillsNavSlice | null
+  workers: WorkersNavSlice | null
 }
 
 export const EMPTY_NAV_STAT_SLICES: NavStatSlices = {
@@ -200,6 +202,7 @@ export const EMPTY_NAV_STAT_SLICES: NavStatSlices = {
   integrations: null,
   featureBoard: null,
   skills: null,
+  workers: null,
 }
 
 function attentionBadge(
@@ -580,22 +583,13 @@ export function fullstackAuditNavBadge(
   return null
 }
 
+/**
+ * Home's own count. Failed fixes and integration issues are not repeated
+ * here: Fixes and Integrations sit right below Home in the sidebar and carry
+ * them (owner walk, 2026-10-28: "48" on both Home and Fixes).
+ */
 export function dashboardNavBadge(stats: NavStatSlices['dashboard']): WorkspaceNavBadge | null {
   if (!stats) return null
-  if (stats.fixesFailed > 0) {
-    return attentionBadge(
-      stats.fixesFailed,
-      'danger',
-      `${stats.fixesFailed} failed fix${stats.fixesFailed === 1 ? '' : 'es'} on dashboard`,
-    )
-  }
-  if (stats.integrationIssues > 0) {
-    return attentionBadge(
-      stats.integrationIssues,
-      'warn',
-      `${stats.integrationIssues} integration issue${stats.integrationIssues === 1 ? '' : 's'}`,
-    )
-  }
   if (stats.openBacklog > 0 && stats.topPriority === 'backlog') {
     return attentionBadge(
       stats.openBacklog,
@@ -790,6 +784,13 @@ export function repoStatsNavBadge(stats: NavStatSlices['repo']): WorkspaceNavBad
     )
   }
   return null
+}
+
+/** Pipeline: a local worker stopped doing useful work (stuck run, offline, account check…). Never hidden. */
+export function workersNavBadge(stats: NavStatSlices['workers']): WorkspaceNavBadge | null {
+  if (!stats || stats.flags <= 0) return null
+  const what = `${stats.flags} local worker problem${stats.flags === 1 ? '' : 's'}`
+  return attentionBadge(stats.flags, stats.danger > 0 ? 'danger' : 'warn', stats.top ? `${what}: ${stats.top}` : what)
 }
 
 export function mcpNavBadge(stats: NavStatSlices['mcp']): WorkspaceNavBadge | null {

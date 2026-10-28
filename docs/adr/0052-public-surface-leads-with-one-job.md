@@ -79,3 +79,19 @@ The critical audit of 2026-10-27 measured the front door:
   not get a landing section.
 - Re-adding a section to the landing for anything but the one job needs a
   superseding ADR.
+
+## Amendment 2026-10-28 (owner decision)
+
+The hero's one secondary link becomes the free Production Check
+(`/check?src=landing-hero`: "Not ready to install? Check your live site free,
+nothing to install, no sign-up"). The sample diagnosis is still linked, one
+scroll down, at the end of "How it works".
+
+Why: a recipient walk-through on 2026-10-28 found that a skeptical stranger is
+asked to run a terminal command from an unknown site before seeing any proof,
+and the research the owner asked for agrees that value before trust (a free
+check of their own site, public live numbers, a real person behind it) is what
+lowers that barrier. The owner chose this option over keeping the landing as it
+was and over leading with the check. Still one primary action and one secondary
+link; `lib/landing-cinematic.test.ts` holds the new pair.
+

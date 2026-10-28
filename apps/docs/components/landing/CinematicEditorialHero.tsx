@@ -8,7 +8,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { motion } from 'motion/react'
-import { LANDING_HERO, LANDING_SAMPLE_LINK } from '@/lib/landing-copy'
+import { LANDING_CHECK_LINK, LANDING_HERO } from '@/lib/landing-copy'
 import { LandingInstallStrip } from './LandingInstallStrip'
 import { usePrefersReducedMotion } from './use-prefers-reduced-motion'
 import { landingStampVariants } from './landing-stagger'
@@ -104,11 +104,14 @@ export function CinematicEditorialHero({
           )
         ) : null}
         <LandingInstallStrip />
-        {/* The one secondary link (ADR 0052): a diagnosis to read, no signup. */}
+        {/* The one secondary link (ADR 0052, amended 2026-10-28): the free
+            Production Check, value before trust. The sample is in How it works. */}
         <p className="landing-hero-sample">
-          <Link href={LANDING_SAMPLE_LINK.href} data-mushi-cta={LANDING_SAMPLE_LINK.id} data-mushi-location="hero">
-            {LANDING_SAMPLE_LINK.label} →
-          </Link>
+          {LANDING_CHECK_LINK.lead}{' '}
+          <Link href={LANDING_CHECK_LINK.href} data-mushi-cta={LANDING_CHECK_LINK.id} data-mushi-location="hero">
+            {LANDING_CHECK_LINK.label} →
+          </Link>{' '}
+          <span className="landing-hero-note">({LANDING_CHECK_LINK.note})</span>
         </p>
         <p className="landing-hero-reassure">{LANDING_HERO.reassure}</p>
       </div>

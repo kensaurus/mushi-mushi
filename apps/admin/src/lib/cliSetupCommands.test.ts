@@ -15,7 +15,7 @@ describe('cliSetupCommands', () => {
 
   it('connect targets the endpoint it is given, never a hard-coded cloud URL (QA bug 142)', () => {
     expect(buildMushiConnectCommand(id, 'https://mushi.selfhost.example/functions/v1/api')).toBe(
-      `MUSHI_API_KEY=mushi_xxx mushi connect --project-id ${id} ` +
+      `MUSHI_API_KEY=YOUR_SDK_KEY mushi connect --project-id ${id} ` +
         `--endpoint https://mushi.selfhost.example/functions/v1/api --write-env --wire-ide --wait`,
     )
   })

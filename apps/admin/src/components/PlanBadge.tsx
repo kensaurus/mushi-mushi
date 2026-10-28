@@ -72,7 +72,7 @@ export function PlanBadge({ density = 'header' }: PlanBadgeProps) {
           : null
 
   // Complimentary accounts (Mushi staff / sponsored / beta) intentionally take
-  // over the entire pill — showing "Pro $99/mo" on a comp account
+  // over the entire pill — showing "Studio $79/mo" on a comp account
   // misrepresents the relationship. We surface "Admin" as the primary identity
   // and demote the entitlement tier to a secondary chip so the user still
   // knows which feature set they have access to.

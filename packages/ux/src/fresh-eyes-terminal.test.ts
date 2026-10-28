@@ -8,7 +8,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { DEFAULT_SETUP_COMMAND, parseSetupEnv, runTerminalSetup, sampleHtml, setupArgv } from './fresh-eyes-terminal.js'
+import { DEFAULT_SETUP_COMMAND, parseSetupEnv, runTerminalSetup, sampleHtml, setupArgv, setupEnv } from './fresh-eyes-terminal.js'
 import type { RunResult } from './proc.js'
 
 const values = { projectId: '9f0c2a1e-1111-2222-3333-444455556666', apiKey: 'mushi_sdk_abcdefghijklmnop12' }
@@ -53,6 +53,22 @@ describe('sampleHtml', () => {
     expect(html).toContain('mushi.loader.global.js')
     expect(html).toContain(`data-project="${values.projectId}"`)
     expect(html).not.toContain('"onload="')
+  })
+})
+
+describe('setupEnv', () => {
+  it('gives the setup its own home, so a wizard cannot replace the operator CLI login', () => {
+    const env = setupEnv('/tmp/run/home', { HOME: '/home/op', XDG_CONFIG_HOME: '/home/op/.config', MUSHI_API_KEY: 'k', MUSHI_PROFILE: 'fresh-eyes', CURSOR_API_KEY: 'c', DBUS_SESSION_BUS_ADDRESS: 'unix:x', PATH: '/usr/bin' })
+    expect(env.HOME).toBe('/tmp/run/home')
+    expect(env.XDG_CONFIG_HOME).toBe(join('/tmp/run/home', '.config'))
+    expect(env.MUSHI_API_KEY).toBeUndefined()
+    expect(env.MUSHI_PROFILE).toBeUndefined()
+    expect(env.CURSOR_API_KEY).toBeUndefined()
+    // No session bus: the wizard cannot reach the operator's keychain either.
+    expect(env.DBUS_SESSION_BUS_ADDRESS).toBeUndefined()
+    expect(env.PATH).toBe('/usr/bin')
+    expect(env.npm_config_cache).toBe(join('/home/op', '.npm'))
+    expect(env.CI).toBe('1')
   })
 })
 

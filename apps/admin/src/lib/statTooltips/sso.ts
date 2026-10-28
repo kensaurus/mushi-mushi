@@ -13,7 +13,7 @@ export function registeredCountTooltip(stats: SsoStats): MetricTooltipData {
       ? `${stats.registeredCount} provider${stats.registeredCount === 1 ? '' : 's'} registered with GoTrue (${stats.activeCount} active · ${stats.totalConfigs} total configs).`
       : stats.ssoEntitlement
         ? 'SSO unlocked but no providers registered — complete Setup tab wizard.'
-        : 'SSO requires Pro+ plan — upgrade before registering SAML/OIDC providers.'
+        : 'SSO needs Enterprise — upgrade before registering SAML/OIDC providers.'
 
   return metricTip(
     'SSO provider configs successfully registered with Supabase GoTrue.',
@@ -22,7 +22,7 @@ export function registeredCountTooltip(stats: SsoStats): MetricTooltipData {
     stats.registeredCount === 0 && stats.ssoEntitlement
       ? { tone: 'info', text: 'No registered providers — finish Setup tab.' }
       : !stats.ssoEntitlement
-        ? { tone: 'info', text: 'SSO locked on current plan — Pro+ required.' }
+        ? { tone: 'info', text: 'SSO locked on current plan — Enterprise required.' }
         : undefined,
   )
 }
@@ -81,18 +81,18 @@ export function planGateTooltip(stats: SsoStats): MetricTooltipData {
   const takeaway =
     stats.ssoEntitlement
       ? `SSO unlocked on ${stats.planDisplayName} — register SAML or OIDC providers on Setup tab.`
-      : `SSO locked on ${stats.planDisplayName} — upgrade to Pro+ to enable enterprise identity.`
+      : `SSO locked on ${stats.planDisplayName} — upgrade to Enterprise to enable enterprise identity.`
 
   return metricTip(
     'Whether the current plan includes SSO entitlement (Unlocked vs Locked).',
     'ssoEntitlement from plan entitlements table; planDisplayName is the human-readable tier name.',
     takeaway,
     !stats.ssoEntitlement
-      ? { tone: 'info', text: `${stats.planDisplayName} · Pro+ required for SSO.` }
+      ? { tone: 'info', text: `${stats.planDisplayName} · Enterprise required for SSO.` }
       : undefined,
   )
 }
 
 export function planGateDetail(stats: SsoStats): string {
-  return `${stats.planDisplayName} · Pro+ required`
+  return `${stats.planDisplayName} · Enterprise required`
 }

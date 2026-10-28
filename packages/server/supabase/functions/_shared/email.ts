@@ -33,6 +33,11 @@ export interface TransactionalEmail {
   replyTo?: string
   /** Free-form tags visible in the Resend dashboard (lifecycle key etc.). */
   tags?: Record<string, string>
+  /**
+   * Resend `Idempotency-Key` (≤256 chars, kept 24 h): a retry with the same
+   * key and body returns the first send's result instead of sending again.
+   */
+  idempotencyKey?: string
 }
 
 export type SendEmailResult =
@@ -91,6 +96,7 @@ export async function sendTransactionalEmail(email: TransactionalEmail): Promise
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
+        ...(email.idempotencyKey ? { 'Idempotency-Key': email.idempotencyKey.slice(0, 256) } : {}),
       },
       body: JSON.stringify(payload),
     })
