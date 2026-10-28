@@ -82,21 +82,64 @@ describe('MergeQueuePanel', () => {
     expect(window.localStorage.getItem('mushi:merge-queue-nonempty:p1')).toBe('0')
   })
 
-  it('lists queued rows in a box that scrolls inside the panel', async () => {
+  it('lists queued rows on the page, not inside a short scroll box', async () => {
     await render()
     await answer([row()])
-    const list = host.querySelector('ul.max-h-40')
+    const list = host.querySelector('[data-testid="merge-queue-rows"]')
+    expect(list?.className).not.toContain('max-h-40')
+    expect(list?.className).not.toContain('overflow-y-auto')
     expect(list?.textContent).toContain('o/r#7')
     expect(window.localStorage.getItem('mushi:merge-queue-nonempty:p1')).toBe('1')
+  })
+
+  it('shows every pull request behind "15 to merge", not a four-row window', async () => {
+    await render()
+    await answer(Array.from({ length: 15 }, (_, i) => row({
+      id: `q${i}`,
+      pr_number: [291, 310, 304, 285, 286, 287, 288, 289, 292, 293, 294, 295, 296, 297, 298][i],
+      state: i < 2 ? 'resolving' : 'queued',
+    })))
+    const list = host.querySelector('[data-testid="merge-queue-rows"]')!
+    expect(host.textContent).toContain('15 to merge')
+    expect(host.textContent).toContain('13 approved')
+    expect(list.querySelectorAll('li').length).toBe(15)
+    expect(list.textContent).toContain('Agent resolving')
+    expect(list.textContent).toContain('o/r#291')
+    expect(list.textContent).toContain('o/r#310')
+    expect(list.textContent).toContain('o/r#304')
+    expect(list.textContent).toContain('o/r#285')
+    expect(host.querySelector('[data-testid="merge-queue-more"]')).toBeNull()
+  })
+
+  it('lists every pull request the heading counts, then pages the rest', async () => {
+    await render()
+    const rows = Array.from({ length: 25 }, (_, i) => row({
+      id: `q${i}`,
+      pr_number: 280 + i,
+      state: i < 2 ? 'resolving' : 'queued',
+    }))
+    await answer(rows)
+    const list = host.querySelector('[data-testid="merge-queue-rows"]')!
+    expect(host.textContent).toContain('25 to merge')
+    expect(list.querySelectorAll('li').length).toBe(20)
+    expect(list.textContent).toContain('o/r#291')
+    expect(list.textContent).toContain('o/r#299')
+    expect(list.textContent).not.toContain('o/r#304')
+    const more = host.querySelector('[data-testid="merge-queue-more"]') as HTMLButtonElement
+    expect(more.textContent).toContain('Show 5 more of 25')
+    await act(async () => { more.click() })
+    expect(list.querySelectorAll('li').length).toBe(25)
+    expect(list.textContent).toContain('o/r#304')
+    expect(host.querySelector('[data-testid="merge-queue-more"]')).toBeNull()
   })
 
   it('lets a long ref break and gives the reason its own line on a phone', async () => {
     await render()
     await answer([row({ repo: 'kensaurus/solo-boss-cloud-documentation', pr_number: 789 })])
-    const link = host.querySelector('ul.max-h-40 a')!
+    const link = host.querySelector('[data-testid="merge-queue-rows"] a')!
     expect(link.className).toContain('wrap-anywhere')
     expect(link.textContent).toBe('kensaurus/solo-boss-cloud-documentation#789')
-    const reason = [...host.querySelectorAll('ul.max-h-40 span')].find((s) => s.textContent?.includes('Approved'))!
+    const reason = [...host.querySelectorAll('[data-testid="merge-queue-rows"] span')].find((s) => s.textContent?.includes('Approved'))!
     expect(reason.className).toContain('flex-auto')
     expect(reason.className).not.toContain('flex-1')
   })
