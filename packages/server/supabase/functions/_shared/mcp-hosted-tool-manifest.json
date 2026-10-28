@@ -238,7 +238,8 @@
     "description": "Recent QA story runs.",
     "method": "GET",
     "path": "/v1/admin/projects/{projectId}/qa-stories/{storyId}/runs?limit={limit|10}",
-    "required": ["storyId"]
+    "required": ["storyId"],
+    "requiresProject": true
   },
   "get_qa_story_run": {
     "scope": "mcp:read",
@@ -246,7 +247,8 @@
     "method": "GET",
     "path": "/v1/admin/projects/{projectId}/qa-stories/{storyId}/runs?limit=50",
     "required": ["storyId", "runId"],
-    "transform": "qa_run_pick"
+    "transform": "qa_run_pick",
+    "requiresProject": true
   },
   "test_notification_channel": {
     "scope": "mcp:write",
