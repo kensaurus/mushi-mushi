@@ -75,6 +75,9 @@ export const MUSHI_EVENTS = {
   key_minted: { surface: 'server', required: ['project_id'] },
   first_report_received: { surface: 'server', required: ['project_id'] },
   first_diagnosis_ready: { surface: 'server', required: ['project_id'] },
+  // Once per organization: its first real end-user report from a deployed
+  // app (not a dev server) that got a diagnosis (_shared/activation.ts).
+  activated: { surface: 'server', required: ['project_id'] },
   fix_merged: { surface: 'server', required: ['project_id'] },
   upgrade_completed: { surface: 'server', required: ['project_id', 'plan'] },
   repo_digest_created: { surface: 'server', required: ['project_id'] },
