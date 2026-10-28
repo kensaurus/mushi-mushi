@@ -38,18 +38,18 @@ export function ProjectNarrativeStrip({ projectName, sdkInstalled, hasReports, h
   const allDone = stages.every(s => s.state === 'done')
   return (
     <section
-      aria-label="Project PDCA narrative"
+      aria-label="How a bug gets fixed"
       // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
       className="relative overflow-hidden rounded-lg border border-edge-subtle bg-surface-raised/40 p-4"
     >
       <span aria-hidden="true" className="absolute -top-10 -left-10 h-32 w-32 rounded-full bg-brand/20 blur-3xl opacity-40" />
       <div className="relative">
         <InlineProof className="font-medium uppercase tracking-wider text-fg-muted border-0 bg-transparent px-0 py-0">
-          Your loop on <span className="font-mono text-fg-secondary normal-case tracking-normal">{projectName}</span>
+          How a bug gets fixed on <span className="font-mono text-fg-secondary normal-case tracking-normal">{projectName}</span>
         </InlineProof>
         <h2 className="mt-1 text-base font-semibold text-fg leading-tight">
           {allDone
-            ? `${projectName} has shipped its first auto-fix end to end. New reports flow through Plan → Do → Check → Act automatically.`
+            ? `${projectName} has fixed a bug end to end: a user reported it, Mushi explained it, an agent wrote the fix and it merged.`
             : 'Watch a real user-felt bug travel from your app to a merged pull request, in four stages.'}
         </h2>
 
@@ -57,6 +57,7 @@ export function ProjectNarrativeStrip({ projectName, sdkInstalled, hasReports, h
           {stages.map((stage, i) => (
             <NarrativeStage
               key={stage.id}
+              step={i + 1}
               stage={stage}
               isCurrent={i === activeIndex}
               connector={i < stages.length - 1}
@@ -69,12 +70,13 @@ export function ProjectNarrativeStrip({ projectName, sdkInstalled, hasReports, h
 }
 
 interface NarrativeStageProps {
+  step: number
   stage: StageNarrative
   isCurrent: boolean
   connector: boolean
 }
 
-function NarrativeStage({ stage, isCurrent, connector }: NarrativeStageProps) {
+function NarrativeStage({ step, stage, isCurrent, connector }: NarrativeStageProps) {
   const meta = PDCA_STAGES[stage.id]
   const tone = stage.state === 'done'
     ? `border-ok/40 bg-ok-muted/15`
@@ -93,10 +95,10 @@ function NarrativeStage({ stage, isCurrent, connector }: NarrativeStageProps) {
           aria-hidden="true"
           className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-xs font-bold leading-none ${badge}`}
         >
-          {stage.state === 'done' ? '✓' : meta.letter}
+          {stage.state === 'done' ? '✓' : step}
         </span>
         <div className="min-w-0">
-          <span className="block text-3xs uppercase tracking-wider text-fg-muted">{meta.label}</span>
+          <span className="block text-3xs uppercase tracking-wider text-fg-muted">Step {step}</span>
           <span className="block text-xs font-semibold text-fg leading-tight truncate">{stage.headline}</span>
         </div>
       </header>
@@ -138,7 +140,7 @@ function buildNarrative({ sdkInstalled, hasReports, hasFix, hasMerged }: BuildAr
         id,
         headline: 'Capture user-felt bugs',
         body: sdkInstalled
-          ? 'SDK is wired in. The widget catches console + network + a screenshot the moment a user files a report.'
+          ? 'The SDK is in your app. When a user reports a bug, it sends a screenshot, the console and the network calls with it.'
           : 'Drop the Mushi Mushi widget into your app so end-users can flag bugs without leaving the page.',
         state: hasReports ? 'done' : 'active',
         cta: hasReports
@@ -149,10 +151,10 @@ function buildNarrative({ sdkInstalled, hasReports, hasFix, hasMerged }: BuildAr
     if (id === 'do') {
       return {
         id,
-        headline: 'Dispatch a fix',
+        headline: 'Get a fix',
         body: hasReports
-          ? 'Mushi triages with Stage 1 (Haiku) → Stage 2 (Sonnet + vision). One click dispatches the auto-fix agent to open a draft PR on a feature branch.'
-          : 'After your first report lands, you can dispatch the agent to draft a PR on a feature branch.',
+          ? 'Mushi explains each report in plain English. One click starts a coding agent that opens a draft pull request with the fix.'
+          : 'After your first report lands, one click starts a coding agent that opens a draft pull request with the fix.',
         state: hasFix ? 'done' : hasReports ? 'active' : 'next',
         cta: hasFix ? { to: '/fixes', label: 'Open Fixes' } : undefined,
       }
@@ -160,20 +162,20 @@ function buildNarrative({ sdkInstalled, hasReports, hasFix, hasMerged }: BuildAr
     if (id === 'check') {
       return {
         id,
-        headline: 'Verify quality',
+        headline: 'Check the fix',
         body: hasFix
-          ? 'A judge model independently grades every classification + fix. Langfuse traces every LLM call so you can audit cost, latency, and prompts.'
-          : 'Once a fix exists, an independent judge LLM grades it. You can see the trace + verdict before merging.',
+          ? 'A second AI grades every diagnosis and fix, so you know whether to trust it before you merge.'
+          : 'Once a fix exists, a second AI grades it, and you see its verdict before you merge.',
         state: hasMerged ? 'done' : hasFix ? 'active' : 'next',
-        cta: hasMerged ? { to: '/judge', label: 'Open Judge' } : undefined,
+        cta: hasMerged ? { to: '/judge', label: 'Open Triage grading' } : undefined,
       }
     }
     return {
       id,
-      headline: hasMerged ? 'Loop closed' : 'Standardise the win',
+      headline: hasMerged ? 'Fix merged' : 'Ship it',
       body: hasMerged
-        ? 'Your fix is merged upstream. New reports for the same component now resolve automatically. Connect Slack to get a heads-up on every loop.'
-        : 'After a verified fix is merged, Mushi closes the loop \u2014 the same class of bug stops surfacing. Connect Slack/GitHub to push wins back into your team.',
+        ? 'The fix is merged and the report is closed. Connect Slack to hear about every fix that lands.'
+        : 'When a checked fix merges, Mushi closes the report and tells the person who filed it. Connect Slack or GitHub to share it with your team.',
       state: hasMerged ? 'done' : hasFix ? 'active' : 'next',
       cta: hasMerged ? { to: '/integrations/config', label: 'Add notifications' } : undefined,
     }

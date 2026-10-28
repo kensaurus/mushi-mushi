@@ -248,7 +248,6 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
               <div>
                 <Btn size="sm" onClick={create} loading={busy} disabled={busy}>Connect</Btn>
               </div>
-              {data.planned.length > 0 && <p className="text-2xs text-fg-faint">Planned, not built yet: {data.planned.join(', ')}.</p>}
             </div>
           </DisclosurePanel>
           )}

@@ -587,7 +587,7 @@ export function FeatureBoardPage() {
                   description="Feature requests submitted via the Feedback form will appear here for voting."
                   hints={[
                     'Users pick “Request a feature” in the widget or My feedback',
-                    'Votes are idempotent — click again to remove yours',
+                    'One vote per person; click again to take yours back',
                     'Mark shipped when the idea lands in a release',
                   ]}
                   action={
