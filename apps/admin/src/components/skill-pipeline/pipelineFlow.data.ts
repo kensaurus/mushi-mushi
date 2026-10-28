@@ -13,16 +13,7 @@ import { MarkerType, type Edge, type Node } from '@xyflow/react'
 
 import { readVizToken, stepStatusColor } from '../../lib/vizTokens'
 
-// ── Step status colours ───────────────────────────────────────────────────────
-const STEP_STATUS_HEX: Record<string, string> = {
-  pending: readVizToken('viz-step-pending'),
-  running: readVizToken('viz-step-running'),
-  passed: readVizToken('viz-step-passed'),
-  failed: readVizToken('viz-step-failed'),
-  skipped: readVizToken('viz-step-skipped'),
-}
-
-/** Runtime reader — prefers live CSS token over module-init fallback. */
+/** Step colour from the stylesheet. Unknown statuses use the pending token. */
 export function resolveStepStatusColor(status: string): string {
   return stepStatusColor(status)
 }
@@ -119,8 +110,8 @@ export function buildPipelineEdges(steps: PipelineStep[]): Edge<PipelineEdgeData
   for (let i = 0; i < steps.length - 1; i++) {
     const src = steps[i]
     const tgt = steps[i + 1]
-    const sourceColor = STEP_STATUS_HEX[src.status] ?? STEP_STATUS_HEX.pending
-    const targetColor = STEP_STATUS_HEX[tgt.status] ?? STEP_STATUS_HEX.pending
+    const sourceColor = stepStatusColor(src.status)
+    const targetColor = stepStatusColor(tgt.status)
     const failing = tgt.status === 'failed'
     const flowing = src.status === 'running'
     edges.push({

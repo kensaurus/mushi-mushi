@@ -128,7 +128,8 @@ Found while doing item 3: Tailwind drops `@theme` colours that no utility uses, 
 `base-and-density.css`). In dark mode `readVizToken()` therefore returns the copy in
 `VIZ_FALLBACKS` (`lib/vizTokens.ts`), a second source of truth for every JS-read chart
 colour. Item 3 changed both. Moving the viz tokens to `@theme static`, or into a plain
-`:root` block, would make the stylesheet the one source.
+`:root` block, would make the stylesheet the one source. Done 2026-10-28 (BL-079):
+the viz colours are in `@theme static`, and `readVizToken()` no longer keeps a palette.
 
 ### Original owner list (2026-10-16, before the decisions above)
 
