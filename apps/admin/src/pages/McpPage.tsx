@@ -37,6 +37,7 @@ import { McpOverviewPanel } from '../components/mcp/McpOverviewPanel'
 import { McpCatalogPanel } from '../components/mcp/McpCatalogPanel'
 import { McpSetupPanel } from '../components/mcp/McpSetupPanel'
 import type { McpQuickstartStepProps } from '../components/mcp/McpQuickstartStep'
+import { editorAgentsPageTitle } from '../lib/editorAgentsTitle'
 import {
   MCP_PAGE_TABS,
   buildCursorJson,
@@ -243,7 +244,7 @@ export function McpPage() {
 
   usePublishPageContext({
     route: '/mcp',
-    title: `${activeMeta.label} · Editor agents`,
+    title: editorAgentsPageTitle(activeMeta.label),
     summary: activeMeta.description,
     filters: { tab: activeTab, catalog: catalogTab, project_id: activeProjectId ?? undefined },
     criticalCount: stats.neverConnectedCount + (stats.endpointMismatch ? 1 : 0),

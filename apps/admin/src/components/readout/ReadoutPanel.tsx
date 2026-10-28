@@ -12,7 +12,24 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { DisclosurePanel, FreshnessPill, type SectionFreshness } from '../ui'
+import { DisclosurePanel, FreshnessPill, formatRelative, type SectionFreshness } from '../ui'
+
+/**
+ * Accessible name of the developer-details toggle. The freshness word
+ * ("now", "10 minutes ago") sits in the same button as "raw signals"; a
+ * CSS gap does not insert a space, so the name has to be written out.
+ */
+export function readoutButtonName(title: string, freshness?: SectionFreshness): string {
+  const subject = title.replace(/\s*readout$/i, '').trim()
+  const base = `Developer details · ${subject} endpoints and raw signals`
+  if (!freshness) return base
+  const when = freshness.at
+    ? formatRelative(freshness.at)
+    : freshness.isValidating
+      ? 'Loading…'
+      : '—'
+  return `${base} ${when}`
+}
 
 /** Layout renders an element with this id after the page; readouts portal into it. */
 export const PAGE_FOOT_SLOT_ID = 'page-foot-slot'
@@ -33,6 +50,8 @@ export function ReadoutPanel({
   action?: ReactNode
   children: ReactNode
 }) {
+  const subject = title.replace(/\s*readout$/i, '').trim()
+  const accessibleName = readoutButtonName(title, freshness)
   // Portal into Layout's page-foot slot: order-last only moved the panel inside a
   // flex stack, so on Home it sat mid-page (2026-10-08). Inline when there is no
   // slot (tests, pages rendered outside Layout).
@@ -42,11 +61,12 @@ export function ReadoutPanel({
   }, [])
   const panel = (
     <DisclosurePanel
+      accessibleName={accessibleName}
       title={
         <span className="text-xs font-medium text-fg-secondary">
           Developer details{' '}
           <span className="font-normal text-fg-muted">
-            · {title.replace(/\s*readout$/i, '')} endpoints and raw signals
+            {`· ${subject} endpoints and raw signals${freshness ? ' ' : ''}`}
           </span>
         </span>
       }
