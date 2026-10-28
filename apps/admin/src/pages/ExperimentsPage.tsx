@@ -1,7 +1,11 @@
 /**
  * FILE: apps/admin/src/pages/ExperimentsPage.tsx
  * PURPOSE: A/B experiment console — banner + EXPERIMENTS SNAPSHOT + tabs:
- *          Experiments | New, readout at the foot.
+ *          Experiments | New, readout at the foot. Below sm, each experiment
+ *          row stacks so Launch and its icon button stay fully visible at 390px.
+ *          Variant count and split stay on that row's meta line until md.
+ *          The stacked row keeps role=table/row/cell because display:block
+ *          below sm can drop the native table mapping.
  */
 
 import { useState, useCallback, useMemo } from 'react'
@@ -18,6 +22,7 @@ import { describeApiError } from '../lib/humanizeApiError'
 import { PageLoadError } from '../components/PageLoadError'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useToast } from '../lib/toast'
+import { ResponsiveTable } from '../components/ResponsiveTable'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
@@ -143,7 +148,6 @@ export function ExperimentsPage() {
   // Every mode lands on the work tab that matches the posture (list, or New when empty); the URL wins.
   const rawTab = searchParams.get('tab')
   const activeTab: ExperimentsTabId = explicitExperimentsTab(rawTab) ?? resolveQuickExperimentsRedirect(stats, null) ?? 'experiments'
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const {
     data: expData,
@@ -259,13 +263,13 @@ export function ExperimentsPage() {
         projectScope={stats.projectName ?? projectName ?? undefined}
 
         helpTitle={copy?.help?.title ?? 'A/B experiments'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Each experiment auto-assigns reporters to variants via deterministic hash or Thompson sampling (bandit mode). Run Analyze at any time for an always-valid p-value — no peeking penalty.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Compare two or more versions of a screen and see which one more users finish. The SDK splits your users between the versions, and Mushi tells you when one is clearly ahead.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Test button copy, colour, or layout variants',
           'Measure impact of a new feature on report rate',
-          'Use bandit mode for fast exploration with small samples',
+          'Send more users to the winning version while the test runs, when you have few users',
         ]}
-        helpHowToUse={copy?.help?.howToUse ?? 'Create an experiment, add variants, launch it. The SDK assigns users via mushi.experiment(). Analyze at any time — mSPRT prevents false positives.'}
+        helpHowToUse={copy?.help?.howToUse ?? 'Create an experiment, add versions, start it. The SDK assigns users via mushi.experiment(). Check the result at any time: looking early does not fake a winner.'}
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -281,6 +285,8 @@ export function ExperimentsPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            // Empty page: the snapshot below is its one first step (P3).
+            show: stats.topPriority !== 'no_experiments',
             children: (
               <ExperimentsStatusBanner
                 stats={stats}
@@ -299,9 +305,8 @@ export function ExperimentsPage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'EXPERIMENTS SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
+                onCreate={() => setActiveTab('new')}
               />
             ),
           },
@@ -399,45 +404,60 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
         <Btn size="sm" variant="primary" onClick={onCreate}>+ New experiment</Btn>
       </div>
     )}
-    <Card className="overflow-hidden">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-edge-subtle bg-surface-overlay text-xs text-fg-muted">
-            <th className="px-3 py-2 text-left">Name</th>
-            <th className="px-3 py-2 text-left">Status</th>
-            <th className="px-3 py-2 text-left">Variants</th>
-            <th className="px-3 py-2 text-left">Mode</th>
-            <th className="px-3 py-2 text-left">Created</th>
-            <th className="px-3 py-2" />
+    <Card className="min-w-0 overflow-hidden">
+      {/* Six columns overflow a 390px card and clip Launch down to "L", plus
+          the trailing icon. Below sm the row is a stack: the name wraps
+          and the actions sit on a full-width line. Variants and Split stay
+          in the meta line until md, where those columns take over.
+          Roles stay explicit: display:block on the table parts below sm
+          can drop the native mapping, and the header row is hidden there. */}
+      <ResponsiveTable ariaLabel="Experiments">
+      <table role="table" className="block w-full text-sm sm:table">
+        <thead role="rowgroup" className="hidden sm:table-header-group">
+          <tr role="row" className="border-b border-edge-subtle bg-surface-overlay text-xs text-fg-muted">
+            <th role="columnheader" className="px-3 py-2 text-left">Name</th>
+            <th role="columnheader" className="px-3 py-2 text-left">Status</th>
+            <th role="columnheader" className="hidden px-3 py-2 text-left md:table-cell">Variants</th>
+            <th role="columnheader" className="hidden px-3 py-2 text-left md:table-cell">Split</th>
+            <th role="columnheader" className="px-3 py-2 text-left">Created</th>
+            <th role="columnheader" className="px-3 py-2"><span className="sr-only">Actions</span></th>
           </tr>
         </thead>
-        <tbody>
+        <tbody role="rowgroup" className="block sm:table-row-group">
           {experiments.map((e) => (
-            <tr key={e.id} className="border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50 transition-opacity">
-              <td className="px-3 py-2">
-                <div className="font-medium text-fg">{e.name}</div>
+            <tr key={e.id} role="row" className="block border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50 transition-opacity sm:table-row">
+              <td role="cell" className="block min-w-0 px-3 pt-2 sm:table-cell sm:py-2">
+                <div className="font-medium text-fg wrap-break-word">{e.name}</div>
                 {e.hypothesis && <div className="text-xs text-fg-muted truncate max-w-48">{e.hypothesis}</div>}
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 md:hidden">
+                  <span className="sm:hidden">{statusBadge(e.status)}</span>
+                  <span className="text-xs tabular-nums text-fg-muted">{e.experiment_variants?.length ?? 0} variants</span>
+                  {e.bandit_enabled
+                    ? <Badge className={CHIP_TONE.brandSubtle}>Shifts to winner</Badge>
+                    : <span className="text-xs text-fg-muted">Even split</span>}
+                  <span className="text-xs text-fg-muted sm:hidden"><RelativeTime value={e.created_at} /></span>
+                </div>
               </td>
-              <td className="px-3 py-2">{statusBadge(e.status)}</td>
-              <td className="px-3 py-2 tabular-nums text-xs">{e.experiment_variants?.length ?? 0}</td>
-              <td className="px-3 py-2">
+              <td role="cell" className="hidden px-3 py-2 sm:table-cell">{statusBadge(e.status)}</td>
+              <td role="cell" className="hidden px-3 py-2 tabular-nums text-xs md:table-cell">{e.experiment_variants?.length ?? 0}</td>
+              <td role="cell" className="hidden px-3 py-2 md:table-cell">
                 {e.bandit_enabled
-                  ? <Badge className={CHIP_TONE.brandSubtle}>Bandit</Badge>
-                  : <span className="text-xs text-fg-muted">Static</span>}
+                  ? <Badge className={CHIP_TONE.brandSubtle}>Shifts to winner</Badge>
+                  : <span className="text-xs text-fg-muted">Even split</span>}
               </td>
-              <td className="px-3 py-2 text-xs text-fg-muted"><RelativeTime value={e.created_at} /></td>
-              <td className="px-3 py-2">
-                <div className="flex gap-1 justify-end">
+              <td role="cell" className="hidden px-3 py-2 text-xs text-fg-muted sm:table-cell"><RelativeTime value={e.created_at} /></td>
+              <td role="cell" className="block px-3 pt-1 pb-2 sm:table-cell sm:py-2">
+                <div className="flex w-full gap-1 justify-end sm:w-auto">
                   {e.status === 'draft' && (e.experiment_variants?.length ?? 0) >= 2 && (
                     // A row action, not the page's main action: one primary per view (Carbon), green for "start".
-                    <Btn size="sm" variant="success" onClick={() => onLaunch(e.id)}>Launch</Btn>
+                    <Btn size="sm" variant="success" className="shrink-0 whitespace-nowrap" onClick={() => onLaunch(e.id)}>Launch</Btn>
                   )}
                   {e.status === 'running' && (
                     <Tooltip content="Stop experiment">
                       <Btn
                         size="sm"
                         variant="ghost"
-                        className="px-2"
+                        className="shrink-0 px-2"
                         aria-label={`Stop experiment ${e.name}`}
                         onClick={() => onStop(e.id)}
                       >
@@ -449,7 +469,7 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
                     <Btn
                       size="sm"
                       variant="ghost"
-                      className="px-2"
+                      className="shrink-0 px-2"
                       aria-label={`View experiment ${e.name}`}
                       onClick={() => onOpen(e)}
                     >
@@ -462,6 +482,7 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
           ))}
         </tbody>
       </table>
+      </ResponsiveTable>
     </Card>
     </div>
   )
@@ -551,7 +572,7 @@ function NewExperimentForm({ projectId, onCreated, onCancel }: { projectId: stri
         </label>
         <label className="flex items-center gap-2 text-sm text-fg">
           <input type="checkbox" checked={form.bandit_enabled} onChange={(e) => set('bandit_enabled', e.target.checked)} className="h-4 w-4" />
-          Enable Thompson Sampling bandit (auto-shifts traffic to winning variant)
+          Send more users to the version that is winning
         </label>
       </div>
 
@@ -675,7 +696,7 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
         <div className="flex flex-wrap gap-2 items-center">
           {statusBadge(experiment.status)}
           {experiment.bandit_enabled && (
-            <Badge className={CHIP_TONE.brandSubtle}>Bandit</Badge>
+            <Badge className={CHIP_TONE.brandSubtle}>Shifts to winner</Badge>
           )}
           {experiment.winner_variant_id && (
             <Badge className={CHIP_TONE.okSubtle}>Winner found</Badge>
@@ -734,9 +755,11 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
               <div key={v.id} className={`flex items-center gap-3 rounded-md border p-3 ${experiment.winner_variant_id === v.id ? 'border-ok/40 bg-ok/5' : 'border-edge-subtle'}`}>
                 <div className="flex-1">
                   <div className="font-medium text-sm text-fg">{v.name}</div>
-                  <div className="text-xs text-fg-muted">
-                    Weight: {(v.traffic_weight * 100).toFixed(0)}%
-                    {experiment.bandit_enabled && ` · α=${v.bandit_alpha.toFixed(1)} β=${v.bandit_beta.toFixed(1)}`}
+                  <div
+                    className="text-xs text-fg-muted"
+                    title={experiment.bandit_enabled ? `Bandit state α=${v.bandit_alpha.toFixed(1)} β=${v.bandit_beta.toFixed(1)}` : undefined}
+                  >
+                    Gets {(v.traffic_weight * 100).toFixed(0)}% of users
                   </div>
                 </div>
                 {experiment.winner_variant_id === v.id && (
@@ -752,14 +775,16 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
             <p className="text-xs font-medium text-fg-muted uppercase tracking-wide">Analysis</p>
 
             <div className={`rounded-md border px-4 py-3 text-sm ${analysis.srm_ok ? 'border-ok/30 bg-ok/5' : 'border-danger/40 bg-surface-raised'}`}>
-              <div className="font-medium text-fg">{analysis.srm_ok ? 'SRM check passed' : 'SRM detected'}</div>
-              <div className="text-xs mt-0.5 text-fg-muted">chi-square p = {analysis.srm_p.toFixed(4)}</div>
+              <div className="font-medium text-fg">
+                {analysis.srm_ok ? 'Users split as planned' : 'Users did not split as planned: check how the SDK assigns them before trusting this result'}
+              </div>
+              <div className="text-xs mt-0.5 text-fg-muted" title="Sample ratio check (chi-square)">Split check p = {analysis.srm_p.toFixed(4)}</div>
             </div>
 
             <Card className="p-4 space-y-2">
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div><span className="text-fg-muted text-xs">p-value</span><div className="font-mono font-medium">{analysis.p_value.toFixed(4)}</div></div>
-                <div><span className="text-fg-muted text-xs">mSPRT log-LR</span><div className="font-mono font-medium">{analysis.log_lr.toFixed(3)}</div></div>
+                <div><span className="text-fg-muted text-xs" title="mSPRT log-likelihood ratio">Strength of evidence</span><div className="font-mono font-medium">{analysis.log_lr.toFixed(3)}</div></div>
                 <div><span className="text-fg-muted text-xs">Relative lift</span><div className="font-mono font-medium">{(analysis.relative_lift * 100).toFixed(1)}%</div></div>
               </div>
               <p className="text-sm mt-2 border-t border-edge-subtle pt-2 text-fg">{analysis.recommendation}</p>

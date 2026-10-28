@@ -13,12 +13,13 @@
 import { useMemo } from 'react'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { Btn, Kbd } from '../ui'
-import { ResponsiveTable, TableDensityToggle } from '../ResponsiveTable'
+import { ResponsiveTable } from '../ResponsiveTable'
 import { ReportRowView } from './ReportRowView'
 import { SortHeader } from './SortHeader'
 import type { ReportRow, SortDir, SortField } from './types'
 import { PAGE_SIZE } from './types'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
+import { preflightForReportRow } from './allAppsRowActions'
 import { REPORTS_TABLE_COL, REPORTS_STICKY_LEAD, REPORTS_TABLE_MIN_W, TABLE_CELL } from './reportsTableLayout'
 
 interface Props {
@@ -54,6 +55,11 @@ interface Props {
    *  DispatchFixPreflight popover so prerequisites are visible BEFORE the
    *  user clicks Queue (and we never round-trip the 4-check fetch per row). */
   preflight?: PreflightState
+  /**
+   * All apps: the preflight was loaded for this app only. Rows from other
+   * apps get an explanation instead of that checklist. Null in one-app mode.
+   */
+  preflightProjectId?: string | null
 }
 
 interface DisplayRow {
@@ -92,6 +98,7 @@ export function ReportsTable({
   onDismiss,
   onDispatchFix,
   preflight,
+  preflightProjectId = null,
 }: Props) {
   const [tbodyParent] = useAutoAnimate({
     duration: 220,
@@ -144,11 +151,10 @@ export function ReportsTable({
 
   return (
     <div className="border border-edge-subtle rounded-md overflow-hidden bg-surface-raised">
-      <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-edge-subtle bg-surface-raised">
-        <span className="text-2xs text-fg-muted min-w-0 truncate">
+      <div className="px-3 py-1.5 border-b border-edge-subtle bg-surface-raised">
+        <span className="block text-2xs text-fg-muted min-w-0 truncate">
           {total} report{total === 1 ? '' : 's'} — click a row to triage; scroll for status & actions
         </span>
-        <TableDensityToggle />
       </div>
       <ResponsiveTable
         ariaLabel="Bug reports"
@@ -235,7 +241,9 @@ export function ReportsTable({
             </tr>
           </thead>
           <tbody ref={tbodyParent}>
-            {displayRows.map((d, i) => (
+            {displayRows.map((d, i) => {
+              const rowPreflight = preflightForReportRow(preflight, preflightProjectId, d.row)
+              return (
               <ReportRowView
                 key={d.row.id}
                 row={d.row}
@@ -257,9 +265,11 @@ export function ReportsTable({
                 onCopyLink={() => onCopyLink(d.row)}
                 onDismiss={() => onDismiss(d.row)}
                 onDispatchFix={() => onDispatchFix(d.row)}
-                preflight={preflight}
+                preflight={rowPreflight.preflight}
+                dispatchScopeNote={rowPreflight.dispatchScopeNote}
               />
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </ResponsiveTable>

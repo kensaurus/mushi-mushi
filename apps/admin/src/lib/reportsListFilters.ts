@@ -69,6 +69,7 @@ export const SEVERITY_CHIPS: ReadonlyArray<{ value: string; label: string; tone:
 const STATUS_FILTER_LABELS: Record<string, string> = {
   open: 'Open (needs a decision)',
   active: 'Not dismissed',
+  unresolved: 'Still open',
   new: 'New',
   queued: 'Queued',
   classified: 'Classified',
@@ -149,12 +150,13 @@ export function kpiTileFilter(
   windowDays: number,
   current: { status: string; days: string } = { status: '', days: '' },
 ): Record<'severity' | 'days' | 'status', string> {
-  if (severity) return { severity, days: String(windowDays), status: 'active' }
+  // The tile counts what is still open, so it opens that list.
+  if (severity) return { severity, days: String(windowDays), status: 'unresolved' }
   // Clearing the tile removes only what the tile set; a status or window
   // the user picked afterwards stays.
   return {
     severity: '',
-    status: current.status === 'active' ? '' : current.status,
+    status: current.status === 'unresolved' || current.status === 'active' ? '' : current.status,
     days: current.days === String(windowDays) ? '' : current.days,
   }
 }

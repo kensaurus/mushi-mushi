@@ -1,5 +1,6 @@
 import { WebPlugin } from '@capacitor/core';
 import {
+  DEFAULT_API_ENDPOINT,
   captureEnvironment,
   createApiClient,
   getReporterToken,
@@ -16,7 +17,7 @@ import type {
   MushiCapacitorUser,
 } from './definitions';
 
-/** Thrown when a plugin method is called before `configure({ endpoint })` is set. */
+/** Thrown when a plugin method is called before `configure()`. */
 class MushiConfigError extends Error {
   constructor(message: string) {
     super(message);
@@ -24,8 +25,7 @@ class MushiConfigError extends Error {
   }
 }
 
-const ENDPOINT_HINT =
-  'Call MushiMushi.configure({ endpoint: "https://xyz.supabase.co/functions/v1/api", ... }) first.';
+const ENDPOINT_HINT = 'Call MushiMushi.configure({ projectId, apiKey }) first.';
 
 /**
  * Web fallback for the Capacitor plugin. Reuses the canonical
@@ -46,19 +46,21 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
 
   async configure(options: MushiCapacitorPluginConfig): Promise<void> {
     this.pluginConfig = options;
-    if (options.endpoint) {
-      this.apiClient = createApiClient({
-        projectId: options.projectId,
-        apiKey: options.apiKey,
-        apiEndpoint: options.endpoint,
-        getUserToken: () => this.userToken,
-      });
-    } else {
-      this.apiClient = null;
-      console.warn(
-        '[MushiMushi] endpoint not set — report() calls will throw. ' + ENDPOINT_HINT,
-      );
-    }
+    this.apiClient = this.buildClient(options);
+  }
+
+  /**
+   * `endpoint` defaults to the hosted Mushi API, the same default as
+   * `@mushi-mushi/web`. Without it the web fallback used to throw on every
+   * report() (Mushi report edb1cf36).
+   */
+  private buildClient(cfg: MushiCapacitorPluginConfig): MushiApiClient {
+    return createApiClient({
+      projectId: cfg.projectId,
+      apiKey: cfg.apiKey,
+      apiEndpoint: cfg.endpoint ?? DEFAULT_API_ENDPOINT,
+      getUserToken: () => this.userToken,
+    });
   }
 
   async report(payload: MushiCapacitorReport): Promise<{ accepted: boolean }> {
@@ -67,7 +69,7 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
 
     const client = this.apiClient;
     if (!client) {
-      throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
+      throw new MushiConfigError('Mushi is not configured. ' + ENDPOINT_HINT);
     }
 
     const environment = captureEnvironment();
@@ -134,14 +136,7 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
     // Rebuild the API client so the signed token rides on every request via
     // the X-Mushi-User-Token header (verified server-side).
     const cfg = this.pluginConfig;
-    if (cfg?.endpoint) {
-      this.apiClient = createApiClient({
-        projectId: cfg.projectId,
-        apiKey: cfg.apiKey,
-        apiEndpoint: cfg.endpoint,
-        getUserToken: () => this.userToken,
-      });
-    }
+    if (cfg) this.apiClient = this.buildClient(cfg);
   }
 
   async setMetadata(): Promise<void> {
@@ -168,7 +163,7 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
   async listMyReports(): Promise<{ reports: Array<Record<string, unknown>> }> {
     const client = this.apiClient;
     const cfg = this.pluginConfig;
-    if (!client || !cfg) throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
+    if (!client || !cfg) throw new MushiConfigError('Mushi is not configured. ' + ENDPOINT_HINT);
     const result = await client.listReporterReports(getReporterToken(cfg.projectId));
     return { reports: (result.data?.reports ?? []) as unknown as Array<Record<string, unknown>> };
   }
@@ -176,7 +171,7 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
   async listMyComments(options: { reportId: string }): Promise<{ comments: Array<Record<string, unknown>> }> {
     const client = this.apiClient;
     const cfg = this.pluginConfig;
-    if (!client || !cfg) throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
+    if (!client || !cfg) throw new MushiConfigError('Mushi is not configured. ' + ENDPOINT_HINT);
     const result = await client.listReporterComments(options.reportId, getReporterToken(cfg.projectId));
     return { comments: (result.data?.comments ?? []) as unknown as Array<Record<string, unknown>> };
   }
@@ -188,7 +183,7 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
   }): Promise<{ comment?: Record<string, unknown>; feedback?: Record<string, unknown> }> {
     const client = this.apiClient;
     const cfg = this.pluginConfig;
-    if (!client || !cfg) throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
+    if (!client || !cfg) throw new MushiConfigError('Mushi is not configured. ' + ENDPOINT_HINT);
     const result = await client.replyToReporterReport(
       options.reportId,
       getReporterToken(cfg.projectId),
@@ -204,7 +199,7 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
   async reopenReport(options: { reportId: string; note?: string }): Promise<{ outcome: Record<string, unknown> }> {
     const client = this.apiClient;
     const cfg = this.pluginConfig;
-    if (!client || !cfg) throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
+    if (!client || !cfg) throw new MushiConfigError('Mushi is not configured. ' + ENDPOINT_HINT);
     const result = await client.reopenReporterReport(options.reportId, getReporterToken(cfg.projectId), options.note);
     return { outcome: (result.data?.outcome ?? {}) as Record<string, unknown> };
   }

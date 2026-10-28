@@ -23,10 +23,12 @@
  *   5. Validates scope/circuit breaker.
  *   6. Resolves the GitHub repo (project_repos primary, falls back to
  *      project_settings.github_repo_url).
- *   7. Creates a draft PR via direct GitHub REST API, then immediately marks
- *      it ready for review so CI runs and console merge works (human still
- *      confirms merge — nothing auto-merges).
- *   8. Updates fix_attempts and fix_dispatch_jobs with the result.
+ *   7. Creates a draft PR via direct GitHub REST API. It stays a draft, so
+ *      the host's CI does not run (ADR 0047): agent-pr-review marks it ready
+ *      once the Opus review says "merge" on its head (or, when no review can
+ *      run, when the model's own check passed). Nothing auto-merges here.
+ *   8. Updates fix_attempts and fix_dispatch_jobs with the result, and
+ *      queues the Opus review (ADR 0030).
  *
  * Security:
  *   - JWT-verified at the edge (verify_jwt=false because the dispatch
@@ -105,6 +107,7 @@ import {
 } from '../_shared/fix-edits.ts';
 import { matchFramePathsToTree } from '../_shared/sentry-frames.ts';
 import { canonicalPrUrl } from '../_shared/pr-substance.ts';
+import { enqueueFixReview } from '../_shared/fix-review-db.ts';
 import { featureRequestDispatchBlock } from '../_shared/report-category.ts';
 
 function ragSkipReasonMessage(reason: RagSkipReason | 'ok', detail: string | undefined): string {
@@ -144,10 +147,12 @@ import {
   cloudAgentBranchName,
   getCloudAgentAdapter,
   isDispatchableCloudAgent,
+  pinnedCursorKeyIdFromDispatch,
   recordCloudAgentDispatched,
 } from '../_shared/agent-adapters.ts';
 import { cursorModelForDispatch } from '../_shared/cursor-cloud.ts';
 import { confirmBaseRef } from '../_shared/github-branch.ts';
+import { isCursorKeyLimitError, isSpendDownPinnedKeyUnavailable } from '../_shared/spend-down.ts';
 
 // ----------------------------------------------------------------------------
 // Structured fix output lives in `_shared/fix-schema.ts` so the regression
@@ -160,6 +165,10 @@ import { FIX_OUTPUT_CONTRACT, fixSchema, isEditEntry, type FixOutput } from '../
 import { sentryFixesTrailers, sentryShortIdsForReport } from '../_shared/sentry-resolve-back.ts';
 import { validateEdgeSpec, renderSpecContextEdge } from '../_shared/spec-validation.ts';
 import { loadFixRecipeBlock } from '../_shared/fix-recipe-block.ts';
+import { PRIOR_ATTEMPTS_MAX, priorAttemptsBlock } from '../_shared/prior-attempts.ts';
+import type { FollowupFinding } from '../_shared/review-followup.ts';
+import { sanitizeForLLM } from '../_shared/sanitize.ts';
+import { reportHasActiveWorkClaim } from '../_shared/work-claims.ts';
 
 const SYSTEM_PROMPT = `You are a senior staff engineer fixing one specific bug report.
 
@@ -279,6 +288,27 @@ Deno.serve(
       reportId: dispatch.report_id,
     });
     tagLangfuseTrace(trace.id);
+
+    // ---- 1b. A local worker holds the report (ADR 0048) ----------------------
+    // dispatchFixForReport and spend-down already skip a claimed report; this
+    // is the last check before an agent starts, for a claim taken between
+    // the dispatch and now. An unreadable lease counts as held.
+    const held = await reportHasActiveWorkClaim(db, dispatch.report_id);
+    if (held !== false) {
+      const reason = held
+        ? 'Skipped: a local worker (mushi work --daemon) holds this report right now.'
+        : 'Skipped: could not read the local worker lease; the next dispatch tries again.';
+      await db
+        .from('fix_dispatch_jobs')
+        .update({ status: 'skipped', error: reason, finished_at: new Date().toISOString() })
+        .eq('id', dispatch.id);
+      log.info('job.skipped_local_claim', { dispatchId: dispatch.id, reportId: dispatch.report_id, held });
+      await trace.end();
+      return new Response(JSON.stringify({ ok: true, skipped: true, reason }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
     // ---- 2. Resolve requested agent + insert fix_attempts row ----------------
     // V5.3 §2.10: the fix-worker is the REST/LLM dispatch path (one of the
@@ -1311,8 +1341,10 @@ ${
           body: buildPrBody({ ...fix, files: prFiles }, dispatch.report_id),
           files: prFiles,
           labels: fixReviewPassed(fix) ? ['mushi-autofix'] : ['mushi-autofix', 'needs-review'],
-          // A fix the model flagged stays a draft: CI and merge wait for a person.
-          markReady: fixReviewPassed(fix),
+          // Always a draft: host CI runs only once the Opus review says
+          // "merge" (agent-pr-review readies it; ADR 0047). A fix the model
+          // flagged stays a draft even then: CI and merge wait for a person.
+          markReady: false,
           // `Fixes <SHORT-ID>` for Sentry-linked reports (sentry-resolve-back.ts).
           commitTrailers: sentryFixesTrailers(
             await sentryShortIdsForReport(db, dispatch.project_id, dispatch.report_id),
@@ -1348,6 +1380,17 @@ ${
           ? { spec_validation_warnings: specValidationWarnings }
           : {}),
       });
+      // The draft waits for this review before its CI runs (ADR 0047).
+      // Never throws; a failed enqueue leaves a draft a person can ready.
+      const reviewQueued = await enqueueFixReview(db, {
+        fixAttemptId,
+        projectId: dispatch.project_id,
+        reportId: dispatch.report_id,
+        prUrl,
+      });
+      if (!reviewQueued.queued) {
+        log.warn('Opus review not queued for the fix PR (non-fatal)', { fixAttemptId, err: reviewQueued.error });
+      }
 
       await db
         .from('fix_dispatch_jobs')
@@ -1549,6 +1592,16 @@ ${
       };
       if (EXPECTED_FAILURE_CATEGORIES.has(failureCategory)) {
         log.warn('Fix worker stopped by guardrail', logFields);
+      } else if (failureCategory === 'cursor_api_error' && isCursorKeyLimitError(errMsg)) {
+        // The Cursor account ran out of usage: an account state, shown on the
+        // fix and the spend-down card and retried on another key by
+        // spend-down, not a server bug. 47 of the 59 "Fix worker failed"
+        // events by 2026-10-23 (MUSHI-MUSHI-SERVER-28).
+        log.warn('Fix worker stopped: Cursor account out of usage', logFields);
+      } else if (failureCategory === 'cursor_api_error' && isSpendDownPinnedKeyUnavailable(errMsg)) {
+        // The key spend-down pinned was already unusable. The next tick pins
+        // another key and sends this report again. Not a server bug.
+        log.warn('Fix worker stopped: spend-down key is not usable', logFields);
       } else {
         log.error('Fix worker failed', logFields);
       }
@@ -1641,6 +1694,9 @@ const EXPECTED_FAILURE_CATEGORIES = new Set<string>([
  */
 function categorizeFailure(err: unknown, msg: string): string {
   const m = (msg || '').toLowerCase();
+  // Pinned spend-down key was already unusable. Same retry as a usage limit
+  // (reportsToRetryAfterKeyLimit), and not a Sentry error.
+  if (isSpendDownPinnedKeyUnavailable(msg)) return 'cursor_api_error';
   // AI-SDK structured-output failures — we throw `LLM call failed: …` and
   // the inner error name is in the message.
   if (m.includes('noobjectgeneratederror') || m.includes('no_object')) return 'llm_no_object';
@@ -1989,7 +2045,8 @@ async function dispatchToCloudAgent(
     (report.category as string | null | undefined) ?? null,
   );
   const basePrompt = buildUserPrompt(report, settings, codeContext, { ...repo, defaultBranch: baseRef }, [], inventoryAnchor, '');
-  const prompt = buildCloudAgentPrompt(basePrompt, {
+  const earlier = await loadPriorAttemptsBlock(db, log, dispatch.report_id, fixAttemptId);
+  const prompt = buildCloudAgentPrompt(earlier ? `${basePrompt.trimEnd()}\n\n${earlier}` : basePrompt, {
     reportId: dispatch.report_id,
     repoOwner: repo.owner,
     repoName: repo.repo,
@@ -2009,6 +2066,9 @@ async function dispatchToCloudAgent(
 
   const adapter = getCloudAgentAdapter(requestedAgent);
   const dispatchSpan = trace.span('cloud.dispatch');
+  // Spend-down stored the key it is billing. Pin it so the Cursor call does
+  // not resolve the pool again and land on a quota-held key.
+  const pinnedCursorKeyId = pinnedCursorKeyIdFromDispatch(dispatchMeta);
   const result = await adapter.dispatch({
     db,
     projectId: dispatch.project_id,
@@ -2021,6 +2081,7 @@ async function dispatchToCloudAgent(
     branchName,
     model,
     name: `Mushi fix ${dispatch.report_id.slice(0, 8)}`,
+    ...(pinnedCursorKeyId ? { pinnedCursorKeyId } : {}),
   });
   dispatchSpan.end({
     agent: requestedAgent,
@@ -2145,6 +2206,59 @@ async function dispatchToCloudAgent(
     }),
     { status: 200, headers: { 'Content-Type': 'application/json' } },
   );
+}
+
+/**
+ * What earlier attempts on this report did (their Opus reviews, or why the
+ * agent stopped), so a re-dispatch does not repeat a rejected theory.
+ * Best-effort: a read failure dispatches without it.
+ */
+async function loadPriorAttemptsBlock(db: ReturnType<typeof getServiceClient>, log: Logger, reportId: string, currentAttemptId: string): Promise<string> {
+  try {
+    const { data: attempts } = await db
+      .from('fix_attempts')
+      .select('id, created_at, status, pr_url, merged_at, error')
+      .eq('report_id', reportId)
+      .neq('id', currentAttemptId)
+      .order('created_at', { ascending: false })
+      .limit(PRIOR_ATTEMPTS_MAX);
+    const rows = (attempts ?? []) as Array<{ id: string; created_at: string; status: string | null; pr_url: string | null; merged_at: string | null; error: string | null }>;
+    if (!rows.length) return '';
+    const { data: reviews } = await db
+      .from('fix_reviews')
+      .select('fix_attempt_id, verdict, summary, fixes_report, findings, completed_at')
+      .in('fix_attempt_id', rows.map((r) => r.id))
+      .eq('status', 'completed')
+      .order('completed_at', { ascending: false });
+    const latest = new Map<string, Record<string, unknown>>();
+    for (const r of (reviews ?? []) as Array<Record<string, unknown>>) {
+      if (!latest.has(r.fix_attempt_id as string)) latest.set(r.fix_attempt_id as string, r);
+    }
+    return priorAttemptsBlock(
+      rows.map((a) => {
+        const r = latest.get(a.id);
+        return {
+          createdAt: a.created_at,
+          status: a.status,
+          prUrl: a.pr_url,
+          mergedAt: a.merged_at,
+          note: a.error,
+          review: r
+            ? {
+                verdict: (r.verdict as string | null) ?? null,
+                summary: (r.summary as string | null) ?? null,
+                fixesReport: (r.fixes_report as boolean | null) ?? null,
+                findings: Array.isArray(r.findings) ? (r.findings as FollowupFinding[]) : [],
+              }
+            : null,
+        };
+      }),
+      (t) => sanitizeForLLM(t).text,
+    );
+  } catch (err) {
+    log.warn('earlier attempts unavailable for the agent prompt (non-fatal)', { reportId, err: err instanceof Error ? err.message : String(err) });
+    return '';
+  }
 }
 
 async function failDispatch(

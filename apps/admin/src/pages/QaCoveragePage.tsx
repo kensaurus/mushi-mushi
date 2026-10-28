@@ -25,6 +25,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { RunStrip, type RunStripDay } from '../components/qa-coverage/RunStrip'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
@@ -84,6 +85,8 @@ interface QaStoryCoverage {
   /** Most recent of MV last_run_at and live qa_stories.updated_at */
   last_run_at: string | null
   last_failure_url: string | null
+  /** Pass/fail per UTC day for the last 7 days, oldest first; null when the server could not read it, absent on an older server. */
+  last_7d?: RunStripDay[] | null
 }
 
 interface QaStoryFull {
@@ -259,6 +262,8 @@ function StoryCard({
           />
         </div>
       </div>
+
+      {coverage.last_7d ? <RunStrip days={coverage.last_7d} /> : null}
 
       {/* Footer row: last run time + failure link */}
       <div className="flex items-center justify-between gap-2">

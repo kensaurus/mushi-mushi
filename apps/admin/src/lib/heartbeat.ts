@@ -156,3 +156,35 @@ export const HEARTBEAT_HINT: Record<Exclude<HeartbeatState, 'unknown'>, string> 
   dead: 'No SDK check-in for over a week — this install has gone quiet.',
   never: 'No SDK has ever authenticated with this project’s keys.',
 }
+
+/**
+ * An SDK key: it may send reports and has no MCP scope (mirrors the server's
+ * `isSdkKey` in `_shared/setup-signals.ts`). A CLI or MCP key's calls are not
+ * the app's SDK, so they never count as an SDK check-in.
+ */
+export function isSdkKeyScopes(scopes: readonly string[] | null | undefined): boolean {
+  const s = scopes ?? []
+  return s.includes('report:write') && !s.some((x) => x.startsWith('mcp:'))
+}
+
+/** The SDK key legend's scale (Connect key list): Healthy under 1 hour, Stale up to 7 days, Cold after. */
+export const SDK_HEALTHY_MS = 60 * 60 * 1000
+export const SDK_COLD_MS = 7 * 24 * 60 * 60 * 1000
+
+export type SdkFreshness = 'healthy' | 'stale' | 'cold' | 'never'
+
+/**
+ * One freshness scale for the SDK everywhere it is shown: the header chip,
+ * the Connect snapshot, the key list and SDK health's Cold problem.
+ */
+export function sdkFreshness(lastSeenAt: string | null | undefined, now: number = Date.now()): SdkFreshness {
+  if (!lastSeenAt) return 'never'
+  const seen = Date.parse(lastSeenAt)
+  if (!Number.isFinite(seen)) return 'never'
+  const age = Math.max(0, now - seen)
+  if (age < SDK_HEALTHY_MS) return 'healthy'
+  if (age <= SDK_COLD_MS) return 'stale'
+  return 'cold'
+}
+
+

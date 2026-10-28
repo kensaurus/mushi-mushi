@@ -147,7 +147,7 @@ describe('IteratePage abort (QA 21)', () => {
     // Abort from the drawer asks first and sends nothing yet.
     const abortButtons = buttons('Abort')
     click(abortButtons[abortButtons.length - 1]!)
-    expect(document.body.textContent).toContain('Abort this PDCA run?')
+    expect(document.body.textContent).toContain('Stop this improvement run?')
     expect(mocks.apiFetch.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'DELETE')).toBe(false)
 
     click(buttons('Abort run')[0]!)
@@ -155,7 +155,7 @@ describe('IteratePage abort (QA 21)', () => {
     expect(mocks.apiFetch.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'DELETE')).toBe(true)
     // The drawer re-read the run: Aborted, and no Abort button left in it.
     expect(document.body.textContent).toContain('Aborted')
-    expect(document.body.textContent).not.toContain('Abort this PDCA run?')
+    expect(document.body.textContent).not.toContain('Stop this improvement run?')
   })
 
   it('refreshes the drawer after Trigger so "Trigger now" is not offered twice', async () => {

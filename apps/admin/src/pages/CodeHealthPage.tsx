@@ -13,8 +13,10 @@
  *  2. Bundle-size trends — bar sparkline per bundle.* metric
  *  3. God-file findings — list of files over the LOC budget
  *
- * Above them, KnownHolesCard: known holes in the dependencies and runtime,
- * read from the repo by vuln-watch (ADR 0038), not pushed from CI.
+ * The view leads with one status sentence and a bar chart of the oversized
+ * files. Known holes in the dependencies (vuln-watch, ADR 0038) live on the
+ * Full-stack audit; this view links there in one line instead of repeating
+ * them (console journeys 2026-10-27).
  */
 
 import { useMemo, useCallback, useEffect } from 'react'
@@ -27,7 +29,6 @@ import {
   Section,
   EmptyState,
   Btn,
-  Card,
 } from '../components/ui'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
@@ -39,11 +40,15 @@ import {
   EMPTY_CODE_HEALTH_STATS,
   type CodeHealthStats,
 } from '../components/code-health/CodeHealthStatsTypes'
-import { CodeHealthStatusBanner, isCodeHealthStatusBannerCritical } from '../components/code-health/CodeHealthStatusBanner'
 import { CodeHealthReadout } from '../components/code-health/CodeHealthReadout'
 import { CodeHealthGuide } from '../components/code-health/CodeHealthGuide'
-import { KnownHolesCard } from '../components/code-health/KnownHolesCard'
-import { CHIP_TONE } from '../lib/chipTone'
+import { OversizedFilesChart } from '../components/code-health/OversizedFilesChart'
+import type { KnownHolesView } from '../components/code-health/KnownHolesCard'
+import { PageStatus, type PageStatusMetrics, type PageStatusTone } from '../components/ui/page-status'
+import { PageFirstStep } from '../components/ui/page-first-step'
+import { codeHealthErrorsHint, codeHealthNoDataHint, codeHealthWarningsHint } from '../lib/humanPageHints'
+import { pluralizeWithCount } from '../lib/format'
+import { CHIP_TONE, LINK_ACCENT } from '../lib/chipTone'
 
 // ── Types (mirrors code-health.ts response shapes) ────────────────────────────
 
@@ -101,71 +106,36 @@ function TrendArrow({ delta, higherIsBad }: { delta: number; higherIsBad: boolea
   )
 }
 
-// ── Summary scorecard ─────────────────────────────────────────────────────────
+// ── Status sentence ──────────────────────────────────────────────────────────
 
-function Scorecard({ data }: { data: CodeHealthResponse }) {
-  const { summary, latestRunAt, latestRunStatus } = data
-  const { error_count, warn_count, max_loc, latest_bundle_kb } = summary
-  const overall = error_count > 0 ? 'fail' : warn_count > 0 ? 'warn' : 'pass'
+/** Exported for tests; page modules are knip entries, so it carries no tag. One sentence on file and bundle size, worst first. */
+export function codeSizeStatus(summary: CodeHealthSummary): { tone: PageStatusTone; sentence: string } {
+  const { error_count: errors, warn_count: warnings, max_loc: maxLoc, latest_bundle_kb: kb } = summary
+  const bundle = kb != null ? ` Your latest bundle is ${kb.toFixed(1)} KB gzipped.` : ''
+  if (errors > 0) {
+    const largest = maxLoc != null ? ` The largest has ${maxLoc.toLocaleString()} lines.` : ''
+    return { tone: 'danger', sentence: `${codeHealthErrorsHint(errors)}${largest}${bundle}` }
+  }
+  if (warnings > 0) return { tone: 'warn', sentence: `${codeHealthWarningsHint(warnings)}${bundle}` }
+  return { tone: 'ok', sentence: `Every file is under the 2,000-line budget.${bundle}` }
+}
 
-  const overallCls =
-    overall === 'fail'
-      ? CHIP_TONE.dangerSubtle
-      : overall === 'warn'
-        ? CHIP_TONE.warnSubtle
-        : CHIP_TONE.okSubtle
-  const overallLabel =
-    overall === 'fail' ? 'Issues found' : overall === 'warn' ? 'Warnings' : 'All clear'
-
-  // Plain-language verdict for at-a-glance reading
-  const LOC_BUDGET = 2000
-  const verdictParts: string[] = []
-  if (error_count > 0) verdictParts.push(`${error_count} file${error_count === 1 ? '' : 's'} over the ${LOC_BUDGET.toLocaleString()} LOC budget (errors)`)
-  if (warn_count > 0) verdictParts.push(`${warn_count} file${warn_count === 1 ? '' : 's'} approaching budget (warnings)`)
-  if (max_loc != null && max_loc > LOC_BUDGET) verdictParts.push(`largest file is ${max_loc.toLocaleString()} LOC — split it to get under budget`)
-  if (latest_bundle_kb != null) verdictParts.push(`latest bundle ${latest_bundle_kb.toFixed(1)} KB gzip`)
-  if (verdictParts.length === 0) verdictParts.push('All files within budget · bundle size looks healthy')
-  const verdict = verdictParts.join(' · ')
-
+/** One line to the audit, where the holes are listed and managed. */
+function DependencyHolesLink({ projectId }: { projectId: string }) {
+  const { data } = usePageData<KnownHolesView>(`/v1/admin/projects/${projectId}/vulnerabilities`)
+  if (!data?.available) return null
+  const open = data.groups.filter((g) => g.status === 'open').length
   return (
-    <div className={`rounded-md border px-4 py-3 ${overallCls}`}>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold">{overallLabel}</p>
-          <p className="mt-0.5 text-xs text-fg-secondary">{verdict}</p>
-          <p className="mt-1.5 text-2xs text-fg-muted">
-            <span className="font-medium">What counts:</span> errors = files over {LOC_BUDGET.toLocaleString()} LOC (must fix);
-            warnings = files approaching budget (track trend);
-            bundle KB = gzip size of the deployed JS bundle (lower is better).
-          </p>
-        </div>
-        <div className="shrink-0 text-right">
-          {latestRunAt ? (
-            <>
-              <p className="text-xs text-fg-faint">
-                Last push: {new Date(latestRunAt).toLocaleString()}
-              </p>
-              <p className="text-xs text-fg-faint">
-                Gate:{' '}
-                <span
-                  className={
-                    latestRunStatus === 'fail'
-                      ? 'text-danger'
-                      : latestRunStatus === 'warn'
-                        ? 'text-warn'
-                        : 'text-ok'
-                  }
-                >
-                  {latestRunStatus ?? '—'}
-                </span>
-              </p>
-            </>
-          ) : (
-            <p className="text-xs text-fg-faint">No CI push data yet</p>
-          )}
-        </div>
-      </div>
-    </div>
+    <p className="text-xs text-fg-secondary" data-testid="code-size-holes-link">
+      {open > 0
+        ? `${pluralizeWithCount(open, 'package')} in your dependencies ${open === 1 ? 'has' : 'have'} known security holes.`
+        : data.lastRun
+          ? 'No known security holes in your dependencies.'
+          : 'Your dependencies have not been checked for known security holes yet.'}{' '}
+      <Link to="/fullstack-audit#dependency-holes" className={LINK_ACCENT}>
+        {open > 0 ? 'Fix them on Full-stack audit' : 'Open Full-stack audit'} →
+      </Link>
+    </p>
   )
 }
 
@@ -421,7 +391,6 @@ export function CodeHealthPage() {
         codeHealth.summary.latest_bundle_kb != null),
   )
 
-  const hasGodFileErrors = (codeHealth?.summary.error_count ?? 0) > 0
 
   if (!projectId) {
     return (
@@ -440,14 +409,28 @@ export function CodeHealthPage() {
     )
   }
 
+  const status = codeHealth && hasAnyData ? codeSizeStatus(codeHealth.summary) : null
+  const oversized = (codeHealth?.godFiles ?? [])
+    .filter((f) => f.line != null && f.severity !== 'info')
+    .map((f) => ({ id: f.id, path: f.file_path ?? f.rule_id, lines: f.line as number }))
+  const projectLabel = stats.projectName ?? 'this app'
+  const errorCount = codeHealth?.summary.error_count ?? 0
+  const warnCount = codeHealth?.summary.warn_count ?? 0
+  const bundleKb = codeHealth?.summary.latest_bundle_kb ?? null
+  const fileMetrics = [
+    { label: 'Files over budget', value: errorCount, tone: errorCount > 0 ? 'danger' : 'neutral' },
+    { label: 'Close to budget', value: warnCount, tone: warnCount > 0 ? 'warn' : 'neutral' },
+  ] as const
+  const statusMetrics: PageStatusMetrics =
+    bundleKb != null ? [...fileMetrics, { label: 'Bundle (gzip)', value: `${bundleKb.toFixed(1)} KB` }] : fileMetrics
+
   return (
     <div className={PAGE_CONTENT_STACK}>
       <PageHeaderBar
-        title="Code Health"
-
-        helpTitle="What is Code Health?"
-        helpWhatIsIt="Bundle sizes and god-file findings pushed from your host repo's CI pipeline. Each push records a gate run you can track over time."
-        helpHowToUse="Mint an SDK ingest key under Projects, add MUSHI_API_URL + MUSHI_INGEST_KEY to your CI secrets, and include scan-god-files.mjs in bundle-budget.yml. Pair with Full-Stack Audit for backend/schema checks."
+        title="Code size"
+        helpTitle="About code size"
+        helpWhatIsIt="How big your files and your app bundle are, sent from your CI after each push to main. Very large files are hard for you and for AI agents to change safely."
+        helpHowToUse="Mint an SDK ingest key under Projects, add MUSHI_API_URL and MUSHI_INGEST_KEY to your CI secrets, and run scan-god-files.mjs in bundle-budget.yml. Security holes in your dependencies are on Full-stack audit."
         helpFlowPath="/code-health"
       >
         <Btn size="sm" variant="ghost" onClick={handleReload}>
@@ -455,106 +438,64 @@ export function CodeHealthPage() {
         </Btn>
       </PageHeaderBar>
 
-      <PagePosture
-        slots={[
-          {
-            priority: POSTURE_PRIORITY.status,
-            show: isCodeHealthStatusBannerCritical(stats),
-            children: (
-              <CodeHealthStatusBanner stats={stats} onRefresh={handleReload} refreshing={statsValidating} />
-            ),
-          },
-          {
-            priority: POSTURE_PRIORITY.guide,
-            show: !shouldHideGuideWhenBannerActive(
-              isCodeHealthStatusBannerCritical(stats),
-              COMMON_HEALTHY_PRIORITIES,
-              stats.topPriority,
-            ),
-            children: <CodeHealthGuide topPriority={stats.topPriority} stats={stats} />,
-          },
-          {
-            priority: POSTURE_PRIORITY.heroOrSnapshot,
-            children: (
-              <CodeHealthReadout stats={stats} fetchedAt={statsFetchedAt} validating={statsValidating} />
-            ),
-          },
-        ]}
-      />
+      {error && <PageLoadError error={error} code={errorCode} resource="code-size data" onRetry={reload} />}
+
+      {loading && !codeHealth && (
+        <div className="flex items-center justify-center py-12">
+          <p className="text-sm text-fg-muted">Loading code size…</p>
+        </div>
+      )}
+
+      {!loading && !error && codeHealth && !hasAnyData && (
+        <PageFirstStep
+          title="No code size data yet"
+          sentence={codeHealthNoDataHint(projectLabel)}
+          action={{ label: 'Mint ingest key', to: `/projects?tab=list&project=${projectId}` }}
+          data-testid="code-size-first-step"
+        />
+      )}
+
+      {status && (
+        <PageStatus
+          ariaLabel="Code size status"
+          tone={status.tone}
+          sentence={status.sentence}
+          freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+          metrics={statusMetrics}
+          action={
+            oversized.length > 0 ? (
+              <Btn size="sm" variant="primary" to={`${location.pathname}${location.search}#god-files`}>
+                Review oversized files
+              </Btn>
+            ) : undefined
+          }
+          data-testid="code-size-status"
+        />
+      )}
+
+      <DependencyHolesLink projectId={projectId} />
 
       <div className="flex w-full min-w-0 flex-col gap-6">
-        {/* Independent of the CI-pushed code-health data: read from the repo by vuln-watch (ADR 0038). */}
-        <KnownHolesCard projectId={projectId} />
-
-        {error && <PageLoadError error={error} code={errorCode} resource="code-health data" onRetry={reload} />}
-
-        {loading && !codeHealth && (
-          <div className="flex items-center justify-center py-12">
-            <p className="text-sm text-fg-muted">Loading code-health data…</p>
-          </div>
-        )}
-
-        {!loading && !error && codeHealth && !hasAnyData && (
-          <EmptyState
-            title="No data yet"
-            description="Mint an SDK ingest key, add CI secrets, and push to main — bundle sizes and god-file findings will appear here automatically."
-            action={
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                <Btn to={`/projects?tab=list&project=${projectId}`} size="sm" variant="primary">
-                  Mint ingest key
-                </Btn>
-                <Btn to="/fullstack-audit" size="sm" variant="ghost">
-                    Full-Stack Audit →
-                  </Btn>
-              </div>
-            }
-          />
-        )}
-
         {codeHealth && hasAnyData && (
           <>
-            <Scorecard data={codeHealth} />
-
-            <Card className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-              <p className="text-xs text-fg-secondary">
-                Backend schema &amp; API contract checks live on{' '}
-                <Link to="/fullstack-audit" className="text-accent hover:underline">
-                  Full-Stack Audit
-                </Link>
-                .
-              </p>
-              {!codeHealth.latestRunAt && bundleSeries.length > 0 && (
-                <span className="text-2xs text-fg-faint whitespace-nowrap">
-                  Bundle metrics only — no god-file gate run yet
-                </span>
-              )}
-            </Card>
-
-            {hasGodFileErrors && (
-              <div id="god-files" className="scroll-mt-4">
+            {oversized.length > 0 && (
               <Section
-                title="God-file findings"
+                title="Oversized files"
                 action={
                   codeHealth.latestRunAt ? (
                     <span className="text-2xs text-fg-faint whitespace-nowrap">
                       From push on {new Date(codeHealth.latestRunAt).toLocaleString()}
                     </span>
-                  ) : (
-                    <span className="text-2xs text-danger whitespace-nowrap">
-                      {codeHealth.summary.error_count} file
-                      {codeHealth.summary.error_count !== 1 ? 's' : ''} over budget
-                    </span>
-                  )
+                  ) : undefined
                 }
               >
-                <GodFileList findings={codeHealth.godFiles} />
+                <OversizedFilesChart files={oversized} />
               </Section>
-              </div>
             )}
 
             {bundleSeries.length > 0 && (
               <Section
-                title="Bundle-size trends"
+                title="Bundle size over time"
                 action={
                   <span className="text-2xs text-fg-faint whitespace-nowrap">
                     gzipped KB · last 90 days
@@ -573,10 +514,10 @@ export function CodeHealthPage() {
 
             {locTrendSeries.length > 0 && (
               <Section
-                title="Largest file LOC trend"
+                title="Largest file over time"
                 action={
                   <span className="text-2xs text-fg-faint whitespace-nowrap">
-                    peak LOC · last 90 days
+                    lines · last 90 days
                   </span>
                 }
               >
@@ -590,25 +531,30 @@ export function CodeHealthPage() {
               </Section>
             )}
 
-            {!hasGodFileErrors && (
-              <div id="god-files" className="scroll-mt-4">
-              <Section
-                title="God-file findings"
-                action={
-                  codeHealth.latestRunAt ? (
-                    <span className="text-2xs text-fg-faint whitespace-nowrap">
-                      From push on {new Date(codeHealth.latestRunAt).toLocaleString()}
-                    </span>
-                  ) : undefined
-                }
-              >
+            <div id="god-files" className="scroll-mt-4">
+              <Section title="How to split each file">
                 <GodFileList findings={codeHealth.godFiles} />
               </Section>
-              </div>
-            )}
+            </div>
           </>
         )}
       </div>
+
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.guide,
+            show: !shouldHideGuideWhenBannerActive(false, COMMON_HEALTHY_PRIORITIES, stats.topPriority),
+            children: <CodeHealthGuide topPriority={stats.topPriority} stats={stats} />,
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            children: (
+              <CodeHealthReadout stats={stats} fetchedAt={statsFetchedAt} validating={statsValidating} />
+            ),
+          },
+        ]}
+      />
     </div>
   )
 }

@@ -1,10 +1,14 @@
 'use client'
 
 /**
- * Diagnosis loop cards — once-in-view stagger (native scroll, no pin).
+ * "How it works" — the landing's one job in three cards (ADR 0052), then a
+ * link to the sample diagnosis that shows all three on one bug. Once-in-view
+ * stagger (native scroll, no pin). The full six-stage loop (<LoopPipeline />)
+ * lives on /concepts/closed-loop.
  */
+import Link from 'next/link'
 import { motion } from 'motion/react'
-import { LANDING_PILLARS } from '@/lib/landing-copy'
+import { LANDING_HOW_IT_WORKS, LANDING_PILLARS, LANDING_SAMPLE_LINK } from '@/lib/landing-copy'
 import { LandingStagger, LandingStaggerItem } from './landing-stagger'
 import { PillarGlyph } from '../PillarGlyph'
 import { usePrefersReducedMotion } from './use-prefers-reduced-motion'
@@ -20,7 +24,7 @@ export function DiagnosisScrollStage() {
     >
       <LandingStaggerItem>
         <h2 id="landing-diagnosis-heading" className="landing-section-title">
-          What happens after a user reports something
+          {LANDING_HOW_IT_WORKS.heading}
         </h2>
       </LandingStaggerItem>
 
@@ -52,6 +56,15 @@ export function DiagnosisScrollStage() {
           </LandingStaggerItem>
         ))}
       </div>
+
+      <LandingStaggerItem>
+        <p className="landing-section-lead landing-diagnosis-sample">
+          {LANDING_HOW_IT_WORKS.sampleLead}{' '}
+          <Link href={LANDING_SAMPLE_LINK.href} data-mushi-cta="landing-how-sample" data-mushi-location="how-it-works">
+            {LANDING_SAMPLE_LINK.label} →
+          </Link>
+        </p>
+      </LandingStaggerItem>
     </LandingStagger>
   )
 }

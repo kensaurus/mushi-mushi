@@ -150,7 +150,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
       {!projectId && (
         <Card className="p-5">
           <p className="text-sm text-fg-muted">Select a project from the switcher or open Copilot from a project card.</p>
-          <Link to="/projects" className="text-xs text-accent underline mt-2 inline-block">Go to Projects</Link>
+          <Link to="/projects" className={`mt-2 inline-block text-xs ${LINK_ACCENT}`}>Go to Projects</Link>
         </Card>
       )}
 
@@ -180,7 +180,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
           <p className="text-sm text-fg-muted">
             Project not found — it may have been deleted, or the link is stale.
           </p>
-          <Link to="/projects" className="text-xs text-accent underline mt-2 inline-block">
+          <Link to="/projects" className={`mt-2 inline-block text-xs ${LINK_ACCENT}`}>
             Go to Projects
           </Link>
         </Card>
@@ -232,7 +232,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
           <Section title="2 · Install snippet">
             <p className="text-xs text-fg-muted mb-3">
               Use the canonical{' '}
-              <Link to={`/onboarding?tab=sdk&project=${projectId}`} className="text-accent underline">
+              <Link to={`/onboarding?tab=sdk&project=${projectId}`} className={LINK_ACCENT}>
                 Onboarding → SDK tab
               </Link>{' '}
               for the live configurator, connection status chip, and copy-paste snippet.
@@ -283,9 +283,12 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
                       API URL: <code className="font-mono">MUSHI_API_URL</code>
                     </li>
                     <li>Does not enable the in-app band — metrics POST /v1/ingest/metrics only.</li>
-                    <li>
-                      Setup: <code className="font-mono">node scripts/setup-yen-yen-ingest-secrets.mjs</code>
-                    </li>
+                    {/* The secrets script lives in the yen-yen repo only (report fe489587). */}
+                    {isExpoReporterProject(projectRow.slug) ? (
+                      <li>
+                        Setup: <code className="font-mono">node scripts/setup-yen-yen-ingest-secrets.mjs</code>
+                      </li>
+                    ) : null}
                   </ul>
                 </ContainedBlock>
               </div>
@@ -335,7 +338,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
           </Section>
 
           <Section title="4 · Verify both tracks">
-            <p className="text-xs text-fg-muted mb-3">Ingest 4/4 and dispatch 4/4 — different gates, both documented.</p>
+            <p className="text-xs text-fg-muted mb-3">Reports coming in and fixes going out pass different checks. Each list below shows its own count.</p>
             <VerifySetupPanel
               projectId={projectId}
               projectName={projectRow.name}

@@ -6,6 +6,14 @@ description: Send Mushi events to the tools you already use through HMAC-signed 
 
 Mushi events flow out as **HMAC-signed JSON webhooks** with [Standard Webhooks](https://www.standardwebhooks.com/) headers (`webhook-id` / `webhook-timestamp` / `webhook-signature: v1,…`) to any tool you wire up. The marketplace ships **12 first-party plugins** and lets you build your own with `@mushi-mushi/plugin-sdk` (retry helpers, signature verification, REST callback in one tiny package).
 
+## Works with Sentry, or without it
+
+You don't need Sentry. If you already use it, keep it: its errors land in the same list as user reports, each explained in plain English.
+
+Bugs come in from users, monitoring tools and even your voice. Fixes and updates go out to your editor, coding agents, tracker and team chat.
+
+<MediatorMap />
+
 ## Available plugins
 
 | Plugin              | Triggers                                                           | Doc |

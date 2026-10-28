@@ -3,7 +3,7 @@
  * PURPOSE: Everything about "how far the code is from its design system":
  *          score card, per-rule breakdown, score trend (unscored runs are
  *          dropped, never drawn as 0), top findings with the suggested token,
- *          and the "Run deviance check" action.
+ *          and the "Check for drift" action.
  */
 
 import { BarSparkline } from '../charts'
@@ -89,7 +89,7 @@ function Trend({ trend }: { trend: Array<{ at: string; score: number | null; sta
         accent="bg-brand"
         showAxes
         yAxisCaption="score"
-        ariaLabel="Deviance score per run, lower is better"
+        ariaLabel="Drift score per check, lower is better"
       />
       <p className="text-2xs text-fg-faint">
         Lower is better.{omitted > 0 ? ` ${omitted} unscored run${omitted === 1 ? ' is' : 's are'} left out.` : ''}
@@ -154,7 +154,7 @@ export function DeviancePanel({ deviance, running, runningSince, notice, onRun }
   const sinceText = since && !Number.isNaN(since.getTime()) ? formatRelative(since) : null
   return (
     <Section
-      title="Deviance"
+      title="Drift from your design"
       action={
         <Btn
           size="sm"
@@ -162,9 +162,9 @@ export function DeviancePanel({ deviance, running, runningSince, notice, onRun }
           onClick={onRun}
           loading={running}
           disabled={running}
-          title={running ? 'A scan is already running' : 'Refresh tokens, then scan the repo for off-system values'}
+          title={running ? 'A check is already running' : 'Read your token files again, then look for code that uses values outside them'}
         >
-          Run deviance check
+          Check for drift
         </Btn>
       }
     >

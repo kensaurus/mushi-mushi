@@ -496,6 +496,23 @@ describe('cross-project and URL spelling (final review of #534)', () => {
     }
   })
 
+  it('a completed PATCH with a PR moves an open report to fixing, never a fixed one back (mushi work, 2026-10-24)', async () => {
+    db = makeDb({
+      fix_attempts: [attempt({ id: OTHER_FIX, agent: 'mcp', pr_url: null, pr_number: null, commit_sha: null })],
+      reports: [{ id: 'rep-1', project_id: P, status: 'classified' }],
+    })
+    const res = await call('PATCH', `/v1/admin/fixes/${OTHER_FIX}`, { status: 'completed', pr_url: 'https://github.com/o/r/pull/7', branch: 'bugfix/y' })
+    expect(res.status).toBe(200)
+    expect(db.tables.reports[0]).toMatchObject({ status: 'fixing', fix_pr_url: 'https://github.com/o/r/pull/7' })
+
+    db = makeDb({
+      fix_attempts: [attempt({ id: OTHER_FIX, agent: 'mcp', pr_url: null, pr_number: null, commit_sha: null })],
+      reports: [{ id: 'rep-1', project_id: P, status: 'fixed' }],
+    })
+    await call('PATCH', `/v1/admin/fixes/${OTHER_FIX}`, { status: 'completed', pr_url: 'https://github.com/o/r/pull/8' })
+    expect(db.tables.reports[0].status).toBe('fixed')
+  })
+
   it('a fix attempt pointed at a repo the project does not have cannot merge it (403 REPO_NOT_IN_PROJECT)', async () => {
     // Project P's attempt names project X's repo o/r (the exact scenario: submit_fix_result
     // with a trailing slash, refresh_ci fills pr_number, merge_fix).

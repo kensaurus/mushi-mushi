@@ -2,9 +2,22 @@
  * Axis copy on the dashboard (2026-10-04 audit): the calls chart printed
  * "-0.0" on its bottom tick, and narrow KPI tiles ran four date labels
  * together ("Sep 2SSep 25Today").
+ *
+ * Count charts (2026-10-24): linear 12% headroom produced fractional ticks
+ * (12.3/24.6/37.0); nice integer steps keep REPORTS / FIXES labels whole.
+ *
+ * scaleToData (2026-10-24): the plot top is always the top tick.
+ * scaleToData only controls the headroom used to pick the step.
+ * Non-count ticks stay on the master linear path.
  */
 import { describe, expect, it } from 'vitest'
-import { buildYTickValues, formatChartCount, sparseXLabels } from './chartAxis'
+import {
+  buildYTickValues,
+  formatChartCount,
+  resolveChartMax,
+  resolvePlotChartMax,
+  sparseXLabels,
+} from './chartAxis'
 
 describe('buildYTickValues / formatChartCount', () => {
   it('ends exactly on the floor, so the bottom label is "0"', () => {
@@ -18,6 +31,72 @@ describe('buildYTickValues / formatChartCount', () => {
   it('never prints a negative zero', () => {
     expect(formatChartCount(-1e-15)).toBe('0')
     expect(formatChartCount(-0.04)).toBe('0')
+  })
+
+  it('uses integer nice steps for count peak 33; the plot top is the top tick in both modes', () => {
+    const values = [33, 10, 5]
+    const ticks = buildYTickValues(33, 0, 4, 0.12, { integer: true })
+    expect(ticks).toEqual([40, 30, 20, 10, 0])
+    for (const t of ticks) {
+      expect(Number.isInteger(t)).toBe(true)
+      expect(formatChartCount(t)).not.toMatch(/\.\d/)
+    }
+    expect(resolvePlotChartMax(values, ticks[0], true)).toBe(40)
+    // scaleToData false: no headroom, still whole numbers, and the plot top is the top tick.
+    const flat = buildYTickValues(33, 0, 4, 0, { integer: true })
+    expect(flat[0]).toBeGreaterThanOrEqual(33)
+    expect(flat.every((t) => Number.isInteger(t))).toBe(true)
+    expect(resolvePlotChartMax(values, flat[0], false)).toBe(flat[0])
+  })
+
+  it('uses integer nice steps for count peak 57 (scaleToData true and false)', () => {
+    const values = [57, 12, 3]
+    const ticks = buildYTickValues(57, 0, 4, 0.12, { integer: true })
+    expect(ticks).toEqual([60, 40, 20, 0])
+    for (const t of ticks) {
+      expect(Number.isInteger(t)).toBe(true)
+      expect(formatChartCount(t)).not.toMatch(/\.\d/)
+    }
+    expect(resolvePlotChartMax(values, ticks[0], true)).toBe(60)
+    const flat = buildYTickValues(57, 0, 4, 0, { integer: true })
+    expect(flat[0]).toBeGreaterThanOrEqual(57)
+    expect(resolvePlotChartMax(values, flat[0], false)).toBe(flat[0])
+  })
+
+  it('snaps a negative integer floor down to a multiple of the step', () => {
+    // LineSparkline passes min = Math.min(0, ...values). Without the snap the
+    // last gap is shorter than the step (10, 5, 0, -4).
+    const floor = -4
+    const ticks = buildYTickValues(8, floor, 4, 0, { integer: true })
+    expect(ticks).toEqual([10, 5, 0, -5])
+    const step = ticks[0]! - ticks[1]!
+    expect(ticks[ticks.length - 1]).toBe(Math.floor(floor / step) * step)
+    for (let i = 1; i < ticks.length; i++) {
+      expect(ticks[i - 1]! - ticks[i]!).toBe(step)
+    }
+  })
+
+  it('adds headroom when the count peak is already a nice number', () => {
+    const ticks = buildYTickValues(40, 0, 4, 0.12, { integer: true })
+    expect(ticks[0]).toBe(50)
+    expect(ticks[ticks.length - 1]).toBe(0)
+    for (const t of ticks) expect(Number.isInteger(t)).toBe(true)
+  })
+
+  it('keeps non-count (USD) ticks on the master linear path', () => {
+    // Exact origin/master buildYTickValues(33) — no nice-step.
+    expect(buildYTickValues(33, 0, 4)).toEqual([36.96, 24.64, 12.32, 0])
+    expect(buildYTickValues(57, 0, 4)).toEqual([63.84, 42.56, 21.28, 0])
+    const usdValues = [1.23, 0.4, 0.1]
+    expect(resolveChartMax(usdValues, true)).toBeCloseTo(1.23 * 1.12)
+    expect(resolveChartMax(usdValues, false)).toBe(1.23)
+    // Non-count callers use resolveChartMax, not the count-only plot helper.
+    expect(buildYTickValues(1.23, 0, 4)).toEqual([
+      1.3776000000000002,
+      0.9184000000000001,
+      0.45920000000000005,
+      0,
+    ])
   })
 })
 

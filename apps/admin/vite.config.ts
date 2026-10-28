@@ -13,9 +13,10 @@ import { invalidateWebWorkspaceDep } from './vite-plugin-invalidate-web-dep.ts'
 //   - local dev      (VITE_BASE_PATH unset → "/")
 //   - self-hosted    (any path the operator wants, e.g. "/admin/")
 //   - kensaur.us     (set to "/mushi-mushi/admin/" in .github/workflows/deploy-admin.yml)
-// The router (`BrowserRouter basename={import.meta.env.BASE_URL}`) and auth
-// redirects (`lib/auth.tsx`) already read `BASE_URL`, so no other code needs
-// to change when this flips.
+// The router basename is `routerBasename(import.meta.env.BASE_URL)` — the
+// trailing slash Vite requires is stripped, because React Router renders
+// nothing at the slashless URL when the basename keeps it. Auth redirects
+// (`lib/auth.tsx`) still read `BASE_URL`.
 const basePath = process.env.VITE_BASE_PATH ?? '/'
 
 // Version + build provenance baked into the bundle so the in-app
@@ -269,8 +270,16 @@ export default defineConfig({
           // Graph layout (dagre) — only by the /ci runner map, which is lazy.
           // Kept out of vendor-misc, which index.html preloads on every page.
           if (id.includes('@dagrejs/')) return 'vendor-graph-layout'
-          // Data table runtime — only by list pages.
-          if (id.includes('@tanstack/react-table') || id.includes('@tanstack/react-virtual')) {
+          // Data table runtime — only by list pages. v9 splits the
+          // implementation across table-core and TanStack Store; those
+          // must stay out of the preloaded misc chunk.
+          if (
+            id.includes('@tanstack/react-table') ||
+            id.includes('@tanstack/table-core') ||
+            id.includes('@tanstack/react-store') ||
+            id.includes('@tanstack/store') ||
+            id.includes('@tanstack/react-virtual')
+          ) {
             return 'vendor-table'
           }
           // Everything else — small misc vendor code.

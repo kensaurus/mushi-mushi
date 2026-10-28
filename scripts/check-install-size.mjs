@@ -56,9 +56,41 @@ const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 // gives "choose where CI runs" its terminal path (surface parity): the
 // placement preview, request and status renderers. No new dependencies; the
 // growth is that code, measured at cli 211.6/805.2 kB packed/unpacked.
+//
+// Raised 2026-10-26: `mushi work` registers its run when the agent starts and
+// closes it on every exit, and CLI commands get SIGINT/SIGTERM cleanups
+// (onInterrupt), so a local run shows in flight on the console and a stop
+// never leaves it hanging. No new dependencies; the growth is that code and
+// the mushi work changes since 2026-10-22, measured at cli 220.5/837.4 kB.
+//
+// Raised 2026-10-26 (npm listing housekeep): the docs index the MCP server
+// ships (`search_mushi_docs`, one excerpt per docs page) gained the
+// @mushi-mushi/ux page and rewritten descriptions for the SDK and plugin
+// pages. No code or dependency change; measured at mcp 232.6/921.8 kB, where
+// 0.29.1 already published at 920.0 kB unpacked.
+//
+// Raised 2026-10-27 (ADR 0047, ADR 0048): `mushi runner bill` and `mushi
+// runner fix` give the real CI bill and the one-click cost fixes their
+// terminal path, and `mushi work --daemon` with `mushi worker install/status/
+// revoke` is the local worker the console steers (heartbeat, claims, guards,
+// systemd unit and Windows task writers). No new dependencies, 32 files, no
+// source maps; the growth is that code, measured at cli 235.5/902.7 kB.
+//
+// Raised 2026-10-27 (ADR 0049, ADR 0050, ADR 0042 amendment): `mushi work
+// --daemon` runs conflicts lanes (merge the base in, check only conflicted
+// files changed, push a plain merge) and audit lanes (propose, reproduce with
+// a closed check, veto, file), parses claims by kind, and runProc no longer
+// hangs on a child holding its pipes. No new dependencies, 32 files, no
+// source maps; the growth is that code, measured at cli 249.7/935.6 kB.
+//
+// Raised 2026-10-27 (ADR 0047 amendment, "Apply to every app"): three MCP
+// tools, preview_ci_cost_fix_rollout, apply_ci_cost_fix_rollout and
+// get_ci_cost_fix_bundle, give one draft PR per repo its editor path (surface
+// parity). Their catalog descriptions ship in every built entry. No code
+// dependency change; measured at mcp 239.3/949.9 kB packed/unpacked.
 export const BUDGETS = [
-  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 235_000, unpacked: 920_000 },
-  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 220_000, unpacked: 840_000 },
+  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 250_000, unpacked: 965_000 },
+  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 255_000, unpacked: 960_000 },
 ]
 
 const fmt = (n) => `${(n / 1000).toFixed(1)} kB`

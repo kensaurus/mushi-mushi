@@ -602,6 +602,8 @@ export interface SpendDownRadarKey {
   servedProjectIds: readonly string[]
   dispatchedToday: number
   lastSummary: SpendDownTick | null
+  /** Set when `no_app` is because another key of the same scope pays first. */
+  idleNote?: string | null
 }
 
 const IDLE_WHY: Record<SpendDownIdleReason, string> = {
@@ -640,15 +642,18 @@ export function evaluateSpendDownIdle(keys: readonly SpendDownRadarKey[], now: D
       continue
     }
     const name = row.label?.trim() || 'unnamed'
-    const needsSetup = reasons.includes('no_app') || reasons.includes('autofix_off')
+    const outranked = reasons.includes('no_app') && !!row.idleNote
+    const needsSetup = !outranked && (reasons.includes('no_app') || reasons.includes('autofix_off'))
+    const why = (r: SpendDownIdleReason) => (r === 'no_app' && row.idleNote ? row.idleNote : IDLE_WHY[r])
+    let fix = 'Nothing is left for this key to fix. Reports an agent already settled (already fixed, wrong repo) stay settled; a new open report is picked up on the next tick.'
+    if (outranked) fix = 'Nothing to change on this key. It pays for those apps when the one ahead of it runs out or is removed.'
+    else if (needsSetup) fix = 'Turn auto-fix on for an app this key already pays for and link that app\'s repo (Settings → General). Spend-down only dispatches where this key is the resolver\'s first pick.'
     findings.push({
       ruleId,
       severity: 'warn',
-      message: `Spend-down is on for the Cursor key "${name}" and inside its window, but it dispatched nothing: ${reasons.map((r) => IDLE_WHY[r]).join(', and ')}.`,
+      message: `Spend-down is on for the Cursor key "${name}" and inside its window, but it dispatched nothing: ${reasons.map(why).join(', and ')}.`,
       target: name,
-      fix: needsSetup
-        ? 'Turn auto-fix on for an app this key already pays for and link that app\'s repo (Settings → General). Spend-down only dispatches where this key is the resolver\'s first pick.'
-        : 'Nothing is left for this key to fix. Reports an agent already settled (already fixed, wrong repo) stay settled; a new open report is picked up on the next tick.',
+      fix,
       evidence: { keyId: row.id, reasons, dispatchedToday: row.dispatchedToday, servedProjects: row.servedProjectIds.length },
     })
   }

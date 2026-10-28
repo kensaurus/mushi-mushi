@@ -1,102 +1,61 @@
 /**
  * FILE: McpSnapshotStrip.tsx
- * PURPOSE: MCP KPI strip using MetricStrip — replaces hand-rolled 6-col grid on McpPage.
+ * PURPOSE: Editor agents status: is your editor talking to Mushi, and when did
+ *          it last call (PageStatus, P1). Key scopes stay on the Setup tab.
  */
 
-import { Section, StatCard, SnapshotSectionHint } from '../ui'
-import { MetricStrip } from '../MetricStrip'
+import { PageStatus } from '../ui'
 import type { McpStats } from './types'
-import {
-  activeKeysDetail,
-  activeKeysTooltip,
-  connectedDetail,
-  connectedTooltip,
-  endpointDetail,
-  endpointTooltip,
-  mcpReadDetail,
-  mcpReadTooltip,
-  sdkOnlyDetail,
-  sdkOnlyTooltip,
-  toolsDetail,
-  toolsTooltip,
-} from '../../lib/statTooltips/mcp'
+import { formatRelative } from '../ui'
+import { pluralizeWithCount } from '../../lib/format'
 import { mcpLinks } from '../../lib/statCardLinks'
 
 interface Props {
   stats: McpStats
   statsFetchedAt: string | null
   statsValidating?: boolean
-  sectionTitle?: string
-  hint?: string
   statLabels?: Record<string, string>
 }
 
-export function McpSnapshotStrip({
-  stats,
-  statsFetchedAt,
-  statsValidating,
-  sectionTitle = 'MCP SNAPSHOT',
-  hint,
-  statLabels,
-}: Props) {
+function mcpSentence(stats: McpStats): string {
+  if (stats.connectedKeyCount === 0) {
+    return stats.activeKeyCount > 0
+      ? 'No editor has called Mushi yet. Connect one from Setup.'
+      : 'No editor is connected yet.'
+  }
+  const last = stats.lastSeenAt ? `, last call ${formatRelative(stats.lastSeenAt)}` : ''
+  const mismatch = stats.endpointMismatch ? ' Your editor is calling a different Mushi address than this console.' : ''
+  return `${pluralizeWithCount(stats.connectedKeyCount, 'editor')} connected${last}; ${pluralizeWithCount(stats.toolCount, 'tool')} available.${mismatch}`
+}
+
+export function McpSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels }: Props) {
   return (
-    <Section title={sectionTitle} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-      {hint ? <SnapshotSectionHint text={hint} /> : null}
-      <MetricStrip cols={6} ariaLabel="MCP snapshot">
-        <StatCard
-          label={statLabels?.activeKeys ?? 'Active keys'}
-          value={stats.activeKeyCount}
-          tooltip={activeKeysTooltip(stats)}
-          detail={activeKeysDetail()}
-          to={mcpLinks.activeKeys}
-        />
-        <StatCard
-          label={statLabels?.mcpRead ?? 'mcp:read'}
-          value={stats.mcpReadKeyCount}
-          accent={stats.mcpReadKeyCount > 0 ? 'text-ok' : 'text-warn'}
-          tooltip={mcpReadTooltip(stats)}
-          detail={mcpReadDetail(stats)}
-          to={mcpLinks.mcpRead}
-        />
-        <StatCard
-          label={statLabels?.connected ?? 'Connected'}
-          value={stats.connectedKeyCount}
-          accent={
-            stats.connectedKeyCount > 0
-              ? 'text-ok'
-              : stats.mcpReadKeyCount > 0
-                ? 'text-warn'
-                : undefined
-          }
-          tooltip={connectedTooltip(stats)}
-          detail={connectedDetail(stats)}
-          to={mcpLinks.connected}
-        />
-        <StatCard
-          label={statLabels?.sdkOnly ?? 'SDK-only keys'}
-          value={stats.reportOnlyKeyCount}
-          accent={stats.reportOnlyKeyCount > 0 && stats.mcpReadKeyCount === 0 ? 'text-warn' : undefined}
-          tooltip={sdkOnlyTooltip(stats)}
-          detail={sdkOnlyDetail()}
-          to={mcpLinks.sdkOnly}
-        />
-        <StatCard
-          label={statLabels?.tools ?? 'Tools'}
-          value={stats.toolCount}
-          accent="text-info"
-          tooltip={toolsTooltip(stats)}
-          detail={toolsDetail(stats)}
-          to={mcpLinks.tools}
-        />
-        <StatCard
-          label={statLabels?.endpoint ?? 'Endpoint'}
-          value={stats.endpointMismatch ? 'Mismatch' : stats.lastSeenAt ? 'OK' : '—'}
-          accent={stats.endpointMismatch ? 'text-danger' : stats.lastSeenAt ? 'text-ok' : undefined}
-          tooltip={endpointTooltip(stats)}
-          detail={endpointDetail(stats)}
-          to={mcpLinks.endpoint}
-        />
-      </MetricStrip>
-    </Section>
+    <PageStatus
+      ariaLabel="Editor agents status"
+      tone={stats.endpointMismatch ? 'warn' : stats.connectedKeyCount > 0 ? 'ok' : 'neutral'}
+      sentence={mcpSentence(stats)}
+      freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      metrics={[
+        {
+          label: statLabels?.connected ?? 'Editors connected',
+          value: stats.connectedKeyCount,
+          tone: stats.connectedKeyCount > 0 ? 'ok' : 'neutral',
+          hint: 'Editor keys that have called Mushi at least once.',
+          to: mcpLinks.connected,
+        },
+        {
+          label: 'Not used yet',
+          value: stats.neverConnectedCount,
+          hint: 'Editor keys you created that no editor has called with.',
+          to: mcpLinks.activeKeys,
+        },
+        {
+          label: statLabels?.tools ?? 'Tools',
+          value: stats.toolCount,
+          hint: 'Things your editor’s agent can ask Mushi to do, like read a bug or start a fix.',
+          to: mcpLinks.tools,
+        },
+      ]}
+    />
   )
 }

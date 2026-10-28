@@ -8,7 +8,9 @@
  *            Daily limits     crawl pages / runs, test generations
  *            Feedback widget  "Bug reports by Mushi" line
  *          Loads + saves `/v1/admin/settings`; secrets come back masked with
- *          a `<column>_set` flag and are never sent back.
+ *          a `<column>_set` flag and are never sent back. The Slack row's
+ *          "can send" state also reads `slackCanPost` from settings stats
+ *          (passed in) plus the row's own channel, webhook, and bot flags.
  */
 
 import { useMemo, useState } from 'react'
@@ -44,6 +46,10 @@ import { LifecycleEmailsToggle } from './LifecycleEmailsToggle'
 import { useByokPool } from './ByokPoolContext'
 import { providerStatusView } from './keyStatus'
 import { SettingsList, SettingsRow, type RowStatusValue } from './SettingsRow'
+import { slackAlertStatus, slackCanOfferTest } from './slackAlertStatus'
+import { fixBranchFieldState } from './fixBranchField'
+import { sentryRowStatus, useSentryConnection } from '../../lib/useSentryConnection'
+import type { HealthRow } from '../integrations/types'
 
 /** Tri-state select values for `widget_brand_footer` (null = plan default). */
 type BrandFooterChoice = 'default' | 'on' | 'off'
@@ -69,6 +75,8 @@ interface ProjectSettings {
   /** Server flags beside masked secrets: the value itself never reaches the console. */
   sentry_webhook_secret_set?: boolean
   slack_webhook_url_set?: boolean
+  /** True when this project's Slack bot token is stored. The token itself never arrives. */
+  slack_bot_token_ref_set?: boolean
   sentry_consume_user_feedback?: boolean
   stage2_model?: string
   /** Quick check (Stage 1) model. Claude ids only; the server rejects others. */
@@ -98,11 +106,18 @@ const DEFAULT_BRANCH_TEMPLATE = 'bugfix/MUSHI-{reportId}-{category}'
 /** The model each job really runs: column defaults and retired ids resolve like the server does. */
 const eff = effectiveModelId
 
-export function GeneralPanel() {
+export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
   const toast = useToast()
   const entitlements = useEntitlements()
   const { data, loading, error, reload } = usePageData<ProjectSettings>('/v1/admin/settings')
   const pool = useByokPool(!entitlements.loading && entitlements.has('byok'))
+  // The same verdict the Integrations card shows, from the same inputs, so
+  // the two pages never disagree about Sentry.
+  const sentryShared = useSentryConnection()
+  // The Slack probe the Integrations card reads (same request, cached), so a
+  // test sent from either page shows on both.
+  const health = usePageData<{ history: HealthRow[] }>('/v1/admin/health/history')
+  const slackProbe = health.data?.history?.find((h) => h.kind === 'slack')
   const [draft, setDraft] = useState<ProjectSettings | null>(null)
   const [saving, setSaving] = useState(false)
   const [showLegacyWebhook, setShowLegacyWebhook] = usePersistentState(
@@ -170,21 +185,32 @@ export function GeneralPanel() {
   if (error) return <ErrorAlert message={`Couldn't load your settings: ${error}`} onRetry={reload} />
 
   // ── Statuses: what is saved, and what Mushi has actually confirmed ──────────
-  const slackSaved = Boolean(saved.slack_channel_id) || saved.slack_webhook_url_set === true
-  const slackStatus: RowStatusValue = !slackSaved
-    ? { state: 'not_connected', detail: 'Add a channel ID below to get bug alerts in Slack.' }
-    : slackTest?.ok
-      ? { state: 'working', detail: 'Test message sent just now.' }
-      : slackTest
-        ? { state: 'attention', detail: "The test message didn't arrive. Check the channel ID and that the Mushi bot is in the channel." }
-        : { state: 'checking', detail: 'Saved. Send a test message to check it.' }
+  // A channel id alone cannot post. slackCanPost covers an org or operator
+  // bot that this project's settings row does not list.
+  const slackInput = {
+    channelId: saved.slack_channel_id,
+    webhookSet: saved.slack_webhook_url_set === true,
+    botSet: saved.slack_bot_token_ref_set === true,
+    canPost: slackCanPost,
+    tested: slackTest,
+    probe: slackProbe,
+  }
+  const slackStatus: RowStatusValue = slackAlertStatus(slackInput)
+  const canTestSlack = slackCanOfferTest(slackInput)
 
+  // What this page alone can see: a DSN and a webhook secret are saved, or
+  // they are not. It is never a verdict — Sentry can be connected and
+  // delivering with its org slug and auth token, which live on Integrations.
   const sentryDsnSaved = Boolean(saved.sentry_dsn)
-  const sentryStatus: RowStatusValue = !sentryDsnSaved
+  const sentrySavedHint: RowStatusValue = !sentryDsnSaved
     ? { state: 'not_connected', detail: 'Add your Sentry DSN to turn production errors into reports.' }
     : saved.sentry_webhook_secret_set !== true
       ? { state: 'attention', detail: "Add the webhook secret below, or Mushi can't accept Sentry's deliveries." }
       : { state: 'checking', detail: 'Saved. The Integrations page shows when Sentry sends its first error.' }
+  // The shared verdict wins once the credentials and probes have been read;
+  // the saved-value line fills in a detail the verdict leaves empty, and
+  // stands in while there is nothing to check (no Sentry credentials yet).
+  const sentryStatus: RowStatusValue = sentryRowStatus(sentryShared, sentrySavedHint)
 
   const supabaseRefSaved = Boolean(saved.supabase_project_ref)
   const supabaseKeyView = providerStatusView('supabase', pool.data?.keys ?? [], pool.data?.legacyKeys ?? [], {
@@ -196,8 +222,11 @@ export function GeneralPanel() {
     : supabaseKeyView
 
   const branchExample = fixBranchExample(settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE)
-  // The server refuses a pattern that breaks the rule; say so before Save.
-  const branchProblem = fixBranchTemplate()(settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE)
+  const branch = fixBranchFieldState({
+    current: settings.fix_branch_template,
+    saved: saved.fix_branch_template,
+    defaultValue: DEFAULT_BRANCH_TEMPLATE,
+  })
 
   return (
     <>
@@ -212,7 +241,7 @@ export function GeneralPanel() {
           purpose="Posts each new bug with Triage and Fix buttons. Fix progress replies in the same thread."
           status={slackStatus}
           action={
-            slackSaved ? (
+            canTestSlack ? (
               <Btn size="sm" variant="ghost" loading={testingSlack} onClick={() => void testSlack()}>
                 Send test message
               </Btn>
@@ -228,7 +257,9 @@ export function GeneralPanel() {
             placeholder="C0B82A322RW"
           />
           <p className="text-xs text-fg-muted">
-            In Slack, open the channel's details and copy the channel ID at the bottom. Then invite the Mushi bot to the channel.
+            {slackInput.botSet || slackCanPost
+              ? "In Slack, open the channel's details and copy the channel ID at the bottom. Then invite the Mushi bot to the channel."
+              : "Mushi's Slack bot isn't connected to this app, so a channel ID alone can't post. Connect it on Integrations, or use the webhook below."}
           </p>
           <SettingsChangeHint current={settings.slack_channel_id ?? ''} saved={saved.slack_channel_id ?? ''} kind="text" />
           {slackTest && (
@@ -492,6 +523,7 @@ export function GeneralPanel() {
             onChange={(e) => update({ fix_branch_template: e.target.value })}
             placeholder={DEFAULT_BRANCH_TEMPLATE}
             validate={fixBranchTemplate()}
+            error={branch.error ?? undefined}
           />
           <p className="text-xs text-fg-muted">
             Example: <code className="font-mono">{branchExample}</code>
@@ -597,7 +629,7 @@ export function GeneralPanel() {
         changeCount={changeCount}
         onSave={() => void save()}
         onDiscard={() => setDraft(null)}
-        blockedReason={branchProblem ? `Fix the branch name pattern first. ${branchProblem.message}` : null}
+        blockedReason={branch.blocksSave ? `Fix the branch name pattern first. ${branch.error}` : null}
       />
 
       {/* Account-scoped; saves on toggle, independent of the project form above. */}

@@ -89,8 +89,11 @@ const lines = [
   "",
   "## Start here (MCP-first)",
   "",
+  curated("Sample diagnosis", "/demo/diagnosis"),
   curated("Incident loop", "/quickstart/incident-loop"),
+  curated("Lovable or Bolt (no terminal)", "/quickstart/lovable-bolt"),
   curated("MCP server", "/quickstart/mcp"),
+  curated("Ask Lovable why it broke", "/quickstart/lovable-mcp"),
   curated(
     "Connect your AI client",
     "/connect",

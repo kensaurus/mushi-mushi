@@ -9,7 +9,7 @@
  */
 
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
-import { installGuard, isGuardNoise, type AllowRule, type GuardLog } from './guard.js'
+import { installGuard, isGuardNoise, type AllowRule, type GuardLog, type GuardPolicy } from './guard.js'
 import { ignoreList, ignoreStyle } from './ignore.js'
 import { isFrameworkNoise, runProbes } from './probes.js'
 import type { ProbeResult, ReplayStep, Surface, Viewport } from './types.js'
@@ -40,12 +40,20 @@ export interface BrowserSession {
 }
 
 export interface SessionOptions {
-  /** Persistent profile directory from `mushi-ux login`; omit for a clean browser. */
+  /** Persistent profile directory from `mushi-ux login`, or `--profile-dir` (a cached, signed-in profile); omit for a clean browser. */
   profileDir?: string
+  /**
+   * Browser build to open it with. 'chrome' opens a profile Google Chrome
+   * created (playwright-cli's cached profiles) with the installed Chrome; the
+   * bundled Chromium is older and may refuse or rewrite such a profile.
+   */
+  channel?: 'chrome' | 'chromium'
   headless?: boolean
   allow?: readonly AllowRule[]
   /** Extra selectors to ignore on top of DEFAULT_IGNORE. */
   ignore?: readonly string[]
+  /** Write policy (guard.ts). Default read-only; fresh-eyes runs may write to the app's own origins (ADR 0053). */
+  policy?: GuardPolicy
 }
 
 /** Sums layout shifts not caused by input, from page start. */
@@ -66,20 +74,21 @@ export async function openSession(opts: SessionOptions = {}): Promise<BrowserSes
   // Playwright's docs say requests a Service Worker handles can bypass
   // context.route. Chromium on 1.61 routed them in a probe (Plan 021 §5), but
   // the guard must not depend on that: block Service Workers outright.
+  const channel = opts.channel === 'chrome' ? { channel: 'chrome' as const } : {}
   if (opts.profileDir) {
-    context = await chromium.launchPersistentContext(opts.profileDir, { headless, serviceWorkers: 'block' })
+    context = await chromium.launchPersistentContext(opts.profileDir, { headless, serviceWorkers: 'block', ...channel })
     // A persistent profile cannot spawn contexts: captures run in a second browser seeded from it.
-    browser = await chromium.launch({ headless })
+    browser = await chromium.launch({ headless, ...channel })
     closeBrowser = async () => {
       await context.close()
       await browser.close()
     }
   } else {
-    browser = await chromium.launch({ headless })
+    browser = await chromium.launch({ headless, ...channel })
     context = await browser.newContext({ serviceWorkers: 'block' })
     closeBrowser = () => browser.close()
   }
-  const guard = await installGuard(context, opts.allow ?? [])
+  const guard = await installGuard(context, opts.allow ?? [], { blocked: [] }, opts.policy)
   await context.addInitScript({ content: CLS_SCRIPT })
   // The state every capture starts from; warmUp replaces it with a visited app.
   let seed = await context.storageState({ indexedDB: true })
@@ -97,7 +106,7 @@ export async function openSession(opts: SessionOptions = {}): Promise<BrowserSes
   }
   const freshContext = async () => {
     const fresh = await browser.newContext({ serviceWorkers: 'block', storageState: seed })
-    await installGuard(fresh, opts.allow ?? [], guard)
+    await installGuard(fresh, opts.allow ?? [], guard, opts.policy)
     await fresh.addInitScript({ content: CLS_SCRIPT })
     return fresh
   }
@@ -141,7 +150,6 @@ export async function settle(page: Page, quietMs = 400, maxMs = 5000): Promise<v
  * progress bar, or a spinning element covering most of the screen. An app
  * that boots behind a splash spinner was screenshotted as an empty page with
  * a spinner and "measured" as fine (glot.it /practice, 2026-10-06).
- * @internal Exported for tests only.
  */
 export async function waitForContent(page: Page, maxMs = 20_000): Promise<void> {
   await page

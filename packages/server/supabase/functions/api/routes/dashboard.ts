@@ -11,7 +11,7 @@ import {
   OPEN_REPORT_STATUSES,
   TRIAGE_BACKLOG_STATUSES,
 } from '../shared.ts';
-import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
+import { countFixesForArea, summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
 import { failedFixPreviews, loadRecentFixTruths } from '../../_shared/fix-report-truth-load.ts';
 import { JUDGE_ELIGIBLE_STATUSES, isJudgeStale, onlyJudgeable } from '../../_shared/judge-eligibility.ts';
 import { reportWindowStartIso } from '../../_shared/report-list-filters.ts';
@@ -22,6 +22,7 @@ import {
   summarizeHealthByKind,
 } from '../../_shared/integration-health-rollup.ts';
 import { DashboardChartReadError, loadDashboardCharts } from '../../_shared/dashboard-chart-rollup.ts';
+import { isSdkKey } from '../../_shared/setup-signals.ts';
 
 /** Activity-feed line for one fix attempt, read against its report's current state. */
 function fixActivityLabel(
@@ -355,11 +356,11 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
           'sdk heartbeat',
           db
             .from('project_api_keys')
-            .select('last_seen_at')
+            .select('scopes, last_seen_at')
             .eq('project_id', activeProject.id)
             .eq('is_active', true)
             .not('last_seen_at', 'is', null)
-            .limit(1),
+            .limit(50),
         ),
         exactCount(
           'report count',
@@ -400,7 +401,8 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         ungradedReports,
         lastEvalAt,
         hasKey: keyRows.length > 0,
-        hasSdk: heartbeatRows.length > 0,
+        // SDK keys only: a CLI or MCP key's calls are not the app's SDK.
+        hasSdk: (heartbeatRows as Array<{ scopes?: string[] | null }>).some((k) => isSdkKey(k.scopes)),
         reportCount,
         lastReport,
         lastFix,
@@ -682,11 +684,11 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
           'sdk heartbeat',
           db
             .from('project_api_keys')
-            .select('last_seen_at')
+            .select('scopes, last_seen_at')
             .eq('project_id', activeProject.id)
             .eq('is_active', true)
             .not('last_seen_at', 'is', null)
-            .limit(1),
+            .limit(50),
         ),
         exactCount(
           'report count',
@@ -724,7 +726,8 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         llmCalls14d,
         llmOk14d,
         hasKey: keyRows.length > 0,
-        hasSdk: heartbeatRows.length > 0,
+        // SDK keys only: a CLI or MCP key's calls are not the app's SDK.
+        hasSdk: (heartbeatRows as Array<{ scopes?: string[] | null }>).some((k) => isSdkKey(k.scopes)),
         reportCount,
         lastReport,
         lastFix,
@@ -1112,8 +1115,18 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     // True only when the fallback row read hit its cap; the KPI counts stay exact.
     const chartsSampled = loaded.charts.sampled;
 
-    // Top components by report count
-    const topComponents = loaded.charts.topComponents;
+    // Top components by report count. Drafted / merged are that area's open
+    // PRs and merged PRs — not the project's attempt total, which the reports
+    // banner used to print as "N more drafted" next to the inbox total.
+    const areaFixRows = [...dashTruths.truths.entries()].map(([id, truth]) => ({
+      component: dashTruths.reports.get(id)?.component,
+      state: truth.state,
+      mergedPrNumber: truth.mergedPrNumber,
+    }));
+    const topComponents = loaded.charts.topComponents.map((c) => {
+      const area = countFixesForArea(c.component, areaFixRows);
+      return { ...c, draftedFixes: area.drafted, mergedFixes: area.merged };
+    });
 
     // `total` is the number of reports with an attempt in the shared 30-day window.
     const dashTruth = summarizeFixTruths(dashTruths.truths.values());
