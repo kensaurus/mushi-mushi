@@ -172,6 +172,7 @@ const COPY: CopyRegistry = {
         steps: 'Create app',
         verify: 'Test it',
         sdk: 'Install widget',
+        diagnose: 'Fix a problem',
       },
       help: {
         title: 'About setup',

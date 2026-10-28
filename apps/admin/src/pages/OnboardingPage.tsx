@@ -30,7 +30,6 @@ import { ContainedBlock } from '../components/report-detail/ReportSurface'
 import { OnboardingSkeleton } from '../components/skeletons/OnboardingSkeleton'
 import { ConnectionStatus } from '../components/ConnectionStatus'
 import { SetupChecklist } from '../components/SetupChecklist'
-import { ProjectNarrativeStrip } from '../components/dashboard/ProjectNarrativeStrip'
 import { PdcaFlow } from '../components/pdca-flow/PdcaFlow'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { useSetupStatus } from '../lib/useSetupStatus'
@@ -71,22 +70,22 @@ const ONBOARDING_TABS: Array<{ id: OnboardingTabId; label: string; description: 
   },
   {
     id: 'steps',
-    label: 'Steps',
+    label: 'All steps',
     description: 'Checklist with required + optional milestones — synced from live DB state.',
   },
   {
     id: 'verify',
-    label: 'Verify',
+    label: 'Test it',
     description: 'API key mint, connection probe, and admin test-report submission.',
   },
   {
     id: 'sdk',
-    label: 'SDK',
+    label: 'Install',
     description: 'Install snippet and init copy — bookmark this tab after setup completes.',
   },
   {
     id: 'diagnose',
-    label: 'Diagnose',
+    label: 'Fix a problem',
     description: 'Something not working? Check the SDK heartbeat, version and fix dispatch for one project, with copy-paste commands.',
   },
 ]
@@ -397,10 +396,6 @@ export function OnboardingPage() {
     )
   }
 
-  const sdkInstalled = !setup.isStepIncomplete('sdk_installed')
-  const hasReports = (project?.report_count ?? 0) > 0
-  const hasFix = (project?.fix_count ?? 0) > 0
-  const hasMerged = (project?.merged_fix_count ?? 0) > 0
   // Render a "Setup complete" hero (instead of bouncing) when there's nothing
   // left for this project to do. Keeps the page useful as a permanent SDK
   // reference for fully onboarded users.
@@ -668,15 +663,9 @@ export function OnboardingPage() {
           (2026-10-28). The rail and the gaps say it once. */}
       {setupComplete && <MigrationsInProgressCard />}
 
-      {project && (
-        <ProjectNarrativeStrip
-          projectName={project.project_name}
-          sdkInstalled={sdkInstalled}
-          hasReports={hasReports}
-          hasFix={hasFix}
-          hasMerged={hasMerged}
-        />
-      )}
+      {/* The "How a bug gets fixed … You are here" stage strip sat here: a
+          fourth progress tracker under the rail, setup gaps and the tabs
+          (integrator's new-user walk, 2026-10-28). The rail says it once. */}
 
       {/* Explainer diagram: shows first-run users the four stages of the
           loop they're about to enter, with outcome copy instead of empty
