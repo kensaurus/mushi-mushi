@@ -12,15 +12,7 @@
  *            first_fix_dispatched, slack_connected, first_qa_story_passing
  */
 
-import type { SetupProject, SetupStep } from './useSetupStatus'
-
-function requiredSetupSteps(project: SetupProject): SetupStep[] {
-  return project.steps.filter((s) => s.required)
-}
-
-export function nextRequiredSetupStep(project: SetupProject): SetupStep | null {
-  return requiredSetupSteps(project).find((s) => !s.complete) ?? null
-}
+import type { SetupProject } from './useSetupStatus'
 
 /**
  * Required counts from GET /v1/admin/setup (the switcher and Home read it)
