@@ -34,15 +34,9 @@ export function FeedbackStatusBanner({
     )
   }
 
-  if (stats.topPriority === 'first_submit') {
-    return (
-      <StatusBannerShell
-        tone="brand"
-        title={`No submissions yet on ${stats.projectName ?? 'your project'}`}
-        subtitle="Report a console bug or request a feature about Mushi with the buttons above — we read every ticket and link shipped ideas to release versions. For end-user bugs from your app, see Reports."
-      />
-    )
-  }
+  // Nothing sent yet is not a problem: the status line under the header says
+  // so once. This banner said it again, in the red brand tone (2026-10-28).
+  if (stats.topPriority === 'first_submit') return null
 
   if (stats.topPriority === 'reply' && stats.awaitingReply > 0) {
     return (
