@@ -12,6 +12,9 @@
  *          The open error / warning totals lead (the same numbers the
  *          Full-stack audit stats count), checks with open findings follow,
  *          and checks with nothing open collapse into one disclosure.
+ *          A check's disclosure names that check's open count. When the list
+ *          is capped, it says how many of that count are shown, so it never
+ *          disagrees with the "N open" badge.
  *
  * Data: GET /v1/admin/inventory/:projectId/findings[?gate=]
  */
@@ -161,6 +164,18 @@ const STATUS_TEXT: Record<string, { label: string; tone: string }> = {
 }
 
 /**
+ * Label for a check's findings disclosure. Small groups say "Findings".
+ * Larger ones name the open count. A capped list says how many of that
+ * count are on the page, so "230 open" is never paired with "Show the 50 findings".
+ */
+function findingsDisclosureLabel(open: number, shown: number): string {
+  if (open <= 3) return 'Findings'
+  const total = open.toLocaleString()
+  if (shown < open) return `Show ${shown.toLocaleString()} of ${total} findings`
+  return `Show the ${total} findings`
+}
+
+/**
  * One check: what it looks at, when it last ran and against which commit,
  * whether that result is old, its open findings by rule, and where to work
  * on them. Small groups open by default; large ones show the rule summary.
@@ -204,7 +219,7 @@ function CheckGroupCard({ projectId, group: g, limit, onChanged }: { projectId: 
       {g.open > 0 && (
         <details open={g.open <= 3}>
           <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg">
-            {g.open <= 3 ? 'Findings' : `Show the ${Math.min(g.open, limit)} findings`}
+            {findingsDisclosureLabel(g.open, shown.length)}
           </summary>
           <div className="mt-2 flex flex-col gap-2">
             {shown.map((f) => {
