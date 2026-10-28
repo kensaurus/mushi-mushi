@@ -834,6 +834,9 @@ export function FixesPage() {
   }, [reloadStats, reloadPipeline, loadFixes])
 
   const setupBlocked = ['no_project', 'no_github', 'no_index'].includes(fixesStats.topPriority)
+  // With no attempts yet the empty state below asks for GitHub itself; the
+  // banner and an empty merge queue only repeated it (2026-10-27).
+  const emptyAsksForGithub = fixes.length === 0 && fixesStats.topPriority === 'no_github'
   const readyCount = useMemo(() => new Set(fixes.filter(readyToMerge).map((f) => f.pr_url)).size, [fixes])
 
   if (loading) return <TableSkeleton rows={6} columns={5} showFilters label="Loading fixes" />
@@ -868,7 +871,7 @@ export function FixesPage() {
             priority: POSTURE_PRIORITY.status,
             // The red "stopped" banner said what the status line says; it
             // stays for what blocks auto-fix itself.
-            show: setupBlocked,
+            show: setupBlocked && !emptyAsksForGithub,
             children: (
               <FixesStatusBanner
                 stats={fixesStats}
@@ -946,7 +949,9 @@ export function FixesPage() {
         <FixRecommendation fixes={fixes} dispatches={mergedDispatches} />
       )}
 
-      <MergeQueuePanel projectId={activeProjectId ?? null} refreshKey={queueRefresh} onMerged={loadFixes} />
+      {emptyAsksForGithub ? null : (
+        <MergeQueuePanel projectId={activeProjectId ?? null} refreshKey={queueRefresh} onMerged={loadFixes} />
+      )}
 
       {mergeFailures.length > 0 && (
         <section aria-label="Pull requests that did not merge" className="rounded-md border border-warn/30 bg-warn-muted/40 p-3 space-y-2">

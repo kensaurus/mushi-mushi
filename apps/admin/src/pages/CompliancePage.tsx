@@ -22,7 +22,7 @@ import {
 import { ContainedBlock, SignalChip, InlineProof, ActionPill } from '../components/report-detail/ReportSurface'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
-import { ResponsiveTable, TableDensityToggle } from '../components/ResponsiveTable'
+import { ResponsiveTable } from '../components/ResponsiveTable'
 import { Modal } from '../components/Modal'
 import { ConfirmDialog, PromptDialog } from '../components/ConfirmDialog'
 import { PageLoadError } from '../components/PageLoadError'
@@ -693,7 +693,6 @@ export function CompliancePage() {
         <Btn variant="ghost" onClick={() => window.print()} title="Renders the page via @media print so you can save as PDF">
           Export PDF
         </Btn>
-        <TableDensityToggle />
       </PageHeaderBar>
 
       <PagePosture

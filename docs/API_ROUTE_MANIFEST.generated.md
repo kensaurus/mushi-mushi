@@ -2,13 +2,13 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-27 · **782** routes.
+> Generated: 2026-10-27 · **788** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 209 |
+| `adminOrApiKey` | 215 |
 | `apiKeyAuth` | 59 |
 | `jwtAuth` | 400 |
 | `jwtOrApiKey` | 2 |
@@ -176,6 +176,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/fixes/stats` | `public` | `packages/server/supabase/functions/api/routes/workspace-nav-meta.test.ts` |
 | GET | `/v1/admin/fixes/summary` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | GET | `/v1/admin/fixes/summary` | `public` | `packages/server/supabase/functions/api/routes/workspace-nav-meta.test.ts` |
+| POST | `/v1/admin/fresh-eyes/test-account` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
 | POST | `/v1/admin/graph-backend/snapshot` | `jwtAuth` | `packages/server/supabase/functions/api/routes/intelligence-synthetic.ts` |
 | GET | `/v1/admin/graph-backend/status` | `jwtAuth` | `packages/server/supabase/functions/api/routes/intelligence-synthetic.ts` |
 | GET | `/v1/admin/graph/blast-radius/:nodeId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/graph-query.ts` |
@@ -449,6 +450,11 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/projects/:id/vulnerabilities/scan` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/vulnerabilities.ts` |
 | PUT | `/v1/admin/projects/:id/vulnerabilities/settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/vulnerabilities.ts` |
 | POST | `/v1/admin/projects/:pid/content-quality/dismiss` | `jwtAuth` | `packages/server/supabase/functions/api/routes/content-quality.ts` |
+| GET | `/v1/admin/projects/:pid/fresh-eyes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
+| GET | `/v1/admin/projects/:pid/fresh-eyes/:runId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
+| PUT | `/v1/admin/projects/:pid/fresh-eyes/:runId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
+| POST | `/v1/admin/projects/:pid/fresh-eyes/:runId/findings` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
+| POST | `/v1/admin/projects/:pid/fresh-eyes/:runId/uploads` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
 | POST | `/v1/admin/projects/:pid/gate-findings/:id/dismiss` | `jwtAuth` | `packages/server/supabase/functions/api/routes/gate-finding-dismiss.ts` |
 | GET | `/v1/admin/projects/:pid/integrations` | `public` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/projects/:pid/integrations/discord/test` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |

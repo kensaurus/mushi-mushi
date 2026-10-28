@@ -394,6 +394,7 @@ Then ask your editor: *"Get the latest Mushi report and fix it."*
 The wizard detects your framework for you. Pick yours to see what it installs
 and the one line it adds to your code.
 
+- **No terminal (Lovable, Bolt):** [Mushi in Lovable or Bolt](/quickstart/lovable-bolt), one script tag pasted through your prompt.
 - **Mobile previews:** [iOS](/quickstart/ios) · [Android](/quickstart/android) · [Flutter](/quickstart/flutter), installed from the GitHub repo.
 - **Go deeper:** [Incident loop](/quickstart/incident-loop) · [MCP server](/quickstart/mcp) · [CLI console loop](/quickstart/cli-console-loop)
 
@@ -405,6 +406,8 @@ What you need first
 
 `npx` runs a tool from npm (the public library of JavaScript packages) without
 installing it for good. Here it runs the Mushi setup wizard.
+
+## Where to start
 
 ## Keys and settings
 
