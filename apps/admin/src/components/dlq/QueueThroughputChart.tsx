@@ -2,7 +2,9 @@
  * FILE: apps/admin/src/components/dlq/QueueThroughputChart.tsx
  * PURPOSE: 14-day created vs completed vs failed throughput sparklines.
  *          Renders nothing when there's been no traffic — empty days don't
- *          deserve their own card.
+ *          deserve their own card. The date range stays one unbreakable
+ *          line; on a narrow card the whole range drops under the title
+ *          instead of splitting a date after a hyphen.
  */
 
 import { Card } from '../ui'
@@ -21,12 +23,12 @@ export function QueueThroughputChart({ throughput }: Props) {
 
   return (
     <Card elevated className="p-3">
-      <div className="flex items-baseline justify-between mb-1">
+      <div className="mb-1 flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h3 className="text-2xs uppercase tracking-wider text-fg-muted">
           Daily throughput · last 14d
         </h3>
-        <div className="flex items-center gap-2">
-          <span className="text-2xs font-mono text-fg-faint">
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="whitespace-nowrap text-2xs font-mono text-fg-faint">
             {throughput[0]?.day} → {throughput[throughput.length - 1]?.day}
           </span>
           <ChartActionsMenu
