@@ -66,6 +66,7 @@ const REVIEWED = new Map<string, 'keyed' | 'stored' | 'sentinel'>([
   ['_shared/store-review-intake.ts reporter_token_hash', 'sentinel'], // 'store-review'; the reviewer's identity is never stored
   ['_shared/site-watch.ts reporter_token_hash', 'sentinel'], // 'site-watch'; a crawl, no person reported it
   ['_shared/ux-runs.ts reporter_token_hash', 'sentinel'], // 'ux-loop' (UX_LOOP_REPORTER): a screen the mushi-ux loop flagged
+  ['_shared/fresh-eyes.ts reporter_token_hash', 'sentinel'], // 'fresh-eyes' (ADR 0053): a first-time-visitor run found it, no person reported it
   ['library-modernizer/index.ts reporter_token_hash', 'sentinel'], // 'cron:library-modernizer'
   ['_shared/vuln-watch-db.ts reporter_token_hash', 'sentinel'], // 'cron:vuln-watch' (ADR 0038)
   ['skill-runs/index.ts reporter_token_hash', 'sentinel'], // 'cron:skill-runs' (ADR 0042: a skill-run round has no reporter)

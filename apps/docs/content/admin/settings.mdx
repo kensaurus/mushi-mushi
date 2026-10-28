@@ -88,6 +88,14 @@ includes the SDK reference (project API keys from **Settings â†’ SDK install** â
 Debug logging flag and other local-only developer flags for this project. These settings
 are never sent to the SDK or end users.
 
+### Display & sidebar
+
+How the console looks in this browser: theme (system, dark, light), density, table rows
+and focus mode (Ctrl/Cmd + . toggles it, Esc exits). The same controls open from your name
+at the foot of the sidebar. Below them, choose which extra pages (Labs) stay in the
+sidebar. Every other page is under **More pages** in the sidebar. `?tab=labs` links still
+open this tab.
+
 ---
 
 ## Changing a key

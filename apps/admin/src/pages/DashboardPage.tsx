@@ -27,10 +27,8 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { SetupChecklist } from '../components/SetupChecklist'
-import { sdkHealthHref } from '../lib/sdkHealth'
 import { FirstReportHero } from '../components/dashboard/FirstReportHero'
 import { QuotaBanner } from '../components/dashboard/QuotaBanner'
-import { HeroIntro } from '../components/dashboard/HeroIntro'
 import { AppCard, AppCardSkeleton } from '../components/home/AppCard'
 import { HealthStrip, HealthStripSkeleton } from '../components/home/HealthStrip'
 import { NeedsYouCard, NeedsYouSkeleton } from '../components/home/NeedsYouCard'
@@ -103,19 +101,11 @@ export function DashboardPage() {
   const sdkInstalled = project ? !setup.isStepIncomplete('sdk_installed') : false
   const showFirstReportHero = !!project && sdkInstalled && project.report_count === 0
   const setupIncomplete = !!project && !setup.selectors.done && setup.selectors.required_complete < setup.selectors.required_total
-  // While a required step is open the hero names it with its fix, never "healthy".
+  // While a required step is open the checklist leads the page and marks it
+  // "Do this next" with its fix. A hero card above it named the same step with
+  // the same button and a second count (owner, 2026-10-27: unnecessary
+  // information), so the checklist is the one place.
   const openStep = setupIncomplete ? (project?.steps.find((s) => s.required && !s.complete) ?? null) : null
-  const heroSetupStep =
-    openStep && project
-      ? {
-          label: openStep.label,
-          description: openStep.description,
-          ctaLabel: openStep.id === 'sdk_installed' ? 'Fix it' : openStep.cta_label,
-          ctaTo: openStep.id === 'sdk_installed' ? sdkHealthHref(project.project_id) : openStep.cta_to,
-          done: setup.selectors.required_complete,
-          total: setup.selectors.required_total,
-        }
-      : null
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-dashboard">
@@ -145,12 +135,6 @@ export function DashboardPage() {
 
       <PagePosture
         slots={[
-          {
-            id: 'setup-hero',
-            priority: POSTURE_PRIORITY.status,
-            show: !!heroSetupStep,
-            children: heroSetupStep ? <HeroIntro stages={[]} focusStage={null} projectName={projectName} setupStep={heroSetupStep} /> : null,
-          },
           { id: 'quota', priority: POSTURE_PRIORITY.nudge, children: <QuotaBanner /> },
           {
             id: 'first-report',
@@ -171,7 +155,7 @@ export function DashboardPage() {
       />
 
       {/* The setup steps, with Fix it on the SDK step. */}
-      {heroSetupStep && project && (
+      {openStep && project && (
         <SetupChecklist project={project} mode="banner" onRefresh={setup.reload} adminEndpointHost={setup.data?.admin_endpoint_host} />
       )}
 
