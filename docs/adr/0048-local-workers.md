@@ -223,9 +223,12 @@ why.
   them away; a strip repeats them above the Pipeline tabs.
 - **Stop this run reuses the lease.** `POST /v1/admin/work/claims/:id/stop`
   (the app's owner or admin, or the machine's owner; audited) ends the claim
-  as `stopped`. The next heartbeat lists it as lost, as for any ended lease,
+  as `stopped`; the report is free for any lane or cloud agent, not requeued
+  (a run that just hung would only hang again). The next heartbeat lists it as lost, as for any ended lease,
   so every daemon version stops the agent; a current one also commits and
-  pushes nothing more. No new verb reaches the machine.
+  pushes nothing more. A git hook already running keeps the agent space until
+  git's time limit; a run whose claim ended but which the machine still
+  reports stays flagged until it is gone. No new verb reaches the machine.
 - **Re-check the account is a value.** `work_hosts.recheck_requested_at`
   (migration `20261028120000_worker_recheck.sql`, additive) makes the
   heartbeat answer `recheckAccount: true` until the machine's next check (at

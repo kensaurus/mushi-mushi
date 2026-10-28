@@ -14,7 +14,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { WorkLanesData } from '../../lib/workers'
+import type { WorkerFlagAction, WorkLanesData } from '../../lib/workers'
 
 const state = vi.hoisted(() => ({
   data: null as unknown,
@@ -367,5 +367,52 @@ describe('worker problems are loud and fixable (ADR 0048 amendment 2026-10-28)',
     await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
     expect(q('worker-host-h1')!.textContent).toContain('does not report its checks')
     expect(q('worker-flags')).toBeNull()
+  })
+})
+
+describe('every worker flag kind renders loud, with its label, title and fix (ADR 0048 amendment 2026-10-28)', () => {
+  const base = { hostId: 'h1', hostname: 'alienware', laneId: null, laneName: null, projectId: 'p1', cause: 'Because.', sinceSec: 1200 }
+  const cases: Array<{ kind: string; severity: 'danger' | 'warn'; label: string; title: string; actions?: WorkerFlagAction[] }> = [
+    { kind: 'host_offline', severity: 'danger', label: 'Machine offline', title: 'alienware is offline', actions: [{ kind: 'copy_command', label: 'Check the worker on that machine', command: 'systemctl --user status mushi-worker.service --no-pager' }] },
+    { kind: 'machine_not_ready', severity: 'danger', label: 'Lane cannot start', title: 'glot on alienware could not start' },
+    { kind: 'lanes_waiting', severity: 'danger', label: 'Waiting for an agent space', title: '6 lanes on alienware have waited 3 h for an agent space' },
+    { kind: 'gh_signed_out', severity: 'danger', label: 'GitHub sign-in', title: 'gh is not signed in on alienware', actions: [{ kind: 'copy_command', label: 'Sign in on the machine', command: 'gh auth login' }] },
+    { kind: 'machine_waiting', severity: 'warn', label: 'Machine waiting', title: 'alienware has taken nothing new for 20 min' },
+    { kind: 'machine_busy', severity: 'warn', label: 'Machine overloaded', title: 'alienware is overloaded: load 37 on 16 cores' },
+    {
+      kind: 'hook_failures',
+      severity: 'warn',
+      label: 'Git hooks failing',
+      title: "glot: 2 runs failed in the repo's git hooks in 24 h",
+      actions: [
+        { kind: 'pause_lane', label: 'Pause this lane', laneId: 'l1' },
+        { kind: 'open_pr', label: 'Open its PR', prUrl: 'https://github.com/kensaurus/glot.it/pull/12' },
+      ],
+    },
+    { kind: 'credits_idle', severity: 'danger', label: 'Credits idle', title: 'Cursor credits idle for 7 h', actions: [{ kind: 'open_page', label: 'Spend credits', to: '/credits' }] },
+  ]
+
+  it.each(cases)('$kind: $label', async (c) => {
+    state.data = { ...fixture(), flags: [{ ...base, id: `${c.kind}:x`, kind: c.kind, severity: c.severity, title: c.title, actions: c.actions ?? [] }] }
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    const el = q(`worker-flag-${c.kind}`)!
+    expect(el.textContent).toContain(c.label)
+    expect(el.textContent).toContain(c.title)
+    expect(el.textContent).toContain('for 20 min')
+    for (const a of c.actions ?? []) {
+      if (a.kind === 'copy_command') expect(el.textContent).toContain(a.command)
+      else expect(el.textContent).toContain(a.label)
+    }
+    // The status line names the problem; it never says all is well.
+    expect(q('workers-status')!.textContent).toContain(c.title)
+  })
+
+  it('Pause this lane sends only paused, and the PR link opens the PR', async () => {
+    const hooks = cases.find((c) => c.kind === 'hook_failures')!
+    state.data = { ...fixture(), flags: [{ ...base, id: 'hook_failures:l1', kind: hooks.kind, severity: hooks.severity, title: hooks.title, actions: hooks.actions! }] }
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    expect(q('worker-flag-hook_failures-open_pr')!.getAttribute('href')).toBe('https://github.com/kensaurus/glot.it/pull/12')
+    await click(q('worker-flag-hook_failures-pause_lane'))
+    expect(state.calls).toEqual([{ path: '/v1/admin/work/lanes/l1', method: 'PATCH', body: { paused: true } }])
   })
 })

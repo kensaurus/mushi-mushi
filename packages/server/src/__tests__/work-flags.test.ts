@@ -272,6 +272,29 @@ describe('deriveWorkerFlags: each other failure', () => {
     expect(flags[0]!.title).toBe('A local mushi work run has been running 4 h outside the worker')
   })
 
+  it('a run stopped from the console while its commit hook hangs: flagged as still holding the space, never as a script', () => {
+    const flags = deriveWorkerFlags(
+      input({
+        hosts: [host({ state: 'working', slots: [{ lane: 'lane-1', runId: C(1), kind: 'fix', ageSec: 4 * HOUR, stage: 'commit', stageSec: 3.9 * HOUR }] })],
+        lanes: [lane(1, { state: 'working', inflight: [{ runId: C(1), kind: 'fix', reportId: R(1), ageSec: 4 * HOUR, stage: 'commit', stageSec: 3.9 * HOUR, model: null, log: ['commit: eslint .'] }] })],
+        claims: [claim(1, { status: 'done', outcome: 'stopped', claimedAt: ago(4 * HOUR), finishedAt: ago(5 * 60) })],
+        // The fix row stays running until the hook ends: it is the worker's run, not a script's.
+        localRuns: [{ fixId: 'f1', reportId: R(1), projectId: P1, createdAt: ago(3.95 * HOUR) }],
+      }),
+    )
+    expect(flags.map((f) => f.kind)).toEqual(['run_stuck'])
+    expect(flags[0]).toMatchObject({ title: 'lane-1: a run that was stopped 5 min ago still holds an agent space', stage: 'commit', log: ['commit: eslint .'] })
+    expect(flags[0]!.cause).toContain("ends only at git's own time limit (25 min)")
+    expect(flags[0]!.actions.map((a) => a.kind)).toEqual(['open_report', 'copy_command'])
+  })
+
+  it('a script run on a report the worker held days ago is still a script run', () => {
+    const flags = deriveWorkerFlags(
+      input({ claims: [claim(1, { status: 'done', outcome: 'pr_opened', claimedAt: ago(3 * 86_400), finishedAt: ago(3 * 86_400 - 1800) })], localRuns: [{ fixId: 'f1', reportId: R(1), projectId: P1, createdAt: ago(2 * HOUR) }] }),
+    )
+    expect(flags.map((f) => f.kind)).toEqual(['unmanaged_run'])
+  })
+
   it('an old daemon that sends no telemetry raises no false flag', () => {
     const flags = deriveWorkerFlags(input({ hosts: [host({ state: 'working', agents: 1 })], lanes: [lane(1, { state: 'working' }), lane(2, { state: 'slot-wait' })], claims: [claim(1, { claimedAt: ago(20 * 60) })] }))
     expect(flags).toEqual([])

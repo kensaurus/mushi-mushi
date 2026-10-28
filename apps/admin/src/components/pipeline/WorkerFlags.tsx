@@ -61,7 +61,7 @@ function FlagAction({ flag, action, onChanged }: { flag: WorkerFlag; action: Wor
           {asking && (
             <ConfirmDialog
               title="Stop this run"
-              body={`The report goes back to the queue. ${flag.hostname ?? 'The machine'} stops the agent at its next heartbeat, within a minute, and commits and pushes nothing more; a git hook already running ends at git's own time limit. The change so far stays in the worktree on the machine.`}
+              body={`The report is free again: the next lane or a cloud agent can take it. ${flag.hostname ?? 'The machine'} stops the agent at its next heartbeat, within a minute, and commits and pushes nothing more; a git hook already running ends at git's own time limit. The change so far stays in the worktree on the machine.`}
               confirmLabel="Stop the run"
               tone="danger"
               loading={busy}

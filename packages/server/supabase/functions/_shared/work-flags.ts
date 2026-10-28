@@ -47,6 +47,8 @@ export const CREDITS_SOON_MS = 7 * 86_400_000
 export const HOOK_WINDOW_MS = 24 * 3600_000
 export const HOOK_FAILURES_MIN = 2
 export const BUSY_LOAD_PER_CORE = 2
+/** Slack between a claim and its fix row (the row starts after the claim; the server stamps both). */
+const CLAIM_SLACK_MS = 60_000
 
 export type WorkerFlagKind =
   | 'host_offline'
@@ -390,8 +392,34 @@ export function deriveWorkerFlags(input: FlagInput): WorkerFlag[] {
         ],
       })
     }
+    const activeIds = new Set(activeClaims.map((c) => c.id))
     for (const [runId, { lane, run }] of telemetry) {
-      if (run.kind !== 'followup' || run.ageSec * 1000 < RUN_STUCK_MS) continue
+      if (run.ageSec * 1000 < RUN_STUCK_MS) continue
+      if (run.kind !== 'followup') {
+        if (activeIds.has(runId)) continue
+        // Its claim ended (stopped from the console, or its lease ran out), yet the machine still runs it.
+        const ended = input.claims.find((c) => c.id === runId)
+        const how = ended?.outcome === 'stopped' ? `was stopped ${durationText(ageSince(ended.finishedAt, now) ?? 0)} ago` : 'lost its claim'
+        const title = `${lane.name}: a run that ${how} still holds an agent space`
+        stuckTitles.push(`${lane.name} (${durationText(run.ageSec)}, ${run.stage === 'commit' || run.stage === 'push' ? `${run.stage} hook` : run.stage}, ended)`)
+        blockers.push(title)
+        flags.push({
+          id: `run_stuck:${runId}`,
+          kind: 'run_stuck',
+          severity: 'danger',
+          ...base(host, lane),
+          title,
+          cause: `The machine has been ${STAGE_TEXT[run.stage]} for ${durationText(run.stageSec)} (run ${durationText(run.ageSec)}). The agent stops at the next heartbeat; a git hook already running ends only at git's own time limit (25 min), so end it on the machine to free the space now.`,
+          sinceSec: run.ageSec,
+          stage: run.stage,
+          log: run.log,
+          actions: [
+            ...(run.reportId ? [{ kind: 'open_report' as const, label: 'Open the report', reportId: run.reportId }] : []),
+            { kind: 'copy_command', label: 'Find it on the machine', command: stuckCommand(host.platform) },
+          ],
+        })
+        continue
+      }
       const title = `${lane.name}: a review follow-up has held an agent space for ${durationText(run.ageSec)}`
       stuckTitles.push(`${lane.name} follow-up (${durationText(run.ageSec)}, ${run.stage})`)
       blockers.push(title)
@@ -460,11 +488,21 @@ export function deriveWorkerFlags(input: FlagInput): WorkerFlag[] {
     })
   }
 
-  // Local runs no worker claims: started by a script, so the console cannot see or stop them.
-  const claimedReports = new Set(activeClaims.map((c) => c.reportId).filter((x): x is string => !!x))
+  // Local runs no worker claims: started by a script, so the console cannot see or stop them. A run
+  // is the worker's own when a claim on its report covered its start (active, stopped from the
+  // console, or a lease that ran out): the fix row starts after the claim, while it holds.
+  const claimedRun = (run: FlagLocalRun) => {
+    const started = Date.parse(run.createdAt)
+    return input.claims.some((c) => {
+      if (c.reportId !== run.reportId) return false
+      const from = Date.parse(c.claimedAt)
+      const to = c.finishedAt ? Date.parse(c.finishedAt) : Infinity
+      return from <= started + CLAIM_SLACK_MS && to >= started - CLAIM_SLACK_MS
+    })
+  }
   for (const run of input.localRuns) {
     const age = ageSince(run.createdAt, now)
-    if (age === null || age * 1000 < RUN_STUCK_MS || claimedReports.has(run.reportId)) continue
+    if (age === null || age * 1000 < RUN_STUCK_MS || claimedRun(run)) continue
     const title = `A local mushi work run has been running ${durationText(age)} outside the worker`
     blockers.push(title)
     flags.push({

@@ -103,7 +103,7 @@ Anything that stops a worker from fixing bugs is listed at the top of the tab, w
 
 The same problems show above the Pipeline tabs, as a count on the **Pipeline** item in the sidebar, in **Needs you** on Home (for that app), as "credits idle" on [Spend credits](/admin/credits), in `mushi worker status` and in the MCP tool `get_worker_status`.
 
-**Stop this run** (the app's owner or an admin, or the machine's owner; asks first, and is recorded in the audit log) ends the run's claim at once and puts the report back in the queue. The machine stops the agent at its next heartbeat, within a minute, and commits or pushes nothing more; a git hook that is already running ends at git's own time limit. A review follow-up is not a claim: pause its lane and end it on the machine.
+**Stop this run** (the app's owner or an admin, or the machine's owner; asks first, and is recorded in the audit log) ends the run's claim at once, so the report is free again: the next lane or a cloud agent can take it (it is not put back in a queue). The machine stops the agent at its next heartbeat, within a minute, and commits or pushes nothing more. A git hook that is already running keeps its agent space until git's own time limit (25 minutes); the flag stays up as "a run that was stopped still holds an agent space" until it ends, with the command to end it on the machine. A review follow-up is not a claim: pause its lane and end it on the machine.
 
 Log lines are cleaned on the machine and again by Mushi before they are stored: no keys, tokens or paths, e-mail addresses masked, and no lines a compiler quotes from your code. A machine whose Mushi CLI is older than these checks says so on its card instead of showing a problem.
 

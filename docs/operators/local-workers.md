@@ -199,7 +199,7 @@ Two console actions answer them:
 
 | Action | Route | Who | What the machine does |
 | --- | --- | --- | --- |
-| Stop this run | `POST /v1/admin/work/claims/:id/stop` | the app's owner or admin, or the machine's owner; audited (`fix_dispatch.cancelled`, `source: worker_stop`) | The claim ends as `stopped`; the next heartbeat lists it as lost, the daemon aborts the agent, and `mushi work` commits and pushes nothing more. A git hook already running ends at git's own time limit (10 min, 25 min for commit and push). Works with every daemon version |
+| Stop this run | `POST /v1/admin/work/claims/:id/stop` | the app's owner or admin, or the machine's owner; audited (`fix_dispatch.cancelled`, `source: worker_stop`) | The claim ends as `stopped` and the report is free for any lane or cloud agent (it is not requeued); the next heartbeat lists the claim as lost, the daemon aborts the agent, and `mushi work` commits and pushes nothing more. A git hook already running keeps the agent space until git's own time limit (10 min, 25 min for commit and push), flagged as a stopped run still holding the space. Works with every daemon version |
 | Re-check the account | `POST /v1/admin/work/hosts/:id/recheck` | the machine's owner | `work_hosts.recheck_requested_at` (migration `20261028120000_worker_recheck.sql`); the heartbeat answers `recheckAccount: true` until the machine has checked again (at most 30 minutes). An older daemon ignores the field |
 
 ## Outcomes and requeue

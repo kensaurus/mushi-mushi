@@ -90,7 +90,7 @@ function StopRun({ claimId, onChanged, testId }: { claimId: string; onChanged?: 
       {asking && (
         <ConfirmDialog
           title="Stop this run"
-          body="The report goes back to the queue. The machine stops the agent at its next heartbeat, within a minute, and commits and pushes nothing more; a git hook already running ends at git's own time limit."
+          body="The report is free again: the next lane or a cloud agent can take it. The machine stops the agent at its next heartbeat, within a minute, and commits and pushes nothing more; a git hook already running ends at git's own time limit."
           confirmLabel="Stop the run"
           tone="danger"
           loading={busy}
