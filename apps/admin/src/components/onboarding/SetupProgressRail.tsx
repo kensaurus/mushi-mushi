@@ -237,7 +237,7 @@ function SnippetStep({
   }
   return (
     <div className="mt-3 min-w-0 space-y-2 border-t border-edge-subtle pt-3" data-testid="setup-next-step">
-      {/* A snippet with "mushi_xxx" in it cannot work, and keys are shown only
+      {/* A snippet with a placeholder key cannot work, and keys are shown only
           once, so a key made earlier is not here to fill in (2026-10-28). */}
       <p className="text-xs text-fg-secondary">
         {apiKey
