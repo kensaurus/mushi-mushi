@@ -657,7 +657,9 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
 
       {/* Account-scoped; saves on toggle, independent of the project form above. */}
       <LifecycleEmailsToggle />
-      <ConsoleHelpPanel />
+      {/* Only Mushi staff can rebuild the shared help index; everyone else saw
+          a card ending "Nothing to do here" (first-time user test, 2026-10-28). */}
+      {entitlements.isSuperAdmin ? <ConsoleHelpPanel /> : null}
     </>
   )
 }
