@@ -4,24 +4,18 @@
 
 /**
  * FILE: apps/admin/src/pages/OnboardingPage.test.tsx
- * PURPOSE: The pipeline-live card on /onboarding renders the shared CTA.
+ * PURPOSE: The pipeline-live card on /onboarding, once the step counter is full.
  *
- * A 10/10 project must show "View fixes" and must not show "Connect fix
- * agents". The card's visibility and that button share onboardingPrimaryCta.ts
- * so the two finished-rules cannot drift (report c016af11).
+ * A 10/10 project shows "View fixes" and "Open dashboard", and does not ask
+ * to connect fix agents. While steps remain, that card stays down even if a
+ * fix has already merged (report c016af11).
  */
 
-import { act, createElement } from 'react'
+import { act, createElement, Fragment } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OnboardingStats } from '../components/onboarding/types'
-import type { OnboardingPrimaryCta, OnboardingPrimaryCtaInput } from '../lib/onboardingPrimaryCta'
-
-type PrimaryCtaModule = {
-  onboardingPrimaryCta: (input: OnboardingPrimaryCtaInput) => OnboardingPrimaryCta
-  onboardingSetupComplete: (input: Pick<OnboardingPrimaryCtaInput, 'done' | 'complete' | 'total'>) => boolean
-}
 
 const PROJECT = '11111111-1111-4111-8111-111111111111'
 
@@ -112,25 +106,16 @@ function pageData(data: unknown) {
   }
 }
 
-const calls = vi.hoisted(() => ({
-  cta: [] as Array<{ mergedFixCount: number; done: boolean; complete: number; total: number }>,
-  hero: [] as Array<{ done: boolean; complete: number; total: number }>,
-}))
-
-vi.mock('../lib/onboardingPrimaryCta', async () => {
-  const actual = await vi.importActual<PrimaryCtaModule>('../lib/onboardingPrimaryCta')
-  return {
-    ...actual,
-    onboardingPrimaryCta: (input: Parameters<typeof actual.onboardingPrimaryCta>[0]) => {
-      calls.cta.push(input)
-      return actual.onboardingPrimaryCta(input)
-    },
-    onboardingSetupComplete: (input: Parameters<typeof actual.onboardingSetupComplete>[0]) => {
-      calls.hero.push(input)
-      return actual.onboardingSetupComplete(input)
-    },
-  }
-})
+function applyProgress(next: { complete: number; total: number; done: boolean; merged: number }) {
+  project.complete = next.complete
+  project.total = next.total
+  project.done = next.done
+  project.merged_fix_count = next.merged
+  stats.stepsComplete = next.complete
+  stats.stepsTotal = next.total
+  stats.setupDone = next.done
+  stats.mergedFixCount = next.merged
+}
 
 vi.mock('../lib/usePageData', () => ({
   usePageData: (path: string | null) => {
@@ -161,6 +146,15 @@ vi.mock('../components/onboarding/OnboardingSetupReadout', () => ({ OnboardingSe
 vi.mock('../components/onboarding/SetupGapsSection', () => ({ SetupGapsSection: () => null }))
 vi.mock('../components/dashboard/ProjectNarrativeStrip', () => ({ ProjectNarrativeStrip: () => null }))
 
+function Where() {
+  const { pathname } = useLocation()
+  return createElement('div', { 'data-where': pathname })
+}
+
+function pipelineHeading(container: HTMLElement): HTMLElement | undefined {
+  return [...container.querySelectorAll('h3')].find((node) => node.textContent?.includes('Pipeline live'))
+}
+
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 describe('OnboardingPage pipeline-live card', () => {
@@ -168,8 +162,7 @@ describe('OnboardingPage pipeline-live card', () => {
   let root: Root
 
   beforeEach(() => {
-    calls.cta.length = 0
-    calls.hero.length = 0
+    applyProgress({ complete: 10, total: 10, done: true, merged: 1 })
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -180,16 +173,46 @@ describe('OnboardingPage pipeline-live card', () => {
     container.remove()
   })
 
-  it('shows View fixes for a 10/10 project and does not ask to connect fix agents', async () => {
+  async function renderPage() {
     const { OnboardingPage } = await import('./OnboardingPage')
     await act(async () => {
-      root.render(createElement(MemoryRouter, null, createElement(OnboardingPage)))
+      root.render(createElement(
+        MemoryRouter,
+        null,
+        createElement(Fragment, null, createElement(OnboardingPage), createElement(Where)),
+      ))
     })
+  }
+
+  it('shows View fixes and Open dashboard for a 10/10 project and does not ask to connect fix agents', async () => {
+    await renderPage()
+    const heading = pipelineHeading(container)
+    expect(heading?.textContent).toContain('10 of 10')
+    const labels = [...(heading?.parentElement?.querySelectorAll('button') ?? [])].map((button) => button.textContent)
+    expect(labels).toEqual(['View fixes', 'Open dashboard'])
+    expect(container.textContent ?? '').not.toContain('Connect fix agents')
+
+    const fixes = [...container.querySelectorAll('button')].find((button) => button.textContent === 'View fixes')
+    await act(async () => {
+      fixes?.click()
+    })
+    expect(container.querySelector('[data-where]')?.getAttribute('data-where')).toBe('/fixes')
+  })
+
+  it('keeps the same finished actions when no fix has merged', async () => {
+    applyProgress({ complete: 10, total: 10, done: true, merged: 0 })
+    await renderPage()
+    const labels = [...(pipelineHeading(container)?.parentElement?.querySelectorAll('button') ?? [])].map((button) => button.textContent)
+    expect(labels).toEqual(['View fixes', 'Open dashboard'])
+    expect(container.textContent ?? '').not.toContain('Connect fix agents')
+  })
+
+  it('does not show the finished-pipeline card while steps remain, even after a merged fix', async () => {
+    applyProgress({ complete: 8, total: 10, done: true, merged: 2 })
+    await renderPage()
+    expect(pipelineHeading(container)).toBeUndefined()
     const text = container.textContent ?? ''
-    expect(text).toContain('10 of 10')
-    expect(text).toContain('View fixes')
+    expect(text).not.toContain('View fixes')
     expect(text).not.toContain('Connect fix agents')
-    expect(calls.cta).toContainEqual({ done: true, complete: 10, total: 10, mergedFixCount: 1 })
-    expect(calls.hero).toContainEqual({ done: true, complete: 10, total: 10 })
   })
 })
