@@ -90,6 +90,7 @@ export const en: MushiLocale = {
     errors: {
       noResponse: 'No response — check your connection and try again.',
       generic: 'Could not reach the assistant. Try again in a moment.',
+      quota: 'The assistant is unavailable until {date}.',
     },
   },
   flows: {

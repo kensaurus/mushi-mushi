@@ -1149,6 +1149,9 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         threadId,
         context: currentPageContext,
       });
+      // Quota is the one server failure that rejects. The widget catches
+      // QuotaExhausted; other failures still resolve null. Direct callers
+      // need a try/catch (see the web changelog).
       if (!res.ok && res.error?.code === 'LLM_UNAVAILABLE' && res.error.message) {
         const error = new Error(res.error.message);
         error.name = 'QuotaExhausted';

@@ -324,7 +324,12 @@ export interface MushiRNInstance {
   getReputation(): Promise<MushiReputationResult | null>
   /** Open the sheet on the Ask tab when assistant is enabled. */
   openAssistant(): void
-  /** One assistant turn — uses published page context when available. */
+  /**
+   * One assistant turn — uses published page context when available.
+   * Resolves the reply, or null on any other server failure. Rejects with
+   * `error.name === 'QuotaExhausted'` and the server sentence when the AI
+   * provider is out of quota (`LLM_UNAVAILABLE`). Callers need a try/catch.
+   */
   askAssistant(message: string, threadId?: string | null): Promise<MushiAssistantReply | null>
 }
 
@@ -1148,6 +1153,8 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
           threadId: threadId ?? null,
           context: pageContextRef.current,
         })
+        // Quota is the one server failure that rejects. Other failures
+        // still resolve null. Direct callers need a try/catch.
         if (!res.ok && res.error?.code === 'LLM_UNAVAILABLE' && res.error.message) {
           const error = new Error(res.error.message)
           error.name = 'QuotaExhausted'

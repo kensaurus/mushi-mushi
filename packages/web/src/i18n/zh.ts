@@ -91,6 +91,7 @@ export const zh: MushiLocale = {
     errors: {
       noResponse: '没有回应 — 请检查网络后重试。',
       generic: '无法连接助手，请稍后再试。',
+      quota: '助手在 {date} 之前不可用。',
     },
   },
   flows: {

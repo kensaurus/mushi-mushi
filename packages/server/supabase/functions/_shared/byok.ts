@@ -634,9 +634,38 @@ function envCandidates(projectId: string, provider: LlmProvider): ResolvedKey[] 
   return [];
 }
 
+// Same date shape as QUOTA_RESET_RE in llm-failover.ts. A monthly cap names
+// when access returns; a plain 429 does not.
+const QUOTA_RESET_RE =
+  /(?:access resumes|regain access(?: on)?)\s+(\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?(?:\s*UTC)?)/i;
+
+/** UTC millis for a provider reset stamp, or null when it is not a date. */
+function parseQuotaResetMs(raw: string): number | null {
+  let s = raw.replace(/\s*UTC$/i, '').trim().replace(' ', 'T');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) s += 'T00:00:00Z';
+  else if (/T\d{2}:\d{2}$/.test(s)) s += ':00Z';
+  else if (/T\d{2}:\d{2}:\d{2}$/.test(s)) s += 'Z';
+  else return null;
+  const ms = Date.parse(s);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * Quota hold length. A 429 cools for one hour. A monthly cap that names a
+ * future reset cools until that instant, so the key is not probed every hour
+ * until the provider opens again. A reset already in the past keeps the hour.
+ */
+function quotaCooldownUntil(reason: string, now = Date.now()): string {
+  const raw = reason.match(QUOTA_RESET_RE)?.[1]?.replace(/\s+/g, ' ')?.trim();
+  const resetMs = raw ? parseQuotaResetMs(raw) : null;
+  const until = resetMs !== null && resetMs > now ? resetMs : now + 60 * 60 * 1000;
+  return new Date(until).toISOString();
+}
+
 /**
  * Mark a byok_keys row with a new status (called by withLlmFailover on error).
- * Quota exhaustion sets a 1-hour cooldown so the key is tried again later.
+ * Quota exhaustion sets a cooldown so the key is tried again later: one hour
+ * for a 429, or until the reset date when the provider named one.
  */
 export async function markKeyStatus(
   db: SupabaseClient,
@@ -644,8 +673,7 @@ export async function markKeyStatus(
   status: Extract<KeyStatus, 'quota_exhausted' | 'auth_failed'>,
   reason: string,
 ): Promise<void> {
-  const cooldownUntil =
-    status === 'quota_exhausted' ? new Date(Date.now() + 60 * 60 * 1000).toISOString() : null;
+  const cooldownUntil = status === 'quota_exhausted' ? quotaCooldownUntil(reason) : null;
 
   // PostgREST query builders are thenables (`then` only) — they have no
   // `.catch`, and they resolve with `{ error }` rather than rejecting. Await

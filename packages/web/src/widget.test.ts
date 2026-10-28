@@ -1845,3 +1845,47 @@ describe('MushiWidget avoidSelectors', () => {
     expect(top).toBe(`${56 + 8}px`);
   });
 });
+
+describe('MushiWidget — assistant quota copy', () => {
+  const getShadow = (w: MushiWidget): ShadowRoot =>
+    (w as unknown as { shadow: ShadowRoot }).shadow;
+
+  function quotaError(message: string): Error {
+    const error = new Error(message);
+    error.name = 'QuotaExhausted';
+    return error;
+  }
+
+  async function ask(locale: string, ask: WidgetCallbacks['onAssistantAsk']): Promise<string> {
+    const w = new MushiWidget({ locale }, { ...noopCallbacks, assistantEnabled: true, onAssistantAsk: ask });
+    w.mount();
+    w.openAssistantTab();
+    await w.sendAssistantMessage('where is billing?');
+    const text = getShadow(w).querySelector('[role="alert"]')?.textContent ?? '';
+    w.destroy();
+    return text;
+  }
+
+  it('uses the locale quota sentence and the reset date, not the English server line', async () => {
+    const text = await ask('ja', async () => {
+      throw quotaError('The assistant is unavailable until 2026-11-01 00:00 UTC.');
+    });
+    expect(text).toContain('2026-11-01 00:00 UTC');
+    expect(text).toContain('アシスタントは');
+    expect(text).not.toContain('The assistant is unavailable until');
+  });
+
+  it('falls back to the server sentence when the provider named no reset date', async () => {
+    const text = await ask('ja', async () => {
+      throw quotaError('The assistant is unavailable because the AI provider is out of quota.');
+    });
+    expect(text).toContain('The assistant is unavailable because the AI provider is out of quota.');
+  });
+
+  it('keeps the locale generic line for any other assistant failure', async () => {
+    const text = await ask('ja', async () => {
+      throw new Error('network down');
+    });
+    expect(text).toContain('アシスタントに接続できませんでした');
+  });
+});

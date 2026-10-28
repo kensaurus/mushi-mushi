@@ -46,6 +46,7 @@ describe('getLocale', () => {
       expect(locale.step1.categories.visual).toBeTruthy();
       expect(locale.step1.categories.confusing).toBeTruthy();
       expect(locale.step1.categories.other).toBeTruthy();
+      expect(locale.assistant.errors.quota).toContain('{date}');
     }
   });
 });
