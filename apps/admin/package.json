@@ -47,6 +47,7 @@
     "@mushi-mushi/eslint-config": "workspace:*",
     "@mushi-mushi/tsconfig": "workspace:*",
     "@sentry/vite-plugin": "^5.3.0",
+    "@tailwindcss/node": "^4.3.1",
     "@tailwindcss/vite": "^4.3.1",
     "@types/d3-force": "^3.0.10",
     "@types/node": "^22.20.0",

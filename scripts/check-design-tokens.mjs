@@ -36,12 +36,15 @@
  *          when a viz-* token read in admin source is missing from the
  *          output. Those tokens are @theme static because Tailwind drops
  *          unused @theme colours and readVizToken() reads them at runtime.
+ *          A readVizToken() call at module scope fails too: main.tsx loads
+ *          the app graph before index.css, so that call would freeze the
+ *          stand-in colour.
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve, join, relative } from 'node:path'
-import { missingEmittedVizTokens } from './viz-token-emission.mjs'
+import { missingEmittedVizTokens, moduleScopeReadVizTokenHits } from './viz-token-emission.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
@@ -841,6 +844,15 @@ const lintFailures =
   focusOutlineHits.length > 0 ||
   ellipsisHits.length > 0
 
+const moduleScopeReads = moduleScopeReadVizTokenHits()
+if (moduleScopeReads.length > 0) {
+  console.error(`\n[viz-read] readVizToken() at module scope freezes a colour before index.css loads:\n`)
+  for (const hit of moduleScopeReads) console.error(`  ${hit.file}:${hit.line}`)
+  console.error(
+    `\nFix: call readVizToken() inside a function (when the colour is painted or logged), or use vizColorMap().\n`,
+  )
+}
+
 let vizMissing = []
 try {
   vizMissing = await missingEmittedVizTokens()
@@ -859,11 +871,11 @@ if (vizMissing.length > 0) {
   )
 }
 
-if (lintFailures || vizMissing.length > 0) process.exit(1)
+if (lintFailures || vizMissing.length > 0 || moduleScopeReads.length > 0) process.exit(1)
 
 const totalTypeFloorFiles = typeFloorFiles.length
 console.log(
   `[ok] Admin design tokens are in sync with index.css (${allow.size} color roots, ${files.length} admin files scanned). ` +
     `Type floor: clean across ${totalTypeFloorFiles} files. Web interface guards: transition-all, focus-visible, ellipsis — clean. ` +
-    `Retired aliases: ${RETIRED_CUSTOM_PROPS.size} names, 0 uses. Viz tokens: emitted.`,
+    `Retired aliases: ${RETIRED_CUSTOM_PROPS.size} names, 0 uses. Viz tokens: emitted. Module-scope reads: 0.`,
 )
