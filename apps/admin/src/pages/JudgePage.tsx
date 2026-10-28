@@ -32,6 +32,8 @@ import {
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import {
   EMPTY_JUDGE_STATS,
+  judgeDisagreementHref,
+  judgeDisagreementShare,
   type JudgeStats,
   type JudgeTabId,
 } from '../components/judge/JudgeStatsTypes'
@@ -311,13 +313,23 @@ export function JudgePage() {
     [setSearchParams],
   )
   const seeDisagreements = useCallback(() => {
+    const q = new URLSearchParams(judgeDisagreementHref(stats).split('?')[1] ?? '')
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
       next.set('tab', 'evaluations')
       next.set('filter', 'disagreement')
+      const from = q.get('from')
+      const to = q.get('to')
+      if (from && to) {
+        next.set('from', from)
+        next.set('to', to)
+      } else {
+        next.delete('from')
+        next.delete('to')
+      }
       return next
     })
-  }, [setSearchParams])
+  }, [setSearchParams, stats])
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
@@ -489,9 +501,10 @@ export function JudgePage() {
         ],
   })
 
-  // From the stats route, over every evaluation: the list below is filtered
-  // and paged, so it is not a sample of anything.
-  const disagreementRate = stats.disagreementRatePct != null ? stats.disagreementRatePct / 100 : null
+  // The rate next to "this week" is that week's share. All-time stays on
+  // disagreementRatePct; using it here showed 76/144 as the recent figure.
+  const disagreementShare = judgeDisagreementShare(stats)
+  const disagreementRate = disagreementShare.ratePct != null ? disagreementShare.ratePct / 100 : null
   // Age only matters while something is waiting to be graded; otherwise the
   // "re-check" nudge asks for a run that evaluates nothing.
   const staleHoursAgo = stats.ungradedReports > 0 ? stats.staleHours : null
@@ -842,7 +855,7 @@ export function JudgePage() {
               { label: 'Avg score', value: `${Math.round(overallScore * 100)}%`, tone: overallScore >= 0.8 ? 'ok' : overallScore >= 0.6 ? 'warn' : 'crit' },
               { label: 'Evaluations', value: totalEvals, tone: 'neutral' },
               { label: 'Weeks tracked', value: weeks.length, tone: 'neutral' },
-              ...(disagreementRate != null ? [{ label: 'Disagreement', value: `${(disagreementRate * 100).toFixed(1)}%`, tone: disagreementRate > 0.2 ? 'warn' as const : 'ok' as const }] : []),
+              ...(disagreementShare.ratePct != null ? [{ label: disagreementShare.kind === 'all' ? 'Disagreement, all grades' : `Disagreement ${disagreementShare.windowPhrase}`, value: `${disagreementShare.ratePct}%`, tone: disagreementShare.ratePct > 20 ? 'warn' as const : 'ok' as const }] : []),
             ],
           } : undefined,
         }}

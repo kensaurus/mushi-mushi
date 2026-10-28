@@ -5,7 +5,13 @@
  */
 
 import { Btn, PageStatus, type PageStatusMetric, type PageStatusTone } from '../ui'
-import { judgeWeekTitle, type JudgeStats } from './JudgeStatsTypes'
+import {
+  judgeDisagreementHref,
+  judgeDisagreementShare,
+  judgeWeekTitle,
+  type JudgeDisagreementShare,
+  type JudgeStats,
+} from './JudgeStatsTypes'
 import { judgeLinks } from '../../lib/statCardLinks'
 
 interface Props {
@@ -24,13 +30,14 @@ function scoreTone(score: number | null): PageStatusTone {
   return 'danger'
 }
 
-/** The recent window when the server sent it, else all time; the words say which (64c2b3df). */
-function disagreementWindow(stats: JudgeStats): { disagreed: number; graded: number; words: string; recent: boolean } {
-  if (stats.recentEvaluations != null && stats.recentDisagreements != null) {
-    const days = stats.recentWindowDays ?? 14
-    return { disagreed: stats.recentDisagreements, graded: stats.recentEvaluations, words: `in the last ${days} days`, recent: true }
-  }
-  return { disagreed: stats.disagreementCount, graded: stats.totalEvaluations, words: 'so far', recent: false }
+function disagreementLead(share: JudgeDisagreementShare): string {
+  const p = share.windowPhrase
+  return p.charAt(0).toUpperCase() + p.slice(1)
+}
+
+function disagreementMetricLabel(share: JudgeDisagreementShare, statLabels?: Record<string, string>): string {
+  if (share.kind === 'all') return statLabels?.disagree ?? 'Disagreements, all time'
+  return share.windowPhrase === 'this week' ? 'Disagreed this week' : `Disagreed ${share.windowPhrase}`
 }
 
 /** @internal Exported for tests only. */
@@ -45,24 +52,24 @@ export function judgeStatusSentence(stats: JudgeStats): string {
   const scored = score
     ? `Diagnoses scored ${score} ${week} across ${stats.latestWeekEvalCount} grade${stats.latestWeekEvalCount === 1 ? '' : 's'}`
     : `No grades ${week}`
-  const w = disagreementWindow(stats)
+  const w = judgeDisagreementShare(stats)
   const disagree =
     w.graded === 0
-      ? `. Nothing was graded ${w.words}.`
+      ? `. Nothing was graded ${w.windowPhrase}.`
       : w.disagreed > 0
-        ? `. ${w.recent ? 'In the last' : 'So far'}${w.recent ? ` ${stats.recentWindowDays ?? 14} days` : ''} the grader disagreed with ${w.disagreed} of ${w.graded} diagnoses (${Math.round((w.disagreed / w.graded) * 100)}%).`
-        : `. The grader agreed with all ${w.graded} diagnoses ${w.words}.`
+        ? `. ${disagreementLead(w)} the grader disagreed with ${w.disagreed} of ${w.graded} diagnoses (${w.ratePct}%).`
+        : `. The grader agreed with all ${w.graded} diagnoses ${w.windowPhrase}.`
   return scored + disagree
 }
 
 export function JudgeSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, onSeeDisagreements }: Props) {
-  const w = disagreementWindow(stats)
+  const w = judgeDisagreementShare(stats)
   const disagreements: PageStatusMetric = {
-    label: w.recent ? `Disagreed, last ${stats.recentWindowDays ?? 14} days` : (statLabels?.disagree ?? 'Disagreements, all time'),
+    label: disagreementMetricLabel(w, statLabels),
     value: w.disagreed,
     tone: w.disagreed > 0 ? 'warn' : 'neutral',
     hint: 'Grades where the second model disagreed with the diagnosis. Read these before merging their fixes.',
-    to: judgeLinks.disagree,
+    to: judgeDisagreementHref(stats),
   }
   return (
     <PageStatus
