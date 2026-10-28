@@ -400,7 +400,7 @@ async function main() {
   // allowance metered here. The STRIPE_PRICE_INDIE_* / PRO_* secrets point at
   // these prices; the earlier ones stay in Stripe (no subscriber used them).
   const builderProduct = await findOrCreateProduct('Mushi Mushi — Builder', 'Up to 3 apps watched, 1,000 diagnoses a month, automatic fix PRs with the review gate.')
-  const studioProduct = await findOrCreateProduct('Mushi Mushi — Studio', 'Up to 10 apps watched, 5,000 diagnoses a month, 5 seats, weekly intelligence report.')
+  const studioProduct = await findOrCreateProduct('Mushi Mushi — Studio', 'Up to 10 apps watched, 3,000 diagnoses a month, 5 seats, weekly intelligence report.')
   const builderBase = await findOrCreatePrice({
     product: builderProduct.id,
     currency: 'usd',
@@ -462,14 +462,15 @@ async function main() {
     billing_scheme: 'tiered',
     tiers_mode: 'graduated',
     tiers: [
-      { up_to: 5000, unit_amount_decimal: '0' },
-      { up_to: 'inf', unit_amount_decimal: '2' },
+      { up_to: 3000, unit_amount_decimal: '0' },
+      { up_to: 'inf', unit_amount_decimal: '3' },
     ],
-    lookup_key: 'mushi:diagnoses:overage:pro:v3',
-    nickname: 'Mushi Mushi diagnoses — Studio (5,000 included, then $0.02/diagnosis)',
+    // v3 (5,000 at $0, then 2 cents) lost money per diagnosis; archived 2026-10-28.
+    lookup_key: 'mushi:diagnoses:overage:pro:v4',
+    nickname: 'Mushi Mushi diagnoses — Studio (3,000 included, then $0.03/diagnosis)',
     tax_behavior: 'exclusive',
     recurring: { interval: 'month', usage_type: 'metered', meter: diagnosesMeter.id },
-    metadata: { project: 'mushi-mushi', tier: 'pro', plan_id: 'pro', kind: 'overage', unit: 'diagnoses', version: 'v3', included: '5000' },
+    metadata: { project: 'mushi-mushi', tier: 'pro', plan_id: 'pro', kind: 'overage', unit: 'diagnoses', version: 'v4', included: '3000' },
   })
 
   // ------------------- Output env block -------------------
