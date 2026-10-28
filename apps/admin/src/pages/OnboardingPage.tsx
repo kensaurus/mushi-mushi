@@ -226,8 +226,9 @@ export function OnboardingPage() {
   // The steps come from /v1/admin/setup, like the rail, the sidebar and Home.
   // The activation payload marks the SDK step optional, so this page said
   // "You're set up, 3 of 3" under a rail saying 3 of 4 (first-time user
-  // test, 2026-10-28).
-  const project = legacySetup.activeProject ?? setup.activeProject
+  // test, 2026-10-28). Step checks read the same source, and the page waits
+  // for it, so the old count never flashes while it loads.
+  const project = legacySetup.activeProject
 
   // What's the next required step? We use it to highlight the right card.
   const nextRequired = useMemo(
@@ -251,7 +252,7 @@ export function OnboardingPage() {
   const firstRunEligible =
     !setupCliMode &&
     setup.resolved &&
-    (!setup.hasAnyProject || (project != null && setup.isStepIncomplete('first_report_received')))
+    (!setup.hasAnyProject || (project != null && legacySetup.isStepIncomplete('first_report_received')))
   const [firstRunHeld, setFirstRunHeld] = useState(false)
   useEffect(() => {
     if (firstRunEligible && viewParam !== 'all') setFirstRunHeld(true)
@@ -432,7 +433,7 @@ export function OnboardingPage() {
     })
   }, [ux.hideOverviewTab, copy?.tabLabels, stats])
 
-  if (setup.loading || (statsLoading && !statsData)) return <OnboardingSkeleton />
+  if (setup.loading || legacySetup.loading || (statsLoading && !statsData)) return <OnboardingSkeleton />
   if (setup.error) {
     const isNetwork =
       setup.error.includes('Failed to fetch') ||
@@ -833,7 +834,7 @@ export function OnboardingPage() {
         </Card>
       )}
 
-      {project && !setup.isStepIncomplete('api_key_generated') && setup.isStepIncomplete('first_report_received') && (
+      {project && !legacySetup.isStepIncomplete('api_key_generated') && legacySetup.isStepIncomplete('first_report_received') && (
         <Card className="p-5 space-y-4">
           <div>
             <h3 className="text-sm font-semibold text-fg">Test your connection</h3>
@@ -872,7 +873,7 @@ export function OnboardingPage() {
         </Card>
       )}
 
-      {project && setup.isStepIncomplete('api_key_generated') && (
+      {project && legacySetup.isStepIncomplete('api_key_generated') && (
         <Card className="p-4 border border-edge-subtle">
           <p className="text-xs text-fg-muted">Make a key first, with the second step at the top of this page.</p>
         </Card>
@@ -880,7 +881,7 @@ export function OnboardingPage() {
 
       {/* A test bug already arrived: the card above says so, this one only
           offers another test, so the tab is never empty for a returning user. */}
-      {project && !setup.isStepIncomplete('api_key_generated') && !setup.isStepIncomplete('first_report_received') && testStatus !== 'pass' && (
+      {project && !legacySetup.isStepIncomplete('api_key_generated') && !legacySetup.isStepIncomplete('first_report_received') && testStatus !== 'pass' && (
         <Card className="p-5 space-y-4 border border-ok/20 bg-ok/5">
           <h3 className="text-sm font-semibold text-fg">Send another test bug</h3>
           <ConnectionStatus />
@@ -979,7 +980,7 @@ export function OnboardingPage() {
               the install code immediately. When the key step is still
               incomplete we offer minting inline here instead of bouncing them
               to the Verify tab (the old ping-pong friction). */}
-          {setup.isStepIncomplete('api_key_generated') && (
+          {legacySetup.isStepIncomplete('api_key_generated') && (
             <Card className="p-4 border border-info/30 bg-info/5 space-y-3">
               <div>
                 <h3 className="text-sm font-semibold text-fg">Mint your API key</h3>

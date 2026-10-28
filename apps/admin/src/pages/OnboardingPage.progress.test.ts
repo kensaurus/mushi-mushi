@@ -43,7 +43,11 @@ describe('Set up page progress', () => {
   // listed the four steps a second time with its own progress bar
   // (first-time user test, 2026-10-28).
   it('reads the same setup as the rail and does not list the required steps twice', () => {
-    expect(src).toContain('const project = legacySetup.activeProject ?? setup.activeProject')
+    expect(src).toMatch(/const project = legacySetup\.activeProject\r?\n/)
+    expect(src).not.toContain('?? setup.activeProject')
+    // Step checks use the same source, and the page waits for it.
+    expect(src).not.toMatch(/[^y]setup\.isStepIncomplete\(/)
+    expect(src).toContain('setup.loading || legacySetup.loading')
     expect(src).toMatch(/mode="wizard"\s+extrasOnly/)
     expect(src).not.toContain('Show setup steps')
     for (const phrase of ['Pipeline verified', 'ingest key', 'verify the full pipeline', 'open /reports', 'so the pipeline works']) {
