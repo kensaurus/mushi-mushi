@@ -36,7 +36,7 @@ import { hasSuccessCheck, presetFor, runFreshEyes, type SuccessCheck } from './f
 import { fileFreshEyesFindings, mintTestAccount, syncFreshEyes, writeTimeline } from './fresh-eyes-report.js'
 import { runTerminalSetup } from './fresh-eyes-terminal.js'
 import { DEFAULT_JUDGE_MODEL } from './judge.js'
-import { cachedProfile, parseChannel } from './profile.js'
+import { cachedProfile, parseChannel, profileDirHelp } from './profile.js'
 import { agentAccount, studioOptions } from './launcher.js'
 import { listModels } from './models.js'
 import { DEFAULT_SKILLS_REPO, listSkills, resolveSkill, resolveSkillChain } from './skills.js'
@@ -129,7 +129,7 @@ program
   .option('--max-pages <n>', 'Stop after this many pages', '40')
   .option('--src <dir>', 'Read routes from this source directory (default: the current directory)', '.')
   .option('--no-profile', 'Ignore the signed-in session from `login`')
-  .option('--profile-dir <dir>', 'Reuse this cached, signed-in browser profile (e.g. ~/.playwright-cli-profiles/<app>) instead of the `login` one')
+  .option('--profile-dir <dir>', profileDirHelp('Reuse this cached, signed-in browser profile (e.g. ~/.playwright-cli-profiles/<app>) instead of the `login` one'))
   .option('--channel <name>', 'Browser build for --profile-dir: chrome (default; the profile was made by Google Chrome) or chromium', parseChannel)
   .action(async (o: { url: string; path: string[]; allow: string[]; ignore: string[]; maxPages: string; src: string; profile: boolean; profileDir?: string; channel?: string }) => {
     const cached = cachedProfile(o)
@@ -173,7 +173,7 @@ program
   .option('--ignore <selector>', 'CSS selector that is not part of the app: hidden in screenshots, skipped by checks (repeatable)', collectSelector, [])
   .option('--install <command>', 'Install command for the worktree (default: from the lockfile; "none" to skip)')
   .option('--login-url <url>', 'Reuse the session saved by `mushi-ux login --url <url>`')
-  .option('--profile-dir <dir>', 'Reuse this cached, signed-in browser profile (e.g. ~/.playwright-cli-profiles/<app>) instead of a `login` one')
+  .option('--profile-dir <dir>', profileDirHelp('Reuse this cached, signed-in browser profile (e.g. ~/.playwright-cli-profiles/<app>) instead of a `login` one'))
   .option('--channel <name>', 'Browser build for --profile-dir: chrome (default) or chromium', parseChannel)
   .option('--judge-model <id>', 'Model for the final before/after review (your Anthropic credentials)', DEFAULT_JUDGE_MODEL)
   .option('--no-judge', 'Skip the final review')
@@ -319,7 +319,7 @@ program
   .command('audit')
   .description('Find UI/UX bugs on the signed-in screens of a live app, read-only, and file each one as a Mushi report.')
   .requiredOption('--url <url>', 'The live app where your cached session is signed in, e.g. https://example.com/admin; only paths under it are visited')
-  .option('--profile-dir <dir>', 'The cached, signed-in browser profile to reuse (e.g. ~/.playwright-cli-profiles/<app>); never a fresh browser')
+  .option('--profile-dir <dir>', profileDirHelp('The cached, signed-in browser profile to reuse (e.g. ~/.playwright-cli-profiles/<app>); never a fresh browser'))
   .option('--channel <name>', 'Browser build for --profile-dir: chrome (default) or chromium', parseChannel)
   .option('--path <path>', 'Also start from this path (repeatable)', collect, [])
   .option('--max-pages <n>', 'Stop mapping after this many pages', '15')
@@ -390,7 +390,7 @@ program
   .command('explore')
   .description('Let a model use the signed-in app like a careless user, read-only; file only the errors that happen again when its steps are replayed.')
   .requiredOption('--url <url>', 'The live app where your cached session is signed in; sessions start here')
-  .option('--profile-dir <dir>', 'The cached, signed-in browser profile to reuse (e.g. ~/.playwright-cli-profiles/<app>); never a fresh browser')
+  .option('--profile-dir <dir>', profileDirHelp('The cached, signed-in browser profile to reuse (e.g. ~/.playwright-cli-profiles/<app>); never a fresh browser'))
   .option('--channel <name>', 'Browser build for --profile-dir: chrome (default) or chromium', parseChannel)
   .option('--path <path>', 'Start sessions from this path too (repeatable; default: the url)', collect, [])
   .option('--charter <name>', `What a session tries: ${Object.keys(CHARTERS).join(', ')} (repeatable; default: all)`, collect, [])

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { cachedProfile, parseChannel } from './profile.js'
+import { cachedProfile, parseChannel, profileDirHelp } from './profile.js'
 
 describe('cachedProfile', () => {
   it('opens a cached profile with the installed Chrome by default, expanding ~', () => {
@@ -19,5 +20,22 @@ describe('cachedProfile', () => {
   it('accepts only chrome or chromium as a channel', () => {
     expect(parseChannel('chrome')).toBe('chrome')
     expect(() => parseChannel('firefox')).toThrow('chrome or chromium')
+  })
+
+  it('tells --profile-dir users that captures share the profile and are not isolated', () => {
+    const help = profileDirHelp('Reuse a profile')
+    expect(help).toContain('Reuse a profile')
+    expect(help).toMatch(/not isolated/)
+    expect(help).toMatch(/localStorage/)
+    expect(help).toMatch(/IndexedDB/)
+
+    const cli = readFileSync(new URL('./cli.ts', import.meta.url), 'utf8')
+    expect(cli.match(/--profile-dir <dir>/g)).toHaveLength(4)
+    expect(cli.match(/profileDirHelp\(/g)).toHaveLength(4)
+
+    const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
+    expect(readme).toMatch(/not isolated/)
+    expect(readme).toMatch(/one after another/)
+    expect(readme).toMatch(/not in parallel/)
   })
 })

@@ -31,3 +31,11 @@ export function parseChannel(v: string): BrowserChannel {
   if (v !== 'chrome' && v !== 'chromium') throw new Error('--channel is chrome or chromium')
   return v
 }
+
+/**
+ * `--profile-dir` help. A cached profile is one browser context, so captures
+ * share its storage with each other and with discovery.
+ */
+export function profileDirHelp(purpose: string): string {
+  return `${purpose} Captures are not isolated: they share this profile's localStorage and IndexedDB with each other and with discovery.`
+}
