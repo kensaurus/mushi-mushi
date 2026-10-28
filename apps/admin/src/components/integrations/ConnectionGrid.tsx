@@ -2,7 +2,8 @@
  * FILE: apps/admin/src/components/integrations/ConnectionGrid.tsx
  * PURPOSE: Top of Integrations: one status sentence with the fix for the
  *          first broken connection, a grid of the six tools (logo, state dot,
- *          last event), and one "needs you" line per broken connection. Each
+ *          last event), and one "needs you" line per broken connection when
+ *          more than one is broken (one goes in the sentence). Each
  *          tile jumps to its card below. The verdicts come from
  *          connectionGrid.ts, which reuses each card's own rules.
  */
@@ -65,11 +66,14 @@ export function ConnectionGrid(props: ConnectionGridProps) {
   const broken = brokenConnections(tiles)
   const { sentence, tone } = connectionGridSentence(tiles)
   const first = broken[0]
+  // One broken connection: its reason goes in the sentence. A one-line
+  // "needs you" list under the tiles said it a third time (2026-10-28).
+  const lead = broken.length === 1 && first.view.detail ? `${first.label} needs you: ${first.view.detail}` : sentence
 
   return (
     <section aria-label="Connections" className="space-y-2" data-testid="integrations-connection-grid">
       <PageStatus
-        sentence={sentence}
+        sentence={lead}
         tone={tone}
         ariaLabel="Connection status"
         action={
@@ -85,7 +89,7 @@ export function ConnectionGrid(props: ConnectionGridProps) {
           <ConnectionTile key={tile.id} tile={tile} />
         ))}
       </ul>
-      {broken.length > 0 ? (
+      {broken.length > 1 ? (
         <ul aria-label="Connections that need you" className="space-y-1">
           {broken.map((tile) => (
             <li key={tile.id} className="flex min-w-0 items-start gap-2 text-xs text-fg-secondary">

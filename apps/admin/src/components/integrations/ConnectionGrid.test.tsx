@@ -60,10 +60,12 @@ describe('ConnectionGrid', () => {
     const tiles = host.querySelectorAll('[data-state]')
     expect(tiles).toHaveLength(6)
     expect(host.querySelector('[data-state="attention"]')?.getAttribute('aria-label')).toBe('GitHub: Needs you. Open its card.')
-    expect(host.textContent).toContain('GitHub needs you.')
+    // One broken connection: its reason is in the sentence, with no second
+    // "needs you" list saying it again (console sweep 2026-10-28).
+    expect(host.querySelector('[aria-label="Connection status"]')?.textContent).toMatch(/GitHub needs you: .+/)
     const fixButtons = Array.from(host.querySelectorAll('button')).filter((b) => b.textContent === 'Fix GitHub')
     expect(fixButtons).toHaveLength(1)
-    expect(host.querySelector('[aria-label="Connections that need you"]')?.textContent).toContain('GitHub:')
+    expect(host.querySelector('[aria-label="Connections that need you"]')).toBeNull()
   })
 
   it('jumps to the card when a tile is pressed', () => {
