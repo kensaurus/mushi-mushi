@@ -1,5 +1,12 @@
 # @mushi-mushi/core
 
+## 1.33.4
+
+### Patch Changes
+
+- 0c93c23: The analytics taxonomy lists `activated`, a server event Mushi Cloud emits once per organization when its first real user report from a deployed app gets a diagnosis.
+- 0c93c23: The analytics taxonomy names two server events for the free Production Check on the docs site: `production_check_started` and `production_check_finished` (with its `outcome`).
+
 ## 1.33.3
 
 ### Patch Changes
