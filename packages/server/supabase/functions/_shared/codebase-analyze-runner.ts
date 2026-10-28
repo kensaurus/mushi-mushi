@@ -8,19 +8,20 @@
  *
  * The index is read page by page: PostgREST's max_rows (1000) truncated the
  * single `.limit(10000)` read, so the graph was rebuilt from a slice and the
- * merge put the rest of the stored document back — the jsonb row only grew.
+ * merge put the rest of the stored document back — the jsonb row only grew
+ * until write_codebase_graph hit statement_timeout (57014).
+ *
+ * A complete read is the whole graph, including when the job names
+ * changed_paths (every push does). The stored row is not read back and not
+ * merged. An incomplete read is refused: merging that slice is the write
+ * that timed out.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { getIndexFingerprint, loadExploreGraph } from './codebase-understand.ts'
 import { invalidateCodebaseUnderstandCaches } from './codebase-impact-resolve.ts'
-import { buildGraphFromIndex, fingerprintFile, mergeGraphUpdate } from './codebase-graph-build.ts'
-import {
-  listIndexedFilePaths,
-  listIndexedFileRows,
-  pruneGraphToLivePaths,
-  writeCodebaseGraph,
-} from './codebase-graph-write.ts'
+import { buildGraphFromIndex, fingerprintFile } from './codebase-graph-build.ts'
+import { listIndexedFileRows, writeCodebaseGraph } from './codebase-graph-write.ts'
 import { log } from './logger.ts'
 import { runWikiIngestForProject } from './wiki-ingest.ts'
 
@@ -122,6 +123,7 @@ async function finishAnalyzeJob(
 export async function runCodebaseAnalyzeJob(
   db: SupabaseClient,
   jobId: string,
+  opts?: { maxFileRowPages?: number },
 ): Promise<AnalyzeJobResult> {
   // Claim and read in one conditional update: two callers (a push kick and
   // the cron drain) can reach the same job, and only the one whose update
@@ -214,7 +216,15 @@ export async function runCodebaseAnalyzeJob(
 
     // Paged: one `.limit(10000)` was capped at PostgREST's max_rows (1000),
     // so the graph was rebuilt from a slice and the merge put the rest back.
-    const index = await listIndexedFileRows(db, projectId)
+    const index = await listIndexedFileRows(db, projectId, opts?.maxFileRowPages)
+    // A short read must not be merged into the stored document. That merge
+    // re-added every node the page did not cover, so the jsonb row only grew
+    // and the upsert timed out. Over the page cap, fail the job.
+    if (!index.complete) {
+      throw new Error(
+        'project_codebase_files read stopped at the page cap; refusing to merge a partial index into project_codebase_graph',
+      )
+    }
     const allRows = index.rows
     const fileRows = allRows.filter((r) => !r.symbol_name)
     const symbolRows = allRows.filter((r) => r.symbol_name)
@@ -227,33 +237,13 @@ export async function runCodebaseAnalyzeJob(
       symbolRows,
     })
 
-    // A whole-index rebuild is the whole graph. Reading the stored document
-    // back would only re-add nodes the index no longer has — and it is the
-    // multi-megabyte jsonb row this job is about to rewrite. buildGraphFromIndex
-    // is the only producer of those nodes: write_codebase_graph is the only
-    // writer of the row and this runner is its only caller, so a rebuild that
-    // drops stored nodes without a filePath drops nothing but stale ones.
-    let existingGraph: ReturnType<typeof buildGraphFromIndex> | null = null
-    if (changedPaths.length > 0 || !index.complete) {
-      const { data: existingGraphRow, error: graphReadErr } = await db
-        .from('project_codebase_graph')
-        .select('graph')
-        .eq('project_id', projectId)
-        .maybeSingle()
-      if (graphReadErr) throw new Error(`project_codebase_graph read failed: ${graphReadErr.message}`)
-      existingGraph = (existingGraphRow?.graph as ReturnType<typeof buildGraphFromIndex> | null) ?? null
-    }
-
-    const merged = mergeGraphUpdate(
-      existingGraph,
-      nextGraph,
-      changedPaths.length ? changedPaths : fileRows.map((r) => r.file_path),
-    )
-    // Drop nodes for tombstoned or deleted files. The merge keeps every path
-    // it is not given, so a push that only admits written files used to
-    // accumulate ghosts until the jsonb upsert timed out.
-    const livePaths = await listIndexedFilePaths(db, projectId)
-    const pruned = pruneGraphToLivePaths(merged, livePaths)
+    // changed_paths does not select a merge. Pushes always set it, and the
+    // read above is already every live row, so nextGraph is the whole map.
+    // Merging the stored jsonb kept stale nodes from the old 1,000-row slice
+    // on every file this push did not name, and the upsert stayed large
+    // enough to hit statement_timeout. Tombstoned files are not in the read,
+    // so they are not in nextGraph either. write_codebase_graph is the only
+    // writer of the row (see the single-writer test).
 
     // RPC: 90s timeout, lz4 toast, advisory lock. A busy lock is requeued;
     // a statement timeout is retried once inside writeCodebaseGraph.
@@ -262,7 +252,7 @@ export async function runCodebaseAnalyzeJob(
       projectId,
       indexFingerprint: fingerprint,
       commitSha: repo?.commit_sha ?? null,
-      graph: pruned,
+      graph: nextGraph,
     })
     if (!written.ok && written.busy) {
       await releaseAnalyzeJob(db, jobId, 'Requeued: another graph write holds this project.')
@@ -305,7 +295,7 @@ export async function runCodebaseAnalyzeJob(
     }
 
     await invalidateCodebaseUnderstandCaches(db, projectId)
-    await finishAnalyzeJob(db, jobId, { node_count: pruned.nodes.length, edge_count: pruned.edges.length })
+    await finishAnalyzeJob(db, jobId, { node_count: nextGraph.nodes.length, edge_count: nextGraph.edges.length })
 
     return { ok: true, status: 'completed', pathsAnalyzed: changedPaths.length || fileRows.length }
   } catch (err) {
