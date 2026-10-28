@@ -95,8 +95,8 @@ describe('reviewRefusal', () => {
     expect(reviewRefusal('HEAD_MOVED', 'moved', null)).toEqual({ state: 'waiting', detail: 'moved', requeueReview: false })
   })
   it('holds a fix-first, a hold and a PR without review, each saying what happens next', () => {
-    expect(reviewRefusal('REVIEW_NOT_MERGE', 'x', { verdict: 'fix_first' }).detail).toMatch(/fix first.*agent fixes its findings/)
+    expect(reviewRefusal('REVIEW_NOT_MERGE', 'x', { verdict: 'fix_first' }).detail).toMatch(/asked for changes.*an agent makes them/)
     expect(reviewRefusal('REVIEW_HOLD', 'x', { verdict: 'hold' })).toMatchObject({ state: 'blocked', detail: expect.stringMatching(/only you can override/) })
-    expect(reviewRefusal('REVIEW_NOT_MERGE', 'x', null).detail).toMatch(/no Opus review yet/)
+    expect(reviewRefusal('REVIEW_NOT_MERGE', 'x', null).detail).toMatch(/no AI review yet/)
   })
 })

@@ -98,7 +98,7 @@ export const FOLLOWUP_REASONS = {
   autofix_off: 'Auto-fix is off for this app.',
   expired: 'Waited a day without a chance to run.',
   // Waiting: the row stays queued and is tried again next tick.
-  review_pending: 'Opus is reviewing this pull request again; waiting for its verdict.',
+  review_pending: 'The AI review is checking this pull request again; waiting for its verdict.',
   ci_pending: 'CI on the reviewed commit is still running or could not be read; waiting for its result.',
   another_running: 'Another follow-up on this pull request is still running.',
   daily_limit: "The organization's follow-ups for today are used up.",

@@ -650,7 +650,7 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
         stage: 'review',
         tone: stuck ? 'stuck' : 'moving',
         noun: PR,
-        text: failed ? 'the review failed' : rv ? (stuck ? 'review not finished after 2 hours' : 'Opus is reviewing') : stuck ? 'never reviewed' : 'waiting for a review',
+        text: failed ? 'the review failed' : rv ? (stuck ? 'review not finished after 2 hours' : 'the AI review is running') : stuck ? 'never reviewed' : 'waiting for a review',
         actions: stuck ? ['re_review'] : [],
       }, itemOf(a, askedAt, { lastError: clip(rv?.error) }))
       continue
@@ -748,7 +748,7 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
         conflict_person: { tone: 'stuck', text: 'held: merge conflict, needs a person: resolve on GitHub', actions: ['update_branch', 'remove'] },
         ci_failed: { tone: 'stuck', text: 'held: CI failed', actions: ['ci_repair', 'rerun_ci', 'remove'] },
         own_ci_red: { tone: 'stuck', text: 'held: their own CI is red', actions: ['ci_repair', 'rerun_ci', 'remove'], settings: FOLLOWUPS_SETTING },
-        fix_first: { tone: 'stuck', text: 'held: Opus says fix first', actions: ['followup', 're_review', 'remove'], settings: FOLLOWUPS_SETTING },
+        fix_first: { tone: 'stuck', text: 'held: the AI review asked for changes', actions: ['followup', 're_review', 'remove'], settings: FOLLOWUPS_SETTING },
         hold: { tone: 'stuck', text: 'held: the review says do not merge', actions: ['re_review', 'remove', 'close'] },
       }
       const s = spec[kind] ?? { tone: 'stuck' as const, text: 'held by the merge queue', actions: ['update_branch', 'remove'] as PipelineAction[] }
