@@ -17,10 +17,12 @@ import {
 } from '../../lib/tokens'
 import { IconCamera, IconIntelligence } from '../icons'
 import { ContainedBlock } from './ReportSurface'
+import { classificationNarrative } from './classificationNarrative'
 import type { ReportDetail } from './types'
 
 export function ClassificationFields({ report }: { report: ReportDetail }) {
   const reproductionHint = (report.stage1_classification as { reproductionHint?: string } | null)?.reproductionHint
+  const narrative = classificationNarrative(report)
   const categoryLabel = CATEGORY_LABELS[report.category] ?? report.category
   const severityText = report.severity ? severityLabel(report.severity) : 'Unset'
   const conf = report.confidence
@@ -83,9 +85,9 @@ export function ClassificationFields({ report }: { report: ReportDetail }) {
         ]}
       />
 
-      {report.summary && (
-        <Callout tone="info" label="LLM summary" icon={<IconIntelligence className="text-info" />}>
-          <ProseBlock value={report.summary} mode="auto" />
+      {narrative && (
+        <Callout tone="info" label={narrative.label} icon={<IconIntelligence className="text-info" />}>
+          <ProseBlock value={narrative.text} mode="auto" />
         </Callout>
       )}
 

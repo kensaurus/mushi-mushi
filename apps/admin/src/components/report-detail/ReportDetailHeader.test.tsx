@@ -132,6 +132,31 @@ describe('reporter chip spacing', () => {
   })
 })
 
+describe('report title and breadcrumb', () => {
+  it('shows Bugs › Report only where the shell breadcrumb is hidden', () => {
+    render(report({ status: 'classified' }))
+    const nav = container.querySelector('nav[aria-label="Breadcrumb"]')
+    expect(nav?.textContent).toContain('Bugs')
+    expect(nav?.textContent).toContain('Report')
+    expect(nav?.textContent).not.toContain('Reports')
+    expect(nav?.textContent).not.toContain('Checkout button does nothing')
+    expect(nav?.parentElement?.className).toContain('xl:hidden')
+  })
+
+  it('renders the title as a page heading, without a filled info box', () => {
+    render(report({ status: 'classified' }))
+    const h2 = container.querySelector('h2')
+    expect(h2?.textContent).toBe('Checkout button does nothing')
+    expect(h2?.className).toContain('heading-rhythm')
+    expect(h2?.className).toContain('text-fg')
+    let node: HTMLElement | null = h2
+    while (node) {
+      expect(node.className).not.toMatch(/\bbg-info/)
+      node = node.parentElement
+    }
+  })
+})
+
 describe('deployLiveLabel', () => {
   it('omits the sha when no observation named one', () => {
     expect(deployLiveLabel(live({ state: 'not_live', prod_commit: null }))).toBe('Fixed — not live yet')
