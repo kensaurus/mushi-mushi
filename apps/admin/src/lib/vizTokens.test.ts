@@ -54,3 +54,31 @@ describe('vizTokens', () => {
     expect(stepStatusColor('failed')).toBe('oklch(0.7 0.2 25)')
   })
 })
+
+// Getter maps are readonly. These functions are type-checked and not called:
+// assigning to a getter-only property throws at runtime.
+function colourMapsRejectAssignment(): void {
+  // @ts-expect-error STAGE_HEX properties are readonly getters
+  STAGE_HEX.plan = 'nope'
+  // @ts-expect-error HERO_SEVERITY_HEX properties are readonly getters
+  HERO_SEVERITY_HEX.info = 'nope'
+  // @ts-expect-error HERO_ACTION_TONE_HEX properties are readonly getters
+  HERO_ACTION_TONE_HEX.plan = 'nope'
+  // @ts-expect-error TONE_HEX properties are readonly getters
+  TONE_HEX.ok = 'nope'
+}
+
+function toneHexKeysAreClosed(): void {
+  const ok: keyof typeof TONE_HEX = 'ok'
+  const warn: keyof typeof TONE_HEX = 'warn'
+  const urgent: keyof typeof TONE_HEX = 'urgent'
+  // @ts-expect-error TONE_HEX keys are ok | warn | urgent
+  const nope: keyof typeof TONE_HEX = 'nope'
+  void ok
+  void warn
+  void urgent
+  void nope
+}
+
+void colourMapsRejectAssignment
+void toneHexKeysAreClosed

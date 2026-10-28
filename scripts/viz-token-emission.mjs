@@ -5,9 +5,18 @@
  *          uses; readVizToken() reads them with getComputedStyle, so they
  *          have to be declared in @theme static.
  *
+ *          A viz-* string counts only when it is an argument of readVizToken()
+ *          or a value passed to vizColorMap(), including a local binding those
+ *          calls read (a status map, or a property on a mapped row). A test id
+ *          or class fragment does not.
+ *
  *          Also fails when readVizToken() runs at module scope. main.tsx
  *          imports the app graph before index.css, so that call freezes the
  *          stand-in colour for the rest of the page.
+ *
+ *          check-design-tokens.mjs --pre-commit skips the TypeScript scan and
+ *          the Tailwind compile unless a staged path is admin CSS, admin
+ *          source, or one of these scripts. CI runs the check every time.
  *
  * USAGE:
  *   Imported by scripts/check-design-tokens.mjs.
@@ -27,17 +36,202 @@ import { fileURLToPath } from 'node:url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 export const REPO_ROOT = resolve(__dirname, '..')
 
-export function stripJsComments(src) {
-  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+const VIZ_NAME = /^viz-[a-z0-9-]+$/
+
+function unwrapExpr(ts, expr) {
+  while (expr) {
+    if (
+      ts.isParenthesizedExpression(expr) ||
+      ts.isAsExpression(expr) ||
+      ts.isNonNullExpression(expr) ||
+      (typeof ts.isSatisfiesExpression === 'function' && ts.isSatisfiesExpression(expr)) ||
+      (typeof ts.isTypeAssertionExpression === 'function' && ts.isTypeAssertionExpression(expr))
+    ) {
+      expr = expr.expression
+      continue
+    }
+    break
+  }
+  return expr
 }
 
-/** Quoted viz-* token names in one TS source string, comments excluded. */
-export function vizTokenNamesInSource(src) {
-  const names = new Set()
-  for (const match of stripJsComments(src).matchAll(/(['"`])(viz-[a-z0-9-]+)\1/g)) {
-    names.add(match[2])
+function propertyNameText(ts, name) {
+  if (!name) return null
+  if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNoSubstitutionTemplateLiteral(name)) {
+    return name.text
   }
+  return null
+}
+
+/** Nearest variable or parameter binding for `ident`. */
+function resolveBinding(ts, ident) {
+  const name = ident.text
+  let current = ident.parent
+  while (current) {
+    if (current.statements) {
+      for (const stmt of current.statements) {
+        if (!ts.isVariableStatement(stmt)) continue
+        for (const decl of stmt.declarationList.declarations) {
+          if (ts.isIdentifier(decl.name) && decl.name.text === name) return decl
+        }
+      }
+    }
+    if (ts.isFunctionLike(current)) {
+      for (const param of current.parameters) {
+        if (ts.isIdentifier(param.name) && param.name.text === name) return param
+      }
+    }
+    current = current.parent
+  }
+  return null
+}
+
+/**
+ * viz-* names that readVizToken() or vizColorMap() actually read in one file.
+ * Other quoted viz-* strings (test ids, class fragments) are ignored.
+ */
+export function vizTokenNamesInSource(src, filename = 'sample.tsx') {
+  if (!src.includes('readVizToken') && !src.includes('vizColorMap')) return []
+  const ts = loadTypescript()
+  const kind = filename.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  const sourceFile = ts.createSourceFile(filename, src, ts.ScriptTarget.Latest, true, kind)
+  const names = new Set()
+  const seen = new Set()
+
+  function addName(text) {
+    if (VIZ_NAME.test(text)) names.add(text)
+  }
+
+  function collectTokenExpr(expr) {
+    expr = unwrapExpr(ts, expr)
+    if (!expr) return
+    if (ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) {
+      addName(expr.text)
+      return
+    }
+    if (ts.isIdentifier(expr)) {
+      collectAllFromBinding(expr)
+      return
+    }
+    if (ts.isPropertyAccessExpression(expr)) {
+      const base = unwrapExpr(ts, expr.expression)
+      if (ts.isIdentifier(base)) collectPropertyRead(base, expr.name.text)
+      else collectTokenExpr(base)
+      return
+    }
+    if (ts.isElementAccessExpression(expr)) {
+      const base = unwrapExpr(ts, expr.expression)
+      if (ts.isIdentifier(base)) collectAllFromBinding(base)
+      else collectTokenExpr(base)
+      return
+    }
+    ts.forEachChild(expr, (child) => {
+      if (ts.isIdentifier(child)) return
+      collectTokenExpr(child)
+    })
+  }
+
+  function collectAllFromBinding(ident) {
+    const decl = resolveBinding(ts, ident)
+    if (!decl || seen.has(decl)) return
+    seen.add(decl)
+    if (ts.isVariableDeclaration(decl) && decl.initializer) collectTokenExpr(decl.initializer)
+  }
+
+  function collectPropertyRead(ident, propName) {
+    const decl = resolveBinding(ts, ident)
+    if (!decl || seen.has(decl)) return
+    seen.add(decl)
+    if (ts.isParameter(decl)) {
+      const receiver = mappedReceiver(decl)
+      if (receiver) collectNamedPropValues(receiver, propName)
+      return
+    }
+    if (ts.isVariableDeclaration(decl) && decl.initializer) collectNamedPropValues(decl.initializer, propName)
+  }
+
+  function mappedReceiver(paramDecl) {
+    const fn = paramDecl.parent
+    if (!fn || !ts.isFunctionLike(fn)) return null
+    const call = fn.parent
+    if (!call || !ts.isCallExpression(call) || !call.arguments.includes(fn)) return null
+    const callee = unwrapExpr(ts, call.expression)
+    if (!ts.isPropertyAccessExpression(callee)) return null
+    if (callee.name.text !== 'map' && callee.name.text !== 'flatMap' && callee.name.text !== 'forEach') return null
+    return callee.expression
+  }
+
+  function collectNamedPropValues(expr, propName) {
+    expr = unwrapExpr(ts, expr)
+    if (!expr) return
+    if (ts.isIdentifier(expr)) {
+      const decl = resolveBinding(ts, expr)
+      if (!decl || seen.has(decl)) return
+      seen.add(decl)
+      if (ts.isVariableDeclaration(decl) && decl.initializer) collectNamedPropValues(decl.initializer, propName)
+      return
+    }
+    if (ts.isArrayLiteralExpression(expr)) {
+      for (const el of expr.elements) collectNamedPropValues(el, propName)
+      return
+    }
+    if (!ts.isObjectLiteralExpression(expr)) return
+    for (const prop of expr.properties) {
+      if (!ts.isPropertyAssignment(prop)) continue
+      if (propertyNameText(ts, prop.name) === propName) collectTokenExpr(prop.initializer)
+    }
+  }
+
+  function collectVizColorMapArg(arg) {
+    const expr = unwrapExpr(ts, arg)
+    if (!expr) return
+    if (!ts.isObjectLiteralExpression(expr)) {
+      collectTokenExpr(expr)
+      return
+    }
+    for (const prop of expr.properties) {
+      if (ts.isPropertyAssignment(prop)) collectTokenExpr(prop.initializer)
+      else if (ts.isShorthandPropertyAssignment(prop)) collectTokenExpr(prop.name)
+    }
+  }
+
+  function visit(node) {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+      if (node.expression.text === 'readVizToken' && node.arguments[0]) collectTokenExpr(node.arguments[0])
+      else if (node.expression.text === 'vizColorMap' && node.arguments[0]) collectVizColorMapArg(node.arguments[0])
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sourceFile)
   return [...names].sort()
+}
+
+/**
+ * Paths that can change which viz tokens the stylesheet emits or which names
+ * admin source reads. A pre-commit that touches none of these skips the
+ * TypeScript scan and the Tailwind compile.
+ */
+export function isVizEmissionSource(file) {
+  const path = String(file).replaceAll('\\', '/')
+  if (path === 'scripts/viz-token-emission.mjs' || path === 'scripts/check-design-tokens.mjs') return true
+  if (/^apps\/admin\/.*\.css$/.test(path)) return true
+  if (/^apps\/admin\/src\/.*\.tsx?$/.test(path)) return true
+  return false
+}
+
+export function vizEmissionSourcesChanged(paths) {
+  return paths.some((file) => isVizEmissionSource(file))
+}
+
+/**
+ * CI and a plain `node scripts/check-design-tokens.mjs` always compile.
+ * `--pre-commit` compiles only when a staged path is a viz source.
+ * `changedPaths === null` means the path list is unknown, so the check runs.
+ */
+export function shouldRunVizEmissionCheck({ preCommit, changedPaths }) {
+  if (!preCommit) return true
+  if (!changedPaths) return true
+  return vizEmissionSourcesChanged(changedPaths)
 }
 
 export function walkTsSources(dir, acc = []) {
@@ -54,7 +248,7 @@ export function walkTsSources(dir, acc = []) {
 export function vizTokenNamesInAdmin(adminSrc = resolve(REPO_ROOT, 'apps/admin/src')) {
   const names = new Set()
   for (const file of walkTsSources(adminSrc)) {
-    for (const name of vizTokenNamesInSource(readFileSync(file, 'utf8'))) names.add(name)
+    for (const name of vizTokenNamesInSource(readFileSync(file, 'utf8'), file)) names.add(name)
   }
   return [...names].sort()
 }
