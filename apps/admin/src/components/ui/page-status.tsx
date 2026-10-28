@@ -19,6 +19,7 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { statLinkLabel } from '../../lib/statCardLinks'
+import { usePublishPageStatus } from '../../lib/pageStatusPresence'
 import { InfoHint } from './fields'
 import { FreshnessPill, type SectionFreshness } from './layout'
 import { PageFirstStep, type PageFirstStepProps } from './page-first-step'
@@ -92,6 +93,7 @@ export function PageStatus({
   ariaLabel = 'Page status',
   'data-testid': testId = 'page-status',
 }: PageStatusProps) {
+  usePublishPageStatus()
   const allEmpty = metrics.length > 0 && metrics.every((m) => isEmptyMetricValue(m.value))
   if (allEmpty && empty) return <PageFirstStep {...empty} />
   const shown = allEmpty ? [] : metrics

@@ -4,6 +4,7 @@
 
 import type { ReactNode } from 'react'
 import { SpringChromeEnter } from './motion/SpringChromeEnter'
+import { usePageStatusShown } from '../lib/pageStatusPresence'
 
 export type StatusBannerTone = 'info' | 'brand' | 'danger' | 'warn' | 'ok'
 
@@ -28,6 +29,10 @@ export function StatusBannerShell({
   action?: ReactNode
   pulseDot?: boolean
 }) {
+  // An "all good" banner over the page's status sentence said the same thing
+  // twice; problems (warn, danger) and running work (brand) still show.
+  const pageStatusShown = usePageStatusShown()
+  if (tone === 'ok' && pageStatusShown) return null
   const shell = BANNER_SHELL[tone]
   return (
     <SpringChromeEnter>
