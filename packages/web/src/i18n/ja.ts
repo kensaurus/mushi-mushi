@@ -90,6 +90,7 @@ export const ja: MushiLocale = {
     errors: {
       noResponse: '応答がありません — 接続を確認して再試行してください。',
       generic: 'アシスタントに接続できませんでした。しばらくしてから再試行してください。',
+      quota: 'アシスタントは {date} まで利用できません。',
     },
   },
   flows: {

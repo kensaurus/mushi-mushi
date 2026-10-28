@@ -18,6 +18,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { categorizeFailure } from '../../supabase/functions/fix-worker/failure-category.ts';
 
 // Mirror of EXPECTED_FAILURE_CATEGORIES in
 // supabase/functions/fix-worker/index.ts. Kept in sync by the source-snapshot
@@ -95,11 +96,24 @@ describe('fix-worker failure logging (MUSHI-MUSHI-SERVER-8)', () => {
       );
       // A pinned key that was already unusable is the same kind of stop: warn,
       // stored as cursor_api_error, and retried on the next spend-down tick.
-      expect(src).toContain("if (isSpendDownPinnedKeyUnavailable(msg)) return 'cursor_api_error'");
+      expect(src).toContain(
+        "failureCategory === 'cursor_api_error' && isSpendDownPinnedKeyUnavailable(errMsg)",
+      );
+      expect(categorizeFailure(new Error('pinned'), 'spend-down cursor key is not usable')).toBe(
+        'cursor_api_error',
+      );
       expect(src).toContain("log.warn('Fix worker stopped: spend-down key is not usable'");
       // A provider "usage limit reached" is a spend cap, same bucket as 429,
       // so it stays a warn instead of paging Sentry as llm_other_error.
-      expect(src).toContain("m.includes('usage limit')");
+      expect(src).toContain('categorizeFailure(');
+      expect(
+        categorizeFailure(
+          new Error(
+            'AI_APICallError: upstream LLM provider usage limit reached (access resumes 2026-11-01 00:00 UTC)',
+          ),
+          'AI_APICallError: upstream LLM provider usage limit reached (access resumes 2026-11-01 00:00 UTC)',
+        ),
+      ).toBe('llm_rate_limit');
     });
   });
 });

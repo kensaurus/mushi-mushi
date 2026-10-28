@@ -33,6 +33,20 @@ export type { WidgetCallbacks, WidgetRewardsState, WidgetSubmitOutcome } from '.
 import { LAZY_STEPS, renderBrandFooter, renderKit, renderOutdatedBanner, renderView, resolveReporterCopy } from './widget-render';
 import type { WidgetRenderCtx } from './widget-render';
 
+/** Reset stamp inside a quota sentence: "until 2026-11-01 00:00 UTC" or "access resumes …". */
+const ASSISTANT_QUOTA_RESET_RE =
+  /(?:access resumes|regain access(?: on)?|until)\s+(\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?(?:\s*UTC)?)/i;
+
+/**
+ * Locale quota line when the provider named a reset date. The server sentence
+ * is the fallback when there is no date to substitute.
+ */
+function assistantQuotaCopy(template: string, serverMessage: string): string {
+  const date = serverMessage.match(ASSISTANT_QUOTA_RESET_RE)?.[1]?.replace(/\s+/g, ' ')?.trim();
+  if (date && template.includes('{date}')) return template.replace('{date}', date);
+  return serverMessage.trim() ? serverMessage : template;
+}
+
 /** Heuristic: hedging / capability-limit answers should offer a report escape. */
 function looksUnsureAssistantAnswer(text: string): boolean {
   const lower = text.toLowerCase();
@@ -498,7 +512,7 @@ export class MushiWidget {
     } catch (err) {
       this.assistantError =
         err instanceof Error && err.name === 'QuotaExhausted' && err.message
-          ? err.message
+          ? assistantQuotaCopy(this.locale.assistant.errors.quota, err.message)
           : this.locale.assistant.errors.generic;
     } finally {
       this.assistantSending = false;

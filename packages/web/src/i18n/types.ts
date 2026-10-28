@@ -141,6 +141,8 @@ export interface MushiLocale {
     errors: {
       noResponse: string;
       generic: string;
+      /** `{date}` is filled when the provider named when access returns. */
+      quota: string;
     };
   };
   flows: {

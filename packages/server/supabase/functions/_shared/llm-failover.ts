@@ -4,9 +4,11 @@
  *
  * `withLlmFailover(db, projectId, provider, fn)` iterates the ordered list
  * of active keys, calls `fn(resolvedKey)`, and on error:
- *   - 429, or a monthly usage cap ("usage limit reached") → marks key as
- *     `quota_exhausted` (1-hour cooldown), advances. A 403 whose body is a
- *     spend cap is quota, not a bad key.
+ *   - 429 → marks key as `quota_exhausted` (1-hour cooldown), advances.
+ *     A monthly usage cap ("usage limit reached") is quota too; when the
+ *     error names a reset date the cooldown runs until that date
+ *     (`markKeyStatus`). A 403 whose body is a spend cap is quota, not a
+ *     bad key.
  *   - 401/403 → marks key as `auth_failed`, advances.
  *   - Transient (5xx, timeout, ECONNRESET/ETIMEDOUT, "overloaded") → bounded
  *     exponential-backoff+jitter retry on the SAME key first (the key isn't

@@ -388,7 +388,11 @@ export interface WidgetCallbacks {
   assistantLabel?: string;
   assistantGreeting?: string;
   assistantSuggestions?: string[];
-  /** Send one assistant turn; resolves with the structured reply. */
+  /**
+   * Send one assistant turn. Resolves the reply, or null on any other server
+   * failure. Rejects with `error.name === 'QuotaExhausted'` and the server
+   * sentence when the AI provider is out of quota (`LLM_UNAVAILABLE`).
+   */
   onAssistantAsk?(message: string, threadId: string | null): Promise<MushiAssistantReply | null>;
 }
 
