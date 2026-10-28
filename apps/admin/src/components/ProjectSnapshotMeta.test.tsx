@@ -67,8 +67,8 @@ describe('ProjectSnapshotMeta chips', () => {
 
   it('names the critical and trend chips, and keeps the trend distinct from the SDK chip', () => {
     render({ snapshot, compact: true, linkless: true })
-    const critical = container.querySelector('[aria-label="12 critical reports in the last 30 days"]')
-    expect(critical?.textContent).toBe('12 critical')
+    const critical = container.querySelector('[aria-label="12 critical reports filed in 30 days, any status"]')
+    expect(critical?.textContent).toBe('12 critical · 30d')
 
     const trend = container.querySelector('[aria-label="Reports up 86 versus the previous 7 days"]')
     expect(trend?.textContent).toBe('↑ 86 reports')

@@ -62,7 +62,7 @@ function WaitingBar({ waiting, error }: { waiting: HomeRelease['waiting']; error
     <div data-testid="home-release-waiting">
       <div className="mb-1.5 flex items-baseline justify-between gap-2">
         <Link to="/reports?status=open" className="text-xs font-medium text-fg hover:underline">
-          {waiting.total} {waiting.total === 1 ? 'bug' : 'bugs'} waiting for a fix
+          {waiting.total} {waiting.total === 1 ? 'bug' : 'bugs'} waiting for a fix, any age
         </Link>
       </div>
       <div className="flex h-3 w-full overflow-hidden rounded-full bg-surface-overlay" role="img" aria-label={parts.map((s) => `${SEVERITY_LABEL[s]} ${waiting.counts[s]}`).join(', ') || 'None waiting'}>
@@ -73,7 +73,11 @@ function WaitingBar({ waiting, error }: { waiting: HomeRelease['waiting']; error
       <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
         {SEVERITIES.map((s) => (
           <li key={s}>
-            <Link to={severityHref(s)} className="inline-flex items-center gap-1.5 text-2xs text-fg-secondary hover:text-fg">
+            <Link
+              to={severityHref(s)}
+              title={`${SEVERITY_LABEL[s]} reports waiting on a decision, any age`}
+              className="inline-flex items-center gap-1.5 text-2xs text-fg-secondary hover:text-fg"
+            >
               <span aria-hidden className={`h-2 w-2 rounded-full ${severityBar(s)}`} />
               {SEVERITY_LABEL[s]} <span className="tabular-nums font-medium text-fg">{waiting.counts[s]}</span>
             </Link>

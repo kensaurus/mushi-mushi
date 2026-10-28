@@ -22,6 +22,7 @@ import { useActiveProjectSignal } from '../../lib/activeProject'
 import { useRealtimeReload } from '../../lib/realtime'
 import { FilterChip } from '../ui'
 import { FilterChipCell, FilterChipRail } from '../FilterChipRail'
+import { criticalChipActive, criticalChipHint, criticalChipLabel, criticalChipParams } from '../../lib/criticalSurfaces'
 import { SEVERITY_CHIPS, STATUS_CHIPS, statusChipCount, type ReportStatusStats } from '../../lib/reportsListFilters'
 
 type StatsResponse = ReportStatusStats
@@ -29,13 +30,17 @@ type StatsResponse = ReportStatusStats
 interface Props {
   status: string
   severity: string
+  /** The list's days window. The severity chip counts all time, so it is selected only when this is empty. */
+  listDays?: string
   /** `enumeration` counts every app (All apps). Default is the pinned app. */
   scope?: 'enumeration' | 'project'
   onSetFilter: (key: string, value: string) => void
+  /** Set several list params at once. Empty string clears the param. */
+  onSetParams?: (updates: Record<string, string>) => void
 }
 
 
-export function ReportsQuickFilters({ status, severity, scope = 'project', onSetFilter }: Props) {
+export function ReportsQuickFilters({ status, severity, listDays = '', scope = 'project', onSetFilter, onSetParams }: Props) {
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const activeProjectSignal = useActiveProjectSignal()
 
@@ -89,12 +94,16 @@ export function ReportsQuickFilters({ status, severity, scope = 'project', onSet
       {SEVERITY_CHIPS.map((b) => (
         <FilterChip
           key={b.value}
-          label={b.label}
+          label={criticalChipLabel(b.label)}
           count={stats ? (bySeverity[b.value] ?? 0) : null}
-          active={severity === b.value}
-          onClick={() => onSetFilter('severity', severity === b.value ? '' : b.value)}
+          active={criticalChipActive({ severity, status, days: listDays }, b.value)}
+          onClick={() => {
+            const params = criticalChipParams({ severity, status, days: listDays }, b.value)
+            if (onSetParams) onSetParams(params)
+            else onSetFilter('severity', params.severity)
+          }}
           tone={b.tone}
-          hint={`Filter to ${b.value}-severity reports`}
+          hint={criticalChipHint(b.value)}
         />
       ))}
     </div>

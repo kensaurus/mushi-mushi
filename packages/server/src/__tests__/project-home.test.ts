@@ -200,6 +200,7 @@ describe('buildNeedsYou', () => {
     const hold = items.find((i) => i.id === 'pipeline_hold')!
     expect(hold.text).toBe('45 PRs: Opus says hold; a person decides.')
     expect(hold.action.to).toBe('/pipeline?project=p1')
+    expect(items.find((i) => i.id === 'critical_waiting')!.text).toBe('2 critical bugs are waiting for a fix, any age.')
     expect(items.find((i) => i.id === 'critical_waiting')!.action.to).toBe('/reports?status=open&severity=critical')
   })
 

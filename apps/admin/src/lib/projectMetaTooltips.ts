@@ -73,7 +73,7 @@ export function buildCriticalTooltip(count: number): MetricTooltipData {
       {
         kind: 'shows',
         label: 'Critical severity',
-        body: `${count} report${count === 1 ? '' : 's'} tagged critical in the last 30 days for this project.`,
+        body: `${count} report${count === 1 ? '' : 's'} tagged critical and filed in the last 30 days, any status. This is not the Bugs “still open” tile.`,
       },
       {
         kind: 'takeaway',

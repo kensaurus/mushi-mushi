@@ -12,6 +12,7 @@
 
 import type { ReactNode } from 'react'
 import { stoppedTitle } from './countDefinitions'
+import { criticalFiled30dLabel } from './criticalSurfaces'
 import { IntegrationHealthDot } from '../components/IntegrationHealthDot'
 import { SidebarBudgetIndicator } from '../components/SidebarBudgetIndicator'
 import { SidebarHealthDot } from '../components/SidebarHealthDot'
@@ -441,7 +442,7 @@ export function resolveNavBadge(
             : navCounts.untriagedBacklog,
         label:
           extras.criticalReports30d > 0
-            ? `${extras.criticalReports30d} critical ${extras.criticalReports30d === 1 ? 'report' : 'reports'} (30d)`
+            ? criticalFiled30dLabel(extras.criticalReports30d)
             : `${navCounts.untriagedBacklog} untriaged ${navCounts.untriagedBacklog === 1 ? 'report' : 'reports'}`,
         hideWhenZero: true,
       }
