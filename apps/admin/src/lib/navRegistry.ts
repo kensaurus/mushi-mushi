@@ -382,6 +382,19 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Check',
   },
   {
+    // Fresh-eyes runs (ADR 0053): a tab of UX runs called "Fresh eyes" until 2026-10-28.
+    id: 'nav:first-user-test',
+    path: '/first-user-test',
+    label: 'First-time user test',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'system-health',
+    iconKey: 'user',
+    paletteDescription: 'An AI that has never seen your app tries to sign up and use it; see where a new user gets stuck and how long it takes.',
+    paletteKeywords: ['fresh eyes', 'first-time user', 'first time user', 'first-time user test', 'onboarding test', 'new user test', 'new user', 'first run', 'sign up test', 'signup test', 'time to first value', 'ttfv', 'first impression'],
+    paletteGroup: 'Check',
+  },
+  {
     id: 'nav:inventory',
     path: '/inventory',
     label: 'User stories',

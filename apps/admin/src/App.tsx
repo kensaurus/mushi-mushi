@@ -60,6 +60,7 @@ const DesignPage = lazy(() => import('./pages/DesignPage').then(m => ({ default:
 const TeamPage = lazy(() => import('./pages/TeamPage').then(m => ({ default: m.TeamPage })))
 const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })))
 const UxRunsPage = lazy(() => import('./pages/UxRunsPage').then(m => ({ default: m.UxRunsPage })))
+const FirstUserTestPage = lazy(() => import('./pages/FirstUserTestPage').then(m => ({ default: m.FirstUserTestPage })))
 const PortfolioPage = lazy(() => import('./pages/PortfolioPage').then(m => ({ default: m.PortfolioPage })))
 const PromptLabPage = lazy(() => import('./pages/PromptLabPage').then(m => ({ default: m.PromptLabPage })))
 const MarketplacePage = lazy(() => import('./pages/MarketplacePage').then(m => ({ default: m.MarketplacePage })))
@@ -398,6 +399,7 @@ export function App() {
                   <Route path="/credits" element={<CreditsPage />} />
                   <Route path="/design" element={<DesignPage />} />
                   <Route path="/ux-runs" element={<UxRunsPage />} />
+                  <Route path="/first-user-test" element={<FirstUserTestPage />} />
                   <Route path="/portfolio" element={<PortfolioPage />} />
                   <Route path="/prompt-lab" element={<PromptLabPage />} />
                   <Route path="/fine-tuning" element={<Navigate to="/prompt-lab" replace />} />
