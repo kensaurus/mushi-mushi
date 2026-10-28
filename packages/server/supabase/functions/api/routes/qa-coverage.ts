@@ -495,13 +495,19 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
 
     const { data: mv } = await db
       .from('qa_story_coverage_24h')
-      .select('story_id, name, pass_rate_pct')
-      .eq('project_id', pid)
-      .order('pass_rate_pct', { ascending: true });
+      .select('story_id, name, passed_24h, failed_24h, error_24h')
+      .eq('project_id', pid);
 
-    const rows = mv ?? [];
+    // Same finished-run rate as the banner. The view's pass_rate_pct counts
+    // skipped runs, so a story that only skipped was 0% and looked failing.
+    const rows = (mv ?? []).map((r) => ({
+      story_id: r.story_id as string,
+      name: r.name as string,
+      pass_rate_pct: finishedPassRate(r as Record<string, unknown>),
+    }));
+    rows.sort((a, b) => (a.pass_rate_pct ?? 101) - (b.pass_rate_pct ?? 101));
     const total = rows.length;
-    const passing = rows.filter((r) => (r.pass_rate_pct ?? 0) >= 80).length;
+    const passing = rows.filter((r) => r.pass_rate_pct != null && r.pass_rate_pct >= 80).length;
     const failing = rows.filter((r) => r.pass_rate_pct != null && r.pass_rate_pct < 80).length;
     const error_count = 0; // MV doesn't separate error from fail at summary level
     const top_failing = rows
