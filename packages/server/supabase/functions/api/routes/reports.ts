@@ -95,11 +95,13 @@ async function unpinnedReportStats(
         .eq('severity', 'critical')
         .in('status', [...NEW_BUCKET_STATUSES]),
     ),
-    mustCount(inProjects().gte('created_at', sinceIso).in('status', ['new', 'queued'])),
+    // Whole New bucket, any age. The banner links open /reports?status=new
+    // with no days filter; a 14-day new|queued count said the queue was
+    // current while pending, submitted, and older New reports were still listed.
+    mustCount(inProjects().in('status', [...NEW_BUCKET_STATUSES])),
     mustCount(
       inProjects()
-        .gte('created_at', sinceIso)
-        .in('status', ['new', 'queued'])
+        .in('status', [...NEW_BUCKET_STATUSES])
         .lt('created_at', hourAgoIso),
     ),
     db
@@ -238,7 +240,13 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     // Every count is for the active project, like the list under the tiles.
     // `projectIds` (every project the caller can reach) once mixed other
     // apps' reports into total14d / critical14d / openBacklog (glot.it, 2026-10-07).
-    const [reportsRes, reportCountRes, keysRes, heartbeatRes] = await Promise.all([
+    // Triage counts are exact and any age: the 14-day sample (max 1000 rows)
+    // only saw new|queued, so one pending report made the banner say the
+    // queue was current while the New list still showed it.
+    const hourAgoIso = new Date(now - 60 * 60 * 1000).toISOString();
+    const inProject = () =>
+      db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', activeProject.id);
+    const [reportsRes, reportCountRes, newUntriaged, openBacklog, keysRes, heartbeatRes] = await Promise.all([
       db
         .from('reports')
         .select('id, status, severity, created_at')
@@ -250,6 +258,8 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         .from('reports')
         .select('id', { count: 'exact', head: true })
         .eq('project_id', activeProject.id),
+      mustCount(inProject().in('status', [...NEW_BUCKET_STATUSES])),
+      mustCount(inProject().in('status', [...NEW_BUCKET_STATUSES]).lt('created_at', hourAgoIso)),
       db
         .from('project_api_keys')
         .select('id')
@@ -273,8 +283,6 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     // "Review N critical" link (status=new&severity=critical&days=14) lists.
     let criticalUntriaged14d = 0;
     let high14d = 0;
-    let newUntriaged = 0;
-    let openBacklog = 0;
     let dismissed14d = 0;
 
     for (const r of recentReports) {
@@ -286,12 +294,6 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       if (status === 'dismissed') dismissed14d += 1;
       if (sev === 'critical' && (NEW_BUCKET_STATUSES as readonly string[]).includes(status)) {
         criticalUntriaged14d += 1;
-      }
-      if (status === 'new' || status === 'queued') {
-        newUntriaged += 1;
-        if (now - new Date(String(r.created_at)).getTime() > 60 * 60 * 1000) {
-          openBacklog += 1;
-        }
       }
     }
 

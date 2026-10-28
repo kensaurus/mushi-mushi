@@ -189,6 +189,24 @@ describe('one report window (#231, #77)', () => {
   })
 })
 
+describe('triage banner matches the New list', () => {
+  it('counts the whole New bucket at any age, not new|queued inside 14 days', () => {
+    // The clear label ("Queue is current — N reports in the last 14 days")
+    // used to ignore pending/submitted and anything older than the window,
+    // while /reports?status=new and the New badge still listed them.
+    const stats = routeBody(REPORTS, "app.get('/v1/admin/reports/stats'", 9000)
+    const helper = routeBody(REPORTS, 'async function unpinnedReportStats', 5000)
+    for (const src of [stats, helper]) {
+      expect(src).not.toContain("['new', 'queued']")
+      expect(src).not.toContain("status === 'new' || status === 'queued'")
+    }
+    expect(helper).toContain("mustCount(inProjects().in('status', [...NEW_BUCKET_STATUSES]))")
+    expect(helper).toContain(".in('status', [...NEW_BUCKET_STATUSES])\n        .lt('created_at', hourAgoIso)")
+    expect(stats).toContain("mustCount(inProject().in('status', [...NEW_BUCKET_STATUSES]))")
+    expect(stats).toContain(".in('status', [...NEW_BUCKET_STATUSES]).lt('created_at', hourAgoIso)")
+  })
+})
+
 describe('critical counts only count open work (#77)', () => {
   it('the /reports banner counts critical reports in the New bucket and links to exactly that', () => {
     const stats = routeBody(REPORTS, "app.get('/v1/admin/reports/stats'", 7000)
