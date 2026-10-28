@@ -6,8 +6,11 @@
  * `is_latest_attempt`, `retryable` and `credential_block` to every row
  * (server: _shared/fix-report-truth.ts). Every count, Retry button and
  * failure row on /fixes reads them here, so the page agrees with the
- * dashboard and /inbox. A row without the fields (an older server) is
- * "unknown": it is never counted and never offered for retry.
+ * dashboard and /inbox. The In flight filter counts `isInFlightFix`:
+ * the latest attempt of a report whose state is `in_flight`. A row
+ * without the fields (an older server) is "unknown": it is never counted
+ * as failed and never offered for retry; a live status still counts as
+ * in flight.
  *
  * REGRESSION (glot.it 2026-10-04): "Retry 8 failed" listed attempts on 4
  * reports already fixed by merged PRs 138–141.
@@ -36,6 +39,25 @@ const PROVIDER_ROUTE: Record<string, string> = {
 /** Newest attempt on a report whose last auto-fix stopped and is still unfixed. */
 export function needsAttention(fix: FixAttempt): boolean {
   return fix.report_fix_state === 'failed' && fix.is_latest_attempt === true
+}
+
+/**
+ * Statuses the server treats as a live attempt (`LIVE_ATTEMPT_STATUSES` in
+ * `_shared/fix-report-truth.ts`). Used only when a row has no report state.
+ */
+const LIVE_ATTEMPT_STATUSES: ReadonlySet<string> = new Set(['queued', 'running', 'pending', 'dispatched'])
+
+/**
+ * The one row the In flight filter counts for a report whose fix is running
+ * now. A queued or running attempt on a report that is already fixed, or an
+ * earlier attempt beside the current one, is history — counting those made
+ * the filter read 8 while the summary read 0 (report 8daa23e6).
+ * A row without `report_fix_state` (an older server) falls back to a live status.
+ */
+export function isInFlightFix(fix: FixAttempt): boolean {
+  if (fix.report_fix_state === 'in_flight') return fix.is_latest_attempt === true
+  if (fix.report_fix_state != null) return false
+  return LIVE_ATTEMPT_STATUSES.has((fix.status ?? '').toLowerCase())
 }
 
 /** An attempt (failed, skipped or a closed PR) on a report that a later attempt fixed. */

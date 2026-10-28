@@ -40,7 +40,7 @@ import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
 import { queueMerges } from '../lib/mergeQueue'
 import { MergeQueuePanel } from '../components/fixes/MergeQueuePanel'
-import { failureCause, fixCauseLabel, fixReportLabel, needsAttention, retryCandidates } from '../lib/fixReportTruth'
+import { failureCause, fixCauseLabel, fixReportLabel, isInFlightFix, needsAttention, retryCandidates } from '../lib/fixReportTruth'
 import {
   RETRY_AGENT_OPTIONS,
   commonRetryAgent,
@@ -50,7 +50,7 @@ import {
 } from '../lib/fixRetry'
 import type { FixAttempt, DispatchJob, FixSummary } from '../components/fixes/types'
 import { FixesStatusBanner } from '../components/fixes/FixesStatusBanner'
-import { reconcileFixesStats } from '../lib/fixesBannerReconcile'
+import { reconcileFixesStats, reconcileListedInFlight } from '../lib/fixesBannerReconcile'
 import { FixesPipelineGuide } from '../components/fixes/FixesPipelineGuide'
 import { FixesSnapshotStrip } from '../components/fixes/FixesSnapshotStrip'
 import { FixesFailedSummary } from '../components/fixes/FixesFailedSummary'
@@ -112,8 +112,10 @@ function bucketFromUrl(status: string | null, tab: string | null): StatusBucket 
 
 /** The one exclusive bucket of an attempt; PR open is matched separately. */
 function bucketize(fix: FixAttempt): StatusBucket {
-  const status = fix.status?.toLowerCase()
-  if (status === 'queued' || status === 'running') return 'inflight'
+  // In flight is the report's current state, one row, so the filter count
+  // matches the summary. A stale queued/running attempt on a shipped report
+  // is not in flight (report 8daa23e6).
+  if (isInFlightFix(fix)) return 'inflight'
   // "Failed / skipped" holds the latest attempt of each report that is
   // still unfixed after it failed, was skipped (2026-08-16 audit P1-4), or
   // its PR went red / closed unmerged (2026-10-02). Earlier attempts on a
@@ -390,8 +392,11 @@ export function FixesPage() {
   // tiles show the same numbers as Pull requests.
   const prCounts = useMemo(() => countRepoFilters(fixes), [fixes])
   const snapshotStats = useMemo(
-    () => ({ ...fixesStats, prsOpen: prCounts.open, prsCiPassing: prCounts.ci_passing }),
-    [fixesStats, prCounts],
+    () => reconcileListedInFlight(
+      { ...fixesStats, prsOpen: prCounts.open, prsCiPassing: prCounts.ci_passing },
+      bucketCounts.inflight,
+    ),
+    [fixesStats, prCounts, bucketCounts.inflight],
   )
 
   // "Most common: …" for the failed banner, from the same per-report rows.
@@ -874,7 +879,7 @@ export function FixesPage() {
             show: setupBlocked && !emptyAsksForGithub,
             children: (
               <FixesStatusBanner
-                stats={fixesStats}
+                stats={snapshotStats}
                 causeSummary={causeSummary}
                 onRefresh={reloadAll}
                 refreshing={isValidating || statsValidating}
@@ -929,7 +934,7 @@ export function FixesPage() {
 
       {/* Quick mode has no snapshot strip, so the KPI row stands in for it. */}
       {summary && ux.hideFixesSnapshot && (
-        <FixSummaryRow summary={{ ...summary, prsOpen: prCounts.open }} successRate={successRate} />
+        <FixSummaryRow summary={{ ...summary, inProgress: Math.max(summary.inProgress, bucketCounts.inflight), prsOpen: prCounts.open }} successRate={successRate} />
       )}
 
       {fixes.length > 0 && (
