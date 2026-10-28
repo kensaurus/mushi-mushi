@@ -30,6 +30,7 @@ import { resolveFirecrawl } from '../../_shared/firecrawl.ts'
 import { emitProductEvent } from '../../_shared/product-events.ts'
 import { sendTransactionalEmail } from '../../_shared/email.ts'
 import { hmacSha256Hex } from '../../_shared/connectors/jwt.ts'
+import { clientIpOf, verifiedClientIp } from '../../_shared/edge-proxy.ts'
 import { checkPublicUrl, resolvesPublic, runtimeResolver } from '../../_shared/public-url-guard.ts'
 import { runProductionCheck, severityCounts, type CheckResult } from '../../_shared/production-check.ts'
 
@@ -52,14 +53,12 @@ export function reportUrl(id: string): string {
 }
 
 /**
- * The caller's IP: Cloudflare's header, else the rightmost X-Forwarded-For
- * hop (the one a client cannot write), as cli-auth's extractClientIp.
+ * The visitor's IP: the one `api` signed when it forwarded the request
+ * (`edge-proxy.ts`; this function's own Cloudflare header may be `api`'s
+ * address), else Cloudflare's header, else the rightmost X-Forwarded-For hop.
  */
-export function callerIp(header: (name: string) => string | undefined): string {
-  const cf = header('cf-connecting-ip')?.trim()
-  if (cf) return cf
-  const xff = header('x-forwarded-for')?.split(',').map((s) => s.trim()).filter(Boolean)
-  return xff?.length ? xff[xff.length - 1] : 'unknown'
+export async function callerIp(header: (name: string) => string | undefined, secret: string | undefined): Promise<string> {
+  return (await verifiedClientIp(header, secret)) ?? clientIpOf(header) ?? 'unknown'
 }
 
 /** HMAC of the IP: stored and used as the rate-limit actor; the IP itself never is. */
@@ -215,7 +214,9 @@ export function registerProductionCheckRoutes(app: Hono<{ Variables: Variables }
 
     // Keyed with a server secret every edge function has, so the stored hash
     // cannot be reversed by hashing the IPv4 space.
-    const ipHash = await hashIp(callerIp((n) => c.req.header(n)), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || 'mushi-production-check')
+    const secret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || undefined
+    const ip = await callerIp((n) => c.req.header(n), secret)
+    const ipHash = await hashIp(ip, secret ?? 'mushi-production-check')
     const perIp = await claim(db, actorFromHash(ipHash), 'production_check_ip', CHECKS_PER_IP_PER_HOUR, '1 hour')
     if (perIp !== 'ok') {
       c.header('Retry-After', perIp === 'limited' ? '3600' : '60')

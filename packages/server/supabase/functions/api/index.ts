@@ -109,6 +109,8 @@ function forwardToApiExt(paths: string[]): void {
     app.all(path, (c) =>
       proxyToFunction(c.req.raw, 'api-ext', c.req.path.replace(/^\/api(?=\/)/, ''), {
         supabaseUrl: Deno.env.get('SUPABASE_URL') ?? '',
+        // Signs the visitor's IP for per-IP limits in api-ext (production-check.ts).
+        clientIpSecret: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || undefined,
       }),
     );
   }

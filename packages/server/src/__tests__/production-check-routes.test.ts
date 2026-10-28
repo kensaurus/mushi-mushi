@@ -20,6 +20,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'npm:hono@4'
 import { makeFakeDb, type FakeDb, type Row } from './__stubs__/fake-supabase.ts'
+import { proxyToFunction } from '../../supabase/functions/_shared/edge-proxy.ts'
 
 const state = vi.hoisted(() => ({
   db: null as unknown,
@@ -277,10 +278,37 @@ describe('GET /v1/public/production-check/:id', () => {
 })
 
 describe('callerIp', () => {
-  it('prefers Cloudflare, then the rightmost forwarded hop', () => {
-    const h = (m: Record<string, string>) => (n: string) => m[n]
-    expect(callerIp(h({ 'cf-connecting-ip': '1.1.1.1', 'x-forwarded-for': '2.2.2.2' }))).toBe('1.1.1.1')
-    expect(callerIp(h({ 'x-forwarded-for': 'spoofed, 3.3.3.3' }))).toBe('3.3.3.3')
-    expect(callerIp(h({}))).toBe('unknown')
+  const h = (m: Record<string, string>) => (n: string) => m[n]
+
+  it('prefers Cloudflare, then the rightmost forwarded hop', async () => {
+    expect(await callerIp(h({ 'cf-connecting-ip': '1.1.1.1', 'x-forwarded-for': '2.2.2.2' }), 'k')).toBe('1.1.1.1')
+    expect(await callerIp(h({ 'x-forwarded-for': 'spoofed, 3.3.3.3' }), 'k')).toBe('3.3.3.3')
+    expect(await callerIp(h({}), 'k')).toBe('unknown')
+  })
+
+  it('behind the api → api-ext hop, visitors are told apart by the IP api signed', async () => {
+    // api-ext's own Cloudflare header is api's egress address for every visitor.
+    const forward = async (visitor: string) => {
+      let sent: Headers | undefined
+      await proxyToFunction(new Request('https://ref.supabase.co/functions/v1/api/v1/public/production-check', { method: 'POST', headers: { 'cf-connecting-ip': visitor }, body: '{}' }), 'api-ext', '/v1/public/production-check', {
+        supabaseUrl: 'https://ref.supabase.co',
+        clientIpSecret: 'service-secret',
+        fetchImpl: (async (_u: string, init: RequestInit) => {
+          sent = init.headers as Headers
+          return new Response('{}')
+        }) as unknown as typeof fetch,
+      })
+      return { ...Object.fromEntries(sent!.entries()), 'cf-connecting-ip': '34.1.1.1' }
+    }
+    for (let i = 0; i < CHECKS_PER_IP_PER_HOUR; i++) {
+      expect((await post({ url: `https://v${i}.app` }, await forward('198.51.100.1'))).status).toBe(202)
+    }
+    expect((await post({ url: 'https://v9.app' }, await forward('198.51.100.1'))).status).toBe(429)
+    expect((await post({ url: 'https://v9.app' }, await forward('198.51.100.2'))).status).toBe(202)
+  })
+
+  it('a forged client-IP header is ignored', async () => {
+    const forged = h({ 'x-mushi-client-ip': '9.9.9.9', 'x-mushi-client-ip-sig': 'a'.repeat(64), 'cf-connecting-ip': '5.5.5.5' })
+    expect(await callerIp(forged, 'service-secret')).toBe('5.5.5.5')
   })
 })
