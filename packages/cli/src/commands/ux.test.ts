@@ -40,7 +40,7 @@ describe('mushi ux', () => {
     expect(call?.argv.slice(1)).toEqual([
       '--yes',
       '--package',
-      '@mushi-mushi/ux@^0.1.0',
+      '@mushi-mushi/ux@^0.3.0',
       'mushi-ux',
       'run',
       '--dev',
@@ -70,5 +70,14 @@ describe('mushi ux', () => {
     const without = await run(['ui'])
     expect(without?.argv.slice(-1)).toEqual(['ui'])
     expect(without?.env?.MUSHI_PROJECT_ID).toBe(process.env.MUSHI_PROJECT_ID)
+  })
+
+  it('passes the login to a fresh-eyes run that files, and not to a dry run', async () => {
+    login.config = { apiKey: 'mushi_k', projectId: '542b34e0-019e-41fe-b900-7b637717bb86', endpoint: 'https://api.test' }
+    const filing = await run(['fresh-eyes', '--url', 'https://app.test', '--goal', 'get my first report', '--file'])
+    expect(filing?.argv).toContain('fresh-eyes')
+    expect(filing?.env).toMatchObject({ MUSHI_API_KEY: 'mushi_k', MUSHI_PROJECT_ID: '542b34e0-019e-41fe-b900-7b637717bb86' })
+    const dry = await run(['fresh-eyes', '--url', 'https://app.test', '--goal', 'x', '--dry-run'])
+    expect(dry?.env?.MUSHI_API_KEY).toBe(process.env.MUSHI_API_KEY)
   })
 })

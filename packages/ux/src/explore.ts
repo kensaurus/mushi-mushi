@@ -38,7 +38,7 @@ export const CHARTERS = {
 
 export type CharterName = keyof typeof CHARTERS
 
-/** @internal Exported for tests only. */
+/** One action from the closed set (explore and fresh-eyes). */
 export type ExploreAction =
   | { action: 'click'; role: string; name: string }
   | { action: 'fill'; role: string; name: string; value: string }
@@ -47,7 +47,7 @@ export type ExploreAction =
   | { action: 'back' | 'forward' | 'reload' | 'scroll' | 'done' }
   | { action: 'resize'; width: number; height: number }
 
-/** @internal Exported for tests only. */
+/** Something the page did that code counts as a bug candidate. */
 export interface Signal {
   kind: 'console-error' | 'page-error' | 'server-error' | 'blank-screen'
   message: string
@@ -59,7 +59,7 @@ const KEYS = new Set(['Enter', 'Escape', 'Tab', 'ArrowDown', 'ArrowUp', 'ArrowLe
 const MAX_SNAPSHOT_CHARS = 8000
 const MAX_VALUE_CHARS = 500
 
-/** @internal Exported for tests only. Pure: the model's next action, or null when it is not one we run. */
+/** Pure: the model's next action, or null when it is not one we run. */
 export function parseAction(text: string | null): ExploreAction | null {
   const j = firstJson(text ?? '')
   if (!j || typeof j.action !== 'string') return null
@@ -95,7 +95,7 @@ export function parseAction(text: string | null): ExploreAction | null {
   }
 }
 
-/** @internal Exported for tests only. Pure: an action a reader can follow, for the report's steps. */
+/** Pure: an action a reader can follow, for the report's steps. */
 export function describeAction(a: ExploreAction): string {
   switch (a.action) {
     case 'click':
@@ -113,7 +113,7 @@ export function describeAction(a: ExploreAction): string {
   }
 }
 
-/** @internal Exported for tests only. Pure: a message with its volatile parts (ids, numbers, hashes) removed, so one bug is one fingerprint. */
+/** Pure: a message with its volatile parts (ids, numbers, hashes) removed, so one bug is one fingerprint. */
 export function normalizeMessage(message: string): string {
   return message
     .replace(/https?:\/\/\S+/g, '<url>')
@@ -125,7 +125,7 @@ export function normalizeMessage(message: string): string {
     .slice(0, 200)
 }
 
-/** @internal Exported for tests only. Pure: one signal's identity: its kind, page and normalized message. */
+/** Pure: one signal's identity: its kind, page and normalized message. */
 export function signalKey(s: Signal): string {
   return `${s.kind}|${pagePath(new URL(s.url).pathname)}|${normalizeMessage(s.message)}`
 }
@@ -155,7 +155,8 @@ export function explorePrompt(input: { charter: string; snapshot: string; done: 
   ].join('\n')
 }
 
-async function snapshotOf(page: Page): Promise<string> {
+/** The page's accessibility snapshot (text when it cannot be read), shared with fresh-eyes. */
+export async function snapshotOf(page: Page): Promise<string> {
   try {
     return await page.locator('body').ariaSnapshot({ timeout: 5000 })
   } catch {
@@ -191,24 +192,123 @@ async function target(page: Page, role: string, name: string) {
   return page.getByRole(role as AriaRole, { name }).first()
 }
 
-/** Run one action. Returns a reason when it was refused or could not run. */
-async function perform(page: Page, a: ExploreAction): Promise<string | null> {
+/** What perform returns when fillValue refuses a value. */
+export const REFUSED_VALUE = 'refused: a test run types only its own test account'
+
+/**
+ * What an element reads as: its aria-label, aria-labelledby text, text, value
+ * and title, the labels inside it (an icon's aria-label), and the first line
+ * of Playwright's accessibility snapshot (its computed name). Null when it
+ * cannot be read: the caller refuses then, since an unread label is not a
+ * safe one.
+ */
+async function accessibleLabel(loc: Awaited<ReturnType<typeof target>>): Promise<string | null> {
+  try {
+    const own = await loc.evaluate(
+      (el) => {
+        const h = el as HTMLElement
+        const labelled = h.getAttribute('aria-labelledby')
+        const byId = labelled ? labelled.split(/\s+/).map((id) => document.getElementById(id)?.innerText ?? '').join(' ') : ''
+        const inner = [...h.querySelectorAll('[aria-label], [title]')].map((c) => c.getAttribute('aria-label') ?? c.getAttribute('title') ?? '').join(' ')
+        // A submit button acts for its form or dialog: "Confirm" in a dialog labelled "Delete project".
+        const type = (h.getAttribute('type') ?? (h.tagName === 'BUTTON' ? 'submit' : '')).toLowerCase()
+        const boxes = [type === 'submit' ? ((h as HTMLButtonElement).form ?? h.closest('form')) : null, h.closest('[role=dialog], [role=alertdialog], dialog')].filter((b): b is Element => !!b)
+        const labelOf = (b: Element) => [b.getAttribute('aria-label'), ...(b.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean).map((id) => document.getElementById(id)?.innerText ?? '')]
+        const boxLabel = boxes.flatMap(labelOf).filter(Boolean).join(' ')
+        return [h.getAttribute('aria-label'), byId, h.innerText, h.getAttribute('value'), h.getAttribute('title'), inner, boxLabel].filter(Boolean).join(' ').trim().slice(0, 400)
+      },
+      undefined,
+      { timeout: 5000 },
+    )
+    const snap = await loc.ariaSnapshot({ timeout: 5000 })
+    return `${own} ${snap.split(/\r?\n/)[0] ?? ''}`.trim()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * What Enter or Space on the focused element acts on: the element and, inside
+ * a form, the form's label and its submit buttons (Enter in a field submits
+ * through them). Null when it cannot be read.
+ */
+async function focusedLabels(page: Page): Promise<string[] | null> {
+  try {
+    return await page.evaluate(() => {
+      const el = document.activeElement as HTMLElement | null
+      if (!el || el === document.body) return []
+      const read = (h: Element) => [h.getAttribute('aria-label'), (h as HTMLElement).innerText, h.getAttribute('value'), h.getAttribute('title')].filter(Boolean).join(' ').trim()
+      const byIds = (h: Element) => (h.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean).map((id) => document.getElementById(id)?.innerText ?? '')
+      const out = [read(el), ...byIds(el)]
+      // A button in a dialog acts for the dialog, as on click.
+      const dialog = el.closest('[role=dialog], [role=alertdialog], dialog')
+      if (dialog) out.push(dialog.getAttribute('aria-label') ?? '', ...byIds(dialog))
+      const form = (el as HTMLInputElement).form ?? el.closest('form')
+      if (form) {
+        out.push(form.getAttribute('aria-label') ?? '')
+        for (const id of (form.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean)) out.push(document.getElementById(id)?.innerText ?? '')
+        // form.elements includes buttons outside the <form> tied to it with form="id".
+        for (const b of [...form.elements].filter((x) => x.matches('button, input[type=submit], input[type=image]'))) {
+          const type = (b.getAttribute('type') ?? 'submit').toLowerCase()
+          if (type === 'submit' || type === 'image') out.push(read(b))
+        }
+      }
+      return out.filter(Boolean).map((x) => x.slice(0, 200))
+    })
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Run one action. Returns a reason when it was refused or could not run.
+ * `refuse` decides which labels are never clicked (fresh-eyes may submit and
+ * send, discovery may not); `fillValue` turns a typed value into what is
+ * actually typed (fresh-eyes substitutes its synthetic identity).
+ *
+ * The label is checked twice: as the model wrote it, and as the element the
+ * locator resolved to reads (a role and name match by substring, so "project"
+ * could land on "Delete project"). Enter and Space are checked against the
+ * focused element, since they press it.
+ */
+export async function perform(
+  page: Page,
+  a: ExploreAction,
+  refuse: (label: string) => boolean = isDestructiveLabel,
+  fillValue: (value: string) => string | null = (v) => v,
+): Promise<string | null> {
   try {
     switch (a.action) {
       case 'click': {
-        if (isDestructiveLabel(a.name)) return `refused: "${a.name}" reads as destructive`
-        await (await target(page, a.role, a.name)).click({ timeout: 5000 })
+        if (refuse(a.name)) return `refused: "${a.name}" reads as destructive`
+        const loc = await target(page, a.role, a.name)
+        if ((await loc.count().catch(() => 0)) === 0) return `could not run: no ${a.role} "${a.name.slice(0, 80)}" on the page`
+        const resolved = await accessibleLabel(loc)
+        if (resolved === null) return `refused: could not read what "${a.name.slice(0, 80)}" is`
+        if (refuse(resolved)) return `refused: "${resolved.slice(0, 80)}" reads as destructive`
+        await loc.click({ timeout: 5000 })
         break
       }
-      case 'fill':
-        await (await target(page, a.role, a.name)).fill(a.value, { timeout: 5000 })
+      case 'fill': {
+        const value = fillValue(a.value)
+        if (value === null) return REFUSED_VALUE
+        await (await target(page, a.role, a.name)).fill(value, { timeout: 5000 })
         break
+      }
       case 'select':
+        if (refuse(a.value)) return `refused: "${a.value.slice(0, 80)}" reads as destructive`
         await (await target(page, a.role, a.name)).selectOption({ label: a.value }, { timeout: 5000 })
         break
-      case 'press':
+      case 'press': {
+        if (a.key === 'Enter' || a.key === 'Space') {
+          const labels = await focusedLabels(page)
+          if (labels === null) return `refused: could not read what ${a.key} would press`
+          const bad = labels.find((l) => refuse(l))
+          if (bad) return `refused: "${bad.slice(0, 80)}" reads as destructive`
+        }
         await page.keyboard.press(a.key === 'Space' ? ' ' : a.key)
         break
+      }
       case 'back':
         await page.goBack({ timeout: 15_000 })
         break
@@ -235,7 +335,7 @@ async function perform(page: Page, a: ExploreAction): Promise<string | null> {
 }
 
 /** Listeners that turn what the page does into signals. */
-function watch(page: Page, origin: string, apiHosts: readonly string[]): { take(): Signal[] } {
+export function watch(page: Page, origin: string, apiHosts: readonly string[]): { take(): Signal[] } {
   let signals: Signal[] = []
   page.on('console', (m) => {
     if (m.type() !== 'error') return
@@ -261,7 +361,7 @@ function watch(page: Page, origin: string, apiHosts: readonly string[]): { take(
   }
 }
 
-/** @internal Exported for tests only. Pure: is the page still on the app's own origin (not about:blank, not another site)? */
+/** Pure: is the page still on the app's own origin (not about:blank, not another site)? */
 export function onSite(url: string, base: URL): boolean {
   try {
     return new URL(url).origin === base.origin
@@ -270,7 +370,7 @@ export function onSite(url: string, base: URL): boolean {
   }
 }
 
-async function blank(page: Page): Promise<Signal | null> {
+export async function blank(page: Page): Promise<Signal | null> {
   const text = (await page.locator('body').innerText({ timeout: 3000 }).catch(() => '')).trim()
   return text.length < 20 ? { kind: 'blank-screen', message: 'The page went blank', url: page.url() } : null
 }

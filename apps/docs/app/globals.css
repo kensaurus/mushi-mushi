@@ -1541,6 +1541,68 @@ html:has(.landing-cinematic-hero) {
   background: var(--mushi-paper-wash);
 }
 
+.landing-install-box__guide {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--mushi-vermillion);
+  text-decoration: none;
+}
+
+.landing-install-box__guide:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* The hero's one secondary link, under the install box: the sample diagnosis. */
+.landing-hero-sample {
+  margin: 1rem 0 0;
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+
+.landing-hero-sample a {
+  color: var(--mushi-vermillion);
+  text-decoration: none;
+}
+
+.landing-hero-sample a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* "More": the topics the landing no longer carries (ADR 0052), one quiet line. */
+.landing-more {
+  margin: 2.5rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.8;
+  color: var(--mushi-ink-muted);
+}
+
+.landing-more a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.landing-more a:hover {
+  color: var(--mushi-vermillion);
+}
+
+.landing-diagnosis-sample {
+  margin: 1.25rem 0 0;
+}
+
+.landing-diagnosis-sample a {
+  font-weight: 600;
+  color: var(--mushi-vermillion);
+  text-decoration: none;
+}
+
+.landing-diagnosis-sample a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 /* A prompt for an AI editor wraps and reads as prose; a shell command scrolls. */
 .landing-oneclick__cmd-row--prompt code {
   white-space: normal;
@@ -1752,14 +1814,14 @@ html:has(.landing-cinematic-hero) {
 
 @media (min-width: 1024px) {
   .landing-diagnosis-track {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1.25rem;
   }
 }
 
 /* Four explicit row tracks — glyph, step, name, prose. Each card is its own
  * grid (sharing tracks across siblings needs `subgrid`), but the glyph and
- * step label are fixed-height, so all four cards resolve the upper tracks
+ * step label are fixed-height, so every card resolves the upper tracks
  * identically and the names align. `1fr` on the prose track lets it absorb
  * the height difference; `height: 100%` squares the bottom edges.
  *
@@ -2037,6 +2099,336 @@ html:has(.landing-cinematic-hero) {
 
 .dark .landing-real-diagnosis__provenance {
   color: var(--mushi-dark-ink-muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * Sample diagnosis (<SampleDiagnosis />, /demo/diagnosis) — four numbered
+ * cards: the user's words, what the widget attached, the diagnosis, the fix
+ * prompt. One column; the captured card splits at 768px.
+ * ------------------------------------------------------------------------- */
+.sample-dx {
+  display: grid;
+  gap: 1rem;
+  margin: 1.5rem 0 2.5rem;
+  min-width: 0;
+}
+
+.sample-dx__badge {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--mushi-ink-muted);
+}
+
+.sample-dx__badge span {
+  display: inline-block;
+  margin-right: 0.45rem;
+  padding: 0.05rem 0.55rem;
+  border: 1px solid var(--mushi-vermillion);
+  border-radius: 999px;
+  font-family: var(--mushi-font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mushi-vermillion);
+}
+
+.sample-dx__card {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 1.15rem 1.25rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.6rem;
+  background: color-mix(in oklch, var(--mushi-paper) 92%, white);
+}
+
+.dark .sample-dx__card {
+  background: color-mix(in oklch, var(--mushi-dark-paper) 88%, black);
+}
+
+main .sample-dx .sample-dx__label {
+  margin: 0 !important;
+  padding: 0 !important;
+  font-family: var(--mushi-font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  text-transform: uppercase;
+  color: var(--mushi-vermillion);
+}
+
+.sample-dx__quote {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  font-style: italic;
+  color: var(--mushi-ink);
+}
+
+.sample-dx__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sample-dx__chips li {
+  font-family: var(--mushi-font-mono);
+  font-size: 0.75rem;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 999px;
+  color: var(--mushi-ink-muted);
+}
+
+.sample-dx__chips strong {
+  color: var(--mushi-vermillion);
+  font-weight: 600;
+}
+
+.sample-dx__captured {
+  display: grid;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .sample-dx__captured {
+    grid-template-columns: 15rem minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.sample-dx__phone-figure {
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+  justify-items: center;
+}
+
+.sample-dx__phone-figure figcaption {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--mushi-ink-muted);
+  text-align: center;
+  max-width: 15rem;
+}
+
+.sample-dx__phone {
+  width: 13rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 1.4rem;
+  padding: 0.6rem;
+  background: var(--mushi-paper);
+}
+
+.sample-dx__phone-bar {
+  font-family: var(--mushi-font-mono);
+  font-size: 0.62rem;
+  text-align: center;
+  color: var(--mushi-ink-muted);
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--mushi-rule);
+}
+
+.sample-dx__phone-body {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem 0.25rem 1rem;
+}
+
+.sample-dx__phone-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--mushi-ink);
+}
+
+.sample-dx__phone-field {
+  font-size: 0.75rem;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.35rem;
+  color: var(--mushi-ink-muted);
+}
+
+.sample-dx__phone-pay {
+  position: relative;
+  margin-top: 0.4rem;
+  padding: 0.55rem;
+  border-radius: 0.4rem;
+  background: var(--mushi-vermillion);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.sample-dx__phone-tap {
+  position: absolute;
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 2px solid var(--mushi-ink);
+  border-radius: 999px;
+  opacity: 0.55;
+}
+
+.sample-dx__phone-tap--1 { top: 0.15rem; left: 6%; }
+.sample-dx__phone-tap--2 { top: 0.6rem; left: 78%; }
+.sample-dx__phone-tap--3 { top: 0.2rem; left: 86%; }
+
+.sample-dx__trail {
+  min-width: 0;
+}
+
+main .sample-dx__trail h3 {
+  margin: 0.9rem 0 0.35rem;
+  font-size: 0.9rem;
+  color: var(--mushi-ink);
+}
+
+main .sample-dx__trail h3:first-child {
+  margin-top: 0;
+}
+
+.sample-dx__steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--mushi-ink-muted);
+}
+
+.sample-dx__steps li {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.sample-dx__when {
+  font-family: var(--mushi-font-mono);
+  font-size: 0.75rem;
+  color: var(--mushi-ink-muted);
+}
+
+.sample-dx__muted {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--mushi-ink-muted);
+}
+
+.sample-dx__title {
+  margin: 0;
+  font-family: var(--mushi-font-display);
+  font-size: 1.25rem;
+  line-height: 1.3;
+  font-weight: 600;
+  color: var(--mushi-ink);
+}
+
+.sample-dx__fields {
+  margin: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.sample-dx__fields dt {
+  margin-top: 0.55rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--mushi-ink);
+}
+
+.sample-dx__fields dd {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--mushi-ink-muted);
+  overflow-wrap: anywhere;
+}
+
+.sample-dx__lines,
+.sample-dx__repro {
+  margin: 0.35rem 0 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.sample-dx__lines {
+  list-style: disc;
+}
+
+.sample-dx__repro {
+  list-style: decimal;
+}
+
+.sample-dx code {
+  font-family: var(--mushi-font-mono);
+  font-size: 0.82em;
+  overflow-wrap: anywhere;
+}
+
+.sample-dx__actions {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.sample-dx__action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.sample-dx__action-row .landing-hero-cta {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.sample-dx__note {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--mushi-ink-muted);
+}
+
+.sample-dx__claude {
+  list-style: decimal;
+  margin: 0;
+  padding: 0.75rem 0.9rem 0.75rem 2rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.45rem;
+  font-size: 0.88rem;
+  color: var(--mushi-ink-muted);
+}
+
+.sample-dx__prompt summary {
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--mushi-ink);
+}
+
+.sample-dx__prompt pre {
+  margin: 0.6rem 0 0;
+  max-height: 24rem;
+  overflow: auto;
+  padding: 0.85rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.45rem;
+  font-family: var(--mushi-font-mono);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--mushi-ink);
+  background: var(--mushi-paper-wash);
 }
 
 /* ---------------------------------------------------------------------------
