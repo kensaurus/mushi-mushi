@@ -103,7 +103,7 @@ async function call(method: string, path: string, body?: unknown) {
 
 describe('false alarm close', () => {
   it('allows the reason only for a check Mushi filed, and tells nobody', () => {
-    for (const source of ['site_audit', 'site_watch', 'security_advisory']) {
+    for (const source of ['site_audit', 'site_watch', 'security_advisory', 'fresh_eyes', 'code_audit']) {
       expect(closedReasonAllowed('false_alarm', source)).toBe(true)
     }
     expect(closedReasonAllowed('false_alarm', 'widget')).toBe(false)
