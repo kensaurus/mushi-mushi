@@ -5,8 +5,10 @@
  *            - a private or local address is refused before anything is
  *              spent (no rate-limit claim, no row);
  *            - no Firecrawl key on Mushi's own project → 503, nothing spent;
- *            - one check per origin per 24 h: a repeat gets the same report
- *              id and spends no IP or daily budget;
+ *            - one check per address per 24 h: a repeat of the same address
+ *              (with or without https:// or a trailing slash) gets the same
+ *              report id and spends no IP or daily budget; another app under
+ *              the same origin (a different path) gets its own check;
  *            - 5 new checks per IP per hour (429), the IP taken from Cloudflare
  *              or the rightmost X-Forwarded-For hop, stored only as a hash;
  *            - 100 a day overall (429); a failed claim refuses (fail closed);
@@ -105,9 +107,11 @@ function installRpc(fake: FakeDb) {
       return { data: n, error: null }
     }
     if (fn === 'production_check_begin') {
-      // The SQL function's contract: the origin's fresh check, else a new row.
+      // The SQL function's contract: this address's fresh check (same origin,
+      // same URL with any trailing slash ignored), else a new row.
       const rows = fake.table('production_checks')
-      const fresh = rows.find((r) => r.origin === args.p_origin && (r.status === 'done' || r.status === 'running'))
+      const key = String(args.p_url).replace(/\/+$/, '')
+      const fresh = rows.find((r) => r.origin === args.p_origin && String(r.url).replace(/\/+$/, '') === key && (r.status === 'done' || r.status === 'running'))
       if (fresh) return { data: [{ check_id: fresh.id, cached: true }], error: null }
       const id = crypto.randomUUID()
       rows.push({ id, origin: args.p_origin, url: args.p_url, ip_hash: args.p_ip_hash, email: args.p_email, src: args.p_src, status: 'running', findings: [], summary: {}, created_at: new Date().toISOString() })
@@ -181,12 +185,24 @@ describe('POST /v1/public/production-check', () => {
     expect(state.events[0]).toMatchObject({ eventName: 'production_check_started', properties: { project_id: SELF, src: 'hn' } })
 
     const spent = claims().length
-    const again = await post({ url: 'acme.app' }, { 'cf-connecting-ip': '198.51.100.20' })
+    const again = await post({ url: 'acme.app/pricing/' }, { 'cf-connecting-ip': '198.51.100.20' })
     expect(again.status).toBe(200)
     const b = (await again.json()) as { data: { id: string; cached: boolean } }
     expect(b.data).toMatchObject({ id: a.data.id, cached: true })
     expect(claims()).toHaveLength(spent)
     expect(db.table('production_checks')).toHaveLength(1)
+  })
+
+  it("another app under the same origin gets its own check, not the first app's report", async () => {
+    // Apps hosted under a path share an origin (kensaur.us/glot-it,
+    // kensaur.us/yen-yen); handing one app's report to the other was wrong.
+    const first = (await (await post({ url: 'https://acme.app/glot-it' })).json()) as { data: { id: string } }
+    const other = await post({ url: 'https://acme.app/yen-yen' }, { 'cf-connecting-ip': '198.51.100.21' })
+    expect(other.status).toBe(202)
+    const o = (await other.json()) as { data: { id: string; cached: boolean } }
+    expect(o.data.cached).toBe(false)
+    expect(o.data.id).not.toBe(first.data.id)
+    expect(db.table('production_checks')).toHaveLength(2)
   })
 
   it(`allows ${CHECKS_PER_IP_PER_HOUR} new checks per IP per hour`, async () => {

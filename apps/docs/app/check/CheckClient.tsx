@@ -277,7 +277,7 @@ function Report({ report }: { report: CheckReport }) {
       <section className="space-y-3 rounded-md border border-mushi-rule p-5">
         <h2 className="text-lg font-semibold text-mushi-ink">This checked what a visitor sees today. Your users find the rest.</h2>
         <p className="text-sm text-mushi-ink-muted">
-          Mushi sits in your app, takes the bug reports your users send, explains each one in plain English and hands
+          Mushi Mushi sits in your app, takes the bug reports your users send, explains each one in plain English and hands
           Cursor, Claude Code or Lovable the fix.
         </p>
         <a
