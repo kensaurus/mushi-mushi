@@ -40,7 +40,8 @@
 --                                per project, _shared/funnel-steps.ts).
 --
 -- Additive: one new table, one new function, one re-declared function.
--- Idempotent: IF NOT EXISTS / OR REPLACE / ON CONFLICT DO NOTHING.
+-- Idempotent: IF NOT EXISTS / OR REPLACE / ON CONFLICT DO NOTHING. Two distinct
+-- dollar-quote tags on purpose ($rec$, $fn$): tests read the funnel body by tag.
 --
 -- Verify after applying:
 --   select relrowsecurity from pg_class where relname = 'project_api_key_origins';             -- t
@@ -99,7 +100,7 @@ LANGUAGE plpgsql
 VOLATILE
 SECURITY DEFINER
 SET search_path = public
-AS $fn$
+AS $rec$
 DECLARE
   v_project   uuid;
   v_first_prj boolean;
@@ -134,7 +135,7 @@ BEGIN
   -- v_inserted is NULL when the conflict's WHERE skipped the update.
   RETURN QUERY SELECT v_project, coalesce(v_inserted, false), coalesce(v_inserted, false) AND v_first_prj;
 END;
-$fn$;
+$rec$;
 
 COMMENT ON FUNCTION public.record_api_key_origin(uuid, text, text, integer) IS
   'Ingest heartbeat write into project_api_key_origins (auth.ts recordSdkHeartbeat). first_for_project drives the sdk_seen_localhost / sdk_seen_live funnel steps. Service role only.';
@@ -145,9 +146,12 @@ GRANT EXECUTE ON FUNCTION public.record_api_key_origin(uuid, text, text, integer
 -- ── 3. Backfill from last_seen_origin ───────────────────────────────────────
 -- The same rules as _shared/sdk-origin.ts for an origin that is set (the local
 -- pattern is report-origin.ts LOCAL_DEV_URL_PATTERN, POSIX ERE on purpose).
--- Keys whose latest check-in sent no Origin are left out: their kind depends
--- on headers that were never stored. first_seen_at is the stored last_seen_at,
--- the earliest time Mushi can prove.
+-- A key whose latest check-in sent no Origin counts as native when its stored
+-- user agent is a native HTTP stack (React Native apps send no Origin);
+-- otherwise it is left out (the SDK package header was never stored).
+-- first_seen_at is the stored last_seen_at, the earliest time Mushi can prove.
+-- Best effort: only one origin per key was ever stored, so a key whose live
+-- check-ins were overwritten by a later localhost one is not recovered.
 WITH src AS (
   SELECT k.id AS key_id,
          k.project_id,
@@ -189,7 +193,24 @@ SELECT key_id, project_id, origin_kind,
  WHERE origin_kind IS NOT NULL
 ON CONFLICT (key_id, origin_kind) DO NOTHING;
 
+-- Origin-less native check-ins (the pattern is sdk-origin.ts NATIVE_UA).
+INSERT INTO public.project_api_key_origins
+       (key_id, project_id, origin_kind, origin_sample, first_seen_at, last_seen_at, seen_count)
+SELECT k.id, k.project_id, 'native', NULL, k.last_seen_at, k.last_seen_at, 1
+  FROM public.project_api_keys k
+ WHERE k.project_id IS NOT NULL
+   AND k.last_seen_at IS NOT NULL
+   AND nullif(btrim(k.last_seen_origin), '') IS NULL
+   AND k.last_seen_user_agent ~* '(okhttp|cfnetwork|dalvik|expo|react-?native)'
+ON CONFLICT (key_id, origin_kind) DO NOTHING;
+
 -- ── 4. company_funnel_weekly(), re-declared ─────────────────────────────────
+-- Unchanged from 20260922000100 (idempotent): the partial index the loop
+-- columns read, kept next to the definition that uses it.
+create index if not exists product_events_loop_ts
+  on public.product_events (ts)
+  where event_name in ('loop_impression', 'loop_click');
+
 create or replace function public.company_funnel_weekly(
   p_weeks integer default 8,
   p_source text default null

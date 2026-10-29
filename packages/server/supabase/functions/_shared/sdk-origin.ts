@@ -50,7 +50,7 @@ export const MAX_ORIGIN_SAMPLE_LEN = 200
 const NATIVE_SCHEMES: ReadonlySet<string> = new Set(['capacitor:', 'ionic:', 'android-app:'])
 
 /** Native HTTP stacks and app shells (radar/operator-detectors.ts APP_CLIENT_UA, without the browser-ish ones). */
-const NATIVE_UA = /okhttp|cfnetwork|dalvik|expo|react-?native/i
+export const NATIVE_UA = /okhttp|cfnetwork|dalvik|expo|react-?native/i
 
 /** Every desktop and mobile browser sends a Mozilla/5.0 product token. */
 const BROWSER_UA = /mozilla\//i

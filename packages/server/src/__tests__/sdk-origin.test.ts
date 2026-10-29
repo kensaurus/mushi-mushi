@@ -20,6 +20,7 @@ import {
   funnelStepForOriginKind,
   LIVE_ORIGIN_KINDS,
   MAX_ORIGIN_SAMPLE_LEN,
+  NATIVE_UA,
   OriginWriteThrottle,
   sanitizeOriginSample,
   SDK_ORIGIN_KINDS,
@@ -219,5 +220,18 @@ describe('20261029120000_project_api_key_origins.sql', () => {
       .map((part) => part.trim().replace(/^'|'$/g, ''))
       .join('')
     expect(pattern).toBe(LOCAL_DEV_URL_PATTERN)
+  })
+
+  it('backfills origin-less native keys with the user-agent pattern the classifier uses', () => {
+    const m = /last_seen_user_agent ~\* '\(([^']+)\)'/.exec(sql)
+    expect(m).not.toBeNull()
+    expect(m![1]).toBe(NATIVE_UA.source)
+    expect(NATIVE_UA.flags).toContain('i')
+  })
+
+  it('gives the RPC its own dollar-quote tag, so tests that read the funnel body by $fn$ find it', () => {
+    const rpc = sql.slice(sql.indexOf('CREATE OR REPLACE FUNCTION public.record_api_key_origin('), sql.indexOf('COMMENT ON FUNCTION public.record_api_key_origin'))
+    expect(rpc).toContain('$rec$')
+    expect(rpc).not.toContain('$fn$')
   })
 })
