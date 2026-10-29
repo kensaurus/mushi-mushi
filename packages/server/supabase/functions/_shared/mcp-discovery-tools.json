@@ -560,7 +560,8 @@
           },
           "ingest": {},
           "dispatch": {},
-          "connection": {}
+          "connection": {},
+          "health": {}
         },
         "required": [
           "mode",
