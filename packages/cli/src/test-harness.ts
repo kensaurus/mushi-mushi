@@ -32,6 +32,8 @@ export interface ScriptedReply {
   body: unknown
   /** Answer with this content type and `body` as raw text (a download) instead of JSON. */
   contentType?: string
+  /** Extra response headers (for example `Retry-After`). */
+  headers?: Record<string, string>
 }
 
 export type Responder = (call: RecordedCall) => ScriptedReply
@@ -57,8 +59,14 @@ export function okReply(data: unknown, extra: Record<string, unknown> = {}): Scr
   return { body: { ok: true, data, ...extra } }
 }
 
-export function errorReply(status: number, code: string, message: string, extra: Record<string, unknown> = {}): ScriptedReply {
-  return { status, body: { ok: false, error: { code, message, ...extra } } }
+export function errorReply(
+  status: number,
+  code: string,
+  message: string,
+  extra: Record<string, unknown> = {},
+  headers?: Record<string, string>,
+): ScriptedReply {
+  return { status, body: { ok: false, error: { code, message, ...extra } }, headers }
 }
 
 export async function runCli(
@@ -91,7 +99,7 @@ export async function runCli(
     }
     return new Response(JSON.stringify(reply.body), {
       status: reply.status ?? 200,
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...reply.headers },
     })
   })
   const logSpy = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {

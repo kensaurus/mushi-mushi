@@ -66,6 +66,11 @@ export interface ApiError {
   ok: false
   error: { code: string; message: string; [detail: string]: unknown }
   httpStatus?: number
+  /**
+   * Seconds from a `Retry-After` delta (`30`). Absent when the header is
+   * missing or is an HTTP date. Callers that retry a 503 read this.
+   */
+  retryAfterSec?: number
 }
 export type ApiResult<T> = ApiOk<T> | ApiError
 
@@ -74,6 +79,20 @@ export type ApiResult<T> = ApiOk<T> | ApiError
  * `flatten()` object instead of `{ code, message }`. Coerce any of them so
  * `die()` never prints `undefined — undefined`.
  */
+/** Delta-seconds `Retry-After`. An HTTP-date or a non-numeric value is ignored. */
+function retryAfterSeconds(res: Response): number | undefined {
+  const raw = res.headers.get('Retry-After')?.trim() ?? ''
+  if (!/^\d+$/.test(raw)) return undefined
+  return Number(raw)
+}
+
+function apiError(res: Response, error: ApiError['error']): ApiError {
+  const retryAfterSec = retryAfterSeconds(res)
+  return retryAfterSec === undefined
+    ? { ok: false, httpStatus: res.status, error }
+    : { ok: false, httpStatus: res.status, error, retryAfterSec }
+}
+
 function normalizeApiError(error: unknown, httpStatus?: number): ApiError['error'] {
   const fallbackCode = httpStatus ? `HTTP_${httpStatus}` : 'API_ERROR'
   if (typeof error === 'string') return { code: fallbackCode, message: error }
@@ -205,20 +224,12 @@ export async function apiCall<T = unknown>(
       const nested = b['error'] as Record<string, unknown> | undefined
       const errCode = (nested?.['code'] as string) ?? (b['code'] as string) ?? `HTTP_${res.status}`
       const errMsg  = (nested?.['message'] as string) ?? (b['message'] as string) ?? `Request failed (${res.status})`
-      return {
-        ok: false,
-        httpStatus: res.status,
-        error: { code: errCode, message: errMsg },
-      }
+      return apiError(res, { code: errCode, message: errMsg })
     }
 
     // `{ ok: false, error: 'text' }` or a zod flatten() object: give it a code and message.
     if (typeof body === 'object' && body !== null && (body as { ok?: unknown }).ok === false) {
-      return {
-        ok: false,
-        httpStatus: res.status,
-        error: normalizeApiError((body as { error?: unknown }).error, res.status),
-      }
+      return apiError(res, normalizeApiError((body as { error?: unknown }).error, res.status))
     }
 
     return body as ApiResult<T>

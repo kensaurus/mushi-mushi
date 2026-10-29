@@ -219,7 +219,9 @@ mushi runner heartbeat             # send one every 2 minutes
 ```
 
 It reads the runner key from `MUSHI_RUNNER_KEY`, the systemd credential that
-`mushi runner add` sets up, or `/etc/mushi/runner.key`.
+`mushi runner add` sets up, or `/etc/mushi/runner.key`. A 503 (the rate limit
+could not be checked) is retried after the response's Retry-After (30 seconds
+when that header is missing, never more than 60), up to 3 times.
 
 It finds GitHub runner services in systemd (`actions.runner.*`, and the ones
 `mushi runner add` creates) and reads each one's memory use, memory limit and
@@ -236,8 +238,10 @@ This writes `job-started.sh` and `job-completed.sh` into `mushi-hooks/` and
 turns them on in the runner's `.env` with GitHub's
 [job hooks](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/run-scripts).
 They send the job's memory peak, memory limit, out-of-memory kills, swap and
-load. Restart the runner service afterwards. The hooks always exit 0, give up
-after 5 seconds, and never fail a job. The runner key sits in `mushi-hooks/key`
+load. Restart the runner service afterwards. The hooks always exit 0 and never
+fail a job. Each request gives up after 5 seconds. A 503 is retried after the
+response's Retry-After (30 seconds when that header is missing, never more
+than 60), up to 3 times. The runner key sits in `mushi-hooks/key`
 with mode 0600; it is not in the scripts and never on a command line.
 
 ### What is sent, and what never is

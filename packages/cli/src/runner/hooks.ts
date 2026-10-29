@@ -13,7 +13,9 @@
  *          - the API key is read from `mushi-hooks/key` (0600) and handed to
  *            curl on stdin as a header, so it is never in the script, never in
  *            a process argument and never echoed;
- *          - curl gives up after 5 seconds;
+ *          - each curl gives up after 5 seconds; a 503 is retried after
+ *            Retry-After (30s when the header is missing, at most 60s),
+ *            up to 3 times;
  *          - GitHub-provided values are reduced to safe characters before
  *            they go into the JSON body.
  *
@@ -37,6 +39,8 @@ export function hookScript(opts: { phase: 'started' | 'completed'; endpoint: str
 # Sends this job's memory peak, memory limit, out-of-memory kills, swap and
 # load to Mushi, so a job killed by the machine reads "test machine stopped",
 # not "your code failed". It never fails the job: it always exits 0.
+# A 503 (the rate limit could not be checked) is retried after Retry-After
+# (30 seconds when that header is missing, never more than 60), up to 3 times.
 # The API key is read from ./key (mode 0600); it is never printed.
 
 PHASE=${opts.phase}
@@ -76,9 +80,26 @@ mushi_hook() {
     "$(num_or_null "$PEAK")" "$(num_or_null "$MAX")" "$(num_or_null "$OOM")" "$(num_or_null "$SWAP")" "$(num_or_null "$LOAD")")
 
   # The key goes to curl on stdin as a header (printf is a shell builtin, so
-  # it never appears in a process list).
-  printf 'X-Mushi-Api-Key: %s\\n' "$(cat "$HOOK_DIR/key")" | curl -sS --max-time 5 -o /dev/null \\
-    -H @- -H 'Content-Type: application/json' -X POST --data "$BODY" "$ENDPOINT/v1/ingest/runner"
+  # it never appears in a process list). A 503 is retried; any other status,
+  # including a real cap (429), is final.
+  attempt=0
+  while [ "$attempt" -lt 3 ]; do
+    attempt=$((attempt + 1))
+    HDR=$(mktemp 2>/dev/null) || HDR="$HOOK_DIR/.hdr.$$"
+    CODE=$(printf 'X-Mushi-Api-Key: %s\\n' "$(cat "$HOOK_DIR/key")" | curl -sS --max-time 5 -o /dev/null -D "$HDR" -w '%{http_code}' \\
+      -H @- -H 'Content-Type: application/json' -X POST --data "$BODY" "$ENDPOINT/v1/ingest/runner") || CODE=000
+    WAIT=$(tr -d "$(printf '\\r')" < "$HDR" 2>/dev/null | tr 'A-Z' 'a-z' | sed -n 's/^retry-after:[[:space:]]*\\([0-9][0-9]*\\).*/\\1/p' | head -n 1)
+    rm -f "$HDR"
+    [ "$CODE" = "503" ] || return 0
+    [ "$attempt" -lt 3 ] || return 0
+    case "$WAIT" in
+      ''|*[!0-9]*) WAIT=30 ;;
+    esac
+    WAIT=$(printf '%s' "$WAIT" | sed 's/^0*//')
+    [ -n "$WAIT" ] || WAIT=0
+    if [ "$WAIT" -gt 60 ]; then WAIT=60; fi
+    sleep "$WAIT"
+  done
 }
 
 mushi_hook >/dev/null 2>&1 || true

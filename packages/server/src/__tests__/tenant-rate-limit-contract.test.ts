@@ -20,9 +20,13 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest'
 
 vi.mock('../../supabase/functions/_shared/logger.ts', () => {
-  const noop = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, child: () => noop }
+  const noop = { info: () => {}, warn: () => {}, error: vi.fn(), debug: () => {}, child: () => noop }
   return { log: noop }
 })
+
+vi.mock('../../supabase/functions/_shared/sentry.ts', () => ({
+  reportMessage: vi.fn(),
+}))
 
 type Tenant = typeof import('../../supabase/functions/_shared/tenant-observability.ts')
 let tenant: Tenant
@@ -118,5 +122,56 @@ describe('claimTenantRateLimit RPC contract', () => {
     expect(out.allowed).toBe(false)
     expect(out.unavailable).toBe(true)
     expect(out.retryAfterSec).toBe(30)
+  })
+
+  it('reports a Sentry event tagged with the scope when a fail-closed claim errors', async () => {
+    const { reportMessage } = await import('../../supabase/functions/_shared/sentry.ts')
+    const { log } = await import('../../supabase/functions/_shared/logger.ts')
+    vi.mocked(reportMessage).mockClear()
+    vi.mocked(log.error).mockClear()
+    const db = recordingDb({ message: 'canceling statement due to statement timeout' })
+    await tenant.claimTenantRateLimit(db as never, 'project:p1:runner_ingest', 60, 60)
+    expect(log.error).toHaveBeenCalledWith(
+      'scoped_rate_limit_claim failed — refusing request',
+      expect.objectContaining({ scopeKey: 'project:p1:runner_ingest', sentry: false }),
+    )
+    expect(reportMessage).toHaveBeenCalledTimes(1)
+    expect(reportMessage).toHaveBeenCalledWith(
+      'scoped_rate_limit_claim failed — refusing request',
+      'error',
+      {
+        tags: { scope: 'project:p1:runner_ingest', rate_limit_claim: 'refused' },
+        extra: { err: 'canceling statement due to statement timeout' },
+      },
+    )
+  })
+
+  it('reports a Sentry event tagged with the scope when a fail-open claim errors', async () => {
+    const { reportMessage } = await import('../../supabase/functions/_shared/sentry.ts')
+    vi.mocked(reportMessage).mockClear()
+    const db = recordingDb({ message: 'connection reset by peer' })
+    const out = await tenant.claimTenantRateLimit(db as never, 'project:p1:voice', 30, 60)
+    expect(out.allowed).toBe(true)
+    expect(reportMessage).toHaveBeenCalledWith(
+      'scoped_rate_limit_claim failed — allowing request',
+      'error',
+      {
+        tags: { scope: 'project:p1:voice', rate_limit_claim: 'allowed' },
+        extra: { err: 'connection reset by peer' },
+      },
+    )
+  })
+
+  it('does not report a Sentry event when the claim succeeds or the cap is hit', async () => {
+    const { reportMessage } = await import('../../supabase/functions/_shared/sentry.ts')
+    vi.mocked(reportMessage).mockClear()
+    await tenant.claimTenantRateLimit(recordingDb() as never, 'project:p1:runner_ingest', 60, 60)
+    await tenant.claimTenantRateLimit(
+      recordingDb({ message: 'rate_limit_exceeded: scope=probe_scope count=3 cap=2 window=00:01:00' }) as never,
+      'project:p1:runner_ingest',
+      60,
+      60,
+    )
+    expect(reportMessage).not.toHaveBeenCalled()
   })
 })
