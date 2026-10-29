@@ -88,6 +88,24 @@ export function allAppsSupportFor(pathname: string): AllAppsSupport {
   return 'single'
 }
 
+/**
+ * How many apps the header's "All apps" row should name.
+ *
+ * CI, Bugs and Pipeline combine every app the caller can open, including
+ * other teams. Apps (`/portfolio`) does not: its cards are this team, narrowed
+ * by the active group. Counting the cross-team directory there showed "9 apps
+ * combined" beside 8 cards.
+ */
+export function allAppsRowCount(
+  support: AllAppsSupport,
+  shownInTeam: number,
+  team: number,
+  accessible: number | null,
+): number {
+  if (support === 'account') return shownInTeam
+  return Math.max(team, accessible ?? 0)
+}
+
 // ── Store ───────────────────────────────────────────────────────────────────
 
 function readStoredAllApps(): boolean {

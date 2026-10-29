@@ -19,6 +19,11 @@ export function radarLabel(r: PortfolioRadarColumn, unreadable: readonly Portfol
   if (unreadable.includes('gate_runs') || unreadable.includes('findings')) {
     return { text: 'Risk checks: not fully read', tone: 'warnSubtle', hint: 'Not every risk check result could be read for this app, so its risks are unknown. This is not a pass. Refresh in a minute.' }
   }
+  // Open risks mean the check ran, even when the timestamp is missing.
+  // Otherwise the card says "Not checked yet" beside "5 risks to fix".
+  const openTotal = r.open.error + r.open.warn
+  if (r.open.error > 0) return { text: `${openTotal} risk${openTotal === 1 ? '' : 's'} to fix`, tone: 'dangerSubtle', hint: `${r.open.error} serious, ${r.open.warn} to look at. Open the App blueprint page for each fix.` }
+  if (r.open.warn > 0) return { text: `${openTotal} risk${openTotal === 1 ? '' : 's'} to look at`, tone: 'warnSubtle', hint: `${r.open.warn} to look at. Open the App blueprint page for each fix.` }
   if (r.status === 'never_run' || !r.checkedAt) {
     return { text: 'Risk checks: not run yet', tone: 'neutral', hint: 'The daily risk checks (expiring domain, store rules, privacy link, unused keys) have not run for this app yet. This is not a pass. Run them from its App blueprint page.' }
   }
@@ -29,9 +34,6 @@ export function radarLabel(r: PortfolioRadarColumn, unreadable: readonly Portfol
     const n = r.errored > 0 ? ` ${r.errored} check${r.errored === 1 ? '' : 's'} could not run.` : ''
     return { text: 'Risk checks failed', tone: 'danger', hint: `The last risk check could not finish.${n} This is not a pass. Run it again from the App blueprint page.` }
   }
-  const total = r.open.error + r.open.warn
-  if (r.open.error > 0) return { text: `${total} risk${total === 1 ? '' : 's'} to fix`, tone: 'dangerSubtle', hint: `${r.open.error} serious, ${r.open.warn} to look at. Open the App blueprint page for each fix.` }
-  if (r.open.warn > 0) return { text: `${total} risk${total === 1 ? '' : 's'} to look at`, tone: 'warnSubtle', hint: `${r.open.warn} to look at. Open the App blueprint page for each fix.` }
   const extra = r.unchecked > 0 ? ` ${r.unchecked} check${r.unchecked === 1 ? '' : 's'} could not decide and ${r.unchecked === 1 ? 'is' : 'are'} not counted as passing.` : ''
   return { text: 'No risks found', tone: 'okSubtle', hint: `The last risk check found nothing to fix.${extra}` }
 }
@@ -280,6 +282,17 @@ export function appUrgency(card: PortfolioCard): AppUrgency {
       chip: { text: `${drift.label} to fix`, tone: 'warnSubtle' },
       short: `${inSentence(drift.label)} to fix`,
       next: { text: `${drift.label}: ${drift.reason}`, to: pageFor(drift), more: others(1) },
+    }
+  }
+  const openRisks = card.unreadable.includes('gate_runs') || card.unreadable.includes('findings')
+    ? 0
+    : card.radar.open.error + card.radar.open.warn
+  if (openRisks > 0) {
+    return {
+      level: 'fix',
+      chip: { text: 'Needs attention', tone: 'warnSubtle' },
+      short: `${openRisks} open ${openRisks === 1 ? 'risk' : 'risks'}`,
+      next: { text: openRisks === 1 ? 'Fix the open risk on the App blueprint page' : `Fix ${openRisks} risks on the App blueprint page`, to: '/recipe', more: others(0) },
     }
   }
   const behind = card.unreadable.includes('sdk') ? undefined : card.sdk.find((e) => e.status === 'behind')

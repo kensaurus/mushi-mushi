@@ -25,10 +25,23 @@ const setup = vi.hoisted(() => ({
   value: null as unknown,
 }))
 
+const pageData = vi.hoisted(() => ({
+  directory: null as {
+    teams: Array<{ id: string; name: string; role: string | null; isPersonal: boolean }>
+    projects: Array<{ id: string; name: string; organizationId: string | null }>
+  } | null,
+}))
+
 vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => setup.value }))
 vi.mock('../lib/useProjectSnapshots', () => ({ useProjectSnapshots: () => ({ byId: new Map(), projects: [] }) }))
 vi.mock('../lib/usePageData', () => ({
-  usePageData: () => ({ data: null, loading: false, error: null, isValidating: false, reload: () => {} }),
+  usePageData: (path: string | null) => ({
+    data: path === '/v1/admin/workspace/projects' ? pageData.directory : null,
+    loading: false,
+    error: null,
+    isValidating: false,
+    reload: () => {},
+  }),
 }))
 vi.mock('../lib/useCreateProject', () => ({ useCreateProject: () => ({ create: vi.fn(), creating: false, error: null }) }))
 vi.mock('../lib/projectGroups', () => ({
@@ -62,6 +75,7 @@ function LocationProbe() {
 
 beforeEach(() => {
   window.localStorage.clear()
+  pageData.directory = null
   setup.value = {
     loading: false,
     error: null,
@@ -192,6 +206,42 @@ describe('ProjectSwitcher — All apps', () => {
     // The choice itself is untouched — it still applies on pages that combine.
     expect(params().get('apps')).toBe('all')
     expect(getStoredProjectScopeMode()).toBe('all')
+  })
+
+  it('on Apps, counts this team and still lists an app that lives in another team', async () => {
+    const org = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+    window.localStorage.setItem('mushi:active_org_id', org)
+    pageData.directory = {
+      teams: [
+        { id: org, name: 'KENJI', role: 'owner', isPersonal: false },
+        { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: 'Other', role: 'owner', isPersonal: false },
+      ],
+      projects: [
+        { id: PROJECT_A, name: 'glot.it', organizationId: org },
+        { id: PROJECT_B, name: 'yen-yen', organizationId: org },
+        { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', name: 'mushi-mushi', organizationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+      ],
+    }
+    await render(`/portfolio?project=${PROJECT_A}`)
+    await click(chip())
+    const row = allRow()!
+    expect(row.textContent).toContain('2 apps in this team')
+    expect(row.textContent).not.toContain('3 apps')
+    expect(host.textContent).toContain('mushi-mushi')
+  })
+
+  it('on a combined page, counts every app the caller can open', async () => {
+    pageData.directory = {
+      teams: [{ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: 'Other', role: 'owner', isPersonal: false }],
+      projects: [
+        { id: PROJECT_A, name: 'glot.it', organizationId: null },
+        { id: PROJECT_B, name: 'yen-yen', organizationId: null },
+        { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', name: 'mushi-mushi', organizationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+      ],
+    }
+    await render(`/ci?project=${PROJECT_A}`)
+    await click(chip())
+    expect(allRow()!.textContent).toContain('3 apps combined')
   })
 
   it('keeps All apps in the header on account-wide pages', async () => {

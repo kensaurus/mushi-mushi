@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   PROJECT_SCOPE_EVENT,
   PROJECT_SCOPE_STORAGE_KEY,
+  allAppsRowCount,
   allAppsSupportFor,
   combinedFetchScope,
   getStoredProjectScopeMode,
@@ -87,6 +88,17 @@ describe('allAppsSupportFor', () => {
     expect(allAppsSupportFor('/reports/123')).toBe('single')
     expect(allAppsSupportFor('/fixes')).toBe('single')
     expect(allAppsSupportFor('/cinema')).toBe('single')
+  })
+})
+
+describe('allAppsRowCount', () => {
+  it('counts this team on Apps, and every reachable app on a combined page', () => {
+    // 8 cards in this team, mushi-mushi only in the cross-team directory.
+    expect(allAppsRowCount('account', 8, 8, 9)).toBe(8)
+    expect(allAppsRowCount('account', 3, 8, 9)).toBe(3)
+    expect(allAppsRowCount('combined', 8, 8, 9)).toBe(9)
+    expect(allAppsRowCount('combined', 8, 8, null)).toBe(8)
+    expect(allAppsRowCount('single', 8, 8, 9)).toBe(9)
   })
 })
 
