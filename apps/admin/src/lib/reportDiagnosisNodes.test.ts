@@ -66,8 +66,10 @@ describe('fixNodes: the next step', () => {
     expect(step?.why).toContain('Run them on the branch, or re-run the local lane.')
     expect(step?.why).toContain('bugfix/MUSHI-1-local-cursor')
     expect(`${step?.title} ${step?.why}`).not.toMatch(/weak spot|retry/i)
-    const attempt = fixNodes(report('classified', failedAttempt({ agent: 'mcp', error: 'git push failed: hook steps failed: test' })), true).find((n) => n.id === 'attempt')
+    const attempt = fixNodes(report('classified', failedAttempt({ agent: 'local-cursor', error: 'git push failed: hook steps failed: test' })), true).find((n) => n.id === 'attempt')
     expect(attempt?.detail).toBe('local Cursor')
+    const mcp = fixNodes(report('classified', failedAttempt({ agent: 'mcp', error: 'git push failed: hook steps failed: test' })), true).find((n) => n.id === 'attempt')
+    expect(mcp?.detail).toBe('MCP')
     expect(attempt?.needsLook).toBe(false)
   })
 

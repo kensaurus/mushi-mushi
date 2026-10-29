@@ -156,6 +156,28 @@ describe('ReportTriageBar Repo select', () => {
   })
 })
 
+describe('ReportTriageBar push-check failure', () => {
+  it('does not offer Dispatch fix or a retry for a refused pre-push hook', async () => {
+    const onDispatch = vi.fn()
+    const report = {
+      ...REPORT,
+      fix_attempts: [{
+        id: 'f1',
+        status: 'failed',
+        error: 'Pre-push checks failed: test.unit. The fix is committed on bugfix/x (abcdef1); nothing was pushed.',
+      }],
+    } as unknown as ReportDetail
+    await render(choice([FRONTEND], 'repo-front'), onDispatch, { report })
+    expect(buttonByText('Dispatch fix')).toBeUndefined()
+    expect(buttonByText('Failed — retry')).toBeUndefined()
+    const btn = buttonByText('Cloud dispatch anyway')
+    expect(btn).toBeTruthy()
+    expect(btn!.title).toMatch(/paid cloud run/i)
+    expect(btn!.title).toMatch(/checks failed/i)
+    expect(onDispatch).not.toHaveBeenCalled()
+  })
+})
+
 describe('ReportTriageBar dispatch gate (#19)', () => {
   it('is disabled with the reason when preflight fails, and never dispatches', async () => {
     const onDispatch = vi.fn()

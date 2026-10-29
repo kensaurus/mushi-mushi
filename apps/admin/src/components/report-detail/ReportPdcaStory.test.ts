@@ -83,15 +83,23 @@ describe('ReportPdcaStory plan stage', () => {
     expect(nodes.act.headline).not.toContain('\\u001b')
   })
 
-  it('a local Cursor run is not labelled mcp', () => {
-    const nodes = buildStoryNodes(
+  it('a local Cursor run is labelled local Cursor, and an MCP submission is MCP', () => {
+    const local = buildStoryNodes(
+      report({
+        status: 'fixing',
+        fix_attempts: [{ id: 'f1', status: 'running', agent: 'local-cursor' }] as ReportDetail['fix_attempts'],
+      }),
+      idle,
+    )
+    expect(local.do.details).toContain('via local Cursor')
+    const mcp = buildStoryNodes(
       report({
         status: 'fixing',
         fix_attempts: [{ id: 'f1', status: 'running', agent: 'mcp' }] as ReportDetail['fix_attempts'],
       }),
       idle,
     )
-    expect(nodes.do.details).toContain('via local Cursor')
-    expect(nodes.do.details?.join(' ')).not.toContain('mcp')
+    expect(mcp.do.details).toContain('via MCP')
+    expect(mcp.do.details?.join(' ')).not.toContain('local Cursor')
   })
 })

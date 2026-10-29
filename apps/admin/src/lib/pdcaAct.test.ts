@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ACT_BLOCKER_COPY, ACT_BLOCKER_STAMP, actBlocker, agentFlaggedFix, fixFailureBucket } from './pdcaAct'
+import { ACT_BLOCKER_COPY, ACT_BLOCKER_STAMP, actBlocker, agentFlaggedFix, displayAgent, fixFailureBucket, pushCheckNames } from './pdcaAct'
 import { STAMP_VISUAL } from './pdcaStamp'
 import { getMergeBlockerReason, pickPrimaryFixAttempt } from './mergeFix'
 
@@ -68,6 +68,23 @@ describe('a test machine that stopped (ADR 0033)', () => {
 
   it('a non-infra verdict keeps the plain CI reading', () => {
     expect(actBlocker({ ...OOM, ci_infra: { infra: false, kind: 'code_failure' }, check_run_conclusion: 'failure' })).toBe('ci_failed')
+  })
+})
+
+describe('displayAgent', () => {
+  it('labels only a mushi work run as local Cursor', () => {
+    expect(displayAgent('local-cursor')).toBe('local Cursor')
+    expect(displayAgent('mcp')).toBe('MCP')
+    expect(displayAgent('cursor_cloud')).toBe('cursor_cloud')
+    expect(displayAgent(null)).toBe('')
+  })
+})
+
+describe('pushCheckNames', () => {
+  it('keeps a dot inside a check name and stops at the next sentence', () => {
+    expect(pushCheckNames('Pre-push checks failed: test.unit, knip. The fix is committed on b (abc); nothing was pushed.')).toBe('test.unit, knip')
+    expect(pushCheckNames('hook steps failed: test.unit. test.unit: FAIL a.test.ts')).toBe('test.unit')
+    expect(pushCheckNames('Pre-push checks failed: test. The fix is committed on b (abc); nothing was pushed.')).toBe('test')
   })
 })
 

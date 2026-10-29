@@ -13,7 +13,7 @@
  * reports already fixed by merged PRs 138–141.
  */
 
-import { stripAnsi } from '../components/report-detail/reportLogFormat'
+import { stripAnsi } from './stripAnsi'
 import { humanizeFixError } from './humanizeFixError'
 import { isFixMerged } from './mergeFix'
 import { fixFailureBucket } from './pdcaAct'

@@ -22,7 +22,7 @@
 
 import { RESOLVED_REPORT_STATUSES } from './fix-report-truth.ts'
 import { ciHeadState, followupTrigger, FOLLOWUP_REASONS, type CiHeadState, type CiJobForRepair, type PriorFollowup } from './review-followup.ts'
-import { localHandoff } from './local-followup.ts'
+import { LOCAL_FIX_AGENTS, localHandoff } from './local-followup.ts'
 import { parseCheckNameList } from './merge-queue.ts'
 import { ROOT_CAUSE_OF_GROUP } from './health-checks.ts'
 
@@ -861,9 +861,10 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
 
 /**
  * Agents that only the server dispatches. Everything else that opens a PR is
- * a person's own lane (`mcp`: `mushi work`, the CLI and the editor).
+ * a person's own lane (`local-cursor`: `mushi work`; `mcp`: submit_fix_result
+ * and older local runs).
  */
-export const LOCAL_AGENTS: ReadonlySet<string> = new Set(['mcp', 'local'])
+export const LOCAL_AGENTS: ReadonlySet<string> = new Set(['local', ...LOCAL_FIX_AGENTS])
 
 export interface AgentKeyRow {
   project_id: string | null

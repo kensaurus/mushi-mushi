@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  LOCAL_AGENTS,
   buildDispatchers,
   buildPipeline,
   dispatcherGroup,
@@ -405,6 +406,17 @@ describe('who opens fixes', () => {
       { project_id: P, agent: 'cursor_cloud', status: 'completed', created_at: '2026-10-24T01:00:00Z' },
     ],
   }
+
+  it('counts a local-cursor run as a local lane, and keeps mcp local', () => {
+    expect(LOCAL_AGENTS.has('local-cursor')).toBe(true)
+    expect(LOCAL_AGENTS.has('mcp')).toBe(true)
+    const [lets] = buildDispatchers({
+      ...base,
+      attempts: [{ project_id: P, agent: 'local-cursor', status: 'running', created_at: '2026-10-26T09:00:00Z' }],
+    })
+    expect(lets.local.running).toBe(1)
+    expect(lets.server.dispatches48h).toBe(0)
+  })
 
   it('auto-fix on with only a disabled universal key: no agent key, 0 dispatches, local lane still runs', () => {
     const [lets, glot, quiet] = buildDispatchers(base)

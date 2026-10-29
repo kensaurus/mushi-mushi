@@ -29,6 +29,8 @@ import {
   rankCandidates,
   stableKey,
   submitPayload,
+  registerFixBody,
+  failedAttemptError,
   WORK_AGENT_KIND,
   WORK_STOPPED_PREFIX,
   missingWriteScope,
@@ -144,7 +146,10 @@ describe('mushi work: branch, prompt and PR', () => {
 describe('mushi work: submitting to Mushi', () => {
   it('sends submit_fix_result’s shape for a PR, and a failed row with the verdict otherwise', () => {
     const now = new Date('2026-10-24T03:00:00Z')
-    expect(WORK_AGENT_KIND).toBe('mcp')
+    expect(WORK_AGENT_KIND).toBe('local-cursor')
+    expect(registerFixBody(R1)).toEqual({ reportId: R1, agent: 'local-cursor' })
+    expect(registerFixBody(R1, '  grok-4.7  ')).toEqual({ reportId: R1, agent: 'local-cursor', llm_model: 'grok-4.7' })
+    expect(registerFixBody(R1, 'm'.repeat(250)).llm_model).toHaveLength(200)
     expect(submitPayload({ branch: 'b', prUrl: 'https://github.com/o/r/pull/5', commitSha: 'abc', filesChanged: ['x.ts'], linesChanged: 4, summary: 'Rounded ticks.' }, now)).toEqual({
       status: 'completed',
       branch: 'b',
@@ -217,6 +222,7 @@ describe('inLocalCooldown', () => {
 
   it('skips a report whose local run ended without a PR this week', () => {
     expect(inLocalCooldown([failed], now)).toBe(true)
+    expect(inLocalCooldown([{ ...failed, agent: 'local-cursor' }], now)).toBe(true)
   })
 
   it('retries after 7 days, after a cloud failure, or when the run opened a PR', () => {
@@ -409,6 +415,14 @@ describe('local workers (ADR 0048): infra failures never count against a report'
 
   it('a run closed as an infra failure starts no cooldown', () => {
     expect(inLocalCooldown([{ ...failed, error: `${WORK_INFRA_PREFIX} git fetch failed: Permission denied` }], now)).toBe(false)
+    const hook = pushHookAttemptError('git push failed: hook steps failed: test. test: FAIL slow.test.ts timed out', 'bugfix/x', 'abc1234def')
+    expect(classifyFailure('git push failed: hook steps failed: test. test: FAIL slow.test.ts timed out', 'push')).toBe('infra')
+    const stored = failedAttemptError('infra', 'git push failed: hook steps failed: test. test: FAIL slow.test.ts timed out', hook)
+    expect(stored.startsWith(`${WORK_INFRA_PREFIX} `)).toBe(true)
+    expect(stored).toContain('Pre-push checks failed: test')
+    expect(stored).toContain('test: FAIL slow.test.ts timed out')
+    expect(inLocalCooldown([{ ...failed, agent: 'local-cursor', error: stored }], now)).toBe(false)
+    expect(failedAttemptError('code', 'git push failed: hook steps failed: test', hook)!.startsWith(WORK_INFRA_PREFIX)).toBe(false)
     expect(inLocalCooldown([{ ...failed, error: 'mushi work: git commit failed: 1 test failed' }], now)).toBe(true)
   })
 
@@ -505,7 +519,7 @@ describe('a push the repo hook refuses', () => {
       expect(failed['branch']).toMatch(/^bugfix\/MUSHI-/)
       expect(failed['commit_sha']).toMatch(/^[0-9a-f]{40}$/)
       expect(failed['error']).toBe(
-        `Pre-push checks failed: test. The fix is committed on ${failed['branch']} (${failed['commit_sha']}); nothing was pushed.`,
+        `Pre-push checks failed: test. The fix is committed on ${failed['branch']} (${failed['commit_sha']}); nothing was pushed. test: FAIL a.test.ts > breaks`,
       )
       expect(String(failed['error'])).not.toContain('git push failed')
     } finally {
@@ -634,9 +648,14 @@ describe('pushHookAttemptError', () => {
   const branch = 'bugfix/MUSHI-1-local-cursor'
   const sha = 'abc1234def5678901234567890abcdef12345678'
 
-  it('names the checks and the commit that was not pushed', () => {
-    expect(pushHookAttemptError('git push failed: hook steps failed: test, knip. test: FAIL a.test.ts', branch, sha))
-      .toBe(`Pre-push checks failed: test, knip. The fix is committed on ${branch} (${sha}); nothing was pushed.`)
+  it('names the checks, the first failing step, and the commit that was not pushed', () => {
+    expect(pushHookAttemptError('git push failed: hook steps failed: test, knip. test: FAIL a.test.ts | error: failed to push some refs / knip: Unused exports', branch, sha))
+      .toBe(`Pre-push checks failed: test, knip. The fix is committed on ${branch} (${sha}); nothing was pushed. test: FAIL a.test.ts`)
+  })
+
+  it('keeps a check name that contains a dot', () => {
+    expect(pushHookAttemptError('git push failed: hook steps failed: test.unit. test.unit: FAIL a.test.ts', branch, sha))
+      .toBe(`Pre-push checks failed: test.unit. The fix is committed on ${branch} (${sha}); nothing was pushed. test.unit: FAIL a.test.ts`)
   })
 
   it('is null for a remote rejection and for a commit hook', () => {

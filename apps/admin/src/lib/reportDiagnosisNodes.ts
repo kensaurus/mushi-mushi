@@ -8,7 +8,7 @@ import { reportDiagnosisView } from './reportDiagnosis'
 import { humanizeFixError } from './humanizeFixError'
 import { CLOSE_REASONS } from './closeReasons'
 import { displayAgent, isRepoPushCheckFailure, PUSH_CHECK_TITLE, pushCheckAdvice, verdictFromError } from './pdcaAct'
-import { stripAnsi } from '../components/report-detail/reportLogFormat'
+import { stripAnsi } from './stripAnsi'
 import { DIAGNOSIS_ANCHORS, NEEDS_LOOK_BELOW, headline, type DiagnosisNode } from './reportDiagnosisModel'
 import type { ReportDetail, ReportFixAttempt } from '../components/report-detail/types'
 

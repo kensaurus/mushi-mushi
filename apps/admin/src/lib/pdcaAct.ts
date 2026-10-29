@@ -93,12 +93,14 @@ export function verdictFromError(error: string | null | undefined): string | nul
 }
 
 /**
- * Local `mushi work` runs are stored as agent `mcp` (the same value as
- * submit_fix_result). The report page says what the run was.
+ * `mushi work` stores `local-cursor`. `mcp` is what submit_fix_result stores
+ * for other tools, so it is not relabelled as a local Cursor run.
  */
 export function displayAgent(agent: string | null | undefined): string {
   if (!agent) return ''
-  return agent === 'mcp' ? 'local Cursor' : agent
+  if (agent === 'local-cursor') return 'local Cursor'
+  if (agent === 'mcp') return 'MCP'
+  return agent
 }
 
 const NOT_A_PUSH_HOOK = /non-fast-forward|\[rejected\]|authentication failed|permission denied/i
@@ -116,9 +118,13 @@ export function isRepoPushCheckFailure(error: string | null | undefined): boolea
   return /git push failed:/i.test(text) && /hook steps failed:/i.test(text)
 }
 
-/** Failed step names from `hook steps failed: test, knip` or `Pre-push checks failed: test`. */
+/**
+ * Failed step names from `hook steps failed: test, knip` or
+ * `Pre-push checks failed: test.unit`. The name runs until ". " (the next
+ * sentence) so a dot inside the name is kept.
+ */
 export function pushCheckNames(error: string | null | undefined): string | null {
-  const names = /(?:pre-push checks failed|hook steps failed):\s*([^.]*)/i.exec(error ?? '')?.[1]?.trim()
+  const names = /(?:pre-push checks failed|hook steps failed):\s*(.*?)(?:\. (?=\S)|$)/i.exec(error ?? '')?.[1]?.replace(/\.+$/, '').trim()
   return names || null
 }
 

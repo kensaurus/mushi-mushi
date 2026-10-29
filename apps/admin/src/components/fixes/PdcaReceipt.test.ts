@@ -20,9 +20,12 @@ const fix = (overrides: Partial<FixAttempt>): FixAttempt => ({
 
 describe('buildReceipts', () => {
   it('labels a local Cursor run and strips a double-encoded color from the error', () => {
-    const receipts = buildReceipts(fix({}), [])
+    const receipts = buildReceipts(fix({ agent: 'local-cursor' }), [])
     expect(receipts.plan.proof).toContain('local Cursor')
     expect(receipts.plan.proof).not.toContain('mcp')
+    const mcp = buildReceipts(fix({ agent: 'mcp' }), [])
+    expect(mcp.plan.proof).toContain('MCP')
+    expect(mcp.plan.proof).not.toContain('local Cursor')
     expect(receipts.do.proof).toContain('hook steps failed: test')
     expect(receipts.do.proof).not.toContain('\\u001b')
     expect(receipts.act.proof).not.toContain('\\u001b')

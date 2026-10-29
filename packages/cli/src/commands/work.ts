@@ -30,8 +30,14 @@ import { MushiCliError } from '../errors.js'
 import type { WhoamiData } from '../cli-types.js'
 import { interruptedBy, onInterrupt } from '../signals.js'
 
-/** @internal Exported for tests only. The fix_attempts.agent value for a fix made outside Mushi's cloud agents (as submit_fix_result). */
-export const WORK_AGENT_KIND = 'mcp'
+/**
+ * @internal Exported for tests only. `mushi work` stores this on
+ * fix_attempts.agent. `submit_fix_result` still stores `mcp`, so the report
+ * page can tell a local Cursor run from any other MCP tool.
+ */
+export const WORK_AGENT_KIND = 'local-cursor'
+/** Cooldown applies to this run and to older `mcp` rows (mushi work before this value, and submit_fix_result). */
+const LOCAL_COOLDOWN_AGENTS = new Set<string>(['mcp', WORK_AGENT_KIND])
 const WORK_AGENT_TIMEOUT_MS = 30 * 60_000
 const PROMPT_MAX_CHARS = 40_000
 const SEVERITY_WEIGHT: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 }
@@ -91,7 +97,7 @@ export const WORK_INFRA_PREFIX = 'mushi work infra:'
  */
 export function inLocalCooldown(attempts: readonly AttemptSummary[], nowMs = Date.now()): boolean {
   return attempts.some((a) => {
-    if (a.agent !== WORK_AGENT_KIND || a.status !== 'failed' || a.pr_url || !a.created_at) return false
+    if (!a.agent || !LOCAL_COOLDOWN_AGENTS.has(a.agent) || a.status !== 'failed' || a.pr_url || !a.created_at) return false
     if (a.error?.startsWith(WORK_STOPPED_PREFIX) || a.error?.startsWith(REAPED_PREFIX) || a.error?.startsWith(WORK_INFRA_PREFIX)) return false
     const at = Date.parse(a.created_at)
     return Number.isFinite(at) && nowMs - at < LOCAL_RETRY_COOLDOWN_MS
@@ -310,6 +316,30 @@ interface SubmitInput {
   linesChanged: number
   summary: string
   noPr?: { verdict: string | null; reason: string }
+}
+
+/**
+ * @internal Exported for tests only. POST /v1/admin/fixes body: the distinct
+ * agent, and the model the run actually used when one was chosen.
+ */
+export function registerFixBody(reportId: string, model?: string | null): { reportId: string; agent: string; llm_model?: string } {
+  const body: { reportId: string; agent: string; llm_model?: string } = { reportId, agent: WORK_AGENT_KIND }
+  const name = model?.trim()
+  if (name) body.llm_model = name.slice(0, 200)
+  return body
+}
+
+/**
+ * @internal Exported for tests only. fix_attempts.error for a closed run.
+ * A refused push replaces the raw git line, and an infra failure keeps the
+ * prefix that starts no cooldown.
+ */
+export function failedAttemptError(failureKind: 'infra' | 'code', reason: string, hookError: string | null): string {
+  if (hookError) {
+    const text = failureKind === 'infra' ? `${WORK_INFRA_PREFIX} ${hookError}` : hookError
+    return text.slice(0, 1000)
+  }
+  return `${failureKind === 'infra' ? WORK_INFRA_PREFIX : 'mushi work:'} ${reason}`.slice(0, 1000)
 }
 
 /** @internal Exported for tests only. The PATCH /v1/admin/fixes/:id body (submit_fix_result's shape; a no-PR run is closed as failed with its verdict). */
@@ -773,7 +803,7 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
     const created = await api<{ fixId: string }>('/v1/admin/fixes', {
       method: 'POST',
       headers: { 'Idempotency-Key': stableKey(detail.id, branch, new Date().toISOString()) },
-      body: JSON.stringify({ reportId: detail.id, agent: WORK_AGENT_KIND }),
+      body: JSON.stringify(registerFixBody(detail.id, o.model)),
     })
     fixId = created.fixId
     // The row reads as in flight already while 'pending'; 'running' says the
@@ -865,7 +895,7 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
       status: 'failed',
       branch,
       ...(hookError && headSha ? { commit_sha: headSha } : {}),
-      error: (hookError ?? `${failureKind === 'infra' ? WORK_INFRA_PREFIX : 'mushi work:'} ${reason}`).slice(0, 1000),
+      error: failedAttemptError(failureKind, reason, hookError),
       completed_at: new Date().toISOString(),
     }).catch((patchErr: unknown) =>
       o.log(`  fix ${fixId}: not marked failed (${patchErr instanceof Error ? patchErr.message : String(patchErr)})`),
@@ -1030,11 +1060,23 @@ export function isHookRejection(message: string): boolean {
  * that is already on the branch. A commit-hook failure is not this (nothing
  * was committed).
  */
+/** Names stop at ". " so `test.unit` stays whole. The first step's detail follows that sentence. */
+function hookStepNames(message: string): { names: string | null; detail: string | null } {
+  const m = /hook steps failed:\s*(.*?)(?:\. (?=\S)|$)/i.exec(message)
+  if (!m) return { names: null, detail: null }
+  const names = m[1]?.replace(/\.+$/, '').trim() || null
+  const rest = m[0].endsWith('. ') ? message.slice(m.index + m[0].length).trim() : ''
+  // First failed step, then its first error line (` | ` joins that step's lines).
+  const detail = rest.split(/\s\/\s/)[0]?.split(/\s\|\s/)[0]?.trim() || null
+  return { names, detail }
+}
+
 export function pushHookAttemptError(message: string, branch: string, sha: string): string | null {
   if (!isHookRejection(message) || !/git push failed:|pre-push hook|husky - pre-push/i.test(message)) return null
-  const names = /hook steps failed:\s*([^.]*)/i.exec(message)?.[1]?.trim()
+  const { names, detail } = hookStepNames(message)
   const checks = names ? `: ${names}` : ''
-  return `Pre-push checks failed${checks}. The fix is committed on ${branch} (${sha}); nothing was pushed.`
+  const sentence = `Pre-push checks failed${checks}. The fix is committed on ${branch} (${sha}); nothing was pushed.`
+  return detail ? `${sentence} ${detail}` : sentence
 }
 
 /**

@@ -161,6 +161,7 @@ describe('which reports a lane may take', () => {
 
   it('a local no-PR run starts a 7-day cooldown, an infra failure does not', () => {
     expect(inLocalCooldown([a({})], NOW)).toBe(true)
+    expect(inLocalCooldown([a({ agent: 'local-cursor' })], NOW)).toBe(true)
     expect(inLocalCooldown([a({ error: `${WORK_INFRA_PREFIX} git fetch: Permission denied` })], NOW)).toBe(false)
     expect(inLocalCooldown([a({ error: 'mushi work stopped by SIGTERM' })], NOW)).toBe(false)
     expect(inLocalCooldown([a({ created_at: '2026-10-10T12:00:00Z' })], NOW)).toBe(false)
