@@ -83,7 +83,9 @@ describe('DiagnosisFixHero', () => {
   it('is honest when only the stage-1 classifier ran', () => {
     const text = render(report({ stage2_analysis: null }))
     expect(text).toContain('Lesson card shows the wrong duration')
-    expect(text).toContain('Full diagnosis not run (classifier confident)')
+    expect(text).toContain('Quick summary only.')
+    expect(text).toContain('the full diagnosis (why it broke and how to fix it) did not run')
+    expect(text).not.toContain('classifier confident')
     expect(text).not.toContain('Why it broke')
   })
 })

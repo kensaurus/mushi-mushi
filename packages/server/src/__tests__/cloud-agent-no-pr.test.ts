@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { classifyNoPrSummary, firstSentence, noPrErrorText } from '../../supabase/functions/_shared/cloud-agent-no-pr.ts'
+import { classifyNoPrSummary, firstSentence, noPrCategoryFromError, noPrErrorText } from '../../supabase/functions/_shared/cloud-agent-no-pr.ts'
 
 const REAL = {
   yenyen: 'This crash is already fixed on `main`. I did not open a pull request.\n\nIt is the same Android failure as YEN-YEN-MOBILE-44.',
@@ -190,5 +190,22 @@ describe('firstSentence', () => {
     const s = firstSentence('word '.repeat(100), 50)
     expect(s.length).toBeLessThanOrEqual(50)
     expect(s.endsWith('…')).toBe(true)
+  })
+})
+
+describe('noPrCategoryFromError', () => {
+  // A local lane (`mushi work`) sends its verdict only as this error line; the
+  // PATCH route records the category from it (2026-10-29).
+  it('reads back the category of every verdict line noPrErrorText writes', () => {
+    for (const category of ['already_fixed', 'wrong_repo', 'not_actionable', 'needs_human'] as const) {
+      expect(noPrCategoryFromError(noPrErrorText({ category, reason: 'why' }))).toBe(category)
+    }
+  })
+
+  it('leaves any other error alone', () => {
+    expect(noPrCategoryFromError('Local agent finished without a change: nothing')).toBeNull()
+    expect(noPrCategoryFromError(noPrErrorText({ category: null, reason: 'notes' }))).toBeNull()
+    expect(noPrCategoryFromError('timed out. Agent says this needs a person: no')).toBeNull()
+    expect(noPrCategoryFromError(undefined)).toBeNull()
   })
 })
