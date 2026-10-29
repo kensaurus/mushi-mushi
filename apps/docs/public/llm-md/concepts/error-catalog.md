@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/error-catalog
 
 ---
 title: API error catalog
-description: Stable error codes returned by the Mushi API envelope, how to read them in the console, and how they correlate with Sentry and Langfuse.
+description: Stable error codes returned by the Mushi Mushi API envelope, how to read them in the console, and how they correlate with Sentry and Langfuse.
 ---
 
 # API error catalog

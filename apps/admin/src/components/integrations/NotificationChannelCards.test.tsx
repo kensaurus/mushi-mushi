@@ -133,7 +133,7 @@ describe('notification channel cards', () => {
       await flush()
     })
     const save = Array.from(container.querySelectorAll<HTMLButtonElement>('details button')).find(
-      (b) => (b.textContent ?? '').trim() === 'Save',
+      (b) => (b.textContent ?? '').trim() === 'Save webhook',
     )!
     await act(async () => {
       save.click()
@@ -154,7 +154,7 @@ describe('notification channel cards', () => {
       await flush()
     })
     const save = Array.from(container.querySelectorAll<HTMLButtonElement>('details button')).find(
-      (b) => (b.textContent ?? '').trim() === 'Save',
+      (b) => (b.textContent ?? '').trim() === 'Save webhook',
     )!
     expect(save.disabled).toBe(true)
   })

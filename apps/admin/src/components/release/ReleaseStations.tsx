@@ -17,6 +17,11 @@ const TRAIN_STATE: Record<string, string> = {
   failed: 'failed CI',
 }
 
+/** "all stuck" when every one is: "39" over "39 stuck" said the number twice (console sweep). */
+function stuckLabel(s: Pick<ReleaseStation, 'count' | 'stuck'>): string {
+  return s.stuck >= s.count ? 'all stuck' : `${s.stuck} stuck`
+}
+
 export function ReleaseStations({ stations, href, testId = 'home-release-stations' }: { stations: ReleaseStation[]; href: string; testId?: string }) {
   return (
     <ol className="grid grid-cols-5" aria-label="Fixes on their way to a release" data-testid={testId}>
@@ -26,7 +31,7 @@ export function ReleaseStations({ stations, href, testId = 'home-release-station
           {i < stations.length - 1 && <span aria-hidden className="absolute left-1/2 top-4 h-px w-full bg-edge" />}
           <Link
             to={href}
-            aria-label={`${s.label}: ${s.count}${s.stuck ? `, ${s.stuck} stuck` : ''}`}
+            aria-label={`${s.label}: ${s.count}${s.stuck ? `, ${stuckLabel(s)}` : ''}`}
             className={`relative flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold tabular-nums ${
               s.stuck > 0
                 ? 'border-danger/50 bg-danger-muted text-danger-foreground'
@@ -40,7 +45,7 @@ export function ReleaseStations({ stations, href, testId = 'home-release-station
             {s.count}
           </Link>
           <span className="w-full truncate text-2xs text-fg-secondary">{s.label}</span>
-          {s.stuck > 0 && <Badge tone="dangerSubtle">{s.stuck} stuck</Badge>}
+          {s.stuck > 0 && <Badge tone="dangerSubtle">{stuckLabel(s)}</Badge>}
         </li>
       ))}
     </ol>

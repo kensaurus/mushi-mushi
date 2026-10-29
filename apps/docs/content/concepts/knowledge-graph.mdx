@@ -1,6 +1,6 @@
 ---
 title: Knowledge graph
-description: How Mushi links reports, components, fixes and developers in a per-project knowledge graph, with pgvector for similarity and Apache AGE for traversal.
+description: How Mushi Mushi links reports, components, fixes and developers in a per-project knowledge graph, with pgvector for similarity and Apache AGE for traversal.
 ---
 
 # Knowledge graph
@@ -28,15 +28,14 @@ an `age_drift_audit` table snapshots any divergence so we can repair it.
 
 ## Indexing
 
-Embeddings use **HNSW** (built when a project crosses 50k reports; IVFFlat
-fallback below). All RLS-referenced columns (especially `user_id`) are
-explicitly indexed because RLS subqueries that match on un-indexed columns
-can be 100× slower.
+Report and cluster embeddings use **HNSW** indexes. Codebase-file embeddings
+use an **IVFFlat** index on `halfvec(1536)`. Columns that RLS policies filter
+on are indexed, because an RLS subquery on an un-indexed column gets slow as
+tables grow.
 
 ## Bug Ontology
 
-Tags are drawn from the cross-customer **Bug Ontology** (see
-Whitepaper §2.6 / Appendix A). Each tag is a versioned, reviewed enum that
-lets us surface "this looks like the same Stripe-3DS issue 11 other
-customers reported last month" — without exposing the other customers'
-data.
+Tags are drawn from a shared **Bug Ontology** (`bug_ontology`), stored on each
+report as `bug_ontology_tags`. Because the tag set is shared, the same kind of
+issue gets the same tag in every project, without any project seeing another
+project's reports.

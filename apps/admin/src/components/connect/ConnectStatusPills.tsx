@@ -61,7 +61,7 @@ export function connectPills(input: ConnectPillsInput): ConnectPill[] {
   return [
     {
       id: 'heartbeat',
-      label: 'SDK heartbeat',
+      label: 'App checked in',
       value: heard ? `Heard ${heard}` : 'Not heard yet',
       tone: freshness === 'healthy' ? 'ok' : freshness === 'never' ? 'neutral' : 'warn',
       href: `#${SDK_HEALTH_ANCHOR}`,

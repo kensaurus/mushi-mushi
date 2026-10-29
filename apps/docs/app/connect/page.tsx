@@ -230,7 +230,7 @@ function CliLane({ client }: { client: McpClientDef }) {
         ))}
       </ol>
       <p className="text-xs text-[var(--mushi-ink-muted)]">
-        Also available: <code className="font-mono">mushi doctor --server</code>{' · '}
+        Also available: <code className="font-mono">mushi doctor</code>{' · '}
         <code className="font-mono">mushi qa stories</code>{' · '}
         <code className="font-mono">mushi upgrade</code>
       </p>
@@ -260,7 +260,7 @@ function SkillsLane({ client }: { client: McpClientDef }) {
         </p>
         <CopyBlock label="" text={agentPrompt} />
         <p className="text-xs text-[var(--mushi-ink-muted)]">
-          Your agent installs the skills, wires the SDK + MCP, and verifies with a test report — no manual steps.
+          Your agent installs the skills, wires the SDK and MCP, and checks the setup with a test report. Review what it changes.
         </p>
       </div>
       <div className="space-y-2">
@@ -269,9 +269,11 @@ function SkillsLane({ client }: { client: McpClientDef }) {
         </p>
         <CopyBlock label="" text={skillsCmd} />
         <p className="text-xs text-[var(--mushi-ink-muted)]">
-          Adds <code className="font-mono text-xs">mushi-health</code>,{' '}
-          <code className="font-mono text-xs">mushi-integration</code>,{' '}
-          <code className="font-mono text-xs">workflow-fix-and-ship</code> and more.
+          Adds <code className="font-mono text-xs">mushi-setup</code>,{' '}
+          <code className="font-mono text-xs">mushi-debug</code>,{' '}
+          <code className="font-mono text-xs">mushi-health</code>,{' '}
+          <code className="font-mono text-xs">mushi-integration</code> and{' '}
+          <code className="font-mono text-xs">mushi-mushi</code>.
         </p>
       </div>
       <div className="rounded-md border border-[var(--mushi-rule)] bg-[var(--mushi-paper-wash)] p-4">

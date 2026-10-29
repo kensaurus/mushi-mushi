@@ -4,10 +4,11 @@
  *          -of-life affordances without forcing callers to migrate to a
  *          full table library:
  *
- *            • Density toggle — 'comfy' (default) vs 'compact' row padding,
+ *            • Row density — 'comfy' (default) vs 'compact' row padding,
  *              driven by a CSS variable so child <td>/<th> pick it up
  *              without prop drilling. Persisted per-user via
- *              `useTableDensity`.
+ *              `useTableDensity`, set under "Table rows" in the display
+ *              settings (DisplayPreferences).
  *
  *            • Scroll-shadow — fades the left/right edges with a CSS mask
  *              when the table overflows horizontally, giving a visual cue
@@ -22,11 +23,8 @@
  *          replace-the-outer-wrapper-only.
  */
 
-import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useTableDensity } from '../lib/useTableDensity'
-import type { TableDensity } from '../lib/useTableDensity'
-import { MicroSegmentCell, MicroSegmentedTrack } from './sidebar/MicroSegmentedTrack'
-import { MICRO_SEG, MICRO_SEG_LABEL, microSegActive } from './sidebar/SidebarMicroChrome'
 
 interface ResponsiveTableProps {
   children: ReactNode
@@ -107,49 +105,5 @@ export function ResponsiveTable({
         {children}
       </div>
     </div>
-  )
-}
-
-interface TableDensityToggleProps {
-  className?: string
-}
-
-const DENSITY_LABELS: Record<TableDensity, string> = {
-  comfy: 'Comfortable',
-  compact: 'Compact',
-}
-
-export function TableDensityToggle({ className = '' }: TableDensityToggleProps) {
-  const [density, setDensity] = useTableDensity()
-  const options = Object.keys(DENSITY_LABELS) as TableDensity[]
-  // Per-instance, stable id — a constant trackId would make the Framer
-  // `LayoutGroup` id and the shared `micro-ind-${trackId}` layoutId collide
-  // when more than one TableDensityToggle is mounted on the same page, causing
-  // the sliding pill to animate between unrelated toggles.
-  const trackId = `table-density-${useId()}`
-  return (
-    <MicroSegmentedTrack
-      trackId={trackId}
-      inline
-      role="group"
-      aria-label="Table density"
-      className={className.trim() || undefined}
-    >
-      {options.map((d) => {
-        const active = density === d
-        return (
-          <MicroSegmentCell key={d} active={active}>
-            <button
-              type="button"
-              onClick={() => setDensity(d)}
-              aria-pressed={active}
-              className={`${MICRO_SEG} ${microSegActive(active)} px-2`}
-            >
-              <span className={MICRO_SEG_LABEL}>{DENSITY_LABELS[d]}</span>
-            </button>
-          </MicroSegmentCell>
-        )
-      })}
-    </MicroSegmentedTrack>
   )
 }

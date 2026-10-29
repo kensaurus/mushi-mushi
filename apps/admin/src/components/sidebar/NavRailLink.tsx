@@ -59,7 +59,7 @@ export interface NavRailLinkProps {
   description: string
   icon: ComponentType<{ className?: string }>
   active: boolean
-  /** Feature-gated for this plan — shows a "Pro" kicker in the flyout. */
+  /** Feature-gated for this plan — shows an "Upgrade" kicker in the flyout. */
   gated?: boolean
   badge: NavBadgeSpec | null
   onNavigate?: () => void
@@ -86,7 +86,7 @@ export function NavRailLink({
           title={label}
           description={description}
           status={status}
-          kicker={gated ? { label: 'Pro', className: CHIP_TONE.brandSubtle } : null}
+          kicker={gated ? { label: 'Upgrade', className: CHIP_TONE.brandSubtle } : null}
         />
       }
     >

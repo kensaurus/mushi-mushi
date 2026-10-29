@@ -7,6 +7,8 @@
  *   mushi-ux discover --url http://localhost:5173        (list screens, no agent)
  *   mushi-ux audit --url https://app.example.com/admin --profile-dir ~/.playwright-cli-profiles/app
  *                                                        (find UX bugs on signed-in screens, file reports)
+ *   mushi-ux fresh-eyes --url https://example.com --goal "get my first bug explained"
+ *                                                        (a first-time visitor: time the path, file what stops them)
  *   mushi-ux run --dev "pnpm dev --port {port}" --agent claude-code
  *   mushi-ux ui                                          (studio: pick agent, model, skill; watch runs)
  *   mushi-ux open <runId>                                (dashboard for a past run)
@@ -17,7 +19,7 @@
 import { spawn } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { createHash } from 'node:crypto'
-import { existsSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { Command, InvalidArgumentError, Option } from 'commander'
@@ -30,6 +32,10 @@ import { discover } from './discover.js'
 import { isSafeSelector } from './ignore.js'
 import { DEFAULT_CURSOR_REVIEW_MODEL } from './checker.js'
 import { CHARTERS, runExplore, type CharterName } from './explore.js'
+import { hasSuccessCheck, presetFor, runFreshEyes, type SuccessCheck } from './fresh-eyes.js'
+import { fileFreshEyesFindings, mintTestAccount, syncFreshEyes, writeTimeline } from './fresh-eyes-report.js'
+import { literalPattern, parseStdinRequest, readStdin, stepsFor, syncsToConsole } from './fresh-eyes-request.js'
+import { runTerminalSetup } from './fresh-eyes-terminal.js'
 import { DEFAULT_JUDGE_MODEL } from './judge.js'
 import { cachedProfile, parseChannel } from './profile.js'
 import { agentAccount, studioOptions } from './launcher.js'
@@ -443,6 +449,136 @@ program
       const pending = writePending(result.dir, outcome.pending)
       if (pending) {
         console.log(o.dryRun ? `Dry run: ${outcome.pending.length} report(s) would be filed: ${pending}` : `No MUSHI_API_KEY / MUSHI_PROJECT_ID: ${outcome.pending.length} report(s) left to file in ${pending}`)
+      }
+    },
+  )
+
+program
+  .command('fresh-eyes')
+  .description('Try one goal like a first-time visitor (signed out, never seen the product) and time the path; file what stops them (ADR 0053).')
+  .option('--url <url>', 'Where a stranger starts: the landing page (required unless --request-stdin)')
+  .option('--goal <text>', 'What they came to do, in plain words, e.g. "get my first bug explained" (required unless --request-stdin)')
+  .option('--sessions <n>', 'Independent sessions; opinions are filed only when 2 agree', '3')
+  .option('--steps <n>', 'Actions per session (at most 80; default 30, or 60 with a test account)')
+  .option('--model <id>', 'Cursor CLI model that plays the visitor', DEFAULT_CURSOR_REVIEW_MODEL)
+  .option('--app-host <host>', "A host that is the app's own (its API, its Supabase project): writes may reach it (repeatable)", collect, [])
+  .option('--success-url <glob>', 'The goal is reached at this path, e.g. "/admin/reports/*"')
+  .option('--success-text <regex>', 'The goal is reached when this text is visible')
+  .option('--success-selector <css>', 'The goal is reached when this element is visible')
+  .option('--success-api <url>', 'The goal is reached when a GET here (with the session cookies) answers with data')
+  .option('--mint-account', 'Mushi only: mint a synthetic account per session through the console (operator key; deleted after 24 h)')
+  .option('--terminal', 'Run the CLI setup step itself when a screen asks for a terminal (scaffold a sample, run the setup, send a report)')
+  .option('--setup-command <cmd>', 'With --terminal: the setup command; {projectId} and {apiKey} are filled in')
+  .option('--allow <rule>', 'Allow a non-GET request that only reads (repeatable)', collect, [])
+  .option('--out <dir>', 'Where the timeline, screenshots and result go')
+  .option('--sync', 'Mirror the run to the console (First-time user test page)')
+  .option('--file', 'File confirmed findings as Mushi reports (at most 15 a run, deduped); mirrors the run to the console too')
+  .option('--dry-run', 'Read-only, no account, nothing filed: tests up to the sign-up wall (with --sync it still shows in the console)')
+  .option('--request-stdin', 'Read the run as JSON on stdin (run id, start page, goal, visitors, test accounts): how a local worker runs a test the console queued')
+  .action(
+    async (o: {
+      url?: string
+      goal?: string
+      sessions: string
+      steps?: string
+      model: string
+      appHost: string[]
+      successUrl?: string
+      successText?: string
+      successSelector?: string
+      successApi?: string
+      mintAccount?: boolean
+      terminal?: boolean
+      setupCommand?: string
+      allow: string[]
+      out?: string
+      sync?: boolean
+      file?: boolean
+      dryRun?: boolean
+      requestStdin?: boolean
+    }) => {
+      // A queued run (local worker): everything the console chose comes on stdin, never in argv.
+      const req = o.requestStdin ? parseStdinRequest(await readStdin()) : null
+      const url = req?.url ?? o.url
+      const goal = req?.goal ?? o.goal
+      if (!url || !goal) throw new Error('--url and --goal are required (or --request-stdin).')
+      const dryRun = req ? req.dryRun : !!o.dryRun
+      const preset = presetFor(url)
+      const given: SuccessCheck = req
+        ? { text: req.successText ? literalPattern(req.successText) : undefined }
+        : { url: o.successUrl, text: o.successText, selector: o.successSelector, api: o.successApi }
+      const success = hasSuccessCheck(given) ? given : (preset?.success ?? {})
+      const cfg = o.sync || o.file || o.mintAccount ? syncConfigFromEnv() : null
+      // Another app's own test account, from the environment (never a flag: it would sit in shell history).
+      const email = process.env.MUSHI_FRESH_EYES_EMAIL?.trim()
+      const password = process.env.MUSHI_FRESH_EYES_PASSWORD
+      const appAccount = email && password ? { email, password } : null
+      for (const k of ['MUSHI_API_KEY', 'MUSHI_PROJECT_ID', 'MUSHI_API_ENDPOINT', 'MUSHI_FRESH_EYES_EMAIL', 'MUSHI_FRESH_EYES_PASSWORD']) delete process.env[k]
+      if ((o.sync || o.mintAccount) && !cfg && !dryRun) throw new Error('--sync and --mint-account need MUSHI_API_KEY and MUSHI_PROJECT_ID (run through `mushi ux`, which passes your login).')
+      if (dryRun && o.mintAccount) console.warn('--dry-run: no account is minted; the run stops at the sign-up wall.')
+      // Accounts the console's operator had minted for this queued run, one per visitor. A visitor
+      // without one would write with no identity, so the run keeps only the visitors that have one.
+      const givenAccounts = req?.accounts ?? []
+      const requested = req?.sessions ?? Number(o.sessions)
+      const sessions = givenAccounts.length > 0 ? Math.min(requested, givenAccounts.length) : requested
+      if (sessions < requested) console.warn(`Only ${givenAccounts.length} test account(s) for ${requested} visitor(s): running ${sessions}.`)
+      const result = await runFreshEyes({
+        url,
+        goal,
+        success,
+        sessions,
+        steps: stepsFor(o.steps, !dryRun && (givenAccounts.length > 0 || !!o.mintAccount || !!appAccount)),
+        model: o.model,
+        appHosts: [...(preset?.appHosts ?? []), ...o.appHost],
+        allow: o.allow,
+        dryRun,
+        outDir: o.out,
+        runId: req?.runId,
+        identity: givenAccounts.length
+          ? async (session) => givenAccounts[session - 1] ?? null
+          : o.mintAccount && cfg
+            ? () => mintTestAccount(cfg)
+            : appAccount
+              ? async () => appAccount
+              : undefined,
+        // Mushi's own path has a CLI step; a queued run with test accounts takes it too.
+        terminal: o.terminal || (req && preset && givenAccounts.length) ? (v) => runTerminalSetup({ ...v, setupCommand: o.setupCommand }) : undefined,
+        onProgress: (m) => process.stderr.write(`  ${m}\n`),
+      })
+      const timeline = writeTimeline(result)
+      console.log(
+        `\n${result.reached} of ${result.sessions.length} session(s) reached the goal; time to first value ${result.ttfvSeconds == null ? 'not measured' : `${result.ttfvSeconds} s`}; ${result.steps} step(s) (median).` +
+          (result.stalledAt ? ` Most stalled at ${result.stalledAt.screen} (${result.stalledAt.reason}).` : ''),
+      )
+      console.log(`${result.findings.length} finding(s), ${result.blocked} request(s) blocked. Timeline: ${timeline}`)
+      for (const w of result.warnings) console.warn(w)
+      // Findings are filed against the synced run, so --file syncs it too. A dry run syncs
+      // (the console shows it, marked "look around only") and files nothing.
+      let syncError: string | null = null
+      if (cfg && syncsToConsole(o, true)) {
+        syncError = await syncFreshEyes(cfg, result, null)
+        console.log(syncError ? `Console sync failed: ${syncError}` : 'Synced to the console (First-time user test).')
+        if (syncError) process.exitCode = 1
+      }
+      if (o.file && syncError) {
+        // Every finding would be refused without its run: keep them to file later instead.
+        const path = join(result.dir, 'to-file.json')
+        writeFileSync(path, JSON.stringify(result.findings, null, 2))
+        console.log(`Nothing filed because the run did not sync. ${result.findings.length} finding(s) kept in ${path}`)
+        process.exitCode = 1
+        return
+      }
+      if (!o.file) {
+        for (const f of result.findings) console.log(`- ${f.severity} (${f.basis}) ${f.screen}: ${f.summary}`)
+        return
+      }
+      const outcome = await fileFreshEyesFindings(cfg, result, dryRun)
+      for (const f of outcome.filed) console.log(`Filed ${f.reportId}: ${f.title}`)
+      for (const s of outcome.skipped) console.log(`Skipped ${s.fingerprint}: ${s.reason}`)
+      if (outcome.pending.length) {
+        const path = join(result.dir, 'to-file.json')
+        writeFileSync(path, JSON.stringify(outcome.pending, null, 2))
+        console.log(dryRun ? `Dry run: ${outcome.pending.length} report(s) would be filed: ${path}` : `No MUSHI_API_KEY / MUSHI_PROJECT_ID: ${outcome.pending.length} report(s) left to file in ${path}`)
       }
     },
   )

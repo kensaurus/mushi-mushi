@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/android
 
 ---
 title: Android (Kotlin) quickstart
-description: Try Mushi's native Kotlin SDK on Android — shake-to-report, a bottom-sheet widget and an offline queue. A preview built from source, not on Maven Central yet.
+description: Try the Mushi Mushi Kotlin SDK on Android. Shake-to-report, a bottom-sheet widget and an offline queue; a preview built from source, not on Maven Central.
 ---
 
 # Android quickstart
@@ -13,7 +13,7 @@ description: Try Mushi's native Kotlin SDK on Android — shake-to-report, a bot
 bottom-sheet capture UI, a file-backed offline queue, rage-tap and slow-screen
 detection, and an optional Sentry bridge.
 
-  **Preview — not on Maven Central yet.** A `dependencies { implementation(…) }`
+  **Preview, not on Maven Central yet.** A `dependencies { implementation(…) }`
   line alone will not resolve until the first release is published. Until then,
   build the library from the repository and consume it from your local Maven
   repository, as below. `npx mushi-mushi` does not set up native Android projects.
