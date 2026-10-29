@@ -375,14 +375,14 @@ main :not(pre) > code {
   font-size: 0.65rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--mushi-vermillion-ink);
+  /* Nextra's `.nextra-banner` is neutral-900 (#171717) with slate-50 text,
+     and white text in `.dark`. Vermillion ink (#7a1f15) is 1.74:1 on that
+     bar, so use the banner's own text colour in both themes.
+     Checked in lib/docs-banner-contrast.test.ts. */
+  color: inherit;
   margin-right: 0.75rem;
   font-weight: 700;
   vertical-align: 1px;
-}
-
-.dark .docs-banner-eyebrow {
-  color: color-mix(in oklch, var(--mushi-vermillion) 70%, var(--mushi-dark-ink));
 }
 
 /* ---------------------------------------------------------------------------
