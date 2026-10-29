@@ -1,6 +1,6 @@
 # @mushi-mushi/web
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 A bug widget for any website. When a user reports a problem, it sends a screenshot, the route, their note and the last console and network events to [Mushi Mushi](https://github.com/kensaurus/mushi-mushi). Mushi explains the cause in plain English and hands your editor a fix. It renders in a Shadow DOM, so your CSS and the widget's never mix.
 
@@ -28,6 +28,8 @@ Mushi.init({
 A launcher appears in the corner. That is the whole integration. On React, Vue, Svelte, Angular, React Native or Capacitor, use the framework package instead: [`react`](https://npmjs.com/package/@mushi-mushi/react) · [`vue`](https://npmjs.com/package/@mushi-mushi/vue) · [`svelte`](https://npmjs.com/package/@mushi-mushi/svelte) · [`angular`](https://npmjs.com/package/@mushi-mushi/angular) · [`react-native`](https://npmjs.com/package/@mushi-mushi/react-native) · [`capacitor`](https://npmjs.com/package/@mushi-mushi/capacitor).
 
 Docs: [Web SDK reference](https://kensaur.us/mushi-mushi/docs/sdks/web)
+
+Building in Lovable or Bolt with no terminal? A script tag works too: [Mushi Mushi in Lovable or Bolt](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt). Mushi Mushi is built first for people who make apps with AI, mostly on their own, and also serves developers who own their code and teams: [who it's for](https://kensaur.us/mushi-mushi/docs/who-its-for).
 
 ## What's inside
 

@@ -13,6 +13,7 @@ the owner approves each phase. Written 2026-10-28; numbers queried that day._
 | Launches ever (HN, PH, Reddit) | 0 | critical audit 2026-10-27 |
 | Landing visits measured | 0 (tracker waits for consent) | product_events |
 | **Proof on the owner's 9 live apps, last 60 days** | **676 user bug reports from 314 people; 231 fixes merged (232 by evening); median 26 h from report to merged fix, 3.3 h to a fix PR; 738 AI reviews, 265 of them "do not merge"** | reports, fix_attempts, fix_reviews |
+| **Correction 2026-10-29** | The row above is wrong. It counted Mushi's own reports (281 imported, 243 from the AI audit loop, 74 from an automated sweep, more from test browsers) as user reports. On the owner's 8 apps (the demo project excluded): 32 reports from people on 16 devices, 1,068 found by the owner's own checks, 234 fixes merged (1 for a person's report), 835 AI reviews, 304 "do not merge". `public_scoreboard()` fixed in migration 20261029100000. | reports, fix_attempts, fix_reviews |
 | Price | Free (1 app, 100 diagnoses) / Builder $29 (3 apps, 1,000) / Studio $79 (10 apps, 3,000) / Enterprise from $499, live 2026-10-28 | pricing_plans, Stripe |
 
 ## 1b. Does it pay for itself? (unit economics, measured 2026-10-28)

@@ -1,6 +1,6 @@
 ---
 title: Storage
-description: The Storage page chooses where Mushi keeps report attachments and recordings — managed storage, or your own bucket for residency or cost.
+description: The Storage view in the Mushi Mushi console chooses where report screenshots and attachments are kept, managed storage or your own bucket, per project.
 ---
 
 import { Callout } from 'nextra/components'
@@ -9,11 +9,12 @@ import { Callout } from 'nextra/components'
 
 # Storage
 
-**Route:** `/storage`
+**Route:** `/team?view=storage` (**Team → Storage**; the old `/storage` address redirects there)
 
-The Storage page configures where Mushi writes report attachments, session recordings,
-and evidence artifacts. By default, Mushi uses managed Supabase storage. You can switch
-to your own bucket for data-residency or cost reasons.
+The Storage view configures where Mushi Mushi writes report screenshots and attachments.
+By default it uses managed Supabase storage. You can switch to your own bucket for
+data-residency or cost reasons. The view has three tabs: **Overview**, **Configure** and
+**Usage** (objects and last write per project).
 
 ---
 
@@ -21,44 +22,50 @@ to your own bucket for data-residency or cost reasons.
 
 | Provider | Notes |
 |----------|-------|
-| **Supabase** (default) | Managed — no configuration required. Files stored in your Supabase project. |
-| **AWS S3** | Requires `bucket`, `region`, and an IAM key pair with `s3:PutObject` / `s3:GetObject`. |
-| **Cloudflare R2** | Requires `bucket`, `region` (use `auto`), and an R2 API token. |
-| **Google Cloud Storage** | Requires `bucket` and a service-account JSON key. |
+| **Supabase Storage** (default) | Managed, no configuration required. |
+| **AWS S3** | Needs a bucket, a region, and an access key ID + secret access key. |
+| **Cloudflare R2** | Needs a bucket and an R2 access key ID + secret; region `auto` or blank. |
+| **Google Cloud Storage** | Needs a bucket and a service-account key (JSON). |
+| **MinIO (self-hosted)** | Needs an endpoint URL and an access key ID + secret. |
 
 ---
 
 ## Configuring a custom bucket
 
 Each project has its own storage config card. The card shows:
-- **Health status chip** — `unknown`, `healthy`, `degraded`, or `failing` with last-check time
-- **Last health error** if the previous check failed
-- **Debug log** — a toggle that reveals a per-step test table (step name, ok/fail, ms, detail)
+- **Health status chip** with the last-check time
+- **Last error** if the previous check failed
+- **Show debug log**: a toggle that reveals the per-step results of the last health check
 
 To configure:
 
 1. Choose a **Provider** from the dropdown.
 2. Fill in the required fields for your provider (see table below).
-3. Click **Save** (saves without activating) or **Save & enable** (saves and marks the config active).
-4. Click **Health check** to confirm Mushi can reach the bucket — the debug log opens automatically.
+3. Click **Save & enable** (first save) or **Save** (later changes).
+4. Click **Health check** to confirm Mushi Mushi can write to the bucket. Health check needs a saved configuration.
 
 | Field | Required for |
 |-------|-------------|
 | **Bucket** | S3, R2, GCS, MinIO |
-| **Region** | S3 (`us-east-1`), R2 (`auto`) |
-| **Endpoint** | MinIO, custom S3-compatible |
+| **Region** | S3 (e.g. `us-east-1`); R2 takes `auto` or blank |
+| **Endpoint (S3-compatible only)** | MinIO; must be a public https URL |
 | **Path prefix** | All providers (optional subfolder) |
-| **Signed URL TTL** | All providers (seconds, default 3600) |
-| **Access key Vault ref** | S3, R2, MinIO — Vault secret name |
-| **Secret key Vault ref** | S3, R2, MinIO — Vault secret name |
-| **GCS service-account Vault ref** | GCS — Vault secret name |
-| **KMS Key ID** | Optional server-side encryption |
-| **Use signed URLs** | Checkbox |
-| **Require encryption** | Checkbox |
+| **Signed URL TTL (seconds)** | All providers |
+| **Access key ID** | S3, R2, MinIO |
+| **Secret access key** | S3, R2, MinIO |
+| **GCS service-account key (JSON)** | GCS |
+| **KMS Key ID (optional)** | Server-side encryption |
+| **Use signed URLs** | Checkbox: serve uploads via short-lived links |
+| **Require encryption** | Checkbox: reject uploads without server-side encryption |
+
+Paste the keys themselves. Mushi Mushi stores them in Supabase Vault under names tied to
+the project; the API refuses a Vault name you type (`VAULT_REF_NOT_ALLOWED`). When a key
+is saved, its field reads "Saved" and a new value replaces it.
 
 <Callout type="warning">
-**Bucket and region are required** for S3 and R2. The API will return a `400 VALIDATION_ERROR`
-if either is empty — this is enforced on the server to prevent saving a broken config.
+The form blocks **Save** until the provider's required fields are filled: a region for
+S3, an endpoint for MinIO, the key pair for S3, R2 and MinIO, and the JSON key for GCS.
+These checks run in the console, not on the server.
 </Callout>
 
 <Callout type="info">
@@ -105,6 +112,5 @@ See [Security → Data residency](/security/data-residency) for the full matrix.
 
 ## Related pages
 
-- [Security → BYO storage](/security/byo-storage) — architecture and encryption details
-- [Integration health](/admin/health) — verify the storage probe
-- [Settings](/admin/settings) — other project configuration
+- [Security → BYO storage](/security/byo-storage): architecture and encryption details
+- [Settings](/admin/settings): other project configuration

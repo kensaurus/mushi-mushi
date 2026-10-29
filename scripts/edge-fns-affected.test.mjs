@@ -20,11 +20,17 @@ function fixture() {
   put(`${F}/api/index.ts`, "import { a } from '../_shared/a.ts'\nimport card from '../_shared/card.json' with { type: 'json' }")
   put(`${F}/mcp/index.ts`, "const m = await import('../_shared/card.json', { with: { type: 'json' } })")
   put(`${F}/healthz/index.ts`, 'Deno.serve(() => new Response("ok"))')
+  put(`${F}/api/routes/board.ts`, 'export const board = 1')
+  put(`${F}/api-ext/index.ts`, "import { board } from '../api/routes/board.ts'")
   return root
 }
 
 test('a function directory change deploys that function only', () => {
   assert.deepEqual(affectedFunctions({ root: fixture(), changed: [`${F}/healthz/index.ts`] }), { all: false, functions: ['healthz'] })
+})
+
+test('a file inside one function also deploys every function that imports it', () => {
+  assert.deepEqual(affectedFunctions({ root: fixture(), changed: [`${F}/api/routes/board.ts`] }).functions, ['api', 'api-ext'])
 })
 
 test('a shared file deploys every function that imports it, also through other shared files', () => {

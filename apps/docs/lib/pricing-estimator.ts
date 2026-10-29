@@ -58,7 +58,9 @@ export function estimateCost(tier: PricingTier, diagnoses: number, annual = fals
     return { total: tier.baseUsd, overage: 0, capped: overCount > 0 }
   }
   const overageCost = overCount * tier.overageUsd
-  const maxOverage = tier.capUsd !== null ? tier.capUsd - tier.baseUsd : Infinity
+  // The cap limits overage spend, on top of the base price: the server stops new
+  // diagnoses once overage reaches it (_shared/quota.ts, SPEND_CAP_REACHED).
+  const maxOverage = tier.capUsd !== null ? tier.capUsd : Infinity
   const clampedOverage = Math.min(overageCost, maxOverage)
   const capped =
     maxOverage !== Infinity && overCount > 0 && overageCost >= maxOverage

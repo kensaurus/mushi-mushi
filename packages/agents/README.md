@@ -1,18 +1,19 @@
 # @mushi-mushi/agents
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
-Cursor Cloud and REST fix-agent adapters.
-
-
-Agentic fix pipeline for Mushi Mushi — orchestrates coding agents to auto-generate fix PRs from classified bug reports.
+Internal package, not published to npm. It is the Node-side fix pipeline for
+Mushi Mushi: it hands a triaged bug report to a coding agent, checks the
+result against scope and the app's expected behaviour, and opens a fix PR.
+Mushi Mushi Cloud runs its fixes from the `fix-worker` edge function. That
+function does not import this package.
 
 ## How It Works
 
 1. **Orchestrator** picks up a report flagged for auto-fix
 2. **Inventory anchor** is recovered from the `reports_against` graph edge (or accepted as a `inventoryActionNodeId` override) and threaded into the `FixContext`
 3. **Scope checker** limits which files the agent can touch
-4. **Agent adapter** generates a code fix (Claude Code, Codex, or generic MCP) — its prompt now carries the inventory Action's `expected_outcome` contract verbatim
+4. **Agent adapter** generates a code fix (Claude Code, Codex, or generic MCP); its prompt carries the inventory Action's `expected_outcome` contract verbatim
 5. **`validateResult` + `validateAgainstSpec`** validate the fix against scope, quality rules, AND the spec contract before opening a PR
 6. **GitHub integration** creates a PR with the fix
 7. **Post-PR synthetic probe** is queued against the originating Action; results land in `synthetic_runs` within minutes of merge
@@ -39,7 +40,7 @@ Agentic fix pipeline for Mushi Mushi — orchestrates coding agents to auto-gene
 | `SandboxAuditWriter` | Persists per-step sandbox audit events |
 | `FIX_CONTEXT_JSON_SCHEMA` / `FIX_RESULT_JSON_SCHEMA` / `SANDBOX_PROVIDER_JSON_SCHEMA` / `EXPECTED_OUTCOME_JSON_SCHEMA` / `AGENT_JSON_SCHEMAS` | Hand-authored draft-07 JSON Schemas for the public agent contracts. Served by the api function at `/v1/schemas/*` so non-TS orchestrators (Python LangGraph, Go agents, A2A skill cards) can consume the contract without typing-by-hand |
 
-## Usage — single repo
+## Usage: single repo
 
 ```ts
 import { FixOrchestrator } from '@mushi-mushi/agents'
@@ -53,7 +54,7 @@ const orchestrator = new FixOrchestrator(supabaseClient, {
 await orchestrator.run(reportId)
 ```
 
-## Usage — multi-repo
+## Usage: multi-repo
 
 When a single bug spans multiple repos (FE + BE, monorepo + infra, etc.), register
 each repo in `project_repos` with `path_globs` and a `role` (`primary`,
@@ -73,7 +74,7 @@ await multi.linkPRs(plan.coordinationId)
 
 Status rolls up to `succeeded` / `partial_success` / `failed` based on each
 child `fix_attempts` row stamped with `coordination_id` + `repo_id`. See
-`docs/content/concepts/multi-repo-fixes.mdx` for the full flow diagram.
+[multi-repo fixes](https://kensaur.us/mushi-mushi/docs/concepts/multi-repo-fixes) for the full flow diagram.
 
 ## Agent Configuration
 
@@ -117,7 +118,7 @@ First-party providers:
 
 ### Third-party providers (2026-05-09 audit)
 
-`SandboxProvider['name']` is now an open `KnownSandboxProvider | (string & {})` union — register your own provider once at boot and `resolveSandboxProvider` will pick it up:
+`SandboxProvider['name']` is now an open `KnownSandboxProvider | (string & {})` union: register your own provider once at boot and `resolveSandboxProvider` will pick it up:
 
 ```ts
 import { registerSandboxProvider, type SandboxProvider } from '@mushi-mushi/agents'
@@ -133,7 +134,7 @@ registerSandboxProvider('daytona-corp', () => daytonaProvider)
 
 The registry refuses to overwrite first-party providers (`KNOWN_SANDBOX_PROVIDERS = ['e2b', 'modal', 'cloudflare', 'local-noop']`). All exec/file events flow through `SandboxAuditWriter` into the `sandbox_runs` table for SOC 2 evidence. `MUSHI_GIT_TOKEN=...` is redacted from stdout/stderr before audit persistence.
 
-## Spec traceability — `inventoryAction` + `expected_outcome`
+## Spec traceability: `inventoryAction` + `expected_outcome`
 
 The orchestrator now threads the originating inventory `Action` through every fix:
 
@@ -162,9 +163,9 @@ const context: FixContext = {
 
 Three things happen automatically when `inventoryAction` is set:
 
-1. **`renderSpecContext(context)`** injects a Markdown block into the LLM review prompt that lists the action description, page, story, and every `expected_outcome` assertion verbatim — with an explicit instruction to preserve the contract.
+1. **`renderSpecContext(context)`** injects a Markdown block into the LLM review prompt that lists the action description, page, story, and every `expected_outcome` assertion verbatim, with an explicit instruction to preserve the contract.
 2. **`validateAgainstSpec(context, result)`** runs after the agent's `validateResult` as a deterministic pre-PR gate. It hard-fails the dispatch if the diff *removes* a `json_path` field the contract asserts on; soft warnings (no changed file references the contract's required DB table, no changed file mentions the action's page route) are persisted to `fix_attempts.spec_validation_warnings JSONB` so reviewers can sanity-check before merging.
-3. **A targeted post-PR synthetic probe** is queued against `actionNodeId` immediately after the PR opens. The synthetic-monitor cron drains the queue with priority on its next tick — so a fix that immediately makes the action `regressed` shows up in the admin UI within minutes of merge, not on the next 15-min sweep.
+3. **A targeted post-PR synthetic probe** is queued against `actionNodeId` immediately after the PR opens. The synthetic-monitor cron drains the queue with priority on its next tick, so a fix that immediately makes the action `regressed` shows up in the admin UI within minutes of merge.
 
 `inventoryAction` is `undefined` for legacy reports without an inventory linkage; downstream code falls back to the bug-report-only path it had before.
 
@@ -186,13 +187,13 @@ The api function serves them under `/v1/schemas/*` (see [`packages/server/supaba
 
 ## Status
 
-- **McpFixAgent** — production adapter; speaks MCP `tools/call` + SEP-1686 Tasks
-- **RestFixWorkerAgent** — production adapter for self-hosted REST workers
-- **GenericMCPAgent** — legacy adapter; new integrations should pick `McpFixAgent`
-- **ClaudeCodeAgent** — working; shells out to the local `claude` CLI behind `MUSHI_ENABLE_CLAUDE_CODE_AGENT=1`. Override the binary path with `MUSHI_CLAUDE_CODE_BIN`. Disabled by default — if the flag is off, `generateFix` returns a deterministic "not configured" result.
-- **CodexAgent** — stub (returns `success: false`); pending direct API integration
-- **MultiRepoFixOrchestrator** — production; backed by `project_repos` + `fix_coordinations` migrations
+- **McpFixAgent**: production adapter; speaks MCP `tools/call` + SEP-1686 Tasks
+- **RestFixWorkerAgent**: production adapter for self-hosted REST workers
+- **GenericMCPAgent**: legacy adapter; new integrations should pick `McpFixAgent`
+- **ClaudeCodeAgent**: working; shells out to the local `claude` CLI behind `MUSHI_ENABLE_CLAUDE_CODE_AGENT=1`. Override the binary path with `MUSHI_CLAUDE_CODE_BIN`. Disabled by default: if the flag is off, `generateFix` returns a deterministic "not configured" result.
+- **CodexAgent**: stub (returns `success: false`); pending direct API integration
+- **MultiRepoFixOrchestrator**: production; backed by `project_repos` + `fix_coordinations` migrations
 
 ## License
 
-[AGPLv3](../server/LICENSE) — copyleft. Part of the open-core server (self-host and fork freely; modified SaaS publishes changes or takes a [commercial license](../../COMMERCIAL-LICENSE.md)).
+[AGPLv3](../server/LICENSE), copyleft. Part of the open-core server (self-host and fork freely; modified SaaS publishes changes or takes a [commercial license](../../COMMERCIAL-LICENSE.md)).

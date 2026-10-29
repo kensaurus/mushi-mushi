@@ -4,13 +4,13 @@ Source: https://kensaur.us/mushi-mushi/docs/demo/diagnosis
 
 ---
 title: "Sample diagnosis: Pay now does nothing on a phone"
-description: A sample Mushi diagnosis you can read without signing up. A user's complaint, what the widget captured, the plain-English cause and the fix prompt.
+description: A sample Mushi Mushi diagnosis you can read without signing up. A user's complaint, what the widget captured, the plain-English cause and the fix prompt.
 ---
 
 # Sample diagnosis
 
 A user writes one line: the checkout button does nothing on their phone.
-This is what you get back from Mushi, from their words to a prompt your AI
+This is what you get back from Mushi Mushi, from their words to a prompt your AI
 can fix it from.
 
 ## Get this for your own app
