@@ -54,6 +54,7 @@ import {
   evaluateTokenDelivery,
   parseClientId,
 } from '../../_shared/cli-auth-helpers.ts'
+import { insertWithUniqueProjectSlug, projectSlugFromName } from '../../_shared/project-slug.ts'
 
 /** Generate a 9-char user-friendly code in the format XXXX-XXXX (RFC 8628 §6.1). */
 function generateUserCode(): string {
@@ -671,18 +672,20 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       )
     }
 
-    let slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48)
-    if (!slug) slug = `project-${crypto.randomUUID().slice(0, 8)}`
-
-    const { data, error } = await db
-      .from('projects')
-      .insert({ name, slug, owner_id: userId, organization_id: organizationId })
-      .select('id')
-      .single()
-
-    if (error) {
-      return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    // Same slug allocation as POST /v1/admin/projects: a taken
+    // projects_slug_key retries the next free handle instead of 500.
+    const inserted = await insertWithUniqueProjectSlug(projectSlugFromName(name), async (candidate) => {
+      const { data: row, error } = await db
+        .from('projects')
+        .insert({ name, slug: candidate, owner_id: userId, organization_id: organizationId })
+        .select('id')
+        .single()
+      return { data: row as { id: string } | null, error }
+    })
+    if (!inserted.ok) {
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: inserted.error?.message ?? 'Could not create project.' } }, 500)
     }
+    const { data, slug } = inserted
 
     await db.from('project_settings').insert({ project_id: data.id })
     await db.from('project_members').upsert(

@@ -21,6 +21,7 @@ import { appLimitDenial } from '../../_shared/plan-app-limit.ts';
 import { failedFixPreviews, loadRecentFixTruths } from '../../_shared/fix-report-truth-load.ts';
 import { projectCapabilities } from '../../_shared/project-capabilities.ts';
 import { freshestHeartbeat, isSdkKey, loadProjectCounts } from '../../_shared/setup-signals.ts';
+import { insertWithUniqueProjectSlug, projectSlugFromName } from '../../_shared/project-slug.ts';
 
 /**
  * Exact report count per project, one `head: true` count query each. Never
@@ -983,40 +984,27 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       }
     }
 
-    // Slug derivation:
-    //   1. Lowercase, collapse non-alphanumerics to '-', trim leading /
-    //      trailing dashes — the historical shape.
-    //   2. If the user typed something like "!!!" or all-emoji that
-    //      reduces to an empty string, fall back to a short random tail
-    //      so we never write an empty slug. Empty slugs broke the slug
-    //      UNIQUE constraint as soon as a second emoji-named project
-    //      landed AND surfaced in the URL as `/projects//settings`,
-    //      which the React Router stopped resolving cleanly.
-    //   3. Cap the length at 48 chars so the slug fits in the URL bar
-    //      and in the audit log without truncation. Random suffixes
-    //      append AFTER the trim so a long-name + collision retry
-    //      below stays under the column cap.
-    let slug = name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 48);
-    if (!slug) {
-      slug = `project-${crypto.randomUUID().slice(0, 8)}`;
-    }
-    const { data, error } = await db
-      .from('projects')
-      .insert({
-        name: name.trim(),
-        slug,
-        owner_id: userId,
-        organization_id: organizationId,
-      })
-      .select('id')
-      .single();
-
-    if (error) return dbError(c, error);
+    // Slug derivation lives in project-slug.ts: lowercase, collapse
+    // non-alphanumerics, empty names become `project-<hex>` (an empty
+    // slug broke UNIQUE and the `/projects//settings` URL), capped at
+    // 48 chars. projects.slug is unique across every team, so a taken
+    // handle retries -2, -3, … instead of returning DbError 23505
+    // (projects_slug_key).
+    const inserted = await insertWithUniqueProjectSlug(projectSlugFromName(name), async (candidate) => {
+      const { data: row, error } = await db
+        .from('projects')
+        .insert({
+          name: name.trim(),
+          slug: candidate,
+          owner_id: userId,
+          organization_id: organizationId,
+        })
+        .select('id')
+        .single();
+      return { data: row as { id: string } | null, error };
+    });
+    if (!inserted.ok) return dbError(c, inserted.error);
+    const { data, slug } = inserted;
 
     // Company funnel (mushi-self): fire-and-forget, never on the response path.
     void emitProductEvent(db, {

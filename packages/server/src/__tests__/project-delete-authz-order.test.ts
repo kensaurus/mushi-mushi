@@ -45,7 +45,10 @@ beforeEach(() => {
   failing = null
   db = makeFakeDb(
     {
-      projects: [{ id: P, name: 'App', slug: 'secret-slug', organization_id: ORG, owner_id: 'owner' }],
+      projects: [
+        { id: P, name: 'App', slug: 'secret-slug', organization_id: ORG, owner_id: 'owner' },
+        { id: '1000000b-0000-4000-8000-000000000000', name: 'App 2', slug: 'secret-slug-2', organization_id: ORG, owner_id: 'owner' },
+      ],
       organization_members: [
         { organization_id: ORG, user_id: 'member', role: 'member', created_at: '2026-01-01' },
         { organization_id: ORG, user_id: 'admin', role: 'admin', created_at: '2026-01-01' },
@@ -56,7 +59,11 @@ beforeEach(() => {
         { id: 'f3', project_id: P, symbol_name: null, tombstoned_at: '2026-01-01' },
       ],
     },
-    { failRead: (t) => (t === failing ? 'connection reset' : null) },
+    {
+      failRead: (t) => (t === failing ? 'connection reset' : null),
+      uniques: { projects: ['slug'] },
+      autoId: true,
+    },
   )
 })
 
@@ -107,6 +114,28 @@ describe('POST /v1/admin/projects', () => {
       body: JSON.stringify({ name: 'New app' }),
     })
     expect(res.status).toBe(500)
+  })
+
+  // projects.slug is unique across every team. A second "Secret Slug" used to
+  // die as DbError 23505 (projects_slug_key) instead of taking the next free handle.
+  it('takes the next free slug when projects_slug_key is already used', async () => {
+    userId = 'admin'
+    const emptyOrg = '5000000b-0000-4000-8000-000000000000'
+    db.table('organization_members').push({
+      organization_id: emptyOrg,
+      user_id: 'admin',
+      role: 'owner',
+      created_at: '2026-02-01',
+    })
+    const res = await app.request('/v1/admin/projects', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-mushi-org-id': emptyOrg },
+      body: JSON.stringify({ name: 'Secret Slug' }),
+    })
+    const json = await res.json() as { ok?: boolean; data?: { slug?: string } }
+    expect(res.status).toBe(201)
+    expect(json.data?.slug).toBe('secret-slug-3')
+    expect(db.table('projects').some((p) => p.slug === 'secret-slug-3' && p.organization_id === emptyOrg)).toBe(true)
   })
 })
 
