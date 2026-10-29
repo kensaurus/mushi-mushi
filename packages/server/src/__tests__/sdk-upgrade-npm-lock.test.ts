@@ -166,4 +166,62 @@ describe('patchNpmLockfile v3', () => {
     if (!result.ok) return
     expect(JSON.parse(result.text).packages['node_modules/@mushi-mushi/core'].version).toBe(CORE)
   })
+
+  it('writes every dependency range of the new version, not only @mushi-mushi ones', () => {
+    const newerNoble: Record<string, NpmPackument> = {
+      ...packs,
+      '@mushi-mushi/core': {
+        latest: CORE,
+        versions: { [CORE]: pack('@mushi-mushi/core', CORE, { '@noble/hashes': '^2.3.0', 'fflate': '^0.8.0' }) },
+      },
+    }
+    const body = lock()
+    const packages = body.packages as Record<string, Record<string, unknown>>
+    packages['node_modules/@noble/hashes'] = { version: '2.3.1', integrity: 'sha512-noble' }
+    packages['node_modules/fflate'] = { version: '0.8.2', integrity: 'sha512-fflate' }
+    const result = patch(JSON.stringify(body, null, 2) + '\n', newerNoble)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const pkgs = JSON.parse(result.text).packages
+    expect(pkgs['node_modules/@mushi-mushi/core'].dependencies).toEqual({ '@noble/hashes': '^2.3.0', 'fflate': '^0.8.0' })
+  })
+
+  it('checks the copy a dependency resolves to from the rewritten entry', () => {
+    const body = lock()
+    const packages = body.packages as Record<string, Record<string, unknown>>
+    packages['node_modules/@mushi-mushi/core/node_modules/@noble/hashes'] = { version: '1.0.0', integrity: 'sha512-noble1' }
+    const result = patch(JSON.stringify(body, null, 2) + '\n')
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toContain('@noble/hashes')
+  })
+
+  it('refuses an entry resolved from a mirror instead of switching it to registry.npmjs.org', () => {
+    const body = lock()
+    const packages = body.packages as Record<string, Record<string, unknown>>
+    packages['node_modules/@mushi-mushi/web']!.resolved = 'https://npm.acme.internal/@mushi-mushi/web/-/web-1.31.0.tgz'
+    const result = patch(JSON.stringify(body, null, 2) + '\n')
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toContain('https://npm.acme.internal')
+  })
+
+  it('touches the root overrides only for a changed @mushi-mushi key', () => {
+    const body = lock()
+    const packages = body.packages as Record<string, Record<string, unknown>>
+    packages['']!.overrides = { 'left-pad': '1.0.0', '@mushi-mushi/core': '1.31.0' }
+    const run = (overrides: Record<string, unknown>) => {
+      const result = patchNpmLockfile(JSON.stringify(body, null, 2) + '\n', {
+        direct: { '@mushi-mushi/web': WEB },
+        packuments: packs,
+        manifests: [{ lockKey: '', ranges: bumpedRanges(manifest, new Set(['@mushi-mushi/web'])), overrides }],
+      })
+      expect(result.ok).toBe(true)
+      return result.ok ? JSON.parse(result.text).packages[''].overrides : null
+    }
+    expect(run({ 'left-pad': '2.0.0', '@mushi-mushi/core': '1.31.0' }))
+      .toEqual({ 'left-pad': '1.0.0', '@mushi-mushi/core': '1.31.0' })
+    expect(run({ 'left-pad': '2.0.0', '@mushi-mushi/core': CORE }))
+      .toEqual({ 'left-pad': '1.0.0', '@mushi-mushi/core': CORE })
+  })
 })

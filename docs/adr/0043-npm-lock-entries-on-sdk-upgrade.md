@@ -39,14 +39,19 @@ worker can copy without running npm.
    lockfileVersion 2 or 3**, the same commit updates the
    `node_modules/@mushi-mushi/<pkg>` entries the bump reaches: `version`,
    `resolved` and `integrity` from the npm packument for that exact version,
-   the host manifest ranges, and the `@mushi-mushi/*` ranges inside those
-   entries (including a transitive `@mushi-mushi/core` required by
-   `@mushi-mushi/web`). A transitive package whose locked version already
+   the host manifest ranges, the root `overrides` only where a
+   `@mushi-mushi/*` key changed, and the new version's dependency ranges
+   inside those entries (including a transitive `@mushi-mushi/core` required
+   by `@mushi-mushi/web`). A transitive package whose locked version already
    satisfies the new range stays. A nested or hoisted copy is rewritten only
-   when the chosen version satisfies every range that resolves to it;
-   otherwise the lockfile is left unchanged and the job names
-   `npm install --package-lock-only`. A prerelease satisfies a range only
-   when the range names that prerelease. lockfileVersion 1 is not guessed.
+   when the chosen version satisfies every range that resolves to it, and
+   each other dependency of the new version must already be locked, at the
+   copy that resolves from that entry, at a version its range accepts. An
+   entry resolved from anywhere but registry.npmjs.org (a mirror or private
+   registry) is not rewritten. Otherwise the lockfile is left unchanged and
+   the job names `npm install --package-lock-only`. A prerelease satisfies a
+   range only when the range names that prerelease. lockfileVersion 1 is not
+   guessed.
 3. **pnpm and yarn lockfiles are not edited.** The PR body and the console
    Update center say this PR needs `pnpm install --lockfile-only` (yarn:
    `yarn install`). The sentence is stored on the upgrade plan, not in the

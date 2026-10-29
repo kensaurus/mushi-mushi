@@ -1,24 +1,22 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/sdk-upgrade-npm-apply.ts
  * PURPOSE: Pick the @mushi-mushi versions for a lock edit and write version,
- *          resolved, and integrity onto one entry. Prereleases are eligible
- *          only when every range allows that prerelease.
+ *          resolved, integrity, and the new version's dependency ranges onto
+ *          one entry. Prereleases are eligible only when every range allows
+ *          that prerelease.
  */
 
 import { cmpSemVer, semverSatisfies } from './sdk-upgrade-semver.ts'
+import { EXACT_VERSION, SCOPE } from './sdk-upgrade-lock-edit.ts'
 import {
-  EXACT_VERSION,
-  installedName,
   metaOf,
   mushiOnly,
-  stringMap,
+  resolvesTo,
   type Entry,
   type Meta,
   type NpmPackument,
   type Targets,
 } from './sdk-upgrade-npm-lock.ts'
-
-const SCOPE = '@mushi-mushi/'
 
 function pickTransitive(ranges: string[], pack: NpmPackument | undefined, locked: string[]): string | null {
   if (!pack) return null
@@ -79,17 +77,17 @@ export function resolveTargets(
   return targets
 }
 
-/** A production dependency the lock cannot already satisfy. @mushi-mushi deps are rewritten. */
-export function blockingDep(pkgs: Record<string, unknown>, meta: Meta): string | null {
+/**
+ * A production dependency whose copy, as resolved from `key`, does not satisfy
+ * the new range. @mushi-mushi deps are rewritten.
+ */
+export function blockingDep(pkgs: Record<string, unknown>, key: string, meta: Meta): string | null {
   for (const [dep, range] of Object.entries(meta.dependencies)) {
     if (dep.startsWith(SCOPE)) continue
-    const versions: string[] = []
-    for (const [key, entry] of Object.entries(pkgs)) {
-      if (installedName(key, entry) !== dep || !entry || typeof entry !== 'object') continue
-      const ver = (entry as { version?: unknown }).version
-      if (typeof ver === 'string') versions.push(ver)
-    }
-    if (!versions.some((ver) => semverSatisfies(ver, range))) return dep
+    const at = resolvesTo(pkgs, key, dep)
+    const entry = at === null ? null : pkgs[at]
+    const ver = entry && typeof entry === 'object' ? (entry as { version?: unknown }).version : undefined
+    if (typeof ver !== 'string' || !semverSatisfies(ver, range)) return dep
   }
   return null
 }
@@ -99,26 +97,7 @@ export function applyEntry(entry: Entry, meta: Meta): void {
   entry.resolved = meta.resolved
   entry.integrity = meta.integrity
   for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies'] as const) {
-    const next = syncMushiField(entry[field], mushiOnly(meta[field]))
-    if (next === 'omit') delete entry[field]
-    else if (next !== 'keep') entry[field] = next
+    if (Object.keys(meta[field]).length) entry[field] = { ...meta[field] }
+    else delete entry[field]
   }
-}
-
-function syncMushiField(section: unknown, mushi: Record<string, string>): 'keep' | 'omit' | Record<string, string> {
-  if (section !== undefined && (typeof section !== 'object' || section === null || Array.isArray(section))) return 'keep'
-  const base = stringMap(section)
-  let changed = false
-  for (const key of Object.keys(base)) {
-    if (!key.startsWith(SCOPE) || key in mushi) continue
-    delete base[key]
-    changed = true
-  }
-  for (const [key, range] of Object.entries(mushi)) {
-    if (base[key] === range) continue
-    base[key] = range
-    changed = true
-  }
-  if (!changed) return 'keep'
-  return Object.keys(base).length ? base : 'omit'
 }
