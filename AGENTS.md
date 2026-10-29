@@ -137,7 +137,7 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `webhooks-linear-agent` | Linear AgentSessionEvent webhooks (acknowledge within 10s; may dispatch fix-worker) |
 | `reporter-notify-fanout` | Email / push for a developer reply to a reporter; enqueued by the `report_comments` trigger, which stays the in-app writer (Plan 018) |
 
-Also: **`api`** (Hono REST router), **`api-ext`** (the overflow half of the admin API: `api` forwards the CI runner, verified-fix, inventory, Ask Mushi, Codebase Atlas, modernization / super-admin, agent-skills, QA coverage, full-stack audit, UX-run, pipeline, tester-marketplace, per-app Home, setup-gaps, release-batch, local-worker (`work.ts`: `/v1/worker/*`, `/v1/admin/work/*`) and repo clean-up (`repo-housekeeping.ts`, ADR 0051) paths there with the caller's headers, because `api` hit Supabase's 5 MB deployment size limit on 2026-10-21 and again on 2026-10-22 (tester marketplace moved 2026-10-26); public URLs are unchanged, `_shared/edge-proxy.ts`; `scripts/deploy-edge-function.test.mjs` holds `api` under the last upload size known to deploy) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
+Also: **`api`** (Hono REST router), **`api-ext`** (the overflow half of the admin API: `api` forwards the CI runner, verified-fix, inventory, Ask Mushi, Codebase Atlas, modernization / super-admin, agent-skills, QA coverage, full-stack audit, UX-run, pipeline, tester-marketplace, per-app Home, setup-gaps, Health check (`health-checks.ts`), release-batch, local-worker (`work.ts`: `/v1/worker/*`, `/v1/admin/work/*`) and repo clean-up (`repo-housekeeping.ts`, ADR 0051) paths there with the caller's headers, because `api` hit Supabase's 5 MB deployment size limit on 2026-10-21 and again on 2026-10-22 (tester marketplace moved 2026-10-26); public URLs are unchanged, `_shared/edge-proxy.ts`; `scripts/deploy-edge-function.test.mjs` holds `api` under the last upload size known to deploy) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
 
 ---
 
@@ -990,6 +990,26 @@ Console Home → Today (`apps/admin/src/pages/DashboardPage.tsx`, sections in
 Opening Home captures a new screenshot in the background only while the
 app's live-site watch is on, with its own Firecrawl key, and the last
 capture is over 7 days old (at most one try a day).
+
+## Health check (Oct 2026)
+
+One registry of every setup and health check (plan-simplicity-2026-10 Phase 1,
+ADR 0054, Proposed). `_shared/health-checks.ts` adapts setup gaps, SDK health,
+the SDK diagnostics launcher verdict and the server doctor into one shape:
+id, status (`ok` / `problem` / `unknown`; a check that cannot be read is never
+`problem`), plain-English detail, fix (`auto`, `one_click`, `guided`), the
+automations it `blocks` and its part. Route in `api/routes/health-checks.ts`
+(served by `api-ext`).
+
+| Route | Auth | Role |
+| --- | --- | --- |
+| `GET /v1/admin/health-checks` | `adminOrApiKey(mcp:read)`, members; a project key only its own app | `?projectId=` one app, else every app the caller opens (≤10); `refresh=1` re-checks setup gaps; `audience=platform` adds the doctor's platform lines. Per app: `checks` (problems first), `fixFirst` (≤3 root causes with `affects`, the items of /pipeline groups each explains), `counts`, `gate.today` (shadow counts); top level `gate.mode`. Read by Home's "Fix these first", `mushi doctor` and MCP `diagnose_setup` |
+
+| Object | Role |
+| --- | --- |
+| `_shared/health-gate.ts` | Stop the line: `fix-worker` (automatic dispatches), `review-followup`, `merge-queue` (train tick, a PR's turn, a conflict agent) and `spend-down-worker` ask it before starting work for an app. Switch `mushi_runtime_config.health_gate_mode`: `off` (default; missing row, failed read or any other value), `observe` (records, runs as before), `enforce` (withholds; the work stays where it was and resumes on its own). Reads the stored `setup_gap_results` (over an hour old = `unknown`) and the follow-up key live; `unknown` never pauses. Only withholds: never around `gatedMergePullRequest` / `gatedTrainMerge`, the Opus hold, verified merge or draft → ready |
+| `health_gate_shadow` | Per app, automation, check, UTC day and mode: how often the gate would pause (observe) or paused (enforce); `health_gate_record()` RPC. Service role only. Migration `20261029120000_health_gate_shadow.sql` |
+| `pipeline-view.ts` `tagRootCauses` | A stuck /pipeline group gets `rootCause: { checkId, count }` when that check is a problem for every item's app; Home then shows the cause once instead of the group |
 
 ---
 
