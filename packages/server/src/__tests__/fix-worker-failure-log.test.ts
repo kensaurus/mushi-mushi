@@ -12,12 +12,23 @@
  *          context_assembly_failed, unknown) MUST still log at `error` →
  *          Sentry. We mirror the decision predicate here so CI enforces it
  *          without booting Deno + Supabase, plus a source-level snapshot so
- *          the gate can't silently disappear.
+ *          the gate can't silently disappear. `categorizeFailure` is exported
+ *          and called directly for the Anthropic usage-cap mapping.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+vi.hoisted(() => {
+  ;(globalThis as Record<string, unknown>).Deno = {
+    serve: () => undefined,
+    env: { get: () => undefined },
+  };
+});
+
+import { ClaudeQuotaExceededError } from '../../supabase/functions/_shared/claude-request.ts';
+import { categorizeFailure } from '../../supabase/functions/fix-worker/index.ts';
 
 // Mirror of EXPECTED_FAILURE_CATEGORIES in
 // supabase/functions/fix-worker/index.ts. Kept in sync by the source-snapshot
@@ -71,6 +82,16 @@ describe('fix-worker failure logging (MUSHI-MUSHI-SERVER-8)', () => {
     });
   });
 
+  describe('categorizeFailure', () => {
+    it('classifies an Anthropic workspace usage cap as llm_rate_limit, not a malformed request', () => {
+      const err = new ClaudeQuotaExceededError(
+        'You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.',
+      );
+      expect(categorizeFailure(err, err.message)).toBe('llm_rate_limit');
+      expect(categorizeFailure(new Error('temperature is deprecated'), 'temperature is deprecated')).toBe('unknown');
+    });
+  })
+
   describe('source snapshot — gate is wired in the edge function', () => {
     const src = readFileSync(FIX_WORKER_SRC, 'utf8');
 
@@ -88,11 +109,6 @@ describe('fix-worker failure logging (MUSHI-MUSHI-SERVER-8)', () => {
       // The genuine-failure branch must still page via log.error.
       expect(src).toContain("log.error('Fix worker failed'");
     });
-
-    it('classifies an Anthropic workspace usage cap as llm_rate_limit, not a malformed request', () => {
-      expect(src).toContain('specified api usage limits')
-      expect(src).toContain('claude quota exceeded')
-    })
 
     it('logs a Cursor account usage limit at warn, other Cursor errors at error (MUSHI-MUSHI-SERVER-28)', () => {
       expect(src).toMatch(

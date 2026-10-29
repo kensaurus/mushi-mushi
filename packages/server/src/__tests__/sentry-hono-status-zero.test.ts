@@ -37,9 +37,25 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const sentrySdk = vi.hoisted(() => ({
+  captureMessage: vi.fn(),
+  captureException: vi.fn(),
+  init: vi.fn(),
+  setTag: vi.fn(),
+}))
+
+// `npm:@sentry/deno` is rewritten to this stub. Spy on the stub the handler
+// actually imports so a missing captureMessage fails the test.
+vi.mock('./__stubs__/npm-stub.ts', () => ({
+  init: sentrySdk.init,
+  captureException: sentrySdk.captureException,
+  captureMessage: sentrySdk.captureMessage,
+  setTag: sentrySdk.setTag,
+}))
+
 import { ClaudeQuotaExceededError } from '../../supabase/functions/_shared/claude-request.ts'
 import { ProjectAccessReadError } from '../../supabase/functions/_shared/project-access.ts'
-import { sentryHonoErrorHandler } from '../../supabase/functions/_shared/sentry.ts'
+import { ensureSentry, sentryHonoErrorHandler } from '../../supabase/functions/_shared/sentry.ts'
 
 interface MinimalContext {
   req: { path: string; method: string }
@@ -84,6 +100,7 @@ describe('sentryHonoErrorHandler — status-0 RangeError contract (Sentry MUSHI-
   afterEach(() => {
     warnSpy.mockRestore()
     errorSpy.mockRestore()
+    vi.unstubAllGlobals()
   })
 
   it('returns 499 client_closed_request for the canonical Deno status-0 RangeError', async () => {
@@ -135,6 +152,38 @@ describe('sentryHonoErrorHandler — status-0 RangeError contract (Sentry MUSHI-
     expect(warnSpy).toHaveBeenCalledTimes(1)
     const payload = JSON.parse(String(warnSpy.mock.calls[0][0])) as Record<string, unknown>
     expect(payload.event).toBe('llm_quota_exceeded')
+  })
+
+  it('sends one grouped Sentry warning for an Anthropic usage cap', () => {
+    vi.stubGlobal('Deno', {
+      env: {
+        get: (key: string) =>
+          key === 'SENTRY_DSN_SERVER' ? 'https://public@o0.ingest.sentry.io/0' : undefined,
+      },
+    })
+    ensureSentry('sentry-hono-test')
+    sentrySdk.captureMessage.mockClear()
+    sentrySdk.captureException.mockClear()
+
+    const first = new ClaudeQuotaExceededError(
+      'You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.',
+    )
+    sentryHonoErrorHandler(first, fakeContext('/v1/admin/reports', 'POST') as never)
+    const later = new ClaudeQuotaExceededError(
+      'You have reached your specified API usage limits. You will regain access on 2026-12-15 at 00:00 UTC.',
+    )
+    sentryHonoErrorHandler(later, fakeContext('/functions/v1/fix-worker', 'POST') as never)
+
+    expect(sentrySdk.captureException).not.toHaveBeenCalled()
+    expect(sentrySdk.captureMessage).toHaveBeenCalledTimes(2)
+    for (const call of sentrySdk.captureMessage.mock.calls) {
+      expect(call[0]).toBe('Anthropic workspace usage limit reached')
+      expect(call[1]).toMatchObject({
+        level: 'warning',
+        fingerprint: ['anthropic-workspace-usage-limit'],
+      })
+    }
+    expect(warnSpy).toHaveBeenCalled()
   })
 
   it('still returns 500 internal for genuine TypeErrors so real bugs keep paging', async () => {

@@ -1692,7 +1692,7 @@ const EXPECTED_FAILURE_CATEGORIES = new Set<string>([
  * Pattern order matters: more-specific HTTP / vendor codes are checked
  * before generic substrings ("Validation failed:" before "failed").
  */
-function categorizeFailure(err: unknown, msg: string): string {
+export function categorizeFailure(err: unknown, msg: string): string {
   const m = (msg || '').toLowerCase();
   // Pinned spend-down key was already unusable. Same retry as a usage limit
   // (reportsToRetryAfterKeyLimit), and not a Sentry error.
