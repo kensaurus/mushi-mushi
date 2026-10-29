@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { brokenConnections, buildConnectionGrid, connectionGridSentence, type ConnectionGridInput } from './connectionGrid'
+import { brokenConnections, buildConnectionGrid, connectionGridSentence, type ConnectionGridInput } from './connectionGridModel'
 import { sentryConnectionFromPageData } from '../../lib/useSentryConnection'
 import type { HealthRow, PlatformResponse } from './types'
 

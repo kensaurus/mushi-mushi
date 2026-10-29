@@ -30,7 +30,8 @@
  *     Reports whose newest attempt in the last 7 days ended without a PR,
  *     with no fix in flight. Fixed, verified, resolved and dismissed reports
  *     never count. Server: _shared/pipeline-view.ts, groups `agent_failed`,
- *     `agent_failed_person` (the agent says a person must decide) and
+ *     `agent_failed_person` (the agent says a person must decide),
+ *     `agent_said_fixed` (already fixed in the code) and
  *     `agent_failed_nothing` (nothing to change in the code); together they
  *     are the one count.
  *     It is a part of Stopped, over a shorter window.
