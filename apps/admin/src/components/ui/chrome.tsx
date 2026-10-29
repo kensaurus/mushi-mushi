@@ -33,6 +33,11 @@ export interface HeaderContextChipProps extends ButtonHTMLAttributes<HTMLButtonE
   kickerHiddenBelowLg?: boolean
   /** Hide plan/status badge below `xl` — full label stays in `title`. */
   badgeHiddenBelowXl?: boolean
+  /**
+   * Keep the badge text as written. The default uppercases short status
+   * words ("PRO"); a plan label such as "Pro (complimentary)" must not.
+   */
+  badgeAsWritten?: boolean
   /** Accent CTA styling for empty-state create actions. */
   variant?: 'default' | 'accent'
 }
@@ -47,6 +52,7 @@ export function HeaderContextChip({
   kickerHiddenSm,
   kickerHiddenBelowLg,
   badgeHiddenBelowXl,
+  badgeAsWritten = false,
   variant = 'default',
   className = '',
   type = 'button',
@@ -93,7 +99,9 @@ export function HeaderContextChip({
             // One display utility only: with both `inline-flex` and `hidden`
             // on the element, inline-flex won and the badge never hid below
             // xl (it took header width at 390px).
-            className={`${badgeHiddenBelowXl ? 'hidden xl:inline-flex' : 'inline-flex'} h-5 max-w-[4.5rem] xl:max-w-[5.5rem] items-center truncate rounded-sm px-1 text-2xs font-medium uppercase shrink-0 ${
+            className={`${badgeHiddenBelowXl ? 'hidden xl:inline-flex' : 'inline-flex'} h-5 ${
+              badgeAsWritten ? 'max-w-[16rem] normal-case' : 'max-w-[4.5rem] xl:max-w-[5.5rem] uppercase'
+            } items-center truncate rounded-sm px-1 text-2xs font-medium shrink-0 ${
               badgeTone ? CHIP_TONE[badgeTone] : CHIP_TONE.neutral
             }`}
           >

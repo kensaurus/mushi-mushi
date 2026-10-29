@@ -31,6 +31,7 @@ import { useBillingUx, resolveQuickBillingTab } from '../lib/billingModeUx'
 import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { describeBillingError } from '../lib/billingErrors'
 import { formatPlanQuotaChip } from '../lib/billingUsageForecast'
+import { visiblePlanLabel } from '../lib/visiblePlanLabel'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { trackAdHoc } from '../lib/track'
@@ -118,6 +119,19 @@ export function BillingPage() {
     [projects, activeProjectId],
   )
   const activeTierId = activeProject?.tier?.id ?? 'free_cloud'
+  const seatBillingMode =
+    membersStats.billingMode === 'complimentary' ||
+    activePlan?.isComplimentary ||
+    activeProject?.billing_mode === 'complimentary' ||
+    stats.isComplimentary ||
+    stats.billingMode === 'complimentary'
+      ? 'complimentary'
+      : 'stripe'
+  const seatPlanLabel = visiblePlanLabel({
+    displayName: membersStats.planDisplayName ?? activePlan?.displayName ?? stats.planDisplayName,
+    planId: membersStats.planId ?? activePlan?.planId ?? stats.planId,
+    billingMode: seatBillingMode,
+  })
   // Apps this team watches: the plan's headline limit (docs/plan-pricing.md).
   const teamAppCount = useMemo(() => {
     const orgId = activeProject?.organization_id
@@ -360,9 +374,7 @@ export function BillingPage() {
       {(activeTab === 'overview' || activeTab === 'plans') && (
         <BillingSeatFaqCallout
           collapsible={activeTab === 'plans'}
-          planDisplayName={
-            membersStats.planDisplayName ?? activePlan?.displayName ?? stats.planDisplayName
-          }
+          planDisplayName={seatPlanLabel}
           planId={membersStats.planId ?? activePlan?.planId ?? stats.planId}
           seatLimit={membersStats.seatLimit ?? activePlan?.seatLimit ?? null}
           seatsUsed={membersStats.seatsUsed}

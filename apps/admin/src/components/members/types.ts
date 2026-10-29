@@ -16,6 +16,8 @@ export interface MembersStats {
   atSeatCap: boolean
   planId: string | null
   planDisplayName: string | null
+  /** `organizations.billing_mode`. Missing on a cached payload means stripe. */
+  billingMode?: 'stripe' | 'complimentary'
   currentUserRole: 'owner' | 'admin' | 'member' | 'viewer'
   canManage: boolean
   organizationName: string | null
@@ -33,6 +35,7 @@ export const EMPTY_MEMBERS_STATS: MembersStats = {
   atSeatCap: false,
   planId: null,
   planDisplayName: null,
+  billingMode: 'stripe',
   currentUserRole: 'member',
   canManage: false,
   organizationName: null,

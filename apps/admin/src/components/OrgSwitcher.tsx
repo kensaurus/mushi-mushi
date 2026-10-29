@@ -21,6 +21,7 @@ import {
 import { knownProjectTeam } from '../lib/crossTeamProject'
 import { useCreateOrganization } from '../lib/useCreateOrganization'
 import { headerDropdownPanelClass } from '../lib/appChrome'
+import { visiblePlanLabel, visiblePlanTitle, type VisiblePlanInput } from '../lib/visiblePlanLabel'
 import { HeaderContextChip, HeaderContextChipSkeleton } from './ui/chrome'
 import { IconMembers } from './icons'
 
@@ -33,23 +34,25 @@ export interface OrganizationSummary {
   is_personal?: boolean
   /**
    * Org-level billing posture from `organizations.billing_mode`.
-   * When `'complimentary'` the team pill renders "admin" instead of the
-   * underlying `plan_id` so internal staff / sponsored orgs don't read as
-   * paying customers in the global header.
+   * Complimentary orgs use the same label as the Team page and sidebar
+   * (`visiblePlanLabel`), not a separate "comp" or "admin" word.
    */
   billing_mode?: 'stripe' | 'complimentary'
+  /** `pricing_plans.display_name` for `plan_id`. Blank falls back to the catalog. */
+  plan_display_name?: string | null
 }
 
-/**
- * Render the right-hand chip on each org row. Complimentary orgs get a
- * distinct "comp" label that overrides the raw `plan_id` so a comp Pro org
- * never reads as "Pro" in the header. It used to say "admin", which next to
- * the team name read as the user's role and made the team switcher look like
- * a user menu. Returned as a plain string so the caller stays in control of
- * layout / wrapping.
- */
+function planInput(org: OrganizationSummary): VisiblePlanInput {
+  return {
+    displayName: org.plan_display_name,
+    planId: org.plan_id,
+    billingMode: org.billing_mode,
+  }
+}
+
+/** Right-hand chip on the team pill and each row in the switcher. */
 function orgPillLabel(org: OrganizationSummary): string {
-  return org.billing_mode === 'complimentary' ? 'comp' : org.plan_id
+  return visiblePlanLabel(planInput(org))
 }
 
 export function OrgSwitcher() {
@@ -245,12 +248,13 @@ export function OrgSwitcher() {
         label={active.name}
         badge={orgPillLabel(active)}
         badgeTone={active.billing_mode === 'complimentary' ? 'brand' : 'neutral'}
+        badgeAsWritten
         title={
           active.billing_mode === 'complimentary'
-            ? `Team: ${active.name} (complimentary, feature set tracks the ${active.plan_id} tier)`
-            : `Team: ${active.name}`
+            ? visiblePlanTitle(planInput(active))
+            : `Team: ${active.name} — ${orgPillLabel(active)}`
         }
-        aria-label={`Team: ${active.name} — switch team`}
+        aria-label={`Team: ${active.name}, ${orgPillLabel(active)}. Switch team`}
         trailing={
           <svg
             width="9"
@@ -281,6 +285,7 @@ export function OrgSwitcher() {
                   role="option"
                   aria-selected={org.id === active.id}
                   onClick={() => pick(org.id)}
+                  title={visiblePlanTitle(planInput(org))}
                   className={`flex w-full items-start justify-between gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-surface-overlay motion-safe:transition-opacity ${
                     org.id === active.id ? 'bg-surface-overlay/60 text-fg' : 'text-fg-secondary'
                   }`}

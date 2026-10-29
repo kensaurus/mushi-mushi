@@ -13,6 +13,7 @@
 import { Link } from 'react-router-dom'
 import { useActivePlan } from '../lib/useActivePlan'
 import { CHIP_TONE } from '../lib/chipTone'
+import { visiblePlanLabel, visiblePlanTitle } from '../lib/visiblePlanLabel'
 
 const TONE: Record<string, string> = {
   hobby: 'bg-surface-overlay text-fg-muted border-edge-subtle',
@@ -27,10 +28,6 @@ const GLYPH: Record<string, string> = {
   pro: '◆◆',
   enterprise: '★',
 }
-
-// Complimentary — ghost text row in sidebar; bordered pill in header only.
-const COMPLIMENTARY_TONE = 'text-fg-muted hover:text-brand border-0 bg-transparent'
-const COMPLIMENTARY_TONE_HEADER = 'bg-brand-subtle text-brand border-brand/40'
 
 function densityClasses(sidebar: boolean) {
   if (sidebar) {
@@ -71,43 +68,29 @@ export function PlanBadge({ density = 'header' }: PlanBadgeProps) {
           ? 'Unlimited reports'
           : null
 
-  // Complimentary accounts (Mushi staff / sponsored / beta) intentionally take
-  // over the entire pill — showing "Studio $79/mo" on a comp account
-  // misrepresents the relationship. We surface "Admin" as the primary identity
-  // and demote the entitlement tier to a secondary chip so the user still
-  // knows which feature set they have access to.
+  // Complimentary accounts share one label and tooltip with the header team
+  // pill and the Team page chip. "Admin" read as a role; "COMP" was a third name.
   if (plan.isComplimentary) {
-    const tooltip = [
-      `Admin account — billed by Mushi Mushi at no cost`,
-      `Feature set tracks the ${plan.displayName} tier`,
-      usageHint,
-    ]
-      .filter(Boolean)
-      .join(' · ')
+    const planInput = {
+      displayName: plan.displayName,
+      planId: plan.planId,
+      billingMode: 'complimentary' as const,
+    }
+    const label = visiblePlanLabel(planInput)
+    const tooltip = visiblePlanTitle(planInput)
     return (
       <Link
         to="/billing"
         title={tooltip}
-        aria-label={`Admin account with ${plan.displayName} entitlements. ${usageHint ?? ''} Open billing.`}
+        aria-label={`${tooltip} Open billing.`}
         data-tour-id="plan-badge"
-        className={`inline-flex items-center font-medium motion-safe:transition-opacity min-w-0 ${
-          sidebar ? COMPLIMENTARY_TONE : `${COMPLIMENTARY_TONE_HEADER} border hover:brightness-110`
-        } ${densityClasses(sidebar)}`}
+        className={`inline-flex items-center font-medium motion-safe:transition-opacity min-w-0 ${CHIP_TONE.brand} ${
+          sidebar
+            ? 'w-full min-w-0 justify-center text-2xs px-1.5 py-0.5 gap-1 rounded-sm shrink-0'
+            : 'text-2xs px-2 py-1 gap-1.5 rounded-sm hover:brightness-110'
+        }`}
       >
-        <span aria-hidden="true" className="leading-none shrink-0 text-brand/80 text-2xs">◆</span>
-        <span className={sidebar ? 'truncate' : ''}>Admin</span>
-        {sidebar ? (
-          <span className="text-fg-faint font-mono uppercase tracking-wider text-2xs shrink-0">
-            {plan.displayName}
-          </span>
-        ) : (
-          <span
-            className="rounded-sm bg-surface-overlay/70 font-mono uppercase tracking-wider text-fg-secondary shrink-0 px-1 py-0.5 text-2xs"
-            aria-hidden="true"
-          >
-            {plan.displayName}
-          </span>
-        )}
+        <span className="truncate normal-case">{label}</span>
       </Link>
     )
   }
