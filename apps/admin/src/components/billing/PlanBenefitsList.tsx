@@ -111,10 +111,10 @@ export function PlanBenefitsList({ planId, planName, flags, retentionDays, seatL
           </li>
         ))}
       </ul>
-      {planId === 'hobby' && (
+      {(planId === 'hobby' || planId === 'free_cloud') && (
         <InlineProof className="mt-2">
-          Unlock BYOK, plugins, and an audit log by upgrading to{' '}
-          <span className="text-brand">Starter · $19/mo</span>.
+          Watch up to 3 apps with automatic fix PRs, plugins and an audit log on{' '}
+          <span className="text-brand">Builder · $29/mo</span>.
         </InlineProof>
       )}
     </section>

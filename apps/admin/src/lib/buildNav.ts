@@ -193,3 +193,8 @@ export function buildOperatorNav(): BuiltNavSection[] {
   })
 }
 
+
+/** Every registry page as a nav item, palette-only views included (sidebar sub-pages, More pages). */
+export const NAV_ITEM_BY_PATH: ReadonlyMap<string, BuiltNavItem> = new Map(
+  NAV_REGISTRY.map((entry) => [entry.path, entryToNavItem(entry)] as const),
+)

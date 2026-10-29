@@ -4,17 +4,18 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/sdk-upgrade-lockfile
 
 ---
 title: SDK upgrade lockfile helper
-description: Add one workflow to your repo so Mushi's SDK upgrade PRs arrive with a refreshed lockfile and pass npm ci or pnpm install --frozen-lockfile.
+description: Add one workflow to your repo so Mushi Mushi's SDK upgrade PRs arrive with a refreshed lockfile and pass npm ci or pnpm install --frozen-lockfile.
 ---
 
 # SDK upgrade lockfile helper
 
-**Create Upgrade PR** bumps `@mushi-mushi/*` in your `package.json` files.
+In Mushi Mushi, **Create Upgrade PR** bumps `@mushi-mushi/*` in your `package.json` files.
 With no workflow and an npm `package-lock.json` (lockfileVersion 2 or 3), the
 same commit updates the `@mushi-mushi/*` lock entries from the npm registry, so
 `npm ci` can pass. pnpm and yarn lockfiles, and npm locks that resolve from a
-mirror or private registry, are not edited; the PR says which install command
-is still required.
+mirror or private registry, are not edited, so those PRs still fail a frozen
+install (`pnpm install --frozen-lockfile`) until someone runs the package
+manager by hand; the PR says which install command is still required.
 
 Add the workflow below once, and every upgrade PR arrives with the lockfile
 already refreshed by your own package manager.

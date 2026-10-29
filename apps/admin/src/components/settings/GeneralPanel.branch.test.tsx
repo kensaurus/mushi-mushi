@@ -110,9 +110,22 @@ describe('GeneralPanel with a legacy branch pattern', () => {
     expect(container.textContent).toContain('Your saved pattern is no longer allowed')
   })
 
+  // Empty fields showed "C0B82A322RW" and a full-looking DSN beside "Not
+  // connected", reading as real values (integrator's walk, 2026-10-28).
+  it('shows example placeholders that read as examples', async () => {
+    await render()
+    const placeholderOf = (label: string) =>
+      Array.from(container.querySelectorAll('label'))
+        .find((l) => l.textContent?.trim().startsWith(label))
+        ?.querySelector('input')?.placeholder ?? ''
+    for (const label of ['Channel ID', 'Sentry DSN', 'Supabase project ref']) {
+      expect(placeholderOf(label).startsWith('e.g. '), label).toBe(true)
+    }
+  })
+
   it('saves a new Sentry DSN without touching the branch pattern', async () => {
     await render()
-    const dsn = container.querySelector<HTMLInputElement>('input[placeholder^="https://abc@o0.ingest.sentry.io"]')!
+    const dsn = container.querySelector<HTMLInputElement>('input[placeholder*="ingest.sentry.io"]')!
     await act(async () => {
       typeInto(dsn, 'https://abc123@o0.ingest.sentry.io/1')
       await flush()
@@ -135,5 +148,28 @@ describe('GeneralPanel with a legacy branch pattern', () => {
       await flush()
     })
     expect(buttonByText('Save changes').disabled).toBe(true)
+  })
+
+  // Every user saw a "Console help index" card ending "Only Mushi staff can
+  // rebuild this shared index. Nothing to do here." (first-time user test).
+  it('shows the help-index card only to someone who can rebuild it', async () => {
+    await render()
+    expect(container.textContent).not.toContain('Console help index')
+    expect(container.textContent).not.toContain('Nothing to do here')
+  })
+
+  // The four model pickers were about 340 of the tab's ~2,600 words
+  // (integrator's new-user walk, 2026-10-28). One row stands in for them.
+  it('keeps the four model pickers behind one row until asked', async () => {
+    localStorage.clear()
+    await render()
+    const headings = () => Array.from(container.querySelectorAll('h3')).map((h) => h.textContent?.trim())
+    expect(headings()).toContain('AI models')
+    expect(headings()).not.toContain('Triage model')
+    await act(async () => {
+      buttonByText('Change models').click()
+      await flush()
+    })
+    expect(headings()).toEqual(expect.arrayContaining(['Triage model', 'Quick check model', 'Judge model', 'Fix model']))
   })
 })

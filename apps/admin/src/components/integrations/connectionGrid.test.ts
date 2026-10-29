@@ -44,8 +44,26 @@ function input(over: Partial<ConnectionGridInput> = {}): ConnectionGridInput {
 }
 
 describe('buildConnectionGrid', () => {
-  it('lists the six tools in a fixed order', () => {
-    expect(buildConnectionGrid(input()).map((t) => t.id)).toEqual(['sentry', 'github', 'slack', 'langfuse', 'cursor_cloud', 'linear'])
+  // The row led with Sentry, a monitoring tool we never require (AGENTS.md;
+  // first-time user test, 2026-10-28). GitHub and alerts lead; Sentry is last.
+  it('lists the tools in a fixed order, GitHub first and monitoring last', () => {
+    expect(buildConnectionGrid(input()).map((t) => t.id)).toEqual(['github', 'slack', 'discord', 'cursor_cloud', 'linear', 'sentry'])
+  })
+
+  // Mushi's own Langfuse (set in its environment) counted as one of the user's
+  // connections: a new app read "2 connected" with nothing connected
+  // (integrator's new-user walk, 2026-10-28).
+  it("leaves out Mushi's own Langfuse and counts the user's", () => {
+    const viaEnv: PlatformResponse = {
+      platform: { langfuse: { langfuse_host: 'https://us.cloud.langfuse.com', langfuse_public_key_ref: 'ref', langfuse_secret_key_ref: 'ref' } },
+      sourceByField: { langfuse_host: 'env', langfuse_public_key_ref: 'env', langfuse_secret_key_ref: 'env' },
+    }
+    const envTiles = buildConnectionGrid(input({ platform: viaEnv, history: [probe('langfuse')] }))
+    expect(envTiles.map((t) => t.id)).not.toContain('langfuse')
+    expect(connectionGridSentence(envTiles).sentence).toMatch(/^Nothing is connected yet/)
+
+    const own: PlatformResponse = { ...viaEnv, sourceByField: { langfuse_host: 'project', langfuse_public_key_ref: 'project', langfuse_secret_key_ref: 'project' } }
+    expect(buildConnectionGrid(input({ platform: own, history: [probe('langfuse')] })).map((t) => t.id)).toContain('langfuse')
   })
 
   it('shows Claude Code only once it is set up, so a failing agent is never hidden from the grid', () => {
@@ -67,7 +85,7 @@ describe('buildConnectionGrid', () => {
   it('a configured tool with a failing check needs you; an unconfigured one does not', () => {
     const tiles = buildConnectionGrid(input({ history: [probe('sentry'), probe('github', 'down', 'HTTP 401 Bad credentials')] }))
     expect(brokenConnections(tiles).map((t) => t.id)).toEqual(['github'])
-    expect(tiles.find((t) => t.id === 'langfuse')!.view.state).toBe('not_connected')
+    expect(tiles.find((t) => t.id === 'cursor_cloud')!.view.state).toBe('not_connected')
   })
 
   it('a Slack channel nothing can post to needs you, with the card’s words', () => {
@@ -90,6 +108,28 @@ describe('connectionGridSentence', () => {
 
   it('says all is well when every connected tool works', () => {
     expect(connectionGridSentence(buildConnectionGrid(input()))).toEqual({ sentence: '2 connected and working.', tone: 'ok' })
+  })
+
+  // One tool set up and never tested read "1 connected, 1 not tested yet"
+  // beside tiles that showed nothing connected (integrator, 2026-10-28).
+  it('counts a tool that is set up but not tested once', () => {
+    expect(connectionGridSentence(buildConnectionGrid(input({ history: [probe('sentry')] })))).toEqual({
+      sentence: '1 connected and working, 1 not tested yet.',
+      tone: 'neutral',
+    })
+    expect(connectionGridSentence(buildConnectionGrid(input({ history: [] })))).toEqual({
+      sentence: '2 set up, not tested yet.',
+      tone: 'neutral',
+    })
+  })
+
+  // Connecting only Discord read "Nothing is connected yet. Start with GitHub"
+  // beside a Discord card saying Connected (first-time user test, 2026-10-28).
+  it('counts an alert channel that is only Discord or Teams', () => {
+    const only = input({ platform: { platform: {} }, history: [], discordConfigured: true, teamsConfigured: true })
+    const tiles = buildConnectionGrid(only)
+    expect(tiles.map((t) => t.id)).toEqual(expect.arrayContaining(['discord', 'teams']))
+    expect(connectionGridSentence(tiles).sentence).toBe('2 set up, not tested yet.')
   })
 
   it('with nothing connected, points at GitHub first', () => {

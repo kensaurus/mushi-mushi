@@ -1,20 +1,20 @@
-# Mushi goes AGPLv3 — the honest open source story
+# Mushi Mushi goes AGPLv3: the honest open source story
 
 Source: https://kensaur.us/mushi-mushi/docs/blog/agplv3-relicense
 
 ---
-title: "Mushi goes AGPLv3 — the honest open source story"
+title: "Mushi Mushi goes AGPLv3: the honest open source story"
 description: Why Mushi Mushi relicensed its server to AGPLv3 while keeping every SDK MIT — the open-core reasoning, what changes for self-hosters, and what stays free.
 date: 2026-06-17
 ---
 
-# Mushi goes AGPLv3 — the honest open source story
+# Mushi Mushi goes AGPLv3: the honest open source story
 
 *Jun 17, 2026 · Kenji Sakuramoto*
 
 ---
 
-We started Mushi with a BSL 1.1 server license — the "source-available" model popularized by HashiCorp and Redis. The idea was reasonable: let anyone self-host, block unmodified SaaS competitors, and convert to Apache in 2029.
+We started Mushi Mushi with a BSL 1.1 server license, the "source-available" model HashiCorp moved Terraform to in 2023. The idea was reasonable: let anyone self-host, block unmodified SaaS competitors, and convert to Apache in 2029.
 
 The problem: our README said "open source." Our migration guides said "MIT-licensed." The badges said `BSL 1.1`. Three things, all contradicting each other.
 
@@ -22,7 +22,7 @@ Worse, every time a developer read the license and realized BSL isn't OSI-approv
 
 ## What we actually want
 
-Supabase is AGPLv3. Langfuse is MIT (SDKs) + proprietary (cloud features). Both built massive developer communities. The common thread: they were honest. Supabase didn't say "open source" and then ship a license that confused everyone. Langfuse didn't over-promise.
+Grafana is AGPLv3. Supabase is Apache 2.0. Langfuse is MIT, with its enterprise folders under a separate license. All three built large developer communities. The common thread: they were clear. Each says what is open and under which license, and you can check it in the LICENSE file. *(Corrected 2026-10-29: this paragraph first said Supabase is AGPLv3. Its main repository is Apache 2.0.)*
 
 We want what they have: trust from developers who can read the license and know exactly what they're getting.
 
@@ -34,7 +34,7 @@ The server (`@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify`)
 - Self-hosting is and always will be free.
 - The AGPLv3 network use provision (Section 13) means if you run a modified server as a SaaS, you publish your changes. This isn't punitive — it's the copyleft that keeps the ecosystem honest.
 - The SDK packages (`@mushi-mushi/react`, `@mushi-mushi/vue`, etc.) remain **MIT** — embed them in anything, open or closed.
-- Companies that need a non-copyleft path for hosted SaaS can obtain a [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md) (dual-licensing, Grafana-style).
+- Companies that need a non-copyleft path for hosted SaaS can obtain a [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md) (dual licensing).
 
 **Self-hosters:** nothing changes operationally. You were already allowed to do everything you're doing. The new license just makes that legally unambiguous and removes the 2029 date anxiety.
 
@@ -46,7 +46,7 @@ The server (`@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify`)
 
 **For Mushi Cloud, the hosted product:** still running the same code. Now provably the same code.
 
-**Update, Oct 22, 2026.** Two changes since this post, both in [Open source & licensing](/concepts/open-source). The console (`apps/admin`) is now AGPLv3 too, so a rebranded console can't ship closed. And we now say it more exactly: Mushi Cloud runs the same code, and carries its own tuning data (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. The repo keeps working default prompts, so self-hosting stays free and complete.
+**Update, Oct 22, 2026.** Two changes since this post, both in [Open source & licensing](/concepts/open-source). The console (`apps/admin`) is now AGPLv3 too, so a rebranded console can't ship closed. And we now say it more exactly: Mushi Cloud runs the same code, and carries its own tuning data (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. The repo keeps working default prompts, so self-hosting stays free and complete. One part of the server is not AGPLv3: the enterprise folder `packages/server/ee` (SSO, audit export, retention policies) is source-available, and production use of it needs a license.
 
 ## The honest "open source" claim
 

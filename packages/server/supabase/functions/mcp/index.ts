@@ -2167,6 +2167,7 @@ const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   'get_ci_overview',
   'get_ci_costs',
   'get_ci_bill',
+  'get_worker_status',
   'request_ci_placement_change',
   'open_ci_cost_fix',
   'preview_ci_cost_fix_rollout',

@@ -139,6 +139,15 @@ describe('heartbeat body', () => {
     expect(parseHeartbeat({ ...body, host: { ...body.host, hostId: 'machine-123' } }).ok).toBe(false)
     expect(parseHeartbeat({ ...body, lanes: [{ ...body.lanes[0], initial: { repoDir: '/x' } }] }).ok).toBe(false)
   })
+  it('keeps only the claim kinds it knows the daemon runs (ADR 0053 amendment)', () => {
+    const takes = (t: unknown) => {
+      const r = parseHeartbeat({ ...body, host: { ...body.host, takes: t } })
+      return r.ok ? r.value.host.takes : null
+    }
+    expect(takes(['fresh_eyes', 'fresh_eyes', 'shell', 7])).toEqual(['fresh_eyes'])
+    expect(takes(undefined)).toEqual([])
+    expect(takes('fresh_eyes')).toEqual([])
+  })
 })
 
 describe('which reports a lane may take', () => {

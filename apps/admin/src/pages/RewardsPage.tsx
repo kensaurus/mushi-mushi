@@ -173,7 +173,7 @@ export function RewardsPage() {
 
       {showHobbyInline && (
         <Card  className="p-3 text-xs text-warn">
-          <strong>Rewards program requires Starter or higher.</strong>{' '}
+          <strong>Rewards program needs Builder or higher.</strong>{' '}
           <Link to="/billing" className="underline">Upgrade your plan</Link> to configure rules, tiers, and webhooks.
           You can preview the program below.
         </Card>

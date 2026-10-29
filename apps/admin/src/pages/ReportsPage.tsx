@@ -38,6 +38,7 @@ import { ReportsKpiStrip } from '../components/reports/ReportsKpiStrip'
 import { FixFirstQueue } from '../components/reports/FixFirstQueue'
 import { ReportsStatusBanner } from '../components/reports/ReportsStatusBanner'
 import { ReportsSentryImport } from '../components/reports/ReportsSentryImport'
+import { ReportsFileIssue } from '../components/reports/ReportsFileIssue'
 import {
   EMPTY_REPORTS_STATS,
   type ReportsStats,
@@ -176,6 +177,8 @@ export function ReportsPage() {
 
   // "Import from Sentry" panel; `?import=sentry` opens it (the Sentry card links here).
   const [sentryImportOpen, setSentryImportOpen] = useState(() => searchParams.get('import') === 'sentry')
+  // "Report an issue": the owner files something they noticed in their own app, as a user would.
+  const [fileIssueOpen, setFileIssueOpen] = useState(() => searchParams.get('file') === '1')
   const closeSentryImport = useCallback(() => {
     setSentryImportOpen(false)
     if (searchParams.has('import')) {
@@ -779,6 +782,17 @@ export function ReportsPage() {
         helpHowToUse={copy?.help?.howToUse ?? 'Use j/k to move, x to select, Enter to open, / to search, ? for the full cheat sheet. Click a column header to sort. Select rows to reveal bulk actions.'}
       >
         <FreshnessPill at={lastFetchedAt} isValidating={isValidating} channel={channelState} />
+        {!allApps && activeProjectId && (
+          <Btn
+            type="button"
+            size="sm"
+            onClick={() => setFileIssueOpen((v) => !v)}
+            aria-expanded={fileIssueOpen}
+            data-testid="mushi-reports-file-issue-toggle"
+          >
+            Report an issue
+          </Btn>
+        )}
         <Btn
           type="button"
           variant="ghost"
@@ -812,6 +826,9 @@ export function ReportsPage() {
         </Tooltip>
       </PageHeaderBar>
 
+      {fileIssueOpen && !allApps && activeProjectId && (
+        <ReportsFileIssue projectId={activeProjectId} projectName={projectName ?? null} onClose={() => setFileIssueOpen(false)} onFiled={reloadAll} />
+      )}
       {sentryImportOpen && <ReportsSentryImport onClose={closeSentryImport} onImported={reloadAll} />}
 
       <PagePosture

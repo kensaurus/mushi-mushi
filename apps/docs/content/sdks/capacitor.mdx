@@ -1,11 +1,11 @@
 ---
 title: '@mushi-mushi/capacitor'
-description: API reference for @mushi-mushi/capacitor — configure, report, listeners, setUser and widget options for Ionic and Capacitor apps on iOS, Android and web.
+description: Reference for @mushi-mushi/capacitor, Mushi Mushi for Ionic and Capacitor on iOS, Android and web. configure, report, listeners, setUser and widget options.
 ---
 
 # `@mushi-mushi/capacitor`
 
-Capacitor plugin for Ionic / Capacitor apps. The web fallback uses
+The Mushi Mushi Capacitor plugin for Ionic and Capacitor apps (`@capacitor/core` 6 or later). The web fallback uses
 `@mushi-mushi/core` so the plugin works in WebView previews; native iOS and
 Android delegate to the standalone Mushi SDKs so a hybrid app gets the same
 shake-to-report and screenshot UX as a pure-native app.
@@ -25,12 +25,12 @@ import { Mushi } from '@mushi-mushi/capacitor'
 await Mushi.configure({
   projectId: 'YOUR_PROJECT_ID',
   apiKey:    'YOUR_PUBLIC_API_KEY',
-  // iOS and Android default to Mushi Cloud; the web fallback (ionic serve)
-  // has no default and report() throws until this is set.
+  // Optional. iOS, Android and the web fallback all default to the hosted
+  // Mushi Mushi API; set it only for a self-hosted deployment.
   endpoint:  'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
 
-  triggerMode: 'shake',         // 'shake' | 'button' | 'both' | 'none'
-  captureScreenshot: true,      // base64 PNG of the active webview
+  triggerMode: 'shake',         // default; 'shake' | 'button' | 'both' | 'none'
+  captureScreenshot: true,      // base64 JPEG of the screen, via the native bridge
   triggerInsetPreset: 'tabBarSafe',  // or 'dockSafe'
   // useNativeWidget: true       // present the native iOS/Android bottom sheet
 })
@@ -83,7 +83,7 @@ import { Callout } from 'nextra/components'
   [Capacitor → React Native migration guide](/migrations/capacitor-to-react-native)
   covers the plugin map, the API mapping (`Mushi.configure` → `<MushiProvider>`,
   `Mushi.report` → `useMushiReport()`), CI/CD on GitHub Actions + Fastlane,
-  and how to keep the same Mushi project / API key across both clients during
+  and how to keep the same Mushi Mushi project / API key across both clients during
   the cutover.
 </Callout>
 

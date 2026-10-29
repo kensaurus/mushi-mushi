@@ -2,7 +2,8 @@
  * FILE: site-audit-routes.test.ts
  * PURPOSE: The site-audit settings routes (ADR 0040): turning it on needs an
  *          https address and a Firecrawl key and schedules the first run;
- *          viewers cannot change it; Run now needs it on and is rate-limited.
+ *          an omitted page limit or cadence stays as stored; viewers cannot
+ *          change it; Run now needs it on and is rate-limited.
  */
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
@@ -108,6 +109,23 @@ describe('site-audit routes', () => {
     db.table('site_audits')[0].next_run_at = farOff
     await call('PUT', PATH, { enabled: true, cadenceDays: 7 })
     expect(db.table('site_audits')[0].next_run_at).toBe(farOff)
+  })
+
+  it('PUT leaves page_limit and cadence_days stored when the body omits them', async () => {
+    db = makeFakeDb(
+      {
+        site_audits: [{ id: 'sa1', project_id: P, enabled: true, base_url: 'https://tsumagoi.kensaur.us', page_limit: 139, cadence_days: 3 }],
+        site_audit_findings: [],
+        site_watches: [],
+      },
+      { autoId: true },
+    )
+    expect((await call('PUT', PATH, { enabled: true, cadenceDays: 1 })).status).toBe(200)
+    expect(db.table('site_audits')[0]).toMatchObject({ page_limit: 139, cadence_days: 1 })
+    expect((await call('PUT', PATH, { enabled: true, pageLimit: 50 })).status).toBe(200)
+    expect(db.table('site_audits')[0]).toMatchObject({ page_limit: 50, cadence_days: 1 })
+    expect((await call('PUT', PATH, { enabled: false })).status).toBe(200)
+    expect(db.table('site_audits')[0]).toMatchObject({ enabled: false, page_limit: 50, cadence_days: 1 })
   })
 
   it('viewers cannot change it', async () => {

@@ -227,7 +227,7 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
   const [fixReports, reviews, followups, events] = await Promise.all([
     inChunks<ReportRow>(missing, (ids) => db.from('reports').select('id, project_id, status, title, summary, description, created_at, processing_error').in('id', ids) as never),
     inChunks<ReviewRow>(attemptIds, (ids) =>
-      db.from('fix_reviews').select('fix_attempt_id, status, verdict, summary, findings, error, completed_at, created_at, queued_at, head_sha').in('fix_attempt_id', ids) as never,
+      db.from('fix_reviews').select('fix_attempt_id, status, verdict, summary, findings, error, completed_at, created_at, queued_at, head_sha, skip_reason').in('fix_attempt_id', ids) as never,
     ),
     // Every follow-up row: the active ones move a PR, all of them are the cloud trigger's history.
     inChunks<FollowupRow>(attemptIds, (ids) =>

@@ -101,11 +101,12 @@ const TABS: Array<{ id: AnomaliesTabId; label: string; description: string }> = 
   { id: 'overview', label: 'Overview', description: 'Status and how your metrics feed spike detection.' },
   { id: 'anomalies', label: 'Spikes', description: 'Spikes to confirm or dismiss, and the reports filed for them.' },
   { id: 'metrics', label: 'Metrics', description: 'Send metric values and see each metric over time.' },
-  { id: 'detect', label: 'Check now', description: 'Look for spikes now, including ones that started with a release.' },
 ]
 
+/** "Check now" was a tab of its own; it is an action on Spikes now, so old `?tab=detect` links land there. */
 function resolveAnomaliesTab(value: string | null): AnomaliesTabId {
-  if (value === 'anomalies' || value === 'metrics' || value === 'detect') return value
+  if (value === 'anomalies' || value === 'metrics') return value
+  if (value === 'detect') return 'anomalies'
   return 'overview'
 }
 
@@ -313,8 +314,8 @@ export function AnomaliesPage() {
         <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || anomaliesValidating || metricsValidating}>
           Refresh
         </Btn>
-        <Btn size="sm" variant="ghost" onClick={() => setActiveTab('detect')}>
-          Run detection
+        <Btn size="sm" variant="ghost" onClick={() => setActiveTab('anomalies')}>
+          Check now
         </Btn>
           </>
         )}
@@ -385,7 +386,12 @@ export function AnomaliesPage() {
               status sentence above already says how many spikes wait. */}
           {projectId && stats.metricPointCount > 0 ? (
             <SpikesOverview projectId={projectId} onConfirm={confirm} onDismiss={dismiss} />
-          ) : null}
+          ) : (
+            // Without metrics this tab held only the readout's links (console sweep).
+            <p className="text-sm text-fg-muted" data-testid="anomalies-summary-empty">
+              Each number you send gets a chart here, with your releases and any spikes on it.
+            </p>
+          )}
           <AnomaliesReadout
             stats={stats}
             fetchedAt={statsFetchedAt}
@@ -395,6 +401,8 @@ export function AnomaliesPage() {
       )}
 
       {activeTab === 'anomalies' && (
+        <div className="space-y-4">
+        <CheckNowCard projectId={projectId ?? ''} onDone={onDetectDone} hasMetrics={stats.metricPointCount > 0} />
         <AnomaliesTab
           anomalies={anomalies}
           loading={anomalyLoading}
@@ -406,8 +414,8 @@ export function AnomaliesPage() {
           projectId={projectId ?? ''}
           noMetrics={stats.metricPointCount === 0}
           onIngestMetrics={() => setActiveTab('metrics')}
-          onRunDetect={() => setActiveTab('detect')}
         />
+        </div>
       )}
 
       {activeTab === 'metrics' && (
@@ -422,15 +430,12 @@ export function AnomaliesPage() {
         />
       )}
 
-      {activeTab === 'detect' && (
-        <DetectTab projectId={projectId ?? ''} onDone={onDetectDone} hasMetrics={stats.metricPointCount > 0} />
-      )}
     </div>
   )
 }
 
 function AnomaliesTab({
-  anomalies, loading, error, errorCode, onRetry, onConfirm, onDismiss, projectId, noMetrics, onIngestMetrics, onRunDetect,
+  anomalies, loading, error, errorCode, onRetry, onConfirm, onDismiss, projectId, noMetrics, onIngestMetrics,
 }: {
   anomalies: AnomalyDetection[]
   loading: boolean
@@ -442,7 +447,6 @@ function AnomaliesTab({
   projectId: string
   noMetrics: boolean
   onIngestMetrics: () => void
-  onRunDetect: () => void
 }) {
   if (!projectId) return <EmptyState title="Select a project" description="Pick a project from the switcher to view anomalies." />
   if (loading) return <TableSkeleton rows={5} />
@@ -451,24 +455,21 @@ function AnomaliesTab({
     return (
       <div className="space-y-3">
         <EmptySectionMessage
-          text={noMetrics ? 'No metric data yet' : 'No open anomalies'}
+          text={noMetrics ? 'No numbers yet' : 'No spikes right now'}
           hint={
             noMetrics
-              ? 'Ingest metric data points before running Page-Hinkley or Z-score detection.'
-              : 'Run the detector or wait for the hourly cron — no open findings is good news.'
+              ? 'Send some numbers on the Metrics tab first.'
+              : 'Mushi checks every hour. No spikes is good news.'
           }
         />
-        <ActionPillRow>
-          {noMetrics ? (
+        {/* Check now is the card right above, so the only pill left is adding numbers. */}
+        {noMetrics ? (
+          <ActionPillRow>
             <ActionPill tone="brand" onClick={onIngestMetrics}>
-              Ingest metrics
+              Add metrics
             </ActionPill>
-          ) : (
-            <ActionPill tone="brand" onClick={onRunDetect}>
-              Run detection
-            </ActionPill>
-          )}
-        </ActionPillRow>
+          </ActionPillRow>
+        ) : null}
       </div>
     )
   }
@@ -674,7 +675,7 @@ function MetricsTab({ metrics, loading, error, errorCode, onRetry, projectId, on
   )
 }
 
-function DetectTab({ projectId, onDone, hasMetrics }: { projectId: string; onDone: () => void; hasMetrics: boolean }) {
+function CheckNowCard({ projectId, onDone, hasMetrics }: { projectId: string; onDone: () => void; hasMetrics: boolean }) {
   const toast = useToast()
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ anomalies: number; ids: string[] } | null>(null)
@@ -711,14 +712,11 @@ function DetectTab({ projectId, onDone, hasMetrics }: { projectId: string; onDon
   return (
     <Card className="max-w-lg space-y-4 p-6">
       <SignalChip tone="neutral" className="uppercase tracking-wider font-semibold">
-        Manual detection run
+        Check now
       </SignalChip>
-      <ContainedBlock tone="muted">
-        <InlineProof className="border-0 bg-transparent px-0 py-0 text-sm leading-relaxed">
-          Analyzes metric_series data using Page-Hinkley, Z-score, and release-boundary regression.
-          Leaves all findings in the Anomalies tab.
-        </InlineProof>
-      </ContainedBlock>
+      <p className="text-sm text-fg-secondary leading-relaxed">
+        Looks for spikes in your numbers now, including ones that started with a release. What it finds is listed below.
+      </p>
       {!projectId && (
         <ContainedBlock tone="warn">
           <p className="text-xs text-warn">Select a project from the switcher before running detection.</p>
@@ -726,7 +724,7 @@ function DetectTab({ projectId, onDone, hasMetrics }: { projectId: string; onDon
       )}
       {!hasMetrics && projectId && (
         <ContainedBlock tone="warn">
-          <p className="text-xs text-warn">No metric data yet — ingest points on the Metrics tab first.</p>
+          <p className="text-xs text-warn">No numbers yet. Send some on the Metrics tab first.</p>
         </ContainedBlock>
       )}
       <div className="grid grid-cols-2 gap-4">
@@ -740,7 +738,7 @@ function DetectTab({ projectId, onDone, hasMetrics }: { projectId: string; onDon
         </label>
       </div>
       {lookbackHours == null && <p className="text-xs text-danger">Enter a whole number of hours from 1 to 720.</p>}
-      <Btn variant="primary" onClick={run} loading={loading} disabled={!projectId}>Run detection</Btn>
+      <Btn variant="primary" onClick={run} loading={loading} disabled={!projectId}>Check now</Btn>
       {result && (
         <ContainedBlock tone="info">
           <SignalChip tone="ok" className="font-medium">

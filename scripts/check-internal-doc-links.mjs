@@ -40,7 +40,7 @@ const findings = []
 // Routes served by the Next.js app router (apps/docs/app/**) rather than Nextra
 // content MDX, so `routeExists` (which only resolves content/*.mdx) can't see
 // them. Keep this list in sync with apps/docs/app/<route>/page.tsx.
-const APP_ROUTER_ROUTES = ["/connect"]
+const APP_ROUTER_ROUTES = ["/connect", "/check", "/proof"]
 function isAppRouterRoute(href) {
   return APP_ROUTER_ROUTES.some((r) => href === r || href.startsWith(`${r}/`))
 }

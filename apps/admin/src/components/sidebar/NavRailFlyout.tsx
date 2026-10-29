@@ -28,7 +28,7 @@ export interface NavRailFlyoutProps {
   description?: string | null
   /** Live context, e.g. "3 untriaged reports". */
   status?: { tone: HealthTone; label: string } | null
-  /** Trailing chip — PDCA stage letter, or a plan gate like "Pro". */
+  /** Trailing chip — PDCA stage letter, or a plan gate like "Upgrade". */
   kicker?: { label: string; className: string } | null
   /** Foot note for keyboard affordances, e.g. "Press [ to expand". */
   hint?: string | null

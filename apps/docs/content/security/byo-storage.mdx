@@ -1,6 +1,6 @@
 ---
 title: BYO storage
-description: Keep Mushi screenshots and crash dumps in your own storage bucket instead of Mushi's — credentials in Vault, signed URLs, and the same console view.
+description: Keep Mushi Mushi screenshots and crash dumps in your own storage bucket instead of Mushi's, with credentials in Vault and signed URLs.
 ---
 
 import { Callout } from 'nextra/components'
@@ -9,41 +9,40 @@ import { Callout } from 'nextra/components'
 
 > **Scenario:** Your company policy requires all user screenshots to stay inside your own AWS account, not a third-party storage bucket.
 
-By default screenshots and crash dumps go to a Mushi-managed Supabase Storage bucket. BYO storage lets you pin them to your own bucket instead — credentials live in Vault, URLs are signed server-side, and the admin console renders identically regardless of backend.
+By default screenshots and crash dumps go to a private Mushi-managed Supabase Storage bucket. BYO storage pins them to your own bucket instead: credentials live in Supabase Vault, URLs are signed server-side, and the admin console shows screenshots the same way from either backend.
 
 ## Supported backends
 
 | Backend | Notes |
 | --- | --- |
-| **AWS S3** | Standard `accessKeyId` / `secretAccessKey` / `region` / `bucket` |
-| **Cloudflare R2** | S3-compatible; set `endpoint` + `region = auto` |
-| **Google Cloud Storage** | HMAC key pair (`accessKeyId` + `secretAccessKey` from the GCS interoperability page) + `bucket` |
-| **MinIO (self-hosted)** | Path-style addressing; set a custom `endpoint` |
-| **Supabase Storage** | Default — no configuration needed |
+| **AWS S3** | `bucket`, `region`, access key ID and secret access key |
+| **Cloudflare R2** | S3-compatible; set `endpoint` and `region = auto` |
+| **Google Cloud Storage** | `bucket` and a service-account JSON key |
+| **MinIO (self-hosted)** | S3-compatible; a custom `endpoint` is required |
+| **Supabase Storage** | Default, no configuration needed |
 
 ## Setup
 
-In the admin console: **Settings → Storage**.
+In the admin console: **BYO storage** (`/storage`).
 
-<Callout type="warning">
-  **Required fields:** `bucket` and `region` are required for S3, Cloudflare R2, and GCS. Submitting without them returns a `400 VALIDATION_ERROR`. Region for Cloudflare R2 should be `auto`.
-</Callout>
+1. Select your provider.
+2. Fill in the fields for it:
+   - **S3 / R2:** `bucket` (exact name) + `region` + access key ID + secret access key
+   - **GCS:** `bucket` + service-account JSON
+   - **MinIO:** `endpoint` (a public `https` URL, e.g. `https://minio.example.com`) + `bucket` + `region` + credentials
+3. Click **Save**. Raw credentials are written to Supabase Vault; the settings row keeps only the Vault references, and the keys are never echoed back.
 
-1. Select your provider from the dropdown.
-2. Fill in the required fields:
-   - **S3 / R2 / GCS:** `bucket` (exact name) + `region` + `accessKeyId` + `secretAccessKey`
-   - **MinIO:** `endpoint` (e.g. `https://minio.internal`) + `bucket` + `region` + credentials
-3. Click **Save**. Credentials are written to Supabase Vault and never echoed back.
+The bucket must already exist. Mushi never creates buckets.
 
 ## What moves (and what doesn't)
 
 - **New reports** ingested after the switch land in your bucket.
-- **Existing reports** stay in the Mushi-managed bucket — they are not migrated automatically.
-- Edge Functions sign all presigned URLs server-side, so the admin console renders screenshots from either location transparently.
+- **Existing reports** stay in the Mushi-managed bucket; they are not migrated automatically.
+- Edge Functions sign the URLs server-side. For your bucket the lifetime is `signed_url_ttl_secs` (default 3600 seconds, 60 to 604,800 allowed).
 
 ## Health check
 
-**Settings → SDK & connection** runs a probe against your configured bucket (a zero-byte `PUT` + `DELETE` to `mushi-health-probe`) and shows `ok` / `degraded` / `error`. If the probe fails, screenshots will fall back to the Mushi-managed bucket and a warning chip appears on the Storage card.
+The BYO storage page has a health check (`POST /v1/admin/storage/:projectId/health`) that uploads a small `_mushi_health_<timestamp>.txt` object and deletes it again. The result is stored as `healthy` or `failing` with the last error, and the page shows it. If an upload to your bucket fails, the report is still saved, without its screenshot, and the error is logged; run the health check after any credential change.
 
 ## Permissions required
 
