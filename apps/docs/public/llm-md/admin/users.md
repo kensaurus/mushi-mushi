@@ -1,23 +1,23 @@
-# Users
+# All users
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/users
 
 ---
-title: Users
-description: The Users page is an operator-only directory of every Mushi account with plan, MRR and churn; other visitors see a not-found page instead.
+title: All users
+description: All users is an operator-only directory of every Mushi Mushi account with plan, MRR and churn; other visitors see a not-found page instead.
 ---
 
-# Users
+# All users
 
-**Route:** `/users`
+**Route:** `/users` (sidebar: **Account → All users**, shown to super-admins only)
 
-The Users page is a super-admin directory of every account that has signed up for
-Mushi. It shows MRR, churn, plan distribution, and per-user detail. It is only
-accessible to Mushi operators — non-operator visitors see a 404-style page.
+All users is a super-admin directory of every account that has signed up for
+Mushi Mushi. It shows MRR, churn, plan distribution and per-user detail. It is only
+accessible to Mushi Mushi operators; other visitors see a not-found page.
 
-This page is visible only to accounts with the `super_admin` role (`operator` badge).
-Regular org admins cannot access `/users` — the API returns an opaque `404 NOT_FOUND`
-(not `403 FORBIDDEN`) to prevent enumeration.
+This page is visible only to accounts whose `app_metadata.role` is `super_admin`.
+Regular org admins cannot use it: the API returns an opaque `404 NOT_FOUND`
+(not `403 FORBIDDEN`) so the endpoints cannot be discovered.
 
 ---
 
@@ -29,7 +29,7 @@ Six stat cards at the top of the page:
 |--------|-------------|
 | **Total signups** | All-time user count |
 | **Paid users** | Users on a paid plan |
-| **MRR** | Monthly recurring revenue (USD) |
+| **MRR (USD)** | Monthly recurring revenue |
 | **Signups · 7d** | New signups in the last 7 days |
 | **Signups · 30d** | New signups in the last 30 days |
 | **Churn · 30d** | Users who cancelled in the last 30 days |
@@ -38,7 +38,7 @@ Six stat cards at the top of the page:
 
 ## User directory
 
-A searchable, filterable table of all users:
+The **Directory** is a searchable, filterable table of all users:
 
 | Column | Description |
 |--------|-------------|
@@ -52,14 +52,14 @@ A searchable, filterable table of all users:
 | **→** | Hover chevron — click to open user detail drawer |
 
 **Filters:**
-- **Search by email** — 250ms debounce
-- **Plan filter** — All / Paid / Free / Builder / Studio / Enterprise
+- **Search by email**
+- **Plan**: All plans / Paid (Builder+) / Free (no sub) / Builder / Studio / Enterprise
 
 ---
 
 ## User detail drawer
 
-Click any user row to open the drawer:
+Click any user row to open the **User detail** drawer:
 
 | Section | Contents |
 |---------|---------|
@@ -75,17 +75,17 @@ Click any user row to open the drawer:
 
 ```bash
 GET /v1/super-admin/metrics
-GET /v1/super-admin/users?limit=100&search=<email>&plan=<plan>
+GET /v1/super-admin/users?limit=100&search=<email>&plan=<plan>&cursor=   # the console asks for 100; default 50, max 200
 GET /v1/super-admin/users/:userId
 ```
 
-These endpoints are not available to regular project tokens — they require an operator
-session. Attempts from non-operator sessions return `404 NOT_FOUND`.
+These endpoints are not available to project API keys; they require a signed-in
+super-admin session. Other sessions get `404 NOT_FOUND`.
 
 ---
 
 ## Related pages
 
-- [Organization members](/admin/teams) — manage roles within your own org
-- [Audit log](/admin/audit) — per-user action history
-- [Billing](/admin/billing) — subscription and plan detail
+- [Organization members](/admin/teams): manage roles within your own org
+- [Audit log](/admin/audit): action history per project
+- [Billing](/admin/billing): subscription and plan detail

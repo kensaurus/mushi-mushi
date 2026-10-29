@@ -4,18 +4,18 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/ux-runs
 
 ---
 title: UX runs
-description: Each screen your coding agent worked on in a mushi ux run, with its plan, every attempt, before and after screenshots, and what was kept.
+description: The UX runs page in Mushi Mushi shows each screen your agent worked on in a mushi ux run, with its plan, attempts, before/after screenshots, and what was kept.
 ---
 
 # UX runs
 
-**Route:** `/ux-runs`
+**Route:** `/ux-runs` (sidebar: More pages → Fix → UX runs. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
 
 > **Scenario:** You let your coding agent work through every page, tab and dialog of
 > your app overnight and want to see, screen by screen, what it changed and whether
 > anything got worse.
 
-`mushi ux run` runs on your machine. It maps your running app, gives one screen at a
+`mushi ux run` (from the Mushi Mushi `@mushi-mushi/ux` package) runs on your machine. It maps your running app, gives one screen at a
 time to the agent you choose (Claude Code, Cursor, Codex) in a separate git branch, and
 keeps an edit only when accessibility, layout and console measurements did not get
 worse. With `--sync` it mirrors the run here as it goes.
@@ -154,7 +154,9 @@ cancelled; a failed one says why. Once an app has a finished test, Home shows a
 ## Where the changes are
 
 Kept edits are commits on the branch shown above the screen list
-(`mushi-ux/`). Nothing is merged for you: review the branch and open it as a
-draft PR. Screenshots are kept for the project's retention window (30 days by default).
+(`mushi-ux/`). Nothing is merged for you: review the branch and open a draft PR
+with **Open draft PR** in the studio (`mushi ux ui`). Once a run has a pull request,
+this page shows it with its required checks and a **Merge to &lt;base&gt;** button that asks
+you to confirm first. Screenshots are kept for the project's retention window (30 days by default).
 
 See also: [CLI reference](/sdks/cli#ux-pass-over-every-screen).

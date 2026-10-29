@@ -36,7 +36,7 @@ the builder ever leaving their editor.**
 
 ### 1.3 The one-sentence north star
 
-> **Your AI shipped it. Mushi tells you why it broke — in plain English, in your
+> **Your AI shipped it. Mushi Mushi tells you why it broke — in plain English, in your
 > editor, with the fix ready to go — so a bug costs you five minutes instead of
 > your whole afternoon.**
 
@@ -129,7 +129,7 @@ routing, Helm) — that remains operator-page material.
 
 The landing page and the README's first screen go further (ADR 0052, owner
 2026-10-27): they carry only Bucket A, as one job — *a user said your app is
-broken; Mushi tells you why in plain English and hands Cursor, Claude Code or
+broken; Mushi Mushi tells you why in plain English and hands Cursor, Claude Code or
 Lovable the fix* — with one install action and one sample diagnosis anyone can
 read. Buckets B and C live on docs pages one click away. The operator cockpit
 (release trains, workers, credits, CI cost) stays behind the operator account

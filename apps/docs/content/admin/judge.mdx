@@ -1,18 +1,18 @@
 ---
-title: Judge dashboard
-description: The Judge page scores how well Mushi's plain-English reads match reality over time, so you see quality slipping or a better prompt ready to promote.
+title: Triage grading
+description: The Triage grading page in the Mushi Mushi console shows how often a second AI agrees with each diagnosis, week by week, and the worst recent disagreements.
 ---
 
 <AdminDocHero page="judge" />
 
 
-# Fix quality scores
+# Triage grading
 
-**Route:** `/judge` (sidebar: Triage grading)
+**Route:** `/judge` (sidebar: **Triage grading**, under Verify; formerly Judge)
 
-The Judge page shows how well Mushi's plain-English reads match reality over time.
-If classification quality is slipping — or a new prompt is ready to promote — you'll
-see it here before bad reads reach your queue.
+A second AI grades each diagnosis Mushi Mushi makes: was the category right, the
+severity, the part of the app, and were the steps to reproduce usable. This page shows
+how often it agrees, so you can tell whether to trust a diagnosis before you merge its fix.
 
 **First on the page:** one sentence with this week's score and how often the grader
 disagreed **in the last 14 days** (the window is named; an older server without it
@@ -24,74 +24,42 @@ link to each report. `GET /v1/admin/judge/stats` returns `recentWindowDays`,
 
 ---
 
-## Trailing score panel
+## Tabs
 
-The top of the page shows:
+The page has four tabs: **Overview**, **Trend**, **Grades** and **Prompts**.
 
-- **30-day mean composite** — the rolling average of `reports.judge_score` across
-  all classifications in your project for the last 30 days.
-- **7-day moving average** — plotted as a line chart so you can spot week-over-week
-  drift at a glance.
-- **Yesterday vs. trailing baseline** — delta highlighted in green / amber / red.
-  If the delta exceeds the drift threshold (default: −0.10), a `judge.drift` alert
-  has already fired.
+- **Trend**: **Score trend (12w)** with a bar per dimension (**Accuracy**, **Severity**,
+  **Component**, **Repro**), a **Score distribution**, and a **Weekly history** table
+  with the week, each dimension and the number of evaluations.
+- **Grades**: **Recent evaluations**, one row per graded report with the model, the
+  prompt version, each dimension and whether the grader **Agreed**. Tick
+  **Disagreements only** to see the misses.
+- **Prompts**: the **Prompt leaderboard** with stage, version, status (`active` or
+  `candidate`), score, evaluations and traffic share. Click a row to filter Recent
+  evaluations to that version.
 
----
-
-## Per-component breakdown
-
-A table ranked by mean composite score per component, showing:
-
-| Column | Description |
-| ------ | ----------- |
-| **Component** | The component tag the classifier assigned |
-| **Mean composite** | Average judge score for this component's reports |
-| **Volume** | Report count in the last 30 days |
-| **Accuracy** | Mean accuracy sub-score |
-| **Severity calibration** | Mean severity_calibration sub-score |
-| **Component tagging** | Mean component_tagging sub-score (lower on yourself = classifier struggles here) |
-| **Repro quality** | Mean repro_quality sub-score |
-
-Sort by any column to find which components the classifier handles worst. These
-are the best candidates for a targeted fine-tune export.
+**Run judge now** grades recent classified reports straight away. It spends AI budget.
+Otherwise the judge runs nightly.
 
 ---
 
-## Prompt A/B status
+## Prompt promotion
 
-Every active A/B experiment shows:
-
-| Column | Description |
-| ------ | ----------- |
-| **Candidate version** | The `stage1_prompt_version` or `stage2_prompt_version` under test |
-| **Sample size** | Classifications scored so far in this window |
-| **Candidate mean** | Current mean judge score for the candidate slice |
-| **Baseline mean** | Concurrent mean for the active production prompt |
-| **Delta** | Candidate − Baseline |
-| **95% CI** | Confidence interval; auto-promotes when CI excludes zero and delta ≥ 0.05 |
-| **Status** | `running` · `promoted` · `demoted` · `inconclusive` |
-
-Click **Promote** to manually promote a candidate before the automated threshold
-is reached (useful when a prompt change is clearly winning but the CI window hasn't
-closed). Click **Demote** to abort an experiment.
+You edit and A/B test prompts in [AI prompts](/admin/prompt-lab). The nightly judge
+run promotes a candidate prompt on its own once it has at least 30 evaluations and its
+mean score is more than 5% above the active prompt's.
 
 ---
 
 ## Drift alerts
 
-The drift alert panel shows the last 30 `judge.drift` events with:
-
-- Timestamp of the alert.
-- The daily mean that triggered it.
-- The trailing 7-day baseline it was compared against.
-- Whether the drift was subsequently resolved (mean recovered) or is still open.
-
-Alerts route to Slack if you've configured the integration in **Settings →
-Integrations → Slack**. Each alert includes a direct link back to this panel.
+When this week's mean score is more than 10% below last week's, the nightly judge run
+records a drift alert and, if the project has a Slack webhook set, posts it to Slack.
+The **Week change** figure at the top shows the same comparison.
 
 ---
 
 ## See also
 
 - [Concepts → Judge & self-improvement](/concepts/judge-loop) — how the nightly judge, A/B testing, fine-tune export, and drift detection work together.
-- [Admin → Fine-tuning](/admin/fine-tuning) — export, train, and promote a fine-tuned classifier.
+- [AI prompts](/admin/prompt-lab) — edit and A/B test the prompts this page grades.

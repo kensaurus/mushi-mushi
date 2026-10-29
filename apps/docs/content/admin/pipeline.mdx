@@ -1,13 +1,13 @@
 ---
 title: Pipeline
-description: The console Pipeline page shows every bug from report to deploy, where it is stuck and why, with one-click fixes.
+description: The Pipeline page in the Mushi Mushi console shows every bug from report to deploy, where it is stuck and why, with one-click fixes.
 ---
 
 # Pipeline
 
-**Route:** `/pipeline` (sidebar: Pipeline, under Fixes)
+**Route:** `/pipeline` (sidebar: Pipeline)
 
-Every bug moves from a report to a fix PR, an Opus review, CI, a release train, a merge and a deploy. This page shows how many items are in each step now, which are stuck, and why. **This app** follows the app you have open. **All apps** reads every project you can see.
+In Mushi Mushi, every bug moves from a report to a fix PR, an Opus review, CI, a release train, a merge and a deploy. This page shows how many items are in each step now, which are stuck, and why. **This app** follows the app you have open. **All apps** reads every project you can see.
 
 ## Stages
 
@@ -49,6 +49,7 @@ Each group says its reason in plain words, for example "12 PRs: their own CI is 
 | **Mark ready** | Takes a draft out of draft so CI runs. |
 | **Queue to merge** | Puts an approved, green PR in the merge queue. |
 | **Remove from queue** / **Close PR** | Takes it out of the queue, or closes it without merging. The reason is kept as a team note on the report. |
+| **Not a code bug** | Closes the report with a reason and tells its reporter. Nothing runs on it again unless someone reopens it. Offered on groups of reports, such as agents that failed without a PR. |
 | **Requeue** | Puts a report back at the front of the local lane that ran it, when that lane's machine stopped the run (not the code). Mushi does this once on its own; after that the report waits here for you. It never counts against the report. |
 
 Every action asks first, works on one PR or the whole group, shows each PR's result, and then the page reads again.

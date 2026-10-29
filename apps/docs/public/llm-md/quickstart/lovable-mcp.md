@@ -4,13 +4,13 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/lovable-mcp
 
 ---
 title: Ask Lovable why it broke
-description: Add Mushi to Lovable as an MCP connector in three steps; Lovable reads the plain-English diagnosis and fixes the bug. Claude Code and Cursor in one paste.
+description: Add Mushi Mushi to Lovable as an MCP connector in three steps; Lovable reads the plain-English diagnosis and fixes the bug. Claude Code and Cursor in one paste.
 ---
 
 # Ask Lovable why it broke
 
 A user says your app is broken. Ask Lovable *"what did my users report?"* and it
-reads Mushi's diagnosis of each report, gets the fix prompt and fixes the code.
+reads Mushi Mushi's diagnosis of each report, gets the fix prompt and fixes the code.
 The same connection works in Claude Code and Cursor.
 
 - Add Mushi to Lovable as a custom MCP server: one URL, sign in, approve.
@@ -149,8 +149,8 @@ combine them, for example `?features=vibe,qa`.
 | Sign-in fails with "404" | Use the `kensaur.us` URL above. Sign-in does not work on a `supabase.co` URL. |
 | "tool … is not enabled for this connection" | The tool is outside `vibe`. Ask `use_mushi` which group it needs and add that group to `?features=`, or use `?features=all`. |
 | Answers mix up your apps | Pin the connection to one app: add `&project=<project-id>` to the URL. |
-| You can't use OAuth | Choose **Bearer token or API key** in Lovable and paste a Mushi API key with MCP access, minted in the Mushi console. Sign-in is safer: its key is made for this one connection. |
-| You want to disconnect | Remove the connector in Lovable, and revoke its key under **MCP → Account keys** in the Mushi console. |
+| You can't use OAuth | Choose **Bearer token or API key** in Lovable and paste a Mushi API key with MCP access, minted on **Manage apps** in the Mushi console (preset **MCP read + write**). Sign-in is safer: its key is made for this one connection. |
+| You want to disconnect | Remove the connector in Lovable, and revoke its key under **Editor agents → Account keys** in the Mushi console. |
 
   More on the sign-in, project scopes and other clients: [MCP server](/quickstart/mcp).
   The full fix loop from your editor: [Incident loop](/quickstart/incident-loop).

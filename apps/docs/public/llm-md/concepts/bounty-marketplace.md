@@ -1,10 +1,10 @@
-# Mushi Bounties — crowd-testing marketplace
+# Mushi Bounties: crowd-testing marketplace
 
 Source: https://kensaur.us/mushi-mushi/docs/concepts/bounty-marketplace
 
 ---
-title: Mushi Bounties — crowd-testing marketplace
-description: Mushi Bounties is a crowd-testing marketplace — publish your app, and real testers file bug reports and earn points they can redeem for rewards.
+title: "Mushi Bounties: crowd-testing marketplace"
+description: Mushi Bounties is the Mushi Mushi crowd-testing marketplace. Publish your app, and real testers file bug reports and earn points they can redeem for rewards.
 ---
 
 # Mushi Bounties
@@ -75,7 +75,7 @@ Testers see their balance update in real time. Redemption options:
 - **Mushi Pro credit** — 1,000 mushi-points → $13 of Mushi Pro (the 1.3× premium
   is a platform coupon, not cash compensation; no 1099 event).
 - **Gift cards** — 1,000 mushi-points → $10 face value via Tremendous (taxable
-  at FMV; $599/yr cap before KYC is required; Tremendous holds the money-transmitter
+  at FMV; KYC is required from $400 a year and gift cards are capped at $599 a year; Tremendous holds the money-transmitter
   licenses on your behalf).
 
 ---
@@ -99,8 +99,9 @@ The rewards model is deliberately conservative:
   No 1099 event is triggered when a tester applies points toward Mushi Pro.
 - **Gift-card cash-out is a separate tax event.** When a tester redeems points
   for a Tremendous gift card, the face value is taxable income at FMV at the time
-  of redemption. Mushi caps this at $599/yr per tester before requiring KYC
-  (W-9 for US, W-8BEN for international). Tremendous files the 1099-MISC; Mushi
+  of redemption. Mushi requires KYC (W-9 for US, W-8BEN for international)
+  once a tester's gift cards reach $400 in a calendar year, and caps gift
+  cards at $599 a year per tester. Tremendous files the 1099-MISC; Mushi
   does not.
 - **No crypto, no prize draws in v1.** Reddit Community Points sunset in November
   2023 citing "a tough regulatory environment for cryptocurrency projects." Prize

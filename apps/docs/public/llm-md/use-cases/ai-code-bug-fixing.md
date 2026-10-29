@@ -1,10 +1,10 @@
-# AI code bug fixing — report to merged fix
+# AI code bug fixing: report to merged fix
 
 Source: https://kensaur.us/mushi-mushi/docs/use-cases/ai-code-bug-fixing
 
 ---
-title: AI code bug fixing — report to merged fix
-description: AI code bug fixing end to end — user reports become plain-English diagnoses, fix prompts, and optional draft PRs, with lessons that prevent repeats.
+title: "AI code bug fixing: report to merged fix"
+description: AI code bug fixing end to end with Mushi Mushi. User reports become plain-English diagnoses, fix prompts and optional draft PRs, with lessons that stop repeats.
 ---
 
 # AI code bug fixing: from user report to merged fix
@@ -25,7 +25,7 @@ mobile. The report keeps the screenshot, the page, and the user's own words.
 
 **Diagnose.** Mushi reads the report against your repo and writes a
 plain-English explanation: what the user hit, the likely cause, which files
-are involved, how severe it is. Classification lands in about ten seconds.
+are involved, how severe it is.
 
 **Deduplicate.** Twenty reports about the same broken button collapse into
 one row, so your queue reflects distinct problems, not complaint volume.

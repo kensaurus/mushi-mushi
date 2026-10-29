@@ -12,7 +12,7 @@ north-star sentence below.
 
 ## One line
 
-> **Your AI shipped it. Mushi tells you why it broke — in plain English, in your
+> **Your AI shipped it. Mushi Mushi tells you why it broke — in plain English, in your
 > editor, with the fix ready to go — so a bug costs you five minutes instead of
 > your whole afternoon.**
 

@@ -1,29 +1,32 @@
-# Feature board
+# Feature requests
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/feature-board
 
 ---
-title: Feature board
-description: The Feature board collects feature requests from support tickets so members can upvote them and you can mark them as shipped.
+title: Feature requests
+description: The Feature requests board in Mushi Mushi collects requests from support tickets so members can upvote and comment, and owners or admins can mark them shipped.
 ---
 
-# Feature board
+# Feature requests
 
-**Route:** `/feature-board`
+**Route:** `/feature-board` (sidebar: **Feature requests**, under Account; the page was called Feature board before)
 
-> **Scenario:** Users keep asking for the same product capability — you want a
-> public-ish board to upvote requests and mark them shipped.
+> **Scenario:** Users keep asking for the same product capability, and you want a
+> board to upvote requests and mark them shipped.
 
-Community-driven board of **feature**-category support tickets:
+A board of the **feature**-category support tickets filed in Mushi Mushi for the active
+project:
 
-- Members upvote and comment
-- Operators mark requests **shipped** when released
-- Snapshot strip shows open / in-progress / shipped counts
+- Members upvote (click again to remove your vote) and comment.
+- Sort by **Most voted**, **Newest** or **Oldest**, and filter by open or shipped.
+- Org owners and admins can **Mark shipped** with an optional note. The requester sees
+  the note on their Support page.
+- The snapshot strip shows open and shipped counts, total votes, and the top request.
 
 Personal support tickets (bugs, billing, how-to) stay on
-[Feedback](/admin/feedback).
+[Help & support](/admin/feedback).
 
 ## Related pages
 
-- [Feedback](/admin/feedback) — your support ticket hub
-- [Releases](/admin/releases) — credit reporters when features ship
+- [Help & support](/admin/feedback): your support ticket hub
+- [Releases](/admin/releases): credit reporters when features ship

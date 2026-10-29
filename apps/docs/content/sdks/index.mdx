@@ -5,7 +5,7 @@ description: Bug-reporting SDKs for React, Vue, Svelte, Angular, React Native, C
 
 # SDK reference
 
-Published npm packages ship on independent semver tracks (see [npm](https://www.npmjs.com/org/mushi-mushi) for live versions). Current workspace snapshots:
+Mushi Mushi's npm packages ship on independent semver tracks (see [npm](https://www.npmjs.com/org/mushi-mushi) for live versions). Current workspace snapshots:
 
 {/* sdk-version-matrix:start */}
 | Package | Version |
@@ -26,33 +26,33 @@ See [Project ID & API keys](/concepts/credentials) for credential formats (proje
 ## Maturity, honestly
 
 Version numbers don't tell the maturity story (a 1.0.x wrapper can be
-younger than a 0.20.x SDK with three years of production miles), so here it
-is directly — what each tier means and where each package sits:
+younger and less used than a 0.x SDK), so this table says it directly: what
+each tier means and where each package sits.
 
 | Tier | What it means | Packages |
 | --- | --- | --- |
-| **Battle-tested** | Runs in production apps daily (including Mushi's own console — we dogfood); full capture surface; deep test suites | `@mushi-mushi/core`, `@mushi-mushi/web`, `@mushi-mushi/react`, `@mushi-mushi/react-native`, `@mushi-mushi/cli`, `@mushi-mushi/mcp` |
+| **Battle-tested** | Runs in production apps daily, including the Mushi Mushi console itself; full capture surface; deep test suites | `@mushi-mushi/core`, `@mushi-mushi/web`, `@mushi-mushi/react`, `@mushi-mushi/react-native`, `@mushi-mushi/cli`, `@mushi-mushi/mcp` |
 | **Solid** | Complete for the documented surface, used in real apps, smaller scope | `@mushi-mushi/capacitor`, `@mushi-mushi/node`, `@mushi-mushi/adapters` |
-| **Functional wrapper** | Thin framework binding over `@mushi-mushi/web` (~300 lines each); everything documented works, but expect fewer framework-specific niceties | `@mushi-mushi/vue`, `@mushi-mushi/svelte`, `@mushi-mushi/angular` |
-| **Native preview** | Full native implementations, not yet published to CocoaPods, Maven Central or pub.dev — install from the GitHub repo | iOS (Swift), Android (Kotlin), Flutter |
+| **Functional wrapper** | Thin framework binding over `@mushi-mushi/web` (100 to 200 lines each); everything documented works, but expect fewer framework-specific niceties | `@mushi-mushi/vue`, `@mushi-mushi/svelte`, `@mushi-mushi/angular` |
+| **Native preview** | Full native implementations, not yet published to CocoaPods, Maven Central or pub.dev; install from the GitHub repo | iOS (Swift), Android (Kotlin), Flutter |
 
 If a "functional wrapper" is missing something you need, the underlying
-[`@mushi-mushi/web`](/sdks/web) API is always available alongside it — and
+[`@mushi-mushi/web`](/sdks/web) API is always available alongside it, and
 [issues](https://github.com/kensaurus/mushi-mushi/issues) for framework
 bindings get prioritized by demand.
 
-The JS packages are MIT-licensed; the server packages (`@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify`) are AGPLv3 — true OSI open source. A small enterprise-edition boundary (`packages/server/ee/`) is source-available but commercial for production use.
+The JS packages are MIT-licensed; the server packages (`@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify`) are AGPLv3, an OSI-approved open-source license. A small enterprise-edition boundary (`packages/server/ee/`) is source-available but commercial for production use.
 
 ## Web & frameworks
 
 | Package | Registry | Description |
 | --- | --- | --- |
 | [`@mushi-mushi/core`](/sdks/core) | npm | Shared primitives: `normaliseThrown`, `createBreadcrumbBuffer`, `captureEnvironment` |
-| [`@mushi-mushi/web`](/sdks/web) | npm | Browser SDK — shake widget, breadcrumbs, session replay, WASM pre-classifier |
+| [`@mushi-mushi/web`](/sdks/web) | npm | Browser SDK: report widget, breadcrumbs, session replay, optional WASM pre-classifier |
 | [`@mushi-mushi/react`](/sdks/react) | npm | React provider + hooks + `<MushiRewardsBadge />` |
 | [`@mushi-mushi/vue`](/sdks/vue) | npm | Vue 3 plugin + composables |
 | [`@mushi-mushi/svelte`](/sdks/svelte) | npm | Svelte stores + context |
-| [`@mushi-mushi/angular`](/sdks/angular) | npm | Angular DI service + directive |
+| [`@mushi-mushi/angular`](/sdks/angular) | npm | Angular service, error handler and `provideMushi()` |
 | [`@mushi-mushi/adapters`](/sdks/adapters) | npm | Inbound observability webhooks (Sentry, Datadog, Bugsnag, …) |
 
 ## Server
@@ -65,30 +65,30 @@ The JS packages are MIT-licensed; the server packages (`@mushi-mushi/server`, `@
 
 | Package | Registry | Description |
 | --- | --- | --- |
-| [`@mushi-mushi/react-native`](/sdks/react-native) | npm | React Native SDK — shake, offline queue, Sentry bridge |
-| [`MushiMushi`](/sdks/ios) | Preview — SwiftPM from `master` (no CocoaPods yet) | iOS / macOS / tvOS native Swift SDK |
-| [`dev.mushimushi:mushi-android`](/sdks/android) | Preview — build from source (not on Maven Central yet) | Android Kotlin SDK, bottom-sheet widget, file-backed queue |
-| [`mushi_mushi`](/sdks/flutter) | Preview — `git:` dependency (not on pub.dev yet) | Flutter pure-Dart SDK, `sensors_plus` shake detection |
-| [`@mushi-mushi/capacitor`](/sdks/capacitor) | npm | Capacitor plugin — wraps native SDKs for hybrid apps |
+| [`@mushi-mushi/react-native`](/sdks/react-native) | npm | React Native SDK: shake-to-report, bottom-sheet widget, offline queue |
+| [`MushiMushi`](/sdks/ios) | Preview: SwiftPM from `master` (no CocoaPods yet) | iOS / macOS / tvOS native Swift SDK |
+| [`dev.mushimushi:mushi-android`](/sdks/android) | Preview: build from source (not on Maven Central yet) | Android Kotlin SDK, bottom-sheet widget, file-backed queue |
+| [`mushi_mushi`](/sdks/flutter) | Preview: `git:` dependency (not on pub.dev yet) | Flutter SDK written in Dart, `sensors_plus` shake detection |
+| [`@mushi-mushi/capacitor`](/sdks/capacitor) | npm | Capacitor plugin that wraps the native SDKs for hybrid apps |
 
 ## Tooling & automation
 
 | Package | Registry | Description |
 | --- | --- | --- |
 | [`@mushi-mushi/cli`](/sdks/cli) | npm | Project setup, RAG indexing, report management, `mushi migrate` |
-| [`mushi-mushi`](/sdks/launcher) | npm | Meta-launcher — `npx mushi-mushi` wizard |
-| [`@mushi-mushi/mcp`](/sdks/mcp) | npm | MCP server — triage reports from Cursor, Claude, Codex |
-| [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) | npm | CI-aware MCP surface — attach to GitHub Actions |
-| [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin) | npm | Lints for missing report calls and incorrect config |
+| [`mushi-mushi`](/sdks/launcher) | npm | Launcher: the `npx mushi-mushi` setup wizard |
+| [`@mushi-mushi/mcp`](/sdks/mcp) | npm | MCP server: triage reports from Cursor, Claude, Codex |
+| [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) | npm | GitHub Action: triage-coverage gate, fix dispatch, pre-release gates, crawler sign-in |
+| [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin) | npm | Lint rules for empty event handlers (`no-dead-handler`) and leftover mock data (`no-mock-leak`) |
 
 ## Infrastructure & advanced
 
 | Package | Registry | Description |
 | --- | --- | --- |
-| [`@mushi-mushi/wasm-classifier`](/sdks/wasm-classifier) | npm | On-device pre-classifier (heuristic; ONNX mode experimental) — drops junk before sending |
+| [`@mushi-mushi/wasm-classifier`](/sdks/wasm-classifier) | npm | On-device pre-classifier (heuristic; ONNX mode experimental) that drops junk before sending |
 | [`@mushi-mushi/plugin-sdk`](/sdks/plugin-sdk) | npm | Build your own Marketplace plugin |
 | [`@mushi-mushi/inventory-schema`](/sdks/inventory-schema) | npm | Zod schemas for `inventory_nodes` and user stories |
-| [`@mushi-mushi/inventory-auth-runner`](/sdks/inventory-auth-runner) | npm | Auth-gated story runner for the QA coverage suite |
+| [`@mushi-mushi/inventory-auth-runner`](/sdks/inventory-auth-runner) | npm | Logs in with Playwright from your `inventory.yaml` auth script so the crawler can reach pages behind a login |
 
 ## Recipes & presets
 

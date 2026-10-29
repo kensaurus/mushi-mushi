@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/agent-pr-review
 
 ---
 title: Agent PR review
-description: Claude Opus 5.5 reviews every pull request a cloud coding agent opens as a fix, and a "hold" stops Mushi from merging it until you choose to.
+description: In Mushi Mushi, Claude Opus 5.5 reviews every fix pull request a coding agent opens, and a "hold" stops Mushi from merging it until you choose to.
 ---
 
 # Agent PR review

@@ -8,7 +8,7 @@ should use v2 hero.
 
 | Slot | Form | Use on |
 |------|------|--------|
-| Hero | *"Your AI wrote it. Mushi tells you why it broke."* | README headers, landing H1, docs landing |
+| Hero | *"Your AI wrote it. Mushi Mushi tells you why it broke."* | README headers, landing H1, docs landing |
 | Offer line | *"…and fixes it, with a reviewer that says no."* | Directly after the hero, in posts and decks (`heroOffer`; owner decision D1, 2026-10-28). Never add a price to it. |
 | Sub-hero | *"Plain-English diagnosis + a paste-ready fix, right inside Cursor."* | Lead paragraphs under hero |
 | Category | *"The bug mediator for AI-built apps"* | Eyebrow, npm, llms.txt |

@@ -1,22 +1,29 @@
 ---
-title: Rewards program
-description: Set up the Mushi rewards program from the console — points for reporter activity, the tier ladder, and the perks your app grants at each tier.
+title: Tester rewards
+description: Set up Mushi Mushi tester rewards from the console, with points for reporter activity, a tier ladder, and the perks your app grants at each tier.
 ---
 
-# Rewards program
+# Tester rewards
+
+**Route:** `/rewards` (sidebar: **Account → Tester rewards**)
 
 import { Callout, Steps, Tabs } from 'nextra/components'
 
-The Rewards program turns passive bug reporters into engaged contributors.
-Every activity your users take in your app — navigating screens, submitting
-reports, leaving comments — earns them points. Points advance tiers. Tiers
-open perks you configure: free plan upgrades, early-access flags, and
-(optionally) monetary payouts via Stripe Connect.
+Tester rewards in Mushi Mushi give the people who report bugs a reason to come back.
+Activity your users send through the SDK earns points when a rule (or a built-in
+default) covers that action. Points advance tiers. Tiers open perks you configure,
+such as a role or a coupon your app grants, and (optionally) monetary payouts via
+Stripe Connect.
+
+The page has these tabs: **Overview**, **Bounties**, **Activity rules**, **Tier ladder**,
+**Contributors**, **Quests**, **Retention**, **Simulator** and **Settings**. **Bounties**
+publishes the app to the Mushi Bounties marketplace so outside testers can find bugs for
+a reward; this page does not cover it in detail.
 
 <Callout type="info">
-  The Rewards page is available on **Builder**, **Studio** and **Enterprise**. The admin
-  toggle at the bottom of [Settings](#settings) is always visible so you can
-  prepare your configuration before flipping the SDK flag in your app.
+  Configuring rules, tiers and webhooks needs **Builder**, **Studio** or **Enterprise**.
+  On Free the page shows a preview with an upgrade link. Monetary payouts need
+  **Enterprise**.
 </Callout>
 
 ---
@@ -36,8 +43,8 @@ sequenceDiagram
   SDK->>API: batch flush (≤100 events)
   API->>DB: resolve / upsert end_users row
   API->>DB: insert end_user_activity rows
-  DB->>DB: trigger: apply_activity_points (awards pts per rule)
-  DB->>DB: aggregate into end_user_points
+  API->>DB: points per rule (or built-in default), caps applied
+  DB->>DB: trigger: apply_activity_points keeps end_user_points totals
   Admin->>DB: GET /v1/admin/rewards/overview
   Admin-->>Admin: live dashboard refreshes
 ```
@@ -52,17 +59,14 @@ record that links all future activity and reports to that identity.
 
 ## Overview tab
 
-The Overview tab shows a snapshot of your rewards program's health:
+The snapshot strip above the tabs shows **Testers (30 days)**, **Points (30 days)** and
+**Payouts waiting**. The Overview tab adds:
 
-| Tile | What it measures |
-|------|-----------------|
-| **Active contributors** | Distinct end users who earned ≥1 point in the last 30 days |
-| **Total points issued** | Sum of all `points_awarded` ever, for your org |
-| **Reports this month** | Reports linked to a known `end_user_id` in the calendar month |
-| **Tier breakdown** | Donut chart: percentage of contributors at each tier |
-
-The tiles are live — `useRealtimeReload` polls every 30 seconds via Supabase
-Realtime so you see activity without a page refresh.
+| Section | What it shows |
+|---------|---------------|
+| **Top testers** and **Running quests** | Who leads, and which quests are live |
+| **Tier distribution** | How many contributors sit at each tier |
+| **Activity feed (last 24 h)** | The latest activity events the SDK sent |
 
 ---
 
@@ -71,49 +75,46 @@ Realtime so you see activity without a page refresh.
 On an empty Activity rules tab, click **Use recommended defaults** (or call
 `POST /v1/admin/rewards/presets/apply`). That idempotently installs:
 
-| Action | Default points | When it fires |
-|--------|---------------:|---------------|
-| `report.submitted` | 10 | After ingest links the report to an `end_user` |
-| `report.triaged` | 50 | After `classify-report` finishes (idempotent) |
-| `comment_posted` | (preset) | Reporter comments |
+| Action | Points | Max / day | When it fires |
+|--------|-------:|----------:|---------------|
+| `report.submitted` | 10 | 20 | After ingest links the report to an `end_user` |
+| `report.triaged` | 50 | none | After `classify-report` finishes (awarded once per report) |
+| `comment_posted` | 8 | 30 | Reporter comments |
 
-Plus a 4-tier ladder (Explorer → Contributor → Champion → Legend). Safe to
+Plus a 4-tier ladder: Explorer (0), Contributor (100), Champion (500) and Legend (2,000). Safe to
 re-run — existing custom rules/slugs are never clobbered. Full operator guide:
 [`docs/REWARDS.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/REWARDS.md).
 
 ---
 
-## Activity Rules tab
+## Activity rules tab
 
-Rules define which user actions earn points and what the caps are.
+Rules define which user actions earn points and what the caps are. The **Point rules**
+table has these columns; edit them in place and click **Save rules**.
 
 | Column | Description |
 |--------|-------------|
-| **Action** | The `action` string the SDK sends (e.g. `page_view`, `report_submit`) |
-| **Base points** | Points awarded per occurrence. Negative values deduct points. |
-| **Max / day** | Cap per user per calendar day. `null` = unlimited. |
-| **Max lifetime** | Lifetime cap per user. `null` = unlimited. |
-| **Multiplier eligible** | Whether a tier multiplier can boost this action's award. |
-| **JWT required** | Monetary-eligible rules (P2) — require a verified host JWT before awarding. |
+| **Action** | The `action` string the SDK sends (e.g. `report_submit`) |
+| **Base pts** | Points awarded per occurrence. Negative values deduct points. |
+| **Daily cap** | Cap per user per day. Empty = unlimited. |
+| **Lifetime cap** | Lifetime cap per user. Empty = unlimited. |
 | **Enabled** | Toggle without deleting. Disabled rules skip evaluation silently. |
 
-**Built-in defaults** (set when the project first enables rewards):
+Each rule also carries `multiplier_eligible` and `requires_jwt_verification` flags,
+set through the API (`PUT /v1/admin/rewards/rules`), not in the table.
 
-| Action | Points | Max/day | Notes |
-|--------|-------:|--------:|-------|
-| `session_start` | 10 | 3 | First three sessions of the day |
-| `page_view` | 2 | 20 | Incremental reading progress |
-| `navigate` | 3 | 30 | Deliberate navigation events |
-| `button_press` | 5 | 30 | Explicit interactions |
-| `comment_add` | 25 | 10 | Social engagement |
-| `report_submit` | 50 | 5 | Core value action — confirmed bugs earn a bonus from the anti-gaming scorer |
+**Built-in fallbacks.** When no rule exists for an action, the server uses a built-in
+table, for example `report.submitted` 10, `report.triaged` 50, `report_submit` 10,
+`report_confirmed` 50, `report_fixed` 25, `comment_posted` 8 and `report_dismissed` -5.
+An action with neither a rule nor a fallback earns nothing.
 
-Rules are applied by a PostgreSQL trigger (`private.apply_activity_points`)
-so the award is atomic and consistent regardless of which SDK surface fired.
+The server computes each award (rule, caps, tier multiplier), then a PostgreSQL trigger
+(`private.apply_activity_points`) keeps the `end_user_points` totals in step.
 
 ### Custom rules
 
-Click **+ Add rule** to create an action you define in your own code:
+The table has no add button. To reward an action you define in your own code, send it
+from the SDK:
 
 ```typescript
 mushi.submitActivity([
@@ -121,24 +122,27 @@ mushi.submitActivity([
 ])
 ```
 
-Then create a rule with `action: 'lesson_complete'`, set the points, and it
-starts accruing immediately — no SDK update required.
+Then upsert a rule with `action: 'lesson_complete'` through `PUT /v1/admin/rewards/rules`.
+It starts accruing on the next event; no SDK update is required.
 
 ---
 
-## Tier Ladder tab
+## Tier ladder tab
 
-Tiers map a point threshold to a named rank with optional perks.
+Tiers map a point threshold to a named rank with optional perks. Each tier card lets you
+edit:
 
-| Column | Description |
-|--------|-------------|
-| **Slug** | Internal identifier used in webhook payloads and SDK responses |
-| **Display name** | User-visible name (e.g. "Explorer", "Contributor") |
+| Field | Description |
+|-------|-------------|
 | **Points threshold** | Minimum `total_points` to reach this tier |
-| **Perks** | Arbitrary JSON object passed to your webhook / SDK callback |
-| **Multiplier** | Point multiplier applied to multiplier-eligible rules for this tier |
+| **Display name** | User-visible name (e.g. "Explorer", "Contributor") |
+| **Monetary reward (USD)** | Payout queued when a user reaches the tier (monetary plans only) |
+| **Enabled** | Turn a tier off without deleting it |
 
-**Default ladder shipped with new projects:**
+A tier also has a slug, perks JSON and a host credit payload (what your app grants);
+the recommended defaults fill these in.
+
+**Default ladder when you have configured no tiers** (shown as "Using default tiers"):
 
 | Tier | Threshold | Color |
 |------|----------:|-------|
@@ -147,24 +151,26 @@ Tiers map a point threshold to a named rank with optional perks.
 | Contributor | 500 | Purple |
 | Champion | 2 000 | Amber |
 
-Edit or extend the ladder to match your own program. Tier evaluation runs
-inside `awardPointsForEndUser` after every successful activity flush — if the
-new total crosses a threshold, a `tier_up` webhook fires automatically.
+Edit the ladder to match your own program. Tier evaluation runs inside
+`awardPointsForEndUser` after every award; if the new total crosses a threshold, a
+`reward.tier_changed` webhook fires.
 
 ---
 
 ## Contributors tab
 
-A live leaderboard of your top reporters, ranked by `total_points` (descending).
-Filter by time window (7d / 30d / all-time) or search by display name / email.
+A leaderboard of your top reporters, ranked by points. Choose the last 30 days or
+all time, filter by tier, and search by name.
 
 **Per-contributor drill-down** (`/v1/admin/rewards/contributors/:id`) shows:
 
-- Point history chart (daily breakdown)
+- **Lifetime points** and **Activity events**
 - Each `end_user_activity` entry with the action, points awarded, and timestamp
-- Linked reports with their classification status
-- Current tier + progress to the next tier
-- GDPR controls: export or delete the end-user's data
+- **Anti-fraud flags**, when there are any
+- **Admin actions**: **Award bonus points** and **Override tier**
+
+Export and erasure are SDK routes the end user calls (see [GDPR & consent](#gdpr--consent)),
+not console buttons.
 
 <Callout type="warning">
   The Contributors tab shows email addresses and display names collected via
@@ -178,25 +184,25 @@ Filter by time window (7d / 30d / all-time) or search by display name / email.
 ## Quests tab
 
 Quests are multi-step goals. A user completes a quest by performing a defined
-sequence of actions within a time window.
+sequence of actions.
 
-**Example quest** — "First Feedback":
-1. `session_start` (day 0)
-2. `navigate` to any 3 distinct screens (day 0–7)
-3. `report_submit` or `comment_add` (day 0–14)
+**Example quest**, "First Feedback" (each step is one action with a label):
+1. `screen_view_unique_per_day`, label "Look around the app"
+2. `report_submit`, label "Send your first bug report"
+3. `comment_posted`, label "Reply to the team"
 
-Quest completions award a bonus `quest_complete` point event in addition to the
-per-action awards.
+Completing a quest awards bonus points in addition to the per-action awards, and
+fires a `reward.quest_completed` webhook.
 
 ### Quest editor
 
-Click **+ New quest** to open the editor:
+Click **New quest** to open the editor:
 
-- **Name** and **description** (shown to users in the badge widget)
-- **Steps** — drag-and-drop ordered list of `{ action, min_count, within_days }`
-- **Reward points** — awarded on completion
-- **Expiry** — quest deadline (absolute date or rolling window)
-- **One-shot** — whether a user can complete the same quest multiple times
+- **Quest name** and **Description (optional)**
+- **Bonus points on completion**
+- **Expires after (days, optional)**
+- **Steps (in order)**: each step has an action and a label (for example "Visit /pricing")
+- **Repeatable**: whether a user can complete the same quest more than once
 
 Quest progress is evaluated server-side in `evaluateQuestProgress` after each
 activity flush, so no client-side code is needed to track completion state.
@@ -205,62 +211,56 @@ activity flush, so no client-side code is needed to track completion state.
 
 ## Retention tab
 
-The Retention tab shows **cohort-level analysis**: how did the rewards program
-affect 7-day and 30-day retention for users who opted in versus those who did
-not?
-
-Charts displayed:
-
-- Retention curves: opted-in vs. opted-out cohorts
-- Avg. sessions per user / week: rewards vs. control
-- Report volume trend: did engagement translate to more reports?
-- At-risk users: opted-in users who haven't appeared in 14+ days (re-engagement
-  candidates for a push campaign)
-
-Data is computed by the `intelligence-report` edge function and cached in
-`project_settings.retention_cache` with a 24-hour TTL.
+The Retention tab (**Retention impact**) compares how long contributors in your highest
+tier keep coming back with everyone else: the top tier's median retention in days,
+the others' median, and the **Retention lift** between them. It is computed on request
+by `GET /v1/admin/rewards/retention-impact`.
 
 ---
 
 ## Simulator tab
 
-The Simulator lets you preview how a point award would behave **before** you
-deploy it to users.
+The **Sandbox simulator** previews how an activity log would score against your
+current rules, without real data.
 
-1. Pick or type an `action` name.
-2. Enter an example `userId` (can be a test ID — no actual `end_users` row is
-   created or modified).
-3. Click **Run** — the server evaluates the rule, applies caps, and returns the
-   award result, the capped reason if applicable, and the hypothetical new tier.
+1. Type an `action` name and a count for each line; **+ Add event** adds a line.
+2. Click **Run simulation**. The server applies your rules and caps and returns
+   **Total points**, the **Reached tier**, and a breakdown per action
+   (count, points per event, subtotal, note).
 
-Use this to sanity-check multiplier interactions, daily cap edge cases, and
-quest trigger logic without touching production data.
+Nothing is written: no `end_users` row is created or changed.
+
+Use this to sanity-check daily cap edge cases before you change a rule.
 
 ---
 
 ## Settings tab
 
-| Setting | Description |
-|---------|-------------|
-| **Rewards enabled** | Master toggle. Disabling stops point awards but preserves all historical data. |
-| **Consent mode** | `explicit` (SDK shows a one-time prompt) or `auto` (opt-in on first `identify()`). |
-| **Show in widget** | Display tier + points footer inside the Mushi bug-report widget. |
-| **Show notifications** | "+X pts" toast shown to the user on each award. |
-| **Monthly org cap** | Max total points your org will award in a calendar month (fraud guard). `0` = unlimited. |
+The Settings tab has four sections: **Host webhooks**, **Identity verification**
+(JWKS URL, audience and issuer for verifying your users' tokens), **Payout ledger** and
+**Disputes**.
+
+Consent and widget display are SDK options, not console settings: `consentMode`
+(`explicit`, the default, or `auto`), `showInWidget` and `showNotifications` in the
+SDK's rewards config.
 
 ### Webhooks
 
-Webhook payloads are sent for these events:
+Webhook payloads are sent for these events. Every payload carries `event`,
+`end_user_id` and `occurred_at`:
 
-| Event | Payload highlights |
-|-------|--------------------|
-| `points_awarded` | `userId`, `action`, `points`, `totalPoints`, `tier` |
-| `tier_up` | `userId`, `previousTier`, `newTier`, `totalPoints` |
-| `quest_complete` | `userId`, `questId`, `questName`, `bonusPoints` |
-| `payout_created` | `userId`, `amount`, `currency`, `stripeTransferId` (P2) |
+| Event |
+|-------|
+| `reward.points_awarded` |
+| `reward.tier_changed` |
+| `reward.quest_completed` |
+| `reward.payout_requested` |
+| `reward.payout_paid` |
 
-Register webhook endpoints in the **Webhooks** subtab, test-fire them with a
-synthetic payload, and view the delivery log.
+Add endpoints under **Host webhooks** (an HTTPS URL and an optional signing secret of at
+least 16 characters; leave it empty and Mushi Mushi creates one and shows it once), and
+send a test event from there. `@mushi-mushi/node` exports `createMushiRewardsHandler` to
+verify and route these events in your server.
 
 ---
 
@@ -268,18 +268,18 @@ synthetic payload, and view the delivery log.
 
 <Callout type="info">
   Monetary payouts require the **Enterprise** plan and a connected Stripe
-  account. The Stripe Connect onboarding flow is inside Settings → Payouts.
+  account. Each end user onboards through the SDK route `POST /v1/sdk/me/payout/onboard`.
 </Callout>
 
 When monetary payouts are enabled:
 
-1. Each contributing user completes a Stripe Connect Express onboarding
-   (linked from their profile or from a `tier_up` notification you send).
-2. Your payout rules define a `$/point` rate and a minimum threshold.
-3. The `payout-aggregator` cron job (runs monthly) computes each user's earned
-   amount, writes a `reward_payouts` row, and queues a Stripe transfer.
-4. The **Payout liability dashboard** shows the outstanding liability (unpaid
-   earned amounts) so you can top up your Stripe balance before month-end.
+1. Each contributing user completes a Stripe Connect Express onboarding.
+2. A payout is queued when a user reaches a tier that has a **Monetary reward (USD)**.
+3. The `reward-payout-aggregator` cron job (monthly, on the 1st at 09:00 UTC) checks
+   the user's KYC and anti-fraud flags, then sends the Stripe transfer and marks the
+   `reward_payouts` row paid or failed.
+4. **Payout ledger** in the Settings tab lists the payouts, so you can top up your
+   Stripe balance before the run.
 
 The JWT verification step (`verifyUserToken` in `MushiRewardsConfig`) ensures
 that monetary awards are only issued to authenticated users whose identity the

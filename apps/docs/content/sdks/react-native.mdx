@@ -1,12 +1,12 @@
 ---
 title: '@mushi-mushi/react-native'
-description: Reference for @mushi-mushi/react-native — MushiProvider, hooks, shake-to-report, screenshots, identity and the offline queue for React Native and Expo.
+description: Reference for @mushi-mushi/react-native, Mushi Mushi for React Native and Expo. MushiProvider, hooks, shake-to-report, screenshots, identity and offline queue.
 ---
 
 # `@mushi-mushi/react-native`
 
-Let testers shake their phone when something feels broken — the native SDK captures
-console logs, network errors, and screenshots, then queues reports offline until
+The Mushi Mushi React Native SDK lets testers shake their phone when something
+feels broken. It captures console logs, network errors, and screenshots, then queues reports offline until
 connectivity returns. Works in bare React Native CLI projects and Expo.
 
 ```tsx
@@ -19,7 +19,7 @@ import { MushiProvider, useMushi, useMushiReport } from '@mushi-mushi/react-nati
 npm install @mushi-mushi/react-native
 ```
 
-Optional peer dependencies — install the ones whose features you want:
+Optional peer dependencies. Install the ones whose features you want:
 
 | Peer | Enables |
 |------|---------|
@@ -27,6 +27,8 @@ Optional peer dependencies — install the ones whose features you want:
 | `@react-navigation/native` | Auto-captured navigation timeline via `useNavigationCapture()` |
 | `react-native-view-shot` | Screenshot on widget open (optional; see [Screenshots](#screenshots-react-native-view-shot)) |
 | `expo-sensors` | Shake-to-report trigger |
+| `expo-secure-store` | Encrypts the offline queue and keeps the reporter token in the keychain/keystore (`storage.secureStorage`, on by default when installed) |
+| `@react-native-community/netinfo` | Sends queued reports as soon as the device is back online |
 
 For shake-to-report on a bare RN CLI project, install Expo modules first:
 
@@ -86,8 +88,10 @@ function ChatScreen() {
 ## Offline queue
 
 Reports submitted while offline are buffered in `AsyncStorage` (key
-`@mushi:offline_queue`, default cap 50 items) and replayed on the next
-provider mount or whenever you call `useMushi().flush()`.
+`@mushi:offline_queue_enc`, encrypted when `expo-secure-store` is available;
+default cap 50 items, oldest dropped first). They are replayed on the next
+provider mount and, with `@react-native-community/netinfo` installed, as soon
+as the connection returns. There is no manual flush method.
 
 import { Callout } from 'nextra/components'
 
@@ -111,13 +115,13 @@ added in **0.19.0**):
 
 | Field | Description |
 | ----- | ----------- |
-| `sessionId` | Per-launch UUID — groups all reports from one app open |
+| `sessionId` | Per-launch UUID; groups all reports from one app open |
 | `sdkPackage` / `sdkVersion` | Package name + build-time version stamp |
 | `appVersion` | Native app version from device info |
 | `fingerprintHash` | Stable RN device hash (`rnfp_*` prefix) for anti-gaming |
 | `breadcrumbs` | Ring buffer (default 50) of console, navigation, and host events |
 | `timeline` | Derived repro trail rendered in the admin **Repro timeline** card |
-| `metadata.user` | Nested reporter identity — see [Identifying users](#identifying-users) |
+| `metadata.user` | Nested reporter identity; see [Identifying users](#identifying-users) |
 | `screenshotDataUrl` | Optional JPEG data-URI when capture is enabled |
 
 Configure the ring buffer and screenshot gate under `config.capture`:
@@ -150,7 +154,7 @@ npx expo install react-native-view-shot
 
 The SDK captures **before** the bottom sheet overlays the screen. Users see a
 **thumbnail preview**, can **Remove** it before submit, and read an optional
-**privacy caption** under the image (1.19+).
+**privacy caption** under the image (0.19+).
 
 ```tsx
 <MushiProvider
@@ -166,7 +170,7 @@ The SDK captures **before** the bottom sheet overlays the screen. Users see a
 ```
 
 Console operators can override the caption via **Projects → SDK install →
-Screenshot privacy caption** (runtime config — no app rebuild).
+Screenshot privacy caption** (runtime config, no app rebuild).
 
 ### Theming the report sheet
 
@@ -314,7 +318,7 @@ export function AuthGate({ children }) {
 ```
 
 `identify()` is idempotent. Calling it with the same `userId` on each session
-restore is safe — the server upserts the `end_users` row and updates
+restore is safe: the server upserts the `end_users` row and updates
 `last_seen_at`.
 
 ---
@@ -334,7 +338,7 @@ export default function App() {
         capture: { console: true, network: true },
         rewards: {
           enabled: true,
-          trackActivity: true,    // auto-captures screen changes via setScreen()
+          trackActivity: true,    // required on React Native: without it no activity is sent
           consentMode: 'explicit',
           showInWidget: true,
         },
@@ -348,10 +352,16 @@ export default function App() {
 }
 ```
 
+On React Native, `trackActivity: true` starts the timer that sends queued
+activity (every `flushIntervalMs`, default 5 minutes, minimum 30 seconds). It
+does not record anything by itself; activity comes from `recordActivity()`
+calls (below).
+
 ### Wiring screen tracking
 
-Call `setScreen()` on every navigation event to feed `page_view` and
-`navigate` activity events automatically:
+Call `setScreen()` on every navigation event. It adds a navigation breadcrumb
+for the repro timeline and a page view for [product analytics](/sdks/analytics).
+It does not record rewards activity.
 
 ```tsx filename="navigation/RootNavigator.tsx"
 import { useMushi } from '@mushi-mushi/react-native'
@@ -364,7 +374,7 @@ export function RootNavigator() {
     <NavigationContainer
       onStateChange={(state) => {
         const routeName = getActiveRouteName(state)
-        sdk?.setScreen(routeName)
+        sdk?.setScreen({ name: routeName })
       }}
     >
       {/* … */}
@@ -382,9 +392,7 @@ function LessonScreen({ lessonId }) {
   const sdk = useMushi()
 
   const onComplete = () => {
-    sdk?.submitActivity([
-      { action: 'lesson_complete', metadata: { lessonId } },
-    ])
+    sdk?.recordActivity('lesson_complete', { lessonId })
   }
 
   return <Button title="Complete" onPress={onComplete} />

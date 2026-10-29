@@ -1,5 +1,7 @@
 # Reddit — drafts (owner posts; one subreddit per day; read each sub's self-promotion rule first)
 
+> **Superseded 2026-10-29: do not post this.** Its numbers counted Mushi's own reports (a backlog import, AI audits, automated sweeps) as reports from users; only 32 of 669 came from people. Corrected numbers and the current drafts: [log/README.md](log/README.md).
+
 > **Before posting:** refresh every number from the live scoreboard (`/proof`, or `GET /v1/public/scoreboard`); they move daily. Don't promise a fix time; quote the measured median (3.3 h to a fix PR on 2026-10-28).
 
 ## r/vibecoding and r/lovable (story first, product last)

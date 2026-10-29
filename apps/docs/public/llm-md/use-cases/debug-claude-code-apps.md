@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/use-cases/debug-claude-code-apps
 
 ---
 title: Debug apps built with Claude Code
-description: How to debug an app Claude Code built — bug reports arrive as plain-English diagnoses your Claude Code agent reads and fixes over MCP, fix prompt included.
+description: How to debug an app Claude Code built. With Mushi Mushi, reports arrive as plain-English diagnoses Claude Code reads and fixes over MCP, fix prompt included.
 ---
 
 # How to debug an app Claude Code built
@@ -37,8 +37,8 @@ fix it" becomes a one-line instruction.
 
 Error monitors capture what the code threw. Mushi captures what the **user
 felt** — including bugs that never throw: wrong copy, dead links, a flow that
-silently no-ops. For AI-built apps those are the majority, and they're
-invisible to a stack-trace tool.
+silently no-ops. In AI-built apps they are common, and they're invisible to
+a stack-trace tool.
 
 ## Set it up
 

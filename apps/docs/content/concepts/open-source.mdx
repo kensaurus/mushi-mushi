@@ -1,6 +1,6 @@
 ---
 title: Open source & licensing
-description: "What is open in Mushi: MIT SDKs to embed anywhere, an AGPLv3 server and console to self-host, a small commercial edition, and what the hosted service keeps."
+description: "What's open in Mushi Mushi: MIT SDKs to embed anywhere, an AGPLv3 server and console to self-host, a commercial edition, and what the hosted service keeps."
 ---
 
 import { Callout } from 'nextra/components'
@@ -30,7 +30,7 @@ self-host is what we run; the hosted service adds only its own tuning data
 | **Server packages** — `@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify` | [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/LICENSE) | Use, modify, self-host, fork for your own org. Modified SaaS → publish changes (§13) or [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md). The cloud runs this exact core. |
 | **Console** — `apps/admin` (and the tester portal, `apps/testers`) | [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/apps/admin/LICENSE) | Same terms as the server. AGPLv3 since Oct 22, 2026; copies from before that date stay MIT. |
 | **Logo, bug mark, app icons, mascot** | [All rights reserved](https://github.com/kensaurus/mushi-mushi/blob/master/TRADEMARK.md) | Use the unmodified logo to refer or link to Mushi. Not as your own app's identity. |
-| **Enterprise edition** — `packages/server/ee/` (SAML/OIDC SSO, audit export, retention CRUD, region pinning, SOC 2 evidence pack) | [Commercial](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/ee/LICENSE) | Read, audit, modify, and run for development/evaluation. Production use needs an Enterprise subscription or `MUSHI_EE_LICENSE_KEY`. |
+| **Enterprise edition**: SAML/OIDC SSO, audit export, retention-policy editing, region pinning, SOC 2 evidence and compliance exports. The boundary and license live in `packages/server/ee/`; the code itself still sits next to the core until it is moved | [Commercial](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/ee/LICENSE) | Read, audit, modify, and run for development/evaluation. Production use needs an Enterprise subscription or `MUSHI_EE_LICENSE_KEY`. |
 | **Third-party attributions** | [NOTICE](https://github.com/kensaurus/mushi-mushi/blob/master/NOTICE) | One-stop list of upstream projects and their licenses. |
 
 ### Why MIT for the SDK?
@@ -100,9 +100,9 @@ See [CONTRIBUTING.md](https://github.com/kensaurus/mushi-mushi/blob/master/CONTR
 | SDK packages (MIT) | Yes — embed in any app | — |
 | Self-hosted server (AGPLv3) | Yes — run on your own infra, unlimited diagnoses | Your own LLM API costs (BYOK) |
 | Mushi Cloud — Free tier | Yes — 1 app, 100 diagnoses / mo, **hard stop** at limit | — |
-| Mushi Cloud — Builder / Studio / Enterprise | Flat base by apps watched + usage overage | $29 (3 apps) or $79 (10 apps) / mo base + $0.03 / extra diagnosis; Enterprise from $499 / mo |
+| Mushi Cloud — Builder / Studio / Enterprise | Flat base by apps watched + usage overage | $29 (3 apps) or $79 (10 apps) / mo base + $0.03 (Builder) or $0.02 (Studio) per extra diagnosis; Enterprise from $499 / mo |
 
-**One sentence:** the MIT + AGPL core self-hosts free; the cloud sells managed hosting, LLM key pooling, retention beyond 7 days, team collaboration, and security features (SSO, SOC 2).
+**One sentence:** the MIT + AGPL core self-hosts free; the cloud sells managed hosting, LLM key pooling, longer retention (Free keeps 14 days), team seats, and enterprise features (SSO, compliance exports).
 
 Diagnoses are the unit of cloud value. A diagnosis = one completed Stage-2 classification (Sonnet produces a plain-English root cause + fix hint). Noise-filtered reports and duplicates collapsed into an existing group do not count.
 
