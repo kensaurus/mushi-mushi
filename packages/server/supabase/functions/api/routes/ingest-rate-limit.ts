@@ -17,6 +17,10 @@
  *                    claimIpRateLimit in cli-auth.ts: ingest already needs this
  *                    database for its real work, so rejecting costs no
  *                    availability a DB outage wouldn't already cost.
+ *
+ * A lock or statement timeout on the counter is not a cap breach. Report
+ * ingest still fail-closes those (this classifier). Session and product-event
+ * ingest treats them as contention and continues; see claimIngestBudget.
  */
 export function classifyIngestRateLimitError(
   error: { message?: string; code?: string } | null,
@@ -36,4 +40,21 @@ export function classifyIngestRateLimitError(
     return 'fail-open';
   }
   return 'fail-closed';
+}
+
+/**
+ * The counter row was locked or the claim statement was cancelled.
+ * Not a cap breach (P0001 / rate_limit_exceeded) and not a dead database.
+ */
+export function isScopedRateLimitContention(
+  error: { message?: string; code?: string; details?: string | null } | null | undefined,
+): boolean {
+  if (!error) return false;
+  const text = `${error.message ?? ''} ${error.details ?? ''}`.toLowerCase();
+  if (text.includes('rate_limit_exceeded')) return false;
+  const code = error.code ?? '';
+  if (code === '55P03' || code === '57014' || code === '40P01') return true;
+  return text.includes('rate_limit_busy')
+    || text.includes('lock timeout')
+    || text.includes('statement timeout');
 }

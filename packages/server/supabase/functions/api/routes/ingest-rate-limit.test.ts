@@ -1,6 +1,6 @@
 import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts'
 
-import { classifyIngestRateLimitError } from './ingest-rate-limit.ts'
+import { classifyIngestRateLimitError, isScopedRateLimitContention } from './ingest-rate-limit.ts'
 
 Deno.test('classifyIngestRateLimitError passes when the RPC returns no error', () => {
   assertEquals(classifyIngestRateLimitError(null), 'ok')
@@ -33,6 +33,32 @@ Deno.test('classifyIngestRateLimitError fails CLOSED on any other RPC error', ()
   )
   assertEquals(classifyIngestRateLimitError({ message: 'network error' }), 'fail-closed')
   assertEquals(classifyIngestRateLimitError({}), 'fail-closed')
+})
+
+Deno.test('classifyIngestRateLimitError keeps a statement timeout fail-closed for report ingest', () => {
+  // Report ingest uses this classifier alone. A timeout there still rejects.
+  // Session ingest checks isScopedRateLimitContention and continues.
+  const error = { message: 'canceling statement due to statement timeout', code: '57014' }
+  assertEquals(classifyIngestRateLimitError(error), 'fail-closed')
+  assertEquals(isScopedRateLimitContention(error), true)
+})
+
+Deno.test('isScopedRateLimitContention matches a busy counter and not a cap breach', () => {
+  assertEquals(
+    isScopedRateLimitContention({ code: '55P03', message: 'rate_limit_busy: scope=sdk_sessions_ip' }),
+    true,
+  )
+  assertEquals(isScopedRateLimitContention({ message: 'canceling statement due to lock timeout' }), true)
+  assertEquals(isScopedRateLimitContention({ code: '40P01', message: 'deadlock detected' }), true)
+  assertEquals(
+    isScopedRateLimitContention({ code: 'P0001', message: 'rate_limit_exceeded: scope=sdk_sessions_ip' }),
+    false,
+  )
+  assertEquals(
+    isScopedRateLimitContention({ code: '53300', message: 'remaining connection slots are reserved' }),
+    false,
+  )
+  assertEquals(isScopedRateLimitContention(null), false)
 })
 
 Deno.test('classifyIngestRateLimitError fails CLOSED for unrelated "does not exist" errors', () => {

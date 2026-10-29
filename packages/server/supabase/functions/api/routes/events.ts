@@ -10,7 +10,8 @@
  *         Deno file; PII-looking property keys dropped server-side too;
  *         per-project switch project_settings.product_events_enabled;
  *         batch <= 50 events / 64 KB (counted on the streamed body, not the
- *         Content-Length header); per-project rate limit; client timestamps
+ *         Content-Length header); per-project and per-IP rate limit (a counter
+ *         timeout does not reject the batch); client timestamps
  *         clamped to [received - 25 h, received + 5 min]; server-owned event
  *         names and the 'server' surface are rejected here (only
  *         emitProductEvent writes those); RLS read-only for org members.
@@ -305,6 +306,7 @@ export function registerEventRoutes(app: Hono<{ Variables: Variables }>): void {
       clientIp((name) => c.req.header(name)),
       { scope: 'product_events', perProjectPerMinute: EVENT_BATCHES_PER_MINUTE, perIpPerMinute: EVENT_BATCHES_PER_IP_PER_MINUTE },
       (scope, err) => log.error('events: rate-limit claim failed — failing closed', { err, scope }),
+      (scope, err) => log.warn('rate_limit_rpc_failed', { err, scope }),
     );
     if (budget === 'limited') {
       c.header('Retry-After', '60');

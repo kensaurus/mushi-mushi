@@ -10,7 +10,9 @@
  *         one-way reporter key is stored — the same key the report path
  *         stores — via _shared/reporter-token.ts. Until 2026-09-21 the raw
  *         token was stored verbatim. Rate-limit: per project and per client IP
- *         (ingest-budget.ts); one upsert per event.
+ *         (ingest-budget.ts); one upsert per event. A lock or statement
+ *         timeout on the counter is logged and the event still proceeds; only
+ *         a real cap breach rejects.
  *
  * Automation: a session whose User-Agent names a headless browser, test
  * driver or crawler (_shared/automated-agent.ts) is stored with is_bot = true
@@ -90,6 +92,7 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
       clientIp((name) => c.req.header(name)),
       { scope: 'sdk_sessions', perProjectPerMinute: SESSION_EVENTS_PER_MINUTE, perIpPerMinute: SESSION_EVENTS_PER_IP_PER_MINUTE },
       (scope, err) => log.error('sessions: rate-limit claim failed — failing closed', { err, scope }),
+      (scope, err) => log.warn('rate_limit_rpc_failed', { err, scope }),
     );
     if (budget === 'limited') {
       c.header('Retry-After', '60');
