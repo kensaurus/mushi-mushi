@@ -123,7 +123,7 @@ export function platformPillClass(platform: string): string {
 }
 
 export const BROWSER_CHIP: Record<'browser' | 'engine' | 'os', string> = {
-  browser: `border-info/25 ${CHIP_TONE.infoSubtle}`,
+  browser: CHIP_TONE.infoSubtle,
   engine: 'border-edge-subtle bg-surface-overlay/50 text-fg-secondary',
   os: CHIP_TONE.brandSubtle,
 }
