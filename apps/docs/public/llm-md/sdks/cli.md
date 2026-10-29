@@ -4,13 +4,13 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/cli
 
 ---
 title: '@mushi-mushi/cli'
-description: Reference for @mushi-mushi/cli — log in, connect a project, run doctor, list reports, dispatch agent fixes and merge their pull requests from the terminal.
+description: Reference for @mushi-mushi/cli, the Mushi Mushi CLI. Log in, connect a project, run doctor, list reports, dispatch agent fixes and merge their pull requests.
 ---
 
 # `@mushi-mushi/cli`
 
-Project setup, report triage, agentic fix dispatch, QA coverage, skill pipelines, and
-headless merge — all from the terminal.
+The Mushi Mushi CLI: project setup, report triage, agentic fix dispatch, QA
+coverage, skill pipelines, and headless merge from the terminal.
 
 ```bash
 npm install -g @mushi-mushi/cli
@@ -25,7 +25,7 @@ mushi fixes merge <fixId>          # squash-merge the PR + mark report Fixed
 
   **Two key types:** SDK ingest keys (`report:write`) are minted on **Setup → Verify** or
   **Projects → Generate API key**. Admin / MCP keys (`mcp:read` or `mcp:write`) are also
-  minted on Projects — use `mcp:write` for fix dispatch, merge, and most CLI admin commands.
+  minted on Projects; use `mcp:write` for fix dispatch, merge, and most CLI admin commands.
   **Settings → API Keys (BYOK)** is for your own LLM/Firecrawl keys, not Mushi credentials.
 
 ---
@@ -52,7 +52,7 @@ Console URL resolution: `MUSHI_CONSOLE_URL` → saved config → localhost `:646
 | `mushi init` | Wizard: prerequisite step, framework detect, install SDK, write `.env.local`, whoami verify, optional test report |
 | `mushi connect` | Non-interactive: config + env (default) + Cursor MCP (default) + optional `--wait` heartbeat |
 | `mushi login` | Save credentials to the CLI config file: `~/.config/mushi/config.json`, or `%APPDATA%\mushi\config.json` on Windows ([full order](#config-file); legacy `~/.mushirc` auto-migrates) |
-| `mushi setup` | Wire Cursor/Claude MCP from saved config — **not** SDK install (run `login` first) |
+| `mushi setup` | Wire Cursor/Claude MCP from saved config; **not** SDK install (run `login` first) |
 | `mushi whoami` | Verify API key and show project info |
 | `mushi ping` | Backend connectivity probe |
 | `mushi config` | View or update CLI config |
@@ -77,7 +77,7 @@ mushi doctor --json           # machine-readable; exits 1 if any check fails
 ```
 
 `--host-app` (also included in `--full`) scans your source for hash-routed SPAs
-— `HashRouter`, `createHashRouter`, `location.hash`, `hashchange` — and, when it
+(`HashRouter`, `createHashRouter`, `location.hash`, `hashchange`) and, when it
 finds them, advises adding `/#/`-prefixed `discoverInventory.routeTemplates` to
 your `Mushi.init()` so parametric hash routes group in the Inventory instead of
 inflating it one row per slug. It's advisory only (never fails the run) and
@@ -202,7 +202,7 @@ mushi fix $REPORT_ID --agent cursor_cloud --wait && echo "Fix PR opened"
 
 ### `mushi fixes`
 
-Headless fix lifecycle — pairs with `mushi fix --wait`.
+Headless fix lifecycle; pairs with `mushi fix --wait`.
 
 ```bash
 # Stream dispatch SSE events (no browser)
@@ -229,7 +229,7 @@ mushi fixes verify <fixId> --json
 console). Requires GitHub App or PAT connected and an API key with `mcp:write`.
 
 When merge succeeds, the report moves to **Fixed**, the reporter gets notified, and
-`fix.applied` webhooks fire — identical to merging on GitHub or via the admin console.
+`fix.applied` webhooks fire, the same as merging on GitHub or via the admin console.
 
 ### `mushi work`
 
@@ -331,8 +331,8 @@ counts against the report.
 mushi worker install --lane my-app --project <projectId> --repo-dir ~/code/my-app --dry-run
 mushi worker install --lane my-app --project <projectId> --repo-dir ~/code/my-app
 
-# Import lanes.conf from the lane-v4 scripts (name profile clone projectId model mode)
-mushi worker install --lanes-conf ~/mushi-credits-handoff/lanes.conf --clone-root ~/.cache/mushi-work
+# Import an existing lanes.conf (columns: name profile clone projectId model mode)
+mushi worker install --lanes-conf ~/lanes.conf --clone-root ~/.cache/mushi-work
 
 # A worker key made in the console instead of with your CLI login
 mushi worker install --lanes-conf lanes.conf --key-stdin --yes < worker.key

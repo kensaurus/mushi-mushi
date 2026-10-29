@@ -1,14 +1,15 @@
 # `@mushi-mushi/plugin-discord`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
-Posts a message to a Discord channel when Mushi triages a bug, proposes a
-fix, applies it, or changes a report's status.
+For small teams and communities that talk in Discord. This posts a message to
+a Discord channel when Mushi Mushi triages a bug, proposes a fix, applies it,
+or changes a report's status.
 
-**Do you need this package?** Not on Mushi Cloud: paste a Discord webhook
+**Do you need this package?** Not on Mushi Mushi Cloud: paste a Discord webhook
 URL on the **Integrations** page of the console and Mushi posts to the
-channel itself. The console's Marketplace has no Discord listing (checked
-2026-10-26), so this package only receives events from a Mushi server you
+channel itself, on any plan. The console's Marketplace has no Discord listing
+(checked 2026-10-29), so this package only receives events from a Mushi server you
 run yourself, once you add a `plugin_registry` row for it.
 
 ```bash
@@ -43,18 +44,24 @@ express().post('/mushi/webhook', expressMiddleware(handler)).listen(3000)
 
 ## Subscribed events
 
-- `report.classified` — embed coloured by severity (`critical` red, `high`
+- `report.classified`: embed coloured by severity (`critical` red, `high`
   orange, `medium` yellow, `low` green).
-- `fix.proposed` — blue embed.
-- `fix.applied` — green embed.
-- `report.status_changed` — grey embed with the new status.
+- `fix.proposed`: blue embed, with the pull request link when there is one.
+- `fix.applied`: green embed, with the pull request link when there is one.
+- `report.status_changed`: grey embed with the old and new status.
+
+## Known gaps
+
+- The fix embeds include a "Fix status" field: proposed, applied or failed,
+  taken from the event.
+- The built-in Discord integration on the Integrations page does not use this
+  package and is not affected.
 
 ## Notes
 
 - All webhook calls retry transient `5xx` via `withRetry` from
   `@mushi-mushi/plugin-sdk`.
-- Embed colour palette mirrors `_shared/discord.ts` server-side so
-  notifications look consistent regardless of which path fires them.
+- The embed colours match the ones the built-in Discord integration uses.
 
 ## License
 

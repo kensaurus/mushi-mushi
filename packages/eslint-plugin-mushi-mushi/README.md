@@ -1,11 +1,11 @@
 # eslint-plugin-mushi-mushi
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
-Part of the Mushi Mushi monorepo — plain-English bug comprehension for vibe coders.
-
-
-ESLint rules for two bugs AI coding tools often ship: a button wired to a handler that does nothing, and fake data (faker, MSW, `John Doe` arrays) left in production code.
+ESLint rules from Mushi Mushi for two bugs AI coding tools often ship: a button
+wired to a handler that does nothing, and fake data (faker, MSW, `John Doe`
+arrays) left in production code. Neither throws an error, so error monitoring
+never sees them. Free, MIT, and works without a Mushi Mushi account.
 
 ```bash
 npm install --save-dev eslint-plugin-mushi-mushi
@@ -30,11 +30,12 @@ Docs: [eslint-plugin-mushi-mushi](https://kensaur.us/mushi-mushi/docs/sdks/eslin
 
 ## Rules
 
-`recommended` (and `legacy`) turn on the first two rules and
-`no-allowlist-jsx-textnode`. The other rules check the Mushi console's own
-design system (its tokens, `<Card>`, `<PageHeaderBar>`, the widget theme)
-and are only in the Mushi monorepo's `internal` preset. Turn one on by name
-if it fits your app.
+The plugin has 19 rules. `recommended` (and `legacy`) turn on three:
+`no-dead-handler`, `no-mock-leak` and `no-allowlist-jsx-textnode`. The other
+16 check the Mushi Mushi console's own design system (its tokens, `<Card>`,
+`<PageHeaderBar>`, the widget theme) and are on only in the `internal` preset
+that the Mushi Mushi repo uses. The table lists some of them. Turn one on by
+name if it fits your app.
 
 | Rule | What it catches |
 | ---- | ---- |
@@ -49,17 +50,20 @@ if it fits your app.
 | `mushi-mushi/prefer-card-primitive` | Hand-rolled `rounded border bg-surface-*` — prefer `<Card>` / `<Panel>`. |
 | `mushi-mushi/no-allowlist-jsx-textnode` | `// mushi-mushi-allowlist` written as a JSX child (renders as visible text). Use a JSX block comment or an attribute-line `//`. |
 
-Only `no-dead-handler` and `no-mock-leak` are meant for any app. The other rules are design rules for Mushi's own admin console.
+Only `no-dead-handler` and `no-mock-leak` (plus the allowlist guard) are meant
+for any app. The rest are design rules for Mushi Mushi's own console, and some
+of them (`no-hand-rolled-dialog`, the `*Page.tsx` rules) would flag ordinary
+code in your app.
 
 ## The `recommended` preset
 
-`mushi.configs.recommended` (also exported as `eslint-plugin-mushi-mushi/recommended`) turns on all 19 rules in the plugin, not only the two above. Besides the table, it enables nine more design rules for Mushi's own console (listed in `src/index.ts`). Some of them only look at Mushi's own paths, but `no-hand-rolled-dialog` checks every file and the `*Page.tsx` rules check any file with that name, so in your own app they can report errors that do not apply to you. Prefer the two-rule config above.
+`mushi.configs.recommended` (also exported as `eslint-plugin-mushi-mushi/recommended`) turns on the same three rules as errors. Since 0.3.6 it no longer includes the console's design rules.
 
 ```js
 import mushi from 'eslint-plugin-mushi-mushi'
 
 export default [
-  mushi.configs.recommended, // all 19 rules
+  mushi.configs.recommended, // no-dead-handler, no-mock-leak, no-allowlist-jsx-textnode
 ]
 ```
 
@@ -75,19 +79,26 @@ export default [
 }
 ```
 
-`"extends": ["plugin:mushi-mushi/legacy"]` is the legacy form of `recommended`, with the same 19 rules.
+`"extends": ["plugin:mushi-mushi/legacy"]` is the legacy form of `recommended`, with the same three rules.
 
 ## Why
 
-Agentic / "vibe coding" tools scaffold UI fast — and ship handlers wired to nothing or pages padded with `John Doe` fake data. Sentry doesn't catch it (no error). User feedback catches it late (you already shipped). These two lint rules close the gap deterministically — no LLM, no false positives at zero cost.
+AI coding tools build UI fast, and sometimes ship handlers wired to nothing or
+pages padded with `John Doe` fake data. Nothing throws, so Sentry never sees
+it, and users find it after you shipped. These rules catch it at lint time,
+with plain pattern checks and no AI call. Like any pattern rule they can flag
+something you meant to write; use the allowlist below for those.
 
-Part of the [Mushi Mushi v2](https://github.com/kensaurus/mushi-mushi) bidirectional bug knowledge graph. Works perfectly fine standalone.
+If you use Mushi Mushi's pre-release checks, its `dead_handler` and
+`mock_leak` checks read the ESLint JSON report these rules produce (see
+[`@mushi-mushi/mcp-ci`](https://www.npmjs.com/package/@mushi-mushi/mcp-ci)).
+The plugin works the same without them.
 
 ## Allowlist
 
-Add `// mushi-mushi-allowlist: <reason>` immediately above a call site (JS/attribute context) to opt out of rules that honour the marker. The reason is required — silent allowlists are the failure mode this plugin exists to catch.
+Add `// mushi-mushi-allowlist: <reason>` immediately above a call site (JS/attribute context) to opt out of rules that honour the marker. The reason is required, so every exception says why.
 
-**Never put bare `//` as a JSX child** — React renders it as text. Inside a children list use a JSX block comment (`{` + `/* … */` + `}`) instead. See `mushi-mushi/no-allowlist-jsx-textnode`.
+**Never put bare `//` as a JSX child.** React renders it as text. Inside a children list use a JSX block comment (`{` + `/* … */` + `}`) instead. See `mushi-mushi/no-allowlist-jsx-textnode`.
 
 ## License
 

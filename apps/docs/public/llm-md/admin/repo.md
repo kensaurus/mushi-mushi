@@ -1,90 +1,112 @@
-# Repo graph
+# Pull requests
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/repo
 
 ---
-title: Repo graph
-description: The Repo page shows every fix branch in your connected GitHub repository — open PRs, CI status, and what the fix worker did on each branch.
+title: Pull requests
+description: The Pull requests page in the Mushi Mushi console lists open pull requests in connected GitHub repos, with fix branches, CI status and what each fix agent did.
 ---
 
-# Repo graph
+# Pull requests
 
-**Route:** `/repo`
+**Route:** `/repo` (sidebar: More pages → Fix → Pull requests. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
 
-The Repo page shows the live state of every fix branch in your connected GitHub
-repository — which ones have open PRs, which are passing or failing CI, and what the
-fix-worker did on each. It's the "Do" phase view: where code changes actually land.
-
----
-
-## Repo header
-
-The header card shows:
-- **Repository URL** — with an **Open on GitHub ↗** link
-- **Default branch**
-- **GitHub App installation status** — whether the Mushi GitHub App has the necessary
-  permissions
-- **Last indexed** time
-
-Count chips in the header summarise the branch states across the project:
-**Total** / **PR open** / **CI passing** / **CI failing** / **Merged** / **Stuck**
+This page shows every open pull request in the GitHub repositories connected to
+your Mushi Mushi app, the branch of every fix attempt with its CI status, and a log
+of what the fix agents did. It is where code changes land.
 
 ---
 
-## Branch list
+## Summary
 
-Branches are shown as cards. Use the **segmented filter** to narrow by state:
+A banner and a snapshot strip come first. The counts are fix attempts:
+**Branches** / **PRs open** / **CI passing** / **CI failing** / **Merged** / **Stuck**.
+**PR open** counts every attempt with an open pull request, whatever CI says, the
+same way the [Fixes](/admin/fixes) page counts.
 
-| Filter | Shows |
-|--------|-------|
-| **All** | Every fix branch |
-| **PR open** | Branches with an open pull request |
-| **CI passing** | PRs with all CI checks green |
-| **CI failing** | PRs with at least one failing CI check |
-| **Failed** | Branches where the fix-worker failed |
+The page has three tabs: **Pull requests**, **Activity** and **Clean up**.
 
-Each branch card shows:
+---
+
+## Pull requests tab
+
+### Open pull requests
+
+Every open pull request in the connected repos, fix or not, grouped by what you can do:
+
+| Group | Shows |
+|-------|-------|
+| **Mergeable now** | Required checks passed; a Mushi fix also has an Opus **merge** verdict on its latest commit |
+| **Needs a fix** | A required check fails, or Opus said **fix first**. Open the fix to send it back |
+| **Hold** | Opus said **hold**: a person decides. Merge is disabled here; the fix page shows the findings |
+| **Waiting** | CI or a review is still running, or the PR is a draft |
+
+**Merge** asks you to confirm first. Nothing merges from this list on its own.
+
+### Fix attempt branches
+
+A closed panel under the open pull requests lists every fix attempt's branch as a
+card. Filter by **All**, **PR open**, **CI passing**, **CI failing**, **Merged** or
+**Failed**.
 
 | Field | Description |
 |-------|-------------|
-| **CI badge** | Passing / failing / pending |
-| **Branch name** | `mushi/fix-` format |
+| **CI badge** | Passing, failing, running or action required |
+| **Branch name** | For a Cursor cloud agent, `/MUSHI--cursor-cloud`, with the prefix taken from the bug category |
 | **PR link** | External link to the GitHub pull request |
 | **Report summary** | Title and severity of the original report |
-| **Files changed / Lines changed** | Diff size |
+| **Files / Lines** | Diff size |
 | **Category** | Bug category from the classifier |
-| **FixGitGraph** | Mini timeline of fix-worker commits on this branch |
+| **Timeline** | A small graph of the fix agent's events on this branch |
 
 ---
 
-## Repo activity log
+## Activity tab
 
-The right panel shows a chronological log of all fix-worker events across the project:
+A log of fix events across the app, newest first. Filter by event type:
 
-| Event type | Description |
-|------------|-------------|
-| `dispatched` | Fix-worker run started for a report |
-| `branch` | Branch created |
-| `commit` | Commit pushed to the fix branch |
-| `pr_opened` | Pull request opened |
-| `ci_resolved` | CI checks completed |
-| `completed` | Fix-worker run succeeded |
-| `failed` | Fix-worker run failed |
+| Event | Description |
+|-------|-------------|
+| **Dispatched** | A fix run started for a report |
+| **Branch** | Branch created |
+| **Commit** | Commit pushed to the fix branch |
+| **PR opened** | Pull request opened |
+| **CI result** | CI checks completed |
+| **Opus review** | The agent PR review gave its verdict |
+| **Review follow-up** | An agent was sent back to fix the review's findings |
+| **Completed** | Fix run succeeded |
+| **Failed** | Fix run failed |
+
+---
+
+## Clean up tab
+
+Deletes the branches Mushi made whose pull request merged or closed, closes Mushi's
+own stale, replaced or held fix PRs, turns on GitHub's automatic branch deletion,
+and restores a branch Mushi deleted. Nothing changes on GitHub from one click:
+anyone who can edit the app asks for a list, an owner or admin approves exactly
+that list (it expires after an hour) and runs it once, and Mushi checks every item
+again when it runs.
 
 ---
 
 ## Managing the GitHub connection
 
-The **Manage** link in the header navigates to `/integrations/config` where you can
-update the GitHub token, repository URL, and default branch.
+**Repository settings**, a closed panel near the foot of the page, lists the linked
+repos with their default branch, GitHub App and index status, and an **Open on
+GitHub ↗** link. Its **Manage** link opens `/integrations/config`, where you
+update the GitHub token, repository URL and default branch.
 
 ---
 
 ## API
 
 ```bash
-GET /v1/admin/repo/overview?project_id=<pid>
-GET /v1/admin/repo/activity?project_id=<pid>&limit=100
+GET  /v1/admin/repo/overview?project_id=<pid>
+GET  /v1/admin/repo/activity?project_id=<pid>&limit=100
+GET  /v1/admin/projects/<pid>/pull-requests
+POST /v1/admin/projects/<pid>/pull-requests/<owner>/<repo>/<number>/merge   { method }
+GET  /v1/admin/projects/<pid>/repo-cleanup
 ```
 
 ---

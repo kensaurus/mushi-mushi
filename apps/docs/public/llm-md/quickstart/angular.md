@@ -4,12 +4,12 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/angular
 
 ---
 title: Angular quickstart
-description: "Add Mushi to an Angular 17+ app: one provideMushi() call registers the Mushi service and error handler, so uncaught errors and bug reports reach your queue."
+description: "Add Mushi Mushi to an Angular 17+ app: one provideMushi() call registers the service and error handler, so uncaught errors and bug reports reach your queue."
 ---
 
 # Angular quickstart
 
-Same loop as [React](/quickstart/react) — swap the install and boot call.
+Same steps as the [React quickstart](/quickstart/react); only the install and the boot call differ.
 
 ```bash
 pnpm add @mushi-mushi/angular

@@ -1,5 +1,5 @@
 /**
- * Landing pricing strip — four plans at a glance, then /pricing for the
+ * Landing pricing strip — the three self-serve plans at a glance, then /pricing for the
  * estimator. Prices and limits come from PRICING_TIERS so this strip, the
  * pricing table and /cloud cannot disagree.
  */

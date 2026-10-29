@@ -16,7 +16,7 @@ can execute without additional context.
 > here, don't fork it. Drift is enforced against by
 > [`scripts/check-positioning-consistency.mjs`](./scripts/check-positioning-consistency.mjs).
 
-**North star.** Your AI shipped it. Mushi tells you why it broke — in plain English, in your editor, with the fix ready to go — so a bug costs you five minutes instead of your whole afternoon.
+**North star.** Your AI shipped it. Mushi Mushi tells you why it broke — in plain English, in your editor, with the fix ready to go — so a bug costs you five minutes instead of your whole afternoon.
 
 **Category we own.** The bug mediator for AI-built apps — one queue between your users, your monitoring (Sentry/Crashlytics/Rollbar), your tracker (Linear/Jira/GitHub), your chat (Slack/Discord/Teams), and your coding agents, where every bug gets a plain-English diagnosis and a ready fix. (Not "error monitoring", not "observability" — those are someone else's ops-coded words.)
 
@@ -28,7 +28,7 @@ ship only as reviewed draft PRs. It never leads a public surface.
 
 **The public surface leads with one job** ([ADR 0052](./docs/adr/0052-public-surface-leads-with-one-job.md)):
 the landing and the README's first screen say only "a user said your app is
-broken; Mushi tells you why in plain English and hands Cursor, Claude Code or
+broken; Mushi Mushi tells you why in plain English and hands Cursor, Claude Code or
 Lovable the fix", with one install action and one readable sample diagnosis.
 Integrations, CI cost, voice, rewards and self-host live on docs pages one
 click away; the operator cockpit never appears on the public path.

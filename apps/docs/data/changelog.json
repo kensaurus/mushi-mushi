@@ -1,5 +1,26 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "Unreleased",
+    "pending": true,
+    "versions": [],
+    "highlights": [
+      {
+        "title": "`mushi connect` uses your saved key",
+        "description": "when you pass no key, it uses the one `npx mushi-mushi` or `mushi login` already saved, so the command the setup wizard prints works as it is. The wizard's last checklist names the console tab by its current label, \"Test it\"."
+      },
+      {
+        "title": "Docs answers match the product",
+        "description": "the docs index behind `search_mushi_docs` is rebuilt from the proofread docs."
+      },
+      {
+        "title": "Hono and Fastify reports drop URL query values",
+        "description": "the error handlers scrub query values (tokens, emails) from the request URL before putting it into the report description, as the Express handler already did."
+      }
+    ],
+    "packages": []
+  },
+  {
     "majorMinor": "1.33",
     "headline": null,
     "pending": false,

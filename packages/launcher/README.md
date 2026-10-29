@@ -1,21 +1,18 @@
 <div align="center">
 
-# mushi-mushi 🐛
+# Mushi Mushi
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
-Plain-English diagnosis + a paste-ready fix, right inside Cursor and Claude Code.
-
-**`mushi-mushi` is the one-command setup wizard.** It adds the Mushi SDK to the app you already have, so the next time a user hits a bug their report arrives explained, not as a stack trace to decode.
-
-One `npx` command. Works with React, Next.js, Vue, Nuxt, Svelte, SvelteKit, Angular, React Native, Expo, Capacitor, and vanilla JS.
+A user says your app is broken. Mushi Mushi tells you why in plain English and hands the fix to Cursor, Claude Code or Lovable. No Sentry or monitoring needed.
 
 ```bash
-npx mushi-mushi                      # the setup wizard
-npx mushi-mushi setup --ide cursor   # then connect your editor (any other command goes to @mushi-mushi/cli)
+npx mushi-mushi
 ```
 
-[Launcher docs](https://kensaur.us/mushi-mushi/docs/sdks/launcher)
+**[See a sample diagnosis →](https://kensaur.us/mushi-mushi/docs/demo/diagnosis)** No signup, nothing to install.
+
+<sub>`mushi-mushi` is the setup command. It adds the Mushi Mushi SDK to the app you already have: React, Next.js, Vue, Nuxt, Svelte, SvelteKit, Angular, React Native, Expo, Capacitor, Node or plain JavaScript. [Launcher docs](https://kensaur.us/mushi-mushi/docs/sdks/launcher)</sub>
 
 [![npm](https://img.shields.io/npm/v/mushi-mushi?color=cb3837&label=mushi-mushi)](https://www.npmjs.com/package/mushi-mushi)
 [![npm downloads](https://img.shields.io/npm/dm/mushi-mushi?color=cb3837&label=downloads)](https://www.npmjs.com/package/mushi-mushi)
@@ -24,23 +21,23 @@ npx mushi-mushi setup --ide cursor   # then connect your editor (any other comma
 [![Socket](https://socket.dev/api/badge/npm/package/mushi-mushi)](https://socket.dev/npm/package/mushi-mushi)
 [![Node](https://img.shields.io/node/v/mushi-mushi?color=339933&logo=node.js)](https://nodejs.org)
 
-<a href="https://kensaur.us/mushi-mushi/docs/connect" title="Try the read-only demo — no signup">
-  <img src="https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/docs/screenshots/report-detail-dark.png" alt="A real user-felt bug inside the Mushi admin — Plan / Do / Check / Act PDCA receipt across the top, the original user description, LLM classification (Confusing UX · Medium · 78% confidence · component = Dashboard/HeroCTA), environment + performance metrics, and a one-click Dispatch-fix CTA." width="860" />
+<a href="https://kensaur.us/mushi-mushi/docs/demo/diagnosis" title="See a sample diagnosis: no signup">
+  <img src="https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/docs/screenshots/report-detail-dark.png" alt="The Mushi console's report list: each user report with a plain-English summary, how serious it is and how sure Mushi is." width="860" />
 </a>
 
-<sub>↑ a real user report, fully classified and ready to dispatch as a GitHub PR · <a href="https://kensaur.us/mushi-mushi/docs/connect">try the read-only demo, no signup</a></sub>
+<sub>↑ reports in the Mushi console, each with a plain-English summary. Click for one full sample diagnosis you can read without signing up.</sub>
 
 </div>
 
 ---
 
-## What does it actually do? (60 seconds, no jargon)
+## What it does
 
-Your users open your app, something feels broken — a button that doesn't react, a page that takes forever, a layout that folds in half on their phone — and they leave. Your error tracker stays silent because nothing technically _crashed_.
+Something in your app feels broken to a user: a button that doesn't react, a page that takes forever, a layout that folds on their phone. Often nothing crashed, so an error tracker stays quiet, and most people just leave.
 
-Mushi adds a small **"shake your phone (or click the bug)"** button. The user taps it, scribbles a note, and Mushi captures everything around the moment: a screenshot, the page they were on, what they were trying to do, and the last few seconds of network and console activity. An AI then reads that report, tags it with severity and category in plain English, groups it with similar reports so you see one row per actual bug, and (optionally) hands it off to another AI that opens a draft pull request with a proposed fix. **A human always reviews and merges** — the loop never bypasses you.
+Mushi Mushi adds a small report button to your app (or shake-to-report on a phone). The user taps it and writes a note. Mushi Mushi saves a screenshot, the page, what they tapped, and the last console and network events. An AI explains the likely cause in plain English and groups repeat reports, so you see one row per real bug. Your editor gets a ready fix prompt. If you want, an agent opens a draft pull request, and you decide whether it merges.
 
-Founders, PMs, designers: see the [plain-language overview in the GitHub README](https://github.com/kensaurus/mushi-mushi#what-this-is).
+Who it's for and where each group starts: [who it's for](https://kensaur.us/mushi-mushi/docs/who-its-for).
 
 ---
 
@@ -50,7 +47,7 @@ Founders, PMs, designers: see the [plain-language overview in the GitHub README]
 npx mushi-mushi
 ```
 
-The wizard detects your framework, installs the right SDK, writes env vars to `.env.local` (with the right prefix for your framework, such as `NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`, `EXPO_PUBLIC_`, `REACT_APP_` or `PUBLIC_`, or bare `MUSHI_*` names for servers and bare React Native), and prints the snippet to paste into your app. **Non-destructive**: never overwrites existing env vars, never edits your source.
+The wizard signs you in through your browser, detects your framework, installs the right SDK, writes env vars to `.env.local` (with the right prefix for your framework, such as `NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`, `EXPO_PUBLIC_`, `REACT_APP_` or `PUBLIC_`, or bare `MUSHI_*` names for servers and bare React Native), prints the snippet to paste into your app, and offers to send a test report. It never overwrites an existing env var and never edits your source.
 
 ```tsx
 // After the wizard runs (React + Vite example, src/main.tsx):
@@ -66,91 +63,77 @@ createRoot(document.getElementById('root')!).render(
 )
 ```
 
-That's it. Your users now have a shake-to-report button (or a floating widget). Reports land in [your admin console](https://kensaur.us/mushi-mushi/), classified by an LLM within seconds.
+Building in Lovable or Bolt, with no terminal? Paste one script tag through your prompt instead: [Mushi Mushi in Lovable or Bolt](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt).
+
+Your users now have a report button. Reports land in [the console](https://kensaur.us/mushi-mushi/admin), each with a plain-English diagnosis. The free plan covers one app and 100 diagnoses a month, with no card and no AI key of your own ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)).
+
+Then connect your editor so it can read diagnoses, and ask it: *"Get the latest Mushi report and fix it."*
+
+```bash
+npx mushi-mushi setup --ide cursor   # or: claude, continue, zed
+```
+
+For Cursor and Claude Code this writes the hosted server entry: the editor opens a browser sign-in on first use and no key is stored on disk. There is also a one-click button on the [connect page](https://kensaur.us/mushi-mushi/docs/connect).
 
 ---
 
 ## What you get
 
-- **Bug report widget** — Shadow-DOM, zero CSS conflicts. Ships with screenshot, console ring, network ring, route + intent capture, and an offline queue.
-- **AI-classified reports** — 2-stage pipeline (Haiku fast-filter → Sonnet deep + vision + RAG) tags each report with category, severity, confidence, and the component path. Stage 2 streams partial results to the admin UI as tokens arrive.
-- **Dedup by meaning, not by string** — pgvector knowledge graph collapses duplicate reports across users, routes, and deploys so your queue isn't a noise storm.
-- **Bidirectional inventory (v2)** — opt in to `capture: { discoverInventory: true }` and the SDK quietly observes routes, `data-testid`s, and outbound API paths in production. Claude drafts an `inventory.yaml` of user stories + pages + actions for you to accept — most teams will never hand-author one.
-- **Pre-release checks (v2)** — the ESLint rules `mushi-mushi/no-dead-handler` and `mushi-mushi/no-mock-leak` catch empty handlers and leftover mock data; the [Mushi Mushi CI Gate Action](https://github.com/kensaurus/mushi-mushi/tree/master/packages/mcp-ci) runs the server-side gates (API contract, status claims, orphan endpoints, unknown calls) on a PR and fails the step when one fails.
-- **Spec-traced fixes (v2.10)** — every dispatched fix carries the inventory `Action` it's meant to repair, the `expected_outcome` contract is rendered into the LLM prompt, a deterministic `validateAgainstSpec` gate fires before the PR opens, and a targeted synthetic probe runs the moment the PR lands.
-- **One-click "Dispatch fix"** — agentic orchestrator opens a GitHub PR with a screenshot diff and a Playwright replay. Sandbox-pluggable (`e2b`, `modal`, `cloudflare`, or your own).
-- **Standards-first integrator** — W3C `traceparent` end-to-end, Standard Webhooks signing on every outbound delivery, RFC-draft `Idempotency-Key` middleware, OAuth 2.0 Dynamic Client Registration, OTLP/HTTP+JSON BYOK exporter. You bring your own observability stack — Mushi never marks up tokens.
-- **Agent-native via MCP + A2A** — MCP Streamable HTTP at `/functions/v1/mcp`, A2A v1.0.0 tasks at `/v1/a2a/tasks` (pull SSE _and_ push notifications), Agent Card discovery, OpenAPI 3.1 spec. Cursor, Claude Code, Copilot, OpenAI Agents SDK, LangGraph, CrewAI all see the same surface.
+- **A report button.** It renders in a Shadow DOM, so its CSS and yours never mix. Each report carries a screenshot the user can mark up or remove, the page, recent clicks, and the last console and network events. Reports wait offline and send when the connection is back.
+- **A diagnosis for each report.** A fast filter drops spam first. Then a second AI pass names the likely cause, how serious it is, how sure it is, and the part of the app involved, in plain English.
+- **One row per real bug.** Reports that mean the same thing are merged, even when users word them differently.
+- **The fix in your editor.** Over MCP, Cursor or Claude Code reads the diagnosis and a fix prompt with the smallest set of files. Your editor's own model writes the fix, so this part needs no extra AI key.
+- **Optional agent fixes.** An agent can open a draft pull request for you to review. On hosted Mushi Mushi the built-in fixer needs no key of your own; Cursor's agents need your Cursor key; or run fixes on your computer with the Mushi Mushi worker. With your own Anthropic key, a second AI reviews each one before it can merge.
 
 ---
 
 ## Who it's for
 
-| You are…                                            | …and this helps because                                                                                                                     |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **A solo dev / small team** shipping a consumer app | You already have Sentry for crashes — but users drop off over _friction_, not exceptions. Mushi captures "this button doesn't do anything". |
-| **A PM or designer** living in the admin            | Triage, severity, component ownership, and PR status — all in one dark-mode console. No reading stack traces.                               |
-| **An AI-native team** already using Cursor / Claude | MCP tools expose the whole loop to your agent. `get_recent_reports`, `triage_issue`, `dispatch_fix` — the same primitives your teammates use.   |
-| **An enterprise** needing SOC 2 + residency         | Region-pinned data (US / EU / JP / SELF), SAML SSO, audit-log ingest, DSAR workflow, HMAC-signed plugin webhooks.                           |
+- **You build apps with AI, mostly on your own.** You use Lovable, Bolt, Cursor or Claude Code, and you didn't write most of the code by hand. A user's "it's broken" becomes a plain-English cause and a fix prompt.
+- **You're a developer and you own your code.** You read the diffs and may run Sentry already. Reports and Sentry errors share one list, and agent pull requests get a second review before they merge.
+- **You run a team.** Reports come from the app, Sentry, store reviews and Slack. They share one list, each with a diagnosis, and can go on to Linear, Jira or GitHub Issues.
+
+Each group's pains and where to start: [who it's for](https://kensaur.us/mushi-mushi/docs/who-its-for).
 
 ---
 
-## Mushi vs your existing stack
+## What else it does
 
-Mushi is a **companion** to Sentry/Datadog, not a replacement. It sees the bugs your crash tracker can't.
+Most bugs never get reported, so Mushi Mushi can also look for them and check the fixes. Each of these is off until you switch it on, and several need your own key:
 
-| Scenario                                | Sentry / Datadog | **Mushi Mushi** |
-| --------------------------------------- | :--------------: | :-------------: |
-| Unhandled JS exception                  |        ✅        |       ✅        |
-| Button that _looks_ clickable but isn't |        —         |       ✅        |
-| 12-second page load, no error thrown    |        —         |       ✅        |
-| User can't find the settings panel      |        —         |       ✅        |
-| Layout broken on iPad Safari only       |        —         |       ✅        |
-| Form submits but data doesn't save      |        ~         |       ✅        |
-| Feature silently regressed last deploy  |        ~         |       ✅        |
-| LLM-classified + deduped queue          |        —         |       ✅        |
-| One-click AI fix → draft GitHub PR      |        —         |       ✅        |
+- A first-time user test: an AI that has never seen your app tries one goal and files where it got stuck (needs the Mushi Mushi worker on your computer).
+- A second AI reviews every agent fix before it merges (needs your own Anthropic key).
+- A watch on your live site every hour, and an audit of every page once a week (need your own Firecrawl key).
+- A daily check of your lockfiles for known security holes (needs your GitHub repo connected).
+- Your GitHub Actions bill explained, and whether a red check was your code or the CI machine (needs your GitHub repo; reading the bill needs a token that can see billing).
+- Playbooks such as "make it accessible" that run in rounds of fix pull requests (need your own Cursor key or the worker).
+- Low-star App Store and Google Play reviews turned into bug reports.
+- Bug reports from your phone through Telegram, Slack or an iPhone shortcut.
 
-> Already have Sentry? Mushi writes breadcrumbs into your existing Sentry session so you can jump from a crash to the user's own words in one click.
+What each one solves and needs: [what else it does](https://kensaur.us/mushi-mushi/docs/what-it-does).
+
+---
+
+## Why not just Sentry?
+
+> **Sentry is built around what the code threw, with a User Feedback widget and
+> replay alongside. Mushi starts from what the user reported, ingests Sentry's
+> errors too, explains each one in plain English, and hands your agent a fix
+> prompt to start from. One queue, with or without Sentry.**
+
+Mushi Mushi catches the bugs that never throw: a button that looks clickable but isn't, a 12-second page load, a layout broken on one phone. It works without Sentry. If you run Sentry, point its alert webhook at Mushi Mushi and the errors land in the same list; merging a Mushi fix resolves the Sentry issue. Details: [Sentry vs Mushi](https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi).
 
 ---
 
 ## Integrates with
 
-**13 outbound plugins** — Mushi sends signals to whatever your team already lives in:
+Nothing needs to be ripped out. Bugs come in from the tools you already run, and fixes and status go back out to them.
 
-<table>
-  <tr>
-    <td align="center" width="110"><b>GitHub</b><br/><sub>Auto-draft PRs<br/>+ Checks API</sub></td>
-    <td align="center" width="110"><b>Sentry</b><br/><sub>Breadcrumb bridge<br/>+ session link</sub></td>
-    <td align="center" width="110"><b>Slack</b><br/><sub>Block Kit<br/>+ /mushi cmd</sub></td>
-    <td align="center" width="110"><b>Jira</b><br/><sub>OAuth 3LO<br/>bidir sync</sub></td>
-    <td align="center" width="110"><b>Linear</b><br/><sub>Issue create<br/>+ status sync</sub></td>
-    <td align="center" width="110"><b>PagerDuty</b><br/><sub>Severity-scoped<br/>escalation</sub></td>
-  </tr>
-  <tr>
-    <td align="center" width="110"><b>Discord</b><br/><sub>Embed messages<br/>per channel</sub></td>
-    <td align="center" width="110"><b>MS Teams</b><br/><sub>Adaptive cards<br/>+ on-call</sub></td>
-    <td align="center" width="110"><b>GitHub Issues</b><br/><sub>Labels<br/>+ assignees</sub></td>
-    <td align="center" width="110"><b>Bugsnag</b><br/><sub>Mirror + close<br/>on fix merge</sub></td>
-    <td align="center" width="110"><b>Rollbar</b><br/><sub>Mirror + resolve<br/>on fix merge</sub></td>
-    <td align="center" width="110"><b>Crashlytics</b><br/><sub>Push reports<br/>+ close</sub></td>
-  </tr>
-  <tr>
-    <td align="center" width="110"><b>Zapier</b><br/><sub>Generic<br/>webhook fan-out</sub></td>
-    <td align="center" width="110"><b>Cursor Cloud</b><br/><sub>Agentic draft<br/>PR dispatch</sub></td>
-    <td align="center" width="110"><b>Cursor</b><br/><sub>via MCP<br/>server</sub></td>
-    <td align="center" width="110"><b>Claude Code</b><br/><sub>via MCP<br/>server</sub></td>
-    <td align="center" width="110"><b>OpenAI Agents</b><br/><sub>via A2A<br/>tasks</sub></td>
-    <td align="center" width="110"><b>LangGraph</b><br/><sub>via A2A<br/>+ MCP</sub></td>
-  </tr>
-</table>
+**13 outbound plugins** send reports and status to: Slack, Discord, Microsoft Teams, Linear, Jira, GitHub Issues, PagerDuty, Sentry, Bugsnag, Rollbar, Crashlytics, Zapier and Cursor Cloud agents.
 
-**11 inbound adapters** — Mushi receives alerts from your existing monitoring and turns them into the same triaged report rows as user-felt bugs:
+**11 inbound adapters** bring alerts from your monitoring into the same list as user reports: Sentry, Datadog, Bugsnag, Rollbar, Firebase Crashlytics, New Relic, Honeycomb, Grafana Loki, AWS CloudWatch, Opsgenie and Firebase Analytics. They ship in [`@mushi-mushi/adapters`](https://www.npmjs.com/package/@mushi-mushi/adapters) for any Node webhook server.
 
-> Sentry · Datadog · Bugsnag · Rollbar · Firebase Crashlytics · New Relic · Honeycomb · Grafana Loki · AWS CloudWatch · Opsgenie · Firebase Analytics
-
-All of them ship in [`@mushi-mushi/adapters`](https://www.npmjs.com/package/@mushi-mushi/adapters) — drop them into any Node webhook server (Express / Fastify / Hono / serverless function).
+Editors connect over MCP: Cursor, Claude Code, VS Code, Windsurf, Cline, Claude Desktop, Zed and any other MCP client ([`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)).
 
 ---
 
@@ -158,57 +141,53 @@ All of them ship in [`@mushi-mushi/adapters`](https://www.npmjs.com/package/@mus
 
 | Framework                       | Install after wizard (automatic)                  |
 | ------------------------------- | ------------------------------------------------- |
-| React                           | `@mushi-mushi/react`                              |
-| Next.js                         | `@mushi-mushi/react`                              |
-| Vue 3 / Nuxt                    | `@mushi-mushi/vue` + `@mushi-mushi/web`           |
-| Svelte / SvelteKit              | `@mushi-mushi/svelte` + `@mushi-mushi/web`        |
-| Angular 17+                     | `@mushi-mushi/angular` + `@mushi-mushi/web`       |
+| React, Next.js, Create React App, Remix | `@mushi-mushi/react`                  |
+| Vue 3 / Nuxt                    | `@mushi-mushi/vue`                                |
+| Svelte / SvelteKit              | `@mushi-mushi/svelte`                             |
+| Angular 17+                     | `@mushi-mushi/angular`                            |
 | React Native / Expo             | `@mushi-mushi/react-native`                       |
 | Capacitor / Ionic               | `@mushi-mushi/capacitor`                          |
-| Flutter / Dart                  | Git dependency — preview, not on pub.dev yet ([how](https://github.com/kensaurus/mushi-mushi/tree/master/packages/flutter#install)) |
-| iOS native (Swift)              | SwiftPM from the repo — preview, not tagged yet ([how](https://github.com/kensaurus/mushi-mushi/tree/master/packages/ios#install)) |
-| Android native (Kotlin/Java)    | Build from source — preview, not on Maven Central yet ([how](https://github.com/kensaurus/mushi-mushi/tree/master/packages/android#install)) |
-| Node (Express / Fastify / Hono) | `@mushi-mushi/node` (server-side error capture)   |
-| Vanilla JS                      | `@mushi-mushi/web`                                |
+| Astro, Solid, plain JavaScript  | `@mushi-mushi/web`                                |
+| Node (Express / Fastify / Hono) | `@mushi-mushi/node` (server-side errors)          |
+| Flutter / Dart                  | Git dependency, a preview, not on pub.dev yet ([how](https://github.com/kensaurus/mushi-mushi/tree/master/packages/flutter#install)) |
+| iOS native (Swift)              | SwiftPM from the repo, a preview, not tagged yet ([how](https://github.com/kensaurus/mushi-mushi/tree/master/packages/ios#install)) |
+| Android native (Kotlin/Java)    | Build from source, a preview, not on Maven Central yet ([how](https://github.com/kensaurus/mushi-mushi/tree/master/packages/android#install)) |
 
-Prefer to skip the wizard? `npm i @mushi-mushi/react` (or your framework's package) and wire it up by hand.
+The Vue, Svelte and Angular packages bring `@mushi-mushi/web` with them. Prefer to skip the wizard? `npm i @mushi-mushi/react` (or your framework's package) and wire it up by hand.
 
 ---
 
 ## How the pipeline works
 
 ```
-User hits widget ──▶ screenshot + console + network + intent
+User taps the report button ──▶ screenshot + page + clicks + console + network
         │
         ▼
-  Fast-filter (Haiku)  ──▶  drops spam, keeps signal
+  Fast filter  ──▶  drops spam and empty reports
         │
         ▼
-  Deep classify (Sonnet + vision + RAG)  ──▶  category, severity, component
+  Diagnosis  ──▶  likely cause, how serious, which part of the app, in plain English
         │
         ▼
-  Dedup (pgvector)  ──▶  groups repeat reports by meaning
+  Merge repeats  ──▶  reports that mean the same thing become one row
         │
         ▼
-  Judge (weekly)  ──▶  scores classifier, retrains prompts
+  Your editor (MCP)  ──▶  reads the diagnosis and the fix prompt
         │
         ▼
-  "Dispatch fix"  ──▶  agent opens a GitHub PR with Playwright replay + visual diff
+  Optional agent  ──▶  opens a draft pull request; a second AI reviews it; you merge
 ```
 
-See the full loop in the [root README](https://github.com/kensaurus/mushi-mushi#the-diagnosis-loop).
+The full picture: [how it works](https://github.com/kensaurus/mushi-mushi#how-it-works) and [the architecture](https://kensaur.us/mushi-mushi/docs/concepts/architecture).
 
 ---
 
-## 30-second quick start
+## Other ways to run the wizard
 
 ```bash
-# 1. Drop the wizard in (or one of the equivalents below)
-npx mushi-mushi
-
-# equivalents:
-npm create mushi-mushi
-npx @mushi-mushi/cli init
+npx mushi-mushi            # this package
+npm create mushi-mushi     # the same wizard
+npx @mushi-mushi/cli init  # the same wizard, from the full CLI
 ```
 
 <details>
@@ -219,9 +198,10 @@ npx mushi-mushi --framework next               # skip framework detection
 npx mushi-mushi --project-id <project-uuid> --api-key mushi_xxx
 npx mushi-mushi --skip-install                 # print the install command, don't run it
 npx mushi-mushi --skip-test-report             # don't offer to send a test report
+npx mushi-mushi --audit                        # health-check an existing install instead
 npx mushi-mushi --cwd apps/web                 # run inside a monorepo sub-package
 npx mushi-mushi --endpoint https://mushi.your-company.com   # self-hosted
-npx mushi-mushi -y                             # accept the detected framework
+npx mushi-mushi -y                             # take the defaults (needed in CI and AI-agent shells)
 npx mushi-mushi -v                             # print version
 npx mushi-mushi --help
 ```
@@ -247,23 +227,23 @@ npx mushi-mushi --help
 - `~/.config/mushi/config.json` (the credentials cache) is written with mode `0o600` on Unix; legacy `~/.mushirc` auto-migrates on first load.
 - The wizard strips CR/LF/NUL from pasted secrets to prevent `.env` injection.
 - Prompts validate format: the project ID is a UUID (or `proj_` + 10 or more characters), and the API key starts with `mushi_` or `mush_pk_` followed by 10 or more characters.
-- This release ships with [npm provenance](https://docs.npmjs.com/generating-provenance-statements) — verify with `npm audit signatures`.
+- This release ships with [npm provenance](https://docs.npmjs.com/generating-provenance-statements). Verify it with `npm audit signatures`.
 
 </details>
 
 <details>
 <summary><b>Supply-chain & verification (Socket, Bundlephobia, Snyk)</b></summary>
 
-Mushi is a CLI launcher — it spawns one `npm install` and appends a small multi-line `MUSHI_*` env block to `.env.local` (or `.env` when `.env.local` does not exist). Here's what each scanner shows and why:
+`mushi-mushi` is a CLI launcher. It spawns one `npm install` and appends a small multi-line `MUSHI_*` env block to `.env.local` (or `.env` when `.env.local` does not exist). Here's what each scanner shows and why:
 
 | Scanner            | What it shows                                 | What it actually means                                                                                                                                                                                                           |
 | ------------------ | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **npm provenance** | ✅ Signed by `kensaurus/mushi-mushi @ master` | Cryptographic Sigstore attestation — `npm audit signatures` will verify this build came from this exact commit on this exact CI workflow.                                                                                        |
+| **npm provenance** | Signed by `kensaurus/mushi-mushi @ master`   | Cryptographic Sigstore attestation — `npm audit signatures` will verify this build came from this exact commit on this exact CI workflow.                                                                                        |
 | **Socket.dev**     | Score + a few low-signal alerts               | Alerts are expected and benign: `child_process` (used to invoke `npm install` and to forward other commands to `@mushi-mushi/cli`), `process.env` (read `DEBUG`, `npm_config_*`), URL strings (printed in help text). The launcher is `src/index.ts`, about 120 lines; the wizard it runs is `src/init.ts` in `@mushi-mushi/cli`. |
-| **Bundlephobia**   | ❌ EntryPointError                            | **Expected.** This is a CLI (`bin` only — no `main`/`module`/`exports`), so there is no importable bundle to measure. Bundlephobia only works for libraries you `import`.                                                        |
+| **Bundlephobia**   | EntryPointError                               | **Expected.** This is a CLI (`bin` only — no `main`/`module`/`exports`), so there is no importable bundle to measure. Bundlephobia only works for libraries you `import`.                                                        |
 | **Snyk Advisor**   | Health score (lower right after publish)      | Snyk's crawler often lags by 1–2 weeks for new public packages — score corrects itself once it picks up the actual `package.json` (repository links, downloads, repo activity).                                                  |
 
-If something looks off to you, [open an issue](https://github.com/kensaurus/mushi-mushi/issues) — the source is 100% public and the CI build is reproducible.
+If something looks off to you, [open an issue](https://github.com/kensaurus/mushi-mushi/issues). The source is 100% public and the CI build is reproducible.
 
 </details>
 
@@ -271,7 +251,7 @@ If something looks off to you, [open an issue](https://github.com/kensaurus/mush
 
 ## Power-user CLI
 
-`mushi-mushi` runs the setup wizard and forwards any other command to `@mushi-mushi/cli` (`npx mushi-mushi reports list` works). For day-to-day triage, install the full CLI to get a `mushi` command:
+`mushi-mushi` runs the setup wizard and forwards any other command to `@mushi-mushi/cli` (`npx mushi-mushi reports list` works). For daily use, install the full CLI to get a `mushi` command:
 
 ```bash
 npm i -g @mushi-mushi/cli
@@ -279,10 +259,12 @@ mushi reports list
 mushi reports show <id>
 mushi reports triage <id> --status triaged --severity high
 mushi deploy check          # post-deploy smoke check
-mushi status                # live pipeline health
+mushi doctor                # what is wired up, and the next step when it isn't
 ```
 
-For the **v2 inventory + gates** loop the actionable surface is the GitHub Action — drop one job into your repo and it runs Claude's proposer / the gate suite / the discovery digest on every PR:
+All commands: [`@mushi-mushi/cli`](https://www.npmjs.com/package/@mushi-mushi/cli).
+
+**Pre-release checks in CI (early).** A GitHub Action runs Mushi Mushi's checks on a pull request, such as API calls that match no endpoint or a status the app claims but never sets. These checks sit behind the `inventory_v2` plan flag. The dead-handler and mock-leak checks also need an ESLint JSON report (`eslint-report`); see the [action's README](https://github.com/kensaurus/mushi-mushi/tree/master/packages/mcp-ci).
 
 ```yaml
 # .github/workflows/mushi-gates.yml
@@ -293,26 +275,21 @@ For the **v2 inventory + gates** loop the actionable surface is the GitHub Actio
     command: gates # also: propose · discover-api · discovery-status · auth-bootstrap
 ```
 
-The same commands are exposed as MCP tools through [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp), so Cursor / Claude Code / Copilot can drive the v2 loop without you ever opening a terminal.
-
-Or skip the CLI entirely and drive it from your AI agent via [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp):
-
-```json
-{ "mcpServers": { "mushi": { "command": "npx", "args": ["-y", "@mushi-mushi/mcp"] } } }
-```
+Prefer to work from your editor instead of a terminal? `npx mushi-mushi setup --ide cursor` (or `claude`, `continue`, `zed`) connects [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp), and the same reads and actions become tools your editor can call. Its README covers a manual config for any other MCP client.
 
 ---
 
 ## Links
 
-- 🌐 **[Read-only demo](https://kensaur.us/mushi-mushi/docs/connect)** — read a real diagnosis in your editor, no signup
-- 📦 **[GitHub](https://github.com/kensaurus/mushi-mushi)** — source, architecture, self-hosting
-- 📚 **[Docs](https://kensaur.us/mushi-mushi/docs/)** — quickstart, concepts, API reference
-- 🐛 **[Report a bug](https://github.com/kensaurus/mushi-mushi/issues)** — eat your own dogfood
+- **[Sample diagnosis](https://kensaur.us/mushi-mushi/docs/demo/diagnosis)**: one bug from report to fix prompt, no signup
+- **[Live numbers](https://kensaur.us/mushi-mushi/docs/proof)**: what Mushi Mushi found and fixed on the maker's own apps, with people's reports counted apart from its own checks
+- **[GitHub](https://github.com/kensaurus/mushi-mushi)**: source, architecture, self-hosting
+- **[Docs](https://kensaur.us/mushi-mushi/docs/)**: quickstarts, concepts, API reference
+- **[Report a bug](https://github.com/kensaurus/mushi-mushi/issues)** in Mushi Mushi itself
 
 ## License
 
-MIT © [Kenji Sakuramoto](https://github.com/kensaurus). Backend packages (`@mushi-mushi/server`, `agents`, `verify`) are [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/LICENSE) — copyleft; modified SaaS publishes changes or takes a [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md).
+MIT © [Kenji Sakuramoto](https://github.com/kensaurus). Backend packages (`@mushi-mushi/server`, `agents`, `verify`) are [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/LICENSE): if you offer a modified server as a service, publish your changes or get a [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md).
 
 ## More apps from the same maker
 
@@ -334,4 +311,4 @@ All apps live under [kensaur.us](https://kensaur.us).
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 529 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (October 2026): 77 edge functions · 529 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

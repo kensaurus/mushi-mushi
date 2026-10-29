@@ -36,7 +36,7 @@ export const OG_CARD_HEIGHT = 630
 export const LANDING_META = {
   title: 'Mushi Mushi — know why your AI-built app broke',
   description:
-    'Your AI shipped it. Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional.',
+    'Your AI shipped it. Mushi Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional.',
 } as const
 
 /** One `openGraph.images` / `twitter.images` entry for the card. */

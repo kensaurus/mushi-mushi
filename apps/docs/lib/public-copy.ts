@@ -93,11 +93,11 @@ export const PRICING_TIER_CTAS: Readonly<Record<string, PricingTierCta>> = {
 }
 
 export const CLOUD_INTRO = {
-  lead: 'Mushi Cloud at kensaur.us/mushi-mushi is the managed product. Same open-source code — we host it, you get a metered diagnosis bill.',
+  lead: 'Mushi Cloud at kensaur.us/mushi-mushi is the hosted version of Mushi Mushi. It runs the same code as the public repo, including the source-available enterprise folder; we run it, and you pay per diagnosis.',
   diagnosisNote:
     'A diagnosis = one finished plain-English root cause written to your queue. Filtered noise and deduplicated groups do not count.',
   meteredWhy:
-    'A plan is the number of apps you watch; diagnoses are the allowance under it. Free covers one app and 100 diagnoses a month, Builder three apps, Studio ten. Bug signals are bursty, so past the allowance each diagnosis is a few cents up to the cap you set. Duplicate stack traces collapse — you pay once per root cause.',
+    'A plan is the number of apps you watch; diagnoses are the allowance under it. Free covers one app and 100 diagnoses a month, Builder three apps, Studio ten. Bug signals are bursty, so past the allowance each diagnosis is a few cents, with a monthly overage cap you set. Duplicate reports collapse, so you pay once per root cause.',
 } as const
 
 export const CONNECT_SKILLS = {
@@ -114,7 +114,7 @@ export const QUICKSTART_HUB_LEDE =
   'New here? Three steps: install, send a first report, get your first fix.'
 
 export const QUICKSTART_ONE_KEY_CALLOUT =
-  'One key does it all. The wizard creates a single API key (a password your app uses to talk to Mushi) for the SDK, which sends reports, and for the command-line tool (mushi doctor, mushi billing and so on). The same key also works for the read-only MCP tools in your editor.'
+  'The wizard makes two keys (passwords your tools use to talk to Mushi Mushi): an SDK key that can only send reports, which goes in your app, and a CLI key that can also read them, which stays on your computer and also works for the MCP tools in your editor.'
 
 export const CONCEPTS_INDEX_LEDE =
   'When a user runs into something broken, Mushi records it, explains it in plain English and can hand your editor a fix, without another dashboard to babysit.'
@@ -169,7 +169,7 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
     diagnoses: '100 / mo',
     retention: '14 days',
     seats: '1',
-    highlights: 'One app, the whole loop once: plain-English diagnosis and a fix packet in your editor; fix PRs with your own AI key. Hard stop at the limit',
+    highlights: 'One app, the whole loop once: plain-English diagnosis and a fix packet in your editor; agent fix PRs once you connect GitHub. Hard stop at the limit',
     cloudNotes: 'All SDKs, hosted console, your own AI and Cursor keys, community support in GitHub Discussions'
   },
   {
@@ -183,9 +183,9 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
     retention: '90 days',
     seats: '1',
     highlights:
-      'Automatic fix PRs with a review gate, merge queue, Slack / Discord alerts; then $0.03/diagnosis up to a $50 cap you set',
+      'Three apps, plugins from the marketplace, usage alerts and an audit log; then $0.03/diagnosis with a $50 overage cap you set',
     cloudNotes:
-      'Three apps, automatic fix PRs, plugin marketplace, usage alerts, email support — $0.03 / extra diagnosis'
+      'Three apps, plugin marketplace, usage alerts, email support; $0.03 per extra diagnosis'
   },
   {
     id: 'pro',
@@ -212,14 +212,13 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
     diagnoses: 'Custom',
     retention: 'Up to 365 days',
     seats: 'Unlimited',
-    // SAML SSO is a real, shipped feature (console → SSO). SOC 2 refers to
-    // the readiness/evidence-pack module (see /security/soc2), not a
-    // third-party certification. Dedicated regional clusters are reserved,
-    // not self-serve yet (see /security/data-residency) — Enterprise is the
-    // path to get one provisioned. SCIM is intentionally omitted: no
-    // provisioning endpoint exists yet, ask sales for the current status.
-    highlights: 'SAML SSO, SOC 2 readiness pack, priority support',
+    // SAML SSO is a real, shipped feature (console → SSO). SOC 2 is evidence
+    // collection toward it (nightly snapshots of five controls, see
+    // /security/soc2), not a certification. Only the Tokyo cluster is live
+    // (see /security/data-residency); no regional cluster or SLA is promised
+    // here. SCIM is omitted: no provisioning endpoint exists yet.
+    highlights: 'SAML SSO, SOC 2 evidence collection (not a certification), priority support',
     cloudNotes:
-      'SOC 2 readiness pack, SAML SSO, your own LLM keys, dedicated regional cluster (provisioned on request), self-host SLA',
+      'SAML SSO, SOC 2 evidence collection, your own LLM keys, 365-day retention, help running it on your own servers',
   },
 ] as const

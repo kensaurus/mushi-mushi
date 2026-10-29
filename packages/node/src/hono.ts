@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
+import { scrubUrl } from '@mushi-mushi/core'
 import type { MushiNodeClient } from './client'
 import { parseTraceContext } from './trace'
 
@@ -44,12 +45,15 @@ export function mushiHonoErrorHandler(
       c.req.raw.headers.forEach((v, k) => { headers[k] = v })
       const traceContext = parseTraceContext(headers)
       const rawTraceparent = headers['traceparent'] ?? undefined
+      // Scrub query values before the URL goes into free text: the client can
+      // key-redact `url`, not a `?token=` inside a sentence (as express.ts).
+      const safeUrl = scrubUrl(c.req.raw.url)
       void opts.client.captureReport({
-        description: `[${c.req.raw.method} ${c.req.raw.url}] ${err.message}`,
+        description: `[${c.req.raw.method} ${safeUrl}] ${err.message}`,
         userCategory: 'bug',
         severity: 'high',
         component: opts.component ?? 'node:hono',
-        url: c.req.raw.url,
+        url: safeUrl,
         traceContext,
         error: { name: err.name, message: err.message, stack: err.stack },
         ...(rawTraceparent ? { metadata: { traceparent: rawTraceparent } } : {}),

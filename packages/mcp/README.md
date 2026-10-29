@@ -1,13 +1,13 @@
 # @mushi-mushi/mcp
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 [![Add to Cursor](https://img.shields.io/badge/Add%20to-Cursor-0098FF)](https://kensaur.us/mushi-mushi/docs/connect)
 [![Add to VS Code](https://img.shields.io/badge/Add%20to-VS%20Code-007ACC?logo=visualstudiocode&logoColor=white)](https://kensaur.us/mushi-mushi/docs/connect)
-[![Try the demo — no signup](https://img.shields.io/badge/Try%20the%20demo-no%20signup-E34234)](https://kensaur.us/mushi-mushi/docs/connect)
+[![Sample diagnosis, no signup](https://img.shields.io/badge/Sample%20diagnosis-no%20signup-E34234)](https://kensaur.us/mushi-mushi/docs/demo/diagnosis)
 [![npm](https://img.shields.io/npm/v/@mushi-mushi/mcp?color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/mcp)
 
-The [Model Context Protocol](https://modelcontextprotocol.io/) server for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi). It lets Cursor, Claude Code, VS Code or any MCP client read your app's bug reports, get a plain-English diagnosis with a fix to start from, and dispatch or merge fixes. Your editor's own model does the work, so you need no second LLM key.
+The [Model Context Protocol](https://modelcontextprotocol.io/) server for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi). It lets Cursor, Claude Code, VS Code or any MCP client read your app's bug reports, get a plain-English diagnosis with a fix to start from, and dispatch or merge fixes. Your editor's own model does the work, so reading reports and fixing them in your editor needs no second AI key. Handing a fix to an agent with `dispatch_fix` is different: it runs the app's fix agent, which on hosted Mushi Mushi is the built-in fixer by default (no key of your own needed); Cursor's agents need your Cursor key, or run on your computer with the Mushi Mushi worker.
 
 Docs: [MCP guide](https://kensaur.us/mushi-mushi/docs/sdks/mcp) · [tool reference](https://kensaur.us/mushi-mushi/docs/sdks/mcp-tools)
 
@@ -63,7 +63,7 @@ Claude Desktop does not expand `${VAR}` references in this file; Cursor and VS C
 
 The full catalog has 130 tools, plus 8 resources (`project://dashboard`, `project://stats`, …) and 4 prompts (`summarize_report_for_fix`, `triage_next_steps`, …). Every tool carries read-only and destructive hints, so your editor can ask before it changes anything. Full list: [MCP tool reference](https://kensaur.us/mushi-mushi/docs/sdks/mcp-tools).
 
-**Tool groups.** New installs get a lean default: `triage`, `fixes`, `inventory`, `setup`, `docs`. Turn on more with `MUSHI_FEATURES=triage,qa,codebase` (stdio) or `?features=…` on the hosted URL, or everything with `all`. Groups: `qa`, `skills`, `codebase`, `rewards`, `admin`, `audit`, `usage`. Add `?read_only=1` to the hosted URL to hide every write tool.
+**Tool groups.** New installs get a lean default: `triage`, `fixes`, `inventory`, `setup`, `docs`. Turn on more with `MUSHI_FEATURES=triage,qa,codebase` (stdio) or `?features=…` on the hosted URL, or everything with `all`. Groups: `qa`, `skills`, `codebase`, `rewards`, `admin`, `audit`, `usage`. For a chat tool such as Lovable, or an editor that caps how many tools it loads, `vibe` gives about a dozen tools for the core loop. Add `?read_only=1` to the hosted URL to hide every write tool.
 
 ## Keys and safety
 
@@ -94,7 +94,7 @@ A key without the needed scope gets a clear `INSUFFICIENT_SCOPE` error, never a 
 
 ## Learn more
 
-[MCP guide](https://kensaur.us/mushi-mushi/docs/sdks/mcp) · [MCP quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/mcp) · [The incident loop](https://kensaur.us/mushi-mushi/docs/quickstart/incident-loop) · [Fix orchestrator](https://kensaur.us/mushi-mushi/docs/concepts/fix-orchestrator)
+[MCP guide](https://kensaur.us/mushi-mushi/docs/sdks/mcp) · [MCP quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/mcp) · [The incident loop](https://kensaur.us/mushi-mushi/docs/quickstart/incident-loop) · [How agent fixes work](https://kensaur.us/mushi-mushi/docs/concepts/fix-orchestrator) · [Sample diagnosis](https://kensaur.us/mushi-mushi/docs/demo/diagnosis)
 
 ## License
 

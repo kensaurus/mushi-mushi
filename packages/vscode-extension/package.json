@@ -3,7 +3,7 @@
   "private": true,
   "publisher": "mushimushi",
   "displayName": "Mushi Mushi",
-  "description": "Your AI wrote it. Mushi tells you why it broke. One-click MCP server for bug triage, evidence, blast radius, and fix dispatch — right inside VS Code agent mode.",
+  "description": "Your AI wrote it. Mushi Mushi tells you why it broke. One-click MCP server for bug triage, evidence, blast radius, and fix dispatch — right inside VS Code agent mode.",
   "version": "0.17.0",
   "license": "MIT",
   "icon": "icon.png",

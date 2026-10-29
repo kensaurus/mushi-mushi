@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/orchestrator-interop
 
 ---
 title: 'Connecting your orchestrator (MCP / A2A / REST / AG-UI)'
-description: Connect any agent orchestrator to Mushi — MCP, A2A, REST and AG-UI surfaces for Cursor, Claude, OpenAI Agents, LangGraph, CrewAI and your own agents.
+description: Connect any agent orchestrator to Mushi Mushi. MCP, A2A, REST and AG-UI surfaces for Cursor, Claude, OpenAI Agents, LangGraph, CrewAI and your own agents.
 ---
 
 # Connecting your orchestrator
