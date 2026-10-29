@@ -10,11 +10,12 @@ to "Mushi" in posts.
 | Platform | Account | Status | Live URL | Posted at (UTC) |
 |---|---|---|---|---|
 | Hacker News (Show HN) | kensaurus | **not posted**: HN is "temporarily restricting Show HNs" from new accounts (account created 2026-10-29, karma 1) | | |
-| Reddit r/SideProject | u/sakuramoto | **removed by Reddit's filters** (seen 2026-10-29 ~03:30 UTC, 0 comments); a message asking the moderators to approve it is drafted for the owner to send | https://redd.it/1xi6gtf | 2026-10-29 ~01:20 |
-| X | @sakuramotokenji | posted, links reply posted by the owner; an image reply (4 pictures) is drafted for the owner to send | https://x.com/sakuramotokenji/status/2115612842812735787 | 2026-10-29 01:13 |
-| LinkedIn | kenji sakuramoto | posted | https://www.linkedin.com/in/kenjisakuramoto/recent-activity/all/ (post of 2026-10-29); an image comment is drafted for the owner to send | 2026-10-29 ~01:25 |
-| Zenn (Idea) | kensaurus | **draft**, saved unpublished; topics ai, claudecode, cursor, 個人開発, oss | https://zenn.dev/articles/b7f223e0c9bf5d/edit (editor) | |
-| note | kensaurus | **draft**, saved unpublished | https://editor.note.com/notes/n2157e8d303d9/edit/ (editor) | |
+| Reddit r/SideProject | u/sakuramoto | **removed by Reddit's filters** (seen 2026-10-29 ~03:30 UTC, 0 comments); the owner sent the moderators a message asking them to approve it (my send hit a CAPTCHA) | https://redd.it/1xi6gtf | 2026-10-29 ~01:20 |
+| X | @sakuramotokenji | posted, links reply posted by the owner, image reply with 4 pictures posted (https://x.com/sakuramotokenji/status/2115647612909208016); profile icon and banner changed to the sage | https://x.com/sakuramotokenji/status/2115612842812735787 | 2026-10-29 01:13 |
+| LinkedIn | kenji sakuramoto | first post (01:25, screenshots only) deleted by the owner; **recreated** ~05:30 with the 4 sage cards and the PR #864 screenshot, numbers as of Oct 29 (839 reviews, 305 held) and the line "The pictures are AI-made; the numbers in them are real" | https://www.linkedin.com/in/kenjisakuramoto/recent-activity/all/ | 2026-10-29 ~05:30 |
+| Zenn (Idea) | kensaurus | **not yet published**: Zenn answered `429 投稿数の上限に達しました` (per-user posting limit; glot.it article used the day's slot), scheduling is blocked by the same limit. Draft saved with 4 sage cards + 2 real screenshots; publish 2026-10-30 | https://zenn.dev/articles/b7f223e0c9bf5d/edit (editor) | |
+| Zenn profile | kensaurus | avatar changed to the sage icon (`media/profile-icon.png`) | https://zenn.dev/kensaurus | 2026-10-29 |
+| note | kensaurus | **posted** with the sage hero as header, 2 cards, hashtags #個人開発 #生成AI #バグ #ClaudeCode #Cursor #オープンソース (the Manus-sponsored #自動化したいこと contest was not joined: it auto-follows Manus); profile icon and header changed to the sage | https://note.com/kensaurus/n/n2157e8d303d9 | 2026-10-29 ~05:20 |
 
 Zenn and note are Japanese. Both use the numbers as of 2026-10-29 02:43 UTC
 (839 reviews, 305 "do not merge"), a few more than the English posts had. The
