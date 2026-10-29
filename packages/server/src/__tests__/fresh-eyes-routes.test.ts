@@ -28,7 +28,10 @@ const state = vi.hoisted(() => ({
 }))
 
 vi.mock('../../supabase/functions/_shared/db.ts', () => ({ getServiceClient: () => state.db }))
-vi.mock('../../supabase/functions/_shared/auth.ts', () => ({ adminOrApiKey: () => async (_c: unknown, next: () => Promise<void>) => next() }))
+vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
+  adminOrApiKey: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  jwtAuth: async (_c: unknown, next: () => Promise<void>) => next(),
+}))
 vi.mock('../../supabase/functions/_shared/audit.ts', () => ({ logAudit: async (...a: unknown[]) => void state.audits.push(a) }))
 vi.mock('../../supabase/functions/_shared/logger.ts', () => {
   const l = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, child: () => l }
@@ -57,6 +60,8 @@ interface Caller {
   isOrgScopedKey?: boolean
   keyAllowedProjectIds?: string[] | null
   headers?: Record<string, string>
+  apiKeyScopes?: string[]
+  apiKeyId?: string
 }
 
 class FakeApp {
@@ -344,5 +349,146 @@ describe('GET', () => {
     expect((one.body.data?.reports as unknown[]).length).toBe(1)
     expect(one.body.data?.run).not.toHaveProperty('id')
     expect((await app.call('GET', '/v1/admin/projects/:pid/fresh-eyes', { pid: OTHER })).status).toBe(403)
+  })
+})
+
+// ── Run now: the console queues a test for a local worker (ADR 0053 amendment 2026-10-28) ──
+
+const LIST = '/v1/admin/projects/:pid/fresh-eyes'
+const CANCEL = `${BASE}/cancel`
+const HOST = '3a000000-0000-4000-8000-000000000001'
+const KEY = '4a000000-0000-4000-8000-000000000001'
+const fresh = new Date(Date.now() - 30_000).toISOString()
+
+function withWorker(db: FakeDb, projectId: string, over: { takes?: string[]; heartbeat?: string; owner?: string } = {}) {
+  db.tables.work_hosts = [{ id: HOST, hostname: 'alienware', owner_user_id: over.owner ?? 'u1', api_key_id: KEY, last_heartbeat_at: over.heartbeat ?? fresh, revoked_at: null, takes: over.takes ?? ['fresh_eyes'] }]
+  db.tables.work_lanes = [{ id: 'l1', host_id: HOST, project_id: projectId, name: 'glot', mode: 'fix', paused: false, drain: false, stop_at: null, concurrency: 1 }]
+  db.tables.work_claims = db.tables.work_claims ?? []
+}
+
+describe('Run now', () => {
+  const body = { url: 'https://glot.it/', goal: 'sign up and pick a language', sessions: 2, dryRun: true }
+
+  it('starts another app on its own address with a plain goal, and offers no test account', async () => {
+    const { db, app } = setup()
+    db.tables.site_watches = [{ project_id: P, base_url: 'https://glot.it' }]
+    const r = await app.call('GET', LIST, { pid: P }, undefined, { userId: OPERATOR, authMethod: 'jwt' })
+    expect(r.body.data?.defaults).toEqual({ url: 'https://glot.it/', urlSource: 'site_watch', goal: 'sign up and start using the app', sessions: 3 })
+    expect(r.body.data?.canUseTestAccount).toBe(false)
+    expect(r.body.data?.runner).toEqual({ state: 'none', hostname: null, lastSeenAt: null })
+    expect(JSON.stringify(r.body.data)).not.toContain('kensaur.us/mushi-mushi')
+  })
+
+  it("offers Mushi's own landing, goal and test accounts only to an operator on Mushi", async () => {
+    const { app } = setup()
+    state.members = new Set([P, SELF])
+    const r = await app.call('GET', LIST, { pid: SELF }, undefined, { userId: OPERATOR, authMethod: 'jwt' })
+    expect(r.body.data?.defaults).toMatchObject({ url: 'https://kensaur.us/mushi-mushi/', urlSource: 'mushi', goal: 'get my first bug explained' })
+    expect(r.body.data?.canUseTestAccount).toBe(true)
+    const other = await app.call('GET', LIST, { pid: SELF }, undefined, { userId: 'u1', authMethod: 'jwt' })
+    expect(other.body.data?.canUseTestAccount).toBe(false)
+  })
+
+  it('says plainly when no computer can run it, and queues nothing', async () => {
+    const { db, app } = setup()
+    const r = await app.call('POST', LIST, { pid: P }, body, { authMethod: 'jwt' })
+    expect(r.status).toBe(409)
+    expect(r.body.error?.code).toBe('NO_WORKER')
+    expect(r.body.error?.message).toContain('Pipeline → Workers')
+    expect(db.tables.ux_runs).toHaveLength(0)
+    withWorker(db, P, { takes: [] })
+    const old = await app.call('POST', LIST, { pid: P }, body, { authMethod: 'jwt' })
+    expect(old.body.error?.message).toContain('too old')
+  })
+
+  it('queues a run for an online worker that runs these tests', async () => {
+    const { db, app } = setup()
+    withWorker(db, P)
+    const r = await app.call('POST', LIST, { pid: P }, body, { authMethod: 'jwt' })
+    expect(r.status).toBe(201)
+    const row = db.tables.ux_runs![0]!
+    expect(row).toMatchObject({ kind: 'fresh_eyes', status: 'queued', start_url: 'https://glot.it/', goal: 'sign up and pick a language', sessions_requested: 2, dry_run: true, has_account: false, requested_by: 'u1' })
+    expect(row.account_granted_by).toBeUndefined()
+    expect(String(row.local_run_id)).toMatch(/^[0-9]{8}-[0-9]{6}-[a-z0-9]{4}$/)
+    expect(r.body.data).toMatchObject({ runId: row.local_run_id, status: 'queued', runner: { state: 'ready', hostname: 'alienware' } })
+  })
+
+  it('refuses viewers, bad input, and a third open run', async () => {
+    const { db, app } = setup()
+    withWorker(db, P)
+    state.role = 'viewer'
+    expect((await app.call('POST', LIST, { pid: P }, body, { authMethod: 'jwt' })).status).toBe(403)
+    state.role = 'admin'
+    expect((await app.call('POST', LIST, { pid: P }, { ...body, url: 'file:///etc/passwd' }, { authMethod: 'jwt' })).status).toBe(400)
+    expect((await app.call('POST', LIST, { pid: P }, body, { authMethod: 'jwt' })).status).toBe(201)
+    expect((await app.call('POST', LIST, { pid: P }, body, { authMethod: 'jwt' })).status).toBe(201)
+    const third = await app.call('POST', LIST, { pid: P }, body, { authMethod: 'jwt' })
+    expect(third.status).toBe(409)
+    expect(third.body.error?.code).toBe('ALREADY_RUNNING')
+  })
+
+  it('grants a test account only to an operator session on Mushi, and stores no password', async () => {
+    const { db, app } = setup()
+    state.members = new Set([P, SELF])
+    withWorker(db, SELF, { owner: OPERATOR })
+    const acct = { url: 'https://kensaur.us/mushi-mushi/', goal: 'get my first bug explained', withAccount: true }
+    expect((await app.call('POST', LIST, { pid: SELF }, acct, { userId: 'u1', authMethod: 'jwt' })).body.error?.code).toBe('TEST_ACCOUNT_UNAVAILABLE')
+    expect((await app.call('POST', LIST, { pid: SELF }, acct, { userId: OPERATOR, authMethod: 'apiKey', isOrgScopedKey: true })).body.error?.code).toBe('TEST_ACCOUNT_UNAVAILABLE')
+    withWorker(db, P, { owner: OPERATOR })
+    expect((await app.call('POST', LIST, { pid: P }, acct, { userId: OPERATOR, authMethod: 'jwt' })).body.error?.code).toBe('TEST_ACCOUNT_UNAVAILABLE')
+    withWorker(db, SELF, { owner: OPERATOR })
+    const ok = await app.call('POST', LIST, { pid: SELF }, acct, { userId: OPERATOR, authMethod: 'jwt' })
+    expect(ok.status).toBe(201)
+    const row = db.tables.ux_runs!.find((r) => r.project_id === SELF)!
+    expect(row).toMatchObject({ has_account: true, account_granted_by: OPERATOR })
+    expect(Date.parse(String(row.account_grant_until)) - Date.now()).toBeLessThanOrEqual(2 * 3_600_000)
+    expect(state.created).toHaveLength(0)
+    expect(Object.keys(row).some((k) => /password/i.test(k))).toBe(false)
+  })
+
+  it('cancels a waiting run, never one a computer started', async () => {
+    const { db, app } = setup()
+    withWorker(db, P)
+    const runId = String((await app.call('POST', LIST, { pid: P }, body, { authMethod: 'jwt' })).body.data?.runId)
+    expect((await app.call('POST', CANCEL, { pid: P, runId }, undefined, { authMethod: 'jwt' })).status).toBe(200)
+    expect(db.tables.ux_runs![0]).toMatchObject({ status: 'stopped', detail: 'Cancelled before a computer started it.' })
+    expect((await app.call('POST', CANCEL, { pid: P, runId }, undefined, { authMethod: 'jwt' })).status).toBe(409)
+  })
+
+  it('stops a run nobody took within a day, with the reason', async () => {
+    const { db, app } = setup()
+    db.tables.ux_runs!.push({ id: 'old', project_id: P, local_run_id: '20261020-000000-aaaa', kind: 'fresh_eyes', status: 'queued', started_at: '2026-10-20T00:00:00.000Z' })
+    const r = await app.call('GET', LIST, { pid: P }, undefined, { authMethod: 'jwt' })
+    expect(r.status).toBe(200)
+    expect(db.tables.ux_runs![0]).toMatchObject({ status: 'stopped', detail: 'No computer picked it up within a day, so it was not run.' })
+  })
+})
+
+describe('a local worker syncs only the run it claimed', () => {
+  const worker: Caller = { authMethod: 'apiKey', isOrgScopedKey: true, keyAllowedProjectIds: [P], apiKeyScopes: ['worker:run'], apiKeyId: KEY }
+  function claimed(db: FakeDb, status = 'active') {
+    withWorker(db, P)
+    db.tables.ux_runs!.push({ id: 'ux1', project_id: P, local_run_id: RUN, kind: 'fresh_eyes', status: 'running', started_at: fresh })
+    db.tables.work_claims!.push({ id: 'c1', host_id: HOST, kind: 'fresh_eyes', ux_run_id: 'ux1', status, lease_until: new Date(Date.now() + 600_000).toISOString() })
+  }
+
+  it('PUT, uploads and findings pass with the claim', async () => {
+    const { db, app } = setup()
+    claimed(db)
+    expect((await app.call('PUT', BASE, { pid: P, runId: RUN }, snapshot(), worker)).status).toBe(200)
+    expect((await app.call('POST', `${BASE}/uploads`, { pid: P, runId: RUN }, { names: ['s1-step00.png'] }, worker)).status).toBe(200)
+    expect((await app.call('POST', `${BASE}/findings`, { pid: P, runId: RUN }, finding(), worker)).status).toBe(200)
+  })
+
+  it('are refused without an active claim, or for a run another worker holds', async () => {
+    const { db, app } = setup()
+    claimed(db, 'done')
+    const r = await app.call('PUT', BASE, { pid: P, runId: RUN }, snapshot(), worker)
+    expect(r.status).toBe(403)
+    expect(r.body.error?.code).toBe('NO_WORK_CLAIM')
+    db.tables.work_claims![0]!.status = 'active'
+    expect((await app.call('PUT', BASE, { pid: P, runId: RUN }, snapshot(), { ...worker, apiKeyId: '5a000000-0000-4000-8000-000000000001' })).status).toBe(403)
+    // Another run of the same app: no claim on it.
+    expect((await app.call('POST', `${BASE}/findings`, { pid: P, runId: '20261027-230000-zz99' }, finding(), worker)).status).toBe(403)
   })
 })

@@ -1,11 +1,10 @@
 # @mushi-mushi/codebase-graph
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
-Symbol graph builder for the codebase explorer.
-
-
-Node-side helpers for building Understand-Anything–shaped knowledge graphs from indexed codebase files.
+Internal package, not published to npm. It builds the file and symbol graph
+behind the Mushi Mushi console's codebase explorer (`/explore`), from files
+the server has already indexed.
 
 ## Attribution
 
@@ -13,8 +12,12 @@ Graph schema and analysis concepts are inspired by [Understand-Anything](https:/
 
 ## Exports
 
-- `buildGraphFromIndex` — file + symbol nodes, import edges, layer grouping
-- `fingerprintFile` / `mergeGraphUpdate` — incremental SKIP/PARTIAL/FULL classification
-- Shared TypeScript types for admin UI consumption
+- `buildGraphFromIndex`: file + symbol nodes, import edges, layer grouping
+- `fingerprintFile`, `classifyFingerprintDelta`, `classifyBatchUpdate`: incremental SKIP/PARTIAL/FULL classification
+- `mergeGraphUpdate`: apply a partial rebuild to an existing graph
+- `extractRelativeImports`: relative import scanning
+- Shared TypeScript types for the admin UI
 
-Used by `codebase-analyze-worker` and unit tests under `packages/server/src/__tests__/`.
+The Deno mirror in `_shared/codebase-graph-build.ts` runs in the edge
+functions; unit tests under `packages/server/src/__tests__/` keep the two in
+step.

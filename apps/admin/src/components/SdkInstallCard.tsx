@@ -82,7 +82,7 @@ export function SdkInstallCard({
   // NEVER bake a truncated key (e.g. `mushi_a1b2c3d4…`) into the copyable
   // snippet: it reads like a real key but fails when pasted, which was a
   // top setup-failure cause. When we don't hold the full secret in memory we
-  // emit the explicit `mushi_xxx` placeholder (renderSnippet's fallback) so
+  // emit the explicit `YOUR_SDK_KEY` placeholder (renderSnippet's fallback) so
   // it's unmistakably a fill-in. The real prefix still shows in the info chip
   // above, and "Rotate key" mints + reveals a full paste-ready secret inline.
   const snippetKey = apiKey ?? rotatedKey ?? null
@@ -218,8 +218,8 @@ export function SdkInstallCard({
               said it tracked the SDK heartbeat, so "All systems healthy"
               showed before any SDK was installed (QA bug 140). */}
           <span className="text-2xs text-fg-muted">
-            Checks that Mushi&apos;s backend is reachable. Whether your app&apos;s SDK has checked in shows on each key
-            below (&ldquo;Never used&rdquo; until its first heartbeat).
+            Checks that Mushi&apos;s backend is reachable. Whether your app has checked in shows on each key
+            below (&ldquo;Never used&rdquo; until it does).
           </span>
         </div>
       )}
@@ -238,14 +238,17 @@ export function SdkInstallCard({
         <div>
           <h3 className="text-sm font-semibold text-fg">Configure & install the SDK</h3>
           <p className="text-xs text-fg-muted mt-1">
-            Tune the widget on the left, watch the snippet on the right update in real time, then copy it
-            into your app. Your project ID is pre-filled. If the snippet still shows
-            <code className="mx-1 px-1 py-0.5 rounded bg-surface-raised text-fg-secondary">mushi_xxx</code>,
-            click <span className="font-medium text-fg-secondary">Mint SDK key</span> above and the real
-            key fills in automatically.
+            Tune the widget on the left, then copy the snippet on the right into your app.
           </p>
         </div>
       )}
+      {/* Where the key comes from, in one line, on Set up and on Connect. */}
+      {!snippetKey ? (
+        <p className="text-xs text-fg-secondary" data-testid="sdk-snippet-key-hint">
+          The snippet needs your SDK key, which is shown only once: press{' '}
+          <span className="font-medium text-fg">Make a key and fill it in</span> above.
+        </p>
+      ) : null}
 
       <div className="@container/sdk">
       <div className={`grid gap-4 ${isServerFramework(framework) ? '' : '@2xl/sdk:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'}`}>

@@ -41,7 +41,7 @@ export function OnboardingSetupReadout({
   const signalRows: DetailRowItem[] = [
     {
       label: 'SDK endpoint',
-      value: stats.sdkEndpointHost ?? (stats.sdkInstalled ? 'Live (host unknown)' : 'No heartbeat yet'),
+      value: stats.sdkEndpointHost ?? (stats.sdkInstalled ? 'Live (host unknown)' : 'Not heard from yet'),
       tone: stats.sdkHostMismatch ? 'warn' : stats.sdkInstalled ? 'ok' : 'muted',
       wrap: true,
     },

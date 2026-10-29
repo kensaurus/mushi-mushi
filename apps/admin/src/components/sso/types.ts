@@ -34,7 +34,7 @@ export const EMPTY_SSO_STATS: SsoStats = {
   projectName: null,
   ssoEntitlement: false,
   planId: 'hobby',
-  planDisplayName: 'Hobby',
+  planDisplayName: 'Free',
   totalConfigs: 0,
   registeredCount: 0,
   pendingCount: 0,

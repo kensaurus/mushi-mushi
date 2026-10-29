@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/self-hosting/edge-functions
 
 ---
 title: Edge Functions deploy
-description: Deploy Mushi's Supabase Edge Functions for a self-hosted install — the minimal ingest and classification set, the full list, and the secrets they need.
+description: Deploy the Mushi Mushi Supabase Edge Functions for a self-hosted install. The minimal ingest and classification set, the full list, and the secrets they need.
 ---
 
 # Edge Functions deploy
@@ -82,11 +82,11 @@ For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `r
 | `fast-filter` | Invoked by `api` | Stage-1 cheap triage before full classification |
 | `classify-report` | `reports` INSERT | LLM triage: severity, category, blast-radius |
 | `mcp` | HTTP | Hosted MCP transport for Cursor / Claude |
-| `fix-worker` | `fix_attempts` INSERT | Generates a git-diff fix via `generateObject` + Zod validation |
-| `judge-batch` | cron | Grades fix quality; writes `judge_results` |
+| `fix-worker` | Fix dispatch (`POST /v1/admin/fixes/dispatch`, autofix) | Drafts a fix and opens a draft PR, or dispatches a Cursor / GitHub cloud agent |
+| `judge-batch` | cron (nightly) | Grades recent classifications; writes `classification_evaluations` and `reports.judge_score` |
 | `intelligence-report` | cron / manual | Weekly LLM narrative from KPI trends |
-| `drift-walker` | HTTP | Crawls live routes and compares them against `inventory_nodes` |
-| `contract-graph-builder` | HTTP | Fetches Postgres schema via `execute_sql` RPC and builds the API contract graph |
+| `drift-walker` | HTTP | Rebuilds the contract snapshot and compares it with the stored `contract_snapshots` baseline |
+| `contract-graph-builder` | HTTP | Builds a contract snapshot from the OpenAPI spec, inventory API dependencies and the latest Supabase schema snapshot |
 | `pdca-runner` | `pdca_runs` INSERT | Runs one PDCA iteration: fix → judge → promote cycle |
 | `qa-story-runner` | cron (every minute) | Runs QA Coverage stories on schedule via Firecrawl / Browserbase |
 | `generate-synthetic` | cron | Playwright-based synthetic smoke tests |
@@ -98,7 +98,10 @@ For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `r
 | `telegram-webhook` | Telegram Bot API | Voice-note inbox: secret-token auth, `/start ` project binding, transcript + inline-keyboard confirmation |
 | `cursor-webhook` | Cursor Cloud Agent (v0 callback) | Receives `statusChange` callbacks, writes `fix_attempts.pr_url`, notifies |
 | `agent-status-poll` | cron (`5-55/5`) | Polls open Cursor / GitHub cloud-agent runs and closes them (PR URL, failure) |
-| `agent-pr-review` | cron (`3-53/10`) + re-run route | Reviews each cloud-agent PR with Claude Opus 5.5 on the project's Anthropic key; a "hold" blocks merging from Mushi without an override |
+| `agent-pr-review` | cron (`3-53/10`) + re-run route | Reviews each fix PR with Claude Opus 5.5 on the project's Anthropic key; a merge verdict readies the draft (with no review possible, a fix-worker draft falls back to its own self-check), and a "hold" blocks merging from Mushi without an override |
+| `review-followup` | cron (`6-56/10`) | Sends "fix first" findings back to a cloud agent on the same PR (off by default) |
+| `fix-verifier` | cron (`4-54/10`) + verify route | Checks the merge gates for a PR's head; merges only when verified auto-merge is on |
+| `merge-queue` | cron (`1-56/5`) + queue route | "Merge when ready" and release trains |
 
 The remaining workers (billing, retention, SDK upgrade, skill-sync, rewards payout, …) live alongside these. Full list: `ls packages/server/supabase/functions/` or `pnpm docs-stats`.
 
@@ -113,22 +116,21 @@ npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-…
 npx supabase secrets set OPENAI_API_KEY=sk-…
 npx supabase secrets set LANGFUSE_PUBLIC_KEY=pk-lf-…
 npx supabase secrets set LANGFUSE_SECRET_KEY=sk-lf-…
-npx supabase secrets set LANGFUSE_HOST=https://cloud.langfuse.com
-npx supabase secrets set SENTRY_DSN=https://…@sentry.io/…
+npx supabase secrets set LANGFUSE_BASE_URL=https://cloud.langfuse.com
+npx supabase secrets set SENTRY_DSN_SERVER=https://…@sentry.io/…
 npx supabase secrets set GITHUB_APP_ID=…
 npx supabase secrets set GITHUB_APP_PRIVATE_KEY="$(cat path/to/key.pem)"
-npx supabase secrets set E2B_API_KEY=…
 npx supabase secrets set FIRECRAWL_API_KEY=…
 npx supabase secrets set ADMIN_BASE_URL=https://your-domain.example.com/admin
 ```
 
-Tenants can override `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` per project via [BYOK](/security/byok).
+Tenants can override `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` per project via [BYOK](/security/byok). `E2B_API_KEY` is read by the Node fix orchestrator in `@mushi-mushi/agents`, not by the edge functions; set it where that runs if you use the E2B sandbox.
 
 ## JWT verification
 
 Functions set `verify_jwt = false` in `packages/server/supabase/config.toml`. Auth is enforced **inside** each handler via one of two patterns:
 
-- **Service-role guard** (`requireServiceRoleAuth`) — cron-triggered functions (`intelligence-report`, `pdca-runner`, `judge-batch`, etc.) verify the Supabase service-role key in the `Authorization` header, so only the Supabase scheduler can call them.
+- **Service-role guard** (`requireServiceRoleAuth`) — cron-triggered functions (`intelligence-report`, `pdca-runner`, `judge-batch`, etc.) verify `MUSHI_INTERNAL_CALLER_SECRET` or the Supabase service-role key in the `Authorization` header, so only the scheduler and other server functions can call them.
 - **User / API-key guard** — user-facing functions (`api`, `mcp`, `classify-report`, etc.) authenticate via API key or JWT inside the handler.
 
 This two-layer approach lets functions be deployed with `--no-verify-jwt` while keeping security equivalent to the platform default. See `packages/server/supabase/config.toml` for the per-function settings.

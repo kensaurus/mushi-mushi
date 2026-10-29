@@ -94,7 +94,7 @@ interface ProjectSettings {
   /** Branch name template for fix-worker PRs: <type>/MUSHI-{reportId}-… plus {category}, {date}, {shortId}. */
   fix_branch_template?: string
   /** "Bug reports by Mushi" mark on the feedback widget. `null`/absent =
-   *  plan default (on for Free Cloud, off for paid and self-host). */
+   *  plan default (on for Free, off for paid and self-host). */
   widget_brand_footer?: boolean | null
   /** Linked Supabase project (20-char ref). The token is a key under AI keys. */
   supabase_project_ref?: string | null
@@ -122,6 +122,14 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
   const [saving, setSaving] = useState(false)
   const [showLegacyWebhook, setShowLegacyWebhook] = usePersistentState(
     'settings:general:slack-webhook-open',
+    false,
+    { projectId: getActiveProjectIdSnapshot(), validate: (v): v is boolean => typeof v === 'boolean' },
+  )
+  // The four model pickers were about 340 words a new user scrolled past on
+  // a ~2,600-word tab; the defaults work, so they wait behind one row
+  // (integrator's new-user walk, 2026-10-28).
+  const [showModels, setShowModels] = usePersistentState(
+    'settings:general:models-open',
     false,
     { projectId: getActiveProjectIdSnapshot(), validate: (v): v is boolean => typeof v === 'boolean' },
   )
@@ -254,7 +262,8 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             type="text"
             value={settings.slack_channel_id ?? ''}
             onChange={(e) => update({ slack_channel_id: e.target.value.trim() })}
-            placeholder="C0B82A322RW"
+            // An empty field showing a real-looking ID read as already filled in (2026-10-28).
+            placeholder="e.g. C0123ABCDEF"
           />
           <p className="text-xs text-fg-muted">
             {slackInput.botSet || slackCanPost
@@ -329,7 +338,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             helpId="settings.general.sentry_dsn"
             value={settings.sentry_dsn ?? ''}
             onChange={(e) => update({ sentry_dsn: e.target.value })}
-            placeholder="https://abc@o0.ingest.sentry.io/4511023875"
+            placeholder="e.g. https://<key>@o0.ingest.sentry.io/<project-id>"
             validate={sentryDsn()}
           />
           <SettingsChangeHint current={settings.sentry_dsn ?? ''} saved={saved.sentry_dsn ?? ''} kind="secret" />
@@ -385,7 +394,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             type="text"
             value={settings.supabase_project_ref ?? ''}
             onChange={(e) => update({ supabase_project_ref: e.target.value.trim() })}
-            placeholder="abcdefghijklmnopqrst"
+            placeholder="e.g. abcdefghijklmnopqrst"
             autoComplete="off"
             spellCheck={false}
             validate={supabaseProjectRef()}
@@ -404,63 +413,77 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
       <SettingsList title="Bug sorting" description="How the AI scores, groups and fixes incoming bugs.">
         <SettingsRow
           icon={<IconJudge size={16} />}
-          title="Triage model"
-          purpose="The AI model that decides each bug's severity and category."
-        >
-          <ClaudeModelSelect
-            role="diagnosis"
-            helpId="settings.general.stage2_model"
-            value={settings.stage2_model}
-            onChange={(id) => update({ stage2_model: id })}
-            extraOptions={
-              <optgroup label="OpenAI fallback">
-                <option value="gpt-5.4">GPT-5.4</option>
-                <option value="gpt-5.4-mini">GPT-5.4-mini</option>
-                <option value="gpt-4.1">GPT-4.1 (legacy)</option>
-              </optgroup>
-            }
-          />
-          <SettingsChangeHint current={eff(settings.stage2_model, 'diagnosis')} saved={eff(saved.stage2_model, 'diagnosis')} />
-        </SettingsRow>
-        <SettingsRow
-          icon={<IconCost size={16} />}
-          title="Quick check model"
-          purpose="The fast first pass that sorts easy bugs and filters noise before the triage model."
-        >
-          <ClaudeModelSelect
-            role="quick_check"
-            helpId="settings.general.stage1_model"
-            value={settings.stage1_model}
-            onChange={(id) => update({ stage1_model: id })}
-          />
-          <SettingsChangeHint current={eff(settings.stage1_model, 'quick_check')} saved={eff(saved.stage1_model, 'quick_check')} />
-        </SettingsRow>
-        <SettingsRow
-          icon={<IconJudge size={16} />}
-          title="Judge model"
-          purpose="The model that double-checks a sample of triage results on the Judge page."
-        >
-          <ClaudeModelSelect
-            role="judge"
-            helpId="settings.general.judge_model"
-            value={settings.judge_model}
-            onChange={(id) => update({ judge_model: id })}
-          />
-          <SettingsChangeHint current={eff(settings.judge_model, 'judge')} saved={eff(saved.judge_model, 'judge')} />
-        </SettingsRow>
-        <SettingsRow
-          icon={<IconGit size={16} />}
-          title="Fix model"
-          purpose="The model Mushi's own fix agent writes fixes with. Fixes cost the most of any AI call."
-        >
-          <ClaudeModelSelect
-            role="fix"
-            helpId="settings.general.fix_model"
-            value={settings.claude_default_model}
-            onChange={(id) => update({ claude_default_model: id })}
-          />
-          <SettingsChangeHint current={eff(settings.claude_default_model, 'fix')} saved={eff(saved.claude_default_model, 'fix')} />
-        </SettingsRow>
+          title="AI models"
+          purpose="Mushi picks a model for each job. Change one only to trade cost for quality."
+          action={
+            <Btn size="sm" variant="ghost" aria-expanded={showModels} onClick={() => setShowModels(!showModels)}>
+              {showModels ? 'Hide models' : 'Change models'}
+            </Btn>
+          }
+        />
+        {showModels ? (
+          <>
+            <SettingsRow
+              icon={<IconJudge size={16} />}
+              title="Triage model"
+              purpose="The AI model that decides each bug's severity and category."
+            >
+              <ClaudeModelSelect
+                role="diagnosis"
+                helpId="settings.general.stage2_model"
+                value={settings.stage2_model}
+                onChange={(id) => update({ stage2_model: id })}
+                extraOptions={
+                  <optgroup label="OpenAI fallback">
+                    <option value="gpt-5.4">GPT-5.4</option>
+                    <option value="gpt-5.4-mini">GPT-5.4-mini</option>
+                    <option value="gpt-4.1">GPT-4.1 (legacy)</option>
+                  </optgroup>
+                }
+              />
+              <SettingsChangeHint current={eff(settings.stage2_model, 'diagnosis')} saved={eff(saved.stage2_model, 'diagnosis')} />
+            </SettingsRow>
+            <SettingsRow
+              icon={<IconCost size={16} />}
+              title="Quick check model"
+              purpose="The fast first pass that sorts easy bugs and filters noise before the triage model."
+            >
+              <ClaudeModelSelect
+                role="quick_check"
+                helpId="settings.general.stage1_model"
+                value={settings.stage1_model}
+                onChange={(id) => update({ stage1_model: id })}
+              />
+              <SettingsChangeHint current={eff(settings.stage1_model, 'quick_check')} saved={eff(saved.stage1_model, 'quick_check')} />
+            </SettingsRow>
+            <SettingsRow
+              icon={<IconJudge size={16} />}
+              title="Judge model"
+              purpose="The model that double-checks a sample of triage results on the Judge page."
+            >
+              <ClaudeModelSelect
+                role="judge"
+                helpId="settings.general.judge_model"
+                value={settings.judge_model}
+                onChange={(id) => update({ judge_model: id })}
+              />
+              <SettingsChangeHint current={eff(settings.judge_model, 'judge')} saved={eff(saved.judge_model, 'judge')} />
+            </SettingsRow>
+            <SettingsRow
+              icon={<IconGit size={16} />}
+              title="Fix model"
+              purpose="The model Mushi's own fix agent writes fixes with. Fixes cost the most of any AI call."
+            >
+              <ClaudeModelSelect
+                role="fix"
+                helpId="settings.general.fix_model"
+                value={settings.claude_default_model}
+                onChange={(id) => update({ claude_default_model: id })}
+              />
+              <SettingsChangeHint current={eff(settings.claude_default_model, 'fix')} saved={eff(saved.claude_default_model, 'fix')} />
+            </SettingsRow>
+          </>
+        ) : null}
         <SettingsRow
           icon={<IconGauge size={16} />}
           title="Quick check confidence"
@@ -603,7 +626,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
         <SettingsRow
           icon={<IconChat size={16} />}
           title="“Bug reports by Mushi” line"
-          purpose="A small line at the foot of the widget that links to Mushi. On by default for Free Cloud, off for paid and self-hosted."
+          purpose="A small line at the foot of the widget that links to Mushi. On by default for Free, off for paid and self-hosted."
         >
           <SelectField
             label="Show the line"
@@ -611,7 +634,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             value={brandFooterToChoice(settings.widget_brand_footer)}
             onChange={(e) => update({ widget_brand_footer: choiceToBrandFooter(e.target.value as BrandFooterChoice) })}
           >
-            <option value="default">Plan default (on for Free Cloud, off for paid and self-host)</option>
+            <option value="default">Plan default (on for Free, off for paid and self-host)</option>
             <option value="on">Always show</option>
             <option value="off">Never show</option>
           </SelectField>
@@ -634,7 +657,9 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
 
       {/* Account-scoped; saves on toggle, independent of the project form above. */}
       <LifecycleEmailsToggle />
-      <ConsoleHelpPanel />
+      {/* Only Mushi staff can rebuild the shared help index; everyone else saw
+          a card ending "Nothing to do here" (first-time user test, 2026-10-28). */}
+      {entitlements.isSuperAdmin ? <ConsoleHelpPanel /> : null}
     </>
   )
 }

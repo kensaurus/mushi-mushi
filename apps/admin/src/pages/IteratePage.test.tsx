@@ -46,6 +46,7 @@ const mocks = vi.hoisted(() => ({
   paths: [] as string[],
   listTotal: 1,
   listRuns: [] as unknown[],
+  hideSnapshot: true,
 }))
 
 vi.mock('../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
@@ -73,7 +74,7 @@ vi.mock('../lib/iterateModeUx', () => ({
     hideTabs: false,
     plainBanner: false,
     hideOverviewChrome: true,
-    hideIterateSnapshot: true,
+    hideIterateSnapshot: mocks.hideSnapshot,
   }),
   resolveQuickIterateTab: () => 'runs',
 }))
@@ -92,6 +93,7 @@ beforeEach(() => {
   mocks.apiFetch.mockReset()
   mocks.paths = []
   mocks.listTotal = 1
+  mocks.hideSnapshot = true
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
@@ -186,5 +188,24 @@ describe('IteratePage runs paging (QA 244)', () => {
     expect(document.body.textContent).toContain('Showing 1–50 of 73 runs')
     click(buttons('Next →')[0]!)
     expect(mocks.paths.some((p) => p.includes('page=2'))).toBe(true)
+  })
+})
+
+// With no runs the status block is the first step ("No improvement runs yet ·
+// Start a run"); an empty Run history under it said so again (2026-10-28).
+describe('IteratePage with no runs', () => {
+  it('leaves out the empty run history while the status block shows the first step', () => {
+    mocks.listTotal = 0
+    mocks.listRuns = []
+    mocks.hideSnapshot = false
+    render()
+    expect(document.body.textContent).not.toContain('Run history')
+  })
+
+  it('keeps the run history when the status block is hidden', () => {
+    mocks.listTotal = 0
+    mocks.listRuns = []
+    render()
+    expect(document.body.textContent).toContain('Run history')
   })
 })

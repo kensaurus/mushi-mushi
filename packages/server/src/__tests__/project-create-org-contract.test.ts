@@ -104,4 +104,13 @@ describe('POST /v1/admin/projects org-id contract (Sentry MUSHI-MUSHI-SERVER-M)'
     expect(earlyReturnIdx).toBeGreaterThan(0);
     expect(bootstrapIdx).toBeLessThan(earlyReturnIdx);
   });
+
+  it('checks the plan app limit (402 PLAN_APP_LIMIT) after the team is known and before the insert', () => {
+    const limitIdx = handler.indexOf('appLimitDenial(');
+    const noOrgIdx = handler.indexOf('NO_ORGANIZATION');
+    const insertIdx = handler.indexOf('.insert({');
+    expect(limitIdx).toBeGreaterThan(noOrgIdx);
+    expect(limitIdx).toBeLessThan(insertIdx);
+    expect(handler).toContain('402');
+  });
 });

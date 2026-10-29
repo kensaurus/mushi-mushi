@@ -3,27 +3,27 @@
 Source: https://kensaur.us/mushi-mushi/docs/admin
 
 ---
-description: Guide to the Mushi admin console — the reports inbox, fix drafts and PRs, plain-English queries, and a link to every deeper page of the console.
+description: Guide to the Mushi Mushi admin console. The Bugs list, fix drafts and pull requests, plain-English questions about your bug data, and links to every page.
 ---
 
-# Admin console
+# Mushi Mushi admin console
 
 ## See it
 
 ## Day-to-day
 
-- [Reports inbox](/admin/reports)
-- [Fix drafts & PRs](/admin/fixes)
-- [Ask in plain English](/admin/query)
+- [Bugs](/admin/reports): every bug report, sorted and searchable
+- [Fixes](/admin/fixes): draft pull requests and their checks
+- [SQL query](/admin/query): ask about your bug data in plain English on the **Ask** tab, or write read-only SQL
 
 ## Deeper surfaces
 
-[Skill playbooks](/admin/skill-pipelines) ·
-[Rewards](/admin/rewards) ·
-[Knowledge graph](/admin/graph) ·
-[Fix quality scores](/admin/judge) ·
+[Agent skills](/admin/skill-pipelines) ·
+[Tester rewards](/admin/rewards) ·
+[Bug clusters](/admin/graph) ·
+[Triage grading](/admin/judge) ·
 [Weekly insights](/admin/intelligence) ·
 [Fine-tuning](/admin/fine-tuning) ·
 [Live collaboration](/admin/realtime) ·
-[MCP](/admin/mcp) ·
+[Editor agents (MCP)](/admin/mcp) ·
 [Connect](/admin/connect)

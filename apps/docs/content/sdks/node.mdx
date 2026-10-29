@@ -1,13 +1,15 @@
 ---
 title: Node.js server error reporting SDK
-description: Report server errors from Node with @mushi-mushi/node — Express, Fastify and Hono error handlers that tag each report with route, request ID and user.
+description: Send Node server errors to Mushi Mushi with @mushi-mushi/node. Express, Fastify and Hono handlers tag each report with request method, URL and trace context.
 ---
 
 # `@mushi-mushi/node`
 
-Server-side SDK for Node.js apps — forward unhandled exceptions, attach
-HTTP error-handler middleware to Express / Fastify / Hono, and tag
-every report with the route, request id, and user (when supplied).
+The Mushi Mushi server-side SDK for Node.js apps. It forwards unhandled
+exceptions, adds HTTP error handlers for Express, Fastify and Hono, and tags
+each handler report with the request method, URL and trace context (W3C
+`traceparent` and `sentry-trace` headers, when present). To attach a user, pass
+`userId` to `captureReport()`.
 
 ## Install
 
@@ -97,9 +99,8 @@ await mushi.captureReport({
 })
 ```
 
-The Node SDK speaks the same wire protocol as the web SDK and shares
-classification quotas — server-thrown bugs and user-side bugs land in
-the same queue.
+The Node SDK sends to the same API as the web SDK, so server-thrown bugs and
+user-side bugs land in the same queue.
 
 ## PII and credential scrubbing
 
@@ -114,10 +115,10 @@ core PII scrubber before it leaves the process:
   have their values replaced with `[Scrubbed]`.
 
 This applies to `captureReport`, `mushiExpressErrorHandler`, and
-`mushiTraceMiddleware` — no extra configuration required.
+`mushiTraceMiddleware`, with no extra configuration.
 
 If you use `Authorization: Token <jwt>` (Conduit / RealWorld spec), the JWT in
-that header is **never captured** — the SDK only reads response status codes and
+that header is **never captured**: the SDK only reads response status codes and
 timing from network spans, not request headers.
 
 The following fields are scrubbed **before the report leaves the Node process**:
@@ -130,6 +131,6 @@ The following fields are scrubbed **before the report leaves the Node process**:
 | `error.stack` | PII scrub |
 | `request.url` *(trace middleware)* | URL scrub |
 
-`userId` and host-supplied `metadata` are left unmodified — the SDK cannot know
+`userId` and host-supplied `metadata` are left unmodified. The SDK cannot know
 which IDs or metadata keys are safe to alter, so the host is responsible for any
 additional scrubbing at those sites.

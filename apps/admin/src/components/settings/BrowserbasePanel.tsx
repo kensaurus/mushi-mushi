@@ -15,7 +15,7 @@ import { usePageData } from '../../lib/usePageData';
 import { Btn, ErrorAlert } from '../ui';
 import { BrandIcon } from '../ui/BrandIcon';
 import { PanelSkeleton } from '../skeletons/PanelSkeleton';
-import { useEntitlements } from '../../lib/useEntitlements';
+import { isByokLocked, useEntitlements } from '../../lib/useEntitlements';
 import { UpgradePrompt } from '../billing/UpgradePrompt';
 import { providerPoolKeys, selectPrimaryProviderKey } from './byokPool';
 import { useByokPool } from './ByokPoolContext';
@@ -38,7 +38,7 @@ const BROWSERBASE_KEY_HREF = '/settings?tab=byok#key-browserbase';
 
 export function BrowserbasePanel() {
   const entitlements = useEntitlements();
-  const byokLocked = !entitlements.loading && !entitlements.has('byok');
+  const byokLocked = isByokLocked(entitlements);
   const {
     data,
     loading,

@@ -28,7 +28,8 @@ const NPX_CLI_CANDIDATES: readonly string[] = [
   join(dirname(process.execPath), '..', 'lib', 'node_modules', 'npm', 'bin', 'npx-cli.js'),
 ]
 
-function uxCommandLine(
+/** How to start `mushi-ux`; the local worker (worker/fresh-eyes.ts) runs first-time user tests through it too. */
+export function uxCommandLine(
   args: readonly string[],
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,

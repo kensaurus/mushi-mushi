@@ -42,6 +42,8 @@ import type { NavStep, NavTarget } from '../lib/askMushiTypes'
 import { PaletteAssistView } from './PaletteAssistView'
 import { fixDeepLinkPath } from '../lib/fixDeepLink'
 import { useEntitlements } from '../lib/useEntitlements'
+import { useAuth } from '../lib/auth'
+import { SignOutAllDialog } from './SidebarUserCard'
 
 interface LiveReport {
   id: string
@@ -163,6 +165,8 @@ export function CommandPalette() {
   const [assistLangfuseTraceId, setAssistLangfuseTraceId] = useState<string | null>(null)
   const assistAbortRef = useRef<AbortController | null>(null)
 
+  const [signOutOpen, setSignOutOpen] = useState(false)
+  const { signOut } = useAuth()
   const [mentionHits, setMentionHits] = useState<MentionHit[]>([])
   const [slashHits, setSlashHits] = useState<SlashCommand[]>([])
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -459,6 +463,27 @@ export function CommandPalette() {
       onSelect: () => handleSelect('action:explore:understand', () => navigate('/explore?tab=ask')),
     },
     {
+      id: 'action:hotkeys',
+      label: 'Keyboard shortcuts',
+      hint: 'Every shortcut in the console',
+      keywords: ['keyboard', 'shortcuts', 'hotkeys', 'keys', 'cheatsheet'],
+      // The same "?" the header's shortcut button and the keyboard use.
+      onSelect: () =>
+        handleSelect('action:hotkeys', () =>
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true })),
+        ),
+    },
+    {
+      id: 'action:sign-out',
+      label: 'Sign out',
+      hint: 'Sign out of every account on this device',
+      keywords: ['sign out', 'log out', 'logout', 'sign off', 'account', 'profile', 'switch account'],
+      onSelect: () => {
+        close()
+        setSignOutOpen(true)
+      },
+    },
+    {
       id: 'action:labs',
       label: 'Display & sidebar settings',
       hint: 'Theme, density, focus mode, and extra pages to keep in the sidebar',
@@ -477,6 +502,8 @@ export function CommandPalette() {
     'w-full max-w-xl rounded-md border border-edge bg-surface-raised shadow-raised flex flex-col max-h-[70dvh] overflow-hidden'
 
   return (
+    <>
+    {signOutOpen ? <SignOutAllDialog signOut={signOut} onClose={() => setSignOutOpen(false)} /> : null}
     <AnimatePresence mode="wait">
       {isOpen && view === 'assist' ? (
         <motion.div
@@ -808,6 +835,7 @@ export function CommandPalette() {
         </motion.div>
       ) : null}
     </AnimatePresence>
+    </>
   )
 }
 

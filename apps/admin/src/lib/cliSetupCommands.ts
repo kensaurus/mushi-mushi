@@ -17,7 +17,7 @@ export function buildMushiInitCommand(projectId: string, apiKey?: string | null)
 
 export function buildMushiConnectCommand(projectId: string, endpoint: string): string {
   return (
-    `MUSHI_API_KEY=mushi_xxx mushi connect --project-id ${projectId} ` +
+    `MUSHI_API_KEY=YOUR_SDK_KEY mushi connect --project-id ${projectId} ` +
     `--endpoint ${endpoint} --write-env --wire-ide --wait`
   )
 }

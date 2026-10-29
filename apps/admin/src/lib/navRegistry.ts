@@ -118,7 +118,7 @@ export const CHECK_SUB_GROUPS: Record<
 > = {
   'system-health': {
     title: 'App checks',
-    hint: 'Is the app itself sound: scheduled tests, user stories, audits, its blueprint, design tokens and content, plus Mushi’s own health.',
+    hint: 'Is the app itself sound: scheduled tests, user stories, audits, its blueprint, design tokens and content, a first-time user test, plus Mushi’s own health.',
   },
   'quality-gates': {
     title: 'AI quality',
@@ -321,7 +321,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     pdcaStage: 'do',
     iconKey: 'pipeline',
     paletteDescription: 'Every bug from report to deploy as one picture: what is stuck where, why, and one-click fixes.',
-    paletteKeywords: ['pipeline', 'stuck', 'funnel', 'release train', 'merge queue', 'ci red', 'conflict', 'triage', 'retry', 'blocked'],
+    paletteKeywords: ['pipeline', 'stuck', 'funnel', 'release train', 'merge queue', 'ci red', 'conflict', 'triage', 'retry', 'blocked', 'workers', 'local worker', 'lanes', 'mushi work'],
     paletteGroup: 'Do',
   },
   {
@@ -332,7 +332,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     pdcaStage: 'do',
     iconKey: 'git',
     paletteDescription: 'Every fix branch and pull request in your connected GitHub repo, with CI status.',
-    paletteKeywords: ['repo', 'repository', 'branch', 'branches', 'git', 'github', 'pr', 'pull request', 'ci', 'checks', 'merge', 'activity'],
+    paletteKeywords: ['repo', 'repository', 'branch', 'branches', 'git', 'github', 'pr', 'prs', 'pull request', 'pull requests', 'mergeable', 'ci', 'checks', 'merge', 'activity'],
     paletteGroup: 'Do',
   },
   {
@@ -379,6 +379,19 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     iconKey: 'qa-coverage',
     paletteDescription: 'Browser tests of your user stories that run on a schedule and alert when one breaks.',
     paletteKeywords: ['qa coverage', 'qa', 'playwright', 'stories', 'coverage', 'test', 'tests'],
+    paletteGroup: 'Check',
+  },
+  {
+    // Fresh-eyes runs (ADR 0053): a tab of UX runs called "Fresh eyes" until 2026-10-28.
+    id: 'nav:first-user-test',
+    path: '/first-user-test',
+    label: 'First-time user test',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'system-health',
+    iconKey: 'user',
+    paletteDescription: 'An AI that has never seen your app tries to sign up and use it; see where a new user gets stuck and how long it takes.',
+    paletteKeywords: ['fresh eyes', 'first-time user', 'first time user', 'first-time user test', 'onboarding test', 'new user test', 'new user', 'first run', 'sign up test', 'signup test', 'time to first value', 'ttfv', 'first impression'],
     paletteGroup: 'Check',
   },
   {
@@ -612,7 +625,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     sectionId: 'workspace',
     iconKey: 'projects',
     paletteDescription: 'Create, rename and archive apps (projects), and see their keys and setup.',
-    paletteKeywords: ['projects', 'apps', 'create project', 'new app', 'team', 'members', 'organisation', 'workspace'],
+    paletteKeywords: ['projects', 'apps', 'create project', 'new app', 'delete project', 'delete app', 'archive', 'rename', 'sdk key', 'ingest key', 'team', 'members', 'organisation', 'workspace'],
     paletteGroup: 'Workspace',
   },
   {
@@ -642,7 +655,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     sectionId: 'workspace',
     iconKey: 'rewards',
     paletteDescription: 'Points, tiers and payouts for the people who report bugs.',
-    paletteKeywords: ['rewards', 'tester', 'bounty', 'wallet', 'points'],
+    paletteKeywords: ['rewards', 'tester', 'testers', 'tester rewards', 'bounty', 'wallet', 'points'],
     paletteGroup: 'Workspace',
   },
   {
@@ -1139,7 +1152,7 @@ export const CORE_NAV_PATHS: readonly string[] = [
 export const CHECK_GROUPS: ReadonlyArray<{ id: CheckSubGroupId; paths: readonly string[] }> = [
   {
     id: 'system-health',
-    paths: ['/qa-coverage', '/health', '/ci', '/fullstack-audit', '/inventory', '/recipe', '/design', '/content'],
+    paths: ['/qa-coverage', '/health', '/ci', '/fullstack-audit', '/inventory', '/recipe', '/design', '/content', '/first-user-test'],
   },
   { id: 'quality-gates', paths: ['/judge', '/lessons', '/prompt-lab'] },
 ]

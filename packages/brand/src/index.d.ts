@@ -36,6 +36,8 @@ export declare const MUSHI_TAGLINE_V2: {
   /** Per-bug promise shared by `oneLiner` and the npm package descriptions. */
   readonly promise: string
   readonly hero: string
+  /** The offer line that continues the hero. Never a price. */
+  readonly heroOffer: string
   readonly subHero: string
   readonly category: string
   /** `category: promise.` — npm descriptions, docs JSON-LD, default meta description. */

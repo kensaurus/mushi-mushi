@@ -1,15 +1,15 @@
 ---
 title: Zapier
-description: Send every Mushi event to Zapier and on to thousands of apps such as Notion, Google Sheets and HubSpot — Catch Hook setup and event filters.
+description: Send every Mushi Mushi event to Zapier and on to thousands of apps such as Notion, Google Sheets and HubSpot. Catch Hook setup and event filters.
 ---
 
 # Zapier plugin
 
-Fan every Mushi event out to Zapier and wire it into any of the 6,000+ Zapier integrations — Slack, Notion, Google Sheets, HubSpot, Jira, and more.
+Send every Mushi Mushi event to Zapier and on to the thousands of apps Zapier connects to, such as Slack, Notion, Google Sheets, HubSpot and Jira.
 
 ## Setup (no server)
 
-1. In Zapier, create a **Zap** with the **Webhook by Zapier → Catch Hook** trigger.
+1. In Zapier, create a **Zap** with the **Webhooks by Zapier → Catch Hook** trigger.
 2. Copy the webhook URL (e.g. `https://hooks.zapier.com/hooks/catch/…`).
 3. In Mushi: **Marketplace → Zapier Bridge → Install**.
 4. Paste the Catch Hook URL as the webhook URL and keep the signing secret Mushi generates.
@@ -17,8 +17,10 @@ Fan every Mushi event out to Zapier and wire it into any of the 6,000+ Zapier in
 
 Zapier then receives Mushi's envelope as is: `{ event, deliveryId,
 occurredAt, projectId, pluginSlug, data }`, with the report under
-`data.report`. Zapier does not check the signature, so anyone who learns the
-Catch Hook URL can post to it.
+`data.report` for report and fix events (see [Webhook events](/plugins/events)
+for each payload). The listing subscribes to every event (`*`), including the
+`test.delivery` sent by the **Test** button. Zapier does not check the
+signature, so anyone who learns the Catch Hook URL can post to it.
 
 ## Setup (with the relay package)
 
@@ -31,7 +33,8 @@ flat payload (`event`, `report_id`, `report_status`, `report_severity`,
 npm i @mushi-mushi/plugin-zapier
 export MUSHI_PLUGIN_SECRET=...   # the same signing secret as in the install form
 export ZAPIER_HOOK_URL=https://hooks.zapier.com/hooks/catch/.../...
-export ALLOW_EVENTS=report.classified,fix.applied   # optional
+export ALLOW_EVENTS=report.classified,fix.applied   # optional: only these
+export DENY_EVENTS=test.delivery                     # optional: never these
 npx -p @mushi-mushi/plugin-zapier mushi-plugin-zapier
 ```
 
@@ -53,6 +56,6 @@ the step.
 
 ## Troubleshooting
 
-- **Zap not firing** — check the plugin's last delivery status on the **Marketplace** page in Mushi.
-- **Events arriving out of order** — Zapier processes webhooks sequentially per Zap. For high-volume projects, create separate Zaps per event type.
-- **Payload too large** — Zapier's webhook step has a 1 MB body limit. Mushi payloads are typically < 10 KB; if they exceed this, contact support.
+- **Zap not firing**: check the plugin's deliveries on the **Marketplace** page in Mushi Mushi.
+- **Events arriving out of order**: Mushi Mushi sends each event as it happens and retries failed ones later, so a retried event can arrive after a newer one. Use `occurredAt` to order them, or build one Zap per event type.
+- **Payload too large**: Zapier documents a 10 MB limit for webhook payloads (2 MB for a raw hook). Mushi Mushi events are normally far smaller (a `skill_pipeline.step.dispatched` context packet, for example, is capped at 40,000 characters).

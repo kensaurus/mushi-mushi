@@ -1,10 +1,14 @@
 /**
  * FILE: apps/admin/src/components/billing/PlanComparisonTable.tsx
  * PURPOSE: Always-visible, feature-grouped matrix of every active plan —
- *          renders Hobby / Starter / Pro / Enterprise side-by-side so a user
+ *          renders Free / Builder / Studio / Enterprise side-by-side so a user
  *          can see at a glance what each tier actually unlocks. Highlights
  *          the caller's current plan with a ring + "Your plan" badge and
- *          marks Starter with a "Most Popular" cue.
+ *          marks Builder with a "Most popular" cue.
+ *
+ *          Since 2026-10-28 (docs/plan-pricing.md) a plan sells apps watched,
+ *          with diagnoses as the one meter under it; reports are not billed,
+ *          so the table no longer lists a report quota or a per-report price.
  *
  *          Research note: NN/g + 2026 SaaS pricing guides both flag
  *          "benefits hidden behind an upgrade button" as the #1 anti-pattern
@@ -22,8 +26,10 @@ interface PlanCatalogEntry {
   display_name: string
   position: number
   monthly_price_usd: number
-  included_reports_per_month: number | null
-  overage_unit_amount_decimal: number | null
+  /** Apps a team may watch on this plan; null = no limit. */
+  max_projects?: number | null
+  included_diagnoses_per_month?: number | null
+  overage_unit_amount_decimal_diagnoses?: number | null
   retention_days: number
   seat_limit: number | null
   is_self_serve: boolean
@@ -49,33 +55,39 @@ const GROUPS: FeatureGroup[] = [
     title: 'Usage',
     rows: [
       {
-        key: 'reports',
-        label: 'Reports / month',
-        hint: 'Classified user-felt bug reports included in the base price.',
-        render: p =>
-          p.included_reports_per_month == null
-            ? 'Unlimited'
-            : p.included_reports_per_month.toLocaleString(),
+        key: 'apps',
+        label: 'Apps',
+        hint: 'Apps this team can watch. Each app gets its own widget, diagnoses and fixes.',
+        render: p => (p.max_projects == null ? 'No limit' : String(p.max_projects)),
       },
       {
-        key: 'overage',
-        label: 'Overage',
-        hint: 'What each extra report costs once you pass the quota.',
+        key: 'diagnoses',
+        label: 'Diagnoses / month',
+        hint: 'Plain-English diagnoses of your bug reports. Reports are still captured past the limit.',
         render: p =>
-          p.overage_unit_amount_decimal == null
-            ? '—'
-            : `$${Number(p.overage_unit_amount_decimal).toFixed(4)} / report`,
+          p.included_diagnoses_per_month == null ? 'Unlimited' : p.included_diagnoses_per_month.toLocaleString(),
+      },
+      {
+        key: 'diagnosis_overage',
+        label: 'Then, per diagnosis',
+        hint: 'What each diagnosis past the monthly amount costs, up to the spend cap you set.',
+        render: p =>
+          p.overage_unit_amount_decimal_diagnoses != null
+            ? `$${Number(p.overage_unit_amount_decimal_diagnoses).toFixed(2)} each`
+            : p.included_diagnoses_per_month == null
+              ? '—'
+              : 'Stops at the limit',
       },
       {
         key: 'retention',
-        label: 'Report retention',
+        label: 'History kept',
         hint: 'How long we keep raw report data (screenshots, console logs).',
         render: p => `${p.retention_days} days`,
       },
       {
         key: 'seats',
         label: 'Admin seats',
-        hint: 'Team members that can access the admin console. Self-serve teams start at Pro.',
+        hint: 'Team members that can use the console. Teams start at Studio.',
         render: p => Boolean(p.feature_flags?.teams) ? (p.seat_limit == null ? 'Unlimited' : String(p.seat_limit)) : 'Solo',
       },
     ],
@@ -85,8 +97,8 @@ const GROUPS: FeatureGroup[] = [
     rows: [
       {
         key: 'byok',
-        label: 'Bring your own LLM key',
-        hint: 'Plug in your own Anthropic / OpenAI key — we bill nothing for LLM calls.',
+        label: 'Use your own AI and Cursor keys',
+        hint: 'Fix PRs and their reviews run on your own Anthropic / Cursor key; we bill nothing for those calls.',
         render: p => Boolean(p.feature_flags?.byok),
       },
       {
@@ -144,10 +156,19 @@ const GROUPS: FeatureGroup[] = [
 ]
 
 const HIGHLIGHT: Record<string, string> = {
-  hobby: '',
-  starter: 'ring-2 ring-brand/40',
+  free_cloud: '',
+  indie: 'ring-2 ring-brand/40',
   pro: 'ring-2 ring-ok/40',
   enterprise: 'ring-2 ring-warn/40',
+}
+
+/** The tier the table and the public pricing page recommend (Builder). */
+const POPULAR_PLAN_ID = 'indie'
+
+/** @internal Exported for tests only. Header price: Enterprise is sales-led but still shows where it starts. */
+export function planPriceLabel(p: Pick<PlanCatalogEntry, 'id' | 'monthly_price_usd' | 'is_self_serve'>): string {
+  if (isSalesLedPlan(p)) return p.monthly_price_usd > 0 ? `From $${p.monthly_price_usd}/mo` : 'Contact us'
+  return p.monthly_price_usd > 0 ? `$${p.monthly_price_usd}/mo` : 'Free'
 }
 
 /**
@@ -159,8 +180,10 @@ const HIGHLIGHT: Record<string, string> = {
  * would just push the conditionals up a level.
  */
 interface CurrentUsage {
-  /** Reports ingested this billing period. Total across the active project. */
-  reports: number
+  /** Diagnoses used this billing period by the active app. */
+  diagnoses: number
+  /** Apps the active app's team watches today. */
+  apps: number
   /**
    * Optional human-friendly context line for the bullet under each column
    * (e.g. "this period · glot.it"). Renders verbatim under the column header
@@ -188,14 +211,37 @@ interface FitVerdict {
   label: string
 }
 
-function evaluateFit(reports: number, limit: number | null): FitVerdict {
+function evaluateFit(used: number, limit: number | null | undefined): FitVerdict {
   if (limit == null) {
     return { pct: null, tone: 'unbounded', glyph: '∞', label: 'No cap' }
   }
-  const pct = Math.round((reports / limit) * 100)
-  if (reports > limit) return { pct, tone: 'over', glyph: '●', label: 'Over' }
+  const pct = Math.round((used / limit) * 100)
+  if (used > limit) return { pct, tone: 'over', glyph: '●', label: 'Over' }
   if (pct >= 80) return { pct, tone: 'near', glyph: '▲', label: 'Tight' }
   return { pct, tone: 'fits', glyph: '✓', label: 'Fits' }
+}
+
+const FIT_RANK: Record<FitVerdict['tone'], number> = { over: 3, near: 2, fits: 1, unbounded: 0 }
+
+/**
+ * @internal Exported for tests only. Whether this team's apps and this
+ * period's diagnoses fit a plan; the verdict is the worse of the two.
+ */
+export function planFit(
+  usage: { diagnoses: number; apps: number },
+  plan: { max_projects?: number | null; included_diagnoses_per_month?: number | null },
+): { apps: FitVerdict; diagnoses: FitVerdict; verdict: FitVerdict } {
+  // Apps are whole: having exactly as many as the plan allows fits; only more does not.
+  const appsLimit = plan.max_projects
+  const apps: FitVerdict =
+    appsLimit == null
+      ? evaluateFit(usage.apps, null)
+      : usage.apps > appsLimit
+        ? { pct: Math.round((usage.apps / appsLimit) * 100), tone: 'over', glyph: '●', label: 'Over' }
+        : { pct: Math.round((usage.apps / appsLimit) * 100), tone: 'fits', glyph: '✓', label: 'Fits' }
+  const diagnoses = evaluateFit(usage.diagnoses, plan.included_diagnoses_per_month)
+  const verdict = FIT_RANK[apps.tone] >= FIT_RANK[diagnoses.tone] ? apps : diagnoses
+  return { apps, diagnoses, verdict }
 }
 
 const FIT_TONE: Record<FitVerdict['tone'], string> = {
@@ -229,16 +275,16 @@ export function PlanComparisonTable({
           </h3>
           <ContainedBlock tone="muted" className="mt-1">
             <p className="text-2xs text-fg-muted">
-              Billed monthly · cancel any time · prices in USD
+              Billed monthly or yearly (2 months free) · cancel any time · prices in USD
               {currentUsage && (
                 <>
                   {' · '}
                   <span className="text-fg-secondary">
-                    Each column shows whether{' '}
-                    <span className="font-mono text-fg">
-                      {currentUsage.reports.toLocaleString()}
-                    </span>{' '}
-                    report{currentUsage.reports === 1 ? '' : 's'} this period would fit
+                    Each column shows whether your{' '}
+                    <span className="font-mono text-fg">{currentUsage.apps.toLocaleString()}</span>{' '}
+                    app{currentUsage.apps === 1 ? '' : 's'} and{' '}
+                    <span className="font-mono text-fg">{currentUsage.diagnoses.toLocaleString()}</span>{' '}
+                    diagnos{currentUsage.diagnoses === 1 ? 'is' : 'es'} this period would fit
                   </span>
                 </>
               )}
@@ -262,7 +308,7 @@ export function PlanComparisonTable({
         </div>
         {sorted.map(p => {
           const isCurrent = p.id === currentPlanId
-          const isPopular = p.id === 'starter'
+          const isPopular = p.id === POPULAR_PLAN_ID
           return (
             <div
               key={`hdr-${p.id}`}
@@ -283,44 +329,28 @@ export function PlanComparisonTable({
                 )}
               </div>
               <div className="text-sm font-mono text-fg-secondary mt-1">
-                {isSalesLedPlan(p)
-                  ? 'Contact us'
-                  : p.monthly_price_usd > 0
-                    ? `$${p.monthly_price_usd}/mo`
-                    : 'Free'}
+                {planPriceLabel(p)}
               </div>
               {currentUsage && (() => {
-                const fit = evaluateFit(currentUsage.reports, p.included_reports_per_month)
-                const limitLabel = p.included_reports_per_month == null
-                  ? '∞'
-                  : p.included_reports_per_month.toLocaleString()
-                const ariaSuffix =
-                  fit.tone === 'over'
-                    ? `Would exceed by ${(currentUsage.reports - (p.included_reports_per_month ?? 0)).toLocaleString()} reports.`
-                    : fit.tone === 'unbounded'
-                      ? 'No monthly cap on this plan.'
-                      : `${fit.pct ?? 0}% of quota.`
+                const fit = planFit(currentUsage, p)
+                const appsLimit = p.max_projects == null ? '∞' : p.max_projects.toLocaleString()
+                const diagLimit = p.included_diagnoses_per_month == null ? '∞' : p.included_diagnoses_per_month.toLocaleString()
+                const summary = `${currentUsage.apps.toLocaleString()} of ${appsLimit} apps, ${currentUsage.diagnoses.toLocaleString()} of ${diagLimit} diagnoses`
                 return (
                   <div
-                    className={`mt-1.5 flex flex-col items-center gap-0.5 ${FIT_TONE[fit.tone]}`}
-                    aria-label={`Your usage on ${p.display_name}: ${currentUsage.reports.toLocaleString()} of ${limitLabel}. ${ariaSuffix}`}
-                    title={
-                      fit.tone === 'unbounded'
-                        ? 'This plan has no monthly report cap.'
-                        : fit.tone === 'over'
-                          ? `Your ${currentUsage.reports.toLocaleString()} reports this period would exceed the ${limitLabel} cap on ${p.display_name}.`
-                          : `Your ${currentUsage.reports.toLocaleString()} reports this period = ${fit.pct}% of the ${limitLabel} cap on ${p.display_name}.`
-                    }
+                    className={`mt-1.5 flex flex-col items-center gap-0.5 ${FIT_TONE[fit.verdict.tone]}`}
+                    aria-label={`Your usage on ${p.display_name}: ${summary}. ${fit.verdict.label}.`}
+                    title={`On ${p.display_name}: ${summary}.`}
                   >
                     <span className="text-2xs font-mono tabular-nums">
-                      {currentUsage.reports.toLocaleString()} / {limitLabel}
+                      {currentUsage.apps.toLocaleString()} / {appsLimit} apps
+                    </span>
+                    <span className="text-2xs font-mono tabular-nums">
+                      {currentUsage.diagnoses.toLocaleString()} / {diagLimit}
                     </span>
                     <span className="text-3xs uppercase tracking-wider font-medium">
-                      <span aria-hidden="true" className="mr-0.5">{fit.glyph}</span>
-                      {fit.label}
-                      {fit.pct != null && fit.tone !== 'unbounded' && (
-                        <span className="ml-1 opacity-80">{fit.pct}%</span>
-                      )}
+                      <span aria-hidden="true" className="mr-0.5">{fit.verdict.glyph}</span>
+                      {fit.verdict.label}
                     </span>
                   </div>
                 )
@@ -333,7 +363,7 @@ export function PlanComparisonTable({
                   disabled={busy}
                   loading={busy}
                 >
-                  {currentPlanId === 'hobby' ? `Start ${p.display_name}` : `Switch to ${p.display_name}`}
+                  {currentPlanId === 'hobby' || currentPlanId === 'free_cloud' ? `Start ${p.display_name}` : `Switch to ${p.display_name}`}
                 </Btn>
               )}
               {isSalesLedPlan(p) && !isCurrent && (

@@ -42,6 +42,8 @@ const Step = z.object({
   requirements: z.array(z.enum(['inbox', 'api_key', 'terminal', 'third_party_account'])).max(4),
   signals: z.array(z.enum(['console-error', 'page-error', 'server-error', 'blank-screen'])).max(20),
   shot: z.string().regex(FRESH_EYES_SHOT_RE).nullable(),
+  /** The page kept a loading sign up to the wait's cap: app_ms is the cap, not the app's real wait. */
+  capped: z.boolean().optional(),
 })
 
 const Stall = z.object({ step: z.number().int().min(0), screen: z.string().max(300), reason: z.enum(STALL_REASONS), detail: z.string().max(300) })
