@@ -39,11 +39,17 @@ the CLI doctor), so no one surface could say "this is the cause, fix it once".
    existing checkers, adapted and never re-implemented: setup gaps, SDK health,
    the SDK diagnostics launcher verdict and the server doctor narrowed to one
    app. `GET /v1/admin/health-checks` serves it (api-ext; `adminOrApiKey`
-   mcp:read, members only, a project key only its own app). Home's "Fix these
-   first", `mushi doctor` and MCP `diagnose_setup` read that list.
+   mcp:read, members only, a project key only its own app). `mushi doctor`
+   (as warnings that do not change whether it passes) and MCP
+   `diagnose_setup` read that list. Home's "Fix these first" reads the same
+   registry from the stored setup-gaps answer only, so Home never waits on
+   GitHub or the live site; SDK and report-button rows join Home in Phase 2.
    `GET /v1/admin/setup-gaps` stays as it is and shares its reader.
 2. **A cause shows once.** Home lists at most three root causes, worst and most
-   waited-on first. A stuck /pipeline group carries the check that explains it
+   waited-on first. A critical problem is always one; a lesser one only while
+   something is counted as waiting on it; "no GitHub repo connected" never is
+   (a repo is optional, standalone first, and the setup checklist asks for
+   it). A stuck /pipeline group carries the check that explains it
    (`rootCause`) only when that check is a problem for the app of every item in
    it, and Home leaves those groups out of Needs you.
 3. **Stop the line, rolled out in two units.** Unit A (read-only) ships the

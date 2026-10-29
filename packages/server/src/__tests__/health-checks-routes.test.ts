@@ -169,7 +169,8 @@ describe('GET /v1/admin/health-checks', () => {
     // Platform lines never reach an app's list.
     expect(ids).not.toContain('recovery_token')
     // Critical first, most waiting first; then the order the checkers list them (setup gaps first).
-    expect(p.fixFirst.map((c: { id: string }) => c.id)).toEqual(['review_followup_key', 'github_access', 'autofix_agent_key'])
+    // "No GitHub repo connected" is in the list but never a root cause (a repo is optional).
+    expect(p.fixFirst.map((c: { id: string }) => c.id)).toEqual(['review_followup_key', 'autofix_agent_key', 'csp_blocks_api'])
     expect(p.fixFirst[0]).toMatchObject({ affects: 24, status: 'problem', blocks: ['followups'] })
     expect(p.checks[0].status).toBe('problem')
     expect(json.data.pipelineRead).toBe(true)

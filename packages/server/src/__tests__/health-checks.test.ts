@@ -138,11 +138,21 @@ describe('lists', () => {
     const affected = attachAffects(rows(), [
       { rootCause: { checkId: 'review_followup_key', count: 24 }, count: 24, items: [{ projectId: P }] },
       { rootCause: { checkId: 'autofix_agent_key', count: 1 }, count: 1, items: [{ projectId: P }] },
+      { rootCause: { checkId: 'deploy_events', count: 2 }, count: 2, items: [{ projectId: P }] },
     ])
     const top = rootCauses(affected)
     expect(top.map((c) => c.id)).toEqual(['review_followup_key', 'autofix_agent_key', 'deploy_events'])
     expect(top[0].affects).toBe(24)
     expect(top.every((c) => c.status === 'problem')).toBe(true)
+  })
+
+  it('a lesser problem is a root cause only while something waits on it; "no repo connected" never is', () => {
+    // A new app: no repo, never deployed, nothing merged and waiting to go live.
+    const fresh = [fromSetupGap(noRepoGap(P), AT), fromSetupGap(deployGap(P, null, NOW), AT), bannerCheck(P, { bannerEnabled: true, launcherMode: 'hidden' }, AT)]
+    expect(rootCauses(fresh)).toEqual([])
+    // A connected repo whose access is broken is one.
+    const repo = fromSetupGap({ ...noRepoGap(P), id: 'github_access:kensaurus/glot.it' }, AT)
+    expect(rootCauses([repo]).map((c) => c.key)).toEqual(['github_access:kensaurus/glot.it'])
   })
 
   it('an unknown or ok check never becomes a root cause', () => {

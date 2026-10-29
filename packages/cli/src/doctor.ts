@@ -1290,6 +1290,9 @@ export async function checkPipelineDoctor(
 
 // ── Health check registry (GET /v1/admin/health-checks) ─────────────────────
 
+/** SDK health rows the ingest block's heartbeat line already covers. */
+const HEARTBEAT_ROWS = new Set(['never_seen', 'sdk_stale']);
+
 interface HealthRow {
   id: string;
   key: string;
@@ -1303,11 +1306,13 @@ interface HealthRow {
 }
 
 /**
- * The app's Health check, the same list the console's "Fix these first"
- * reads (setup gaps, SDK health, the report button). Problems and checks
+ * The app's Health check (setup gaps, SDK health, the report button), the
+ * same rows the console's Health check route serves. Problems and checks
  * that could not be read are listed; passing checks are one summary line.
- * A critical problem counts against `ready`; others are ⚠. The server
- * doctor's own lines are left out here: checkPipelineDoctor prints them.
+ * Every row is ⚠ and never counts against `ready` (Phase 1: `ready` keeps
+ * its meaning for scripts that gate on it). Left out because another block
+ * already prints them: the server doctor's lines (checkPipelineDoctor) and
+ * the SDK check-in rows (the `[ingest] Last SDK heartbeat` line).
  * Skipped quietly for ingest-only keys and servers without the route.
  * @internal Exported for tests only.
  */
@@ -1333,7 +1338,7 @@ export async function checkHealthRegistry(
       return [{ name: '[health] Health check', ok: true, warn: true, detail: `GET /v1/admin/health-checks returned HTTP ${res.status}; health unknown.` }];
     }
     const body = (await res.json()) as { data?: { projects?: Array<{ checks?: HealthRow[] }> } };
-    const rows = (body.data?.projects?.[0]?.checks ?? []).filter((r) => r.source !== 'doctor');
+    const rows = (body.data?.projects?.[0]?.checks ?? []).filter((r) => r.source !== 'doctor' && !HEARTBEAT_ROWS.has(r.id));
     const out: DoctorCheck[] = [];
     for (const r of rows) {
       if (r.status === 'ok') continue;
@@ -1341,8 +1346,8 @@ export async function checkHealthRegistry(
       const fix = r.fix ? ` → Fix: ${r.fix.label}${r.fix.to ? ` (console ${r.fix.to})` : ''}${r.fix.steps?.length ? `: ${r.fix.steps.join(' ')}` : ''}` : '';
       out.push({
         name: `[health] ${r.title}`,
-        ok: !(r.status === 'problem' && r.severity === 'critical'),
-        warn: !(r.status === 'problem' && r.severity === 'critical'),
+        ok: true,
+        warn: true,
         detail: r.status === 'unknown' ? `Not checked: ${r.detail}` : `${r.detail}${waiting}${fix}`,
       });
     }

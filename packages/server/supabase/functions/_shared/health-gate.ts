@@ -155,7 +155,7 @@ export async function loadGateChecks(db: SupabaseClient, projectId: string, now:
 
 /**
  * Adds one to today's count of (app, automation, check) decisions in
- * `health_gate_shadow` (migration 20261029120000). A missing table or any
+ * `health_gate_shadow` (migration 20261029150000). A missing table or any
  * other failure is ignored: recording never changes what a dispatcher does.
  */
 export async function recordGateDecision(db: SupabaseClient, projectId: string, verdict: GateVerdict, automation: string): Promise<void> {

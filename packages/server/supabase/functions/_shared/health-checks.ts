@@ -334,12 +334,27 @@ export function dropDuplicateNoRepo(checks: HealthCheck[]): HealthCheck[] {
 export const FIX_FIRST_MAX = 3
 
 /**
- * Home's "Fix these first": an app owner's problems that stop an automation
- * or the reports themselves, worst and most waited-on first, at most three.
- * Problems that stop nothing stay in the full list, not here.
+ * Whether a problem belongs in "Fix these first": a critical one always; a
+ * lesser one only while something is counted as waiting on it (a new app
+ * that has never deployed has no fix waiting to go live, so "no deploy seen"
+ * is not yet a root cause). "No GitHub repo connected" is never one: a repo
+ * is optional (standalone first) and the setup checklist already asks for it.
+ * Per-repo access lines (`github_access:owner/repo`) still are.
+ */
+function isRootCause(c: HealthCheck): boolean {
+  if (c.audience !== 'app_owner' || c.status !== 'problem') return false
+  if (c.key === 'github_access') return false
+  if (c.severity === 'critical') return true
+  return c.blocks.length > 0 && (c.affects ?? 0) > 0
+}
+
+/**
+ * Home's "Fix these first": an app owner's root causes (isRootCause), worst
+ * and most waited-on first, at most three. Every other problem stays in the
+ * full list, not here.
  */
 export function rootCauses(checks: HealthCheck[], max = FIX_FIRST_MAX): HealthCheck[] {
-  return sortChecks(checks.filter((c) => c.audience === 'app_owner' && c.status === 'problem' && (c.blocks.length > 0 || c.severity === 'critical'))).slice(0, max)
+  return sortChecks(checks.filter(isRootCause)).slice(0, max)
 }
 
 // ── Root causes of pipeline groups ──────────────────────────────────────────

@@ -1003,12 +1003,12 @@ automations it `blocks` and its part. Route in `api/routes/health-checks.ts`
 
 | Route | Auth | Role |
 | --- | --- | --- |
-| `GET /v1/admin/health-checks` | `adminOrApiKey(mcp:read)`, members; a project key only its own app | `?projectId=` one app, else every app the caller opens (≤10); `refresh=1` re-checks setup gaps; `audience=platform` adds the doctor's platform lines. Per app: `checks` (problems first), `fixFirst` (≤3 root causes with `affects`, the items of /pipeline groups each explains), `counts`, `gate.today` (shadow counts); top level `gate.mode`. Read by Home's "Fix these first", `mushi doctor` and MCP `diagnose_setup` |
+| `GET /v1/admin/health-checks` | `adminOrApiKey(mcp:read)`, members; a project key only its own app | `?projectId=` one app, else every app the caller opens (≤10); `refresh=1` re-checks setup gaps; `audience=platform` adds the doctor's platform lines. Per app: `checks` (problems first), `fixFirst` (≤3 root causes with `affects`, the items of /pipeline groups each explains), `counts`, `gate.today` (shadow counts); top level `gate.mode`. Read by `mushi doctor` (warnings only) and MCP `diagnose_setup`; Home's "Fix these first" uses the same registry from the stored setup gaps only (`homeHealthChecks`, never a live probe) |
 
 | Object | Role |
 | --- | --- |
 | `_shared/health-gate.ts` | Stop the line: `fix-worker` (automatic dispatches), `review-followup`, `merge-queue` (train tick, a PR's turn, a conflict agent) and `spend-down-worker` ask it before starting work for an app. Switch `mushi_runtime_config.health_gate_mode`: `off` (default; missing row, failed read or any other value), `observe` (records, runs as before), `enforce` (withholds; the work stays where it was and resumes on its own). Reads the stored `setup_gap_results` (over an hour old = `unknown`) and the follow-up key live; `unknown` never pauses. Only withholds: never around `gatedMergePullRequest` / `gatedTrainMerge`, the Opus hold, verified merge or draft → ready |
-| `health_gate_shadow` | Per app, automation, check, UTC day and mode: how often the gate would pause (observe) or paused (enforce); `health_gate_record()` RPC. Service role only. Migration `20261029120000_health_gate_shadow.sql` |
+| `health_gate_shadow` | Per app, automation, check, UTC day and mode: how often the gate would pause (observe) or paused (enforce); `health_gate_record()` RPC. Service role only. Migration `20261029150000_health_gate_shadow.sql` |
 | `pipeline-view.ts` `tagRootCauses` | A stuck /pipeline group gets `rootCause: { checkId, count }` when that check is a problem for every item's app; Home then shows the cause once instead of the group |
 
 ---

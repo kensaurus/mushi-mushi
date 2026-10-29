@@ -376,7 +376,7 @@ describe('checkHealthRegistry', () => {
     id: 'x', key: 'x', status: 'ok', severity: 'warn', title: 'X', detail: 'Fine.', source: 'setup_gaps', affects: null, fix: null, ...over,
   });
 
-  it('lists each problem once with its fix and what waits on it; a critical one counts against ready', async () => {
+  it('lists each problem once with its fix and what waits on it, as warnings that never change ready', async () => {
     const doFetch = vi.fn(async () =>
       new Response(
         JSON.stringify({
@@ -389,7 +389,8 @@ describe('checkHealthRegistry', () => {
                   row({ id: 'deploy_events', status: 'problem', severity: 'warn', title: 'Deploy events', detail: 'No deploy seen in 15 days.' }),
                   row({ id: 'csp_blocks_api', status: 'unknown', title: 'Site security policy', detail: 'the site did not answer' }),
                   row({ id: 'dead_letter', status: 'problem', source: 'doctor', title: 'dead letter' }),
-                  row({ id: 'never_seen' }),
+                  row({ id: 'never_seen', status: 'problem', severity: 'critical', title: 'SDK never checked in' }),
+                  row({ id: 'banner_disabled' }),
                   row({ id: 'outdated_sdk' }),
                 ],
               },
@@ -402,7 +403,10 @@ describe('checkHealthRegistry', () => {
     const checks = await checkHealthRegistry(config, doFetch);
     expect(String((doFetch as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][0])).toContain('/v1/admin/health-checks?projectId=');
     expect(checks.map((c) => c.name)).toEqual(['[health] Review follow-up key', '[health] Deploy events', '[health] Site security policy', '[health] Other checks']);
-    expect(checks[0]).toMatchObject({ ok: false, warn: false });
+    // A critical problem is still a warning: `ready` keeps its meaning in Phase 1.
+    expect(checks.every((c) => c.ok && c.warn !== false)).toBe(true);
+    // The heartbeat rows are the ingest block's, never printed twice.
+    expect(checks.some((c) => c.name.includes('never checked in'))).toBe(false);
     expect(checks[0].detail).toContain('24 waiting on this.');
     expect(checks[0].detail).toContain('Pick a Cursor key (console /settings?tab=byok#review-followups)');
     expect(checks[1]).toMatchObject({ ok: true, warn: true });
