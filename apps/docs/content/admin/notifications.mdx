@@ -1,75 +1,62 @@
 ---
-title: Notifications
-description: The Notifications page lists every alert Mushi sent to reporters and team members for a project, so you can debug delivery or audit messages.
+title: Reporter updates
+description: The Reporter updates page in Mushi Mushi lists widget messages your reporters see, so you can check they hear back when a bug is diagnosed, fixed and shipped.
 ---
 <AdminDocHero page="notifications" />
 
 
-# Notifications
+# Reporter updates
 
-**Route:** `/notifications`
+**Route:** `/notifications` (sidebar: **Reporter updates**; formerly Notifications)
 
-The Notifications page shows the outbound notification history for this project — every
-alert Mushi sent to reporters and team members. Use it to debug delivery problems or
-audit communication history.
+When someone reports a bug through your app, Mushi Mushi queues messages for them: when
+the report is diagnosed, when it is fixed or the fix failed, when they earn a reward, and
+when someone replies to their comment. The SDK widget polls for these messages. This page
+lists them so you can check that the loop back to reporters works.
+
+It shows messages to reporters only. Alerts to your team go to Slack, Discord and the
+other channels set up in [Integrations](/admin/integrations).
+
+The tabs are **Summary**, **Sent**, **How they hear back** and **Setup**.
 
 ---
 
-## What appears here
+## Message types
 
-| Event type | When it fires |
+| Type | When it is queued |
 |------------|--------------|
-| **Fix deployed** | A fix-worker PR was merged and the reporter's issue is resolved |
-| **Report acknowledged** | A team member triaged the report |
-| **Tier up** | A reporter crossed a reward tier threshold |
-| **Quest completed** | A reporter completed a reward quest |
-| **Judge drift** | The classifier's 7-day accuracy dropped below the threshold |
-| **Improvement loop completed** | An improvement run finished (sent to the team, not reporters) |
+| `classified` | The report was diagnosed |
+| `fixed` | The report was marked fixed |
+| `fix_failed` | A fix attempt for the report failed |
+| `reward` | The reporter earned points or a tier |
+| `comment_reply` | Someone replied to the reporter's comment |
 
 ---
 
-## Columns
+## Sent tab
 
-| Column | Description |
-|--------|-------------|
-| **Recipient** | Email or user ID of the notification target |
-| **Type** | Event type (see table above) |
-| **Channel** | `email`, `in-app`, `webhook`, or `push` |
-| **Status** | `sent`, `failed`, `bounced`, `read` |
-| **Sent at** | Timestamp |
+Each row shows the type, the message, whether the reporter has read it (and when), a
+short form of the reporter's key, and a link to the report. Expand a row for the full
+JSON payload. Filter by type, or show unread messages only.
 
----
-
-## Marking as read
-
-Use **Mark all read** to clear the unread badge on the notifications bell in the header.
-Individual rows can be marked read by clicking the row.
+**Mark read** on a row, or **Mark all read**, marks messages read once you have checked
+them.
 
 ---
 
-## Debugging delivery failures
+## If reporters hear nothing
 
-If a notification shows `failed`:
-1. Check the **error** column (hover the row or expand it) for the delivery error.
-2. Verify the recipient's email is valid in **Organization members**.
-3. For webhook channels, confirm the webhook URL is reachable from Supabase edge functions.
-4. For push notifications, confirm the SDK's push token is registered.
-
----
-
-## Configuring notification rules
-
-Notification routing rules are in **Settings → Notifications** (coming soon in the UI;
-currently configured via the API):
-```bash
-PUT /v1/admin/projects/:projectId/notification-rules
-Authorization: Bearer <service-role-key>
-```
+1. Open **Setup**: reporter updates must be on, and **Reporter loop prerequisites** lists
+   what else is missing.
+2. If reports exist but no messages appear, the updates are off or nothing has been
+   diagnosed or fixed yet.
+3. If messages stay unread for a long time, check that the widget in your app is running
+   a current SDK and can reach Mushi Mushi.
 
 ---
 
 ## Related pages
 
-- [Rewards](/admin/rewards) — tier-up and quest notification triggers
-- [Fix drafts](/admin/fixes) — fix-deployed notification source
-- [Settings](/admin/settings) — notification channel configuration
+- [Tester rewards](/admin/rewards) — where `reward` messages come from
+- [Releases](/admin/releases) — publishing a release tells credited reporters their fix shipped
+- [Settings](/admin/settings) — project settings

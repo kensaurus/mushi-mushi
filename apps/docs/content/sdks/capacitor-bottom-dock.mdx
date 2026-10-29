@@ -1,11 +1,12 @@
 ---
 title: Capacitor bottom dock
-description: Keep the Mushi bug-report button clear of tab bars and bottom docks in Capacitor apps with triggerInsetPreset, explicit insets, or widget.anchor.
+description: Keep the Mushi Mushi bug-report button clear of tab bars and bottom docks in Capacitor apps with triggerInsetPreset, explicit insets, or widget.anchor.
 ---
 
 # Capacitor bottom dock
 
-Use `triggerInsetPreset` for common mobile chrome:
+To keep the Mushi Mushi button clear of a tab bar or dock, use `triggerInsetPreset`
+(`tabBarSafe` lifts it 72 dp, `dockSafe` 96 dp):
 
 ```ts
 import { Mushi, triggerInsetPresets } from '@mushi-mushi/capacitor'

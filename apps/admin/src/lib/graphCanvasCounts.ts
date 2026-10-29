@@ -12,9 +12,12 @@ export function graphCanvasProof(
   loaded: number,
   total: number | null | undefined,
 ): string {
-  const head = `${shown}/${loaded} ${kind}`
+  // Plain words: "47/200 nodes (newest 200 of 223) · 29/31 edges" read as
+  // debug output on a page for people (2026-10-28).
+  const noun = kind === 'nodes' ? 'items' : 'links'
+  const head = `${shown.toLocaleString()} of ${loaded.toLocaleString()} ${noun}`
   if (typeof total === 'number' && total > loaded) {
-    return `${head} (newest ${loaded.toLocaleString()} of ${total.toLocaleString()})`
+    return `${head} (the newest ${loaded.toLocaleString()} of ${total.toLocaleString()})`
   }
   return head
 }

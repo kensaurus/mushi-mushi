@@ -328,6 +328,8 @@ export function registerUxRunsRoutes(app: Hono<{ Variables: Variables }>): void 
       .from('ux_runs')
       .select('id, local_run_id, mode, status, agent, model, judge_model, skill, branch, counts, started_at, finished_at, updated_at')
       .eq('project_id', projectId)
+      // Fresh-eyes runs (ADR 0053) share the table and have their own tab.
+      .eq('kind', 'loop')
       .order('started_at', { ascending: false })
       .limit(50)
     if (error) return dbError(c, error)

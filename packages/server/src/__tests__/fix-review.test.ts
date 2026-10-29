@@ -15,6 +15,7 @@ import {
   buildReviewDiff,
   buildReviewPrompt,
   commentSafe,
+  modelDisplayName,
   describeCi,
   fenceUntrusted,
   formatReviewComment,
@@ -302,11 +303,14 @@ describe('PR comment', () => {
     reportUrl: 'https://console.example/reports/r1',
   })
 
-  it('renders the verdict, findings and marker, and links to the report instead of quoting it', () => {
-    expect(body).toContain('### Mushi review (claude-opus-5-5): fix first')
-    expect(body).toContain('**Major** `src/a.ts:12`')
+  it('renders a plain headline, a summary table, numbered findings with a separate fix, and links to the report instead of quoting it', () => {
+    expect(body).toContain('### Mushi review: Fix first: 1 thing to change before this merges')
+    expect(body).toContain('| Yes | Low | No |')
+    expect(body).toContain('#### 1. Must fix · `src/a.ts:12`')
+    expect(body).toContain('> **How to fix:** Keep it.')
     expect(body).toContain('**Removes existing behaviour**')
-    expect(body).toContain('[Mushi console](https://console.example/reports/r1)')
+    expect(body).toContain('[Open the full review and the bug report in the Mushi console](https://console.example/reports/r1)')
+    expect(body).toContain('Reviewed by Claude Opus 5.5 · commit abcdef1 · 3 files reviewed.')
     expect(body).not.toContain('jane@example.com')
     expect(body.endsWith(REVIEW_COMMENT_MARKER)).toBe(true)
   })
@@ -325,7 +329,39 @@ describe('PR comment', () => {
   it('neutralises mentions and HTML from the model', () => {
     expect(body).not.toContain('@kensaurus')
     expect(body).not.toContain('<img')
-    expect(commentSafe('@a <b>')).toBe('@​a &lt;b&gt;')
+    expect(commentSafe('@a <b>')).toBe('@​a &lt;b>')
+  })
+
+  it('leaves code and comparisons readable: no entities inside backticks or for a lone > (owner, 2026-10-28)', () => {
+    expect(commentSafe('count `stars > 0` and `a<b`')).toBe('count `stars > 0` and `a<b`')
+    expect(commentSafe('x > 0 and y < 3')).toBe('x > 0 and y < 3')
+    expect(commentSafe('a <script> outside code')).toBe('a &lt;script> outside code')
+  })
+
+  it('cuts long findings at a word, not mid-word', () => {
+    const long = normalizeReview(
+      { ...CLEAN, verdict: 'fix_first', findings: [{ severity: 'minor', file: '(general)', line: null, issue: 'word '.repeat(200), suggested_fix: 'Do it.' }] },
+      NO_CTX,
+    )
+    const out = formatReviewComment(long, { model: 'm', headSha: null, diff: { shownFiles: 1, totalFiles: 1, truncated: false }, reportUrl: null })
+    expect(out).toMatch(/word…\n/)
+    expect(out).not.toMatch(/wor…|wo…/)
+    expect(out).toContain('#### 1. Worth fixing')
+  })
+
+  it('orders findings worst first and names a merge plainly', () => {
+    const mixed = normalizeReview(
+      { ...CLEAN, verdict: 'merge', findings: [
+        { severity: 'minor', file: 'b.ts', line: 1, issue: 'small', suggested_fix: 'tidy' },
+        { severity: 'major', file: 'a.ts', line: 2, issue: 'big', suggested_fix: 'fix' },
+      ] },
+      NO_CTX,
+    )
+    const out = formatReviewComment(mixed, { model: 'gpt-5.5', headSha: null, diff: { shownFiles: 2, totalFiles: 2, truncated: false }, reportUrl: null })
+    expect(out.indexOf('a.ts')).toBeLessThan(out.indexOf('b.ts'))
+    expect(out).toContain('Reviewed by gpt-5.5')
+    expect(modelDisplayName('claude-sonnet-5-5')).toBe('Claude Sonnet 5.5')
+    expect(modelDisplayName('claude-haiku-5')).toBe('Claude Haiku 5')
   })
 })
 

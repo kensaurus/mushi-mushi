@@ -66,6 +66,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { resolveLlmKey, type ResolvedKey } from '../_shared/byok.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { isClaudeRefusal, resolveClaudeModel } from '../_shared/claude-request.ts'
+import { isQuotaMessage } from '../_shared/llm-quota.ts'
 import { estimateCallCostUsd } from '../_shared/pricing.ts'
 import { recordLlmUsage, extractLlmUsage, servedModel } from '../_shared/llm-usage.ts'
 import { sanitizeForLLM } from '../_shared/sanitize.ts'
@@ -222,6 +223,8 @@ export type ReviewOutcome =
 
 export interface ReviewRunSummary {
   requeued: number
+  /** Reviews a missing or spent key stopped, queued again once a newer working key exists. */
+  resumed: number
   gaveUp: number
   enqueued: number
   claimed: number
@@ -401,6 +404,82 @@ async function recoverStale(db: SupabaseClient, now: Date): Promise<{ requeued: 
     .lt('attempts', REVIEW_MAX_TRIES)
     .select('id')
   return { requeued: requeued?.length ?? 0, gaveUp: gaveUp?.length ?? 0 }
+}
+
+const RESUME_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000
+const RESUME_SCAN = 300
+
+/** A review that stopped because its app had no working Claude key, or the key ran out. */
+export function stoppedForKey(row: { status: string; skip_reason: string | null; error: string | null }): boolean {
+  if (row.status === 'skipped') return row.skip_reason === 'no_anthropic_key'
+  return row.status === 'failed' && !!row.error && isQuotaMessage(row.error)
+}
+
+/**
+ * Reviews a missing or spent Claude key stopped are queued again once their
+ * app resolves a working key that was added or replaced after they stopped,
+ * and only while the PR is still open. On 2026-10-28 24 of them waited for a
+ * person to press Re-run after the owner had already added the new key; a
+ * key changed before the stop never resumes them, so a still-spent key does
+ * not loop.
+ */
+export async function resumeKeyBlocked(
+  db: SupabaseClient,
+  now: Date,
+  resolveKey: (db: SupabaseClient, projectId: string) => Promise<ResolvedKey | null> = (d, p) => resolveLlmKey(d, p, 'anthropic'),
+): Promise<number> {
+  const since = new Date(now.getTime() - RESUME_LOOKBACK_MS).toISOString()
+  const { data } = await db
+    .from('fix_reviews')
+    .select('id, project_id, fix_attempt_id, status, skip_reason, error, completed_at')
+    .in('status', ['skipped', 'failed'])
+    .gte('completed_at', since)
+    .order('completed_at', { ascending: false })
+    .limit(RESUME_SCAN)
+  type Row = { id: string; project_id: string; fix_attempt_id: string; status: string; skip_reason: string | null; error: string | null; completed_at: string | null }
+  const stopped = ((data ?? []) as Row[]).filter(stoppedForKey)
+  if (stopped.length === 0) return 0
+
+  const { data: open } = await db
+    .from('fix_attempts')
+    .select('id')
+    .in('id', [...new Set(stopped.map((r) => r.fix_attempt_id))])
+    .in('pr_state', ['open', 'draft'])
+  const openIds = new Set(((open ?? []) as Array<{ id: string }>).map((a) => a.id))
+
+  // When each app's working key last changed, or null when it has none.
+  const keyChangedAt = new Map<string, string | null>()
+  for (const projectId of new Set(stopped.map((r) => r.project_id))) {
+    let changed: string | null = null
+    try {
+      const key = await resolveKey(db, projectId)
+      if (key?.source === 'byok' && key.keyId) {
+        const { data: row } = await db.from('byok_keys').select('status, created_at, rotated_at').eq('id', key.keyId).maybeSingle()
+        const k = row as { status: string; created_at: string; rotated_at: string | null } | null
+        if (k && k.status === 'active') changed = k.rotated_at && k.rotated_at > k.created_at ? k.rotated_at : k.created_at
+      }
+    } catch {
+      changed = null
+    }
+    keyChangedAt.set(projectId, changed)
+  }
+
+  const ids = stopped
+    .filter((r) => openIds.has(r.fix_attempt_id))
+    .filter((r) => {
+      const changed = keyChangedAt.get(r.project_id)
+      return !!changed && !!r.completed_at && changed > r.completed_at
+    })
+    .map((r) => r.id)
+  if (ids.length === 0) return 0
+  const at = now.toISOString()
+  const { data: resumed } = await db
+    .from('fix_reviews')
+    .update({ status: 'queued', run_id: null, attempts: 0, error: null, skip_reason: null, completed_at: null, queued_at: at, updated_at: at })
+    .in('id', ids)
+    .in('status', ['skipped', 'failed'])
+    .select('id')
+  return resumed?.length ?? 0
 }
 
 /** Queue a review for each open cloud-agent or fix-worker PR that has none. */
@@ -838,6 +917,7 @@ export async function runAgentPrReview(
   const nowIso = now.toISOString()
   const summary: ReviewRunSummary = {
     requeued: 0,
+    resumed: 0,
     gaveUp: 0,
     enqueued: 0,
     claimed: 0,
@@ -853,6 +933,7 @@ export async function runAgentPrReview(
   const stale = await recoverStale(db, now)
   summary.requeued = stale.requeued
   summary.gaveUp = stale.gaveUp
+  summary.resumed = await resumeKeyBlocked(db, now, deps.resolveAnthropicKey)
 
   let rows: QueueRow[]
   if (opts.fixAttemptId) {

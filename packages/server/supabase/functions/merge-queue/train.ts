@@ -525,9 +525,9 @@ export async function runTrainTick(
 }
 
 function w0(c: TrainCandidate): string {
-  if (c.held) return 'Opus says hold on this commit. Open the fix to read why; only you can override a hold.'
-  if (c.verdict === 'fix_first') return 'Opus says fix first; a follow-up agent works on its findings, then it can ride a release train.'
-  if (c.verdict === 'merge' && c.verdictHead !== c.headSha) return 'Opus is reviewing the latest commit; it rides a release train once the verdict is merge.'
-  if (!c.verdict) return 'Waiting for its Opus review before it can ride a release train.'
+  if (c.held) return 'The AI review says do not merge this commit. Open the fix to read why; only you can override it.'
+  if (c.verdict === 'fix_first') return 'The AI review asked for changes; a follow-up agent works on its findings, then it can ride a release train.'
+  if (c.verdict === 'merge' && c.verdictHead !== c.headSha) return 'The AI review is checking the latest commit; it rides a release train once the verdict is merge.'
+  if (!c.verdict) return 'Waiting for its AI review before it can ride a release train.'
   return 'Waits for the next release train.'
 }

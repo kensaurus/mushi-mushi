@@ -3,30 +3,30 @@
 Source: https://kensaur.us/mushi-mushi/docs/admin/teams
 
 ---
-description: How teams work in Mushi — organizations own projects, billing, invitations and the member roster, and project access comes from membership.
+description: How teams work in Mushi Mushi. Organizations own projects, billing, invitations and the member roster, and project access comes from membership.
 ---
 
-# Teams and Members
+# Teams and members
 
-Teams are modeled as organizations. An organization owns projects, billing, invitations, and the member roster. Every project keeps its existing `project_id`, but access is granted through `organization_members`.
+**Route:** `/team?view=members` (Team → **Members**; the old `/organization/members` link opens it)
+
+In Mushi Mushi, teams are modeled as organizations. An organization owns projects, billing, invitations, and the member roster. Every project keeps its existing `project_id`, but access is granted through `organization_members`.
 
 ## Plans
 
-Teams are available on Pro and Enterprise.
+Teams are available on Studio and Enterprise.
 
 | Plan | Teams |
-| ---
-
- | --- |
-| Free Cloud | Solo workspace |
-| Indie | Solo workspace |
-| Pro | Invite teammates and share projects |
-| Enterprise | Teams plus SSO and SOC 2 controls |
+| --- | --- |
+| Free | Solo workspace, 1 app |
+| Builder | Solo workspace, 3 apps |
+| Studio | 5 seats (you and up to 4 teammates; pending invitations count) and 10 apps |
+| Enterprise | Teams plus SSO and SOC 2 controls, no app limit |
 
 The product enforces this in three places:
 
 - The admin UI hides the invite form and shows an upgrade prompt.
-- The API returns `402 feature_not_in_plan` for invitation attempts below Pro.
+- The API returns `402 feature_not_in_plan` for invitation attempts below Studio.
 - The database rejects invitation inserts with the `invitations_plan_gate` trigger.
 
 ## Roles
@@ -40,7 +40,7 @@ The product enforces this in three places:
 
 ## Invitation Flow
 
-1. An owner or admin opens **Members** in the admin console.
+1. An owner or admin opens **Team → Members** in the admin console.
 2. They invite an email with a role.
 3. Mushi creates an `invitations` row with a one-time token and sends a Supabase Auth invite email when possible.
 4. The invitee signs in and opens `/invite/accept?token=...`.

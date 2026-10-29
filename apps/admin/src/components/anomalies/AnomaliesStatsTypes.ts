@@ -3,7 +3,7 @@
  * PURPOSE: Anomalies shell stats — banner + ANOMALIES SNAPSHOT strip.
  */
 
-export type AnomaliesTabId = 'overview' | 'anomalies' | 'metrics' | 'detect'
+export type AnomaliesTabId = 'overview' | 'anomalies' | 'metrics'
 
 export type AnomaliesTopPriority =
   | 'no_project'

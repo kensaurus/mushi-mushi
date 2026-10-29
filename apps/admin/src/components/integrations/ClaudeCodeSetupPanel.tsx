@@ -125,7 +125,7 @@ export function ClaudeCodeSetupPanel({ configured, workflowEvent }: Props) {
 
           {data.mushiSupabaseUrl && (
             <div className="flex flex-wrap items-center gap-2 text-2xs">
-              <span className="text-fg-muted">Dispatch callback URL (injected automatically):</span>
+              <span className="text-fg-muted">Where finished fixes report back (filled in for you):</span>
               <code className="font-mono text-fg-secondary truncate max-w-full">{data.mushiSupabaseUrl}</code>
               <Btn size="sm" variant="ghost" onClick={() => void copyText(data.mushiSupabaseUrl, 'url')}>
                 <IconCopy size={12} />

@@ -43,7 +43,7 @@ export function paidUsersTooltip(metrics: UsersMetrics | null | undefined): Metr
       : 'No paid subscribers yet — all accounts on free/hobby tiers.'
 
   return metricTip(
-    'Accounts on a paid plan tier (Pro or above) with active billing.',
+    'Accounts on a paid plan (Builder or above) with active billing.',
     'Counts users with entitlements or subscription_tier indicating paid status from billing sync.',
     takeaway,
   )

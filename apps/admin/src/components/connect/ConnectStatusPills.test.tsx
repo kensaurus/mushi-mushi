@@ -51,6 +51,12 @@ describe('connectPills', () => {
     expect(never[0]).toMatchObject({ value: 'Not heard yet', tone: 'neutral' })
   })
 
+  // "SDK heartbeat" was jargon to a new user (integrator's walk, 2026-10-28).
+  it('names the check-in pill in plain words', () => {
+    const pills = connectPills({ sdkLastSeenAt: null, sdkVersion: null, sdkLatestVersion: null, sdkStatus: null, mcpStats: { connectedKeyCount: 0, lastSeenAt: null }, now: NOW })
+    expect(pills[0].label).toBe('App checked in')
+  })
+
   it('every pill jumps to a Connect section that exists', () => {
     const pills = connectPills({ sdkLastSeenAt: null, sdkVersion: null, sdkLatestVersion: null, sdkStatus: null, mcpStats: { connectedKeyCount: 0, lastSeenAt: null }, now: NOW })
     for (const p of pills) expect(CONNECT_SECTION_IDS).toContain(p.href.slice(1))

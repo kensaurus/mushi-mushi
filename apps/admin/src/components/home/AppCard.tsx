@@ -14,7 +14,7 @@ import { Badge, Btn, Card, RelativeTime, Skeleton } from '../ui'
 import { ProjectFavicon } from '../ProjectFavicon'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
-import { hostOf, type HomeApp, type HomeSection, type Platform } from '../../lib/projectHome'
+import { siteLabel, type HomeApp, type HomeSection, type Platform } from '../../lib/projectHome'
 import { HomeSectionBody } from './HomeSectionBody'
 
 const PLATFORM_LABEL: Record<Platform, string> = { web: 'Web', ios: 'iOS', android: 'Android' }
@@ -42,7 +42,7 @@ function AppCardBody({ app, projectId, canEdit, onRefreshed }: { app: HomeApp; p
   const [busy, setBusy] = useState(false)
   const [broken, setBroken] = useState(false)
   const shot = app.thumbnail && !broken ? app.thumbnail : null
-  const host = hostOf(app.liveUrl)
+  const host = siteLabel(app.liveUrl)
 
   async function refresh() {
     setBusy(true)

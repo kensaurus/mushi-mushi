@@ -1,6 +1,6 @@
 ---
 title: Rewards & contributor identity
-description: How Mushi's rewards program works — reporters earn points for reports and triage, climb project-defined tiers, and get perks from your app via webhooks.
+description: How the Mushi Mushi rewards program works. Reporters earn points for reports and triage, climb project-defined tiers, and get perks from your app via webhooks.
 ---
 
 # Rewards & contributor identity
@@ -149,15 +149,14 @@ sequenceDiagram
 
 `trackActivity: true` in `MushiRewardsConfig` auto-captures:
 
-- `session_start` — once per session (new tab / app foreground after 30 min
-  idle)
-- `page_view` — every pathname change in the web SDK, every screen change via
-  `setScreen()` in React Native
-- `navigate` — explicit `<a>` clicks and `router.push()` calls
-- `button_press` — clicks on elements with `data-mushi-track` or
-  `[data-testid]` attributes
+- `session_minute`: once a minute while the user is active and opted in, up to a
+  daily cap
+- `screen_view_unique_per_day`: the first view of each route per day
+- `element_selected`: clicks on elements with a `data-testid` attribute
 
-For custom actions, call `mushi.submitActivity()` directly.
+For custom actions, call `Mushi.recordActivity('lesson_completed', { … })`. The SDK
+batches these and sends them to `POST /v1/sdk/activity`. In React Native, each
+`setScreen()` change counts as a page view.
 
 ---
 
@@ -211,9 +210,12 @@ The rewards system inherits all guarantees from the
 - Activity events from tokens flagged `spam` or `rate_limited` are stored with
   `points_awarded = 0` so the audit trail is complete without the fraud being
   rewarded.
-- The `anomaly-detection-cron` (P3) runs nightly to identify users whose
-  `end_user_activity` pattern deviates statistically from the cohort median.
-  Flagged records land in `reward_disputes` for manual review.
+- The `detect-reward-anomalies` cron (`private.detect_reward_anomalies()`, daily
+  at 04:00 UTC) flags users whose 30-day points are more than 5× their
+  organization's median with `velocity_anomaly` in `end_users.anti_fraud_flags`.
+  Flagged users can still earn but cannot withdraw monetary rewards; the flag
+  clears when they fall back below the threshold. Disputes are reviewed in
+  `reward_disputes`.
 - Monthly org caps in `project_settings` put a hard ceiling on total points
   issued in a calendar month — protecting you from an unexpected viral spike.
 
@@ -221,64 +223,43 @@ The rewards system inherits all guarantees from the
 
 ## Webhooks reference
 
-Register webhook endpoints in the admin console under **Rewards → Settings →
-Webhooks**. All payloads are `POST`, `Content-Type: application/json`, signed
-with `X-Mushi-Signature` (HMAC-SHA256).
+Register webhook endpoints in the admin console on the **Rewards** page. All
+payloads are `POST`, `Content-Type: application/json`, and signed with
+`X-Mushi-Signature: sha256=<hex HMAC-SHA256 of the body>`. `@mushi-mushi/node`
+exports `createMushiRewardsHandler` to verify and route them.
 
-### `points_awarded`
+Every payload carries `event`, `end_user_id`, `occurred_at` and `webhookId`, plus
+the event's own fields. A webhook with an empty event list receives every event.
 
-```json
-{
-  "event": "points_awarded",
-  "userId": "usr_abc123",
-  "organizationId": "org_xyz",
-  "action": "report_submit",
-  "pointsAwarded": 50,
-  "totalPoints": 220,
-  "tier": { "slug": "explorer", "displayName": "Explorer" },
-  "occurredAt": "2026-05-17T12:34:56Z"
-}
-```
+Two events are sent today:
 
-### `tier_up`
+### `reward.tier_changed`
 
 ```json
 {
-  "event": "tier_up",
-  "userId": "usr_abc123",
-  "organizationId": "org_xyz",
-  "previousTier": { "slug": "free", "displayName": "Free" },
-  "newTier": { "slug": "explorer", "displayName": "Explorer" },
-  "totalPoints": 103,
-  "occurredAt": "2026-05-17T12:34:56Z"
+  "event": "reward.tier_changed",
+  "end_user_id": "6f1c0d3e-…",
+  "tier_before": { "slug": "explorer", "display_name": "Explorer" },
+  "tier_after": { "slug": "contributor", "display_name": "Contributor", "perks": {} },
+  "host_credit_payload": { "kind": "role", "role": "contributor" },
+  "occurred_at": "2026-05-17T12:34:56Z",
+  "webhookId": "…"
 }
 ```
 
-### `quest_complete`
+### `reward.quest_completed`
 
 ```json
 {
-  "event": "quest_complete",
-  "userId": "usr_abc123",
-  "organizationId": "org_xyz",
-  "questId": "quest_001",
-  "questName": "First Feedback",
-  "bonusPoints": 100,
-  "totalPoints": 320,
-  "occurredAt": "2026-05-17T12:34:56Z"
+  "event": "reward.quest_completed",
+  "end_user_id": "6f1c0d3e-…",
+  "quest_id": "quest_001",
+  "quest_name": "First Feedback",
+  "bonus_points": 100,
+  "occurred_at": "2026-05-17T12:34:56Z",
+  "webhookId": "…"
 }
 ```
 
-### `payout_created` (P2 — monetary)
-
-```json
-{
-  "event": "payout_created",
-  "userId": "usr_abc123",
-  "organizationId": "org_xyz",
-  "amount": 25.00,
-  "currency": "usd",
-  "stripeTransferId": "tr_xxx",
-  "occurredAt": "2026-05-17T12:34:56Z"
-}
-```
+`reward.points_awarded`, `reward.payout_requested` and `reward.payout_paid` are
+reserved event names you can subscribe to, but nothing sends them yet.

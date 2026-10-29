@@ -20,8 +20,8 @@ export function MembersStatusBanner({ stats, teamsEnabled, onInvitesTab }: Props
     return (
       <StatusBannerShell
         tone="warn"
-        title="Teams require Pro or Enterprise"
-        subtitle={`You can preview the roster on ${stats.planDisplayName ?? stats.planId ?? 'Hobby'}, but inviting teammates needs the teams entitlement.`}
+        title="Teams need Studio or Enterprise"
+        subtitle={`You can preview the roster on ${stats.planDisplayName ?? stats.planId ?? 'Free'}, but inviting teammates needs the teams entitlement.`}
         action={
           <Btn to="/billing" size="sm" variant="ghost">View plans</Btn>
         }

@@ -26,7 +26,7 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
-import { agentEnv, clearWorktree, commitWithHooks, failureTail, git, installDeps, runProc, type WorkStage, classifyFailure } from '../commands/work.js'
+import { agentEnv, clearWorktree, commitWithHooks, failureTail, git, installDeps, pushWithHooks, runProc, type WorkStage, classifyFailure } from '../commands/work.js'
 import type { ConflictTarget } from './protocol.js'
 
 const CONFLICT_AGENT_TIMEOUT_MS = 20 * 60_000
@@ -222,7 +222,7 @@ export async function resolveConflict(t: ConflictTarget, o: ConflictRunOptions):
     const remoteSha = remote.stdout.split(/\s/)[0] ?? ''
     if (remote.code !== 0) return { result: 'failed', failureKind: 'infra', detail: `git ls-remote failed: ${failureTail(remote, 200)}` }
     if (remoteSha !== t.headSha) return { result: 'skipped', detail: `the branch moved to ${remoteSha.slice(0, 7) || 'nothing'} while the agent worked; nothing pushed` }
-    await git(wt, ['push', '--quiet', 'origin', `HEAD:refs/heads/${t.headRef}`])
+    await pushWithHooks(wt, ['--quiet', 'origin', `HEAD:refs/heads/${t.headRef}`], o.log)
     return { result: 'pushed', headAfter: sha, detail: `merged ${base} (${baseSha.slice(0, 7)}) into the PR and pushed ${sha.slice(0, 7)}: ${agentNote}` }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

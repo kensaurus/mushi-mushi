@@ -5,6 +5,7 @@
 
 import { usePageCopy } from '../../lib/copy'
 import { qaFailingHint, scopedHref } from '../../lib/humanPageHints'
+import { pluralizeWithCount } from '../../lib/format'
 import { StatusBannerShell } from '../StatusBannerShell'
 import { StatusBannerAction } from '../StatusBannerAction'
 import type { QaCoverageStats, QaCoverageTabId } from './QaCoverageStatsTypes'
@@ -184,6 +185,25 @@ export function QaCoverageStatusBanner({
               tone="warn"
             />
           )
+        }
+      />
+    )
+  }
+
+  // Every run was skipped, so no test passed or failed: that is no result, not
+  // "healthy, avg 100% pass rate" (2026-10-28: 0/3 passing read as green).
+  if (stats.passingStories === 0 && stats.failingStories === 0 && stats.noDataStories > 0) {
+    return (
+      <StatusBannerShell
+        tone="info"
+        title="No test results yet"
+        subtitle={`${pluralizeWithCount(stats.noDataStories, 'test')} ran ${pluralizeWithCount(stats.totalRuns24h, 'time')} in the last 24 hours, and every run was skipped, so nothing was checked. Tests set to Local run only from your own machine.`}
+        action={
+          <StatusBannerAction
+            label={actions.openStories ?? 'Open stories'}
+            to={scopedHref('/qa-coverage?tab=stories', pid)}
+            tone="info"
+          />
         }
       />
     )

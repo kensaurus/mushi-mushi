@@ -2,7 +2,9 @@
  * New-project tab body for Projects hub.
  */
 
+import { useNavigate } from 'react-router-dom'
 import { Btn, ErrorAlert, Input, Section } from '../ui'
+import { PLAN_APP_LIMIT_TITLE, PLANS_HREF } from '../../lib/useCreateProject'
 import { ContainedBlock } from '../report-detail/ReportSurface'
 import {
   ProjectCreatedSuccessPanel,
@@ -46,6 +48,7 @@ export function ProjectsCreatePanel({
   onRetryCreate,
   onClearCreateError,
 }: ProjectsCreatePanelProps) {
+  const navigate = useNavigate()
   return (
     <Section title="Create a project">
       {createdProject ? (
@@ -120,7 +123,9 @@ export function ProjectsCreatePanel({
               <div id="projects-create-error">
                 <ErrorAlert
                   title={
-                    createError.code === 'NO_ORGANIZATION'
+                    createError.code === 'PLAN_APP_LIMIT'
+                      ? PLAN_APP_LIMIT_TITLE
+                      : createError.code === 'NO_ORGANIZATION'
                       ? 'No writable team found'
                       : createError.code === 'FORBIDDEN'
                         ? 'Not allowed in this team'
@@ -131,6 +136,12 @@ export function ProjectsCreatePanel({
                   message={createError.message}
                   code={createError.code}
                   actions={(() => {
+                    if (createError.code === 'PLAN_APP_LIMIT') {
+                      return [
+                        { label: 'See plans', onClick: () => navigate(PLANS_HREF) },
+                        { label: 'Dismiss', onClick: onClearCreateError },
+                      ]
+                    }
                     if (createError.code === 'NO_ORGANIZATION') {
                       return [
                         { label: 'Open team settings', onClick: onNavigateTeam },

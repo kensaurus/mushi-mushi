@@ -36,6 +36,8 @@ describe('navSlicesForPaths', () => {
       'integrations',
       'onboarding',
       'settings',
+      // Pipeline carries the local worker flags (ADR 0048 amendment 2026-10-28).
+      'workers',
     ])
   })
 
@@ -47,6 +49,7 @@ describe('navSlicesForPaths', () => {
       'onboarding',
       'releases',
       'settings',
+      'workers',
     ])
   })
 })

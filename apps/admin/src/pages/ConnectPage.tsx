@@ -21,7 +21,6 @@ import { SdkInstallCard } from '../components/SdkInstallCard'
 import { SdkNativeConnectivityCard } from '../components/SdkNativeConnectivityCard'
 import { SdkHealthPanel } from '../components/SdkHealthPanel'
 import { SDK_HEALTH_ANCHOR } from '../lib/sdkHealth'
-import { CliSetupGuide } from '../components/CliSetupGuide'
 import { EMPTY_MCP_STATS, type McpStats } from '../components/mcp/types'
 import { ConnectStudio } from '../components/connect/ConnectStudio'
 import { ConnectStatusPills } from '../components/connect/ConnectStatusPills'
@@ -34,8 +33,6 @@ import { useConnectUx } from '../lib/connectModeUx'
 import { LINK_ACCENT } from '../lib/chipTone'
 import { useDispatchPreflight } from '../lib/useDispatchPreflight'
 import { usePublishPageContext } from '../lib/pageContext'
-import { useSetupStatus } from '../lib/useSetupStatus'
-import { nextRequiredSetupStep } from '../lib/setupProgress'
 import {
   IconAlertTriangle,
   IconArrowRight,
@@ -201,36 +198,18 @@ export function ConnectPage() {
   const fallbackGithubRepoUrl = project?.primary_repo?.repo_url ?? null
   // SDK keys only: an MCP or CLI key's heartbeat is not the app checking in.
   const sdkLastSeenAt = latestHeartbeatAt(project?.api_keys?.filter((k) => isSdkKeyScopes(k.scopes)))
-  const sdkConnected = sdkLastSeenAt != null
   const snapshotLoading = (projectsFeed.loading && !project) || mcpStatsQuery.loading
   // A fresh load of /connect#connect-sdk-health ran the layout's hash scroll
   // before the sections above had their height, and stayed at the top.
   useScrollToHash(!projectsFeed.loading && !mcpStatsQuery.loading)
   // An app that only has SDK keys is set up correctly; MCP is an optional extra for the editor.
   const mcpOptional = mcpStats.topPriority === 'report_only_keys' || mcpStats.topPriority === 'no_mcp_key'
-  const setupStatus = useSetupStatus(activeProjectId)
-  const nextSetupStep = nextRequiredSetupStep(
-    setupStatus.activeProject ?? { steps: [], required_total: 0, required_complete: 0, total: 0, complete: 0, done: false, report_count: 0, fix_count: 0, merged_fix_count: 0, project_id: '', project_name: '', project_slug: '', created_at: '' },
-  )
-  const requiredSetupDone = setupStatus.selectors.done
 
   // Native CI shows once the project has loaded and is a native app, so the tab never appears and then vanishes.
   const visibleSections = CONNECT_SECTIONS.filter((s) => s.id !== 'connect-native-ci' || isNativeProject(project))
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-connect">
-      {!requiredSetupDone && nextSetupStep && (
-        <HelpBanner tone="warn" title="Finish setup first">
-          <p className="text-xs text-fg-muted">
-            Complete <strong>{nextSetupStep.label}</strong> in the setup wizard before
-            wiring integrations here.
-          </p>
-          <Btn size="sm" variant="ghost" className="mt-2" to={nextSetupStep.cta_to}>
-            {nextSetupStep.cta_label} →
-          </Btn>
-        </HelpBanner>
-      )}
-
       <PageHeaderBar
         title={copy?.title ?? 'Connect'}
         icon={<IconLink />}
@@ -300,9 +279,11 @@ export function ConnectPage() {
         ) : null}
       </div>
 
-      {!sdkConnected && !feedError ? (
-        <CliSetupGuide projectId={project?.id ?? activeProjectId} />
-      ) : null}
+      {/* The install lives once on this page, in Bug capture, where "Make a
+          key and fill it in" fills the snippet. A pointer to Set up sat above
+          it, so the install showed twice; a setup banner said the same again
+          (first-time user test, 2026-10-28). The "App checked in" pill is the
+          one status. */}
 
       {feedError && (
         <HelpBanner
@@ -369,7 +350,7 @@ export function ConnectPage() {
               {project && isExpoReporterNeverConnected(project) ? (
                 <HelpBanner
                   tone="warn"
-                  title="No SDK heartbeat from store builds yet"
+                  title="Your store builds have not checked in yet"
                   icon={<IconAlertTriangle className="h-5 w-5 text-warn-foreground" />}
                   className="mb-3"
                 >

@@ -4,13 +4,13 @@ Source: https://kensaur.us/mushi-mushi/docs/compare/posthog-session-replay-vs-mu
 
 ---
 title: PostHog session replay vs Mushi Mushi
-description: PostHog session replay vs Mushi Mushi in 2026 — every session recorded versus the one a user flagged as broken, free tiers, and why teams run both.
+description: PostHog session replay vs Mushi Mushi in 2026. Every session recorded versus the one a user flagged as broken, free tiers, and why teams run both.
 ---
 
 # PostHog session replay vs Mushi Mushi
 
 PostHog records every session and every exception, and gives you product
-analytics on top. Mushi records the moment a user says something is wrong,
+analytics on top. Mushi Mushi records the moment a user says something is wrong,
 attaches the screen they were looking at and the console/network tail, and
 writes the diagnosis. They answer different questions, and this page is
 mostly about which question you have.

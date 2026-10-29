@@ -20,14 +20,14 @@ export default {
   'vue-2-to-vue-3': 'Vue 2 → Vue 3',
   'spa-to-ssr': 'SPA → SSR',
 
-  // Switch to Mushi
-  'sentry-to-mushi': 'Sentry + Mushi (enrich or standalone)',
-  'instabug-to-mushi': 'Instabug (Luciq) → Mushi',
-  'shake-to-mushi': 'Shake → Mushi',
-  'logrocket-feedback-to-mushi': 'LogRocket Feedback → Mushi',
-  'bugherd-to-mushi': 'BugHerd → Mushi',
-  'pendo-feedback-to-mushi': 'Pendo Feedback → Mushi',
+  // Switch to Mushi Mushi
+  'sentry-to-mushi': 'Sentry + Mushi Mushi (enrich or standalone)',
+  'instabug-to-mushi': 'Instabug (Luciq) → Mushi Mushi',
+  'shake-to-mushi': 'Shake → Mushi Mushi',
+  'logrocket-feedback-to-mushi': 'LogRocket Feedback → Mushi Mushi',
+  'bugherd-to-mushi': 'BugHerd → Mushi Mushi',
+  'pendo-feedback-to-mushi': 'Pendo Feedback → Mushi Mushi',
 
-  // Mushi SDK upgrade rail
-  'mushi-sdk-upgrade': '@mushi-mushi/* 0.x → 1.0',
+  // Mushi Mushi SDK upgrade rail
+  'mushi-sdk-upgrade': 'Mushi Mushi SDK upgrades (0.x → 1.x)',
 }

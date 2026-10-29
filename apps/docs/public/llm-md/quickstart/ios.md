@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/ios
 
 ---
 title: iOS (Swift) quickstart
-description: Add Mushi's native Swift SDK to an iOS app with Swift Package Manager — shake-to-report, offline queue and device context. Preview build, not on CocoaPods yet.
+description: Add the Mushi Mushi Swift SDK to an iOS app with Swift Package Manager. Shake-to-report, offline queue and device context. A preview, not on CocoaPods yet.
 ---
 
 # iOS quickstart

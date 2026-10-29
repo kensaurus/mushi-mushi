@@ -29,7 +29,7 @@
     "@mushi-mushi/web": "workspace:*",
     "@sentry/react": "^10.59.0",
     "@supabase/supabase-js": "^2.108.2",
-    "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-table": "^9.3.1",
     "@xyflow/react": "^12.11.1",
     "cmdk": "^1.1.1",
     "d3-force": "^3.0.0",

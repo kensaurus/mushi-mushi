@@ -4,12 +4,12 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/presets
 
 ---
 title: SDK presets
-description: Mushi SDK presets such as production-calm set sensible widget and capture defaults in one line, and any explicit Mushi.init option still wins.
+description: Mushi Mushi SDK presets such as production-calm set widget, capture and proactive-prompt defaults in one line, and any explicit Mushi.init option still wins.
 ---
 
 # SDK presets
 
-Presets are additive defaults. Any explicit `Mushi.init()` option wins.
+Mushi Mushi presets are additive defaults. Any explicit `Mushi.init()` option wins.
 
 ```ts
 Mushi.init({
@@ -21,10 +21,13 @@ Mushi.init({
 
 | Preset | Use when | Behavior |
 | --- | --- | --- |
-| `production-calm` | Public production apps | Manual launcher, quiet console freshness warnings, no proactive prompts |
-| `manual-only` | Settings/help pages only | No floating launcher, no proactive prompts |
-| `beta-loud` | Beta/internal test cohorts | Rage click, long task, API cascade, screenshots, element selector |
-| `internal-debug` | Staff builds | Loud proactive prompts, long cooldown budget, full capture |
+| `production-calm` | Public production apps | Default launcher (`trigger: 'auto'`), SDK-outdated notice in the console only, screenshot on report, no performance capture, no proactive prompts |
+| `manual-only` | Settings/help pages only | No floating launcher (`trigger: 'manual'`), otherwise the same as `production-calm` |
+| `beta-loud` | Beta/internal test cohorts | Rage click, long task, API cascade and error-boundary prompts, automatic screenshots, element selector, performance capture, outdated-SDK banner |
+| `internal-debug` | Staff builds | Everything in `beta-loud`, plus a permissive prompt cooldown (up to 10 prompts a session, no wait after a dismissal) and the brand footer |
+| `minimal` | Lean installs | Console capture only, screenshot on report, no network, performance or replay capture, no proactive prompts |
+| `standard` | Default | Adds nothing; same as no preset |
+| `full` | Maximum capture | Console, network and performance capture, automatic screenshots, `lite` replay, element selector, every proactive prompt |
 
 For bottom navs or chat composers, pair a preset with `widget.anchor`:
 

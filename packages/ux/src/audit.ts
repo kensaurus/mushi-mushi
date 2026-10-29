@@ -31,7 +31,7 @@ import type { SyncConfig } from './sync.js'
 import { VIEWPORTS, type ProbeResult, type Surface, type Viewport } from './types.js'
 
 /** @internal Exported for tests only. */
-export type FindingKind = 'axe' | 'overflow' | 'layout' | 'console' | 'cls' | 'visual' | 'explore'
+export type FindingKind = 'axe' | 'overflow' | 'layout' | 'console' | 'cls' | 'visual' | 'explore' | 'fresh-eyes'
 type FindingSeverity = 'high' | 'medium' | 'low'
 export type ReviewVia = 'claude-code' | 'anthropic-api' | 'cursor' | 'none'
 

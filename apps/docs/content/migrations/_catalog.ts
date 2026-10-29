@@ -56,8 +56,8 @@ export interface GuideMeta {
 export const CATEGORY_LABELS: Record<MigrationCategory, string> = {
   mobile: 'Mobile / hybrid',
   web: 'Web framework',
-  competitor: 'Switch to Mushi',
-  'sdk-upgrade': 'Mushi SDK upgrade',
+  competitor: 'Switch to Mushi Mushi',
+  'sdk-upgrade': 'Mushi Mushi SDK upgrade',
 }
 
 export const CATEGORY_ORDER: readonly MigrationCategory[] = [
@@ -72,17 +72,16 @@ export const CATEGORY_ORDER: readonly MigrationCategory[] = [
  * framework moves, then competitor->Mushi (a strategic GTM surface), then
  * the Mushi self-upgrade rail at the bottom.
  *
- * Every published entry was sanity-checked on 2026-04-29 against the
- * relevant upstream docs (Capacitor, Vite, Next.js, Vue, Expo, Luciq,
- * Shake, LogRocket, BugHerd, Pendo). Re-validate on each minor Mushi
- * release; the audit log lives in docs/migrations/. */
+ * Competitor API names and detectPackages were re-checked on 2026-10-29
+ * against upstream docs and the npm registry (every detectPackages entry
+ * must exist on npm). Re-validate on each minor Mushi release. */
 export const CATALOG: readonly GuideMeta[] = [
   // ── mobile / hybrid ────────────────────────────────────────────────
   {
     slug: 'capacitor-to-react-native',
     title: 'Capacitor → React Native',
     summary:
-      'Full porting plan with both EAS Build and GitHub Actions + Fastlane CI/CD recipes, the plugin map, and the Mushi SDK swap.',
+      'Full porting plan with EAS Build and GitHub Actions + Fastlane CI/CD recipes, the plugin map, and the Mushi Mushi SDK swap.',
     category: 'mobile',
     effort: 'Weeks',
     risk: 'High',
@@ -143,7 +142,7 @@ export const CATALOG: readonly GuideMeta[] = [
     slug: 'cra-to-vite',
     title: 'Create React App → Vite',
     summary:
-      'CRA is unmaintained. Run `npx migrate-to-vite@latest cra` for the codemod, then handle the manual breaking changes (env vars, public/, types).',
+      'Create React App is deprecated. Run `npx migrate-to-vite@latest cra` for the codemod, then handle the manual changes (env vars, public/, SVG imports, tests).',
     category: 'web',
     effort: 'Hours',
     risk: 'Low',
@@ -166,7 +165,7 @@ export const CATALOG: readonly GuideMeta[] = [
     slug: 'vue-2-to-vue-3',
     title: 'Vue 2 → Vue 3',
     summary:
-      'Composition API migration with `@mushi-mushi/vue` peer-dep alignment and the `app.use(MushiPlugin, ...)` shape.',
+      'Vue 3 upgrade via the compat build, then the `@mushi-mushi/vue` plugin: one `app.use(MushiPlugin, ...)` call.',
     category: 'web',
     effort: 'Days',
     risk: 'Med',
@@ -189,9 +188,9 @@ export const CATALOG: readonly GuideMeta[] = [
   // ── competitor -> Mushi ────────────────────────────────────────────
   {
     slug: 'sentry-to-mushi',
-    title: 'Sentry + Mushi (enrich or standalone)',
+    title: 'Sentry + Mushi Mushi (enrich or standalone)',
     summary:
-      'Keep Sentry — Mushi runs alongside it and adds plain-English diagnosis + paste-ready fixes to your errors, or works standalone. Never a rip-out.',
+      'Keep Sentry. Mushi runs alongside it and adds plain-English diagnosis and paste-ready fixes to your errors, or works standalone. Never a rip-out.',
     category: 'competitor',
     effort: 'Hours',
     risk: 'Low',
@@ -211,33 +210,33 @@ export const CATALOG: readonly GuideMeta[] = [
   },
   {
     slug: 'instabug-to-mushi',
-    title: 'Instabug (Luciq) → Mushi',
+    title: 'Instabug (Luciq) → Mushi Mushi',
     summary:
-      'API mapping for the rebrand-aware migration: `Luciq.init` → `Mushi.init`, `identifyUser` → `setUser`, shake invocation parity.',
+      'React Native API mapping: `Luciq.init` → `<MushiProvider>`, `identifyUser` → `setUser`, shake-to-report with `expo-sensors`.',
     category: 'competitor',
     effort: 'Hours',
     risk: 'Low',
     status: 'published',
-    detectPackages: ['instabug-reactnative', 'luciq-reactnative-sdk', '@instabug/web'],
+    detectPackages: ['instabug-reactnative', '@luciq/react-native'],
     fromLabel: 'Instabug / Luciq',
   },
   {
     slug: 'shake-to-mushi',
-    title: 'Shake → Mushi',
+    title: 'Shake → Mushi Mushi',
     summary:
-      '`Shake.start(apiKey)` → `Mushi.init`, `addEventKey` → `setMetadata`, with a Mushi widget config that matches Shake\'s shake-to-report defaults.',
+      '`Shake.start(apiKey)` → `Mushi.init`, `Shake.setMetadata` → `setMetadata`, and shake-to-report on React Native and Capacitor.',
     category: 'competitor',
     effort: 'Hours',
     risk: 'Low',
     status: 'published',
-    detectPackages: ['@shakebugs/shake-react-native', '@softnoesis/shakebug-js'],
+    detectPackages: ['@shakebugs/react-native-shake', '@shakebugs/browser'],
     fromLabel: 'Shake',
   },
   {
     slug: 'logrocket-feedback-to-mushi',
-    title: 'LogRocket Feedback → Mushi',
+    title: 'LogRocket Feedback → Mushi Mushi',
     summary:
-      'Move bug-feedback off LogRocket without losing session replay — keep LogRocket for replay, swap the feedback widget for Mushi, link the two via Mushi metadata.',
+      'Collect bug reports with Mushi and keep LogRocket for session replay. Each report carries the LogRocket session URL in its metadata.',
     category: 'competitor',
     effort: 'Hours',
     risk: 'Low',
@@ -247,35 +246,35 @@ export const CATALOG: readonly GuideMeta[] = [
   },
   {
     slug: 'bugherd-to-mushi',
-    title: 'BugHerd → Mushi',
+    title: 'BugHerd → Mushi Mushi',
     summary:
-      'Sidebar feedback widget → Mushi shake/button widget. Pixel-pin annotations replaced with Mushi\'s element selector + screenshot.',
+      'Sidebar feedback widget → Mushi floating button. Pixel-pin comments → Mushi\'s element picker and screenshot markup.',
     category: 'competitor',
     effort: 'Hours',
     risk: 'Low',
     status: 'published',
-    detectPackages: ['bugherd-pubsub'],
+    // BugHerd installs as a script tag; it has no npm package to detect.
     fromLabel: 'BugHerd',
   },
   {
     slug: 'pendo-feedback-to-mushi',
-    title: 'Pendo Feedback → Mushi',
+    title: 'Pendo Feedback → Mushi Mushi',
     summary:
-      '`pendo.identify` → `Mushi.setUser`, route-tracking → `Mushi.setScreen`, in-app guides → external feature flag (Pendo stays where it shines).',
+      'Pendo retired classic Feedback on 2026-08-01. Move feedback to Mushi: `pendo.identify` → `setUser`, `pendo.track` → `track`; keep Pendo for analytics and guides.',
     category: 'competitor',
     effort: 'Hours',
     risk: 'Low',
     status: 'published',
-    detectPackages: ['pendo-io-browser', '@pendo/web'],
+    detectPackages: ['@pendo/agent'],
     fromLabel: 'Pendo Feedback',
   },
 
   // ── Mushi SDK upgrade ──────────────────────────────────────────────
   {
     slug: 'mushi-sdk-upgrade',
-    title: '@mushi-mushi/* 0.x → 1.0',
+    title: 'Mushi Mushi SDK upgrades (0.x → 1.x)',
     summary:
-      'Forward-looking upgrade rail. Tracks each package\'s breaking changes as we approach 1.0 so customers can plan ahead.',
+      'The breaking changes each @mushi-mushi package made at 1.0, the version-bump command, and the current versions.',
     category: 'sdk-upgrade',
     effort: 'Hours',
     risk: 'Low',

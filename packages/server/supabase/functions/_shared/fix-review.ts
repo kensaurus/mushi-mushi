@@ -534,26 +534,66 @@ export const VERDICT_LABEL: Record<ReviewVerdict, string> = {
   hold: 'hold',
 }
 
-const SEVERITY_LABEL: Record<FindingSeverity, string> = { blocker: 'Blocker', major: 'Major', minor: 'Minor' }
-const RISK_LABEL: Record<ReviewRisk, string> = { low: 'low', med: 'medium', high: 'high' }
+const RISK_LABEL: Record<ReviewRisk, string> = { low: 'Low', med: 'Medium', high: 'High' }
 
 /**
  * Model text going into a GitHub comment: no HTML, no @-mentions (a review
- * of untrusted code must not ping people). The comment never carries the
- * review summary, which can quote the reporter: a PR may be public, the bug
- * report is not, so the comment links to the report in the console instead.
+ * of untrusted code must not ping people). Only a `<` that could open a tag is
+ * escaped, and never inside `code`: GitHub shows entities literally there, so
+ * escaping every `<` and `>` printed "stars &gt; 0" (2026-10-28). The comment
+ * never carries the review summary, which can quote the reporter: a PR may be
+ * public, the bug report is not, so the comment links to the report in the
+ * console instead.
  */
 export function commentSafe(text: string): string {
   return text
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+    .split(/(`[^`\n]*`)/)
+    .map((part) => (part.startsWith('`') && part.endsWith('`') && part.length > 1 ? part : part.replace(/<(?=[A-Za-z/!?])/g, '&lt;')))
+    .join('')
     .replace(/@(?=[A-Za-z0-9_-])/g, '@​')
 }
 
-/** One line, cut short: comment labels point to the console, they do not carry the detail. */
+/** One line, cut at a word boundary: labels point to the console, they do not carry the detail. */
 function shortLabel(text: string, max: number): string {
   const one = text.replace(/\s+/g, ' ').trim()
-  return one.length > max ? `${one.slice(0, max - 1)}…` : one
+  if (one.length <= max) return one
+  const cut = one.slice(0, max - 1)
+  const space = cut.lastIndexOf(' ')
+  return `${space > max * 0.6 ? cut.slice(0, space) : cut}…`
+}
+
+/** "claude-opus-5-5" → "Claude Opus 5.5"; an id it does not recognise is shown as it is. */
+export function modelDisplayName(model: string): string {
+  const m = /^claude-([a-z]+)-(\d+)(?:-(\d+))?(?:-\d{8})?$/i.exec(model.trim())
+  if (!m) return model
+  return `Claude ${m[1]!.charAt(0).toUpperCase()}${m[1]!.slice(1)} ${m[2]}${m[3] ? `.${m[3]}` : ''}`
+}
+
+function headline(review: NormalizedReview): string {
+  const must = review.findings.filter((f) => f.severity !== 'minor').length
+  const n = must || review.findings.length
+  switch (review.verdict) {
+    case 'merge':
+      return review.findings.length ? `Looks good to merge (${review.findings.length} small note${review.findings.length === 1 ? '' : 's'})` : 'Looks good to merge'
+    case 'fix_first':
+      return n ? `Fix first: ${n} thing${n === 1 ? '' : 's'} to change before this merges` : 'Fix first before this merges'
+    case 'hold':
+      return "Hold: don't merge this as it is"
+  }
+}
+
+function findingBlock(f: NormalizedReview['findings'][number], i: number): string[] {
+  const where = f.file === '(general)' ? '' : ` · \`${f.file.replace(/`/g, "'")}${f.line ? `:${f.line}` : ''}\``
+  const tag = f.severity === 'blocker' ? 'Blocks the merge' : f.severity === 'major' ? 'Must fix' : 'Worth fixing'
+  return [
+    // A heading, not bold text: GitHub joins two plain lines into one paragraph.
+    `#### ${i}. ${tag}${where}`,
+    '',
+    commentSafe(shortLabel(f.issue, 600)),
+    '',
+    `> **How to fix:** ${commentSafe(shortLabel(f.suggested_fix, 600))}`,
+    '',
+  ]
 }
 
 export function formatReviewComment(
@@ -567,33 +607,31 @@ export function formatReviewComment(
   },
 ): string {
   const lines: string[] = [
-    `### Mushi review (${meta.model}): ${VERDICT_LABEL[review.verdict]}`,
+    `### Mushi review: ${headline(review)}`,
     '',
-    `**Fixes the report:** ${review.fixes_report ? 'yes' : 'no'} · **Risk:** ${RISK_LABEL[review.risk]} · **Scope creep:** ${review.scope_creep ? 'yes' : 'no'}`,
+    '| Fixes the report | Risk | Scope creep |',
+    '| :-- | :-- | :-- |',
+    `| ${review.fixes_report ? 'Yes' : 'No'} | ${RISK_LABEL[review.risk]} | ${review.scope_creep ? 'Yes' : 'No'} |`,
+    '',
   ]
-  if (meta.reportUrl) lines.push('', `The full review and the bug report are in the [Mushi console](${meta.reportUrl}).`)
-  if (review.findings.length > 0) {
-    lines.push('', '**Findings**')
-    for (const f of review.findings) {
-      const where = f.file === '(general)' ? '' : ` \`${f.file.replace(/`/g, "'")}${f.line ? `:${f.line}` : ''}\``
-      lines.push(`- **${SEVERITY_LABEL[f.severity]}**${where}: ${commentSafe(shortLabel(f.issue, 240))} _Fix:_ ${commentSafe(shortLabel(f.suggested_fix, 240))}`)
-    }
-  }
+  // Worst first: what blocks or must change, then what is worth fixing.
+  const ordered = [...review.findings].sort((a, b) => ({ blocker: 0, major: 1, minor: 2 })[a.severity] - ({ blocker: 0, major: 1, minor: 2 })[b.severity])
+  ordered.forEach((f, i) => lines.push(...findingBlock(f, i + 1)))
   if (review.removes_behavior.length > 0) {
-    lines.push('', '**Removes existing behaviour**', ...review.removes_behavior.map((r) => `- ${commentSafe(shortLabel(r, 80))}`))
+    lines.push('**Removes existing behaviour**', ...review.removes_behavior.map((r) => `- ${commentSafe(shortLabel(r, 80))}`), '')
   }
   if (review.needs_human_decision) {
-    lines.push('', `**Needs your decision:** ${commentSafe(shortLabel(review.needs_human_decision, 120))} (details in the console)`)
+    lines.push(`**Needs your decision:** ${commentSafe(shortLabel(review.needs_human_decision, 120))} (details in the console)`, '')
   }
   if (review.rules_applied.length > 0) {
-    lines.push('', `_Mushi set the verdict to "${VERDICT_LABEL[review.verdict]}": ${review.rules_applied.join(' ')}_`)
+    lines.push(`_Mushi set the verdict to "${VERDICT_LABEL[review.verdict]}": ${review.rules_applied.join(' ')}_`, '')
   }
+  if (meta.reportUrl) lines.push(`[Open the full review and the bug report in the Mushi console](${meta.reportUrl})`, '')
   const coverage = meta.diff.truncated
     ? `${meta.diff.shownFiles} of ${meta.diff.totalFiles} files reviewed (the rest was too large)`
-    : `${meta.diff.totalFiles} file(s) reviewed`
+    : `${meta.diff.totalFiles} file${meta.diff.totalFiles === 1 ? '' : 's'} reviewed`
   lines.push(
-    '',
-    `<sub>Independent review of a cloud-agent pull request. A "hold" stops Mushi from merging it until someone overrides. Commit ${meta.headSha ? meta.headSha.slice(0, 7) : 'unknown'} · ${coverage}.</sub>`,
+    `<sub>Reviewed by ${modelDisplayName(meta.model)} · commit ${meta.headSha ? meta.headSha.slice(0, 7) : 'unknown'} · ${coverage}. "Hold" means Mushi will not merge this until someone overrides it.</sub>`,
     REVIEW_COMMENT_MARKER,
   )
   const body = lines.join('\n')

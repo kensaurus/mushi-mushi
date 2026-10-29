@@ -17,12 +17,9 @@ interface Props {
 function membersSentence(stats: MembersStats): string {
   const members = `${pluralizeWithCount(stats.memberCount, 'member')}`
   const invites = stats.pendingInvites > 0 ? `, ${pluralizeWithCount(stats.pendingInvites, 'invite')} not accepted yet` : ''
-  const seats =
-    stats.seatLimit === null
-      ? '; no seat limit on your plan'
-      : stats.atSeatCap
-        ? `; all ${stats.seatLimit} seats are used`
-        : `; ${stats.seatsUsed} of ${stats.seatLimit} seats used`
+  // The Seats tile carries the count; the sentence speaks only when the
+  // seats have run out (it said "3 of 5 seats used" beside "3/5").
+  const seats = stats.seatLimit !== null && stats.atSeatCap ? `; all ${stats.seatLimit} seats are used` : ''
   return `${members}${invites}${seats}.`
 }
 

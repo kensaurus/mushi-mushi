@@ -4,12 +4,12 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/vue
 
 ---
 title: Vue 3 quickstart
-description: Add Mushi bug reporting to a Vue 3 app — install @mushi-mushi/vue and register MushiPlugin with your project ID and public API key in main.ts.
+description: Add Mushi Mushi bug reporting to a Vue 3 app. Install @mushi-mushi/vue and register MushiPlugin with your project ID and public API key in main.ts.
 ---
 
 # Vue 3 quickstart
 
-Same loop as [React](/quickstart/react) — swap the install and boot call.
+Same steps as the [React quickstart](/quickstart/react); only the install and the boot call differ.
 
 ```bash
 pnpm add @mushi-mushi/vue

@@ -46,10 +46,40 @@ export interface WorkerHost {
   version: string | null
   online: boolean
   lastHeartbeatAt: string
-  status: Record<string, string | number>
+  /** Numbers and words, plus `checks` (account, gh), `slots` and `waitWhy` from a CLI that sends them. */
+  status: Record<string, unknown>
   guards: HostGuards
   revoked: boolean
   mine: boolean
+  /** The Cursor account its lanes may spend, set in the console: in full for its owner, masked otherwise. Null until set. */
+  cursorAccount?: string | null
+  /** The last "Switch account" (never its link here: readCursorSwitch, owner only). */
+  cursorLogin?: CursorLoginView | null
+  /** False for a machine whose Mushi CLI predates "Switch account". */
+  canSwitchAccount?: boolean
+}
+
+type CursorLoginState = 'requested' | 'waiting_for_runs' | 'link_ready' | 'signed_in' | 'wrong_account' | 'failed' | 'expired'
+
+export interface CursorLoginView {
+  requestId: string
+  state: CursorLoginState
+  account: string
+  requestedAt: string
+  at: string
+  detail: string | null
+  /** The Cursor approve link: only for the machine's owner, only while it is the step to take. */
+  url?: string
+}
+
+export interface CursorSwitchStatus {
+  account: string | null
+  login: CursorLoginView | null
+  online: boolean
+  canSwitch: boolean
+  /** Agents running on the machine now (a switch waits for them). */
+  runs: number | null
+  check: { result: string | null; ageSec: number | null; detail: string | null } | null
 }
 
 export interface WorkerLane {
@@ -63,7 +93,8 @@ export interface WorkerLane {
   reviewModel?: string | null
   /** owner/name of the lane's clone, as the machine reports it. */
   repo?: string | null
-  status: Record<string, string | number>
+  /** Numbers and words, plus `runs` (RunTelemetry) from a CLI that sends them. */
+  status: Record<string, unknown>
   lastSeenAt: string
   /** A conflict or audit run holds no report (reportId null). */
   active: Array<{ claimId: string; kind?: ClaimKind; reportId: string | null; title: string; since: string; leaseUntil: string; fromQueue: boolean }>
@@ -91,6 +122,77 @@ export interface WorkLanesData {
   projects: Array<{ id: string; name: string }>
   hosts: WorkerHost[]
   lanes: WorkerLane[]
+  /** Worst first (the server's work-flags.ts); missing from a server that predates them. */
+  flags?: WorkerFlag[]
+}
+
+/** Where a run is (ADR 0048 amendment 2026-10-28). */
+export type RunStage = 'prepare' | 'agent' | 'commit' | 'push' | 'pr' | 'run'
+
+/** A run in flight as its machine last reported it (lane.status.inflight). */
+export interface RunTelemetry {
+  runId: string
+  kind: string
+  reportId: string | null
+  ageSec: number
+  stage: RunStage
+  stageSec: number
+  model: string | null
+  log: string[]
+}
+
+export type WorkerFlagAction =
+  | { kind: 'stop_run'; label: string; claimId: string }
+  | { kind: 'pause_lane'; label: string; laneId: string }
+  | { kind: 'open_report'; label: string; reportId: string }
+  | { kind: 'open_pr'; label: string; prUrl: string }
+  | { kind: 'copy_command'; label: string; command: string }
+  | { kind: 'recheck_account'; label: string; hostId: string }
+  | { kind: 'switch_account'; label: string; hostId: string }
+  | { kind: 'open_page'; label: string; to: string }
+
+/** One problem with a local worker, in plain words, with the actions that fix it. */
+export interface WorkerFlag {
+  id: string
+  kind: string
+  severity: 'danger' | 'warn'
+  hostId: string | null
+  hostname: string | null
+  laneId: string | null
+  laneName: string | null
+  projectId: string | null
+  title: string
+  cause: string
+  sinceSec: number | null
+  stage?: RunStage | null
+  log?: string[]
+  actions: WorkerFlagAction[]
+}
+
+/** The stage as a person says it. */
+export const STAGE_LABEL: Record<RunStage, string> = {
+  prepare: 'getting the repo ready',
+  agent: 'coding agent at work',
+  commit: "in the repo's commit hook",
+  push: "in the repo's pre-push hook",
+  pr: 'opening the pull request',
+  run: 'running',
+}
+
+/** "under a minute", "12 min", "4 h 20 min", "3 d": the server's durationText. */
+export function durationLabel(sec: number): string {
+  if (sec < 60) return 'under a minute'
+  const min = Math.round(sec / 60)
+  if (min < 60) return `${min} min`
+  const h = Math.floor(min / 60)
+  if (h < 48) return min % 60 && h < 10 ? `${h} h ${min % 60} min` : `${h} h`
+  return `${Math.round(h / 24)} d`
+}
+
+/** The runs a lane's machine reported in flight. */
+export function laneRuns(lane: Pick<WorkerLane, 'status'>): RunTelemetry[] {
+  const runs = (lane.status as Record<string, unknown>).inflight
+  return Array.isArray(runs) ? (runs as RunTelemetry[]) : []
 }
 
 /** The same model id rule as the server and the daemon: letters, digits and `._:-`. */
@@ -220,6 +322,34 @@ export async function patchHostGuards(hostId: string, guards: Partial<HostGuards
 export async function revokeHost(hostId: string): Promise<WriteResult> {
   const res = await apiFetch<{ id: string; revoked: boolean }>(`/v1/admin/work/hosts/${encodeURIComponent(hostId)}`, { method: 'DELETE', scope: 'enumeration' })
   return res.ok ? { ok: true, message: 'Revoked. The worker stops at its next heartbeat.' } : fail(res)
+}
+
+/** "Stop this run": the claim ends now; the machine stops the agent at its next heartbeat. */
+export async function stopRun(claimId: string): Promise<WriteResult> {
+  const res = await apiFetch<{ id: string; message: string }>(`/v1/admin/work/claims/${encodeURIComponent(claimId)}/stop`, { method: 'POST', scope: 'enumeration', body: '{}' })
+  return res.ok ? { ok: true, message: res.data?.message ?? 'Stopped.' } : fail(res)
+}
+
+/** "Re-check the account": the machine runs cursor-agent status again within a minute or two. */
+export async function recheckAccount(hostId: string): Promise<WriteResult> {
+  const res = await apiFetch<{ id: string; message: string }>(`/v1/admin/work/hosts/${encodeURIComponent(hostId)}/recheck`, { method: 'POST', scope: 'enumeration', body: '{}' })
+  return res.ok ? { ok: true, message: res.data?.message ?? 'Asked.' } : fail(res)
+}
+
+/** "Switch account": the account the machine's lanes may spend, and a sign-in the machine starts within a minute. */
+export async function switchCursorAccount(hostId: string, account: string, restart = false): Promise<WriteResult & { code?: string; login?: CursorLoginView | null }> {
+  const res = await apiFetch<{ login: CursorLoginView | null; message: string }>(`/v1/admin/work/hosts/${encodeURIComponent(hostId)}/cursor-account`, {
+    method: 'POST',
+    scope: 'enumeration',
+    body: JSON.stringify({ account, restart }),
+  })
+  return res.ok ? { ok: true, message: res.data?.message ?? 'Asked.', login: res.data?.login ?? null } : { ...fail(res), code: res.error?.code }
+}
+
+/** Where the switch stands, with the approve link while that is the step (the machine's owner only). */
+export async function readCursorSwitch(hostId: string): Promise<{ ok: true; data: CursorSwitchStatus } | { ok: false; message: string }> {
+  const res = await apiFetch<CursorSwitchStatus>(`/v1/admin/work/hosts/${encodeURIComponent(hostId)}/cursor-login`, { scope: 'enumeration' })
+  return res.ok && res.data ? { ok: true, data: res.data } : { ok: false, message: res.error?.message ?? 'Could not read the switch.' }
 }
 
 /** A worker key (worker:run) for these apps; the key comes back once. */
