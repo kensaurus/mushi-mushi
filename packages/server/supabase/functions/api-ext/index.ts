@@ -61,6 +61,7 @@ import { registerSetupGapsRoutes } from '../api/routes/setup-gaps.ts'
 import { registerHealthCheckRoutes } from '../api/routes/health-checks.ts'
 import { registerDoctorRoutes } from '../api/routes/doctor.ts'
 import { registerByokReviewFollowupRoutes } from '../api/routes/byok-review-followups.ts'
+import { registerByokSpendDownRoutes } from '../api/routes/byok-spend-down.ts'
 import { registerReleaseBatchRoutes } from '../api/routes/release-batch.ts'
 import { registerWorkRoutes } from '../api/routes/work.ts'
 import { registerRepoHousekeepingRoutes } from '../api/routes/repo-housekeeping.ts'
@@ -106,6 +107,7 @@ registerSetupGapsRoutes(app)
 registerHealthCheckRoutes(app)
 registerDoctorRoutes(app)
 registerByokReviewFollowupRoutes(app)
+registerByokSpendDownRoutes(app)
 registerReleaseBatchRoutes(app)
 registerWorkRoutes(app)
 registerRepoHousekeepingRoutes(app)

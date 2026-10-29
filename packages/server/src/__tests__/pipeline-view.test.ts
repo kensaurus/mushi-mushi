@@ -295,7 +295,9 @@ describe('buildPipeline', () => {
       actionFacts: { cloud: new Map(), prior: new Map(), roundHeads: new Map(), rerunRefused: new Set() },
     })
     expect(group(stages, 'agent_failed_person')?.group.label).toBe('1 report: the agent says a person must do it, no PR opened')
-    expect(group(stages, 'agent_failed_nothing')?.group.label).toBe('2 reports: the agent found nothing to change in the code')
+    expect(group(stages, 'agent_failed_nothing')?.group.label).toBe('1 report: the agent found nothing to change in the code')
+    expect(group(stages, 'agent_said_fixed')?.group.label).toBe('1 report: the agent says the bug is already fixed in the code')
+    expect(group(stages, 'agent_said_fixed')?.group.actions).toEqual(['mark_fixed', 'dismiss'])
     expect(group(stages, 'agent_failed')?.group.count).toBe(2)
     for (const id of ['agent_failed_person', 'agent_failed_nothing', 'agent_failed']) {
       const g = group(stages, id)!.group

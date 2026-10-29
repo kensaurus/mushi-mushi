@@ -513,8 +513,8 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
 
   const recommendation = useMemo(
     () =>
-      deriveRecommendation(report, dispatchState, commentCount, requestDispatch, nowMs, dispatchBlockState, hasCodeLocation),
-    [report, dispatchState, commentCount, requestDispatch, nowMs, dispatchBlockState, hasCodeLocation],
+      deriveRecommendation(report, dispatchState, commentCount, requestDispatch, nowMs, dispatchBlockState, hasCodeLocation, (patch) => void onTriage(patch)),
+    [report, dispatchState, commentCount, requestDispatch, nowMs, dispatchBlockState, hasCodeLocation, onTriage],
   )
 
   // Bumped when a reply reaches the reporter so the Reporter view refetches

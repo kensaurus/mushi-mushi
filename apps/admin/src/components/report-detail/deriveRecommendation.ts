@@ -5,6 +5,7 @@ import { pickPrimaryFixAttempt } from '../../lib/mergeFix'
 import { isReportClassified } from '../../lib/reportDiagnosis'
 import { KNOWN_ISSUES_SEARCH_HREF } from '../../lib/settingsTabs'
 import { NO_CODE_LOCATION_REASON } from '../../lib/reportCodeLocation'
+import { verdictFromError } from '../../lib/pdcaAct'
 
 /** The opt-in's name as the fix worker quotes it in a skip reason. */
 const WEB_SEARCH_SETTING_NAME = 'Search the web for known fixes'
@@ -145,8 +146,9 @@ export function deriveRecommendation(
   nowMs: number = Date.now(),
   block: { blocked: boolean; reason: string | null } = { blocked: false, reason: null },
   hasCodeLocation = true,
+  onClose?: (patch: ReportClosePatch) => void,
 ): Recommendation {
-  const rec = recommendationFor(report, dispatchState, commentCount, onRequestDispatch, nowMs, hasCodeLocation)
+  const rec = recommendationFor(report, dispatchState, commentCount, onRequestDispatch, nowMs, hasCodeLocation, onClose)
   if (!block.blocked) return rec
   const isDispatch = (onClick: (() => void) | undefined) => onClick === onRequestDispatch
   const touchesDispatch = isDispatch(rec.cta?.onClick) || (rec.actions ?? []).some((a) => isDispatch(a.onClick))
@@ -161,6 +163,61 @@ export function deriveRecommendation(
   }
 }
 
+/** The page's status change (ReportDetailPage onTriage). */
+export type ReportClosePatch = { status: 'fixed' } | { status: 'dismissed'; closed_reason?: string }
+
+/** A failed attempt that is the agent's answer, not a breakage: what to say and offer. */
+function verdictRecommendation(
+  verdict: string,
+  latest: ReportFixAttempt,
+  meta: RecommendationMeta[],
+  onDispatch: () => void,
+  onClose?: (patch: ReportClosePatch) => void,
+): Recommendation | null {
+  const said = (latest.error ?? '').replace(/^[^:]{0,60}:\s*/, '').replace(/^\**\s*Mushi verdict:\s*\w+\s*\**\s*/i, '').trim()
+  const detail = said ? ` The agent wrote: “${said.slice(0, 400)}${said.length > 400 ? '…' : ''}”` : ''
+  const sendAgain: RecommendationAction = { label: 'Still broken: send again', onClick: onDispatch, tone: 'ghost' }
+  if (verdict === 'already_fixed') {
+    return {
+      title: 'The agent says this is already fixed',
+      description: `Check it on your app. If the bug is gone, close the report; if not, send it again with what you still see.${detail}`,
+      tone: 'info',
+      meta,
+      actions: [
+        ...(onClose ? [{ label: 'It is fixed: close it', onClick: () => onClose({ status: 'fixed' }), tone: 'primary' as const }] : []),
+        sendAgain,
+      ],
+    }
+  }
+  if (verdict === 'not_actionable' || verdict === 'wrong_repo') {
+    return {
+      title: verdict === 'wrong_repo' ? 'The agent says the code is in another repo' : 'The agent found nothing in the code to change',
+      description:
+        verdict === 'wrong_repo'
+          ? `It is a real bug in code this app does not connect yet. Connect that repo (Settings → Repos), then send it again.${detail}`
+          : `Often this is config, an outage or expected behaviour. Close it if so; send it again if you can point at the code.${detail}`,
+      tone: 'info',
+      meta,
+      actions: [
+        // Not for wrong_repo: closing as "working as intended" would tell the reporter a real bug is expected behaviour.
+        ...(onClose && verdict === 'not_actionable' ? [{ label: 'Not a code bug: close it', onClick: () => onClose({ status: 'dismissed', closed_reason: 'working_as_intended' }), tone: 'primary' as const }] : []),
+        ...(verdict === 'wrong_repo' ? [{ label: 'Connect the repo →', to: '/settings?tab=repos', tone: 'ghost' as const }] : []),
+        sendAgain,
+      ],
+    }
+  }
+  if (verdict === 'needs_human') {
+    return {
+      title: 'The agent says a person must decide this',
+      description: `It needs a product or access decision an agent should not make. Decide, then reply on the report or send it again with the decision.${detail}`,
+      tone: 'urgent',
+      meta,
+      actions: [sendAgain],
+    }
+  }
+  return null
+}
+
 function recommendationFor(
   report: ReportDetail,
   dispatchState: DispatchState,
@@ -168,6 +225,7 @@ function recommendationFor(
   onDispatch: () => void,
   nowMs: number,
   hasCodeLocation: boolean,
+  onClose?: (patch: ReportClosePatch) => void,
 ): Recommendation {
   // A triage card whose CTA would be Dispatch fix: with nothing for an agent
   // to edit, say so, point at "Not a code bug" and keep dispatch as a ghost.
@@ -270,6 +328,13 @@ function recommendationFor(
           },
         ]
       : []
+
+    // The agent's verdict (already fixed, nothing to change, another repo,
+    // needs a person) is an answer, not a breakage: "Retry dispatch" was the
+    // wrong next step and nothing offered to close the report (sweep 2026-10-29).
+    const verdict = latest.failure_category ?? verdictFromError(latest.error)
+    const answered = verdict ? verdictRecommendation(verdict, latest, lastAttemptMeta, onDispatch, onClose) : null
+    if (answered) return answered
 
     // context_assembly_failed: RAG embedding / retrieval pipeline error.
     // Checked BEFORE the skipped_no_context branch: the worker skips these

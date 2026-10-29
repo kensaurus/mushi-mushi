@@ -505,32 +505,28 @@ export interface CheckRunSnapshot {
  * Pull the latest check-run conclusion for a commit. GitHub returns the full
  * list; we collapse to a single { status, conclusion } using the same rules
  * the UI uses:
- *   - If any check-run is still `queued` or `in_progress` → status stays
+ *   - If any check-run or commit status is not finished → status stays
  *     pending and conclusion stays null (the PR is not done).
- *   - Otherwise conclusion = worst (failure > cancelled > timed_out > neutral
- *     > skipped > success), mirroring GitHub's own UI badge colouring.
+ *   - Otherwise the worst failing conclusion, else `success` when any run
+ *     succeeded (skipped and neutral pass, as on GitHub; collapseCheckRuns).
+ *   - Legacy commit statuses count too (Buildkite, CircleCI, Vercel…).
  *   - A run a later re-run of the same check replaced is left out first
  *     (currentCheckRuns), as GitHub's merge state does.
+ *   - Check runs from an older Actions run of the same workflow are left
+ *     out too. GitHub scores only the newest run per workflow; the list
+ *     still includes the older one (report 9e2ec6f0).
  */
 export async function fetchLatestCheckRun(
   token: string,
   ref: GithubRepoRef,
   commitSha: string,
 ): Promise<CheckRunSnapshot | null> {
-  const res = await fetchWithTimeout(
-    `https://api.github.com/repos/${ref.owner}/${ref.repo}/commits/${commitSha}/check-runs?per_page=100`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    },
-  )
-  if (res.status === 404) return null
-  if (!res.ok) throw new Error(`check-runs fetch ${res.status}`)
-  const body = await res.json() as { check_runs?: CheckRunLike[] }
-  return collapseCheckRuns(body.check_runs ?? [])
+  const [runs, statuses] = await Promise.all([
+    listCheckRuns(token, ref, commitSha, 'throw'),
+    listCommitStatuses(token, ref, commitSha),
+  ])
+  if (!runs) return null
+  return collapseCheckRuns(await withoutSupersededWorkflowRunsFromGithub(token, ref, commitSha, runs), statuses)
 }
 
 /**
@@ -545,21 +541,11 @@ export async function fetchFailingCheckNames(
   ref: GithubRepoRef,
   gitRef: string,
 ): Promise<Set<string> | null> {
-  const res = await fetchWithTimeout(
-    `https://api.github.com/repos/${ref.owner}/${ref.repo}/commits/${encodeURIComponent(gitRef)}/check-runs?per_page=100&filter=latest`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    },
-  )
-  if (!res.ok) return null
-  const body = (await res.json().catch(() => null)) as { check_runs?: CheckRunLike[] } | null
-  if (!body || !Array.isArray(body.check_runs)) return null
+  const listed = await listCheckRuns(token, ref, gitRef, 'null')
+  if (!listed) return null
+  const runs = await withoutSupersededWorkflowRunsFromGithub(token, ref, gitRef, listed)
   return new Set(
-    currentCheckRuns(body.check_runs)
+    currentCheckRuns(runs)
       .filter((r) => !isAdvisoryCheckRun(r) && (r.conclusion === 'failure' || r.conclusion === 'timed_out'))
       .map((r) => String(r.name ?? ''))
       .filter(Boolean),
@@ -575,10 +561,162 @@ export interface CheckRunLike {
   /** For Actions jobs: .../actions/runs/<run id>/job/<job id>. */
   details_url?: string | null
   app?: { id?: number | null; slug?: string | null } | null
+  check_suite?: { id?: number | null } | null
+}
+
+/** One Actions workflow run on a commit, as `actions/runs?head_sha=` returns it. */
+export interface WorkflowRunOnHead {
+  id: number
+  workflow_id: number | null
+  /** Latest check suite of this run. Older attempts keep their own suite id. */
+  check_suite_id: number | null
+  created_at: string | null
 }
 
 function actionsRunId(r: CheckRunLike): string | null {
   return r.details_url?.match(/\/actions\/runs\/(\d+)/)?.[1] ?? null
+}
+
+function actionsRunNumericId(r: CheckRunLike): number | null {
+  const s = actionsRunId(r)
+  if (!s) return null
+  const n = Number(s)
+  return Number.isSafeInteger(n) && n > 0 ? n : null
+}
+
+const COMMIT_SHA_RE = /^[0-9a-f]{7,64}$/i
+
+async function listCheckRuns(
+  token: string,
+  ref: GithubRepoRef,
+  gitRef: string,
+  onError: 'throw' | 'null',
+): Promise<CheckRunLike[] | null> {
+  const all: CheckRunLike[] = []
+  // A large matrix has more than 100 runs; a red job on page 2 must count.
+  for (let page = 1; page <= CHECK_RUN_PAGES; page++) {
+    const res = await fetchWithTimeout(
+      `https://api.github.com/repos/${ref.owner}/${ref.repo}/commits/${encodeURIComponent(gitRef)}/check-runs?per_page=100&filter=latest&page=${page}`,
+      { headers: githubAuthHeaders(token) },
+    )
+    if (res.status === 404 && page === 1) return null
+    if (!res.ok) {
+      if (onError === 'throw') throw new Error(`check-runs fetch ${res.status}`)
+      return null
+    }
+    const body = (await res.json().catch(() => null)) as { total_count?: number; check_runs?: CheckRunLike[] } | null
+    if (!body || typeof body !== 'object') {
+      if (onError === 'throw') throw new Error('check-runs fetch invalid')
+      return null
+    }
+    if (!Array.isArray(body.check_runs)) return onError === 'throw' ? all : null
+    all.push(...body.check_runs)
+    if (body.check_runs.length < 100 || all.length >= (body.total_count ?? 0)) break
+  }
+  return all
+}
+
+/** At most 300 check runs per commit are read. */
+const CHECK_RUN_PAGES = 3
+
+/**
+ * Workflow run ids that are not the newest run of their workflow on this
+ * commit. GitHub's merge box scores only that newest run. An older run
+ * (a cancelled duplicate, a failed run replaced by a re-run that started
+ * before the failure was recorded) stays on the check-run list forever.
+ */
+export function supersededWorkflowRunIds(runs: readonly WorkflowRunOnHead[]): Set<number> {
+  const newest = new Map<number, WorkflowRunOnHead>()
+  const dead = new Set<number>()
+  for (const run of runs) {
+    if (!Number.isSafeInteger(run.id) || run.id <= 0) continue
+    const wf = run.workflow_id
+    if (wf == null || !Number.isSafeInteger(wf) || wf <= 0) continue
+    const prev = newest.get(wf)
+    if (!prev) {
+      newest.set(wf, run)
+      continue
+    }
+    if (prev.id === run.id) continue
+    if (workflowRunIsNewer(run, prev)) {
+      dead.add(prev.id)
+      newest.set(wf, run)
+    } else {
+      dead.add(run.id)
+    }
+  }
+  return dead
+}
+
+function workflowRunIsNewer(a: WorkflowRunOnHead, b: WorkflowRunOnHead): boolean {
+  const ta = Date.parse(a.created_at ?? '')
+  const tb = Date.parse(b.created_at ?? '')
+  if (Number.isFinite(ta) && Number.isFinite(tb) && ta !== tb) return ta > tb
+  return a.id > b.id
+}
+
+/**
+ * Drop check runs that belong to an older Actions run of the same workflow.
+ * A check with no Actions run id is kept (another app, or a run we could
+ * not place). Two different workflows that share a job name both stay.
+ */
+export function withoutSupersededWorkflowRuns<T extends CheckRunLike>(
+  checks: readonly T[],
+  runs: readonly WorkflowRunOnHead[],
+): T[] {
+  const deadRuns = supersededWorkflowRunIds(runs)
+  if (deadRuns.size === 0) return [...checks]
+  const deadSuites = new Set<number>()
+  for (const run of runs) {
+    if (deadRuns.has(run.id) && run.check_suite_id != null && run.check_suite_id > 0) deadSuites.add(run.check_suite_id)
+  }
+  return checks.filter((c) => {
+    const runId = actionsRunNumericId(c)
+    if (runId != null && deadRuns.has(runId)) return false
+    const suite = c.check_suite?.id
+    if (typeof suite === 'number' && deadSuites.has(suite)) return false
+    return true
+  })
+}
+
+async function listWorkflowRunsForHead(token: string, ref: GithubRepoRef, sha: string): Promise<WorkflowRunOnHead[] | null> {
+  if (!COMMIT_SHA_RE.test(sha)) return null
+  try {
+    const res = await fetchWithTimeout(
+      `https://api.github.com/repos/${ref.owner}/${ref.repo}/actions/runs?${new URLSearchParams({ head_sha: sha, per_page: '100' })}`,
+      { headers: githubAuthHeaders(token) },
+    )
+    if (!res.ok) return null
+    const body = (await res.json().catch(() => null)) as { workflow_runs?: unknown } | null
+    if (!body || !Array.isArray(body.workflow_runs)) return null
+    const out: WorkflowRunOnHead[] = []
+    for (const raw of body.workflow_runs) {
+      if (!raw || typeof raw !== 'object') continue
+      const r = raw as { id?: unknown; workflow_id?: unknown; check_suite_id?: unknown; created_at?: unknown }
+      if (typeof r.id !== 'number' || !Number.isSafeInteger(r.id) || r.id <= 0) continue
+      out.push({
+        id: r.id,
+        workflow_id: typeof r.workflow_id === 'number' && r.workflow_id > 0 ? r.workflow_id : null,
+        check_suite_id: typeof r.check_suite_id === 'number' && r.check_suite_id > 0 ? r.check_suite_id : null,
+        created_at: typeof r.created_at === 'string' ? r.created_at : null,
+      })
+    }
+    return out
+  } catch {
+    return null
+  }
+}
+
+/** Check runs minus older Actions runs of the same workflow. A failed runs read keeps every check. */
+async function withoutSupersededWorkflowRunsFromGithub<T extends CheckRunLike>(
+  token: string,
+  ref: GithubRepoRef,
+  sha: string,
+  checks: readonly T[],
+): Promise<T[]> {
+  const workflows = await listWorkflowRunsForHead(token, ref, sha)
+  if (!workflows) return [...checks]
+  return withoutSupersededWorkflowRuns(checks, workflows)
 }
 
 /**
@@ -623,39 +761,84 @@ export function isAdvisoryCheckRun(run: { name?: string | null }): boolean {
   return ADVISORY_CHECK_RUN_NAMES.has((run.name ?? '').toLowerCase())
 }
 
-export function collapseCheckRuns(all: CheckRunLike[]): CheckRunSnapshot {
-  const runs = currentCheckRuns(all.filter((r) => !isAdvisoryCheckRun(r)))
+/** Conclusions GitHub counts as passing for required checks and the merge box. */
+const PASSING_CONCLUSIONS = new Set(['success', 'neutral', 'skipped'])
+
+/** Worst first among conclusions that do not pass. Unknown values rank just under failure. */
+const FAILING_SEVERITY: Record<string, number> = {
+  failure: 100,
+  startup_failure: 95,
+  cancelled: 90,
+  timed_out: 80,
+  action_required: 70,
+  stale: 60,
+}
+
+/**
+ * One state for a commit, by GitHub's own rule: `success`, `neutral` and
+ * `skipped` pass (docs.github.com, "Status checks"). Any other conclusion,
+ * including one this code does not know, fails closed and the worst wins.
+ * A head with only passing runs reads `success` when one of them succeeded,
+ * so a skipped CLA or E2E job no longer hides a green build; `skipped` or
+ * `neutral` alone stays as is for callers that want a real success.
+ * `extra` holds legacy commit statuses, already one per context.
+ */
+export function collapseCheckRuns(all: CheckRunLike[], extra: CheckRunLike[] = []): CheckRunSnapshot {
+  const runs = [...currentCheckRuns(all.filter((r) => !isAdvisoryCheckRun(r))), ...extra]
   if (runs.length === 0) return { status: null, conclusion: null }
 
-  const pending = runs.some((r) => r.status === 'queued' || r.status === 'in_progress')
-  if (pending) {
+  if (runs.some((r) => r.status !== 'completed' || !r.conclusion)) {
     return { status: 'in_progress', conclusion: null }
   }
 
-  // Worst-wins ordering. We take whatever the matrix says is the most
-  // severe conclusion, so a red "failure" never gets hidden by a later
-  // green "success" from an unrelated check.
-  const severity: Record<string, number> = {
-    failure: 100,
-    cancelled: 90,
-    timed_out: 80,
-    action_required: 70,
-    stale: 60,
-    neutral: 40,
-    skipped: 30,
-    success: 10,
-  }
   let worst: string | null = null
   let worstScore = -1
   for (const r of runs) {
-    if (!r.conclusion) continue
-    const score = severity[r.conclusion] ?? 50
+    const c = r.conclusion as string
+    if (PASSING_CONCLUSIONS.has(c)) continue
+    // Unknown values fail closed but never displace a real `failure`, the
+    // one conclusion downstream code reads as red code (pipeline-view, ci-infra).
+    const score = FAILING_SEVERITY[c] ?? 99
     if (score > worstScore) {
       worstScore = score
-      worst = r.conclusion
+      worst = c
     }
   }
-  return { status: 'completed', conclusion: worst }
+  if (worst) return { status: 'completed', conclusion: worst }
+  const has = (c: string) => runs.some((r) => r.conclusion === c)
+  return { status: 'completed', conclusion: has('success') ? 'success' : has('neutral') ? 'neutral' : 'skipped' }
+}
+
+/**
+ * Legacy commit statuses (Buildkite, CircleCI, Vercel, Snyk…) as check-run
+ * shapes. They report on a separate API from check runs, so a repo whose CI
+ * posts statuses had no CI state at all. Only finished statuses count: a
+ * `pending` one may never finish (a CircleCI approval hold, an integration
+ * that posts pending and never updates), and GitHub itself merges past a
+ * pending status that is not required, so it must not hold the head at
+ * "running" forever. A read error or no statuses gives none (the combined
+ * state is "pending" when there are no statuses at all).
+ */
+export function commitStatusesAsCheckRuns(statuses: Array<{ context?: string | null; state?: string | null }>): CheckRunLike[] {
+  return statuses.flatMap((s) => {
+    const state = (s.state ?? '').toLowerCase()
+    if (state !== 'success' && state !== 'failure' && state !== 'error') return []
+    return [{ name: s.context ?? 'status', status: 'completed', conclusion: state === 'success' ? 'success' : 'failure' }]
+  })
+}
+
+async function listCommitStatuses(token: string, ref: GithubRepoRef, gitRef: string): Promise<CheckRunLike[]> {
+  try {
+    const res = await fetchWithTimeout(
+      `https://api.github.com/repos/${ref.owner}/${ref.repo}/commits/${encodeURIComponent(gitRef)}/status?per_page=100`,
+      { headers: githubAuthHeaders(token) },
+    )
+    if (!res.ok) return []
+    const body = (await res.json().catch(() => null)) as { statuses?: Array<{ context?: string; state?: string }> } | null
+    return Array.isArray(body?.statuses) ? commitStatusesAsCheckRuns(body.statuses) : []
+  } catch {
+    return []
+  }
 }
 
 export interface WorkflowRunSnapshot {

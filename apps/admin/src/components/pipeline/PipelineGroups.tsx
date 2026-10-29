@@ -10,7 +10,7 @@
  *          you have a worker lane for its app (ADR 0048).
  */
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Btn } from '../ui'
 import { IconAlertTriangle, IconCheck, IconChevronDown, IconChevronRight, IconClock, IconExternalLink } from '../icons'
@@ -30,6 +30,8 @@ interface Props {
   onAction: (pending: PendingAction, key: string) => void
   /** Your own local worker lanes (every app); empty hides "Send to my local worker". */
   workerLanes?: WorkerLane[]
+  /** A group to open and scroll to (`/pipeline?group=<id>`, Home's Needs you buttons). */
+  focusGroupId?: string | null
 }
 
 /** Stages whose reports have no fix to keep yet: a local worker may take them. */
@@ -79,7 +81,7 @@ export function ActionButtons({
   onAction: Props['onAction']
   testIdPrefix: string
 }) {
-  const shown = actions.filter((a) => items.some((i) => (a === 'dismiss' || a === 'requeue' ? i.reportId : i.prUrl)))
+  const shown = actions.filter((a) => items.some((i) => (a === 'dismiss' || a === 'mark_fixed' || a === 'requeue' ? i.reportId : i.prUrl)))
   if (shown.length === 0) return null
   return (
     <span className="flex flex-wrap gap-1">
@@ -225,14 +227,19 @@ function ItemRow({ item, group, props }: { item: PipelineItem; group: PipelineGr
 const ITEMS_STEP = 20
 
 function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
-  const [open, setOpen] = useState(false)
+  const focused = props.focusGroupId === group.id
+  const [open, setOpen] = useState(focused)
+  const ref = useRef<HTMLLIElement>(null)
+  useEffect(() => {
+    if (focused) ref.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [focused])
   const [shown, setShown] = useState(ITEMS_STEP)
   const apps = new Set(group.items.map((i) => i.projectId))
   const appId = apps.size === 1 ? [...apps][0]! : null
   const sendIds = [...new Set(group.items.map((i) => i.reportId).filter((x): x is string => !!x))]
   const lanes = appId && SENDABLE_STAGES.has(group.stage) ? (props.workerLanes ?? []).filter((l) => l.projectId === appId) : []
   return (
-    <li className={`rounded-md border border-edge-subtle border-l-4 bg-surface-raised ${TONE_BORDER[group.tone]}`} data-testid={`pipeline-group-${group.id}`}>
+    <li ref={ref} className={`scroll-mt-20 rounded-md border border-edge-subtle border-l-4 bg-surface-raised ${TONE_BORDER[group.tone]}`} data-testid={`pipeline-group-${group.id}`}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 p-2.5">
         <button
           type="button"

@@ -52,6 +52,8 @@ export type PipelineAction =
   | 'followup'
   /** Close the report with a reason (the console's report dismiss route). */
   | 'dismiss'
+  /** Close the report as fixed: the agent found the fix already in the code (same route, status fixed). */
+  | 'mark_fixed'
   /** Put a report a local worker could not run (the machine failed, ADR 0048) back in its lane. Item ids are work_claims ids. */
   | 'requeue'
 
@@ -362,13 +364,14 @@ export function failedChecksFromDetail(detail: string | null): string[] {
 
 // ── Agent failures and action availability ──────────────────────────────────
 
-type AgentFailureKind = 'person' | 'nothing' | 'error'
+type AgentFailureKind = 'person' | 'fixed' | 'nothing' | 'error'
 
 /** The cloud agent's own no-PR verdicts (fix-report-truth.ts AGENT_VERDICT_CATEGORIES). */
 function agentFailureKind(category: string | null | undefined): AgentFailureKind {
   const c = (category ?? '').toLowerCase()
   if (c === 'needs_human') return 'person'
-  if (c === 'already_fixed' || c === 'not_actionable' || c === 'wrong_repo') return 'nothing'
+  if (c === 'already_fixed') return 'fixed'
+  if (c === 'not_actionable' || c === 'wrong_repo') return 'nothing'
   return 'error'
 }
 
@@ -379,6 +382,8 @@ function agentFailureKind(category: string | null | undefined): AgentFailureKind
  */
 const AGENT_FAILED_GROUPS: Record<AgentFailureKind, { id: string; text: string }> = {
   person: { id: 'agent_failed_person', text: 'the agent says a person must do it, no PR opened' },
+  // Already fixed is not "not a code bug": closing it that way told the reporter the wrong thing.
+  fixed: { id: 'agent_said_fixed', text: 'the agent says the bug is already fixed in the code' },
   nothing: { id: 'agent_failed_nothing', text: 'the agent found nothing to change in the code' },
   error: { id: 'agent_failed', text: 'the agent failed, no PR opened' },
 }
@@ -465,6 +470,7 @@ function blockedActions(actions: readonly PipelineAction[], ctx: BlockContext): 
         why = a.pr_url ? null : NO_PR
         break
       case 'dismiss':
+      case 'mark_fixed':
         why = a.report_id ? null : 'No report to close.'
         break
       default:
@@ -610,7 +616,7 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       } else if (a.status === 'failed' && age(now, a.created_at) <= RECENT_MS && isAgentFailedReport(a)) {
         // The agent's own verdict is an answer a re-run repeats; an error is not (fix-report-truth.ts).
         const kind = agentFailureKind(a.failure_category)
-        groups.add(AGENT_FAILED_GROUPS[kind].id, { stage: 'pr', tone: 'stuck', noun: REPORT, text: AGENT_FAILED_GROUPS[kind].text, actions: ['dismiss'] }, itemOf(a, a.completed_at ?? a.created_at, { lastError: clip(a.error) }))
+        groups.add(AGENT_FAILED_GROUPS[kind].id, { stage: 'pr', tone: 'stuck', noun: REPORT, text: AGENT_FAILED_GROUPS[kind].text, actions: kind === 'fixed' ? ['mark_fixed', 'dismiss'] : ['dismiss'] }, itemOf(a, a.completed_at ?? a.created_at, { lastError: clip(a.error) }))
       }
       continue
     }
