@@ -62,6 +62,25 @@ export interface NeedsYouItem {
   action: ConnectHint
 }
 
+/** A Health check's fix (server `_shared/health-checks.ts` HealthFix). */
+export type HealthFix =
+  | { kind: 'auto'; label: string; action: string }
+  | { kind: 'one_click'; label: string; to: string; action?: string }
+  | { kind: 'guided'; label: string; steps: string[]; to?: string }
+
+/** One root cause in "Fix these first" (server `buildFixFirst`). */
+export interface FixFirstItem {
+  id: string
+  key: string
+  part: string
+  severity: 'critical' | 'warn' | 'info'
+  title: string
+  detail: string
+  /** How many items wait on it, when counted. */
+  affects: number | null
+  fix: HealthFix | null
+}
+
 type StationId = 'fix' | 'ci' | 'train' | 'merged' | 'deployed'
 
 interface Station {
@@ -130,6 +149,8 @@ export interface ProjectHome {
   projectId: string
   app: HomeSection<HomeApp>
   health: HomeSection<HealthSignal[]>
+  /** Root causes first, at most three (older servers send none). */
+  fixFirst?: HomeSection<FixFirstItem[]>
   needsYou: HomeSection<NeedsYouItem[]>
   release: HomeSection<HomeRelease>
   sitemap: HomeSection<HomeSitemap>
