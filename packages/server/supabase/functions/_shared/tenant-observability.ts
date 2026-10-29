@@ -19,6 +19,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { log } from './logger.ts';
 import type { AuditAction } from './audit.ts';
 import { logAudit } from './audit.ts';
+import { reportMessage } from './sentry.ts';
 
 const tenantLog = log.child('tenant');
 
@@ -109,7 +110,9 @@ export async function rateLimitActorId(scopeKey: string): Promise<string> {
  * Runner ingest (`*:runner_ingest`) is the exception: it fails closed. A
  * Postgres statement timeout on the hot scope row used to return
  * `{ allowed: true }` and the push proceeded unthrottled exactly when load
- * was highest.
+ * was highest. `mushi runner heartbeat` and the job hooks retry that 503.
+ * The row-lock timeout itself (a short local statement_timeout) is BL-170.
+ * Either failure path reports one Sentry event tagged with the scope.
  */
 export async function claimTenantRateLimit(
   db: SupabaseClient,
@@ -132,14 +135,31 @@ export async function claimTenantRateLimit(
   if (FAIL_CLOSED_SCOPE.test(scopeKey)) {
     // Ingest abuse protection: a timeout or any other claim error must not
     // lift the cap. Callers map `unavailable` to 503 RATE_LIMIT_UNAVAILABLE.
-    tenantLog.error('scoped_rate_limit_claim failed — refusing request', { scopeKey, err: msg });
+    reportClaimRpcError(scopeKey, msg, 'refused');
     return { allowed: false, retryAfterSec: CLAIM_UNAVAILABLE_RETRY_SEC, unavailable: true };
   }
   // Fail open on genuine infra errors so a database blip cannot lock out
   // legitimate traffic — but log loudly, because a silent fail-open here is
   // indistinguishable from having no rate limit at all.
-  tenantLog.error('scoped_rate_limit_claim failed — allowing request', { scopeKey, err: msg });
+  reportClaimRpcError(scopeKey, msg, 'allowed');
   return { allowed: true };
+}
+
+/**
+ * One Sentry event per claim-RPC failure, tagged with the rate-limit scope,
+ * so a timeout or an unexpected error can be alerted on. `sentry: false` on
+ * the log line keeps the logger from sending a second event whose tag is the
+ * logger name rather than the scope.
+ */
+function reportClaimRpcError(scopeKey: string, err: string, outcome: 'refused' | 'allowed'): void {
+  const msg = outcome === 'refused'
+    ? 'scoped_rate_limit_claim failed — refusing request'
+    : 'scoped_rate_limit_claim failed — allowing request';
+  tenantLog.error(msg, { scopeKey, err, sentry: false });
+  reportMessage(msg, 'error', {
+    tags: { scope: scopeKey.slice(0, 200), rate_limit_claim: outcome },
+    extra: { err },
+  });
 }
 
 export interface OrgAuditInput {

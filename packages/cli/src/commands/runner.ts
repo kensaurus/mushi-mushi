@@ -20,7 +20,8 @@
  *                       (/v1/admin/ci/cost-fix-rollout, ADR 0047 amendment);
  *                       fix-status shows it and, after the merge, the saving
  *          - heartbeat  this machine's memory, swap, load and runner services
- *                       (POST /v1/ingest/runner, kind heartbeat)
+ *                       (POST /v1/ingest/runner, kind heartbeat). A 503 is
+ *                       retried after Retry-After, up to 3 times.
  *          - hooks      job hooks that report each job's memory peak and OOM
  *                       kills (POST /v1/ingest/runner, kind job)
  *          - add        set this machine up as a runner with safe defaults
@@ -37,7 +38,7 @@ import { accessSync, chmodSync, closeSync, constants as fsConstants, existsSync,
 import { arch as nodeArch, userInfo } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import * as p from '@clack/prompts'
-import { apiCall, die, outputIsJson, requireConfig, requireUuid } from '../cli-shared.js'
+import { apiCall, die, outputIsJson, requireConfig, requireUuid, type ApiResult } from '../cli-shared.js'
 import { loadConfig, type CliConfig } from '../config.js'
 import { CLOUD_API_ENDPOINT } from '../endpoint.js'
 import { MushiCliError } from '../errors.js'
@@ -78,6 +79,12 @@ import {
 import { assertNotCliKey, defaultRunnerKeyLabel, resolveRunnerKey, RUNNER_KEY_CREDENTIAL, RUNNER_KEY_PATH } from '../runner/key.js'
 
 const HEARTBEAT_INTERVAL_MS = 120_000
+/** 503 RATE_LIMIT_UNAVAILABLE: try this many posts, then give up for this tick. */
+const RUNNER_INGEST_ATTEMPTS = 3
+/** Matches the server's CLAIM_UNAVAILABLE_RETRY_SEC when Retry-After is absent. */
+const RUNNER_INGEST_RETRY_DEFAULT_SEC = 30
+/** A huge Retry-After must not stall a timer. The server sends 30, which fits. */
+const RUNNER_INGEST_RETRY_CAP_SEC = 60
 
 /** Test seams: the host, gh and the step runner. */
 interface RunnerDeps {
@@ -89,6 +96,8 @@ interface RunnerDeps {
   systemdRunning: () => boolean
   /** `gh auth status` text, to tell whether gh keeps its token in a desktop keyring. */
   ghAuthText: () => string
+  /** Heartbeat interval and the 503 backoff. Tests record the wait instead of sleeping. */
+  sleep: (ms: number, signal: AbortSignal) => Promise<void>
 }
 
 /** A file's text through one descriptor (no symlinks), or '' when it does not exist. */
@@ -132,6 +141,7 @@ let deps: RunnerDeps = {
   runStep: defaultRunStep,
   systemdRunning: () => existsSync('/run/systemd/system'),
   ghAuthText: () => ghAuthStatus().text,
+  sleep,
 }
 
 /** @internal Tests only. */
@@ -201,6 +211,35 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
       done()
     }, { once: true })
   })
+}
+
+/**
+ * How long to wait before repeating a 503. Honour a delta-seconds Retry-After,
+ * otherwise the server's 30s default, and never wait more than 60s.
+ */
+function runnerIngestWaitMs(result: ApiResult<unknown>): number {
+  const header = !result.ok && typeof result.retryAfterSec === 'number' && result.retryAfterSec >= 0
+    ? result.retryAfterSec
+    : RUNNER_INGEST_RETRY_DEFAULT_SEC
+  return Math.min(header, RUNNER_INGEST_RETRY_CAP_SEC) * 1000
+}
+
+/**
+ * POST one heartbeat. A 503 (the claim RPC failed closed) is retried so a
+ * statement timeout does not drop it. A 429 is the real cap: one try.
+ */
+async function postRunnerIngest(config: CliConfig, body: unknown, signal: AbortSignal): Promise<ApiResult<unknown>> {
+  let result: ApiResult<unknown> = {
+    ok: false,
+    error: { code: 'NETWORK_ERROR', message: 'Runner push was not sent.' },
+  }
+  for (let attempt = 1; attempt <= RUNNER_INGEST_ATTEMPTS; attempt++) {
+    result = await apiCall<unknown>('/v1/ingest/runner', config, { method: 'POST', body: JSON.stringify(body) })
+    if (result.ok || result.httpStatus !== 503 || attempt === RUNNER_INGEST_ATTEMPTS || signal.aborted) return result
+    await deps.sleep(runnerIngestWaitMs(result), signal)
+    if (signal.aborted) return result
+  }
+  return result
 }
 
 function printPlan(plan: AddPlan, dryRun: boolean): void {
@@ -609,7 +648,8 @@ Create one with \`mushi runner key\`.`)
       const signal = getAbortSignal()
       for (;;) {
         const body = build()
-        const result = await apiCall<unknown>('/v1/ingest/runner', config, { method: 'POST', body: JSON.stringify(body) })
+        const result = await postRunnerIngest(config, body, signal)
+        if (signal.aborted) return
         if (opts.once) {
           if (!result.ok) die(result)
           console.log(`Sent a heartbeat for ${body.host.hostname} with ${body.runners.length} runner(s).`)
@@ -620,7 +660,7 @@ Create one with \`mushi runner key\`.`)
         } else {
           process.stderr.write(`${new Date().toISOString()} heartbeat failed: ${result.error.code} — ${result.error.message}\n`)
         }
-        await sleep(HEARTBEAT_INTERVAL_MS, signal)
+        await deps.sleep(HEARTBEAT_INTERVAL_MS, signal)
         if (signal.aborted) return
       }
     })

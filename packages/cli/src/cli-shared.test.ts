@@ -36,6 +36,29 @@ describe('apiCall error shapes', () => {
 })
 
 describe('apiCall', () => {
+  it('records a Retry-After delta on the error', async () => {
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ ok: false, error: { code: 'RATE_LIMIT_UNAVAILABLE', message: 'paused' } }), {
+      status: 503,
+      headers: { 'content-type': 'application/json', 'Retry-After': '30' },
+    }))
+    expect(await apiCall('/x', config)).toEqual({
+      ok: false,
+      httpStatus: 503,
+      retryAfterSec: 30,
+      error: { code: 'RATE_LIMIT_UNAVAILABLE', message: 'paused' },
+    })
+  })
+
+  it('ignores a Retry-After that is not a delta in seconds', async () => {
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ ok: false, error: { code: 'RATE_LIMIT_UNAVAILABLE', message: 'paused' } }), {
+      status: 503,
+      headers: { 'content-type': 'application/json', 'Retry-After': 'Wed, 21 Oct 2015 07:28:00 GMT' },
+    }))
+    const r = await apiCall('/x', config)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.retryAfterSec).toBeUndefined()
+  })
+
   it('normalizes { ok: false, error: "text" } and records the status', async () => {
     vi.stubGlobal('fetch', async () => jsonResponse(500, { ok: false, error: 'boom' }))
     const r = await apiCall('/x', config)

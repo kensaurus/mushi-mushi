@@ -537,8 +537,51 @@ describe('mushi runner heartbeat', () => {
   it('--once exits non-zero when the server refuses', async () => {
     vi.stubEnv('MUSHI_RUNNER_KEY', RUNNER_KEY)
     const run = await runCli(registerRunnerCommands, ['runner', 'heartbeat', '--once'], () => errorReply(429, 'RATE_LIMITED', 'slow down'))
+    expect(run.calls).toHaveLength(1)
     expect(run.exitCode).toBe(1)
     expect(run.stderr).toContain('RATE_LIMITED')
+  })
+
+  it('--once retries a 503 after Retry-After and then sends', async () => {
+    vi.stubEnv('MUSHI_RUNNER_KEY', RUNNER_KEY)
+    const waits: number[] = []
+    __setRunnerDeps({ sleep: async (ms) => { waits.push(ms) } })
+    let n = 0
+    const run = await runCli(registerRunnerCommands, ['runner', 'heartbeat', '--once'], () => {
+      n += 1
+      if (n === 1) return errorReply(503, 'RATE_LIMIT_UNAVAILABLE', 'paused', {}, { 'Retry-After': '7' })
+      return okReply({ status: 'ok' })
+    })
+    expect(run.calls).toHaveLength(2)
+    expect(waits).toEqual([7_000])
+    expect(run.exitCode).toBe(0)
+    expect(run.stdout).toContain('Sent a heartbeat for ci-box with 1 runner(s).')
+  })
+
+  it('--once waits 30s when a 503 omits Retry-After', async () => {
+    vi.stubEnv('MUSHI_RUNNER_KEY', RUNNER_KEY)
+    const waits: number[] = []
+    __setRunnerDeps({ sleep: async (ms) => { waits.push(ms) } })
+    let n = 0
+    const run = await runCli(registerRunnerCommands, ['runner', 'heartbeat', '--once'], () => {
+      n += 1
+      return n === 1 ? errorReply(503, 'RATE_LIMIT_UNAVAILABLE', 'paused') : okReply({ status: 'ok' })
+    })
+    expect(run.calls).toHaveLength(2)
+    expect(waits).toEqual([30_000])
+    expect(run.exitCode).toBe(0)
+  })
+
+  it('--once gives up after three 503s and caps Retry-After at 60s', async () => {
+    vi.stubEnv('MUSHI_RUNNER_KEY', RUNNER_KEY)
+    const waits: number[] = []
+    __setRunnerDeps({ sleep: async (ms) => { waits.push(ms) } })
+    const run = await runCli(registerRunnerCommands, ['runner', 'heartbeat', '--once'], () =>
+      errorReply(503, 'RATE_LIMIT_UNAVAILABLE', 'paused', {}, { 'Retry-After': '120' }))
+    expect(run.calls).toHaveLength(3)
+    expect(waits).toEqual([60_000, 60_000])
+    expect(run.exitCode).toBe(1)
+    expect(run.stderr).toContain('RATE_LIMIT_UNAVAILABLE')
   })
 })
 

@@ -14,8 +14,15 @@ afterEach(() => {
   tmp = null
 })
 
+interface HookStatus { code: number; retryAfter?: string }
+
 /** Runs a hook with a fake curl that records its argv, stdin and the body. */
-function runHook(phase: 'started' | 'completed', env: Record<string, string>, opts: { key?: boolean; curlFails?: boolean } = {}) {
+function runHook(
+  phase: 'started' | 'completed',
+  env: Record<string, string>,
+  opts: { key?: boolean; curlFails?: boolean; statuses?: HookStatus[] } = {},
+) {
+  if (tmp) rmSync(tmp, { recursive: true, force: true })
   tmp = mkdtempSync(join(tmpdir(), 'mushi-hook-'))
   const hooks = join(tmp, 'mushi-hooks')
   const bin = join(tmp, 'bin')
@@ -25,11 +32,44 @@ function runHook(phase: 'started' | 'completed', env: Record<string, string>, op
   writeFileSync(script, hookScript({ phase, endpoint: 'https://api.test/functions/v1/api/', hostId: HOST_ID }), { mode: 0o755 })
   if (opts.key !== false) writeFileSync(join(hooks, 'key'), `${KEY}\n`, { mode: 0o600 })
   const log = join(tmp, 'curl.log')
-  writeFileSync(join(bin, 'curl'), `#!/bin/sh
+  const sleepLog = join(tmp, 'sleep.log')
+  if (opts.statuses) {
+    const arms = opts.statuses.map((s, i) => `  ${i + 1}) CODE=${s.code}; RA='${s.retryAfter ?? ''}' ;;`).join('\n')
+    writeFileSync(join(bin, 'curl'), `#!/bin/sh
+printf '%s\\n' "$@" >> '${log}.argv'
+printf '\\n---\\n' >> '${log}.argv'
+cat >> '${log}.stdin'
+n=$(cat '${log}.count' 2>/dev/null || echo 0)
+n=$((n + 1))
+printf '%s' "$n" > '${log}.count'
+CODE=200
+RA=
+case "$n" in
+${arms}
+esac
+prev=
+for a in "$@"; do
+  if [ "$prev" = "-D" ]; then
+    if [ -n "$RA" ]; then printf 'HTTP/1.1 %s\\r\\nRetry-After: %s\\r\\n\\r\\n' "$CODE" "$RA" > "$a"
+    else printf 'HTTP/1.1 %s\\r\\n\\r\\n' "$CODE" > "$a"; fi
+  fi
+  prev=$a
+done
+printf '%s' "$CODE"
+exit 0
+`)
+    writeFileSync(join(bin, 'sleep'), `#!/bin/sh
+printf '%s\\n' "$1" >> '${sleepLog}'
+exit 0
+`)
+    chmodSync(join(bin, 'sleep'), 0o755)
+  } else {
+    writeFileSync(join(bin, 'curl'), `#!/bin/sh
 printf '%s\\n' "$@" > '${log}.argv'
 cat > '${log}.stdin'
 ${opts.curlFails ? 'exit 7' : 'exit 0'}
 `)
+  }
   chmodSync(join(bin, 'curl'), 0o755)
   const res = spawnSync('sh', [script], {
     env: { PATH: `${bin}:/usr/bin:/bin`, ...env },
@@ -42,7 +82,8 @@ ${opts.curlFails ? 'exit 7' : 'exit 0'}
       return null
     }
   }
-  return { res, argv: read(`${log}.argv`), stdin: read(`${log}.stdin`) }
+  const count = read(`${log}.count`)
+  return { res, argv: read(`${log}.argv`), stdin: read(`${log}.stdin`), sleeps: read(sleepLog), curls: count ? Number(count) : null }
 }
 
 const GH_ENV = {
@@ -94,6 +135,36 @@ describe('hookScript', () => {
     expect(runHook('started', GH_ENV, { key: false }).res.status).toBe(0)
     expect(runHook('started', GH_ENV, { key: false }).argv).toBeNull()
     expect(runHook('completed', GH_ENV, { curlFails: true }).res.status).toBe(0)
+  })
+
+  it('retries a 503 after Retry-After and then sends the sample', () => {
+    const { res, argv, stdin, sleeps, curls } = runHook('completed', GH_ENV, { statuses: [{ code: 503, retryAfter: '4' }, { code: 200 }] })
+    expect(res.status).toBe(0)
+    expect(curls).toBe(2)
+    expect(sleeps).toBe('4\n')
+    expect(argv).not.toContain(KEY)
+    expect(stdin).toBe(`X-Mushi-Api-Key: ${KEY}\nX-Mushi-Api-Key: ${KEY}\n`)
+  })
+
+  it('waits 30s when a 503 omits Retry-After, and caps a long one at 60s', () => {
+    const missing = runHook('started', GH_ENV, { statuses: [{ code: 503 }, { code: 200 }] })
+    expect(missing.curls).toBe(2)
+    expect(missing.sleeps).toBe('30\n')
+    expect(missing.res.status).toBe(0)
+    const capped = runHook('completed', GH_ENV, {
+      statuses: [{ code: 503, retryAfter: '120' }, { code: 503, retryAfter: '120' }, { code: 503, retryAfter: '120' }],
+    })
+    expect(capped.res.status).toBe(0)
+    expect(capped.curls).toBe(3)
+    expect(capped.sleeps).toBe('60\n60\n')
+    expect(capped.argv).not.toContain(KEY)
+  })
+
+  it('does not retry a 429', () => {
+    const { res, curls, sleeps } = runHook('started', GH_ENV, { statuses: [{ code: 429, retryAfter: '5' }, { code: 200 }] })
+    expect(res.status).toBe(0)
+    expect(curls).toBe(1)
+    expect(sleeps).toBeNull()
   })
 
   it('does not inline the key and refuses a bad host id or endpoint', () => {
