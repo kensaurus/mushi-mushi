@@ -561,16 +561,13 @@ export interface CiOutcomeCounts {
 }
 
 /**
- * The server's pass rate is passed ÷ (passed + code failures + machine
- * stops), so the passed count follows from it exactly enough to draw.
+ * Outcome counts for the summary bar. `passed` is jobs that finished testing
+ * and passed. Machine stops stay in `infra`: they never finished testing, so
+ * they are not folded into the pass rate.
  */
-export function ciOutcomeCounts(stats: Pick<CiOverview['stats'], 'jobs' | 'passRate' | 'infraFailures' | 'codeFailures'>): CiOutcomeCounts {
+export function ciOutcomeCounts(stats: Pick<CiOverview['stats'], 'jobs' | 'passed' | 'infraFailures' | 'codeFailures'>): CiOutcomeCounts {
   const failed = stats.codeFailures + stats.infraFailures
-  let passed = 0
-  if (stats.passRate != null) {
-    passed = stats.passRate >= 1 ? Math.max(0, stats.jobs - failed) : Math.round((stats.passRate * failed) / (1 - stats.passRate))
-  }
-  passed = Math.min(passed, Math.max(0, stats.jobs - failed))
+  const passed = Math.min(Math.max(0, stats.passed), Math.max(0, stats.jobs - failed))
   return {
     passed,
     codeFailures: stats.codeFailures,

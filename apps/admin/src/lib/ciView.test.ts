@@ -346,17 +346,25 @@ describe('runner families (one-job runners)', () => {
 })
 
 describe('summary: outcome counts and verdict', () => {
-  it('derives passed jobs from the pass rate over passed + failed + stopped', () => {
-    // 40 passed, 10 code failures, 50 stopped: rate 0.4.
-    expect(ciOutcomeCounts({ jobs: 110, passRate: 0.4, codeFailures: 10, infraFailures: 50 })).toEqual({
+  it('keeps machine stops out of the passed count', () => {
+    // 80 finished testing and passed, 36 the machine stopped, 10 cancelled or still going.
+    expect(ciOutcomeCounts({ jobs: 126, passed: 80, codeFailures: 0, infraFailures: 36 })).toEqual({
+      passed: 80,
+      codeFailures: 0,
+      infra: 36,
+      other: 10,
+      total: 126,
+    })
+    // 40 passed, 10 failed the code, 50 stopped, 10 other. The rate is 40/50, not 40/100.
+    expect(ciOutcomeCounts({ jobs: 110, passed: 40, codeFailures: 10, infraFailures: 50 })).toEqual({
       passed: 40,
       codeFailures: 10,
       infra: 50,
       other: 10,
       total: 110,
     })
-    expect(ciOutcomeCounts({ jobs: 12, passRate: 1, codeFailures: 0, infraFailures: 0 }).passed).toBe(12)
-    expect(ciOutcomeCounts({ jobs: 0, passRate: null, codeFailures: 0, infraFailures: 0 }).total).toBe(0)
+    expect(ciOutcomeCounts({ jobs: 12, passed: 12, codeFailures: 0, infraFailures: 0 }).passed).toBe(12)
+    expect(ciOutcomeCounts({ jobs: 0, passed: 0, codeFailures: 0, infraFailures: 0 }).total).toBe(0)
   })
 
   it('leads with a long wait, then machine trouble, then code failures, else healthy', () => {
