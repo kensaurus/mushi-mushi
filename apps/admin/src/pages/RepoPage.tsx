@@ -55,6 +55,7 @@ import { EMPTY_REPO_STATS, type RepoStats, type RepoTabId } from '../components/
 import { usePageData } from '../lib/usePageData'
 import { ProjectReposCard } from '../components/repo/ProjectReposCard'
 import { OpenPullRequests } from '../components/repo/OpenPullRequests'
+import { RepoCleanup } from '../components/repo/RepoCleanup'
 import { ListPager } from '../components/ListPager'
 import {
   REPO_FILTERS,
@@ -141,7 +142,7 @@ const ACTIVITY_PAGE_SIZE = 20
 
 /** `?tab=overview` (old links) and no tab open the pull requests. */
 function resolveRepoTab(value: string | null): RepoTabId {
-  return value === 'activity' ? 'activity' : 'branches'
+  return value === 'activity' || value === 'cleanup' ? value : 'branches'
 }
 
 type ActivityKind = RepoActivityEvent['kind']
@@ -378,6 +379,8 @@ export function RepoPage() {
         label: copy?.tabLabels?.activity ?? 'Activity',
         count: activity && activity.length > 0 ? activity.length : undefined,
       },
+      // Repo clean-up (ADR 0051): this page is itself a Lab (Pull requests), so the tab is opt-in.
+      { id: 'cleanup' as const, label: 'Clean up' },
     ],
     [copy?.tabLabels, repoStats.totalBranches, activity],
   )
@@ -600,6 +603,8 @@ export function RepoPage() {
       )}
 
       {activeTab === 'activity' && activityPanel}
+
+      {activeTab === 'cleanup' && activeProjectId && <RepoCleanup projectId={activeProjectId} />}
 
       {/* Linked repos, default branch, App and index status: setup, not the daily job. */}
       {activeProjectId && (

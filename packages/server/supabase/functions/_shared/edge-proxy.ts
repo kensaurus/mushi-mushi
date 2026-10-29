@@ -31,6 +31,50 @@ export interface ProxyOptions {
   /** This project's Supabase URL (SUPABASE_URL). */
   supabaseUrl: string
   fetchImpl?: typeof fetch
+  /**
+   * Secret that signs the caller's IP for the next function (the service
+   * role key). The hop is a new request through Supabase's edge, so the
+   * next function's own `cf-connecting-ip` may be `api`'s address, not the
+   * visitor's; per-IP limits there read the signed header instead.
+   */
+  clientIpSecret?: string
+}
+
+/** The caller's IP and its HMAC, set by `api` on a forward (see verifiedClientIp). */
+export const CLIENT_IP_HEADER = 'x-mushi-client-ip'
+export const CLIENT_IP_SIG_HEADER = 'x-mushi-client-ip-sig'
+
+/**
+ * The caller's IP as this function sees it: Cloudflare's header, else the
+ * rightmost X-Forwarded-For hop (the one a client cannot write); null if none.
+ */
+export function clientIpOf(header: (name: string) => string | null | undefined): string | null {
+  const cf = header('cf-connecting-ip')?.trim()
+  if (cf) return cf
+  const xff = header('x-forwarded-for')?.split(',').map((s) => s.trim()).filter(Boolean)
+  return xff?.length ? xff[xff.length - 1] : null
+}
+
+async function signClientIp(secret: string, ip: string): Promise<string> {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`client-ip:${ip}`))
+  return Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/**
+ * The IP `api` signed on the forward, or null when the header is missing or
+ * its signature does not match (a caller hitting this function directly, or
+ * forging the header, gets null and the caller falls back to clientIpOf).
+ */
+export async function verifiedClientIp(header: (name: string) => string | null | undefined, secret: string | undefined): Promise<string | null> {
+  const ip = header(CLIENT_IP_HEADER)?.trim()
+  const sig = header(CLIENT_IP_SIG_HEADER)?.trim()
+  if (!ip || !sig || !secret || ip.length > 64) return null
+  const want = await signClientIp(secret, ip)
+  if (want.length !== sig.length) return null
+  let diff = 0
+  for (let i = 0; i < want.length; i++) diff |= want.charCodeAt(i) ^ sig.charCodeAt(i)
+  return diff === 0 ? ip : null
 }
 
 /**
@@ -52,6 +96,14 @@ export async function proxyToFunction(req: Request, fn: string, apiPath: string,
     if (!HOP_BY_HOP.has(key.toLowerCase())) headers.set(key, value)
   })
   headers.set('x-mushi-forwarded-by', 'api')
+  // Never pass on a client-supplied IP header; sign the real one instead.
+  headers.delete(CLIENT_IP_HEADER)
+  headers.delete(CLIENT_IP_SIG_HEADER)
+  const ip = clientIpOf((n) => req.headers.get(n))
+  if (ip && opts.clientIpSecret) {
+    headers.set(CLIENT_IP_HEADER, ip)
+    headers.set(CLIENT_IP_SIG_HEADER, await signClientIp(opts.clientIpSecret, ip))
+  }
   const hasBody = req.method !== 'GET' && req.method !== 'HEAD'
   const upstream = await (opts.fetchImpl ?? fetch)(target, {
     method: req.method,

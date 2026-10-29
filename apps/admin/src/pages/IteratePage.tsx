@@ -392,7 +392,10 @@ export function IteratePage() {
               {runsError && (
                 <PageLoadError error={runsError} resource="the run list" onRetry={reloadRuns} />
               )}
-              {!runsLoading && !runsError && (
+              {/* No runs at all: the status block above is the first step
+                  ("No improvement runs yet · Start a run"); an empty Run
+                  history said it a second time (2026-10-28). */}
+              {!runsLoading && !runsError && !(runsTotal === 0 && !ux.hideIterateSnapshot) && (
                 <Section title="Run history" freshness={{ at: runsFetchedAt, isValidating: runsValidating }}>
                   <PdcaRunTable
                     runs={runList}

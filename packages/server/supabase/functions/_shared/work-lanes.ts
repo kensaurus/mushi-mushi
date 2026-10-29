@@ -13,7 +13,15 @@
  *          each side refuses anything else.
  */
 
-export const LANE_MODES = ['fix', 'followups'] as const
+import { cleanHostTelemetry, cleanLaneTelemetry } from './work-telemetry.ts'
+import { parseCursorLoginReport, type CursorLoginReport } from './cursor-login.ts'
+
+/**
+ * What a lane does (ADR 0048; P3 modes: ADR 0049 conflicts, ADR 0050 audit,
+ * ADR 0042 amendment skill). An older daemon refuses a mode it does not know
+ * and leaves that lane idle.
+ */
+export const LANE_MODES = ['fix', 'followups', 'conflicts', 'audit', 'skill'] as const
 export type LaneMode = (typeof LANE_MODES)[number]
 
 /** The verbs a heartbeat answers with, per lane. Nothing else ever leaves the server for a lane. */
@@ -118,6 +126,35 @@ export function laneConfigFromRow(row: {
   }
 }
 
+/**
+ * What the console may change on a lane: the seven verbs, plus `review_model`
+ * (an audit lane's optional veto model, ADR 0050). `review_model` is not a
+ * heartbeat verb: it travels in the audit claim, so a daemon that predates it
+ * never sees an unknown key.
+ */
+export type LaneSettings = Partial<LaneConfig> & { review_model?: string | null }
+
+export function parseLaneSettings(raw: unknown): Parsed<LaneSettings> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, message: 'Lane settings must be an object.' }
+  const { review_model: reviewModel, ...rest } = raw as Record<string, unknown>
+  const out: LaneSettings = {}
+  if (reviewModel !== undefined) {
+    if (reviewModel !== null && (typeof reviewModel !== 'string' || !MODEL_RE.test(reviewModel))) {
+      return { ok: false, message: 'review_model must be a model id (letters, digits, ".", "_", ":", "-") or null for no veto pass.' }
+    }
+    out.review_model = reviewModel as string | null
+  }
+  if (Object.keys(rest).length === 0) {
+    return reviewModel === undefined ? { ok: false, message: `Send at least one of ${[...LANE_VERBS, 'review_model'].join(', ')}.` } : { ok: true, value: out }
+  }
+  const verbs = parseLaneVerbs(rest, { partial: true })
+  if (!verbs.ok) return verbs
+  return { ok: true, value: { ...verbs.value, ...out } }
+}
+
+/** owner/name of a GitHub repository, as a lane's clone names it (a value, never a path). */
+export const REPO_RE = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/
+
 /** Host-wide guards the daemon applies on the machine, from the server (defaults are lane-v4's). */
 export const HOST_GUARD_KEYS = ['max_agents', 'min_free_mem_gb', 'gh_floor'] as const
 export interface HostGuards {
@@ -163,27 +200,43 @@ export function hostGuardsFrom(raw: unknown): HostGuards {
 
 // ── What the daemon sends ───────────────────────────────────────────────────
 
-export const HOST_STATES = ['starting', 'working', 'idle', 'paused', 'mem-wait', 'gh-quota-wait', 'auth-wait', 'slot-wait', 'backoff', 'stopped', 'draining'] as const
+export const HOST_STATES = ['starting', 'working', 'idle', 'paused', 'mem-wait', 'gh-quota-wait', 'auth-wait', 'slot-wait', 'backoff', 'stopped', 'draining', 'not-ready', 'switching-account'] as const
 export const MAX_LANES_PER_HOST = 20
 
 export interface HeartbeatLane {
   name: string
   projectId: string
-  /** lane-v4's status JSON, as numbers and one short state word. */
-  status: Record<string, string | number>
+  /** lane-v4's status JSON (numbers and one short state word), plus the runs in flight (work-telemetry.ts). */
+  status: Record<string, unknown>
   /** Settings the machine proposes for a lane it registers (lanes.conf import); used only when the lane is new. */
   initial: Partial<LaneConfig>
+  /** owner/name of the lane's clone (its origin remote); null from a daemon that predates P3. */
+  repo: string | null
 }
 
+/**
+ * Claim kinds beyond its lanes' modes a daemon says it can run (ADR 0053
+ * amendment 2026-10-28): `fresh_eyes`, a first-time user test the console
+ * queued. A daemon that predates the list sends none and is offered none.
+ */
+export const HOST_TAKES = ['fresh_eyes'] as const
+export type HostTake = (typeof HOST_TAKES)[number]
+/** What the daemon can do when the console asks (ADR 0048 amendment 2026-10-28): a closed list, stored in the host's status as `can`. */
+export const HOST_CAN = ['cursor_login'] as const
+export type HostCan = (typeof HOST_CAN)[number]
+
 export interface Heartbeat {
-  host: { hostId: string; hostname: string; platform: 'linux' | 'wsl2' | 'macos' | 'windows'; version: string | null }
-  status: Record<string, string | number | boolean>
+  host: { hostId: string; hostname: string; platform: 'linux' | 'wsl2' | 'macos' | 'windows'; version: string | null; takes: HostTake[] }
+  /** Numbers and words (cleanStatus), plus the host's checks, agent spaces and why it waits (work-telemetry.ts). */
+  status: Record<string, unknown>
   lanes: HeartbeatLane[]
   /** Active claims the daemon is still working on: their leases are renewed. */
   claims: string[]
+  /** The Cursor sign-in the console asked for, as the machine reports it. Never stored in `status` (the link is the owner's only). */
+  cursorLogin: CursorLoginReport | null
 }
 
-const STATUS_NUMBERS = ['runs', 'prs', 'pushes', 'timeouts', 'errors', 'idle', 'agentMin', 'agents', 'maxAgents', 'memAvailableGb', 'ghRemaining', 'worktrees', 'branches']
+const STATUS_NUMBERS = ['runs', 'prs', 'pushes', 'timeouts', 'errors', 'idle', 'agentMin', 'agents', 'maxAgents', 'memAvailableGb', 'ghRemaining', 'worktrees', 'branches', 'load1', 'cpus', 'stateSec']
 const STATUS_WORDS: Record<string, readonly string[]> = {
   state: HOST_STATES,
   cursor: ['signed_in', 'signed_out', 'unknown', 'missing'],
@@ -214,6 +267,8 @@ export function parseHeartbeat(raw: unknown): Parsed<Heartbeat> {
   if (!hostname) return { ok: false, message: 'host.hostname is required.' }
   if (!['linux', 'wsl2', 'macos', 'windows'].includes(String(h.platform))) return { ok: false, message: 'host.platform must be linux, wsl2, macos or windows.' }
   const version = typeof h.version === 'string' && /^[0-9A-Za-z.+-]{1,40}$/.test(h.version) ? h.version : null
+  // Capability, not control: a kind this server does not know is dropped, so a newer daemon still registers.
+  const takes = [...new Set((Array.isArray(h.takes) ? h.takes : []).filter((t): t is HostTake => typeof t === 'string' && (HOST_TAKES as readonly string[]).includes(t)))]
   const lanesRaw = Array.isArray(b.lanes) ? b.lanes : []
   if (lanesRaw.length > MAX_LANES_PER_HOST) return { ok: false, message: `At most ${MAX_LANES_PER_HOST} lanes per host.` }
   const lanes: HeartbeatLane[] = []
@@ -230,13 +285,16 @@ export function parseHeartbeat(raw: unknown): Parsed<Heartbeat> {
       if (!p.ok) return { ok: false, message: `Lane "${name}": ${p.message}` }
       initial = p.value
     }
-    lanes.push({ name, projectId: l.projectId.toLowerCase(), status: cleanStatus(l.status), initial })
+    if (l.repo != null && (typeof l.repo !== 'string' || !REPO_RE.test(l.repo))) return { ok: false, message: `Lane "${name}": repo must be owner/name.` }
+    lanes.push({ name, projectId: l.projectId.toLowerCase(), status: { ...cleanStatus(l.status), ...cleanLaneTelemetry(l.status) }, initial, repo: typeof l.repo === 'string' ? l.repo.toLowerCase() : null })
   }
   const claims = (Array.isArray(b.claims) ? b.claims : []).filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)).slice(0, 50)
-  const status = cleanStatus(b.status)
+  const can = [...new Set((Array.isArray(h.can) ? h.can : []).filter((t): t is HostCan => typeof t === 'string' && (HOST_CAN as readonly string[]).includes(t)))]
+  const status = { ...cleanStatus(b.status), ...cleanHostTelemetry(b.status), ...(can.length ? { can } : {}) }
+  const cursorLogin = parseCursorLoginReport((b.status as Record<string, unknown> | null | undefined)?.cursorLogin)
   return {
     ok: true,
-    value: { host: { hostId: h.hostId, hostname, platform: h.platform as Heartbeat['host']['platform'], version }, status, lanes, claims },
+    value: { host: { hostId: h.hostId, hostname, platform: h.platform as Heartbeat['host']['platform'], version, takes }, status, lanes, claims, cursorLogin },
   }
 }
 
@@ -256,6 +314,7 @@ export function laneClaimBlock(cfg: LaneConfig, activeClaims: number, now: Date)
   if (cfg.drain) return 'The lane is draining: it finishes what runs and takes nothing new.'
   if (cfg.stop_at && Date.parse(cfg.stop_at) <= now.getTime()) return `The lane stopped at ${cfg.stop_at} (its stop date).`
   if (cfg.mode === 'followups') return 'The lane only works review follow-ups.'
+  // conflicts, audit and skill claim through the same route; what they may take is decided there.
   if (activeClaims >= cfg.concurrency) return `The lane already runs ${activeClaims} of ${cfg.concurrency}.`
   return null
 }
@@ -338,7 +397,13 @@ export async function claimFirstFree<T extends { id: string }>(
 
 // ── How a claim ends ────────────────────────────────────────────────────────
 
-export const CLAIM_OUTCOMES = ['pr_opened', 'no_change', 'verdict', 'timeout', 'skipped', 'stopped', 'failed'] as const
+/**
+ * How a run ended. `pushed` and `refused` are conflict runs (ADR 0049: a merge
+ * commit pushed, or the worker's own checks refused the agent's result);
+ * `filed` is an audit run that filed at least one reproduced finding (ADR 0050);
+ * `ran` is a first-time user test that finished and synced (ADR 0053 amendment).
+ */
+export const CLAIM_OUTCOMES = ['pr_opened', 'no_change', 'verdict', 'timeout', 'skipped', 'stopped', 'failed', 'pushed', 'refused', 'filed', 'ran'] as const
 export type ClaimOutcome = (typeof CLAIM_OUTCOMES)[number]
 export const FAILURE_KINDS = ['infra', 'code'] as const
 export type FailureKind = (typeof FAILURE_KINDS)[number]
@@ -352,6 +417,8 @@ export interface ClaimDone {
   fixId: string | null
   prUrl: string | null
   detail: string | null
+  /** A conflict run's pushed merge commit. */
+  headAfter: string | null
 }
 
 export function parseClaimDone(raw: unknown): Parsed<ClaimDone> {
@@ -366,8 +433,10 @@ export function parseClaimDone(raw: unknown): Parsed<ClaimDone> {
   const fixId = typeof b.fixId === 'string' && UUID_RE.test(b.fixId) ? b.fixId : null
   const prUrl = typeof b.prUrl === 'string' && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(b.prUrl) ? b.prUrl : null
   if (b.outcome === 'pr_opened' && !prUrl) return { ok: false, message: 'A pr_opened outcome needs prUrl (https://github.com/<owner>/<repo>/pull/<n>).' }
+  const headAfter = typeof b.headAfter === 'string' && /^[0-9a-f]{40}$/.test(b.headAfter) ? b.headAfter : null
+  if (b.outcome === 'pushed' && !headAfter) return { ok: false, message: 'A pushed outcome needs headAfter, the 40-hex sha of the merge commit.' }
   const detail = typeof b.detail === 'string' ? b.detail.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').slice(0, 1000) : null
-  return { ok: true, value: { outcome: b.outcome as ClaimOutcome, failureKind: failureKind as FailureKind | null, fixId, prUrl, detail } }
+  return { ok: true, value: { outcome: b.outcome as ClaimOutcome, failureKind: failureKind as FailureKind | null, fixId, prUrl, detail, headAfter } }
 }
 
 /** True when this infra failure may put the report back in the queue on its own (no automatic requeue in the window). */

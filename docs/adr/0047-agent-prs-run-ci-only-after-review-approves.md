@@ -123,3 +123,100 @@ Two Mushi paths still paid for CI before anyone had approved the change:
   never asked for.
 - **Path filters on the verify workflow instead of branch skips.** A release
   train carries real code changes, so a path filter would still run it.
+
+## Amendment (2026-10-27): one draft PR per repo for "Apply to every app"
+
+Status: Accepted 2026-10-27 by team-lead (Claude) under the owner's
+delegation ("decide for me fully, stop asking").
+
+### Context
+
+The CI cost "Open fix PR" opens one draft PR per workflow edit. A repo with
+four advised fixes got four pull requests. Each one ran the repo's CI once
+when it was readied, and each needed its own review and merge. The owner pays
+per Actions minute and asked for batched releases (one PR, one CI run). There
+was also no way to act on the advice across every app at once.
+
+### Decision
+
+- **A bundle is one draft PR for several fixes in one repo.** It is the
+  `ci_cost_fix_jobs` rows that share a new `bundle_id` column. There is no
+  parent table. Each row is still one workflow file and one kind, and keeps
+  its own status, summary, refusal and measurement. Every row that made it
+  into the PR carries the same `pr_url`, so the single "Open fix PR" sees
+  that edit's PR as open and does not open a second one.
+- **`ci-cost-fix-worker` runs a bundle** with `{ bundleId }`
+  (`_shared/ci-cost-fix-bundle.ts`):
+  - it claims all queued rows of the bundle in one guarded update;
+  - it reads the repo, token, default branch and required checks once;
+  - it reads each workflow file once and applies its kinds in
+    `CI_COST_FIX_KINDS` order, each on the previous output;
+  - every refusal of `applyCiCostFix` still applies per item. A refused or
+    already-applied item ends `refused` / `no_change` and is listed under
+    "Not changed" in the PR body and in the result. It is never dropped;
+  - when nothing changed, no PR is opened;
+  - the PR has one `ci:` title, a section per workflow with each change's
+    summary and reason, and the workflow's 14-day minutes;
+  - the branch name comes from the bundle id. A run reclaimed after a lost
+    finish pushes to the same branch and reuses its PR.
+
+  A bundle row is never run on its own: the single-job claim skips rows with
+  a `bundle_id`.
+- **Measurement stays per workflow and is never doubled.** When two kinds
+  change the same file in one PR, the first stores the workflow's baseline
+  and measured minutes. The other stores none, and its summary says it is
+  measured with the first. The bundle read fetches the PR from GitHub once
+  for all its rows.
+- **"Apply to every app"** (`api/routes/ci-cost-fix-bundle.ts`, in
+  `api-ext`):
+  - `GET /v1/admin/ci/cost-fix-rollout` previews every advice item that
+    carries an `autofix`, for the apps the caller may change (viewers' apps
+    are left out). Items are grouped per app and repo, with the estimated
+    saving per item and per repo. An unpriced item stays null, never $0.
+    An edit whose PR is open or in flight is marked so. The preview reads
+    the advisor's own gating, so it only lists edits the worker is expected
+    to make.
+  - The preview carries `GITHUB_WORKFLOWS_WRITE_MISSING` per repo when Mushi
+    already knows the token cannot edit workflows: from the setup check's
+    probe (a cache-only read, never a new probe) or from the repo's last
+    attempt. Mushi never writes to find out.
+  - `POST` the same path opens one bundle per repo: at most 10 repos and 20
+    items each. The server rebuilds the advice and queues only items it still
+    advises; evidence and saving come from the server, never the client. It
+    skips an edit whose PR is still open or that is in flight, and says why
+    per item. Each bundle takes one token of the project's existing 10 CI fix
+    PRs an hour, and the one-in-flight index still holds per item.
+  - `GET /v1/admin/ci/cost-fix-bundles/:id` reads a bundle: its PR, each
+    item's state, and the measured saving after the merge.
+- **Surfaces.** The console CI page has "Apply to every app" next to the
+  advice: a preview with checkboxes, one confirm, then each repo's PR or
+  refusals. The CLI has `mushi runner fix --all` (preview), `--all --apply`
+  and `mushi runner fix-status --bundle`. The MCP tools are
+  `preview_ci_cost_fix_rollout`, `apply_ci_cost_fix_rollout` and
+  `get_ci_cost_fix_bundle`. The single "Open fix PR" is unchanged.
+
+### Consequences
+
+- A repo with N advised fixes costs one CI run and one review, not N.
+- One refusal no longer blocks a repo's other fixes, and it stays visible
+  in the PR.
+- A bundle PR is larger to review than a single fix. Each change has its
+  own section, and a person can still untick fixes before opening.
+- The migration (`bundle_id` + a partial index, additive) must be applied
+  before `api-ext` and `ci-cost-fix-worker` are deployed: job reads now
+  select the column.
+
+### Rejected
+
+- **A parent `ci_cost_fix_bundles` table.** It would duplicate the PR fields
+  the rows already carry, and add a second status to keep in step. The
+  bundle's state is derived from its rows.
+- **One PR per app instead of per repo.** An app can span repos, and a PR
+  lives in one repo.
+- **Trusting the client's evidence and saving.** The preview could be stale
+  or edited. The server rebuilds the advice and opens only what it still
+  advises.
+- **Probing the token's workflow permission before opening.** GitHub has no
+  read for it, and Mushi never writes to check. The preview uses what the
+  setup check or the last attempt already learned, and the PR attempt itself
+  reports the rest in plain words.

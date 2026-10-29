@@ -191,7 +191,7 @@ export function SdkInstallConfigurator({
                   type="text"
                   value={config.bannerMessage}
                   onChange={(e) => onChange({ ...config, bannerMessage: e.target.value })}
-                  placeholder="Your app is in active beta — expect rough edges."
+                  placeholder="e.g. This app is in beta, so expect rough edges."
                   className="mt-0.5 w-full px-2 py-1 bg-surface-overlay border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand text-2xs"
                 />
               </label>
@@ -236,7 +236,7 @@ export function SdkInstallConfigurator({
                 type="text"
                 value={config.attachToSelector}
                 onChange={(e) => update('attachToSelector', e.target.value)}
-                placeholder="#report-button"
+                placeholder="e.g. #report-button"
                 className="mt-1 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand font-mono text-2xs"
               />
               <p className="text-fg-faint text-2xs mt-0.5">Leave blank to set programmatically via <code>sdk.attachTo(el)</code>.</p>

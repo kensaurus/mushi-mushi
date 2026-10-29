@@ -377,3 +377,28 @@ export function createTtlCache<T>(ttlMs: number, max = 500) {
     },
   }
 }
+
+// ── What each repo's access can do, as last probed ──────────────────────────
+
+/** By `projectId:owner/repo` (lowercase), kept as long as the setup gaps themselves. */
+const repoAbilities = createTtlCache<TokenAbilities>(SETUP_GAPS_CACHE_MS)
+
+/** The setup check (api/routes/setup-gaps.ts) records what it probed. */
+export function rememberRepoAbilities(projectId: string, repo: string, abilities: TokenAbilities, nowMs: number): void {
+  repoAbilities.set(`${projectId}:${repo.toLowerCase()}`, abilities, nowMs)
+}
+
+export function clearRepoAbilities(): void {
+  repoAbilities.clear()
+}
+
+/**
+ * Whether Mushi's GitHub access may edit workflow files in this repo, as the
+ * last setup check in this isolate found it; null when no fresh check knows.
+ * Cache only: it never probes GitHub. The CI cost fix rollout preview
+ * (ci-cost-fix-bundle routes) reads it to warn before a bundle fails on
+ * GITHUB_WORKFLOWS_WRITE_MISSING.
+ */
+export function knownWorkflowsAbility(projectId: string, repo: string, nowMs: number): Ability | null {
+  return repoAbilities.get(`${projectId}:${repo.toLowerCase()}`, nowMs)?.value.workflows ?? null
+}

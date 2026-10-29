@@ -74,6 +74,73 @@ export async function activeWorkClaims(db: Db, reportIds: readonly string[], now
   return { ids }
 }
 
+/** A queue holds its reports for its lane only while the lane's machine has sent a heartbeat this recently. */
+export const QUEUE_HOLD_MS = 24 * 3_600_000
+
+/**
+ * True when a queue row reserves its report for its lane: the lane will take
+ * it (a `fix` lane takes any report, a `skill` lane only a skill-run round),
+ * and its machine is alive (not revoked, a heartbeat within QUEUE_HOLD_MS).
+ * A dead or revoked machine, or a lane in another mode, reserves nothing, so
+ * a queue row never strands a report (ADR 0048: a dead daemon blocks nobody).
+ */
+export function queueRowReserves(
+  lane: { mode: string } | undefined,
+  host: { revoked_at: string | null; last_heartbeat_at: string | null } | undefined,
+  reportSource: string | null | undefined,
+  now: Date,
+): boolean {
+  if (!lane || !host || host.revoked_at || !host.last_heartbeat_at) return false
+  if (now.getTime() - Date.parse(host.last_heartbeat_at) > QUEUE_HOLD_MS) return false
+  if (lane.mode === 'fix') return true
+  return lane.mode === 'skill' && reportSource === 'skill_run'
+}
+
+/**
+ * Report ids among `reportIds` that a local worker lane's queue reserves
+ * (other than `exceptLaneId`; queueRowReserves). A person (or a skill run,
+ * ADR 0042 amendment) chose that machine, so spend-down and other lanes leave
+ * the report while the machine is alive. `{ error }` on a failed read, as
+ * activeWorkClaims.
+ */
+export async function queuedForLocalLanes(db: Db, reportIds: readonly string[], exceptLaneId?: string, now: Date = new Date()): Promise<{ ids: Set<string> } | { error: string }> {
+  const ids = new Set<string>()
+  const unique = [...new Set(reportIds)]
+  const rows: Array<{ report_id: string; lane_id: string }> = []
+  for (let i = 0; i < unique.length; i += IN_CHUNK) {
+    const { data, error } = await db.from('work_queue').select('report_id, lane_id').in('report_id', unique.slice(i, i + IN_CHUNK))
+    if (error) {
+      if (missingTable(error)) return { ids }
+      return { error: error.message }
+    }
+    rows.push(...((data ?? []) as Array<{ report_id: string; lane_id: string }>).filter((r) => r.lane_id !== exceptLaneId))
+  }
+  if (rows.length === 0) return { ids }
+  const laneIds = [...new Set(rows.map((r) => r.lane_id))]
+  const { data: lanes, error: laneErr } = await db.from('work_lanes').select('id, mode, host_id').in('id', laneIds)
+  if (laneErr) return { error: laneErr.message }
+  const laneById = new Map(((lanes ?? []) as Array<{ id: string; mode: string; host_id: string }>).map((l) => [l.id, l]))
+  const hostIds = [...new Set([...laneById.values()].map((l) => l.host_id))]
+  const { data: hosts, error: hostErr } = hostIds.length ? await db.from('work_hosts').select('id, revoked_at, last_heartbeat_at').in('id', hostIds) : { data: [], error: null }
+  if (hostErr) return { error: hostErr.message }
+  const hostById = new Map(((hosts ?? []) as Array<{ id: string; revoked_at: string | null; last_heartbeat_at: string | null }>).map((h) => [h.id, h]))
+  const skillReports = [...new Set(rows.filter((r) => laneById.get(r.lane_id)?.mode === 'skill').map((r) => r.report_id))]
+  const sourceById = new Map<string, string | null>()
+  if (skillReports.length) {
+    const { data: reps, error: repErr } = await db.from('reports').select('id, source').in('id', skillReports)
+    if (repErr) return { error: repErr.message }
+    for (const r of (reps ?? []) as Array<{ id: string; source: string | null }>) sourceById.set(r.id, r.source)
+  }
+  for (const r of rows) {
+    const lane = laneById.get(r.lane_id)
+    if (queueRowReserves(lane, lane ? hostById.get(lane.host_id) : undefined, sourceById.get(r.report_id), now)) ids.add(r.report_id)
+  }
+  return { ids }
+}
+
+/** Lane modes whose lanes take reports from a queue. A conflicts or audit lane never reads one. */
+export const QUEUE_MODES: readonly string[] = ['fix', 'followups', 'skill']
+
 /** One report: held by a local worker right now? `null` on a failed read (treat as held). */
 export async function reportHasActiveWorkClaim(db: Db, reportId: string, now: Date = new Date()): Promise<boolean | null> {
   const res = await activeWorkClaims(db, [reportId], now)
@@ -134,11 +201,12 @@ export async function laneForQueue(
   db: Db,
   laneId: string,
   who: { projectId: string; userId: string; apiKeyId?: string | null },
-): Promise<{ lane: QueueLane } | { error: string; status: 404 | 503 }> {
-  const { data: lane, error } = await db.from('work_lanes').select('id, project_id, host_id').eq('id', laneId).maybeSingle()
+): Promise<{ lane: QueueLane } | { error: string; status: 404 | 409 | 503 }> {
+  const { data: lane, error } = await db.from('work_lanes').select('id, project_id, host_id, mode').eq('id', laneId).maybeSingle()
   if (error) return missingTable(error) ? { error: 'No local worker is registered yet.', status: 404 } : { error: 'Could not read the lane. Try again in a minute.', status: 503 }
-  const row = lane as { id: string; project_id: string; host_id: string } | null
+  const row = lane as { id: string; project_id: string; host_id: string; mode?: string } | null
   if (!row || row.project_id !== who.projectId) return { error: 'That lane does not serve this app.', status: 404 }
+  if (row.mode && !QUEUE_MODES.includes(row.mode)) return { error: `That lane is in ${row.mode} mode and takes no reports from a queue.`, status: 409 }
   let q = db.from('work_hosts').select('id').eq('id', row.host_id).eq('owner_user_id', who.userId).is('revoked_at', null)
   if (who.apiKeyId) q = q.eq('api_key_id', who.apiKeyId)
   const { data: host, error: hostErr } = await q.maybeSingle()
@@ -162,7 +230,7 @@ export async function enqueueReports(
   db: Db,
   lane: QueueLane,
   reportIds: readonly string[],
-  opts: { source: 'console' | 'report_file' | 'requeue' | 'lease_expired'; addedBy?: string | null; front?: boolean; now?: Date },
+  opts: { source: 'console' | 'report_file' | 'requeue' | 'lease_expired' | 'skill_run'; addedBy?: string | null; front?: boolean; now?: Date },
 ): Promise<{ queued: number } | { error: string }> {
   const now = opts.now ?? new Date()
   const base = queuePosition(now, opts.front)

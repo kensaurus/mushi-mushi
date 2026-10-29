@@ -17,7 +17,7 @@ import { BrandIcon } from '../ui/BrandIcon';
 import { IconPlay, IconTrash } from '../icons';
 import { PanelSkeleton } from '../skeletons/PanelSkeleton';
 import { ConfirmDialog } from '../ConfirmDialog';
-import { useEntitlements } from '../../lib/useEntitlements';
+import { isByokLocked, useEntitlements } from '../../lib/useEntitlements';
 import { UpgradePrompt } from '../billing/UpgradePrompt';
 import { CHIP_TONE, LINK_ACCENT } from '../../lib/chipTone';
 import { prepareByokSecret } from '../../lib/byokKeyRules';
@@ -221,7 +221,7 @@ function providerActionLabel(view: KeyStatusView, keyCount: number): string {
 
 export function ByokPanel() {
   const entitlements = useEntitlements();
-  const byokLocked = !entitlements.loading && !entitlements.has('byok');
+  const byokLocked = isByokLocked(entitlements);
   const pool = useByokPool(!byokLocked);
   // Free reads: the provider's own balance where it publishes one, and what
   // Mushi recorded spending through each provider in the last 30 days.
@@ -829,7 +829,7 @@ export function ByokPanel() {
                             setNewBaseUrl(e.target.value);
                             setBaseUrlError(null);
                           }}
-                          placeholder="https://your-host.example.com/v1"
+                          placeholder="e.g. https://your-host.example.com/v1"
                           autoComplete="url"
                           error={baseUrlError ?? undefined}
                         />

@@ -172,6 +172,7 @@ const COPY: CopyRegistry = {
         steps: 'Create app',
         verify: 'Test it',
         sdk: 'Install widget',
+        diagnose: 'Fix a problem',
       },
       help: {
         title: 'About setup',
@@ -874,7 +875,6 @@ const COPY: CopyRegistry = {
         overview: 'Summary',
         anomalies: 'Spikes',
         metrics: 'Metrics',
-        detect: 'Check now',
       },
       help: {
         title: 'About unusual spikes',
@@ -884,7 +884,7 @@ const COPY: CopyRegistry = {
           'Notice latency creeping up after a deploy',
           'Get a bug report opened for a confirmed regression',
         ],
-        howToUse: 'Send some values from the Metrics tab, then click Check now or wait for the hourly check. Confirm a real spike or dismiss noise under its chart.',
+        howToUse: 'Send some values from the Metrics tab, then press Check now on the Spikes tab or wait for the hourly check. Confirm a real spike or dismiss noise under its chart.',
       },
     },
     '/cost': {
@@ -978,7 +978,7 @@ const COPY: CopyRegistry = {
         plans: 'Compare plans',
         payment: 'Update payment',
         projects: 'Create project',
-        cost: 'View LLM cost',
+        cost: 'See AI spend',
         health: 'Run Health test',
       },
       tabLabels: {
@@ -988,7 +988,7 @@ const COPY: CopyRegistry = {
       },
       help: {
         title: 'About billing',
-        whatIsIt: 'Per-project subscription and usage meters. Hobby includes a monthly report quota; paid plans add higher limits, your own LLM keys, and Stripe-managed billing.',
+        whatIsIt: 'Your plan and its usage. Free watches one app with 100 diagnoses a month; Builder ($29) watches three, Studio ($79) ten. Your own AI keys work on every plan.',
         useCases: [
           'See reports used vs quota before new reports start returning HTTP 402',
           'Upgrade via Stripe Checkout or manage card/invoices in the Billing Portal',
@@ -1467,7 +1467,7 @@ const COPY: CopyRegistry = {
     },
     '/onboarding': {
       title: 'Set up',
-      description: 'Three short steps: create a project, install the widget, send a test bug to see the loop run.',
+      description: 'Three short steps: create a project, install the widget, send a test bug to see it work.',
       sections: { snapshot: 'Setup snapshot' },
       statLabels: {
         required: 'Required steps',
@@ -1475,12 +1475,8 @@ const COPY: CopyRegistry = {
         reports: 'Reports',
         optional: 'Optional',
       },
-      tabLabels: {
-        overview: 'Overview',
-        steps: 'Steps',
-        verify: 'Verify',
-        sdk: 'SDK',
-      },
+      // No tabLabels: the page's own plain names apply ("More to connect", "Test it",
+      // "Install"); "Steps / Verify / SDK" here overrode them (2026-10-28).
       help: {
         title: 'About setup',
         whatIsIt:

@@ -1,54 +1,64 @@
 ---
-title: Natural-language query
-description: Ask questions about your Mushi project's bug data in plain English — the Query page writes the SQL and draws the chart for you.
+title: SQL query
+description: Ask about your bug data in Mushi Mushi in plain English or in read-only SQL; the SQL query page shows the SQL it ran, the result rows and a short summary.
 ---
 
 import { Callout } from 'nextra/components'
 
 <AdminDocHero page="query" />
 
-# Natural-language query
+# SQL query
 
-The Query page lets you ask questions about your project's data in plain English.
-Type a question, get SQL, get a chart — no SQL knowledge required.
+**Route:** `/query` (sidebar: **SQL query**, under Account)
+
+The SQL query page in Mushi Mushi answers questions about your project's bug data. On the
+**Ask** tab, pick **Natural language** to type a question in plain English, or **Raw SQL**
+to write a `SELECT` yourself. Every run is read-only, sandboxed and logged.
+
+The page has four tabs: **Ask**, **History**, **Schema** (the approved tables) and
+**Overview**.
 
 ---
 
 ## How it works
 
-1. **You type a question** — e.g. *"How many critical bugs touched the checkout
-   component last week, grouped by browser?"*
-2. **The LLM generates SQL** — the prompt includes the schema for every table in
-   the allow-list so the model can write accurate queries.
-3. **The SQL is validated** — a deterministic allow-list check confirms the query
-   only reads from permitted tables. Any mutation (`INSERT`, `UPDATE`, `DELETE`,
-   `DROP`, …) is rejected before execution.
-4. **The query runs** — against a read replica (or a read-only Postgres role on
-   self-hosted setups).
-5. **Results render as a chart** — the LLM picks the most appropriate chart type
-   (bar, line, pie, table) based on the result shape. You can override the type
-   from the chart toolbar.
+1. **You type a question**, for example *"How many P0/P1 reports landed this week vs last
+   week?"* (press Enter to run). In **Raw SQL** mode you write the query and press ⌘/Ctrl+Enter.
+2. **Graph questions go to the graph.** Questions about blast radius or dependencies are
+   answered by walking the knowledge graph directly, without writing SQL.
+3. **Otherwise the model writes SQL** from a schema description of the approved tables,
+   filtered by `project_id = $1` and limited to 100 rows.
+4. **The SQL is checked** before it runs: one statement only, no writes or DDL (`INSERT`,
+   `UPDATE`, `DELETE`, `DROP`, …), no system schemas (`auth`, `storage`, `vault`, …).
+   A query without `LIMIT` gets `LIMIT 100` appended. A rejected query returns
+   `INVALID_SQL`.
+5. **The query runs as a read-only database role** (`mushi_nl_reader`) that can only
+   `SELECT` the approved tables and only your project's rows. That role, not the text
+   checks, is the real boundary.
+6. **You get the result rows as a table**, the SQL that ran (with **Copy SQL**), and, for
+   natural-language questions, a short plain-English summary.
+
+Runs are rate-limited to 60 an hour per user; past the limit the API returns `RATE_LIMITED`.
 
 ---
 
-## Allow-listed tables
-
-Only these tables are reachable from the query page:
+## Approved tables
 
 | Table | What's in it |
 | ----- | ------------ |
-| `reports` | Every incoming user report with classification fields |
-| `mistake_clusters` | Deduplicated clusters of similar reports |
-| `lessons` | Promoted learning rules with names and summaries |
-| `fix_attempts` | Agent fix runs — status, PR URL, files changed |
-| `end_users` | Identified reporter profiles (rewards-linked) |
-| `end_user_points` | Per-user point totals and tier |
-| `classification_evaluations` | Nightly judge scores per report |
-| `graph_nodes` | Inventory model nodes (stories, pages, elements, actions) |
-| `synthetic_runs` | Synthetic monitor walk results |
+| `reports` | Every incoming report with its classification fields |
+| `report_groups` | Groups of similar reports |
+| `classification_evaluations` | Judge scores for classifications |
+| `reporter_reputation` | Reporter reputation scores |
+| `reporter_devices` | Devices tracked by [Spam & abuse](/admin/anti-gaming) |
+| `graph_nodes`, `graph_edges` | The knowledge graph |
+| `bug_ontology` | Bug category tags |
+| `fix_attempts`, `fix_verifications`, `fix_events` | Fix runs, their verification and events |
+| `llm_invocations` | Every LLM call, with model, tokens and cost |
+| `anti_gaming_events` | Flag and unflag events |
 
-Attempting to query any table not on this list returns a `table_not_allowed` error
-before the SQL reaches the database.
+In **Raw SQL** mode, a query that names a table outside this list is rejected before it
+reaches the database. The **Schema** tab shows the same list.
 
 ---
 
@@ -59,61 +69,46 @@ before the SQL reaches the database.
 
 "Show me the daily report volume trend for the past 3 months."
 
-"What are the top 5 reporters by points this month?"
-
 "How many fix attempts failed vs. succeeded last week?"
-
-"Which lessons have been injected into the most PR reviews?"
 
 "Show reports where severity is critical and status is open, created this week."
 ```
 
 ---
 
-## Audit log
+## History and saved queries
 
-Every query is written to the audit log with:
+Every run, successful or not, is stored with your user, the prompt, the generated SQL,
+the row count and the latency. The **Library** panel lists them in three groups:
 
-- Executing user and timestamp
-- The natural-language prompt
-- The generated SQL (full text)
-- The row count of the result
-- Whether the query was blocked by the allow-list
+- **Saved**: runs you pinned with **Pin to Saved**
+- **Recent**: your latest runs
+- **Team**: recent runs by other people on the projects you can see
 
-The audit log is accessible in **Settings → Audit** and is exportable as CSV.
+You can remove a run from your history.
 
-<Callout type="warning">
-  The allow-list blocks access to `end_user_activity`, `api_keys`,
-  `project_settings`, and all `private.*` schema tables. If a generated query
-  tries to `UNION` or use a subquery to reach a blocked table, the validator
-  catches it.
+<Callout type="info">
+  Results show as a table only. The page does not draw charts and has no CSV export;
+  copy the SQL if you need the data elsewhere.
 </Callout>
 
 ---
 
-## Chart types
+## API
 
-| Type | Auto-selected when |
-| ---- | ----------------- |
-| Bar | Comparing counts or sums across categories |
-| Line | Time-series data with a date/timestamp column |
-| Pie / Donut | Proportional breakdown with ≤ 8 categories |
-| Table | More than 8 columns, or the LLM can't infer a useful chart shape |
-
-Click the chart type selector in the toolbar to override. Charts are exportable as
-PNG or the underlying CSV via the **⋮** menu.
-
----
-
-## Saved queries
-
-Click **Save** to store a query by name. Saved queries appear in the left panel and
-can be shared with teammates by copying the URL. Saved queries are project-scoped —
-they're visible to every member with at least Viewer access.
+```bash
+POST   /v1/admin/query              { "question": "..." }   # natural language
+POST   /v1/admin/query/raw          { "sql": "SELECT ..." }  # raw SQL
+GET    /v1/admin/query/history?limit=25
+PATCH  /v1/admin/query/history/:id  # pin / unpin
+DELETE /v1/admin/query/history/:id
+GET    /v1/admin/query/team?limit=25
+GET    /v1/admin/query/stats
+```
 
 ---
 
 ## See also
 
-- [Admin → Intelligence reports](/admin/intelligence) — automated weekly digest built from the same data.
-- [Concepts → Knowledge graph](/concepts/knowledge-graph) — explore relationships visually instead of via SQL.
+- [Admin → Intelligence reports](/admin/intelligence): automated weekly digest built from the same data.
+- [Concepts → Knowledge graph](/concepts/knowledge-graph): explore relationships visually instead of via SQL.

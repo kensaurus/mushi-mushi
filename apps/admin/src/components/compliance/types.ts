@@ -36,7 +36,7 @@ export const EMPTY_COMPLIANCE_STATS: ComplianceStats = {
   projectName: null,
   soc2Entitlement: false,
   planId: 'hobby',
-  planDisplayName: 'Hobby',
+  planDisplayName: 'Free',
   projectCount: 0,
   controlsTotal: 0,
   controlsPass: 0,

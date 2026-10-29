@@ -1,75 +1,78 @@
-# LogRocket Feedback → Mushi
+# LogRocket Feedback → Mushi Mushi
 
 Source: https://kensaur.us/mushi-mushi/docs/migrations/logrocket-feedback-to-mushi
 
 ---
-title: 'LogRocket Feedback → Mushi'
-description: Move LogRocket's feedback widget to Mushi while keeping LogRocket for session replay — both SDKs run side by side, with a step-by-step checklist.
+title: 'LogRocket Feedback → Mushi Mushi'
+description: Collect bug reports with Mushi Mushi while keeping LogRocket for session replay. Both SDKs run side by side, with a step-by-step checklist.
 ---
 
-# LogRocket Feedback → Mushi
+# LogRocket Feedback → Mushi Mushi
 
  
 
-LogRocket bundles **session replay** and **bug feedback** in one SDK. This
-guide moves the feedback widget to Mushi while you keep LogRocket for
-session replay (or migrate replay separately later — that's not Mushi's
-job).
+LogRocket is mainly session replay and product analytics. Its feedback
+features are in-app Surveys (a paid add-on you configure in the LogRocket
+dashboard, which can show a persistent rating and comment tab) and a
+Feedback view that pulls in feedback from tools like Intercom, Zendesk and
+the app stores. This guide moves in-app bug reporting to Mushi Mushi while
+you keep LogRocket for session replay.
 
   **You can run both SDKs side by side indefinitely.** LogRocket records
   the session; Mushi captures the user's report. Mushi can attach a
   LogRocket session URL to every report via metadata, so triagers get
   one-click access to the replay.
 
-## Why switch (the feedback piece)
+## Why switch (the bug-report piece)
 
-- **Replay-coexistence by design.** LogRocket's strength is session
-  replay; its bug-feedback widget is a thin add-on. Mushi is feedback-first
-  with a Shadow-DOM widget that doesn't interfere with replay.
+- **Bug reports, not ratings.** A Mushi report carries the user's
+  description, a screenshot they can mark up, console and network logs,
+  and (on the web) the page element they picked.
 - **AI triage.** Mushi's two-stage classifier and judge loop turn raw
   reports into triaged tickets without a human pass.
-- **Self-host.** Mushi runs on Supabase / your own Postgres; LogRocket is
-  SaaS-only.
-- **Privacy.** Mushi's capture is localized (one report at a time, on
-  user trigger). LogRocket records continuously by default — even after
-  switching the feedback widget, you'll still want LogRocket's
-  privacy controls.
+- **Open-source server.** Mushi's server and console are AGPLv3, so you can
+  self-host them for free. (LogRocket also offers self-hosting, as part of
+  its paid plans.)
+- **Privacy.** Mushi captures on user trigger, one report at a time. If
+  LogRocket keeps recording sessions, keep using LogRocket's privacy
+  controls too.
 
 ## API mapping
 
-| LogRocket | Mushi |
+`const mushi = Mushi.init({...})` returns the instance used below.
+
+| LogRocket | Mushi Mushi |
 |-----------|-------|
-| `LogRocket.init('app/id')` | `Mushi.init({ projectId, apiKey })` (mounted separately) |
-| `LogRocket.identify(uid, traits)` | `Mushi.setUser({ id: uid, ...traits })` |
-| `LogRocket.captureMessage(msg)` | Submit a report via the widget OR `Mushi.report({ description: msg })` |
-| `LogRocket.captureException(err)` | `Mushi.report({ description: err.message })` (or hook into your error boundary) |
-| `LogRocket.track(name, props)` | `Mushi.setMetadata({ lastEvent: name, ...props })` |
-| `` (React) | `` widget OR your own button calling `mushi.openWidget()` |
-| `LogRocket.sessionURL` | Attach as metadata on Mushi reports — see below |
+| `LogRocket.init('app/id')` | `const mushi = Mushi.init({ projectId, apiKey })` (mounted separately) |
+| `LogRocket.identify(uid, traits)` | `mushi.identify(uid, traits)` |
+| `LogRocket.captureMessage(msg)` | `mushi.captureEvent({ description: msg })`, or let the user submit through the widget |
+| `LogRocket.captureException(err)` | `mushi.captureException(err)` |
+| `LogRocket.track(name, props)` | For repro context on the next report: `mushi.addBreadcrumb({ category: 'custom', level: 'info', message: name })`. For product analytics: `mushi.track(name, props)` (names must be `snake_case`; not attached to reports) |
+| In-app survey / feedback tab | The Mushi widget (by default a floating button on desktop, an edge tab on phones), or your own button calling `mushi.open()` |
+| `LogRocket.getSessionURL(cb)` | Attach the URL as metadata on Mushi reports (below) |
 
-## Linking LogRocket session URLs into Mushi reports
+## Linking LogRocket session URLs into Mushi Mushi reports
 
-This is the killer recipe — every Mushi report includes a one-click
-"Open session in LogRocket" link, so triagers can watch the replay
-without leaving the Mushi dashboard.
+With this, each Mushi report carries the LogRocket session URL, so
+triagers can open the replay from the report.
 
 ```ts
 import LogRocket from 'logrocket'
 import { Mushi } from '@mushi-mushi/web'
 
 LogRocket.init('your-app/id')
-Mushi.init({ projectId: 'YOUR_PROJECT_ID', apiKey: 'YOUR_PUBLIC_KEY' })
+const mushi = Mushi.init({ projectId: 'YOUR_PROJECT_ID', apiKey: 'YOUR_PUBLIC_KEY' })
 
+// LogRocket calls this again when a new session starts.
 LogRocket.getSessionURL((sessionUrl) => {
-  Mushi.setMetadata({ logrocketSession: sessionUrl })
+  mushi.setMetadata('logrocketSession', sessionUrl)
 })
 
 LogRocket.identify('user-42', { email: 'jane@example.com' })
-Mushi.setUser({ id: 'user-42', email: 'jane@example.com' })
+mushi.identify('user-42', { email: 'jane@example.com' })
 ```
 
-Now every Mushi report carries the LogRocket session URL in its metadata.
-In the admin console, the metadata viewer renders it as a clickable link.
+Every Mushi report now carries the LogRocket session URL in its metadata.
 
 ## Migration checklist
 
@@ -79,40 +82,40 @@ Sign in to the Mushi admin console; copy projectId + apiKey.</> },
     { id: 'mount-mushi', label: 'Mount Mushi (LogRocket stays as-is)', content: {`import LogRocket from 'logrocket'
 
 LogRocket.init('your-app/id')
-Mushi.init({ projectId: 'YOUR_PROJECT_ID', apiKey: 'YOUR_PUBLIC_KEY' })`} },
+const mushi = Mushi.init({ projectId: 'YOUR_PROJECT_ID', apiKey: 'YOUR_PUBLIC_KEY' })`} },
     { id: 'link-session', label: 'Wire LogRocket session URL into Mushi metadata', content: {`LogRocket.getSessionURL((url) => {
-  Mushi.setMetadata({ logrocketSession: url })
+  mushi.setMetadata('logrocketSession', url)
 })`} },
-    { id: 'mirror-identify', label: 'Mirror LogRocket.identify into Mushi.setUser', content: {`function identifyEverywhere(uid: string, traits: Record<string, unknown>) {
+    { id: 'mirror-identify', label: 'Mirror LogRocket.identify into mushi.identify', content: {`function identifyEverywhere(uid: string, traits: { email?: string; name?: string }) {
   LogRocket.identify(uid, traits)
-  Mushi.setUser({ id: uid, ...traits })
+  mushi.identify(uid, traits)
 }`} },
-    { id: 'disable-lr-feedback', label: 'Disable the LogRocket feedback widget', content: <>If you used LogRocket&apos;s feedback button or modal, remove that integration. Keep LogRocket&apos;s core SDK for the replay; just stop calling its feedback APIs.</> },
+    { id: 'disable-lr-feedback', label: 'Turn off LogRocket in-app surveys you used for bug reports', content: <>If you ran a LogRocket survey or feedback tab to collect bug reports, turn it off in the LogRocket dashboard. Keep LogRocket&apos;s core SDK for the replay.</> },
     { id: 'update-runbooks', label: 'Update internal runbooks', content: <>Triagers now open Mushi for the report and click the LogRocket session link inline. Document the workflow.</> },
     { id: 'verify', label: 'Submit a test report and verify the LogRocket link works', content: <>Open a Mushi report; click the logrocketSession metadata link; confirm LogRocket opens the right session.</> },
 
 />
 
-## Feature parity (feedback only — replay is its own product)
+## Feature parity (feedback only; replay is its own product)
 
 | Capability | LogRocket Feedback | Mushi |
 |------------|-------------------|-------|
-| User-triggered report widget | ✅ | ✅ |
-| Screenshot capture | ✅ | ✅ (web) |
-| Console + network capture | ✅ (also covers replay) | ✅ |
-| AI triage | ❌ | ✅ |
-| Self-host | ❌ | ✅ |
-| Open source | ❌ | ✅ |
-| Session replay | ✅ | ❌ — keep LogRocket |
+| User-triggered feedback in the app | ✅ (Surveys add-on: rating + comment) | ✅ (bug report widget) |
+| Screenshot in the report | Session replay instead | ✅ (with markup on web) |
+| Console + network capture | ✅ (in the replay) | ✅ |
+| Self-host | ✅ (paid plans) | ✅ (free) |
+| Open-source server | ❌ (SDK is MIT) | ✅ |
+| Session replay | ✅ | Opt-in, sampled (`capture.replay`); keep LogRocket if replay is central |
 | Heatmaps | ✅ | ❌ |
-| Funnels / analytics | ✅ | ❌ |
+| Funnels / analytics | ✅ | ✅ (basic, from `mushi.track()`) |
 
-The takeaway: **Mushi replaces the feedback widget, not the replay**.
-Keep LogRocket for what it's best at; use Mushi where bug capture
-benefits from AI triage + AGPLv3 open source + self-host.
+The takeaway: **Mushi replaces in-app bug reporting, not the replay**.
+Keep LogRocket for replay; use Mushi for bug reports that arrive with
+context, an AI diagnosis and a ready fix.
 
 ## References
 
 - [Mushi web SDK](/sdks/web)
 - [LogRocket session URL API](https://docs.logrocket.com/reference/get-session-url)
 - [LogRocket identify API](https://docs.logrocket.com/reference/identify)
+- [LogRocket Surveys](https://docs.logrocket.com/docs/surveys)

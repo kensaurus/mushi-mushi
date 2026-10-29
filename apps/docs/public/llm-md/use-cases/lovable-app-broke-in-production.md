@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/use-cases/lovable-app-broke-in-produ
 
 ---
 title: Your Lovable app broke in production
-description: What to do when a Lovable, Bolt, Cursor or Claude Code app breaks for a real user — reproduce it, read the first error, and ask the agent for the smallest fix.
+description: What to do when a Lovable, Bolt, Cursor or Claude Code app breaks for a real user. Reproduce it, read the first error, and ask the agent for the smallest fix.
 ---
 
 # Your Lovable app broke in production. Now what?
@@ -14,7 +14,7 @@ you. A user messages "it's broken". You open the code and it is a few
 thousand lines you have read once, if that.
 
 This is a checklist for that afternoon. It assumes you can open the browser
-console and you have an AI editor. Most of it has nothing to do with Mushi;
+console and you have an AI editor. Most of it has nothing to do with Mushi Mushi;
 one step does.
 
 ## 1. Get the user's exact words and their screen
@@ -71,14 +71,22 @@ Steps 1 to 3 are the expensive part, and a user cannot do them for you. An
 in-app bug reporter can: [Mushi Mushi](/) is an open-source SDK that lets the
 user report from a widget or a phone shake, attaches the screenshot and the
 console/network tail, writes a plain-English diagnosis of what broke and
-why, and hands the fix prompt to Cursor or Claude Code over MCP. One command
-installs it:
+why, and gives you a fix prompt to paste back into Lovable, Bolt, Cursor or
+Claude Code. [Here is a sample diagnosis](/demo/diagnosis).
+
+In Lovable or Bolt there is no terminal, so you install it with a prompt:
+sign up, copy your script tag from the console, and ask the builder to add
+it to the `` of `index.html`. The
+[Lovable or Bolt quickstart](/quickstart/lovable-bolt) walks through it, and
+[Mushi as a Lovable connector](/quickstart/lovable-mcp) lets you read reports
+from Lovable's chat. With a terminal (Cursor, Claude Code), one command does
+it:
 
 ```bash
 npx mushi-mushi
 ```
 
-Free Cloud is 50 diagnoses a month with no card; self-hosting is free. Other
+Free is one app and 100 diagnoses a month with no card; self-hosting is free. Other
 tools that solve parts of this are compared on
 [Sentry alternatives for solo founders](/compare/sentry-alternatives-for-solo-founders).
 

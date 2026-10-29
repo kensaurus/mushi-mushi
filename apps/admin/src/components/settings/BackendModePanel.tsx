@@ -115,14 +115,14 @@ export function BackendModePanel() {
         <div className="space-y-3">
           <Input
             label="Supabase project URL"
-            placeholder="https://xxxx.supabase.co"
+            placeholder="e.g. https://<project-ref>.supabase.co"
             value={draftUrl}
             onChange={e => setDraftUrl(e.target.value)}
             error={urlErr}
           />
           <Input
             label="Supabase anon key"
-            placeholder="eyJhbGci..."
+            placeholder="e.g. eyJhbGci… (the anon key)"
             value={draftKey}
             onChange={e => setDraftKey(e.target.value)}
             error={keyErr}
