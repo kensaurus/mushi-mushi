@@ -45,6 +45,7 @@ import {
   type MembersTabId,
 } from '../components/members/types'
 import { CHIP_TONE } from '../lib/chipTone'
+import { visiblePlanLabel, visiblePlanTitle } from '../lib/visiblePlanLabel'
 
 // Undo window for soft-delete operations on this page. Long enough for the
 // "wait, that wasn't who I meant" reaction (Nielsen reports ~5-10 s for
@@ -117,7 +118,13 @@ interface Invitation {
 }
 
 interface MembersResponse {
-  organization: { id: string; slug: string; name: string; plan_id: string } | null
+  organization: {
+    id: string
+    slug: string
+    name: string
+    plan_id: string
+    billing_mode?: 'stripe' | 'complimentary'
+  } | null
   currentUserRole: OrgRole
   members: Member[]
   invitations: Invitation[]
@@ -315,6 +322,17 @@ export function OrganizationSettingsPage() {
   const teamsEnabled = entitlements.loading
     ? data?.organization?.plan_id === 'pro' || data?.organization?.plan_id === 'enterprise'
     : entitlements.has('teams')
+  const billingMode =
+    stats.billingMode === 'complimentary' || data?.organization?.billing_mode === 'complimentary'
+      ? 'complimentary'
+      : 'stripe'
+  const planLabelInput = {
+    displayName: stats.planDisplayName,
+    planId: stats.planId ?? data?.organization?.plan_id,
+    billingMode,
+  }
+  const planLabel = visiblePlanLabel(planLabelInput)
+  const planTitle = visiblePlanTitle(planLabelInput)
 
   usePublishPageContext({
     route: '/organization/members',
@@ -659,8 +677,11 @@ export function OrganizationSettingsPage() {
         ]}
         helpHowToUse={copy?.help?.howToUse ?? 'Use Invites to send email invitations. Use Roster to audit activity and change roles.'}
       >
-        <Badge className={teamsEnabled ? CHIP_TONE.okSubtle : CHIP_TONE.warnSubtle}>
-          {stats.planDisplayName ?? data?.organization?.plan_id ?? 'hobby'}
+        <Badge
+          tone={billingMode === 'complimentary' ? 'brand' : teamsEnabled ? 'okSubtle' : 'warnSubtle'}
+          title={planTitle}
+        >
+          {planLabel}
         </Badge>
       </PageHeaderBar>
 
@@ -691,7 +712,7 @@ export function OrganizationSettingsPage() {
             show: activeTab === 'roster',
             children: (
               <MembersReadout
-                stats={stats}
+                stats={{ ...stats, billingMode }}
                 orgId={activeOrgId}
                 fetchedAt={lastFetchedAt}
                 isValidating={isValidating}
@@ -710,7 +731,7 @@ export function OrganizationSettingsPage() {
       />
 
       <SeatBillingCallout
-        planDisplayName={stats.planDisplayName}
+        planDisplayName={planLabel}
         planId={stats.planId}
         seatLimit={stats.seatLimit}
         seatsUsed={stats.seatsUsed}

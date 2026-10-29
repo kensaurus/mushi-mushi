@@ -290,7 +290,26 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
       ...(row.organizations as unknown as Record<string, unknown>),
       role: row.role,
     }));
-    return c.json({ ok: true, data: { organizations: orgs } });
+    const planIds = [
+      ...new Set(
+        orgs
+          .map((org) => org.plan_id)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0),
+      ),
+    ];
+    const planNames = new Map<string, string>();
+    if (planIds.length > 0) {
+      const { data: plans } = await db.from('pricing_plans').select('id, display_name').in('id', planIds);
+      for (const plan of plans ?? []) {
+        const row = plan as { id?: string; display_name?: string | null };
+        if (row.id && row.display_name) planNames.set(row.id, row.display_name);
+      }
+    }
+    const organizations = orgs.map((org) => ({
+      ...org,
+      plan_display_name: typeof org.plan_id === 'string' ? planNames.get(org.plan_id) ?? null : null,
+    }));
+    return c.json({ ok: true, data: { organizations } });
   });
 
   // Create a brand-new organization (team) with the caller as owner.
@@ -494,7 +513,7 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
     }
 
     const [{ data: org }, { data: members, error }, { data: invitations }] = await Promise.all([
-      db.from('organizations').select('id, slug, name, plan_id, is_personal').eq('id', orgId).maybeSingle(),
+      db.from('organizations').select('id, slug, name, plan_id, billing_mode, is_personal').eq('id', orgId).maybeSingle(),
       db
         .from('organization_members')
         // last_active_at + joined_via feed the new "Active 3d ago" column
@@ -604,7 +623,7 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
 
     const [{ data: org }, { data: memberRows, error: memberErr }, { data: inviteRows, error: inviteErr }] =
       await Promise.all([
-        db.from('organizations').select('id, slug, name, plan_id').eq('id', orgId).maybeSingle(),
+        db.from('organizations').select('id, slug, name, plan_id, billing_mode').eq('id', orgId).maybeSingle(),
         db
           .from('organization_members')
           .select('last_active_at')
@@ -670,6 +689,9 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
         atSeatCap,
         planId: (org as { plan_id?: string | null } | null)?.plan_id ?? null,
         planDisplayName,
+        billingMode: (org as { billing_mode?: string | null } | null)?.billing_mode === 'complimentary'
+          ? 'complimentary'
+          : 'stripe',
         currentUserRole: role,
         canManage,
         organizationName: (org as { name?: string | null } | null)?.name ?? null,

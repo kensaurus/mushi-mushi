@@ -59,9 +59,9 @@ interface ActivePlanSummary {
    * Org-level billing posture inherited from `organizations.billing_mode`.
    * `'stripe'` (default) = self-serve, paying customer.
    * `'complimentary'` = Mushi-internal staff / sponsored / beta — entitlements
-   * track `planId` but no Stripe customer or invoice exists. The PlanBadge,
-   * OrgSwitcher, and BillingPage all render an "Admin" affordance instead of
-   * the plain tier label so the user understands they're not a paying Pro.
+   * track `planId` but no Stripe customer or invoice exists. The header,
+   * Team page, and sidebar say the tier plus "(complimentary)"
+   * (`visiblePlanLabel`) instead of a separate COMP or Admin chip.
    */
   billingMode: 'stripe' | 'complimentary'
   /** Convenience flag — equivalent to `billingMode === 'complimentary'`. */
