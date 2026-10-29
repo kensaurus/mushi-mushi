@@ -469,28 +469,33 @@ export function OnboardingPage() {
   if (statsError) return <PageLoadError error={statsError} resource="setup stats" onRetry={reloadAll} />
 
   // Shared by the Steps tab and first-run S1 — one form, two homes.
-  const createProjectForm = (
+  // First-run passes intro=false: the wizard already says "Name your app".
+  // A second heading, "Create your first project", made the other half of
+  // fresh-eyes sessions think that was a different task (report 2a8d4a76).
+  const createProjectForm = (intro = true) => (
     <Card className="p-5 space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold text-fg">
-          {setupCliMode && setup.hasAnyProject
-            ? 'Create a new project'
-            : setupCliMode
-              ? 'Create your project'
-              : 'Create your first project'}
-        </h3>
-        <ContainedBlock tone="muted" className="mt-2">
-          <p className="text-xs text-fg-muted">
-            A project groups all bug reports from one application. Name it after your app.
-          </p>
-        </ContainedBlock>
-      </div>
+      {intro ? (
+        <div>
+          <h3 className="text-sm font-semibold text-fg">
+            {setupCliMode && setup.hasAnyProject
+              ? 'Create a new project'
+              : setupCliMode
+                ? 'Create your project'
+                : 'Create your first project'}
+          </h3>
+          <ContainedBlock tone="muted" className="mt-2">
+            <p className="text-xs text-fg-muted">
+              A project groups all bug reports from one application. Name it after your app.
+            </p>
+          </ContainedBlock>
+        </div>
+      ) : null}
       <div className="flex gap-2">
         <div className="flex-1">
           <Input
-            label="Project name"
+            label={intro ? 'Project name' : 'App name'}
             helpId="onboarding.project_name"
-            placeholder="e.g. My SaaS App"
+            placeholder={intro ? 'e.g. My SaaS App' : 'e.g. My app'}
             value={projectName}
             onChange={(e) => {
               setProjectName(e.target.value)
@@ -510,7 +515,7 @@ export function OnboardingPage() {
           onClick={createProject}
           loading={creating}
           disabled={creating || !projectName.trim()}
-          title={!projectName.trim() ? 'Enter a project name to continue' : undefined}
+          title={!projectName.trim() ? (intro ? 'Enter a project name to continue' : 'Enter the app name to continue') : undefined}
         >
           Create
         </Btn>
@@ -528,31 +533,14 @@ export function OnboardingPage() {
     </Card>
   )
 
-  // First-run wizard: S1 (name the project) → S2 (see your first diagnosis).
-  // The key is auto-minted by the create endpoint, so there is no key step.
+  // First-run wizard: name the app, then send a test bug. The key is
+  // auto-minted by the create endpoint, so there is no key step. "Step N of
+  // 2" and "{name} is ready" (no button) read as the end of setup
+  // (report 2a8d4a76). The diagnosis screen is the next action, including
+  // in the moment before the setup refetch returns the new app.
   const firstRunWizard = (
     <div className="space-y-4" data-testid="onboarding-first-run">
-      {!project ? (
-        <div className="space-y-4">
-          <div>
-            <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Step 1 of 2</p>
-            <h2 className="mt-0.5 text-base font-semibold text-fg">Name your project</h2>
-            <p className="mt-1 text-xs text-fg-muted">
-              That is the only input we need. Your report key is minted for you.
-            </p>
-          </div>
-          {createdProject ? (
-            <Card className="p-4 border-ok/30 bg-ok/5">
-              <p className="text-sm font-medium text-fg">
-                <span className="font-mono">{createdProject.name}</span> is ready
-              </p>
-              <p className="mt-0.5 text-xs text-fg-muted">Preparing your first diagnosis…</p>
-            </Card>
-          ) : (
-            <div ref={createFormRef}>{createProjectForm}</div>
-          )}
-        </div>
-      ) : (
+      {project ? (
         <FirstDiagnosisScreen
           projectId={project.project_id}
           projectName={project.project_name}
@@ -560,6 +548,25 @@ export function OnboardingPage() {
           apiKey={createdProject?.apiKey ?? apiKey?.key ?? null}
           onDiagnosed={reloadAll}
         />
+      ) : createdProject ? (
+        <FirstDiagnosisScreen
+          projectId={createdProject.id}
+          projectName={createdProject.name}
+          projectSlug={createdProject.slug}
+          apiKey={createdProject.apiKey ?? null}
+          onDiagnosed={reloadAll}
+        />
+      ) : (
+        <div className="space-y-4">
+          <div>
+            <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Next</p>
+            <h2 className="mt-0.5 text-base font-semibold text-fg">Name your app</h2>
+            <p className="mt-1 text-xs text-fg-muted">
+              Type its name and press Create. That makes the app and its key. The next screen sends a test bug.
+            </p>
+          </div>
+          <div ref={createFormRef}>{createProjectForm(false)}</div>
+        </div>
       )}
       <p className="text-2xs text-fg-faint">
         Prefer the full checklist (keys, integrations, every optional step)?{' '}
@@ -582,15 +589,14 @@ export function OnboardingPage() {
         icon={<IconBolt />}
         projectScope={stats.projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
-        description={copy?.description ?? 'Create a project, make a key, install the SDK, and watch your first bug get a plain-English read — target: under 2 minutes.'}
-        helpTitle={copy?.help?.title ?? 'About this wizard'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'A guided checklist that creates your first project, generates an API key, sends a test report, and shows the SDK snippet. Progress saves across devices.'}
+        description={copy?.description ?? 'Name your app, then send a test bug. This page shows that one next step.'}
+        helpTitle={copy?.help?.title ?? 'About setup'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Name your app, send one test bug, and read the diagnosis here. Installing the widget comes after that.'}
         helpUseCases={copy?.help?.useCases ?? [
-          'Create the project that will receive bug reports from your app',
-          'Generate and copy the API key that authenticates SDK requests',
-          'Confirm reports arrive before shipping any code',
+          'See a plain-English diagnosis before installing anything',
+          'Copy the widget into your app once the test bug is diagnosed',
         ]}
-        helpHowToUse={copy?.help?.howToUse ?? 'Complete the required steps in order. The API key is only shown once — copy it before continuing. You can rerun the test report any time from Settings.'}
+        helpHowToUse={copy?.help?.howToUse ?? 'Do the step this page names. The button is the next action.'}
       />
 
       {firstRun ? firstRunWizard : (
@@ -805,7 +811,7 @@ export function OnboardingPage() {
 
       {shouldShowOnboardingCreateForm(setupCliMode, setup.hasAnyProject, Boolean(createdProject)) && (
         <div id="onboarding-create-form" ref={createFormRef}>
-          {createProjectForm}
+          {createProjectForm()}
         </div>
       )}
         </>
@@ -1028,7 +1034,7 @@ export function OnboardingPage() {
         <OnboardingSetupReadout stats={stats} statsFetchedAt={statsFetchedAt} statsValidating={statsValidating} />
       ) : null}
 
-      {!ux.hideFooterLinks ? (
+      {!ux.hideFooterLinks && !firstRun ? (
       <p className="text-center flex items-center justify-center gap-3">
         <Btn
           variant="ghost"
