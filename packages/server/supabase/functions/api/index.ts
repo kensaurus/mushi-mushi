@@ -654,6 +654,7 @@ registerAdminOpsRoutes(app);
 // Live-site watch: Firecrawl monitors that file broken pages as reports (ADR 0024).
 registerSiteWatchRoutes(app);
 // Spend-down and review follow-ups (ADR 0028, 0032): served by api-ext (api size budget).
+// GET /v1/admin/byok/cursor/models is the list spend-down, Integrations, and follow-ups share.
 forwardToApiExt([
   '/v1/admin/byok/spend-down',
   '/v1/admin/byok/spend-down/projects/:projectId/resume',

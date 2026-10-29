@@ -19,6 +19,7 @@ parked work is visible in one place.
 - **Added 2026-10-27 (worker modes, console ops plan P3):** BL-138 and BL-139: the `ux` lane mode left out of P3, and what the conflicts, audit and skill modes left open.
 - **Delta 2026-10-27:** 12 new (BL-123..BL-130 from the scan; BL-131..BL-134 host-repo follow-ups from the 2026-10-26 CI cost rollout) · 0 closed · 0 newly stale · 0 moved to verify-done (BL-011, BL-013, BL-040, BL-041, BL-068, BL-069, BL-071, BL-079, BL-096, BL-098, BL-099, BL-107, BL-108, BL-115, BL-121 re-checked in code: still open)
 - **Added 2026-10-20 (PR #504, spend-down):** BL-087..BL-091, parked parts of ADR 0028. Closed BL-089 on 2026-10-22.
+- **Closed 2026-10-27:** BL-090. Spend-down, Integrations, and review follow-ups pick a Cursor model from `GET /v1/admin/byok/cursor/models`.
 - **Added 2026-10-21 (agent PR review):** BL-095, a parked part of ADR 0030.
 - **Added 2026-10-21 (universal AI keys):** BL-096, BL-097, BL-098, parked parts of ADR 0031.
 - **Added 2026-10-21 (review follow-ups):** BL-099, BL-100, parked parts of ADR 0032.
@@ -29,22 +30,25 @@ parked work is visible in one place.
 - **Added 2026-10-23 (site audit, ADR 0040):** BL-116, a parked part of the site audit. Closed BL-117 on 2026-10-23.
 - **Added 2026-10-24 (local fix worker, `mushi work`):** BL-118..BL-119, parked parts of the local worker.
 - **Delta 2026-10-17:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 73 · **Recently closed:** 27 (BL-011, BL-154 on 2026-10-29; BL-117, BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 110 · **Recently closed:** 28 (BL-090 on 2026-10-27; BL-011, BL-154 on 2026-10-29; BL-117, BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
-| deferred-plan-phase | 12 |
-| test-gap | 3 |
-| tech-debt | 15 |
-| known-bug | 3 |
-| decision-needed | 12 |
-| unfinished-feature | 25 |
+| deferred-plan-phase | 16 |
+| test-gap | 4 |
+| tech-debt | 17 |
+| known-bug | 16 |
+| decision-needed | 13 |
+| unfinished-feature | 37 |
 | dependency | 2 |
 | needs-triage | 1 |
+| product | 2 |
+| ux | 1 |
+| perf | 1 |
 
 | Status | Open |
 |---|---|
-| relevant | 70 |
+| relevant | 107 |
 | verify-done | 3 |
 | stale (propose removal) | 0 |
 
@@ -129,7 +133,6 @@ parked work is visible in one place.
 | BL-082 | decision-needed | yen-yen code-health ingest has been silent since 2026-07-16. yen-yen's `bundle-budget.yml` dropped its push-to-main trigger on purpose (a cost cut), and its "Push code-health metrics to Mushi" step is gated on `github.event_name == 'push'`, so the `workflow_dispatch` path its own comment offers never posts either. `/code-health` for yen-yen shows July data with no staleness signal, and AGENTS.md ("Code Health Ingest") still says it posts on every push to `main`. Decide: let the step run on `workflow_dispatch` or a weekly schedule in yen-yen, or update AGENTS.md and show staleness on the page | relevant | low | `kensaurus/yen-yen` `.github/workflows/bundle-budget.yml:24`-`:37`, `:168`; `AGENTS.md` (Code Health Ingest); BL-009 | — |
 | BL-087 | deferred-plan-phase | Spend-down UX lane: spend an expiring Cursor key on cloud UX runs as well as fixes. Parked because the cloud UX run route is session-only (ADR 0017 approval posture); needs an owner decision on who `requested_by` is for an unattended run | relevant | low | ADR 0028 (Rejected), `api/routes/ux-cloud.ts`, plan cursor-credit-spend-down §4 step 5 | — |
 | BL-088 | deferred-plan-phase | Spend-down QA lane: route `test-gen-from-report` / `test-gen-from-story` to Cursor so QA generation can use expiring Cursor credits. Today both run on Anthropic/OpenAI keys only | relevant | low | ADR 0028 (Rejected), plan cursor-credit-spend-down §4 step 6 | — |
-| BL-090 | unfinished-feature | Cursor model picker for spend-down and Integrations, fed by Cursor's `GET /v1/models` through a new `/v1/admin/byok/cursor/models`. The console takes a free-text model spec validated by `parseCursorModelSpec` | relevant | low | `apps/admin/src/components/settings/SpendDownSection.tsx`, plan §4 Console | — |
 | BL-095 | unfinished-feature | Per-project review model for the agent PR review (`project_settings.agent_pr_review_model`, the `judge_model` pattern with `resolveClaudeModel`). Deferred: Opus 5.5 is the point of the gate | relevant | low | ADR 0030 (Rejected), `_shared/models.ts` `AGENT_PR_REVIEW_MODEL` | — |
 | BL-096 | decision-needed | Universal AI keys (ADR 0031) serve apps through their organization's owners, so an app with no organization (only the legacy `projects.owner_id`) gets none. Decide: fall back to `projects.owner_id` in `keyOwnerForProject`, or move such apps into a personal organization | relevant | low | ADR 0031, `_shared/byok-scope.ts` `keyOwnerForProject` | — |
 | BL-097 | unfinished-feature | Add or move an organization or universal key from the CLI (`mushi keys add --scope`, `mushi keys scope`) through a device-auth console session instead of the project API key, which may not change shared keys (ADR 0023, ADR 0031). Today only the console does | relevant | low | ADR 0031, `packages/cli/src/commands/keys.ts`, `PATCH /v1/admin/byok/keys/:keyId/scope` | — |
@@ -217,6 +220,7 @@ parked work is visible in one place.
 |---|---|---|---|
 | BL-011 | `_shared/storage.ts` assumed the Supabase bucket existed and only remapped the known-uncreated name `mushi-screenshots` | 2026-10-29 | `probeSupabaseBucket` calls `storage.getBucket` before upload, signed URL, delete, and the Supabase health list. A hit is cached for the isolate; a miss throws `STORAGE_BUCKET_MISSING` and a probe failure throws `STORAGE_BUCKET_PROBE_FAILED`. The legacy `mushi-screenshots` remap is unchanged. A missing name is not swapped for `screenshots`. Tests: `_shared/storage-bucket.test.ts`. |
 | BL-154 | Local workers: the owner's lanes still ran on `lane-v4.sh` | 2026-10-29 | The lanes run under `mushi work --daemon` (`mushi-worker.service` in Ubuntu-24.04, host alienwarex16): its heartbeat carries slots, stages and the Cursor and gh checks (`work_hosts.status`, 2026-10-28 16:31 UTC), and runs hold `work_claims` leases |
+| BL-090 | Cursor model picker for spend-down and Integrations. The console took a free-text model spec validated by `parseCursorModelSpec` | 2026-10-27 | `GET /v1/admin/byok/cursor/models` calls Cursor `GET /v1/models` for the named byok key (spend-down) or the key the app would use (Integrations). Review follow-ups use the same picker. Settings → AI keys and Integrations → Cursor Cloud save the same spec (`id` or `id?param=value`); a missing list falls back to the text field. |
 | BL-117 | Site audit cadence and page limit are API-only; /credits shows the switch and Run now only | 2026-10-23 | `SiteAuditControl` on /credits, while the audit is on: Daily / Every 3 days / Weekly (`cadenceDays` 1, 3, 7) and a page-limit select (`pageLimit`), both through `PUT /v1/admin/projects/:id/site-audit`, plus the credits a run (one per page). A stored cadence outside those three stays selectable. Tests: `CreditsPage.test.tsx`. |
 | BL-083 | `PATH_SLICES` could still ask nav-meta for slices only the deleted route hero read | 2026-10-23 | Audited against `resolveNavBadge`. Every remaining key is read by that badge or by the counters it fills (`projects`, `members`). Dropped the extra `dashboard` on `/health` (`navSlicesForPaths` already requests it). Layout no longer unions the current pathname into the sidebar request — that union existed for `layoutHeroFromStats`, deleted 2026-10-17. The one sidebar (core pages plus enabled Labs) asks only for visible badges. `apps/admin/src/lib/navBadges.test.ts`, `apps/admin/src/components/Layout.navSlices.test.tsx`. |
 | BL-089 | Radar `spend_down_idle` finding: a Cursor key with spend-down on, inside its window, that dispatched nothing | 2026-10-22 | `evaluateSpendDownIdle` (`_shared/radar/operator-detectors.ts`) runs with the operator detectors and writes rule `spend_down_idle`. It reuses `spendDownWindow` and `spendDownIdleReasons` (`_shared/spend-down.ts`): in-window and nothing dispatched because no app uses the key, auto-fix is off, or every open report is settled. Tests: `spend-down.test.ts`, `radar-operator-detectors.test.ts`, `radar-run.test.ts`. ADR 0028 consequences. |

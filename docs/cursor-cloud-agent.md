@@ -96,7 +96,7 @@ the PR was opened only when GitHub fires the webhook.
 | Field | Where in console | Description |
 |-------|-----------------|-------------|
 | **API Key** (`cursor_api_key_ref`) | Integrations → Cursor Cloud → API Key | `crsr_…` key. Stored in Supabase Vault — Mushi never exposes the raw value. |
-| **Model** (`cursor_default_model`) | Integrations → Cursor Cloud → Model | Optional. Blank = account default (`composer-2`). Valid slugs: `composer-2`, `claude-4-sonnet-thinking`, `claude-opus-4-7-thinking-xhigh`, `gpt-5.5-medium`. Unrecognised values are silently ignored and the account default is used. |
+| **Model** (`cursor_default_model`) | Integrations → Cursor Cloud → Model | Optional. The card lists the models this Cursor account accepts, including their settings. Blank = account default. Other accepts an id with settings, e.g. `grok-4.7?reasoning_effort=xhigh&context=500k`. |
 | **Auto-create PRs** (`cursor_auto_create_pr`) | Integrations → Cursor Cloud → Auto-create PRs | `true` (default): Cursor opens a draft PR as soon as the fix is committed. `false`: Cursor commits only — useful for manual branch inspection before a PR exists. |
 
 Full knob descriptions (including `howItWorks`, defaults, and `whenToChange`)

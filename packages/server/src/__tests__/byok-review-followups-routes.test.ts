@@ -8,11 +8,14 @@
  *            - PATCH: organization owners and admins only, the key must
  *              belong to the organization, model and limit validated;
  *            - GET /v1/admin/byok/cursor/models?keyId=: another app's key
- *              needs an organization owner or admin;
+ *              needs an organization owner or admin; no keyId uses the key
+ *              the app would use; the path is registered only here;
  *            - GET /v1/admin/byok/spend-down carries `reviewFollowups`, and
  *              a failed follow-up read shows null without failing the status.
  */
 
+import { readFileSync, readdirSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
 
@@ -23,6 +26,7 @@ const state = vi.hoisted(() => ({
   accessible: [] as string[],
   listModels: null as null | ((apiKey: string) => Promise<unknown[]>),
   query: {} as Record<string, string>,
+  resolveCursor: null as null | (() => Promise<string | null>),
 }))
 
 const fakeLog = vi.hoisted(() => {
@@ -46,7 +50,7 @@ vi.mock('../../supabase/functions/_shared/project-access.ts', () => ({
   accessibleProjectIds: async () => state.accessible,
 }))
 vi.mock('../../supabase/functions/_shared/agent-adapters.ts', () => ({
-  resolveCursorApiKey: async () => 'crsr_app',
+  resolveCursorApiKey: () => (state.resolveCursor ? state.resolveCursor() : Promise.resolve('crsr_app')),
 }))
 vi.mock('../../supabase/functions/_shared/cursor-cloud.ts', async (orig) => {
   const actual = (await orig()) as Record<string, unknown>
@@ -175,6 +179,7 @@ beforeEach(() => {
   state.accessible = [P1, P2]
   state.listModels = null
   state.query = {}
+  state.resolveCursor = null
   dbModule.clearCursorModelCache()
 })
 
@@ -313,6 +318,40 @@ describe('GET cursor/models', () => {
     state.query = {}
     ;({ app } = setup())
     expect((await app.call('GET', MODELS)).status).toBe(200)
+  })
+  it('with no keyId calls Cursor with the key the app would use, and a missing key is NO_CURSOR_KEY', async () => {
+    const seen: string[] = []
+    state.listModels = async (k) => {
+      seen.push(k)
+      return [{ id: 'grok-4.7' }]
+    }
+    state.query = {}
+    const { app } = setup()
+    const res = await app.call('GET', MODELS)
+    expect(res.status).toBe(200)
+    expect(seen).toEqual(['crsr_app'])
+    expect(JSON.stringify(res.body)).not.toContain('crsr_app')
+    state.resolveCursor = async () => null
+    const missing = await app.call('GET', MODELS)
+    expect(missing.status).toBe(400)
+    expect(missing.body.error?.code).toBe('NO_CURSOR_KEY')
+    state.query = { keyId: 'nope' }
+    expect((await app.call('GET', MODELS)).body.error?.code).toBe('INVALID_KEY_ID')
+  })
+  it('registers GET /v1/admin/byok/cursor/models once, on the review-follow-up routes', () => {
+    const routesDir = resolve(__dirname, '../../supabase/functions/api/routes')
+    const hits = readdirSync(routesDir)
+      .filter((name) => name.endsWith('.ts'))
+      .filter((name) => readFileSync(resolve(routesDir, name), 'utf8').includes("'/v1/admin/byok/cursor/models'"))
+    expect(hits).toEqual(['byok-review-followups.ts'])
+    const index = readFileSync(resolve(__dirname, '../../supabase/functions/api/index.ts'), 'utf8')
+    expect(index).not.toContain('registerByokCursorModelsRoutes')
+    expect(index).not.toContain('byok-cursor-models')
+    const manifest = readFileSync(resolve(__dirname, '../../../../docs/API_ROUTE_MANIFEST.generated.md'), 'utf8')
+    const rows = manifest.split('\n').filter((line) => line.includes('`/v1/admin/byok/cursor/models`'))
+    expect(rows).toEqual([
+      '| GET | `/v1/admin/byok/cursor/models` | `jwtAuth` | `packages/server/supabase/functions/api/routes/byok-review-followups.ts` |',
+    ])
   })
 })
 

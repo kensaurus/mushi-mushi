@@ -1,19 +1,22 @@
 /**
  * FILE: apps/admin/src/components/settings/CursorModelPicker.tsx
- * PURPOSE: Cursor model picker (review follow-ups, ADR 0032; written so
- *          spend-down and Integrations can adopt it, BL-090). Loads
+ * PURPOSE: Cursor model picker for spend-down and Integrations (BL-090) and
+ *          review follow-ups (ADR 0032). Loads
  *          GET /v1/admin/byok/cursor/models and writes a spec string
  *          (`id` or `id?param=value&…`). keyId asks for that Cursor account;
  *          omit it to use the key the app would use. A failed or empty list
- *          falls back to the text field.
+ *          falls back to the text field. Other mode closes when the saved
+ *          spec changes to a listed model, and when keyId changes.
  */
 
+import { useEffect, useRef, useState } from 'react'
 import { Input, SelectField } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import {
   CURSOR_MODEL_OTHER,
   cursorModelSelection,
   cursorModelSpec,
+  isPlainParam,
   type CursorModelOption,
   type CursorModelParam,
 } from './cursorModelSpec'
@@ -32,13 +35,20 @@ interface Props {
 }
 
 function paramValues(param: CursorModelParam, current: string) {
-  if (current && !param.values.some((v) => v.value === current)) {
-    return [{ value: current, displayName: current }, ...param.values]
+  const values = param.values.filter((v) => isPlainParam(v.value))
+  if (current && !values.some((v) => v.value === current)) {
+    return [{ value: current, displayName: current }, ...values]
   }
-  return param.values
+  return values
 }
 
-export function CursorModelPicker({
+export function CursorModelPicker(props: Props) {
+  // A different Cursor account is a different list. Remounting drops Other
+  // mode left over from the previous key.
+  return <CursorModelPickerBody key={props.keyId ?? ''} {...props} />
+}
+
+function CursorModelPickerBody({
   value,
   onChange,
   keyId,
@@ -54,7 +64,35 @@ export function CursorModelPicker({
   const models = usePageData<{ models: CursorModelOption[] }>(path, { deps: [keyId ?? ''] })
   const list = models.data?.models ?? []
   const listReady = !models.loading && !models.error && models.data != null
-  const selection = cursorModelSelection(value, list, listReady)
+  const [otherPicked, setOtherPicked] = useState(false)
+  // Other stays open only until a saved spec that is on the list arrives
+  // from outside the picker (a form reset, or another field writing the draft).
+  // Specs the picker wrote itself (typing a listed id in Other) never close it.
+  const seenValue = useRef(value)
+  const pendingValue = useRef(false)
+  const ownWrite = useRef<string | null>(null)
+  const emit = (spec: string) => {
+    ownWrite.current = spec
+    onChange(spec)
+  }
+  useEffect(() => {
+    if (seenValue.current !== value) {
+      seenValue.current = value
+      pendingValue.current = ownWrite.current !== value
+      ownWrite.current = null
+    }
+    if (!pendingValue.current || !listReady) return
+    const incoming = cursorModelSelection(value, list, true)
+    pendingValue.current = false
+    if (list.some((m) => m.id === incoming.modelId)) setOtherPicked(false)
+  }, [value, list, listReady])
+  const parsed = cursorModelSelection(value, list, listReady)
+  // A blank or listed value maps back to its own option, so Other needs its
+  // own flag to keep the typed-id field open.
+  const selection =
+    otherPicked && parsed.modelId !== CURSOR_MODEL_OTHER
+      ? { modelId: CURSOR_MODEL_OTHER, custom: value, params: {} }
+      : parsed
   const chosen = list.find((m) => m.id === selection.modelId)
   const visibleLabel = labelled ? label : undefined
 
@@ -89,9 +127,10 @@ export function CursorModelPicker({
         value={selection.modelId}
         onChange={(e) => {
           const id = e.target.value
+          setOtherPicked(id === CURSOR_MODEL_OTHER)
           if (id === CURSOR_MODEL_OTHER)
-            onChange(selection.modelId === CURSOR_MODEL_OTHER ? value : '')
-          else onChange(id)
+            emit(selection.modelId === CURSOR_MODEL_OTHER ? value : '')
+          else emit(id)
         }}
       >
         <option value="">{emptyLabel}</option>
@@ -113,7 +152,7 @@ export function CursorModelPicker({
           aria-label="Model id"
           value={selection.custom}
           placeholder="e.g. grok-4.7?reasoning_effort=xhigh"
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => emit(e.target.value)}
         />
       )}
       {(chosen?.parameters ?? []).map((p) => (
@@ -122,7 +161,7 @@ export function CursorModelPicker({
           label={p.displayName ?? p.id}
           value={selection.params[p.id] ?? ''}
           onChange={(e) =>
-            onChange(
+            emit(
               cursorModelSpec(
                 chosen!.id,
                 '',

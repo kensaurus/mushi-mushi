@@ -1,6 +1,7 @@
 /**
  * FILE: cursorModelSpec.test.ts
- * PURPOSE: The Cursor model picker writes a model spec
+ * PURPOSE: The spend-down, Integrations, and review follow-up pickers write a
+ *          Cursor model spec
  *          (`id` or `id?param=value`) and reopen a saved spec on the same controls.
  */
 
@@ -57,6 +58,13 @@ describe('cursorModelSpec', () => {
       cursorModelSpec('grok-4.7', '', { context: '500k', reasoning_effort: 'xhigh' }, GROK),
     ).toBe('grok-4.7?reasoning_effort=xhigh&context=500k')
     expect(cursorModelSpec('grok-4.7', '', { reasoning_effort: '' }, GROK)).toBe('grok-4.7')
+  })
+
+  it('leaves out a param value that would break the spec', () => {
+    expect(
+      cursorModelSpec('grok-4.7', '', { reasoning_effort: 'a&context=1', context: '500k' }, GROK),
+    ).toBe('grok-4.7?context=500k')
+    expect(cursorModelSpec('grok-4.7', '', { reasoning_effort: 'x=y?z' }, GROK)).toBe('grok-4.7')
   })
 
   it('keeps a typed id when Other is selected', () => {

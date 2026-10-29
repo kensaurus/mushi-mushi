@@ -22,7 +22,17 @@ const pageData = vi.hoisted(() => ({
 }))
 
 vi.mock('../../lib/usePageData', () => ({
-  usePageData: () => pageData.current,
+  usePageData: (path: string | null) => {
+    if (String(path ?? '').includes('/byok/cursor/models')) {
+      return {
+        data: { models: [{ id: 'composer-2.5', displayName: 'Composer 2.5' }] },
+        error: null,
+        loading: false,
+        reload: () => {},
+      }
+    }
+    return pageData.current
+  },
 }))
 vi.mock('../ProjectSwitcher', () => ({ useActiveProjectId: () => 'p1' }))
 
@@ -123,6 +133,25 @@ describe('PlatformIntegrationCard — Remove key', () => {
   it('hides the menu from members, who cannot change credentials', async () => {
     await render({ onRemoveKey: vi.fn(), onApplyToAll: vi.fn(), canManage: false })
     expect(moreActions()).toBeNull()
+  })
+
+  it('picks the default model from this Cursor account', async () => {
+    const onChangeField = vi.fn()
+    await render({ isEditing: true, draft: { cursor_default_model: '' }, onChangeField })
+    const select = container.querySelector('select')
+    expect(select?.textContent).toContain('Account default')
+    expect(select?.textContent).toContain('Composer 2.5')
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!
+    setter!.call(select, 'composer-2.5')
+    await act(async () => select!.dispatchEvent(new Event('change', { bubbles: true })))
+    expect(onChangeField).toHaveBeenCalledWith('cursor_default_model', 'composer-2.5')
+  })
+
+  it('says the model list is from the saved key while a new key is typed', async () => {
+    await render({ isEditing: true, draft: { cursor_default_model: '' } })
+    expect(container.textContent).not.toContain('Save the new API key first')
+    await render({ isEditing: true, draft: { cursor_api_key_ref: 'crsr_new', cursor_default_model: '' } })
+    expect(container.textContent).toContain('Save the new API key first')
   })
 })
 

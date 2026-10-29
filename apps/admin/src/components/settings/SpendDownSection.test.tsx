@@ -31,15 +31,36 @@ const KEY: SpendDownKeyStatus = {
   lastSummary: null,
 }
 
+const GROK = {
+  id: 'grok-4.7',
+  displayName: 'Grok 4.7',
+  parameters: [
+    { id: 'reasoning_effort', displayName: 'Reasoning effort', values: [{ value: 'xhigh' }, { value: 'high' }] },
+    { id: 'context', displayName: 'Context', values: [{ value: '500k' }] },
+  ],
+}
+
 const mocks = vi.hoisted(() => ({
   apiFetch: vi.fn(),
   reload: vi.fn(),
   keys: [] as unknown[],
+  models: null as unknown,
+  modelsError: null as string | null,
   followups: null as unknown,
 }))
 vi.mock('../../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../../lib/usePageData', () => ({
-  usePageData: () => ({ data: { projectId: 'p', keys: mocks.keys, reviewFollowups: mocks.followups }, loading: false, error: null, reload: mocks.reload }),
+  usePageData: (path: string) => {
+    if (String(path).includes('/byok/cursor/models')) {
+      return {
+        data: mocks.modelsError ? null : { models: mocks.models },
+        loading: false,
+        error: mocks.modelsError,
+        reload: () => {},
+      }
+    }
+    return { data: { projectId: 'p', keys: mocks.keys, reviewFollowups: mocks.followups }, loading: false, error: null, reload: mocks.reload }
+  },
 }))
 
 import { SpendDownSection } from './SpendDownSection'
@@ -57,6 +78,14 @@ function setInput(label: string, value: string) {
   setter.call(input, value)
   input.dispatchEvent(new Event('input', { bubbles: true }))
 }
+function setSelect(label: string, value: string) {
+  const lab = Array.from(document.body.querySelectorAll('label')).find((l) => l.textContent?.includes(label))
+  const select = lab?.querySelector('select') as HTMLSelectElement | null
+  if (!select) throw new Error(`no select "${label}"`)
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!
+  setter.call(select, value)
+  select.dispatchEvent(new Event('change', { bubbles: true }))
+}
 
 describe('SpendDownSection', () => {
   let container: HTMLDivElement
@@ -71,6 +100,9 @@ describe('SpendDownSection', () => {
   beforeEach(() => {
     mocks.apiFetch.mockReset()
     mocks.apiFetch.mockResolvedValue({ ok: true, data: {} })
+    mocks.models = [GROK]
+    mocks.modelsError = null
+    mocks.followups = null
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -86,11 +118,11 @@ describe('SpendDownSection', () => {
     await render(true)
     expect(document.body.textContent).toContain('Spend-down is off.')
     await act(async () => button('Set up spend-down').click())
-    await act(async () => {
-      setInput('Credits expire on', '2026-10-31')
-      setInput('Model', 'grok-4.7?reasoning_effort=xhigh&context=500k')
-      setInput('Fixes per day', '20')
-    })
+    await act(async () => setInput('Credits expire on', '2026-10-31'))
+    await act(async () => setSelect('Model (optional)', 'grok-4.7'))
+    await act(async () => setSelect('Reasoning effort', 'xhigh'))
+    await act(async () => setSelect('Context', '500k'))
+    await act(async () => setInput('Fixes per day', '20'))
     const box = document.body.querySelector('input[type="checkbox"]') as HTMLInputElement
     await act(async () => box.click())
     await act(async () => button('Save').click())
@@ -124,6 +156,30 @@ describe('SpendDownSection', () => {
     expect(document.body.textContent).toContain('tsumagoi: No open report to fix')
     expect(document.body.textContent).toContain('An owner or admin can change it')
     expect(Array.from(document.body.querySelectorAll('button')).some((b) => b.textContent?.includes('spend-down'))).toBe(false)
+  })
+
+  it('types a model id when the model list does not load', async () => {
+    mocks.keys = [KEY]
+    mocks.modelsError = 'Cursor did not return its models'
+    await render(true)
+    await act(async () => button('Set up spend-down').click())
+    expect(document.body.textContent).toContain('model list did not load')
+    await act(async () => setInput('Model (optional)', 'composer-2.5'))
+    await act(async () => button('Save').click())
+    const call = mocks.apiFetch.mock.calls.find(([url]) => url === '/v1/admin/byok/keys/key-1/spend-down')!
+    expect(JSON.parse(String((call[1] as RequestInit).body)).model).toBe('composer-2.5')
+  })
+
+  it('picks Other from a blank model and types an id', async () => {
+    mocks.keys = [KEY]
+    await render(true)
+    await act(async () => button('Set up spend-down').click())
+    await act(async () => setInput('Credits expire on', '2026-10-31'))
+    await act(async () => setSelect('Model (optional)', '__other'))
+    await act(async () => setInput('Model id', 'custom-1?effort=high'))
+    await act(async () => button('Save').click())
+    const call = mocks.apiFetch.mock.calls.find(([url]) => url === '/v1/admin/byok/keys/key-1/spend-down')!
+    expect(JSON.parse(String((call[1] as RequestInit).body)).model).toBe('custom-1?effort=high')
   })
 
   it('shows the 7-day scoreboard and each paused app with its reason', async () => {
