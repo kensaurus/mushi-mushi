@@ -10,8 +10,11 @@ import { sentryConnection } from './integrationConnection'
 import {
   sentryConfiguredFromPlatform,
   sentryConnectionFromPageData,
+  sentryQuerySettled,
   sentryRowStatus,
 } from './useSentryConnection'
+import { settingsBannerPriority } from '../components/settings/SettingsStatusBanner'
+import { EMPTY_SETTINGS_STATS } from '../components/settings/types'
 import type { HealthRow, PlatformResponse } from '../components/integrations/types'
 
 const NOW = Date.parse('2026-10-04T01:00:00Z')
@@ -97,6 +100,27 @@ describe('sentryRowStatus', () => {
     expect(row.detail).toMatch(/^Last event received/)
   })
 
+  it('the Settings banner uses that same Working verdict, so it can reach all-clear without a DSN', () => {
+    const shared = sentryConnectionFromPageData({ platform, history: [probeRow], deliveries: [accepted], now: NOW })
+    const card = sentryConnection({
+      configured: true,
+      probe: probeRow,
+      latestDelivery: accepted,
+      deliveriesLoaded: true,
+      autoImport: { enabled: false, lastRunAt: null },
+      now: NOW,
+    })
+    expect(shared).toEqual(card)
+    expect(
+      settingsBannerPriority(
+        { ...EMPTY_SETTINGS_STATS, projectId: 'p1', sdkConfigEnabled: true, byokAnthropicConfigured: true },
+        { working: 1, attention: 0, replaced: 0, expiring: 0, checking: 0, off: 0, total: 1 },
+        true,
+        shared,
+      ),
+    ).toBe('healthy')
+  })
+
   it('keeps the page\u2019s own hint while the verdict is unknown or there is nothing to check', () => {
     expect(sentryRowStatus(null, savedHint)).toEqual(savedHint)
     expect(sentryRowStatus({ state: 'not_connected' }, savedHint)).toEqual(savedHint)
@@ -104,5 +128,40 @@ describe('sentryRowStatus', () => {
 
   it('borrows the saved hint when the shared verdict has no detail', () => {
     expect(sentryRowStatus({ state: 'attention' }, savedHint).detail).toBe(savedHint.detail)
+  })
+})
+
+describe('sentryQuerySettled', () => {
+  const pending = { data: null, error: null }
+  const ready = { data: { ok: true }, error: null }
+
+  it('waits for credentials, probe history, and deliveries once Sentry is configured', () => {
+    expect(
+      sentryQuerySettled({ enabled: true, platform: pending, history: pending, configured: false, deliveries: pending }),
+    ).toBe(false)
+    expect(
+      sentryQuerySettled({ enabled: true, platform: ready, history: ready, configured: true, deliveries: pending }),
+    ).toBe(false)
+    expect(
+      sentryQuerySettled({ enabled: true, platform: ready, history: ready, configured: true, deliveries: ready }),
+    ).toBe(true)
+  })
+
+  it('does not wait for deliveries that were not requested, and a failed read is settled', () => {
+    expect(
+      sentryQuerySettled({ enabled: true, platform: ready, history: ready, configured: false, deliveries: pending }),
+    ).toBe(true)
+    expect(
+      sentryQuerySettled({
+        enabled: true,
+        platform: ready,
+        history: { data: null, error: 'nope' },
+        configured: false,
+        deliveries: pending,
+      }),
+    ).toBe(true)
+    expect(sentryQuerySettled({ enabled: false, platform: pending, history: pending, configured: false, deliveries: pending })).toBe(
+      true,
+    )
   })
 })

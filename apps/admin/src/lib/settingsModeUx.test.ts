@@ -47,6 +47,18 @@ describe('resolveQuickSettingsTab', () => {
     expect(resolveQuickSettingsTab({ ...ready, slackConfigured: false }, summary({}), true, true)).toBe('general');
   });
 
+  it('opens SDK when Sentry is Working even without a saved DSN, matching the banner', () => {
+    expect(
+      resolveQuickSettingsTab(
+        { ...ready, slackConfigured: false, sentryConfigured: false },
+        summary({}),
+        true,
+        true,
+        { state: 'working', detail: 'Last event received just now' },
+      ),
+    ).toBe('sdk');
+  });
+
   it('opens General when Slack is saved but cannot send', () => {
     expect(resolveQuickSettingsTab({ ...ready, slackCanPost: false }, summary({}), true, true)).toBe('general');
   });
