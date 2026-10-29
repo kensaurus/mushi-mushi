@@ -1,7 +1,8 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/local-followup.ts
  * PURPOSE: Review follow-ups for pull requests a LOCAL agent opened through
- *          `mushi work` (fix_attempts.agent = 'mcp'), ADR 0032 amendment
+ *          `mushi work` (fix_attempts.agent = 'local-cursor', or 'mcp' for
+ *          older rows), ADR 0032 amendment
  *          2026-10-24, and for cloud-agent PRs while the team's cloud
  *          follow-ups are off (amendment 2026-10-25). The review-followup worker only starts Cursor Cloud
  *          agents on cloud-agent PRs; a local PR that Opus said "fix first"
@@ -15,8 +16,11 @@
  */
 
 import { FOLLOWUP_MAX_PER_PR } from './review-followup.ts'
+import { LOCAL_WORK_AGENTS } from './work-lanes.ts'
 
-/** fix_attempts.agent for a fix made outside Mushi's cloud agents (`mushi work`, `submit_fix_result`). */
+/** fix_attempts.agent values a local follow-up may work on (`mushi work` and `submit_fix_result`). */
+export const LOCAL_FIX_AGENTS: readonly string[] = LOCAL_WORK_AGENTS
+/** `submit_fix_result` still stores this. `mushi work` stores `local-cursor`. */
 export const LOCAL_FIX_AGENT = 'mcp'
 
 /**
@@ -28,7 +32,7 @@ export const CLOUD_FIX_AGENTS: readonly string[] = ['cursor_cloud', 'github_clou
 
 /** Pure: whether a local follow-up may work on a fix this agent made. */
 export function localFollowupAllowedFor(agent: string | null, cloudFollowupsOn: boolean): boolean {
-  if (agent === LOCAL_FIX_AGENT) return true
+  if (agent != null && LOCAL_FIX_AGENTS.includes(agent)) return true
   return !cloudFollowupsOn && agent != null && CLOUD_FIX_AGENTS.includes(agent)
 }
 

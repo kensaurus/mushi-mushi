@@ -32,6 +32,11 @@ describe('localFollowupGate', () => {
     expect(localFollowupGate(input())).toEqual({ ok: true, headSha: HEAD, branch: 'bugfix/x', round: 1, kind: 'findings' })
   })
 
+  it('follows up a mushi work pull request stored as local-cursor', () => {
+    const attempt = { agent: 'local-cursor', pr_url: 'https://github.com/o/r/pull/1', merged_at: null, pr_state: 'open' }
+    expect(localFollowupGate(input({ attempt }))).toMatchObject({ ok: true, round: 1 })
+  })
+
   it('leaves cloud-agent PRs to the review-followup worker while cloud follow-ups are on', () => {
     const cloud = { agent: 'cursor_cloud', pr_url: 'https://github.com/o/r/pull/1', merged_at: null, pr_state: 'open' }
     expect(localFollowupGate(input({ attempt: cloud, cloudFollowupsOn: true }))).toMatchObject({ ok: false, code: 'NOT_LOCAL', message: expect.stringContaining('follow-ups are on') })

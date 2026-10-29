@@ -347,8 +347,12 @@ export interface AttemptLite {
   created_at: string | null
 }
 
-/** The fix_attempts.agent value of a local run (`mushi work`, as submit_fix_result). */
-export const LOCAL_AGENT = 'mcp'
+/**
+ * fix_attempts.agent for a run on someone's machine. `local-cursor` is
+ * `mushi work`. `mcp` is submit_fix_result and mushi work rows from before
+ * that split. Both cool down and both get the reaper's 90 minute window.
+ */
+export const LOCAL_WORK_AGENTS = ['mcp', 'local-cursor'] as const
 /** Error prefixes of local runs that say nothing about the report: a stop, the reaper, an infra failure. */
 export const WORK_STOPPED_PREFIX = 'mushi work stopped'
 export const WORK_INFRA_PREFIX = 'mushi work infra:'
@@ -371,7 +375,7 @@ export function hasLiveAttempt(attempts: readonly AttemptLite[]): boolean {
  */
 export function inLocalCooldown(attempts: readonly AttemptLite[], now: Date): boolean {
   return attempts.some((a) => {
-    if (a.agent !== LOCAL_AGENT || a.status !== 'failed' || a.pr_url || !a.created_at) return false
+    if (!a.agent || !(LOCAL_WORK_AGENTS as readonly string[]).includes(a.agent) || a.status !== 'failed' || a.pr_url || !a.created_at) return false
     if (a.error?.startsWith(WORK_STOPPED_PREFIX) || a.error?.startsWith(REAPED_PREFIX) || a.error?.startsWith(WORK_INFRA_PREFIX)) return false
     const at = Date.parse(a.created_at)
     return Number.isFinite(at) && now.getTime() - at < LOCAL_RETRY_COOLDOWN_MS

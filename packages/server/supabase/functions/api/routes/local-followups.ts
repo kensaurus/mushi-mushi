@@ -52,7 +52,7 @@ import { ciJobsForHeads } from '../../_shared/review-followup-db.ts';
 import { ciGithub, fetchJobLogTail } from '../../_shared/ci-jobs.ts';
 import {
   CLOUD_FIX_AGENTS,
-  LOCAL_FIX_AGENT,
+  LOCAL_FIX_AGENTS,
   localFollowupAllowedFor,
   localFollowupDedupe,
   localFollowupGate,
@@ -183,7 +183,7 @@ export function registerLocalFollowupRoutes(app: Hono<{ Variables: Variables }>)
       .from('fix_attempts')
       .select(ATTEMPT_COLUMNS)
       .eq('project_id', projectId)
-      .in('agent', [LOCAL_FIX_AGENT, ...CLOUD_FIX_AGENTS])
+      .in('agent', [...LOCAL_FIX_AGENTS, ...CLOUD_FIX_AGENTS])
       .not('pr_url', 'is', null)
       .is('merged_at', null)
       .gte('created_at', since)

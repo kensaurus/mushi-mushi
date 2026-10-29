@@ -26,7 +26,7 @@
  *                             machine for over 5 minutes
  *            machine_busy     load per core of 2 or more
  *            hook_failures    2 or more runs of a lane failed in the repo's git hooks in 24 h
- *            unmanaged_run    a local `mushi work` run (fix_attempts.agent = 'mcp') has been
+ *            unmanaged_run    a local `mushi work` run (fix_attempts.agent local-cursor, or mcp) has been
  *                             running over 45 minutes with no worker claim: a script, not
  *                             the console-steered worker, started it
  *            credits_idle     no agent work for 2 hours while Cursor credits expire within
@@ -130,7 +130,7 @@ export interface FlagClaim {
   prUrl: string | null
 }
 
-/** A `mushi work` run (fix_attempts.agent = 'mcp', status running) of the caller's apps. */
+/** A `mushi work` run (fix_attempts.agent local-cursor or mcp, status running) of the caller's apps. */
 export interface FlagLocalRun {
   fixId: string
   reportId: string

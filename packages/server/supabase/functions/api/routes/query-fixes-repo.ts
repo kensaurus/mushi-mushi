@@ -55,6 +55,7 @@ import { canonicalPrUrl, parsePullRequestUrl } from '../../_shared/pr-substance.
 import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
 import { loadRecentFixTruths, loadReportFixTruths, reportTitle } from '../../_shared/fix-report-truth-load.ts';
 import { resolveUserDisplays } from '../../_shared/user-display.ts';
+import { newFixAttemptRow } from '../../_shared/fix-attempt-create.ts';
 import { isWorkerOnlyKey, workerClaimDenial } from '../../_shared/work-claims.ts';
 import {
   fetchPullRequest,
@@ -765,12 +766,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
 
     const { data: fix, error } = await db
       .from('fix_attempts')
-      .insert({
-        report_id: report.id,
-        project_id: report.project_id,
-        agent: body.agent ?? 'claude_code',
-        status: 'pending',
-      })
+      .insert(newFixAttemptRow(body, report))
       .select('id')
       .single();
 

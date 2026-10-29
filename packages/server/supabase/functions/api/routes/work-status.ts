@@ -32,7 +32,7 @@ import type { Variables } from '../types.ts'
 import type { getServiceClient } from '../../_shared/db.ts'
 import type { logAudit } from '../../_shared/audit.ts'
 import { ownerUserColumnReady, withOwnerUserColumn } from '../../_shared/byok-scope.ts'
-import { hostOnline, laneConfigFromRow } from '../../_shared/work-lanes.ts'
+import { hostOnline, laneConfigFromRow, LOCAL_WORK_AGENTS } from '../../_shared/work-lanes.ts'
 import { currentCursorLogin, cursorLoginView, isFinal, newCursorLogin, parseCursorAccount, parseStoredCursorLogin } from '../../_shared/cursor-login.ts'
 import { maskEmail } from '../../_shared/work-telemetry.ts'
 import { deriveWorkerFlags, durationText, flagSummary, type FlagClaim, type FlagCreditExpiry, type FlagHost, type FlagLane, type FlagLocalRun, type WorkerFlag } from '../../_shared/work-flags.ts'
@@ -53,8 +53,6 @@ export interface WorkStatusDeps {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IN_CHUNK = 100
-/** `mushi work` runs (fix_attempts.agent) — the CLI's WORK_AGENT_KIND; only it sets status 'running'. */
-const LOCAL_AGENT = 'mcp'
 const LOCAL_RUN_LOOKBACK_MS = 2 * 86_400_000
 const CREDIT_WINDOW_MS = 7 * 86_400_000
 
@@ -82,7 +80,7 @@ async function readLocalRuns(db: Db, projectIds: readonly string[], now: Date): 
       .from('fix_attempts')
       .select('id, report_id, project_id, created_at')
       .in('project_id', part)
-      .eq('agent', LOCAL_AGENT)
+      .in('agent', [...LOCAL_WORK_AGENTS])
       .eq('status', 'running')
       .gte('created_at', since)
       .limit(100)

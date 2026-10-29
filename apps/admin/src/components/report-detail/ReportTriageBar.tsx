@@ -13,6 +13,7 @@ import { featureRequestDispatchBlock, shortRepoName } from '../../lib/dispatchCo
 import type { DispatchTargetRepo } from '../../lib/useDispatchTargetRepo'
 import { closeReasonSentryNotice, closeReasonsFor } from '../../lib/closeReasons'
 import { humanizeFixError } from '../../lib/humanizeFixError'
+import { isRepoPushCheckFailure } from '../../lib/pdcaAct'
 import { stripAnsi } from './reportLogFormat'
 import { trackAdHoc } from '../../lib/track'
 import { NO_CODE_LOCATION_REASON } from '../../lib/reportCodeLocation'
@@ -104,7 +105,15 @@ export function ReportTriageBar({
   // retry can help: a report with nothing to fix stops the same way again.
   const failure = dispatchState.status === 'failed' ? humanizeFixError(dispatchState.error) : null
   const retryHelps = !failure || failure.action?.target.kind === 'retry' || failure.known === false
+  const latestAttempt = report.fix_attempts?.[0]
+  // A refused pre-push hook is not a failed cloud dispatch. The button stays
+  // available, but it no longer reads as a retry of that push.
+  const pushCheckIdle =
+    dispatchState.status === 'idle' &&
+    latestAttempt?.status === 'failed' &&
+    isRepoPushCheckFailure(latestAttempt.error)
   const dispatchLabel =
+    pushCheckIdle ? 'Cloud dispatch anyway' :
     dispatchState.status === 'idle' ? (hasCodeLocation ? 'Dispatch fix' : 'Dispatch anyway') :
     dispatchState.status === 'queueing' ? 'Dispatching…' :
     dispatchState.status === 'queued' ? 'Queued…' :
@@ -303,13 +312,13 @@ export function ReportTriageBar({
         )}
         <div className="flex flex-col items-end gap-1">
           <Btn
-            variant={hasCodeLocation ? 'primary' : 'ghost'}
-            size={hasCodeLocation ? 'md' : 'sm'}
+            variant={pushCheckIdle || !hasCodeLocation ? 'ghost' : 'primary'}
+            size={pushCheckIdle || !hasCodeLocation ? 'sm' : 'md'}
             onClick={onRequestDispatch}
             disabled={dispatchDisabled}
             loading={isDispatchBusy && dispatchState.status !== 'completed' && dispatchState.status !== 'failed'}
             leadingIcon={<IconArrowRight />}
-            title={dispatchBlockReason}
+            title={dispatchBlockReason ?? (pushCheckIdle ? "Your repo's own checks failed at push. This starts a new paid cloud run; it does not re-run those checks or push the local commit." : undefined)}
           >
             {dispatchLabel}
           </Btn>

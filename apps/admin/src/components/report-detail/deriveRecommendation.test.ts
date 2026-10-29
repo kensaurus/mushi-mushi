@@ -422,6 +422,17 @@ describe('deriveRecommendation', () => {
       expect(rec.meta?.find((m) => m.label === 'Checks')?.value).toBe('test')
     })
 
+    it('keeps a dot in the check name', () => {
+      const report = makeReport({
+        fix_attempts: [makeFixAttempt({
+          status: 'failed',
+          error: 'Pre-push checks failed: test.unit. The fix is committed on bugfix/x (abcdef1); nothing was pushed. test.unit: FAIL a.test.ts',
+        })],
+      })
+      const rec = deriveRecommendation(report, makeDispatchState(), 0, noOp)
+      expect(rec.meta?.find((m) => m.label === 'Checks')?.value).toBe('test.unit')
+    })
+
     it('a commit-hook failure stays on the generic retry path', () => {
       const report = makeReport({
         fix_attempts: [makeFixAttempt({
@@ -436,13 +447,18 @@ describe('deriveRecommendation', () => {
   })
 
   describe('meta chip shape', () => {
-    it('labels a local Cursor run instead of mcp', () => {
-      const report = makeReport({
+    it('labels a local Cursor run, and leaves an MCP submission as MCP', () => {
+      const local = makeReport({
+        status: 'fixing',
+        fix_attempts: [makeFixAttempt({ status: 'running', started_at: new Date().toISOString(), agent: 'local-cursor' })],
+      })
+      const mcp = makeReport({
         status: 'fixing',
         fix_attempts: [makeFixAttempt({ status: 'running', started_at: new Date().toISOString(), agent: 'mcp' })],
       })
-      const rec = deriveRecommendation(report, makeDispatchState({ status: 'running' }), 0, noOp)
-      expect(rec.meta?.find((m) => m.label === 'Agent')?.value).toBe('local Cursor')
+      const running = makeDispatchState({ status: 'running' })
+      expect(deriveRecommendation(local, running, 0, noOp).meta?.find((m) => m.label === 'Agent')?.value).toBe('local Cursor')
+      expect(deriveRecommendation(mcp, running, 0, noOp).meta?.find((m) => m.label === 'Agent')?.value).toBe('MCP')
     })
 
     it('includes model chip when llm_model is set', () => {
