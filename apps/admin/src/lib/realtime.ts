@@ -183,6 +183,8 @@ export function useRealtimeReload(
     return () => {
       document.removeEventListener('visibilitychange', onVisible)
       if (timerRef.current) clearTimeout(timerRef.current)
+      timerRef.current = null
+      firstPendingRef.current = null
       for (const ch of channels) supabase.removeChannel(ch)
       setChannelState('idle')
     }

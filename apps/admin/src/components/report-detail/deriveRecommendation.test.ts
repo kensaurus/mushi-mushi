@@ -569,6 +569,12 @@ describe('agent verdicts are answers, not breakages (sweep 2026-10-29)', () => {
     expect(onClose).toHaveBeenCalledWith({ status: 'dismissed', closed_reason: 'working_as_intended' })
   })
 
+  it('another repo: connect it and send again, never "Not a code bug"', () => {
+    const { rec } = run({ failure_category: 'wrong_repo', error: 'Agent says the code is in another repo: the API lives in backend.' })
+    expect(rec.title).toBe('The agent says the code is in another repo')
+    expect(rec.actions?.map((a) => a.label)).toEqual(['Connect the repo →', 'Still broken: send again'])
+  })
+
   it('needs a person: no close button, a decision first', () => {
     const { rec } = run({ failure_category: 'needs_human', error: 'Agent says this needs a person: pick a plan name.' })
     expect(rec.title).toBe('The agent says a person must decide this')

@@ -387,7 +387,7 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
         rows<{ route: string }>('session_page_views', db.from('session_page_views').select('route').eq('project_id', id).gte('ts', weekStart).order('ts', { ascending: false }).limit(PAGE_VIEW_SAMPLE)),
         rows<{ url: string | null }>('report urls', db.from('reports').select('url:environment->>url').eq('project_id', id).gte('created_at', priorStart).limit(2000)),
         // Where the SDK ran (preview deploys too). Optional: an older self-host without the table keeps every URL.
-        rows<{ origin_sample: string | null }>('key origins', db.from('project_api_key_origins').select('origin_sample').eq('project_id', id).limit(100)).catch(() => []),
+        rows<{ origin_sample: string | null }>('key origins', db.from('project_api_key_origins').select('origin_sample').eq('project_id', id).order('last_seen_at', { ascending: false }).limit(100)).catch(() => []),
         keysP,
         watchP,
         liveUrlP,

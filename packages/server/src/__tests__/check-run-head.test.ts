@@ -26,7 +26,7 @@ beforeEach(() => {
 })
 
 describe('applyHeadCheckRollup', () => {
-  it('a queued or running delivery stores "running" without reading GitHub', async () => {
+  it('a queued or running delivery stores its status without reading GitHub', async () => {
     const { db, queries } = createFakeDb(() => ({ data: null, error: null }))
     const out = await applyHeadCheckRollup(db as never, ['attempt-1'], 'one', {
       eventStatus: 'in_progress',
@@ -115,5 +115,19 @@ describe('applyHeadCheckRollup', () => {
     const payload = findQueries(queries, 'fix_attempts', 'update')[0]?.payload as Record<string, unknown>
     expect(payload.check_run_conclusion).toBe('failure')
     expect(payload).not.toHaveProperty('ci_infra')
+  })
+
+  it('never stores one passing job as the head success when the rollup cannot be read', async () => {
+    fetchLatestCheckRun.mockRejectedValue(new Error('rate limited'))
+    const { db, queries } = createFakeDb(() => ({ data: null, error: null }))
+    const out = await applyHeadCheckRollup(db as never, ['attempt-1'], 'one', {
+      eventStatus: 'completed',
+      eventConclusion: 'success',
+      token: 'ghs_test',
+      ref: REF,
+      sha: SHA,
+    })
+    expect(out.head).toMatchObject({ status: 'in_progress', conclusion: null })
+    expect(findQueries(queries, 'fix_attempts', 'update')[0]?.payload).toMatchObject({ check_run_conclusion: null })
   })
 })

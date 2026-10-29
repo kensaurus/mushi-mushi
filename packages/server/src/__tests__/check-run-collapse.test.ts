@@ -48,6 +48,11 @@ describe('collapseCheckRuns', () => {
       { name: 'a', status: 'completed', conclusion: 'success' },
       { name: 'b', status: 'completed', conclusion: 'brand_new_state' },
     ]).conclusion).toBe('brand_new_state')
+    // ...but a real failure stays the one reported, whatever the order.
+    expect(collapseCheckRuns([
+      { name: 'b', status: 'completed', conclusion: 'brand_new_state' },
+      { name: 'c', status: 'completed', conclusion: 'failure' },
+    ]).conclusion).toBe('failure')
     expect(collapseCheckRuns([
       { name: 'a', status: 'completed', conclusion: 'cancelled' },
       { name: 'b', status: 'completed', conclusion: 'startup_failure' },
@@ -67,7 +72,8 @@ describe('collapseCheckRuns', () => {
     const green = [{ name: 'test', status: 'completed', conclusion: 'success' }]
     expect(collapseCheckRuns(green, commitStatusesAsCheckRuns([{ context: 'buildkite/app', state: 'failure' }])).conclusion).toBe('failure')
     expect(collapseCheckRuns(green, commitStatusesAsCheckRuns([{ context: 'snyk', state: 'error' }])).conclusion).toBe('failure')
-    expect(collapseCheckRuns(green, commitStatusesAsCheckRuns([{ context: 'ci/circleci', state: 'pending' }])).status).toBe('in_progress')
+    // A pending status may never finish (an approval hold); GitHub merges past it unless required.
+    expect(collapseCheckRuns(green, commitStatusesAsCheckRuns([{ context: 'ci/circleci', state: 'pending' }]))).toEqual({ status: 'completed', conclusion: 'success' })
     expect(collapseCheckRuns(green, commitStatusesAsCheckRuns([{ context: 'vercel', state: 'success' }])).conclusion).toBe('success')
     // A repo whose only CI posts statuses still gets a state.
     expect(collapseCheckRuns([], commitStatusesAsCheckRuns([{ context: 'ci/circleci', state: 'success' }])).conclusion).toBe('success')

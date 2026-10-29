@@ -56,8 +56,9 @@ export async function resolveStoredHeadCheck(input: {
   // Each completed delivery costs the rollup's reads (installation tokens get
   // 5,000 an hour, shared with everything else the App does).
   if (status && status !== 'completed') {
-    return { status: 'in_progress', conclusion: null, rolledUp: false, clearInfra: false }
+    return { status, conclusion: null, rolledUp: false, clearInfra: false }
   }
+  let readFailed = false
   if (input.token && input.ref && input.sha) {
     try {
       const snapshot = await fetchLatestCheckRun(input.token, input.ref, input.sha)
@@ -67,8 +68,15 @@ export async function resolveStoredHeadCheck(input: {
         conclusion = normalize(snapshot.conclusion)
       }
     } catch (err) {
+      readFailed = true
       input.onRollupError?.(err)
     }
+  }
+  // One passing job says nothing about the head: when the rollup could not be
+  // read (rate limit, outage), store "running" and let ci-sync read it later,
+  // never this job's success as the PR's. A failing job is still news.
+  if (readFailed && GREEN_ROLLUP.has(conclusion)) {
+    return { status: 'in_progress', conclusion: null, rolledUp: false, clearInfra: false }
   }
   const storedConclusion = conclusion || null
   return {

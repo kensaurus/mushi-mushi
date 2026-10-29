@@ -764,7 +764,7 @@ export function isAdvisoryCheckRun(run: { name?: string | null }): boolean {
 /** Conclusions GitHub counts as passing for required checks and the merge box. */
 const PASSING_CONCLUSIONS = new Set(['success', 'neutral', 'skipped'])
 
-/** Worst first among conclusions that do not pass. Unknown values rank as failure. */
+/** Worst first among conclusions that do not pass. Unknown values rank just under failure. */
 const FAILING_SEVERITY: Record<string, number> = {
   failure: 100,
   startup_failure: 95,
@@ -796,7 +796,9 @@ export function collapseCheckRuns(all: CheckRunLike[], extra: CheckRunLike[] = [
   for (const r of runs) {
     const c = r.conclusion as string
     if (PASSING_CONCLUSIONS.has(c)) continue
-    const score = FAILING_SEVERITY[c] ?? 100
+    // Unknown values fail closed but never displace a real `failure`, the
+    // one conclusion downstream code reads as red code (pipeline-view, ci-infra).
+    const score = FAILING_SEVERITY[c] ?? 99
     if (score > worstScore) {
       worstScore = score
       worst = c
@@ -810,20 +812,18 @@ export function collapseCheckRuns(all: CheckRunLike[], extra: CheckRunLike[] = [
 /**
  * Legacy commit statuses (Buildkite, CircleCI, Vercel, Snyk…) as check-run
  * shapes. They report on a separate API from check runs, so a repo whose CI
- * posts statuses had no CI state at all. A read error or no statuses gives
- * none: the combined state is "pending" when there are no statuses
- * (docs.github.com, "Get the combined status"), which must not read as CI
- * running.
+ * posts statuses had no CI state at all. Only finished statuses count: a
+ * `pending` one may never finish (a CircleCI approval hold, an integration
+ * that posts pending and never updates), and GitHub itself merges past a
+ * pending status that is not required, so it must not hold the head at
+ * "running" forever. A read error or no statuses gives none (the combined
+ * state is "pending" when there are no statuses at all).
  */
 export function commitStatusesAsCheckRuns(statuses: Array<{ context?: string | null; state?: string | null }>): CheckRunLike[] {
-  return statuses.map((s) => {
+  return statuses.flatMap((s) => {
     const state = (s.state ?? '').toLowerCase()
-    const done = state === 'success' || state === 'failure' || state === 'error'
-    return {
-      name: s.context ?? 'status',
-      status: done ? 'completed' : 'in_progress',
-      conclusion: state === 'success' ? 'success' : done ? 'failure' : null,
-    }
+    if (state !== 'success' && state !== 'failure' && state !== 'error') return []
+    return [{ name: s.context ?? 'status', status: 'completed', conclusion: state === 'success' ? 'success' : 'failure' }]
   })
 }
 

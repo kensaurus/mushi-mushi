@@ -286,7 +286,9 @@ describe('belongsToApp', () => {
     expect(belongsToApp('https://WWW.Example.com:443/a', app)).toBe(true)
     expect(belongsToApp('https://preview-123.vercel.app/x', app)).toBe(true)
     expect(belongsToApp('https://github.com/o/r/blob/main/x.md', app)).toBe(false)
-    expect(belongsToApp('https://api.example.com/v1', app)).toBe(false)
+    // A subdomain of the app's host is the app's too (an apex watch covers app.example.com).
+    expect(belongsToApp('https://app.example.com/settings', app)).toBe(true)
+    expect(belongsToApp('https://notexample.com/x', app)).toBe(false)
   })
 
   it('keeps paths, local development and app schemes; drops browser-internal URLs', () => {
@@ -308,6 +310,17 @@ describe('belongsToApp', () => {
     expect(belongsToApp('https://kensaur.us/mushi-mushi/admin/fixes', mushi)).toBe(true)
     expect(belongsToApp('https://kensaur.us/glot-it/practice', mushi)).toBe(false)
     expect(belongsToApp('https://kensaur.us/mushi-mushi-old/x', mushi)).toBe(false)
+  })
+
+  it('a base that is a page or a language still covers the app, not one page', () => {
+    // Only the first segment scopes: a watch on /app/login covers all of /app.
+    const deep = appAddresses(['https://example.com/app/login'])
+    expect(belongsToApp('https://example.com/app/settings', deep)).toBe(true)
+    expect(belongsToApp('https://example.com/blog', deep)).toBe(false)
+    // A locale is a language, not a place on the host.
+    for (const base of ['https://example.com/en', 'https://example.com/ja-JP/']) {
+      expect(belongsToApp('https://example.com/pricing', appAddresses([base]))).toBe(true)
+    }
   })
 
   it('keeps everything when no address is known (as before)', () => {

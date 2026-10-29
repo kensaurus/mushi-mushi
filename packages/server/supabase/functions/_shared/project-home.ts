@@ -496,11 +496,16 @@ function addressOf(raw: string): AppAddress | null {
     const u = new URL(raw.trim())
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return null
     const host = u.hostname.toLowerCase().replace(/^www\./, '') + (u.port ? `:${u.port}` : '')
-    return { host, basePath: u.pathname.replace(/\/+$/, '') }
+    // Only the first segment scopes: a base like /app/login still covers /app.
+    // A locale (/en, /ja-JP) is a language, not the app's place on the host.
+    const first = u.pathname.split('/').find(Boolean) ?? ''
+    return { host, basePath: !first || LOCALE_SEGMENT.test(first) ? '' : `/${first}` }
   } catch {
     return null
   }
 }
+
+const LOCALE_SEGMENT = /^[a-z]{2}(?:[-_][a-z]{2,4})?$/i
 
 /** The app's addresses from every place it is known: site watch, site audit, crawler, SDK key origins. */
 export function appAddresses(urls: Array<string | null | undefined>): AppAddress[] {
@@ -537,14 +542,21 @@ export function belongsToApp(raw: string, addresses: AppAddress[]): boolean {
   if (FOREIGN_SCHEMES.has(u.protocol)) return false
   if (u.protocol !== 'http:' && u.protocol !== 'https:') return true
   if (isLocalOrigin(u.origin) || addresses.length === 0) return true
-  const here = addressOf(text)
-  if (!here) return false
-  const same = addresses.filter((a) => a.host === here.host)
+  let path: string
+  let host: string
+  try {
+    host = u.hostname.toLowerCase().replace(/^www\./, '') + (u.port ? `:${u.port}` : '')
+    path = u.pathname.replace(/\/+$/, '')
+  } catch {
+    return false
+  }
+  // The app's host or one of its subdomains (an apex watch covers app.example.com).
+  const same = addresses.filter((a) => a.host === host || host.endsWith(`.${a.host}`))
   // SDK origins carry no path; a watched or audited address with a base path
   // says which part of a shared host is this app.
   const scoped = same.filter((a) => a.basePath)
   const pool = scoped.length > 0 ? scoped : same
-  return pool.some((a) => !a.basePath || here.basePath === a.basePath || here.basePath.startsWith(`${a.basePath}/`))
+  return pool.some((a) => !a.basePath || path === a.basePath || path.startsWith(`${a.basePath}/`))
 }
 
 export function buildSitemap(input: SitemapInput): SitemapView {

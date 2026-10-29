@@ -194,12 +194,13 @@ function verdictRecommendation(
       title: verdict === 'wrong_repo' ? 'The agent says the code is in another repo' : 'The agent found nothing in the code to change',
       description:
         verdict === 'wrong_repo'
-          ? `Connect the repo that holds this code (Settings → Repos), then send it again, or close it.${detail}`
+          ? `It is a real bug in code this app does not connect yet. Connect that repo (Settings → Repos), then send it again.${detail}`
           : `Often this is config, an outage or expected behaviour. Close it if so; send it again if you can point at the code.${detail}`,
       tone: 'info',
       meta,
       actions: [
-        ...(onClose ? [{ label: 'Not a code bug: close it', onClick: () => onClose({ status: 'dismissed', closed_reason: 'working_as_intended' }), tone: 'primary' as const }] : []),
+        // Not for wrong_repo: closing as "working as intended" would tell the reporter a real bug is expected behaviour.
+        ...(onClose && verdict === 'not_actionable' ? [{ label: 'Not a code bug: close it', onClick: () => onClose({ status: 'dismissed', closed_reason: 'working_as_intended' }), tone: 'primary' as const }] : []),
         ...(verdict === 'wrong_repo' ? [{ label: 'Connect the repo →', to: '/settings?tab=repos', tone: 'ghost' as const }] : []),
         sendAgain,
       ],

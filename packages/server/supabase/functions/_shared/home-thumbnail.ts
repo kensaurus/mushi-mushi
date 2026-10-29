@@ -127,7 +127,7 @@ const ERROR_PAGE_TEXT = new RegExp(
 )
 
 /** A title that is only an error code or a "not found" (soft 404 at HTTP 200). */
-const ERROR_TITLE = /^\s*(?:error\s*)?(?:404|500|502|503|504)\b|^\s*(?:404[:\s-]*)?(?:page )?not found\s*$|^\s*something went wrong\b/i
+const ERROR_TITLE = /^\s*(?:error\s*)?(?:404|500|502|503|504)(?:\s*[:|–—-]\s*.{0,40}|\s+(?:not found|error|bad gateway|service unavailable|gateway time-?out|internal server error))?\s*$|^\s*(?:404[:\s-]*)?(?:page )?not found\s*$|^\s*something went wrong[.!]?\s*$/i
 
 /**
  * Why a scraped page is an error screen rather than the app, or null.
