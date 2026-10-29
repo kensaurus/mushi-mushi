@@ -12,6 +12,7 @@ import { apiFetch } from '../lib/supabase'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { Card, Skeleton } from './ui'
 import { ActionPill, ActionPillRow, ContainedBlock } from './report-detail/ReportSurface'
+import { stripAnsi } from './report-detail/reportLogFormat'
 import type { DispatchState } from '../lib/dispatchFix'
 import { CHIP_TONE } from '../lib/chipTone'
 import { readFixCi } from '../lib/ciInfra'
@@ -169,7 +170,7 @@ export function FixProgressStream({ reportId, dispatchState, hasFixHistory = tru
 
       {dispatchState.error && (
         <ContainedBlock tone="warn" label="Dispatch error">
-          <p className="text-2xs text-danger wrap-break-word text-pretty">{dispatchState.error}</p>
+          <p className="text-2xs text-danger wrap-break-word text-pretty">{stripAnsi(dispatchState.error)}</p>
         </ContainedBlock>
       )}
 
@@ -250,7 +251,7 @@ export function FixProgressStream({ reportId, dispatchState, hasFixHistory = tru
 
       {latest?.error && stage !== 'failed' && (
         <ContainedBlock tone="warn" label="Attempt error" className="mt-1.5">
-          <p className="font-mono text-2xs text-danger">{latest.error}</p>
+          <p className="font-mono text-2xs text-danger">{stripAnsi(latest.error)}</p>
         </ContainedBlock>
       )}
     </Card>

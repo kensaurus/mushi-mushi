@@ -367,6 +367,19 @@ describe('deriveRecommendation', () => {
       const rec = deriveRecommendation(report, makeDispatchState(), 0, noOp)
       expect(rec.description).toContain('OOM in sandbox')
     })
+
+    it('strips lefthook color codes from a blocked push', () => {
+      const report = makeReport({
+        fix_attempts: [makeFixAttempt({
+          status: 'failed',
+          failure_category: null,
+          error: 'mushi work: git push failed: \u001b[38;2;56;56;56m│\u001b[0m test: FAIL a.test.ts',
+        })],
+      })
+      const rec = deriveRecommendation(report, makeDispatchState(), 0, noOp)
+      expect(rec.description).toContain('test: FAIL a.test.ts')
+      expect(rec.description).not.toMatch(/\u001b/)
+    })
   })
 
   describe('meta chip shape', () => {
