@@ -56,6 +56,7 @@ import {
   ALL_APPS_VALUE,
   OPEN_PROJECT_SWITCHER_EVENT,
   PROJECT_SCOPE_QUERY_PARAM,
+  allAppsRowCount,
   allAppsSupportFor,
   getStoredProjectScopeMode,
   setStoredProjectScopeMode,
@@ -89,7 +90,8 @@ export function ProjectSwitcher() {
   // one app below it (report ee6547f5). The dropdown keeps the chosen mode.
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const pageCombinesApps = allAppsSupportFor(pathname) !== 'single'
+  const support = allAppsSupportFor(pathname)
+  const pageCombinesApps = support !== 'single'
   // Inline "create new project" affordance — exposed in the dropdown
   // footer so users don't have to navigate away to /projects to spin up
   // a fresh workspace. `creating` toggles the row from a chip to an input.
@@ -361,7 +363,10 @@ export function ProjectSwitcher() {
     projects[0].project_id
   const active = projects.find((p) => p.project_id === activeId) ?? projects[0]
   const groupList = groups.data?.groups ?? []
-  const activeGroup = groupList.find((g) => g.slug === groupFilter) ?? null
+  // Apps also honours ?group=. Read it so this list matches those cards.
+  // Do not write ?group= from here: the param would follow the user onto every other page.
+  const groupSlug = (support === 'account' ? searchParams.get('group') : null) ?? groupFilter
+  const activeGroup = groupList.find((g) => g.slug === groupSlug) ?? null
   const shownProjects = activeGroup ? projects.filter((p) => activeGroup.project_ids.includes(p.project_id)) : projects
 
   /** Pick a project in another team: switch team first, then project. */
@@ -412,9 +417,9 @@ export function ProjectSwitcher() {
   const allApps = scopeMode === 'all'
   // What this page is showing, which is what the chip must say.
   const showingAllApps = allApps && pageCombinesApps
-  // Every app the caller can open, across teams once the directory is read
-  // (the combined pages read all of them), else this team's.
-  const appCount = Math.max(projects.length, directory.data?.projects.length ?? 0)
+  // Combined pages (CI, Bugs, Pipeline) read every app the caller can open.
+  // Apps does not: its cards are this team, after the group filter above.
+  const appCount = allAppsRowCount(support, shownProjects.length, projects.length, directory.data?.projects.length ?? null)
 
   const snapshot = snapshots.byId.get(active.project_id)
   const chipName = showingAllApps ? 'All apps' : active.project_name
@@ -514,7 +519,9 @@ export function ProjectSwitcher() {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">All apps</span>
                   <span className="block truncate text-3xs text-fg-faint">
-                    {appCount} {appCount === 1 ? 'app' : 'apps'} combined, where a page supports it
+                    {support === 'account'
+                      ? `${appCount} ${appCount === 1 ? 'app' : 'apps'} ${activeGroup ? 'in this group' : 'in this team'}`
+                      : `${appCount} ${appCount === 1 ? 'app' : 'apps'} combined, where a page supports it`}
                   </span>
                 </span>
                 {allApps && <span className="shrink-0 text-2xs text-brand">✓</span>}

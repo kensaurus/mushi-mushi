@@ -74,6 +74,43 @@ describe('PortfolioCardTile', () => {
     expect(next.getAttribute('href')).toBe('/reports')
   })
 
+  it('does not say "Not checked yet" when risks were found', () => {
+    render(
+      createElement(PortfolioCardTile, {
+        card: card({
+          openReports: 0,
+          needsLook: [],
+          radar: { checkedAt: null, status: 'never_run', open: { error: 5, warn: 0, info: 0 }, unchecked: 0, errored: 0 },
+        }),
+        favicon,
+        showSpend: false,
+      }),
+    )
+    expect(host.textContent).toContain('Needs attention')
+    expect(host.textContent).toContain('5 risks to fix')
+    expect(host.textContent).toContain('Risks found')
+    expect(host.textContent).not.toContain('Not checked yet')
+  })
+
+  it('wraps a long next step onto two lines and keeps the full sentence on the title', () => {
+    const reason = 'Missing from GitHub: VITE_MUSHI_API_KEY and several other names that do not fit on one card line'
+    render(
+      createElement(PortfolioCardTile, {
+        card: card({
+          openReports: 0,
+          needsLook: [{ element: 'env', state: 'drift', label: 'Env', reason }],
+        }),
+        favicon,
+        showSpend: false,
+      }),
+    )
+    const next = host.querySelector('[data-testid="portfolio-next-step"]') as HTMLAnchorElement
+    expect(next.className).toContain('line-clamp-2')
+    expect(next.className).not.toContain('truncate')
+    expect(next.getAttribute('title')).toContain(reason)
+    expect(next.querySelector('[role="tooltip"]')).toBeNull()
+  })
+
   it('names a failing part in the chip and links to its page', () => {
     render(
       createElement(PortfolioCardTile, {

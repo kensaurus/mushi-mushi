@@ -56,6 +56,8 @@ export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
   const chips = cardStatusChips(card)
   const urgency = appUrgency(card)
   const next = urgency.next
+  const risksKnown = !card.unreadable.includes('gate_runs') && !card.unreadable.includes('findings')
+  const openRisks = risksKnown ? card.radar.open.error + card.radar.open.warn : 0
   return (
     <Card className="flex min-w-0 flex-col gap-3 p-4">
       <div className="flex items-start gap-3">
@@ -90,14 +92,14 @@ export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
       </div>
 
       {next && (
-        // Neutral text: red is for errors, and this is a suggestion. A plain
-        // title, not <Tooltip>: its inline anchor stops `truncate` shrinking
-        // the line, which pushed the card wider than a phone screen.
+        // Neutral text: red is for errors, and this is a suggestion. Two lines
+        // plus the native title. Not <Tooltip>: its inline anchor stopped the
+        // line from shrinking and pushed the card wider than a phone screen.
         <Link
           to={next.to}
           onClick={open}
           title={next.more > 0 ? `${next.text} (+${next.more} more on the App blueprint page)` : next.text}
-          className="block min-w-0 truncate text-xs text-fg-secondary hover:text-fg hover:underline"
+          className="line-clamp-2 min-w-0 text-xs text-fg-secondary hover:text-fg hover:underline"
           data-testid="portfolio-next-step"
         >
           <span className="font-medium text-fg">Next step:</span> {next.text} →
@@ -124,6 +126,8 @@ export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
             <>
               Checked <RelativeTime value={card.radar.checkedAt} />
             </>
+          ) : openRisks > 0 ? (
+            'Risks found'
           ) : (
             'Not checked yet'
           )}

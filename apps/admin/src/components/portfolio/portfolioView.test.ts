@@ -60,6 +60,8 @@ describe('portfolioView', () => {
     expect(radarLabel(card({}).radar)).toMatchObject({ text: 'Risk checks: not run yet', tone: 'neutral' })
     expect(radarLabel({ checkedAt: '2026-10-02T00:00:00Z', status: 'pass', open: { error: 0, warn: 0, info: 2 }, unchecked: 0, errored: 0 }).text).toBe('No risks found')
     expect(radarLabel({ checkedAt: '2026-10-02T00:00:00Z', status: 'fail', open: { error: 1, warn: 2, info: 0 }, unchecked: 0, errored: 0 })).toMatchObject({ text: '3 risks to fix', tone: 'dangerSubtle' })
+    // A missing timestamp must not hide risks that were already found.
+    expect(radarLabel({ checkedAt: null, status: 'never_run', open: { error: 5, warn: 0, info: 0 }, unchecked: 0, errored: 0 }).text).toBe('5 risks to fix')
     // A check that failed to run is never green.
     expect(radarLabel({ checkedAt: '2026-10-02T00:00:00Z', status: 'error', open: { error: 0, warn: 0, info: 0 }, unchecked: 0, errored: 1 })).toMatchObject({ text: 'Risk checks failed', tone: 'danger' })
   })
@@ -217,6 +219,11 @@ describe('appUrgency', () => {
     const behind = [{ projectId: 'p', package: '@mushi-mushi/web', version: '1.0.0', latest: '1.1.0', status: 'behind', reason: 'behind' }]
     expect(appUrgency(card({ needsLook: [], sdk: behind as never }))).toMatchObject({ level: 'behind', chip: { text: 'SDK update' }, next: { to: '/connect' } })
     expect(appUrgency(card({ needsLook: [] }))).toMatchObject({ chip: { text: 'Not checked yet' }, next: null })
+    const risks = { checkedAt: null, status: 'never_run' as const, open: { error: 5, warn: 0, info: 0 }, unchecked: 0, errored: 0 }
+    const withRisks = appUrgency(card({ needsLook: [], radar: risks }))
+    expect(withRisks).toMatchObject({ level: 'fix', chip: { text: 'Needs attention' }, next: { to: '/recipe' } })
+    expect(withRisks.chip.text).not.toBe('Not checked yet')
+    expect(needsALook(card({ needsLook: [], radar: risks }))).toBe(true)
     const checked = { checkedAt: '2026-10-02T00:00:00Z', status: 'pass' as const, open: { error: 0, warn: 0, info: 0 }, unchecked: 0, errored: 0 }
     expect(appUrgency(card({ needsLook: [], radar: checked }))).toMatchObject({ level: 'clear', chip: { text: 'All clear' }, next: null })
   })
