@@ -90,7 +90,7 @@ export function OnboardingSetupReadout({
                 Fix SDK endpoint env
               </span>
             ) : stats.sdkInstalled ? (
-              <span className={`inline-flex items-center gap-1 rounded-full border border-ok/30 ${CHIP_TONE.okSubtle} px-2 py-0.5`}>
+              <span className={`inline-flex items-center gap-1 rounded-full ${CHIP_TONE.okSubtle} px-2 py-0.5`}>
                 <IconCheck size={12} aria-hidden />
                 Pipeline live
               </span>

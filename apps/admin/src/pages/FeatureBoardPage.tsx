@@ -258,7 +258,7 @@ function FeatureRow({
           <h3 className="text-sm font-medium leading-snug text-fg">{ticket.subject}</h3>
           <div className="flex shrink-0 items-center gap-1.5">
             {isShipped && ticket.status !== 'resolved' && (
-              <Badge className={`border border-ok/30 ${CHIP_TONE.okSubtle} text-3xs`}>
+              <Badge className={`${CHIP_TONE.okSubtle} text-3xs`}>
                 Shipped
               </Badge>
             )}

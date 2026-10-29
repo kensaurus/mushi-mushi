@@ -70,6 +70,7 @@ export interface CiOverview {
     queued: number
     running: number
     jobs7d: number
+    /** Passed ÷ jobs that finished testing on this repo. Machine stops are not included. */
     passRate: number | null
     queueP95s: number | null
     durationP50s: number | null
@@ -107,7 +108,10 @@ export interface CiOverview {
   }>
   stats: {
     jobs: number
+    /** Passed ÷ jobs that finished testing (passed + code failures). Null when none finished. Machine stops are not included. */
     passRate: number | null
+    /** Jobs that finished testing and passed. */
+    passed: number
     queueP50s: number | null
     queueP95s: number | null
     durationP50s: number | null
