@@ -201,7 +201,7 @@ describe('buildNeedsYou', () => {
     expect(items.map((i) => i.id)).toEqual(['site_broken', 'critical_waiting', 'pipeline_hold', 'ci_red', 'pipeline_agent_failed'])
     const hold = items.find((i) => i.id === 'pipeline_hold')!
     expect(hold.text).toBe('45 PRs: the review says do not merge; you decide.')
-    expect(hold.action.to).toBe('/pipeline?project=p1')
+    expect(hold.action.to).toBe('/pipeline?project=p1&group=hold')
     expect(items.find((i) => i.id === 'critical_waiting')!.action.to).toBe('/reports?status=open&severity=critical')
   })
 

@@ -74,6 +74,10 @@ interface UseRealtimeReloadOptions {
    *  pull_request / check_run webhooks for the same fix. */
   debounceMs?: number
   enabled?: boolean
+  /** Only this app's rows: adds `project_id=eq.<id>` to every table given by name. */
+  projectId?: string | null
+  /** Reload at least this often while events keep arriving (a busy pipeline never goes quiet). */
+  maxWaitMs?: number
 }
 
 /**
@@ -90,7 +94,7 @@ export function useRealtimeReload(
   onChange: () => void,
   opts: UseRealtimeReloadOptions = {},
 ): { channelState: RealtimeChannelState } {
-  const { debounceMs = 500, enabled = true } = opts
+  const { debounceMs = 500, enabled = true, projectId = null, maxWaitMs } = opts
   const [channelState, setChannelState] = useState<RealtimeChannelState>('idle')
 
   // Keep the callback fresh across renders without re-subscribing every
@@ -99,22 +103,29 @@ export function useRealtimeReload(
   handlerRef.current = onChange
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const firstPendingRef = useRef<number | null>(null)
   const fire = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
+    const now = Date.now()
+    firstPendingRef.current ??= now
+    const wait = maxWaitMs == null ? debounceMs : Math.max(0, Math.min(debounceMs, firstPendingRef.current + maxWaitMs - now))
     timerRef.current = setTimeout(() => {
       timerRef.current = null
+      firstPendingRef.current = null
       // Pause when the tab is hidden — the user can't see the list, and
       // waking fetchers only wastes quota. The existing subscription
       // buffers on Supabase's side until we reload on visibility change.
       if (typeof document !== 'undefined' && document.hidden) return
       handlerRef.current()
-    }, debounceMs)
-  }, [debounceMs])
+    }, wait)
+  }, [debounceMs, maxWaitMs])
 
   // Serialise the tables array for a stable effect dep — avoids
   // re-subscribing every render just because the caller passed an inline
   // array.
-  const tablesKey = JSON.stringify(tables)
+  const tablesKey = JSON.stringify(
+    projectId ? tables.map((t) => (typeof t === 'string' ? { table: t, filter: `project_id=eq.${projectId}` } : t)) : tables,
+  )
 
   useEffect(() => {
     if (!enabled) {

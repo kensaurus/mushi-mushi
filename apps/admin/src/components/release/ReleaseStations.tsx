@@ -17,9 +17,14 @@ const TRAIN_STATE: Record<string, string> = {
   failed: 'failed CI',
 }
 
-/** "all stuck" when every one is: "39" over "39 stuck" said the number twice (console sweep). */
+/**
+ * A station's `stuck` counts items waiting on a person (a review hold, a
+ * failed agent, red CI), the same items Home's Needs you lists, so it says
+ * "need you": "82 stuck" read as broken machinery (console sweep 2026-10-29).
+ * "all" when every one is: "39" over "39" said the number twice.
+ */
 function stuckLabel(s: Pick<ReleaseStation, 'count' | 'stuck'>): string {
-  return s.stuck >= s.count ? 'all stuck' : `${s.stuck} stuck`
+  return s.stuck >= s.count ? 'all need you' : `${s.stuck} need you`
 }
 
 export function ReleaseStations({ stations, href, testId = 'home-release-stations' }: { stations: ReleaseStation[]; href: string; testId?: string }) {

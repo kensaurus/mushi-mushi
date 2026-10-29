@@ -544,3 +544,39 @@ describe('a report with no code location', () => {
     expect(rec.actions).toBeUndefined()
   })
 })
+
+describe('agent verdicts are answers, not breakages (sweep 2026-10-29)', () => {
+  const dispatch = vi.fn()
+  const run = (attempt: Parameters<typeof makeFixAttempt>[0], onClose = vi.fn()) => ({
+    rec: deriveRecommendation(makeReport({ fix_attempts: [makeFixAttempt(attempt)] }), makeDispatchState(), 0, dispatch, Date.now(), undefined, true, onClose),
+    onClose,
+  })
+
+  it('already fixed: close it as fixed, or send again; no "Retry dispatch"', () => {
+    const { rec, onClose } = run({ failure_category: 'already_fixed', error: 'Agent found nothing to change: Mushi verdict: already_fixed The tile no longer shows 4/0.' })
+    expect(rec.title).toBe('The agent says this is already fixed')
+    expect(rec.description).toContain('The agent wrote: “The tile no longer shows 4/0.”')
+    expect(rec.actions?.map((a) => a.label)).toEqual(['It is fixed: close it', 'Still broken: send again'])
+    rec.actions?.[0]?.onClick?.()
+    expect(onClose).toHaveBeenCalledWith({ status: 'fixed' })
+  })
+
+  it('reads the verdict from the error line when an older run has no category', () => {
+    const { rec, onClose } = run({ failure_category: null, error: 'Agent found nothing it can tie to code: The event names no query.' })
+    expect(rec.title).toBe('The agent found nothing in the code to change')
+    expect(rec.description).toContain('“The event names no query.”')
+    rec.actions?.[0]?.onClick?.()
+    expect(onClose).toHaveBeenCalledWith({ status: 'dismissed', closed_reason: 'working_as_intended' })
+  })
+
+  it('needs a person: no close button, a decision first', () => {
+    const { rec } = run({ failure_category: 'needs_human', error: 'Agent says this needs a person: pick a plan name.' })
+    expect(rec.title).toBe('The agent says a person must decide this')
+    expect(rec.actions?.map((a) => a.label)).toEqual(['Still broken: send again'])
+  })
+
+  it('without a close handler it still offers sending again', () => {
+    const rec = deriveRecommendation(makeReport({ fix_attempts: [makeFixAttempt({ failure_category: 'already_fixed' })] }), makeDispatchState(), 0, dispatch)
+    expect(rec.actions?.map((a) => a.label)).toEqual(['Still broken: send again'])
+  })
+})

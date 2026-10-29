@@ -392,7 +392,7 @@ export function buildNeedsYou(input: NeedsYouInput): NeedsYouItem[] {
       if (g.tone !== 'stuck' || g.count === 0) continue
       if (g.rootCause && shown.has(g.rootCause.checkId)) continue
       const meta = GROUP_IMPACT[g.id] ?? DEFAULT_GROUP
-      items.push({ id: `pipeline_${g.id}`, impact: meta.impact, text: `${g.label}.`, action: { label: meta.action, to: pipelineHref } })
+      items.push({ id: `pipeline_${g.id}`, impact: meta.impact, text: `${g.label}.`, action: { label: meta.action, to: `${pipelineHref}&group=${encodeURIComponent(g.id)}` } })
     }
   }
   // A local worker that stopped doing useful work (ADR 0048 amendment 2026-10-28): never hidden.
