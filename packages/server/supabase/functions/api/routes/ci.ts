@@ -1,7 +1,9 @@
 /**
  * ci.ts — CI runners you can see (Plan 022, ADR 0033).
  *
- *   POST /v1/ingest/runner               apiKeyAuth + scope runner:write, 60/min
+ *   POST /v1/ingest/runner               apiKeyAuth + scope runner:write, 60/min.
+ *        A claim RPC failure (statement timeout included) is 503
+ *        RATE_LIMIT_UNAVAILABLE — the cap fails closed, it does not lift.
  *        `mushi runner heartbeat` (kind 'heartbeat') and the runner job hooks
  *        (kind 'job'). Host ids arrive hashed; raw machine ids are refused.
  *        Only a runner:write key: the public SDK key (report:write, shipped in
@@ -139,6 +141,10 @@ async function ingestRunner(c: Context, deps: CiRouteDeps): Promise<Response> {
   if (!projectId) return jsonError(c, 'PROJECT_KEY_REQUIRED', 'Use a key bound to a project (Projects → SDK ingest key).', 400)
   const db = deps.getServiceClient()
   const rate = await deps.claimRateLimit(db, `project:${projectId}:runner_ingest`, RUNNER_INGEST_PER_MINUTE, 60)
+  if (rate.unavailable) {
+    c.header('Retry-After', String(rate.retryAfterSec ?? 30))
+    return jsonError(c, 'RATE_LIMIT_UNAVAILABLE', 'Runner pushes are paused for a moment. Retry shortly.', 503)
+  }
   if (!rate.allowed) {
     c.header('Retry-After', String(rate.retryAfterSec ?? 60))
     return jsonError(c, 'RATE_LIMITED', 'Too many runner pushes. Retry in a minute.', 429)
