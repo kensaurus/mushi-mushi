@@ -221,8 +221,8 @@ function Stage2AbsentNote({ view }: { view: ReturnType<typeof reportDiagnosisVie
   if (view.kind === 'stage1_only') {
     return (
       <p className="mt-1.5 text-2xs text-fg-faint">
-        Full diagnosis not run (classifier confident) — this is the quick classifier&rsquo;s summary, without a root
-        cause or suggested fix.
+        Quick summary only. The first check was sure what kind of bug this is, so the full diagnosis (why it broke
+        and how to fix it) did not run. The fix prompt below still gives your agent everything Mushi Mushi knows.
       </p>
     )
   }
