@@ -11,8 +11,16 @@ to "Mushi" in posts.
 |---|---|---|---|---|
 | Hacker News (Show HN) | kensaurus | **not posted**: HN is "temporarily restricting Show HNs" from new accounts (account created 2026-10-29, karma 1) | | |
 | Reddit r/SideProject | u/sakuramoto | posted | https://redd.it/1xi6gtf | 2026-10-29 ~01:20 |
-| X | @sakuramotokenji | posted (links reply still owed) | https://x.com/sakuramotokenji/status/2115612842812735787 | 2026-10-29 01:13 |
+| X | @sakuramotokenji | posted, links reply posted by the owner | https://x.com/sakuramotokenji/status/2115612842812735787 | 2026-10-29 01:13 |
 | LinkedIn | kenji sakuramoto | posted | https://www.linkedin.com/in/kenjisakuramoto/recent-activity/all/ (post of 2026-10-29) | 2026-10-29 ~01:25 |
+| Zenn (Idea) | kensaurus | **draft**, saved unpublished; topics ai, claudecode, cursor, 個人開発, oss | https://zenn.dev/articles/b7f223e0c9bf5d/edit (editor) | |
+| note | kensaurus | **draft**, saved unpublished | https://editor.note.com/notes/n2157e8d303d9/edit/ (editor) | |
+
+Zenn and note are Japanese. Both use the numbers as of 2026-10-29 02:43 UTC
+(839 reviews, 305 "do not merge"), a few more than the English posts had. The
+Zenn draft links the earlier Zenn article on how the pipeline works
+(https://zenn.dev/kensaurus/articles/0c8f927b20adaf, 2026-10-10) instead of
+repeating it. Hacker News is set aside for now (owner, 2026-10-29).
 
 ### Numbers used, and where they come from
 
@@ -132,6 +140,82 @@ I packaged this as an open-source tool called mushi-mushi. It is early and I am 
 Code: github.com/kensaurus/mushi-mushi
 
 The second picture is the sample diagnosis from the docs, to show what a report turns into.
+```
+
+### Zenn (draft)
+
+![The Zenn draft in preview](2026-10-29-zenn-draft.png)
+
+Title: AIに直させたバグ修正を、別のAIが305回「マージするな」と止めた話
+
+```markdown
+個人でアプリを作っています。Cursor と Claude Code でほとんど書いていて、いま 8 つのアプリが動いています。開発はひとりです。
+
+困っていたのは、自分で一行ずつ書いたわけではないコードのバグでした。「動かない」と言われても、どこから見ればいいのか分からないことがある。そこで、バグの報告を AI に読ませて、修正の PR を AI エージェントに出させるようにしました。仕組みは前の記事に書きました。
+https://zenn.dev/kensaurus/articles/0c8f927b20adaf
+
+最初はうまくいっているように見えました。テストも通る。でも、よく見ると「直っていない」修正が混ざっていました。
+
+## 2つ目の AI にレビューさせる
+
+そこで、修正 PR がマージされる前に、別のモデルに「元のバグ報告」と「差分」を並べて読ませ、「マージしてよい」「先に直して」「マージするな」のどれかを理由つきで返させるようにしました。
+
+直近 60 日の数字です（10 月 29 日時点、自分のアプリだけ。公開ページでいつでも見られます）。
+
+- レビュー 839 回、そのうち「マージするな」が 305 回
+- マージされた修正 234 件
+
+止められた例をひとつ。管理画面に「すべて仕分け済み」というバナーが出ているのに、その下の「次に仕分ける3件」のリストにはまだ報告が残っている、というバグでした。エージェントの修正は、バナーが数える対象を広げただけで、リストには一切触れていませんでした。テストは通っていました。レビューの AI はこれを「報告の問題を直していない」として止めました。この PR とレビューは GitHub でそのまま読めます。
+https://github.com/kensaurus/mushi-mushi/pull/864
+
+## いちばん意外だったこと
+
+ユーザーはほとんどバグを報告してくれません。60 日間、8 つのアプリで、実際の人からの報告は 32 件でした（しかも一部は自分のテストです）。
+
+一方で、自分で仕掛けたチェック（AI によるコード監査、Sentry、サイトの巡回、自分で書いた報告）から見つかったバグは 1,000 件を超えていました。マージされた修正のうち、ユーザーの報告から始まったものは 1 件だけです。
+
+バグはだいたい報告されません。困った人は、黙って離れていきます。
+
+## いま作っているもの
+
+この仕組みを Mushi Mushi というオープンソースのツールにしています（SDK は MIT、サーバーは AGPL）。アプリに報告ボタンを置くと、報告ごとに原因を平易な言葉で説明して、Cursor や Claude Code にそのまま渡せる修正の指示を作ります。報告を待たずに、初めてのユーザーのふりをして迷う場所を探すテストや、サイトの見守り、既知の脆弱性のチェックもします。
+
+まだ早い段階で、使っているのはほぼ自分です。セットアップの手順も多すぎると思っています。
+
+- コード: https://github.com/kensaurus/mushi-mushi
+- 数字（ユーザーの報告と自分のチェックを分けて数えています）: https://kensaur.us/mushi-mushi/docs/proof
+- 何ができるか: https://kensaur.us/mushi-mushi/docs/what-it-does
+
+AI に書かせたアプリを人に使ってもらっている方に聞いてみたいです。ユーザーはバグを報告してくれますか。AI の修正、どうやって信用していますか。
+```
+
+### note (draft)
+
+![The note draft in the editor](2026-10-29-note-draft.png)
+
+Title: ユーザーはバグを報告してくれない。8つのアプリを60日見て分かったこと
+
+```text
+群馬県嬬恋村でキャンプ場を運営しながら、AI を使ってアプリを作っています。いま動いているのは 8 つ。家計簿、語学の練習、写真、ひとり法人の決算、キャンプ場の管理まわりなどです。
+
+コードのほとんどは AI が書いています。速く作れるのはいいのですが、困るのはバグが出たときです。自分で書いていないので、どこを見ればいいのか分からない。
+
+それで、バグの報告を AI に読ませて原因を説明させ、修正も AI に作らせるようにしました。ただ、AI の修正は「それらしく見えて直っていない」ことがよくあります。なので、修正が入る前に、もうひとつの AI に「本当に報告の問題を直しているか」を確認させています。10 月 29 日までの 60 日で 839 回確認して、305 回「これは入れるな」と止めました。
+
+でも、いちばん驚いたのは別のことでした。
+
+ユーザーは、ほとんどバグを報告してくれないんです。60 日間、8 つのアプリで、実際の人から届いた報告は 32 件。そのうち何件かは自分のテストでした。
+
+一方、自分で用意したチェック（AI によるコードの点検、エラーの監視、サイトの見回り、自分が見つけたもの）からは 1,000 件以上見つかっていました。結局、直したバグのほとんどは、ユーザーが教えてくれたものではありませんでした。
+
+考えてみれば当たり前で、困ったとき、わざわざ報告するより、そっと閉じるほうが簡単です。
+
+この仕組みは Mushi Mushi という名前で公開しています。オープンソースで、1 つのアプリまでは無料です。まだ早い段階で、使っているのはほとんど自分です。
+
+数字はここで公開しています。ユーザーからの報告と、自分のチェックで見つけたものを分けて数えています。
+https://kensaur.us/mushi-mushi/docs/proof
+
+アプリを作って人に使ってもらっている方、ユーザーはバグを教えてくれますか。
 ```
 
 ## Images
