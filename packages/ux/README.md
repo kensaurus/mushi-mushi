@@ -2,7 +2,9 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Find the UX problems on every screen of your app before your users do, and let the coding agent you already pay for fix them one screen at a time. Every change is measured. Only the ones that help are kept, on a branch you review. Part of [Mushi Mushi](https://github.com/kensaurus/mushi-mushi).
+For people who build with an AI coding agent and keep hearing that a screen is cramped, unreadable or broken on a phone. This [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) tool finds the UX problems on every screen of your app before your users do, and lets the coding agent you already pay for fix them one screen at a time. Every change is measured. Only the ones that help are kept, on a branch you review.
+
+You need your app running locally and a coding agent you are signed in to (Claude Code or the Cursor CLI; Codex and Cursor Cloud are not yet verified). A Mushi Mushi account is only needed to mirror runs to the console or file reports.
 
 ```bash
 npx @mushi-mushi/ux ui   # the studio on 127.0.0.1: pick agent, model and pages, then watch each attempt

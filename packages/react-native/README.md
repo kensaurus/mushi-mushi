@@ -29,7 +29,7 @@ Other frameworks: [`@mushi-mushi/react`](https://npmjs.com/package/@mushi-mushi/
 
 ## What this package adds on mobile
 
-Every bug your users feel — a button that won't tap, a screen that freezes, a layout that folds on their device — gets captured, classified by AI, and fed into a lesson library that prevents the same class of mistake in the next PR review and the next AI agent run. That's the closed loop the main [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi) README describes. This package is the mobile entry point.
+On a phone, the bugs people feel often never crash: a button that won't tap, a screen that freezes, a layout that folds on one device. This package lets the person report that moment from inside your app. The report arrives in the same list as your web reports, with the same plain-English diagnosis and fix prompt. How the rest works: [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi). Who it's for: [who it's for](https://kensaur.us/mushi-mushi/docs/who-its-for).
 
 ## Using Sentry too (optional)
 
@@ -49,13 +49,15 @@ Control how users open the report form:
 
 | Value | Behavior |
 |---|---|
-| `'button'` (default) | Floating action button — safe on all Hermes builds |
-| `'shake'` | Shake-to-report listener (requires optional `expo-sensors` peer) |
-| `'both'` | Floating button + shake |
-| `'manual'` / `'hidden'` | No auto UI — call `open()` programmatically |
-| `'attach'` | Hides default UI; host renders its own button and calls `attachTo()` |
+| `'button'` (default) | Floating action button. Safe on all Hermes builds |
+| `'auto'` / `'edge-tab'` | Also show the floating button (names shared with the web SDK) |
+| `'shake'` | Shake-to-report listener (needs the optional `expo-sensors` peer) |
+| `'both'` | Floating button and shake |
+| `'banner'` | A dismissible banner strip (`widget.banner.message`) instead of the button |
+| `'manual'` / `'hidden'` | No automatic UI. Call `open()` yourself |
+| `'attach'` | Hides the default UI. You render your own button and call `attachTo()` |
 
-> **Note on shake + Hermes:** `expo-sensors` is loaded lazily via `require()` so apps that ship `trigger: 'button'` never pay the shake-sensor cost. Both triggers are fully Hermes-compatible as of v0.11.0.
+> **Shake and Hermes.** `expo-sensors` loads lazily through `require()`, so apps that ship `trigger: 'button'` never pay for the shake sensor. Both triggers work on Hermes since v0.11.0.
 
 ```tsx
 <MushiProvider
@@ -95,7 +97,7 @@ import { MushiTrigger } from '@mushi-mushi/react-native'
 </MushiTrigger>
 ```
 
-`MushiTrigger` wraps any child with `cloneElement` — the child's `onPress` chain is preserved.
+`MushiTrigger` wraps any child with `cloneElement`, so the child's `onPress` chain is preserved.
 
 ## Standalone components
 
@@ -103,8 +105,8 @@ import { MushiTrigger } from '@mushi-mushi/react-native'
 import { MushiBottomSheet, MushiFloatingButton } from '@mushi-mushi/react-native'
 ```
 
-- `MushiBottomSheet` — Conversational report modal with category → description → submit flow. Dark/light theme, drag-to-dismiss.
-- `MushiFloatingButton` — Positioned FAB with spring animation. Configurable via `buttonPosition` and `inset`.
+- `MushiBottomSheet`: a conversational report modal with category → description → submit flow. Dark/light theme, drag-to-dismiss.
+- `MushiFloatingButton`: a positioned FAB with spring animation. Configurable via `buttonPosition` and `inset`.
 
 ## Theming
 
@@ -132,12 +134,12 @@ The report sheet takes the host's look through `widget.theme`. Every token is op
 - Network requests (fetch interceptor, headers redacted)
 - Navigation events (React Navigation integration, optional)
 - A 50-entry breadcrumb ring buffer → sent as `breadcrumbs` + a derived repro `timeline` (SDK lifecycle, screen changes via `setScreen`, and host crumbs via `addBreadcrumb`)
-- Screenshot of the current screen (optional — see below)
-- Offline queue via `@react-native-async-storage/async-storage` — reports survive force-close
+- Screenshot of the current screen (optional, see below)
+- Offline queue via `@react-native-async-storage/async-storage`, so reports survive a force-close
 
 ## Screenshots
 
-When `react-native-view-shot` is installed, the SDK captures the current screen **before** the report sheet overlays it, and shows the user a **thumbnail preview** they can remove before submitting. A configurable **privacy caption** (`widget.screenshotSensitiveHint`) appears under the preview — default copy reminds reporters to drop balances or PII. Enabled by default; turn off capture with `capture: { screenshot: false }`.
+When `react-native-view-shot` is installed, the SDK captures the current screen **before** the report sheet overlays it, and shows the user a **thumbnail preview** they can remove before submitting. A configurable **privacy caption** (`widget.screenshotSensitiveHint`) appears under the preview. The default copy reminds reporters to drop balances or PII. Enabled by default; turn off capture with `capture: { screenshot: false }`.
 
 ```tsx
 <MushiProvider
@@ -155,7 +157,7 @@ When `react-native-view-shot` is installed, the SDK captures the current screen 
 npx expo install react-native-view-shot   # v4+ on Expo SDK 55; v5+ for Fabric / New Architecture
 ```
 
-> **Masking sensitive screens.** `captureScreen()` grabs whatever is on screen. The preview + Remove control is the reporter's consent gate — finance apps can keep screenshots on with a custom caption instead of disabling capture entirely. For screens that must never be photographed, set `capture: { screenshot: false }` while they're focused, or use `expo-screen-capture` to mark the view secure. Full doc: [`docs/SDK_SCREENSHOT_PREVIEW.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md).
+> **Masking sensitive screens.** `captureScreen()` grabs whatever is on screen. The preview + Remove control is the reporter's consent gate, so finance apps can keep screenshots on with a custom caption instead of disabling capture entirely. For screens that must never be photographed, set `capture: { screenshot: false }` while they're focused, or use `expo-screen-capture` to mark the view secure. Full doc: [`docs/SDK_SCREENSHOT_PREVIEW.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md).
 
 > **Metro / Hermes hosts.** Optional peers (`react-native-view-shot`, `@react-native-community/netinfo`, `expo-sensors`) load with a literal `require()` inside `try/catch`, which Metro treats as optional. To skip loading entirely, pass them in: `<MushiProvider netInfo={NetInfo} viewShot={ViewShot} expoSensors={ExpoSensors}>`. Versions 0.21–0.23 shipped an esbuild `__require()` shim that crashed under Metro and needed a postinstall patch; drop that patch when you upgrade.
 
@@ -176,10 +178,12 @@ Mushi stores only a SHA-256 hash of the email (the host app owns the raw PII) an
 
 - `react` >= 18
 - `react-native` >= 0.72
-- `@react-navigation/native` >= 6 (optional — navigation capture)
-- `@react-native-async-storage/async-storage` >= 1.19 (optional — offline queue)
-- `react-native-view-shot` >= 3.8 (optional — screenshot capture; v5+ for New Architecture / Fabric)
-- `expo-sensors` (optional — shake trigger only)
+- `@react-navigation/native` >= 6 (optional: navigation capture)
+- `@react-native-async-storage/async-storage` >= 1.19 (optional: offline queue)
+- `react-native-view-shot` >= 3.8 (optional: screenshot capture; v5+ for New Architecture / Fabric)
+- `@react-native-community/netinfo` >= 11 (optional: send queued reports when the connection returns)
+- `expo-sensors` >= 13 (optional: shake trigger only)
+- `expo-secure-store` >= 13 (optional: encrypts the offline queue and keeps the anonymous reporter token in secure storage)
 
 ## Changelog highlights
 
@@ -200,4 +204,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 529 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (October 2026): 77 edge functions · 529 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

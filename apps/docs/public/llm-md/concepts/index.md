@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts
 
 ---
 title: Concepts
-description: Mushi's core ideas in one place — capture, plain-English diagnosis, dedupe into one row, optional agent fixes, verification, and lessons it remembers.
+description: Mushi Mushi's core ideas in one place. Capture, plain-English diagnosis, dedupe into one row, optional agent fixes, verification, and lessons it remembers.
 ---
 
 # Concepts

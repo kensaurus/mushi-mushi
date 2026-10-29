@@ -4,105 +4,62 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/fine-tuning
 
 ---
 title: Fine-tuning
-description: The Fine-tuning page exports your best-scored classifications, trains a fine-tuned model, benchmarks it offline and promotes it to production.
+description: Fine-tuning jobs in Mushi Mushi export classified reports, train a small OpenAI or Bedrock model, validate it, and swap it in for the fast filter or diagnosis.
 ---
 
 # Fine-tuning
 
-The Fine-Tuning page guides you through exporting your project's best-scored
-classifications, training a fine-tuned variant, validating it against an offline
-benchmark, and promoting it to replace the active production prompt — all without
-leaving the console.
+**Where:** **AI prompts** (`/prompt-lab`) → **Advanced: fine-tuning & synthetic** →
+**Fine-tuning jobs**. The old `/fine-tuning` link redirects to `/prompt-lab`; there is no
+separate Fine-tuning page any more.
+
+A fine-tuning job in Mushi Mushi exports your project's classified reports, trains a
+fine-tuned model with a vendor, checks it against recent reports, and, if you promote it,
+makes it the model for one classification step.
 
 ---
 
-## Pipeline
+## Start a job
 
-Each stage is visible as a stepper in the UI. You can pause between stages —
-for example, export the dataset, review it offline, and come back to start
-training later.
+Click **New job** and choose:
 
----
+| Field | Options |
+| ----- | ------- |
+| **Vendor / base model** | **OpenAI — gpt-4o-mini (self-service)**, the default, or **Bedrock — Claude 3 Haiku (requires AWS setup)** |
+| **Promote to stage** | `stage1` (fast filter) or `stage2` (diagnosis). Type it exactly. |
 
-## Stage details
-
-### exporting → exported
-
-Click **Export dataset** to queue a dataset export. The exporter:
-
-1. Fetches the last N classifications (configurable, default 2 000) where
-   `judge_score >= 0.8` — only high-confidence examples train the model.
-2. Converts each classification into a fine-tune training pair:
-   `{ prompt: , completion: <category, severity, component, tags> }`.
-3. Validates the export schema with `@mushi-mushi/inventory-schema`'s classifier
-   format.
-4. Uploads the JSONL file to your BYO Storage bucket (or Mushi-managed storage).
-
-The exported file URL appears in the **Exports** tab for 30 days.
-
-### training → trained
-
-Click **Start training** to kick off a fine-tune job with your provider:
-
-| Provider | Model | Notes |
-| -------- | ----- | ----- |
-| OpenAI | `gpt-4o-mini` | Default. Fast, cheap, good for classification. |
-| Anthropic | `claude-haiku-3-5` | Higher accuracy on nuanced severity calibration. |
-| Custom | Any OpenAI-compatible endpoint | Self-hosted models via `fine_tune_endpoint` in project settings. |
-
-Training runs asynchronously. The stepper polls the provider's job status every
-60 seconds and updates the UI.
-
-### validating → validated / rejected
-
-When training completes, the validation harness runs automatically:
-
-- **Eval accuracy** — classification accuracy on a held-out test set (20% of
-  the export).
-- **Severity calibration delta** — how much the model's severity distribution
-  drifts from the ground-truth labels.
-- **Component tagging F1** — precision × recall for component assignment.
-- **Cost-per-classification** projection — estimated cost per 1 000 classifications
-  at the provider's current pricing.
-
-  A candidate is **only promotable** if its judge-score mean beats the current
-  production prompt's mean by **≥ 0.05** with **p &lt; 0.05**. If the candidate
-  loses, the UI offers **Reject** with a one-line reason. Rejected runs are archived
-  in the **History** tab for future reference.
-
-### promoted
-
-Click **Promote** to replace the active production prompt with the validated
-candidate. The promotion is atomic — a database transaction flips the
-`active_prompt_version` column and writes a `prompt.promoted` audit event.
-The old prompt is demoted to `archived` status; it can be re-promoted from the
-History tab if needed.
+Bedrock training is off unless the server sets `MUSHI_BEDROCK_FINETUNE_ENABLED=1` and
+`BEDROCK_OUTPUT_S3_URI`, and the project has AWS credentials as a BYOK key.
 
 ---
 
-## History tab
+## Job steps
 
-Every fine-tune run — promoted, rejected, or abandoned — appears in the History
-tab with:
+Each job row has a button for its next step:
 
-- Start and end timestamps
-- Export row count and held-out test accuracy
-- Judge mean (candidate vs. baseline at time of validation)
-- Promotion outcome and, for rejections, the rejection reason
-- A **Restore** button that re-promotes a previously archived prompt
+1. **Export training samples.** Mushi gathers classified reports from the job's time
+   window with a confidence of at least 0.85 (the default), skipping dismissed reports.
+   When the job asks for judge-confirmed labels only, it keeps reports the grader agreed
+   with.
+2. **Upload and start training.** The samples go to the vendor and a training job starts.
+3. **Check status.** Asks the vendor whether training has finished. OpenAI can also
+   report back through a webhook.
+4. **Validate.** Runs the model on up to 500 recent classified reports. It passes when
+   accuracy is at least 85%, the drift score is at most 0.25, and no training data leaked
+   into the check.
+5. **Promote.** Only a validated job can be promoted. It sets the project's fine-tuned
+   model for the chosen stage (`stage1` or `stage2`) and writes an audit event.
 
----
+**Reject** asks for a short reason (at least 4 characters) and records it. **Delete**
+removes the job.
 
-## Cost projection
-
-The validation report includes a **cost-per-classification** projection based on
-the provider's current per-token pricing. This is an estimate using the median
-report length in your project. Actual costs vary with report complexity.
+The table shows **Status**, **Model**, **Promote to**, **Samples**, **Accuracy**,
+**Created** and the actions.
 
 ---
 
 ## See also
 
-- [Concepts → Judge & self-improvement](/concepts/judge-loop) — how the nightly judge, A/B testing, and fine-tune pipeline fit together.
-- [Admin → Judge dashboard](/admin/judge) — the per-component score breakdown that helps you pick the right export slice.
-- [Admin → Intelligence reports](/admin/intelligence) — weekly digest that includes classifier quality metrics.
+- [AI prompts](/admin/prompt-lab) — where this card lives, and where you A/B test prompts
+- [Triage grading](/admin/judge) — the grader whose verdicts can filter training samples
+- [Concepts → Judge & self-improvement](/concepts/judge-loop) — how grading and prompts fit together

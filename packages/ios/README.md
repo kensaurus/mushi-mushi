@@ -1,26 +1,38 @@
-# @mushi-mushi/ios
+# Mushi Mushi for iOS (`MushiMushi`)
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Native iOS SDK for [Mushi Mushi](https://kensaur.us/mushi-mushi) — the open-source,
-LLM-driven bug intake, classification, and autofix platform.
+The native Swift SDK for [Mushi Mushi](https://kensaur.us/mushi-mushi), for
+iOS apps whose users find bugs you never see. A user shakes the phone or taps
+a button, describes the problem, and the report arrives in Mushi Mushi with a
+screenshot and device details, where it gets a plain-English diagnosis and a
+fix prompt for your AI editor.
 
-> **Status: preview (0.4.0).** Feature parity with the web SDK, but **not
-> released to CocoaPods trunk and not tagged for SwiftPM yet** — `pod 'MushiMushi', '~> 0.4'`
-> and `.package(..., from: "0.4.0")` will not resolve. Install it from this
+> **Status: preview (0.4.0), not on CocoaPods trunk and not tagged for
+> SwiftPM yet.** `pod 'MushiMushi', '~> 0.4'` and
+> `.package(..., from: "0.4.0")` will not resolve. Install it from this
 > repository as shown below until the first tagged release.
+
+You need a Mushi Mushi project: its project ID and an SDK API key
+(`mushi_…`) from the console. The free plan works. iOS 15 or newer.
+
+Docs: [iOS SDK reference](https://kensaur.us/mushi-mushi/docs/sdks/ios) ·
+[iOS quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/ios)
 
 ## Features
 
-- 📸 **Shake-to-report** with screenshot capture
-- 📦 **Offline queue** that survives app restarts (file-backed, byte-capped)
-- 🎯 **Native bottom-sheet widget** with category picker and live min-length validation
-- 🌐 **Device + app context** auto-attached to every report
-- 🧭 **Breadcrumb ring buffer** — 50-entry FIFO, auto-attached to every report
-- 🚨 **Proactive detection** — rage-tap and slow-screen triggers auto-open the widget
-- 🔒 **PII scrubber** — emails, JWTs, Stripe/OpenAI/Anthropic/AWS keys redacted before submission
-- ⚠️ **Exception normaliser** — `captureError()` now forwards name/message/stack/cause
-- 🧪 **Tested** — `swift test` runs the offline-queue, breadcrumb, PII, and exception suite
+- **Shake-to-report** with a screenshot
+- **Offline queue** that survives app restarts (file-backed, size-capped)
+- **Native bottom-sheet widget** with a category picker and a minimum
+  description length
+- **Device and app context** attached to every report
+- **Breadcrumbs**: the last 50 events, attached to every report
+- **Proactive prompts**: rage taps and slow screens open the widget
+- **PII scrubbing**: emails, phone numbers, card numbers, JWTs and common API
+  keys are redacted before a report is sent
+- **`captureError()`** sends the error's name, message, stack and cause
+- **Tested**: `swift test` runs the offline-queue, breadcrumb, PII and
+  exception suites
 
 ## Install
 
@@ -57,7 +69,7 @@ import MushiMushi
 struct MyApp: App {
     init() {
         Mushi.shared.configure(with: MushiConfig(
-            projectId: "proj_...",
+            projectId: "<project-uuid>",
             apiKey: "mushi_...",
             endpoint: "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api",
             triggerMode: .both,           // .shake | .button | .both | .none
@@ -109,8 +121,8 @@ let crumbs = Mushi.shared.getBreadcrumbs()  // snapshot for debugging
 ```
 
 Wire categories: `navigation`, `ui.tap`, `console`, `network`,
-`lifecycle`, `custom` — admin tooling treats `ui.tap` as the touch-device
-sibling of the web SDK's `ui.click`. The `data` map is `[String: String]`
+`lifecycle`, `custom`. The console treats `ui.tap` as the touch version of the
+web SDK's `ui.click`. The `data` map is `[String: String]`
 on iOS; non-string values are coerced to strings on the Capacitor bridge.
 
 If your app already uses Sentry, keep initializing Sentry in the host app and
@@ -122,9 +134,9 @@ target, which keeps the native SDK dependency-free by default.
 
 | Field                   | Default                              | Notes |
 |-------------------------|--------------------------------------|-------|
-| `projectId`             | _required_                           | Project UUID from Mushi admin |
+| `projectId`             | _required_                           | Project UUID from the Mushi Mushi console |
 | `apiKey`                | _required_                           | Project API key (`mushi_...`) |
-| `endpoint`              | _required_                           | Mushi Cloud: `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`; self-hosters pass their own functions URL |
+| `endpoint`              | _required_                           | Mushi Mushi Cloud: `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`; self-hosters pass their own functions URL |
 | `triggerMode`           | `.shake`                             | `shake` / `button` / `both` / `none` |
 | `captureScreenshot`     | `true`                               | Disable for HIPAA-sensitive flows |
 | `captureBreadcrumbs`    | `true`                               | Attaches the in-app breadcrumb buffer to each report; no Sentry needed |
@@ -141,4 +153,4 @@ target, which keeps the native SDK dependency-free by default.
 
 ## License
 
-MIT — see [LICENSE](../../LICENSE) at the repo root.
+MIT. See [LICENSE](./LICENSE).

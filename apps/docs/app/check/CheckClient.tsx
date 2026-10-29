@@ -116,7 +116,7 @@ function CheckForm({ error, onSubmit, defaultUrl }: { error?: string; onSubmit: 
         <p className="text-xs font-semibold uppercase tracking-wide text-mushi-vermillion">Free Production Check</p>
         <h1 className="text-3xl font-bold tracking-tight text-mushi-ink sm:text-4xl">Is your live app broken for new visitors?</h1>
         <p className="text-base text-mushi-ink-muted">
-          Paste your address. In about 30 seconds Mushi reads your home page and three pages it links to, the way a first
+          Paste your address. In about 30 seconds Mushi Mushi reads your home page and three pages it links to, the way a first
           visitor sees them, and tells you in plain English what to fix: error pages, dead links, missing security
           headers, published source maps.
         </p>
@@ -286,7 +286,7 @@ function Report({ report }: { report: CheckReport }) {
           data-mushi-location="check_report"
           className="inline-block rounded-md bg-mushi-vermillion px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
         >
-          Fix these automatically: install Mushi free (1 app)
+          Install Mushi Mushi free (1 app)
         </a>
       </section>
     </div>

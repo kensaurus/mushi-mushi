@@ -1,13 +1,14 @@
 ---
 title: Fix drafts & PRs
-description: What happens when you dispatch a fix — Mushi runs a coding agent in a sandbox and opens a draft pull request with a rationale and CI status to review.
+description: Fix dispatch in Mushi Mushi. A coding agent drafts the change, a draft pull request opens with a rationale, and an Opus review decides if it is ready for CI.
 ---
 
 # Fix drafts & PRs
 
-When you click **Dispatch fix** in the admin console, Mushi opens a draft pull
-request on your repo — with a rationale, screenshot diff, and CI status you
-can review before merge.
+When you click **Dispatch fix** in the admin console, Mushi Mushi has a coding
+agent (Mushi's own fix-worker, Cursor, or GitHub's agent) open a draft pull
+request on your repo, with a rationale and CI status you can review before
+merge.
 
 ## Flow
 
@@ -48,9 +49,10 @@ sequenceDiagram
 | `cloudflare`   | Edge-routed, sub-second cold starts      |
 
 The adapter abstraction means swapping providers is a config change, not a
-code change. Every sandbox invocation writes to `sandbox_audit_log`
-(provider, image digest, network policy, exit code) so a SOC 2 auditor can
-verify isolation guarantees.
+code change. Every sandbox run writes a `fix_sandbox_runs` row (provider,
+image, CPU, memory, timeout, network deny-by-default and allowed hosts, status)
+and its `sandbox_events`, so the isolation settings of each run can be checked
+afterwards.
 
 ## Agent contract
 
@@ -61,25 +63,33 @@ We support three agent shapes:
 - **`RestFixWorkerAgent`** — a simpler REST contract (`POST /fix`,
   `GET /status`) for teams that haven't adopted MCP yet.
 - **`CursorCloudAgent`** (new in May 2026) — delegates to a [Cursor Cloud Agent](https://cursor.com/docs/cloud-agent)
-  via `@cursor/sdk`. The agent runs in Cursor's managed cloud environment, opens a signed
-  draft PR via `autoCreatePR: true`, and returns the PR URL and agent artifacts.
-  Unlike the other adapters, it does **not** use an E2B/Modal sandbox — Cursor provides
-  its own isolated runtime. The fix-worker edge function delegates these runs to the Node-side
-  orchestrator since `@cursor/sdk` is Node-only.
+  via `@cursor/sdk` in the Node orchestrator. The agent runs in Cursor's managed cloud
+  environment, opens a draft PR via `autoCreatePR: true`, and returns the PR URL and agent
+  artifacts. It does **not** use an E2B/Modal sandbox; Cursor provides its own runtime. On
+  Mushi Cloud the `fix-worker` edge function dispatches Cursor and GitHub cloud agents
+  directly through their APIs (`_shared/agent-adapters.ts`).
 
-Both `McpFixAgent` and `RestFixWorkerAgent` have the same tools: `read_file`, `write_file`,
-`run_tests`, `git_commit`, `open_pr`. Filesystem and network access are
-brokered through the sandbox — the agent itself never gets a raw shell.
+`McpFixAgent` calls one MCP tool on your agent server (`mushi.generate_fix` by
+default, configurable) and `RestFixWorkerAgent` calls your REST endpoint; what
+tools the agent uses inside is up to that agent. When a sandbox provider is
+configured, filesystem and network access go through the sandbox's policy.
 
 `CursorCloudAgent` receives the fix prompt (including spec context) and uses Cursor's
 own tool suite inside the managed cloud environment.
 
 ## Credential scoping
 
-Mushi's GitHub App ships with **per-repo, per-PR scoping**: each fix
-attempt installs the app only on the target repo, with `contents:write` and
-`pull-requests:write` only. Tokens last 60 minutes and are revoked the
-moment the PR is opened.
+The Mushi GitHub App only reaches the repositories you install it on. For each
+GitHub call Mushi mints a short-lived installation token (GitHub expires it
+after an hour); without the App it uses a token you stored for the project or
+organization. The token is not narrowed to one repository or revoked when the
+PR opens.
+
+The PR stays a **draft**. `agent-pr-review` reviews it with Claude Opus on your
+own Anthropic key and marks it ready (so your CI runs) when the verdict is merge
+on that exact commit. When no review is possible (no Anthropic key, or the
+review is turned off), a draft Mushi's own fix-worker opened falls back to its
+model's own self-check instead. See [Agent PR review](/concepts/agent-pr-review).
 
 ## Spec traceability — `inventoryAction` end-to-end
 

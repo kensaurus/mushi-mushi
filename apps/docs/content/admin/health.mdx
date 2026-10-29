@@ -1,6 +1,6 @@
 ---
 title: Mushi health
-description: The Mushi health page shows whether Mushi itself is working (its AI calls, background jobs and provider connections), so you catch a degraded integration early.
+description: The Mushi health page shows whether Mushi Mushi itself works (AI calls, background jobs, provider connections), so you catch a degraded integration early.
 ---
 
 import { Callout } from 'nextra/components'
@@ -11,17 +11,22 @@ import { Callout } from 'nextra/components'
 
 **Route:** `/health` (the sidebar called it "App health" until October 2026)
 
-This page is about Mushi itself, not your app: the AI calls behind your diagnoses
+This page is about Mushi Mushi itself, not your app: the AI calls behind your diagnoses
 and fixes, Mushi's background jobs, and live provider connectivity. Use it to catch
 degradation before it surfaces as a user-facing bug. Your own app's uptime and
 errors are on **Home**.
+
+The page has four views, picked at the top: **Mushi’s AI & jobs** (described below),
+**[Code size](/admin/code-health)**, **[Schema changes](/admin/drift)** and
+**[Unusual spikes](/admin/anomalies)**. Inside **Mushi’s AI & jobs**, the tabs are
+**Overview**, **AI calls**, **Scheduled jobs** and **Recent traces**.
 
 ---
 
 ## Time window
 
-Use the **1h / 24h / 7d** toggle at the top right to scope all stats and charts to a
-time window. The window is persisted in the URL (`?window=`).
+Use the **Last hour / Last 24h / Last 7 days** picker to scope the AI-call stats and
+charts to a time window. The window is persisted in the URL (`?window=`).
 
 ---
 
@@ -35,7 +40,7 @@ window:
 | **Total calls** | Number of `llm_invocations` rows in window |
 | **Fallback rate** | % of calls that used a fallback model |
 | **Error rate** | % of calls that returned an error |
-| **Latency p50 / p95** | Median and 95th-percentile response time |
+| **Speed avg / p95** | Average and 95th-percentile response time |
 
 Below the summary, a **per-function breakdown** table shows calls, avg/p95 latency, cost
 (USD), fallback count, errors, and last failure time for each edge function
@@ -48,43 +53,39 @@ in use.
 
 ## Provider probes
 
-Two cards show live connectivity to your BYOK providers:
+On the **Recent traces** tab, two cards test the Anthropic and OpenAI keys set on the
+Mushi Mushi server (`ANTHROPIC_API_KEY` and `OPENAI_API_KEY`). They do not test the
+BYOK keys you add in Settings.
 
 | Provider | What's tested |
 |----------|--------------|
-| **Anthropic** | `POST /v1/messages` — confirms key validity and model access |
-| **OpenAI** | `POST /v1/chat/completions` with `max_completion_tokens: 10` — returns `ok` / `degraded` / `error` |
+| **Anthropic** | A 1-token `POST /v1/messages` call: confirms the key works and can reach the probe model |
+| **OpenAI** | `GET /v1/models/<probe model>`: confirms the key and its access to the model, and costs nothing |
 
-Each card shows: **status badge**, **latency**, and **last probed** time. Click
-**Probe now** to run a live round-trip test on demand.
-
-<Callout type="info">
-The OpenAI probe uses `max_completion_tokens: 10` (not `max_tokens`) to be compatible
-with `gpt-5.4-mini` and newer models. A `degraded` status with a short message is normal
-and means the key works.
-</Callout>
+Each card shows a **status badge** (`ok`, `degraded`, `down` or `unknown`), the
+**latency**, and the **last probed** time. Click **Probe now** to run the test on demand.
 
 ---
 
 ## Cron job health
 
-Cards for each background cron job — `judge-batch`, `intelligence-report`,
-`data-retention` — show:
+The **Scheduled jobs** tab has a card for each background job: `judge-batch`,
+`intelligence-report` and `data-retention`. Each shows:
 
-- **Last run** timestamp and staleness indicator
-- **Run count** in window
-- **Success rate** percentage
-- **Avg duration**
+- **Last run** timestamp and a staleness note when a run is late
+- **Run count**, **success rate** and **average duration**, read from the most recent
+  100 job runs (not filtered by the time window)
 
-Click **Trigger now** to run a job immediately without waiting for its schedule.
+Click **Trigger now** on `judge-batch` or `intelligence-report` to run it immediately.
+It spends AI budget, and only admins can use it. `data-retention` has no manual trigger.
 
 ---
 
 ## Recent LLM calls log
 
-The bottom of the page lists the most recent `llm_invocations` rows for this project,
-with columns: timestamp, function name, model, fallback badge, error badge, key source,
-latency, token count, and links to the source report and Langfuse trace.
+The **Recent traces** tab lists the most recent `llm_invocations` rows for this project,
+with the time, function name, model, fallback and error badges, key source (when it is not
+the server key), latency, token count, and a link to the Langfuse trace when one was recorded.
 
 Use the **Show** filter (`all / errors / fallbacks`) to isolate problem calls. The URL
 param `?recent=` persists the filter. The list auto-updates via a realtime subscription.
@@ -93,14 +94,15 @@ param `?recent=` persists the filter. The list auto-updates via a realtime subsc
 
 ## Recommended actions
 
-A banner at the top computes a severity level (`ok` / `warn` / `urgent`) based on the
-count of red and amber signals across the page. If the system is healthy, the banner
-shows a success tone and can be dismissed.
+On the **Overview** tab, the summary reads **Critical probes failing**, **Degraded
+probes** or **All systems nominal**, from the count of red and amber signals on the page.
+When something needs you (error rate, a fallback spike, a failed or late job, or no AI
+calls at all in the window), a recommended next step appears with a link.
 
 ---
 
 ## Related pages
 
 - [Settings](/admin/settings) — configure BYOK keys
-- [Iterate](/admin/iterate) — the highest per-run LLM cost driver
-- [Fix drafts](/admin/fixes) — fix-worker call detail
+- [Improvement runs](/admin/iterate) — the highest per-run LLM cost driver
+- [Fixes](/admin/fixes) — fix-worker call detail

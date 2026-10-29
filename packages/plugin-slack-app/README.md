@@ -2,11 +2,12 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Building blocks for a Mushi Slack app: the `/mushi` slash command router,
-Slack request verification, the OAuth install helpers, and a Slack app
-manifest.
+For people who run their own Mushi Mushi backend and want bug reports and the
+`/mushi` command in Slack. It has the building blocks for a Slack app: the
+`/mushi` slash command router, Slack request verification, the OAuth install
+helpers, and a Slack app manifest.
 
-**Do you need this package?** Not on Mushi Cloud: open the **Integrations**
+**Do you need this package?** Not on Mushi Mushi Cloud: open the **Integrations**
 page of the console and click **Add to Slack**. Report cards with buttons,
 threaded replies and `/mushi` then work with no code. This package is for
 people who run the Mushi backend themselves, or who want to host the Slack
@@ -72,7 +73,7 @@ the backend downloads the audio and runs its own speech-to-text, then posts
 the verbatim transcript with **Confirm / Cancel** buttons before anything is
 dispatched.
 
-## Quick start — Hono server
+## Quick start: Hono server
 
 ```ts
 import { Hono } from 'hono'
@@ -130,6 +131,7 @@ app.get('/slack/install', (c) => {
 | `/mushi list`        | Most recent open reports (5 standalone, 10 on the hosted backend). |
 | `/mushi open <id>`   | Show classification + summary for one report.          |
 | `/mushi resolve <id>`| Transition a report to `fixed`.                        |
+| `/mushi reply <id> <message>` | Reply to the person who sent the report (hosted backend only). |
 | `/mushi help`        | Print the command reference.                           |
 
 All responses are ephemeral (visible only to the invoking user) unless you
@@ -140,8 +142,9 @@ override `response_type` in a custom handler.
 - `verifySlackRequest` runs HMAC-SHA256 over `v0:<timestamp>:<rawBody>` and
   compares in **constant time**. Reject requests older than 5 minutes to
   block replay.
-- OAuth token rotation is enabled in the manifest — persist both
-  `access_token` and `refresh_token`.
+- The manifest leaves Slack token rotation off (`token_rotation_enabled:
+  false`), so the bot token from the install does not expire. If you turn
+  rotation on, store both `access_token` and `refresh_token`.
 - Never log the raw `payload` from interactive actions; Slack embeds the
   invoking user's email there.
 

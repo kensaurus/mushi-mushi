@@ -2,50 +2,64 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Part of the Mushi Mushi monorepo — plain-English bug comprehension for vibe coders.
+A GitHub Action for people who already use Mushi Mushi and want CI to act on
+their bug reports: hand one report to an agent that opens a fix PR, ask
+questions about your reports, or run Mushi Mushi's pre-release checks on a
+commit.
 
-
-GitHub Action that runs Mushi Mushi MCP-style tools from CI. Use it to
-**gate PR merges** on classification coverage, kick off the judge after a
-deploy, dispatch fixes for a specific report, or run natural-language
-queries against your report corpus — all without leaving your workflow.
+> **Status: the `uses:` line below does not run today.** `action.yml` starts
+> `dist/cli.js`, and the built `dist/` folder is not in the repository
+> (checked 2026-10-29 on `master` and on the `@mushi-mushi/mcp-ci@0.6.8` tag),
+> so the step fails before any command starts. The commands below describe
+> what the code does once that is fixed.
 
 ```yaml
 - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
   with:
     api-key: ${{ secrets.MUSHI_API_KEY }}
     project-id: ${{ secrets.MUSHI_PROJECT_ID }}
-    command: check-coverage   # fail the step when under 80% of reports are triaged
+    command: dispatch-fix
+    report-id: <report-uuid>
 ```
+
+**What you need**
+
+- A Mushi Mushi project and a project API key with MCP access, saved as a
+  repo secret. An SDK key (`report:write`) is refused. `check-coverage`,
+  `query` and `discovery-status` need `mcp:read`; every other command needs
+  `mcp:write`. Mint the key on the console's **Connect** page.
+- For `dispatch-fix`: a GitHub repo connected to the project, so the agent
+  has somewhere to open the PR.
+- For the inventory commands (`gates`, `discover-api`, `spec-drift`,
+  `discovery-status`, `propose`, `auth-bootstrap`): the Studio or Enterprise plan on Mushi Mushi
+  Cloud. Other plans get a 402. See [pricing](https://kensaur.us/mushi-mushi/docs/pricing).
 
 Docs: [mcp-ci reference](https://kensaur.us/mushi-mushi/docs/sdks/mcp-ci)
 
-> Not a full MCP server. For the full MCP experience (tools, prompts,
-> streaming), install [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp) and run it against your
-> local Claude Code / Codex / Cursor setup. This Action is the 80% glue
-> path: short-lived CI jobs that call the same REST endpoints the MCP
-> server exposes, with no stdio transport overhead.
+This is not an MCP server. It calls the same REST API the MCP tools use, from
+a short CI job. For tools inside your editor, install
+[`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp).
 
 ## Commands
 
-### Triage & fix loop
+### Reports and fixes
 
 | `command`          | What it does                                                                 | Required inputs                       |
 | ------------------ | ---------------------------------------------------------------------------- | ------------------------------------- |
-| `check-coverage`   | Fails if `classified / total` is below `min-coverage`. Default threshold `0.8`. | —                                     |
-| `trigger-judge`    | Runs the classification pipeline on up to 50 unclassified reports.           | —                                     |
-| `dispatch-fix`     | Queues an agentic fix attempt for a specific report. Optionally accepts `inventory-action-node-id` to pin the fix to a specific inventory `Action` so the worker threads its `expected_outcome` contract into the LLM prompt and runs a targeted post-PR synthetic probe (whitepaper §2.10). | `report-id` (+ optional `inventory-action-node-id`) |
-| `query`            | Runs a natural-language query and prints the result.                         | `question`                            |
+| `check-coverage`   | Meant to fail the step when fewer than `min-coverage` (default `0.8`) of your reports are classified. **It cannot fail today:** it reads a `classified` count that `GET /v1/admin/stats` does not return, so the ratio is `NaN` and the step passes. | none                                  |
+| `trigger-judge`    | Asks the judge to grade Mushi Mushi's diagnoses it has not graded yet. It does not classify reports (that happens on its own when a report arrives). Needs the judge switched on for the project; the grading runs in the background after the step ends. | none                                  |
+| `dispatch-fix`     | Hands one report to a coding agent, which opens a fix PR. `inventory-action-node-id` pins the fix to one inventory action, so its `expected_outcome` goes into the agent's prompt. | `report-id` (+ optional `inventory-action-node-id`) |
+| `query`            | Asks a question about your reports in plain words and prints the answer.     | `question`                            |
 
-### Mushi v2 — bidirectional inventory & gates
+### Inventory and pre-release checks (Studio or Enterprise plan)
 
 | `command`          | What it does                                                                                                                                    | Required inputs                                  |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | `gates`            | Runs the pre-release gates for the current commit (`all` = `dead_handler`, `mock_leak`, `api_contract`, `status_claim`, `orphan_endpoint`, `unknown_call`), prints one line per gate, and fails the step when any gate fails, errors or returns no result. `dead_handler` and `mock_leak` read your ESLint JSON report (`eslint-report`); without it the step fails. The crawl runs from Inventory → Reconcile, not here. Use `gates: 'api_contract,status_claim'` to run a subset. | `eslint-report` for the lint gates (also `commit-sha` / `pr-number` / `gates`) |
-| `discover-api`     | Walks the customer repo for Next.js route handlers + OpenAPI + (optionally) Supabase introspection and POSTs the resulting `discovered_apis` to `inventory-gates` so Gate 3 (`api_contract`) has something to diff against. | — (uses `repo-root` / `openapi-file` / `supabase-*`) |
-| `spec-drift`       | Gate 6: runs `oasdiff breaking` between two OpenAPI specs, records the findings as a `spec_drift` gate run and sets the `findings` output. Fails on a breaking change unless `fail-on-breaking: false`. | `base-spec`, `head-spec` (+ optional `fail-on-breaking`, `commit-sha`, `pr-number`) |
+| `discover-api`     | Reads your repo for Next.js route handlers and OpenAPI files (and, optionally, your Supabase tables) and sends the list to Mushi Mushi, so the `api_contract` check has something to compare against. | — (uses `repo-root` / `openapi-file` / `supabase-*`) |
+| `spec-drift`       | Runs `oasdiff breaking` between two OpenAPI specs, records the findings as a `spec_drift` gate run and sets the `findings` output. Fails on a breaking change unless `fail-on-breaking: false`. | `base-spec`, `head-spec` (+ optional `fail-on-breaking`, `commit-sha`, `pr-number`) |
 
-### Mushi v2.1 — passive discovery & proposal flow
+### Inventory from SDK traffic (Studio or Enterprise plan)
 
 | `command`          | What it does                                                                                                                                                       | Required inputs                                |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
@@ -53,41 +67,19 @@ Docs: [mcp-ci reference](https://kensaur.us/mushi-mushi/docs/sdks/mcp-ci)
 | `propose`          | Kicks the LLM proposer (`POST /v1/admin/inventory/:projectId/propose` → `inventory-propose` Edge Function). Emits `proposal_id`; chain it into a PR-comment job.   | —                                              |
 | `auth-bootstrap`   | Refreshes the crawler cookie via [`@mushi-mushi/inventory-auth-runner`](https://www.npmjs.com/package/@mushi-mushi/inventory-auth-runner) (shells out to `npx --yes -p @mushi-mushi/inventory-auth-runner mushi-mushi-auth refresh`). Run before any `gates` step that triggers a crawl. | `TEST_USER_*` env vars consumed by your script |
 
-## Quick start — gate merges on triage coverage
+## Example: start a fix by hand
 
 ```yaml
-# .github/workflows/mushi-gate.yml
-name: Mushi CI Gate
-on: [pull_request]
-
-jobs:
-  classify:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
-        with:
-          api-key: ${{ secrets.MUSHI_API_KEY }}
-          project-id: ${{ secrets.MUSHI_PROJECT_ID }}
-          command: trigger-judge
-
-      - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
-        with:
-          api-key: ${{ secrets.MUSHI_API_KEY }}
-          project-id: ${{ secrets.MUSHI_PROJECT_ID }}
-          command: check-coverage
-          min-coverage: '0.9'
-```
-
-## Quick start — auto-dispatch fix on label
-
-```yaml
+# .github/workflows/mushi-fix.yml
 on:
-  issues:
-    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      report_id:
+        description: 'Mushi Mushi report id (UUID)'
+        required: true
 
 jobs:
   dispatch:
-    if: github.event.label.name == 'mushi:auto-fix'
     runs-on: ubuntu-latest
     steps:
       - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
@@ -95,14 +87,14 @@ jobs:
           api-key: ${{ secrets.MUSHI_API_KEY }}
           project-id: ${{ secrets.MUSHI_PROJECT_ID }}
           command: dispatch-fix
-          report-id: ${{ github.event.issue.body }}
+          report-id: ${{ inputs.report_id }}
 ```
 
-## Quick start — Mushi v2 gates on every PR
+## Example: pre-release checks on every PR
 
 ```yaml
 # .github/workflows/mushi-gates.yml
-name: Mushi v2 Gates
+name: Mushi Mushi checks
 on: [pull_request]
 
 jobs:
@@ -111,7 +103,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Refresh the crawler cookie so the crawler can reach auth-gated routes.
+      # auth-bootstrap signs in with Playwright, so the job needs a browser.
+      - run: npx playwright install --with-deps chromium
+
+      # Refresh the crawler cookie so the crawler can reach pages behind your login.
       - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
           api-key: ${{ secrets.MUSHI_API_KEY }}
@@ -144,7 +139,7 @@ jobs:
           pr-number: ${{ github.event.pull_request.number }}
 ```
 
-## Quick start — Mushi v2.1 weekly proposal job
+## Example: weekly inventory proposal
 
 ```yaml
 on:
@@ -174,8 +169,8 @@ jobs:
 
 | Input               | Required              | Default                                                     | Description                                                                                                            |
 | ------------------- | --------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `api-key`           | yes                   | —                                                           | Mushi project API key. Store as a repo secret.                                                                         |
-| `project-id`        | yes                   | —                                                           | Mushi project UUID.                                                                                                    |
+| `api-key`           | yes                   | —                                                           | Mushi Mushi project API key with `mcp:read` or `mcp:write` (see above). Store as a repo secret.                        |
+| `project-id`        | yes                   | —                                                           | Mushi Mushi project UUID.                                                                                              |
 | `command`           | yes                   | —                                                           | One of the commands above.                                                                                             |
 | `api-endpoint`      | no                    | Hosted Supabase functions URL                               | Override for self-hosted deployments.                                                                                  |
 | `report-id`         | when `dispatch-fix`   | —                                                           | Report UUID to dispatch a fix for.                                                                                     |

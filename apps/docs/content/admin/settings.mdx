@@ -1,6 +1,6 @@
 ---
 title: Settings
-description: The Settings page holds every project option — notifications, your own LLM keys, widget copy, Slack alerts and developer settings.
+description: The Settings page in Mushi Mushi holds every project option, from bug alerts and spend limits to your own AI keys, web tools, voice reports and SDK connection.
 ---
 
 import { Callout } from 'nextra/components'
@@ -9,13 +9,17 @@ import { Callout } from 'nextra/components'
 
 # Settings
 
-**Route:** `/settings`
+**Route:** `/settings` (sidebar: **Settings**)
 
-> **Scenario:** Your widget copy feels off, you want your own LLM keys on the bill,
+> **Scenario:** Your widget copy feels off, you want your own AI keys on the bill,
 > and Slack should ping the channel when a critical bug lands. This page holds every
-> project knob — notifications, keys, widget, and developer toggles.
+> Mushi Mushi project setting: alerts, keys, widget and developer toggles.
 
-The tab you pick is saved in the URL (`?tab=`).
+The page has six tabs: **General**, **AI keys**, **Web tools**, **Voice reports**,
+**SDK & connection** and **Display & sidebar**. The tab you pick is saved in the URL
+(`?tab=`). Old links still work: `?tab=firecrawl` and `?tab=browserbase` open **Web
+tools**, `?tab=health` and `?tab=dev` open **SDK & connection**, `?tab=keys` opens
+**AI keys** and `?tab=labs` opens **Display & sidebar**.
 
 ---
 
@@ -23,8 +27,12 @@ The tab you pick is saved in the URL (`?tab=`).
 
 ### General
 
-Notifications, Sentry config, the default LLM model, and the deduplication threshold
-for report clustering.
+Bug alerts (Slack channel), error tracking (Sentry), an optional read-only link to your
+Supabase database, and **Bug sorting**: the AI models for triage, the quick check, the
+judge and fixes, the quick-check confidence, grouping of similar bugs and fix branch
+names. It also holds daily limits for Firecrawl and test writing, the feedback widget's
+"Bug reports by Mushi" line, and, behind **Fixes and CI → Show**, the pull request
+review, verified merge, CI cost and CI policy settings.
 
 **Spend limits** (project admins) cap what the project spends. Leave a field
 empty for no limit.
@@ -42,51 +50,34 @@ If Mushi cannot read this month's spend (a database error), the AI call goes
 ahead and the failure is reported to the operator's error monitoring. A
 temporary read failure never stops triage, and it never passes unnoticed.
 
-### BYOK (API keys)
+### AI keys
 
-Configure Anthropic and OpenAI-compatible API keys for the project's LLM pipelines.
-Keys are stored encrypted in Supabase Vault.
+Your own keys for Anthropic, OpenAI, OpenRouter, Cursor, Firecrawl, Browserbase and
+Supabase. Keys are stored encrypted in Supabase Vault, and after saving the list shows
+only a short hint of each key. A key can belong to one app or be shared with your other
+apps; an app's own key is tried first. The Cursor row also holds spend-down mode (see
+[Spend credits](/admin/credits)).
 
-| Key | Used by |
-|-----|---------|
-| **Anthropic API key** | `fix-worker`, `classify-report`, `pdca-runner`, `judge-batch` |
-| **OpenAI-compatible key** | `fix-worker` (fallback), `test-gen-from-report` |
+### Web tools
 
-After saving, only the last four characters are shown.
+- **Firecrawl (web pages)**: your Firecrawl key, the websites it may read, and the pages
+  per lookup. Firecrawl reads public web pages while Mushi diagnoses a bug.
+- **Known fixes on the web**: the **Search the web for known fixes** switch.
+- **Browserbase (cloud browser)**: runs [scheduled tests](/admin/qa-coverage) in a cloud
+  browser when a story's provider is `browserbase`. Keys go through
+  `GET|PUT /v1/admin/byok/browserbase`.
 
-### Firecrawl
+### Voice reports
 
-Optional web research provider. When configured, enables the
-[Research](/admin/research) page and powers the `drift-walker` crawl:
+Report bugs by voice from your phone, Telegram or Slack. See [Voice intake](/admin/voice).
 
-| Field | Description |
-|-------|-------------|
-| **Firecrawl API key** | Your BYOK key from firecrawl.dev |
-| **Firecrawl base URL** | Optional self-hosted endpoint override |
+### SDK & connection
 
-### Browserbase
-
-Cloud Chromium provider for [QA Coverage](/admin/qa-coverage) when a story’s
-provider is `browserbase`. Keys are stored in Vault via
-`GET|PUT /v1/admin/byok/browserbase`. Without a project key, the runner falls
-back to the platform global key in `mushi_runtime_config`.
-
-| Field | Description |
-|-------|-------------|
-| **Browserbase API key** | Your BYOK key from browserbase.com |
-| **Test connection** | Probes auth / network / quota and shows last test status |
-
-### Health
-
-Live connection status for all configured integrations. Shows the same provider probe
-data as the [Integration health](/admin/health) page, scoped to this project. Also
-includes the SDK reference (project API keys from **Settings → SDK install** — not a Vite env var) and a
-**pipeline smoke test** button.
-
-### Dev tools
-
-Debug logging flag and other local-only developer flags for this project. These settings
-are never sent to the SDK or end users.
+**Check the connection** (whether this browser reaches Mushi and where your data
+lives), **Install the bug widget** (a link to [Connect](/admin/connect), where the
+install snippet lives, and the API address to copy), **Send a test bug**, and **Debug
+logging (this browser)**, which logs to the browser console. Debug logging is stored in
+this browser only; it is never sent to the SDK or end users.
 
 ### Display & sidebar
 
@@ -100,21 +91,21 @@ open this tab.
 
 ## Changing a key
 
-1. Open the **BYOK** tab.
-2. Paste the new key and click **Save**.
-3. Navigate to [Integration health](/admin/health) → **Probe now** to verify the new key works.
+1. Open the **AI keys** tab.
+2. Add the new key on the provider's row and save it.
+3. Open [Mushi health](/admin/health) → **Probe now** to verify the new key works.
 
 <Callout type="warning">
 Do not paste a Supabase `service_role` key here. That key bypasses all row-level
-security and must only be used server-side. These BYOK fields are for third-party
-AI/integration providers only.
+security and must only be used server-side. The Supabase row asks for a scoped,
+read-only access token, as its instructions describe.
 </Callout>
 
 ---
 
 ## Related pages
 
-- [Integration health](/admin/health) — verify keys with live round-trip tests
-- [Storage](/admin/storage) — configure BYO object storage
-- [SSO](/admin/sso) — SAML/OIDC identity provider registration
-- [Organization members](/admin/teams) — manage access and roles
+- [Mushi health](/admin/health): verify keys with live round-trip tests
+- [Storage](/admin/storage): configure your own object storage
+- [SSO](/admin/sso): SAML/OIDC identity provider registration
+- [Organization members](/admin/teams): manage access and roles

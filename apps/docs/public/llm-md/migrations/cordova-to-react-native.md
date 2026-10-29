@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/cordova-to-react-native
 
 ---
 title: 'Cordova → React Native'
-description: Move a Cordova app to React Native in two hops — stabilise on Capacitor first, then port screen by screen — without losing Mushi bug reporting.
+description: Move a Cordova app to React Native in two hops (stabilise on Capacitor first, then port screen by screen) without losing Mushi Mushi bug reporting.
 ---
 
 # Cordova → React Native
@@ -17,23 +17,25 @@ because it lets you ship features the whole time instead of feature-freezing
 for a full rewrite.
 
 If your app is small (a handful of screens, no deep native plugin
-dependencies) you can skip the Capacitor stop and port directly to RN —
-see the **Direct path** section below.
+dependencies) you can skip the Capacitor stop and port directly to RN.
+See **Path B** below.
 
   This guide composes two existing guides. Read them in order:
   [Cordova → Capacitor](/migrations/cordova-to-capacitor) first, then
   [Capacitor → React Native](/migrations/capacitor-to-react-native).
-  Mushi stays mounted on the same project the whole way through.
+  Mushi Mushi stays on the same project the whole way through.
 
 ## Why migrate
 
 You're on Cordova and want to end up on React Native because:
 
-- **Performance.** WebView-based shells hit a ceiling on chat scrolls,
-  large lists, and animations. RN's JS-to-native bridge clears it.
-- **Native API access.** Modern iOS / Android APIs (App Intents,
-  WidgetKit, Health, etc.) ship to RN faster than to Cordova or Capacitor.
-- **Hiring.** RN engineers are easier to find in 2026 than Cordova ones.
+- **Performance.** WebView-based shells can struggle with long scrolling
+  lists, chat views and animations. React Native renders native views.
+- **Native API access.** Newer iOS / Android APIs (App Intents,
+  WidgetKit, Health, etc.) are often reachable through Expo modules or
+  community libraries.
+- **Hiring.** React Native engineers are usually easier to find than
+  Cordova ones.
 
 You should NOT migrate if:
 
@@ -68,18 +70,18 @@ Faster end-to-end, riskier mid-migration. Use only when:
 - Your React/JS code is already well-isolated from Cordova plugin calls
   (you can swap call sites to RN equivalents directly).
 
-## Mushi during the migration
+## Mushi Mushi during the migration
 
-Identical to the [Capacitor → React Native § 7](/migrations/capacitor-to-react-native#7-mushi-mushi-during-the-migration)
-plan: same project, same `apiKey`, dual-ship Cordova/Capacitor and RN at the
+Identical to [§ 7 of the Capacitor → React Native plan](https://github.com/kensaurus/mushi-mushi/blob/master/docs/migrations/capacitor-to-react-native.md#7-mushi-mushi-during-the-migration):
+same project, same `apiKey`, dual-ship Cordova/Capacitor and RN at the
 same time, sunset the legacy build only after the RN one has been stable for
 a week in beta.
 
 You'll touch the Mushi SDK exactly once per hop:
 
-- **Hop 1 (Cordova → Capacitor):** swap the legacy Cordova plugin for
-  [`@mushi-mushi/capacitor`](/sdks/capacitor) and call
-  `Mushi.configure({ projectId, apiKey })`.
+- **Hop 1 (Cordova → Capacitor):** replace `@mushi-mushi/web` in the
+  WebView (if you used it) with [`@mushi-mushi/capacitor`](/sdks/capacitor)
+  and call `Mushi.configure({ projectId, apiKey })`.
 - **Hop 2 (Capacitor → React Native):** swap that for
   [`@mushi-mushi/react-native`](/sdks/react-native) and mount
   `` at the app root.
@@ -88,8 +90,8 @@ You'll touch the Mushi SDK exactly once per hop:
 
 Walk the plugin list once at the start. Anything without a Capacitor or RN equivalent is the long pole — budget time for a TurboModule wrapper.</> },
     { id: 'hop1-cap', label: 'Hop 1: complete Cordova → Capacitor', content: <>Follow the Cordova → Capacitor checklist end-to-end. Ship to production. Stop here for at least a week to let real users hit the new build before starting hop 2.</> },
-    { id: 'hop1-mushi', label: 'Verify Mushi reports flow on the Capacitor build', content: <>Open the Mushi admin console; confirm reports tagged sdk:capacitor are landing. Don't proceed to hop 2 until you have ≥ 1 day of clean Capacitor reports in production.</> },
-    { id: 'hop2-bootstrap', label: 'Hop 2: bootstrap the RN project (RN 0.83+, New Architecture)', content: <>Create a sibling RN project per Path B § 5.1. Don't try to port in place — keep the Capacitor app shippable.</> },
+    { id: 'hop1-mushi', label: 'Verify Mushi reports flow on the Capacitor build', content: <>Open the Mushi admin console; filter Reports by SDK and confirm reports from @mushi-mushi/capacitor are landing. Don't proceed to hop 2 until you have ≥ 1 day of clean Capacitor reports in production.</> },
+    { id: 'hop2-bootstrap', label: 'Hop 2: bootstrap the RN project (current RN, New Architecture)', content: <>Create a sibling RN project per § 5.1 of the plan. Don't try to port in place — keep the Capacitor app shippable.</> },
     { id: 'hop2-screens', label: 'Port screens one at a time', content: <>Lift the screen's React/JSX, swap web components for RN primitives (View, Text, ScrollView, FlashList). Keep the same fetcher / state layer where possible.</> },
     { id: 'hop2-mushi', label: 'Mount @mushi-mushi/react-native + smoke-test', content: {`import { MushiProvider } from '@mushi-mushi/react-native'
 
@@ -99,17 +101,17 @@ Walk the plugin list once at the start. Anything without a Capacitor or RN equiv
     
 
 }`} },
-    { id: 'dual-ship', label: 'Dual-ship Capacitor + RN for ≥ 2 weeks', content: <>Both builds report to the same Mushi project. Use the SDK tag filter on the dashboard to compare incident rates between the two builds before sunsetting Capacitor.</> },
+    { id: 'dual-ship', label: 'Dual-ship Capacitor + RN for ≥ 2 weeks', content: <>Both builds report to the same Mushi project. Filter Reports by SDK to compare the two builds before sunsetting Capacitor.</> },
     { id: 'sunset', label: 'Sunset the Cordova/Capacitor build', content: <>Once the RN build has been live for 2 weeks with no P0 reports, push the legacy build to deprecation in App Store Connect / Play Console.</> },
 
 />
 
-## Migration checklist (Path B — direct)
+## Migration checklist (Path B, direct)
 
 If even one plugin has no RN equivalent and you can't budget time for a TurboModule, fall back to Path A.</> },
-    { id: 'rn-bootstrap', label: 'Bootstrap RN 0.83 with the New Architecture', content: <>See Cap→RN § 5.1.</> },
+    { id: 'rn-bootstrap', label: 'Bootstrap a current React Native release with the New Architecture', content: <>See § 5.1 of the Cap→RN plan.</> },
     { id: 'design-system', label: 'Port your design system to RN primitives or a kit (NativeWind / Tamagui)', content: <>Plan for ~1 week of token / theme work before any screens move.</> },
-    { id: 'screen-port', label: 'Port screens — feature freeze the Cordova build', content: <>Keep a list of in-progress screens. Mark each as it lands.</> },
+    { id: 'screen-port', label: 'Port screens and feature-freeze the Cordova build', content: <>Keep a list of in-progress screens. Mark each as it lands.</> },
     { id: 'mushi-rn', label: 'Mount @mushi-mushi/react-native (same projectId / apiKey)', content: <>Same code as Path A.</> },
     { id: 'beta', label: 'Closed beta on TestFlight / Play Internal', content: <>Run for ≥ 1 week. Watch the Mushi inbox daily.</> },
     { id: 'cutover', label: 'Cutover and sunset Cordova', content: <>Push to production once the beta is clean. Archive the Cordova repo.</> },
@@ -118,10 +120,11 @@ If even one plugin has no RN equivalent and you can't budget time for a TurboMod
 
 ## Verification
 
-- Mushi inbox shows reports tagged with the new SDK on a real device.
-- Cold-start time on a mid-tier Android device drops by ≥ 30 % vs the
-  Cordova baseline (rough sanity check; varies by app).
-- Crash rate is ≤ 0.5 % for the first 7 days of beta.
+- The Mushi Reports page shows reports from `@mushi-mushi/react-native`
+  sent from a real device.
+- Cold start on a mid-range Android device is no slower than the Cordova
+  baseline (measure both; results vary by app).
+- The crash rate in beta is no worse than the Cordova build's.
 
 ## Rollback
 

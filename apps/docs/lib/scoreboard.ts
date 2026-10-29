@@ -23,7 +23,8 @@ export interface Scoreboard {
 
 export async function loadScoreboard(fetchImpl: typeof fetch = fetch): Promise<Scoreboard | null> {
   try {
-    const res = await fetchImpl(`${PUBLIC_API_URL}/v1/public/scoreboard`)
+    // no-cache: revalidate every visit, so an answer cached before a deploy never shows.
+    const res = await fetchImpl(`${PUBLIC_API_URL}/v1/public/scoreboard`, { cache: 'no-cache' })
     const body = (await res.json().catch(() => null)) as { ok?: boolean; data?: Scoreboard } | null
     return res.ok && body?.ok && body.data ? body.data : null
   } catch {

@@ -1,6 +1,6 @@
 ---
-title: Pricing — Free, Builder, Studio and self-host
-description: Mushi Mushi pricing — free for one app and 100 AI bug diagnoses a month. Builder $29/mo for 3 apps, Studio $79/mo for 10. Free to self-host.
+title: "Pricing: Free, Builder, Studio and self-host"
+description: Mushi Mushi pricing. Free for one app and 100 AI bug diagnoses a month. Builder $29/mo for 3 apps, Studio $79/mo for 10. Free to self-host.
 ---
 
 import { Callout } from 'nextra/components'
@@ -19,18 +19,20 @@ import { PRICING_LEDE } from '@/lib/public-copy'
 
 <PricingTiersTable />
 
-A plan is the number of **apps** Mushi watches for your team: one on Free, three on Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
+A plan is the number of **apps** Mushi Mushi watches for your team: one on Free, three on Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
+
+Installing plugins from the Marketplace (PagerDuty, Zapier, the Cursor and Claude Code agents, Linear Sync, Sentry Mirror) needs Builder or above. The Integrations page (Sentry, Slack, GitHub, Linear) works on every plan.
 
 <Callout type="info">
   **Annual billing saves two months.** Pay for 10 months, get 12: Builder is $290 a year, Studio $790. Annual plans have no pay-as-you-go overage: they include the plan's diagnoses each month and pause new diagnoses at that limit. Pick annual at checkout, or switch an existing plan with **Change plan** on the Billing page. For Enterprise commits, contact us.
 </Callout>
 
 <Callout type="info">
-  **Overage is capped.** Builder and Studio include a default spend cap ($50 and $200). You can lower or raise it in the console. At the cap, Mushi pauses new diagnoses with a graceful message — never a surprise invoice. Email alerts fire at **50%, 80%, and 100%** of your included diagnoses.
+  **Overage is capped.** Builder and Studio include a default cap on overage spend ($50 and $200 a month, on top of the base fee). You can lower or raise it in the console. At the cap, Mushi pauses new diagnoses and says so, instead of sending a bigger invoice. Email alerts fire at **50%, 80%, and 100%** of your included diagnoses.
 </Callout>
 
 <Callout type="warning">
-  **Free has a hard stop** — not a soft limit. At 100 diagnoses Mushi stops diagnosing new reports until the next calendar month. No card, no charge, no bill shock.
+  **Free has a hard stop**, not a soft limit. At 100 diagnoses Mushi stops diagnosing new reports until the next calendar month. No card, no charge, no bill shock.
 </Callout>
 
 ## What counts as a diagnosis
@@ -41,12 +43,12 @@ One diagnosis = one completed classification pass. Specifically:
 - It is not a duplicate of an existing group already classified this period.
 - The classifier finishes and writes a plain-English root cause + severity + fix hint.
 
-Under the hood that is a two-stage pipeline (Haiku fast-filter → Sonnet structured output). Classification, deduplication, fix attempts, knowledge-graph writes, and MCP tool calls are **not** counted separately — they are included in the per-diagnosis price.
+Under the hood that is a two-stage pipeline (Haiku fast-filter → Sonnet structured output). Classification, deduplication, knowledge-graph writes, and MCP tool calls are **not** counted separately: they are included in the per-diagnosis price. Fix PRs and agent runs are not counted as diagnoses; with your own AI key (see [below](#your-own-ai-key-and-the-self-host-path)), their tokens are billed by that vendor.
 
 **What does NOT count:**
 
 - Reports filtered by the fast-filter (noise, spam, incomplete submissions).
-- Reports deduplicated to an existing group (same broken button, same stack trace — they collapse, you only pay once).
+- Reports deduplicated to an existing group (same broken button, same stack trace: they collapse, you only pay once).
 - Inbound adapter events (Sentry alerts, Datadog webhooks) that don't complete a fresh diagnosis.
 - MCP `get_fix_context` calls, fix dispatch, or any read-only operation.
 
@@ -58,11 +60,11 @@ Use the slider below to model your bill. Toggle **Annual** to see the effective 
 
 ## Example bills
 
-Fixed formulas (overage metered on top of base):
+Monthly plans, default caps, for a billing period that lines up with the calendar month (overage metered on top of the base fee; the cap limits the overage, not the total):
 
 ```
-Builder: $29 + max(0, diagnoses − 1,000) × $0.03  (capped at $50/mo total)
-Studio:  $79 + max(0, diagnoses − 3,000) × $0.03  (capped at $200/mo total)
+Builder: $29 + min(max(0, diagnoses − 1,000) × $0.03, $50)
+Studio:  $79 + min(max(0, diagnoses − 3,000) × $0.03, $200)
 ```
 
 | Diagnoses / mo | Builder | Studio |
@@ -71,12 +73,12 @@ Studio:  $79 + max(0, diagnoses − 3,000) × $0.03  (capped at $200/mo total)
 | 500 | $29.00 | $79.00 |
 | 1,000 | $29.00 | $79.00 |
 | 1,500 | $44.00 | $79.00 |
-| 2,000 | $50.00 *(cap)* | $79.00 |
-| 3,000 | $50.00 *(cap)* | $79.00 |
-| 5,000 | $50.00 *(cap)* | $139.00 |
-| 8,000 | $50.00 *(cap)* | $200.00 *(cap)* |
+| 2,000 | $59.00 | $79.00 |
+| 3,000 | $79.00 *(cap)* | $79.00 |
+| 5,000 | $79.00 *(cap)* | $139.00 |
+| 8,000 | $79.00 *(cap)* | $229.00 |
 
-A typical vibe-coder app runs **200–400 diagnoses / month**, well inside Builder's 1,000. Most people move up for a second or fourth app, not for more diagnoses.
+The cap is checked per calendar month (UTC) of usage: at the cap, new diagnoses pause until the 1st. Builder reaches its default cap at about 2,667 diagnoses in a month, Studio at about 9,667. Reports past that point are kept, not diagnosed.
 
 ## Why apps, not reports?
 
@@ -84,27 +86,27 @@ Reports are noisy: one broken button can send fifty, and a busy week is hard to 
 
 ## Why diagnoses, not events
 
-Sentry meters errors. We meter comprehension — a unit you can actually predict and that maps 1:1 to the value delivered (a plain-English root cause + paste-ready fix). Duplicate errors from the same broken button collapse to one diagnosis. You pay once.
+Sentry meters errors. We meter diagnoses: one per plain-English root cause and paste-ready fix, a unit you can predict. Duplicate errors from the same broken button collapse to one diagnosis. You pay once.
 
 ## Your own AI key and the self-host path
 
 On every Cloud plan, Free included, you can add your own Anthropic, OpenAI or Cursor key under **Settings → API keys**. Mushi then uses it for fix PRs and agent work; you pay those vendors directly at list rate, and we never mark up tokens.
 
-When self-hosting, Mushi uses **your** keys for everything. Most teams run the full loop for under $20 / month in LLM costs.
+When self-hosting, Mushi uses **your** keys for everything. For a sense of scale: on Mushi's own key, a diagnosis cost about $0.017–0.022 in LLM tokens over the 30 days to 2026-10-28, so 1,000 diagnoses is roughly $20. Fix PRs and reviews are extra and depend on the model you pick.
 
-The self-host path is completely free, always will be — [see the guide](/self-hosting).
+The self-host path is free, and always will be: [see the guide](/self-hosting).
 
 ## Compared to Sentry + Seer
 
 | | Sentry Team + Seer | Mushi Builder |
 |---|---|---|
-| Base plan | $26 / mo | $29 / mo for 3 apps |
+| Base plan | Team: $26 / mo billed annually, $29 monthly | $29 / mo for 3 apps ($290 a year) |
 | AI diagnosis | Seer add-on: + $40 / active contributor / mo | Included |
-| Solo dev total | **$66 + / mo** | **$29 / mo** |
-| Catches non-crash friction | Via its User Feedback widget and Session Replay | Yes — shake-to-report with screenshot and console/network tail, then a diagnosis |
+| Solo dev total | **$66–69 / mo** plus any pay-as-you-go | **$29 / mo** |
+| Catches non-crash friction | Via its User Feedback widget and Session Replay | Yes: a report widget (shake on mobile) with screenshot and console/network tail, then a diagnosis |
 | Bugs in your editor | Sentry MCP server: issues and Seer analysis in Cursor / Claude Code | Mushi MCP server: diagnosis, fix prompt and lessons; no second LLM key |
 
-Sentry prices from [sentry.io/pricing](https://sentry.io/pricing/) and [Sentry's pricing docs](https://docs.sentry.io/pricing/), checked 2026-09-21. Seer is an add-on to the Team, Business or Enterprise plan, billed as its own monthly charge. An active contributor is anyone who opens two or more pull requests in a month to a Seer-enabled repo; the $66 total assumes one of them. Seer is not available in self-hosted Sentry.
+Sentry prices from [sentry.io/pricing](https://sentry.io/pricing/) and [Sentry's pricing docs](https://docs.sentry.io/pricing/), checked 2026-10-29. Seer is an add-on to the Team or Business plan, billed as its own monthly charge. An active contributor is anyone who opens two or more pull requests in a month to a Seer-enabled repo; the $66–69 total assumes one of them. Seer is not available in self-hosted Sentry ([self-hosted docs](https://develop.sentry.dev/self-hosted/)).
 
 Sentry + Seer is strong at code-thrown errors, tracing, breadcrumbs and session replay, and Seer is an AI debugging agent for those issues. Mushi starts from user-felt friction that never triggers an error, ingests Sentry's errors too, and turns each into a plain-English diagnosis and a paste-ready fix prompt in your editor. A diagnosis is an LLM's reading and can be wrong; check it before you merge.
 
@@ -124,15 +126,15 @@ The console says how many apps your plan watches and how many your team has, and
 
 ### Can I use my own AI key on Free?
 
-Yes. Bring-your-own-key works on every plan, Free included. Add an Anthropic, OpenAI or Cursor key under **Settings → API keys** and Mushi can open fix PRs with it, so you see the whole loop on your first app before paying anything. Automatic fix PRs without you in the loop start on Builder.
+Yes. Bring-your-own-key works on every plan, Free included. Add an Anthropic, OpenAI or Cursor key under **Settings → API keys** and Mushi can open fix PRs with it, so you see the whole loop on your first app before paying anything.
 
 ### When does my quota reset?
 
-Cloud plans reset on your **Stripe billing period** (shown on the Billing page as “Quota resets in N days”). Free resets on the calendar month (UTC).
+Diagnoses are counted per calendar month (UTC) on every plan, so the count starts again on the 1st. Paid plans are invoiced on your Stripe billing period, which can start on a different day.
 
 ### Can I change my spend cap?
 
-Yes. Open **Billing → Spending cap** on your project card. Set any USD cap from $0–100,000 or clear it to use the plan default ($50 Builder, $200 Studio).
+Yes. Open **Billing → Spending cap** on your project card. Set any USD cap on overage from $0–100,000 or clear it to use the plan default ($50 Builder, $200 Studio).
 
 ### Who receives usage alert emails?
 
@@ -156,10 +158,10 @@ From $499 a month, billed annually: unlimited apps, SAML SSO, the SOC 2 readines
 
 ### How do I estimate before signing up?
 
-Use the interactive estimator above, or run `mushi billing status` after wiring the SDK — it shows diagnoses used, limit, and spend cap for the current period.
+Use the interactive estimator above, or run `mushi billing status` after wiring the SDK: it shows diagnoses used, limit, and spend cap for the current period.
 
 ## Start free
 
 <PricingCta location="pricing-bottom" />
 
-Prefer the terminal? `npx mushi-mushi` runs the wizard — detect framework, install the SDK, write env vars, connect MCP. See the [incident loop quickstart](/quickstart/incident-loop), or [create your free account in the console](https://kensaur.us/mushi-mushi/admin/signup?src=pricing-text).
+Prefer the terminal? `npx mushi-mushi` runs the wizard: detect framework, install the SDK, write env vars, connect MCP. See the [incident loop quickstart](/quickstart/incident-loop), or [create your free account in the console](https://kensaur.us/mushi-mushi/admin/signup?src=pricing-text).

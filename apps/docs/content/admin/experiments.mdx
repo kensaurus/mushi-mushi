@@ -1,6 +1,6 @@
 ---
 title: Experiments
-description: The Experiments page defines and runs A/B tests in Mushi and analyses them with CUPED variance reduction and sequential testing.
+description: The Experiments page in the Mushi Mushi console defines and runs A/B tests on your app and analyses them with CUPED variance reduction and sequential testing.
 ---
 
 import { Callout } from 'nextra/components'
@@ -9,9 +9,9 @@ import { Callout } from 'nextra/components'
 
 # Experiments
 
-**Route:** `/experiments`
+**Route:** `/experiments` (a Lab: under **More pages** in the sidebar unless you keep it there)
 
-The Experiments page lets you define A/B tests, launch them, collect results, and run
+The Experiments page in Mushi Mushi lets you define A/B tests, launch them, collect results, and run
 statistical analysis (CUPED variance reduction + mSPRT sequential testing) to determine
 a winner without a fixed sample size.
 
@@ -19,43 +19,43 @@ a winner without a fixed sample size.
 
 ## Tabs
 
-### Experiments
+The tabs are **Summary**, **Experiments** and **New**. The summary counts include
+**Total**, **Running**, **Ready to launch** and **Winners**.
 
-Summary stat cards: **Total**, **Running**, **Winners found**.
+### Experiments
 
 The experiments table shows:
 
 | Column | Description |
 |--------|-------------|
 | **Name** | Experiment label |
-| **Hypothesis** | Truncated hypothesis text |
-| **Status** | `draft`, `running`, `stopped` badge |
+| **Status** | `Draft`, `Running`, `Stopped` or `Completed` |
 | **Variants** | Count of configured variants |
-| **Bandit mode** | Badge if Thompson Sampling is enabled |
+| **Split** | **Shifts to winner** when bandit mode is on, otherwise **Even split** |
 | **Created** | Timestamp |
 
-**Actions:** **Launch** (draft), **Stop** (running), **View** (opens drawer).
+**Actions:** **Launch** (draft) and **Stop** (running). Click a row to open the drawer.
 
 ### New
 
-Create a new experiment:
+Create a new experiment, then click **Create experiment**:
 
 | Field | Description |
 |-------|-------------|
-| **Name** | Short experiment label |
+| **Name** | Short experiment label (required) |
 | **Hypothesis** | What you expect to observe and why |
-| **Bandit mode** | Enables Thompson Sampling — automatically reallocates traffic to better-performing variants |
-| **Variants** | Add variants with a name and traffic weight. At least two required. |
+| **Send more users to the version that is winning** | Bandit mode: Thompson Sampling moves traffic toward better-performing variants |
+| **Variants** | A name and a **Weight (0–1)** for each. Two to start; **+ Add variant** adds more. |
 
 ---
 
 ## Experiment detail drawer
 
-Opens on **View**. Shows:
-- Status, bandit enabled, and winner badges
+Opens when you click a row. Shows:
+- Status, **Shifts to winner** and **Winner found** badges
 - **Hypothesis** text
 - **Variants** list — each with traffic weight, Thompson Sampling α/β parameters, and a **winner** highlight if analysis identified it
-- **Launch** / **Stop** / **Analyze** buttons
+- **Launch** / **Stop** / **Analyze** buttons, **Add variant**, and **Delete draft** for a draft
 
 ### Analysis results
 
@@ -110,6 +110,5 @@ POST /v1/admin/experiments/<id>/analyze
 
 ## Related pages
 
-- [Anomaly detection](/admin/anomalies) — detect metric shifts caused by experiment variants
-- [Judge dashboard](/admin/judge) — A/B test classifier prompt versions
-- [Intelligence reports](/admin/intelligence) — experiment results appear in the weekly digest
+- [Unusual spikes](/admin/anomalies) — detect metric shifts caused by experiment variants
+- [AI prompts](/admin/prompt-lab) — A/B test the prompts behind Mushi Mushi's own AI steps (a separate feature)

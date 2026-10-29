@@ -4,172 +4,176 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/integrations
 
 ---
 title: Integrations
-description: Set up Mushi integrations from one page — send new bugs to Linear, bring in Sentry feedback, and open fix pull requests on your GitHub repo.
+description: Set up Mushi Mushi integrations on one page. Open fix pull requests on GitHub, send bugs to Linear, Jira or GitHub Issues, alert Slack and import Sentry errors.
 ---
 
 # Integrations
 
-**Route:** `/integrations/config`
+**Route:** `/integrations/config` (sidebar: **Integrations**, under Connect)
 
-> **Scenario:** You just set up Mushi and want new bugs to land in Linear, Sentry
-> feedback to flow in, and fix PRs to open on your main GitHub repo — all from one
-> page, in under 10 minutes.
+> **Scenario:** You just set up Mushi Mushi and want fix PRs to open on your GitHub repo,
+> new bugs to land in Linear, and Sentry errors to flow in, all from one page.
 
-The Integrations page wires Mushi to the tools your team already uses: Sentry and
-Langfuse for context, GitHub for code, and Jira / Linear / PagerDuty for routing.
+The Integrations page wires Mushi Mushi to the tools your team already uses. Every
+integration is optional except GitHub, which fixes need.
 
----
-
-## Hero
-
-The page header shows: **N/M connected** (how many platforms are configured and passing
-their health probe), and the timestamp of the last probe event.
+The top of the page shows which tools are connected, what is broken, and the next step.
 
 ---
 
-## Core platform integrations
+## Sections
 
-These integrations feed data *into* Mushi or extend its internal capabilities.
+| Section | Cards |
+| --- | --- |
+| **Your code** | GitHub (code repo) |
+| **Alerts** | Slack, Discord, Microsoft Teams |
+| **Fix agent** | Cursor Cloud, Claude Code Agent, plus the codebase index, a dry-run panel and **Deployment readiness** |
+| **Issue trackers** | Linear, Jira, GitHub Issues, PagerDuty |
+| **Errors you already catch (optional)** | Sentry; Langfuse under **Advanced: trace Mushi's AI calls in your own Langfuse** |
 
-### Sentry
+At the foot of the page are links to [Editor agents](/admin/mcp), [Agent skills](/admin/skill-pipelines),
+[Reporter updates](/admin/notifications) and [Plugins](/admin/marketplace).
 
-| Field | Description |
-|-------|-------------|
-| **DSN** | Sentry project DSN — enables Sentry User Feedback events to forward into Mushi |
-| **Auth token** | For issue-level metadata queries |
-| **Organisation slug** | Your Sentry org |
-| **Project slug** | Your Sentry project |
+---
 
-After saving, Mushi subscribes to Sentry's User Feedback webhook so new Sentry feedback
-automatically becomes a Mushi report.
-
-### Langfuse
-
-| Field | Description |
-|-------|-------------|
-| **Public key** | Langfuse project public key |
-| **Secret key** | Langfuse project secret key |
-| **Base URL** | Override for self-hosted Langfuse |
-
-When configured, every LLM call from Mushi's edge functions streams a trace to Langfuse.
-Traces are visible in [Integration health](/admin/health) with a direct link.
-
-### GitHub
+## GitHub (code repo)
 
 | Field | Description |
 |-------|-------------|
-| **GitHub App installation ID** | The ID shown in your GitHub App settings |
-| **Repository URL** | The repo Mushi opens fix PRs against |
-| **Default branch** | The base branch for fix-worker PRs |
+| **Repo URL** | The repo Mushi Mushi opens fix PRs against (SSH URLs are normalized) |
+| **Default branch** | Base branch for fix PRs; `main` when blank |
+| **Installation token** | A GitHub App installation token (preferred) or a fine-grained PAT with Contents: write and Pull requests: write |
+| **Webhook secret** | Optional HMAC secret; set the same value on the repo's webhook (events: Check runs, Check suites) |
 
-The **Codebase index** card shows the indexing status for the active project's repo —
-`ok`, `stale`, `failed`, `off`, or `never`. The index powers the [Repo page](/admin/repo)
-branch graph and the fix-worker's code context. It also shows coverage in files
-against your plan's file limit (see [how much of a large repo is indexed](/admin/explore#how-much-of-a-large-repo-is-indexed)).
+The **Codebase index** card shows the indexing status for the active project's repo:
+`ok`, `stale`, `failed`, `off`, or `never`. The index powers the [Pull requests page](/admin/repo)
+and the fix agent's code context. It also shows coverage in files against your plan's
+file limit (see [how much of a large repo is indexed](/admin/explore#how-much-of-a-large-repo-is-indexed)).
 For a repo connected with a Personal Access Token, it shows the webhook URL that turns on push indexing.
+
+## Fix agents
 
 ### Cursor Cloud
 
 | Field | Description |
 |-------|-------------|
-| **API Key** | Your Cursor API key — stored encrypted in the Supabase Vault; never exposed in the UI |
-| **Default model** | Agent model (`composer-2.5` or your account default) |
-| **Auto-create PRs** | When enabled, Cursor opens a signed draft PR automatically after the fix run |
+| **API Key** | Your Cursor API key (`crsr_…`), stored encrypted in Supabase Vault; never shown again in the UI |
+| **Default model** | Optional Cursor model id (for example `composer-2.5`); blank uses your Cursor account default |
+| **Auto-create PRs** | On by default: Cursor opens a signed draft PR when the agent finishes. Turn off to review the branch first. |
 
-When configured, Mushi can dispatch a Cursor Cloud Agent to fix classified reports — the agent opens a signed draft PR and posts the link back to the [Fixes page](/admin/fixes). Activate via:
-
-- **Marketplace** — install the _Cursor Cloud Agent_ plugin for event-driven dispatch (recommended for per-severity gating).
-- **Settings → Autofix** — set `autofix_agent = cursor_cloud` to make Cursor the project-wide default.
+With a key saved, Mushi Mushi can dispatch a Cursor Cloud agent to fix a classified
+report; the agent opens a signed draft PR and the link shows on the [Fixes page](/admin/fixes).
+For event-driven dispatch, install the _Cursor Cloud Agent_ plugin from
+[Plugins](/admin/marketplace).
 
 The API Key is stored via Supabase Vault. The raw key is never written to any database column. For self-hosted deployments where Supabase Vault is not accessible from the Node orchestrator, set `MUSHI_CURSOR_API_KEY_OVERRIDE` in your Node orchestrator environment as an escape hatch.
 
-Each platform card shows:
-- **Connection status pill** — connected / disconnected / error
-- **Latest probe latency**
-- **7-day health sparkline**
+### Claude Code Agent
 
-Click **Edit** to reveal the form fields. Click **Test** to run a live probe and see
-the result as a status toast.
+A GitHub Actions workflow for your repo that runs the Claude Code CLI on a fix prompt,
+commits a fix branch and opens a draft PR, with your Anthropic key kept in your GitHub
+secrets. Mushi Mushi checks the key and gives you the workflow, but it does **not**
+trigger the workflow yet: you run it yourself with a `repository_dispatch` event. To have
+Mushi Mushi open fix PRs on its own, use Cursor Cloud or the GitHub cloud agent.
+
+## Sentry
+
+| Field | Description |
+|-------|-------------|
+| **Org slug** | Your Sentry organization |
+| **Project slug** | Optional; narrows event search to one project |
+| **More Sentry projects** | Optional; up to 10 more projects this app reports to, for import |
+| **Auth token** | `project:read` + `event:read` (import, enrichment) and `event:write` (resolve on merge) |
+| **DSN (optional)** | Only needed if you want Mushi Mushi reports forwarded as Sentry events |
+| **Webhook secret** | The Client Secret of the Sentry internal integration whose webhook URL is the **Receive URL** shown on the card |
+
+## Langfuse (advanced)
+
+| Field | Description |
+|-------|-------------|
+| **Host** | Langfuse base URL (US cloud, EU cloud, or self-hosted) |
+| **Public key** | Langfuse project public key |
+| **Secret key** | Langfuse project secret key |
+
+When configured, Mushi Mushi's AI calls send traces to your own Langfuse project.
+
+## Card controls
+
+Each card shows its connection state, when it was last probed, and a short health
+sparkline. **Test connection** runs a live probe and reports the result as a toast;
+**Edit credentials** (or **Configure integration**) opens the form. Only admins can edit.
 
 ---
 
-## Routing destinations
+## Issue trackers
 
-These integrations receive Mushi events as outbound webhooks or API calls.
-
-| Destination | What it receives |
+| Destination | What it does |
 |-------------|-----------------|
-| **Jira** | Creates a Jira issue when a report is triaged |
-| **Linear** | Creates a Linear issue; syncs fix status back |
-| **GitHub Issues** | Opens a GitHub Issue for triaged reports |
-| **PagerDuty** | Fires a PagerDuty incident for `critical` reports |
+| **Linear** | Creates a Linear issue for a new `critical` or `high` report; when the Linear issue is completed or cancelled, the report is resolved |
+| **Jira** | Creates a Jira issue for a new `critical` or `high` report, with severity mapped to Jira priority |
+| **GitHub Issues** | Opens a GitHub Issue for a new `critical` or `high` report, with severity and category labels; closes it when the report is resolved |
+| **PagerDuty** | Pages on-call (Events API v2) for `critical` reports only; resolves the incident when the report is closed |
 
-Each routing provider card shows its connection state and a **Pause / Resume** toggle.
-When paused, events are dropped — not queued — so resume promptly.
+Each routing card has **Test connection**, a **Pause / Resume** toggle and **Disconnect**.
+While paused, new reports are not forwarded to it.
 
 **Connecting a routing provider:**
-1. Click **Edit**.
-2. Enter the required credentials (API key, project/team ID, etc.).
-3. Click **Save**.
-4. Click **Test** to fire a test event.
+1. Click **Connect**.
+2. Enter the required credentials (for Jira: base URL, user email, API token, project key;
+   for GitHub Issues: PAT with Issues: write, owner, repo; for PagerDuty: routing key).
+3. Click **Save**, then **Test connection**.
 
-**Disconnecting:** click **Disconnect** → confirm in the dialog.
-
-For richer event routing (filter by severity, round-robin, fanout to multiple
-destinations), use the [Plugin marketplace](/admin/marketplace) instead. The routing
-providers here are pre-built, opinionated connectors.
+For more event routing (Discord, Teams, Zapier and more, or your own webhooks), use
+[Plugins](/admin/marketplace). The trackers here are pre-built connectors.
 
 ---
 
 ## Common tasks
 
-### Connecting GitHub so fix-worker can open PRs
-1. Create a [GitHub App](https://docs.github.com/en/apps/creating-github-apps/about-creating-github-apps/about-creating-github-apps) and install it on your repo.
-2. On the **GitHub** card, click **Edit**.
-3. Enter the App installation ID, repo URL, and default branch.
-4. Click **Save** → **Test** → confirm the probe returns green.
-5. Open [Repo graph](/admin/repo) — the repo header should show your connected repo.
+### Connecting GitHub so the fix agent can open PRs
+1. Install the Mushi Mushi GitHub App on your repo, or create a fine-grained PAT with
+   Contents: write and Pull requests: write.
+2. On the **GitHub (code repo)** card, click **Configure integration**.
+3. Enter the repo URL, default branch and the installation token.
+4. Click **Save**, then **Test connection**, and confirm the probe returns green.
+5. Open [Pull requests](/admin/repo): the header should show your connected repo.
 
-### Forwarding Sentry User Feedback into Mushi
-1. On the **Sentry** card, click **Edit**.
-2. Enter your DSN, auth token, org slug, and project slug.
-3. Click **Save** → **Test**.
-4. In Sentry, add a User Feedback webhook pointing to your Mushi API endpoint.
-5. Submit a test Sentry feedback — it should appear in [Reports](/admin/reports) within 30 seconds.
+### Bringing Sentry errors into Mushi Mushi
+1. On the **Sentry** card, click **Configure integration**.
+2. Enter your org slug, auth token, and optionally the project slug.
+3. Click **Save**, then **Test connection**.
+4. For live delivery, create a Sentry internal integration whose webhook URL is the card's
+   **Receive URL**, and paste its Client Secret as the **Webhook secret**.
 
 ### Routing critical reports to PagerDuty
-1. In **Routing destinations**, find PagerDuty → click **Edit**.
-2. Enter your PagerDuty API key and service ID.
-3. Click **Save** → **Test** → confirm a test incident fires.
-4. Go to [Reports](/admin/reports) → triage a `critical` report → confirm a PagerDuty incident opens automatically.
+1. In **Issue trackers**, find PagerDuty and click **Connect**.
+2. Enter your Events API v2 routing key.
+3. Click **Save**, then **Test connection**.
+4. The next report classified `critical` pages your on-call.
+
+### Setting up Cursor Cloud auto-fix
+1. Create a Cursor API key at [cursor.com/dashboard/integrations](https://cursor.com/dashboard/integrations) → API Keys.
+2. Connect **GitHub (code repo)** first: Cursor agents need your repo URL and token.
+3. On the **Cursor Cloud** card, click **Configure integration**, paste the `crsr_…` key, then **Save** → **Test connection**.
+4. Install the **Cursor Cloud Agent** plugin from [Plugins](/admin/marketplace) (subscribe to `report.classified`) for automatic dispatch.
+5. Dispatch a fix on a report: the [Fixes page](/admin/fixes) shows the Cursor agent badge and PR link once the run completes.
 
 ---
 
 ## API
 
 ```bash
-GET  /v1/admin/integrations/platform
-PUT  /v1/admin/integrations/platform/:kind   { ...credentials }
-POST /v1/admin/health/integration/:kind      (live probe)
-GET  /v1/admin/integrations                  (routing destinations)
-POST /v1/admin/integrations                  { type, ...config }
+GET    /v1/admin/integrations/platform
+PUT    /v1/admin/integrations/platform/:kind   { ...credentials }
+POST   /v1/admin/health/integration/:kind      (live probe)
+GET    /v1/admin/integrations                  (issue-tracker destinations)
+POST   /v1/admin/integrations                  { type, ...config }
 DELETE /v1/admin/integrations/:type
 ```
 
----
-
-## Common tasks
-
-### Setting up Cursor Cloud auto-fix
-1. Create a Cursor API key at [cursor.com/dashboard/integrations](https://cursor.com/dashboard/integrations) → API Keys.
-2. Connect **GitHub (code repo)** first — Cursor agents need your repo URL and token.
-3. On the **Cursor Cloud** card, click **Edit**, paste the `crsr_…` key, then **Save** → **Test connection**.
-4. Install the **Cursor Cloud Agent** plugin from [Marketplace](/admin/marketplace) (subscribe to `report.classified`) — or set `autofix_agent = cursor_cloud` in Settings if you want every fix dispatched via Cursor.
-5. Triage a `critical` report → trigger dispatch → the [Fixes page](/admin/fixes) will show the Cursor agent badge and PR link once the run completes.
-
 ## Related pages
 
-- [Repo graph](/admin/repo) — powered by the GitHub integration
-- [Integration health](/admin/health) — LLM and cron health (not integration probes)
-- [Plugin marketplace](/admin/marketplace) — advanced routing and custom webhooks
-- [Fix orchestrator](/admin/fixes) — Cursor agent badge, artifact gallery, and live streaming view
+- [Pull requests](/admin/repo): powered by the GitHub integration
+- [Mushi health](/admin/health): Mushi's own AI calls and jobs
+- [Plugins](/admin/marketplace): more routing and custom webhooks
+- [Fixes](/admin/fixes): Cursor agent badge, artifact gallery, and live streaming view

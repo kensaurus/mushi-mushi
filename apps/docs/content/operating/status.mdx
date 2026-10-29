@@ -1,5 +1,5 @@
 ---
-description: Mushi Cloud status and uptime — the live status page for the API, hosted MCP, console and docs, what is monitored, and the uptime commitment per plan.
+description: Mushi Mushi Cloud status. The live status page for the API, hosted MCP, console and docs, what it checks, and what is and is not promised about uptime.
 ---
 
 # Status & Uptime
@@ -7,37 +7,38 @@ description: Mushi Cloud status and uptime — the live status page for the API,
 import { Callout } from 'nextra/components'
 
 <Callout type="info">
-  **Status page:** [updown.io/p/b6lod](https://updown.io/p/b6lod) — live
-  component availability and historical uptime for the API, hosted MCP,
-  console, and docs.
+  **Status page:** [updown.io/p/b6lod](https://updown.io/p/b6lod) shows live
+  availability and history for the Mushi Mushi API, hosted MCP, console, and
+  docs.
 </Callout>
 
 ## What we monitor
 
-| Component | What it covers |
-|-----------|---------------|
-| **Ingest API** (`kensaur.us/mushi-mushi/v1/ingest`) | Report receipt, queue depth, p99 latency |
-| **Diagnosis pipeline** | Stage-2 classification jobs, model latency |
-| **MCP server** (`kensaur.us/mushi-mushi/mcp`) | OAuth endpoint, tool availability |
-| **Console** (`kensaur.us/mushi-mushi`) | Dashboard availability |
-| **CLI auth** | Device-code flow, token exchange |
+The status page runs four HTTPS checks, each every 5 minutes. A check passes
+when the endpoint answers and its TLS certificate is valid.
+
+| Check | What it covers |
+|-------|---------------|
+| **Mushi API (ingest edge function)** | The Supabase edge function that receives reports |
+| **Mushi hosted MCP** | The hosted MCP endpoint your editor connects to |
+| **Mushi console** | The admin console at `kensaur.us/mushi-mushi/admin` |
+| **Mushi docs** | This docs site |
+
+The status page does not measure queue depth, latency percentiles, the
+diagnosis pipeline or CLI sign-in. Those show up in the console, not here.
 
 ## Uptime commitment
 
-Mushi Cloud is operated on a **reasonable-efforts basis** for the Free and Builder plans.
-Studio subscribers receive priority incident response.
-Enterprise SLAs (99.9 % monthly uptime with credits) are negotiated per-contract —
-contact `kensaurus@gmail.com` for details.
-
-> SLA commitments live here in the docs and in your Enterprise contract — never in
-> the product hero or marketing copy.
+Mushi Mushi Cloud has **no uptime SLA** on the Free, Builder or Studio plans.
+It is run on a reasonable-efforts basis. Enterprise terms,
+including any SLA, are set in a separate order form (see
+[Terms §8](/legal/terms)). Ask at `kensaurus@gmail.com`.
 
 ## Incident communication
 
-1. Status page updated within **15 minutes** of detection.
-2. Active incidents posted in
+1. The status page reflects an outage as soon as a check fails.
+2. Known incidents may also be posted in
    [GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions).
-3. Post-mortems published within **5 business days** for P0/P1 incidents.
 
 ## Reporting availability issues
 

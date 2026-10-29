@@ -95,3 +95,25 @@ lowers that barrier. The owner chose this option over keeping the landing as it
 was and over leading with the check. Still one primary action and one secondary
 link; `lib/landing-cinematic.test.ts` holds the new pair.
 
+
+## Amendment 2026-10-29 (owner decision)
+
+The landing adds two compact sections after "How it works": **Who it's for**
+(three cards: solo builders using AI, developers who own their code, teams;
+each links to its section of `/who-its-for`) and **More than bug reports** (six
+cards from `/what-it-does`: first-time user test, a second AI checks every fix,
+live-site watch, known security holes, the CI bill, playbooks in rounds). Each
+card is a name and one line of pain; the detail stays on the two docs pages.
+The hero, its install box (still the one primary action) and its one secondary
+link are unchanged.
+
+Why: the owner asked to sell the checks that find bugs nobody reports, and to
+segment the audience, in plain words, and told the agent to decide the landing
+after looking at strong open-source sites. Plausible's landing (hero, then a
+feature grid, proof, pricing) and Supabase's (a products grid, then what each
+is for) both show the product's range under a one-line hero. On the owner's
+own apps, 1,068 bugs came from their own checks and 32 from people in 60 days
+(`/proof`), so leaving those checks off the front page undersold what the
+product does. This reverses the part of the decision that moved "CI cost" off
+the landing; the bug lifecycle, integrations map, Sentry comparison, console
+tour and self-hosting stay on docs pages linked from the "More" line.

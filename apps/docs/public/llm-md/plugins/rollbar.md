@@ -4,13 +4,13 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/rollbar
 
 ---
 title: Rollbar
-description: Copy triaged Mushi bug reports into Rollbar items and resolve them when fixes ship — a self-hosted plugin with an access token and project id.
+description: Copy triaged Mushi Mushi bug reports into Rollbar items and try to resolve them when fixes ship. A self-hosted plugin with an access token and project id.
 ---
 
 # Rollbar plugin
 
-Copies each bug Mushi triages into Rollbar as an item, and resolves the item
-when Mushi applies a fix.
+Copies each bug Mushi Mushi triages into Rollbar as an item, and tries to
+resolve the item when the fix merges.
 
 **Not in the Mushi Cloud Marketplace yet.** The console has no Rollbar
 listing, so you can't install it from there. On a Mushi server you run
@@ -18,7 +18,7 @@ yourself, add a `plugin_registry` row for it and install it like any listed
 plugin.
 To bring Rollbar errors *into* Mushi, use `@mushi-mushi/adapters` instead.
 
-## Setup (self-hosted Mushi)
+## Setup (self-hosted Mushi Mushi)
 
 ```bash
 npm i @mushi-mushi/plugin-rollbar
@@ -40,4 +40,11 @@ Point the plugin's webhook URL at `https://<your-host>/mushi/webhook`.
 | Event | Action |
 | --- | --- |
 | `report.classified` | Create a Rollbar item (environment `production`, level from severity, fingerprint `mushi--`) |
-| `fix.applied` | Resolve the item |
+| `fix.applied` | Resolve the item (`PATCH /api/1/item/`, `status: resolved`) |
+
+To resolve, the plugin needs the item id from Rollbar's answer to the create
+call and keeps it in memory (pass your own cache to
+`createRollbarPlugin(cfg, cache)` to survive restarts). Rollbar documents
+that answer as returning an occurrence `uuid`; if it carries no `id`, nothing
+is stored and `fix.applied` does nothing. We have not confirmed this against
+a live Rollbar account.

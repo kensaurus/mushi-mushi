@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/analytics
 
 ---
 title: Product analytics (track)
-description: Mushi.track() reference — named events, consent, sampling and batching, useMushiTrack() for React, Users & Funnels, and the /v1/sdk/events wire format.
+description: Mushi Mushi product analytics with Mushi.track(). Events, consent, sampling, batching, useMushiTrack() for React, Users & Funnels and the /v1/sdk/events format.
 ---
 
 # Product analytics: `Mushi.track()`
@@ -16,8 +16,9 @@ description: Mushi.track() reference — named events, consent, sampling and bat
   `useMushiTrack()`, `@mushi-mushi/react-native` ≥ 0.22 and
   `@mushi-mushi/node` ≥ 1.3.
 
-Every Mushi SDK can record named product events alongside bug reports and
-sessions, so a solo builder can see a signup funnel, a user's path, and
+The Mushi Mushi web, React, React Native and Node SDKs (and the Vue, Svelte
+and Angular wrappers, through the web SDK) can record named product events
+alongside bug reports and sessions, so a solo builder can see a signup funnel, a user's path, and
 retention in the same console that holds the bug reports, without a second
 analytics tool. Mushi's own funnel (landing → signup → first report) runs on
 the same API.
@@ -75,6 +76,7 @@ and returns `false` until the provider has initialised.
 | `consent` | `'implied'` | `'implied'` sends immediately. `'required'` buffers up to 50 events in memory until `setConsent('granted')`; a stored `denied` wins. |
 | `sampleRate` | `1` | 0..1, decided once per person from a hash of the anonymous id, never per event, so funnels stay consistent. |
 | `respectDoNotTrack` | `true` | Honours `navigator.doNotTrack` and Global Privacy Control. When active, no events are sent and no anonymous id is exposed. |
+| `excludeBots` | `true` | Skips tracking in WebDriver-controlled browsers (Playwright, Puppeteer, Selenium), headless Chrome, Lighthouse and crawler user agents. Set `false` to exercise analytics from an end-to-end test. |
 | `autoPageviews` | `false` | Emit `pageview` on `history.pushState` and `popstate`. Off because sessions already record page views. |
 | `flushIntervalMs` | `5000` | Timer flush. Floor is 1,000 ms. |
 | `propertyAllowlist` | `[]` | Property keys that may pass the PII key filter (below). |
@@ -168,7 +170,7 @@ MCP client, scoped to the project of the MCP key:
 
 | Tool | Answers |
 |---|---|
-| `query_funnel` | "Of people who did A, how many did B, then C, in the last N days?" — ordered steps, optional breakdown property |
+| `query_funnel` | "Of people who did A, how many did B, then C, in the last N days?": ordered steps, optional breakdown property |
 | `get_product_events_summary` | Event counts, distinct people and top properties for a period |
 | `get_user_paths` | The most common next steps after a given event |
 
@@ -217,17 +219,17 @@ Responses:
 | `200` (ingest off) | `{ "ok": true, "data": { "accepted": 0, "dropped": 2, "reason": "disabled" } }` |
 | `400` | `INVALID_JSON` |
 | `401` | bad or missing API key |
-| `413` | `PAYLOAD_TOO_LARGE` — body over 64 KB |
+| `413` | `PAYLOAD_TOO_LARGE`: body over 64 KB |
 | `422` | `INVALID_EVENT_BATCH` with per-field `issues` |
-| `500` | `INSERT_FAILED` — retry with the same `dedup_key`s |
+| `500` | `INSERT_FAILED`: retry with the same `dedup_key`s |
 
 Server-side, the property contract is applied again: reserved `$` keys are
 kept only from a fixed allowlist (`$surface`, `$route`, `$referrer`,
-`$session_id`, `$sdk_version`, `$utm_*`, `$first_touch`, `$ref`), PII-looking
+`$session_id`, `$sdk_version`, `$utm_*`, `$first_touch`, `$ref`, `$client_ts`), PII-looking
 keys are dropped, and any event whose properties exceed 8 KB is counted in
 `dropped`.
 
-## Mushi's own events
+## Mushi Mushi's own events
 
 The SDK's vocabulary for Mushi's own funnel lives in
 [`packages/core/src/analytics-taxonomy.ts`](https://github.com/kensaurus/mushi-mushi/blob/master/packages/core/src/analytics-taxonomy.ts):

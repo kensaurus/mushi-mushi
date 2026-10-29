@@ -1617,9 +1617,12 @@ html:has(.landing-cinematic-hero) {
   line-height: 1.5;
 }
 
-/* The Copy button copies the whole command, so the scroll only needs a hint. */
+/* Show the whole command: a horizontal scroll hid the end of the MCP URL, so
+   people could not see what they were about to paste (2026-10-29). */
 .landing-install-box .landing-oneclick__cmd-row code {
-  scrollbar-width: thin;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: visible;
 }
 
 @media (max-width: 479px) {
@@ -1839,7 +1842,9 @@ html:has(.landing-cinematic-hero) {
   padding: 1.15rem 1.2rem 1.25rem;
   background: color-mix(in oklch, var(--mushi-paper) 92%, white);
   display: grid;
-  grid-template-rows: auto auto auto 1fr;
+  /* Content from the top: a fixed row template spread the spare height
+     between "STEP 1" and the title. */
+  align-content: start;
   gap: 0.45rem;
   /* Stretch every card to the tallest sibling so the bottom edges line up
    * too — otherwise the shorter cards float and the row looks unfinished. */
@@ -2912,4 +2917,12 @@ main .sample-dx__trail h3:first-child {
   text-decoration-color: var(--mushi-vermillion);
   text-decoration-thickness: 2px;
   text-underline-offset: 3px;
+}
+
+/* Nextra renders a <summary> label as an h3 whose prose margin pushed it below
+   the chevron ("Words you will see on this page" on the landing). */
+main details > summary > h3 {
+  margin: 0 !important;
+  font-size: 1rem;
+  font-weight: 600;
 }

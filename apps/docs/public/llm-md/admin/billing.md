@@ -4,16 +4,16 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/billing
 
 ---
 title: Billing
-description: The Billing page shows your diagnosis quota, usage alerts at 50% and 80%, your projected bill, and spend caps for your Mushi plan.
+description: The Billing view shows your Mushi Mushi plan, diagnosis quota, usage alerts at 50% and 80%, your projected bill and your spend cap.
 ---
 
 # Billing
 
-**Route:** `/billing`
+**Route:** `/team?view=billing` (Team → **Billing**; the old `/billing` link opens it)
 
-> **Scenario:** It's the 20th of the month. You get an email at 50% of your diagnosis quota, then again at 80%. You want to know when you'll hit the wall, what your projected bill is, and how to cap spend — without logging into Stripe.
+> **Scenario:** It's the 20th of the month. You get an email at 50% of your diagnosis quota, then again at 80%. You want to know when you'll hit the wall, what your projected bill is, and how to cap spend, without logging into Stripe.
 
-Everything you need to manage your subscription is on this page: live usage with forecast and projected cost, plan comparison, invoices, spend caps, and in-console support.
+Everything you need to manage your Mushi Mushi subscription is in this view, on three tabs: **Overview** (your project card with usage, controls and invoices), **Plans** (plan comparison) and **Support** (open a ticket).
 
 ---
 
@@ -29,29 +29,28 @@ Below the bar you will see:
 
 | Element | What it tells you |
 |---|---|
-| **Forecast chip** | At current pace, the date you'll hit your included quota |
-| **Projected cost** | Estimated monthly bill at current pace (paid tiers with overage) |
-| **Quota resets in N days** | Days until your Stripe billing period ends |
+| **Forecast chip** | At current pace, when you'll hit your included quota, or "Quota resets in N days" |
+| **Projected cost** | Estimated monthly bill at current pace (paid plans with overage; never shown on a complimentary account) |
 
 **What happens at 100%?**
 
 - **Free:** New reports are captured but **not diagnosed** until the period resets.
-- **Builder / Studio (monthly):** Overage continues until your **spend cap** pauses Stage-2 classification. No reports are lost.
+- **Builder / Studio (monthly):** Overage continues ($0.03 a diagnosis on Builder, $0.02 on Studio) until your **spend cap** pauses Stage-2 classification. No reports are lost.
 - **Builder / Studio (annual):** No overage. Stage-2 classification pauses at the included diagnoses until the next calendar month. No reports are lost.
 
 ### Usage breakdown
 
-| Metric | What it measures |
+| Meter | What it measures |
 |--------|-----------------|
-| **Diagnoses · period** | Completed Stage-2 classifications this billing cycle |
-| **Spend cap · month** | Hard USD ceiling on overage (editable below the bar) |
-| **Subscription status** | `active`, `past_due` (update card), `canceled` |
-| **Period end date** | When your current billing cycle resets |
-| **Fix count** | How many fix-worker runs this month |
-| **Classifier tokens** | LLM tokens used by the classifier pipeline |
-| **LLM cost** | Estimated AI spend from your BYOK keys |
+| **Diagnoses** | Completed Stage-2 classifications this billing period, against the plan's allowance |
+| **Reports** | Reports received this period (no report limit on current plans) |
+| **Seats** | Members plus pending invitations, against the plan's seats |
+| **Spend cap** | Your hard USD ceiling on overage, or **Not set** |
+| **Fixes merged** | Fix PRs from Mushi merged this period, from any agent |
 
-The **30-day sparkline** shows daily report volume — useful for spotting a spike that will push diagnoses over quota.
+The card also shows **Classifier tokens** for the period. A `past_due` subscription shows a banner asking you to update your card.
+
+The **30-day sparkline** shows daily report volume, useful for spotting a spike that will push diagnoses over quota.
 
 ---
 
@@ -59,12 +58,12 @@ The **30-day sparkline** shows daily report volume — useful for spotting a spi
 
 On each paid project card, **Predictability controls** let you:
 
-1. **Monthly spend cap (USD)** — override the plan default ($50 Builder, $200 Studio). Diagnoses pause gracefully at the cap.
-2. **Usage alert email** — where 50% / 80% / 100% quota alerts are sent (defaults to project owner).
+1. **Monthly spend cap (USD)**: override the plan default ($50 Builder, $200 Studio). Diagnoses pause gracefully at the cap.
+2. **Usage alert email**: where 50% / 80% / 100% quota alerts are sent (defaults to project owner).
 
 Both settings save immediately via the Billing API. Leave the cap blank to revert to the plan default; leave the email blank to use the owner address.
 
-  Alerts are deduplicated — at most **one email per threshold per billing month**. The usage-alerts cron runs hourly.
+  Alerts are deduplicated: at most **one email per threshold per billing month**. The usage-alerts cron runs hourly.
 
 ---
 
@@ -77,7 +76,8 @@ The **Plans** tab compares Free, Builder, Studio and Enterprise by apps, diagnos
 ## Upgrading your plan
 
 1. Click **Upgrade** on the project card.
-2. Pick **Monthly** or **Annual** (about two months free), then **Select** the plan you want.
+2. Pick **Monthly** or **Annual** (about two months free), then **Select** the plan you want
+   (Builder $29/month or $290/year; Studio $79/month or $790/year).
 3. Complete payment in **Stripe Checkout**.
 4. Stripe sends you back to Billing, which shows the new plan as soon as Stripe confirms the payment.
 
@@ -89,7 +89,7 @@ A project that already pays switches in the console, not in Checkout:
 2. Choose Builder or Studio, monthly or annual. The current choice shows as **Current plan**.
 3. The dialog shows what Stripe charges now (or credits) for the prorated difference. Click **Confirm change**.
 
-The change applies immediately. Moving between monthly and annual starts a new billing period that day. If the card is declined, nothing changes. Annual plans have no overage and stop at the included diagnoses each month. Enterprise is arranged with our team — use **Contact us** on the Plans tab.
+The change applies immediately. Moving between monthly and annual starts a new billing period that day. If the card is declined, nothing changes. Annual plans have no overage and stop at the included diagnoses each month. Enterprise is arranged with our team: use **Contact us** on the Plans tab.
 
 ---
 
@@ -120,5 +120,6 @@ mushi billing cap 0      # clear override → plan default
 
 ## Related docs
 
-- [Public pricing](/pricing) — plan table, estimator, example bills, FAQ
-- [Self-hosting](/self-hosting) — unlimited diagnoses with your own LLM key
+- [Public pricing](/pricing): plan table, estimator, example bills, FAQ
+- [Self-hosting](/self-hosting): unlimited diagnoses with your own LLM key
+- [Team](/admin/team): the page this view belongs to

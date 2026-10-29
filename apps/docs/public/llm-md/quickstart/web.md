@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/web
 
 ---
 title: Vanilla JS quickstart
-description: Add Mushi's browser SDK to any site without a framework — install @mushi-mushi/web, call Mushi.init, and file bug reports from your buttons or the widget.
+description: Add the Mushi Mushi browser SDK to any site without a framework. Install @mushi-mushi/web, call Mushi.init, and file reports from your buttons or the widget.
 ---
 
 # Vanilla JS quickstart

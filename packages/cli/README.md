@@ -29,11 +29,13 @@ For your editor, `mushi setup` writes the hosted MCP entry by default: the edito
 
 | Group | Commands |
 | --- | --- |
-| Set up | `init`, `login`, `setup`, `connect`, `doctor`, `upgrade`, `nudge`, `completion` |
-| Bugs | `reports list/show/search/triage`, `lessons list/show` |
+| Set up | `init`, `login`, `setup`, `connect`, `doctor`, `test` (send a test report), `upgrade`, `nudge`, `completion`, `profile` |
+| Bugs | `reports list/show/search/triage`, `lessons list/show`, `sentry import` |
 | Fixes | `fix <reportId>`, `fixes tail/merge/refresh-ci/review/verify`, `verify workflow` |
-| Ship | `sourcemaps upload`, `deploy check`, `migrate`, `audit` |
-| Test and UX | `qa stories/runs/run`, `tdd gen/pending/approve/improve`, `stories map`, `ux` |
+| Local agent | `work` (a Cursor agent on your own computer fixes a report; you push), `worker install/status/revoke` (keeps it running, steered from the console) |
+| Ship | `sourcemaps upload`, `deploy check`, `migrate`, `audit`, `releases` |
+| Test and UX | `qa stories/runs/run`, `tdd gen/pending/approve/improve`, `stories map`, `ux` (including `ux fresh-eyes`, the first-time user test) |
+| CI | `runner status/compare/bill`: where your tests run, what they cost, and whether a red check was your code or the machine |
 | Account | `whoami`, `status`, `usage`, `billing`, `keys`, `integrations`, `slack` |
 
 `mushi --help` and `mushi <command> --help` list every command and flag.
@@ -43,7 +45,7 @@ For your editor, `mushi setup` writes the hosted MCP entry by default: the edito
 ```bash
 mushi doctor --fix                                  # check SDK, ingest and dispatch; fix what's safe locally
 mushi reports list --status new --severity critical # what broke
-mushi fix <reportId> --wait                         # an agent opens a draft PR for it
+mushi fix <reportId> --wait                         # an agent opens a draft PR for it (your own AI key)
 mushi fixes merge <fixId>                           # merge it and mark the report Fixed
 mushi upgrade                                       # bump @mushi-mushi/* to the latest stable
 mushi upgrade --check                               # CI: exit 0 current, 1 outdated, 2 registry down
@@ -58,7 +60,9 @@ mushi init --yes --project-id <uuid> --api-key mushi_xxx --skip-test-report
 MUSHI_API_KEY=mushi_xxx mushi connect --project-id <uuid> --endpoint <url> --wait   # wire a repo, wait for the first SDK heartbeat
 ```
 
-Other `init` flags: `--framework next`, `--cwd apps/web` (monorepos), `--endpoint <url>` (self-hosted), `--skip-install`.
+Other `init` flags: `--framework next`, `--cwd apps/web` (monorepos), `--endpoint <url>` (self-hosted), `--skip-install`, `--audit` (check an existing install instead).
+
+**What needs your own key.** Reading reports, diagnoses and fix prompts does not. `mushi fix` hands the report to an agent that runs on your own key: Anthropic for the built-in fixer (the default), or Cursor with `--agent cursor_cloud`. `mushi work` runs a Cursor agent on your own computer instead.
 
 ## Environment variables
 
@@ -68,6 +72,7 @@ Other `init` flags: `--framework next`, `--cwd apps/web` (monorepos), `--endpoin
 | `MUSHI_PROJECT_ID` | Project UUID |
 | `MUSHI_API_ENDPOINT` | API base URL (defaults to Mushi Cloud) |
 | `MUSHI_CONSOLE_URL` | Console base for links and browser opens |
+| `MUSHI_PROFILE` | Named credential profile to use (same as `--profile`) |
 | `MUSHI_BYOK_KEY` | Key for `mushi keys add`, kept out of shell history |
 | `MUSHI_NO_UPDATE_CHECK=1` | Skip the "newer version" hint |
 | `MUSHI_DEBUG=1` | Full stack traces on error |

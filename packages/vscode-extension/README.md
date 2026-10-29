@@ -2,11 +2,11 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-One-click [Model Context Protocol](https://modelcontextprotocol.io/) server for
-VS Code agent mode. Pull a plain-English diagnosis and a paste-ready fix prompt
-for any user-felt bug — plus evidence (screenshots, console, network), blast
-radius, and fix dispatch — without leaving the editor and **without a second
-LLM key**.
+For people who fix bugs in VS Code's agent mode. This extension registers the
+Mushi Mushi [MCP](https://modelcontextprotocol.io/) server, so the agent can
+pull a plain-English diagnosis and a fix prompt for a bug a user reported,
+with its evidence (screenshots, console, network), its blast radius, and a way
+to start a fix, without you leaving the editor.
 
 > **Status: deferred (2026-09-21).** This extension is **not published** to the
 > VS Code Marketplace or Open VSX, and will not be until the hosted MCP sign-in
@@ -23,17 +23,17 @@ LLM key**.
 2. Open the **Chat** view → **Agent** mode. Mushi registers itself as an MCP
    server automatically.
 3. The first time the agent uses a Mushi tool you'll be prompted for an API key.
-   Get one from the [Mushi console](https://kensaur.us/mushi-mushi/admin) → **Connect &
-   Update → Add to VS Code**, or run **`Mushi Mushi: Use the read-only demo`**
-   from the Command Palette to try it with no signup.
+   Mint a key with the `mcp:read` scope on the **Projects** page of the
+   [Mushi console](https://kensaur.us/mushi-mushi/admin) (API keys).
 
-## Try it with no signup
+## Read-only demo mode
 
-Run **`Mushi Mushi: Use the read-only demo (no signup)`** from the Command
-Palette (`Ctrl/Cmd+Shift+P`). This connects to a public, read-only demo project
-seeded with synthetic reports so you can see the tools work end-to-end. It is
-locked to `?read_only=1` and a safe feature subset — it can read nothing of real
-users and write nothing.
+**`Mushi Mushi: Use the read-only demo (no signup)`** switches the extension
+to a read-only demo project, locked to `?read_only=1` and a safe feature
+subset, so it can read nothing of real users and write nothing. It needs a
+demo key in `mushiMushi.demoApiKey`; the extension does not ship one, so
+until a public demo key is published this mode shows a "no demo key is set"
+message.
 
 ## Commands
 
@@ -48,18 +48,18 @@ users and write nothing.
 | Setting | Default | Description |
 | --- | --- | --- |
 | `mushiMushi.transport` | `stdio` | `stdio` runs `npx @mushi-mushi/mcp` locally; `http` connects to the hosted Streamable HTTP endpoint. |
-| `mushiMushi.endpoint` | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api` | Mushi API base URL (`MUSHI_API_ENDPOINT`) for the stdio transport. Point at your self-hosted edge functions if you are not on Mushi Cloud. |
+| `mushiMushi.endpoint` | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api` | Mushi API base URL (`MUSHI_API_ENDPOINT`) for the stdio transport. Point at your self-hosted edge functions if you are not on Mushi Mushi Cloud. |
 | `mushiMushi.mcpHttpUrl` | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp` | Hosted Streamable HTTP MCP URL for the `http` transport. |
-| `mushiMushi.projectId` | — | Optional Mushi project UUID. |
+| `mushiMushi.projectId` | (empty) | Optional Mushi project UUID. |
 | `mushiMushi.features` | `triage,fixes,inventory,setup,docs` | Comma-separated MCP feature groups to expose. Use `all` for every tool. |
 | `mushiMushi.useDemo` | `false` | Use the public read-only demo project. |
-| `mushiMushi.demoApiKey` | — | Public `mcp:read` demo key used when **Use demo** is on. |
+| `mushiMushi.demoApiKey` | (empty) | `mcp:read` demo key used when **Use demo** is on. None ships with the extension. |
 
 ## Self-hosting
 
 Not on Mushi Cloud? Set `mushiMushi.endpoint` / `mushiMushi.mcpHttpUrl` to your
 own Supabase edge functions and use a key minted from your own console. See the
-[self-host guide](https://kensaur.us/mushi-mushi/docs/).
+[self-host guide](https://kensaur.us/mushi-mushi/docs/self-hosting).
 
 ## Links
 

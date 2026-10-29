@@ -1,11 +1,11 @@
 ---
 title: Discord
-description: Post Mushi report and fix events to a Discord channel — paste a channel webhook on the Integrations page, or run the self-hosted Discord plugin.
+description: Post Mushi Mushi report and fix events to a Discord channel. Paste a channel webhook on the Integrations page, or run the self-hosted Discord plugin.
 ---
 
 # Discord plugin
 
-Posts a message to a Discord channel when Mushi triages a bug or a fix
+Posts a message to a Discord channel when Mushi Mushi triages a bug or a fix
 lands.
 
 ## Setup (Mushi Cloud, no code)
@@ -19,8 +19,9 @@ Mushi posts to the channel itself; you do not need the npm package.
 
 [`@mushi-mushi/plugin-discord`](https://www.npmjs.com/package/@mushi-mushi/plugin-discord)
 does the same from your own server. The console's Marketplace has no Discord
-listing, so it only receives events from a Mushi server you run yourself,
-once you add a `plugin_registry` row for it.
+listing, so you can't install it from the console. On a Mushi server you run
+yourself, add a `plugin_registry` row for it and install it like any listed
+plugin.
 
 ```bash
 npm i @mushi-mushi/plugin-discord
@@ -34,5 +35,8 @@ npx -p @mushi-mushi/plugin-discord mushi-plugin-discord
 | --- | --- |
 | `report.classified` | Coloured by severity (critical red, high orange, medium yellow, low green) |
 | `fix.proposed` | Blue, with the PR link when there is one |
-| `fix.applied` | Green |
-| `report.status_changed` | Grey, with the new status |
+| `fix.applied` | Green, with the PR link |
+| `report.status_changed` | Grey, "moved from X to Y" |
+
+The fix embeds also have a "Fix status" field: proposed, applied or failed,
+taken from the event.

@@ -1,24 +1,32 @@
-# mushi_mushi
+# Mushi Mushi for Flutter (`mushi_mushi`)
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Flutter SDK for [Mushi Mushi](https://kensaur.us/mushi-mushi) — the open-source,
-LLM-driven bug intake, classification, and autofix platform.
+The Flutter SDK for [Mushi Mushi](https://kensaur.us/mushi-mushi), for iOS and
+Android apps built with Flutter whose users find bugs you never see. A user
+shakes the phone or taps a button, describes the problem, and the report
+arrives in Mushi Mushi with a screenshot and device details, where it gets a
+plain-English diagnosis and a fix prompt for your AI editor.
 
-> **Status: preview.** The API surface is stable at 0.3.0, but the package is
-> **not published to pub.dev yet** — `flutter pub add mushi_mushi` and
-> `mushi_mushi: ^0.3.0` will not resolve. Install it from this repository as a
-> git dependency (below) until the pub.dev release lands.
+> **Status: preview (0.3.0), not on pub.dev yet.** `flutter pub add mushi_mushi`
+> and `mushi_mushi: ^0.3.0` will not resolve. Install it from this repository
+> as a git dependency (below) until the pub.dev release lands.
+
+You need a Mushi Mushi project: its project ID and an SDK API key
+(`mushi_…`) from the console. The free plan works. Flutter 3.19 or newer.
+
+Docs: [Flutter SDK reference](https://kensaur.us/mushi-mushi/docs/sdks/flutter) ·
+[Flutter quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/flutter)
 
 ## Features
 
-- 📳 **Shake-to-report** via `sensors_plus` — works on iOS & Android
-- 📦 **Offline queue** that survives app restarts (file-backed, byte-capped)
-- 🎯 **Material bottom-sheet widget** with category picker and live
-  min-length validation
-- 🌐 **Device + app context** auto-attached via `device_info_plus` and
+- **Shake-to-report** via `sensors_plus`, on iOS and Android
+- **Offline queue** that survives app restarts (file-backed, size-capped)
+- **Material bottom-sheet widget** with a category picker and a minimum
+  description length
+- **Device and app context** attached via `device_info_plus` and
   `package_info_plus`
-- 🔌 **Optional Sentry bridge** via `Mushi.instance.onReportSubmitted`
+- **Optional Sentry hook** via `Mushi.instance.onReportSubmitted`
 
 ## Install
 
@@ -41,8 +49,9 @@ import 'package:mushi_mushi/mushi_mushi.dart';
 
 void main() {
   Mushi.instance.configure(const MushiConfig(
-    projectId: 'proj_...',
+    projectId: '<project-uuid>',
     apiKey: 'mushi_...',
+    endpoint: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
     triggerMode: MushiTriggerMode.both,
     captureScreenshot: true,
     minDescriptionLength: 20,
@@ -90,7 +99,7 @@ try { await riskyCall(); }
 catch (e, st) { await Mushi.instance.captureError(e, st); }
 ```
 
-## Sentry bridge
+## Sending reports to Sentry too
 
 The Flutter SDK exposes an `onReportSubmitted` callback you can wire to any
 crash reporter. For Sentry:
@@ -113,15 +122,15 @@ Mushi.instance.onReportSubmitted = (payload) async {
 
 | Field                  | Default                              | Notes |
 |------------------------|--------------------------------------|-------|
-| `projectId`            | _required_                           | Project UUID from Mushi admin |
+| `projectId`            | _required_                           | Project UUID from the Mushi Mushi console |
 | `apiKey`               | _required_                           | Project API key (`mushi_...`) |
-| `endpoint`             | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`         | Override for self-hosting |
+| `endpoint`             | _required_                           | Mushi Mushi Cloud: `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`; self-hosters pass their own functions URL |
 | `triggerMode`          | `shake`                              | `shake` / `button` / `both` / `none` |
 | `captureScreenshot`    | `true`                               | Requires a `RepaintBoundary` boundary key |
 | `minDescriptionLength` | `20`                                 | Matches the web SDK contract |
 | `offlineQueueMaxBytes` | `2 * 1024 * 1024`                    | Soft cap; oldest entries trim first |
 | `theme`                | `MushiTheme(accentColor: Color(0xFF22C55E))` | |
-| `triggerInsets`        | `MushiTriggerInsets(right: 24, bottom: 32)` | Per-edge offset for the in-app `MushiFloatingTrigger` overlay (see `lib/src/overlay.dart`). Set `left` to `0` to anchor on the leading edge instead. |
+| `triggerInsets`        | `MushiTriggerInsets(right: 20, bottom: 28)` | Per-edge offset for the in-app `MushiFloatingTrigger` overlay (see `lib/src/overlay.dart`). Set `left` to `0` to anchor on the leading edge instead. |
 
 ## Privacy
 
@@ -133,4 +142,4 @@ Mushi.instance.onReportSubmitted = (payload) async {
 
 ## License
 
-MIT — see [LICENSE](../../LICENSE) at the repo root.
+MIT. See [LICENSE](./LICENSE).

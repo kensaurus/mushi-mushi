@@ -32,7 +32,7 @@ export function LandingFaq({ items = LANDING_FAQ }: Props) {
     <section aria-labelledby="landing-faq-heading">
       <JsonLd data={faqJsonLd(items)} />
       <h2 id="landing-faq-heading">Frequently asked questions</h2>
-      <div className="not-prose border border-mushi-rule rounded-md divide-y divide-mushi-rule">
+      <div className="not-prose mt-4 border border-mushi-rule rounded-md divide-y divide-mushi-rule">
         {items.map((item, i) => {
           const panelId = `${baseId}-panel-${i}`
           const isOpen = open === i

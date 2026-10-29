@@ -4,12 +4,12 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/flutter
 
 ---
 title: Flutter quickstart
-description: Add Mushi's Flutter SDK as a git dependency — shake-to-report, a Material bottom sheet and an offline queue for iOS and Android. Preview, not on pub.dev yet.
+description: Add the Mushi Mushi Flutter SDK as a git dependency. Shake-to-report, a Material bottom sheet and an offline queue for iOS and Android. Not on pub.dev yet.
 ---
 
 # Flutter quickstart
 
-  **Preview — not on pub.dev yet.** A plain version constraint for `mushi_mushi`
+  **Preview, not on pub.dev yet.** A plain version constraint for `mushi_mushi`
   will not resolve until the package is published. Until then, depend on it straight from the
   repository with a `git:` dependency, as below. `npx mushi-mushi` does not set
   up Flutter projects.

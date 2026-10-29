@@ -20,6 +20,8 @@ const env = captureEnvironment(); // viewport, user agent, connection, page timi
 
 Docs: [Core SDK reference](https://kensaur.us/mushi-mushi/docs/sdks/core)
 
+Mushi Mushi is built first for people who make apps with AI, mostly on their own. Developers who own their code and teams with bug reports in many places use it too: [who it's for](https://kensaur.us/mushi-mushi/docs/who-its-for).
+
 ```mermaid
 flowchart LR
     A["Framework SDK<br/>react, vue, web…"] --> B["@mushi-mushi/core<br/>types · API client · queue"] --> C["Mushi API"]

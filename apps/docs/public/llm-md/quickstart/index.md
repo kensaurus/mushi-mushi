@@ -1,16 +1,16 @@
-# Quickstart — fix your first bug in 60 seconds
+# Quickstart: install, first report, first fix
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart
 
 ---
-title: Quickstart — fix your first bug in 60 seconds
-description: Install Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.
+title: "Quickstart: install, first report, first fix"
+description: Install Mushi Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.
 ---
 
 # Quickstart
 
 - One command, `npx mushi-mushi`, adds a report button to your app.
-- When a user reports a bug, Mushi writes a plain-English diagnosis.
+- When a user reports a bug, Mushi Mushi writes a plain-English diagnosis.
 - Your AI editor reads it and writes the fix.
 
 ### Install

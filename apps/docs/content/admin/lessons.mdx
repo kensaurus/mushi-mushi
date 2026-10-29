@@ -1,6 +1,6 @@
 ---
 title: Lessons
-description: The Lessons page turns repeat fixes into rules — when the same root cause keeps returning, Mushi records it so your editor sees it on the next PR.
+description: The Lessons page in the Mushi Mushi console turns a bug that keeps coming back into a coding rule your editor agent can read before its next fix.
 ---
 
 import { Callout, Steps } from 'nextra/components'
@@ -17,10 +17,9 @@ import { Callout, Steps } from 'nextra/components'
 > handler) keeps slipping through PR review. Lessons is the page that stops this
 > cycle permanently.
 
-A lesson is a structured coding rule extracted from a cluster of similar bug reports.
-Once promoted, it's injected into the LLM's context before every fix-worker run and
-every PR review — so the agent and your reviewers are both pre-warned about patterns
-that historically caused real user pain.
+In Mushi Mushi, a lesson is a structured coding rule extracted from a cluster of similar
+bug reports. Once promoted, your editor agent can read it before it writes a fix: through
+the MCP tools `query_lessons` and `list_lessons`, or from `.mushi/lessons.json` in your repo.
 
 ---
 
@@ -34,13 +33,14 @@ that historically caused real user pain.
    read very alike, coherence 0.75 or more, is promoted for you every 6 hours.)
 4. **You promote** — open **Recurring patterns**, read the suggested rule, and click
    **Promote**. The pattern becomes a rule in use.
-5. **Injection** — the lesson is packed into every fix-worker and PR review context
-   (up to 3,000 tokens), ranked by severity × relevance.
+5. **Retrieval** — when an agent asks for lessons on a change, the best matches are
+   packed into a token budget (3,000 by default), ranked by similarity, severity and
+   how recent the lesson is.
 
 <Callout type="info">
-When GitHub is connected, promoted lessons are also written to `.mushi/lessons.json`
-in your repo. Cursor, Copilot, and other AI assistants that have access to your repo
-read this file automatically — no extra setup required.
+Mushi Mushi does not commit `.mushi/lessons.json` to your repo by itself. Write or
+refresh it with `npx @mushi-mushi/cli sync-lessons` (locally or in CI). Editor agents
+read it when their rules tell them to; `mushi setup --with-rules` adds that rule.
 </Callout>
 
 ---
@@ -94,12 +94,12 @@ toggle to review them and restore if needed.
 ## Tab: Try a change (`?tab=query`)
 
 > **Use this when:** You've just promoted a new lesson and want to confirm it will be
-> retrieved when the fix-worker handles a related bug. Or you want to check that a
-> retired lesson is no longer surfacing.
+> retrieved for a related change. Or you want to check that a retired lesson is no
+> longer surfacing.
 
 Paste any code diff or problem description into the textarea, set a token budget (start
-with the default 3000), and click **Query lessons**. The results show exactly what the
-fix-worker would receive — with rank, similarity score, and the full rule text.
+with the default 3000), and click **Query lessons**. The results show what `query_lessons` would return to an
+agent: rank, similarity score and the full rule text.
 
 **Practical example:**
 - Paste the diff of a recent iOS bug fix.
@@ -119,7 +119,7 @@ fix-worker would receive — with rank, similarity score, and the full rule text
 ### After fixing a recurring bug
 1. Open **Recurring patterns** and find the pattern for this bug.
 2. If it is ready to promote, promote it.
-3. Check with **Try a change** that your next fix-worker run will see the rule.
+3. Check with **Try a change** that the rule comes back for a related change.
 
 ### Cleaning up stale lessons
 1. Open the **Rules in use** tab, toggle to **Active**.
@@ -128,16 +128,16 @@ fix-worker would receive — with rank, similarity score, and the full rule text
 
 ---
 
-## How injection works at fix time
+## How retrieval works
 
-When fix-worker starts a run:
-1. The incoming report's embedding is used to query the lesson store.
-2. Top-N lessons are ranked by `severity × similarity_score`.
-3. Lessons are packed into the LLM system prompt up to the 3,000-token budget.
-4. The LLM generates a patch with those rules as hard constraints.
+When an agent calls `query_lessons` (or you use **Try a change**):
+1. The pasted change or description is matched against the lesson store by meaning.
+2. Matches are scored `0.5 × similarity + 0.3 × severity + 0.2 × recency`.
+3. Lessons are packed, best first, until the token budget (default 3,000, allowed
+   100 to 8,000) is full.
 
-**Result:** a lesson promoted from 3 iOS Safari reports means the fix-worker
-will never generate a submit handler without `await` again — for any iOS report.
+A lesson raises the odds that the agent avoids the pattern. It is not a guarantee: the
+agent still has to read and follow it.
 
 ---
 
@@ -155,7 +155,6 @@ POST  /v1/admin/lessons/query        { "diff": "...", "token_budget": 3000 }
 
 ## Related pages
 
-- [Knowledge graph](/admin/graph) — visual view of the same clusters as a force-directed graph
-- [Judge dashboard](/admin/judge) — the coherence scores that gate promotion
-- [Fix drafts](/admin/fixes) — see lessons in action on real fix runs
-- [Prompt lab](/admin/prompt-lab) — edit the LLM prompt that generates lesson rule text
+- [Bug clusters](/admin/graph) — bugs grouped by shared cause
+- [Fixes](/admin/fixes) — the fix runs a lesson is meant to inform
+- [Schema changes](/admin/drift) — a serious finding can become a candidate lesson

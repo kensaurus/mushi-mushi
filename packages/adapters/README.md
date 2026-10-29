@@ -6,9 +6,17 @@ Already send errors to Sentry, Crashlytics, Bugsnag or Rollbar? These webhook
 handlers forward them into [Mushi Mushi](https://github.com/kensaurus/mushi-mushi),
 so a crash lands in the same queue as your users' bug reports and gets the same
 plain-English diagnosis and ready fix. You do not need any of these tools to use
-Mushi; this package is only for when you already have one.
+Mushi Mushi; this package is only for when you already have one.
 
-## Quick start — Sentry → Hono
+**Do you need this package?** Not for Sentry on Mushi Mushi Cloud: open
+**Integrations → Sentry** in the console, paste your Sentry internal
+integration's Client Secret, and Sentry alerts go straight into the queue
+([how](https://kensaur.us/mushi-mushi/docs/plugins/sentry#route-sentry-errors-into-mushi-mushi-inbound)).
+The other sources have no built-in receiver. For those you run one of these
+handlers on your own server and pass each event on, for example with
+`@mushi-mushi/node` and a project API key.
+
+## Quick start: Sentry to Hono
 
 ```bash
 npm i @mushi-mushi/adapters @mushi-mushi/node
@@ -67,8 +75,8 @@ source's signature or secret, then calls your `sink`. Docs:
 | Grafana / Loki (AM)    | `translateGrafanaLoki`       | `createGrafanaLokiWebhookHandler` |
 
 Every translator outputs `MushiCaptureEventInput` (from `@mushi-mushi/core`)
-so you can route the result to any sink — the hosted Mushi API, a queue, a
-local database, a fan-out of several. Subpath imports are supported, e.g.
+so you can send the result anywhere: the hosted Mushi Mushi API, a queue, a
+local database, or several of these at once. Subpath imports are supported, e.g.
 `@mushi-mushi/adapters/cloudwatch`.
 
 ## Severity mapping
@@ -78,9 +86,9 @@ Each adapter maps the source's native severity onto Mushi's four-level scale:
 | Mushi      | Sentry (`level`) | Datadog | New Relic (`priority`) | Honeycomb (contains) | Grafana/AM       |
 | ---------- | ---------------- | ------- | ---------------------- | -------------------- | ---------------- |
 | `critical` | fatal            | P1      | critical               | critical             | critical, page   |
-| `high`     | error            | P2      | —                      | high, error          | high, error      |
-| `medium`   | warning          | P3      | warning                | warn                 | warning, warn    |
-| `low`      | info, debug      | P4–P5   | —                      | info                 | info, low        |
+| `high`     | error            | P2      | high                   | high, error          | high, error      |
+| `medium`   | warning          | P3      | warning, medium        | warn                 | warning, warn    |
+| `low`      | info, debug      | P4–P5   | low                    | info                 | info, low        |
 
 A Sentry metric alert maps to `high` when it opens and carries no severity when it resolves.
 
@@ -102,9 +110,8 @@ Each adapter uses the strongest auth its upstream supports:
 | Honeycomb           | HMAC-SHA256 (`sha256=…`)      | `X-Honeycomb-Signature`   |
 | Grafana / Loki (AM) | shared token (timing-safe)    | `X-Grafana-Token`         |
 
-Tests under `src/__tests__/` cover translation and forged-signature rejection
-for Sentry, Bugsnag, Rollbar, Crashlytics, Firebase Analytics, CloudWatch and
-Opsgenie. Datadog, New Relic, Honeycomb and Grafana have no tests yet.
+Tests under `src/__tests__/` cover translation and the rejection of a wrong
+signature or secret for all eleven sources.
 
 ## License
 

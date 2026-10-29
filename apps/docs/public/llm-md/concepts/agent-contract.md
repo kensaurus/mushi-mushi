@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/agent-contract
 
 ---
 title: Agent contract
-description: What Mushi expects an agent to read before opening a PR, and what it promises in return.
+description: What Mushi Mushi expects an agent to read before opening a PR, and what it promises in return.
 ---
 
 # Agent contract
@@ -31,13 +31,13 @@ feeds the lesson library, which makes the next agent's fix smarter.
 
 ## What the agent reads before opening a PR
 
-These are the minimum reads. Agents that skip them produce fixes with
-higher recurrence rates (tracked by `judge_batch.recurrence_score`).
+These are the minimum reads. Skipping them makes it more likely that the
+fix repeats a mistake an earlier fix already made.
 
 | Step | MCP call | Why |
 |------|----------|-----|
 | Get the fix brief | `get_fix_context(reportId)` | Root cause, smallest file set, repro steps, blast-radius warnings |
-| Check lessons | `lessons.query` or read `.mushi/lessons.json` | Anti-patterns from past fixes on similar components |
+| Check lessons | `query_lessons` or read `.mushi/lessons.json` | Anti-patterns from past fixes on similar components |
 | Inspect blast radius | `get_blast_radius(componentId)` | Other components that will break if this one changes |
 | Read privacy posture | `privacy://status` resource | Confirm whether client data leaves the project LLM account |
 

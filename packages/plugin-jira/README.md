@@ -2,14 +2,15 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Opens a Jira Cloud issue for each new Mushi bug report, moves it through
-your Jira workflow as the report changes status, and comments when the fix
-lands. It is a library: you write the small server around it.
+For teams that track bugs in Jira Cloud. This opens a Jira issue for each new
+Mushi Mushi bug report, moves it through your Jira workflow as the report
+changes status, and comments when the fix lands. It is a library: you write
+the small server around it.
 
-**Do you need this package?** Not on Mushi Cloud: add Jira on the
+**Do you need this package?** Not on Mushi Mushi Cloud: add Jira on the
 **Integrations** page of the console (base URL, email, API token, project
-key) and Mushi opens and resolves Jira issues itself. The console's
-Marketplace has no Jira listing (checked 2026-10-26), so this package only
+key) and Mushi opens and resolves Jira issues itself, on any plan. The
+console's Marketplace has no Jira listing (checked 2026-10-29), so this package only
 receives events from a Mushi server you run yourself, once you add a
 `plugin_registry` row for it.
 
@@ -48,7 +49,7 @@ const { url, state, codeVerifier } = buildAuthorizeUrl(config, projectId)
 const tokens = await exchangeCode(config, code, codeVerifier)
 ```
 
-Tokens are short-lived — call `refreshTokens(config, tokens.refreshToken)`
+Tokens are short-lived. Call `refreshTokens(config, tokens.refreshToken)`
 before expiry, or persist the mapping and refresh lazily on 401. The refresh
 result leaves `cloudId` and `cloudUrl` empty (they never change), so merge it
 onto the stored record instead of replacing it:
@@ -84,9 +85,9 @@ app.post('/mushi/webhook', expressMiddleware(handler))
 
 | Event                     | Effect on Jira                                                     |
 | ------------------------- | ------------------------------------------------------------------ |
-| `report.created`          | Creates a Jira issue under `jiraProjectKey` with mushi labels.     |
-| `report.status_changed`   | Transitions the issue via `statusToTransition` map.                |
-| `fix.applied`             | Adds a comment linking the GitHub PR (or fix summary).             |
+| `report.created`          | Creates a Jira issue under `jiraProjectKey`, labelled with the report's category and severity (`unknown` until triage). |
+| `report.status_changed`   | Moves the issue with the transition named in `statusToTransition`. |
+| `fix.applied`             | Adds a comment with the fix's pull request link, when there is one. |
 
 Other Mushi events are ignored.
 

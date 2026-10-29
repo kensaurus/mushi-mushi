@@ -192,6 +192,10 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
     a: 'Yes. The libraries you add to your app (SDKs) are MIT-licensed and the server is AGPLv3. You can run the whole thing on your own server with one command, or use the hosted free plan: one app, 100 diagnoses a month, no card.',
   },
   {
+    q: 'Can an AI agent write the fix for me?',
+    a: 'Yes, if you want it to. Connect your GitHub repo and turn on automatic fixes, and an agent opens a pull request for a diagnosed bug. The built-in fixer needs no key of your own; to use Cursor agents, add your Cursor key, or run them on your own computer with mushi work. With your own Anthropic key, a second AI then reads that pull request next to the original report and says merge, fix first, or do not merge, so a fix that only hides the symptom is caught. Nothing merges unless you merge it or turn on automatic merging.',
+  },
+  {
     q: 'Which frameworks are supported?',
     a: 'Web: React, Vue, Svelte, Angular, and any other site through the browser widget. Mobile: React Native and Capacitor. Server: Node. One wizard installs any of them. Native iOS, Android and Flutter SDKs are previews and install from the GitHub repo.',
   },

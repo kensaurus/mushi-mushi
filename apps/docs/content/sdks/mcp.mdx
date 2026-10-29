@@ -1,18 +1,18 @@
 ---
 title: Bug report MCP server for Cursor & Claude Code
-description: Reference for @mushi-mushi/mcp, the Mushi MCP server for Cursor, Claude Code, VS Code and Windsurf — stdio and hosted HTTP transports, scopes and setup.
+description: Reference for @mushi-mushi/mcp, the Mushi Mushi MCP server for Cursor, Claude Code, VS Code and Windsurf. stdio and hosted HTTP transports, scopes and setup.
 ---
 
 # `@mushi-mushi/mcp`
 
-MCP server for Cursor, VS Code, Windsurf, Cline, Claude, Zed, and other MCP
-clients — reports, plain-English reads, and fix briefs in the editor.
+The Mushi Mushi MCP server for Cursor, VS Code, Windsurf, Cline, Claude, Zed,
+and other MCP clients: reports, plain-English reads, and fix briefs in the editor.
 **[→ Connect](/connect)** for a one-click install. Full walkthrough:
 [Quickstart → MCP](/quickstart/mcp).
 
-Speaks **JSON-RPC 2.0** with `tools/call` semantics and supports the
-**SEP-1686 Tasks** envelope so long-running fixes can stream progress back
-into your IDE.
+Speaks **JSON-RPC 2.0** with `tools/call` semantics. The hosted endpoint also
+supports the MCP **Tasks** extension (`io.modelcontextprotocol/tasks`), so a
+client on the 2026-07-28 revision can follow a long-running fix as a task.
 
 ## Quick start
 
@@ -29,11 +29,11 @@ entry.
 
 ## Two transports
 
-- **stdio (local)** — `npx -y @mushi-mushi/mcp@0.30.0`. What
-  `mushi setup --stdio` writes, and the only option for Claude Desktop,
-  Continue, Cline and Zed. Your client launches the server as a subprocess
-  and pipes JSON-RPC over stdio.
-- **Streamable HTTP (hosted, 2026-05-09 release)** — single endpoint
+- **stdio (local)**: `npx -y @mushi-mushi/mcp@0.30.0`. This is what
+  `mushi setup --stdio` writes, and what `setup` always writes for Continue and
+  Zed. Use it for any client that only runs local servers. Your client launches
+  the server as a subprocess and pipes JSON-RPC over stdio.
+- **Streamable HTTP (hosted, 2026-05-09 release)**: single endpoint
   at `/functions/v1/mcp`, dual-era (MCP 2024-11-05 … 2025-11-25 with `initialize`, and the current 2026-07-28 revision with `server/discover`). POST returns
   `application/json` or `text/event-stream` per content negotiation,
   GET opens an SSE stream for server-pushed notifications, DELETE
@@ -46,7 +46,7 @@ key yourself instead (for an orchestrator that cannot open a browser), send
 it as a header. A static key header turns the client's sign-in off:
 
 ```jsonc
-// .cursor/mcp.json — Streamable HTTP with an API key
+// .cursor/mcp.json: Streamable HTTP with an API key
 {
   "mcpServers": {
     "mushi-mushi-hosted": {

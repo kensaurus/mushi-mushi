@@ -1,11 +1,11 @@
 ---
 title: Jira Cloud
-description: Open Jira Cloud issues from Mushi bug reports and keep their status in step — set it up on the Integrations page, or self-host the Jira plugin.
+description: Open Jira Cloud issues from Mushi Mushi bug reports and keep their status in step. Set it up on the Integrations page, or self-host the Jira plugin.
 ---
 
 # Jira Cloud plugin
 
-Opens a Jira issue for each Mushi bug report and keeps it in step as the
+Opens a Jira issue for each Mushi Mushi bug report and keeps it in step as the
 report moves to fixed.
 
 ## Setup (Mushi Cloud, no code)
@@ -25,14 +25,15 @@ Mushi opens and resolves the Jira issues itself; you do not need the npm package
 is a library for doing the same from your own server with Jira OAuth 2.0
 (3LO): `buildAuthorizeUrl`, `exchangeCode`, `refreshTokens` and
 `createJiraPluginHandler`. See its README for the code. The console's
-Marketplace has no Jira listing, so it only receives events from a Mushi
-server you run yourself, once you add a `plugin_registry` row for it.
+Marketplace has no Jira listing, so you can't install it from the console. On
+a Mushi server you run yourself, add a `plugin_registry` row for it and
+install it like any listed plugin.
 
 | Event | Action |
 | --- | --- |
-| `report.created` | Create a Jira issue under `jiraProjectKey`, labelled with category and severity |
+| `report.created` | Create a Jira issue under `jiraProjectKey`, labelled with category and severity (`unknown` here, since triage hasn't run yet) |
 | `report.status_changed` | Run the Jira transition from `statusToTransition` (defaults: pending/classified/grouped → To Do, fixing → In Progress, fixed/dismissed → Done) |
-| `fix.applied` | Comment with the fix PR link or summary |
+| `fix.applied` | Comment `Mushi fix applied: <PR link>`. `fix.applied` carries no summary, so none is added |
 
 The report → issue mapping is kept in memory, so after a restart status
 changes and fix comments for older reports are skipped.

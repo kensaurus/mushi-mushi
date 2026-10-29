@@ -2,13 +2,16 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Pages whoever is on call in PagerDuty when Mushi triages a bug as critical,
-and resolves the page when the fix lands.
+For teams with someone on call. This pages whoever is on call in PagerDuty
+when Mushi Mushi triages a bug as critical, and resolves the page when the fix
+lands.
 
-**Do you need this package?** Usually not. On Mushi Cloud you add PagerDuty
-on the **Integrations** page of the console (paste the Events API v2 routing
-key) and Mushi pages and resolves for you. Run this package only if you want
-the PagerDuty calls to come from your own server.
+**Do you need this package?** Usually not. On Mushi Mushi Cloud you add
+PagerDuty on the **Integrations** page of the console (paste the Events API v2
+routing key, on any plan) and Mushi pages and resolves for you. Run this
+package only if you want the PagerDuty calls to come from your own server.
+Installing **PagerDuty Escalation** from the Marketplace needs a paid plan
+(Builder or above, see [pricing](https://kensaur.us/mushi-mushi/docs/pricing)).
 
 ```bash
 npm i @mushi-mushi/plugin-pagerduty
@@ -19,7 +22,8 @@ npx -p @mushi-mushi/plugin-pagerduty mushi-plugin-pagerduty   # POST /mushi/webh
 ```
 
 Then install **PagerDuty Escalation** from the console's **Marketplace**
-page and set its webhook URL to `https://<your-host>/mushi/webhook`. Add
+page and set its webhook URL to `https://<your-host>/mushi/webhook`. The
+listing subscribes to `report.classified` and `sla.breached` only, so add
 `fix.applied` and `report.status_changed` to its subscribed events if you
 want pages to resolve on their own.
 
@@ -46,11 +50,11 @@ express().post('/mushi/webhook', expressMiddleware(handler)).listen(3000)
 
 ## Subscribed events
 
-- `report.classified` — pages when severity ≥ threshold.
-- `sla.breached` — pages unconditionally with the breach severity (Mushi
-  does not emit this event yet).
-- `fix.applied` — resolves the page.
-- `report.status_changed` — resolves the page when the new status is
+- `report.classified`: pages when the severity is at or above the threshold.
+- `sla.breached`: pages with the breach severity, whatever the threshold.
+  Mushi does not send this event yet.
+- `fix.applied`: resolves the page.
+- `report.status_changed`: resolves the page when the new status is
   `fixed` or `resolved`.
 
 The returned handler also has `dispatchResolve({ reportId, dedupKey, summary })`
@@ -59,8 +63,8 @@ for resolving a page from your own code.
 ## Dedup
 
 Each PagerDuty event uses `mushi:<projectId>:<reportId>` as the dedup key,
-so re-firing the same event will update the existing incident rather than
-creating a duplicate.
+so a repeat of the same event updates the open incident. No second incident
+opens.
 
 ## License
 

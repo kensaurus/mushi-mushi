@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/use-cases/mcp-bug-fixing-server
 
 ---
 title: MCP server for bug fixing
-description: What an MCP bug-fixing server is and how Mushi's works — Cursor, Claude Code, or Codex read live bug reports, pull fix context, and dispatch fixes.
+description: What an MCP bug-fixing server is and how the Mushi Mushi one works. Cursor, Claude Code or Codex read live bug reports, pull fix context, and dispatch fixes.
 ---
 
 # MCP server for bug fixing

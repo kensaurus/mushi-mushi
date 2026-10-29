@@ -1,35 +1,37 @@
-# MCP
+# Editor agents (MCP)
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/mcp
 
 ---
-title: MCP
-description: The MCP page connects Cursor, Claude Code, Windsurf and other MCP clients to Mushi and lists the tools your agent can call from the editor.
+title: Editor agents (MCP)
+description: The Editor agents page connects Cursor, Claude Code, Windsurf and other MCP clients to Mushi Mushi and lists the tools your agent can call from the editor.
 ---
 
-# MCP — ask your editor what broke
+# Editor agents (MCP): ask your editor what broke
 
-**Route:** `/mcp`
+**Route:** `/mcp` (sidebar: **Editor agents**, under Connect)
 
-Wire Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected,
+Wire Mushi Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected,
 your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
-The live **Catalog** tab mirrors the server registry (**130 tools**, 8 resources, 4 prompts).
+The page has four tabs: **Summary**, **Setup**, **Catalog** and **Examples**. The
+**Catalog** tab mirrors the server registry (**130 tools**, 8 resources, 4 prompts).
 
 ---
 
 ## Quickstart
 
-The page opens with a 3-step quickstart strip. Step 1 shows complete when you already have an `mcp:read` key.
+The **Setup** tab opens with a 3-step strip, **Get an agent talking in 60 seconds**. Step 1
+shows complete when you already have an `mcp:read` key.
 
-### 1. Generate an MCP-scoped API key
-Click **Generate an API key** (or use **Add to Cursor** on Connect & Update) → mint a key with **`MCP read`** or **`MCP read+write`** scope. This is separate from your app's SDK ingest key (`report:write`).
+### 1. Generate an API key
+Mint a key with **MCP read** (to browse) or **MCP read + write** (to dispatch fixes), or use **Add to Cursor**, which creates a key for you. This is separate from your app's SDK ingest key (`report:write`).
 
-### 2. Install the MCP server
-Copy the snippet from the **Install** card, or click **Add to Cursor** / **Add to VS Code** for a one-click deeplink. The deeplink includes `MUSHI_FEATURES=triage,fixes,inventory,setup,docs` (lean catalog).
+### 2. Paste the snippet
+Copy the **Stdio (.cursor/mcp.json)** or **Hosted HTTP** block, or click **Add to Cursor** (or the button for your editor on [Connect](/admin/connect)) for a one-click deeplink. The deeplink includes `MUSHI_FEATURES=triage,fixes,inventory,setup,docs` (lean catalog).
 
-### 3. Use it
+### 3. Ask the agent
 Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See [MCP quickstart](/quickstart/mcp) and [Incident loop](/quickstart/incident-loop).
 
 ---
@@ -83,7 +85,7 @@ Lovable use it ([guide](/quickstart/lovable-mcp)).
 
 ## Key status
 
-Two badges in the quickstart strip show whether you have:
+Two badges next to the strip show whether you have:
 - **`mcp:read`** — required for read tools (reports, fix context, lessons, docs search)
 - **`mcp:write`** — required for dispatch, merge, QA triggers, and other mutations
 
@@ -159,8 +161,9 @@ MCP prompts orchestrate multiple tools into a single agent turn:
 
 ## Related pages
 
-- [Projects](/admin/projects) — mint MCP API keys
-- [Connect & Update](/admin/onboarding) — unified SDK + MCP install hub
-- [SDKs → MCP](/sdks/mcp) — `@mushi-mushi/mcp` package reference
-- [MCP tools reference](/sdks/mcp-tools) — full catalog from `catalog.ts`
-- [Fix orchestrator](/concepts/fix-orchestrator) — what happens after `dispatch_fix`
+- [Manage apps](/admin/projects): mint MCP API keys
+- [Connect](/admin/connect): unified SDK + MCP install hub
+- [MCP OAuth consent](/admin/mcp-auth): sign in from the editor instead of pasting a key
+- [SDKs → MCP](/sdks/mcp): `@mushi-mushi/mcp` package reference
+- [MCP tools reference](/sdks/mcp-tools): full catalog from `catalog.ts`
+- [Fix orchestrator](/concepts/fix-orchestrator): what happens after `dispatch_fix`

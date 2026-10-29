@@ -4,14 +4,14 @@ Source: https://kensaur.us/mushi-mushi/docs/operating
 
 ---
 title: Operating (maintainers)
-description: Runbooks for maintainers running Mushi Cloud or publishing the open-source packages — deployment, releases and status. Not needed to use the SDK.
+description: Runbooks for maintainers running Mushi Mushi Cloud or publishing the open-source packages (deployment, releases and status). Not needed to use the SDK.
 ---
 
-# Operating Mushi
+# Operating Mushi Mushi
 
-This section is for **maintainers** running Mushi Cloud or shipping the open-source
-SDK packages — not for app developers integrating the SDK. If you are integrating
-Mushi into your app, start at [Quickstart](/quickstart) instead.
+This section is for **maintainers** running Mushi Mushi Cloud or shipping the
+open-source SDK packages, not for app developers integrating the SDK. If you are
+integrating Mushi into your app, start at [Quickstart](/quickstart) instead.
 
   Mushi is **OSS-first**: the hosted product runs the same code as this repo, plus its own
   tuning data (prompts and scoring weights kept as configuration).
@@ -25,15 +25,17 @@ Mushi into your app, start at [Quickstart](/quickstart) instead.
 | [CI runners](/operating/ci-runners) | Anyone running GitHub Actions | Where your tests run and why a fix waits, a broken fix vs a stopped test machine, and `mushi runner add` |
 | [Local workers](https://github.com/kensaurus/mushi-mushi/blob/master/docs/operators/local-workers.md) | Anyone fixing reports on their own machine | `mushi work --daemon` as a service, its guards and key, and the console's Pipeline → Workers tab |
 
-## The four independent deploy paths
+## The independent deploy paths
 
-Mushi has **four** delivery pipelines that ship independently — a change to one
-never blocks the others:
+Mushi Mushi has **six** delivery pipelines that ship independently, so a change
+to one never blocks the others:
 
-1. **npm SDK packages** — `release.yml` (Changesets version PR → merge → OIDC publish).
-2. **Supabase Edge Functions** — `deploy-edge-functions.yml` (path-filtered push to `master`).
-3. **Admin console SPA** — `deploy-admin.yml` (S3 + CloudFront).
-4. **Docs site** — `deploy-docs.yml` (S3 + CloudFront).
+1. **npm SDK packages**: `release.yml` (Changesets version PR → merge → OIDC publish).
+2. **Supabase Edge Functions**: `deploy-edge-functions.yml` (path-filtered push to `master`, plus a nightly full deploy).
+3. **Admin console SPA**: `deploy-admin.yml` (S3 + CloudFront).
+4. **Docs site**: `deploy-docs.yml` (S3 + CloudFront).
+5. **Mushi Bounties marketplace**: `deploy-testers.yml` (S3 + CloudFront at `/testers`).
+6. **Hosted MCP proxy**: `deploy-hosted-mcp.yml` (CloudFront route and OAuth discovery documents for `/hosted-mcp`).
 
 **Database migrations are manual** (`supabase db push`) and are never run by CI.
 

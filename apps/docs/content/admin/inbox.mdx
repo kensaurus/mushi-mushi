@@ -1,6 +1,6 @@
 ---
 title: To-do
-description: The To-do list gathers everything in Mushi that needs a human decision — reports, queue failures, health and drift alerts — in one list.
+description: The To-do page gathers everything in Mushi Mushi that needs a human decision, like urgent reports, failed fixes, queue failures and health alerts, in one list.
 ---
 
 import { Callout } from 'nextra/components'
@@ -9,14 +9,16 @@ import { Callout } from 'nextra/components'
 
 # To-do
 
-**Route:** `/inbox`
+**Route:** `/inbox` (sidebar: **More pages › Bugs › To-do**, or keep it in the sidebar as a Lab from Settings → Display & sidebar)
 
-> **Scenario:** It's Monday morning. You open Mushi and want to know in one glance
-> what actually needs a human decision right now — without clicking through Reports,
-> Queue, Health, and Drift separately to piece it together.
+> **Scenario:** It's Monday morning. You open Mushi Mushi and want to know in one
+> glance what actually needs a human decision right now, without clicking through
+> Bugs, Processing jobs and Mushi health separately to piece it together.
 
-The Inbox is your to-do list across the whole loop — every action that still needs
-you, in one prioritised view. Think of it as Monday-morning standup prep, auto-generated.
+To-do is your list across the whole loop: every action that still needs you, in one
+prioritised view. It has three tabs: **Overview** (every open card, top to bottom),
+**Stages** (filter by step, open and cleared cards together) and **Activity** (the
+recent reports and fixes behind the counts).
 
 ---
 
@@ -38,9 +40,9 @@ Each card has four parts:
 | Part | Example |
 |------|---------|
 | **PDCA stage chip** | `PLAN` (triage backlog), `DO` (failed fix), `OPS` (dead-letter item) |
-| **Page label** | "Reports", "Queue", "Integration health" |
-| **Action title** | "5 reports awaiting triage" |
-| **Reason** | "Oldest is 18 hours old — over your 12-hour SLA" |
+| **Page label** | The page that owns the action |
+| **Action title** | "2 critical reports need triage", "3 reports still unfixed after an auto-fix attempt" |
+| **Reason** | One line on why it matters |
 
 The **primary action button** takes you directly to the page with the relevant item
 pre-selected. You never need to search.
@@ -50,59 +52,58 @@ pre-selected. You never need to search.
 ## Cleared stages strip
 
 Below the open cards, a row of chips shows every pipeline stage that currently has
-**nothing pending** — with a ✓ badge. This is deliberate: it's a positive signal. When
-all chips are checked and there are no open cards, your pipeline is clear.
+**nothing pending**, with a ✓ badge. When all chips are checked and there are no open
+cards, the page reads **All clear**.
 
 Click any cleared chip to navigate to that page and verify the state yourself.
 
 ---
 
-## Filtering by PDCA phase
+## Filtering by stage
 
-Use the filter chips to focus on one part of the loop:
+On the **Stages** tab, the filter chips focus on one part of the loop. **All**,
+**Open** and **Clear** filter by state; the stage chips appear only for stages that
+have cards:
 
 | Filter | Shows |
 |--------|-------|
-| **All** | Everything open |
-| **Plan** | Triage backlog — reports needing a human decision |
-| **Do** | Failed fix runs, stuck PRs |
-| **Check** | Quality failures — judge drift, health probe errors |
-| **Act** | Promotable lessons, unattributed releases |
-| **Ops** | Dead-letter items, cron failures |
+| **All** | Every card, open and cleared |
+| **Open** | Cards that still need you |
+| **Clear** | Stages with nothing pending |
+| **Plan** | Classify and triage |
+| **Do** | Dispatch and land fixes |
+| **Check** | Verify quality |
+| **Act** | Connections and config |
+| **Ops** | Health and compliance |
 
 ---
 
 ## Common tasks
 
 ### Morning triage (the fast path)
-1. Open Inbox. Look at the **Open** count in the top-left tile.
-2. If it's 0 — all cleared. You're done. Dashboard is the next stop.
-3. If not, scan the cards top-to-bottom — they're ordered by severity.
+1. Open To-do. Look at the **Open** count.
+2. If it's 0, everything is cleared. Home is the next stop.
+3. If not, scan the cards top to bottom; the most urgent comes first.
 4. Click the primary action on each card to resolve it.
-5. Refresh (button top-right) — cleared cards disappear as you resolve them.
+5. Click **Refresh**: cleared cards disappear as you resolve them.
 
-### Understanding a stage chip colour
-- **Red chip** — critical severity or SLA breach — do this first.
-- **Amber chip** — warning — action today.
-- **Grey chip** — informational — awareness only.
-
-### When the Inbox seems wrong
-If you resolved an issue but the card is still showing: click **Refresh**. The Inbox
-reads from the dashboard cache (60-second TTL). The card will clear on the next poll.
+### When To-do seems wrong
+If you resolved an issue but the card is still showing, click **Refresh** to fetch
+the counts again.
 
 ---
 
 <Callout type="info">
-The Inbox is a read-only view — it doesn't take actions itself. Every primary action
-button navigates to the page that owns the action. This keeps the audit trail clear:
-actions are logged on their source page, not here.
+To-do is a read-only view: it doesn't take actions itself. Every primary action
+button navigates to the page that owns the action, so actions are logged on their
+source page, not here.
 </Callout>
 
 ---
 
 ## Related pages
 
-- [Dashboard](/admin/dashboard) — the data source; shows the same pipeline state as charts
-- [Reports & triage](/admin/reports) — source of Plan-phase cards
-- [Processing queue](/admin/queue) — source of Ops-phase cards
-- [Integration health](/admin/health) — source of Check-phase health cards
+- [Home](/admin/dashboard): the summary page for one app
+- [Bugs](/admin/reports): source of Plan cards
+- [Processing jobs](/admin/queue): source of queue-failure cards
+- [Mushi health](/admin/health): source of health-probe cards

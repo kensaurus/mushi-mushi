@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/shared-login
 
 ---
 title: 'One login and one purchase across your apps'
-description: How to let people sign in once and keep what they bought across several of your apps, and what Mushi checks so it keeps working.
+description: How to let people sign in once and keep what they bought across several of your apps, and what Mushi Mushi checks so it keeps working.
 ---
 
 # One login and one purchase across your apps

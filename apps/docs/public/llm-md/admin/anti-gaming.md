@@ -1,35 +1,49 @@
-# Anti-gaming
+# Spam & abuse
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/anti-gaming
 
 ---
-title: Anti-gaming
-description: The Anti-gaming page flags reporters whose patterns look abusive — near-duplicate spam, reward farming or synthetic sessions — for you to review.
+title: Spam & abuse
+description: The Spam & abuse page in Mushi Mushi lists devices that send reports and flags any that look like one person with many accounts or a report flood, for review.
 ---
 
-# Anti-gaming
+# Spam & abuse
 
-**Route:** `/anti-gaming`
+**Route:** `/anti-gaming` (sidebar: **Spam & abuse**, under Bugs; the page was called Anti-gaming before October 2026)
 
-The Anti-gaming page surfaces reporters whose submission patterns look anomalous — devices
-sending many near-identical reports, accounts farming reward points, or sessions that
-appear synthetic. Review flagged reporters here and take action.
+Mushi Mushi tracks every device that sends reports to your project and flags the ones
+whose pattern looks like abuse: many reporter accounts behind one device, or one reporter
+sending a flood of reports. Review the flagged devices here and clear the ones that are fine.
 
 ---
 
 ## How detection works
 
-Mushi runs a set of server-side heuristics on every incoming report batch:
+Every incoming report runs three server-side checks. The thresholds are fixed in the
+server code; there is no per-project setting for them.
 
-| Rule | What it detects |
+| Check | Flags a device when |
 |------|----------------|
-| **Velocity** | More than N reports from the same device in a 1-hour window |
-| **Duplicate content** | Report bodies with cosine similarity > 0.95 to a recent report |
-| **Reward farming** | Submissions clustered immediately after a quest milestone |
-| **Synthetic session** | Sessions with no real user interaction (no scroll, no focus events) |
-| **Device rotation** | Same user rotating device IDs to avoid per-device limits |
+| **Cross-account** | 5 or more reporter identities share one SDK fingerprint hash |
+| **Multi-account** | More than 3 reporter tokens come from one device fingerprint (IP and User-Agent). When the User-Agent is a script (`node`, `curl`, …) the reason says so, because one server relaying many users' reports looks the same. |
+| **Velocity** | One reporter sends more than 10 reports in 24 hours |
 
-Reports that trip a rule are assigned a **risk score** (0–100) and surfaced here.
+A flag never blocks a report. The report is still stored, triaged and fixed normally;
+the flag only marks the device for review.
+
+---
+
+## The page
+
+- **Tiles:** Tracked devices, Flagged, Cross-account, Total reports.
+- **Device list:** switch between flagged and all tracked devices, group by **Flat**,
+  **Date** or **Status** (Cross-account, Flagged, Tracked), and search by fingerprint,
+  token, IP or reason. Open a row for its details.
+- **Recent events:** the log of flags and unflags, filterable by type.
+  `/anti-gaming?tab=events` opens it directly.
+- **Withheld tester redemptions** (super-admin only, shown when there are any): gift-card
+  redemptions paused by the tester anti-fraud checks, each with **Approve** or **Deny**
+  (deny refunds the points).
 
 ---
 
@@ -37,41 +51,28 @@ Reports that trip a rule are assigned a **risk score** (0–100) and surfaced he
 
 | Action | Description |
 |--------|-------------|
-| **Flag reporter** | Mark the reporter as suspected gaming; stops reward accrual |
-| **Unflag reporter** | Clear the flag; restore reward eligibility |
-| **Ban device** | Block future reports from this device ID |
-| **Dismiss** | Mark the alert as a false positive; the report proceeds normally |
-| **View reports** | Jump to the Reports page filtered to this reporter |
+| **Flag as suspicious** | Flag the device by hand, with a short reason |
+| **Unflag device** | Clear the flag. Tokens already seen count as reviewed, so the device is not re-flagged by its very next report. |
 
-Flagging a reporter stops their reward accrual but does NOT delete their submitted reports.
-Those reports are still triaged and fixed normally.
+Flagging a device does NOT delete its reports. When a flagged device belongs to a reporter,
+the reporter is marked with an anti-fraud flag: they drop off the rewards leaderboard and
+their reward payouts are withheld for review.
 
 ---
 
-## Velocity rules
+## API
 
-Velocity thresholds are configurable per-project. Defaults:
-- **100 reports / device / hour** — trip the velocity alert
-- **500 reports / device / day** — auto-ban the device
-
-To change limits, go to **Settings → Anti-gaming** or use the API:
 ```bash
-PUT /v1/admin/projects/:projectId/anti-gaming/rules
-{ "velocity_hour": 100, "velocity_day": 500 }
+GET  /v1/admin/anti-gaming/stats?project_id=<pid>
+GET  /v1/admin/anti-gaming/devices
+GET  /v1/admin/anti-gaming/events
+POST /v1/admin/anti-gaming/devices/:id/flag     { "reason": "..." }
+POST /v1/admin/anti-gaming/devices/:id/unflag
 ```
-
----
-
-## False positive rate
-
-The classification model targets < 2% false positive rate. If you're seeing legitimate
-reporters flagged, consider raising the velocity threshold or reducing the duplicate
-similarity threshold.
 
 ---
 
 ## Related pages
 
-- [Reports](/admin/reports) — the source of flagged submissions
-- [Rewards](/admin/rewards) — reward program that gaming attempts target
-- [Settings](/admin/settings) — configure velocity thresholds
+- [Reports](/admin/reports): the reports these devices sent
+- [Rewards](/admin/rewards): the reward program that abuse targets

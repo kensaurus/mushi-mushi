@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/use-cases/debug-cursor-apps
 
 ---
 title: Debug apps built with Cursor
-description: How to debug an app Cursor wrote for you — user bug reports become plain-English diagnoses and fix prompts your Cursor agent applies over MCP.
+description: How to debug an app Cursor wrote for you. With Mushi Mushi, user bug reports become plain-English diagnoses and fix prompts your Cursor agent applies over MCP.
 ---
 
 # How to debug an app Cursor wrote for you

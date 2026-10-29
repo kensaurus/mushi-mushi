@@ -29,6 +29,8 @@ A launcher appears in the corner. That is the whole integration. On React, Vue, 
 
 Docs: [Web SDK reference](https://kensaur.us/mushi-mushi/docs/sdks/web)
 
+Building in Lovable or Bolt with no terminal? A script tag works too: [Mushi Mushi in Lovable or Bolt](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt). Mushi Mushi is built first for people who make apps with AI, mostly on their own, and also serves developers who own their code and teams: [who it's for](https://kensaur.us/mushi-mushi/docs/who-its-for).
+
 ## What's inside
 
 | | |

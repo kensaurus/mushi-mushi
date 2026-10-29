@@ -2,10 +2,14 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Add Mushi to the app you already have in one command, or scaffold a Vue, Svelte
-or Node starter with `--template`.
+Adds [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) to the app you
+already have, so when a user says something is broken you get the likely cause
+in plain English and a fix prompt for your AI editor. One command finds your
+framework, installs the right SDK and writes your keys. It can also start a
+small Vue, Svelte or Node app with Mushi Mushi already in it (`--template`).
 
-> One-line setup for the [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) bug-reporting SDK: a user's report arrives as a plain-English diagnosis and a paste-ready fix in your editor.
+You need Node.js 20 or newer and a free Mushi Mushi account (the wizard opens
+a browser sign-in).
 
 ```bash
 npm create mushi-mushi
@@ -19,13 +23,13 @@ Docs: [the setup wizard](https://kensaur.us/mushi-mushi/docs/sdks/launcher) (sam
 
 ## What it does
 
-1. **Detects your framework** — Next.js, Nuxt, SvelteKit, Angular, Expo, Capacitor, plain React/Vue/Svelte, or vanilla JS.
-2. **Picks the right SDK** — `@mushi-mushi/react`, `@mushi-mushi/vue`, `@mushi-mushi/svelte`, `@mushi-mushi/angular`, `@mushi-mushi/react-native`, `@mushi-mushi/capacitor`, or `@mushi-mushi/web`.
-3. **Detects your package manager** — uses `npm`, `pnpm`, `yarn`, or `bun` based on your lockfile.
-4. **Writes env vars** — framework-prefixed keys (e.g. `VITE_MUSHI_PROJECT_ID` / `NEXT_PUBLIC_MUSHI_API_KEY`) land in `.env.local`.
-5. **Warns about `.gitignore`** — won't ship secrets if your env file isn't ignored.
-6. **Prints the provider snippet** — framework-specific code to paste in.
-7. **Sends a test report** (opt-in) — closes the loop so you see your first classified bug immediately.
+1. **Finds your framework:** Next.js, React (Vite or Create React App), Remix, Astro, Solid, Vue, Nuxt, Svelte, SvelteKit, Angular, Expo, React Native, Capacitor, Express, Fastify, Hono, or plain JavaScript.
+2. **Picks the right SDK:** `@mushi-mushi/react`, `@mushi-mushi/vue`, `@mushi-mushi/svelte`, `@mushi-mushi/angular`, `@mushi-mushi/react-native`, `@mushi-mushi/capacitor` or `@mushi-mushi/web` for apps, and `@mushi-mushi/node` for Express, Fastify and Hono servers.
+3. **Uses your package manager:** `npm`, `pnpm`, `yarn` or `bun`, based on your lockfile.
+4. **Writes your keys:** into `.env.local` (or your existing `.env`), with the prefix your framework needs, for example `VITE_MUSHI_PROJECT_ID` or `NEXT_PUBLIC_MUSHI_API_KEY`. Servers, Remix and bare React Native get plain `MUSHI_PROJECT_ID` and `MUSHI_API_KEY`.
+5. **Checks `.gitignore`:** warns you if that env file is not ignored, so you don't commit it.
+6. **Prints the setup code** for your framework, ready to paste.
+7. **Offers to send a test report** at the end, so you see your first diagnosed bug right away.
 
 By default it wires Mushi into an **existing** project, so run it from that project's root. To start from nothing, use a starter template instead.
 
@@ -55,10 +59,12 @@ npm create mushi-mushi -- --framework next
 npm create mushi-mushi -- --project-id <project-uuid> --api-key mushi_xxx
 npm create mushi-mushi -- --skip-install
 npm create mushi-mushi -- --skip-test-report
+npm create mushi-mushi -- --audit          # health-check an existing install instead
 npm create mushi-mushi -- --cwd apps/web
 npm create mushi-mushi -- --endpoint https://mushi.your-company.com
 npm create mushi-mushi -- --template vue [dir]
 npm create mushi-mushi -- -y
+npm create mushi-mushi -- --version
 npm create mushi-mushi -- --help
 ```
 
@@ -76,7 +82,7 @@ npx @mushi-mushi/cli init     # scoped name
 - **Wrong framework detected?** Pass `--framework <id>` explicitly. Valid IDs: `next, react, cra, remix, astro, solid, vue, nuxt, svelte, sveltekit, angular, expo, react-native, capacitor, express, fastify, hono, vanilla`.
 - **Running in a monorepo?** `cd` into the package you want Mushi in first, or pass `--cwd apps/web`.
 - **`npx` cache serving an old version?** Run `npm cache clean --force` or `npx mushi-mushi@latest`.
-- **Non-interactive (CI)?** Pass all of `--yes`, `--project-id`, and `--api-key`. The wizard exits with a clear error otherwise.
+- **Non-interactive shell (CI, or an AI agent's terminal)?** Pass `--yes`. The wizard then prints the sign-in URL (no browser opens) and picks the project by your app's name. On CI with no one to sign in, also pass `--project-id` and `--api-key`.
 - **Key pasted with quotes/whitespace?** The wizard strips them, then checks the format: the API key starts with `mushi_` or `mush_pk_` followed by 10 or more characters, and the project ID is a UUID (or `proj_` followed by 10 or more characters).
 
 ## Security

@@ -1,11 +1,11 @@
 ---
 title: '@mushi-mushi/adapters'
-description: Turn Sentry, Datadog, Bugsnag and other monitoring webhooks into Mushi reports with @mushi-mushi/adapters, deduped against the same queue as user reports.
+description: Turn Sentry, Datadog, Bugsnag and other monitoring webhooks into Mushi Mushi reports with @mushi-mushi/adapters, in the same queue as user reports.
 ---
 
 # `@mushi-mushi/adapters`
 
-Already send errors to Sentry, Crashlytics, Bugsnag or Rollbar? These webhook handlers forward them into Mushi, so a crash lands in the same queue as your users' bug reports and gets the same plain-English diagnosis and ready fix. You do not need any of these tools to use Mushi; this package is only for when you already have one.
+Already send errors to Sentry, Crashlytics, Bugsnag or Rollbar? These webhook handlers forward them into Mushi Mushi, so a crash lands in the same queue as your users' bug reports and gets the same plain-English diagnosis and ready fix. You do not need any of these tools to use Mushi; this package is only for when you already have one.
 
 ## Install
 
@@ -29,9 +29,9 @@ pnpm add @mushi-mushi/adapters
 | AWS CloudWatch (via SNS)      | `translateCloudWatch`        | `createCloudWatchAdapter`         |
 | Opsgenie                      | `translateOpsGenie`          | `createOpsGenieAdapter`           |
 
-Every translator returns a `MushiCaptureEventInput` (from `@mushi-mushi/core`) so you can route the result to any sink — the hosted Mushi API, a queue, your own database, a fan-out of several. Subpath imports are supported, e.g. `@mushi-mushi/adapters/cloudwatch`.
+Every translator returns a `MushiCaptureEventInput` (from `@mushi-mushi/core`) so you can route the result to any sink: the hosted Mushi Mushi API, a queue, your own database, a fan-out of several. Subpath imports are supported, e.g. `@mushi-mushi/adapters/cloudwatch`.
 
-## Quick start — Datadog → Hono
+## Quick start: Datadog → Hono
 
 ```ts
 import { Hono } from 'hono';
@@ -73,15 +73,15 @@ Each adapter normalises the source's native severity onto Mushi's four-level sca
 | Mushi      | Sentry (`level`) | Datadog | New Relic (`priority`) | Honeycomb (contains) | Grafana / AM   |
 | ---------- | ---------------- | ------- | ---------------------- | -------------------- | -------------- |
 | `critical` | fatal            | P1      | critical               | critical             | critical, page |
-| `high`     | error            | P2      | —                      | high, error          | high, error    |
-| `medium`   | warning          | P3      | warning                | warn                 | warning, warn  |
-| `low`      | info, debug      | P4–P5   | —                      | info                 | info, low      |
+| `high`     | error            | P2      | high                   | high, error          | high, error    |
+| `medium`   | warning          | P3      | warning, medium        | warn                 | warning, warn  |
+| `low`      | info, debug      | P4–P5   | low                    | info                 | info, low      |
 
 The other crash-tracker adapters (Bugsnag / Rollbar / Crashlytics) map their `level` / `severity` field directly; Opsgenie / CloudWatch / Firebase Analytics derive severity from the upstream alarm state.
 
 ## Authentication
 
-Every adapter uses the strongest auth its upstream supports — never a shared bearer where a real signature exists.
+Every adapter uses the strongest auth its upstream supports, never a shared bearer where a real signature exists.
 
 | Adapter             | Method                        | Header                    |
 | ------------------- | ----------------------------- | ------------------------- |
@@ -97,4 +97,4 @@ Every adapter uses the strongest auth its upstream supports — never a shared b
 | Honeycomb           | HMAC-SHA256 (`sha256=…`)      | `X-Honeycomb-Signature`   |
 | Grafana / Loki (AM) | shared token (timing-safe)    | `X-Grafana-Token`         |
 
-Unit tests cover translation and forged-signature rejection for Sentry, Bugsnag, Rollbar, Crashlytics, Firebase Analytics, CloudWatch and Opsgenie; Datadog, New Relic, Honeycomb and Grafana have none yet. Run them with `pnpm --filter @mushi-mushi/adapters test`.
+Unit tests cover translation and rejection of a forged signature or missing secret for all eleven adapters. Run them with `pnpm --filter @mushi-mushi/adapters test`.

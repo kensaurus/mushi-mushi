@@ -4,12 +4,12 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/skills
 
 ---
 title: Agent skills
-description: Install Mushi playbooks into Cursor and Claude Code, sync them into the console catalog, and attach skill chains to bug reports.
+description: Install Mushi Mushi agent playbooks into Cursor and Claude Code, sync them into the console catalog, and attach skill chains to bug reports.
 ---
 
 # Agent skills
 
-**Skills** are SKILL.md playbooks your AI coding agent reads on demand — bug triage, fix-and-ship, QA sweeps, security audits, and more. Mushi syncs compatible repos into a project catalog and recommends the best skill when a report is classified.
+**Skills** are SKILL.md playbooks your AI coding agent reads on demand: bug triage, fix-and-ship, QA sweeps, security audits, and more. Mushi Mushi syncs compatible repos into a project catalog and recommends the best skill when a report is classified.
 
 ## Install skills into your editor
 
@@ -19,7 +19,7 @@ From the public [Connect page](/connect), pick **Skills** and run:
 npx skills add kensaurus/mushi-mushi
 ```
 
-That adds playbooks such as `mushi-health`, `mushi-integration`, and `workflow-fix-and-ship` to your local agent.
+That adds the five Mushi Mushi playbooks in the repo's `skills/` folder (`mushi-mushi`, `mushi-setup`, `mushi-debug`, `mushi-health` and `mushi-integration`) to your local agent. Workflow skills such as `workflow-fix-and-ship` come from the skill sources synced into the console catalog (by default `kensaurus/cursor-kenji`).
 
 ## How skills connect to Mushi
 
@@ -41,6 +41,6 @@ GitHub repo (SKILL.md files)
 
 ## Related
 
-- [Skill Pipelines operator guide](/admin/skill-pipelines) — handoff vs cloud execution
-- [MCP tools reference](/sdks/mcp-tools) — full tool catalog
-- [Incident loop](/quickstart/incident-loop) — start here if prod is broken right now
+- [Skill Pipelines operator guide](/admin/skill-pipelines): handoff vs cloud execution
+- [MCP tools reference](/sdks/mcp-tools): full tool catalog
+- [Incident loop](/quickstart/incident-loop): start here if prod is broken right now

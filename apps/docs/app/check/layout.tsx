@@ -4,7 +4,7 @@ import { DOCS_SITE, OG_CARD_IMAGE } from '../../lib/structured-data'
 
 const TITLE = 'Free Production Check'
 const DESCRIPTION =
-  'Paste your live app’s address. Mushi reads your home page and three pages it links to, the way a first visitor sees them, and tells you in plain English what is broken and how to fix it. Public pages only.'
+  'Paste your live app’s address. Mushi Mushi reads your home page and three pages it links to, the way a first visitor sees them, and tells you in plain English what is broken and how to fix it. Public pages only.'
 /** /check is an app route, not MDX, so the catch-all's canonical logic never reaches it. */
 const CHECK_URL = `${DOCS_SITE}/check`
 

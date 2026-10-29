@@ -29,6 +29,8 @@ export default {
   connect: { title: 'Connect your client', href: '/connect' },
   // Readable without signup or install (owner, 2026-10-27; ADR 0052).
   demo: 'Sample diagnosis',
+  'who-its-for': 'Who it’s for',
+  'what-it-does': 'What else it does',
   quickstart: 'Quickstart',
   concepts: 'Concepts',
 

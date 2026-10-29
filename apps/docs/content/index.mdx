@@ -22,11 +22,15 @@ import { LANDING_HERO, LANDING_WHAT_THIS_IS } from '@/lib/landing-copy'
 
 <DiagnosisScrollStage />
 
+<LandingAudience />
+
+<LandingFeatures />
+
 ## What it takes
 
 - **No monitoring stack.** No Sentry, no logging service, no AI key of your own. Mushi's AI writes the diagnosis.
 - **Free to start.** One app and 100 diagnoses a month with no card. Repeat reports of one bug count once.
-- **Your AI does the fix, you approve it.** Mushi hands Cursor, Claude Code or Lovable the prompt. Nothing ships until you say so.
+- **Your AI does the fix, you approve it.** Mushi hands Cursor, Claude Code or Lovable the prompt. Nothing ships until you say so. If you let an agent open the fix as a pull request, a second AI reads it next to the original report and can refuse it: [here is one it held](https://github.com/kensaurus/mushi-mushi/pull/864).
 
 <OssTrustStrip />
 
@@ -58,7 +62,7 @@ Mushi Mushi is the bug mediator for AI-built apps, an open-source tool that give
 
 <div className="landing-more">
 
-More: [How a bug moves, step by step](/concepts/closed-loop) ·
+More: [Who it’s for](/who-its-for) · [What else it does](/what-it-does) · [How a bug moves, step by step](/concepts/closed-loop) ·
 [Sentry, Linear, Slack and other tools](/plugins) ·
 [Compared with Sentry](/compare/sentry-vs-mushi) ·
 [More ways to install](/quickstart) ·

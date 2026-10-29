@@ -4,12 +4,12 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/pagerduty
 
 ---
 title: PagerDuty
-description: Page your on-call rotation through PagerDuty when Mushi triages a bug as critical, and resolve it when the fix lands — Events API v2 routing key setup.
+description: Page your on-call rotation via PagerDuty when Mushi Mushi triages a bug as critical, and resolve it when the fix lands. Setup with an Events API v2 routing key.
 ---
 
 # PagerDuty plugin
 
-Pages whoever is on call when Mushi triages a bug as critical, and resolves
+Pages whoever is on call when Mushi Mushi triages a bug as critical, and resolves
 the page when the fix lands.
 
 **Most people don't need the plugin.** Add PagerDuty on the console's
@@ -50,18 +50,18 @@ PagerDuty event fields:
 
 | PagerDuty field | Mushi source |
 | --- | --- |
-| `dedup_key` | `mushi::` — a re-sent event updates the same incident |
-| `summary` | report `title` (or its id) |
+| `dedup_key` | `mushi::`, so a re-sent event updates the same incident |
+| `summary` | report `title` (or `Mushi: `) |
 | `source` | `mushi-mushi` |
 | `severity` | `critical → critical`, `high → error`, `medium → warning`, `low → info` |
 | `custom_details` | the full Mushi event envelope |
 
 ## Troubleshooting
 
-- **No page fired** — check the plugin's last delivery status on the
-  **Marketplace** page. A `401` from your server means the signing secret
-  differs from `MUSHI_PLUGIN_SECRET`. Check the severity threshold too.
-- **Duplicate incidents** — make sure PagerDuty is not set up both on the
+- **No page fired**: check the plugin's deliveries on the **Marketplace**
+  page. A `401` from your server means the signing secret differs from
+  `MUSHI_PLUGIN_SECRET`. Check the severity threshold too.
+- **Duplicate incidents**: make sure PagerDuty is not set up both on the
   Integrations page and through this plugin.
-- **Incident not auto-resolving** — add `fix.applied` and
+- **Incident not auto-resolving**: add `fix.applied` and
   `report.status_changed` to the plugin's subscribed events.

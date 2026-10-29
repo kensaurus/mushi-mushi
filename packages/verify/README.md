@@ -2,10 +2,10 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Preflight checks for SDK env vars and ingest health.
-
-
-Playwright-based fix verification for Mushi Mushi — runs automated smoke tests on generated fixes and compares screenshots.
+Internal package, not published to npm. It checks a fix before anyone trusts
+it: it replays the bug report's steps in a Playwright browser against the fix's
+preview deployment, compares a screenshot with the baseline, and records the
+result for Mushi Mushi.
 
 ## How It Works
 
@@ -30,7 +30,7 @@ import { verifyFix } from '@mushi-mushi/verify'
 
 const result = await verifyFix({
   reportId: 'rep_xxx',
-  fixAttemptId: 'fa_xxx', // optional — correlates the run to a fix_attempts row
+  fixAttemptId: 'fa_xxx', // optional: links the run to a fix_attempts row
   deploymentUrl: 'https://preview-branch.your-app.com',
   supabaseUrl: process.env.SUPABASE_URL!,
   supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -46,7 +46,7 @@ const result = await verifyFix({
 ### Attach-time steps
 
 By default `verifyFix` replays `reports.reproduction_steps`. Pass `steps`
-to override them at call-time — useful when an agent attaches a custom
+to override them at call-time, for example when an agent attaches a custom
 regression probe alongside its fix PR. Strings are run through the same
 natural-language parser as repro steps; structured `{ action, target?, value? }`
 descriptors skip parsing and dispatch directly.
@@ -66,4 +66,4 @@ The [verify-fix workflow](../../.github/workflows/verify-fix.yml) runs this auto
 
 ## License
 
-[AGPLv3](../server/LICENSE) — copyleft. Part of the open-core server (self-host and fork freely; modified SaaS publishes changes or takes a [commercial license](../../COMMERCIAL-LICENSE.md)).
+[AGPLv3](../server/LICENSE), copyleft. Part of the open-core server (self-host and fork freely; modified SaaS publishes changes or takes a [commercial license](../../COMMERCIAL-LICENSE.md)).

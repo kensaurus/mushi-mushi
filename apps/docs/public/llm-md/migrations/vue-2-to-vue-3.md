@@ -4,19 +4,19 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/vue-2-to-vue-3
 
 ---
 title: 'Vue 2 → Vue 3'
-description: Upgrade a Vue 2 app to Vue 3 and move from the vanilla Mushi web SDK to the @mushi-mushi/vue plugin, with an interactive migration checklist.
+description: Upgrade a Vue 2 app to Vue 3 and move from the plain Mushi Mushi web SDK to the @mushi-mushi/vue plugin, with an interactive migration checklist.
 ---
 
 # Vue 2 → Vue 3
 
  
 
-Vue 2 reached end-of-life on 2023-12-31. Most apps have already migrated;
-this guide covers the holdouts and the Mushi-specific pieces.
+Vue 2 reached end-of-life on 2023-12-31. This guide covers the upgrade
+and the Mushi Mushi pieces.
 
-The Mushi Vue adapter (`@mushi-mushi/vue`) supports **Vue 3 only**. Apps
-still on Vue 2 must use the vanilla `@mushi-mushi/web` SDK; this guide
-brings you onto the adapter.
+The Mushi Vue adapter (`@mushi-mushi/vue`) supports **Vue 3.3 and later**
+(its peer dependency is `vue >=3.3`). Apps still on Vue 2 use the plain
+`@mushi-mushi/web` SDK; this guide brings you onto the adapter.
 
   **Vue 2 is no longer receiving security patches.** The Vue team's official
   recommendation is to migrate. If you cannot, [HeroDevs ships a paid LTS](https://www.herodevs.com/support/nes-vue)
@@ -28,20 +28,20 @@ brings you onto the adapter.
 - Options API still works in Vue 3, but the **Composition API** is the
   recommended style. You can mix both during the migration.
 - Filters are gone. Methods or computed properties replace them.
-- Functional components must be converted to regular components or use
-  `defineComponent` with `functional: true` removed.
-- `v-model` on a custom component changed semantics — see the
+- Functional components are plain functions in Vue 3; the `functional`
+  option and `` are gone.
+- `v-model` on a custom component changed semantics; see the
   [Vue 3 migration guide](https://v3-migration.vuejs.org/breaking-changes/v-model.html).
 - Vue Router 3 → 4. Vuex 3 → 4 (or Pinia, recommended).
 - Mushi: `@mushi-mushi/web` direct usage → `@mushi-mushi/vue` adapter.
 
-## API mapping (Mushi-specific)
+## API mapping (Mushi Mushi)
 
 | Vue 2 (with @mushi-mushi/web) | Vue 3 (with @mushi-mushi/vue + @mushi-mushi/web) |
 |-------------------------------|--------------------------------------------------|
-| `Mushi.init({ projectId, apiKey })` in main.js | Same `Mushi.init(...)` PLUS `app.use(MushiPlugin, { projectId, apiKey })` |
-| Manually attach `Vue.config.errorHandler = ...` to forward to Mushi | The adapter wires Vue 3's `app.config.errorHandler` automatically |
-| Reach into `Mushi` directly from any component | Use `useMushi()` composable inside `` |
+| `Mushi.init({ projectId, apiKey })` in main.js | `app.use(MushiPlugin, { projectId, apiKey })` only; the plugin calls `Mushi.init()` itself |
+| Manually attach `Vue.config.errorHandler = ...` to forward to Mushi | The adapter chains onto Vue 3's `app.config.errorHandler` automatically |
+| Use the instance from `Mushi.init()` in components | Use the `useMushi()` composable inside `` / `setup()` |
 
 ## Migration checklist
 
@@ -60,20 +60,17 @@ npm install vue@^3
 + import { createRouter, createWebHistory } from 'vue-router'
 + export default createRouter({ history: createWebHistory(), routes })`} },
     { id: 'state', label: 'Decide: Vuex 4 or Pinia', content: <>Vuex 4 is a Vue-3-compatible drop-in. Pinia is the new recommended state library — better TS, smaller, simpler. If you're touching state code anyway, Pinia is worth the switch.</> },
-    { id: 'install-mushi-adapter', label: 'Install the Mushi Vue adapter', content: {`npm install @mushi-mushi/vue @mushi-mushi/web`} },
+    { id: 'install-mushi-adapter', label: 'Install the Mushi Vue adapter', content: {`npm install @mushi-mushi/vue
+# @mushi-mushi/web comes with it as a dependency`} },
     { id: 'wire-mushi', label: 'Replace direct Mushi.init usage with the adapter', content: {`// main.ts
-
-const credentials = {
-  projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
-  apiKey:    import.meta.env.VITE_MUSHI_API_KEY,
 
 const app = createApp(App)
 
-// 1. Vue plugin: wires useMushi() composable + Vue 3 errorHandler
-app.use(MushiPlugin, credentials)
-
-// 2. Web SDK: actually mounts the floating widget + capture pipeline
-Mushi.init(credentials)
+// Initialises the SDK (widget + capture), provides useMushi(),
+// and chains onto app.config.errorHandler. Don't also call Mushi.init().
+app.use(MushiPlugin, {
+  projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+  apiKey:    import.meta.env.VITE_MUSHI_API_KEY,
 
 app.mount('#app')`} },
     { id: 'use-composable', label: 'Migrate components to useMushi()', content: {`
@@ -84,29 +81,27 @@ async function reportIssue() {
   await mushi?.captureEvent({ description: 'Issue from Vue component' })
 
 `} },
-    { id: 'remove-vue2-mushi', label: 'Remove any Vue-2-era Mushi error-handler shims', content: <>If you previously did Vue.config.errorHandler = (err) =&gt; Mushi.captureException(err), delete it. The adapter installs its own app.config.errorHandler that calls Mushi automatically.</> },
-    { id: 'verify', label: 'Smoke-test: throw an error, verify it lands as a Mushi report', content: <>Throw inside a Vue lifecycle hook. The adapter forwards it to Mushi as a report tagged with source: vue. Confirm it appears in the admin console.</> },
+    { id: 'remove-vue2-mushi', label: 'Remove any Vue-2-era Mushi error-handler shims', content: <>If you previously did Vue.config.errorHandler = (err) =&gt; mushi.captureException(err), delete it, along with your own Mushi.init() call. The adapter chains its own app.config.errorHandler that reports to Mushi.</> },
+    { id: 'verify', label: 'Smoke-test: throw an error, verify it lands as a Mushi report', content: <>Throw inside a Vue lifecycle hook. The adapter sends it to Mushi with source vue-error-handler. Confirm it appears in the admin console.</> },
 
 />
 
 ## Common gotchas
 
-- **Forgetting `Mushi.init()` after `app.use(MushiPlugin, ...)`**. The Vue
-  plugin only wires the composable + error handler; it does NOT mount the
-  visual widget. You need both calls. (This is also why the in-console
-  Install SDK card emits both lines — it caught a previous regression
-  where users thought one was enough.)
+- **Calling `Mushi.init()` as well as `app.use(MushiPlugin, ...)`**. Since
+  `@mushi-mushi/vue` 1.0 the plugin initialises the SDK itself; a second
+  `Mushi.init()` only logs "Already initialized". Remove it.
 - **`` and Options API mixing**. Both work in Vue 3, but
-  `useMushi()` only works inside `setup()` / `` because it's
-  a composable. For Options API components, use `inject('mushi')`
-  (the plugin provides it).
-- **Stale Vue 2 plugins**. Some older Mushi-adjacent plugins (Sentry-Vue
-  v6, Vue-Logger v1) only support Vue 2. Audit your plugin list.
+  `useMushi()` is a composable, so call it inside `setup()` /
+  ``. In an Options API component, add a `setup()` option
+  that returns it, or use `Mushi.getInstance()` from `@mushi-mushi/web`.
+- **Stale Vue 2 plugins**. Check each Vue plugin you use (error
+  reporting, logging, UI kits) for a Vue 3 version.
 
-## Mushi behaviour during the migration
+## Mushi Mushi during the migration
 
 You can run **just `@mushi-mushi/web`** in compat mode and it works. The
-adapter is purely additive — it gives you a nicer composable API and
+adapter is purely additive: it gives you a nicer composable API and
 auto-wires the error handler. Migrate Mushi to the adapter only after
 your app is on real Vue 3 (compat alias removed).
 

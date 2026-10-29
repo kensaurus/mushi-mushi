@@ -2,7 +2,7 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-An optional junk filter for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) bug reports. It runs in the browser and stops empty or nonsense reports ("hi", "asdf") before they are sent, so they never reach the server or an LLM.
+An optional junk filter for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) bug reports, for web apps that get a lot of "hi" and "asdf". It runs in the browser and stops empty or nonsense reports before they are sent, so they never reach the server or an LLM. Most apps do not need it: the web SDK already runs its own pattern filter first.
 
 > **Status: the ONNX mode is experimental.** Model inference is not implemented yet: `createOnnxClassifier()` loads `onnxruntime-web` and your model, then returns the heuristic's verdict for every report (`modelId: 'heuristic-fallback'`) and logs one console warning saying so. Use `createHeuristicClassifier()` in production.
 
@@ -17,8 +17,8 @@ import { Mushi } from '@mushi-mushi/web';
 import { createHeuristicClassifier } from '@mushi-mushi/wasm-classifier';
 
 Mushi.init({
-  projectId: 'proj_…',
-  apiKey: '…',
+  projectId: '<project-uuid>',
+  apiKey: 'mushi_…',
   preFilter: { wasmClassifier: createHeuristicClassifier() },
 });
 ```
@@ -27,15 +27,15 @@ The web SDK never loads this package on its own; pass it through `preFilter.wasm
 
 It runs in two modes:
 
-1. **Heuristic mode** (default, no dependencies) — a pattern-based score over the description, attached signals, and proactive triggers. Always available.
-2. **ONNX mode** — lazy-loads `onnxruntime-web` (optional peer dependency) and a quantized small language model you host on a CDN. Falls back to heuristic mode automatically if the runtime, model, or WebGPU/WASM backend is unavailable. **Model inference is not implemented yet:** this mode still returns heuristic verdicts (see below), so use heuristic mode for now.
+1. **Heuristic mode** (default, no dependencies): a pattern-based score over the description, attached signals, and proactive triggers. Always available.
+2. **ONNX mode**: lazy-loads `onnxruntime-web` (optional peer dependency) and a quantized small language model you host on a CDN. Falls back to heuristic mode automatically if the runtime, model, or WebGPU/WASM backend is unavailable. **Model inference is not implemented yet:** this mode still returns heuristic verdicts (see below), so use heuristic mode for now.
 
 ## Why
 
 Without it, every report goes to the server for LLM classification. That works, but:
 
-- **Cost** — reports the server is going to dismiss anyway ("hi", "test", "asdf", a single emoji) still cost an LLM call.
-- **Privacy** — obvious junk is never transmitted, so it stays out of audit logs and out of the LLM provider's hands.
+- **Cost:** reports the server is going to dismiss anyway ("hi", "test", "asdf", a single emoji) still cost an LLM call.
+- **Privacy:** obvious junk is never transmitted, so it stays out of audit logs and out of the LLM provider's hands.
 
 The classifier runs after the SDK's built-in pattern filter and before the API client. If it returns `block`, the report is not sent. If it returns `pass` or `unsure`, the report is sent and the server does the full classification.
 
@@ -62,7 +62,7 @@ if (result.verdict === 'block') {
 }
 ```
 
-## Usage — ONNX mode (experimental)
+## Usage: ONNX mode (experimental)
 
 Every verdict below still comes from the heuristic until inference ships.
 
@@ -102,7 +102,7 @@ Until that custom head is in place and the inference step is written, the ONNX b
 |---------|---------|----------------|
 | `pass` | High-confidence actionable bug | Submit the report. |
 | `block` | High-confidence junk | Do not send the report. |
-| `unsure` | Ambiguous | Submit anyway — the server LLM is the source of truth. |
+| `unsure` | Ambiguous | Submit anyway. The server's classification decides. |
 
 The thresholds default to `blockThreshold = 0.20` and `passThreshold = 0.55`. Change them with `createHeuristicClassifier({ blockThreshold, passThreshold })` (the ONNX classifier takes the same options).
 

@@ -2,13 +2,14 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Write your own small HTTPS server that reacts when Mushi files, triages or
-fixes a bug. The SDK checks Mushi's signature on each request, drops repeat
+For developers who want Mushi Mushi to drive a tool it does not connect to
+yet. Write a small HTTPS server that reacts when Mushi files, triages or fixes
+a bug; the SDK checks Mushi's signature on each request, drops repeat
 deliveries and calls your handler for the event.
 
 You only need this to connect a tool Mushi does not cover. Slack, Discord,
 Teams, Linear, Jira, GitHub Issues, PagerDuty and Sentry are connected on the
-**Integrations** page of the Mushi console with no code.
+**Integrations** page of the Mushi console with no code, on any plan.
 
 ```bash
 npm i @mushi-mushi/plugin-sdk express
@@ -39,9 +40,15 @@ inside the Mushi platform itself:
 - The Mushi backend does not need to vet/audit plugin code at install time.
 - A plugin can be migrated, scaled, or rolled back independently of Mushi.
 
-The trade-off is latency: the Mushi pipeline doesn't block on plugin
-acknowledgement (deliveries are async), so plugins that need synchronous
-mutation should call the REST API back from the handler.
+The trade-off is latency: the Mushi pipeline doesn't wait for plugins
+(deliveries are async), so a plugin that needs to change something in Mushi
+calls the REST API back from its handler.
+
+Mushi waits 8 seconds for your server's answer and retries on a timeout or a
+non-2xx answer. `createPluginHandler` answers only after your handler
+finishes, and it remembers a delivery only after success, so keep handlers
+under 8 seconds (or hand slow work to a queue) and make them safe to run
+twice.
 
 ## Express, with a call back into Mushi
 
@@ -100,7 +107,7 @@ export default app
 | Header                 | Value                                                                |
 |------------------------|----------------------------------------------------------------------|
 | `X-Mushi-Event`        | Event name (e.g. `report.created`)                                   |
-| `X-Mushi-Signature`    | `t=<unix-ms>,v1=<hex>` — Stripe-style                                |
+| `X-Mushi-Signature`    | `t=<unix-ms>,v1=<hex>` (Stripe-style)                                |
 | `X-Mushi-Project`      | Project UUID                                                         |
 | `X-Mushi-Plugin`       | Plugin slug (matches the marketplace listing)                        |
 | `X-Mushi-Delivery`     | Per-delivery UUID; safe as an idempotency key                        |
@@ -153,7 +160,9 @@ use at I/O boundaries.
 
 The console's **Marketplace** page lists only reviewed plugins. Mushi sends
 events to a plugin once it is installed there with your server's public
-HTTPS URL and a signing secret. To get a listing, submit it with
+HTTPS URL and a signing secret. On Mushi Mushi Cloud, installing a plugin
+needs a paid plan (Builder or above, see
+[pricing](https://kensaur.us/mushi-mushi/docs/pricing)). To get a listing, submit it with
 `POST /v1/marketplace/submissions`; a reviewer checks the manifest, the
 callback URL and the requested permissions.
 
@@ -164,27 +173,31 @@ copy and adapt them as a starting point:
 
 **Project management / on-call**
 
-- [`@mushi-mushi/plugin-pagerduty`](../plugin-pagerduty) — paged on critical events; auto-resolves on `fix.applied`.
-- [`@mushi-mushi/plugin-jira`](../plugin-jira) — creates Jira issues and moves them when the report status changes.
-- [`@mushi-mushi/plugin-linear`](../plugin-linear) — creates and updates Linear issues.
-- [`@mushi-mushi/plugin-github-issues`](../plugin-github-issues) — open + close GitHub Issues with the `mushi-bug` label.
+- [`@mushi-mushi/plugin-pagerduty`](../plugin-pagerduty): pages on critical reports; resolves on `fix.applied`.
+- [`@mushi-mushi/plugin-jira`](../plugin-jira): creates Jira issues and moves them when the report status changes.
+- [`@mushi-mushi/plugin-linear`](../plugin-linear): creates and updates Linear issues.
+- [`@mushi-mushi/plugin-github-issues`](../plugin-github-issues): opens and closes GitHub issues with the `mushi-bug` label.
 
 **Chat / notifications**
 
-- [`@mushi-mushi/plugin-slack-app`](../plugin-slack-app) — `/mushi` slash command, Slack request verification, OAuth helpers.
-- [`@mushi-mushi/plugin-discord`](../plugin-discord) — embed posts to a Discord webhook.
-- [`@mushi-mushi/plugin-msteams`](../plugin-msteams) — Adaptive Card 1.4 notifications.
+- [`@mushi-mushi/plugin-slack-app`](../plugin-slack-app): `/mushi` slash command, Slack request verification, OAuth helpers.
+- [`@mushi-mushi/plugin-discord`](../plugin-discord): embeds posted to a Discord webhook.
+- [`@mushi-mushi/plugin-msteams`](../plugin-msteams): Adaptive Card 1.4 notifications.
 
-**Error monitoring (mirrored writes)**
+**Error monitoring (copies of reports)**
 
-- [`@mushi-mushi/plugin-sentry`](../plugin-sentry) — mirror reports into Sentry; resolve on fix.
-- [`@mushi-mushi/plugin-bugsnag`](../plugin-bugsnag) — Bugsnag Data API v2 mirror.
-- [`@mushi-mushi/plugin-rollbar`](../plugin-rollbar) — Rollbar item mirror + auto-resolve.
-- [`@mushi-mushi/plugin-crashlytics`](../plugin-crashlytics) — sets a Remote Config `mushi_resolved_*` flag on fix.
+- [`@mushi-mushi/plugin-sentry`](../plugin-sentry): copies reports into Sentry; resolves on fix.
+- [`@mushi-mushi/plugin-bugsnag`](../plugin-bugsnag): copies reports into Bugsnag (not yet tested against a live project).
+- [`@mushi-mushi/plugin-rollbar`](../plugin-rollbar): copies reports into Rollbar items and resolves them (not yet tested against a live project).
+- [`@mushi-mushi/plugin-crashlytics`](../plugin-crashlytics): sets a Remote Config `mushi_resolved_*` flag on fix.
 
 **Workflow**
 
-- [`@mushi-mushi/plugin-zapier`](../plugin-zapier) — fan-out to any Zapier workflow via incoming webhook.
+- [`@mushi-mushi/plugin-zapier`](../plugin-zapier): sends every event to a Zapier Catch Hook.
+
+**Coding agents**
+
+- [`@mushi-mushi/plugin-cursor-cloud`](../plugin-cursor-cloud): starts a Cursor Cloud Agent on critical reports; it opens a draft PR.
 
 ## License
 
