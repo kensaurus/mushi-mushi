@@ -11,16 +11,17 @@
  * DEPENDENCIES:
  * - _shared/sdk-release-sync.ts — the GitHub read and the one update
  * - _shared/error-codes.ts — gateway HTML / 502 classification
- * - _shared/logger.ts — warn on a blip, error only for a real database failure
+ * - _shared/logger.ts — warn while retrying; error once every attempt fails
  *
  * USAGE:
  * Called only from sdk-release-sync/index.ts. Not imported by `api`
  * (that bundle is at its upload-size budget).
  *
  * NOTES:
- * A retry runs the whole sync again. The update is the same job row, so a
- * write that landed and then returned 502 is safe to repeat. The gateway
- * page is never logged: the status title and cf-ray are.
+ * GitHub is read once. A retry writes the same job row again, so a write
+ * that landed and then returned 502 is safe to repeat. Only that write is
+ * classified as SYNC_PERSIST_FAILED. The gateway page is never logged:
+ * the status title and cf-ray are.
  */
 
 import type { getServiceClient } from '../_shared/db.ts'
@@ -62,10 +63,27 @@ function thrownPersistMessage(err: unknown): string | null {
   return isRetryablePersistMessage(message) ? message : null
 }
 
+/** The one row write. A thrown gateway/socket error becomes its message; anything else is rethrown. */
+async function writeSdkReleaseRow(
+  db: ReturnType<typeof getServiceClient>,
+  jobId: string,
+  update: Record<string, unknown>,
+): Promise<string | null> {
+  try {
+    const { error } = await db.from('sdk_upgrade_jobs').update(update).eq('id', jobId)
+    return error ? error.message ?? '' : null
+  } catch (err) {
+    const message = thrownPersistMessage(err)
+    if (message === null) throw err
+    return message
+  }
+}
+
 /**
- * Read GitHub and store the result. A transient persist failure (Cloudflare
- * 502/503/504, or a dropped connection whose text we already classify) is
- * tried up to three times. A coded database error is not retried.
+ * Read GitHub once and store the result. A transient failure of the row write
+ * (Cloudflare 502/503/504, or a dropped connection whose text we already
+ * classify) is tried up to three times. A coded database error is not retried.
+ * A throw from the GitHub read is not this failure.
  */
 export async function syncSdkReleaseJobRetryingPersist(
   db: ReturnType<typeof getServiceClient>,
@@ -74,46 +92,41 @@ export async function syncSdkReleaseJobRetryingPersist(
   opts: { sleep?: (ms: number) => Promise<void> } = {},
 ): Promise<Awaited<ReturnType<typeof syncSdkReleaseJob>>> {
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
-  const once = async () => {
-    try {
-      return await syncSdkReleaseJob(db, token, job)
-    } catch (err) {
-      const message = thrownPersistMessage(err)
-      if (message === null) throw err
-      return { ok: false as const, code: 'SYNC_PERSIST_FAILED' as const, message }
-    }
-  }
-  let result = await once()
-  for (let attempt = 0; attempt < PERSIST_ATTEMPTS - 1; attempt++) {
-    if (result.ok || result.code !== 'SYNC_PERSIST_FAILED') return result
-    const message = result.message ?? ''
-    if (!isRetryablePersistMessage(message)) break
-    const cfRay = cloudflareRayId(message)
-    log.warn('retrying sdk release persist', {
-      jobId: job.id,
-      attempt: attempt + 1,
-      attempts: PERSIST_ATTEMPTS,
-      ...(cfRay ? { cfRay } : {}),
-      detail: dbDiagnosticMessage(message).slice(0, 300),
-      transient: true,
-    })
-    await sleep(100 * 2 ** attempt)
-    result = await once()
-  }
-  if (result.ok || result.code !== 'SYNC_PERSIST_FAILED') return result
-  const message = result.message ?? ''
-  const transient = isRetryablePersistMessage(message)
-  const detail = dbDiagnosticMessage(message).slice(0, 300)
-  const cfRay = cloudflareRayId(message)
-  if (transient) {
-    log.warn('failed to persist sync', {
-      jobId: job.id,
-      detail,
-      ...(cfRay ? { cfRay } : {}),
-      transient: true,
-    })
-  } else {
-    log.error('failed to persist sync', { jobId: job.id, err: detail })
-  }
-  return { ...result, message: plainPersistMessage(message, transient) }
+  return syncSdkReleaseJob(db, token, job, {
+    persist: async (update) => {
+      const row = update as Record<string, unknown>
+      let failed = await writeSdkReleaseRow(db, job.id, row)
+      for (let attempt = 0; attempt < PERSIST_ATTEMPTS - 1; attempt++) {
+        if (failed == null || !isRetryablePersistMessage(failed)) break
+        const cfRay = cloudflareRayId(failed)
+        log.warn('retrying sdk release persist', {
+          jobId: job.id,
+          attempt: attempt + 1,
+          attempts: PERSIST_ATTEMPTS,
+          ...(cfRay ? { cfRay } : {}),
+          detail: dbDiagnosticMessage(failed).slice(0, 300),
+          transient: true,
+        })
+        await sleep(100 * 2 ** attempt)
+        failed = await writeSdkReleaseRow(db, job.id, row)
+      }
+      if (failed == null) return null
+      const transient = isRetryablePersistMessage(failed)
+      const detail = dbDiagnosticMessage(failed).slice(0, 300)
+      const cfRay = cloudflareRayId(failed)
+      // A blip that recovers is a warning above. Every attempt failing is an
+      // error so a lasting gateway outage still reaches Sentry.
+      if (transient) {
+        log.error('failed to persist sync', {
+          jobId: job.id,
+          detail,
+          ...(cfRay ? { cfRay } : {}),
+          transient: true,
+        })
+      } else {
+        log.error('failed to persist sync', { jobId: job.id, err: detail })
+      }
+      return plainPersistMessage(failed, transient)
+    },
+  })
 }
