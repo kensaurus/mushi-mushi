@@ -402,17 +402,30 @@ export function anthropicUsageLimitDetail(err: unknown): string | null {
   return null
 }
 
+const REGAIN_ACCESS_RE = /regain access on (\d{4}-\d{2}-\d{2}) at (\d{2}:\d{2}) UTC/i
+
 /**
- * True for the typed error, a raw Anthropic 400 with that sentence, or any
- * thrown error whose message carries the sentence (a failover wrapper).
- * Safe for Sentry suppression. Not safe on its own for marking a key:
- * `classifyLlmError` uses the status-400 check and the typed error only.
+ * ISO-8601 UTC instant from Anthropic's "regain access on YYYY-MM-DD at HH:MM UTC",
+ * or null when that sentence is absent or the date does not exist.
+ * Callers use it as a key cooldown so a workspace cap is not retried every hour.
+ */
+export function anthropicUsageLimitCooldownUntil(text: string): string | null {
+  const match = text.match(REGAIN_ACCESS_RE)
+  if (!match) return null
+  const iso = `${match[1]}T${match[2]}:00.000Z`
+  const ms = Date.parse(iso)
+  if (!Number.isFinite(ms)) return null
+  if (new Date(ms).toISOString().slice(0, 16) !== `${match[1]}T${match[2]}`) return null
+  return new Date(ms).toISOString()
+}
+
+/**
+ * True only for the typed quota error or a raw Anthropic HTTP 400 that
+ * carries the usage-limit sentence. A different error that merely quotes
+ * the sentence is not the workspace cap: Sentry must still see it.
  */
 export function isOperationalAnthropicQuota(err: unknown): boolean {
-  if (isClaudeQuotaExceeded(err)) return true
-  if (anthropicUsageLimitDetail(err)) return true
-  const msg = err instanceof Error ? err.message : ''
-  return USAGE_LIMIT_RE.test(msg)
+  return isClaudeQuotaExceeded(err) || anthropicUsageLimitDetail(err) !== null
 }
 
 export interface ClaudeUsageLike {

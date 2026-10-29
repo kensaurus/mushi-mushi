@@ -12,23 +12,16 @@
  *          context_assembly_failed, unknown) MUST still log at `error` →
  *          Sentry. We mirror the decision predicate here so CI enforces it
  *          without booting Deno + Supabase, plus a source-level snapshot so
- *          the gate can't silently disappear. `categorizeFailure` is exported
- *          and called directly for the Anthropic usage-cap mapping.
+ *          the gate can't silently disappear. `categorizeFailure` lives in
+ *          `_shared/fix-failure.ts` so this file does not import the worker.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-vi.hoisted(() => {
-  ;(globalThis as Record<string, unknown>).Deno = {
-    serve: () => undefined,
-    env: { get: () => undefined },
-  };
-});
-
 import { ClaudeQuotaExceededError } from '../../supabase/functions/_shared/claude-request.ts';
-import { categorizeFailure } from '../../supabase/functions/fix-worker/index.ts';
+import { categorizeFailure } from '../../supabase/functions/_shared/fix-failure.ts';
 
 // Mirror of EXPECTED_FAILURE_CATEGORIES in
 // supabase/functions/fix-worker/index.ts. Kept in sync by the source-snapshot
@@ -116,7 +109,9 @@ describe('fix-worker failure logging (MUSHI-MUSHI-SERVER-8)', () => {
       );
       // A pinned key that was already unusable is the same kind of stop: warn,
       // stored as cursor_api_error, and retried on the next spend-down tick.
-      expect(src).toContain("if (isSpendDownPinnedKeyUnavailable(msg)) return 'cursor_api_error'");
+      expect(readFileSync(resolve(__dirname, '../../supabase/functions/_shared/fix-failure.ts'), 'utf8')).toContain(
+        "if (isSpendDownPinnedKeyUnavailable(msg)) return 'cursor_api_error'",
+      );
       expect(src).toContain("log.warn('Fix worker stopped: spend-down key is not usable'");
     });
   });

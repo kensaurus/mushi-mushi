@@ -31,6 +31,15 @@ describe('humanizeFixError: Anthropic workspace usage cap', () => {
     expect(h?.severity).toBe('soft')
     expect(h?.action?.target).toEqual({ kind: 'route', to: '/settings?tab=byok' })
   })
+
+  it('names an exhausted key pool when the code is uppercase in a lowercased message', () => {
+    const h = humanizeFixError(
+      'LLM failover: ALL_KEYS_EXHAUSTED for provider anthropic after 1 attempt(s). Last error: billing hard stop',
+    )
+    expect(h?.title).toBe('All configured API keys have hit their quota.')
+    expect(h?.hint).toContain('Add a backup key')
+    expect(h?.action?.label).toBe('Add backup key')
+  })
 })
 
 describe('humanizeFixError: review gate', () => {

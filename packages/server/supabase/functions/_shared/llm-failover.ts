@@ -4,8 +4,9 @@
  *
  * `withLlmFailover(db, projectId, provider, fn)` iterates the ordered list
  * of active keys, calls `fn(resolvedKey)`, and on error:
- *   - 429, or Anthropic's 400 workspace usage cap → marks key as
- *     `quota_exhausted` (1-hour cooldown), advances. The cap is not retried.
+ *   - 429 → marks key as `quota_exhausted` (1-hour cooldown), advances.
+ *   - Anthropic's 400 workspace usage cap → `quota_exhausted` until the
+ *     "regain access on …" time in the error (else 1 hour). Not retried.
  *   - 401/403 → marks key as `auth_failed`, advances.
  *   - Transient (5xx, timeout, ECONNRESET/ETIMEDOUT, "overloaded") → bounded
  *     exponential-backoff+jitter retry on the SAME key first (the key isn't
