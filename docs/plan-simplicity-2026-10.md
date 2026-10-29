@@ -751,3 +751,22 @@ numbers.
 Phase 0 (actor on every funnel event, the missing funnel steps) is not ranked
 because it does not reduce drop-off by itself. Do it first: without it, none of the
 five can be shown to work.
+
+---
+
+## 8. Baseline taken before Phase 0 (2026-10-29 ~05:00 UTC)
+
+Read from production right after review follow-ups and spend-down were switched back
+on (03:44 UTC) and 73 approved PRs were queued. Phases are compared against this.
+
+| App | Open fix PRs | Reports in `fixing` > 7 days | Failed fixes, 30 days | Fixes merged, last 24 h |
+|---|---:|---:|---:|---:|
+| glot.it | 49 | 12 | 71 | 6 |
+| Help Her Take Photo | 26 | 0 | 61 | 1 |
+| the-wanting-mind | 25 | 0 | 32 | 4 |
+| yen-yen | 23 | 3 | 91 | 3 |
+
+The owner approved Phase 0 and Phase 1 on 2026-10-29. Phase 1 ships in two units:
+the read-only registry first, then pausing in observe-only mode behind a runtime
+switch (default off), turned on per check only after a day of shadow data with no
+false pauses.
