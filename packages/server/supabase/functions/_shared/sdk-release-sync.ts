@@ -137,6 +137,9 @@ export async function syncSdkReleaseJob(
   }
 
   const { update, ...derived } = deriveSdkReleaseUpdate(job, github, new Date().toISOString())
+  // One update of this job row. A Cloudflare 502/503/504 is retried by the
+  // cron (sdk-release-sync/persist.ts). The retry loop stays out of this file
+  // because it also ships inside `api`, which is at its upload-size budget.
   const { error } = await db.from('sdk_upgrade_jobs').update(update).eq('id', job.id)
   if (error) return { ok: false, code: 'SYNC_PERSIST_FAILED', message: error.message }
   return { ok: true, ...derived, github }
