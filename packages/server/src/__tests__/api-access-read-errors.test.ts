@@ -201,6 +201,29 @@ describe('dbError transient log line', () => {
     expect(String(line.err_message)).not.toContain('<')
   })
 
+  it('a shared company-funnel org is a 409 and is not sent to Sentry', () => {
+    vi.mocked(reportError).mockClear()
+    const c = {
+      get: () => 'req-org',
+      req: { path: '/v1/admin/projects', method: 'POST' },
+      json: (body: unknown, status?: number) => ({ body, status }),
+    }
+    const res = shared.dbError(c as never, {
+      code: '23514',
+      message: 'SELF_ORG_SHARED',
+      hint: 'The company-funnel project must be the only project in its organization',
+    }) as unknown as {
+      body: { ok: boolean; error: { code: string; message: string } }
+      status: number
+    }
+    expect(res.status).toBe(409)
+    expect(res.body.ok).toBe(false)
+    expect(res.body.error.code).toBe('CONFLICT')
+    expect(res.body.error.message).toBe(shared.SELF_ORG_SHARED_MESSAGE)
+    expect(res.body.error.message).not.toContain('SELF_ORG_SHARED')
+    expect(reportError).not.toHaveBeenCalled()
+  })
+
   it('a real SQL error is still reported and the client message stays generic', () => {
     const c = {
       get: () => undefined,

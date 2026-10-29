@@ -74,7 +74,9 @@ async function selfOrganizationId(db: SupabaseClient): Promise<string | null> {
  * end_users are organization-scoped: console users resolved here share a
  * namespace with every other project in the self organization. The self
  * project was moved into its own org on 2026-09-22 (migration
- * 20260922000018); a second project landing there silently re-mixes them.
+ * 20260922000018). Migration 20261029130000 moves it again when that org
+ * holds another project, copies the funnel's end users, and rejects the
+ * next project write into that org (SELF_ORG_SHARED).
  */
 async function warnIfSelfOrgShared(db: SupabaseClient, orgId: string): Promise<void> {
   const { count, error } = await db

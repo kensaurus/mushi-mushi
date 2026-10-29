@@ -48,7 +48,7 @@ import { jwtAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { logAudit } from '../../_shared/audit.ts'
 import { log } from '../../_shared/logger.ts'
-import { dbError, callerCanAccessProject } from '../shared.ts'
+import { dbError, callerCanAccessProject, isSelfOrgSharedDbError, SELF_ORG_SHARED_MESSAGE } from '../shared.ts'
 import { emitFunnelEvent } from '../../_shared/setup-funnel.ts'
 import {
   evaluateTokenDelivery,
@@ -681,6 +681,9 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       .single()
 
     if (error) {
+      if (isSelfOrgSharedDbError(error)) {
+        return c.json({ ok: false, error: { code: 'CONFLICT', message: SELF_ORG_SHARED_MESSAGE } }, 409)
+      }
       return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
     }
 
