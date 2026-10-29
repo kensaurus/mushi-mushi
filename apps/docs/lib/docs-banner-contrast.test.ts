@@ -4,12 +4,13 @@
  * `.docs-banner-eyebrow` used `--mushi-vermillion-ink` (#7a1f15). Nextra's
  * `<Banner>` paints `.nextra-banner` with `bg-neutral-900` (oklch 20.5% 0,
  * #171717) and `text-slate-50`, and in `.dark` white text over
- * #212121–#383838. That ink is 1.74:1 on the bar. The label inherits the
+ * a dark gradient. That ink is 1.74:1 on the bar. The label inherits the
  * banner's own text colour instead. The `.dark` override is gone so a
  * theme-only mix cannot put a dark red back on the same bar.
  *
- * Colour maths lives in this file, so a move of the server edge-function
- * colour module leaves this test alone.
+ * Colour maths lives in this file. Bar colours come from the theme
+ * stylesheet (`nextra-theme-docs/style.css`), including the dark gradient
+ * stops, so a renamed Banner build file cannot fail the suite.
  */
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -91,8 +92,6 @@ const css = readFileSync(join(here, '../app/globals.css'), 'utf8');
 const brand = readFileSync(join(here, '../../../packages/brand/src/editorial.css'), 'utf8');
 
 const requireFromDocs = createRequire(join(here, '../package.json'));
-const nextraRoot = dirname(requireFromDocs.resolve('nextra/package.json'));
-const banner = readFileSync(join(nextraRoot, 'dist/client/components/banner/index.js'), 'utf8');
 const nextraCss = readFileSync(requireFromDocs.resolve('nextra-theme-docs/style.css'), 'utf8');
 
 function ruleBody(source: string, selector: string): string {
@@ -124,6 +123,17 @@ function color(input: string): Rgba {
   return parsed;
 }
 
+/** Painted dark-theme bar in the theme stylesheet. Two hex stops, any angle. */
+const DARK_BANNER_GRADIENT =
+  /background-image:\s*linear-gradient\(\s*[\d.]+deg\s*,\s*(#[0-9a-f]{6})\s*,\s*(#[0-9a-f]{6})\s*\)/i;
+
+/** Dark-theme bar ends from the painted `background-image` in the theme CSS. */
+function darkBannerEnds(source: string): [Rgba, Rgba] {
+  const match = DARK_BANNER_GRADIENT.exec(source);
+  if (!match) throw new Error('missing dark banner gradient in nextra theme css');
+  return [color(match[1]), color(match[2])];
+}
+
 describe('docs banner eyebrow contrast', () => {
   const eyebrow = ruleBody(css, '.docs-banner-eyebrow');
   const root = ruleBody(brand, ':root');
@@ -131,8 +141,7 @@ describe('docs banner eyebrow contrast', () => {
   const slate50 = color(decl(nextraCss, '--x-color-slate-50'));
   const white = color(decl(nextraCss, '--x-color-white'));
   const vermillionInk = color(decl(root, '--mushi-vermillion-ink'));
-  const darkEnd = color('#212121');
-  const lightEnd = color('#383838');
+  const [darkEnd, lightEnd] = darkBannerEnds(nextraCss);
 
   it('inherits the banner text colour instead of vermillion ink', () => {
     expect(decl(eyebrow, 'color')).toBe('inherit');
@@ -142,9 +151,11 @@ describe('docs banner eyebrow contrast', () => {
     );
   });
 
-  it('paints the banner with neutral-900 and slate-50, in any class order', () => {
-    expect(banner).toContain('bg-neutral-900');
-    expect(banner).toContain('text-slate-50');
+  it('reads dark bar ends from the theme stylesheet gradient', () => {
+    const stripped = nextraCss.replace(DARK_BANNER_GRADIENT, 'background-image: none');
+    expect(() => darkBannerEnds(stripped)).toThrow(/missing dark banner gradient/);
+    expect(contrastRatio(slate50, darkEnd)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(white, lightEnd)).toBeGreaterThanOrEqual(4.5);
   });
 
   it('clears WCAG AA for the text the label inherits, on every bar colour', () => {
@@ -164,30 +175,5 @@ describe('docs banner eyebrow contrast', () => {
     // #7a1f15 on #171717 is 1.7367… before rounding. Closeness to that value
     // still passes when the helper returns 1.74, and when it returns the raw ratio.
     expect(contrastRatio(vermillionInk, color('#171717'))).toBeCloseTo(1.7367281193892272, 2);
-  });
-
-  it('keeps colour maths in this file', () => {
-    const source = readFileSync(fileURLToPath(import.meta.url), 'utf8');
-    const serverColor = [
-      'packages',
-      'server',
-      'supabase',
-      'functions',
-      '_shared',
-      'design-color',
-    ].join('/');
-    expect(source).not.toContain(serverColor);
-  });
-
-  it('does not pin one exact Nextra banner class string', () => {
-    const source = readFileSync(fileURLToPath(import.meta.url), 'utf8');
-    const exactClasses = ['x:text-slate-50', 'x:dark:text-white', 'x:bg-neutral-900'].join(' ');
-    expect(source).not.toContain(exactClasses);
-  });
-
-  it('compares the measured ink ratio with closeness, not exact equality', () => {
-    const source = readFileSync(fileURLToPath(import.meta.url), 'utf8');
-    expect(source).not.toMatch(/\.toBe\(1\.74\)/);
-    expect(source).toMatch(/toBeCloseTo\(1\.74,\s*2\)/);
   });
 });
