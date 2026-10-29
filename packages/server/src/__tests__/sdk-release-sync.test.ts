@@ -231,6 +231,10 @@ describe('sync persist retry (Mushi report 547db71b)', () => {
     const result = await syncSdkReleaseJobRetryingPersist(gateway.db as never, 'tok', STORED, { sleep: noWait })
     expect(result.ok).toBe(true)
     expect(gateway.attempts()).toBe(2)
+    // A 502 on the write must not read GitHub again.
+    expect(gh.pull).toHaveBeenCalledTimes(1)
+    expect(gh.checks).toHaveBeenCalledTimes(1)
+    expect(gh.deploy).toHaveBeenCalledTimes(1)
     expect(inner.table('sdk_upgrade_jobs')[0]).toMatchObject({ release_status: 'ready_to_merge' })
     expect(reportMessage).not.toHaveBeenCalled()
   })
@@ -250,8 +254,15 @@ describe('sync persist retry (Mushi report 547db71b)', () => {
     expect(logged).toContain('502 Bad Gateway')
     expect(logged).not.toContain('<!DOCTYPE')
     expect(gateway.attempts()).toBe(3)
+    expect(gh.pull).toHaveBeenCalledTimes(1)
+    expect(gh.checks).toHaveBeenCalledTimes(1)
+    expect(gh.deploy).toHaveBeenCalledTimes(1)
     expect(inner.table('sdk_upgrade_jobs')[0]).toEqual(STORED_ROW)
-    expect(reportMessage).not.toHaveBeenCalled()
+    // Every attempt failed: an error, so Sentry still hears about the outage.
+    const reported = JSON.stringify(vi.mocked(reportMessage).mock.calls)
+    expect(reported).toContain('failed to persist sync')
+    expect(reported).toContain('8f21aa9c0d4e1b2a-NRT')
+    expect(reported).not.toContain('<!DOCTYPE')
   })
 
   it('retries when the update throws a gateway page', async () => {
@@ -276,7 +287,56 @@ describe('sync persist retry (Mushi report 547db71b)', () => {
     const result = await syncSdkReleaseJobRetryingPersist(flaky as never, 'tok', STORED, { sleep: noWait })
     expect(result.ok).toBe(true)
     expect(calls).toBe(2)
+    expect(gh.pull).toHaveBeenCalledTimes(1)
+    expect(gh.checks).toHaveBeenCalledTimes(1)
+    expect(gh.deploy).toHaveBeenCalledTimes(1)
     expect(inner.table('sdk_upgrade_jobs')[0]).toMatchObject({ release_status: 'ready_to_merge' })
+    expect(reportMessage).not.toHaveBeenCalled()
+  })
+
+  it('a thrown fetch failure or timeout from GitHub is not a persist failure and is not retried', async () => {
+    const inner = db
+    const gateway = withUpdateFailures(inner, [])
+    gh.checks.mockImplementation(() => Promise.reject(new TypeError('fetch failed')))
+    const fetched = await syncSdkReleaseJobRetryingPersist(gateway.db as never, 'tok', STORED, { sleep: noWait })
+    expect(fetched).toMatchObject({ ok: false, code: 'GITHUB_UNAVAILABLE' })
+    expect(gh.checks).toHaveBeenCalledTimes(1)
+    expect(gateway.attempts()).toBe(0)
+    expect(inner.table('sdk_upgrade_jobs')[0]).toEqual(STORED_ROW)
+
+    gh.checks.mockImplementation(timedOut)
+    const timed = await syncSdkReleaseJobRetryingPersist(gateway.db as never, 'tok', STORED, { sleep: noWait })
+    expect(timed).toMatchObject({ ok: false, code: 'GITHUB_UNAVAILABLE' })
+    expect(timed.ok ? '' : timed.message).toContain('timed out')
+    expect(gh.checks).toHaveBeenCalledTimes(2)
+    expect(gateway.attempts()).toBe(0)
+  })
+
+  it('a thrown fetch failed from the update is retried without reading GitHub again', async () => {
+    vi.mocked(reportMessage).mockClear()
+    gh.checks.mockResolvedValue({ status: 'completed', conclusion: 'success' })
+    const inner = db
+    let calls = 0
+    const flaky = {
+      from(table: string) {
+        const query = inner.from(table) as {
+          update: (payload: Record<string, unknown>) => { eq: (key: string, value: unknown) => Promise<unknown> }
+        }
+        const realUpdate = query.update.bind(query)
+        query.update = (payload) => {
+          calls += 1
+          if (calls === 1) return { eq: () => Promise.reject(new TypeError('fetch failed')) }
+          return realUpdate(payload)
+        }
+        return query
+      },
+    }
+    const result = await syncSdkReleaseJobRetryingPersist(flaky as never, 'tok', STORED, { sleep: noWait })
+    expect(result.ok).toBe(true)
+    expect(calls).toBe(2)
+    expect(gh.pull).toHaveBeenCalledTimes(1)
+    expect(gh.checks).toHaveBeenCalledTimes(1)
+    expect(gh.deploy).toHaveBeenCalledTimes(1)
     expect(reportMessage).not.toHaveBeenCalled()
   })
 
