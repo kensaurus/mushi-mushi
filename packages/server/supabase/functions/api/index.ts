@@ -11,7 +11,6 @@ import { registerSdkAssistantRoutes } from './routes/sdk-assistant.ts';
 import { registerConsoleKnowledgeRoutes } from './routes/console-knowledge.ts';
 import { registerAdminOpsRoutes } from './routes/admin-ops.ts';
 import { registerSiteWatchRoutes } from './routes/site-watch.ts';
-import { registerByokSpendDownRoutes } from './routes/byok-spend-down.ts';
 import { registerBillingChangePlanRoutes } from './routes/billing-change-plan.ts';
 import { registerBillingProjectsQueueGraphRoutes } from './routes/billing-projects-queue-graph.ts';
 import { registerCodebaseRoutes } from './routes/codebase.ts';
@@ -654,9 +653,14 @@ registerAdminOpsRoutes(app);
 
 // Live-site watch: Firecrawl monitors that file broken pages as reports (ADR 0024).
 registerSiteWatchRoutes(app);
-registerByokSpendDownRoutes(app);
-// Review follow-ups: settings, Cursor model list, scoreboard (ADR 0032).
-forwardToApiExt(['/v1/admin/byok/review-followups', '/v1/admin/byok/cursor/models']);
+// Spend-down and review follow-ups (ADR 0028, 0032): served by api-ext (api size budget).
+forwardToApiExt([
+  '/v1/admin/byok/spend-down',
+  '/v1/admin/byok/spend-down/projects/:projectId/resume',
+  '/v1/admin/byok/keys/:keyId/spend-down',
+  '/v1/admin/byok/review-followups',
+  '/v1/admin/byok/cursor/models',
+]);
 
 // In-app plan change (Indie ↔ Pro, monthly ↔ annual) for paying projects.
 registerBillingChangePlanRoutes(app);
