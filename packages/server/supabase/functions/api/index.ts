@@ -834,6 +834,8 @@ forwardToApiExt(['/v1/admin/projects/:id/sdk-health', '/v1/admin/projects/:id/sd
 forwardToApiExt(['/v1/admin/projects/:id/home', '/v1/admin/projects/:id/home/thumbnail']);
 // setup-gaps.ts and release-batch.ts (console ops plan P1, read-only); deploy size limit, 2026-10-27.
 forwardToApiExt(['/v1/admin/setup-gaps', '/v1/admin/release-batch']);
+// health-checks.ts: the Health check registry (plan-simplicity-2026-10 Phase 1, read-only); deploy size limit.
+forwardToApiExt(['/v1/admin/health-checks']);
 // work.ts: local workers (`mushi work --daemon`, ADR 0048); deploy size limit, 2026-10-27.
 forwardToApiExt(['/v1/worker/*', '/v1/admin/work/*']);
 // repo-housekeeping.ts (ADR 0051, console ops plan P4): repo clean-up from /repo; deploy size limit, 2026-10-27.

@@ -24,6 +24,7 @@ import { RESOLVED_REPORT_STATUSES } from './fix-report-truth.ts'
 import { ciHeadState, followupTrigger, FOLLOWUP_REASONS, type CiHeadState, type CiJobForRepair, type PriorFollowup } from './review-followup.ts'
 import { localHandoff } from './local-followup.ts'
 import { parseCheckNameList } from './merge-queue.ts'
+import { ROOT_CAUSE_OF_GROUP } from './health-checks.ts'
 
 export const PIPELINE_STAGES = [
   { id: 'reported', label: 'Reported' },
@@ -95,6 +96,12 @@ export interface PipelineGroup {
   /** The setting that holds this group; `hint` says what it needs. */
   settings: { label: string; to: string; hint?: string } | null
   items: PipelineItem[]
+  /**
+   * The Health check that explains this stuck group while it is a problem
+   * for every item's app (`tagRootCauses`); `count` is how many wait on it.
+   * Absent when no check explains it.
+   */
+  rootCause?: { checkId: string; count: number }
 }
 
 export interface PipelineStage {
@@ -1019,6 +1026,29 @@ export function withDispatcherGroup(stages: PipelineStage[], group: PipelineGrou
     const oldest = [s.oldestAt, group.oldestAt].filter((x): x is string => !!x).sort()[0] ?? null
     return { ...s, groups, count: s.count + group.count, stuck: s.stuck + group.count, oldestAt: oldest }
   })
+}
+
+// ── Root causes (Health checks, plan-simplicity-2026-10 Phase 1) ────────────
+
+/**
+ * Tag each stuck group with the Health check that explains it
+ * (ROOT_CAUSE_OF_GROUP), when that check is a problem for the app of every
+ * item in the group, so the console can show "<N> are waiting on this" once
+ * instead of the group as its own row. A post-pass like the `followupsOn`
+ * one in buildPipeline: additive, and a group no check explains is returned
+ * unchanged. `problems`: check ids that are a problem, by app.
+ */
+export function tagRootCauses(stages: PipelineStage[], problems: ReadonlyMap<string, ReadonlySet<string>>): PipelineStage[] {
+  if (problems.size === 0) return stages
+  return stages.map((s) => ({
+    ...s,
+    groups: s.groups.map((g) => {
+      const checkId = ROOT_CAUSE_OF_GROUP[g.id]
+      if (!checkId || g.tone !== 'stuck' || g.items.length === 0) return g
+      const explained = g.items.every((i) => problems.get(i.projectId)?.has(checkId))
+      return explained ? { ...g, rootCause: { checkId, count: g.count } } : g
+    }),
+  }))
 }
 
 // ── Intake rejects ──────────────────────────────────────────────────────────
