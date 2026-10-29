@@ -10,7 +10,7 @@
  * version your app reports, and the latest upgrade job for the PR.
  */
 
-import type { SdkUpgradeState } from './useSdkUpgrade'
+import type { BumpEntry, SdkUpgradeState } from './useSdkUpgrade'
 
 type UpdateCenterMode =
   /** A job is queued or running right now. */
@@ -66,11 +66,13 @@ export interface UpdateCenterView {
 /**
  * Sentence prefix the upgrade worker stores on the first bump (`plan[0].lockfileNote`).
  * Keep equal to `LOCKFILE_NOTE_PREFIX` in `_shared/sdk-upgrade-pr.ts`.
+ * The argument is the upgrade plan (`BumpEntry[]`): package, from and to on
+ * every row, lockfileNote only on some.
  */
 const LOCKFILE_NOTE_PREFIX = 'This PR needs '
 
 export function lockfileNoteFromPlan(
-  plan: ReadonlyArray<{ lockfileNote?: string | null }> | null | undefined,
+  plan: readonly BumpEntry[] | null | undefined,
 ): string | null {
   for (const row of plan ?? []) {
     if (typeof row.lockfileNote === 'string' && row.lockfileNote.startsWith(LOCKFILE_NOTE_PREFIX)) {
