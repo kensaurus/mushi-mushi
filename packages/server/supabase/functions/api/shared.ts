@@ -30,6 +30,17 @@ import {
   isTransientDbConnectionError,
 } from '../_shared/error-codes.ts';
 
+/** Plain refusal when a write would share the company-funnel organization. */
+export const SELF_ORG_SHARED_MESSAGE =
+  "This team is reserved for Mushi's own project. Create the app in a different team."
+
+/** True when the exclusive-org trigger rejected the write (SQLSTATE 23514). */
+export function isSelfOrgSharedDbError(
+  err: { message?: string | null } | null | undefined,
+): boolean {
+  return (err?.message ?? '').includes('SELF_ORG_SHARED')
+}
+
 /**
  * Capture a Supabase / Postgres error to Sentry AND return the canonical 500
  * JSON response in one call. Most DB errors here returned
@@ -87,6 +98,12 @@ export function dbError(
       }),
     );
     return jsonError(c, 'DB_ERROR', gateway ? SAFE_INTERNAL_MESSAGE : SAFE_DB_MESSAGE, gateway ? 503 : 500);
+  }
+
+  // The company-funnel org is exclusive. Creating an app there is a conflict,
+  // not an outage, and must not open a Sentry issue on every attempt.
+  if (isSelfOrgSharedDbError(err)) {
+    return jsonError(c, 'CONFLICT', SELF_ORG_SHARED_MESSAGE, 409);
   }
 
   const diagnostic = dbFailureMessage(err);
