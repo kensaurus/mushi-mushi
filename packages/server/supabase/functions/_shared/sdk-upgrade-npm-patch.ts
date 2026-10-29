@@ -7,6 +7,7 @@
 
 import { semverSatisfies } from './sdk-upgrade-semver.ts'
 import { applyEntry, blockingDep, resolveTargets } from './sdk-upgrade-npm-apply.ts'
+import { SCOPE } from './sdk-upgrade-lock-edit.ts'
 import {
   entryViolation,
   installedName,
@@ -17,7 +18,22 @@ import {
   type NpmPackument,
 } from './sdk-upgrade-npm-lock.ts'
 
-const SCOPE = '@mushi-mushi/'
+const NPM_REGISTRY = 'https://registry.npmjs.org/'
+
+/** The lock's root `overrides` with the manifest's @mushi-mushi keys, or null when those already match. */
+function mushiOverrides(lockValue: unknown, manifest: Record<string, unknown>): Record<string, unknown> | null {
+  const current = lockValue && typeof lockValue === 'object' && !Array.isArray(lockValue)
+    ? lockValue as Record<string, unknown>
+    : {}
+  const next = { ...current }
+  let changed = false
+  for (const [key, value] of Object.entries(manifest)) {
+    if (!key.startsWith(SCOPE) || JSON.stringify(current[key]) === JSON.stringify(value)) continue
+    next[key] = value
+    changed = true
+  }
+  return changed ? next : null
+}
 
 function writeJson(original: string, value: unknown): string {
   const nl = original.includes('\r\n') ? '\r\n' : '\n'
@@ -146,15 +162,20 @@ export function patchNpmLockfile(
       if (section && (typeof section !== 'object' || Array.isArray(section))) continue
       entry[field] = { ...(section as Record<string, unknown> | undefined), ...ranges }
     }
-    if (spec.overrides) entry.overrides = spec.overrides
+    const overrides = spec.overrides ? mushiOverrides(entry.overrides, spec.overrides) : null
+    if (overrides) entry.overrides = overrides
   }
   for (const [key, raw] of Object.entries(pkgs)) {
     const name = installedName(key, raw)
     const meta = name ? targets.get(name) : undefined
     if (!name || !meta || !raw || typeof raw !== 'object' || Array.isArray(raw)) continue
+    const resolved = (raw as { resolved?: unknown }).resolved
+    if (typeof resolved === 'string' && !resolved.startsWith(NPM_REGISTRY)) {
+      return { ok: false, reason: `${name} resolves from ${resolved.split('/').slice(0, 3).join('/')}, not registry.npmjs.org` }
+    }
     const reason = entryViolation(pkgs, key, name, meta.version, targets)
     if (reason) return { ok: false, reason }
-    const missing = blockingDep(pkgs, meta)
+    const missing = blockingDep(pkgs, key, meta)
     if (missing) return { ok: false, reason: `lock has no entry for ${missing} that satisfies the new manifest` }
   }
   for (const [key, raw] of Object.entries(pkgs)) {

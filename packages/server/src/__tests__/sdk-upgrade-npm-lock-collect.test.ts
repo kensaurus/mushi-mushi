@@ -36,6 +36,15 @@ function npmLock(): string {
         resolved: 'https://registry.npmjs.org/@mushi-mushi/core/-/core-1.31.0.tgz',
         integrity: 'sha512-oldcore',
       },
+      'node_modules/old-plugin': {
+        version: '1.0.0',
+        dependencies: { '@mushi-mushi/core': '^0.24.0' },
+      },
+      'node_modules/old-plugin/node_modules/@mushi-mushi/core': {
+        version: '0.24.1',
+        resolved: 'https://registry.npmjs.org/@mushi-mushi/core/-/core-0.24.1.tgz',
+        integrity: 'sha512-old024',
+      },
     },
     dependencies: {
       '@mushi-mushi/web': {
@@ -97,7 +106,7 @@ function fetchImpl(coreDeps: Record<string, string> = {}): typeof fetch {
 }
 
 describe('collectLockfileChanges', () => {
-  it('rewrites an npm lock, including the legacy tree, from the packument', async () => {
+  it('leaves an npm lock alone and names npm install when a nested requirer rejects the new version', async () => {
     const text = npmLock()
     const edited = await collectLockfileChanges({
       blobs: [{ path: 'package.json' }, { path: 'package-lock.json', sha: 'lock' }],
@@ -109,12 +118,39 @@ describe('collectLockfileChanges', () => {
       fetchImpl: fetchImpl(),
     })
     expect(edited.outcome).toBe('manual')
+    expect(edited.files).toEqual([])
     expect(edited.commands).toEqual(['npm install --package-lock-only'])
     expect(edited.reasons[0]).toContain('^0.24.0')
   })
 
+  it('names npm install for a lock that resolves from a mirror', async () => {
+    const body = JSON.parse(npmLock()) as { packages: Record<string, Record<string, unknown>>; dependencies: Record<string, unknown> }
+    delete body.packages['node_modules/old-plugin']
+    delete body.packages['node_modules/old-plugin/node_modules/@mushi-mushi/core']
+    delete body.dependencies['old-plugin']
+    for (const entry of Object.values(body.packages)) {
+      if (typeof entry.resolved === 'string') entry.resolved = entry.resolved.replace('https://registry.npmjs.org', 'https://npm.acme.internal')
+    }
+    const text = JSON.stringify(body, null, 2) + '\n'
+    const edited = await collectLockfileChanges({
+      blobs: [{ path: 'package.json' }, { path: 'package-lock.json', sha: 'lock' }],
+      treeComplete: true,
+      manifests: [{ path: 'package.json', contents: manifest }],
+      bumps: [{ package: '@mushi-mushi/web', to: WEB }],
+      readBlob: async () => text,
+      readContents: async () => null,
+      fetchImpl: fetchImpl(),
+    })
+    expect(edited.outcome).toBe('manual')
+    expect(edited.files).toEqual([])
+    expect(edited.commands).toEqual(['npm install --package-lock-only'])
+    expect(edited.reasons[0]).toContain('not registry.npmjs.org')
+  })
+
   it('updates v2 entries when every nested range accepts the version', async () => {
-    const body = JSON.parse(npmLock()) as { dependencies: Record<string, unknown> }
+    const body = JSON.parse(npmLock()) as { packages: Record<string, unknown>; dependencies: Record<string, unknown> }
+    delete body.packages['node_modules/old-plugin']
+    delete body.packages['node_modules/old-plugin/node_modules/@mushi-mushi/core']
     delete body.dependencies['old-plugin']
     const text = JSON.stringify(body, null, 2) + '\n'
     const edited = await collectLockfileChanges({

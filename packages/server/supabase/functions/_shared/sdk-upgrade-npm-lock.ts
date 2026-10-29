@@ -6,9 +6,8 @@
  */
 
 import { semverSatisfies } from './sdk-upgrade-semver.ts'
+import { SCOPE } from './sdk-upgrade-lock-edit.ts'
 
-const SCOPE = '@mushi-mushi/'
-export const EXACT_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/
 const DEP_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'] as const
 
 export interface NpmPackument {
@@ -107,7 +106,7 @@ function nodeParent(key: string): string | null {
   return key.startsWith('node_modules/') ? '' : null
 }
 
-function resolvesTo(pkgs: Record<string, unknown>, fromKey: string, name: string): string | null {
+export function resolvesTo(pkgs: Record<string, unknown>, fromKey: string, name: string): string | null {
   let cursor: string | null = fromKey
   const seen = new Set<string>()
   while (cursor !== null && !seen.has(cursor)) {
