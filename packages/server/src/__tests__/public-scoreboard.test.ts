@@ -41,7 +41,9 @@ const BOARD = {
   apps: 9,
   user_reports: 676,
   reporters: 314,
+  other_reports: 1068,
   fixes_merged: 231,
+  merged_from_users: 1,
   reviews: 738,
   reviews_hold: 265,
   median_hours_to_merged_fix: 26.4,
@@ -79,9 +81,9 @@ describe('GET /v1/public/scoreboard', () => {
     expect(res.headers.get('cache-control')).toBe('public, max-age=900')
     const { data } = (await res.json()) as { data: Record<string, unknown> }
     expect(Object.keys(data).sort()).toEqual(
-      ['apps', 'asOf', 'days', 'fixesMerged', 'medianHoursToMergedFix', 'reporters', 'reviews', 'reviewsHold', 'userReports', 'weeklyMerged'].sort(),
+      ['apps', 'asOf', 'days', 'fixesMerged', 'medianHoursToMergedFix', 'mergedFromUsers', 'otherReports', 'reporters', 'reviews', 'reviewsHold', 'userReports', 'weeklyMerged'].sort(),
     )
-    expect(data).toMatchObject({ apps: 9, userReports: 676, reporters: 314, fixesMerged: 231, reviews: 738, reviewsHold: 265, medianHoursToMergedFix: 26.4, asOf: '2026-10-28T12:00:00.000Z' })
+    expect(data).toMatchObject({ apps: 9, userReports: 676, reporters: 314, otherReports: 1068, fixesMerged: 231, mergedFromUsers: 1, reviews: 738, reviewsHold: 265, medianHoursToMergedFix: 26.4, asOf: '2026-10-28T12:00:00.000Z' })
     expect(JSON.stringify(data)).not.toContain('glot.it')
     expect(db.rpcCalls).toEqual([{ fn: 'public_scoreboard', args: { p_days: 60 } }])
   })
@@ -150,5 +152,37 @@ describe('migration 20261028200000_production_checks_and_scoreboard.sql', () => 
     expect(body).toMatch(/count\(DISTINCT reporter_token_hash\)/)
     expect(body).toMatch(/verdict = 'hold'/)
     expect(body).not.toMatch(/p\.name|p\.slug|description|summary|email/)
+  })
+})
+
+describe('migration 20261029100000_public_scoreboard_honest_counts.sql', () => {
+  // 2026-10-29: /proof called 676 reports "from users"; 637 were Mushi's own
+  // (a backlog import, the AI audit loop, an automated sweep, test browsers).
+  const sql = readFileSync(resolve(__dirname, '../../supabase/migrations/20261029100000_public_scoreboard_honest_counts.sql'), 'utf8')
+  const code = sql.replace(/--.*$/gm, '')
+  const output = /jsonb_build_object\([\s\S]*\);\s*\$function\$/.exec(code)?.[0] ?? ''
+
+  it("leaves demo projects out of the owner's apps", () => {
+    expect(code).toMatch(/o\.billing_mode = 'complimentary'/)
+    expect(code).toMatch(/p\.name !~\* 'demo'/)
+  })
+
+  it('counts a user report only from the widget on a real device, never a report Mushi or its agents filed', () => {
+    expect(code).toMatch(/r\.source = 'widget'/)
+    for (const agent of ['mushi-', 'headless', 'playwright', 'puppeteer', 'console sweep']) expect(code).toContain(agent)
+    for (const filer of ['audit', 'sweep', 'import', 'fresh', 'admin_test_report', 'admin_file', 'captureexception']) expect(code).toContain(filer)
+    expect(output).toMatch(/'user_reports', \(SELECT count\(\*\) FROM window_reports WHERE from_user\)/)
+    expect(output).toMatch(/'other_reports', \(SELECT count\(\*\) FROM window_reports WHERE NOT from_user\)/)
+    expect(output).toMatch(/'merged_from_users'/)
+  })
+
+  it('still returns totals only: no app names, report text or reporter identity in the output', () => {
+    expect(output).not.toMatch(/p\.name|p\.slug|description|summary|email|reporter_token_hash(?!\))/)
+  })
+
+  it('stays SECURITY DEFINER with a fixed search_path and service-role EXECUTE only', () => {
+    expect(code).toMatch(/STABLE SECURITY DEFINER\s+SET search_path TO 'public'/)
+    expect(code).toMatch(/REVOKE ALL ON FUNCTION public\.public_scoreboard\(integer\) FROM PUBLIC, anon, authenticated;/)
+    expect(code).toMatch(/GRANT EXECUTE ON FUNCTION public\.public_scoreboard\(integer\) TO service_role;/)
   })
 })

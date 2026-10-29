@@ -45,6 +45,10 @@ export function ProofClient() {
             Mushi. These numbers are counted live from Mushi’s database for those apps only. They are not customer numbers:
             only totals leave the database, never app names, report text or anything about the people who reported.
           </p>
+          <p className="text-base text-mushi-ink-muted">
+            So far most of the bugs Mushi fixed were found by my own checks, not reported by people using the apps. The
+            numbers below keep the two apart.
+          </p>
         </header>
 
         {board === 'loading' && <p className="text-sm text-mushi-ink-muted">Counting…</p>}
@@ -84,15 +88,25 @@ function Board({ board }: { board: Scoreboard }) {
       </p>
       <dl className="docs-open__grid">
         <div>
-          <dt>Bug reports from users</dt>
+          <dt>Bug reports from people using the apps</dt>
           <dd>
             {formatCount(board.userReports)}{' '}
-            <span className="text-sm font-normal text-mushi-ink-muted">from {formatCount(board.reporters)} people</span>
+            <span className="text-sm font-normal text-mushi-ink-muted">from {formatCount(board.reporters)} devices, my own testing included</span>
+          </dd>
+        </div>
+        <div>
+          <dt>Bugs found by my own checks</dt>
+          <dd>
+            {formatCount(board.otherReports)}{' '}
+            <span className="text-sm font-normal text-mushi-ink-muted">AI audits, Sentry, site checks, and bugs I filed</span>
           </dd>
         </div>
         <div>
           <dt>Fixes merged</dt>
-          <dd>{formatCount(board.fixesMerged)}</dd>
+          <dd>
+            {formatCount(board.fixesMerged)}{' '}
+            <span className="text-sm font-normal text-mushi-ink-muted">{formatCount(board.mergedFromUsers)} of them for a report from a person</span>
+          </dd>
         </div>
         <div>
           <dt>AI reviews of fix PRs</dt>
@@ -102,38 +116,53 @@ function Board({ board }: { board: Scoreboard }) {
           </dd>
         </div>
         <div>
-          <dt>Median time, user report to merged fix</dt>
+          <dt>Median time, bug found to fix merged</dt>
           <dd>{formatHours(board.medianHoursToMergedFix)}</dd>
         </div>
       </dl>
 
       {weeks.length > 1 && (
         <figure className="space-y-2">
-          <figcaption className="docs-open__caption">Fixes merged per week (weeks starting Monday, UTC; the first and last weeks are partial).</figcaption>
+          <figcaption className="docs-open__caption">
+            Fixes merged per week. Each label under a point is the Monday the week starts (UTC); the number above it is that
+            week’s count. The first and last weeks are partial.
+          </figcaption>
           <svg
             width="100%"
-            viewBox={`-4 -4 ${SPARK_W + 8} ${SPARK_H + 8}`}
+            viewBox={`-12 -20 ${SPARK_W + 24} ${SPARK_H + 44}`}
             role="img"
-            aria-label={`Fixes merged per week: ${weeks.map((w) => `${w.weekStart} ${w.merged}`).join(', ')}`}
-            className="max-w-md text-mushi-vermillion"
+            aria-label={`Fixes merged per week: ${weeks.map((w) => `week of ${w.weekStart}: ${w.merged}`).join(', ')}`}
+            className="max-w-xl text-mushi-vermillion"
           >
+            <line x1={0} y1={SPARK_H} x2={SPARK_W} y2={SPARK_H} stroke="currentColor" strokeOpacity="0.25" strokeWidth="1" />
             <path d={sparklinePath(points)} fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
             {points.map((p, i) => (
-              <circle key={weeks[i].weekStart} cx={p.x} cy={p.y} r="2.5" fill="currentColor">
-                <title>
-                  Week of {weeks[i].weekStart}: {weeks[i].merged} merged
-                </title>
-              </circle>
+              <g key={weeks[i].weekStart}>
+                <circle cx={p.x} cy={p.y} r="2.5" fill="currentColor" />
+                <text x={p.x} y={p.y - 6} textAnchor="middle" fontSize="9" className="fill-mushi-ink">
+                  {weeks[i].merged}
+                </text>
+                <text x={p.x} y={SPARK_H + 14} textAnchor="middle" fontSize="8" className="fill-mushi-ink-muted">
+                  {weekLabel(weeks[i].weekStart)}
+                </text>
+              </g>
             ))}
           </svg>
         </figure>
       )}
 
       <p className="docs-open__caption">
-        A bug report from a user is one sent through the Mushi widget in the app. A fix is merged when its pull request
-        lands on the app’s main branch. The AI review of fix PRs is switched on for these apps; “do not merge” is its hold
-        verdict, and a held PR waits for a person.
+        A bug report from a person is one sent through the Mushi button in the app from a real device; my own testing
+        counts here too. Everything else (bugs I filed in the console, AI audits, Sentry errors, site checks) is counted
+        under my own checks. A fix is merged when its pull request lands on the app’s main branch. The AI review of fix PRs
+        is switched on for these apps; “do not merge” is its hold verdict, and a held PR waits for a person.
       </p>
     </div>
   )
+}
+
+/** "2026-10-19" → "Oct 19" (UTC). */
+function weekLabel(isoDay: string): string {
+  const d = new Date(`${isoDay}T00:00:00Z`)
+  return Number.isNaN(d.getTime()) ? isoDay : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 }

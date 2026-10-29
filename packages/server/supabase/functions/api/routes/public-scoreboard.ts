@@ -24,9 +24,15 @@ export const SCOREBOARD_TTL_MS = 15 * 60_000
 export interface PublicScoreboard {
   days: number
   apps: number
+  /** In-app reports from people on real devices (the owner's own testing included). */
   userReports: number
   reporters: number
+  /** Every other report: console/API filings, AI audits and sweeps, imports, Sentry, site checks. */
+  otherReports: number
+  /** Every merged fix PR, whatever found the bug. */
   fixesMerged: number
+  /** Merged fixes whose report came from a person (userReports). */
+  mergedFromUsers: number
   reviews: number
   reviewsHold: number
   medianHoursToMergedFix: number | null
@@ -49,7 +55,9 @@ export function toPublicScoreboard(raw: unknown, asOf: Date): PublicScoreboard {
     apps: count(r.apps),
     userReports: count(r.user_reports),
     reporters: count(r.reporters),
+    otherReports: count(r.other_reports),
     fixesMerged: count(r.fixes_merged),
+    mergedFromUsers: count(r.merged_from_users),
     reviews: count(r.reviews),
     reviewsHold: count(r.reviews_hold),
     medianHoursToMergedFix: r.median_hours_to_merged_fix != null && Number.isFinite(median) ? Math.round(median * 10) / 10 : null,
