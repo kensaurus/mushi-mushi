@@ -78,9 +78,11 @@ Deno.test('an event with more properties than the SDK ever sends is refused', ()
 })
 
 Deno.test('the per-IP budget key is a stable UUID that does not contain the IP', async () => {
-  const a = await ipActorId('203.0.113.7')
-  assertEquals(a, await ipActorId('203.0.113.7'))
-  assertNotEquals(a, await ipActorId('203.0.113.8'))
+  const project = '1000000a-0000-4000-8000-000000000001'
+  const a = await ipActorId('203.0.113.7', project)
+  assertEquals(a, await ipActorId('203.0.113.7', project))
+  assertNotEquals(a, await ipActorId('203.0.113.8', project))
+  assertNotEquals(a, await ipActorId('203.0.113.7', '1000000a-0000-4000-8000-000000000002'))
   assertEquals(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(a), true)
   assertEquals(a.includes('203'), false)
   const headers: Record<string, string> = { 'x-forwarded-for': '198.51.100.1, 10.0.0.1' }
