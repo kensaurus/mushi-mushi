@@ -54,4 +54,25 @@ describe('fixNodes: the next step', () => {
     const step = nextStep(report('classified', failedAttempt({ failure_category: 'sandbox_timeout', error: 'timed out' })))
     expect(step?.title).toBe('Check the weak spots, then retry')
   })
+
+  it('a push the repo hook refused says to run those checks, not to look at weak spots', () => {
+    const step = nextStep(report('classified', failedAttempt({
+      agent: 'mcp',
+      error: 'Pre-push checks failed: test. The fix is committed on bugfix/MUSHI-1-local-cursor (abc1234def); nothing was pushed.',
+      branch: 'bugfix/MUSHI-1-local-cursor',
+      commit_sha: 'abc1234def5678901234567890abcdef12345678',
+    })))
+    expect(step?.title).toBe("Your repo's own checks failed at push")
+    expect(step?.why).toContain('Run them on the branch, or re-run the local lane.')
+    expect(step?.why).toContain('bugfix/MUSHI-1-local-cursor')
+    expect(`${step?.title} ${step?.why}`).not.toMatch(/weak spot|retry/i)
+    const attempt = fixNodes(report('classified', failedAttempt({ agent: 'mcp', error: 'git push failed: hook steps failed: test' })), true).find((n) => n.id === 'attempt')
+    expect(attempt?.detail).toBe('local Cursor')
+    expect(attempt?.needsLook).toBe(false)
+  })
+
+  it('a commit hook failure still points at the weak spots', () => {
+    const step = nextStep(report('classified', failedAttempt({ error: 'mushi work: git commit failed: hook steps failed: lint' })))
+    expect(step?.title).toBe('Check the weak spots, then retry')
+  })
 })

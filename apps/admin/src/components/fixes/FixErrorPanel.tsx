@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { humanizeFixError } from '../../lib/humanizeFixError';
+import { stripAnsi } from '../report-detail/reportLogFormat';
 import type { HumanizedFixError } from '../../lib/humanizeFixError';
 import { ContainedBlock } from '../report-detail/ReportSurface';
 
@@ -46,7 +47,7 @@ export function FixErrorPanel({ error, agent, category, onRetry, supersededNote 
           {rawOpen ? 'Hide technical error' : 'Show technical error'}
         </button>
         {rawOpen && (
-          <pre className="text-2xs font-mono text-fg-faint whitespace-pre-wrap break-all">{h.raw}</pre>
+          <pre className="text-2xs font-mono text-fg-faint whitespace-pre-wrap break-all">{stripAnsi(h.raw)}</pre>
         )}
       </ContainedBlock>
     );
@@ -120,7 +121,7 @@ export function FixErrorPanel({ error, agent, category, onRetry, supersededNote 
       {/* Raw error disclosure */}
       {rawOpen && (
         <pre className="pl-5 text-2xs font-mono text-fg-faint whitespace-pre-wrap break-all">
-          {h.raw}
+          {stripAnsi(h.raw)}
         </pre>
       )}
     </div>

@@ -65,4 +65,33 @@ describe('ReportPdcaStory plan stage', () => {
     expect(nodes.act.headline).toContain('hook steps failed: test')
     expect(nodes.act.headline).not.toMatch(/\u001b/)
   })
+
+  it('strips a double-encoded lefthook color stored as the six characters \\u001b', () => {
+    const nodes = buildStoryNodes(
+      report({
+        status: 'fixing',
+        fix_attempts: [{
+          id: 'f1',
+          status: 'failed',
+          // The bytes a JSON-encoded error keeps when it is encoded a second time.
+          error: 'git push failed: \\u001b[38;2;56;56;56m│\\u001b[0m hook steps failed: test',
+        }] as ReportDetail['fix_attempts'],
+      }),
+      idle,
+    )
+    expect(nodes.act.headline).toContain('hook steps failed: test')
+    expect(nodes.act.headline).not.toContain('\\u001b')
+  })
+
+  it('a local Cursor run is not labelled mcp', () => {
+    const nodes = buildStoryNodes(
+      report({
+        status: 'fixing',
+        fix_attempts: [{ id: 'f1', status: 'running', agent: 'mcp' }] as ReportDetail['fix_attempts'],
+      }),
+      idle,
+    )
+    expect(nodes.do.details).toContain('via local Cursor')
+    expect(nodes.do.details?.join(' ')).not.toContain('mcp')
+  })
 })

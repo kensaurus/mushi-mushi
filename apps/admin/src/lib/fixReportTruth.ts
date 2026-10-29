@@ -13,6 +13,7 @@
  * reports already fixed by merged PRs 138–141.
  */
 
+import { stripAnsi } from '../components/report-detail/reportLogFormat'
 import { humanizeFixError } from './humanizeFixError'
 import { isFixMerged } from './mergeFix'
 import { fixFailureBucket } from './pdcaAct'
@@ -132,9 +133,10 @@ export interface FailureHeadline {
 
 /** The real reason a fix attempt stopped, for the row itself (not hidden behind an expand). */
 export function failureHeadline(fix: FixAttempt): FailureHeadline | null {
-  const firstLine = fix.error ? fix.error.split('\n')[0].trim().slice(0, 240) : null
+  const plain = fix.error ? stripAnsi(fix.error) : ''
+  const firstLine = plain ? plain.split('\n')[0].trim().slice(0, 240) : null
   if (!fix.error) return null
-  const h = humanizeFixError(fix.error, { agent: fix.agent, category: fix.failure_category })
+  const h = humanizeFixError(plain, { agent: fix.agent, category: fix.failure_category })
   if (!h) return null
   if (h.known === false) {
     return {

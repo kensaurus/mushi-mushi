@@ -740,6 +740,7 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
   let keep = o.keep ?? false
   let fixId: string | null = null
   let stage: WorkStage = 'prepare'
+  let headSha: string | null = null
   // The fix row is closed exactly once: by the run's own outcome, or by a stop.
   let closed = false
   const close = async (payload: Record<string, unknown>): Promise<void> => {
@@ -821,6 +822,7 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
     const last = run.stdout.trim().split('\n').filter((l) => l.trim()).slice(-6).join(' ')
     await commitWithHooks(wt, ['--quiet', '-m', prTitle(detail.summary, detail.id), '-m', commitBody(`Mushi report: ${detail.id}`, 'Made by a local Cursor agent through `mushi work`.')], o.log)
     const sha = await git(wt, ['rev-parse', 'HEAD'])
+    headSha = sha
     const numstat = await git(wt, ['diff', '--numstat', `origin/${base}`, 'HEAD'])
     const files: string[] = []
     let lines = 0
@@ -855,8 +857,17 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
     // machine (infra) is closed so that it starts no cooldown.
     const reason = err instanceof Error ? err.message : String(err)
     const failureKind = classifyFailure(reason, stage)
+    // A refused pre-push hook leaves the commit on the branch. Say that, and
+    // keep the sha, so the report can name where the fix is.
+    const hookError = stage === 'push' && headSha ? pushHookAttemptError(reason, branch, headSha) : null
     keep = true
-    await close({ status: 'failed', branch, error: `${failureKind === 'infra' ? WORK_INFRA_PREFIX : 'mushi work:'} ${reason}`.slice(0, 1000), completed_at: new Date().toISOString() }).catch((patchErr: unknown) =>
+    await close({
+      status: 'failed',
+      branch,
+      ...(hookError && headSha ? { commit_sha: headSha } : {}),
+      error: (hookError ?? `${failureKind === 'infra' ? WORK_INFRA_PREFIX : 'mushi work:'} ${reason}`).slice(0, 1000),
+      completed_at: new Date().toISOString(),
+    }).catch((patchErr: unknown) =>
       o.log(`  fix ${fixId}: not marked failed (${patchErr instanceof Error ? patchErr.message : String(patchErr)})`),
     )
     return { reportId: detail.id, result: 'failed', failureKind, outcome: `failed (${failureKind}): ${reason} (the change is kept in ${wt})`, ...(fixId ? { fixId } : {}) }
@@ -1011,6 +1022,19 @@ export async function commitWithHooks(wt: string, args: string[], log: (line: st
 /** @internal Exported for tests only. A push the repo's own pre-push hook refused (not the remote, not auth). */
 export function isHookRejection(message: string): boolean {
   return /hook steps failed:|pre-push hook|husky - pre-push/i.test(message) && !/non-fast-forward|\[rejected\]|Authentication failed|permission denied/i.test(message)
+}
+
+/**
+ * @internal Exported for tests only. The fix_attempts.error when the repo's
+ * pre-push hook refused the push: the checks that failed, and the commit
+ * that is already on the branch. A commit-hook failure is not this (nothing
+ * was committed).
+ */
+export function pushHookAttemptError(message: string, branch: string, sha: string): string | null {
+  if (!isHookRejection(message) || !/git push failed:|pre-push hook|husky - pre-push/i.test(message)) return null
+  const names = /hook steps failed:\s*([^.]*)/i.exec(message)?.[1]?.trim()
+  const checks = names ? `: ${names}` : ''
+  return `Pre-push checks failed${checks}. The fix is committed on ${branch} (${sha}); nothing was pushed.`
 }
 
 /**
