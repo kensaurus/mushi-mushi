@@ -63,7 +63,7 @@ export interface NeedsYouItem {
 }
 
 /** A Health check's fix (server `_shared/health-checks.ts` HealthFix). */
-export type HealthFix =
+type HealthFix =
   | { kind: 'auto'; label: string; action: string }
   | { kind: 'one_click'; label: string; to: string; action?: string }
   | { kind: 'guided'; label: string; steps: string[]; to?: string }
