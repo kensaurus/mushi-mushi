@@ -1,10 +1,10 @@
-# Incident loop — bug to fix prompt
+# Incident loop: from bug report to fix prompt
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/incident-loop
 
 ---
-title: Incident loop — bug to fix prompt
-description: Run npx mushi-mushi, ship, and turn your first user-reported bug into a plain-English diagnosis and a paste-ready fix for Cursor or Claude Code.
+title: "Incident loop: from bug report to fix prompt"
+description: Run npx mushi-mushi, ship, and let Mushi Mushi turn your first user-reported bug into a plain-English diagnosis and a paste-ready fix for Cursor or Claude Code.
 ---
 
 # Incident loop
@@ -29,7 +29,7 @@ agent fetch the details and close the report itself.
 
 - A Mushi project and API key ([credentials](/concepts/credentials)).
 - At least one report: from the SDK, the test report `npx mushi-mushi` offers, or a Sentry alert.
-- MCP connected to your editor ([MCP quickstart](/quickstart/mcp)). The agent needs write access to mark the report fixed; the default key has it.
+- MCP connected to your editor ([MCP quickstart](/quickstart/mcp)). The agent needs write access to mark the report fixed. Signing in through the hosted MCP (the default for Cursor and Claude Code) gives it; a key with only `mcp:read` does not.
 
 ## The loop
 
@@ -39,11 +39,13 @@ New project:
 
 ```bash
 npx mushi-mushi
-# wizard writes .env.local + optional test report
-mushi connect --wait
 ```
 
-Existing report: open **Reports** in the console and copy its ID, or ask the agent *"list recent mushi reports"*.
+The wizard writes `.env.local` and offers a test report. At the end it offers
+to run `mushi connect`: say yes to wire Cursor's MCP config and wait for the
+first heartbeat from your app.
+
+Existing report: open **Bugs** in the console and copy its ID, or ask the agent *"list recent mushi reports"*.
 
 **You'll see:** a report ID, and the report in the console with a plain-English title.
 
@@ -70,8 +72,9 @@ It combines `get_fix_context`, `get_blast_radius` and `get_similar_bugs` into on
 ### Paste and ship
 
 Paste the agent's output into a Cursor chat (or keep going in the same thread)
-and ask it to implement the fix. When GitHub is linked, `dispatch_fix` can open
-a draft PR instead.
+and ask it to implement the fix. When GitHub is connected and **Automatic
+fixes** is on (console → **Integrations**), `dispatch_fix` can open a draft PR
+instead.
 
 **You'll see:** the code change in your editor, ready to review and commit.
 
@@ -81,4 +84,4 @@ a draft PR instead.
 
 - [MCP server quickstart](/quickstart/mcp)
 - [Cursor integration](/integrations/cursor)
-- [Fix orchestrator](/concepts/fix-orchestrator) — optional draft PR dispatch
+- [Fix orchestrator](/concepts/fix-orchestrator): optional draft PR dispatch

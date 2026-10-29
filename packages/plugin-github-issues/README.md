@@ -1,14 +1,15 @@
 # `@mushi-mushi/plugin-github-issues`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
-Opens a GitHub issue (labelled `mushi-bug`) for each bug Mushi triages and
-closes it when Mushi applies the fix.
+For people who track work in GitHub Issues. This opens a GitHub issue
+(labelled `mushi-bug`) for each bug Mushi Mushi triages and closes it when
+Mushi applies the fix.
 
-**Do you need this package?** Not on Mushi Cloud: add GitHub Issues on the
+**Do you need this package?** Not on Mushi Mushi Cloud: add GitHub Issues on the
 **Integrations** page of the console (owner, repo and a token with Issues:
-write) and Mushi opens and closes the issues itself. The console's
-Marketplace has no GitHub Issues listing (checked 2026-10-26), so this
+write) and Mushi opens and closes the issues itself, on any plan. The console's
+Marketplace has no GitHub Issues listing (checked 2026-10-29), so this
 package only receives events from a Mushi server you run yourself, once you
 add a `plugin_registry` row for it.
 
@@ -49,7 +50,7 @@ express().post('/mushi/webhook', expressMiddleware(handler)).listen(3000)
 ## Subscribed events
 
 - `report.classified` → `POST /repos/{owner}/{repo}/issues` (creates the
-  `mushi-bug` label idempotently if missing).
+  `mushi-bug` label first if the repo does not have it).
 - `fix.applied` → `PATCH /repos/{owner}/{repo}/issues/{number}` with
   `state: closed`.
 

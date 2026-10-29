@@ -1,10 +1,10 @@
-# Closed-loop evolution — the thesis
+# Closed-loop evolution: the thesis
 
 Source: https://kensaur.us/mushi-mushi/docs/concepts/closed-loop
 
 ---
-title: Closed-loop evolution — the thesis
-description: The thesis behind Mushi — why AI-built apps need a closed loop from what users feel to a verified fix, and how capture, diagnosis and fixes connect.
+title: "Closed-loop evolution: the thesis"
+description: The thesis behind Mushi Mushi. Why AI-built apps need a closed loop from what users feel to a verified fix, and how capture, diagnosis and fixes connect.
 ---
 
 # Closed-loop evolution — the thesis
@@ -76,9 +76,9 @@ In Mushi that means: catch the bug → embed it → cluster similar bugs → nam
 
 1. **A user feels friction** (a dead button, a slow screen, a layout that breaks on one phone) and shakes the app or clicks the feedback stamp. — *Source: SDK or [Anti-gaming](/admin/anti-gaming) for synthetic probes.*
 2. **Mushi SDK captures** the moment: screenshot, session breadcrumbs, device info, the current route. — *Visible in [Reports & triage](/admin/reports).*
-3. **The server embeds the report** with `text-embedding-3-small` and runs the BIRCH-style streaming clusterer. — *Architecture: `classify-report` edge function.*
+3. **The server embeds the report** with `text-embedding-3-small` and runs the BIRCH-style streaming clusterer. — *Architecture: `mistake-clusterer` edge function (hourly).*
 4. **Similar reports collapse** into a `mistake_cluster`. When the cluster reaches coherence ≥ 0.75 and size ≥ 3, the judge model promotes it to a **`lesson`** with auto-generated name + summary + one-shot rule. — *Visible in [Judge dashboard](/admin/judge) and [Lessons](/admin/lessons).*
-5. **The lesson is injected** into the next PR review (token-budget packed to ≤ 3 000 tokens) and into the next agentic fix run — so neither human reviewers nor the AI agent can repeat the same class of mistake. — *Triggered from [Fix orchestrator](/admin/fixes) or autonomously via [Iterate (PDCA)](/admin/iterate).*
+5. **The lesson is injected** into the next PR review (packed into a token budget, 3,000 by default) and into the next agentic fix run, so reviewers and the AI agent are less likely to repeat the same class of mistake. — *Triggered from [Fix orchestrator](/admin/fixes) or autonomously via [Iterate (PDCA)](/admin/iterate).*
 6. **The user is credited** in the changelog: *"Fixed by Kenji: the Settings page back-button was double-counting the safe-area inset"*. The SDK shows a toast on the next session. — *Managed in [Releases](/admin/releases) and [Rewards](/admin/rewards).*
 7. **Drift and anomaly detectors** run continuously, generating candidate reports for issues no user has noticed yet. Those reports enter the same pipeline at step 2 — the loop closes without waiting for a human to file a ticket. — *[Drift scanner](/admin/drift) and [Anomaly detection](/admin/anomalies).*
 8. **The PDCA loop runs** on a schedule or on demand: crawl the live URL, plan improvements, fix them, verify. — *[Iterate (PDCA)](/admin/iterate) page; powered by the `pdca-runner` edge function.*

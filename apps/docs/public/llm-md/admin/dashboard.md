@@ -1,17 +1,17 @@
-# Dashboard
+# Home
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/dashboard
 
 ---
-title: Dashboard
-description: Home in the Mushi console shows how one app is doing — is it up, what needs you, what is shipping, which pages have bugs and who can reach it.
+title: Home
+description: "Home in the Mushi Mushi console shows how one app is doing: is it up, what needs you, what is shipping, which pages have bugs and who can reach it."
 ---
 
-# Dashboard
+# Home
 
-**Route:** `/dashboard` (Home → Today)
+**Route:** `/dashboard` (sidebar: **Home**, first tab **Today**)
 
-> **Scenario:** You open Mushi in the morning and want to know in 30 seconds whether
+> **Scenario:** You open Mushi Mushi in the morning and want to know in 30 seconds whether
 > your app is up, whether anything broke overnight, and what needs you today.
 
 Home is one page per app. It answers five questions without opening any other page:
@@ -21,6 +21,13 @@ is grey and its button says how to connect it; a part whose read failed says
 "Could not read" instead of showing a 0.
 
 All of it comes from one call, `GET /v1/admin/projects/:id/home`.
+
+Home has more tabs beside **Today**: **Overview** ([all apps](/admin/overview),
+`?view=apps`), **User activity** ([sessions](/admin/activity), `?view=users`),
+**Users & funnels** (`?view=funnels`) and **Weekly insights**
+([intelligence reports](/admin/intelligence), `?view=insights`). The old paths
+`/overview`, `/activity`, `/analytics` and `/intelligence` open these tabs. This page
+describes **Today**.
 
 ---
 
@@ -117,13 +124,13 @@ reports yet.
 ---
 
 A confetti burst and toast appear the first time a fix-worker PR is merged for your
-project — the "first merged fix" milestone.
+project: the "first merged fix" milestone.
 
 ---
 
 ## Related pages
 
-- [Inbox](/admin/inbox) — all open actions in one list
-- [Reports](/admin/reports) — the full bug queue
-- [Pipeline](/admin/pipeline) — every fix from report to deploy
-- [Integration health](/admin/health) — AI and background job health
+- [To-do](/admin/inbox): all open actions in one list
+- [Bugs](/admin/reports): the full bug queue
+- [Pipeline](/admin/pipeline): every fix from report to deploy
+- [Mushi health](/admin/health): Mushi's own AI and background job health

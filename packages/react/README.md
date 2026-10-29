@@ -1,6 +1,6 @@
 # @mushi-mushi/react
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 The React and Next.js SDK for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi). It adds a bug button to your app. When a user taps it, Mushi captures a screenshot, the route, their note and the recent console and network events, explains the cause in plain English, and hands your editor a fix to start from.
 

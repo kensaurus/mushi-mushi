@@ -23,7 +23,8 @@ export interface Scoreboard {
 
 export async function loadScoreboard(fetchImpl: typeof fetch = fetch): Promise<Scoreboard | null> {
   try {
-    const res = await fetchImpl(`${PUBLIC_API_URL}/v1/public/scoreboard`)
+    // no-cache: revalidate every visit, so an answer cached before a deploy never shows.
+    const res = await fetchImpl(`${PUBLIC_API_URL}/v1/public/scoreboard`, { cache: 'no-cache' })
     const body = (await res.json().catch(() => null)) as { ok?: boolean; data?: Scoreboard } | null
     return res.ok && body?.ok && body.data ? body.data : null
   } catch {
@@ -33,8 +34,9 @@ export async function loadScoreboard(fetchImpl: typeof fetch = fetch): Promise<S
 
 const fmt = new Intl.NumberFormat('en-US')
 
-export function formatCount(n: number): string {
-  return fmt.format(n)
+/** A count, or a dash when the API sent none (an older cached answer): never "NaN". */
+export function formatCount(n: number | undefined): string {
+  return typeof n === 'number' && Number.isFinite(n) ? fmt.format(n) : '–'
 }
 
 /** 26.4 → "26 hours"; under 2 → minutes; over 72 → days. */

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
+import { scrubUrl } from '@mushi-mushi/core'
 import type { MushiNodeClient } from './client'
 import { parseTraceContext } from './trace'
 
@@ -42,7 +43,7 @@ export function mushiFastifyPlugin(app: FastifyInstance, opts: FastifyPluginOpti
             ? req.headers['traceparent'][0]
             : undefined
       void opts.client.captureReport({
-        description: `[${req.method ?? 'REQ'} ${req.url ?? req.raw?.url ?? ''}] ${err.message}`,
+        description: `[${req.method ?? 'REQ'} ${scrubUrl(req.url ?? req.raw?.url ?? '')}] ${err.message}`,
         userCategory: 'bug',
         severity: (reply.statusCode ?? 500) >= 500 ? 'high' : 'medium',
         component: opts.component ?? 'node:fastify',

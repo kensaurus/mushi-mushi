@@ -1,13 +1,13 @@
 ---
 title: '@mushi-mushi/inventory-auth-runner'
-description: "@mushi-mushi/inventory-auth-runner logs in with Playwright from your inventory.yaml auth script so Mushi's crawler can reach pages behind a login."
+description: "@mushi-mushi/inventory-auth-runner logs in with Playwright from your inventory.yaml auth script so the Mushi Mushi crawler can reach pages behind a login."
 ---
 
 # `@mushi-mushi/inventory-auth-runner`
 
 A small Playwright runner that signs in to your app with the login script
 in your [`inventory.yaml`](/sdks/inventory-schema), picks the session
-cookie, and saves it to your Mushi project so the crawler and synthetic
+cookie, and saves it to your Mushi Mushi project so the crawler and synthetic
 monitor can reach pages behind a login wall.
 
 ## When you need it
@@ -21,6 +21,7 @@ gives you the bootstrap step that hands them a session.
 
 ```bash
 pnpm add -D @mushi-mushi/inventory-auth-runner
+npx playwright install chromium   # once, if Playwright has no Chromium on this machine yet
 ```
 
 ## Usage
@@ -90,6 +91,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # The runner launches Chromium; a fresh runner has no Playwright browser.
+      - run: npx --yes -p @mushi-mushi/inventory-auth-runner playwright install --with-deps chromium
       - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
           api-key:    ${{ secrets.MUSHI_API_KEY }}
@@ -101,4 +104,5 @@ jobs:
 ```
 
 The `auth-bootstrap` command in [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci)
-is a convenience wrapper that calls this runner — use it from CI.
+is a convenience wrapper that calls this runner (with `MUSHI_PROJECT` set
+from `project-id`); use it from CI. It does not install a browser itself.

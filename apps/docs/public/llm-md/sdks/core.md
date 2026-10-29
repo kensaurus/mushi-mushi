@@ -4,13 +4,14 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/core
 
 ---
 title: '@mushi-mushi/core'
-description: Reference for @mushi-mushi/core — the MushiConfig shape, widget options, PII scrubbing helpers and region resolution shared by every Mushi JavaScript SDK.
+description: Reference for @mushi-mushi/core, the MushiConfig shape, widget options, PII scrubbing helpers and region resolution shared by every Mushi Mushi JavaScript SDK.
 ---
 
 # `@mushi-mushi/core`
 
 Shared types, HTTP client, offline queue helpers, and config used by every
-framework SDK. Framework-agnostic — you rarely install this package directly.
+Mushi Mushi framework SDK. It is framework-agnostic, and you rarely install it
+directly.
 
 ## Install
 
@@ -37,7 +38,7 @@ interface MushiConfig {
 ```
 
 Get both values in one step by running `mushi login` or by creating a project in
-the [Mushi console](https://kensaur.us/mushi-mushi/admin/projects) — the ID and
+the [Mushi Mushi console](https://kensaur.us/mushi-mushi/admin/projects). The ID and
 key are shown together on the success screen after project creation.
 
 Sampling + `beforeSend` examples: [`@mushi-mushi/web`](/sdks/web#sampling--beforesend).
@@ -88,7 +89,7 @@ flush call to make.
 
 The redactor that every SDK uses at capture time is exported so you can reuse
 it in your own `beforeSend` hook, server code, or logs. It runs entirely in
-your process — scrubbed values never leave the client.
+your process, so scrubbed values never leave the client.
 
 ```ts
 import { scrubPii, scrubUrl, createPiiScrubber } from '@mushi-mushi/core'
@@ -103,11 +104,12 @@ scrubUrl('/articles?tag=dragons&token=eyJhbGciOiJIUzI1NiJ9.payload.sig')
 ```
 
 **`scrubPii(text, config?)`** replaces sensitive substrings anywhere in free
-text. **`scrubUrl(url, config?)`** redacts only query-string *values* — both the
-standard `?…` part and any `?…` inside a hash-router fragment (`#/path?…`) — and
+text. **`scrubUrl(url, config?)`** redacts only query-string *values* (both the
+standard `?…` part and any `?…` inside a hash-router fragment, `#/path?…`) and
 leaves keys and path segments intact. `scrubUrl` redacts values under
-known-sensitive keys (`token`, `password`, `api_key`, `secret`, `auth`,
-`session`, `email`, `phone`, `ssn`, and the exact keys `key` / `code` / `sig`)
+known-sensitive keys (any key containing `token`, `jwt`, `passw`, `pwd`,
+`secret`, `api_key`/`apikey`, `auth`, `session`, `signature`, `email`, `phone`
+or `ssn`, case-insensitive, plus the exact keys `key` / `code` / `sig`)
 to `[Scrubbed]`, then pattern-scrubs the remaining values so a JWT hiding under
 an innocent key (`?next=eyJ…`) is still caught. Both accept absolute or relative
 URLs and never throw.

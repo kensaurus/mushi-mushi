@@ -1,6 +1,6 @@
 # @mushi-mushi/capacitor
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 The Capacitor and Ionic plugin for [Mushi Mushi](https://kensaur.us/mushi-mushi). Users shake the phone or tap a button to report a bug. Mushi gets a screenshot and their note, explains the cause in plain English, and hands your editor a fix to start from.
 
@@ -25,7 +25,7 @@ await Mushi.configure({
 
 Docs: [Capacitor SDK reference](https://kensaur.us/mushi-mushi/docs/sdks/capacitor) · [Project ID and API keys](https://kensaur.us/mushi-mushi/docs/concepts/credentials)
 
-The plugin uses the same project API key as the web SDK (`mushi_…`), minted in the console under **Projects → API Keys**. The npm package vendors the standalone iOS and Android SDK sources, so you do not need a separate Maven or SwiftPM Mushi dependency.
+The plugin uses the same project API key as the web SDK (`mushi_…`), a `report:write` key from the console's **Setup → Verify** page (the Projects page can mint one too). The npm package vendors the standalone iOS and Android SDK sources, so you do not need a separate Maven or SwiftPM Mushi dependency.
 
 Other frameworks: [`@mushi-mushi/react`](https://npmjs.com/package/@mushi-mushi/react) · [`@mushi-mushi/vue`](https://npmjs.com/package/@mushi-mushi/vue) · [`@mushi-mushi/svelte`](https://npmjs.com/package/@mushi-mushi/svelte) · [`@mushi-mushi/angular`](https://npmjs.com/package/@mushi-mushi/angular) · [`@mushi-mushi/react-native`](https://npmjs.com/package/@mushi-mushi/react-native) · [`@mushi-mushi/web`](https://npmjs.com/package/@mushi-mushi/web) (vanilla JS)
 
@@ -90,7 +90,7 @@ bottom sheet from the standalone SDKs.
 | `endpoint`             | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api` on iOS and Android; none in the browser fallback | Override for self-hosting. Required in the browser fallback |
 | `triggerMode`          | `'shake'`                            | `'shake'` / `'button'` / `'both'` / `'none'` |
 | `captureScreenshot`    | `true`                               | Disable for HIPAA-sensitive flows |
-| `minDescriptionLength` | `20`                                 | Matches the web/native SDK contracts |
+| `minDescriptionLength` | `20`                                 | Same default as the native iOS and Android SDKs |
 | `useNativeWidget`      | `false`                              | When `true`, uses the bottom-sheet from the native SDK |
 | `theme`                | _none_                               | `{ accentColor?, dark? }` for the native bottom sheet |
 | `triggerInset`         | `{ bottom: 96, trailing: 20 }` (iOS) / `{ bottom: 96, end: 20 }` (Android) | Per-edge offset in points / dp so the native button clears tab bars and primary buttons. Keys: `bottom`, `leading` / `trailing` (iOS), `start` / `end` (Android) |
@@ -104,4 +104,4 @@ MIT — see [LICENSE](./LICENSE).
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 529 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (October 2026): 77 edge functions · 529 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

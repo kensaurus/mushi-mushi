@@ -34,7 +34,7 @@ only as far as the law protects unregistered marks where you are.
 | **Mushi**                                     | word mark  |
 | **虫** (the kanji used standalone)            | word mark  |
 | The Mushi Mushi bug logo (any color variant)  | logo mark  |
-| The tagline "Your AI wrote it. Mushi tells you why it broke." + adjacent visual identity | trade dress |
+| The tagline "Your AI wrote it. Mushi Mushi tells you why it broke." + adjacent visual identity | trade dress |
 | `mushi-mushi.dev`, `mushimushi.dev`,          | domain     |
 | `kensaur.us/mushi-mushi/*`                    | identity   |
 

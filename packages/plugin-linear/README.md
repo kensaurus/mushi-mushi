@@ -1,14 +1,17 @@
 # `@mushi-mushi/plugin-linear`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
-Opens a Linear issue for each new Mushi bug report, updates it once Mushi
-has triaged the report, and can move it along your Linear workflow.
+For people who plan their work in Linear. This opens a Linear issue for each
+new Mushi Mushi bug report, updates it once Mushi has triaged the report, and
+can move it along your Linear workflow.
 
-**Do you need this package?** Usually not. On Mushi Cloud you connect Linear
-on the **Integrations** page of the console (OAuth or an API key) and Mushi
-files and closes Linear issues itself. Run this package only if you want the
-Linear calls to come from your own server.
+**Do you need this package?** Usually not. On Mushi Mushi Cloud you connect
+Linear on the **Integrations** page of the console (OAuth or an API key, on
+any plan) and Mushi files and closes Linear issues itself. Run this package
+only if you want the Linear calls to come from your own server. Installing
+**Linear Sync** from the Marketplace needs a paid plan (Builder or above, see
+[pricing](https://kensaur.us/mushi-mushi/docs/pricing)).
 
 ```bash
 npm i @mushi-mushi/plugin-linear
@@ -25,12 +28,14 @@ Docs: https://kensaur.us/mushi-mushi/docs/plugins/linear
 
 ## Subscribed events
 
-- `report.created` — creates a Linear issue and stashes the mapping.
-- `report.classified` — updates the issue title/description with the
-  classifier output.
-- `report.status_changed` — moves the issue to the configured workflow
-  state via `stateMap` (optional, programmatic use only; the stand-alone
-  server sets no `stateMap`, so it never moves issues).
+- `report.created`: creates a Linear issue and remembers which issue belongs
+  to the report.
+- `report.classified`: updates the issue's title and description with the
+  triage result.
+- `report.status_changed`: moves the issue to the Linear workflow state in
+  `stateMap[newStatus]`. This needs a `stateMap` (Mushi status → Linear
+  state id), so it works only when you call `createLinearPlugin` yourself;
+  the stand-alone server sets no `stateMap` and never moves issues.
 
 `MUSHI_API_KEY` is read by the stand-alone server but nothing in it posts
 back to Mushi yet. To comment on the Mushi report yourself, call

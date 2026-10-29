@@ -9,12 +9,12 @@ import { Callout } from 'nextra/components'
 
 <Callout type="warning">
   **Draft, not yet reviewed by a lawyer.** This page is a complete plain-English
-  description of how Mushi Mushi handles personal data as of 2026-10-28. Treat
+  description of how Mushi Mushi handles personal data as of 2026-10-29. Treat
   it as a description of current practice, not a finished legal document.
   Questions: kensaurus@gmail.com.
 </Callout>
 
-**Effective date:** 2026-10-28 · **Version:** 3 (version 2, 2026-10-10, did not list the free production check or the cookieless visit count; version 1, 2026-09-21, did not list the opt-in known-fix search sent to Firecrawl)
+**Effective date:** 2026-10-29 · **Version:** 4. Version 4 lists Langfuse and Browserbase, which we already used but had left out of section 5; neither is new, and we are telling console account holders about the omission by email; says Sentry also receives errors from Mushi Mushi's own servers; says model providers also receive code snippets for fixes and reviews; describes the request tracker as it is (it records requests, it does not produce a signed export); and corrects the tester ID-check threshold to US$400. (Version 3, 2026-10-28, did not include these corrections; version 2, 2026-10-10, did not list the free production check or the cookieless visit count; version 1, 2026-09-21, did not list the opt-in known-fix search sent to Firecrawl.)
 
 This policy covers **Mushi Cloud** (the hosted service at
 `kensaur.us/mushi-mushi`), the **admin console**, the **docs site**, the
@@ -24,7 +24,7 @@ and this policy does not apply to your instance.
 
 ## 1. Who is responsible
 
-Mushi Mushi is built and operated by **kensaurus LLC (kensaurus合同会社)**,
+Mushi Mushi is built and operated by **Kensaurus 合同会社**,
 based in Japan (the "controller" for the data described in section 3, and the
 "processor" for the data described in section 4).
 
@@ -47,7 +47,7 @@ requests personally.
 | **Docs-site page-view count** | For each page view: the page path, the `?src=` campaign tag of the link you arrived by, and the host name of the site that linked to you (for example `news.ycombinator.com`). Stored only as a count per day, path, tag and host. No IP address, cookie, browser ID, user agent or fingerprint is stored, and nothing is written to your browser. To stop one visitor flooding the count, the rate limiter keeps a one-way hash of your IP address salted with a secret and the date, so it cannot be turned back into the address or linked across days, and it is never stored with the counts | The docs and landing pages, without the SDK, before and without consent; skipped when Do Not Track or Global Privacy Control is on | Count how many people each launch post or link brings |
 | **Console error telemetry** | Stack traces, browser and OS, the console route you were on when something broke | Sentry, from the admin console | Fix bugs in the console itself |
 | **Support and security mail** | Whatever you put in an email to us | You | Answer you |
-| **Bounties tester data** | Tester display name, points balance, gift-card redemptions, and KYC details (legal name, jurisdiction, tax ID) once redemptions pass US$599 in a calendar year | You, on the Bounties marketplace | Pay out gift cards and meet US tax reporting rules |
+| **Bounties tester data** | Tester display name, points balance, gift-card redemptions, and KYC details (legal name, jurisdiction, tax ID) once gift-card redemptions reach US$400 in a calendar year | You, on the Bounties marketplace | Pay out gift cards and meet US tax reporting rules |
 
 We do not sell personal data and we do not run advertising.
 
@@ -102,7 +102,7 @@ End-user report data, fix and repo data, and any voice transcript belong to the
   the service; applies the security measures on the [security summary](/security);
   uses only the sub-processors in section 5 and gives notice on this page before
   adding one; assists the owner with data-subject requests through the DSAR
-  tooling in the console; deletes or returns the data at the end of the
+  tracking in the console; deletes or returns the data at the end of the
   contract; and makes the SOC 2 readiness evidence available on request. Owners
   who need a signed DPA on their own paper can email us.
 
@@ -113,11 +113,13 @@ cannot reach them, email us and we will forward the request.
 
 | Sub-processor | What they process | Location | Notes |
 | --- | --- | --- | --- |
-| **Supabase** (on AWS) | Database, auth, storage, edge functions — everything at rest | AWS `ap-northeast-1` (Tokyo) today. EU and JP residency options are reserved; when the dedicated clusters ship, a project's data stays in the [region chosen at creation](/security/data-residency) | Row-level security on every table, nightly coverage check |
-| **Anthropic**, **OpenAI**, **OpenRouter** | Report text, sanitised screenshots and logs sent for diagnosis; audio clips for voice transcription (OpenAI only) | US | **BYOK:** if you add your own model key, calls run against *your* provider account. Nothing is billed to or stored by Mushi's provider account. Hosted keys are used only when you have not added your own |
+| **Supabase** (on AWS) | Database, auth, storage, edge functions — everything at rest | AWS `ap-northeast-1` (Tokyo) today. Dedicated US and EU clusters are planned; when they ship, a project's data stays in the [region chosen at creation](/security/data-residency) | Row-level security, nightly RLS check |
+| **Anthropic**, **OpenAI**, **OpenRouter** | Report text and logs (after PII scrubbing), screenshots, and code snippets sent for diagnosis, fixes and reviews; audio clips for voice transcription (OpenAI only) | US | **BYOK:** if you add your own model key, calls run against *your* provider account. Nothing is billed to or stored by Mushi's provider account. Hosted keys are used only when you have not added your own |
 | **Resend** | Email address and the content of transactional email (verification, usage alerts, invitations, lifecycle nudges) | US | No marketing list, no tracking pixels |
 | **AWS S3 + CloudFront** | Static docs and console files; screenshots when you pick S3 as [BYO storage](/security/byo-storage) | US / your bucket's region | Public assets only, unless you bring your own bucket |
-| **Sentry** | Console error telemetry (section 2) | US | Console only; the SDK in your app never reports to our Sentry |
+| **Sentry** | Console error telemetry (section 2), and error reports from Mushi's own edge functions (stack traces with project and report IDs) | US | The SDK in your app never reports to our Sentry |
+| **Langfuse** | Trace metadata for each model call: model, token counts, latency, project and report IDs, with PII patterns scrubbed from metadata strings | US / EU (Langfuse Cloud) | Used to monitor model cost and quality |
+| **Browserbase** | The pages of your app that a QA story visits, when a story runs on the Browserbase provider | US | QA stories only |
 | **GitHub** | OAuth sign-in profile; repo metadata, code index and draft PRs when you connect a repository | US | Access is scoped to the repos you pick and revocable in GitHub settings |
 | **Stripe** | Billing name, email, card details (Stripe holds the card, we never see the full number), invoices | US | Paid plans only |
 | **Firecrawl** | Public URLs you point Mushi at (for example your own site) when running inventory, QA-coverage or story-mapping crawls; queries you run on the Research page; and, only if a project turns on **Search the web for known fixes**: the error message of a report with IDs, URLs and long numbers removed (plus the runtime name, such as `node`), searched in Firecrawl's developer index (GitHub issues, pull requests, READMEs, docs) and on GitHub and Stack Overflow after classification or when someone presses **Search again**, and, for a fix dispatch with little code context, the report summary or the first 200 characters of its description | US | Only pages you ask us to crawl. The known-fix search is off by default and set per project (Settings → Web tools) |
@@ -166,7 +168,9 @@ also complain to your local supervisory authority.
   full export or deletion, email [kensaurus@gmail.com](mailto:kensaurus@gmail.com)
   from the address on the account.
 - **Project owners handling requests from their end users:** the console
-  has a DSAR tool that produces a signed export per reporter; see
+  has a DSAR tracker (**Compliance → DSARs**) that records each request and
+  who completed it, and a host backend can erase one end user's reports
+  through `POST /v1/sdk/erase-subject`; see
   [SOC 2 readiness → DSAR](/security/soc2#dsar-data-subject-access-request).
 - **End users of someone else's app:** contact the app's owner. If you cannot,
   email us with the app name and we will route the request.
@@ -179,7 +183,7 @@ or the reporter identity before releasing anything.
 This section applies to personal information handled by Mushi as a
 business operator under the APPI (個人情報の保護に関する法律).
 
-- **Business operator (個人情報取扱事業者):** kensaurus LLC (kensaurus合同会社), Japan. Contact:
+- **Business operator (個人情報取扱事業者):** Kensaurus 合同会社, Japan. Contact:
   [kensaurus@gmail.com](mailto:kensaurus@gmail.com).
 - **Purpose of use (利用目的):** to provide and improve the Mushi service,
   bill for paid plans, answer support requests, keep the service secure, pay
@@ -195,7 +199,7 @@ business operator under the APPI (個人情報の保護に関する法律).
   correction, addition, deletion, suspension of use, or suspension of
   third-party provision. Email us with `[mushi-privacy]` in the subject. We
   will verify identity and respond without undue delay. We do not charge a fee.
-- **Security measures (安全管理措置):** row-level security on every table,
+- **Security measures (安全管理措置):** row-level security on the database tables,
   encryption at rest and in transit, least-privilege access with an
   append-only audit log, and the controls listed on the
   [security summary](/security).
@@ -250,7 +254,7 @@ after the effective date means the new version applies.
 
 ## 13. Contact
 
-**kensaurus LLC (kensaurus合同会社)** · Japan · [kensaurus@gmail.com](mailto:kensaurus@gmail.com) ·
+**Kensaurus 合同会社** · Japan · [kensaurus@gmail.com](mailto:kensaurus@gmail.com) ·
 subject `[mushi-privacy]`
 
 Related: [Terms of Service](/legal/terms) · [Security summary](/security) ·

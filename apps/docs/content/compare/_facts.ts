@@ -21,10 +21,10 @@
 import type { LandingComparisonRow } from '@/lib/landing-copy'
 import type { FaqEntry } from '@/lib/structured-data'
 
-export const FACTS_REVIEWED_AT = '2026-09-21'
+export const FACTS_REVIEWED_AT = '2026-10-29'
 /** Mushi's own facts follow its pricing page (Free / Builder / Studio, 2026-10-28); competitor facts keep FACTS_REVIEWED_AT. */
-const MUSHI_FACTS_REVIEWED_AT = '2026-10-28'
-export const NEXT_REVIEW_DUE = '2026-12-21'
+const MUSHI_FACTS_REVIEWED_AT = '2026-10-29'
+export const NEXT_REVIEW_DUE = '2027-01-29'
 
 interface Fact {
   /** Short label, e.g. "Free tier". */
@@ -66,7 +66,7 @@ export const MUSHI: Vendor = {
   facts: [
     { claim: 'Free tier', value: 'Free: 1 app, 100 diagnoses per month (hard stop; later reports are kept, not diagnosed), 1 seat, 14-day retention, your own AI key allowed, no card', sourceUrl: MUSHI_PRICING, reviewedAt: MUSHI_FACTS_REVIEWED_AT },
     { claim: 'Paid tiers', value: 'Builder $29/mo (3 apps, 1,000 diagnoses) · Studio $79/mo (10 apps, 3,000 diagnoses) · Enterprise from $499/mo', sourceUrl: MUSHI_PRICING, reviewedAt: MUSHI_FACTS_REVIEWED_AT },
-    { claim: 'License', value: 'SDKs MIT; server AGPLv3', sourceUrl: `${MUSHI_REPO}/blob/master/LICENSE`, reviewedAt: R },
+    { claim: 'License', value: 'SDKs MIT; server AGPLv3, except the enterprise folder (packages/server/ee: SSO, audit export, retention policies), which is source-available and needs a license in production', sourceUrl: `${MUSHI_REPO}/blob/master/LICENSE`, reviewedAt: R },
     { claim: 'Self-host', value: 'Free, whole stack, one command onto your own Supabase project (free tier works); bring your own Anthropic key (SELF_HOSTED.md)', sourceUrl: `${MUSHI_REPO}/blob/master/SELF_HOSTED.md`, reviewedAt: R },
     { claim: 'Editor loop', value: 'MCP server for Cursor / Claude Code; no second LLM key in the MCP process', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/quickstart/mcp', reviewedAt: R },
     { claim: 'Diagnosis accuracy', value: 'An LLM reading of the report and your repo. It can be wrong or name the wrong file; read it before you apply the fix.', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/concepts/judge-loop', reviewedAt: R },
@@ -86,10 +86,10 @@ export const SENTRY: Vendor = {
     'Error and performance monitoring: SDKs capture exceptions, traces and releases, and Seer is a paid AI debugging agent on top.',
   facts: [
     { claim: 'Free tier', value: 'Developer plan: $0, 5k errors, limited to one user', sourceUrl: SENTRY_PRICING, reviewedAt: R },
-    { claim: 'Paid tiers', value: 'Team $26/mo · Business $80/mo · Enterprise custom', sourceUrl: SENTRY_PRICING, reviewedAt: R },
+    { claim: 'Paid tiers', value: 'Team $26/mo · Business $80/mo, billed annually ($29 and $89 billed monthly) · Enterprise custom', sourceUrl: SENTRY_PRICING, reviewedAt: R },
     {
       claim: 'Seer (AI debugging agent)',
-      value: 'An add-on to the Team, Business or Enterprise plan at $40 per active contributor per month, billed as its own monthly charge, separate from pay-as-you-go. An active contributor is anyone who opens two or more pull requests in a month to a Seer-enabled repo. The older $20-a-month-plus-credits pricing stopped being offered in January 2026.',
+      value: 'An add-on to the Team or Business plan at $40 per active contributor per month, billed as its own monthly charge, separate from pay-as-you-go. An active contributor is anyone who opens two or more pull requests in a month to a Seer-enabled repo. The older $20-a-month-plus-credits pricing stopped being offered in January 2026.',
       sourceUrl: SENTRY_PRICING_DOCS,
       reviewedAt: R,
     },
@@ -111,7 +111,7 @@ export const SENTRY_PRICING_ROWS: readonly LandingComparisonRow[] = [
   },
   {
     label: 'AI diagnosis',
-    foil: 'Seer: $40 per active contributor per month, an add-on to Team ($26/mo), Business or Enterprise',
+    foil: 'Seer: $40 per active contributor per month, an add-on to Team ($26/mo billed annually) or Business',
     mushi: 'Included in every diagnosis, free tier onward',
   },
   {
@@ -132,7 +132,7 @@ export const SENTRY_FAQ: readonly FaqEntry[] = [
   },
   {
     q: 'Does Sentry have an AI fix loop?',
-    a: 'Seer is Sentry\'s AI debugging agent. Sentry sells it as an add-on to the Team, Business or Enterprise plan at $40 per active contributor per month, where an active contributor is anyone who opens two or more pull requests in a month to a Seer-enabled repo. It is billed as its own monthly charge, separate from pay-as-you-go, and it is not available in self-hosted Sentry.',
+    a: 'Seer is Sentry\'s AI debugging agent. Sentry sells it as an add-on to the Team or Business plan at $40 per active contributor per month, where an active contributor is anyone who opens two or more pull requests in a month to a Seer-enabled repo. It is billed as its own monthly charge, separate from pay-as-you-go, and it is not available in self-hosted Sentry.',
   },
   {
     q: 'What does Mushi cost?',
@@ -216,14 +216,14 @@ export const JAM_FAQ: readonly FaqEntry[] = [
   },
   {
     q: 'What do the free tiers cover?',
-    a: 'Jam Free (2026-09-21): 30 Jams a month, recordings up to 5 minutes, 5 Recording Links, 5 creator seats. Mushi Free: one app, 100 diagnoses a month, no card, unlimited reports.',
+    a: 'Jam Free (2026-10-29): 30 Jams a month, recordings up to 5 minutes, 5 Recording Links, 5 creator seats. Mushi Free: one app, 100 diagnoses a month, no card, unlimited reports.',
   },
 ]
 
 // ── PostHog ────────────────────────────────────────────────────────────────
 
 const POSTHOG_PRICING = 'https://posthog.com/pricing'
-const POSTHOG_ERROR_TRACKING = 'https://posthog.com/docs/error-tracking'
+const POSTHOG_ERROR_TRACKING = 'https://posthog.com/docs/error-tracking/surfaces/web-app'
 const POSTHOG_SELF_DRIVING_PRICING = 'https://posthog.com/docs/self-driving/pricing'
 
 export const POSTHOG: Vendor = {
@@ -235,12 +235,12 @@ export const POSTHOG: Vendor = {
     { claim: 'Session replay free tier', value: '5K recordings per month', sourceUrl: POSTHOG_PRICING, reviewedAt: R },
     { claim: 'Error tracking free tier', value: '100K exceptions per month', sourceUrl: POSTHOG_PRICING, reviewedAt: R },
     { claim: 'Analytics free tier', value: '1M events per month', sourceUrl: POSTHOG_PRICING, reviewedAt: R },
-    { claim: 'Free plan limits', value: 'No credit card; 1 project; 1-year data retention; usage stops at the free limits', sourceUrl: POSTHOG_PRICING, reviewedAt: R },
+    { claim: 'Free plan limits', value: 'No credit card; 1 project; 1-year data retention', sourceUrl: POSTHOG_PRICING, reviewedAt: R },
     { claim: 'Open source', value: 'An MIT-licensed open-source product is available (pricing page FAQ)', sourceUrl: POSTHOG_PRICING, reviewedAt: R },
     { claim: 'AI free tier', value: '500 PostHog AI credits per month (worth $5) and 3 pull requests per month from the Inbox (beta)', sourceUrl: POSTHOG_PRICING, reviewedAt: R },
     {
       claim: 'AI on errors',
-      value: 'PostHog AI can search errors and find their root cause in the web app. Every error-tracking issue has a "Fix with AI" button that writes a fix or explain prompt for PostHog AI or a coding assistant.',
+      value: 'In the web app you can ask PostHog AI to search your issues and work out the root cause from the stack trace. Every error-tracking issue has a "Fix with AI" button that writes a fix or explain prompt for PostHog AI or a coding assistant.',
       sourceUrl: POSTHOG_ERROR_TRACKING,
       reviewedAt: R,
     },
@@ -315,7 +315,7 @@ export const POSTHOG_FAQ: readonly FaqEntry[] = [
   },
   {
     q: 'What do the free tiers cover?',
-    a: 'PostHog (2026-09-21): 5K session recordings, 100K exceptions and 1M analytics events a month, 500 PostHog AI credits (worth $5) and 3 Inbox pull requests a month, no card, one project, one-year retention. Mushi: one app and 100 diagnoses a month, no card; self-hosting is free.',
+    a: 'PostHog (2026-10-29): 5K session recordings, 100K exceptions and 1M analytics events a month, 500 PostHog AI credits (worth $5) and 3 Inbox pull requests a month, no card, one project, one-year retention. Mushi: one app and 100 diagnoses a month, no card; self-hosting is free.',
   },
 ]
 
@@ -363,9 +363,9 @@ export const ALTERNATIVES: readonly AlternativeRow[] = [
     vendor: 'Bugsnag',
     url: BUGSNAG_HOME,
     freeTier: 'Free: $0, 1 user, 7.5K events + 1M spans/mo, 7-day retention',
-    selfHost: 'Yes, an "On-premise" edition on the Enterprise plan only; price on request',
-    aiFix: 'None on the pricing page; SmartBear\'s MCP server (beta) offers AI fix suggestions in your IDE',
-    pickIf: 'You want error and performance monitoring free for one person, with a paid step from $20/mo (Select) and an on-premise option if you ever need one.',
+    selfHost: 'Yes: the Preferred plan includes "On premises or SaaS deployment"',
+    aiFix: 'None on the pricing page; SmartBear\'s MCP server offers AI-powered fix suggestions in your IDE',
+    pickIf: 'You want error and performance monitoring free for one person, with paid Select and Preferred plans priced by event volume and an on-premise option if you ever need one.',
     sourceUrl: BUGSNAG_PRICING,
     moreSources: [
       { label: 'on-premise', url: BUGSNAG_ON_PREMISE },
@@ -375,9 +375,9 @@ export const ALTERNATIVES: readonly AlternativeRow[] = [
   {
     vendor: 'Rollbar',
     url: 'https://rollbar.com/',
-    freeTier: 'Free: 5,000 occurrences + 1,000 session replays/mo; Essentials from $9/mo for 10,000 occurrences',
+    freeTier: 'Free: 5,000 occurrences + 1,000 session replays/mo, 0 included credits',
     selfHost: 'No, cloud-only',
-    aiFix: 'Rollbar Resolve (public beta): root cause, a code change tested in a sandbox, and a PR. Needs AI credits and the Rollbar GitHub App; the Free plan includes none',
+    aiFix: 'Rollbar Resolve: works out what is wrong, writes a fix, runs your tests in an isolated environment, then opens a PR. It runs on credits; the Free plan includes none',
     pickIf: 'Your volume is low, you want a small replay allowance for free, cloud-only is fine, and you would pay for AI credits to get fix PRs.',
     sourceUrl: ROLLBAR_PRICING,
     moreSources: [
@@ -425,11 +425,11 @@ export const ALTERNATIVES: readonly AlternativeRow[] = [
 export const ALTERNATIVES_FAQ: readonly FaqEntry[] = [
   {
     q: 'What is the cheapest way to get error tracking as a solo founder?',
-    a: 'Every tool on this page has a $0 plan: Sentry Developer, Bugsnag Free, Rollbar Free, LaunchDarkly Developer (where hosted highlight.io went), PostHog and Mushi Free. Sentry, PostHog and Mushi can also be self-hosted for free, and highlight.io\'s open-source repo documents a free hobby install. Bugsnag\'s on-premise edition is Enterprise-only, and Rollbar is cloud-only. The real cost is the afternoon you spend reading what they collected.',
+    a: 'Every tool on this page has a $0 plan: Sentry Developer, Bugsnag Free, Rollbar Free, LaunchDarkly Developer (where hosted highlight.io went), PostHog and Mushi Free. Sentry, PostHog and Mushi can also be self-hosted for free, and highlight.io\'s open-source repo documents a free hobby install. Bugsnag offers on-premises deployment on its Preferred plan, and Rollbar is cloud-only. The real cost is the afternoon you spend reading what they collected.',
   },
   {
     q: 'Which of these explain the bug instead of showing a stack trace?',
-    a: 'Most now have something. Sentry\'s Seer is an add-on to Team, Business or Enterprise at $40 per active contributor per month. Rollbar Resolve (public beta) finds the root cause, writes a code change, runs your tests in a sandbox and opens a pull request, using AI credits the Free plan does not include. PostHog has a "Fix with AI" prompt on every error issue and, in open beta, draft pull requests for recurring errors: 3 a month free, then $15 each. Bugsnag\'s pricing page lists no AI feature; SmartBear\'s MCP server, in beta, offers AI fix suggestions in the IDE. Mushi writes a plain-English diagnosis on every plan: up to 100 a month on Free (a hard stop; later reports are kept but not diagnosed until next month), 1,000 included on Builder, and unlimited self-hosted with your own LLM key. Like the others, it is an AI reading and can be wrong. The report it starts from is what a user said and saw, not only what threw.',
+    a: 'Most now have something. Sentry\'s Seer is an add-on to Team or Business at $40 per active contributor per month. Rollbar Resolve works out what is wrong, writes a fix, runs your tests in an isolated environment and opens a pull request, using credits the Free plan does not include. PostHog has a "Fix with AI" prompt on every error issue and, in open beta, draft pull requests for recurring errors: 3 a month free, then $15 each. Bugsnag\'s pricing page lists no AI feature; SmartBear\'s MCP server offers AI fix suggestions in the IDE. Mushi writes a plain-English diagnosis on every plan: up to 100 a month on Free (a hard stop; later reports are kept but not diagnosed until next month), 1,000 included on Builder, and unlimited self-hosted with your own LLM key. Like the others, it is an AI reading and can be wrong. The report it starts from is what a user said and saw, not only what threw.',
   },
   {
     q: 'Do I have to rip out Sentry to try Mushi?',
@@ -437,7 +437,7 @@ export const ALTERNATIVES_FAQ: readonly FaqEntry[] = [
   },
   {
     q: 'How current is this page?',
-    a: 'Every number was read on 2026-09-21 from the vendor\'s own pages, linked under each tool\'s name. A value that cannot be confirmed on a review date is marked unverified instead of guessed. The next scheduled review is 2026-12-21.',
+    a: 'Every number was read on 2026-10-29 from the vendor\'s own pages, linked under each tool\'s name. A value that cannot be confirmed on a review date is marked unverified or removed instead of guessed. The next scheduled review is 2027-01-29.',
   },
 ]
 

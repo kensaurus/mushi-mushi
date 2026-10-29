@@ -1,12 +1,13 @@
 # `@mushi-mushi/plugin-rollbar`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
-Copies each bug Mushi triages into Rollbar as an item, so user reports sit
-next to your Rollbar errors, and resolves that item when Mushi applies a fix.
+For teams who live in Rollbar and want to see what users report there too.
+This copies each bug Mushi Mushi triages into Rollbar as an item, next to your
+Rollbar errors, and resolves that item when Mushi applies a fix.
 
-**Status on Mushi Cloud:** the console's **Marketplace** has no Rollbar
-listing yet (checked 2026-10-26), so you can't install it from the console.
+**Status on Mushi Mushi Cloud:** the console's **Marketplace** has no Rollbar
+listing yet (checked 2026-10-29), so you can't install it from the console.
 On a Mushi server you run yourself, add a `plugin_registry` row for it and
 install it like any listed plugin. Getting Rollbar errors *into* Mushi is the
 separate `@mushi-mushi/adapters` package.
@@ -56,6 +57,10 @@ express().post('/mushi/webhook', expressMiddleware(handler)).listen(3000)
   `fix.applied` cannot find the item. Pass your own cache as the second
   argument to `createRollbarPlugin` to keep it.
 - Auth header is `X-Rollbar-Access-Token` per Rollbar's REST API spec.
+- Not yet tested against a live Rollbar project. The plugin keeps
+  `result.id` from the create call to resolve the item later; Rollbar's
+  create response documents an occurrence `uuid`, so if `id` comes back empty
+  the item is never resolved on `fix.applied`.
 
 ## License
 

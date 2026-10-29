@@ -1,6 +1,6 @@
 ---
 title: Research
-description: The Research page runs a Firecrawl web search scoped to your tech stack and returns summarised answers with links to their sources.
+description: The Research page in the Mushi Mushi console runs a web search through your Firecrawl key and lets you attach useful results to a bug.
 ---
 
 import { Callout } from 'nextra/components'
@@ -9,56 +9,53 @@ import { Callout } from 'nextra/components'
 
 # Research
 
-**Route:** `/research`
+**Route:** `/research` (a Lab: under **More pages** in the sidebar unless you keep it there)
 
-The Research page is a Firecrawl-powered web search scoped to your tech stack. Ask
-questions in plain English and get summarised answers with source links, drawn from
-up-to-date documentation and community resources.
+Research in Mushi Mushi is a web search through your own Firecrawl key. Use it while
+reviewing a bug to find release notes, Stack Overflow threads or vendor changelogs, and
+attach what helps to the bug. The tabs are **Search** and **History**.
 
 ---
 
 ## What it's for
 
-- **Debug a library error** — "Why does `react-query` v5 throw on an empty select return?"
-- **Find migration paths** — "How do I upgrade from Next.js 14 to 15 App Router?"
-- **Check best practices** — "What are the current Supabase RLS performance recommendations?"
-- **Research a competitor pattern** — "How does Linear handle optimistic updates in their web app?"
+- **Debug a library error**: "Why does `react-query` v5 throw on an empty select return?"
+- **Find migration paths**: "How do I upgrade from Next.js 14 to 15 App Router?"
+- **Check best practices**: "What are the current Supabase RLS performance recommendations?"
 
-Results are saved per-project so teammates can see previous research without re-running it.
+Each search is saved as a session for the project, so teammates can open it from
+**History** (query, mode, number of results and when) without running it again.
 
 ---
 
 ## Running a search
 
-1. Type your question in the search box.
-2. Optionally select a **context** tag (e.g. your framework, language, or library) to
-   narrow results.
-3. Press **Search** or `Enter`.
+1. Type a query of 2 to 500 characters (an error signature, library name or doc topic).
+2. Press **Search** or `Enter`.
 
-Results appear within 5–15 seconds depending on Firecrawl queue depth. Each result card shows:
-- **Title** and source URL
-- **Summary** — AI-extracted key points
-- **Relevance score**
+Each result card shows the page title, its URL and an excerpt of the page text, plus
+**Attached** or **Not attached**. Results are not summarised by AI and carry no
+relevance score.
 
-If the search fails, an error banner shows the specific error code:
-- **FIRECRAWL_ERROR** — your Firecrawl BYOK key is invalid or rate-limited. Check
-  [Integration health](/admin/health).
-- **TIMEOUT** — the search took > 30 seconds. Try a more specific query.
-- **NO_RESULTS** — no pages matched. Try broader terms.
+If the search fails, the page names the reason:
+- **FIRECRAWL_NOT_CONFIGURED**: no Firecrawl key for this project. **Open Firecrawl key**
+  takes you to it.
+- **FIRECRAWL_AUTH_FAILED**: Firecrawl rejected the key.
+- **RATE_LIMITED**: Firecrawl is rate-limiting you. Try again shortly.
+- **SEARCH_FAILED**: the search did not complete.
 
 <Callout type="info">
-Research results are stored in your Supabase project. They are never shared with other
-tenants. Firecrawl processes queries on their infrastructure using your BYOK key — see
-their [privacy policy](https://www.firecrawl.dev/privacy-policy) for data handling details.
+Research sessions are stored in Mushi Mushi's database for your project and are not
+shown to other teams. Firecrawl processes queries on their infrastructure using your key;
+see their [privacy policy](https://www.firecrawl.dev/privacy-policy).
 </Callout>
 
 ---
 
-## Saving results
+## Attaching a result to a bug
 
-Click the bookmark icon on any result card to save it to the project's research library.
-Saved results appear in the **Saved** tab and are pinned to the relevant report or fix
-if you initiated the search from those pages.
+Click **Attach to bug** on a result, pick the bug under **Which bug does this help?**,
+and click **Attach to this bug**. The card then reads **Saved on bug** with a link to it.
 
 ---
 
@@ -75,12 +72,10 @@ When a report carries a real error (a Sentry exception or an error-level console
 ## Prerequisites
 
 A Firecrawl API key must be configured in **Settings → AI keys** before Research works. A key shared with every app in your organization works too.
-Visit [Integration health](/admin/health) to confirm the key is active.
 
 ---
 
 ## Related pages
 
-- [Integration health](/admin/health) — test your Firecrawl key
-- [Settings](/admin/settings) — add your Firecrawl BYOK key
-- [Fix drafts](/admin/fixes) — research is linked to fix context
+- [Settings](/admin/settings) — add your Firecrawl key
+- [Bugs](/admin/reports) — where attached results and **Others who hit this** appear

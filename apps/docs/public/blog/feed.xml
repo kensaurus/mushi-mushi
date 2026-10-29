@@ -16,7 +16,7 @@
       <pubDate>Mon, 21 Sep 2026 00:00:00 GMT</pubDate>
     </item>
     <item>
-      <title>Mushi goes AGPLv3 — the honest open source story</title>
+      <title>Mushi Mushi goes AGPLv3: the honest open source story</title>
       <link>https://kensaur.us/mushi-mushi/docs/blog/agplv3-relicense</link>
       <guid isPermaLink="true">https://kensaur.us/mushi-mushi/docs/blog/agplv3-relicense</guid>
       <description>Why Mushi Mushi relicensed its server to AGPLv3 while keeping every SDK MIT — the open-core reasoning, what changes for self-hosters, and what stays free.</description>
@@ -27,12 +27,12 @@
       <title>Launch Week 1 — five features, five days</title>
       <link>https://kensaur.us/mushi-mushi/docs/blog/launch-week-1</link>
       <guid isPermaLink="true">https://kensaur.us/mushi-mushi/docs/blog/launch-week-1</guid>
-      <description>Everything Mushi Mushi shipped in Launch Week 1 — one feature a day, from bug-report capture to editor-ready fixes, with demos and setup commands.</description>
+      <description>The five features Mushi Mushi shipped in June 2026, one a day, from MCP install to CLI browser sign-in. The public launch posts it promised did not go out.</description>
       <dc:creator>Kenji Sakuramoto</dc:creator>
       <pubDate>Wed, 17 Jun 2026 00:00:00 GMT</pubDate>
     </item>
     <item>
-      <title>60 seconds from &quot;this is broken&quot; to a draft PR — building Mushi Mushi</title>
+      <title>From &quot;this is broken&quot; to a draft PR: building Mushi Mushi</title>
       <link>https://kensaur.us/mushi-mushi/docs/blog/auto-fix-loop</link>
       <guid isPermaLink="true">https://kensaur.us/mushi-mushi/docs/blog/auto-fix-loop</guid>
       <description>How Mushi Mushi turns a one-sentence user complaint into a classified, deduped, AI-judged draft PR, and why the human stays in the loop the whole way.</description>

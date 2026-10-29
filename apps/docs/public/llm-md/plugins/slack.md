@@ -4,20 +4,20 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/slack
 
 ---
 title: Slack app
-description: Triage Mushi bug reports from Slack — add the app from the Integrations page, and each report posts as a card with buttons to fix, resolve or dismiss.
+description: Triage Mushi Mushi bug reports from Slack. Add the app from the Integrations page, and each report posts as a card with buttons to fix, resolve or dismiss.
 ---
 
 # Slack app plugin
 
-Triage a bug from the channel it lands in. Mushi posts each classified report
+Triage a bug from the channel it lands in. Mushi Mushi posts each classified report
 as a Block Kit card carrying the plain-English title, root cause, and evidence
-counts — and the card's buttons let you dispatch a fix, resolve, or dismiss
+counts. The card's buttons let you dispatch a fix, resolve, or dismiss
 without opening the console.
 
-**Why it exists** — the fastest triage is the one that doesn't need a second
+**Why it exists:** the fastest triage is the one that doesn't need a second
 tab.
 
-**Who it's for** — teams whose bugs already get discussed in Slack.
+**Who it's for:** teams whose bugs already get discussed in Slack.
 
 ## Setup
 
@@ -38,7 +38,7 @@ on the server. The package README lists every URL and scope.
 
 | Element | What it tells you |
 | --- | --- |
-| Header | Severity, category, project — plus `(N×)` when the bug is a repeat |
+| Header | Severity, category, project, plus `(N×)` when the bug is a repeat |
 | Title | The plain-language headline ("Checkout button does nothing"), with the technical summary beneath it |
 | 🔍 line | Likely root cause from Stage 2 |
 | Context row | Area · component · confidence · reporter · environment · page · release |
@@ -58,8 +58,8 @@ small card.
 | **Dismiss** | Marks it dismissed (noise, duplicate, won't fix), behind a confirm dialog |
 | **Reply to reporter** | Opens a box for a message the person who reported the bug sees word for word in "Your reports" in your app. Only shown when the report came from your app's widget |
 
-Resolve and Dismiss run the same transition contract as the console — plugin
-event, linked-issue resolution, and reporter notification — so acting from
+Resolve and Dismiss run the same transition contract as the console (plugin
+event, linked-issue resolution, and reporter notification), so acting from
 Slack and acting from the web app can't drift apart.
 
 After an action the card rewrites itself in place: the button row is replaced
@@ -114,5 +114,5 @@ the Slack side yourself: the slash command router (`list`, `open `,
 | Symptom | Cause |
 | --- | --- |
 | Buttons do nothing | Interactivity Request URL not set, or the signing secret doesn't match |
-| Cards post but Triage 404s | `ADMIN_BASE_URL` unset on the server — the deep link can't be built |
+| Cards post but Triage 404s | `ADMIN_BASE_URL` unset on the server, so the deep link can't be built |
 | No cards at all | No bot token for the project, and no `slack_webhook_url` fallback configured |

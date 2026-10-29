@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/nextjs-app-router-csp
 
 ---
 title: Next.js App Router + CSP
-description: Mount Mushi in a Next.js App Router client component and allow its endpoints in your Content-Security-Policy, with a copy-paste CSP allowlist.
+description: Mount Mushi Mushi in a Next.js App Router client component and allow its endpoints in your Content-Security-Policy, with a copy-paste CSP allowlist.
 ---
 
 # Next.js App Router + CSP
@@ -14,7 +14,7 @@ description: Mount Mushi in a Next.js App Router client component and allow its 
   for the full incremental porting plan, including where to put
   `` once you're on the App Router.
 
-Mount Mushi inside a client component:
+Mount Mushi Mushi inside a client component:
 
 ```tsx
 'use client'

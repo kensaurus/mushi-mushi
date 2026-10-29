@@ -1,30 +1,34 @@
-# Plugin marketplace
+# Plugins
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/marketplace
 
 ---
-title: Plugin marketplace
-description: The Plugin marketplace installs outbound plugins such as PagerDuty, Linear and Zapier that receive Mushi webhook events for your project.
+title: Plugins
+description: The Plugins page in the Mushi Mushi console installs outbound plugins, such as a Zapier bridge or your own signed webhook, that receive events for your project.
 ---
 
-# Plugin marketplace
+# Plugins
 
-**Route:** `/marketplace`
+**Route:** `/marketplace` (sidebar: **Account → Plugins**)
 
-The marketplace lets you install outbound plugins — PagerDuty, Linear, Zapier, and
-others — that receive webhook events from Mushi when reports are classified, fixes are
-deployed, or tiers are triggered.
+The Plugins page lets you install outbound plugins that receive signed webhook events
+from Mushi Mushi, for example when a report is classified or a fix is requested. The
+page itself suggests Zapier and your own HTTPS endpoint; for Sentry, Linear, Jira or
+PagerDuty it points you to their cards on [Integrations](/admin/integrations) instead.
 
 The `plugins` entitlement is required to install plugins. An upgrade prompt appears if
 it isn't active on your plan.
 
 ---
 
-## Sections
+## Tabs
 
-### Available plugins
+The page has four tabs: **Overview**, **Browse**, **Installed** and **Deliveries**.
+Overview shows your installed plugins and how their deliveries are doing.
 
-A card grid showing all plugins in the catalogue. Each card shows:
+### Browse
+
+A card grid showing all plugins in the catalog. Each card shows:
 - Plugin name, publisher, category, short description, version
 - **Install status** — installed badge if already active
 - **Reliability stats** — total dispatches, ok rate, avg latency (from the dispatch log)
@@ -36,7 +40,7 @@ the list.
 
 The installed plugins list with per-plugin controls (see Actions below).
 
-### Recent deliveries
+### Deliveries
 
 A dispatch log table showing the most recent outbound webhook calls. Filterable by
 **plugin slug** and **status** (`ok`, `error`, `timeout`). Use this to debug delivery
@@ -46,12 +50,12 @@ problems or confirm an event fired.
 
 ## Installing a plugin
 
-1. Find the plugin in the Available section.
+1. Find the plugin on the **Browse** tab.
 2. Click **Install**.
 3. Fill in the install form:
    - **Webhook URL** — your endpoint that receives events
-   - **Signing secret** — auto-generated; verify the `X-Mushi-Signature` header in your handler
-   - **Subscribed events** — select which event types to receive
+   - **Signing secret** (HMAC-SHA256): store it, it is shown only once; verify the `X-Mushi-Signature` header in your handler
+   - **Subscribed events**: a comma-separated list of event names, or `*` for all
 4. Click **Install**.
 
 ---
@@ -70,16 +74,23 @@ problems or confirm an event fired.
 
 ## Signing verification
 
-Every outbound webhook includes an `X-Mushi-Signature` header (HMAC-SHA256 of the
-request body using your signing secret). Always verify this in your handler before
-processing events:
+Every outbound webhook includes an `X-Mushi-Signature` header of the form
+`t=,v1=`, where `v1` is the HMAC-SHA256 of `` `${t}.${rawBody}` `` with your
+signing secret. Deliveries also carry the [Standard Webhooks](https://www.standardwebhooks.com/)
+headers (`webhook-id`, `webhook-timestamp`, `webhook-signature`). Verify the signature
+in your handler before processing events:
 
 ```ts
 import crypto from 'crypto'
 
-function verify(body: string, signature: string, secret: string) {
-  const expected = crypto.createHmac('sha256', secret).update(body).digest('hex')
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
+function verify(rawBody: string, header: string, secret: string) {
+  const parts = Object.fromEntries(header.split(',').map((p) => p.split('=')))
+  const t = parts.t
+  const v1 = parts.v1 ?? ''
+  if (!t || Math.abs(Date.now() - Number(t)) > 5 * 60 * 1000) return false
+  const expected = crypto.createHmac('sha256', secret).update(`${t}.${rawBody}`).digest('hex')
+  return expected.length === v1.length &&
+    crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(v1))
 }
 ```
 
@@ -89,19 +100,23 @@ function verify(body: string, signature: string, secret: string) {
 
 ### Cursor Cloud Agent
 
-The **Cursor Cloud Agent** plugin (`cursor-cloud-agent`) is a first-party Mushi plugin that dispatches a Cursor Cloud Agent when qualifying events fire. The agent opens a signed draft PR on your GitHub repo automatically — no manual review needed.
+The **Cursor Cloud Agent** plugin (`cursor-cloud-agent`) is a first-party plugin that starts a Cursor Cloud Agent when qualifying events fire. The agent opens a draft PR on your GitHub repo. It still needs your review: see [Fixes](/admin/fixes) for the review and merge gates.
 
 **Subscribes to:** `report.classified` · `fix.requested` · `qa_story.failed` · `skill_pipeline.step.dispatched`
+
+For `report.classified`, only reports at or above the plugin's severity threshold start an
+agent (critical when no threshold is set). A `fix.requested` event that the fix worker
+already sent to Cursor does not start a second agent.
 
 **Configure after installing:**
 | Field | Description |
 |-------|-------------|
 | **API Key** | Your Cursor API key |
-| **Workspace ID** | Your Cursor workspace ID (`ws_…`) |
+| **Workspace ID** | Asked for by the install form; the current dispatch code does not read it |
 | **Model** | `composer-2.5` (default) or `composer-latest` |
 | **Auto-create PRs** | Toggle — enabled by default |
 
-Unlike standard webhook plugins, the Cursor Cloud Agent plugin dispatches **directly to the Cursor REST API** — there's no outbound webhook URL to configure. HMAC verification for inbound events is handled internally by the Mushi platform.
+Unlike standard webhook plugins, the Cursor Cloud Agent plugin calls **the Cursor REST API directly**, so there is no outbound webhook URL to configure. If the plugin has no API key, Mushi Mushi falls back to the project's Cursor key; with no key at all, or no GitHub repo URL on the project, the dispatch is skipped.
 
 The dispatch result (agent ID, run ID, PR URL) is visible in [Fixes](/admin/fixes) under the Cursor badge.
 

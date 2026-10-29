@@ -23,7 +23,7 @@ import { fileURLToPath, pathToFileURL } from 'url'
 const __dir = fileURLToPath(new URL('.', import.meta.url))
 const ROOT = join(__dir, '..')
 
-const CANONICAL_V2 = 'Your AI wrote it. Mushi tells you why it broke.'
+const CANONICAL_V2 = 'Your AI wrote it. Mushi Mushi tells you why it broke.'
 const CANONICAL_LEGACY =
   'Sentry sees what code throws. Mushi sees what users feel — and closes the loop with AI.'
 

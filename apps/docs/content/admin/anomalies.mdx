@@ -1,13 +1,14 @@
 ---
-title: Anomaly detection
-description: The Anomaly detection page runs statistical detectors over the metrics you send and can file a report in your queue when one behaves unexpectedly.
+title: Unusual spikes
+description: The Unusual spikes view in the Mushi Mushi console runs statistical detectors on your metrics and files a bug report when a spike starts right after a release.
 ---
 <AdminDocHero page="anomalies" />
 
 
-# Anomaly detection
+# Unusual spikes
 
-**Route:** `/anomalies`
+**Route:** `/health?view=spikes` (**Mushi health → Unusual spikes**). The old `/anomalies`
+link redirects there. Until October 2026 this was its own page, called Anomaly detection.
 
 **First on the page:** one sentence on the spikes to confirm or dismiss. Once metrics
 arrive, **Your metrics, with releases and spikes** draws each metric over time (those
@@ -16,19 +17,22 @@ spike, and **Confirm** / **Dismiss** under the chart. With no metrics yet the pa
 one **Add metrics** step. The detectors read **Sudden jump** (z-score), **Slow drift**
 (Page-Hinkley) and **Started with a release**.
 
-The Anomaly detection page applies statistical detectors to time-series metrics you
-feed in. When a metric behaves unexpectedly, it surfaces as an anomaly — optionally
-auto-filing a report in your project's queue.
+Mushi Mushi applies statistical detectors to the time-series metrics you send, every
+hour and whenever you click **Check now**. When a metric behaves unexpectedly, it shows
+up as a spike. A spike that starts right after a release also files a bug report.
 
 ---
 
 ## Tabs
 
-### Anomalies
+The tabs are **Summary**, **Spikes** and **Metrics**.
 
-Summary stat cards: **Open**, **Confirmed**, **Auto-reported** counts.
+### Spikes
 
-The anomaly table shows:
+The summary counts include **Spikes to review**, **After a release**, **High score**,
+**Auto-reported**, **Metrics watched** and **Dismissed**.
+
+The spike table shows:
 
 | Column | Description |
 |--------|-------------|
@@ -36,13 +40,12 @@ The anomaly table shows:
 | **Method** | Detection algorithm badge: `Page-Hinkley`, `Z-score`, or `release-regression` |
 | **Score** | The anomaly score (higher = more anomalous) |
 | **Value** | The observed metric value that triggered the alert |
-| **Baseline mean** | The expected value based on history |
+| **Baseline** | The expected value based on history (mean) |
 | **Detected** | Timestamp |
-| **Auto-reported** | Badge if a report was automatically filed |
 
 **Actions:**
-- **Confirm** — marks the anomaly as real; updates the confirmed count
-- **Dismiss** — marks as false positive and removes from open list
+- **Confirm**: marks the spike as real
+- **Dismiss**: marks it as noise and removes it from the open list
 
 ### Metrics
 
@@ -52,40 +55,40 @@ Feed time-series data into the detection pipeline:
 |-------|-------------|
 | **Metric name** | Identifier for the series (e.g. `checkout_errors`, `p95_latency`) |
 | **Value** | Numeric measurement |
-| **Timestamp** | ISO datetime (defaults to now) |
+| **Timestamp** | Date and time (defaults to now) |
 
-After ingesting several data points, a **mini bar chart** appears per metric showing up
-to 50 recent values with min/max range.
+Click **Ingest** to store the value. After several data points, a **mini bar chart**
+appears per metric showing up to 50 recent values with min/max range.
 
-### Detect
+### Check now
 
-Run a detection pass on demand:
+The **Spikes** tab has a card to run a detection pass on demand:
 
 | Field | Description |
 |-------|-------------|
 | **Metric name** | Optional filter — leave blank to run on all metrics |
-| **Lookback hours** | 1–720 hours of history to analyse |
+| **Lookback (hours)** | 1 to 720 hours of history to analyse (starts at 48) |
 
-Click **Run detection** to trigger the detection pass. The result shows the count of
+Click **Check now** to run the detection pass. The result shows the count of
 new anomalies found.
 
 ---
 
 ## Detection methods
 
-| Method | Best for |
+| Method (label in the chart) | Best for |
 |--------|----------|
-| **Page-Hinkley** | Gradual drift in a running mean (e.g. slowly rising error rate) |
-| **Z-score** | Sudden spikes above a rolling standard deviation band |
-| **release-regression** | Metrics that changed significantly around a deploy timestamp |
+| **Page-Hinkley** (Slow drift) | Gradual drift in a running mean (e.g. slowly rising error rate) |
+| **Z-score** (Sudden jump) | Sudden spikes above a rolling standard deviation band |
+| **release-regression** (Started with a release) | Metrics that changed significantly right after a release |
 
 ---
 
 ## Auto-reporting
 
-If a confirmed anomaly exceeds a severity threshold, Mushi automatically creates a
-report in the Reports queue. This closes the loop: anomalies become actionable items
-without requiring manual review.
+When a spike is a **release regression** (it started right after a release), Mushi
+creates a bug report in **Bugs** with severity `high` and category `regression`, and
+marks the spike confirmed. Other spikes wait for you to confirm or dismiss them.
 
 ---
 
@@ -112,6 +115,6 @@ PATCH /v1/admin/anomalies/<id>
 
 ## Related pages
 
-- [Reports](/admin/reports) — auto-filed anomaly reports appear here
-- [Intelligence reports](/admin/intelligence) — weekly digest includes anomaly trends
+- [Bugs](/admin/reports) — auto-filed regression reports appear here
+- [Releases](/admin/releases) — the releases drawn on each metric chart
 - [Experiments](/admin/experiments) — A/B test changes that might affect your metrics

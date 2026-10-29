@@ -4,43 +4,45 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/audit
 
 ---
 title: Audit log
-description: The Audit log records every admin action and agent run in Mushi — who minted API keys, who dispatched a fix, and what triggered a pull request.
+description: The Audit log in the Mushi Mushi console records admin actions and key events, like who minted or revoked an API key, changed settings or merged a pull request.
 ---
 
 # Audit log
 
-**Route:** `/audit`
+**Route:** `/team?view=audit` (**Team → Audit log**; the old `/audit` address redirects there)
 
-> **Scenario 1:** A fix-worker PR was opened for the wrong repository last night and
-> you want to know which admin action or agent run triggered it.
+> **Scenario 1:** A pull request was merged last night and you want to know who merged it.
 >
 > **Scenario 2:** Your security team wants to know who generated API keys in the last
 > 30 days and whether any were revoked.
 
-The audit log is an immutable record of every action taken in the system — by humans,
-agents, and automated pipelines. Every entry is timestamped, attributed, and expandable
-to show the full before/after payload.
+The Audit log in Mushi Mushi records actions taken by people, agents and scheduled jobs
+on the active project. Each entry has a time, an actor, a resource and, when the action
+stored one, a metadata payload you can expand. The view has three tabs: **Overview**,
+**Log** and **Breakdown**.
+
+The Audit log needs the `audit_log` entitlement (Builder, Studio and Enterprise). The
+API also checks the Enterprise license and runs in evaluation mode without one.
 
 ---
 
 ## What's logged
 
-Every action that mutates data produces an audit entry. Examples:
+Not every change writes an entry: the code logs a fixed list of actions. Most settings
+changes, including SSO and storage changes, are recorded as `settings.updated` or
+`settings.deleted` with the resource type telling you what changed. Examples from that list:
 
 | Action | Description |
 |--------|-------------|
-| `report.created` | A new report was ingested |
-| `report.triaged` | A human triaged a report |
-| `fix.dispatched` | A fix-worker run was started |
-| `fix.completed` | A fix-worker run succeeded |
-| `fix.failed` | A fix-worker run failed |
-| `lesson.promoted` | A mistake cluster was promoted to a lesson |
-| `key.created` | An API key was generated |
-| `key.revoked` | An API key was revoked |
-| `sso.registered` | An SSO provider was added |
-| `project.deleted` | A project was deleted |
-| `pdca.run.started` | An improvement run was queued |
-| `user.invited` | A teammate was invited |
+| `report.created` / `report.triaged` | A report was filed or triaged |
+| `api_key.created` / `api_key.revoked` | An API key was minted or revoked |
+| `settings.updated` / `settings.deleted` | A setting, SSO provider, storage config and so on changed |
+| `fix.reviewed` / `pull_request.merged` | A fix was reviewed; a pull request was merged |
+| `fix_dispatch.cancelled` | A fix dispatch was cancelled |
+| `project.created` / `project.deleted` | A project was created or deleted |
+| `org.member_role_changed`, `org.invite_revoked` | Team membership changes |
+| `billing.plan_changed` | The plan changed |
+| `mcp.tool_called` | An MCP tool call |
 
 ---
 
@@ -48,18 +50,19 @@ Every action that mutates data produces an audit entry. Examples:
 
 | Column | Description |
 |--------|-------------|
-| **Time** | Timestamp (relative + absolute on hover) |
-| **Action** | Colour-coded badge — green for success, red for failures, amber for warnings |
-| **Actor** | Email address for human actors, function name for agents, "system" for cron |
-| **Resource** | `type:id-prefix` — the object the action affected |
-| **▶** | Expand to see the full JSON metadata payload and complete resource ID |
+| **Time** | When it happened |
+| **Action** | The action name; failure actions (`fix.failed`, `integration.disconnected`) and warning actions (`api_key.revoked`, `plugin.uninstalled`) are highlighted |
+| **Actor** | Who did it |
+| **Resource** | The type and short ID of the object the action affected |
+| **▶** | Expand to see the metadata payload and the full resource ID |
 
 ---
 
-## Hero metrics
+## Snapshot
 
-Three stat cards at the top of the page show counts for the selected time window:
-**Total events**, **FAIL events**, **WARN events**.
+The strip at the top shows **Changes (24h)**, **Failures (24h)** and **All time**. The
+Overview tab breaks the last day down by **Human actors**, **Agent actors** and
+**System actors**, and names the most frequent action of the last 7 days.
 
 ---
 
@@ -67,12 +70,14 @@ Three stat cards at the top of the page show counts for the selected time window
 
 | Filter | Options |
 |--------|---------|
-| **Action** | Dropdown of all action types |
-| **Resource type** | `report`, `fix`, `lesson`, `key`, `project`, `user`, etc. |
-| **Actor type** | Human / Agent / System |
-| **When** | Last 1h / 24h / 7d / 30d / all time |
-| **Actor email** | Type and press Enter to filter to a specific person |
-| **Search** | Free-text search on action and resource (press Enter or blur) |
+| **Action** | A fixed list of common action names |
+| **Resource** | `report`, `fix`, `settings`, `integration`, `project`, `api_key`, `plugin`, `dsar`, `fine_tuning`, `prompt` |
+| **Actor type** | Human / Agent (LLM) / System (cron / webhook) |
+| **When** | Last hour / Last 24h / Last 7 days / Last 30 days / All time |
+| **Actor email** | Filter to a specific person |
+| **Search action / resource** | Free-text search on action and resource |
+
+The **Failures (24h)** card also filters the log to failure or warning outcomes.
 
 Active filters appear as chips in a rail below the toolbar. Click the **×** on any chip
 to remove it, or **Clear all** to reset.
@@ -81,50 +86,51 @@ to remove it, or **Clear all** to reset.
 
 ## Expanding a row
 
-Click any row to expand it and see the full JSON metadata payload. This includes the
-before/after state for mutations, the triggering agent ID, and any error detail for
-failed actions.
+Click a row that has metadata to expand it and see the JSON payload the action stored,
+plus the full resource ID. What the payload holds depends on the action; most do not
+store a before/after copy.
 
 ---
 
 ## Export
 
-Click **Export CSV** to download all entries matching the current filters. The export
-includes all columns plus the full metadata JSON.
+Click **Export CSV** to download the entries currently loaded (one page, up to 50) with
+Time, Action, Actor, Resource, Resource ID and the metadata JSON. Page through the log
+to export more.
 
 ---
 
 ## Common tasks
 
-### Tracing an unexpected fix-worker action
-1. Set **Action** filter to `fix.dispatched`.
-2. Set **When** to `last 24h`.
-3. Find the relevant entry — expand it to see the `report_id`, `triggered_by` (human or agent), and `project_id`.
-4. Click the `report_id` in the payload to navigate directly to the report.
+### Finding who merged a pull request
+1. Type `pull_request.merged` in **Search action / resource**.
+2. Set **When** to **Last 24h**.
+3. Expand the entry to see its metadata and the actor.
 
 ### Security review: who created API keys this month
-1. Set **Action** to `key.created`.
-2. Set **When** to `last 30d`.
-3. Set **Actor type** to `Human`.
-4. Review the Actor column — each entry shows the email of who generated the key.
-5. Click **Export CSV** to share with your security team.
+1. Type `api_key.created` in **Search action / resource** (the Action dropdown lists `api_key.minted`, which the server does not write).
+2. Set **When** to **Last 30 days**.
+3. Set **Actor type** to **Human**.
+4. Review the Actor column.
+5. Repeat with `api_key.revoked`, then **Export CSV** each page to share.
 
 ### Finding out when a project was deleted
 1. Set **Action** to `project.deleted`.
-2. Expand the row — the payload includes the full project name, slug, and the actor who confirmed deletion.
+2. Expand the row to see the metadata the deletion stored and the actor.
 
 ---
 
 ## API
 
 ```bash
-GET /v1/admin/audit?action=&resource_type=&actor=&actor_type=&since=&q=&limit=50&offset=
+GET /v1/admin/audit?action=&outcome=&resource_type=&actor=&actor_type=&since=&q=&limit=50&offset=
+GET /v1/admin/audit/stats
 ```
 
 ---
 
 ## Related pages
 
-- [Compliance](/admin/compliance) — SOC 2 evidence exports that reference audit data
-- [Fix drafts](/admin/fixes) — detailed fix-worker run logs
-- [Organization members](/admin/teams) — see who has access and can generate entries
+- [Compliance](/admin/compliance): SOC 2 evidence that references audit data
+- [Fixes](/admin/fixes): fix run history
+- [Organization members](/admin/teams): who has access

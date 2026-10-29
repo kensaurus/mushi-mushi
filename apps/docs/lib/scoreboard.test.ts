@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { formatAsOf, formatHours, loadScoreboard, sparklinePath, sparklinePoints } from './scoreboard'
+import { formatAsOf, formatCount, formatHours, loadScoreboard, sparklinePath, sparklinePoints } from './scoreboard'
 
 describe('formatHours', () => {
   it('reads as people say it', () => {
@@ -7,6 +7,14 @@ describe('formatHours', () => {
     expect(formatHours(0.5)).toBe('30 minutes')
     expect(formatHours(100)).toBe('4.2 days')
     expect(formatHours(null)).toBe('not enough data yet')
+  })
+})
+
+describe('formatCount', () => {
+  it('groups thousands, and shows a dash for a number the API did not send', () => {
+    expect(formatCount(1068)).toBe('1,068')
+    expect(formatCount(undefined)).toBe('–')
+    expect(formatCount(Number.NaN)).toBe('–')
   })
 })
 

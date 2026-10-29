@@ -37,6 +37,8 @@ import {
   RealDiagnosisCard,
   MediatorMap,
   PricingStrip,
+  LandingAudience,
+  LandingFeatures,
 } from './components/landing'
 
 export const useMDXComponents = (components?: Record<string, unknown>) => ({
@@ -83,5 +85,7 @@ export const useMDXComponents = (components?: Record<string, unknown>) => ({
   RealDiagnosisCard,
   MediatorMap,
   PricingStrip,
+  LandingAudience,
+  LandingFeatures,
   ...(components ?? {}),
 })

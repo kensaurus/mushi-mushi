@@ -4,12 +4,12 @@ Source: https://kensaur.us/mushi-mushi/docs/compare/jam-vs-mushi
 
 ---
 title: Jam vs Mushi Mushi
-description: Jam.dev vs Mushi Mushi in 2026 — a teammate recording a bug in the Jam extension versus a user reporting from your app, MCP handoff and free tiers.
+description: Jam.dev vs Mushi Mushi in 2026. A teammate recording a bug in the Jam extension versus a user reporting from your app, MCP handoff and free tiers.
 ---
 
 # Jam vs Mushi Mushi
 
-Jam and Mushi both put console and network logs next to a bug so nobody has
+Jam and Mushi Mushi both put console and network logs next to a bug so nobody has
 to ask "can you reproduce that?". The difference is who presses the button.
 With Jam, a person on or near your team records the bug in Chrome. With
 Mushi, the user who hit the bug reports it from inside your production app,

@@ -4,16 +4,16 @@ Source: https://kensaur.us/mushi-mushi/docs/self-hosting/observability
 
 ---
 title: Langfuse + Sentry
-description: Wire Langfuse LLM tracing and Sentry error tracking into a self-hosted Mushi server — the Edge Function secrets and what each trace records.
+description: Wire Langfuse LLM tracing and Sentry error tracking into a self-hosted Mushi Mushi server. The Edge Function secrets and what each trace records.
 ---
 
 # Observability
 
-Mushi ships with first-class Langfuse (LLM traces) and Sentry (error tracking) integration. Both are configured as Edge Function secrets.
+Mushi Mushi integrates Langfuse (LLM traces) and Sentry (error tracking). Both are optional and configured as Edge Function secrets.
 
 ## Langfuse (LLM tracing)
 
-Every LLM invocation is wrapped in a Langfuse trace with the prompt version, model, token usage, latency, cost, and `key_source` (`tenant` vs `platform`).
+When the Langfuse keys are set, LLM calls are traced to Langfuse with the model, token counts, latency and metadata such as the project and report IDs (string metadata is PII-scrubbed first). Every call is also recorded in the `llm_invocations` table, Langfuse or not.
 
 ```bash
 cd packages/server
@@ -26,21 +26,21 @@ npx supabase secrets set LANGFUSE_BASE_URL=https://cloud.langfuse.com
 
 Replace `LANGFUSE_BASE_URL` with your self-hosted Langfuse URL if needed.
 
-  BYOK traces include `key_source: "tenant"` so you can filter Langfuse by tenant vs platform usage. See [BYOK](/security/byok) for details.
+  Which key paid for a call is recorded in `llm_invocations.key_source` (`byok` or `env`), not in Langfuse. See [BYOK](/security/byok).
 
 ### What gets traced
 
-| Trace | Function | Prompt version key |
-| --- | --- | --- |
-| Report classification | `classify-report` | `mushi-classifier-v*` |
-| Fix generation | `fix-worker` | `mushi-fixer-v*` |
-| Fix judgment | `judge-batch` | `mushi-judge-v*` |
-| Intelligence report | `intelligence-report` | `mushi-intel-v*` |
-| PDCA iteration | `pdca-runner` | tracked per model config |
+| Trace | Function |
+| --- | --- |
+| Report classification | `fast-filter`, `classify-report` |
+| Fix generation | `fix-worker` |
+| Classification grading | `judge-batch` |
+| Intelligence report | `intelligence-report` |
+| PDCA iteration | `pdca-runner` |
 
 ### Viewing traces
 
-In Langfuse: **Traces** → filter by `project_id` (the Langfuse trace tag matches the Mushi project ID). The **Health** page in the Mushi admin console shows recent LLM call logs pulled from Langfuse.
+In Langfuse: **Traces**, then filter by the project ID in the trace metadata. The **Health** page in the Mushi admin console lists recent LLM calls from `llm_invocations`, each with its Langfuse trace ID.
 
 ## Sentry (error tracking)
 
@@ -48,8 +48,8 @@ Every Edge Function wraps its handler with `withSentry()` from `_shared/sentry.t
 
 ```bash
 cd packages/server
-npx supabase secrets set SENTRY_DSN=https://…@sentry.io/…
-npx supabase secrets set SENTRY_ENVIRONMENT=production
+npx supabase secrets set SENTRY_DSN_SERVER=https://…@sentry.io/…   # SENTRY_DSN also works
+npx supabase secrets set SUPABASE_ENV=production                     # Sentry environment
 npx supabase secrets set SENTRY_RELEASE=$GIT_SHA
 ```
 
@@ -63,18 +63,17 @@ VITE_SENTRY_DSN=https://…@sentry.io/… pnpm --filter "@mushi-mushi/admin..." 
 
 ## OpenTelemetry
 
-The fix orchestrator emits OTel spans for every sandbox lifecycle event, agent tool call, and PR creation. Point your collector at the standard endpoint:
+When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, `classify-report` exports an OTLP span for each classification, as a child of the ingest request's `traceparent` when there is one. Point it at your collector (`OTEL_EXPORTER_OTLP_HEADERS` adds auth headers):
 
 ```bash
 npx supabase secrets set OTEL_EXPORTER_OTLP_ENDPOINT=https://your-collector/v1/traces
 ```
 
-Spans include `report_id`, `attempt_id`, and `stage` tags so you can join OTel traces back to Mushi data.
+Spans carry `report.id` and `project.id` attributes so you can join them back to Mushi data.
 
 ## Health dashboard
 
-After deploying, check **Settings → SDK & connection** in the admin console. It shows:
-- Provider probe status (Anthropic, OpenAI, Langfuse, Sentry, GitHub)
-- Recent LLM call latency and cost
-- Cron job last-run timestamps
-- Any `degraded` or `error` probes with actionable error codes
+After deploying, open **Mushi health** (`/health`) in the admin console. It shows
+the AI calls behind diagnoses and fixes (count, error rate, fallback rate,
+latency and cost) and the background jobs' last runs. Integration probes
+(Anthropic, OpenAI, Langfuse, Sentry, GitHub) are on the **Integrations** page.

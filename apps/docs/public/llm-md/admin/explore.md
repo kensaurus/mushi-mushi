@@ -1,30 +1,33 @@
-# Codebase Atlas
+# Code map
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/explore
 
 ---
-title: Codebase Atlas
-description: Visual, searchable map of every indexed source file — explore architectural layers, import dependencies, and find code by meaning.
+title: Code map
+description: The Code map page in the Mushi Mushi console is a visual, searchable map of your indexed source files, with architectural layers, imports and search by meaning.
 ---
 
-# Codebase Atlas — `/explore`
+# Code map
 
-The Explore page turns the raw indexed source files into a visual, navigable map of how your project is architecturally structured. It is the fastest way to answer "where does X live?", "what imports what?", and "which layer handles this concern?" — without opening your editor.
+**Route:** `/explore` (sidebar: More pages → Fix → Code map; also called Codebase Atlas. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
 
-  **Prerequisite:** Most of the Explore page requires codebase indexing to be enabled. **Copy digest** and **Map → Diagram** only need a connected GitHub repo. Run `mushi index` from your project directory, or enable **Settings → Codebase Indexing** in the admin console. Indexing typically completes in under a minute for codebases up to 10,000 files.
+The Code map page in Mushi Mushi turns the raw indexed source files into a visual, navigable map of how your project is architecturally structured. It is the fastest way to answer "where does X live?", "what imports what?", and "which layer handles this concern?" — without opening your editor.
+
+  **Prerequisite:** Most of the page requires codebase indexing. **Copy digest** and **Map → Diagram** only need a connected GitHub repo. Turn indexing on in the **Codebase indexing** card on [Integrations](/admin/integrations) (`/integrations/config`), or upload a local folder with `mushi index `. The hourly sweep fills the index in batches up to your plan's file limit (see [below](#how-much-of-a-large-repo-is-indexed)).
 
 ---
 
 ## Tab groups
 
-The page is organized into three rails (URL `?tab=`):
+The page has five groups (URL `?tab=`):
 
-| Rail | Tabs | Purpose |
+| Group | Views | Purpose |
 |------|------|---------|
-| **Summary** | Summary | Index health, file counts, last index attempt / error |
+| **Summary** | Summary | Index health, file counts, last index attempt and error |
 | **Understand** | Ask · Tour · Domains · Knowledge | Chat with citations, guided walkthrough, business domains, wiki/docs knowledge merged into Ask |
-| **Map** | Graph · Layers · Diagram · Search | Visual architecture map, an AI architecture diagram, and semantic search (detailed below) |
-| **Index** | Index | Indexer debug — repo, webhook, embedding coverage, last error |
+| **Map** | Graph · Layers · Diagram | Visual architecture map and an AI architecture diagram (detailed below) |
+| **Search** | Search | Semantic search (detailed below) |
+| **Index** | Index | Indexer debug: repo, webhook, embedding coverage, last error |
 
 MCP equivalents: `ask_codebase`, `get_file_summary`, `get_codebase_tour`, `search_codebase`, `get_codebase_domains`, `analyze_codebase_impact`, `analyze_wiki_knowledge`, `get_repo_digest` (on the default feature set; needs no index).
 
@@ -142,15 +145,9 @@ Click the chip again (or **Clear**) to restore the full view.
 
 ---
 
-## Stats bar
+## Node and edge counter
 
-Below the page title:
-
-```
-115 files · ts, tsx, js · Indexed via Mushi SDK
-```
-
-Shows total indexed file count, top languages detected by extension, and the indexing source.
+Above the graph, a counter such as `64/115 nodes · 80/210 edges` shows how many nodes and edges the current filters leave visible, out of the total.
 
 ---
 
@@ -162,25 +159,20 @@ Switch between **Files** (one node per file) and **Symbols** (one node per expor
 
 ## Indexing
 
-### Install the CLI
+### Turn on indexing for the connected repo
+
+On [Integrations](/admin/integrations) (`/integrations/config`), the **Codebase indexing** card turns indexing on for the app's GitHub repo and starts a sweep at once. With the Mushi GitHub App installed, each `push` re-indexes the changed files.
+
+### Or upload a local folder
+
+For a private repo the GitHub App cannot read, install the CLI and upload a folder:
 
 ```bash
 npm install -g @mushi-mushi/cli
+mushi index ./src            # add --dry-run to list files first
 ```
 
-### Index your project
-
-From the root of your project:
-
-```bash
-mushi index
-```
-
-The CLI reads your project's `MUSHI_PROJECT_ID` and `MUSHI_API_KEY` from environment variables (or `.env`), walks the source tree, chunks files into overlapping windows, generates embeddings via your BYOK OpenAI key, and upserts them into `project_codebase_files`.
-
-### Or enable auto-indexing
-
-In **Settings → Codebase Indexing**, toggle **Auto-index on push**. The Mushi GitHub App listens for `push` events and re-indexes changed files automatically.
+`mushi index ` uses the project and key saved by `mushi login` / `mushi init`, walks the folder (skipping `node_modules`, `.git`, `dist`, `build`, `.next`, `.turbo` and `coverage`), and uploads `.ts`, `.tsx`, `.js`, `.jsx`, `.py`, `.go` and `.rs` files under 500 KB. `--language ts` limits it to one language.
 
 Connected with a Personal Access Token instead of the App? Add a repo webhook in GitHub (**Settings → Webhooks**). Point it at the URL the Codebase indexing card shows (your API endpoint plus `/v1/webhooks/github`). Use content type `application/json` and the webhook secret the card revealed, and tick **Pushes** and **Check runs**. Each push to the default branch then re-indexes the changed files.
 
@@ -199,7 +191,7 @@ The path filter is the repo's `path_globs`, the same globs the fix worker uses t
 
 "Last sweep" counts partial sweeps too. A partial sweep is never shown as a complete index. Pushes count against the plan limit as well: a push re-indexes files already in the index, and adds new files only while the index is under the limit.
 
-  Only files tracked by git are indexed. Add large generated directories (`dist/`, `.next/`, `node_modules/`) to `.mushiignore` to skip them.
+  The sweep reads files from GitHub, so only committed files are indexed. To keep generated or vendored folders out, set the repo's path filter (**Path filter (advanced, optional)** on the Codebase indexing card).
 
 ---
 
@@ -311,8 +303,8 @@ Similarity scores range from 0 to 1. Scores above 0.7 are usually highly relevan
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| "Codebase not indexed yet" | No files in `project_codebase_files` | Run `mushi index` or enable auto-indexing |
-| Most files show as "Other" | Files are in non-standard directories | Add a `.mushiignore` to exclude generated code; re-index |
+| "Codebase not indexed yet" | No files in `project_codebase_files` | Turn on the Codebase indexing card, or run `mushi index ` |
+| Most files show as "Other" | Files are in non-standard directories | Narrow the repo's path filter to your source folders; re-index |
 | 0 import edges | Project uses only path aliases (`@/`, `~/`) | Import edges only resolve relative imports; switch to Symbols view for finer granularity |
-| Search returns no results | Missing BYOK OpenAI key | Settings → BYOK → add `OPENAI_API_KEY` for embeddings |
+| Search returns no results | Missing OpenAI key for embeddings | **Settings → AI keys** → add an OpenAI key |
 | Slow graph render | Very large project (1,000+ files) | Use layer filter chips to scope down, or switch to Layers view |

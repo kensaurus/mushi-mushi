@@ -4,14 +4,14 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/checks
 
 ---
 title: Checks
-description: The Checks page shows every automatic check on this app with its state, when it last ran and its open count, failing checks first.
+description: The Checks page in the Mushi Mushi console shows every automatic check on this app with its state, when it last ran and its open count, failing checks first.
 ---
 
 # Checks
 
-**Route:** `/checks`
+**Route:** `/checks` (sidebar: Checks)
 
-Is my app OK, and which check is red? Every automatic check on this app, in one grid, failing checks first. A sentence at the top names the checks that need you, with one button to open the first.
+Is my app OK, and which check is red? Every automatic check Mushi Mushi runs on this app, in one grid, failing checks first. A sentence at the top names the checks that need you, with one button to open the first.
 
 Each card has a dot and a state:
 
@@ -22,13 +22,13 @@ Each card has a dot and a state:
 | Green | Pass | A finished run was read and found nothing. Shown with when it last ran. |
 | Grey | Not run yet, Not set up, Status unavailable | Never a pass. Not set up comes with a Set up link. |
 
-An Upgrade pill means the check needs a higher plan. AI prompts and CI runners are Labs: their cards appear once you keep them in the sidebar in Settings → Display & sidebar. While you are on Checks or one of its pages, the sidebar lists every check under Checks.
+An Upgrade pill means the check needs a higher plan. AI prompts and CI runners are Labs: their cards appear once you switch them on under Settings → Display & sidebar → Labs. While you are on Checks or one of its pages, the sidebar lists every check under Checks.
 
 ## The checks
 
 ### App checks
 
-Is the app itself sound: scheduled tests, user stories, audits, its blueprint, design tokens and content, plus Mushi’s own health.
+Is the app itself sound: scheduled tests, user stories, audits, its blueprint, design tokens and content, a first-time user test, plus Mushi’s own health.
 
 | Card | Route | What it covers |
 | --- | --- | --- |
@@ -40,6 +40,7 @@ Is the app itself sound: scheduled tests, user stories, audits, its blueprint, d
 | App blueprint | `/recipe` | What this app is built from — database, design system, routes, CI, deploy, env and integrations — and what changed. |
 | Design system | `/design` | Design tokens, contrast pairs, type scale and off-token code. Token and rule edits open a draft pull request. |
 | [Content checks](/admin/content) | `/content` | AI-generated and user-submitted content flagged as wrong or low quality. |
+| First-time user test | `/first-user-test` | An AI that has never seen your app tries to sign up and use it; where a new user gets stuck and how long it takes. See [UX runs](/admin/ux-runs#first-time-user-test). |
 
 ### AI quality
 

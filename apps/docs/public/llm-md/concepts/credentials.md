@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/credentials
 
 ---
 title: Project ID & API keys
-description: Where to find your Mushi project ID and API key, what the report:write and mcp scopes allow, the one mushi_ key format, and env var names per framework.
+description: Where to find your Mushi Mushi project ID and API key, what the report:write and mcp scopes allow, the one mushi_ key format, and env var names per framework.
 ---
 
 # Project ID & API keys

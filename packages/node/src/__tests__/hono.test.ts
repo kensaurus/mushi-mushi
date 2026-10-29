@@ -30,6 +30,19 @@ describe('mushiHonoErrorHandler on a Hono app', () => {
     }))
   })
 
+  it('keeps query tokens out of the report text and url', async () => {
+    const { client, captureReport } = stubClient()
+    const app = new Hono()
+    app.get('/boom', () => { throw new Error('checkout exploded') })
+    app.onError(mushiHonoErrorHandler({ client }, (_err, c) => c.text('Server error', 500)))
+
+    await app.request('/boom?token=sk_live_abc123&page=2')
+    const sent = captureReport.mock.calls[0][0] as { description: string; url: string }
+    expect(sent.description).not.toContain('sk_live_abc123')
+    expect(sent.url).not.toContain('sk_live_abc123')
+    expect(sent.description).toContain('/boom?')
+  })
+
   it('accepts a c.json() fallback', async () => {
     const { client } = stubClient()
     const app = new Hono()

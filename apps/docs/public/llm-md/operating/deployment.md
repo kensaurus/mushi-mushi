@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/operating/deployment
 
 ---
 title: Deployment & releases
-description: How Mushi's maintainers ship the SDKs, edge functions and docs — a public summary of the release process. App developers never need to run any of it.
+description: How Mushi Mushi's maintainers ship the SDKs, edge functions, console and docs. A public summary of the release process; app developers never need to run it.
 ---
 
 # Deployment & releases
@@ -15,15 +15,17 @@ repo at [`docs/DEPLOYMENT.md`](https://github.com/kensaurus/mushi-mushi/blob/mas
   Maintainers only. App developers integrating the SDK never need to run any of
   this — install from npm and follow the [Quickstart](/quickstart).
 
-## Four independent pipelines
+## Independent pipelines
 
 | Pipeline | Trigger | Target |
 | --- | --- | --- |
 | npm SDK packages | Merge the Changesets version PR to `master` (often a manual `release.yml` dispatch) | npm registry |
-| Edge Functions | Push to `master` touching `packages/server/supabase/functions/**` | Supabase Edge (Deno) |
+| Edge Functions | Push to `master` touching `packages/server/supabase/functions/**`, plus a nightly full deploy | Supabase Edge (Deno) |
 | Admin console SPA | Push to `master` touching `apps/admin/**` | S3 + CloudFront |
 | Docs site | Push to `master` touching `apps/docs/**` | S3 + CloudFront |
-| DB migrations | **Manual** — `supabase db push` | Postgres |
+| Bounties marketplace | Push to `master` touching `apps/testers/**` | S3 + CloudFront |
+| Hosted MCP proxy | Push to `master` touching the hosted-MCP scripts, or manual dispatch | CloudFront |
+| DB migrations | **Manual**: `supabase db push` | Postgres |
 
 ## npm SDK release (Changesets + OIDC)
 
@@ -69,8 +71,8 @@ gh workflow run release.yml --ref master
 
 ## Edge Functions, admin & docs
 
-These three deploy automatically on a path-filtered push to `master` — they do
-not wait on the npm release. Self-hosters reuse the same scripts; see
+These deploy automatically on a path-filtered push to `master` and do not wait
+on the npm release. Self-hosters reuse the same scripts; see
 [Self-hosting → Edge Functions](/self-hosting/edge-functions) and
 [Self-hosting → Admin SPA](/self-hosting/admin-spa).
 

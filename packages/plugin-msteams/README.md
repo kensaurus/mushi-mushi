@@ -1,14 +1,14 @@
 # `@mushi-mushi/plugin-msteams`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
-Posts a card to a Microsoft Teams channel when Mushi triages a bug, proposes
-a fix, or applies it.
+For teams that work in Microsoft Teams. This posts a card to a Teams channel
+when Mushi Mushi triages a bug, proposes a fix, or applies it.
 
-**Do you need this package?** Not on Mushi Cloud: paste a Teams incoming
+**Do you need this package?** Not on Mushi Mushi Cloud: paste a Teams incoming
 webhook URL on the **Integrations** page of the console and Mushi posts to
-the channel itself. The console's Marketplace has no Teams listing (checked
-2026-10-26), so this package only receives events from a Mushi server you
+the channel itself, on any plan. The console's Marketplace has no Teams
+listing (checked 2026-10-29), so this package only receives events from a Mushi server you
 run yourself, once you add a `plugin_registry` row for it.
 
 ```bash
@@ -43,14 +43,22 @@ express().post('/mushi/webhook', expressMiddleware(handler)).listen(3000)
 
 ## Subscribed events
 
-- `report.classified` — Adaptive Card with severity-coloured accent.
-- `fix.proposed` — Adaptive Card with PR link if available.
-- `fix.applied` — green confirmation card.
+- `report.classified`: Adaptive Card with a severity-coloured accent.
+- `fix.proposed`: Adaptive Card with the branch and, when there is a pull
+  request, a "View Pull Request" button.
+- `fix.applied`: green confirmation card with a "View merged PR" button when
+  there is a pull request.
+
+## Known gaps
+
+- The cards include a "Fix status" fact: proposed, applied or failed, taken
+  from the event.
+- The built-in Teams integration on the Integrations page does not use this
+  package and is not affected.
 
 ## Notes
 
-- Adaptive Card schema version `1.4` so cards render correctly in modern
-  Teams clients (desktop ≥ 1.5.x, mobile ≥ April 2024 release).
+- Cards use Adaptive Card schema version `1.4`.
 - All webhook calls retry transient `5xx` via `withRetry` from
   `@mushi-mushi/plugin-sdk`.
 

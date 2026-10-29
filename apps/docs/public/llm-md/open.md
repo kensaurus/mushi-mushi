@@ -20,7 +20,9 @@ built. A number that could not be fetched says so instead of showing zero.
   [public](https://github.com/kensaurus/mushi-mushi) if you want to look.
 - **Product usage, unless it is published above.** Signups, activated
   projects and paying customers come from our own database, not a public API.
-  The last published snapshot is in the build-in-public post
+  Live counts of bug reports, merged fixes and AI reviews on the owner's own
+  apps (last 60 days) are on [/proof](/proof), read from the database each
+  time the page loads. The last published signup snapshot is in the build-in-public post
   [I shipped a bug tool for 5 months and got 9 signups](/blog/nine-signups-what-the-data-said)
   (numbers as of 2026-09-20).
 

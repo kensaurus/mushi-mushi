@@ -1,66 +1,83 @@
-# @mushi-mushi/* upgrades
+# Mushi Mushi SDK upgrades (0.x → 1.x)
 
 Source: https://kensaur.us/mushi-mushi/docs/migrations/mushi-sdk-upgrade
 
 ---
-title: '@mushi-mushi/* upgrades'
-description: Upgrade @mushi-mushi packages to the current 1.x releases — breaking changes by package, the codemod, and how to check which versions you run.
+title: 'Mushi Mushi SDK upgrades (0.x → 1.x)'
+description: Upgrade @mushi-mushi packages from 0.x to the current 1.x releases. The real breaking changes by package, the version-bump command, and the current versions.
 ---
 
-# `@mushi-mushi/*` upgrades
+# Mushi Mushi SDK upgrades (0.x → 1.x)
 
  
 
-  **Most packages are already on 1.x.** `@mushi-mushi/core` and `@mushi-mushi/web`
-  are on **1.23.x**; `react` **1.21.x**; `vue` / `svelte` / `angular` / `node` /
-  `capacitor` on **1.x**. Mobile tracks remain independent (`react-native`
-  **0.20.x**, native iOS/Android **0.4.x**). Use each package&apos;s CHANGELOG
-  and `npx mushi-mushi upgrade` for mechanical bumps.
+  **Most packages are on 1.x.** `@mushi-mushi/core` 1.33.4, `web` and
+  `react` 1.33.3, `node` 1.3.4, `capacitor` 1.1.4, `vue` / `svelte` /
+  `angular` 1.0.4 (npm, 2026-10-29). `@mushi-mushi/react-native` is still
+  0.x (0.24.4). The native iOS and Android SDKs are 0.4.0 and are not on
+  npm. Read each package&apos;s CHANGELOG, then run `npx mushi-mushi upgrade`
+  to bump versions.
+
+## Breaking changes from 0.x
+
+Taken from the 1.0.0 entries in each package&apos;s `CHANGELOG.md`, except the React Native `endpoint` row, which comes from the SDK source (React Native is still 0.x):
+
+| Package | What changed at 1.0 | What you do |
+|---------|---------------------|-------------|
+| `@mushi-mushi/core`, `web`, `react` | No breaking changes from 0.9. 1.0 added `identify`, `setTag` / `setTags` / `clearTag`, `addBreadcrumb` and structured `captureException`. | Bump the version. |
+| `@mushi-mushi/vue` | `MushiPlugin` calls `Mushi.init()` itself and depends on `@mushi-mushi/web`. | Remove your own `Mushi.init(config)` call and the separate `@mushi-mushi/web` install. |
+| `@mushi-mushi/svelte` | `initMushi()` calls `Mushi.init()` itself. | Remove your own `Mushi.init(config)` call. |
+| `@mushi-mushi/angular` | `provideMushi()` calls `Mushi.init()` itself. | Remove your own `Mushi.init(config)` call. |
+| `@mushi-mushi/capacitor` | `Mushi.configure()` is the init call (`Mushi.init()` is now an alias for it). API keys use the `mushi_*` format. | Check your key starts with `mushi_`. |
+| `@mushi-mushi/node` | Stable 1.0 API, no functional changes from 0.x. | Bump the version. |
+| `@mushi-mushi/react-native` (still 0.x) | `MushiProvider` accepts a `config` object as well as bare props, and reads env vars when neither is set. `endpoint` is deprecated in favour of `apiEndpoint`. | Rename `endpoint` to `apiEndpoint`. |
 
 ## What stays stable
 
-We expect upgrades within the documented public API to **not** break:
+Within 1.x, these are meant not to break:
 
-- The `Mushi.init({ projectId, apiKey })` shape — this is the public
-  contract every customer wires.
-- The `Mushi.report({ description, ... })` shape.
-- The `` component in React (and framework equivalents).
+- The `Mushi.init({ projectId, apiKey })` shape and the instance it returns.
+- Instance methods such as `setUser`, `setMetadata`, `captureEvent`,
+  `captureException`, `open` and `report({ category })`.
+- The `` component in React (and the framework equivalents).
 - Wire-format API endpoints (`/v1/reports`, `/v1/admin/*`).
 - The MCP server protocol.
 
-Possible churn (check CHANGELOG before bumping):
+Check the CHANGELOG before bumping for:
 
 - Internal capture types exported via `@mushi-mushi/core`.
-- Legacy `Mushi.captureException` shims.
 - Bundled-CSS export paths and default privacy-redaction lists.
 
 If you build only against the documented public API (everything under
-`/sdks/*` in these docs), most upgrades are a single bump in
-`package.json`.
+`/sdks/*` in these docs), most upgrades are a single version bump.
 
 ## Migration checklist
 
 Each package ships its own CHANGELOG.md in the GitHub repo (e.g. @mushi-mushi/web). Skim the latest entry for breaking changes.</> },
-    { id: 'pin-current', label: 'Pin your current versions before upgrading', content: <>If you\'re on a range like "@mushi-mushi/react": "^1.x.y", change to the exact pin first so your lockfile is clean.</> },
-    { id: 'codemod', label: 'Run the upgrade helper', content: {`npx mushi-mushi upgrade`} },
-    { id: 'manual-review', label: 'Review the diff', content: <>Mechanical rewrites are covered; CSP rules and custom widget styling need manual attention.</> },
+    { id: 'pin-current', label: 'Pin your current versions before upgrading', content: <>If you&apos;re on a range like "@mushi-mushi/react": "^1.x.y", change to the exact pin first so your lockfile is clean.</> },
+    { id: 'codemod', label: 'Bump the packages', content: {`npx mushi-mushi upgrade --dry-run   # show the install command
+npx mushi-mushi upgrade             # bump @mushi-mushi/* to the latest stable versions`} },
+    { id: 'manual-review', label: 'Apply the code changes yourself', content: <>The upgrade command only changes versions; it does not rewrite code. Apply the breaking changes listed above by hand, and re-check CSP rules and custom widget styling.</> },
     { id: 'rebuild', label: 'Rebuild + run your test suite', content: <>Type errors usually surface here. Most are easy one-line fixes.</> },
     { id: 'smoke-test', label: 'Smoke-test on a real device / browser', content: <>Submit a test report. Confirm console + network + screenshot capture still work and the report lands in the admin console.</> },
-    { id: 'update-prod', label: 'Roll out to production behind a canary', content: <>Mushi is a passive SDK — it can only fail to capture (best case) or capture wrong things (worst case). Both are easy to roll back.</> },
+    { id: 'update-prod', label: 'Roll out to production behind a canary', content: <>If the new version captures less or captures the wrong thing, roll back by pinning the previous versions.</> },
 
 />
 
-## Current package tracks (workspace snapshot)
+## Current versions
 
-| Package | Current track |
+From the npm registry on 2026-10-29:
+
+| Package | Version |
 |---------|---------------|
-| `@mushi-mushi/core` / `web` | 1.23.x |
-| `@mushi-mushi/react` | 1.21.x |
-| `@mushi-mushi/vue` / `svelte` / `angular` | 1.0.x |
-| `@mushi-mushi/node` / `capacitor` | 1.1.x |
-| `@mushi-mushi/react-native` | 0.20.x |
-| `@mushi-mushi/cli` | 0.26.x |
-| `@mushi-mushi/mcp` | 0.19.x |
-| iOS / Android native | 0.4.x |
+| `@mushi-mushi/core` | 1.33.4 |
+| `@mushi-mushi/web` / `react` | 1.33.3 |
+| `@mushi-mushi/vue` / `svelte` / `angular` | 1.0.4 |
+| `@mushi-mushi/node` | 1.3.4 |
+| `@mushi-mushi/capacitor` | 1.1.4 |
+| `@mushi-mushi/react-native` | 0.24.4 |
+| `@mushi-mushi/cli` | 0.35.0 |
+| `@mushi-mushi/mcp` | 0.30.0 |
+| iOS (CocoaPods / SwiftPM) and Android (Gradle) | 0.4.0, not on npm |
 
 See the [SDK index](/sdks) version matrix for the live workspace snapshot.

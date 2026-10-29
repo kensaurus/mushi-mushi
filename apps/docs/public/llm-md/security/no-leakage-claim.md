@@ -1,9 +1,9 @@
-# No client data leakage — what we promise and how we enforce it
+# No client data leakage: what we promise and how we enforce it
 
 Source: https://kensaur.us/mushi-mushi/docs/security/no-leakage-claim
 
 ---
-title: No client data leakage — what we promise and how we enforce it
+title: "No client data leakage: what we promise and how we enforce it"
 description: Explicit enumeration of Mushi Mushi's privacy boundaries, the gaps we've closed, and the controls that keep client data isolated.
 ---
 
@@ -11,7 +11,7 @@ description: Explicit enumeration of Mushi Mushi's privacy boundaries, the gaps 
 
 This page is the single-source citation for the privacy claims made on the Mushi Mushi landing page. It enumerates exactly what Mushi promises, which controls enforce each promise, and which gaps have been closed or documented as follow-ups.
 
-  **Short version:** Your reports are RLS-isolated per project. Screenshots are behind signed URLs. PII is scrubbed before writing to Postgres and before any LLM call. Your code never leaves your repo. BYOK means Anthropic/OpenAI never sees your data under our account when configured.
+  **Short version:** Your reports are RLS-isolated per project. Screenshots are behind signed URLs in a private bucket. Common PII patterns are scrubbed before writing to Postgres and before the diagnosis models see a report. Code snippets reach a model only for diagnosis and fixes, and cloud coding agents work in your repo under your own account. With BYOK, model calls run on your provider account instead of ours.
 
 ---
 
@@ -19,7 +19,7 @@ This page is the single-source citation for the privacy claims made on the Mushi
 
 ### 1. Your data doesn't cross project boundaries
 
-**Control:** Row-Level Security (RLS) is enabled on every customer-facing table. The `reports`, `fix_attempts`, `qa_story_runs`, `llm_invocations`, `byok_audit_log`, and 30+ sibling tables use `project_id IN (SELECT id FROM projects WHERE owner_id = auth.uid())` or the org-member equivalent. The `soc2-evidence` cron snapshots `mushi_rls_coverage_snapshot()` daily and alerts if a new table has RLS disabled.
+**Control:** Row-Level Security (RLS) is enabled on every customer-facing table. The `reports`, `fix_attempts`, `qa_story_runs`, `llm_invocations`, `byok_audit_log`, and 30+ sibling tables use `project_id IN (SELECT id FROM projects WHERE owner_id = auth.uid())` or the org-member equivalent. The `soc2-evidence` cron snapshots `mushi_rls_coverage_snapshot()` daily and records a failing CC6.1 control if a public table has RLS disabled.
 
 **Verification:** `SELECT schemaname, tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public' AND NOT rowsecurity;` should return zero rows.
 
@@ -35,7 +35,7 @@ This page is the single-source citation for the privacy claims made on the Mushi
 
 ### 3. Screenshots are behind signed, time-limited URLs
 
-**Control (Wave 5 Gap B):** The default `SupabaseStorageAdapter` now uses `createSignedUrl()` (TTL 3600s) instead of `getPublicUrl()`. The `screenshots` Supabase Storage bucket was created with `public = false`. This means even if the bucket flag were accidentally flipped, the URL stored in `reports.screenshot_url` would still be a signed URL that expires.
+**Control (Wave 5 Gap B):** The default `SupabaseStorageAdapter` uses `createSignedUrl()` instead of `getPublicUrl()`, and the `screenshots` bucket is private (`public = false`). The stored URL is a signed URL, so flipping the bucket to public later would not turn old URLs into public links. Its lifetime is long (about 7 years) so screenshots keep rendering in the console for as long as the report is kept; treat a stored screenshot URL as a secret.
 
 **BYO storage:** S3/R2/GCS/MinIO adapters use SigV4-presigned GET URLs with TTL from `project_storage_settings.signed_url_ttl_secs` (default 3600s, max 604800s).
 
@@ -43,23 +43,22 @@ This page is the single-source citation for the privacy claims made on the Mushi
 
 ## BYOK — your API keys run against your account
 
-**What "BYOK" means:** Mushi never trains on your bug reports. When you configure your own Anthropic or OpenAI key (`Settings → API Keys (BYOK)`), all LLM calls (classify, fix, judge) use your key and your account. Mushi's platform key is not used.
+**What "BYOK" means:** Mushi does not train models on your bug reports. When you add your own Anthropic or OpenAI key (**Settings → AI keys**), the classify, fix and judge calls use your key and your account first. Mushi's platform key is used only for a provider where you have no key.
 
-**What happens without BYOK:** LLM calls fall back to Mushi's platform Anthropic/OpenAI account. Your prompt content (the scrubbed bug description, code context, diff) flows through that account. This is logged in `llm_invocations.key_source = 'env'` and surfaced as a warning chip on `/onboarding` and `/settings`.
+**What happens without BYOK:** LLM calls fall back to Mushi's platform Anthropic/OpenAI account. Your prompt content (the scrubbed bug description, code context, diff) flows through that account. This is recorded as `llm_invocations.key_source = 'env'`.
 
-**Enterprise opt-out (Wave 5 Gap D):** `project_settings.require_byok = true` makes the env fallback a hard error. Set automatically on Cloud-paid and Enterprise plans.
+**No hard "BYOK only" switch yet (Wave 5 Gap D):** `project_settings.require_byok` exists in the schema, but no edge function reads it today, so it does not block the platform-key fallback. To keep every call on your accounts, add both an Anthropic and an OpenAI key.
 
-**Vault encryption:** BYOK key values are stored as `vault://` references pointing to Supabase Vault (`vault.secrets`). The `project_settings.byok_*_key_ref` columns never hold raw key strings in production (enforced by `dereferenceKey()` in `_shared/byok.ts` which rejects non-vault refs in the `production` environment).
+**Vault encryption:** BYOK key values are stored as `vault://` references pointing to Supabase Vault (`vault.secrets`). `dereferenceKey()` in `_shared/byok.ts` rejects a raw (non-vault) key reference when the environment is `production`.
 
 ---
 
-## Your code stays in your repo
+## Where your code goes
 
-The `fix-worker` edge function reads your codebase via a RAG vector index (`project_codebase_files`) built by `mushi index`. It generates a diff and opens a draft PR via the GitHub REST API. Your source files are:
+There are two fix paths, and they treat code differently:
 
-- Stored in `project_codebase_files` with `content_preview` (first 500 chars) for UI display and full-text embedding for semantic search. They are RLS-isolated by `project_id`.
-- Never sent to Anthropic/OpenAI as raw files — only the relevant snippet (≤ 8 KB context window) extracted by RAG is included in the prompt, already scrubbed for PII.
-- Deleted from the vector index when `project_settings.codebase_index_enabled = false` or the project is deleted (cascade via `project_id FK ON DELETE CASCADE`).
+- **Mushi's own `fix-worker` model call** reads your codebase through a vector index (`project_codebase_files`) built by `mushi index` or the GitHub indexer. Indexed chunks keep a short `content_preview` for the console plus an embedding for search, are RLS-isolated by `project_id`, and are deleted with the project (`ON DELETE CASCADE`). Only the retrieved snippets go into the prompt, not whole files.
+- **Cloud coding agents** (Cursor, GitHub's agent) work directly in your repository under your own key or account, the same as when you run them yourself. Mushi sends them the report and its diagnosis.
 
 ---
 
@@ -89,6 +88,6 @@ The `fix-worker` edge function reads your codebase via a RAG vector index (`proj
 
 - `project_retention_policies` — per-project data retention with `legal_hold` support
 - `data_subject_requests` — GDPR/CCPA DSR tracking
-- `soc2_evidence` — daily snapshots of CC6.1, CC7.2, A1.2 controls
+- `soc2_evidence` — daily snapshots of the CC6.1, CC6.7, CC7.2, CC8.1 and A1.2 controls
 - `audit_logs` — all admin write actions
 - `byok_audit_log` — BYOK key add/rotate/remove/use events per project

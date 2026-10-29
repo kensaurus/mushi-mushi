@@ -1,33 +1,37 @@
-# Mushi Cloud
+# Mushi Mushi Cloud
 
 Source: https://kensaur.us/mushi-mushi/docs/cloud
 
 ---
-title: Mushi Cloud
-description: Hosted Mushi Mushi — bug reports, plain-English diagnoses, and fix dispatch without running servers. Free for one app with 100 diagnoses a month.
+title: Mushi Mushi Cloud
+description: Hosted Mushi Mushi. Bug reports, plain-English diagnoses, and fix dispatch without running servers. Free for one app with 100 diagnoses a month.
 ---
 
-# Mushi Cloud
+# Mushi Mushi Cloud
 
 ## Plans
 
 ## Sign-up flow
 
-1. `kensaur.us/mushi-mushi/admin` — email + password.
-2. Email confirmation → sign in → `/onboarding` wizard.
+1. `kensaur.us/mushi-mushi/admin`: email and password, or a GitHub account when that sign-in is offered.
+2. Email confirmation (for email sign-up) → sign in → `/onboarding` wizard.
 3. Create your first project, mint an API key, run `npx mushi-mushi` to install the SDK.
-4. The admin dashboard at `kensaur.us/mushi-mushi/admin` shows diagnoses used / limit and a single button:
-   **Add a card via Stripe**.
-5. Stripe Checkout → on success, your subscription becomes active. Overage bills through Stripe meter events.
+4. The Billing page in the console shows diagnoses used / limit per app, with an **Upgrade** button
+   (**Change plan** once you pay).
+5. Stripe Checkout → on success, your subscription becomes active. Overage on monthly plans bills through Stripe meter events.
 
 ## Why metered on diagnoses
 
 ## Spend controls
 
-Every paid plan supports a **hard monthly spend cap** — set it in the console under Billing → Spending Cap. When the cap is reached, Mushi pauses new diagnoses for the calendar month with an upgrade prompt. You also receive email alerts at 80 % and 100 % of your included quota.
+Every monthly paid plan has a **hard cap on overage spend** ($50 Builder, $200 Studio by default), set in the console under Billing → Spending Cap. When the cap is reached, Mushi pauses new diagnoses for the rest of the calendar month with an upgrade prompt. Annual plans have no overage and stop at the included diagnoses. You also receive email alerts at 50%, 80% and 100% of your included diagnoses.
 
 ## Self-hosting
 
 If you'd rather run Mushi on your own Supabase project, see
-[Self-hosting](/self-hosting) — every feature on Cloud is in the OSS
-repo. Self-hosting is free forever; you supply your own LLM keys.
+[Self-hosting](/self-hosting). The Cloud code is in the public repo: the
+server is AGPLv3, and the enterprise features in `packages/server/ee`
+(SSO, audit export, retention policies) are source-available and need a
+license in production. Cloud also carries its own tuning data (prompt
+wording, evaluation sets) as configuration; the repo ships working default
+prompts. Self-hosting is free forever; you supply your own LLM keys.

@@ -1,11 +1,11 @@
 ---
 title: '@mushi-mushi/svelte'
-description: Reference for @mushi-mushi/svelte — initMushi, getMushi and the SvelteKit error hooks that forward client and server errors to your Mushi queue.
+description: Reference for @mushi-mushi/svelte, the Mushi Mushi Svelte SDK. initMushi, getMushi and the SvelteKit handleError helpers that send browser errors to your queue.
 ---
 
 # `@mushi-mushi/svelte`
 
-Svelte / SvelteKit boot helpers over [`@mushi-mushi/web`](/sdks/web). Shared
+Mushi Mushi boot helpers for Svelte and SvelteKit over [`@mushi-mushi/web`](/sdks/web). Shared
 wrapper notes: [Framework wrappers](/sdks/framework-wrappers).
 
 ```bash
@@ -22,10 +22,14 @@ import { initMushi, getMushi, createMushiErrorHandler } from '@mushi-mushi/svelt
 
 | Export | Purpose |
 | --- | --- |
-| `initMushi(config)` | Boot once (SSR-safe) — calls `Mushi.init` internally |
-| `getMushi()` | SDK instance after init |
-| `createMushiErrorHandler()` | SvelteKit `handleError` helper |
-| `mushiHandleError(opts?)` | Lower-level handleError helper |
+| `initMushi(config)` | Boot once. Calls `Mushi.init` in the browser and returns `null` during SSR |
+| `getMushi()` | SDK instance after init; throws if `initMushi()` has not run |
+| `mushiHandleError(opts?)` | Returns a SvelteKit `handleError` hook that sends the error with `captureException()`; optional `format` maps the error to `App.Error` |
+| `createMushiErrorHandler()` | Older `({ error, event })` handler, kept for backwards compatibility. Prefer `mushiHandleError` |
+
+The error helpers send only when an SDK instance exists. Because `initMushi()`
+does nothing on the server, a helper used in `hooks.server.ts` does not send
+server errors; use [`@mushi-mushi/node`](/sdks/node) for those.
 
 ## Setup
 

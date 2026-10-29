@@ -4,22 +4,22 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/android
 
 ---
 title: 'dev.mushimushi:mushi-android (Android)'
-description: API reference for Mushi's native Kotlin SDK — init, report, captureError, showWidget, breadcrumbs and the Sentry bridge. A preview built from source.
+description: API reference for the Mushi Mushi native Kotlin SDK. init, report, captureError, showWidget, breadcrumbs and the Sentry bridge. A preview built from source.
 ---
 
 # `dev.mushimushi:mushi-android` (Android)
 
-Native Kotlin SDK: `SensorManager` shake detection, an `AppCompatDialogFragment`
+The Mushi Mushi native Kotlin SDK: `SensorManager` shake detection, an `AppCompatDialogFragment`
 bottom-sheet report UI, rage-tap and slow-screen detection, PII scrubbing, and a
 file-backed offline queue.
 
-  **Preview — not on Maven Central yet.** Build it from
+  **Preview, not on Maven Central yet.** Build it from
   [`packages/android`](https://github.com/kensaurus/mushi-mushi/tree/master/packages/android)
   with `gradle publishToMavenLocal` and add `mavenLocal()` to your repositories;
   [Quickstart → Android](/quickstart/android) has the steps.
 
 ```kotlin
-// app/build.gradle.kts — resolves from mavenLocal() after a local build
+// app/build.gradle.kts: resolves from mavenLocal() after a local build
 dependencies {
     implementation("dev.mushimushi:mushi-android:0.4.0")
 }
@@ -29,7 +29,7 @@ dependencies {
 
 | Method | Purpose |
 | --- | --- |
-| `Mushi.init(application, MushiConfig(...))` | Boot the SDK — call once in `Application.onCreate()` |
+| `Mushi.init(application, MushiConfig(...))` | Boot the SDK; call once in `Application.onCreate()` |
 | `Mushi.report(description, category, metadata)` | Submit a report from code, no UI |
 | `Mushi.captureError(throwable, metadata)` | Report a caught `Throwable` with its name, message and stack |
 | `Mushi.showWidget(category, metadata)` | Present the bottom-sheet widget (needs a `FragmentActivity`) |

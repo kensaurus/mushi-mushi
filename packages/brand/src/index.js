@@ -85,7 +85,7 @@ export const MUSHI_TAGLINE_V2 = {
    * a compression of this. Use on the about/concept pages where there's room.
    */
   northStar:
-    'Your AI shipped it. Mushi tells you why it broke — in plain English, in your editor, with the fix ready to go — so a bug costs you five minutes instead of your whole afternoon.',
+    'Your AI shipped it. Mushi Mushi tells you why it broke — in plain English, in your editor, with the fix ready to go — so a bug costs you five minutes instead of your whole afternoon.',
   /**
    * One-liner — the compressed north-star for fixed-width fields: GitHub repo
    * description, npm `description`, og:description fallback. Keep these byte-for-
@@ -98,7 +98,7 @@ export const MUSHI_TAGLINE_V2 = {
    */
   promise: PROMISE,
   /** Hero — README headers, landing H1, docs landing. */
-  hero: 'Your AI wrote it. Mushi tells you why it broke.',
+  hero: 'Your AI wrote it. Mushi Mushi tells you why it broke.',
   /**
    * The offer line that continues the hero (owner decision D1, 2026-10-28,
    * docs/plan-gtm-november-2026.md §3): the hero says why, this says what
