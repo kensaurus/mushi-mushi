@@ -60,3 +60,16 @@ describe('mistake_clusterer_unclustered()', () => {
     expect(source).not.toMatch(/\.not\(\s*'report_id',\s*'in',\s*\n?\s*db\.from/)
   })
 })
+
+describe('coherence judge without a model key', () => {
+  it('skips the project instead of failing the judge', () => {
+    // projectLlmKey returns null when nothing is configured and when the
+    // monthly budget is spent. Either used to throw "No Anthropic key for
+    // this project", which the outer catch logged as a judge failure.
+    expect(source).toMatch(/reason: 'no_llm_key'/)
+    expect(source).toMatch(/coherence judge skipped/)
+    expect(source).toMatch(/skippedNoKey\.add\(projectId\)/)
+    expect(source).not.toMatch(/No Anthropic key for this project/)
+    expect(source).toMatch(/log\.error\('coherence judge failed'/)
+  })
+})

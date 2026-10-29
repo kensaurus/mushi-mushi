@@ -16,6 +16,9 @@
  *       - read top-5 reports
  *       - LLM judge rates semantic coherence 0-1
  *       - if coherence ≥ 0.75 → promote to lessons (calls mistake-summarizer)
+ *     A project with no Anthropic key and no OpenAI/OpenRouter key, or one
+ *     over its monthly AI budget, is skipped. projectLlmKey returns null for
+ *     both; that is not a judge failure.
  *
  * Cost discipline: every LLM call writes an llm_invocations row (recordLlmUsage).
  */
@@ -213,9 +216,12 @@ Deno.serve(
         .gte('cluster_size', MIN_CLUSTER_SIZE)
         .limit(20)
 
+      // Projects already skipped this run (no model key, or over the AI budget).
+      const skippedNoKey = new Set<string>()
       for (const cluster of (candidates ?? [])) {
         const clusterId = cluster.id as string
         const projectId = cluster.project_id as string
+        if (skippedNoKey.has(projectId)) continue
 
         // Get top-K reports for this cluster
         const { data: members } = await db
@@ -242,7 +248,7 @@ ${reportSummaries}
 Rate the semantic coherence of this cluster and suggest how to name and summarise it.`
 
         try {
-          let result: z.infer<typeof coherenceSchema>
+          let result: z.infer<typeof coherenceSchema> | undefined
           // The project's own key first, the platform key otherwise.
           const anthropicResolved = await projectLlmKey(db, projectId, 'anthropic')
           const anthropicKey = anthropicResolved?.key
@@ -254,24 +260,39 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
           }
 
           const claudeStart = Date.now()
-          try {
-            if (!anthropicKey) throw new Error('No Anthropic key for this project')
-            const generation = await claudeGenerateObject({
-              apiKey: anthropicKey,
-              model: MISTAKE_MODEL,
-              effort: MISTAKE_EFFORT,
-              schema: coherenceSchema,
-              prompt,
-            })
-            void recordLlmUsage(db, { ...usageCtx, keySource: anthropicResolved?.source, model: MISTAKE_MODEL, startedAt: claudeStart }, { result: generation })
-            result = generation.object
-          } catch (claudeErr) {
-            // No key means no paid call, so no row.
-            if (anthropicKey) {
-              void recordLlmUsage(db, { ...usageCtx, keySource: anthropicResolved?.source, model: MISTAKE_MODEL, startedAt: claudeStart }, { error: claudeErr })
+          let claudeErr: unknown = null
+          if (anthropicKey) {
+            try {
+              const generation = await claudeGenerateObject({
+                apiKey: anthropicKey,
+                model: MISTAKE_MODEL,
+                effort: MISTAKE_EFFORT,
+                schema: coherenceSchema,
+                prompt,
+              })
+              void recordLlmUsage(db, { ...usageCtx, keySource: anthropicResolved?.source, model: MISTAKE_MODEL, startedAt: claudeStart }, { result: generation })
+              result = generation.object
+            } catch (err) {
+              void recordLlmUsage(db, { ...usageCtx, keySource: anthropicResolved?.source, model: MISTAKE_MODEL, startedAt: claudeStart }, { error: err })
+              claudeErr = err
             }
+          }
+          if (!anthropicKey || claudeErr) {
+            // No key means no paid call, so no row. null from projectLlmKey is
+            // "not configured" or "monthly budget spent" — skip, don't fail.
             const openaiResolved = await projectLlmKey(db, projectId, 'openai')
-            if (!openaiResolved) throw claudeErr
+            if (!openaiResolved) {
+              if (!anthropicKey) {
+                skippedNoKey.add(projectId)
+                log.info('coherence judge skipped', {
+                  scope: 'mistake-clusterer',
+                  projectId,
+                  reason: 'no_llm_key',
+                })
+                continue
+              }
+              throw claudeErr
+            }
             const openaiUsage = {
               ...usageCtx,
               keySource: openaiResolved.source,
@@ -294,6 +315,7 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
             void recordLlmUsage(db, openaiUsage, { result: generation })
             result = generation.object
           }
+          if (!result) continue
 
           // Update cluster with judge result
           const updatePayload: Record<string, unknown> = {
