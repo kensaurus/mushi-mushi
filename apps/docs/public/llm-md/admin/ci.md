@@ -4,16 +4,28 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/ci
 
 ---
 title: CI runners
-description: The console CI runners page shows where tests run, how long they wait for a machine, and whether a red check was your code or the test machine.
+description: The CI runners page in the Mushi Mushi console shows where tests run, how long they wait for a machine, and whether a red check was your code or the machine.
 ---
 
 # CI runners
 
-**Route:** `/ci`
+**Route:** `/ci` (sidebar: Checks › CI runners. CI runners is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar and on the Checks grid)
 
-Every fix Mushi opens is tested by your CI before it can merge. This page shows the machines that run those tests, the jobs waiting for one, and why a fix takes as long as it does to land. **This app** follows the app you have open. **All apps** reads every project you can see.
+Every fix Mushi Mushi opens is tested by your CI before it can merge. This page shows the machines that run those tests, the jobs waiting for one, and why a fix takes as long as it does to land. **This app** follows the app you have open. **All apps** reads every project you can see.
 
 The page reloads every 30 seconds while the tab is visible, and **Refresh** does the same. Each reload asks GitHub for queued and running jobs. The server does that live read at most once a minute per app.
+
+## Spend less on CI
+
+AI agents open a lot of pull requests, and every one runs your tests on GitHub Actions. This page keeps that bill small:
+
+- **See what you really pay.** Your GitHub Actions bill per repo and per day, with public repos and free minutes shown as $0.
+- **Find the waste.** Tests that run on drafts, schedules that run every hour, docs-only changes that run every test.
+- **Fix it in one pull request.** Mushi opens a small workflow change for you to review, then shows the minutes saved after it merges.
+
+Mushi's own fix pull requests run your tests only after a review says they are worth merging.
+
+## How it reads your runs
 
 A collector also runs every 10 minutes. It reads GitHub Actions runs updated in the last 2 hours, on every branch of each app's repositories, classifies each job, and deletes job rows and samples older than 30 days.
 
@@ -81,7 +93,7 @@ A classic token, which is what `gh auth login` makes, reads a personal account's
 
 ### Cost advice that reads your workflows
 
-Each item of **Cost advice** gives its evidence and a saving per month. The saving is the billed minutes Mushi recorded over the window, at GitHub's list price. It is zero for public repos and self-hosted runners, which GitHub doesn't charge for. An item marked **one-click fix** can open a pull request that makes the change.
+Each item of **Cost advice** gives its evidence and a saving per month. The saving is the billed minutes Mushi recorded over the window, at GitHub's list price. It is zero for public repos and self-hosted runners, which GitHub doesn't charge for. An item with an **Open fix PR** button can open a pull request that makes the change.
 
 | Advice | When it appears | One-click fix |
 | --- | --- | --- |
@@ -96,6 +108,7 @@ Each item of **Cost advice** gives its evidence and a saving per month. The savi
 | Draft pull requests run the full CI | A pull request workflow doesn't skip drafts | Yes: skip drafts |
 
 Advice that needs data Mushi doesn't have yet stays hidden. It never guesses.
+
 ## Fix it in one PR
 
 Some advice is one edit to one workflow file. Those cards have an **Open fix PR** button for each workflow they found:
@@ -116,6 +129,20 @@ After the merge, the card shows the saving Mushi measured. That is the workflow'
 Writing a workflow file needs the GitHub App's **Workflows: Read and write** permission, or a token with the `workflow` scope. Without it, the card says so. You can still copy the fix and commit it yourself.
 
 From the terminal, run `mushi runner fix --repo <owner/repo> --workflow .github/workflows/ci.yml --kind skip_drafts`, and follow it with `mushi runner fix-status`. In your editor, use the MCP tool `open_ci_cost_fix`.
+
+## Apply to every app
+
+Every pull request runs CI once, and each run costs minutes. So when a repo has several fixes, it's cheaper to open them as **one** pull request. **Apply to every app**, next to the advice list, does that for all your apps at once:
+
+1. **Preview.** Mushi lists every fix it can open in the apps you may change, grouped by repo, with the estimated saving per fix and per repo. A fix whose pull request is still open, or is being opened, can't be picked again. Mushi can't price every fix: those say "not priced", never $0. A repo where Mushi already knows its GitHub access can't edit workflow files starts unticked, with the reason. Mushi knows this from the setup check or the last attempt.
+2. **Pick and confirm.** Tick the fixes you want, then confirm once. Mushi opens at most 10 repos at a time and 20 fixes per repo. Each repo counts once against its app's 10 CI fix pull requests an hour.
+3. **Results.** Each repo gets **one draft pull request** with a `ci:` title. The body lists every change with what it changed and why, plus the workflow's minutes over the last 14 days. Each fix keeps the refusals above. A fix Mushi refused is listed in the pull request and in the result, never dropped. When Mushi refuses every fix in a repo, it opens no pull request there and says why.
+
+Before opening anything, Mushi rebuilds the advice. It opens only fixes it still advises, so a stale preview can't open something the advice no longer says.
+
+After the merge, Mushi measures each changed workflow once, even when two fixes changed the same file. The saving isn't counted twice.
+
+From the terminal, run `mushi runner fix --all` to preview and `mushi runner fix --all --apply` to open. Follow each repo with `mushi runner fix-status --bundle `. In your editor, use the MCP tools `preview_ci_cost_fix_rollout`, `apply_ci_cost_fix_rollout` and `get_ci_cost_fix_bundle`.
 
 ## When nothing has reported in
 

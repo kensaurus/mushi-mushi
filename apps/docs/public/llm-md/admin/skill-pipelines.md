@@ -1,17 +1,17 @@
-# Skill Pipelines
+# Agent skills
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/skill-pipelines
 
 ---
-title: Skill Pipelines
-description: Skill Pipelines recommend agent skills from the kenji skills and skills.sh ecosystem for each classified bug and run them during review in Mushi.
+title: Agent skills
+description: Agent skills in Mushi Mushi recommend skills from the kenji skills and skills.sh ecosystem for each classified bug and run them as pipelines during review.
 ---
 
-# Skill Pipelines
+# Agent skills (skill pipelines)
 
-**Route:** `/skills`
+**Route:** `/skills` (sidebar: **Agent skills**, under Connect; the page was called Skill Pipelines before)
 
-Skill Pipelines integrate the [kenji skills / skills.sh](https://github.com/kensaurus/skills) agent-skill ecosystem directly into Mushi bug review. When a bug report is classified, Mushi recommends the most relevant Cursor agent skills — and you can attach a skill chain to any report, visualize it as a live React Flow pipeline, and execute it either as a handoff to your local Cursor agent or automatically via Cursor Cloud.
+Agent skills bring the [kenji skills / skills.sh](https://github.com/kensaurus/skills) agent-skill ecosystem into Mushi Mushi bug review. When a bug report is classified, Mushi recommends the most relevant Cursor agent skills — and you can attach a skill chain to any report, visualize it as a live React Flow pipeline, and execute it either as a handoff to your local Cursor agent or automatically via Cursor Cloud.
 
 ---
 
@@ -31,17 +31,17 @@ git repo skills/SKILL.md (kenji skills or any skills.sh-compatible repo)
 
 ## The three tabs
 
-### Catalog
+### Skill Catalog
 
-Browse the full skill catalog grouped by category (`workflow`, `debug`, `test`, `audit`, `enhance`, …). Search by name or description. Start a pipeline from any skill.
+Browse the full skill catalog grouped by category (`workflow`, `debug`, `test`, `audit`, `enhance`, …). Search by name or description. Open a skill to preview its SKILL.md, then under **Apply to a report** paste a report ID, pick a **Mode** and click **Start pipeline**.
 
-### Pipelines
+### Pipeline Runs
 
 All pipeline runs for your project — past and active. Click a run to see the live React Flow visualization with step-level status (pending → running → passed / failed). Subscribe to real-time updates without refreshing.
 
 ### Sources
 
-Manage the GitHub repos whose SKILL.md files are synced into your project's catalog. The default seed is `kensaurus/skills`. Any [skills.sh](https://skills.sh)-compatible repo works.
+Manage the GitHub repos whose SKILL.md files are synced into your project's catalog. A new project starts with no sources; the page suggests adding `kensaurus/skills` (70+ skills). Any [skills.sh](https://skills.sh)-compatible repo works.
 
 ---
 
@@ -108,12 +108,6 @@ Use these from your Cursor agent to close the loop without leaving the IDE:
 
 ---
 
-## PDCA-style improvement loop
-
-If a pipeline step fails, the console offers **Improve and retry** — this creates a child run (with `parent_run_id` and incremented `iteration`) so the PM can loop a feature through a skill like `workflow-build-feature` repeatedly, each iteration accumulating context from the previous run.
-
----
-
 ## Security
 
 Skill catalog content comes exclusively from **allowlisted GitHub repos** configured in the Sources tab. Arbitrary URLs are never fetched. Every SKILL.md body is scanned for leaked API keys before storage.
@@ -128,7 +122,7 @@ Skill catalog content comes exclusively from **allowlisted GitHub repos** config
 
 ## Adding a new skill source
 
-### Go to Skill Pipelines → Sources
+### Go to Agent skills → Sources
 
 Click **Add source** and enter the GitHub `owner/repo` slug (e.g. `myorg/my-skills-repo`).
 
@@ -138,4 +132,4 @@ Click **Sync now** or run `mushi skills sync`. The `skill-sync` edge function fe
 
 ### Browse the new skills
 
-Switch to the **Catalog** tab. New skills appear grouped by category prefix.
+Switch to the **Skill Catalog** tab. New skills appear grouped by category prefix.

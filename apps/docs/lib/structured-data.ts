@@ -36,7 +36,7 @@ export const OG_CARD_HEIGHT = 630
 export const LANDING_META = {
   title: 'Mushi Mushi — know why your AI-built app broke',
   description:
-    'Your AI shipped it. Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional.',
+    'Your AI shipped it. Mushi Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional.',
 } as const
 
 /** One `openGraph.images` / `twitter.images` entry for the card. */
@@ -143,7 +143,7 @@ export const SOFTWARE_APPLICATION_JSONLD = {
     '@type': 'Offer',
     price: '0',
     priceCurrency: 'USD',
-    description: '50 diagnoses/month on the free tier — no card required. Self-hosting is free.',
+    description: 'Free for one app with 100 diagnoses a month, no card required. Builder is $29/month for 3 apps, Studio $79/month for 10. Self-hosting is free.',
   },
   softwareHelp: { '@type': 'CreativeWork', url: DOCS_SITE },
   license: `${MUSHI_CANONICAL_URLS.repo}/blob/master/LICENSE`,

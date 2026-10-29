@@ -1,16 +1,16 @@
-# Quickstart — fix your first bug in 60 seconds
+# Quickstart: install, first report, first fix
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart
 
 ---
-title: Quickstart — fix your first bug in 60 seconds
-description: Install Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.
+title: "Quickstart: install, first report, first fix"
+description: Install Mushi Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.
 ---
 
 # Quickstart
 
 - One command, `npx mushi-mushi`, adds a report button to your app.
-- When a user reports a bug, Mushi writes a plain-English diagnosis.
+- When a user reports a bug, Mushi Mushi writes a plain-English diagnosis.
 - Your AI editor reads it and writes the fix.
 
 ### Install
@@ -48,6 +48,7 @@ Then ask your editor: *"Get the latest Mushi report and fix it."*
 The wizard detects your framework for you. Pick yours to see what it installs
 and the one line it adds to your code.
 
+- **No terminal (Lovable, Bolt):** [Mushi in Lovable or Bolt](/quickstart/lovable-bolt), one script tag pasted through your prompt.
 - **Mobile previews:** [iOS](/quickstart/ios) · [Android](/quickstart/android) · [Flutter](/quickstart/flutter), installed from the GitHub repo.
 - **Go deeper:** [Incident loop](/quickstart/incident-loop) · [MCP server](/quickstart/mcp) · [CLI console loop](/quickstart/cli-console-loop)
 
@@ -59,6 +60,8 @@ What you need first
 
 `npx` runs a tool from npm (the public library of JavaScript packages) without
 installing it for good. Here it runs the Mushi setup wizard.
+
+## Where to start
 
 ## Keys and settings
 

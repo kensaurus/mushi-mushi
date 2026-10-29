@@ -14,7 +14,9 @@
  *        The job. For an opened PR: notices the merge on GitHub and stores
  *        the workflow's billed minutes per day since (up to 14 days) beside
  *        the 14 days before, so `saving` is measured, not projected. A job
- *        still queued after 2 minutes is fired again.
+ *        still queued after 2 minutes is fired again (its bundle, when it is
+ *        part of one: ci-cost-fix-bundle.ts), and so is a bundle row left
+ *        `running` past the 10-minute stale window.
  *   GET  /v1/admin/ci/cost-fixes?project_id=   adminOrApiKey(mcp:read)
  *        The project's last 50 jobs, newest first (stored values only).
  */
@@ -30,6 +32,7 @@ import { claimTenantRateLimit } from '../../_shared/tenant-observability.ts'
 import { CI_COST_FIX_KINDS } from '../../_shared/ci-cost-fix.ts'
 import {
   COST_FIX_JOB_COLUMNS,
+  COST_FIX_STALE_MS,
   findProjectRepo,
   refreshCostFixMeasurement,
   toCostFixView,
@@ -71,11 +74,14 @@ export interface CiCostFixRouteDeps {
   refresh: (db: Db, job: CostFixJobRow) => Promise<CostFixJobRow>
   /** Fire-and-forget call to ci-cost-fix-worker for one job. */
   invokeWorker: (jobId: string) => void
+  /** The same for a bundle (several fixes, one PR). */
+  invokeBundleWorker: (bundleId: string) => void
   logAudit: typeof logAudit
   now: () => Date
 }
 
-function defaultInvokeWorker(jobId: string): void {
+/** Fire-and-forget POST to ci-cost-fix-worker with `{ jobId }` or `{ bundleId }`. */
+export function invokeCostFixWorker(payload: { jobId: string } | { bundleId: string }): void {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const internalSecret = Deno.env.get('MUSHI_INTERNAL_CALLER_SECRET') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   if (!supabaseUrl || !internalSecret) return
@@ -84,7 +90,7 @@ function defaultInvokeWorker(jobId: string): void {
     fetch(`${supabaseUrl}/functions/v1/ci-cost-fix-worker`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${internalSecret}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobId }),
+      body: JSON.stringify(payload),
     }),
     'ci-cost-fix-worker',
   )
@@ -98,7 +104,8 @@ export const defaultCiCostFixRouteDeps: CiCostFixRouteDeps = {
   callerCanAccessProject,
   findProjectRepo,
   refresh: (db, job) => refreshCostFixMeasurement(db as never, job),
-  invokeWorker: defaultInvokeWorker,
+  invokeWorker: (jobId) => invokeCostFixWorker({ jobId }),
+  invokeBundleWorker: (bundleId) => invokeCostFixWorker({ bundleId }),
   logAudit,
   now: () => new Date(),
 }
@@ -201,8 +208,12 @@ async function getCostFix(c: Context, deps: CiCostFixRouteDeps): Promise<Respons
   const access = await deps.callerCanAccessProject(c, db, c.get('userId') as string, job.project_id)
   if (!access.allowed) return jsonError(c, 'NOT_FOUND', 'Fix not found', 404)
 
-  if (job.status === 'queued' && deps.now().getTime() - Date.parse(job.created_at) > REFIRE_AFTER_MS) {
-    deps.invokeWorker(job.id)
+  const nowMs = deps.now().getTime()
+  // A bundle row stuck `running` past the stale window is fired again as its bundle (the worker reclaims it).
+  const staleBundleRow = job.bundle_id && job.status === 'running' && job.started_at != null && nowMs - Date.parse(job.started_at) > COST_FIX_STALE_MS
+  if ((job.status === 'queued' && nowMs - Date.parse(job.created_at) > REFIRE_AFTER_MS) || staleBundleRow) {
+    if (job.bundle_id) deps.invokeBundleWorker(job.bundle_id)
+    else deps.invokeWorker(job.id)
   } else if (job.status === 'pr_opened') {
     job = await deps.refresh(db, job)
   }

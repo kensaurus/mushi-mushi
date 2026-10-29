@@ -4,14 +4,14 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/react
 
 ---
 title: React quickstart
-description: Add the Mushi React SDK in one command — npx mushi-mushi installs the bug-reporting widget, writes env vars, and files your first test report.
+description: Add the Mushi Mushi React SDK in one command. npx mushi-mushi installs the bug-report widget, writes env vars, and offers to send a test report.
 ---
 
 # React quickstart
 
-Get a shake-to-report widget into a React app in under five minutes.
+Add the Mushi Mushi bug-report widget to a React app.
 
-  **Coming from Create React App?** Migrate to Vite in an afternoon — see
+  **Coming from Create React App?** Migrate to Vite first: see
   the [CRA → Vite migration guide](/migrations/cra-to-vite). All Mushi React
   examples below assume Vite + React 19.
 
@@ -116,14 +116,14 @@ export function CrashFallback({ error }: { error: Error }) {
 `?.`. To open the report widget from a button instead, use
 `const { report } = useMushi()` and call `report()`.
 
-Or rely on the built-in widget — no code required. The launcher mounts as
+Or rely on the built-in widget, with no extra code. The launcher mounts as
 soon as `` initialises.
 
 ## 4. Verify
 
 Open your admin console at [kensaur.us/mushi-mushi/admin](https://kensaur.us/mushi-mushi/admin) (or your self-hosted
-instance) — your first report should appear in the Reports list within a
-second of submission, classified by the LLM pipeline within ~10s.
+instance). Your first report appears on the **Bugs** page within seconds, and
+its AI diagnosis follows shortly after.
 
 ## Next steps
 

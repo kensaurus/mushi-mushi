@@ -44,6 +44,7 @@ import { PipelineActionDialog, type PendingAction } from '../components/pipeline
 import { TrainHistory } from '../components/pipeline/TrainHistory'
 import { FixOpeners } from '../components/pipeline/FixOpeners'
 import { WorkersPanel } from '../components/pipeline/WorkersPanel'
+import { WorkerFlagsStrip } from '../components/pipeline/WorkerFlags'
 import { LANES_PATH, type WorkLanesData } from '../lib/workers'
 import {
   ACTION_META,
@@ -98,8 +99,19 @@ export function PipelinePage() {
     const d = lanesPage.data
     if (!d || !Array.isArray(d.hosts) || !Array.isArray(d.lanes)) return []
     const mine = new Set(d.hosts.filter((h) => h.mine && !h.revoked).map((h) => h.id))
-    return d.lanes.filter((l) => mine.has(l.hostId))
+    // Only lanes that fix reports take a sent report (a conflicts, audit or skill lane would not).
+    return d.lanes.filter((l) => mine.has(l.hostId) && l.config.mode === 'fix')
   }, [lanesPage.data])
+  const workerFlags = useMemo(() => (Array.isArray(lanesPage.data?.flags) ? lanesPage.data.flags : []), [lanesPage.data])
+  const workersHref = useMemo(() => {
+    const next = new URLSearchParams(searchParams)
+    next.set('tab', 'workers')
+    return `/pipeline?${next.toString()}`
+  }, [searchParams])
+  const tabOptions = useMemo(
+    () => (workerFlags.length ? TAB_OPTIONS.map((o) => (o.id === 'workers' ? { ...o, label: `Workers (${workerFlags.length} problem${workerFlags.length === 1 ? '' : 's'})` } : o)) : TAB_OPTIONS),
+    [workerFlags],
+  )
   const now = useNow(30_000)
   const toast = useToast()
 
@@ -126,7 +138,15 @@ export function PipelinePage() {
   usePublishPageContext({
     route: '/pipeline',
     title: 'Pipeline',
-    summary: data ? `${stuckTotal} items stuck across ${stages.filter((s) => s.stuck > 0).length} stages` : page.error ? "The pipeline couldn't load" : 'Loading the pipeline',
+    // The Workers tab never loads the pipeline, so it must not say it is loading it.
+    summary:
+      tab === 'workers'
+        ? 'Local workers'
+        : data
+          ? `${stuckTotal} items stuck across ${stages.filter((s) => s.stuck > 0).length} stages`
+          : page.error
+            ? "The pipeline couldn't load"
+            : 'Loading the pipeline',
     questions: ['Why are my fixes not merging?', 'Which PRs are stuck, and why?', 'Why do my release trains keep failing?'],
   })
 
@@ -196,7 +216,10 @@ export function PipelinePage() {
         {projectId && <SegmentedControl<Scope> value={scope} options={SCOPE_OPTIONS} onChange={setScopeChoice} ariaLabel="Which apps" size="sm" />}
       </PageHeaderBar>
 
-      <SegmentedControl<Tab> value={tab} options={TAB_OPTIONS} onChange={setTab} ariaLabel="Pipeline or local workers" size="md" />
+      {/* A local worker that stopped doing useful work is loud here too: the Workers tab is not the default. */}
+      {tab === 'pipeline' && <WorkerFlagsStrip flags={workerFlags} workersHref={workersHref} />}
+
+      <SegmentedControl<Tab> value={tab} options={tabOptions} onChange={setTab} ariaLabel="Pipeline or local workers" size="md" />
 
       {tab === 'workers' && <WorkersPanel projectId={scope === 'project' ? projectId : null} now={now} />}
 

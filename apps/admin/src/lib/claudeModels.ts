@@ -109,7 +109,7 @@ export const ROLE_RECOMMENDED: Record<ModelRole, ModelRecommendation> = {
   },
   pr_review: {
     id: 'claude-opus-5-5',
-    why: 'The review grades another model\'s code before it can merge (ADR 0030). Opus 5.5 is the default; move to Fable 5.1 only if reviews miss problems that a stronger reviewer would catch, as Anthropic advises for work Opus 5.5 still falls short on.',
+    why: 'The review grades another model\'s code before it can merge. Opus 5.5 is the default; move to Fable 5.1 only if reviews miss problems that a stronger reviewer would catch, as Anthropic advises for work Opus 5.5 still falls short on.',
     sources: [CHOOSING_A_MODEL],
   },
 }

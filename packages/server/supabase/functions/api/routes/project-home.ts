@@ -38,6 +38,8 @@ import {
   buildStations,
   buildWeek,
   ciSignal,
+  setupSignal,
+  type SetupInput,
   currentTrain,
   detectPlatforms,
   errorSection,
@@ -72,6 +74,8 @@ import {
   type ThumbnailRow,
 } from '../../_shared/home-thumbnail.ts'
 import { readPipeline } from './pipeline.ts'
+import { readWorkerFlags } from './work-status.ts'
+import { flagsForProject, type WorkerFlag } from '../../_shared/work-flags.ts'
 import { reportWindowStartIso } from '../../_shared/report-list-filters.ts'
 import { dbError, OPEN_REPORT_STATUSES, parseUuidParam, userCanAccessProject } from '../shared.ts'
 
@@ -93,6 +97,13 @@ export interface ProjectHomeDeps {
   resolveFirecrawl: typeof resolveFirecrawl
   captureThumbnail: typeof captureThumbnail
   lookupUser: (db: Db, userId: string) => Promise<{ name: string | null; avatarUrl: string | null }>
+  /** Local worker flags that touch this app (work-flags.ts); the default reads them like the Workers tab. */
+  workerFlags?: (db: Db, userId: string, projectId: string, now: Date) => Promise<WorkerFlag[]>
+}
+
+async function workerFlags(db: Db, userId: string, projectId: string, now: Date): Promise<WorkerFlag[]> {
+  const { flags, lanes } = await readWorkerFlags(db, userId, [projectId], now)
+  return flagsForProject(flags, lanes, projectId)
 }
 
 async function lookupUser(db: Db, userId: string): Promise<{ name: string | null; avatarUrl: string | null }> {
@@ -112,6 +123,7 @@ export const defaultProjectHomeDeps: ProjectHomeDeps = {
   resolveFirecrawl,
   captureThumbnail,
   lookupUser,
+  workerFlags,
 }
 
 function within<T>(p: PromiseLike<T>, what: string, ms = SECTION_MS): Promise<T> {
@@ -174,7 +186,7 @@ interface ProjectRow {
 const latestSeen = (keys: KeyRow[]) =>
   keys.map((k) => k.last_seen_at).filter((x): x is string => !!x).sort().at(-1) ?? null
 
-export async function readProjectHome(db: Db, project: ProjectRow, deps: ProjectHomeDeps) {
+export async function readProjectHome(db: Db, project: ProjectRow, deps: ProjectHomeDeps, userId: string | null = null) {
   const id = project.id
   const now = deps.now()
   const iso = (msAgo: number) => new Date(now.getTime() - msAgo).toISOString()
@@ -227,6 +239,8 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
     one<ThumbnailRow>(THUMBNAIL_TABLE, db.from(THUMBNAIL_TABLE).select('project_id, storage_path, page_url, captured_at, last_attempt_at, last_error').eq('project_id', id).maybeSingle()),
   )
   const firecrawlP = settle(within(deps.resolveFirecrawl(db, id), 'firecrawl key'))
+  // Local workers that stopped doing useful work for this app (ADR 0048 amendment 2026-10-28).
+  const workersP = settle(userId ? within((deps.workerFlags ?? workerFlags)(db, userId, id, now), 'local workers') : Promise.resolve([] as WorkerFlag[]))
 
   const [keys, watch, broken, liveUrls, repo, pipeline, deploy, thumb, firecrawl] = await Promise.all([
     keysP, watchP, brokenP, liveUrlP, repoP, pipelineP, deployP, thumbP, firecrawlP,
@@ -292,6 +306,17 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
       return ciSignal({ repo: slug, branch, jobs })
     })().catch((e) => errorSignal('ci', 'CI on main', '/ci', e)),
   ])
+  // First-time setup, only for apps with a finished fresh-eyes run (ADR 0053).
+  const setupRun = await one<SetupInput['run']>(
+    'fresh-eyes run',
+    db.from('ux_runs').select('ttfv_seconds, steps, reached, stalled_at, finished_at, counts').eq('project_id', id).eq('kind', 'fresh_eyes').eq('status', 'done').eq('dry_run', false).order('finished_at', { ascending: false }).limit(1).maybeSingle(),
+  ).catch((e) => {
+    // Display only: the light is left out, the rest of Home renders.
+    log.warn('home: fresh-eyes run unreadable', { projectId: id, err: e instanceof Error ? e.message : String(e) })
+    return null
+  })
+  const setup = setupSignal({ run: setupRun })
+  if (setup) health.push(setup)
 
   // ── Release ──
   const waitingP = settle(
@@ -409,7 +434,7 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
     })(),
   )
 
-  const [waiting, week, activity, sitemap, access] = await Promise.all([waitingP, weekP, activityP, sitemapP, accessP])
+  const [waiting, week, activity, sitemap, access, workers] = await Promise.all([waitingP, weekP, activityP, sitemapP, accessP, workersP])
 
   // ── App card ──
   let thumbnail: { url: string; capturedAt: string | null; pageUrl: string | null } | null = null
@@ -500,6 +525,7 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
       criticalWaiting: waiting.ok ? waiting.value.counts.critical : null,
       pipeline: pipeline.ok ? pipeline.value.stages : null,
       sdk: sdkFreshness,
+      workers: workers.ok ? workers.value : null,
     }),
   )
 
@@ -521,7 +547,7 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
     activity: activity.ok ? okSection(activity.value) : errorSection(activity.error),
     access: access.ok ? okSection(access.value) : errorSection(access.error),
     // Reads Needs you could not use, so the console can say the list may be incomplete.
-    partial: [!pipeline.ok && 'pipeline', !waiting.ok && 'waiting'].filter(Boolean) as string[],
+    partial: [!pipeline.ok && 'pipeline', !waiting.ok && 'waiting', !workers.ok && 'workers'].filter(Boolean) as string[],
   }
 }
 
@@ -545,7 +571,7 @@ export function registerProjectHomeRoutes(app: Hono<{ Variables: Variables }>, d
     const db = getServiceClient()
     const p = await projectFor(c, db)
     if ('response' in p) return p.response
-    return c.json({ ok: true, data: await readProjectHome(db, p.project, deps) })
+    return c.json({ ok: true, data: await readProjectHome(db, p.project, deps, c.get('userId') as string) })
   })
 
   app.post('/v1/admin/projects/:id/home/thumbnail', jwtAuth, async (c: Ctx) => {

@@ -165,12 +165,13 @@ describe('Home while a required setup step is open', () => {
     expect(container.querySelector('[data-testid="sdk-health-panel"]')).toBeTruthy()
   })
 
-  it('the hero names the open step with its fix, never "healthy"', async () => {
+  it('names the open step once, in the checklist, never "healthy"', async () => {
     await mount()
-    const hero = container.querySelector('[data-testid="dashboard-hero-setup"]')!
-    expect(hero.textContent).toContain('Setup 3 of 4 done')
-    expect(hero.textContent).toContain('Install the SDK in your app')
-    expect(hero.querySelector('a')!.getAttribute('href')).toBe(`/connect?project=${PROJECT}#connect-sdk-health`)
+    // The hero card that repeated the step, its button and a second count is
+    // gone (owner, 2026-10-27); the checklist marks the step itself.
+    expect(container.querySelector('[data-testid="dashboard-hero-setup"]')).toBeNull()
+    expect(container.textContent).not.toContain('Setup 3 of 4 done')
+    expect(container.textContent).toContain('Install the SDK in your app')
     expect(container.textContent).not.toContain('Loop is clean')
     expect(container.textContent).not.toContain('Nothing waiting on you')
   })

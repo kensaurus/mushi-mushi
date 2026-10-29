@@ -25,6 +25,8 @@ export interface SkillRun {
   status: 'active' | 'done' | 'stopped'
   stop_reason: string | null
   current_report_id: string | null
+  /** A local worker lane runs the rounds (ADR 0042 amendment); null = the app's Cursor key in the cloud. */
+  lane_id?: string | null
   history: Array<{ round: number; reportId: string; outcome: string; prUrl?: string | null }>
   created_at: string
   updated_at: string
@@ -47,7 +49,7 @@ export async function loadSkillRuns() {
   return apiFetch<{ runs: SkillRun[]; skills: SkillRunSkill[] }>('/v1/admin/skill-runs', { cache: 'no-store', scope: 'enumeration' })
 }
 
-export async function startSkillRun(projectId: string, input: { skillSlug: string; scope: string; rounds: number; autoMerge: boolean }) {
+export async function startSkillRun(projectId: string, input: { skillSlug: string; scope: string; rounds: number; autoMerge: boolean; laneId?: string }) {
   return apiFetch<{ run: SkillRun }>(`/v1/admin/projects/${projectId}/skill-runs`, { method: 'POST', body: JSON.stringify(input) })
 }
 

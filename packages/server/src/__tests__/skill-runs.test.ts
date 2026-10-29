@@ -22,6 +22,11 @@ describe('skill catalog', () => {
     for (const s of SKILL_RUN_SKILLS) expect(s.measure.length).toBeGreaterThan(20)
     expect(skillRunSkill('plan-pricing')).toBeNull()
   })
+
+  it('offers the backlog register, measured by its diff, but no skill that bumps dependencies (ADR 0019)', () => {
+    expect(skillRunSkill('housekeep-backlog')?.measure).toMatch(/BACKLOG\.md.*diff/)
+    expect(skillRunSkill('workflow-housekeep')).toBeNull()
+  })
 })
 
 describe('skillRunReport', () => {

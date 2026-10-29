@@ -5,7 +5,7 @@
  *   configure a bounty schedule, set targeting criteria, and monitor stats.
  *
  *   API surface: /v1/admin/published-apps/:projectId
- *   Entitlement: marketplace_publish (Pro+). Shows an upgrade prompt if the
+ *   Entitlement: marketplace_publish (Studio and up). Shows an upgrade prompt if the
  *   org doesn't have the entitlement.
  */
 
@@ -371,9 +371,9 @@ export function PublishingTab() {
     if (isEntitlementError) {
       return (
         <EmptyState
-          title="Marketplace publishing requires a Pro plan"
+          title="Marketplace publishing needs Studio"
           description="Upgrade your workspace to publish apps to the Mushi Bounties marketplace and start rewarding testers."
-          action={<Btn variant="primary" onClick={() => navigate('/billing')}>Upgrade to Pro</Btn>}
+          action={<Btn variant="primary" onClick={() => navigate('/billing')}>Upgrade to Studio</Btn>}
         />
       )
     }

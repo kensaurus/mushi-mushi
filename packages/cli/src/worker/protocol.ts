@@ -12,6 +12,13 @@
  *
  *          The lanes and the clone each one works in live in a local file
  *          (~/.config/mushi/worker.json): the server never stores or sends a path.
+ *
+ *          A claim answer is parsed the same way (parseClaim): a fix claim
+ *          carries a report, a conflict claim (ADR 0049) a PR of the lane's own
+ *          repository with the head commit Mushi saw, an audit claim (ADR
+ *          0050) only models and a count, a first-time user test (ADR 0053
+ *          amendment) a start page, a goal in plain words and, for Mushi's
+ *          own operator, test accounts. Anything else is refused.
  */
 
 import { existsSync, readFileSync } from 'node:fs'
@@ -19,7 +26,8 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import { MushiCliError } from '../errors.js'
 
-const LANE_MODES = ['fix', 'followups'] as const
+/** fix and followups (ADR 0048); conflicts (ADR 0049), audit (ADR 0050) and skill (ADR 0042 amendment). */
+const LANE_MODES = ['fix', 'followups', 'conflicts', 'audit', 'skill'] as const
 type LaneMode = (typeof LANE_MODES)[number]
 const LANE_VERBS = ['paused', 'concurrency', 'model', 'mode', 'stop_at', 'drain', 'prune_own'] as const
 
@@ -40,6 +48,11 @@ export interface HostGuards {
 }
 
 export const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/
+/** owner/name of a GitHub repository. */
+const REPO_RE = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/
+/** A branch name git and GitHub both accept, and never an option or a path escape. */
+const BRANCH_RE = /^(?!-)(?!.*\.\.)(?!.*\/\/)(?!.*@\{)[A-Za-z0-9._\/-]{1,200}(?<![./])$/
+const SHA_RE = /^[0-9a-f]{40}$/
 export const LANE_NAME_RE = /^[a-z0-9][a-z0-9._-]{0,39}$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -111,7 +124,17 @@ export interface HeartbeatAnswer {
   refused: Array<{ name: string; reason: string }>
   renewed: string[]
   lost: string[]
+  /** Lane ids whose app has a first-time user test waiting: ask for work now. */
+  wake: string[]
+  /** The console asked for a new Cursor account check (ADR 0048 amendment 2026-10-28). Only `true` counts. */
+  recheckAccount: boolean
+  /** The Cursor account the machine's owner set in the console; it overrides the local worker.json. */
+  cursorAccount: string | null
+  /** A "Switch account" the console asked for, while it is open. */
+  cursorLogin: { requestId: string } | null
 }
+
+const ACCOUNT_RE = /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/
 
 /**
  * The heartbeat answer, checked field by
@@ -139,9 +162,125 @@ export function parseHeartbeatAnswer(raw: unknown): { answer: HeartbeatAnswer; b
     .filter((r) => typeof r?.name === 'string')
     .map((r) => ({ name: String(r.name).slice(0, 40), reason: String(r.reason ?? '').slice(0, 300) }))
   return {
-    answer: { hostId: typeof d.hostId === 'string' ? d.hostId : '', guards: guards.value, lanes, refused, renewed: ids(d.renewed), lost: ids(d.lost) },
+    answer: { hostId: typeof d.hostId === 'string' ? d.hostId : '', guards: guards.value, lanes, refused, renewed: ids(d.renewed), lost: ids(d.lost), wake: ids(d.wake),
+      recheckAccount: d.recheckAccount === true,
+      cursorAccount: typeof d.cursorAccount === 'string' && d.cursorAccount.length <= 254 && ACCOUNT_RE.test(d.cursorAccount) ? d.cursorAccount.toLowerCase() : null,
+      cursorLogin: d.cursorLogin && typeof (d.cursorLogin as { requestId?: unknown }).requestId === 'string' && UUID_RE.test((d.cursorLogin as { requestId: string }).requestId) ? { requestId: (d.cursorLogin as { requestId: string }).requestId } : null,
+    },
     bad,
   }
+}
+
+// ── Claims ──────────────────────────────────────────────────────────────────
+
+export interface ConflictTarget {
+  queueId: string
+  repo: string
+  prNumber: number
+  headRef: string
+  headSha: string
+  prUrl: string | null
+}
+
+/** A first-time user test the console queued (ADR 0053 amendment 2026-10-28). */
+export interface FreshEyesTarget {
+  /** The console's run id; the run syncs into that row. */
+  runId: string
+  url: string
+  goal: string
+  sessions: number
+  /** Plain words that mean the visitor made it, or null. */
+  successText: string | null
+  dryRun: boolean
+  /** One synthetic account per session, for Mushi's own operator only. Never logged (the user id may be). */
+  accounts: Array<{ email: string; password: string; name: string; userId?: string }>
+}
+
+type ParsedClaim =
+  | { kind: 'fix'; id: string; model: string | null; raw: Record<string, unknown> }
+  | { kind: 'conflict'; id: string; model: string | null; conflict: ConflictTarget }
+  | { kind: 'audit'; id: string; model: string | null; audit: { reviewModel: string | null; findingsLeft: number } }
+  | { kind: 'fresh_eyes'; id: string; model: string | null; freshEyes: FreshEyesTarget }
+
+const RUN_ID_RE = /^[0-9]{8}-[0-9]{6}-[a-z0-9]{4}$/
+const CONTROL_RE = /[\u0000-\u001f\u007f]/
+
+/** Plain text from the server: no control characters, never read as an option. */
+function plainText(raw: unknown, max: number): string | null {
+  if (typeof raw !== 'string' || !raw.trim() || raw.length > max || CONTROL_RE.test(raw) || raw.trim().startsWith('-')) return null
+  return raw.trim()
+}
+
+function parseFreshEyesTarget(raw: unknown): Parsed<FreshEyesTarget> {
+  const t = (raw ?? {}) as Record<string, unknown>
+  if (typeof t.runId !== 'string' || !RUN_ID_RE.test(t.runId)) return { ok: false, message: 'the test claim has no run id' }
+  let url: URL
+  try {
+    url = new URL(String(t.url))
+  } catch {
+    return { ok: false, message: 'the test claim\'s start page is not a web address' }
+  }
+  if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.username || url.password || String(t.url).length > 500) return { ok: false, message: 'the test claim\'s start page is not an http(s) address' }
+  const goal = plainText(t.goal, 300)
+  if (!goal) return { ok: false, message: 'the test claim\'s goal is not plain text' }
+  if (typeof t.sessions !== 'number' || !Number.isInteger(t.sessions) || t.sessions < 1 || t.sessions > 5) return { ok: false, message: 'the test claim\'s visitors are not 1 to 5' }
+  const successText = t.successText == null ? null : plainText(t.successText, 120)
+  if (t.successText != null && !successText) return { ok: false, message: 'the test claim\'s success words are not plain text' }
+  if (typeof t.dryRun !== 'boolean') return { ok: false, message: 'the test claim\'s dryRun is not true or false' }
+  const accounts: FreshEyesTarget['accounts'] = []
+  for (const a of Array.isArray(t.accounts) ? (t.accounts as Array<Record<string, unknown>>) : []) {
+    if (typeof a?.email !== 'string' || !/^[^\s@]{1,100}@[^\s@]{1,200}$/.test(a.email) || typeof a.password !== 'string' || a.password.length < 12 || a.password.length > 200 || CONTROL_RE.test(a.password)) {
+      return { ok: false, message: 'a test account in the claim is malformed' }
+    }
+    const userId = typeof a.userId === 'string' && UUID_RE.test(a.userId) ? a.userId : undefined
+    accounts.push({ email: a.email, password: a.password, name: plainText(a.name, 80) ?? 'Test visitor', ...(userId ? { userId } : {}) })
+  }
+  if (accounts.length > t.sessions || (t.dryRun && accounts.length)) return { ok: false, message: 'the test claim carries more accounts than it may use' }
+  return { ok: true, value: { runId: t.runId, url: url.toString(), goal, sessions: t.sessions, successText, dryRun: t.dryRun, accounts } }
+}
+
+/**
+ * @internal Exported for tests. A claim answer, checked by kind. A fix claim's
+ * report goes on to `workOne` as it always did (a claim without `kind` is a fix
+ * claim from a server that predates P3). A conflict claim names a PR of the
+ * lane's repository and the head Mushi saw; its branch is checked so it can
+ * never be read as a git option or reach outside refs/heads.
+ */
+export function parseClaim(raw: unknown): Parsed<ParsedClaim> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, message: 'the claim is not an object' }
+  const c = raw as Record<string, unknown>
+  if (typeof c.id !== 'string' || !UUID_RE.test(c.id)) return { ok: false, message: 'the claim has no id' }
+  const model = c.model == null ? null : typeof c.model === 'string' && MODEL_RE.test(c.model) ? c.model : undefined
+  if (model === undefined) return { ok: false, message: 'the claim\'s model is not a model id' }
+  const kind = c.kind ?? 'fix'
+  if (kind === 'fix') {
+    const report = c.report as Record<string, unknown> | undefined
+    if (!report || typeof report.id !== 'string' || !UUID_RE.test(report.id)) return { ok: false, message: 'the fix claim has no report' }
+    return { ok: true, value: { kind: 'fix', id: c.id, model, raw: c } }
+  }
+  if (kind === 'conflict') {
+    const t = (c.conflict ?? {}) as Record<string, unknown>
+    if (typeof t.queueId !== 'string' || !UUID_RE.test(t.queueId)) return { ok: false, message: 'the conflict claim has no queue row' }
+    if (typeof t.repo !== 'string' || !REPO_RE.test(t.repo)) return { ok: false, message: 'the conflict claim\'s repo is not owner/name' }
+    if (typeof t.prNumber !== 'number' || !Number.isInteger(t.prNumber) || t.prNumber < 1) return { ok: false, message: 'the conflict claim\'s PR number is not a number' }
+    if (typeof t.headRef !== 'string' || !BRANCH_RE.test(t.headRef)) return { ok: false, message: 'the conflict claim\'s branch is not a plain branch name' }
+    if (typeof t.headSha !== 'string' || !SHA_RE.test(t.headSha)) return { ok: false, message: 'the conflict claim\'s head is not a commit sha' }
+    const prUrl = typeof t.prUrl === 'string' && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(t.prUrl) ? t.prUrl : null
+    return { ok: true, value: { kind: 'conflict', id: c.id, model, conflict: { queueId: t.queueId, repo: t.repo, prNumber: t.prNumber, headRef: t.headRef, headSha: t.headSha, prUrl } } }
+  }
+  if (kind === 'audit') {
+    const a = (c.audit ?? {}) as Record<string, unknown>
+    const reviewModel = a.reviewModel == null ? null : typeof a.reviewModel === 'string' && MODEL_RE.test(a.reviewModel) ? a.reviewModel : undefined
+    if (reviewModel === undefined) return { ok: false, message: 'the audit claim\'s review model is not a model id' }
+    const left = typeof a.findingsLeft === 'number' && Number.isInteger(a.findingsLeft) && a.findingsLeft >= 0 ? a.findingsLeft : 0
+    return { ok: true, value: { kind: 'audit', id: c.id, model, audit: { reviewModel, findingsLeft: left } } }
+  }
+  if (kind === 'fresh_eyes') {
+    const t = parseFreshEyesTarget(c.freshEyes)
+    if (!t.ok) return t
+    return { ok: true, value: { kind: 'fresh_eyes', id: c.id, model, freshEyes: t.value } }
+  }
+  return { ok: false, message: `unknown claim kind "${String(kind).slice(0, 20)}"` }
 }
 
 // ── The local config ────────────────────────────────────────────────────────

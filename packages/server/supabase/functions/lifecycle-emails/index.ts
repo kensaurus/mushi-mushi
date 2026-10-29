@@ -14,15 +14,19 @@
 //   2. This function re-checks the same flag, so a manual POST cannot
 //      bypass the kill switch.
 //   3. _shared/email.ts refuses to send without RESEND_FROM_EMAIL, and
-//      day-2/day-7 refuse without LIFECYCLE_UNSUB_SECRET (they carry a
-//      signed List-Unsubscribe link).
+//      every email refuses without LIFECYCLE_UNSUB_SECRET (each carries a
+//      signed List-Unsubscribe link, the day-0 welcome included).
 //
 // Idempotent: a row is claimed in lifecycle_email_sends (PK user_id +
 // email_key) BEFORE the send; a conflict means another tick already
-// took it. A failed send releases the claim so the next tick retries
-// inside the window.
+// took it. A send that certainly failed releases the claim so the next
+// tick retries inside the window (shouldReleaseClaim: not on Resend's
+// 409). Every send carries Resend's Idempotency-Key
+// lifecycle/<user>/<key>, so a retry after a timeout cannot send twice.
 //
-// Excluded: operator_users (founders), lifecycle_email_optout, users
+// Excluded: operator_users (founders), lifecycle_email_optout,
+// synthetic_accounts (first-time user test accounts, ADR 0053),
+// tester-only accounts (Bounties testers who own no project), users
 // without a confirmed email, accounts older than 14 days.
 //
 // Auth: shared MUSHI_INTERNAL_CALLER_SECRET via requireServiceRoleAuth.
@@ -39,7 +43,9 @@ import { NOT_FIRST_REPORT_SOURCES } from '../_shared/first-report.ts'
 import {
   buildLifecycleEmail,
   decideLifecycleEmail,
-  needsUnsubscribeLink,
+  isTesterOnlyAccount,
+  lifecycleIdempotencyKey,
+  shouldReleaseClaim,
   type LifecycleEmailKey,
 } from '../_shared/lifecycle-emails.ts'
 
@@ -70,6 +76,7 @@ interface CandidateUser {
   email: string
   confirmedAt: Date
   createdAt: Date
+  meta: Record<string, unknown>
 }
 
 interface SendStat {
@@ -124,7 +131,7 @@ async function listRecentConfirmedUsers(db: Db, now: Date): Promise<CandidateUse
       const confirmedAt = new Date(u.email_confirmed_at)
       if (Number.isNaN(createdAt.getTime()) || Number.isNaN(confirmedAt.getTime())) continue
       if (createdAt.getTime() < cutoff) continue
-      out.push({ id: u.id, email: u.email, confirmedAt, createdAt })
+      out.push({ id: u.id, email: u.email, confirmedAt, createdAt, meta: (u.user_metadata ?? {}) as Record<string, unknown> })
     }
     if (users.length < LIST_PAGE_SIZE) break
   }
@@ -150,15 +157,33 @@ async function loadSignals(db: Db, users: CandidateUser[]): Promise<Signals> {
     return { excluded, sentByUser, realReportsByUser, mcpSetupDone, reportsUnavailable: false }
   }
 
-  const [operators, optouts, sends, projects, mcp] = await Promise.all([
+  const [operators, optouts, sends, projects, mcp, synthetic, testers] = await Promise.all([
     db.from('operator_users').select('user_id'),
     db.from('lifecycle_email_optout').select('user_id').in('user_id', ids),
     db.from('lifecycle_email_sends').select('user_id, email_key').in('user_id', ids),
     db.from('projects').select('id, owner_id').in('owner_id', ids),
     db.from('setup_funnel_events').select('user_id').eq('event_name', 'mcp_setup_done').in('user_id', ids),
+    db.from('synthetic_accounts').select('user_id').in('user_id', ids),
+    db.from('mushi_testers').select('auth_user_id').in('auth_user_id', ids),
   ])
+  // An exclusion list that could not be read leaves its people out this tick:
+  // a missed email is retried next hour, a wrong one cannot be unsent.
+  for (const [name, res] of [['operator_users', operators], ['lifecycle_email_optout', optouts], ['synthetic_accounts', synthetic], ['mushi_testers', testers]] as const) {
+    if (res.error) {
+      llog.error('exclusion_list_unavailable', { list: name, err: res.error.message })
+      for (const id of ids) excluded.add(id)
+    }
+  }
   for (const r of (operators.data ?? []) as Array<{ user_id: string }>) excluded.add(r.user_id)
   for (const r of (optouts.data ?? []) as Array<{ user_id: string }>) excluded.add(r.user_id)
+  for (const r of (synthetic.data ?? []) as Array<{ user_id: string }>) excluded.add(r.user_id)
+  const owners = new Set(
+    ((projects.data ?? []) as Array<{ owner_id: string | null }>).map((p) => p.owner_id).filter((id): id is string => Boolean(id)),
+  )
+  const marketplaceTesters = new Set(((testers.data ?? []) as Array<{ auth_user_id: string }>).map((t) => t.auth_user_id))
+  for (const u of users) {
+    if (isTesterOnlyAccount(u.meta, owners.has(u.id), marketplaceTesters.has(u.id))) excluded.add(u.id)
+  }
   for (const r of (sends.data ?? []) as Array<{ user_id: string; email_key: string }>) {
     const set = sentByUser.get(r.user_id) ?? new Set<string>()
     set.add(r.email_key)
@@ -225,12 +250,9 @@ async function sendOne(
   }
 
   try {
-    let unsubscribeUrl: string | null = null
-    if (needsUnsubscribeLink(key)) {
-      if (!ctx.unsubSecret) throw new Error('LIFECYCLE_UNSUB_SECRET not configured')
-      const token = await signUnsubscribeToken(user.id, ctx.unsubSecret)
-      unsubscribeUrl = `${ctx.apiUrl}/v1/public/email/unsubscribe?t=${encodeURIComponent(token)}`
-    }
+    if (!ctx.unsubSecret) throw new Error('LIFECYCLE_UNSUB_SECRET not configured')
+    const token = await signUnsubscribeToken(user.id, ctx.unsubSecret)
+    const unsubscribeUrl = `${ctx.apiUrl}/v1/public/email/unsubscribe?t=${encodeURIComponent(token)}`
     const content = buildLifecycleEmail({
       key,
       adminUrl: ctx.adminUrl,
@@ -245,9 +267,10 @@ async function sendOne(
       headers: content.headers,
       replyTo: REPLY_TO,
       tags: { lifecycle_key: key },
+      idempotencyKey: lifecycleIdempotencyKey(user.id, key),
     })
     if (!result.ok) {
-      await release()
+      if (shouldReleaseClaim(result)) await release()
       return { user_id: user.id, email_key: key, result: 'send_failed', reason: result.reason }
     }
     return { user_id: user.id, email_key: key, result: 'sent' }

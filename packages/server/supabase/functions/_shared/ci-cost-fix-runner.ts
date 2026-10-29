@@ -37,7 +37,7 @@ export const COST_FIX_PR_LABELS = ['mushi-ci-cost']
 const DAY_MS = 24 * 60 * 60_000
 
 export const COST_FIX_JOB_COLUMNS =
-  'id, project_id, requested_by, repo, workflow_path, kind, status, workflow_name, evidence, month_saving_usd, summary, error_code, error, pr_url, pr_number, branch, commit_sha, baseline, measured, merged_at, closed_at, created_at, started_at, finished_at, updated_at'
+  'id, project_id, requested_by, repo, workflow_path, kind, status, workflow_name, evidence, month_saving_usd, summary, error_code, error, pr_url, pr_number, branch, commit_sha, baseline, measured, merged_at, closed_at, created_at, started_at, finished_at, updated_at, bundle_id'
 
 export type CostFixStatus = 'queued' | 'running' | 'pr_opened' | 'no_change' | 'refused' | 'failed'
 
@@ -67,6 +67,8 @@ export interface CostFixJobRow {
   started_at: string | null
   finished_at: string | null
   updated_at: string
+  /** Set when this fix shares one draft PR with others for the same repo (ci-cost-fix-bundle.ts). */
+  bundle_id?: string | null
 }
 
 export interface MinutesDay {
@@ -114,6 +116,8 @@ export interface CostFixJobView {
   closedAt: string | null
   createdAt: string
   finishedAt: string | null
+  /** The bundle (one PR for several fixes in this repo) it was opened in, else null. */
+  bundleId: string | null
 }
 
 export function toCostFixView(row: CostFixJobRow): CostFixJobView {
@@ -139,6 +143,7 @@ export function toCostFixView(row: CostFixJobRow): CostFixJobView {
     closedAt: row.closed_at,
     createdAt: row.created_at,
     finishedAt: row.finished_at,
+    bundleId: row.bundle_id ?? null,
   }
 }
 
@@ -229,7 +234,7 @@ export function workflowNameOf(yaml: string, path: string): string {
   return path
 }
 
-async function loadWorkflowMinutes(
+export async function loadWorkflowMinutes(
   db: SupabaseClient,
   job: Pick<CostFixJobRow, 'project_id' | 'repo' | 'workflow_name' | 'workflow_path'>,
   from: Date,
@@ -276,14 +281,14 @@ const CI_JOB_MAX_PAGES = 21
 // The PR
 // ─────────────────────────────────────────────────────────────────────────────
 
-const KIND_TITLE: Record<CiCostFixKind, string> = {
+export const KIND_TITLE: Record<CiCostFixKind, string> = {
   add_concurrency: 'cancel superseded runs',
   skip_drafts: 'skip drafts',
   weekly_cron: 'run the schedule weekly',
   ignore_docs_paths: 'skip docs-only changes',
 }
 
-const KIND_WHY: Record<CiCostFixKind, string> = {
+export const KIND_WHY: Record<CiCostFixKind, string> = {
   add_concurrency:
     'Without a concurrency group, every push to a pull request starts a new run while the old one keeps going and keeps billing. Now the new push cancels the run it replaces. Pushes to your branches (the default branch included) always finish.',
   skip_drafts:
@@ -452,8 +457,14 @@ export async function runCiCostFixJob(db: SupabaseClient, jobId: string, deps: C
   const staleIso = new Date(now.getTime() - COST_FIX_STALE_MS).toISOString()
   // Claim a queued job, else one a dead run left `running`. Each update is
   // guarded on the status it read, so two workers never both claim a job.
+  // A job in a bundle is never run on its own: its PR is the bundle's
+  // (runCiCostFixBundle), and a single run would open a second one.
   const claim = (stale: boolean) => {
-    const q = db.from('ci_cost_fix_jobs').update({ status: 'running', started_at: nowIso, updated_at: nowIso }).eq('id', jobId)
+    const q = db
+      .from('ci_cost_fix_jobs')
+      .update({ status: 'running', started_at: nowIso, updated_at: nowIso })
+      .eq('id', jobId)
+      .is('bundle_id', null)
     return (stale ? q.eq('status', 'running').lte('started_at', staleIso) : q.eq('status', 'queued')).select(COST_FIX_JOB_COLUMNS)
   }
   let { data: claimed, error: claimErr } = await claim(false)
@@ -595,7 +606,10 @@ export async function refreshCostFixMeasurement(
         patch.closed_at = pr.closedAt ?? now.toISOString()
       }
     }
-    if (mergedAt) {
+    // A bundle fix sharing its workflow with another fix in the same PR has no
+    // baseline of its own: the workflow is measured once, on that other fix.
+    const measuresHere = !job.bundle_id || job.baseline != null
+    if (mergedAt && measuresHere) {
       // Whole UTC days after the merge day, up to MEASURE_DAYS.
       const m = new Date(mergedAt)
       const from = new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth(), m.getUTCDate()) + DAY_MS)

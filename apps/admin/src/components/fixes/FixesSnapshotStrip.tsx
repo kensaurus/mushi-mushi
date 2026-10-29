@@ -13,7 +13,7 @@ import { fixesLinks } from '../../lib/statCardLinks'
 
 interface Props {
   stats: FixesStats
-  /** Fix PRs ready to merge (countDefinitions readyToMerge), from the loaded list. */
+  /** Fix PRs ready to merge (countDefinitions isReadyToMerge), from the loaded list. */
   ready?: number
   statsFetchedAt: string | null
   statsValidating?: boolean

@@ -33,7 +33,7 @@ export const EMPTY_STORAGE_STATS: StorageStats = {
   projectId: null,
   projectName: null,
   planId: 'hobby',
-  planDisplayName: 'Hobby',
+  planDisplayName: 'Free',
   projectCount: 0,
   configuredCount: 0,
   unconfiguredCount: 0,

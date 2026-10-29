@@ -22,6 +22,7 @@
  *       GET /v1/admin/ci/compare?project_id=&days=30 → CiCompare (Cost and speed)
  *       GET /v1/admin/ci/placement?project_id= → CiPlacement (Where CI runs, ADR 0037)
  *       GET /v1/admin/fixes?limit=100 (project scope) → "Mushi fix" links
+ *       GET/POST /v1/admin/ci/cost-fix-rollout → "Apply to every app" (CiCostFixRollout)
  */
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -40,6 +41,7 @@ import { CiNodeDrawer } from '../components/ci/CiNodeDrawer'
 import { CiAdviceList, CiInfraFailures, CiSlowJobs } from '../components/ci/CiSections'
 import { CiSummary } from '../components/ci/CiSummary'
 import { CiCostSection } from '../components/ci/CiCostSection'
+import { CiCostFixRollout } from '../components/ci/CiCostFixRollout'
 import { CiPlacementSection } from '../components/ci/CiPlacementSection'
 import { usePageData } from '../lib/usePageData'
 import { apiFetch } from '../lib/supabase'
@@ -252,7 +254,12 @@ export function CiPage() {
             </PanelErrorBoundary>
           </Section>
 
-          <Section title="Speed it up" id="ci-advice" icon={<IconBolt />}>
+          <Section
+            title="Speed it up"
+            id="ci-advice"
+            icon={<IconBolt />}
+            action={<CiCostFixRollout />}
+          >
             <p className="mb-2 text-xs text-fg-muted">Changes that would land your fixes sooner, each with the evidence and a copy-ready fix.</p>
             <CiAdviceList advice={data.advice} />
           </Section>

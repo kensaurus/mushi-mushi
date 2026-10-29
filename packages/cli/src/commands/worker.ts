@@ -10,7 +10,10 @@
  *            on Linux and WSL2, a scheduled task on Windows. Everything is
  *            printed first and written only after a yes (or --yes).
  *   status   this machine's lanes, key and service, then every worker the
- *            console sees (GET /v1/admin/work/lanes): `lanectl status`.
+ *            console sees (GET /v1/admin/work/lanes): `lanectl status`. Its
+ *            problems come first, the same flags the console shows (a stuck
+ *            run with its stage, an offline machine, a failing account
+ *            check, idle credits), each with what to do.
  *   revoke   the key revokes itself, is removed from this machine, and the
  *            service is stopped.
  *
@@ -29,6 +32,7 @@ import { loadConfig } from '../config.js'
 import { MushiCliError } from '../errors.js'
 import { isKeychainEnabled, tryDeleteWorkerKey, trySaveWorkerKey } from '../keychain.js'
 import { assertWorkerKey, readWorkerKey } from '../worker/daemon.js'
+import { flagLines, type WorkerFlagView } from '../worker/flags-view.js'
 import { parseLanesConf, SYSTEMD_UNIT_NAME, systemdUnit, WINDOWS_TASK_NAME, windowsTaskArgs } from '../worker/install.js'
 import { loadWorkerConfig, MODEL_RE, validateWorkerConfig, WORKER_CONFIG_PATH, WORKER_KEY_PATH, type LocalLane, type WorkerConfig } from '../worker/protocol.js'
 
@@ -36,6 +40,8 @@ const UNIT_PATH = join(process.env['XDG_CONFIG_HOME'] || join(homedir(), '.confi
 
 interface WorkLanesView {
   generatedAt: string
+  /** Worker flags, worst first; missing from a server that predates them. */
+  flags?: WorkerFlagView[]
   hosts: Array<{ id: string; hostname: string; platform: string; online: boolean; lastHeartbeatAt: string; status: Record<string, unknown>; guards: Record<string, number>; revoked: boolean; mine: boolean }>
   lanes: Array<{
     id: string
@@ -46,8 +52,15 @@ interface WorkLanesView {
     status: Record<string, unknown>
     active: unknown[]
     queue: unknown[]
-    counts7d: { runs: number; prs: number; timeouts: number; errors: number; infra: number }
+    counts7d: { runs: number; prs: number; merges?: number; filed?: number; timeouts: number; errors: number; infra: number }
   }>
+}
+
+/** What a lane got done in 7 days, in its mode's terms. */
+function laneDone(l: WorkLanesView['lanes'][number]): number {
+  if (l.config.mode === 'conflicts') return l.counts7d.merges ?? 0
+  if (l.config.mode === 'audit') return l.counts7d.filed ?? 0
+  return l.counts7d.prs
 }
 
 async function readStdinKey(): Promise<string> {
@@ -234,6 +247,14 @@ export function registerWorkerCommands(program: Command): void {
         process.exitCode = 1
         return
       }
+      const problems = flagLines(res.data.flags)
+      if (problems.length) {
+        console.log(`\n${problems.join('\n')}`)
+        // A machine that cannot work is not a success.
+        if (res.data.flags!.some((f) => f.severity === 'danger')) process.exitCode = 2
+      } else if (res.data.flags) {
+        console.log('\nNo problems: every worker the console sees is doing useful work or has nothing to take.')
+      }
       const hosts = new Map(res.data.hosts.map((h) => [h.id, h]))
       for (const h of res.data.hosts) {
         console.log(`\n${h.hostname} (${h.platform}) ${h.revoked ? 'revoked' : h.online ? 'online' : 'offline'}, last heartbeat ${h.lastHeartbeatAt.slice(0, 16).replace('T', ' ')} UTC, ${String(h.status['state'] ?? '?')}; up to ${h.guards['max_agents']} agents`)
@@ -242,14 +263,14 @@ export function registerWorkerCommands(program: Command): void {
         console.log('\nNo lanes registered yet.')
         return
       }
-      console.log(`\n${'lane'.padEnd(16)} ${'app'.padEnd(16)} ${'state'.padEnd(13)} ${'model'.padEnd(22)} ${'run'.padStart(4)} ${'PRs'.padStart(4)} ${'tmo'.padStart(4)} ${'err'.padStart(4)} ${'queue'.padStart(5)}  host`)
+      console.log(`\n${'lane'.padEnd(16)} ${'app'.padEnd(16)} ${'mode'.padEnd(10)} ${'state'.padEnd(13)} ${'model'.padEnd(22)} ${'run'.padStart(4)} ${'done'.padStart(4)} ${'tmo'.padStart(4)} ${'err'.padStart(4)} ${'queue'.padStart(5)}  host`)
       for (const l of res.data.lanes) {
         const state = l.config.paused ? 'paused' : l.config.drain ? 'draining' : String(l.status['state'] ?? '?')
         console.log(
-          `${l.name.padEnd(16)} ${l.projectName.slice(0, 16).padEnd(16)} ${state.padEnd(13)} ${(l.config.model ?? 'default').slice(0, 22).padEnd(22)} ${String(l.counts7d.runs).padStart(4)} ${String(l.counts7d.prs).padStart(4)} ${String(l.counts7d.timeouts).padStart(4)} ${String(l.counts7d.errors).padStart(4)} ${String(l.queue.length).padStart(5)}  ${hosts.get(l.hostId)?.hostname ?? '?'}`,
+          `${l.name.padEnd(16)} ${l.projectName.slice(0, 16).padEnd(16)} ${l.config.mode.padEnd(10)} ${state.padEnd(13)} ${(l.config.model ?? 'default').slice(0, 22).padEnd(22)} ${String(l.counts7d.runs).padStart(4)} ${String(laneDone(l)).padStart(4)} ${String(l.counts7d.timeouts).padStart(4)} ${String(l.counts7d.errors).padStart(4)} ${String(l.queue.length).padStart(5)}  ${hosts.get(l.hostId)?.hostname ?? '?'}`,
         )
       }
-      console.log('\nRuns are the last 7 days. Change lanes on Pipeline → Workers in the console.')
+      console.log('\nRuns are the last 7 days; "done" is PRs opened (fix, skill), merges pushed (conflicts) or passes that filed findings (audit). Change lanes on Pipeline → Workers in the console.')
     })
 
   worker

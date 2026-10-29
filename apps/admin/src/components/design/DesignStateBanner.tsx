@@ -2,7 +2,9 @@
  * FILE: apps/admin/src/components/design/DesignStateBanner.tsx
  * PURPOSE: Top-of-page status for the design plane: element state + reason,
  *          the token snapshot it reads from, and the newest failed refresh or
- *          scan when that failure is newer than the snapshot.
+ *          scan when that failure is newer than the snapshot. Recipe-card
+ *          copy that says "Open the Design system page" is rewritten here,
+ *          because this banner only renders on that page.
  */
 
 import { Card, formatRelative } from '../ui'
@@ -23,6 +25,21 @@ const SOURCE_LABEL: Record<RecipeHistoryEntry['source'], string> = {
 }
 
 /**
+ * Recipe-card copy tells you to open this page. The banner only renders
+ * here, so those sentences point at the controls on this page instead.
+ * Longer phrases come first so a shorter one cannot match inside them.
+ */
+const DESIGN_PAGE_COPY: ReadonlyArray<readonly [string, string]> = [
+  ['Open the Design system page for each one.', 'See each one under Deviance on this page.'],
+  ['Run it again from the Design system page.', 'Run the deviance check again on this page.'],
+  ['Run it from the Design system page.', 'Run the deviance check on this page.'],
+]
+
+function reasonOnDesignPage(reason: string): string {
+  return DESIGN_PAGE_COPY.reduce((text, [from, to]) => text.replace(from, to), reason)
+}
+
+/**
  * The server's element state only grades the deviance scan. When the token
  * lint below it lists problems, "OK · Code follows your design tokens" above
  * "Token issues · 200 found" is a contradiction (console audit 2026-10-20,
@@ -39,7 +56,7 @@ export function reconcileDesignState(
       reason: `${tokenIssueCount} token issue${tokenIssueCount === 1 ? '' : 's'} to fix in your token files (listed below); the code itself follows the tokens it has.`,
     }
   }
-  return { state: design.state, reason: design.reason }
+  return { state: design.state, reason: reasonOnDesignPage(design.reason) }
 }
 
 export function DesignStateBanner({ design, tokenIssueCount = 0 }: { design: DesignPlaneResponse; tokenIssueCount?: number }) {

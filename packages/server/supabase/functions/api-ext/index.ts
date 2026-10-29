@@ -12,7 +12,7 @@
  *          manifest and the surface-parity check keep reading them.
  *
  *          Routes here: CI runners, placement and the real bill (Plan 022), CI cost fix PRs
- *          (ADR 0047), inventory, Ask Mushi,
+ *          (ADR 0047) and their one-PR-per-repo bundles, inventory, Ask Mushi,
  *          verified fixes (Plan 024), known holes in dependencies (ADR 0038),
  *          the merge queue (ADR 0041), skill runs (ADR 0042), local review
  *          follow-ups for `mushi work` PRs (ADR 0032 amendment 2026-10-24),
@@ -20,7 +20,11 @@
  *          the tester marketplace (tester portal, public marketplace and
  *          roadmap, submission and redemption review, Tremendous webhook),
  *          the per-app Home, setup gaps and the release batch (console ops
- *          plan P1), and local workers (`mushi work --daemon`, ADR 0048).
+ *          plan P1), local workers (`mushi work --daemon`, ADR 0048), repo clean-up (ADR 0051)
+ *          fresh-eyes runs (ADR 0053), the public free Production Check and
+ *          scoreboard (docs /check and /proof, GTM plan November 2026), and the
+ *          cookieless landing page-view count with the daily GTM scorecard
+ *          (landing-visits.ts).
  */
 
 import { Hono } from 'npm:hono@4'
@@ -32,6 +36,7 @@ import { registerCiRoutes } from '../api/routes/ci.ts'
 import { registerCiPlacementRoutes } from '../api/routes/ci-placement.ts'
 import { registerCiBillRoutes } from '../api/routes/ci-bill.ts'
 import { registerCiCostFixRoutes } from '../api/routes/ci-cost-fix.ts'
+import { registerCiCostFixBundleRoutes } from '../api/routes/ci-cost-fix-bundle.ts'
 import { registerInventoryRoutes } from '../api/routes/inventory.ts'
 import { registerAskMushiRoutes } from '../api/routes/ask-mushi.ts'
 import { registerVerifyRoutes } from '../api/routes/verify.ts'
@@ -55,6 +60,11 @@ import { registerProjectHomeRoutes } from '../api/routes/project-home.ts'
 import { registerSetupGapsRoutes } from '../api/routes/setup-gaps.ts'
 import { registerReleaseBatchRoutes } from '../api/routes/release-batch.ts'
 import { registerWorkRoutes } from '../api/routes/work.ts'
+import { registerRepoHousekeepingRoutes } from '../api/routes/repo-housekeeping.ts'
+import { registerFreshEyesRoutes } from '../api/routes/fresh-eyes.ts'
+import { registerProductionCheckRoutes } from '../api/routes/production-check.ts'
+import { registerPublicScoreboardRoutes } from '../api/routes/public-scoreboard.ts'
+import { registerLandingVisitRoutes } from '../api/routes/landing-visits.ts'
 
 ensureSentry('api-ext')
 
@@ -70,6 +80,7 @@ registerCiRoutes(app)
 registerCiPlacementRoutes(app)
 registerCiBillRoutes(app)
 registerCiCostFixRoutes(app)
+registerCiCostFixBundleRoutes(app)
 registerVerifyRoutes(app)
 registerCodebaseUnderstandRoutes(app)
 registerModernizationHealthSuperRoutes(app)
@@ -91,6 +102,11 @@ registerProjectHomeRoutes(app)
 registerSetupGapsRoutes(app)
 registerReleaseBatchRoutes(app)
 registerWorkRoutes(app)
+registerRepoHousekeepingRoutes(app)
+registerFreshEyesRoutes(app)
+registerProductionCheckRoutes(app)
+registerPublicScoreboardRoutes(app)
+registerLandingVisitRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 

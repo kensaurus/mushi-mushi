@@ -1,11 +1,11 @@
 ---
 title: JavaScript bug reporting SDK for the browser
-description: Reference for @mushi-mushi/web, the browser SDK — screenshots, console and network capture, the Shadow DOM widget, sampling, beforeSend and privacy.
+description: Reference for @mushi-mushi/web, the Mushi Mushi browser SDK. Screenshots, console and network capture, the Shadow DOM widget, sampling, beforeSend and privacy.
 ---
 
 # `@mushi-mushi/web`
 
-Browser SDK: screenshots, console logs, network breadcrumbs, and a
+The Mushi Mushi browser SDK: screenshots, console logs, network breadcrumbs, and a
 report widget in a Shadow DOM so your CSS never leaks in or out.
 
 import { Callout } from 'nextra/components'
@@ -17,34 +17,35 @@ import { Callout } from 'nextra/components'
   [LogRocket Feedback](/migrations/logrocket-feedback-to-mushi),
   [BugHerd](/migrations/bugherd-to-mushi), and
   [Pendo Feedback](/migrations/pendo-feedback-to-mushi). Each maps the
-  competitor's API to the Mushi equivalent and includes an interactive
+  competitor's API to the Mushi Mushi equivalent and includes an interactive
   checklist.
 </Callout>
 
 See [Quickstart → Vanilla JS](/quickstart/web) for setup. Notable extras:
 
-- **XHR + fetch network capture** — the SDK patches both `XMLHttpRequest` and
+- **XHR + fetch network capture.** The SDK patches both `XMLHttpRequest` and
   `window.fetch` globally at `init()`. Every network request (including legacy
   jQuery/axios XHR calls) is captured as a `MushiNetworkEntry` and appears in
   the Network breadcrumbs tab. Calling `destroy()` removes the patches; if
   another APM tool (Sentry, Datadog) has since wrapped the same globals, the
   SDK detects the unsafe state and leaves the native references alone.
-- **`runtimeConfig: 'auto'`** — fetches console settings from `GET /v1/sdk/config`
+- **`runtimeConfig: 'auto'`** fetches console settings from `GET /v1/sdk/config`
   and merges them over host init. Host-wired banner and capture flags win over
   console defaults. See [Runtime config](/concepts/runtime-config).
-- **`proactive: { rageClick, errorBoundary, longTask, apiCascade, pageDwell, firstSession, cooldown }`** —
+- **`proactive: { rageClick, errorBoundary, longTask, apiCascade, pageDwell, firstSession, cooldown }`**:
   friction detectors that open the reporter contextually (rage clicks, error
   boundaries, long tasks, API cascades, page dwell, first session). Subscribe
   with `mushi.on('proactive:triggered', ({ data }) => …)` (`proactive:dismissed`
   fires on close) and cap frequency with `cooldown`.
-- **`beforeSend((report) => report | null)`** — last-mile transform after
+- **`beforeSend((report) => report | null)`**: last-mile transform after
   built-in PII scrub. Return `null` to drop the report client-side. Prefer
   this over the deprecated `beforeSendFeedback` (feedback-only).
-- **`sampleRate` / `replaySampleRate`** — probabilistic gates for automatic
+- **`sampleRate` / `replaySampleRate`**: probabilistic gates for automatic
   error reports and session replay (see below). User-initiated feedback is
   never sampled out.
-- **Built-in PII scrubber** — always on; masks emails, phones, SSNs,
-  credit-card-shaped strings, and JWTs. It has no init option. To remove
+- **Built-in PII scrubber**: always on; masks emails, phones, SSNs,
+  credit-card-shaped strings, JWTs and vendor API keys (see the
+  [pattern table](/sdks/core#pii-scrubbing-utilities-127)). It has no init option. To remove
   anything else, edit or drop the report in `beforeSend`.
 
 ---
@@ -83,7 +84,7 @@ Types live on `MushiConfig` in `@mushi-mushi/core`.
 
 When screenshot capture is enabled (`capture.screenshot: 'on-report'` or
 `'auto'`), the report screen shows a **visible preview** of the image that will
-be attached — not just a "Screenshot attached ✓" label. Reporters can **Remove**
+be attached, not just a "Screenshot attached ✓" label. Reporters can **Remove**
 the screenshot before submit and optionally read a **privacy caption** beneath
 the preview.
 
@@ -92,7 +93,7 @@ Mushi.init({
   projectId: '00000000-0000-0000-0000-000000000000', // UUID from Projects page
   apiKey: 'mushi_xxxxxxxxxxxxxxxxxxxxxxxxxxxx',        // report:write key
   widget: {
-    // true  → localized default caption (en/es/ja/th)
+    // true  → localized default caption (en/es/ja/th/zh)
     // string → your compliance copy verbatim
     // false → hide caption (preview + Remove still show)
     screenshotSensitiveHint: true,
@@ -102,10 +103,10 @@ Mushi.init({
 ```
 
 Tune the caption from the admin console (**Projects → SDK install → Screenshot
-privacy caption**) without rebuilding — it travels in `GET /v1/sdk/config` under
+privacy caption**) without rebuilding. It travels in `GET /v1/sdk/config` under
 `widget.screenshotSensitiveHint`.
 
-The preview stays in sync if the reporter uses **Mark up** (blur/highlight).
+The preview stays in sync if the reporter uses **Mark up** (highlight, blur, arrow).
 Keep `img-src data:` in your CSP when using screenshots on locked-down pages.
 See the [Next.js App Router + CSP recipe](/sdks/nextjs-app-router-csp).
 
@@ -117,7 +118,7 @@ Maintainer deep-dive:
 ## Runtime config merge (Jul 2026+)
 
 When `runtimeConfig` is `'auto'`, the SDK merges console settings from
-`GET /v1/sdk/config` over your `init()` config. Explicit host wiring wins — if
+`GET /v1/sdk/config` over your `init()` config. Explicit host wiring wins: if
 you set `widget: { trigger: 'banner' }`, a console default of `launcher: 'auto'`
 no longer hides the banner.
 
@@ -136,19 +137,14 @@ troubleshooting table. Maintainer deep-dive:
 Screenshot and element-picker buttons hide when that capture mode is unavailable
 (permission denied, unsupported browser, or disabled in config). When capture
 fails at runtime, the widget shows a short inline error instead of a dead button.
-
-Wire availability from host code when needed:
-
-```typescript
-mushi.setCaptureAvailability({ screenshot: true, element: false })
-```
+The SDK sets this availability itself; there is no public method to call.
 
 ---
 
 ## Description draft persistence
 
 Typed report text (description, email, follow-up reply) survives background panel
-re-renders — for example when runtime config refreshes or the route changes.
+re-renders, for example when runtime config refreshes or the route changes.
 Drafts clear on successful submit or when the reporter opens a new session.
 
 ---
@@ -170,9 +166,9 @@ if (user) {
 }
 ```
 
-`identify()` is idempotent — calling it again with the same `userId` updates
-the stored traits. Calling it with a new `userId` flushes any buffered events
-for the previous session first.
+`identify()` is idempotent: calling it again with the same `userId` and traits
+does nothing, and calling it with new traits updates them. Calling it with a
+different `userId` switches the identity used for later reports and activity.
 
 ### Enabling the Rewards program
 
@@ -186,10 +182,9 @@ const mushi = Mushi.init({
   apiKey: 'YOUR_API_KEY',
   rewards: {
     enabled: true,
-    trackActivity: true,        // auto-capture page_view, navigate, session_start
+    trackActivity: true,        // auto-capture first route visits and [data-testid] clicks
     consentMode: 'explicit',    // 'explicit' | 'auto'
     showInWidget: true,         // show tier + points in the bug-report widget
-    showNotifications: true,    // "+X pts" toast on each award
     flushIntervalMs: 300_000,   // how often to POST activity (min 30s)
   },
 })
@@ -199,17 +194,18 @@ const mushi = Mushi.init({
 
 | Action | Trigger |
 |--------|---------|
-| `session_start` | First SDK init after 30 min idle, capped 3×/day |
-| `page_view` | Every `history.pushState` / `popstate` event |
-| `navigate` | `<a>` clicks and programmatic router pushes |
-| `button_press` | Clicks on `[data-mushi-track]` or `[data-testid]` elements |
+| `screen_view_unique_per_day` | First visit to each route during the page session (`history.pushState`, `popstate`, or a DOM change under `<main>`). Despite the name, the SDK remembers visited routes in memory only, so a reload counts them again |
+| `element_selected` | Clicks on `[data-testid]` elements |
+
+With rewards enabled, the SDK also records `session_minute` once a minute
+while the page is open (up to 60 minutes a day), whether or not
+`trackActivity` is on. Nothing is sent until the user has opted in and
+`identify()` has been called.
 
 For custom actions:
 
 ```typescript
-mushi.submitActivity([
-  { action: 'lesson_complete', metadata: { lessonId: 'l_123', score: 0.9 } },
-])
+mushi.recordActivity('lesson_complete', { lessonId: 'l_123', score: 0.9 })
 ```
 
 ### Querying points & tier
@@ -277,7 +273,7 @@ SDK finishes initialising, so you never need to null-check the instance.
 ## Hash-routed SPAs (e.g. React Router `<HashRouter>`, Backbone, legacy apps)
 
 Hash-routed SPAs navigate via `location.hash` changes (`#/login`, `#/article/my-post`).
-The Mushi web SDK subscribes to `hashchange` automatically — every navigation is
+The Mushi Mushi web SDK subscribes to `hashchange` automatically, so every navigation is
 captured as a timeline entry. To group parametric routes in the **Inventory**,
 supply `/#/`-prefixed route templates:
 
@@ -304,7 +300,7 @@ dropped); otherwise it stores the plain pathname. History-based routes
 distinct in the Inventory and can be monitored independently.
 
 **Filter params** (e.g. `#/?tag=elixir&offset=10`) are stripped before the route
-template is matched — only the path segment after `#/` is matched.
+template is matched; only the path segment after `#/` is matched.
 
 **Without templates**, every unique hash path becomes its own Inventory row.
 For slug-heavy apps (articles, profiles, products) this inflates the Inventory;

@@ -6,7 +6,7 @@
  * docs and landing, dev.to cover) from the brand SSOT, so a tagline or license
  * change reaches the image the same way it reaches READMEs and npm:
  *
- *   hero     MUSHI_TAGLINE_V2.hero      "Your AI wrote it. Mushi tells you why it broke."
+ *   hero     MUSHI_TAGLINE_V2.hero      "Your AI wrote it. Mushi Mushi tells you why it broke."
  *   eyebrow  MUSHI_TAGLINE_V2.category
  *   lead     MUSHI_TAGLINE_V2.promise
  *   footer   MUSHI_CANONICAL_URLS.repo · MUSHI_OSS.license
@@ -43,7 +43,7 @@ const HEIGHT = 630
 const escapeHtml = (s) =>
   s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
 
-/** "Your AI wrote it. Mushi tells you why it broke." → ["Your AI wrote it.", "Mushi tells you why it broke."] */
+/** "Your AI wrote it. Mushi Mushi tells you why it broke." → ["Your AI wrote it.", "Mushi Mushi tells you why it broke."] */
 function splitHero(hero) {
   const cut = hero.indexOf('. ')
   if (cut < 0) return [hero, '']

@@ -40,6 +40,8 @@ export const SKILL_RUN_SKILLS: readonly SkillRunSkill[] = [
   { slug: 'audit-bundle-size', label: 'Bundle size', measure: 'the production JavaScript size of the app and of the routes in scope, from the build output' },
   { slug: 'backend-error-handling', label: 'Error handling', measure: 'errors in scope that are swallowed or never read (for example a supabase-js `{ error }` ignored), count before and after' },
   { slug: 'housekeep-dead-code', label: 'Dead code', measure: 'unused files, exports and dependencies in scope as Knip reports them' },
+  // Inventory only (the skill implements nothing); dependency bumps stay on the ADR 0019 / 0038 paths.
+  { slug: 'housekeep-backlog', label: 'Parked-work register', measure: 'docs/BACKLOG.md rows by status (open, verify-done, stale, closed) and the diff against the last regeneration: rows added, closed and newly stale, each with its source file' },
   { slug: 'test-unit', label: 'Unit tests', measure: 'tests and line coverage of the modules in scope' },
 ] as const
 

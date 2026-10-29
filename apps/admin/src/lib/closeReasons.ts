@@ -20,7 +20,7 @@ export interface CloseReason {
 }
 
 /** `reports.source` values Mushi files itself. Same set the API accepts. */
-const MUSHI_CHECK_SOURCES = new Set<string>(['site_audit', 'site_watch', 'security_advisory'])
+const MUSHI_CHECK_SOURCES = new Set<string>(['site_audit', 'site_watch', 'security_advisory', 'fresh_eyes', 'code_audit'])
 
 function isMushiCheckSource(source: string | null | undefined): boolean {
   return typeof source === 'string' && MUSHI_CHECK_SOURCES.has(source)

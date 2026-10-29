@@ -11,6 +11,14 @@
  * critical path.
  *
  * Reference: https://web.dev/articles/vitals
+ *
+ * web-vitals v6 can emit another sample on each soft navigation when
+ * `reportSoftNavs` is true. This console is a React Router SPA and the
+ * sample is attached to the current pageload span, so soft-nav reporting
+ * stays off and each vital remains a full-page-load measurement.
+ * `sendToSentry` forwards name, value, id, and rating from the standard
+ * build. The v6 attribution default (`includeProcessedEventEntries: false`)
+ * does not change that payload.
  */
 import { onCLS, onFCP, onINP, onLCP, onTTFB } from 'web-vitals'
 import * as Sentry from '@sentry/react'
@@ -57,9 +65,11 @@ function sendToSentry(metric: { name: string; value: number; id: string; rating?
  * call in main.tsx so this never runs before first paint.
  */
 export function reportWebVitals(): void {
-  onCLS(sendToSentry)
-  onFCP(sendToSentry)
-  onINP(sendToSentry)
-  onLCP(sendToSentry)
-  onTTFB(sendToSentry)
+  // Soft navigations stay off so client-side route changes keep the
+  // full-page-load numbers attached to the pageload span.
+  onCLS(sendToSentry, { reportSoftNavs: false })
+  onFCP(sendToSentry, { reportSoftNavs: false })
+  onINP(sendToSentry, { reportSoftNavs: false })
+  onLCP(sendToSentry, { reportSoftNavs: false })
+  onTTFB(sendToSentry, { reportSoftNavs: false })
 }

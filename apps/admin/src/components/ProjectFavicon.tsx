@@ -24,7 +24,8 @@ import { projectInitials, projectInitialsChipClass } from '../lib/resolveProject
  * violations before the initials fallback kicks in. Filter them up front.
  * Keep this list in sync with the CloudFront function's img-src directive.
  */
-function isCspLoadableImageUrl(url: string): boolean {
+/** @internal Exported for tests only. */
+export function isCspLoadableImageUrl(url: string): boolean {
   try {
     const u = new URL(url, window.location.href)
     if (u.protocol === 'data:' || u.protocol === 'blob:') return true
@@ -35,6 +36,10 @@ function isCspLoadableImageUrl(url: string): boolean {
       host === 'www.google.com' ||
       host.endsWith('.googleusercontent.com') ||
       host === 'avatars.githubusercontent.com' ||
+      // The owner's apps on their own subdomains (tsumagoi., solo-boss., talk.):
+      // img-src allows https://*.kensaur.us, so their icons load. Missing here,
+      // those apps showed initials instead of their favicon (2026-10-29).
+      (u.protocol === 'https:' && host.endsWith('.kensaur.us')) ||
       // App Store icons (projects.icon_url from _shared/app-icon.ts).
       host.endsWith('.mzstatic.com')
     )

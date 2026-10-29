@@ -125,6 +125,10 @@ export function ProjectsStatusBanner({ stats, activeTeamName, roleHint, onTab, o
     )
   }
 
+  // Healthy needs no banner: the Overview tab and the tiles say it, and the
+  // page said "All projects ingesting" up to three times (console sweep).
+  if (priority === 'healthy') return null
+
   return (
     <StatusBannerShell
       tone="ok"

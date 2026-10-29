@@ -75,9 +75,34 @@ const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 // revoke` is the local worker the console steers (heartbeat, claims, guards,
 // systemd unit and Windows task writers). No new dependencies, 32 files, no
 // source maps; the growth is that code, measured at cli 235.5/902.7 kB.
+//
+// Raised 2026-10-27 (ADR 0049, ADR 0050, ADR 0042 amendment): `mushi work
+// --daemon` runs conflicts lanes (merge the base in, check only conflicted
+// files changed, push a plain merge) and audit lanes (propose, reproduce with
+// a closed check, veto, file), parses claims by kind, and runProc no longer
+// hangs on a child holding its pipes. No new dependencies, 32 files, no
+// source maps; the growth is that code, measured at cli 249.7/935.6 kB.
+//
+// Raised 2026-10-27 (ADR 0047 amendment, "Apply to every app"): three MCP
+// tools, preview_ci_cost_fix_rollout, apply_ci_cost_fix_rollout and
+// get_ci_cost_fix_bundle, give one draft PR per repo its editor path (surface
+// parity). Their catalog descriptions ship in every built entry. No code
+// dependency change; measured at mcp 239.3/949.9 kB packed/unpacked.
+//
+// Raised 2026-10-28 (ADR 0053 amendment, ADR 0048 amendment): the local
+// worker runs the first-time user tests the console queues (claim, mushi-ux
+// on stdin, sync), sends what each run is doing in its heartbeat (stage, ages,
+// cleaned log lines, agent spaces, the Cursor and gh checks) for the worker
+// flags, and git commit/push stop after a time limit with their whole process
+// group. No new dependencies, no source maps; the growth is that code,
+// measured at cli 257.0/968.9 kB.
 export const BUDGETS = [
-  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 240_000, unpacked: 940_000 },
-  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 245_000, unpacked: 935_000 },
+  // 2026-10-28: 965 → 975 kB unpacked: the bundled docs index (search_mushi_docs)
+  // now carries the Free/Builder/Studio pricing and Production Check pages.
+  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 250_000, unpacked: 975_000 },
+  // 2026-10-28: packed 262 → 270 kB: release 5's version bump adds its CHANGELOG
+  // entries (the changelog ships in the tarball), measured 265.4 kB packed.
+  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 270_000, unpacked: 990_000 },
 ]
 
 const fmt = (n) => `${(n / 1000).toFixed(1)} kB`

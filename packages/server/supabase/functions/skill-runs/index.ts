@@ -8,7 +8,9 @@
  *   - no round yet, or the last round merged → file the next round as a
  *     classified report (source 'skill_run') with the task, the measurement
  *     and the skill's text from the synced catalog; spend-down sends it to
- *     the app's own Cursor key;
+ *     the app's own Cursor key, or, for a run on a local worker lane
+ *     (`lane_id`, ADR 0042 amendment), it goes into that lane's queue, which
+ *     spend-down leaves alone;
  *   - the round's PR has an Opus "merge" verdict and the run merges when
  *     ready → hand it to the merge queue (ADR 0041), whose gates decide;
  *   - the agent found nothing left → done; it needs a person, the code is in
@@ -25,7 +27,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { parsePrRepoRef } from '../_shared/fix-merge.ts'
 import { nextSkillRunStep, skillRunReport, skillRunSkill, type RoundHistory } from '../_shared/skill-runs.ts'
-import { reportHasActiveWorkClaim } from '../_shared/work-claims.ts'
+import { enqueueReports, reportHasActiveWorkClaim } from '../_shared/work-claims.ts'
 
 const log = rootLog.child('skill-runs')
 const LEASE_MS = 4 * 60_000
@@ -42,6 +44,8 @@ interface RunRow {
   current_report_id: string | null
   history: RoundHistory[] | null
   created_by: string | null
+  /** A local worker lane runs the rounds (ADR 0042 amendment); null = the cloud. */
+  lane_id: string | null
 }
 
 interface RoundAttempt {
@@ -96,6 +100,18 @@ async function fileRound(db: SupabaseClient, run: RunRow, history: RoundHistory[
   }).select('id').maybeSingle()
   if (error || !report) throw new Error(`round ${round} not filed: ${(error?.message ?? 'no row').slice(0, 160)}`)
   const reportId = (report as { id: string }).id
+  if (run.lane_id) {
+    // Into the lane's queue before anything else sees the round. When that
+    // fails the round is taken back and filed again next tick: a local run
+    // never falls through to a cloud agent.
+    const { data: lane } = await db.from('work_lanes').select('id, project_id, host_id').eq('id', run.lane_id).maybeSingle()
+    const l = lane as { id: string; project_id: string; host_id: string } | null
+    const q = l ? await enqueueReports(db, { id: l.id, projectId: l.project_id, hostId: l.host_id }, [reportId], { source: 'skill_run' }) : { error: 'the lane is gone' }
+    if ('error' in q) {
+      await db.from('reports').delete().eq('id', reportId)
+      throw new Error(`round ${round} not queued for its local lane: ${q.error.slice(0, 160)}`)
+    }
+  }
   await db.from('skill_runs').update({ round, current_report_id: reportId, updated_at: new Date().toISOString(), claimed_until: null }).eq('id', run.id)
   return reportId
 }
@@ -191,7 +207,7 @@ export async function processRun(db: SupabaseClient, run: RunRow): Promise<strin
 
 export async function runSkillRuns(db: SupabaseClient, runId?: string): Promise<Record<string, number>> {
   const nowIso = new Date().toISOString()
-  let q = db.from('skill_runs').select('id, project_id, skill_slug, scope, rounds_max, round, auto_merge, current_report_id, history, created_by, claimed_until').eq('status', 'active')
+  let q = db.from('skill_runs').select('id, project_id, skill_slug, scope, rounds_max, round, auto_merge, current_report_id, history, created_by, lane_id, claimed_until').eq('status', 'active')
   if (runId) q = q.eq('id', runId)
   const { data, error } = await q.order('updated_at', { ascending: true }).limit(RUNS_PER_TICK)
   if (error) throw new Error(`skill-runs read failed: ${error.message}`)

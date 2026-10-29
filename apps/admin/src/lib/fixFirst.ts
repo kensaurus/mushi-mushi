@@ -38,10 +38,15 @@ export function fixFirstOrder<T extends FixFirstInput>(reports: readonly T[], ma
     .slice(0, max)
 }
 
-/** "Where in the code does <bug> come from?" for the top open bugs: Code map's suggested questions. */
+/**
+ * "Where in the code does <bug> come from?" for the top open bugs: Code map's
+ * suggested questions. Bugs that share a title ask once (three "DbError:
+ * canceling statement…" reports made three identical chips, 2026-10-28).
+ */
 export function bugQuestions(reports: ReadonlyArray<FixFirstInput & { title?: string | null; summary?: string | null }>, max = 3): string[] {
-  return fixFirstOrder(reports, max)
+  const questions = fixFirstOrder(reports, reports.length)
     .map((r) => (r.title ?? r.summary ?? '').trim().replace(/\s+/g, ' '))
     .filter(Boolean)
     .map((t) => `Where in the code does "${t.length > 70 ? `${t.slice(0, 69)}…` : t}" come from?`)
+  return [...new Set(questions)].slice(0, max)
 }

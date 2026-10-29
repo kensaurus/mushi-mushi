@@ -634,10 +634,10 @@ export function LessonsPage() {
     route: '/lessons',
     title: projectName ? `Lessons · ${projectName}` : 'Lessons',
     summary: statsLoading
-      ? 'Loading lesson memory…'
+      ? 'Loading lessons…'
       : stats.activeLessons === 0 && stats.candidateClusters === 0
-        ? 'No clusters or lessons yet'
-        : `${stats.activeLessons} active · ${stats.candidateClusters} candidate clusters`,
+        ? 'No lessons or recurring patterns yet'
+        : `${stats.activeLessons} in use · ${stats.candidateClusters} recurring patterns`,
     criticalCount: stats.criticalLessons,
     questions: stats.activeLessons > 0
       ? [

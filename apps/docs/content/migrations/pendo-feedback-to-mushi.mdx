@@ -1,48 +1,52 @@
 ---
-title: 'Pendo Feedback → Mushi'
-description: Swap Pendo's feedback module for Mushi while keeping Pendo for analytics, guides and NPS — both share user identity through one identify call.
+title: 'Pendo Feedback → Mushi Mushi'
+description: Pendo retired classic Feedback on 2026-08-01. Move in-app feedback and bug reports to Mushi Mushi while keeping Pendo for analytics and guides.
 ---
 
-# Pendo Feedback → Mushi
+# Pendo Feedback → Mushi Mushi
 
 <EffortBadge level="Hours" /> <RiskBadge level="Low" />
 
-Pendo bundles **product analytics**, **in-app guides**, **NPS surveys**,
-and a **feedback module** in one suite. This guide swaps the **feedback
-module** to Mushi while you keep Pendo for everything else (analytics,
-guides, NPS) — the two tools share user identity via a single
-`identify` call.
-
 import { Callout } from 'nextra/components'
 
-<Callout type="info">
-  **You almost certainly want to keep Pendo.** Pendo's analytics + in-app
-  guides are best-in-class. Mushi just replaces the feedback inbox piece
-  — where Pendo is weakest.
+<Callout type="warning">
+  **Pendo retired classic Feedback on August 1, 2026.** Its replacement is
+  Pendo Listen. Pendo's notice says classic Feedback data could be
+  retrieved until **November 1, 2026** and is permanently deleted after
+  that; export it from Pendo settings if you still can. See
+  [Pendo&apos;s retirement notice](https://support.pendo.io/hc/en-us/articles/5092218184475-Overview-of-Pendo-classic-Feedback).
 </Callout>
+
+Pendo also covers **product analytics**, **in-app guides** and **NPS
+surveys**. This guide moves in-app feedback and bug reports to Mushi Mushi
+while you keep Pendo for the rest. The two tools share user identity
+through one identify function.
 
 ## Why switch (the feedback piece)
 
-- **AI triage built-in.** Pendo Feedback requires manual review or
-  third-party tooling for triage. Mushi's two-stage classifier handles it.
-- **Reproduction context.** Mushi captures console + network +
-  screenshot + DOM snapshot per report. Pendo Feedback is form-based —
-  the user types what's wrong, you guess at the rest.
-- **Self-host + open source.** Pendo is enterprise SaaS; Mushi SDKs are MIT, the server is AGPLv3 — true OSI open source.
-- **Engineering-friendly inbox.** Mushi's admin console is built for devs
-  triaging issues; Pendo's is built for product managers ranking ideas.
+- **AI triage built in.** Mushi's two-stage classifier categorises and
+  prioritises each report.
+- **Reproduction context.** Mushi captures console, network, a screenshot
+  and a DOM summary with each report, so you aren't relying on the user's
+  description alone.
+- **Self-host and open source.** Mushi SDKs are MIT and the server is
+  AGPLv3.
+- **Built for developers.** Mushi's console is for triaging and fixing
+  bugs; it also has a feature board where reporters vote on ideas.
 
 ## API mapping
 
-| Pendo | Mushi |
-|-------|-------|
-| `pendo.initialize({ visitor: { id, email } })` | `Mushi.init({ projectId, apiKey })` + `Mushi.setUser({ id, email })` |
-| `pendo.identify(visitor, account)` | `Mushi.setUser({ id, ...visitor })` + metadata for account |
-| `pendo.track('event', props)` | `Mushi.setMetadata({ lastEvent: 'event', ...props })` |
-| `pendo.feedback.show()` | `Mushi.openWidget()` |
-| Pendo Feedback ideas board | Mushi Reports inbox (filter by category=`feature_request`) |
+`const mushi = Mushi.init({...})` returns the instance used below.
 
-## Recipe: keep Pendo for analytics + guides; use Mushi for feedback
+| Pendo | Mushi Mushi |
+|-------|-------|
+| `pendo.initialize({ visitor: { id, email } })` | `const mushi = Mushi.init({ projectId, apiKey })` + `mushi.setUser({ id, email })` |
+| `pendo.identify(visitor, account)` | `mushi.setUser({ id, email, name })` + `mushi.setMetadata('accountId', account.id)` |
+| `pendo.track('event', props)` | For repro context on the next report: `mushi.addBreadcrumb({ category: 'custom', level: 'info', message: 'event' })`. For product analytics: `mushi.track('event_name', props)` (names must be `snake_case`; not attached to reports) |
+| A button that opened classic Feedback | `mushi.open()`, or the Mushi launcher (a floating button on desktop, an edge tab on phones) |
+| Feedback ideas board | Mushi [feature board](/admin/feature-board) (reporters vote), or Reports filtered to feature requests |
+
+## Recipe: keep Pendo for analytics + guides; use Mushi Mushi for feedback
 
 ```ts
 import { Mushi } from '@mushi-mushi/web'
@@ -53,22 +57,18 @@ window.pendo.initialize({
   account: { id: 'acme-corp' },
 })
 
-Mushi.init({
+const mushi = Mushi.init({
   projectId: 'YOUR_PROJECT_ID',
   apiKey:    'YOUR_PUBLIC_KEY',
-  widget:    { trigger: 'button' },
 })
 
 // 2. Mirror identity
-Mushi.setUser({ id: 'user-42', email: 'jane@example.com' })
-Mushi.setMetadata({ accountId: 'acme-corp' })
-
-// 3. Hide Pendo's feedback button (you can keep its other UI)
-window.pendo.disableGuides?.({ category: 'feedback' })
+mushi.setUser({ id: 'user-42', email: 'jane@example.com' })
+mushi.setMetadata('accountId', 'acme-corp')
 ```
 
-Now Pendo handles analytics + product guides; Mushi handles feedback
-intake + triage.
+Now Pendo handles analytics and product guides; Mushi handles feedback
+intake and triage.
 
 ## Migration checklist
 
@@ -79,41 +79,39 @@ intake + triage.
     { id: 'install', label: 'Install Mushi alongside Pendo', content: <pre className="text-xs">{`npm install @mushi-mushi/web
 # Or @mushi-mushi/react if you're on React`}</pre> },
     { id: 'mount-mushi', label: 'Initialise Mushi in your app entry', content: <pre className="text-xs">{`import { Mushi } from '@mushi-mushi/web'
-Mushi.init({ projectId: '...', apiKey: '...' })`}</pre> },
-    { id: 'mirror-identity', label: 'Mirror pendo.identify into Mushi.setUser', content: <pre className="text-xs">{`function identifyEverywhere(visitor, account) {
+const mushi = Mushi.init({ projectId: '...', apiKey: '...' })`}</pre> },
+    { id: 'mirror-identity', label: 'Mirror pendo.identify into mushi.setUser', content: <pre className="text-xs">{`function identifyEverywhere(visitor, account) {
   window.pendo.identify(visitor, account)
-  Mushi.setUser({ id: visitor.id, email: visitor.email, name: visitor.name })
-  Mushi.setMetadata({ accountId: account.id, plan: account.plan })
+  mushi.setUser({ id: visitor.id, email: visitor.email, name: visitor.name })
+  mushi.setMetadata('accountId', account.id)
+  mushi.setMetadata('plan', account.plan)
 }`}</pre> },
-    { id: 'mirror-track', label: 'Mirror critical pendo.track calls into Mushi metadata', content: <>You don't need to mirror every event — just the last few "what was the user doing" breadcrumbs that help reproduction. Mushi's auto-capture covers most of it.</> },
-    { id: 'disable-pendo-feedback', label: 'Hide the Pendo Feedback widget', content: <>Either via <code>{`window.pendo.disableGuides({ category: 'feedback' })`}</code> or by removing the Feedback module from your Pendo subscription.</> },
-    { id: 'export-old', label: 'Export historical Pendo Feedback ideas (optional)', content: <>If you want continuity, export your existing feedback as CSV from Pendo's UI and import into Mushi as one-off reports. Most teams skip this — historical feedback rarely gets re-triaged.</> },
-    { id: 'update-runbooks', label: 'Update internal runbooks', content: <>"Where do feedback requests live?" → Mushi admin console. Send a 1-line note to PMs / CS / engineering.</> },
+    { id: 'mirror-track', label: 'Mirror critical pendo.track calls as Mushi breadcrumbs', content: <>You don&apos;t need to mirror every event, only the few &quot;what was the user doing&quot; steps that help reproduction: <code>{`mushi.addBreadcrumb({ category: 'custom', level: 'info', message: 'checkout_started' })`}</code>. Mushi&apos;s auto-capture covers most of the rest.</> },
+    { id: 'disable-pendo-feedback', label: 'Remove links and buttons that opened classic Feedback', content: <>Pendo says entry points to the old Feedback portal break once it is retired. Point them at <code>mushi.open()</code> instead.</> },
+    { id: 'export-old', label: 'Export historical classic Feedback data (if it is still available)', content: <>Pendo&apos;s notice says classic Feedback data could be retrieved until November 1, 2026 and is deleted after that. If you still can, request the export from Pendo settings.</> },
+    { id: 'update-runbooks', label: 'Update internal runbooks', content: <>"Where do feedback requests live?" → Mushi admin console. Send a one-line note to PMs, CS and engineering.</> },
     { id: 'verify', label: 'Submit a test report and verify pipeline', content: <>Click the Mushi widget, submit a report, verify it appears in the admin console with the right user identity attached.</> },
   ]}
 />
 
 ## Feature parity
 
-| Capability | Pendo Feedback | Mushi |
+| Capability | Pendo | Mushi Mushi |
 |------------|---------------|-------|
-| User-triggered report widget | ✅ | ✅ |
-| Console + network capture | ❌ (form only) | ✅ |
-| Screenshot capture | ❌ | ✅ (web) |
-| AI triage | ❌ | ✅ |
-| Idea voting / merging | ✅ | ❌ — flat report inbox |
-| Customer-facing roadmap | ✅ | ❌ |
-| Product analytics | ✅ (Pendo core) | ❌ |
-| In-app guides / tooltips | ✅ (Pendo core) | ❌ |
-| NPS surveys | ✅ (Pendo core) | ❌ |
-| Self-host | ❌ | ✅ |
-| Open source | ❌ | ✅ |
+| In-app feedback | Classic Feedback retired 2026-08-01; Pendo Listen replaces it | ✅ (widget) |
+| Console + network capture | not checked | ✅ |
+| Screenshot capture | not checked | ✅ |
+| Idea voting | ✅ | ✅ (feature board) |
+| Product analytics | ✅ | ✅ (basic, from `mushi.track()`) |
+| In-app guides / tooltips | ✅ | ❌ |
+| NPS surveys | ✅ | ❌ |
+| Self-host | not checked | ✅ |
 
-The takeaway: **keep Pendo for analytics, guides, and NPS; switch the
-feedback module to Mushi**. Most customers find this combination strictly
-better than running either tool alone.
+The takeaway: **keep Pendo for analytics, guides and NPS; send feedback
+and bug reports to Mushi**.
 
 ## References
 
 - [Mushi web SDK](/sdks/web)
 - [Pendo identify API](https://support.pendo.io/hc/en-us/articles/360031862272-Install-Pendo-on-a-single-page-web-application)
+- [Pendo: classic Feedback retirement](https://support.pendo.io/hc/en-us/articles/5092218184475-Overview-of-Pendo-classic-Feedback)

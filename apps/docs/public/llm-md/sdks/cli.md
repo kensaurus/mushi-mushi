@@ -4,13 +4,13 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/cli
 
 ---
 title: '@mushi-mushi/cli'
-description: Reference for @mushi-mushi/cli — log in, connect a project, run doctor, list reports, dispatch agent fixes and merge their pull requests from the terminal.
+description: Reference for @mushi-mushi/cli, the Mushi Mushi CLI. Log in, connect a project, run doctor, list reports, dispatch agent fixes and merge their pull requests.
 ---
 
 # `@mushi-mushi/cli`
 
-Project setup, report triage, agentic fix dispatch, QA coverage, skill pipelines, and
-headless merge — all from the terminal.
+The Mushi Mushi CLI: project setup, report triage, agentic fix dispatch, QA
+coverage, skill pipelines, and headless merge from the terminal.
 
 ```bash
 npm install -g @mushi-mushi/cli
@@ -25,7 +25,7 @@ mushi fixes merge <fixId>          # squash-merge the PR + mark report Fixed
 
   **Two key types:** SDK ingest keys (`report:write`) are minted on **Setup → Verify** or
   **Projects → Generate API key**. Admin / MCP keys (`mcp:read` or `mcp:write`) are also
-  minted on Projects — use `mcp:write` for fix dispatch, merge, and most CLI admin commands.
+  minted on Projects; use `mcp:write` for fix dispatch, merge, and most CLI admin commands.
   **Settings → API Keys (BYOK)** is for your own LLM/Firecrawl keys, not Mushi credentials.
 
 ---
@@ -52,7 +52,7 @@ Console URL resolution: `MUSHI_CONSOLE_URL` → saved config → localhost `:646
 | `mushi init` | Wizard: prerequisite step, framework detect, install SDK, write `.env.local`, whoami verify, optional test report |
 | `mushi connect` | Non-interactive: config + env (default) + Cursor MCP (default) + optional `--wait` heartbeat |
 | `mushi login` | Save credentials to the CLI config file: `~/.config/mushi/config.json`, or `%APPDATA%\mushi\config.json` on Windows ([full order](#config-file); legacy `~/.mushirc` auto-migrates) |
-| `mushi setup` | Wire Cursor/Claude MCP from saved config — **not** SDK install (run `login` first) |
+| `mushi setup` | Wire Cursor/Claude MCP from saved config; **not** SDK install (run `login` first) |
 | `mushi whoami` | Verify API key and show project info |
 | `mushi ping` | Backend connectivity probe |
 | `mushi config` | View or update CLI config |
@@ -77,7 +77,7 @@ mushi doctor --json           # machine-readable; exits 1 if any check fails
 ```
 
 `--host-app` (also included in `--full`) scans your source for hash-routed SPAs
-— `HashRouter`, `createHashRouter`, `location.hash`, `hashchange` — and, when it
+(`HashRouter`, `createHashRouter`, `location.hash`, `hashchange`) and, when it
 finds them, advises adding `/#/`-prefixed `discoverInventory.routeTemplates` to
 your `Mushi.init()` so parametric hash routes group in the Inventory instead of
 inflating it one row per slug. It's advisory only (never fails the run) and
@@ -202,7 +202,7 @@ mushi fix $REPORT_ID --agent cursor_cloud --wait && echo "Fix PR opened"
 
 ### `mushi fixes`
 
-Headless fix lifecycle — pairs with `mushi fix --wait`.
+Headless fix lifecycle; pairs with `mushi fix --wait`.
 
 ```bash
 # Stream dispatch SSE events (no browser)
@@ -229,7 +229,7 @@ mushi fixes verify <fixId> --json
 console). Requires GitHub App or PAT connected and an API key with `mcp:write`.
 
 When merge succeeds, the report moves to **Fixed**, the reporter gets notified, and
-`fix.applied` webhooks fire — identical to merging on GitHub or via the admin console.
+`fix.applied` webhooks fire, the same as merging on GitHub or via the admin console.
 
 ### `mushi work`
 
@@ -307,9 +307,21 @@ every lane on the machine. A lane is one app and one clone of its repo.
 Every minute it sends a heartbeat. The answer holds each lane's settings, set
 in the console: its model, mode, how many reports at once, paused, drain and a
 stop date, plus the machine's guards (agents at once, a free-memory floor, a
-GitHub API floor). The daemon then runs review follow-ups first, and claims
-reports: the lane's queue first, then the worst open reports. While a lane
-holds a report, no cloud agent is sent to it. Every outcome goes back to
+GitHub API floor). The daemon then works by each lane's mode:
+
+| Mode | What the lane does |
+| --- | --- |
+| `fix` | Runs review follow-ups first, then claims reports: the lane's queue first, then the worst open reports |
+| `followups` | Review follow-ups only |
+| `conflicts` | Merges the base branch into a merge-queue PR of the clone's repository at the commit Mushi saw; the agent may change only the conflicted files; refused on a leftover marker or any other change; commits with your hooks and pushes the merge, fast-forward only |
+| `audit` | A model (read-only) proposes bugs for one screen with the line, the code there and a check; the machine runs the check itself and files only what reproduces; a second model may only veto |
+| `skill` | Only the rounds of skill runs started with this lane on Spend credits |
+
+Whatever its mode (except `followups`), a lane first takes a **first-time user test**
+someone started with Run now in the console: it runs `mushi-ux fresh-eyes` on this
+machine and the console follows it live. The heartbeat tells the lane within a minute.
+
+While a lane holds a report, no cloud agent is sent to it. Every outcome goes back to
 Mushi; a failure of the machine (a clone permission, the network, a hook that
 timed out under load) is kept apart from a failure of the code and never
 counts against the report.
@@ -319,8 +331,8 @@ counts against the report.
 mushi worker install --lane my-app --project <projectId> --repo-dir ~/code/my-app --dry-run
 mushi worker install --lane my-app --project <projectId> --repo-dir ~/code/my-app
 
-# Import lanes.conf from the lane-v4 scripts (name profile clone projectId model mode)
-mushi worker install --lanes-conf ~/mushi-credits-handoff/lanes.conf --clone-root ~/.cache/mushi-work
+# Import an existing lanes.conf (columns: name profile clone projectId model mode)
+mushi worker install --lanes-conf ~/lanes.conf --clone-root ~/.cache/mushi-work
 
 # A worker key made in the console instead of with your CLI login
 mushi worker install --lanes-conf lanes.conf --key-stdin --yes < worker.key
@@ -340,14 +352,27 @@ stay on your machine), stores a worker key in the OS keychain (or
 `~/.config/mushi/worker.key`, mode 0600, where there is none), and writes the
 service: a systemd user unit (`mushi-worker.service`) on Linux and WSL2, a
 scheduled task that starts at logon on Windows. From `lanes.conf`, `queue` and
-`fix` become `fix`, `off` becomes a paused lane, and the profile column is
-dropped: one worker key serves every app.
+`fix` become `fix`, `followups`, `conflicts`, `audit` and `skill` stay as they
+are, `off` becomes a paused lane, and the profile column is dropped: one worker
+key serves every app. The heartbeat names each lane's repository (`owner/name`
+from its `origin` remote) so a conflicts lane takes only that repository's
+PRs; the clone's path never leaves the machine.
 
 The worker key has the scope `worker:run`: it can take reports for its lanes,
 record their fixes and file reports, and nothing else. It cannot merge, change
 settings or read keys. `install` makes one with your CLI login (which needs
 `mcp:write` on every lane's app), or takes one from stdin. The daemon refuses
 your CLI key. The agent gets neither key.
+
+`mushi worker status` starts with what stops your workers from fixing bugs, the
+same list as the console's Workers tab, worst first: a run stuck in a repo's
+commit or pre-push hook (with its stage and last log lines), an offline
+machine, a Cursor account check that failed or timed out, lanes waiting for an
+agent space (one coding agent at a time; each machine allows a set number),
+`gh` signed out, idle credits. Each comes with what to do. It exits with code 2
+while one of them needs you now. The worker sends the stage and log lines with
+its heartbeat; keys, tokens and paths are removed and e-mail addresses masked
+before anything leaves the machine.
 
 | Command | Flags |
 | --- | --- |
@@ -481,6 +506,23 @@ mushi repo diagram unpublish --yes
 `publish` shows where the page will go before it publishes. It sends the hash
 of exactly what the preview showed, so a diagram that changed in between is
 refused. A private repo can only be published from the console.
+
+### Clean up branches and pull requests
+
+```bash
+mushi repo cleanup show [--stale-days 14]       # branches and fix PRs Mushi opened that can go, with why and the commit
+mushi repo cleanup request delete-branches --repo owner/app [--keys branch:a,branch:b]
+mushi repo cleanup request close-prs --repo owner/app [--keys pr:12]
+mushi repo cleanup request auto-delete --repo owner/app   # turn on GitHub's "Automatically delete head branches"
+mushi repo cleanup restore <itemId>…            # bring back a branch Mushi deleted, at the commit it kept
+```
+
+Only branches and pull requests Mushi itself opened are listed: a branch whose
+pull request merged or closed and that still points at that pull request's last
+commit, or an open fix PR that a newer fix replaced, that the Opus review held,
+or that got no new commit for 14 days. The CLI only asks. A team owner or admin
+approves the exact list in the console (Repo → Clean up) within an hour, and
+Mushi checks every item again before it deletes or closes anything.
 
 ---
 
