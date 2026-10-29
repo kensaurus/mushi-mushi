@@ -1,12 +1,7 @@
 /**
- * Project slugs and the project insert that picks a free one.
- *
- * `projects.slug` is unique across every account, but it comes from the name
- * a person types. On 2026-10-29 a first-time user test showed two new
- * accounts both naming their app "My SaaS App" (the console's own
- * placeholder): the second got a 500 DB_ERROR (23505 on projects_slug_key)
- * and could not create an app at all. The readable slug is tried first; on a
- * slug collision only, a short random tail is added and the insert retried.
+ * Project slugs. `projects.slug` is unique across every account, so a name
+ * someone else used ("My SaaS App", 2026-10-29) gets a short random tail on
+ * collision instead of a 500 (23505 projects_slug_key).
  */
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 
