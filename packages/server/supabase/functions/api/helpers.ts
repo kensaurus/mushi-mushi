@@ -34,6 +34,13 @@ import {
   NON_REAL_REPORT_SOURCES,
   type OldestReportRow,
 } from '../_shared/first-report.ts';
+import {
+  isActivationCandidate,
+  isFirstActivationCandidate,
+  type ActivationCandidateRow,
+} from '../_shared/activation.ts';
+import { reportOriginFilter } from '../_shared/report-origin.ts';
+import { emitFunnelStep, funnelStepMemo } from '../_shared/funnel-steps.ts';
 
 // Company funnel: projects whose first_report_received check already ran in
 // this isolate. Bounds the lookups to once per project per isolate; the
@@ -731,6 +738,48 @@ export async function ingestReport(
       })().catch((err: unknown) =>
         log.warn('first_report_received emit failed (non-fatal)', { projectId, err: String(err) }),
       ), 'first_report_received');
+    }
+  }
+
+  // New-user path (plan-simplicity Phase 0): `first_real_report` = the
+  // project's first end-user report from a deployed app, the rule activation.ts
+  // uses (not a localhost test bug, not a console fixture or a hand-filed
+  // report). first_report_received above stays as it is: it also counts a
+  // test bug from a dev server, which is the step this one separates.
+  // The pure check runs first, so most reports never reach the database.
+  {
+    const candidate: ActivationCandidateRow = {
+      id: reportId,
+      source: null, // reports.source defaults to 'widget' on this path
+      custom_metadata: enrichedMetadata,
+      url: typeof report.environment?.url === 'string' ? report.environment.url : null,
+    };
+    if (isActivationCandidate(candidate) && funnelStepMemo.claim('first_real_report', projectId)) {
+      runInBackground((async () => {
+        // Only end-user reports from a deployed app are read, so 50 rows of
+        // localhost test bugs cannot push the first live one out of the window.
+        const deployed = reportOriginFilter('deployed');
+        let query = db
+          .from('reports')
+          .select('id, source, custom_metadata, url:environment->>url')
+          .eq('project_id', projectId)
+          .in('source', ['widget', 'sdk']);
+        if (deployed?.kind === 'or') query = query.or(deployed.clause);
+        const { data: earliest, error: earliestErr } = await query
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })
+          .limit(50);
+        if (earliestErr) {
+          funnelStepMemo.release('first_real_report', projectId);
+          throw new Error(`first_real_report lookup failed: ${earliestErr.message}`);
+        }
+        if (!isFirstActivationCandidate((earliest ?? []) as ActivationCandidateRow[], reportId)) return;
+        await emitFunnelStep(db, {
+          step: 'first_real_report',
+          projectId,
+          properties: { report_id: reportId, sdk_package: report.sdkPackage ?? null },
+        });
+      })(), 'first_real_report');
     }
   }
 

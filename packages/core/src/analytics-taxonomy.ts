@@ -79,6 +79,20 @@ export const MUSHI_EVENTS = {
   // app (not a dev server) that got a diagnosis (_shared/activation.ts).
   activated: { surface: 'server', required: ['project_id'] },
   fix_merged: { surface: 'server', required: ['project_id'] },
+  // New-user path, once per project each (dedup key '<event>:<project id>',
+  // _shared/funnel-steps.ts; docs/plan-simplicity-2026-10.md Phase 0).
+  // sdk_seen_*: the first SDK check-in from a dev machine / from a live site
+  // or store app. first_real_report: the first end-user report from a
+  // deployed app (activation.ts isActivationCandidate), stricter than
+  // first_report_received, which also counts a test bug from localhost.
+  // first_diagnosis_viewed: the first diagnosis a person saw in the console
+  // (today the first-run sample diagnosis, the setup step diagnosis_viewed).
+  sdk_seen_localhost: { surface: 'server', required: ['project_id', 'origin_kind'] },
+  sdk_seen_live: { surface: 'server', required: ['project_id', 'origin_kind'] },
+  first_real_report: { surface: 'server', required: ['project_id', 'report_id'] },
+  first_diagnosis_viewed: { surface: 'server', required: ['project_id'] },
+  first_fix_dispatched: { surface: 'server', required: ['project_id', 'report_id'] },
+  first_fix_merged: { surface: 'server', required: ['project_id', 'report_id'] },
   upgrade_completed: { surface: 'server', required: ['project_id', 'plan'] },
   repo_digest_created: { surface: 'server', required: ['project_id'] },
   repo_diagram_generated: { surface: 'server', required: ['project_id'] },

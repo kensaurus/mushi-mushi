@@ -29,7 +29,7 @@ import { log } from '../../_shared/logger.ts'
 import { fetchWithTimeout } from '../../_shared/http.ts'
 import { runInBackground } from '../../_shared/background.ts'
 import { mintInstallationAccess, parseGithubRepoUrl, resolveProjectGithubToken, type GithubRepoRef } from '../../_shared/github.ts'
-import { loadFollowupSettings } from '../../_shared/review-followup-db.ts'
+import { readFollowupKeyGap } from '../../_shared/setup-gap-followup.ts'
 import {
   abilitiesFromClassicScopes,
   abilitiesFromInstallation,
@@ -39,7 +39,6 @@ import {
   countByStatus,
   createTtlCache,
   deployGap,
-  followupKeyGap,
   forAudience,
   githubAccessGap,
   noRepoGap,
@@ -152,7 +151,9 @@ export const defaultSetupGapsDeps: SetupGapsDeps = {
     await res.body?.cancel().catch(() => {})
     return { status: res.status, scopes: res.headers.get('x-oauth-scopes') }
   },
-  readDispatchers,
+  // Looked up when called, not when this module loads, so a module that only
+  // reads stored answers (Home, through health-checks.ts) can import this one.
+  readDispatchers: (...args) => readDispatchers(...args),
 }
 
 function within<T>(p: PromiseLike<T>, what: string, ms = CHECK_MS): Promise<T> {
@@ -261,22 +262,9 @@ async function githubGaps(db: Db, projectId: string, deps: SetupGapsDeps): Promi
   return out
 }
 
-async function followupGap(db: Db, project: DispatcherProject): Promise<SetupGap> {
-  try {
-    if (!project.organization_id) {
-      return followupKeyGap({ projectId: project.id, settings: { enabled: false, offReason: null, keyId: null } })
-    }
-    const settings = await within(loadFollowupSettings(db as never, project.organization_id), 'follow-up settings')
-    let keyStatus: string | null | undefined
-    if (settings.enabled && settings.keyId) {
-      const { data, error } = await within(db.from('byok_keys').select('status').eq('id', settings.keyId).maybeSingle(), 'follow-up key')
-      if (error) throw new Error(error.message)
-      keyStatus = (data as { status: string } | null)?.status ?? null
-    }
-    return followupKeyGap({ projectId: project.id, settings, keyStatus })
-  } catch (err) {
-    return { ...followupKeyGap({ projectId: project.id, settings: null }), summary: `Mushi could not read the review follow-up settings (${why(err)}).` }
-  }
+/** The shared read (setup-gap-followup.ts), with this route's deadline and wording of a failed read. */
+function followupGap(db: Db, project: DispatcherProject): Promise<SetupGap> {
+  return readFollowupKeyGap(db as never, project, { within: (p, what) => within(p, what), why })
 }
 
 async function dispatchGap(db: Db, project: DispatcherProject, now: Date, deps: SetupGapsDeps): Promise<SetupGap> {
@@ -354,6 +342,61 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
   return out
 }
 
+export interface LoadSetupGapsOptions {
+  /** Re-check now (not more than once a minute per app). */
+  refresh?: boolean
+  /**
+   * false: never wait for a live check. An app with no answer under a day old
+   * is checked in the background and left out of this answer (Home uses this,
+   * so it never waits on GitHub). Default true.
+   */
+  waitForLive?: boolean
+}
+
+/**
+ * Each app's setup gaps: this isolate's cache, else the stored answer (under
+ * 10 minutes as is, under a day shown and re-checked in the background), else
+ * a live check. Callers check access first. Shared by GET /v1/admin/setup-gaps
+ * and GET /v1/admin/health-checks (health-checks.ts route).
+ */
+export async function loadSetupGaps(db: Db, projects: DispatcherProject[], deps: SetupGapsDeps = defaultSetupGapsDeps, opts: LoadSetupGapsOptions = {}): Promise<ProjectGaps[]> {
+  const refresh = opts.refresh === true
+  const waitForLive = opts.waitForLive !== false
+  const nowMs = deps.now().getTime()
+  const stored = refresh ? new Map<string, { value: ProjectGaps; at: number }>() : await readStored(db, projects.map((p) => p.id))
+  const checkAndStore = async (p: DispatcherProject): Promise<ProjectGaps> => {
+    const fresh = await checkProject(db, p, deps)
+    cache.set(p.id, fresh, deps.now().getTime())
+    await storeResult(db, fresh)
+    return fresh
+  }
+  const inBackground = (p: DispatcherProject) => {
+    if (refreshing.has(p.id)) return
+    refreshing.add(p.id)
+    runInBackground(checkAndStore(p).finally(() => refreshing.delete(p.id)), 'setup-gaps-refresh')
+  }
+  const results = await mapLimit(projects, PROJECT_CONCURRENCY, async (p): Promise<ProjectGaps | null> => {
+    const hit = cache.get(p.id, nowMs)
+    if (hit && (!refresh || nowMs - hit.at < REFRESH_MIN_MS)) return hit.value
+    const last = stored.get(p.id)
+    if (last && nowMs - last.at < SETUP_GAPS_CACHE_MS) {
+      cache.set(p.id, last.value, last.at)
+      return last.value
+    }
+    if (last && nowMs - last.at < STORED_STALE_MAX_MS) {
+      // Show the last answer now; the next visit sees the re-check.
+      inBackground(p)
+      return last.value
+    }
+    if (!waitForLive) {
+      inBackground(p)
+      return null
+    }
+    return await checkAndStore(p)
+  })
+  return results.filter((r): r is ProjectGaps => r !== null)
+}
+
 export function registerSetupGapsRoutes(app: Hono<{ Variables: Variables }>, deps: SetupGapsDeps = defaultSetupGapsDeps): void {
   app.get('/v1/admin/setup-gaps', jwtAuth, async (c: Ctx) => {
     const db = getServiceClient()
@@ -376,33 +419,7 @@ export function registerSetupGapsRoutes(app: Hono<{ Variables: Variables }>, dep
     const { data: projectRows, error } = await db.from('projects').select('id, name, organization_id, owner_id').in('id', ids)
     if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
     const projects = (projectRows ?? []) as DispatcherProject[]
-    const refresh = c.req.query('refresh') === '1'
-    const nowMs = deps.now().getTime()
-    const stored = refresh ? new Map<string, { value: ProjectGaps; at: number }>() : await readStored(db, projects.map((p) => p.id))
-    const checkAndStore = async (p: DispatcherProject): Promise<ProjectGaps> => {
-      const fresh = await checkProject(db, p, deps)
-      cache.set(p.id, fresh, deps.now().getTime())
-      await storeResult(db, fresh)
-      return fresh
-    }
-    const results = await mapLimit(projects, PROJECT_CONCURRENCY, async (p) => {
-      const hit = cache.get(p.id, nowMs)
-      if (hit && (!refresh || nowMs - hit.at < REFRESH_MIN_MS)) return hit.value
-      const last = stored.get(p.id)
-      if (last && nowMs - last.at < SETUP_GAPS_CACHE_MS) {
-        cache.set(p.id, last.value, last.at)
-        return last.value
-      }
-      if (last && nowMs - last.at < STORED_STALE_MAX_MS) {
-        // Show the last answer now; the next visit sees the re-check.
-        if (!refreshing.has(p.id)) {
-          refreshing.add(p.id)
-          runInBackground(checkAndStore(p).finally(() => refreshing.delete(p.id)), 'setup-gaps-refresh')
-        }
-        return last.value
-      }
-      return await checkAndStore(p)
-    })
+    const results = await loadSetupGaps(db, projects, deps, { refresh: c.req.query('refresh') === '1' })
     const all = results.flatMap((r) => r.gaps)
     slog.info('setup gaps read', { projects: results.length, ...countByStatus(all) })
     return c.json({

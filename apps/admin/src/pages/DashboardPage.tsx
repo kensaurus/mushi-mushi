@@ -177,7 +177,7 @@ export function DashboardPage() {
           </div>
 
           <div className="grid gap-3 lg:grid-cols-2 [&>*]:min-w-0">
-            <NeedsYouCard section={data.needsYou} partial={data.partial} />
+            <NeedsYouCard section={data.needsYou} fixFirst={data.fixFirst} partial={data.partial} />
             <ReleaseCard section={data.release} projectId={activeProjectId} />
           </div>
 

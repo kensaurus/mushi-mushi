@@ -2385,6 +2385,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         ingest: z.unknown().optional(),
         dispatch: z.unknown().optional(),
         connection: z.unknown().optional(),
+        health: z.unknown().optional(),
       }),
     },
     async (args) => {
@@ -2546,17 +2547,33 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           apiLog.warn('diagnose_setup dispatch preflight failed', { error: detail });
         }
       }
+      // The app's Health check: the same root causes the console's "Fix these first" shows.
+      let health: HealthCheckSummary | null = null;
+      if (resolvedId) {
+        try {
+          const h = await apiCall<{ projects: Array<HealthCheckSummary & { projectId: string }> }>(
+            `/v1/admin/health-checks?projectId=${encodeURIComponent(resolvedId)}`,
+          );
+          const p = h.projects?.[0];
+          if (p) health = { fixFirst: p.fixFirst ?? [], counts: p.counts };
+        } catch {
+          // Best-effort: an older server has no Health check route.
+        }
+      }
       const ingestFailed = ingest.steps.filter((s) => s.required && !s.complete);
       const ingestBlock = ingestFailed[0]?.hint;
       const connOk = connIssues.length === 0;
       const ready = connOk && ingest.ready && dispatchReady;
+      const rootCause = health?.fixFirst[0];
       const nextAction = !connOk
         ? (connIssues[0]?.fix ?? 'Fix the connection issue above.')
         : !ingest.ready
           ? (ingestBlock ?? 'Complete SDK ingest setup.')
           : !dispatchReady
             ? (dispatchBlock ?? 'Complete dispatch preflight in Settings → Integrations.')
-            : 'All setup checks pass — submit a test report to confirm end-to-end.';
+            : rootCause
+              ? fixFirstAction(rootCause)
+              : 'All setup checks pass — submit a test report to confirm end-to-end.';
       const summary = ready
         ? 'Mushi connection, ingest, and dispatch setup look healthy.'
         : !connOk
@@ -2578,6 +2595,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         },
         ingest: { ready: ingest.ready, steps: ingest.steps },
         dispatch: resolvedId ? { ready: dispatchReady, checks: dispatchChecks } : null,
+        ...(health ? { health } : {}),
       });
     },
   );
@@ -5707,6 +5725,19 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
 }
 
 /** Tools that work before an API key exists: they read only the public docs. */
+/** The Health check's root causes for an app (GET /v1/admin/health-checks). */
+interface HealthCheckSummary {
+  fixFirst: Array<{ title: string; detail: string; affects?: number | null; fix?: { label: string; to?: string } | null }>;
+  counts?: unknown;
+}
+
+/** "Fix first: <title>. <detail> (<fix> in the console at <page>)" for diagnose_setup's nextAction. */
+function fixFirstAction(c: HealthCheckSummary['fixFirst'][number]): string {
+  const waiting = c.affects && c.affects > 0 ? ` ${c.affects} waiting on this.` : '';
+  const fix = c.fix ? ` (${c.fix.label}${c.fix.to ? ` in the console at ${c.fix.to}` : ''})` : '';
+  return `Fix first: ${c.title}. ${c.detail}${waiting}${fix}`;
+}
+
 export const SETUP_MODE_TOOLS = ['search_mushi_docs', 'get_mushi_doc', 'diagnose_setup'] as const;
 
 export const MUSHI_CONSOLE_URL = 'https://kensaur.us/mushi-mushi/admin';

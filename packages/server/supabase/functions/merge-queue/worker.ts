@@ -25,6 +25,7 @@ import {
 } from '../_shared/merge-queue.ts'
 import { isCursorKeyLimitError } from '../_shared/spend-down.ts'
 import { conflictRowAfterRun, conflictSlotBack } from '../_shared/work-modes.ts'
+import { OFF_GATE, pauseReason, type HealthGate } from '../_shared/health-gate.ts'
 
 const log = rootLog.child('merge-queue')
 const LEASE_MS = 4 * 60_000
@@ -71,6 +72,12 @@ export interface MergeQueueDeps {
   requeueReview: typeof requeueReviewForNewHead
   /** Release trains (ADR 0044); absent → every app merges PR by PR. */
   train?: Omit<TrainDeps, 'pull' | 'checks' | 'updateBranch' | 'ready' | 'finalize' | 'requeueReview' | 'now'>
+  /**
+   * The health gate (ADR 0054, Proposed); absent = off. It can only withhold:
+   * a paused app's train tick, a PR's turn, or a new conflict agent waits for
+   * a later tick. It never sits around `merge` / `train.trainMerge`.
+   */
+  healthGate?: HealthGate
 }
 
 export interface AttemptRow {
@@ -358,6 +365,13 @@ async function resolve(
     await set({ state: 'blocked', detail: `Merge conflict: ${MAX_CONFLICT_AGENTS} agent runs did not resolve it. Resolve it on GitHub.`, head_sha: head })
     return 'blocked'
   }
+  // Stop the line: a conflict agent runs on the follow-up key; while a Health
+  // check stops follow-ups for this app, the row waits instead of failing.
+  const health = await (deps.healthGate ?? OFF_GATE).check(row.project_id, 'followups')
+  if (health.withhold) {
+    await set({ detail: `Merge conflict; waits for a conflict agent. ${pauseReason(health)}`.slice(0, 500), head_sha: head })
+    return 'conflict_health_paused'
+  }
   const key = await deps.cursorKey(db, row.project_id)
   if (!key.ok) {
     await set({ state: 'blocked', detail: `Merge conflict. ${key.reason}`, head_sha: head })
@@ -461,6 +475,7 @@ export function pickConflictRows<T extends { repo: string; cursor_agent_id: stri
 
 export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, projectId?: string): Promise<Record<string, number>> {
   const now = deps.now ?? (() => new Date())
+  const gate = deps.healthGate ?? OFF_GATE
   const nowIso = now().toISOString()
   let q = db.from('fix_merge_queue').select(ROW_COLUMNS).in('state', ['queued', 'waiting', 'resolving', 'blocked'])
   if (projectId) q = q.eq('project_id', projectId)
@@ -489,6 +504,12 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
     for (const [repo, repoRows] of byRepo) {
       if (repos.has(repo)) continue
       const lead = repoRows[0]
+      // Stop the line: a Health check that stops the train for this app (GitHub
+      // access) leaves the repo's rows queued for a later tick.
+      if ((await gate.check(lead.project_id, 'train')).withhold) {
+        tally.train_health_paused = (tally.train_health_paused ?? 0) + 1
+        continue
+      }
       const until = new Date(now().getTime() + LEASE_MS).toISOString()
       const { data: claimed } = await db.from('fix_merge_queue').update({ claimed_until: until }).eq('id', lead.id).or(`claimed_until.is.null,claimed_until.lt.${nowIso}`).select('id')
       if (!claimed || (claimed as unknown[]).length === 0) continue
@@ -535,6 +556,12 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
   }
   const trainResolving = new Set(conflictWork.map((r) => r.id))
   for (const row of [...picked, ...conflictWork]) {
+    // A PR's turn on the single-PR path is the train's admission for that app;
+    // a train app's conflict row is gated where its agent would start (resolve).
+    if (!trainResolving.has(row.id) && (await gate.check(row.project_id, 'train')).withhold) {
+      tally.health_paused = (tally.health_paused ?? 0) + 1
+      continue
+    }
     const until = new Date(now().getTime() + LEASE_MS).toISOString()
     // Compare-and-set on the local claim too: a lane that claimed the row after
     // this tick read it (ADR 0049) wins, and this tick leaves the row alone.
