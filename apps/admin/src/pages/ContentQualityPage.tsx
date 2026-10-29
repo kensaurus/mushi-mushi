@@ -308,7 +308,9 @@ export function ContentQualityPage() {
           aria-label="Search content key"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="w-full sm:w-64"
+          // The toolbar sizes the label, not the input. w-64 fits about 21
+          // characters of this field, so the phrase ended mid-word.
+          containerClassName="w-full shrink-0 sm:w-80"
         />
         <FilterSelect
           label="statuses"
