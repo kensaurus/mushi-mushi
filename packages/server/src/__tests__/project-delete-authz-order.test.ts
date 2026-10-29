@@ -9,6 +9,8 @@
  *   failure answered 403 (or bootstrapped a personal org on create).
  * - countRowsPerProject can filter to live file rows (no symbol chunks or
  *   tombstones) for the "indexed files" count.
+ * - Creating a project whose name derives a slug another project already
+ *   uses (`projects_slug_key`) allocates the next free slug instead of 500.
  */
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
@@ -107,6 +109,28 @@ describe('POST /v1/admin/projects', () => {
       body: JSON.stringify({ name: 'New app' }),
     })
     expect(res.status).toBe(500)
+  })
+
+  it('a name whose slug is already taken gets the next free slug', async () => {
+    userId = 'admin'
+    const OTHER = '6000000a-0000-4000-8000-000000000000'
+    db = makeFakeDb(
+      {
+        projects: [{ id: P, name: 'Taken', slug: 'my-saas-app', organization_id: OTHER, owner_id: 'owner' }],
+        organization_members: [{ organization_id: ORG, user_id: 'admin', role: 'admin', created_at: '2026-01-01' }],
+        organizations: [{ id: ORG, plan_id: 'free_cloud' }],
+      },
+      { autoId: true, uniques: { projects: ['slug'] } },
+    )
+    const res = await app.request('/v1/admin/projects', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-mushi-org-id': ORG },
+      body: JSON.stringify({ name: 'My SaaS App' }),
+    })
+    const body = await res.json()
+    expect(res.status).toBe(201)
+    expect(body.data.slug).toBe('my-saas-app-2')
+    expect(db.table('projects').map((p) => p.slug).sort()).toEqual(['my-saas-app', 'my-saas-app-2'])
   })
 })
 

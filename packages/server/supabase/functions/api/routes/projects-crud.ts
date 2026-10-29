@@ -21,6 +21,7 @@ import { appLimitDenial } from '../../_shared/plan-app-limit.ts';
 import { failedFixPreviews, loadRecentFixTruths } from '../../_shared/fix-report-truth-load.ts';
 import { projectCapabilities } from '../../_shared/project-capabilities.ts';
 import { freshestHeartbeat, isSdkKey, loadProjectCounts } from '../../_shared/setup-signals.ts';
+import { insertProjectAllocatingSlug } from '../../_shared/project-slug.ts';
 
 /**
  * Exact report count per project, one `head: true` count query each. Never
@@ -983,58 +984,36 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       }
     }
 
-    // Slug derivation:
-    //   1. Lowercase, collapse non-alphanumerics to '-', trim leading /
-    //      trailing dashes — the historical shape.
-    //   2. If the user typed something like "!!!" or all-emoji that
-    //      reduces to an empty string, fall back to a short random tail
-    //      so we never write an empty slug. Empty slugs broke the slug
-    //      UNIQUE constraint as soon as a second emoji-named project
-    //      landed AND surfaced in the URL as `/projects//settings`,
-    //      which the React Router stopped resolving cleanly.
-    //   3. Cap the length at 48 chars so the slug fits in the URL bar
-    //      and in the audit log without truncation. Random suffixes
-    //      append AFTER the trim so a long-name + collision retry
-    //      below stays under the column cap.
-    let slug = name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 48);
-    if (!slug) {
-      slug = `project-${crypto.randomUUID().slice(0, 8)}`;
-    }
-    const { data, error } = await db
-      .from('projects')
-      .insert({
-        name: name.trim(),
-        slug,
-        owner_id: userId,
-        organization_id: organizationId,
-      })
-      .select('id')
-      .single();
-
-    if (error) return dbError(c, error);
+    // Slug is global (`projects_slug_key`). A second "My SaaS App" used to
+    // 500 with DbError 23505. The helper inserts the plain slug, then
+    // -2…-11, then random tails, and stops on any error that is not that
+    // unique key. `error` is always an object, including when the insert
+    // returns no row and no PostgREST error.
+    const created = await insertProjectAllocatingSlug(db, {
+      name: name.trim(),
+      owner_id: userId,
+      organization_id: organizationId,
+    });
+    if (!created.ok) return dbError(c, created.error);
+    const { id: projectId, slug } = created;
 
     // Company funnel (mushi-self): fire-and-forget, never on the response path.
     void emitProductEvent(db, {
       userId,
       eventName: 'project_created',
       surface: 'server',
-      properties: { project_id: data.id, source: 'console' },
-      dedupKey: `project_created:${data.id}`,
+      properties: { project_id: projectId, source: 'console' },
+      dedupKey: `project_created:${projectId}`,
     });
 
-    await db.from('project_settings').insert({ project_id: data.id });
+    await db.from('project_settings').insert({ project_id: projectId });
     // Membership is the source-of-truth for "can this user dispatch fixes /
     // see traces / etc". Without this row the owner can read via owner_id but
     // member-gated endpoints (fixes/dispatch) reject them. Always seed.
     await db
       .from('project_members')
       .upsert(
-        { project_id: data.id, user_id: userId, role: 'owner' },
+        { project_id: projectId, user_id: userId, role: 'owner' },
         { onConflict: 'project_id,user_id' },
       );
 
@@ -1055,7 +1034,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       const keyId = crypto.randomUUID();
       const { error: keyInsertErr } = await db.from('project_api_keys').insert({
         id: keyId,
-        project_id: data.id,
+        project_id: projectId,
         key_hash: keyHash,
         key_prefix: prefix,
         label: 'sdk-ingest',
@@ -1070,12 +1049,12 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
           userId,
           eventName: 'key_minted',
           surface: 'server',
-          properties: { project_id: data.id, label: 'sdk-ingest', scopes: 'report:write' },
+          properties: { project_id: projectId, label: 'sdk-ingest', scopes: 'report:write' },
           dedupKey: `key_minted:${keyId}`,
         });
         void logAudit(
           db,
-          data.id,
+          projectId,
           userId,
           'api_key.created',
           'project_api_key',
@@ -1090,7 +1069,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
 
     // apiKeyId lets the success panel rotate exactly this key (QA #31).
     return c.json(
-      { ok: true, data: { id: data.id, slug, apiKey: autoKey, keyPrefix: autoKeyPrefix, apiKeyId: autoKeyId } },
+      { ok: true, data: { id: projectId, slug, apiKey: autoKey, keyPrefix: autoKeyPrefix, apiKeyId: autoKeyId } },
       201,
     );
   });
