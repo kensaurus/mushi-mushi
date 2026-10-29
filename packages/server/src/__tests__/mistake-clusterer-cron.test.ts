@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createFakeDb, eqValue, findQueries } from './__stubs__/fake-query-recorder.ts'
+import { createFakeDb, eqValue, findQueries, hasFilter } from './__stubs__/fake-query-recorder.ts'
 import { log } from '../../supabase/functions/_shared/logger.ts'
 import { handleMistakeClusterer } from '../../supabase/functions/mistake-clusterer/index.ts'
 
@@ -99,6 +99,74 @@ function coherenceRequest() {
   })
 }
 
+type Recorded = ReturnType<typeof createFakeDb>['queries']
+
+/** Updates that stamp updated_at so a skipped project leaves the front of the queue. */
+function deferUpdates(queries: Recorded) {
+  return findQueries(queries, 'mistake_clusters', 'update').filter((q) => {
+    const payload = q.payload as { updated_at?: unknown } | undefined
+    return typeof payload?.updated_at === 'string' && hasFilter(q, 'eq', 'project_id')
+  })
+}
+
+function rowMatches(
+  row: Record<string, unknown>,
+  filters: Array<{ method: string; args: unknown[] }>,
+): boolean {
+  for (const f of filters) {
+    if (f.method === 'eq' && row[String(f.args[0])] !== f.args[1]) return false
+    if (f.method === 'gte' && Number(row[String(f.args[0])]) < Number(f.args[1])) return false
+    if (f.method === 'in') {
+      const list = f.args[1]
+      if (!Array.isArray(list) || !list.includes(row[String(f.args[0])])) return false
+    }
+  }
+  return true
+}
+
+/**
+ * Applies the candidate select's order and limit, and a skip's updated_at
+ * stamp, the way Postgres would. Rows stay in the caller's array.
+ */
+function queueDb(rows: Array<Record<string, unknown> & { id: string; updated_at: string }>) {
+  return createFakeDb((q) => {
+    if (q.op === 'rpc') return { data: [] }
+    if (q.table === 'mistake_clusters' && q.op === 'select') {
+      const selected = rows.filter((r) => rowMatches(r, q.filters)).map((r) => ({ ...r }))
+      const order = q.filters.find((f) => f.method === 'order' && f.args[0] === 'updated_at')
+      if (order) {
+        const ascending = (order.args[1] as { ascending?: boolean } | undefined)?.ascending !== false
+        selected.sort((a, b) => {
+          const cmp = String(a.updated_at).localeCompare(String(b.updated_at))
+          return ascending ? cmp : -cmp
+        })
+      }
+      const limit = q.filters.find((f) => f.method === 'limit')
+      const n = typeof limit?.args[0] === 'number' ? limit.args[0] : selected.length
+      return { data: selected.slice(0, n) }
+    }
+    if (q.table === 'mistake_clusters' && q.op === 'update') {
+      const stamp = (q.payload as { updated_at?: unknown } | undefined)?.updated_at
+      if (typeof stamp === 'string') {
+        for (const row of rows) {
+          if (rowMatches(row, q.filters)) row.updated_at = stamp
+        }
+      }
+      return { data: null }
+    }
+    if (q.table === 'report_cluster_membership') {
+      return {
+        data: [{
+          report_id: 'r1',
+          distance: 0.01,
+          reports: { title: 'Back', description: 'Inset', category: 'layout', severity: 'warn' },
+        }],
+      }
+    }
+    return { data: null }
+  })
+}
+
 const serverRoot = resolve(__dirname, '../..')
 const migration = readFileSync(
   join(serverRoot, 'supabase/migrations/20261007142000_mistake_clusterer_cron.sql'),
@@ -150,35 +218,17 @@ describe('mistake_clusterer_unclustered()', () => {
   })
 })
 
-describe('coherence judge without a model key', () => {
-  it('skips the project instead of failing the judge', () => {
-    // projectLlmKey returns null when nothing is configured and when the
-    // monthly budget is spent. Either used to throw "No Anthropic key for
-    // this project", which the outer catch logged as a judge failure.
-    expect(source).toMatch(/reason: skipReason/)
-    expect(source).toMatch(/'no_llm_key'/)
-    expect(source).toMatch(/'budget_exhausted'/)
-    expect(source).toMatch(/coherence judge skipped/)
-    expect(source).toMatch(/skippedNoKey\.add\(projectId\)/)
-    expect(source).not.toMatch(/No Anthropic key for this project/)
-    expect(source).toMatch(/log\.error\('coherence judge failed'/)
-  })
-
-  it('keeps the unreachable result check as a type guard', () => {
-    expect(source).toMatch(/if \(!result\) continue/)
-    expect(source).toMatch(/Type guard only/)
-  })
-})
-
 describe('coherence judge skip path', () => {
   beforeEach(() => {
     judge.claude.length = 0
     judge.key = null
     vi.spyOn(log, 'info').mockImplementation(() => {})
+    vi.spyOn(log, 'warn').mockImplementation(() => {})
     vi.spyOn(log, 'error').mockImplementation(() => {})
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
   })
 
@@ -208,6 +258,21 @@ describe('coherence judge skip path', () => {
     expect(vi.mocked(log.info).mock.calls).toEqual([
       ['coherence judge skipped', { scope: 'mistake-clusterer', projectId: NO_KEY, reason: 'no_llm_key' }],
     ])
+    expect(vi.mocked(log.warn).mock.calls).toEqual([
+      ['coherence judge skipped projects', { scope: 'mistake-clusterer', skippedProjects: 1 }],
+    ])
+    const candidateSelect = findQueries(queries, 'mistake_clusters', 'select')
+      .find((q) => hasFilter(q, 'gte', 'cluster_size'))
+    expect(candidateSelect?.filters).toEqual(expect.arrayContaining([
+      { method: 'order', args: ['updated_at', { ascending: true }] },
+      { method: 'limit', args: [20] },
+    ]))
+    // Every judgeable candidate of the skipped project, not just this row.
+    expect(deferUpdates(queries).map((q) => eqValue(q, 'project_id'))).toEqual([NO_KEY])
+    expect(deferUpdates(queries)[0]?.filters).toEqual(expect.arrayContaining([
+      { method: 'eq', args: ['status', 'candidate'] },
+      { method: 'gte', args: ['cluster_size', 3] },
+    ]))
     // The second cluster of the skipped project is not resolved again.
     expect(calls.filter((c) => c.startsWith(`${NO_KEY}:`))).toEqual([
       `${NO_KEY}:anthropic`,
@@ -216,8 +281,9 @@ describe('coherence judge skip path', () => {
     expect(calls).toContain(`${KEYED}:anthropic`)
     expect(judge.claude).toHaveLength(1)
     const updates = findQueries(queries, 'mistake_clusters', 'update')
-    expect(updates.map((q) => eqValue(q, 'id'))).toEqual(['c-keyed'])
-    expect(updates[0]?.payload).toMatchObject({ judge_coherence_score: 0.9, name: 'same-bug' })
+    const judged = updates.filter((q) => hasFilter(q, 'eq', 'id'))
+    expect(judged.map((q) => eqValue(q, 'id'))).toEqual(['c-keyed'])
+    expect(judged[0]?.payload).toMatchObject({ judge_coherence_score: 0.9, name: 'same-bug' })
   })
 
   it('logs budget_exhausted for a spent monthly budget and still judges the rest', async () => {
@@ -242,7 +308,113 @@ describe('coherence judge skip path', () => {
     expect(vi.mocked(log.info).mock.calls).toEqual([
       ['coherence judge skipped', { scope: 'mistake-clusterer', projectId: BUDGET, reason: 'budget_exhausted' }],
     ])
+    expect(vi.mocked(log.warn).mock.calls).toEqual([
+      ['coherence judge skipped projects', { scope: 'mistake-clusterer', skippedProjects: 1 }],
+    ])
+    expect(deferUpdates(queries).map((q) => eqValue(q, 'project_id'))).toEqual([BUDGET])
     const updates = findQueries(queries, 'mistake_clusters', 'update')
-    expect(updates.map((q) => eqValue(q, 'id'))).toEqual(['c-keyed'])
+    expect(updates.filter((q) => hasFilter(q, 'eq', 'id')).map((q) => eqValue(q, 'id'))).toEqual(['c-keyed'])
+  })
+
+  it('warns once per run with the number of skipped projects', async () => {
+    const other = 'project-no-key-2'
+    judge.key = async (projectId, provider, onMiss) => {
+      if (projectId === NO_KEY || projectId === other) {
+        onMiss?.('unconfigured')
+        return null
+      }
+      if (provider === 'anthropic') return { key: 'sk-ant-test', source: 'byok', hint: 'test' }
+      onMiss?.('unconfigured')
+      return null
+    }
+
+    const { db, queries } = coherenceDb(candidateRows([
+      { id: 'c-no-1', projectId: NO_KEY },
+      { id: 'c-no-2', projectId: NO_KEY },
+      { id: 'c-other', projectId: other },
+      { id: 'c-keyed', projectId: KEYED },
+    ]))
+    const res = await handleMistakeClusterer(coherenceRequest(), db)
+
+    expect(res.status).toBe(200)
+    expect(vi.mocked(log.error).mock.calls).toEqual([])
+    expect(vi.mocked(log.info).mock.calls).toEqual([
+      ['coherence judge skipped', { scope: 'mistake-clusterer', projectId: NO_KEY, reason: 'no_llm_key' }],
+      ['coherence judge skipped', { scope: 'mistake-clusterer', projectId: other, reason: 'no_llm_key' }],
+    ])
+    // One summary, not one warning per cluster or per project.
+    expect(vi.mocked(log.warn).mock.calls).toEqual([
+      ['coherence judge skipped projects', { scope: 'mistake-clusterer', skippedProjects: 2 }],
+    ])
+    expect(deferUpdates(queries).map((q) => eqValue(q, 'project_id'))).toEqual([NO_KEY, other])
+  })
+
+  it('does not warn when every candidate has a key', async () => {
+    judge.key = async () => ({ key: 'sk-ant-test', source: 'byok', hint: 'test' })
+    const { db, queries } = coherenceDb(candidateRows([{ id: 'c-keyed', projectId: KEYED }]))
+    const res = await handleMistakeClusterer(coherenceRequest(), db)
+
+    expect(res.status).toBe(200)
+    expect(vi.mocked(log.warn).mock.calls).toEqual([])
+    expect(vi.mocked(log.info).mock.calls).toEqual([])
+    expect(deferUpdates(queries)).toEqual([])
+  })
+
+  it('judges a keyed project on the next run when keyless candidates fill this page', async () => {
+    // Forty keyless clusters are older than the keyed one. A page of 20
+    // that only stamps the rows it saw still leaves 20 keyless clusters
+    // in front, so the keyed project never reaches the limit.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-01T00:00:00.000Z'))
+    const keyless = Array.from({ length: 40 }, (_, i) => ({
+      id: `c-no-${i}`,
+      project_id: NO_KEY,
+      status: 'candidate',
+      cluster_size: 3,
+      severity_distribution: { warn: 3 },
+      name: null,
+      updated_at: `2026-01-01T00:00:${String(i).padStart(2, '0')}.000Z`,
+    }))
+    const rows = [
+      ...keyless,
+      {
+        id: 'c-keyed',
+        project_id: KEYED,
+        status: 'candidate',
+        cluster_size: 3,
+        severity_distribution: { warn: 3 },
+        name: null,
+        updated_at: '2026-01-02T00:00:00.000Z',
+      },
+    ]
+    judge.key = async (projectId, provider, onMiss) => {
+      if (projectId === NO_KEY) {
+        onMiss?.('unconfigured')
+        return null
+      }
+      if (provider === 'anthropic') return { key: 'sk-ant-test', source: 'byok', hint: 'test' }
+      onMiss?.('unconfigured')
+      return null
+    }
+
+    const { db, queries } = queueDb(rows)
+    const first = await handleMistakeClusterer(coherenceRequest(), db)
+    expect(first.status).toBe(200)
+    expect(await first.json()).toMatchObject({ ok: true, promoted: 0, coherenceRan: true })
+    expect(judge.claude).toHaveLength(0)
+    expect(vi.mocked(log.warn).mock.calls).toEqual([
+      ['coherence judge skipped projects', { scope: 'mistake-clusterer', skippedProjects: 1 }],
+    ])
+    // The whole keyless project moved behind the keyed cluster.
+    expect(rows.filter((r) => r.project_id === NO_KEY).every((r) => r.updated_at === '2026-06-01T00:00:00.000Z')).toBe(true)
+    expect(rows.find((r) => r.id === 'c-keyed')?.updated_at).toBe('2026-01-02T00:00:00.000Z')
+
+    const second = await handleMistakeClusterer(coherenceRequest(), db)
+    expect(second.status).toBe(200)
+    expect(await second.json()).toMatchObject({ ok: true, promoted: 1, coherenceRan: true })
+    expect(judge.claude).toHaveLength(1)
+    expect(vi.mocked(log.error).mock.calls).toEqual([])
+    const judged = findQueries(queries, 'mistake_clusters', 'update').filter((q) => hasFilter(q, 'eq', 'id'))
+    expect(judged.map((q) => eqValue(q, 'id'))).toEqual(['c-keyed'])
   })
 })
