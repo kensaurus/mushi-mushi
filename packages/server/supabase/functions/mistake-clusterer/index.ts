@@ -16,9 +16,10 @@
  *       - read top-5 reports
  *       - LLM judge rates semantic coherence 0-1
  *       - if coherence ≥ 0.75 → promote to lessons (calls mistake-summarizer)
- *     A project with no Anthropic key and no OpenAI/OpenRouter key, or one
- *     over its monthly AI budget, is skipped. projectLlmKey returns null for
- *     both; that is not a judge failure.
+ *     A project with no Anthropic key and no OpenAI/OpenRouter key is skipped
+ *     (`no_llm_key`). One over its monthly AI budget is skipped
+ *     (`budget_exhausted`). projectLlmKey returns null for both and reports
+ *     which via onMiss. Neither is a judge failure.
  *
  * Cost discipline: every LLM call writes an llm_invocations row (recordLlmUsage).
  */
@@ -33,7 +34,7 @@ import { log } from '../_shared/logger.ts'
 import { MISTAKE_EFFORT, MISTAKE_MODEL, OPENAI_PRIMARY } from '../_shared/models.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { recordLlmUsage } from '../_shared/llm-usage.ts'
-import { projectLlmKey } from '../_shared/project-llm-key.ts'
+import { projectLlmKey, type ProjectLlmKeyMiss } from '../_shared/project-llm-key.ts'
 
 // Cosine distance threshold for cluster assignment (≤ = assign, > = new cluster)
 const ASSIGN_DISTANCE = 0.18
@@ -96,276 +97,289 @@ function cosineDistance(a: number[], b: number[]): number {
   return 1 - dot / (Math.sqrt(normA) * Math.sqrt(normB))
 }
 
-Deno.serve(
-  withSentry(async (req: Request) => {
-    if (req.method !== 'POST') {
-      return new Response('Method Not Allowed', { status: 405 })
-    }
+export async function handleMistakeClusterer(
+  req: Request,
+  db: ReturnType<typeof getServiceClient> = getServiceClient(),
+): Promise<Response> {
+  if (req.method !== 'POST') {
+    return new Response('Method Not Allowed', { status: 405 })
+  }
 
-    const authErr = requireServiceRoleAuth(req)
-    if (authErr) return authErr
+  const authErr = requireServiceRoleAuth(req)
+  if (authErr) return authErr
 
-    const db = getServiceClient()
+  // ─── Step 1: Incremental clustering of new embeddings ───────────────────
 
-    // ─── Step 1: Incremental clustering of new embeddings ───────────────────
+  // Find unprocessed embeddings (not yet in report_cluster_membership).
+  // A NOT EXISTS in SQL: passing a query builder to .not('report_id', 'in', …)
+  // sent the filter `not.in.[object Object]` and failed every run.
+  const { data: unprocessed, error: fetchErr } = await db
+    .rpc('mistake_clusterer_unclustered', { p_limit: MAX_REPORTS_PER_RUN })
 
-    // Find unprocessed embeddings (not yet in report_cluster_membership).
-    // A NOT EXISTS in SQL: passing a query builder to .not('report_id', 'in', …)
-    // sent the filter `not.in.[object Object]` and failed every run.
-    const { data: unprocessed, error: fetchErr } = await db
-      .rpc('mistake_clusterer_unclustered', { p_limit: MAX_REPORTS_PER_RUN })
+  if (fetchErr) {
+    log.error('fetch error', { scope: 'mistake-clusterer', err: fetchErr.message })
+    return new Response(JSON.stringify({ error: fetchErr.message }), { status: 500 })
+  }
 
-    if (fetchErr) {
-      log.error('fetch error', { scope: 'mistake-clusterer', err: fetchErr.message })
-      return new Response(JSON.stringify({ error: fetchErr.message }), { status: 500 })
-    }
+  let assigned = 0
+  let created = 0
 
-    let assigned = 0
-    let created = 0
+  const rows = (unprocessed ?? []) as UnclusteredRow[]
+  for (const row of rows) {
+    const reportId = row.report_id
+    const projectId = row.project_id
+    const severity = row.severity ?? 'warn'
+    const embedding = parseVector(row.embedding)
 
-    const rows = (unprocessed ?? []) as UnclusteredRow[]
-    for (const row of rows) {
-      const reportId = row.report_id
-      const projectId = row.project_id
-      const severity = row.severity ?? 'warn'
-      const embedding = parseVector(row.embedding)
+    // Load existing candidate clusters for this project
+    const { data: clusters } = await db
+      .from('mistake_clusters')
+      .select('id, centroid, cluster_size, severity_distribution')
+      .eq('project_id', projectId)
+      .neq('status', 'retired')
+      .limit(500)
 
-      // Load existing candidate clusters for this project
-      const { data: clusters } = await db
-        .from('mistake_clusters')
-        .select('id, centroid, cluster_size, severity_distribution')
-        .eq('project_id', projectId)
-        .neq('status', 'retired')
-        .limit(500)
+    let bestClusterId: string | null = null
+    let bestDistance = Infinity
 
-      let bestClusterId: string | null = null
-      let bestDistance = Infinity
-
-      for (const cluster of (clusters ?? [])) {
-        const centroid = parseVector(cluster.centroid)
-        const dist = cosineDistance(embedding, centroid)
-        if (dist < bestDistance) {
-          bestDistance = dist
-          bestClusterId = cluster.id as string
-        }
-      }
-
-      if (bestClusterId && bestDistance <= ASSIGN_DISTANCE) {
-        // Assign to existing cluster
-        const cluster = clusters!.find((c) => c.id === bestClusterId)!
-        const newSize = (cluster.cluster_size as number) + 1
-        const newCentroid = updateCentroid(
-          parseVector(cluster.centroid),
-          embedding,
-          newSize,
-        )
-        const distribution = (cluster.severity_distribution as Record<string, number>) ?? {}
-        distribution[severity] = (distribution[severity] ?? 0) + 1
-
-        await Promise.all([
-          db.from('mistake_clusters').update({
-            centroid: JSON.stringify(newCentroid),
-            cluster_size: newSize,
-            severity_distribution: distribution,
-            last_seen_at: new Date().toISOString(),
-          }).eq('id', bestClusterId),
-          db.from('report_cluster_membership').insert({
-            report_id: reportId,
-            cluster_id: bestClusterId,
-            distance: bestDistance,
-          }),
-        ])
-        assigned++
-      } else {
-        // Create new candidate cluster
-        const { data: newCluster } = await db
-          .from('mistake_clusters')
-          .insert({
-            project_id: projectId,
-            centroid: JSON.stringify(embedding),
-            cluster_size: 1,
-            severity_distribution: { [severity]: 1 },
-            status: 'candidate',
-          })
-          .select('id')
-          .single()
-
-        if (newCluster) {
-          await db.from('report_cluster_membership').insert({
-            report_id: reportId,
-            cluster_id: newCluster.id,
-            distance: 0,
-          })
-          created++
-        }
+    for (const cluster of (clusters ?? [])) {
+      const centroid = parseVector(cluster.centroid)
+      const dist = cosineDistance(embedding, centroid)
+      if (dist < bestDistance) {
+        bestDistance = dist
+        bestClusterId = cluster.id as string
       }
     }
 
-    // ─── Step 2: Coherence judge (every 6h or when runCoherence=true) ────────
+    if (bestClusterId && bestDistance <= ASSIGN_DISTANCE) {
+      // Assign to existing cluster
+      const cluster = clusters!.find((c) => c.id === bestClusterId)!
+      const newSize = (cluster.cluster_size as number) + 1
+      const newCentroid = updateCentroid(
+        parseVector(cluster.centroid),
+        embedding,
+        newSize,
+      )
+      const distribution = (cluster.severity_distribution as Record<string, number>) ?? {}
+      distribution[severity] = (distribution[severity] ?? 0) + 1
 
-    const body = await req.json().catch(() => ({}))
-    const runCoherence = body.runCoherence === true || isCoherenceWindow()
-
-    let promoted = 0
-    if (runCoherence) {
-      // Find candidate clusters with size ≥ 3 that haven't been judged recently
-      const { data: candidates } = await db
+      await Promise.all([
+        db.from('mistake_clusters').update({
+          centroid: JSON.stringify(newCentroid),
+          cluster_size: newSize,
+          severity_distribution: distribution,
+          last_seen_at: new Date().toISOString(),
+        }).eq('id', bestClusterId),
+        db.from('report_cluster_membership').insert({
+          report_id: reportId,
+          cluster_id: bestClusterId,
+          distance: bestDistance,
+        }),
+      ])
+      assigned++
+    } else {
+      // Create new candidate cluster
+      const { data: newCluster } = await db
         .from('mistake_clusters')
-        .select('id, project_id, cluster_size, severity_distribution, name')
-        .eq('status', 'candidate')
-        .gte('cluster_size', MIN_CLUSTER_SIZE)
-        .limit(20)
+        .insert({
+          project_id: projectId,
+          centroid: JSON.stringify(embedding),
+          cluster_size: 1,
+          severity_distribution: { [severity]: 1 },
+          status: 'candidate',
+        })
+        .select('id')
+        .single()
 
-      // Projects already skipped this run (no model key, or over the AI budget).
-      const skippedNoKey = new Set<string>()
-      for (const cluster of (candidates ?? [])) {
-        const clusterId = cluster.id as string
-        const projectId = cluster.project_id as string
-        if (skippedNoKey.has(projectId)) continue
+      if (newCluster) {
+        await db.from('report_cluster_membership').insert({
+          report_id: reportId,
+          cluster_id: newCluster.id,
+          distance: 0,
+        })
+        created++
+      }
+    }
+  }
 
-        // Get top-K reports for this cluster
-        const { data: members } = await db
-          .from('report_cluster_membership')
-          .select('report_id, distance, reports!inner(title, description, category, severity)')
-          .eq('cluster_id', clusterId)
-          .order('distance', { ascending: true })
-          .limit(JUDGE_TOP_K)
+  // ─── Step 2: Coherence judge (every 6h or when runCoherence=true) ────────
 
-        if (!members?.length) continue
+  const body = await req.json().catch(() => ({}))
+  const runCoherence = body.runCoherence === true || isCoherenceWindow()
 
-        const reportSummaries = members
-          .map((m) => {
-            const r = m.reports as { title?: string; description?: string; category?: string }
-            return `- [${r.category ?? 'unknown'}] ${r.title ?? ''}: ${(r.description ?? '').slice(0, 200)}`
-          })
-          .join('\n')
+  let promoted = 0
+  if (runCoherence) {
+    // Find candidate clusters with size ≥ 3 that haven't been judged recently
+    const { data: candidates } = await db
+      .from('mistake_clusters')
+      .select('id, project_id, cluster_size, severity_distribution, name')
+      .eq('status', 'candidate')
+      .gte('cluster_size', MIN_CLUSTER_SIZE)
+      .limit(20)
 
-        const prompt = `You are a quality-assurance engineer reviewing a cluster of ${members.length} bug reports to determine if they describe the same root problem.
+    // Projects already skipped this run (no model key, or over the AI budget).
+    const skippedNoKey = new Set<string>()
+    for (const cluster of (candidates ?? [])) {
+      const clusterId = cluster.id as string
+      const projectId = cluster.project_id as string
+      if (skippedNoKey.has(projectId)) continue
+
+      // Get top-K reports for this cluster
+      const { data: members } = await db
+        .from('report_cluster_membership')
+        .select('report_id, distance, reports!inner(title, description, category, severity)')
+        .eq('cluster_id', clusterId)
+        .order('distance', { ascending: true })
+        .limit(JUDGE_TOP_K)
+
+      if (!members?.length) continue
+
+      const reportSummaries = members
+        .map((m) => {
+          const r = m.reports as { title?: string; description?: string; category?: string }
+          return `- [${r.category ?? 'unknown'}] ${r.title ?? ''}: ${(r.description ?? '').slice(0, 200)}`
+        })
+        .join('\n')
+
+      const prompt = `You are a quality-assurance engineer reviewing a cluster of ${members.length} bug reports to determine if they describe the same root problem.
 
 Reports in this cluster:
 ${reportSummaries}
 
 Rate the semantic coherence of this cluster and suggest how to name and summarise it.`
 
-        try {
-          let result: z.infer<typeof coherenceSchema> | undefined
-          // The project's own key first, the platform key otherwise.
-          const anthropicResolved = await projectLlmKey(db, projectId, 'anthropic')
-          const anthropicKey = anthropicResolved?.key
-          const usageCtx = {
-            functionName: 'mistake-clusterer',
-            stage: 'cluster-coherence',
-            projectId,
-            primaryModel: MISTAKE_MODEL,
-          }
+      try {
+        let result: z.infer<typeof coherenceSchema> | undefined
+        // A spent budget wins over "nothing configured" when the two providers disagree.
+        let skipReason: 'no_llm_key' | 'budget_exhausted' = 'no_llm_key'
+        const noteMiss = (miss: ProjectLlmKeyMiss) => {
+          if (miss === 'budget_exhausted') skipReason = 'budget_exhausted'
+        }
+        // The project's own key first, the platform key otherwise.
+        const anthropicResolved = await projectLlmKey(db, projectId, 'anthropic', noteMiss)
+        const anthropicKey = anthropicResolved?.key
+        const usageCtx = {
+          functionName: 'mistake-clusterer',
+          stage: 'cluster-coherence',
+          projectId,
+          primaryModel: MISTAKE_MODEL,
+        }
 
-          const claudeStart = Date.now()
-          let claudeErr: unknown = null
-          if (anthropicKey) {
-            try {
-              const generation = await claudeGenerateObject({
-                apiKey: anthropicKey,
-                model: MISTAKE_MODEL,
-                effort: MISTAKE_EFFORT,
-                schema: coherenceSchema,
-                prompt,
-              })
-              void recordLlmUsage(db, { ...usageCtx, keySource: anthropicResolved?.source, model: MISTAKE_MODEL, startedAt: claudeStart }, { result: generation })
-              result = generation.object
-            } catch (err) {
-              void recordLlmUsage(db, { ...usageCtx, keySource: anthropicResolved?.source, model: MISTAKE_MODEL, startedAt: claudeStart }, { error: err })
-              claudeErr = err
-            }
-          }
-          if (!anthropicKey || claudeErr) {
-            // No key means no paid call, so no row. null from projectLlmKey is
-            // "not configured" or "monthly budget spent" — skip, don't fail.
-            const openaiResolved = await projectLlmKey(db, projectId, 'openai')
-            if (!openaiResolved) {
-              if (!anthropicKey) {
-                skippedNoKey.add(projectId)
-                log.info('coherence judge skipped', {
-                  scope: 'mistake-clusterer',
-                  projectId,
-                  reason: 'no_llm_key',
-                })
-                continue
-              }
-              throw claudeErr
-            }
-            const openaiUsage = {
-              ...usageCtx,
-              keySource: openaiResolved.source,
-              model: OPENAI_PRIMARY,
-              startedAt: Date.now(),
-              fallbackReason: anthropicKey ? 'anthropic_failed' : 'no_anthropic_key',
-            }
-            const openai = openAiProvider({
-              apiKey: openaiResolved.key,
-              ...(openaiResolved.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
-            })
-            const generation = await generateObject({
-              model: openai(OPENAI_PRIMARY),
+        const claudeStart = Date.now()
+        let claudeErr: unknown = null
+        if (anthropicKey) {
+          try {
+            const generation = await claudeGenerateObject({
+              apiKey: anthropicKey,
+              model: MISTAKE_MODEL,
+              effort: MISTAKE_EFFORT,
               schema: coherenceSchema,
               prompt,
-            }).catch((err: unknown) => {
-              void recordLlmUsage(db, openaiUsage, { error: err })
-              throw err
             })
-            void recordLlmUsage(db, openaiUsage, { result: generation })
+            void recordLlmUsage(db, { ...usageCtx, keySource: anthropicResolved?.source, model: MISTAKE_MODEL, startedAt: claudeStart }, { result: generation })
             result = generation.object
+          } catch (err) {
+            void recordLlmUsage(db, { ...usageCtx, keySource: anthropicResolved?.source, model: MISTAKE_MODEL, startedAt: claudeStart }, { error: err })
+            claudeErr = err
           }
-          if (!result) continue
-
-          // Update cluster with judge result
-          const updatePayload: Record<string, unknown> = {
-            judge_coherence_score: result.coherence_score,
-            name: result.cluster_name,
-            summary: result.cluster_summary,
-            suggested_rule: result.suggested_rule,
-          }
-
-          if (result.coherence_score >= COHERENCE_THRESHOLD) {
-            updatePayload.status = 'promoted'
-            // Create the lesson
-            const sampleIds = (members ?? []).map((m) => m.report_id as string)
-            await db.from('lessons').insert({
-              project_id: projectId,
-              cluster_id: clusterId,
-              rule_text: result.suggested_rule,
-              anti_pattern: null,
-              summary_paragraph: result.cluster_summary,
-              severity: result.severity,
-              frequency: cluster.cluster_size,
-              sample_report_ids: sampleIds,
-            })
-            promoted++
-          }
-
-          await db.from('mistake_clusters').update(updatePayload).eq('id', clusterId)
-        } catch (err) {
-          log.error('coherence judge failed', {
-            scope: 'mistake-clusterer',
-            clusterId,
-            err: err instanceof Error ? err.message : String(err),
-          })
         }
+        if (!anthropicKey || claudeErr) {
+          // No key means no paid call, so no row. null is "not configured"
+          // (no_llm_key) or "monthly budget spent" (budget_exhausted). Both
+          // skip the judge; the reason tells them apart. Info, not error:
+          // neither is a judge failure, so this does not page Sentry.
+          const openaiResolved = await projectLlmKey(db, projectId, 'openai', noteMiss)
+          if (!openaiResolved) {
+            if (!anthropicKey) {
+              skippedNoKey.add(projectId)
+              log.info('coherence judge skipped', {
+                scope: 'mistake-clusterer',
+                projectId,
+                reason: skipReason,
+              })
+              continue
+            }
+            throw claudeErr
+          }
+          const openaiUsage = {
+            ...usageCtx,
+            keySource: openaiResolved.source,
+            model: OPENAI_PRIMARY,
+            startedAt: Date.now(),
+            fallbackReason: anthropicKey ? 'anthropic_failed' : 'no_anthropic_key',
+          }
+          const openai = openAiProvider({
+            apiKey: openaiResolved.key,
+            ...(openaiResolved.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
+          })
+          const generation = await generateObject({
+            model: openai(OPENAI_PRIMARY),
+            schema: coherenceSchema,
+            prompt,
+          }).catch((err: unknown) => {
+            void recordLlmUsage(db, openaiUsage, { error: err })
+            throw err
+          })
+          void recordLlmUsage(db, openaiUsage, { result: generation })
+          result = generation.object
+        }
+        // Type guard only. Every path that reaches here assigned `result` or
+        // already continued or threw; `| undefined` exists so that assignment
+        // is visible to the checker.
+        if (!result) continue
+
+        // Update cluster with judge result
+        const updatePayload: Record<string, unknown> = {
+          judge_coherence_score: result.coherence_score,
+          name: result.cluster_name,
+          summary: result.cluster_summary,
+          suggested_rule: result.suggested_rule,
+        }
+
+        if (result.coherence_score >= COHERENCE_THRESHOLD) {
+          updatePayload.status = 'promoted'
+          // Create the lesson
+          const sampleIds = (members ?? []).map((m) => m.report_id as string)
+          await db.from('lessons').insert({
+            project_id: projectId,
+            cluster_id: clusterId,
+            rule_text: result.suggested_rule,
+            anti_pattern: null,
+            summary_paragraph: result.cluster_summary,
+            severity: result.severity,
+            frequency: cluster.cluster_size,
+            sample_report_ids: sampleIds,
+          })
+          promoted++
+        }
+
+        await db.from('mistake_clusters').update(updatePayload).eq('id', clusterId)
+      } catch (err) {
+        log.error('coherence judge failed', {
+          scope: 'mistake-clusterer',
+          clusterId,
+          err: err instanceof Error ? err.message : String(err),
+        })
       }
     }
+  }
 
-    return new Response(
-      JSON.stringify({
-        ok: true,
-        processed: rows.length,
-        assigned,
-        created,
-        promoted,
-        coherenceRan: runCoherence,
-      }),
-      { headers: { 'content-type': 'application/json' } },
-    )
-  }),
-)
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      processed: rows.length,
+      assigned,
+      created,
+      promoted,
+      coherenceRan: runCoherence,
+    }),
+    { headers: { 'content-type': 'application/json' } },
+  )
+}
+
+if (typeof Deno !== 'undefined') {
+  Deno.serve(withSentry((req: Request) => handleMistakeClusterer(req)))
+}
 
 /** True if current UTC hour is 0, 6, 12, or 18 — the 4 coherence windows */
 function isCoherenceWindow() {
