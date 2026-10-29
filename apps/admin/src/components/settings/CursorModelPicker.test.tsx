@@ -80,6 +80,21 @@ describe('CursorModelPicker Other mode', () => {
     expect(modelIdInput()).toBeTruthy()
   })
 
+  it('keeps Other open when the user types a listed id into the Other field', () => {
+    const onChange = vi.fn()
+    render({ value: '', onChange })
+    act(() => pick(CURSOR_MODEL_OTHER))
+    const input = modelIdInput() as HTMLInputElement
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'grok-4.7')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(onChange).toHaveBeenCalledWith('grok-4.7')
+    render({ value: 'grok-4.7', onChange })
+    expect(select().value).toBe(CURSOR_MODEL_OTHER)
+    expect(modelIdInput()).toBeTruthy()
+  })
+
   it('closes Other when keyId changes onto a listed model', () => {
     const onChange = vi.fn()
     render({ value: 'grok-4.7', onChange, keyId: 'key-a' })

@@ -67,12 +67,19 @@ function CursorModelPickerBody({
   const [otherPicked, setOtherPicked] = useState(false)
   // Other stays open only until a saved spec that is on the list arrives
   // from outside the picker (a form reset, or another field writing the draft).
+  // Specs the picker wrote itself (typing a listed id in Other) never close it.
   const seenValue = useRef(value)
   const pendingValue = useRef(false)
+  const ownWrite = useRef<string | null>(null)
+  const emit = (spec: string) => {
+    ownWrite.current = spec
+    onChange(spec)
+  }
   useEffect(() => {
     if (seenValue.current !== value) {
       seenValue.current = value
-      pendingValue.current = true
+      pendingValue.current = ownWrite.current !== value
+      ownWrite.current = null
     }
     if (!pendingValue.current || !listReady) return
     const incoming = cursorModelSelection(value, list, true)
@@ -122,8 +129,8 @@ function CursorModelPickerBody({
           const id = e.target.value
           setOtherPicked(id === CURSOR_MODEL_OTHER)
           if (id === CURSOR_MODEL_OTHER)
-            onChange(selection.modelId === CURSOR_MODEL_OTHER ? value : '')
-          else onChange(id)
+            emit(selection.modelId === CURSOR_MODEL_OTHER ? value : '')
+          else emit(id)
         }}
       >
         <option value="">{emptyLabel}</option>
@@ -145,7 +152,7 @@ function CursorModelPickerBody({
           aria-label="Model id"
           value={selection.custom}
           placeholder="grok-4.7?reasoning_effort=xhigh&context=500k"
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => emit(e.target.value)}
         />
       )}
       {(chosen?.parameters ?? []).map((p) => (
@@ -154,7 +161,7 @@ function CursorModelPickerBody({
           label={p.displayName ?? p.id}
           value={selection.params[p.id] ?? ''}
           onChange={(e) =>
-            onChange(
+            emit(
               cursorModelSpec(
                 chosen!.id,
                 '',
