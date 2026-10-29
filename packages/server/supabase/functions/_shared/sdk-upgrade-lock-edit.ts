@@ -1,11 +1,14 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/sdk-upgrade-lock-edit.ts
- * PURPOSE: Read the lockfiles for an SDK upgrade and, when the host has no
- *          lockfile workflow, rewrite npm v2/v3 @mushi-mushi entries.
- *          pnpm and yarn are named, not edited (ADR 0043, proposed).
+ * PURPOSE: Helpers for an SDK upgrade's lockfile edit (ADR 0043, proposed):
+ *          find the lockfile that governs each bumped manifest, read ranges,
+ *          overrides and pins from manifests, and the constants the lock
+ *          modules share. The npm rewrite itself is sdk-upgrade-npm-patch.ts.
  */
 
-const SCOPE = '@mushi-mushi/'
+export const SCOPE = '@mushi-mushi/'
+export const EXACT_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/
+export const LOCK_PATH_IGNORE = /(^|\/)(node_modules|dist|build|out|\.next|\.turbo|\.output|coverage|vendor|\.git)\//
 const DEP_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'] as const
 const LOCK_NAMES = ['pnpm-lock.yaml', 'package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock'] as const
 
@@ -37,7 +40,7 @@ function kindOf(fileName: string): LockKind | null {
   return null
 }
 
-function dirOf(manifestPath: string): string {
+export function dirOf(manifestPath: string): string {
   return manifestPath === 'package.json' ? '' : manifestPath.slice(0, -'/package.json'.length)
 }
 
@@ -163,7 +166,7 @@ export function exactPins(
       for (const [name, spec] of Object.entries(section as Record<string, unknown>)) {
         if (!name.startsWith(SCOPE) || typeof spec !== 'string') continue
         const to = latest[name]
-        if (!to || !EXACT_PIN.test(to)) continue
+        if (!to || !EXACT_VERSION.test(to)) continue
         const core = spec.replace(/^[\^~>=<\s]+/, '').trim()
         if (core === to) bumps.push({ package: name, to })
       }
@@ -171,8 +174,6 @@ export function exactPins(
   }
   return bumps
 }
-
-const EXACT_PIN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/
 
 export function decodeGithubBase64(body: unknown): string | null {
   if (!body || typeof body !== 'object') return null
