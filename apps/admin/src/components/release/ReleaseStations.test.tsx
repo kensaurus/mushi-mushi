@@ -37,14 +37,14 @@ const stations: ReleaseStation[] = [
 ]
 
 describe('ReleaseStations', () => {
-  it('says "all stuck" when every one is, and the share when only some are', () => {
+  it('says "all need you" when every one is, and the share when only some are', () => {
     act(() => {
       root.render(createElement(MemoryRouter, null, createElement(ReleaseStations, { stations, href: '/fixes' })))
     })
     const items = Array.from(container.querySelectorAll('li')).map((li) => li.textContent)
-    expect(items[0]).toBe('39Draftedall stuck')
-    expect(items[1]).toBe('6Reviewed2 stuck')
+    expect(items[0]).toBe('39Draftedall need you')
+    expect(items[1]).toBe('6Reviewed2 need you')
     expect(items[2]).toBe('4Merged')
-    expect(container.querySelector('a')?.getAttribute('aria-label')).toBe('Drafted: 39, all stuck')
+    expect(container.querySelector('a')?.getAttribute('aria-label')).toBe('Drafted: 39, all need you')
   })
 })
