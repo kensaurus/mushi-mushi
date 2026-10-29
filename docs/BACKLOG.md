@@ -7,7 +7,8 @@ regenerating it.** Plans stay the source of truth for their own detail
 (`docs/execplans/PLANS.md` and each plan file); a row here points at them so
 parked work is visible in one place.
 
-- **Last regenerated:** 2026-10-27 (fourth run; delta against 2026-10-17 below)
+- **Last regenerated:** 2026-10-30 (fifth run; delta against 2026-10-27 below)
+- **Delta 2026-10-30:** 12 new (BL-180..BL-191: health gate Phase 2, simplicity Phases 2–5, GTM D1, held PRs, code-only stale verdicts, owner-gated live tests, retention-sweep check, red host branches and hook failures, Chromium-only layout tests, tsumagoi #968 red) · 0 closed · 0 newly stale · 1 added as verify-done (BL-188). Partly done since 10-27, still open: BL-146 (2 of 2 visitors reached a diagnosis, a412bae73), BL-156 (per-address reuse applied, 39dce567b), BL-164 (newStatus / pullRequestUrl, 6a24a3517), BL-170 (lockfile commands in the PR body, 39dce567b), BL-174 (plain "did not run" wording, a412bae73), BL-177 (no call for a running check, a9b1bd0c6). Code markers since 10-26: no new TODO/FIXME; 7 new `skipIf` guards (2 Chromium-only, BL-190; 5 skip on Windows and run in Linux CI). Already settled, no row: the backfill migration file landed in #918, the `report_presence` migration file ships with this register, the Zenn article is being published. The open count below counts the table; the 10-27 figure (73) had drifted.
 - **Added 2026-10-29 (docs proofread):** BL-164..BL-169, code bugs and leftovers the public-docs proofread found.
 - **Added 2026-10-29 (worker back, merge queue read):** BL-158..BL-163: CI repair on local lanes, "Try again with a new agent", a live cost-fix PR, the first-time user test failing on a missing Playwright browser, the one-app solo view, and a pre-push hook crash dropping a report from its lane. Closed BL-154.
 - **Added 2026-10-27 (per-app Home):** BL-135, parts the Home redesign left out.
@@ -29,23 +30,26 @@ parked work is visible in one place.
 - **Added 2026-10-23 (site audit, ADR 0040):** BL-116, a parked part of the site audit. Closed BL-117 on 2026-10-23.
 - **Added 2026-10-24 (local fix worker, `mushi work`):** BL-118..BL-119, parked parts of the local worker.
 - **Delta 2026-10-17:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 73 · **Recently closed:** 27 (BL-011, BL-154 on 2026-10-29; BL-117, BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 125 · **Recently closed:** 27 (BL-011, BL-154 on 2026-10-29; BL-117, BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
-| deferred-plan-phase | 12 |
-| test-gap | 3 |
-| tech-debt | 15 |
-| known-bug | 3 |
-| decision-needed | 12 |
-| unfinished-feature | 25 |
+| deferred-plan-phase | 19 |
+| test-gap | 7 |
+| tech-debt | 18 |
+| known-bug | 18 |
+| decision-needed | 16 |
+| unfinished-feature | 38 |
+| product | 3 |
+| ux | 2 |
+| perf | 1 |
 | dependency | 2 |
 | needs-triage | 1 |
 
 | Status | Open |
 |---|---|
-| relevant | 70 |
-| verify-done | 3 |
+| relevant | 121 |
+| verify-done | 4 |
 | stale (propose removal) | 0 |
 
 > **Scanned 2026-10-27** on `origin/master` `23dd367c` plus the docs commits of the CI cost branch.
@@ -210,6 +214,18 @@ parked work is visible in one place.
 | BL-177 | perf | Every completed `check_run` webhook now reads the head's rollup from GitHub (1–3 check-run pages, commit statuses, `actions/runs`: 3–5 calls), on the installation's 5,000-an-hour budget shared with fix-worker and merges; a 100-job matrix costs about 400 calls a push. A failed read no longer stores one green job as the head (2026-10-30). Coalesce: one rollup per head SHA per ~30 s window (debounce through a row timestamp, or roll up on `check_suite.completed` only) | relevant | med | `_shared/check-run-head.ts`, `webhooks-github-indexer`, `api/routes/public.ts` | — |
 | BL-178 | ux | Home → Access and details lists CLI and MCP keys (`cli-login`, `default`) as "never used": `project_api_keys.last_seen_at` is stamped only by SDK traffic (`_shared/auth.ts`), so a key the CLI or MCP uses every day reads unused, and revoke is only on /projects. Stamp last use on every authenticated key use (throttled like the SDK heartbeat), or label the column "last SDK check-in"; link each key row to its revoke | relevant | low | `_shared/auth.ts`, `api/routes/project-home.ts`, `apps/admin/src/components/home/AccessCard.tsx` | — |
 | BL-179 | product | No app sends `deploy.completed`, so the Deployed station reads 0 and "No deploy seen yet" on every app, and reporters are never told their fix is live (`deploy_observations` newest webhook row 2026-10-13; writers `api/routes/recipe-ingest.ts`, `_shared/recipe-phase2.ts`). Ship a one-step producer: a GitHub `deployment_status` / workflow-run listener in the indexer, or a copyable CI step in Settings, so a merge reaches Deployed without hand wiring | relevant | high | `webhooks-github-indexer`, deploy observations, Setup gaps "Deploy events" | — |
+| BL-180 | deferred-plan-phase | Health checks (ADR 0054): the health gate still runs in observe mode. Moving it to enforce needs Phase 2's stored-check refresher; only the live follow-up-key check is seen today. ADR 0054 stays `Proposed` until then (see BL-124 for the older ADRs) | relevant | med | `docs/adr/0054-health-checks-one-registry.md` (Phase 2), `docs/HANDOVER-2026-10-29.md` | — |
+| BL-181 | deferred-plan-phase | Simplicity Phase 2: the new health checks (plan rows 1, 3, 4, 7, 9, 12, 14–16, 21–23), `sdk_localhost_only` first; it reads `project_api_key_origins` (related: BL-178) | relevant | med | `docs/plan-simplicity-2026-10.md` Phase 2 | — |
+| BL-182 | deferred-plan-phase | Simplicity Phases 3–4: outside-in console and widget (three first-run buttons, Home zones), then the parts layer in Settings | relevant | med | `docs/plan-simplicity-2026-10.md` Phases 3–4 | — |
+| BL-183 | decision-needed | Simplicity Phase 5, landing page: keep the 9 feature cards (A) or collapse them to names (B). Owner decision | relevant | low | `docs/plan-simplicity-2026-10.md` Phase 5 | — |
+| BL-184 | decision-needed | GTM November D1: add the offer sub-hero to the tagline ladder; needs the brand ladder and `check-positioning-consistency` updated together. Owner decision | relevant | low | `docs/plan-gtm-november-2026.md` D1 | — |
+| BL-185 | decision-needed | 20 mushi-mushi fix PRs the AI review held ("do not merge"): close, override with a reason, or send again. No overrides made. Console: /pipeline → "the review says do not merge" (the retry action itself is BL-159) | relevant | med | `docs/HANDOVER-2026-10-30.md` | — |
+| BL-186 | tech-debt | About 10 reports whose agent verdict (already fixed / not actionable) can only be checked in code, not in the console: 70dbd945, f9809bb6, f66ae5d0, 2d5e2bd7, 7426815e, 69fcafcb, 9831ade8, 18db5e8e, 89ac1103, 9be9d5fd. Each report page now offers close / send again | relevant | low | `docs/HANDOVER-2026-10-30.md` | — |
+| BL-187 | test-gap | Live tests that need the owner once: the Cursor Switch-account test (ADR 0048 amendment b), the first-time user test with a test account rather than the owner's (partly BL-146), and the Lovable connector test inside Lovable | relevant | med | `.cursor/complete-everything-state.md` (main checkout) | — |
+| BL-188 | test-gap | After the 10-29 03:27 UTC retention sweep, confirm the synthetic accounts 7be1a8b0, 3598f883 and 1b40d212 are gone from auth and organizations (read-only check, not recorded) | verify-done | low | `.cursor/complete-everything-state.md` (main checkout) | — |
+| BL-189 | known-bug | Host repos with a red default branch: Help Her Take Photo "Mobile Release" (yen-yen actionlint is BL-133, glot Capacitor build is BL-131). Hook failures outside BL-171 also stop lanes: glot readme-counts drift, solo-boss public-shell-isolation baseline, mushi-mushi admin hex check and a `getPackageJSONURL` crash inside a hook | relevant | med | `docs/HANDOVER-2026-10-29.md` | — |
+| BL-190 | test-gap | Phone-width (390px) layout tests run only where Chromium is installed (`it.skipIf(!chromiumBin)`); the CI unit job has no browser, so they never run in CI: `PromptStageTable.test.tsx:118`, `ExperimentsPage.test.tsx:237` | relevant | low | those two files | — |
+| BL-191 | known-bug | tsumagoi #968 (SDK upgrade + the BL-132 renames) is red on Browser gates 4/4: `booking-summary-status` "Saved in your booking" not found (`reserve-visuals` 390/1440) and the LINE hand-off button under 48px (`sennin-chat`). PRs merged just before it passed the same gates, so the PR's reservation changes are the suspect. Also: ~40 tsumagoi unit specs assume `/` paths or LF endings, so its pre-push cannot pass from Windows | relevant | high | kensaurus/tsumagoi#968 run 40899880476; `docs/HANDOVER-2026-10-29.md` | tsumagoi#968 |
 
 ---
 
