@@ -5,7 +5,7 @@
  *          last event), and one "needs you" line per broken connection when
  *          more than one is broken (one goes in the sentence). Each
  *          tile jumps to its card below. The verdicts come from
- *          connectionGrid.ts, which reuses each card's own rules.
+ *          connectionGridModel.ts, which reuses each card's own rules.
  */
 
 import { BrandIcon } from '../ui/BrandIcon'
@@ -20,7 +20,7 @@ import {
   connectionGridSentence,
   type ConnectionGridInput,
   type GridTile,
-} from './connectionGrid'
+} from './connectionGridModel'
 
 const DOT: Record<ConnectionState, string> = {
   working: 'bg-ok',
