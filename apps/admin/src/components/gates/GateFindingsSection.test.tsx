@@ -8,7 +8,8 @@
  *          gate with plain-English gate names, says "not checked yet" when
  *          nothing ran, and a `spend_cap_unset` finding applies its suggested
  *          caps through PATCH /v1/admin/settings only after confirmation, and
- *          never overwrites a cap that is set by then.
+ *          never overwrites a cap that is set by then. A capped list's
+ *          disclosure names the open count, not only the page size.
  */
 
 import { act, createElement } from 'react'
@@ -77,6 +78,60 @@ const payload = {
 }
 
 describe('GateFindingsSection', () => {
+  it('names the open count when a design-token list is capped at 50', async () => {
+    const findings = Array.from({ length: 230 }, (_, i) => ({
+      id: `f-${i}`,
+      gate_run_id: 'design-1',
+      severity: 'error' as const,
+      rule_id: 'off_token_color',
+      message: `Hex ${i}`,
+      file_path: `src/C${i}.tsx`,
+      line: 1,
+      allowlisted: false,
+    }))
+    apiFetch.mockResolvedValue({
+      ok: true,
+      data: {
+        runs: [{ id: 'design-1', gate: 'design_drift', status: 'fail', summary: { phase: 'scan' }, started_at: '2026-10-02T00:00:00Z' }],
+        findings,
+      },
+    })
+    render()
+    await flush()
+    const text = container.textContent ?? ''
+    expect(text).toContain('Failing · 230 open')
+    const summary = [...container.querySelectorAll('summary')].find((s) => s.textContent?.includes('findings'))
+    expect(summary?.textContent).toBe('Show 50 of 230 findings')
+    expect(text).not.toContain('Show the 50 findings')
+    expect(text).toContain('180 more not shown')
+  })
+
+  it('names every finding when the open count fits on the page', async () => {
+    const findings = Array.from({ length: 4 }, (_, i) => ({
+      id: `f-${i}`,
+      gate_run_id: 'design-1',
+      severity: 'warn' as const,
+      rule_id: 'off_token_color',
+      message: `Hex ${i}`,
+      file_path: `src/C${i}.tsx`,
+      line: 1,
+      allowlisted: false,
+    }))
+    apiFetch.mockResolvedValue({
+      ok: true,
+      data: {
+        runs: [{ id: 'design-1', gate: 'design_drift', status: 'warn', summary: { phase: 'scan' }, started_at: '2026-10-02T00:00:00Z' }],
+        findings,
+      },
+    })
+    render()
+    await flush()
+    const summary = [...container.querySelectorAll('summary')].find((s) => s.textContent?.includes('findings') || s.textContent === 'Findings')
+    expect(summary?.textContent).toBe('Show the 4 findings')
+    expect(container.textContent).toContain('4 open')
+    expect(container.textContent).not.toContain('more not shown')
+  })
+
   it('lists the newest open findings with file, line and a plain-English gate name', async () => {
     apiFetch.mockResolvedValue({ ok: true, data: payload })
     render()
