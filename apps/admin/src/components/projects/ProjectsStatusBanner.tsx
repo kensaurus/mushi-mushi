@@ -14,6 +14,8 @@ interface Props {
   /** Viewer/member guidance when destructive actions are hidden. */
   roleHint?: string | null
   onTab?: (tab: ProjectsTabId) => void
+  /** The open tab: on `create` the form is right below, so no second "Create project" button. */
+  activeTab?: ProjectsTabId
   onRefresh?: () => void
   refreshing?: boolean
 }
@@ -25,7 +27,7 @@ function tabFromPath(path: string | null): ProjectsTabId | null {
   return null
 }
 
-export function ProjectsStatusBanner({ stats, activeTeamName, roleHint, onTab, onRefresh, refreshing }: Props) {
+export function ProjectsStatusBanner({ stats, activeTeamName, roleHint, onTab, activeTab, onRefresh, refreshing }: Props) {
   const priority = stats.topPriority
   const label = stats.topPriorityLabel
   const actionTab = tabFromPath(stats.topPriorityTo)
@@ -40,7 +42,9 @@ export function ProjectsStatusBanner({ stats, activeTeamName, roleHint, onTab, o
         title="No projects in this workspace yet"
         subtitle={roleHint ?? label}
         action={
-          roleHint ? undefined : onTab ? (
+          // A first-time user test (2026-10-29) clicked this twice on the
+          // create tab, where it only re-opened the tab it was on.
+          roleHint || activeTab === 'create' ? undefined : onTab ? (
             <Btn size="sm" variant="primary" onClick={() => onTab('create')}>Create project</Btn>
           ) : (
             <Btn to="/projects?tab=create" size="sm" variant="primary">Create project</Btn>
