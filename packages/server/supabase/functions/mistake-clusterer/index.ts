@@ -19,7 +19,10 @@
  *     A project with no Anthropic key and no OpenAI/OpenRouter key is skipped
  *     (`no_llm_key`). One over its monthly AI budget is skipped
  *     (`budget_exhausted`). projectLlmKey returns null for both and reports
- *     which via onMiss. Neither is a judge failure.
+ *     which via onMiss. Neither is a judge failure. Candidates are read
+ *     oldest-updated first. A skip stamps that project's judgeable
+ *     candidates so they cannot fill the limit on every later run, and the
+ *     run logs one warning with how many projects were skipped.
  *
  * Cost discipline: every LLM call writes an llm_invocations row (recordLlmUsage).
  */
@@ -209,17 +212,21 @@ export async function handleMistakeClusterer(
 
   let promoted = 0
   if (runCoherence) {
-    // Find candidate clusters with size ≥ 3 that haven't been judged recently
+    // Oldest first, 20 at a time. A skip stamps that project's candidates
+    // (below) so a keyless project cannot occupy this limit on every run.
     const { data: candidates } = await db
       .from('mistake_clusters')
       .select('id, project_id, cluster_size, severity_distribution, name')
       .eq('status', 'candidate')
       .gte('cluster_size', MIN_CLUSTER_SIZE)
+      .order('updated_at', { ascending: true })
       .limit(20)
 
+    const batch = candidates ?? []
     // Projects already skipped this run (no model key, or over the AI budget).
     const skippedNoKey = new Set<string>()
-    for (const cluster of (candidates ?? [])) {
+    let skippedProjects = 0
+    for (const cluster of batch) {
       const clusterId = cluster.id as string
       const projectId = cluster.project_id as string
       if (skippedNoKey.has(projectId)) continue
@@ -286,17 +293,29 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
         if (!anthropicKey || claudeErr) {
           // No key means no paid call, so no row. null is "not configured"
           // (no_llm_key) or "monthly budget spent" (budget_exhausted). Both
-          // skip the judge; the reason tells them apart. Info, not error:
-          // neither is a judge failure, so this does not page Sentry.
+          // skip the judge; the reason tells them apart. Info per project.
+          // One warn after the batch counts the skips: visible in the
+          // function logs, and not an error, so it does not page Sentry.
           const openaiResolved = await projectLlmKey(db, projectId, 'openai', noteMiss)
           if (!openaiResolved) {
             if (!anthropicKey) {
               skippedNoKey.add(projectId)
+              skippedProjects++
               log.info('coherence judge skipped', {
                 scope: 'mistake-clusterer',
                 projectId,
                 reason: skipReason,
               })
+              // Stay a candidate. Stamp every judgeable candidate of this
+              // project — not just this row — or the rest of a keyless
+              // project is still the oldest page next run. There is no
+              // last-judged column; updated_at is the queue.
+              await db
+                .from('mistake_clusters')
+                .update({ updated_at: new Date().toISOString() })
+                .eq('project_id', projectId)
+                .eq('status', 'candidate')
+                .gte('cluster_size', MIN_CLUSTER_SIZE)
               continue
             }
             throw claudeErr
@@ -361,6 +380,12 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
           err: err instanceof Error ? err.message : String(err),
         })
       }
+    }
+    if (skippedProjects > 0) {
+      log.warn('coherence judge skipped projects', {
+        scope: 'mistake-clusterer',
+        skippedProjects,
+      })
     }
   }
 
