@@ -113,13 +113,16 @@ export function ActivityPage() {
             show: Boolean(data),
             children: data ? (
               <StatGrid>
+                {/* The window in the label: Overview shows 7-day sessions beside this
+                    page's 30-day ones, and "Sessions 139" vs "Sessions (7d) 75" read as
+                    a contradiction (2026-10-28). */}
                 <StatCard
-                  label="Sessions"
+                  label={`Sessions (${data.window_days}d)`}
                   value={fmt(data.sessions)}
                   detail={`${fmt(data.completed_sessions)} completed`}
                 />
                 <StatCard
-                  label="Unique devices"
+                  label={`Unique devices (${data.window_days}d)`}
                   value={fmt(data.unique_devices)}
                   detail={`${fmt(data.identified_users)} identified`}
                 />

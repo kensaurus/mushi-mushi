@@ -1,13 +1,13 @@
-# Mushi in Lovable or Bolt
+# Lovable or Bolt quickstart (no terminal)
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt
 
 ---
-title: Mushi in Lovable or Bolt
-description: Add Mushi to a Lovable or Bolt app without a terminal. Paste one script tag through your prompt, then read each bug's plain-English cause and fix prompt.
+title: Lovable or Bolt quickstart (no terminal)
+description: Add Mushi Mushi to a Lovable or Bolt app without a terminal. Paste one script tag through your prompt, then read each bug's plain-English cause and fix prompt.
 ---
 
-# Mushi in Lovable or Bolt
+# Mushi Mushi in Lovable or Bolt
 
 Lovable and Bolt build your app from a chat, with no terminal, so `npx` is
 not an option. You add Mushi the way you change anything else there: with a
@@ -15,16 +15,18 @@ prompt. It takes about five minutes.
 
 - Sign up free and copy your script tag.
 - Ask Lovable or Bolt to add it to your app.
-- When a user reports a bug, Mushi tells you why and gives you a prompt that fixes it.
+- When a user reports a bug, Mushi Mushi tells you why and gives you a prompt that fixes it.
 
 ### Get your script tag
 
 [Sign up free](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-lovable-bolt)
-and create a project. On the setup page, in **Configure & install the SDK**,
-pick the **Script tag** tab. Your project ID is already in the tag. If the
-key still reads `mushi_xxx`, click **Generate API key** in the box above it
-(elsewhere in the console the button reads **Mint SDK key**) and the real key
-fills in. Then copy the tag.
+and create a project. On the setup page (**Set up** in the sidebar), open the
+**Install widget** tab and, in **Configure & install the SDK**, pick the
+**Script tag** tab. Your project ID is already in the tag. If the key still
+reads `YOUR_SDK_KEY`, click **Generate API key** in the **Mint your API key**
+box above it and the real key fills in. If there is no such box (a key was
+already made for you and is no longer shown), click **Rotate** next to your key
+in the same card: the new key fills in. Then copy the tag.
 
 **You'll see:** a tag that starts with `
 

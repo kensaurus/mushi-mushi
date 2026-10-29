@@ -4,12 +4,12 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/github-issues
 
 ---
 title: GitHub Issues
-description: Open a GitHub issue for every triaged Mushi report and close it when the fix lands — set it up on the Integrations page, or self-host the plugin.
+description: Open a GitHub issue for every triaged Mushi Mushi report and close it when the fix lands. Set it up on the Integrations page, or self-host the plugin.
 ---
 
 # GitHub Issues plugin
 
-Opens a GitHub issue for each bug Mushi triages, and closes it when the fix
+Opens a GitHub issue for each bug Mushi Mushi triages, and closes it when the fix
 lands.
 
 ## Setup (Mushi Cloud, no code)
@@ -25,8 +25,9 @@ Mushi opens the issues and closes them itself; you do not need the npm package.
 
 [`@mushi-mushi/plugin-github-issues`](https://www.npmjs.com/package/@mushi-mushi/plugin-github-issues)
 does the same from your own server. The console's Marketplace has no GitHub
-Issues listing, so it only receives events from a Mushi server you run
-yourself, once you add a `plugin_registry` row for it.
+Issues listing, so you can't install it from the console. On a Mushi server
+you run yourself, add a `plugin_registry` row for it and install it like any
+listed plugin.
 
 ```bash
 npm i @mushi-mushi/plugin-github-issues
@@ -41,3 +42,7 @@ npx -p @mushi-mushi/plugin-github-issues mushi-plugin-github-issues
 | --- | --- |
 | `report.classified` | Open an issue labelled `mushi-bug` (the label is created if missing) |
 | `fix.applied` | Close the issue |
+
+The report → issue mapping is kept in memory unless you pass your own cache
+to `createGithubIssuesPlugin(cfg, cache)`, so after a restart `fix.applied`
+can't close issues opened before it.

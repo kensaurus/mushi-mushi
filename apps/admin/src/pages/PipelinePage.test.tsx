@@ -100,12 +100,12 @@ function fixture(): PipelineData {
           id: 'autofix_no_agent',
           stage: 'pr',
           tone: 'stuck',
-          label: '1 app: auto-fix is on but has no agent key; 0 dispatches in 48h',
+          label: '1 app: auto-fix is on but has no Cursor key to start fixes; no fix started in the last 2 days',
           count: 1,
           oldestAt: '2026-10-24T01:00:00Z',
           actions: [],
           settings: { label: 'Cursor keys and spend-down', to: '/credits#cursor-fix-bugs' },
-          items: [item('p1', { title: 'glot.it', reportId: null, prUrl: null, prNumber: null, lastError: 'Auto-fix is on but has no agent key; 0 dispatches in 48h' })],
+          items: [item('p1', { title: 'glot.it', reportId: null, prUrl: null, prNumber: null, lastError: 'Auto-fix is on but has no Cursor key to start fixes; no fix started in the last 2 days' })],
         },
         { id: 'draft_no_ci', stage: 'pr', tone: 'stuck', label: '1 draft: CI never ran', count: 1, oldestAt: '2026-10-25T12:00:00Z', actions: ['mark_ready', 'close'], settings: null, items: [item('f9')] },
       ]),
@@ -114,7 +114,7 @@ function fixture(): PipelineData {
           id: 'hold',
           stage: 'review',
           tone: 'stuck',
-          label: '1 PR: Opus says hold; a person decides',
+          label: '1 PR: the review says do not merge; you decide',
           count: 1,
           oldestAt: '2026-10-24T12:00:00Z',
           actions: ['re_review', 'close'],
@@ -153,7 +153,7 @@ function fixture(): PipelineData {
         opener: 'both',
         server: { agentKeys: 0, offKeys: 1, dispatches24h: 0, dispatches48h: 0, lastAt: '2026-10-24T01:00:00Z' },
         local: { runs24h: 6, running: 2, lastAt: '2026-10-26T11:00:00Z' },
-        problem: 'Auto-fix is on but has no agent key (1 Cursor key off or spend-down off); 0 dispatches in 48h',
+        problem: 'Auto-fix is on but has no Cursor key to start fixes (1 Cursor key off or spend-down off); no fix started in the last 2 days',
       },
       {
         projectId: 'p2',
@@ -378,6 +378,22 @@ describe('PipelinePage', () => {
     expect(paths).toContain('/v1/admin/work/lanes?projectId=p1')
     expect(paths).not.toContain('/v1/admin/pipeline?projectId=p1')
     expect(q('pipeline-stage-ci')).toBeNull()
+  })
+
+  it('a stuck local worker is loud above the tabs, with the way to the Workers tab (ADR 0048 amendment 2026-10-28)', async () => {
+    const flag = (id: string, severity: 'danger' | 'warn', title: string) => ({ id, kind: id.split(':')[0], severity, hostId: 'h1', hostname: 'alienware', laneId: null, laneName: null, projectId: 'p1', title, cause: '', sinceSec: 60, actions: [] })
+    ;(state.data as PipelineData & { flags?: unknown[] }).flags = [
+      flag('run_stuck:c1', 'danger', 'glot: a run has held an agent space for 4 h'),
+      flag('run_stuck:c2', 'danger', 'yen-yen: a run has held an agent space for 5 h 36 min'),
+      flag('lanes_waiting:h1', 'danger', '6 lanes on alienware have waited 3 h for an agent space'),
+      flag('account_check:h1', 'warn', 'The Cursor account check timed out on alienware'),
+    ]
+    await render()
+    const strip = q('worker-flags-strip')!
+    expect(strip.textContent).toContain('glot: a run has held an agent space for 4 h.')
+    expect(strip.textContent).toContain('and 1 more on the Workers tab.')
+    expect(q('worker-flags-strip-open')!.getAttribute('href')).toBe('/pipeline?tab=workers')
+    expect(document.body.textContent).toContain('Workers (4 problems)')
   })
 
   it('shows registered local worker lanes per app, linked to the Workers tab', async () => {

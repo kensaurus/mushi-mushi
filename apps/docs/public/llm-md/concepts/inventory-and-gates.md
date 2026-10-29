@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/inventory-and-gates
 
 ---
 title: 'Inventory and gates (v2)'
-description: Mushi v2's inventory.yaml lists every page, story and action in your app, and five composite gates fail the build when a change breaks that contract.
+description: The Mushi Mushi inventory.yaml lists every page, story and action in your app, and five composite gates fail the build when a change breaks that contract.
 ---
 
 # Inventory and gates
@@ -62,7 +62,7 @@ the production payload itself never carries user data.
 ## Synthetic monitor
 
 The monitor re-walks every action's `expected_outcome` against your staging URL
-(or any explicit `synthetic_target_url`). Defaults are **fail-closed**: write paths
+(or the project's `synthetic_monitor_target_url`). Defaults are **fail-closed**: write paths
 (POST / PUT / DELETE actions) are skipped unless you opt in per-project:
 
 ```yaml filename="inventory.yaml"

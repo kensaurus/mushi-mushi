@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/spa-to-ssr
 
 ---
 title: 'SPA → SSR (Next.js / Nuxt / SvelteKit)'
-description: Move a Vite SPA to Next.js, Nuxt or SvelteKit — env var prefix changes, where to mount Mushi so it survives navigation, and hydration gotchas.
+description: Move a Vite SPA to Next.js, Nuxt or SvelteKit. Env var prefix changes, where to mount Mushi Mushi so it survives navigation, and hydration gotchas.
 ---
 
 # SPA → SSR (Next.js / Nuxt / SvelteKit)
@@ -15,34 +15,36 @@ Move a Vite SPA (React, Vue, or Svelte) onto a server-rendered framework
 (Next.js, Nuxt, or SvelteKit respectively) for SEO, faster TTFB, and
 real route-level data loading.
 
-The Mushi-specific bits are: env-var prefix changes, where to mount the
+The Mushi Mushi bits are: env-var prefix changes, where to mount the
 provider so it survives navigation, and what to do about hydration
 warnings. The framework-level migration mechanics are upstream:
 
-- React SPA → **Next.js** App Router: [official Next.js migration guide](https://nextjs.org/docs/app/building-your-application/upgrading/from-create-react-app)
-- Vue SPA → **Nuxt 3**: [official Nuxt migration guide](https://nuxt.com/docs/migration/overview)
+- React SPA → **Next.js** App Router: [Next.js: migrating from Vite](https://nextjs.org/docs/app/guides/migrating/from-vite)
+- Vue SPA → **Nuxt**: [Nuxt installation](https://nuxt.com/docs/4.x/getting-started/installation)
 - Svelte SPA → **SvelteKit**: [creating a SvelteKit project](https://svelte.dev/docs/kit/creating-a-project)
 
 ## Env-var prefix mapping
 
-This is the change that bites every team:
+This is the change that most often breaks the SDK after a move:
 
 | Vite SPA | Next.js | Nuxt | SvelteKit |
 |----------|---------|------|-----------|
-| `VITE_MUSHI_PROJECT_ID` | `NEXT_PUBLIC_MUSHI_PROJECT_ID` | `NUXT_PUBLIC_MUSHI_PROJECT_ID` | `PUBLIC_MUSHI_PROJECT_ID` |
-| `VITE_MUSHI_API_KEY` | `NEXT_PUBLIC_MUSHI_API_KEY` | `NUXT_PUBLIC_MUSHI_API_KEY` | `PUBLIC_MUSHI_API_KEY` |
-| `import.meta.env.VITE_*` | `process.env.NEXT_PUBLIC_*` | `useRuntimeConfig().public.*` | `import.meta.env.PUBLIC_*` |
+| `VITE_MUSHI_PROJECT_ID` | `NEXT_PUBLIC_MUSHI_PROJECT_ID` | `NUXT_PUBLIC_MUSHI_PROJECT_ID` | `VITE_MUSHI_PROJECT_ID` (unchanged) |
+| `VITE_MUSHI_API_KEY` | `NEXT_PUBLIC_MUSHI_API_KEY` | `NUXT_PUBLIC_MUSHI_API_KEY` | `VITE_MUSHI_API_KEY` (unchanged) |
+| `import.meta.env.VITE_*` | `process.env.NEXT_PUBLIC_*` | `useRuntimeConfig().public.*` (declare the keys in `nuxt.config`) | `import.meta.env.VITE_*` |
 
-The Mushi CLI handles this automatically: rerun `npx mushi-mushi init`
-after the migration and it'll write the right prefix into your `.env.local`.
+SvelteKit runs on Vite, so `VITE_` variables keep working; if you prefer
+SvelteKit's own `PUBLIC_` prefix, read them from `$env/static/public`
+instead. Rerunning `npx mushi-mushi init` in the new project writes the
+prefix the CLI uses for that framework into your `.env.local`.
 
 ## Migration checklist (generic, picks the right framework as you go)
 
-React SPA → Next.js (App Router). Vue SPA → Nuxt 3. Svelte SPA → SvelteKit. Don't switch UI framework AND rendering model in the same migration — it doubles the risk.</> },
+React SPA → Next.js (App Router). Vue SPA → Nuxt. Svelte SPA → SvelteKit. Don't switch UI framework AND rendering model in the same migration — it doubles the risk.</> },
     { id: 'bootstrap', label: 'Bootstrap the new framework alongside the old SPA', content: {`# Pick one:
 npx create-next-app@latest        # Next.js
-npx nuxi@latest init              # Nuxt 3
-npm create svelte@latest          # SvelteKit`} },
+npm create nuxt@latest            # Nuxt
+npx sv create                     # SvelteKit`} },
     { id: 'design-system', label: 'Port shared design tokens / global CSS first', content: <>If you use Tailwind, the config carries over almost as-is. CSS-in-JS users on emotion/styled-components need to wire up the SSR adapter for their library before any components move.</> },
     { id: 'routes', label: 'Migrate routes one at a time', content: <>For each SPA route, create the equivalent file-based route in the new framework. Keep the SPA running for any route not yet ported (proxy or redirect).</> },
     { id: 'data', label: 'Move data fetching to the server', content: <>SWR / react-query calls inside SPA components → Server Component fetches (Next.js) / asyncData (Nuxt) / load functions (SvelteKit). The SDK doesn't care; this is purely a perf win.</> },
@@ -52,35 +54,37 @@ npm create svelte@latest          # SvelteKit`} },
 
   return {children}
 
-// Nuxt — plugins/mushi.client.ts
+// Nuxt: nuxt.config.ts declares the keys (NUXT_PUBLIC_MUSHI_* fill them)
+export default defineNuxtConfig({
+  runtimeConfig: { public: { mushiProjectId: '', mushiApiKey: '' } },
+
+// Nuxt: plugins/mushi.client.ts (MushiPlugin initialises the SDK itself)
 
 export default defineNuxtPlugin((nuxtApp) => {
   const cfg = useRuntimeConfig()
-  const credentials = { projectId: cfg.public.mushiProjectId, apiKey: cfg.public.mushiApiKey }
-  nuxtApp.vueApp.use(MushiPlugin, credentials)
-  Mushi.init(credentials)
+  nuxtApp.vueApp.use(MushiPlugin, {
+    projectId: cfg.public.mushiProjectId,
+    apiKey: cfg.public.mushiApiKey,
 
-// SvelteKit — src/routes/+layout.svelte
+// SvelteKit: src/routes/+layout.svelte (initMushi initialises the SDK itself)
 
   import { onMount } from 'svelte'
-  import { Mushi } from '@mushi-mushi/web'
   import { initMushi } from '@mushi-mushi/svelte'
-  import { PUBLIC_MUSHI_PROJECT_ID, PUBLIC_MUSHI_API_KEY } from '$env/static/public'
   onMount(() => {
-    const credentials = { projectId: PUBLIC_MUSHI_PROJECT_ID, apiKey: PUBLIC_MUSHI_API_KEY }
-    initMushi(credentials)
-    Mushi.init(credentials)
+    initMushi({
+      projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+      apiKey: import.meta.env.VITE_MUSHI_API_KEY,
 
 `} },
     { id: 'hydration', label: 'Verify no hydration warnings', content: <>Mushi renders its widget into a Shadow DOM mounted on document.body on the client side only. It does NOT cause hydration mismatches because the widget is never present in server-rendered HTML. If you see hydration warnings, they're from your code, not Mushi.</> },
-    { id: 'dynamic-import', label: 'For Nuxt/Next, use a .client suffix or "use client" for Mushi components', content: <>Mushi components ({``}, useMushi(), useMushiReport()) are client-only because they touch window. Mark them appropriately so SSR does not try to render them server-side.</> },
+    { id: 'dynamic-import', label: 'For Nuxt/Next, use a .client suffix or "use client" for Mushi code', content: <>Mushi&apos;s provider and hooks ({``}, useMushi(), useMushiReport()) run in the browser. Mark them client-only (a .client plugin in Nuxt, 'use client' in Next.js) so SSR doesn&apos;t try to run them.</> },
     { id: 'sitemap', label: 'Confirm SSR routes are crawlable', content: <>Run a Lighthouse SEO audit on a few key pages. If TTFB is slower than the old SPA, you've probably introduced an unnecessary serverside fetch — profile and remove it.</> },
     { id: 'redirect', label: 'Redirect old SPA routes to the new ones (when all migrated)', content: <>Either at the CDN layer (Cloudflare / S3 redirects) or via the new framework's redirects config.</> },
-    { id: 'verify', label: 'Smoke-test Mushi from a server-rendered page', content: <>Open a page that's rendered by the SSR pipeline. Click the floating bug widget, submit a report, confirm metadata.url on the report shows the SSR-rendered route. Tagged appropriately for the new framework.</> },
+    { id: 'verify', label: 'Smoke-test Mushi from a server-rendered page', content: <>Open a page that's rendered by the SSR pipeline. Open the floating widget, submit a report, and confirm the report shows the SSR-rendered route.</> },
 
 />
 
-## Where the Mushi widget lives across SSR vs CSR
+## Where the Mushi Mushi widget lives across SSR vs CSR
 
 The Mushi visual widget mounts client-side, in a Shadow DOM child of
 `document.body`, after `Mushi.init()` runs. Because it doesn't render in
@@ -88,27 +92,27 @@ the server-side HTML, you'll see:
 
 - ✅ No hydration warnings caused by the widget itself
 - ✅ Crawlers don't see the widget (it's not in the initial HTML)
-- ✅ The widget appears within ~100 ms of `Mushi.init()` resolving
-- ⚠️ Brief flash of un-widget'd page on slow networks (acceptable; this
-  is intentional client-only behaviour to keep server HTML lean)
+- ⚠️ The widget appears only after the client-side JavaScript runs, so on
+  slow networks the page shows briefly without it (intentional, to keep
+  server HTML lean)
 
 ## Common gotchas
 
-- **`useMushi()` in a Server Component** (Next.js App Router) — build
+- **`useMushi()` in a Server Component** (Next.js App Router): build
   error. Add `'use client'`. See the
   [Next.js Pages → App Router guide](/migrations/nextjs-pages-to-app-router#server-components-and-usemushi)
   for the recommended pattern.
-- **Forgetting to call `Mushi.init()` in addition to the framework
-  adapter** — Vue and Svelte adapters do NOT mount the widget themselves.
-  They wire composables / error handlers; you still need
-  `Mushi.init(credentials)` to mount the visual widget.
-- **Env-var prefix typos** — symptom is `projectId: undefined` errors at
-  runtime. Run `npx mushi-mushi init` to regenerate the env section
-  correctly.
+- **Calling `Mushi.init()` as well as the framework adapter.** Since 1.0,
+  `MushiPlugin` (Vue/Nuxt) and `initMushi()` (Svelte) initialise the SDK
+  themselves; a second `Mushi.init()` only logs "Already initialized".
+  Remove it.
+- **Env-var prefix typos.** The SDK throws an error saying `projectId`
+  and `apiKey` are required. Run `npx mushi-mushi init` to regenerate the
+  env section.
 
 ## References
 
-- [Next.js: Migrating from Create React App](https://nextjs.org/docs/app/building-your-application/upgrading/from-create-react-app)
-- [Nuxt 3 migration guide](https://nuxt.com/docs/migration/overview)
+- [Next.js: Migrating from Vite](https://nextjs.org/docs/app/guides/migrating/from-vite)
+- [Nuxt installation](https://nuxt.com/docs/4.x/getting-started/installation)
 - [Creating a SvelteKit project](https://svelte.dev/docs/kit/creating-a-project)
 - [`@mushi-mushi/react`](/sdks/react) / [`@mushi-mushi/vue`](/sdks/vue) / [`@mushi-mushi/svelte`](/sdks/svelte) SDK references

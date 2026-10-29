@@ -4,13 +4,13 @@ Source: https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi
 
 ---
 title: Sentry vs Mushi Mushi
-description: Sentry vs Mushi Mushi in 2026 — what each captures, Sentry's free tier and Seer pricing next to Mushi's 50 free diagnoses a month, and running both.
+description: Sentry vs Mushi Mushi in 2026. What each captures, Sentry's free tier and Seer pricing next to Mushi's free plan (1 app, 100 diagnoses), and running both.
 ---
 
 # Sentry vs Mushi Mushi
 
 Sentry is built around what the code threw, with a User Feedback widget and
-Session Replay alongside. Mushi starts from what the user reported, ingests
+Session Replay alongside. Mushi Mushi starts from what the user reported, ingests
 Sentry's errors too, explains each one in plain English, and hands your agent
 a fix prompt to start from. One queue, with or without Sentry.
 
@@ -40,14 +40,14 @@ case for an app built with Cursor, Claude Code or Lovable.
 
 Keep Sentry where it is. Point a Sentry issue-alert webhook at Mushi and every
 error lands in the same queue as user reports, deduped and diagnosed; with the
-outbound Sentry plugin (Indie and above, or self-hosted), Mushi resolves the
+outbound Sentry plugin (Builder and above, or self-hosted), Mushi resolves the
 linked Sentry issue when the fix merges. The setup is three steps
 on the [Sentry plugin page](/plugins/sentry), and there is a
 [migration guide](/migrations/sentry-to-mushi) for the enrich-or-standalone
 decision.
 
 Three things to know before you compare bills. Seer is an add-on to the
-Team, Business or Enterprise plan, priced per active contributor and billed
+Team or Business plan, priced per active contributor and billed
 as its own monthly charge, separate from pay-as-you-go; the price and what
 counts as an active contributor are in the Sentry table above, from
 [Sentry's pricing docs](https://docs.sentry.io/pricing/). Seer is not

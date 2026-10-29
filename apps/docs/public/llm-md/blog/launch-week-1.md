@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/blog/launch-week-1
 
 ---
 title: "Launch Week 1 — five features, five days"
-description: Everything Mushi Mushi shipped in Launch Week 1 — one feature a day, from bug-report capture to editor-ready fixes, with demos and setup commands.
+description: The five features Mushi Mushi shipped in June 2026, one a day, from MCP install to CLI browser sign-in. The public launch posts it promised did not go out.
 date: 2026-06-17
 ---
 
@@ -20,6 +20,9 @@ date: 2026-06-17
   production until September. The post is kept as written; the current launch
   plan and its gate are on the [launch page](/launch-week), and the numbers
   are in [9 signups in 5 months](/blog/nine-signups-what-the-data-said).
+  Correction, 2026-10-29: the Friday item named `mushimushi.dev`, a domain this
+  project never owned. `mushi login` opens the console at
+  `kensaur.us/mushi-mushi/admin` and you approve a code there; no key paste.
 
 Mushi has been shipping quietly for a year. This week we stop doing that.
 
@@ -46,10 +49,10 @@ mushi setup --ide zed     # wires Zed
 
 **Thursday — GitHub OAuth + onboarding.** Signup with one GitHub click. New users land on `/onboarding` instead of an empty dashboard. Self-hosters get `MUSHI_INIT_*` env vars for headless bootstrapping.
 
-**Friday — `mushi login`.** The CLI now opens a browser to `mushimushi.dev/settings/api-keys`, waits for you to paste back your key, and verifies it. No more copying Project UUIDs from the dashboard.
+**Friday — `mushi login`.** The CLI now opens the console in your browser, waits for you to approve the sign-in there, and verifies it. No more copying Project UUIDs from the dashboard.
 
 ```bash
-mushi login   # opens browser → paste key → verified
+mushi login   # opens browser → approve → verified
 ```
 
 ## Why now

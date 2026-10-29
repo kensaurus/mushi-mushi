@@ -1,11 +1,11 @@
 ---
 title: '@mushi-mushi/mcp-ci'
-description: "@mushi-mushi/mcp-ci is Mushi's GitHub Action: fail a PR while reports wait for triage, dispatch a fix, run the pre-release gates and refresh crawler sign-in."
+description: "@mushi-mushi/mcp-ci is the Mushi Mushi GitHub Action: fail a PR while reports await triage, dispatch a fix, run pre-release gates and refresh crawler sign-in."
 ---
 
 # `@mushi-mushi/mcp-ci`
 
-Mushi's GitHub Action. It calls the same API the MCP server uses, from a
+The Mushi Mushi GitHub Action. It calls the same API the MCP server uses, from a
 short CI job: fail a PR while bug reports sit untriaged, have an agent open
 a fix PR for one report, run the pre-release gates on a commit, or refresh
 the crawler's signed-in session.
@@ -28,8 +28,8 @@ jobs:
 ```
 
 `check-coverage` fails the step when fewer than `min-coverage` (default
-`0.8`) of the project's reports are classified. Add a `trigger-judge` step
-before it to classify waiting reports first.
+`0.8`) of the project's reports are classified. Classification runs on its own
+when a report arrives; `trigger-judge` does not classify reports.
 
 ### Gates on every PR
 
@@ -58,7 +58,7 @@ jobs:
 | `command:`           | What it does                                                          |
 | -------------------- | --------------------------------------------------------------------- |
 | `check-coverage`     | Fails when the classified share of reports is under `min-coverage`; sets the `coverage` output. |
-| `trigger-judge`      | Runs classification on up to 50 unclassified reports.                 |
+| `trigger-judge`      | Starts the judge, which grades the AI classification of up to 50 classified reports not yet graded (projects with the judge turned on). It does not classify new reports. |
 | `dispatch-fix`       | Queues an agent fix for `report-id` (optionally pinned with `inventory-action-node-id`). |
 | `query`              | Runs a plain-English `question` against your reports and prints the answer. |
 | `gates`              | Runs the gates for `commit-sha` (`all` = `dead_handler`, `mock_leak`, `api_contract`, `status_claim`, `orphan_endpoint`, `unknown_call`) and fails the step when one fails, errors or returns no result. |
@@ -82,7 +82,7 @@ The same commands are exposed as MCP tools via [`@mushi-mushi/mcp`](/sdks/mcp).
 Cursor, Claude Code, and Copilot can run them on your behalf when the MCP
 server is configured. Inside the admin console you can also click
 **Run gates** / **Run crawler** directly on each row of the User stories
-page — see [Admin → User stories · Inventory](/admin/inventory).
+page; see [Admin → User stories · Inventory](/admin/inventory).
 
 ## Inputs
 
@@ -93,7 +93,7 @@ page — see [Admin → User stories · Inventory](/admin/inventory).
 | `api-key`     | ✓        | —             | Project API key (`mushi_…`). Store it as a repo secret. |
 | `project-id`  | ✓        | —             | Project UUID.                                        |
 | `command`     | ✓        | —             | One of the commands listed above.                    |
-| `api-endpoint` |         | Mushi Cloud   | Override for self-hosted Mushi deployments.          |
+| `api-endpoint` |         | hosted Mushi Mushi API | Override for self-hosted deployments.          |
 | `report-id`   | for `dispatch-fix` | —   | Report UUID.                                         |
 | `inventory-action-node-id` |  | —     | For `dispatch-fix`: the inventory action to pin the fix to. |
 | `question`    | for `query` | —          | The question to ask.                                 |

@@ -1,57 +1,53 @@
-# Fix drafts & PRs
+# Fixes
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/fixes
 
 ---
-title: Fix drafts & PRs
-description: The Fixes page tracks every draft pull request Mushi opened from a bug report, from the moment a fix run starts until the PR is ready or the run fails.
+title: Fixes
+description: The Fixes page tracks every draft pull request Mushi Mushi opened from a bug report, from the moment a fix run starts until the PR is ready or the run fails.
 ---
 
-# Fix drafts & PRs
+# Fixes
 
-The Fixes page shows every draft pull request Mushi opened from a real bug — from
-the moment a fix run starts to when a PR is ready to review (or the run fails).
+**Route:** `/fixes` (sidebar: **Fixes**)
+
+The Fixes page shows every draft pull request Mushi Mushi opened from a real bug,
+from the moment a fix run starts to when a PR is ready to review (or the run fails).
 Multi-repo coordination rows appear when one report spans several repos.
 
 ---
 
 ## The fixes list
 
-Each row in the list shows:
+Tiles above the list count **Attempts (30d)**, **Reports fixed**, **In flight**,
+**PRs open** and, when any exist, **Spec warnings** and why auto-fix stopped.
+
+The table has these columns (Pipeline and CI / Agent are hidden in the compact
+layout):
 
 | Column | What it is |
 | ------ | ---------- |
-| **Status** | `queued` · `running` · `completed` · `failed` · `cancelled` |
-| **Agent type** | `McpFixAgent` (Cursor / Claude Code), `RestFixWorkerAgent` (edge function), or `cursor_cloud` (Cursor Cloud Agent) |
-| **Sandbox** | `e2b` (default cloud), `modal`, `local`, or `none`. Cursor Cloud runs use `none` — the agent runs in Cursor's managed cloud env. |
-| **Branch / PR** | Link to the GitHub PR. For Cursor runs, this is the Cursor-signed draft PR. |
-| **Files / lines** | Scope of the diff — files touched and net line delta |
-| **Spec warnings** | Yellow pill if `validateAgainstSpec()` flagged issues before the PR opened |
-| **AI summary** | One-sentence description of what the agent changed and why |
-| **Cursor badge** | ◆ chip (visible on `cursor_cloud` rows) — links directly to the agent run transcript in Cursor |
+| **Status** | Where the attempt is, for example queued, running, completed or failed |
+| **Report** | The bug the fix is for |
+| **Pipeline** | The fix's stages, from dispatch to PR |
+| **CI / Agent** | The PR's CI result and the agent that wrote it (a ◆ chip on Cursor Cloud rows links to the run in Cursor) |
+| **Started** | When the run started |
 
-Coordination rows have a **▶ Expand** toggle that reveals the per-repo child
-attempts grouped underneath.
+Click a row to expand it: branch, token use, CI sync, the PDCA timeline, the
+agent's rationale, the files changed, spec-validation warnings and, for Cursor
+Cloud runs, the artifact gallery. The Opus review shows in the merge dialog. Coordination rows expand to the
+per-repo child attempts grouped underneath.
 
 ---
 
-## Streaming view
+## Live status
 
-Click any running fix to open the **streaming drawer**. It opens a Hono
-`streamSSE` connection into the orchestrator and renders AG-UI protocol events live:
-
-- **Tool calls** — file reads, searches, shell commands, test runs.
-- **File writes** — diffs rendered inline as the agent writes them.
-- **Test output** — pass / fail per test as they stream.
-- **Sandbox lifecycle** — boot, snapshot, restore, teardown events.
-
-The transport sanitises carriage returns per
-[CVE-2026-29085](https://nvd.nist.gov/vuln/detail/CVE-2026-29085) so injected
-control sequences can't forge fake tool-call lines.
-
-  The streaming view works for both `McpFixAgent` and `RestFixWorkerAgent`.
-  For MCP agents, events arrive via the Cursor / Claude Code AG-UI bridge.
-  For REST workers, events stream directly from the `fix-worker` Edge Function.
+While a dispatch runs, the console follows it over a server-sent event stream
+(`GET /v1/admin/fixes/dispatch/:id/stream`) and falls back to polling if the stream
+drops. The stream carries run status events (started, status, completed, failed) in
+the AG-UI envelope format. The server JSON-encodes every payload
+([CVE-2026-29085](https://nvd.nist.gov/vuln/detail/CVE-2026-29085)) so an untrusted
+string can't inject extra event frames.
 
 ---
 
@@ -60,14 +56,8 @@ control sequences can't forge fake tool-call lines.
 When the fix-worker runs `validateAgainstSpec()` before opening a PR and finds
 soft issues — e.g. the diff doesn't touch any file that references the contract's
 required DB table — the warnings land in `fix_attempts.spec_validation_warnings`
-and surface as a yellow callout in the streaming drawer:
-
-```
-⚠  Sanity-check before merging
-   The diff does not reference table public.users, but the expected_outcome
-   contract requires a row_exists assertion on that table.
-   Review manually before merging.
-```
+and appear under **Spec validation warnings** when you expand the fix row, and in
+the **Spec warnings** tile above the list.
 
 Hard errors (removing a json_path field the contract asserts on) abort the run
 before the PR opens.
@@ -78,8 +68,8 @@ before the PR opens.
 
 When `agent = cursor_cloud`, the fix row shows two additional UI elements:
 
-- **Cursor badge** — a ◆ `bc-…` chip that links to the agent run transcript in Cursor's web interface.
-- **Artifact gallery** — screenshots, videos, and log files the agent produced during the run. These are fetched via `agent.listArtifacts()` after the run terminates.
+- **Cursor badge**: a ◆ `bc-…` chip that links to the agent run in Cursor's web interface.
+- **Artifact gallery**: screenshots, videos and log files the agent produced during the run, fetched after the run ends.
 
 The artifact gallery is visible in the expanded fix detail when artifacts are present.
 
@@ -114,17 +104,17 @@ PR is trusted and the fix timeline says the contents were not checked.
 
 ## Dispatching a fix
 
-You can dispatch a fix from four places:
+You can dispatch a fix from three places:
 
 1. **Report detail** → "Dispatch fix" button (single-repo or auto multi-repo).
    A report with no stack trace, source file or failed request (most web
    vitals and native crashes) leads with "Not a code bug" instead, and the
    button reads "Dispatch anyway": a fix agent usually has nothing to change.
-2. **Reports list** → kebab menu → "Send to Cursor agent" (dispatches `cursor_cloud` directly).
-3. **Fixes list** → "New fix" button with a report picker.
-4. **MCP / A2A / CLI** — `dispatch_fix` tool (`agent=cursor_cloud`), `POST /v1/a2a/tasks`, or `mushi fix  --agent cursor_cloud`.
+2. **Bugs list** → the **Dispatch fix →** button on a row, which first shows a
+   preflight of what is needed.
+3. **MCP / A2A / CLI**: `dispatch_fix` tool (`agent=cursor_cloud`), `POST /v1/a2a/tasks`, or `mushi fix  --agent cursor_cloud`.
 
-All three paths produce the same `fix_dispatch_jobs` row and emit the same
+All paths produce the same `fix_dispatch_jobs` row and emit the same
 `fix.dispatched` webhook to subscribed plugins.
 
 When a project has more than one linked repo, pick the repo the PR opens
@@ -145,10 +135,10 @@ the primary repo; another project's repo id is refused with
 | `fix.proposed` | Orchestrator opens a draft PR (Cursor or standard agent) |
 | `fix.applied` | Fix completed and PR is merged |
 | `fix.failed` | Orchestrator exhausted retries |
-| `fix.coordination.succeeded` | All child PRs in a multi-repo fix are open |
 
-Configure webhook endpoints in **Settings → Webhooks**. Each delivery is logged
-with the payload, HTTP status, and any retry attempts.
+Configure webhook endpoints by installing a webhook plugin on
+[Plugins](/admin/marketplace) (`/marketplace`). Each delivery is logged with its
+status, latency and the start of the response.
 
 ---
 
@@ -178,7 +168,7 @@ mushi fixes refresh-ci <fixId>
 ## Merging from the console
 
 After CI passes (or you've reviewed manually), merge the draft PR without leaving
-Mushi. This is **user-confirmed**: Mushi merges only what you merge or queue,
+Mushi Mushi. This is **user-confirmed**: Mushi merges only what you merge or queue,
 or what passes [verified merge](/admin/verified-merge) when you turned it on.
 
 ### Where merge appears
@@ -213,9 +203,14 @@ sequenceDiagram
   Console-->>You: Report status Fixed
 ```
 
-**Draft PRs:** fix-worker opens PRs as drafts. Before merge, the API calls GitHub's
-GraphQL `markPullRequestReadyForReview` (same as `gh pr ready`). New fix-worker runs also
-auto-ready immediately after opening the PR.
+**Draft PRs:** fix-worker opens PRs as drafts. The PR is marked ready (GitHub's
+GraphQL `markPullRequestReadyForReview`, the same as `gh pr ready`) only when the
+Opus review says merge on its head, so your CI runs only on an approved commit. A
+console merge of a PR that is still a draft marks it ready first.
+
+**Review gate:** while the PR's latest Opus review says **hold**, the merge is
+refused unless a team member (not a viewer) overrides it in the console with a
+reason. API keys (CLI, MCP) cannot override.
 
 **Merge methods:** squash (default), merge commit, or rebase — chosen in the confirm
 popover.
@@ -294,7 +289,7 @@ merge stay listed above the table with GitHub's reason and a
 
 ## See also
 
-- [Verified merge](/admin/verified-merge) — the gates an agent's PR passes before Mushi merges it on its own.
-- [Concepts → Fix drafts & PRs](/concepts/fix-orchestrator) — how auto-fix works internally.
-- [Concepts → Multi-repo coordinated fixes](/concepts/multi-repo-fixes) — coordinated multi-repo runs.
-- [Connecting your orchestrator](/concepts/orchestrator-interop) — dispatch via MCP, A2A, or REST.
+- [Verified merge](/admin/verified-merge): the gates an agent's PR passes before Mushi merges it on its own.
+- [Concepts → Fix drafts & PRs](/concepts/fix-orchestrator): how auto-fix works internally.
+- [Concepts → Multi-repo coordinated fixes](/concepts/multi-repo-fixes): coordinated multi-repo runs.
+- [Connecting your orchestrator](/concepts/orchestrator-interop): dispatch via MCP, A2A, or REST.

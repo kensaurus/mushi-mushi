@@ -53,8 +53,8 @@ export function RewardsStatusBanner({ stats, rewardsEntitlement, onTab, onRefres
     return (
       <StatusBannerShell
         tone="warn"
-        title="Rewards program requires Starter or higher"
-        subtitle={`Preview tabs below are read-only on Hobby — upgrade to edit rules, tiers, and webhooks for ${orgLabel}.`}
+        title="Rewards program needs Builder or higher"
+        subtitle={`Preview tabs below are read-only on Free — upgrade to edit rules, tiers, and webhooks for ${orgLabel}.`}
         action={
           <Btn to="/billing" size="sm" variant="ghost">View plans</Btn>
         }

@@ -93,16 +93,19 @@ describe('allAppsSupportFor', () => {
 describe('useProjectScope', () => {
   let root: Root
   let host: HTMLDivElement
-  const seen: { scope: ProjectScope | null; search: string; set: ((m: 'all' | 'project') => void) | null } = {
+  const seen: { scope: ProjectScope | null; search: string; hash: string; set: ((m: 'all' | 'project') => void) | null } = {
     scope: null,
     search: '',
+    hash: '',
     set: null,
   }
 
   function Probe() {
     seen.scope = useProjectScope()
     seen.set = useSetProjectScopeMode()
-    seen.search = useLocation().search
+    const location = useLocation()
+    seen.search = location.search
+    seen.hash = location.hash
     return null
   }
 
@@ -143,6 +146,16 @@ describe('useProjectScope', () => {
     setStoredProjectScopeMode('all')
     await render(`/ci?project=${PROJECT_A}`)
     expect(seen.scope).toEqual({ mode: 'all' })
+  })
+
+  // Router's own setter navigates to a bare "?…" and dropped the hash, so a
+  // link to /settings?tab=ci-cost lost its section (console sweep, 2026-10-28).
+  it('keeps the #section of the link when it changes the scope param', async () => {
+    await render(`/settings?tab=general&project=${PROJECT_A}#ci-cost`)
+    await act(async () => seen.set!('all'))
+    expect(new URLSearchParams(seen.search).get('apps')).toBe('all')
+    expect(new URLSearchParams(seen.search).get('tab')).toBe('general')
+    expect(seen.hash).toBe('#ci-cost')
   })
 
   it('switches in storage and the URL together, keeping ?project=', async () => {

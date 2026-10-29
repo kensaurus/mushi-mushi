@@ -120,7 +120,7 @@ export function VoiceRecorderCard({ onFile, onTranscript, busyStage, disabled, i
 
         {!recording && !busy && (
           <p className="text-center text-xs text-fg-muted">
-            Say what broke or what to change. You will see the exact transcript before anything is dispatched.
+            Say what broke or what to change. You will see the exact words before Mushi does anything with them.
           </p>
         )}
 

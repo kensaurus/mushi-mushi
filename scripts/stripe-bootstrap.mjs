@@ -166,6 +166,17 @@ async function findProductByName(name) {
   return (list.data ?? []).find((p) => p.name === name) ?? null
 }
 
+async function findOrCreateProduct(name, description) {
+  const existing = await findProductByName(name)
+  if (existing) {
+    log(`product exists: ${name} → ${existing.id}`)
+    return existing
+  }
+  const created = await stripe('/products', { method: 'POST', body: { name, description, metadata: { project: 'mushi-mushi' } } })
+  log(`product created: ${name} → ${created.id}`)
+  return created
+}
+
 // ----------------------------------------------------------------
 // Util
 // ----------------------------------------------------------------
@@ -383,6 +394,85 @@ async function main() {
     metadata: { project: 'mushi-mushi', tier: 'pro', kind: 'base', billing_period: 'annual', version: 'v1' },
   })
 
+  // ── Phase 4 — Builder and Studio (owner, 2026-10-28; docs/plan-pricing.md) ──
+  // Plan ids stay indie / pro (metadata.tier below), the products are named
+  // Builder and Studio. Apps watched is the headline limit; diagnoses are the
+  // allowance metered here. The STRIPE_PRICE_INDIE_* / PRO_* secrets point at
+  // these prices; the earlier ones stay in Stripe (no subscriber used them).
+  const builderProduct = await findOrCreateProduct('Mushi Mushi — Builder', 'Up to 3 apps watched, 1,000 diagnoses a month, automatic fix PRs with the review gate.')
+  const studioProduct = await findOrCreateProduct('Mushi Mushi — Studio', 'Up to 10 apps watched, 3,000 diagnoses a month, 5 seats, weekly intelligence report.')
+  const builderBase = await findOrCreatePrice({
+    product: builderProduct.id,
+    currency: 'usd',
+    unit_amount: 2900,
+    lookup_key: 'mushi:indie:base:v2',
+    nickname: 'Mushi Mushi Builder — $29/mo',
+    tax_behavior: 'exclusive',
+    recurring: { interval: 'month', usage_type: 'licensed' },
+    metadata: { project: 'mushi-mushi', tier: 'indie', plan_id: 'indie', kind: 'base', version: 'v2' },
+  })
+  const builderAnnual = await findOrCreatePrice({
+    product: builderProduct.id,
+    currency: 'usd',
+    unit_amount: 29000,
+    lookup_key: 'mushi:indie:annual:v2',
+    nickname: 'Mushi Mushi Builder — $290/yr (2 months free)',
+    tax_behavior: 'exclusive',
+    recurring: { interval: 'year', usage_type: 'licensed' },
+    metadata: { project: 'mushi-mushi', tier: 'indie', plan_id: 'indie', kind: 'base', billing_period: 'annual', version: 'v2' },
+  })
+  const builderOverage = await findOrCreatePrice({
+    product: products.diagnosesOverage.id,
+    currency: 'usd',
+    billing_scheme: 'tiered',
+    tiers_mode: 'graduated',
+    tiers: [
+      { up_to: 1000, unit_amount_decimal: '0' },
+      { up_to: 'inf', unit_amount_decimal: '3' },
+    ],
+    lookup_key: 'mushi:diagnoses:overage:indie:v3',
+    nickname: 'Mushi Mushi diagnoses — Builder (1,000 included, then $0.03/diagnosis)',
+    tax_behavior: 'exclusive',
+    recurring: { interval: 'month', usage_type: 'metered', meter: diagnosesMeter.id },
+    metadata: { project: 'mushi-mushi', tier: 'indie', plan_id: 'indie', kind: 'overage', unit: 'diagnoses', version: 'v3', included: '1000' },
+  })
+  const studioBase = await findOrCreatePrice({
+    product: studioProduct.id,
+    currency: 'usd',
+    unit_amount: 7900,
+    lookup_key: 'mushi:pro:base:v3',
+    nickname: 'Mushi Mushi Studio — $79/mo',
+    tax_behavior: 'exclusive',
+    recurring: { interval: 'month', usage_type: 'licensed' },
+    metadata: { project: 'mushi-mushi', tier: 'pro', plan_id: 'pro', kind: 'base', version: 'v3' },
+  })
+  const studioAnnual = await findOrCreatePrice({
+    product: studioProduct.id,
+    currency: 'usd',
+    unit_amount: 79000,
+    lookup_key: 'mushi:pro:annual:v2',
+    nickname: 'Mushi Mushi Studio — $790/yr (2 months free)',
+    tax_behavior: 'exclusive',
+    recurring: { interval: 'year', usage_type: 'licensed' },
+    metadata: { project: 'mushi-mushi', tier: 'pro', plan_id: 'pro', kind: 'base', billing_period: 'annual', version: 'v2' },
+  })
+  const studioOverage = await findOrCreatePrice({
+    product: products.diagnosesOverage.id,
+    currency: 'usd',
+    billing_scheme: 'tiered',
+    tiers_mode: 'graduated',
+    tiers: [
+      { up_to: 3000, unit_amount_decimal: '0' },
+      { up_to: 'inf', unit_amount_decimal: '3' },
+    ],
+    // v3 (5,000 at $0, then 2 cents) lost money per diagnosis; archived 2026-10-28.
+    lookup_key: 'mushi:diagnoses:overage:pro:v4',
+    nickname: 'Mushi Mushi diagnoses — Studio (3,000 included, then $0.03/diagnosis)',
+    tax_behavior: 'exclusive',
+    recurring: { interval: 'month', usage_type: 'metered', meter: diagnosesMeter.id },
+    metadata: { project: 'mushi-mushi', tier: 'pro', plan_id: 'pro', kind: 'overage', unit: 'diagnoses', version: 'v4', included: '3000' },
+  })
+
   // ------------------- Output env block -------------------
   heading('✓ Bootstrap complete. Add these to your secret store:')
   const envLines = [
@@ -400,15 +490,16 @@ async function main() {
     `# legacy aliases — keep until quota.ts is fully migrated off reports_ingested`,
     `STRIPE_METER_EVENT_NAME=mushi_reports_ingested`,
     ``,
-    `# Phase 2 — diagnoses-metered tier prices (use for new Checkout Sessions)`,
-    `STRIPE_PRICE_INDIE_BASE=${indieBase.id}`,
-    `STRIPE_PRICE_INDIE_DIAGNOSES_OVERAGE=${indieDiagnosesOverage.id}`,
-    `STRIPE_PRICE_PRO_BASE_V2=${proBaseV2.id}`,
-    `STRIPE_PRICE_PRO_DIAGNOSES_OVERAGE=${proDiagnosesOverage.id}`,
+    `# Phase 4 — Builder (plan id indie) and Studio (plan id pro), 2026-10-28 (use for new Checkout Sessions)`,
+    `STRIPE_PRICE_INDIE_BASE=${builderBase.id}`,
+    `STRIPE_PRICE_INDIE_DIAGNOSES_OVERAGE=${builderOverage.id}`,
+    `STRIPE_PRICE_INDIE_ANNUAL=${builderAnnual.id}`,
+    `STRIPE_PRICE_PRO_BASE_V2=${studioBase.id}`,
+    `STRIPE_PRICE_PRO_DIAGNOSES_OVERAGE=${studioOverage.id}`,
+    `STRIPE_PRICE_PRO_ANNUAL=${studioAnnual.id}`,
     ``,
-    `# Phase 3 — annual billing prices (~2 months free)`,
-    `STRIPE_PRICE_INDIE_ANNUAL=${indieAnnual.id}`,
-    `STRIPE_PRICE_PRO_ANNUAL=${proAnnual.id}`,
+    `# Superseded 2026-10-28 (Indie $15, Pro $49, their annual and v2 overage prices; no subscriber)`,
+    `# ${indieBase.id} ${indieDiagnosesOverage.id} ${proBaseV2.id} ${proDiagnosesOverage.id} ${indieAnnual.id} ${proAnnual.id}`,
     ``,
     `# Legacy prices (still active for existing subscribers)`,
     `STRIPE_PRICE_STARTER_BASE=${starterBase.id}`,

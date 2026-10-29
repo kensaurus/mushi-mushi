@@ -41,6 +41,7 @@ import type {
   SkillsNavSlice,
   SsoNavSlice,
   StorageNavSlice,
+  WorkersNavSlice,
 } from './remainingNavSliceTypes'
 
 interface AuditStatsResp {
@@ -87,6 +88,7 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
     integrationsStatsRes,
     featureBoardStatsRes,
     skillsStatsRes,
+    workersStatsRes,
   ] = await Promise.all([
     apiFetch<LessonsStats>('/v1/admin/lessons/stats'),
     apiFetch<DriftStats>('/v1/admin/drift/stats'),
@@ -128,6 +130,7 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
     apiFetch<IntegrationsNavSlice>('/v1/admin/integrations/stats'),
     apiFetch<FeatureBoardNavSlice>('/v1/admin/feature-board/stats'),
     apiFetch<SkillsNavSlice>('/v1/admin/skills/stats'),
+    apiFetch<WorkersNavSlice>('/v1/admin/work/stats'),
   ])
 
   const lessonsStats = lessonsStatsRes.ok ? lessonsStatsRes.data : null
@@ -166,6 +169,7 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
   const integrationsStats = integrationsStatsRes.ok ? integrationsStatsRes.data : null
   const featureBoardStats = featureBoardStatsRes.ok ? featureBoardStatsRes.data : null
   const skillsStats = skillsStatsRes.ok ? skillsStatsRes.data : null
+  const workersStats = workersStatsRes.ok ? workersStatsRes.data : null
 
   return normalizeNavSlices({
     contentQuality: contentQualityStats
@@ -391,5 +395,6 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
     integrations: integrationsStats,
     featureBoard: featureBoardStats,
     skills: skillsStats,
+    workers: workersStats,
   })
 }

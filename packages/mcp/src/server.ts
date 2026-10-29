@@ -1839,6 +1839,33 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   );
 
   server.registerTool(
+    'get_worker_status',
+    {
+      title: titleOf('get_worker_status'),
+      description: descOf('get_worker_status'),
+      annotations: annotationsFor('get_worker_status'),
+      inputSchema: z.object({
+        projectId: z
+          .string()
+          .optional()
+          .describe('Project UUID — defaults to the server-configured project; omitted with an account-level key, every project you can read'),
+      }),
+      outputSchema: z.looseObject({
+        generatedAt: z.string().optional(),
+        flags: z.array(z.looseObject({})).optional().describe('Worst first: what stops a worker, why, and the fix'),
+        projects: z.array(z.looseObject({})).optional(),
+        hosts: z.array(z.looseObject({})).optional(),
+        lanes: z.array(z.looseObject({})).optional(),
+      }),
+    },
+    async (args) => {
+      const pid = args.projectId ? await resolveProjectId(args.projectId) : projectId || undefined;
+      const qs = pid ? `?${new URLSearchParams({ projectId: pid })}` : '';
+      return jsonResult(await apiCall(`/v1/admin/work/lanes${qs}`));
+    },
+  );
+
+  server.registerTool(
     'request_ci_placement_change',
     {
       title: titleOf('request_ci_placement_change'),

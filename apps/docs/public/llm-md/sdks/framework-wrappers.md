@@ -4,14 +4,15 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/framework-wrappers
 
 ---
 title: Framework wrappers (Vue / Svelte / Angular)
-description: How the Vue, Svelte and Angular Mushi packages wrap @mushi-mushi/web — how each one boots the SDK once, and where to find capture and widget options.
+description: How the Mushi Mushi Vue, Svelte and Angular packages wrap @mushi-mushi/web, how each one boots the SDK once, and where to find capture and widget options.
 ---
 
 # Framework wrappers
 
-`@mushi-mushi/vue`, `@mushi-mushi/svelte`, and `@mushi-mushi/angular` are thin
-idiomatic shells over [`@mushi-mushi/web`](/sdks/web). Each package depends on
-`web` and calls `Mushi.init` once — do not call `Mushi.init` a second time.
+The Mushi Mushi packages `@mushi-mushi/vue`, `@mushi-mushi/svelte`, and
+`@mushi-mushi/angular` are thin idiomatic shells over [`@mushi-mushi/web`](/sdks/web).
+Each package depends on `web` and calls `Mushi.init` once, so do not call
+`Mushi.init` a second time.
 
 | Package | Boot | Docs |
 | --- | --- | --- |

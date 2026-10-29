@@ -151,11 +151,11 @@ export function SdkInstallKeyPanel({
             </span>
             <div className="flex items-center gap-1.5">
               <Tooltip
-                content="Mints a new report:write key and drops it straight into the code snippet below. Existing keys keep working."
+                content="Makes a new key that can only send bug reports and fills it into the snippet below. Your other keys keep working."
                 side="top"
               >
                 <Btn size="sm" variant="primary" disabled={minting} onClick={() => void mintSdkKey()}>
-                  {minting ? 'Minting…' : 'Mint SDK key'}
+                  {minting ? 'Making a key…' : 'Make a key and fill it in'}
                 </Btn>
               </Tooltip>
             </div>
@@ -223,7 +223,7 @@ export function SdkInstallKeyPanel({
             </Btn>
           )}
           <p className="text-2xs text-fg-muted">
-            Full secret shown once at mint or rotate. Healthy: the SDK authenticated with it in the
+            A key is shown in full once, when it is made or rotated. Healthy: the SDK authenticated with it in the
             last hour. Stale: no activity in the last hour (normal for a quiet app). Cold: nothing for
             over 7 days, so the deploy may have stopped shipping the SDK. Never used: minted, but no
             app has authenticated with it yet.
@@ -234,10 +234,10 @@ export function SdkInstallKeyPanel({
       {!apiKey && activeKeys.length === 0 && (
         <Box className={flat ? 'flex flex-wrap items-center justify-between gap-2' : 'px-3 py-2.5 flex flex-wrap items-center justify-between gap-2'}>
           <span className="text-2xs text-fg-secondary">
-            No API key yet — mint one and it drops straight into the snippet below.
+            No key yet. Make one and it fills into the snippet below.
           </span>
           <Btn size="sm" variant="primary" disabled={minting} onClick={() => void mintSdkKey()}>
-            {minting ? 'Minting…' : 'Mint SDK key'}
+            {minting ? 'Making a key…' : 'Make a key and fill it in'}
           </Btn>
         </Box>
       )}
