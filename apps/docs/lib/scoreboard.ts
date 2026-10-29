@@ -33,8 +33,9 @@ export async function loadScoreboard(fetchImpl: typeof fetch = fetch): Promise<S
 
 const fmt = new Intl.NumberFormat('en-US')
 
-export function formatCount(n: number): string {
-  return fmt.format(n)
+/** A count, or a dash when the API sent none (an older cached answer): never "NaN". */
+export function formatCount(n: number | undefined): string {
+  return typeof n === 'number' && Number.isFinite(n) ? fmt.format(n) : '–'
 }
 
 /** 26.4 → "26 hours"; under 2 → minutes; over 72 → days. */
