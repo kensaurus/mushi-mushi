@@ -26,10 +26,13 @@ let inited = false
 
 /**
  * A workspace usage cap is an account state, not an app bug. Log it for
- * Supabase Logs and do not open a Sentry issue (the 400 otherwise groups
- * with malformed-request bugs).
+ * Supabase Logs and send one grouped Sentry warning (fixed fingerprint) so
+ * the cap is visible without paging as a malformed-request exception.
  */
+const ANTHROPIC_QUOTA_FINGERPRINT = ['anthropic-workspace-usage-limit']
+
 function warnAnthropicQuota(err: unknown, where: string): void {
+  const errMessage = (err instanceof Error ? err.message : String(err)).slice(0, 500)
   console.warn(
     JSON.stringify({
       ts: new Date().toISOString(),
@@ -38,9 +41,13 @@ function warnAnthropicQuota(err: unknown, where: string): void {
       event: 'llm_quota_exceeded',
       msg: 'Anthropic workspace usage limit reached — not an app bug',
       where,
-      err_message: (err instanceof Error ? err.message : String(err)).slice(0, 500),
+      err_message: errMessage,
     }),
   )
+  reportMessage('Anthropic workspace usage limit reached', 'warning', {
+    fingerprint: ANTHROPIC_QUOTA_FINGERPRINT,
+    extra: { where, err_message: errMessage },
+  })
 }
 
 export function ensureSentry(functionName?: string): void {
@@ -92,7 +99,12 @@ export function reportError(
 export function reportMessage(
   msg: string,
   level: 'info' | 'warning' | 'error' | 'fatal',
-  ctx?: { tags?: Record<string, string>; extra?: Record<string, unknown> },
+  ctx?: {
+    tags?: Record<string, string>
+    extra?: Record<string, unknown>
+    /** Replaces Sentry's default grouping. Quota warnings share one fingerprint. */
+    fingerprint?: string[]
+  },
 ): void {
   if (!inited) return
   Sentry.captureMessage(msg, { level, ...ctx })
@@ -224,7 +236,7 @@ export function sentryHonoErrorHandler(err: Error, c: Context): Response {
   }
 
   // Workspace usage cap (HTTP 400 "specified API usage limits"). Operational,
-  // already classified as quota by failover. Do not page it as a bug.
+  // already classified as quota by failover. One grouped warning, not an exception.
   if (isOperationalAnthropicQuota(err)) {
     warnAnthropicQuota(err, `${c.req.method} ${c.req.path}`)
     return c.json(
