@@ -41,7 +41,7 @@ const SETUP_CHORE = {
   element: 'gates' as const,
   label: 'Automated checks',
   state: 'drift' as const,
-  reason: '2 problems to fix: Mushi setup check (2). They and their fixes are under Risk checks on the Recipe page.',
+  reason: '2 problems to fix: Mushi setup check (2). They and their fixes are under Risk checks on the App blueprint page.',
 }
 
 describe('portfolioView', () => {

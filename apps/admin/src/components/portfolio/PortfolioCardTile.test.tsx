@@ -32,7 +32,7 @@ const card = (over: Partial<PortfolioCard>): PortfolioCard => ({
       element: 'gates',
       label: 'Automated checks',
       state: 'drift',
-      reason: '1 problem to fix: Mushi setup check (1). They and their fixes are under Risk checks on the Recipe page.',
+      reason: '1 problem to fix: Mushi setup check (1). They and their fixes are under Risk checks on the App blueprint page.',
     },
   ],
   openReports: 29,

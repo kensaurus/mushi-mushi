@@ -34,7 +34,7 @@ Every recipe element is in exactly one state:
 | `not_connected` | Nothing is configured. Each card says what to connect. |
 | `error` | The last check failed. Mushi says why instead of showing an old result. |
 
-The console's **Recipe** page (`/recipe`) shows the eight elements (schema, design
+The console's **App blueprint** page (`/recipe`) shows the eight elements (schema, design
 system, routes and stories, gates, CI/CD, deploy, env names, integrations) on one
 canvas, with a list view on narrow screens. MCP clients read the same data with
 `get_app_recipe`.
@@ -200,7 +200,7 @@ when the score is above the project's threshold (40 unless you change it):
 
 Some problems never throw an error, so no user report or crash log will show
 them. Mushi checks for them once a day and shows the result under **Hole
-checks** on the Recipe page:
+checks** on the App blueprint page:
 
 | Check | What it catches |
 |-------|-----------------|
@@ -265,7 +265,7 @@ change the listing in a pull request, and your own CI publishes it with
 `fastlane deliver`, `fastlane supply` or EAS. Mushi never holds a key that can
 publish a listing.
 
-**Run store review** on the Recipe page then checks:
+**Run store review** on the App blueprint page then checks:
 
 | Check | What it catches |
 |-------|-----------------|
@@ -283,7 +283,7 @@ says **Not checked**. This is a check against your code, not legal advice.
 ### Store reviews as reports
 
 A one-star review is a bug report from someone who never opened your widget.
-Switch on **Store reviews as reports** on the Recipe page and Mushi reads the
+Switch on **Store reviews as reports** on the App blueprint page and Mushi reads the
 app's App Store and Google Play reviews every 6 hours, through the App Store
 Connect and Google Play sources bound to that app (see below). Each new review
 at or under your star threshold becomes a report in the queue, with
@@ -338,7 +338,7 @@ listing change is published by your own CI after you merge.
 
 ### From the console
 
-Select the **Gates**, **Env** or **Routes** card on the Recipe page and open the
+Select the **Gates**, **Env** or **Routes** card on the App blueprint page and open the
 **Change** tab:
 
 | Card | What the form edits |
