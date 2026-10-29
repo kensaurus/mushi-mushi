@@ -35,6 +35,7 @@ import {
   buildActivity,
   buildFixFirst,
   buildNeedsYou,
+  appAddresses,
   buildSitemap,
   buildStations,
   buildWeek,
@@ -382,15 +383,28 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
   // ── Sitemap ──
   const sitemapP = settle(
     (async () => {
-      const [views, bugs] = await Promise.all([
+      const [views, bugs, sdkOrigins, keyRows, watchRow, sites] = await Promise.all([
         rows<{ route: string }>('session_page_views', db.from('session_page_views').select('route').eq('project_id', id).gte('ts', weekStart).order('ts', { ascending: false }).limit(PAGE_VIEW_SAMPLE)),
         rows<{ url: string | null }>('report urls', db.from('reports').select('url:environment->>url').eq('project_id', id).gte('created_at', priorStart).limit(2000)),
+        // Where the SDK ran (preview deploys too). Optional: an older self-host without the table keeps every URL.
+        rows<{ origin_sample: string | null }>('key origins', db.from('project_api_key_origins').select('origin_sample').eq('project_id', id).limit(100)).catch(() => []),
+        keysP,
+        watchP,
+        liveUrlP,
+      ])
+      const addresses = appAddresses([
+        watchRow.ok ? watchRow.value?.base_url : null,
+        sites.ok ? sites.value[0]?.base_url : null,
+        sites.ok ? sites.value[1]?.crawler_base_url : null,
+        ...(keyRows.ok ? keyRows.value.map((k) => k.last_seen_origin) : []),
+        ...sdkOrigins.map((o) => o.origin_sample),
       ])
       return buildSitemap({
         views: views.map((v) => v.route),
         viewsCapped: views.length >= PAGE_VIEW_SAMPLE,
         bugUrls: bugs.map((b) => b.url).filter((u): u is string => !!u),
         brokenUrls: broken.ok ? broken.value.map((b) => b.url) : [],
+        addresses,
       })
     })(),
   )

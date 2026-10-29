@@ -52,6 +52,12 @@ export async function resolveStoredHeadCheck(input: {
   let status = normalize(input.eventStatus)
   let conclusion = normalize(input.eventConclusion)
   let rolledUp = false
+  // A queued or running check means the head is still running: no GitHub call.
+  // Each completed delivery costs the rollup's reads (installation tokens get
+  // 5,000 an hour, shared with everything else the App does).
+  if (status && status !== 'completed') {
+    return { status: 'in_progress', conclusion: null, rolledUp: false, clearInfra: false }
+  }
   if (input.token && input.ref && input.sha) {
     try {
       const snapshot = await fetchLatestCheckRun(input.token, input.ref, input.sha)

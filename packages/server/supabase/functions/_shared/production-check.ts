@@ -226,7 +226,7 @@ export function pageFindings(pages: readonly PageResult[]): Finding[] {
       where: list(errorStatus.map((p) => `${pathOf(p.url)} (${p.statusCode})`)),
     })
   }
-  const screens = pages.filter((p) => !(typeof p.statusCode === 'number' && p.statusCode >= 400) && errorPageReason(undefined, p.markdown))
+  const screens = pages.filter((p) => !(typeof p.statusCode === 'number' && p.statusCode >= 400) && errorPageReason(undefined, p.markdown, { title: p.title }))
   if (screens.length) {
     out.push({
       rule: 'error_screen',

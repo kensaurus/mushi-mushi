@@ -26,6 +26,21 @@ beforeEach(() => {
 })
 
 describe('applyHeadCheckRollup', () => {
+  it('a queued or running delivery stores "running" without reading GitHub', async () => {
+    const { db, queries } = createFakeDb(() => ({ data: null, error: null }))
+    const out = await applyHeadCheckRollup(db as never, ['attempt-1'], 'one', {
+      eventStatus: 'in_progress',
+      eventConclusion: null,
+      token: 'ghs_test',
+      ref: REF,
+      sha: SHA,
+      now: new Date('2026-10-28T00:00:00.000Z'),
+    })
+    expect(fetchLatestCheckRun).not.toHaveBeenCalled()
+    expect(out.head).toMatchObject({ status: 'in_progress', conclusion: null })
+    expect(findQueries(queries, 'fix_attempts', 'update')[0]?.payload).toMatchObject({ check_run_status: 'in_progress', check_run_conclusion: null })
+  })
+
   it('stores the rollup success when the event itself failed, and clears ci_infra', async () => {
     fetchLatestCheckRun.mockResolvedValue({ status: 'completed', conclusion: 'success' })
     const { db, queries } = createFakeDb(() => ({ data: null, error: null }))

@@ -505,10 +505,11 @@ export interface CheckRunSnapshot {
  * Pull the latest check-run conclusion for a commit. GitHub returns the full
  * list; we collapse to a single { status, conclusion } using the same rules
  * the UI uses:
- *   - If any check-run is still `queued` or `in_progress` → status stays
+ *   - If any check-run or commit status is not finished → status stays
  *     pending and conclusion stays null (the PR is not done).
- *   - Otherwise conclusion = worst (failure > cancelled > timed_out > neutral
- *     > skipped > success), mirroring GitHub's own UI badge colouring.
+ *   - Otherwise the worst failing conclusion, else `success` when any run
+ *     succeeded (skipped and neutral pass, as on GitHub; collapseCheckRuns).
+ *   - Legacy commit statuses count too (Buildkite, CircleCI, Vercel…).
  *   - A run a later re-run of the same check replaced is left out first
  *     (currentCheckRuns), as GitHub's merge state does.
  *   - Check runs from an older Actions run of the same workflow are left
@@ -520,9 +521,12 @@ export async function fetchLatestCheckRun(
   ref: GithubRepoRef,
   commitSha: string,
 ): Promise<CheckRunSnapshot | null> {
-  const runs = await listCheckRuns(token, ref, commitSha, 'throw')
+  const [runs, statuses] = await Promise.all([
+    listCheckRuns(token, ref, commitSha, 'throw'),
+    listCommitStatuses(token, ref, commitSha),
+  ])
   if (!runs) return null
-  return collapseCheckRuns(await withoutSupersededWorkflowRunsFromGithub(token, ref, commitSha, runs))
+  return collapseCheckRuns(await withoutSupersededWorkflowRunsFromGithub(token, ref, commitSha, runs), statuses)
 }
 
 /**
@@ -588,23 +592,32 @@ async function listCheckRuns(
   gitRef: string,
   onError: 'throw' | 'null',
 ): Promise<CheckRunLike[] | null> {
-  const res = await fetchWithTimeout(
-    `https://api.github.com/repos/${ref.owner}/${ref.repo}/commits/${encodeURIComponent(gitRef)}/check-runs?per_page=100&filter=latest`,
-    { headers: githubAuthHeaders(token) },
-  )
-  if (res.status === 404) return null
-  if (!res.ok) {
-    if (onError === 'throw') throw new Error(`check-runs fetch ${res.status}`)
-    return null
+  const all: CheckRunLike[] = []
+  // A large matrix has more than 100 runs; a red job on page 2 must count.
+  for (let page = 1; page <= CHECK_RUN_PAGES; page++) {
+    const res = await fetchWithTimeout(
+      `https://api.github.com/repos/${ref.owner}/${ref.repo}/commits/${encodeURIComponent(gitRef)}/check-runs?per_page=100&filter=latest&page=${page}`,
+      { headers: githubAuthHeaders(token) },
+    )
+    if (res.status === 404 && page === 1) return null
+    if (!res.ok) {
+      if (onError === 'throw') throw new Error(`check-runs fetch ${res.status}`)
+      return null
+    }
+    const body = (await res.json().catch(() => null)) as { total_count?: number; check_runs?: CheckRunLike[] } | null
+    if (!body || typeof body !== 'object') {
+      if (onError === 'throw') throw new Error('check-runs fetch invalid')
+      return null
+    }
+    if (!Array.isArray(body.check_runs)) return onError === 'throw' ? all : null
+    all.push(...body.check_runs)
+    if (body.check_runs.length < 100 || all.length >= (body.total_count ?? 0)) break
   }
-  const body = (await res.json().catch(() => null)) as { check_runs?: CheckRunLike[] } | null
-  if (!body || typeof body !== 'object') {
-    if (onError === 'throw') throw new Error('check-runs fetch invalid')
-    return null
-  }
-  if (!Array.isArray(body.check_runs)) return onError === 'throw' ? [] : null
-  return body.check_runs
+  return all
 }
+
+/** At most 300 check runs per commit are read. */
+const CHECK_RUN_PAGES = 3
 
 /**
  * Workflow run ids that are not the newest run of their workflow on this
@@ -748,39 +761,84 @@ export function isAdvisoryCheckRun(run: { name?: string | null }): boolean {
   return ADVISORY_CHECK_RUN_NAMES.has((run.name ?? '').toLowerCase())
 }
 
-export function collapseCheckRuns(all: CheckRunLike[]): CheckRunSnapshot {
-  const runs = currentCheckRuns(all.filter((r) => !isAdvisoryCheckRun(r)))
+/** Conclusions GitHub counts as passing for required checks and the merge box. */
+const PASSING_CONCLUSIONS = new Set(['success', 'neutral', 'skipped'])
+
+/** Worst first among conclusions that do not pass. Unknown values rank as failure. */
+const FAILING_SEVERITY: Record<string, number> = {
+  failure: 100,
+  startup_failure: 95,
+  cancelled: 90,
+  timed_out: 80,
+  action_required: 70,
+  stale: 60,
+}
+
+/**
+ * One state for a commit, by GitHub's own rule: `success`, `neutral` and
+ * `skipped` pass (docs.github.com, "Status checks"). Any other conclusion,
+ * including one this code does not know, fails closed and the worst wins.
+ * A head with only passing runs reads `success` when one of them succeeded,
+ * so a skipped CLA or E2E job no longer hides a green build; `skipped` or
+ * `neutral` alone stays as is for callers that want a real success.
+ * `extra` holds legacy commit statuses, already one per context.
+ */
+export function collapseCheckRuns(all: CheckRunLike[], extra: CheckRunLike[] = []): CheckRunSnapshot {
+  const runs = [...currentCheckRuns(all.filter((r) => !isAdvisoryCheckRun(r))), ...extra]
   if (runs.length === 0) return { status: null, conclusion: null }
 
-  const pending = runs.some((r) => r.status === 'queued' || r.status === 'in_progress')
-  if (pending) {
+  if (runs.some((r) => r.status !== 'completed' || !r.conclusion)) {
     return { status: 'in_progress', conclusion: null }
   }
 
-  // Worst-wins ordering. We take whatever the matrix says is the most
-  // severe conclusion, so a red "failure" never gets hidden by a later
-  // green "success" from an unrelated check.
-  const severity: Record<string, number> = {
-    failure: 100,
-    cancelled: 90,
-    timed_out: 80,
-    action_required: 70,
-    stale: 60,
-    neutral: 40,
-    skipped: 30,
-    success: 10,
-  }
   let worst: string | null = null
   let worstScore = -1
   for (const r of runs) {
-    if (!r.conclusion) continue
-    const score = severity[r.conclusion] ?? 50
+    const c = r.conclusion as string
+    if (PASSING_CONCLUSIONS.has(c)) continue
+    const score = FAILING_SEVERITY[c] ?? 100
     if (score > worstScore) {
       worstScore = score
-      worst = r.conclusion
+      worst = c
     }
   }
-  return { status: 'completed', conclusion: worst }
+  if (worst) return { status: 'completed', conclusion: worst }
+  const has = (c: string) => runs.some((r) => r.conclusion === c)
+  return { status: 'completed', conclusion: has('success') ? 'success' : has('neutral') ? 'neutral' : 'skipped' }
+}
+
+/**
+ * Legacy commit statuses (Buildkite, CircleCI, Vercel, Snyk…) as check-run
+ * shapes. They report on a separate API from check runs, so a repo whose CI
+ * posts statuses had no CI state at all. A read error or no statuses gives
+ * none: the combined state is "pending" when there are no statuses
+ * (docs.github.com, "Get the combined status"), which must not read as CI
+ * running.
+ */
+export function commitStatusesAsCheckRuns(statuses: Array<{ context?: string | null; state?: string | null }>): CheckRunLike[] {
+  return statuses.map((s) => {
+    const state = (s.state ?? '').toLowerCase()
+    const done = state === 'success' || state === 'failure' || state === 'error'
+    return {
+      name: s.context ?? 'status',
+      status: done ? 'completed' : 'in_progress',
+      conclusion: state === 'success' ? 'success' : done ? 'failure' : null,
+    }
+  })
+}
+
+async function listCommitStatuses(token: string, ref: GithubRepoRef, gitRef: string): Promise<CheckRunLike[]> {
+  try {
+    const res = await fetchWithTimeout(
+      `https://api.github.com/repos/${ref.owner}/${ref.repo}/commits/${encodeURIComponent(gitRef)}/status?per_page=100`,
+      { headers: githubAuthHeaders(token) },
+    )
+    if (!res.ok) return []
+    const body = (await res.json().catch(() => null)) as { statuses?: Array<{ context?: string; state?: string }> } | null
+    return Array.isArray(body?.statuses) ? commitStatusesAsCheckRuns(body.statuses) : []
+  } catch {
+    return []
+  }
 }
 
 export interface WorkflowRunSnapshot {

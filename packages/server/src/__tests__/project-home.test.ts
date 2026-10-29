@@ -12,6 +12,8 @@ import { describe, expect, it } from 'vitest'
 import {
   buildActivity,
   buildNeedsYou,
+  appAddresses,
+  belongsToApp,
   buildSitemap,
   buildStations,
   buildWeek,
@@ -262,6 +264,54 @@ describe('sitemap', () => {
 
   it('is empty with no signal at all', () => {
     expect(buildSitemap({ views: [], viewsCapped: false, bugUrls: [], brokenUrls: [] }).pages).toEqual([])
+  })
+
+  it('leaves out report URLs on other sites (an imported GitHub link is not an app page)', () => {
+    const map = buildSitemap({
+      views: [],
+      viewsCapped: false,
+      bugUrls: ['https://github.com/kensaurus/mushi-mushi/blob/master/docs/BACKLOG.md', 'https://github.com/o/r/issues/12', 'https://glot.it/lessons/7'],
+      brokenUrls: [],
+      addresses: appAddresses(['https://glot.it']),
+    })
+    expect(map.pages.map((p) => p.path)).toEqual(['/', '/lessons', '/lessons/:id'])
+  })
+})
+
+describe('belongsToApp', () => {
+  const app = appAddresses(['https://www.example.com', 'https://preview-123.vercel.app', null, 'not a url'])
+
+  it('keeps the app hosts, www or not, any default port', () => {
+    expect(belongsToApp('https://example.com/a', app)).toBe(true)
+    expect(belongsToApp('https://WWW.Example.com:443/a', app)).toBe(true)
+    expect(belongsToApp('https://preview-123.vercel.app/x', app)).toBe(true)
+    expect(belongsToApp('https://github.com/o/r/blob/main/x.md', app)).toBe(false)
+    expect(belongsToApp('https://api.example.com/v1', app)).toBe(false)
+  })
+
+  it('keeps paths, local development and app schemes; drops browser-internal URLs', () => {
+    expect(belongsToApp('/settings', app)).toBe(true)
+    expect(belongsToApp('settings/profile', app)).toBe(true)
+    expect(belongsToApp('http://localhost:3000/x', app)).toBe(true)
+    expect(belongsToApp('http://127.0.0.1:5173/', app)).toBe(true)
+    expect(belongsToApp('capacitor://localhost/tabs/home', app)).toBe(true)
+    expect(belongsToApp('ionic://localhost/home', app)).toBe(true)
+    expect(belongsToApp('file:///android_asset/www/index.html', app)).toBe(true)
+    expect(belongsToApp('about:blank', app)).toBe(false)
+    expect(belongsToApp('chrome-extension://abc/popup.html', app)).toBe(false)
+    expect(belongsToApp('https://exa mple.com', app)).toBe(false)
+  })
+
+  it('on a shared host, only the app\'s base path counts, even next to a pathless SDK origin', () => {
+    const mushi = appAddresses(['https://kensaur.us/mushi-mushi/', 'https://kensaur.us'])
+    expect(belongsToApp('https://kensaur.us/mushi-mushi', mushi)).toBe(true)
+    expect(belongsToApp('https://kensaur.us/mushi-mushi/admin/fixes', mushi)).toBe(true)
+    expect(belongsToApp('https://kensaur.us/glot-it/practice', mushi)).toBe(false)
+    expect(belongsToApp('https://kensaur.us/mushi-mushi-old/x', mushi)).toBe(false)
+  })
+
+  it('keeps everything when no address is known (as before)', () => {
+    expect(belongsToApp('https://anything.example/x', [])).toBe(true)
   })
 })
 

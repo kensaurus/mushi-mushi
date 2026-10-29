@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { collapseCheckRuns, installationIdForAttempt, isAdvisoryCheckRun, prNumberFromUrl, supersededWorkflowRunIds, withoutSupersededWorkflowRuns } from '../../supabase/functions/_shared/github.ts'
+import { collapseCheckRuns, commitStatusesAsCheckRuns, installationIdForAttempt, isAdvisoryCheckRun, prNumberFromUrl, supersededWorkflowRunIds, withoutSupersededWorkflowRuns } from '../../supabase/functions/_shared/github.ts'
 
 describe('collapseCheckRuns', () => {
   it('ignores the Copilot review run when the CI jobs passed', () => {
@@ -23,6 +23,56 @@ describe('collapseCheckRuns', () => {
       { name: 'lint', status: 'completed', conclusion: 'success' },
       { name: 'test', status: 'completed', conclusion: 'failure' },
     ])).toEqual({ status: 'completed', conclusion: 'failure' })
+  })
+
+  it('a skipped or neutral job does not hide a green build (GitHub counts both as passing)', () => {
+    expect(collapseCheckRuns([
+      { name: 'Build & Test', status: 'completed', conclusion: 'success' },
+      { name: 'CLA signed', status: 'completed', conclusion: 'skipped' },
+      { name: 'Lint report', status: 'completed', conclusion: 'neutral' },
+    ])).toEqual({ status: 'completed', conclusion: 'success' })
+  })
+
+  it('only skipped jobs stay skipped, so callers can ask for a real success', () => {
+    expect(collapseCheckRuns([
+      { name: 'e2e', status: 'completed', conclusion: 'skipped' },
+    ])).toEqual({ status: 'completed', conclusion: 'skipped' })
+    expect(collapseCheckRuns([
+      { name: 'e2e', status: 'completed', conclusion: 'skipped' },
+      { name: 'report', status: 'completed', conclusion: 'neutral' },
+    ]).conclusion).toBe('neutral')
+  })
+
+  it('fails closed on a conclusion it does not know, and on startup_failure', () => {
+    expect(collapseCheckRuns([
+      { name: 'a', status: 'completed', conclusion: 'success' },
+      { name: 'b', status: 'completed', conclusion: 'brand_new_state' },
+    ]).conclusion).toBe('brand_new_state')
+    expect(collapseCheckRuns([
+      { name: 'a', status: 'completed', conclusion: 'cancelled' },
+      { name: 'b', status: 'completed', conclusion: 'startup_failure' },
+    ]).conclusion).toBe('startup_failure')
+  })
+
+  it('waits on waiting, requested and pending runs, not only queued', () => {
+    for (const status of ['waiting', 'requested', 'pending']) {
+      expect(collapseCheckRuns([
+        { name: 'deploy', status, conclusion: null },
+        { name: 'test', status: 'completed', conclusion: 'success' },
+      ])).toEqual({ status: 'in_progress', conclusion: null })
+    }
+  })
+
+  it('counts legacy commit statuses (Buildkite, Snyk) next to check runs', () => {
+    const green = [{ name: 'test', status: 'completed', conclusion: 'success' }]
+    expect(collapseCheckRuns(green, commitStatusesAsCheckRuns([{ context: 'buildkite/app', state: 'failure' }])).conclusion).toBe('failure')
+    expect(collapseCheckRuns(green, commitStatusesAsCheckRuns([{ context: 'snyk', state: 'error' }])).conclusion).toBe('failure')
+    expect(collapseCheckRuns(green, commitStatusesAsCheckRuns([{ context: 'ci/circleci', state: 'pending' }])).status).toBe('in_progress')
+    expect(collapseCheckRuns(green, commitStatusesAsCheckRuns([{ context: 'vercel', state: 'success' }])).conclusion).toBe('success')
+    // A repo whose only CI posts statuses still gets a state.
+    expect(collapseCheckRuns([], commitStatusesAsCheckRuns([{ context: 'ci/circleci', state: 'success' }])).conclusion).toBe('success')
+    // No statuses at all is no signal, never "pending".
+    expect(collapseCheckRuns(green, commitStatusesAsCheckRuns([]))).toEqual({ status: 'completed', conclusion: 'success' })
   })
 
   it('stays pending while any CI job runs', () => {
