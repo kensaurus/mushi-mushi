@@ -177,7 +177,8 @@ async function scopedProjectIds(c: Ctx, db: Db, userId: string, requested: strin
 export async function readPipeline(db: Db, projectIds: string[], now: Date) {
   const since7 = new Date(now.getTime() - 7 * DAY).toISOString();
   const since14 = new Date(now.getTime() - 14 * DAY).toISOString();
-  const [projectsRes, reportsRes, attemptsRes, failedRes, queueRes, trainsRes, deploysRes] = await Promise.all([
+  const since60 = new Date(now.getTime() - 60 * DAY).toISOString();
+  const [projectsRes, reportsRes, attemptsRes, failedRes, queueRes, trainsRes, deploysRes, verdictsRes] = await Promise.all([
     db.from('projects').select('id, name, organization_id, owner_id').in('id', projectIds),
     db
       .from('reports')
@@ -215,11 +216,23 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
       .order('created_at', { ascending: false })
       .limit(1000),
     db.from('deploy_observations').select('project_id, observed_version, ok, observed_at').in('project_id', projectIds).gte('observed_at', since14).limit(500),
+    // Older agent verdicts stay listed while their report is open (pipeline-view verdictStillOpen).
+    db
+      .from('fix_attempts')
+      .select(ATTEMPT_COLUMNS)
+      .in('project_id', projectIds)
+      .eq('status', 'failed')
+      .in('failure_category', ['needs_human', 'already_fixed', 'not_actionable', 'wrong_repo'])
+      .lt('created_at', since7)
+      .gte('created_at', since60)
+      .limit(500),
   ]);
   for (const r of [projectsRes, reportsRes, attemptsRes, failedRes, queueRes, trainsRes]) if (r.error) throw new Error(r.error.message);
+  // Optional: a failed read only drops the older verdicts, never the page.
+  const olderVerdicts = verdictsRes.error ? [] : (verdictsRes.data ?? []);
 
   const seen = new Set<string>();
-  const attempts = ([...(attemptsRes.data ?? []), ...(failedRes.data ?? [])] as Array<AttemptRow & { repo_id: string | null }>).filter((a) =>
+  const attempts = ([...(attemptsRes.data ?? []), ...(failedRes.data ?? []), ...olderVerdicts] as Array<AttemptRow & { repo_id: string | null }>).filter((a) =>
     seen.has(a.id) ? false : (seen.add(a.id), true),
   );
   const attemptIds = attempts.map((a) => a.id);

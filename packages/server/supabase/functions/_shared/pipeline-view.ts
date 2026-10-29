@@ -591,6 +591,12 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
     return !(status && RESOLVED_REPORT_STATUSES.has(status))
   }
 
+  // An agent's verdict waits for a person, not for time: it stays listed while
+  // its report is still open, past the 7-day window an agent error gets
+  // (console sweep 2026-10-30). Reports are only loaded while open.
+  const verdictStillOpen = (a: AttemptRow): boolean =>
+    agentFailureKind(a.failure_category) !== 'error' && !!a.report_id && reportsById.has(a.report_id)
+
   for (const a of input.attempts) {
     // Merged (last 7 days): Merged, or Deployed when a deploy was seen after it.
     if (a.merged_at || a.pr_state === 'merged') {
@@ -613,7 +619,7 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       if (a.status === 'running' || a.status === 'pending') {
         const stuck = age(now, a.created_at) > AGENT_STUCK_MS
         groups.add(stuck ? 'agent_slow' : 'agent_running', { stage: 'pr', tone: stuck ? 'stuck' : 'moving', noun: ['fix', 'fixes'], text: stuck ? 'agent still running after 6 hours' : 'agent writing the fix', actions: [] }, itemOf(a, a.created_at))
-      } else if (a.status === 'failed' && age(now, a.created_at) <= RECENT_MS && isAgentFailedReport(a)) {
+      } else if (a.status === 'failed' && (age(now, a.created_at) <= RECENT_MS || verdictStillOpen(a)) && isAgentFailedReport(a)) {
         // The agent's own verdict is an answer a re-run repeats; an error is not (fix-report-truth.ts).
         const kind = agentFailureKind(a.failure_category)
         groups.add(AGENT_FAILED_GROUPS[kind].id, { stage: 'pr', tone: 'stuck', noun: REPORT, text: AGENT_FAILED_GROUPS[kind].text, actions: kind === 'fixed' ? ['mark_fixed', 'dismiss'] : ['dismiss'] }, itemOf(a, a.completed_at ?? a.created_at, { lastError: clip(a.error) }))
