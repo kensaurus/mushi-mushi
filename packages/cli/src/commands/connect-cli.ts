@@ -6,7 +6,7 @@ export function registerConnectCommand(program: Command): void {
   program
     .command('connect')
     .description('Save credentials, merge env vars, wire Cursor MCP, optionally wait for SDK heartbeat')
-    .option('--api-key <key>', 'Mushi API key (mushi_…) saved to the CLI config — or set MUSHI_API_KEY to keep it out of shell history')
+    .option('--api-key <key>', 'Mushi API key (mushi_…) saved to the CLI config — or set MUSHI_API_KEY to keep it out of shell history. Default: the key `npx mushi-mushi` or `mushi login` saved')
     .option(
       '--sdk-key <key>',
       'Ingest-only (report:write) key for the SDK env vars — or set MUSHI_SDK_KEY. Default: the key saved for this project, else --api-key if it is ingest-only',
@@ -44,9 +44,12 @@ A key that can read reports is refused for .env.local; it still works for the CL
       waitTimeout: string
       json?: boolean
     }) => {
-      const apiKey = process.env.MUSHI_API_KEY ?? opts.apiKey
+      const saved = loadConfig()
+      // The setup wizard and `mushi login` already saved a key: use it, so the
+      // command the wizard prints works as it is.
+      const apiKey = process.env.MUSHI_API_KEY ?? opts.apiKey ?? saved.apiKey
       if (!apiKey) {
-        console.error('Provide the API key via the MUSHI_API_KEY env var (recommended) or --api-key <key>.')
+        console.error('No API key found. Run `npx mushi-mushi` or `mushi login` first, or set MUSHI_API_KEY (recommended) or pass --api-key <key>.')
         process.exit(1)
       }
       const result = await runConnect({
@@ -60,7 +63,7 @@ A key that can read reports is refused for .env.local; it still works for the CL
         wait: opts.wait,
         waitTimeoutSec: parseInt(opts.waitTimeout, 10) || 120,
         json: opts.json,
-      }, loadConfig())
+      }, saved)
       if (opts.json) {
         console.log(JSON.stringify(result, null, 2))
       } else {

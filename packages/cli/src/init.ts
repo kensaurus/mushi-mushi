@@ -1205,7 +1205,7 @@ function printNextSteps(framework: Framework, consoleBase: string, enableRewards
       '  [ ] 1. Paste the init snippet above into your app entry file',
       '  [ ] 2. Start your dev server',
       '  [ ] 3. Wire your editor: npx mushi-mushi setup --ide cursor   (or --ide claude)',
-      `  [ ] 4. Open the Verify tab to send a test report: ${consoleUrl(consoleBase, '/onboarding?tab=verify')}`,
+      `  [ ] 4. Open the Test it tab to send a test report: ${consoleUrl(consoleBase, '/onboarding?tab=verify')}`,
     ].join('\n'),
     'Next steps:',
   );
@@ -1247,7 +1247,10 @@ async function maybeOfferConnect(
     for (const line of result.messages) p.log.message(line);
   } catch (err) {
     p.log.warn(err instanceof Error ? err.message : String(err));
-    p.log.info('You can run manually: mushi connect --write-env --wire-ide --wait');
+    // The key comes from the CLI config persistCliConfig just wrote, so it never lands in shell history.
+    p.log.info(
+      `You can run it yourself: npx mushi-mushi connect --project-id ${credentials.projectId} --endpoint ${endpoint} --write-env --wire-ide --wait`,
+    );
   }
 }
 
