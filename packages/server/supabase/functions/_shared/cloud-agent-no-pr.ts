@@ -162,3 +162,12 @@ export function noPrErrorText(verdict: NoPrVerdict): string {
   if (verdict.reason) return `Cloud agent finished without opening a pull request. Its notes: ${verdict.reason}`
   return 'Cloud agent finished without opening a pull request.'
 }
+
+/** The category in a noPrErrorText line (also `mushi work`'s, which sends only `error`). */
+export function noPrCategoryFromError(error: unknown): NonNullable<NoPrVerdict['category']> | null {
+  if (typeof error !== 'string') return null
+  for (const category of ['already_fixed', 'wrong_repo', 'not_actionable', 'needs_human'] as const) {
+    if (error.startsWith(noPrErrorText({ category, reason: '' }))) return category
+  }
+  return null
+}

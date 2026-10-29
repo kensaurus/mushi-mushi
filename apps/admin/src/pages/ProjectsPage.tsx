@@ -671,6 +671,7 @@ export function ProjectsPage() {
                 activeTeamName={activeTeamName}
                 roleHint={roleHint}
                 onTab={setTab}
+                activeTab={activeTab}
                 onRefresh={reloadAll}
                 refreshing={validating}
               />

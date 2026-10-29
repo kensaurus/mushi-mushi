@@ -7,6 +7,7 @@
 import { reportDiagnosisView } from './reportDiagnosis'
 import { humanizeFixError } from './humanizeFixError'
 import { CLOSE_REASONS } from './closeReasons'
+import { verdictFromError } from './pdcaAct'
 import { DIAGNOSIS_ANCHORS, NEEDS_LOOK_BELOW, headline, type DiagnosisNode } from './reportDiagnosisModel'
 import type { ReportDetail, ReportFixAttempt } from '../components/report-detail/types'
 
@@ -290,7 +291,7 @@ export function diagnosisNodes(report: ReportDetail): DiagnosisNode[] {
     return [{ ...base, title: 'Diagnosis failed', detail: 'deep diagnosis did not finish', state: 'failed', needsLook: true, why: view.message }]
   }
   if (view.kind === 'stage1_only') {
-    return [{ ...base, title: 'Fast filter was confident; no deep diagnosis', detail: 'stage 1 only', state: 'ok', needsLook: false, why: 'The fast filter classified this report with enough confidence that the deep diagnosis was skipped. Run it from the classification card if you want a root cause.' }]
+    return [{ ...base, title: 'Quick summary only; no full diagnosis', detail: 'first check only', state: 'ok', needsLook: false, why: 'The first check was sure what kind of bug this is, so the full diagnosis (why it broke and how to fix it) did not run. The fix prompt still gives your agent everything Mushi Mushi knows.' }]
   }
   return [{ ...base, title: 'Diagnosis in progress', detail: 'usually under a minute', state: 'pending', needsLook: false, why: 'Mushi is still reading this report.' }]
 }
@@ -372,7 +373,8 @@ export function fixNodes(report: ReportDetail, diagnosisReady: boolean): Diagnos
   let next: Pick<DiagnosisNode, 'title' | 'detail' | 'why' | 'state'> | null = null
   // A closed report ends on the decision, never on "retry" (report f5575c9e).
   const closedLabel = CLOSE_REASONS.find((r) => r.value === report.closed_reason)?.label
-  const needsPerson = attempts[0]?.failure_category === 'needs_human'
+  // Local-lane runs before 2026-10-29 carry the verdict only in the error line.
+  const needsPerson = (attempts[0]?.failure_category ?? verdictFromError(attempts[0]?.error)) === 'needs_human'
   if (status === 'verified') next = { title: 'Verified in production', detail: 'loop closed', why: 'The fix shipped and the bug did not come back.', state: 'done' }
   else if (status === 'dismissed') next = { title: closedLabel ? `Closed: ${closedLabel}` : 'Closed', detail: 'decision', why: 'Someone closed this report, so nothing runs on it. Reopen it from the triage bar if it comes back.', state: 'done' }
   else if (status === 'fixed' || latest?.state === 'done') next = { title: 'Check it in production', detail: 'next step', why: 'The fix merged. Watch for the bug to come back; Mushi reopens the report if it does.', state: 'open' }
