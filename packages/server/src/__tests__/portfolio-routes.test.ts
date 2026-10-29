@@ -174,6 +174,8 @@ describe('GET /v1/admin/orgs/:orgId/portfolio', () => {
     const bad = res.body.data.cards.find((c: { projectId: string }) => c.projectId === pid(2))
     expect(bad).toMatchObject({ worst: 'error', elements: {} })
     expect(bad.error).toMatch(/could not be composed/)
+    expect(bad.error).toMatch(/App blueprint page/)
+    expect(bad.error).not.toMatch(/Recipe page/)
     expect(res.body.data.cards.filter((c: { error: string | null }) => c.error === null)).toHaveLength(6)
   })
 

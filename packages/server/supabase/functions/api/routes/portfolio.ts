@@ -597,7 +597,7 @@ export async function buildPortfolio(db: Db, deps: PortfolioRouteDeps, orgId: st
       return { ...base, worst: response.worst, elements, error: null, needsLook: cardProblems(response.elements, RECIPE_ELEMENT_KEYS) }
     } catch (err) {
       plog.warn('portfolio card failed', { projectId: p.id, err: (err as Error)?.message ?? String(err) })
-      return { ...base, worst: 'error', elements: {}, error: 'The recipe for this project could not be composed. Open its Recipe page for detail.', needsLook: [] }
+      return { ...base, worst: 'error', elements: {}, error: 'The recipe for this project could not be composed. Open its App blueprint page for detail.', needsLook: [] }
     }
   })
 

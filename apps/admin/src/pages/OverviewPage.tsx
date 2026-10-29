@@ -450,9 +450,9 @@ function ProjectHealthCard({ card, recipeWorst }: { card: ProjectCard; recipeWor
             to="/recipe"
             onClick={handleSwitchProject}
             className="ml-auto inline-flex min-h-6 items-center gap-1 rounded-sm text-2xs text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
-            aria-label="Open this project's recipe"
+            aria-label="Open this project's App blueprint"
           >
-            <span>Recipe</span>
+            <span>App blueprint</span>
             <RecipeStateChip state={recipeWorst} />
           </Link>
         )}

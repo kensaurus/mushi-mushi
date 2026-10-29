@@ -98,7 +98,7 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
         // A 200 envelope can still carry a failed refresh — show why.
         setNotice({ tone: 'error', text: res.data.reason || 'Refresh did not complete.' })
       } else {
-        setNotice({ tone: 'ok', text: res.data.reason || 'Recipe refreshed.' })
+        setNotice({ tone: 'ok', text: res.data.reason || 'App blueprint refreshed.' })
       }
     } finally {
       setRefreshing(false)
@@ -156,7 +156,7 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
                 value={view}
                 options={VIEW_OPTIONS}
                 onChange={setView}
-                ariaLabel="Recipe layout"
+                ariaLabel="App blueprint layout"
                 size="sm"
               />
             </div>
