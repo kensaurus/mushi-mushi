@@ -54,6 +54,8 @@ function makeFixAttempt(
     llm_model?: string | null
     agent?: string | null
     files_changed?: string[]
+    branch?: string | null
+    commit_sha?: string | null
   } = {},
 ) {
   return {
@@ -382,7 +384,67 @@ describe('deriveRecommendation', () => {
     })
   })
 
+  describe('pre-push hook refusal', () => {
+    it('says to run the repo checks on the commit, and does not offer a paid retry', () => {
+      const report = makeReport({
+        fix_attempts: [makeFixAttempt({
+          status: 'failed',
+          failure_category: null,
+          error: 'mushi work: git push failed: hook steps failed: test, knip. test: FAIL a.test.ts',
+          branch: 'bugfix/MUSHI-1-local-cursor',
+          commit_sha: 'abc1234def5678901234567890abcdef12345678',
+        })],
+      })
+      const rec = deriveRecommendation(report, makeDispatchState(), 0, noOp)
+      expect(rec.title).toBe("Your repo's own checks failed at push")
+      expect(rec.description).toContain('Run them on the branch, or re-run the local lane.')
+      expect(rec.description).toContain('bugfix/MUSHI-1-local-cursor')
+      expect(rec.description).toContain('abc1234')
+      expect(rec.description).toContain('nothing was pushed')
+      expect(rec.description).not.toMatch(/weak spot/i)
+      expect(rec.actions?.some((a) => /retry/i.test(a.label))).toBe(false)
+      expect(rec.meta?.find((m) => m.label === 'Checks')?.value).toBe('test, knip')
+      expect(rec.meta?.find((m) => m.label === 'Branch')?.value).toBe('bugfix/MUSHI-1-local-cursor')
+      expect(rec.meta?.find((m) => m.label === 'Commit')?.value).toBe('abc1234')
+    })
+
+    it('reads the branch and commit from the stored line when the columns are empty', () => {
+      const report = makeReport({
+        fix_attempts: [makeFixAttempt({
+          status: 'failed',
+          error: 'Pre-push checks failed: test. The fix is committed on bugfix/x (abcdef1); nothing was pushed.',
+        })],
+      })
+      const rec = deriveRecommendation(report, makeDispatchState(), 0, noOp)
+      expect(rec.title).toBe("Your repo's own checks failed at push")
+      expect(rec.description).toContain('bugfix/x')
+      expect(rec.description).toContain('abcdef1')
+      expect(rec.meta?.find((m) => m.label === 'Checks')?.value).toBe('test')
+    })
+
+    it('a commit-hook failure stays on the generic retry path', () => {
+      const report = makeReport({
+        fix_attempts: [makeFixAttempt({
+          status: 'failed',
+          error: 'mushi work: git commit failed: hook steps failed: lint. lint: error TS2322',
+        })],
+      })
+      const rec = deriveRecommendation(report, makeDispatchState(), 0, noOp)
+      expect(rec.title).toBe('Fix attempt failed')
+      expect(rec.actions?.some((a) => /retry/i.test(a.label))).toBe(true)
+    })
+  })
+
   describe('meta chip shape', () => {
+    it('labels a local Cursor run instead of mcp', () => {
+      const report = makeReport({
+        status: 'fixing',
+        fix_attempts: [makeFixAttempt({ status: 'running', started_at: new Date().toISOString(), agent: 'mcp' })],
+      })
+      const rec = deriveRecommendation(report, makeDispatchState({ status: 'running' }), 0, noOp)
+      expect(rec.meta?.find((m) => m.label === 'Agent')?.value).toBe('local Cursor')
+    })
+
     it('includes model chip when llm_model is set', () => {
       const report = makeReport({
         fix_attempts: [makeFixAttempt({ status: 'running', started_at: new Date().toISOString(), llm_model: 'claude-sonnet-4' })],

@@ -92,6 +92,60 @@ export function verdictFromError(error: string | null | undefined): string | nul
   return hit ? hit[1] : null
 }
 
+/**
+ * Local `mushi work` runs are stored as agent `mcp` (the same value as
+ * submit_fix_result). The report page says what the run was.
+ */
+export function displayAgent(agent: string | null | undefined): string {
+  if (!agent) return ''
+  return agent === 'mcp' ? 'local Cursor' : agent
+}
+
+const NOT_A_PUSH_HOOK = /non-fast-forward|\[rejected\]|authentication failed|permission denied/i
+
+/**
+ * A push the repo's own pre-push hook refused. `hook steps failed` is also
+ * what a commit hook prints, so that summary counts only on a push failure.
+ * `Pre-push checks failed` is the line `mushi work` stores after a refused push.
+ */
+export function isRepoPushCheckFailure(error: string | null | undefined): boolean {
+  const text = error ?? ''
+  if (!text || NOT_A_PUSH_HOOK.test(text)) return false
+  if (/pre-push checks failed\b/i.test(text)) return true
+  if (/pre-push hook|husky - pre-push/i.test(text)) return true
+  return /git push failed:/i.test(text) && /hook steps failed:/i.test(text)
+}
+
+/** Failed step names from `hook steps failed: test, knip` or `Pre-push checks failed: test`. */
+export function pushCheckNames(error: string | null | undefined): string | null {
+  const names = /(?:pre-push checks failed|hook steps failed):\s*([^.]*)/i.exec(error ?? '')?.[1]?.trim()
+  return names || null
+}
+
+/** Branch and commit named in the stored push-failure line. */
+export function pushCommitFromError(error: string | null | undefined): { branch: string; sha: string } | null {
+  const m = /committed on (\S+) \(([0-9a-f]{7,40})\)/i.exec(error ?? '')
+  if (!m) return null
+  return { branch: m[1]!, sha: m[2]! }
+}
+
+export const PUSH_CHECK_TITLE = "Your repo's own checks failed at push"
+
+/** Next-step sentence for a refused push. Names the commit when we have it. */
+export function pushCheckAdvice(
+  error: string | null | undefined,
+  branch: string | null | undefined,
+  sha: string | null | undefined,
+): string {
+  const named = pushCommitFromError(error)
+  const whereBranch = branch || named?.branch || null
+  const whereSha = sha || named?.sha || null
+  const committed = whereBranch
+    ? ` The fix is committed on ${whereBranch}${whereSha ? ` (${whereSha.slice(0, 7)})` : ''}; nothing was pushed.`
+    : ''
+  return `Run them on the branch, or re-run the local lane.${committed}`
+}
+
 /** Breakdown key for a counted failure. Mirrors `fixFailureBucket` on the server. */
 export function fixFailureBucket(fix: ActFixSignals & { failure_category?: string | null }): string {
   if (fix.failure_category) return fix.failure_category

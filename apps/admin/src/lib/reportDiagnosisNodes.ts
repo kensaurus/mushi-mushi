@@ -7,7 +7,8 @@
 import { reportDiagnosisView } from './reportDiagnosis'
 import { humanizeFixError } from './humanizeFixError'
 import { CLOSE_REASONS } from './closeReasons'
-import { verdictFromError } from './pdcaAct'
+import { displayAgent, isRepoPushCheckFailure, PUSH_CHECK_TITLE, pushCheckAdvice, verdictFromError } from './pdcaAct'
+import { stripAnsi } from '../components/report-detail/reportLogFormat'
 import { DIAGNOSIS_ANCHORS, NEEDS_LOOK_BELOW, headline, type DiagnosisNode } from './reportDiagnosisModel'
 import type { ReportDetail, ReportFixAttempt } from '../components/report-detail/types'
 
@@ -347,7 +348,7 @@ export function checkNodes(report: ReportDetail): DiagnosisNode[] {
 
 function attemptNode(attempts: ReportFixAttempt[]): DiagnosisNode {
   const latest = attempts[0]
-  const who = [latest.agent, modelName(latest.llm_model)].filter(Boolean).join(' · ') || 'fix agent'
+  const who = [displayAgent(latest.agent), modelName(latest.llm_model)].filter(Boolean).join(' · ') || 'fix agent'
   const more = attempts.length > 1 ? ` · ${plural(attempts.length, 'attempt', 'attempts')}` : ''
   const base = { id: 'attempt', lane: 'fix' as const, confidence: null, source: 'fix_attempts', detail: `${who}${more}` }
   if (latest.pr_state === 'merged' || latest.merged_at) {
@@ -357,9 +358,13 @@ function attemptNode(attempts: ReportFixAttempt[]): DiagnosisNode {
     return { ...base, title: `Pull request ${latest.pr_number ? `#${latest.pr_number} ` : ''}opened`, state: 'ok', needsLook: false, why: `The agent opened a draft pull request${latest.files_changed?.length ? ` touching ${plural(latest.files_changed.length, 'file', 'files')}` : ''}. Review it, then merge from the Fixes page.`, href: latest.pr_url }
   }
   if (latest.status === 'failed' || latest.status.startsWith('skipped')) {
+    if (!latest.status.startsWith('skipped') && isRepoPushCheckFailure(latest.error)) {
+      return { ...base, title: PUSH_CHECK_TITLE, state: 'failed', needsLook: false, why: pushCheckAdvice(latest.error, latest.branch, latest.commit_sha) }
+    }
     const human = humanizeFixError(latest.error)
     const title = latest.status.startsWith('skipped') ? 'Fix not attempted' : 'Agent stopped without a pull request'
-    return { ...base, title, state: 'failed', needsLook: true, why: human ? `${human.title} ${human.hint}`.trim() : latest.error ?? 'The fix attempt ended without a pull request.' }
+    const plain = stripAnsi(latest.error ?? '').trim()
+    return { ...base, title, state: 'failed', needsLook: true, why: human ? `${human.title} ${human.hint}`.trim() : plain || 'The fix attempt ended without a pull request.' }
   }
   return { ...base, title: 'Fix in progress', state: 'pending', needsLook: false, why: 'A coding agent is drafting the fix; this updates when it opens a pull request or stops.' }
 }
@@ -380,6 +385,7 @@ export function fixNodes(report: ReportDetail, diagnosisReady: boolean): Diagnos
   else if (status === 'fixed' || latest?.state === 'done') next = { title: 'Check it in production', detail: 'next step', why: 'The fix merged. Watch for the bug to come back; Mushi reopens the report if it does.', state: 'open' }
   else if (latest?.state === 'ok') next = { title: 'Review and merge the pull request', detail: 'next step', why: 'Read the diff and the CI result, then merge from the Fixes page or GitHub.', state: 'open' }
   else if (latest?.state === 'failed' && needsPerson) next = { title: 'A person decides this one', detail: 'next step', why: 'The agent said this needs a decision, not a code change. Decide it yourself, or close it as "Not a code bug" in the triage bar; a retry would stop the same way.', state: 'open' }
+  else if (latest?.state === 'failed' && isRepoPushCheckFailure(attempts[0]?.error)) next = { title: PUSH_CHECK_TITLE, detail: 'next step', why: pushCheckAdvice(attempts[0]?.error, attempts[0]?.branch, attempts[0]?.commit_sha), state: 'open' }
   else if (latest?.state === 'failed') next = { title: 'Check the weak spots, then retry', detail: 'next step', why: 'Look at the marked nodes first: a vague component or missing repro steps usually stop the agent. Fix those in the triage bar, then dispatch again or paste the fix prompt into your editor.', state: 'open' }
   else if (!latest && diagnosisReady && status !== 'dismissed') next = { title: 'Fix it: dispatch or paste the prompt', detail: 'next step', why: 'Copy the fix prompt into your coding agent, or dispatch a cloud agent from "Fix it with your coding agent".', state: 'open' }
   if (next) nodes.push({ id: 'next', lane: 'fix', confidence: null, needsLook: false, source: 'status · fix_attempts', anchor: DIAGNOSIS_ANCHORS.diagnosis, ...next })

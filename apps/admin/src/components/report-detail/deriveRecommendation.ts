@@ -5,6 +5,7 @@ import { pickPrimaryFixAttempt } from '../../lib/mergeFix'
 import { isReportClassified } from '../../lib/reportDiagnosis'
 import { KNOWN_ISSUES_SEARCH_HREF } from '../../lib/settingsTabs'
 import { NO_CODE_LOCATION_REASON } from '../../lib/reportCodeLocation'
+import { displayAgent, isRepoPushCheckFailure, PUSH_CHECK_TITLE, pushCheckAdvice, pushCheckNames, pushCommitFromError } from '../../lib/pdcaAct'
 import { stripAnsi } from './reportLogFormat'
 
 /** A failed attempt's error, without terminal color codes from a git hook. */
@@ -83,7 +84,7 @@ function buildFixingMeta(
     })
   }
   if (latest?.llm_model) meta.push({ label: 'Model', value: latest.llm_model, tone: 'neutral' })
-  if (latest?.agent) meta.push({ label: 'Agent', value: latest.agent, tone: 'neutral' })
+  if (latest?.agent) meta.push({ label: 'Agent', value: displayAgent(latest.agent), tone: 'neutral' })
   if (latest?.files_changed && latest.files_changed.length > 0) {
     const shown = latest.files_changed.slice(0, 1).join(', ')
     const more = latest.files_changed.length - 1
@@ -423,6 +424,28 @@ function recommendationFor(
           { label: 'View pipeline log \u2192', to: '/fixes', tone: 'ghost' },
           { label: 'Retry dispatch', onClick: onDispatch, tone: 'primary' },
         ],
+      }
+    }
+
+    // The repo's own pre-push hook refused the push. Retrying dispatch starts
+    // another paid cloud run; the checks have to pass on this commit first.
+    if (isFailed && isRepoPushCheckFailure(latest.error)) {
+      const checks = pushCheckNames(latest.error)
+      const named = pushCommitFromError(latest.error)
+      const branch = latest.branch || named?.branch || null
+      const sha = latest.commit_sha || named?.sha || null
+      const meta: RecommendationMeta[] = [
+        ...lastAttemptMeta,
+        ...(checks ? [{ label: 'Checks', value: checks, tone: 'danger' as const }] : []),
+        ...(branch ? [{ label: 'Branch', value: branch, tone: 'neutral' as const }] : []),
+        ...(sha ? [{ label: 'Commit', value: sha.slice(0, 7), tone: 'neutral' as const }] : []),
+      ]
+      return {
+        title: PUSH_CHECK_TITLE,
+        description: pushCheckAdvice(latest.error, latest.branch, latest.commit_sha),
+        tone: 'urgent',
+        meta: meta.length > 0 ? meta : undefined,
+        actions: [{ label: 'View pipeline log \u2192', to: '/fixes', tone: 'ghost' }],
       }
     }
 

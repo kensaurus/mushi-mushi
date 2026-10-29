@@ -158,6 +158,15 @@ describe('failureHeadline', () => {
   it('returns null without an error', () => {
     expect(failureHeadline(fix({ error: undefined }))).toBeNull()
   })
+
+  it('drops a double-encoded lefthook color from the row title', () => {
+    const h = failureHeadline(fix({
+      error: 'mushi work: git push failed: \\u001b[38;2;56;56;56m│\\u001b[0m hook steps failed: test. test: FAIL a.test.ts',
+    }))!
+    expect(h.title).toContain('hook steps failed: test')
+    expect(h.title).not.toContain('\\u001b')
+    expect(h.firstLine).not.toContain('\\u001b')
+  })
 })
 
 describe('rows from an older server (no report fields)', () => {

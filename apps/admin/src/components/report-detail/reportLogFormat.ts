@@ -7,6 +7,8 @@ import { CHIP_TONE } from '../../lib/chipTone'
  */
 export function stripAnsi(text: string): string {
   return text
+    // A double-encoded copy stores the six characters "\u001b" instead of ESC.
+    .replace(/\\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
     .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
     .replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, '')
     .replace(/\u001b[@-_]/g, '')

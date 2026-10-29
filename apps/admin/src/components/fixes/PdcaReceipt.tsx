@@ -14,7 +14,8 @@ import { Link } from 'react-router-dom'
 import { PDCA_ORDER, PDCA_STAGES, type PdcaStageId } from '../../lib/pdca'
 import { isFixMerged } from '../../lib/mergeFix'
 import { STAMP_VISUAL, type StageStamp } from '../../lib/pdcaStamp'
-import { ACT_BLOCKER_COPY, ACT_BLOCKER_LINK_LABEL, ACT_BLOCKER_STAMP, actBlocker, agentFlaggedFix } from '../../lib/pdcaAct'
+import { ACT_BLOCKER_COPY, ACT_BLOCKER_LINK_LABEL, ACT_BLOCKER_STAMP, actBlocker, agentFlaggedFix, displayAgent } from '../../lib/pdcaAct'
+import { stripAnsi } from '../report-detail/reportLogFormat'
 import type { FixAttempt } from './types'
 import type { FixTimelineEvent } from '../FixGitGraph'
 
@@ -97,7 +98,8 @@ function Stamp({ stamp }: { stamp: StageStamp }) {
   )
 }
 
-function buildReceipts(
+/** @internal Exported for tests only. */
+export function buildReceipts(
   fix: FixAttempt,
   timeline: FixTimelineEvent[]
 ): Record<PdcaStageId, StageReceipt> {
@@ -126,7 +128,7 @@ function buildReceipts(
   const plan: StageReceipt = {
     id: 'plan',
     stamp: 'done',
-    proof: `Dispatched to ${fix.agent} from report ${fix.report_id.slice(0, 8)}…`,
+    proof: `Dispatched to ${displayAgent(fix.agent) || 'the agent'} from report ${fix.report_id.slice(0, 8)}…`,
     link: { href: `/reports/${fix.report_id}`, label: 'Open source report' },
   }
 
@@ -149,7 +151,7 @@ function buildReceipts(
         : hasBranch
           ? `Branch ${fix.branch ?? '(unnamed)'} created — agent working`
           : isFailed
-            ? `Agent did not finish — ${fix.error ?? 'see error below'}`
+            ? `Agent did not finish — ${stripAnsi(fix.error ?? '').trim() || 'see error below'}`
             : 'Agent has not started yet',
     link: fix.pr_url ? { href: fix.pr_url, label: `PR${fix.pr_number ? ` #${fix.pr_number}` : ''}` } : undefined,
   }
@@ -185,7 +187,7 @@ function buildReceipts(
       ? 'Merged on GitHub — report marked Fixed when the webhook ran'
       : 'Merged on GitHub — loop closed for this PR'
     : isFailed
-      ? `Loop blocked — ${fix.error ?? 'fix attempt failed'}`
+      ? `Loop blocked — ${stripAnsi(fix.error ?? '').trim() || 'fix attempt failed'}`
       : blocker
         ? ACT_BLOCKER_COPY[blocker]
         : actStamp === 'pending'

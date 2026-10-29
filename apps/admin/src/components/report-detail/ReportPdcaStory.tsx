@@ -26,7 +26,7 @@
 
 import { PDCA_ORDER, PDCA_STAGES, type PdcaStageId } from '../../lib/pdca'
 import { STAMP_VISUAL, type StageStamp } from '../../lib/pdcaStamp'
-import { ACT_BLOCKER_COPY, ACT_BLOCKER_LINK_LABEL, ACT_BLOCKER_STAMP, actBlocker } from '../../lib/pdcaAct'
+import { ACT_BLOCKER_COPY, ACT_BLOCKER_LINK_LABEL, ACT_BLOCKER_STAMP, actBlocker, displayAgent } from '../../lib/pdcaAct'
 import { Card, RelativeTime } from '../ui'
 import { ActionPill, InlineProof } from './ReportSurface'
 import type { DispatchState } from '../../lib/dispatchFix'
@@ -244,7 +244,7 @@ export function buildStoryNodes(
     if (liveStatus === 'completed' && dispatchState.prUrl) return 'Fix dispatched — PR opened just now'
     if (inFlight) return 'Auto-fix agent is drafting the PR right now'
     if (fixStatus === 'failed') {
-      return `Last attempt stopped — ${humanizeFixError(fix?.error)?.title ?? fix?.error ?? 'see fixes page'}`
+      return `Last attempt stopped — ${humanizeFixError(fix?.error)?.title ?? (stripAnsi(fix?.error ?? '').trim() || 'see fixes page')}`
     }
     if (dispatched) return 'Fix attempt recorded'
     return reportHasCodeLocation(report)
@@ -264,7 +264,7 @@ export function buildStoryNodes(
     headline: doHeadline,
     at: fix?.completed_at ?? fix?.started_at ?? fix?.created_at ?? null,
     details: [
-      fix?.agent ? `via ${fix.agent}` : null,
+      fix?.agent ? `via ${displayAgent(fix.agent)}` : null,
       fix?.branch || null,
       fix?.lines_changed != null ? `${fix.lines_changed} loc` : null,
     ],

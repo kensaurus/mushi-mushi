@@ -14,6 +14,7 @@ import {
   failureTail,
   hookFailureDetail,
   isHookRejection,
+  pushHookAttemptError,
   pushWithHooks,
   agentEnv,
   branchNameFor,
@@ -463,6 +464,58 @@ describe('runProc', () => {
   })
 })
 
+describe('a push the repo hook refuses', () => {
+  it.skipIf(process.platform === 'win32')('records the commit and the checks, and does not push the branch', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mushi-work-hook-'))
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    writeFileSync(join(bin, 'gh'), '#!/bin/sh\nexit 1\n', { mode: 0o755 })
+    writeFileSync(join(bin, 'cursor-agent'), '#!/bin/sh\necho "fixed it" > fix.txt\necho done\n', { mode: 0o755 })
+    const sh = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, stdio: 'pipe' }).toString()
+    const origin = join(root, 'origin.git')
+    sh(root, 'init', '-q', '--bare', '-b', 'main', origin)
+    const clone = join(root, 'clone')
+    sh(root, 'clone', '-q', origin, clone)
+    sh(clone, 'config', 'user.email', 'w@example.com')
+    sh(clone, 'config', 'user.name', 'worker')
+    sh(clone, 'commit', '-q', '--allow-empty', '-m', 'first')
+    sh(clone, 'push', '-q', 'origin', 'HEAD:main')
+    sh(clone, 'remote', 'set-head', 'origin', 'main')
+    writeFileSync(join(clone, '.git', 'hooks', 'pre-push'), '#!/bin/sh\necho \'┃  test ❯ \'\necho \' FAIL  a.test.ts > breaks\'\necho \'🥊 test (2 seconds)\'\nexit 1\n', { mode: 0o755 })
+    const saved = { PATH: process.env['PATH'], HOME: process.env['HOME'] }
+    process.env['PATH'] = `${bin}:${saved.PATH}`
+    process.env['HOME'] = root
+    const patches: Array<Record<string, unknown>> = []
+    const api = (async (path: string, init?: RequestInit) => {
+      if (init?.method === 'POST' && path === '/v1/admin/fixes') return { fixId: 'f1' }
+      if (init?.method === 'PATCH') patches.push(JSON.parse(String(init.body)) as Record<string, unknown>)
+      return {}
+    }) as never
+    try {
+      const out = await workOne(api, { id: R1, summary: 'Total is wrong', category: 'bug' } as never, {
+        repoDir: clone,
+        agent: 'cursor',
+        log: () => {},
+        earlier: [],
+      })
+      expect(out.result).toBe('failed')
+      expect(sh(clone, 'ls-remote', '--heads', 'origin')).not.toMatch(/bugfix|fix\//)
+      const failed = patches.at(-1)!
+      expect(failed['status']).toBe('failed')
+      expect(failed['branch']).toMatch(/^bugfix\/MUSHI-/)
+      expect(failed['commit_sha']).toMatch(/^[0-9a-f]{40}$/)
+      expect(failed['error']).toBe(
+        `Pre-push checks failed: test. The fix is committed on ${failed['branch']} (${failed['commit_sha']}); nothing was pushed.`,
+      )
+      expect(String(failed['error'])).not.toContain('git push failed')
+    } finally {
+      process.env['PATH'] = saved.PATH
+      process.env['HOME'] = saved.HOME
+      rmSync(root, { recursive: true, force: true })
+    }
+  }, 30_000)
+})
+
 describe('a run stopped from the console (ADR 0048 amendment 2026-10-28)', () => {
   it.skipIf(process.platform === 'win32')('reports each stage, and after a stop during git commit pushes nothing', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mushi-work-stop-'))
@@ -574,6 +627,21 @@ describe('isHookRejection', () => {
     expect(isHookRejection('git push failed: ! [rejected] HEAD -> main (non-fast-forward)')).toBe(false)
     expect(isHookRejection('git push failed: remote: Permission denied to bot. fatal: Authentication failed')).toBe(false)
     expect(isHookRejection('git push failed: fatal: unable to access github.com')).toBe(false)
+  })
+})
+
+describe('pushHookAttemptError', () => {
+  const branch = 'bugfix/MUSHI-1-local-cursor'
+  const sha = 'abc1234def5678901234567890abcdef12345678'
+
+  it('names the checks and the commit that was not pushed', () => {
+    expect(pushHookAttemptError('git push failed: hook steps failed: test, knip. test: FAIL a.test.ts', branch, sha))
+      .toBe(`Pre-push checks failed: test, knip. The fix is committed on ${branch} (${sha}); nothing was pushed.`)
+  })
+
+  it('is null for a remote rejection and for a commit hook', () => {
+    expect(pushHookAttemptError('git push failed: ! [rejected] HEAD -> main (non-fast-forward)', branch, sha)).toBeNull()
+    expect(pushHookAttemptError('git commit failed: hook steps failed: lint', branch, sha)).toBeNull()
   })
 })
 
