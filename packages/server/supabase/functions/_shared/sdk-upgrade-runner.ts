@@ -362,6 +362,7 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
     if (existingPr) {
       const onBranch = await scanForBumps(existingPr.headRef)
       const refreshed = await withLockfiles(onBranch, existingPr.headRef)
+      const note = refreshed.commands.length ? lockfileNeedsSentence(refreshed.commands) : null
       if (refreshed.files.length > 0) {
         const commitSha = includesLock(refreshed.files)
           ? await updateBranchWithSingleCommit({
@@ -378,7 +379,6 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
           prNumber: existingPr.number,
           lockfile: refreshed.outcome,
         })
-        const note = refreshed.commands.length ? lockfileNeedsSentence(refreshed.commands) : null
         await finalize('completed', {
           pr_url: existingPr.url,
           pr_number: existingPr.number,
@@ -395,7 +395,7 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
           pr_url: existingPr.url,
           pr_number: existingPr.number,
           branch: existingPr.headRef,
-          plan: allBumps,
+          plan: planWithLockfileNote(allBumps, note),
         })
       }
       return { ok: true, status: 'completed', prUrl: existingPr.url }

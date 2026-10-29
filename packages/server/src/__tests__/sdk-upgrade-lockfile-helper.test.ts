@@ -39,7 +39,7 @@ const gh = vi.hoisted(() => ({
   createBranchWithSingleCommit: vi.fn(async () => 'bump-sha'),
   resolveBaseBranch: vi.fn(async () => ({ branch: 'main', sha: 'base-sha' })),
   openPullRequestForBranch: vi.fn(async () => ({ url: 'https://github.com/acme/app/pull/9', number: 9 })),
-  findOpenPrByHeadPrefix: vi.fn(async () => null),
+  findOpenPrByHeadPrefix: vi.fn(async (): Promise<{ number: number; url: string; headRef: string } | null> => null),
   commitFilesToBranch: vi.fn(async () => 'refresh-sha'),
   updateBranchWithSingleCommit: vi.fn(async () => 'lock-sha'),
 }))
@@ -228,6 +228,98 @@ describe('runSdkUpgradeJob — lockfile helper', () => {
     expect((opts.files as Array<{ path: string }>).map((file) => file.path)).toEqual(['package.json'])
     expect(lastUpdate(queries).error).toBeUndefined()
     expect(lastUpdate(queries).plan).toEqual([
+      expect.objectContaining({ lockfileNote: 'This PR needs `pnpm install --lockfile-only`.' }),
+    ])
+  })
+})
+
+describe('runSdkUpgradeJob — reused upgrade PR', () => {
+  const HEAD = 'mushi/sdk-upgrade-old'
+  const ON_HEAD = `ref=${encodeURIComponent(HEAD)}`
+  const staleLock = {
+    name: 'host',
+    lockfileVersion: 3,
+    packages: {
+      '': { dependencies: { '@mushi-mushi/web': '^1.29.0' } },
+      'node_modules/@mushi-mushi/web': {
+        version: '1.29.0',
+        resolved: 'https://registry.npmjs.org/@mushi-mushi/web/-/web-1.29.0.tgz',
+        integrity: 'sha512-old',
+      },
+    },
+  }
+  const packument = vi.fn(async () => ({
+    ok: true,
+    json: async () => ({
+      'dist-tags': { latest: '1.31.0' },
+      versions: {
+        '1.31.0': {
+          version: '1.31.0',
+          dist: { tarball: 'https://registry.npmjs.org/@mushi-mushi/web/-/web-1.31.0.tgz', integrity: 'sha512-newweb' },
+        },
+      },
+    }),
+  }))
+
+  function reuse(branchRange: string, lockName: 'package-lock.json' | 'pnpm-lock.yaml') {
+    gh.findOpenPrByHeadPrefix.mockResolvedValueOnce({ number: 5, url: 'https://github.com/acme/app/pull/5', headRef: HEAD })
+    state.ghRoutes = [
+      [`/git/trees/${encodeURIComponent(HEAD)}`, { tree: [
+        { path: 'package.json', type: 'blob' },
+        { path: lockName, type: 'blob', sha: 'locksha' },
+      ] }],
+      [`/git/trees/main`, { tree: [{ path: 'package.json', type: 'blob' }] }],
+      [`/contents/package.json?${ON_HEAD}`, { content: b64(JSON.stringify({ name: 'host', dependencies: { '@mushi-mushi/web': branchRange } })) }],
+      [`/contents/package.json?ref=main`, { content: b64(JSON.stringify(PKG)) }],
+      [`/git/blobs/locksha`, { content: b64(JSON.stringify(staleLock)) }],
+      [`/repos/${OWNER}/${REPO}`, { default_branch: 'main' }],
+    ]
+  }
+
+  async function run() {
+    vi.stubGlobal('fetch', packument)
+    try {
+      const { db, queries } = runnerDb()
+      state.db = db
+      const result = await runSdkUpgradeJob(JOB)
+      return { result, update: lastUpdate(queries) }
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  }
+
+  const committed = () => {
+    expect(gh.updateBranchWithSingleCommit).toHaveBeenCalledTimes(1)
+    const opts = (gh.updateBranchWithSingleCommit.mock.calls[0] as unknown as [Record<string, unknown>])[0]
+    expect(opts.branch).toBe(HEAD)
+    return opts.files as Array<{ path: string; contents: string }>
+  }
+
+  it('package.json already at latest, stale package-lock.json: one commit rewrites the lock on the PR branch', async () => {
+    reuse('^1.31.0', 'package-lock.json')
+    const { result, update } = await run()
+    expect(result).toMatchObject({ ok: true, status: 'completed', prUrl: 'https://github.com/acme/app/pull/5' })
+    expect(gh.createPrFromFiles).not.toHaveBeenCalled()
+    expect(gh.commitFilesToBranch).not.toHaveBeenCalled()
+    const files = committed()
+    expect(files.map((file) => file.path)).toEqual(['package-lock.json'])
+    expect(JSON.parse(files[0]!.contents).packages['node_modules/@mushi-mushi/web']).toMatchObject({ version: '1.31.0', integrity: 'sha512-newweb' })
+    expect(update).toMatchObject({ status: 'completed', commit_sha: 'lock-sha', pr_number: 5 })
+    expect((update.plan as Array<Record<string, unknown>>)[0]?.lockfileNote).toBeUndefined()
+  })
+
+  it('package.json behind latest: package.json and package-lock.json land in one commit', async () => {
+    reuse('^1.29.0', 'package-lock.json')
+    await run()
+    expect(committed().map((file) => file.path)).toEqual(['package.json', 'package-lock.json'])
+  })
+
+  it('a lock it cannot edit: nothing is pushed and the stored plan still carries the lockfile note', async () => {
+    reuse('^1.31.0', 'pnpm-lock.yaml')
+    const { update } = await run()
+    expect(gh.updateBranchWithSingleCommit).not.toHaveBeenCalled()
+    expect(gh.commitFilesToBranch).not.toHaveBeenCalled()
+    expect(update.plan).toEqual([
       expect.objectContaining({ lockfileNote: 'This PR needs `pnpm install --lockfile-only`.' }),
     ])
   })
