@@ -2,6 +2,9 @@
  * TesterHomePage — landing dashboard for the tester portal.
  * Shows greeting, stat strip, next-milestone progress, recommended apps,
  * in-flight pipeline, and quick links to the Learn section.
+ *
+ * The gift-card scale's "$400 KYC" caption shares the tick's percentage.
+ * It must not sit in the justify-between row, which would pin it at 50%.
  */
 import { Link } from 'react-router-dom'
 import { useTesterStatus, reputationTier, REP_TIERS } from '../../lib/useTesterStatus'
@@ -143,6 +146,8 @@ export function TesterHomePage() {
   const kycThreshold = wallet?.kycThresholdUsd ?? 400
   const kycCleared = wallet?.kycCleared ?? false
   const kycCap = wallet?.kycCapUsd ?? 599
+  // Same anchor as the tick. A middle flex item would land at 50%.
+  const kycThresholdPct = Math.min(100, Math.max(0, kycCap > 0 ? (kycThreshold / kycCap) * 100 : 0))
   const pendingRedemptions = wallet?.pendingRedemptions ?? []
 
   const loadError = statusError ?? appsError ?? walletError ?? subsError
@@ -251,14 +256,23 @@ export function TesterHomePage() {
               <TesterProgressTrack
                 value={ytd}
                 max={kycCap}
-                markerPct={(kycThreshold / kycCap) * 100}
+                markerPct={kycThresholdPct}
                 markerLabel={`KYC required at $${kycThreshold}`}
                 barClassName={ytd >= kycThreshold && !kycCleared ? 'bg-warn' : 'bg-brand'}
               />
-              <div className="flex justify-between text-2xs text-fg-faint">
-                <span>${ytd.toFixed(0)}</span>
-                <span>${kycThreshold} KYC</span>
-                <span>${kycCap} cap</span>
+              {/* Caption tracks the tick. The ends stay in the flex row. */}
+              <div className="relative text-2xs text-fg-faint">
+                <div className="flex justify-between">
+                  <span>${ytd.toFixed(0)}</span>
+                  <span>${kycCap} cap</span>
+                </div>
+                <span
+                  data-testid="home-kyc-gate-label"
+                  className="absolute top-0 -translate-x-1/2 whitespace-nowrap"
+                  style={{ left: `${kycThresholdPct}%` }}
+                >
+                  ${kycThreshold} KYC
+                </span>
               </div>
               <div className="pt-1">
                 <p className="text-xs font-medium text-fg">Gift card cap</p>
