@@ -12,9 +12,7 @@ import { registerConsoleKnowledgeRoutes } from './routes/console-knowledge.ts';
 import { registerAdminOpsRoutes } from './routes/admin-ops.ts';
 import { registerSiteWatchRoutes } from './routes/site-watch.ts';
 import { registerByokSpendDownRoutes } from './routes/byok-spend-down.ts';
-import { registerByokReviewFollowupRoutes } from './routes/byok-review-followups.ts';
 import { registerBillingChangePlanRoutes } from './routes/billing-change-plan.ts';
-import { registerDoctorRoutes } from './routes/doctor.ts';
 import { registerBillingProjectsQueueGraphRoutes } from './routes/billing-projects-queue-graph.ts';
 import { registerCodebaseRoutes } from './routes/codebase.ts';
 import { registerRepoDigestRoutes } from './routes/repo-digest.ts';
@@ -658,12 +656,13 @@ registerAdminOpsRoutes(app);
 registerSiteWatchRoutes(app);
 registerByokSpendDownRoutes(app);
 // Review follow-ups: settings, Cursor model list, scoreboard (ADR 0032).
-registerByokReviewFollowupRoutes(app);
+forwardToApiExt(['/v1/admin/byok/review-followups', '/v1/admin/byok/cursor/models']);
 
 // In-app plan change (Indie ↔ Pro, monthly ↔ annual) for paying projects.
 registerBillingChangePlanRoutes(app);
 
-registerDoctorRoutes(app);
+// Server doctor: served by api-ext with the Health check that reuses its checks (ADR 0054).
+forwardToApiExt(['/v1/admin/doctor']);
 
 forwardToApiExt(['/v1/admin/inventory', '/v1/admin/inventory/*']);
 

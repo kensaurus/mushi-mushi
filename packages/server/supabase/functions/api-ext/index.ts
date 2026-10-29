@@ -59,6 +59,8 @@ import { registerTesterMarketplaceRoutes } from '../api/routes/tester-marketplac
 import { registerProjectHomeRoutes } from '../api/routes/project-home.ts'
 import { registerSetupGapsRoutes } from '../api/routes/setup-gaps.ts'
 import { registerHealthCheckRoutes } from '../api/routes/health-checks.ts'
+import { registerDoctorRoutes } from '../api/routes/doctor.ts'
+import { registerByokReviewFollowupRoutes } from '../api/routes/byok-review-followups.ts'
 import { registerReleaseBatchRoutes } from '../api/routes/release-batch.ts'
 import { registerWorkRoutes } from '../api/routes/work.ts'
 import { registerRepoHousekeepingRoutes } from '../api/routes/repo-housekeeping.ts'
@@ -102,6 +104,8 @@ registerTesterMarketplaceRoutes(app)
 registerProjectHomeRoutes(app)
 registerSetupGapsRoutes(app)
 registerHealthCheckRoutes(app)
+registerDoctorRoutes(app)
+registerByokReviewFollowupRoutes(app)
 registerReleaseBatchRoutes(app)
 registerWorkRoutes(app)
 registerRepoHousekeepingRoutes(app)
