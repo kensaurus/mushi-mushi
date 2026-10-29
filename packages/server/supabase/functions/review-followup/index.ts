@@ -58,6 +58,7 @@ import { log as rootLog } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
+import { createHealthGate, OFF_GATE, pauseReason, type HealthGate } from '../_shared/health-gate.ts'
 import { sanitizeForLLM } from '../_shared/sanitize.ts'
 import { checkAutofixBudget, type AutofixBudgetCheck, type AutofixBudgetSettings } from '../_shared/autofix-budget.ts'
 import {
@@ -236,6 +237,8 @@ export interface FollowupRunSummary {
   noChange: number
   timedOut: number
   results: Array<{ followupId: string } & FollowupOutcome>
+  /** Rows left queued because a Health check stops follow-ups (health gate in enforce; absent otherwise). */
+  healthPaused?: number
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1159,7 +1162,12 @@ export function pickFollowupBatch<T extends { project_id: string }>(rows: T[], b
 // A tick
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function runReviewFollowups(db: SupabaseClient, deps: FollowupDeps = {}): Promise<FollowupRunSummary> {
+/**
+ * `gate`: the health gate (ADR 0054, Proposed). It can only withhold a new
+ * dispatch, leaving the row queued for a later tick; polling running agents
+ * is never gated. The default is off, so callers that pass none run as before.
+ */
+export async function runReviewFollowups(db: SupabaseClient, deps: FollowupDeps = {}, gate: HealthGate = OFF_GATE): Promise<FollowupRunSummary> {
   const now = (deps.now ?? (() => new Date()))()
   const summary: FollowupRunSummary = {
     settled: 0,
@@ -1201,6 +1209,14 @@ export async function runReviewFollowups(db: SupabaseClient, deps: FollowupDeps 
   // One at a time: each dispatch reads today's count the next one must see.
   const startedNow = new Set<string>()
   for (const row of pickFollowupBatch((queued ?? []) as FollowupRow[])) {
+    // Stop the line: a Health check that stops follow-ups for this app (the
+    // follow-up key was deleted) leaves the row queued instead of failing it.
+    const health = await gate.check(row.project_id, 'followups')
+    if (health.withhold) {
+      summary.healthPaused = (summary.healthPaused ?? 0) + 1
+      log.info('review-followup.health_paused', { followupId: row.id, projectId: row.project_id, reason: pauseReason(health) })
+      continue
+    }
     try {
       const o = await dispatchOne(db, row, deps)
       if (o.outcome === 'dispatched') startedNow.add(row.id)
@@ -1247,7 +1263,7 @@ export async function handler(req: Request): Promise<Response> {
   const db = getServiceClient()
   const cronRun = await startCronRun(db, 'review-followup', raw?.trigger === 'cron' ? 'cron' : 'http')
   try {
-    const summary = await runReviewFollowups(db)
+    const summary = await runReviewFollowups(db, {}, await createHealthGate(db, 'review-followup'))
     await cronRun.finish({ rowsAffected: summary.dispatched, metadata: { ...summary, results: summary.results.slice(0, 20) } })
     return new Response(JSON.stringify({ ok: true, data: summary }), { status: 200, headers: { 'Content-Type': 'application/json' } })
   } catch (err) {

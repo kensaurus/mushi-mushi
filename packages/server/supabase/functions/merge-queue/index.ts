@@ -43,6 +43,7 @@ import { validateCursorModel } from '../_shared/review-followup.ts'
 import { createCursorAgentV1, getCursorAgent, getCursorRun } from '../_shared/cursor-cloud.ts'
 import { checksView, type ChecksView } from '../_shared/merge-queue.ts'
 import { runMergeQueue, type MergeQueueDeps } from './worker.ts'
+import { createHealthGate } from '../_shared/health-gate.ts'
 
 const GH_HEADERS = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }
 
@@ -198,7 +199,10 @@ export async function handler(req: Request): Promise<Response> {
   const unauthorized = requireServiceRoleAuth(req)
   if (unauthorized) return unauthorized
   const body = (await req.json().catch(() => ({}))) as { projectId?: unknown }
-  const tally = await runMergeQueue(getServiceClient(), liveDeps, typeof body.projectId === 'string' ? body.projectId : undefined)
+  const db = getServiceClient()
+  // The health gate reads its switch once per tick (off unless mushi_runtime_config says otherwise).
+  const healthGate = await createHealthGate(db, 'merge-queue')
+  const tally = await runMergeQueue(db, { ...liveDeps, healthGate }, typeof body.projectId === 'string' ? body.projectId : undefined)
   return new Response(JSON.stringify({ ok: true, data: tally }), { status: 200, headers: { 'Content-Type': 'application/json' } })
 }
 

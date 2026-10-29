@@ -18,6 +18,10 @@
  *
  * Auth: a console session or an API key with mcp:read (`mushi doctor`, MCP
  * `diagnose_setup`), members only. A project key reaches its own app only.
+ *
+ * `gate.mode` is the health gate switch (ADR 0054); each app's `gate.today`
+ * lists what the gate would pause (observe) or paused (enforce) today, from
+ * `health_gate_shadow` (empty while that table is not deployed).
  */
 
 import type { Context, Hono } from 'npm:hono@4'
@@ -41,6 +45,7 @@ import {
   type HealthCheck,
 } from '../../_shared/health-checks.ts'
 import { tagRootCauses, type PipelineStage } from '../../_shared/pipeline-view.ts'
+import { readHealthGateMode } from '../../_shared/health-gate.ts'
 import { defaultSetupGapsDeps, loadSetupGaps, type SetupGapsDeps } from './setup-gaps.ts'
 import { readSdkHealth } from './sdk-health.ts'
 import { runDoctorChecks } from './doctor.ts'
@@ -136,6 +141,22 @@ async function doctorRows(db: Db, userId: string, projectId: string, platform: b
   }
 }
 
+/** Today's shadow counts (health_gate_shadow); none when the table is missing or unreadable. */
+async function gateToday(db: Db, ids: string[], now: Date): Promise<Map<string, Array<{ automation: string; checkId: string; mode: string; count: number }>>> {
+  const out = new Map<string, Array<{ automation: string; checkId: string; mode: string; count: number }>>()
+  try {
+    const day = now.toISOString().slice(0, 10)
+    const { data, error } = await db.from('health_gate_shadow').select('project_id, automation, check_id, mode, count').in('project_id', ids).eq('day', day)
+    if (error) return out
+    for (const r of (data ?? []) as Array<{ project_id: string; automation: string; check_id: string; mode: string; count: number }>) {
+      out.set(r.project_id, [...(out.get(r.project_id) ?? []), { automation: r.automation, checkId: r.check_id, mode: r.mode, count: r.count }])
+    }
+  } catch {
+    // No shadow data is not an error.
+  }
+  return out
+}
+
 async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length)
   let next = 0
@@ -173,7 +194,7 @@ export function registerHealthCheckRoutes(app: Hono<{ Variables: Variables }>, d
     const scope = await scopedIds(c, db, userId)
     if ('response' in scope) return scope.response
     const now = deps.now()
-    const empty = { generatedAt: now.toISOString(), projects: [], counts: countChecks([]), truncated: false }
+    const empty = { generatedAt: now.toISOString(), projects: [], counts: countChecks([]), truncated: false, gate: { mode: await readHealthGateMode(db as never) } }
     if (scope.ids.length === 0) return c.json({ ok: true, data: empty })
 
     const { data: projectRows, error } = await db.from('projects').select('id, name, organization_id, owner_id').in('id', scope.ids)
@@ -181,12 +202,14 @@ export function registerHealthCheckRoutes(app: Hono<{ Variables: Variables }>, d
     const projects = (projectRows ?? []) as DispatcherProject[]
     const platform = c.req.query('audience') === 'platform'
 
-    const [gaps, pipeline] = await Promise.all([
+    const [gaps, pipeline, shadow, mode] = await Promise.all([
       loadSetupGaps(db, projects, deps.setupGaps, { refresh: c.req.query('refresh') === '1' }).catch((err) => {
         hlog.warn('setup gaps unreadable for the health check', { err: why(err) })
         return null
       }),
       within(deps.readPipeline(db, projects.map((p) => p.id), now), 'pipeline', PIPELINE_MS).catch(() => null),
+      gateToday(db, projects.map((p) => p.id), now),
+      readHealthGateMode(db as never),
     ])
     const gapsByProject = new Map((gaps ?? []).map((g) => [g.projectId, g]))
 
@@ -214,6 +237,7 @@ export function registerHealthCheckRoutes(app: Hono<{ Variables: Variables }>, d
         checks: visible,
         fixFirst: rootCauses(visible),
         counts: countChecks(visible),
+        gate: { today: shadow.get(project.id) ?? [] },
       }
     })
     const counts = countChecks(out.flatMap((p) => p.checks))
@@ -226,6 +250,7 @@ export function registerHealthCheckRoutes(app: Hono<{ Variables: Variables }>, d
         counts,
         truncated: scope.truncated,
         pipelineRead: pipeline !== null,
+        gate: { mode },
       },
     })
   })

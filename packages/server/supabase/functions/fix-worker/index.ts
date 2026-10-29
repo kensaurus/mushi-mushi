@@ -169,6 +169,7 @@ import { PRIOR_ATTEMPTS_MAX, priorAttemptsBlock } from '../_shared/prior-attempt
 import type { FollowupFinding } from '../_shared/review-followup.ts';
 import { sanitizeForLLM } from '../_shared/sanitize.ts';
 import { reportHasActiveWorkClaim } from '../_shared/work-claims.ts';
+import { createHealthGate, pauseReason } from '../_shared/health-gate.ts';
 
 const SYSTEM_PROMPT = `You are a senior staff engineer fixing one specific bug report.
 
@@ -308,6 +309,31 @@ Deno.serve(
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
+    }
+
+    // ---- 1c. Stop the line (health gate, ADR 0054 Proposed) -----------------
+    // An automatic dispatch only: a person's dispatch (console, CLI, MCP) runs
+    // as before. Off unless mushi_runtime_config.health_gate_mode says
+    // otherwise; in observe it only records; in enforce a Health check that
+    // stops auto-fix for this app skips the job before an agent starts, the
+    // same way as a held report above. Spend-down dispatches arrive here too,
+    // so observe mode counts them in both places.
+    if (dispatchTrigger(dispatch.dispatch_metadata) === 'automatic') {
+      const gate = await createHealthGate(db, 'fix-worker');
+      const health = await gate.check(dispatch.project_id, 'autofix');
+      if (health.withhold) {
+        const reason = `Skipped: ${pauseReason(health)}`.slice(0, 500);
+        await db
+          .from('fix_dispatch_jobs')
+          .update({ status: 'skipped', error: reason, finished_at: new Date().toISOString() })
+          .eq('id', dispatch.id);
+        log.info('job.skipped_health_gate', { dispatchId: dispatch.id, projectId: dispatch.project_id, checks: health.pausing.map((c) => c.key) });
+        await trace.end();
+        return new Response(JSON.stringify({ ok: true, skipped: true, reason }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     // ---- 2. Resolve requested agent + insert fix_attempts row ----------------

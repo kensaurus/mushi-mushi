@@ -45,6 +45,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { checkAutofixBudget, type AutofixBudgetCheck, type AutofixBudgetSettings } from '../_shared/autofix-budget.ts'
 import { dispatchFixForReport, type DispatchResult } from '../_shared/dispatch.ts'
+import { createHealthGate, OFF_GATE, pauseReason, type HealthGate } from '../_shared/health-gate.ts'
 import { activeWorkClaims, queuedForLocalLanes } from '../_shared/work-claims.ts'
 import {
   SPEND_DOWN_REDISPATCH_COOLDOWN_DAYS,
@@ -112,6 +113,8 @@ export interface ProjectOutcome {
   probe?: boolean
   /** Not reached this tick (the key's limit ran out, or the key is out of its window); carried from the last tick. */
   carried?: boolean
+  /** A Health check stops auto-fix for this app (health gate in enforce, ADR 0054); `stopped` says which. */
+  healthPaused?: boolean
   /**
    * The app's stop-loss reset (a probe-driven resume, or the console's
    * Resume), kept every tick so the window stays restarted even before the
@@ -141,6 +144,8 @@ export interface SpendDownDeps {
   ) => Promise<AutofixBudgetCheck>
   /** Shared across keys within one tick: each app's samples are read once. */
   yieldCache?: SpendDownYieldCache
+  /** The health gate (ADR 0054, Proposed); absent = off. It can only withhold an app's dispatches. */
+  healthGate?: HealthGate
 }
 
 /**
@@ -351,6 +356,15 @@ export async function runSpendDownForKey(
       probe = true
     }
 
+    // Stop the line: a Health check that stops auto-fix for this app (no
+    // usable GitHub access or agent key) withholds its dispatches this tick.
+    const health = await (deps.healthGate ?? OFF_GATE).check(projectId, 'autofix')
+    if (health.withhold) {
+      outcome.healthPaused = true
+      if (!probe) outcome.stopped = pauseReason(health)
+      continue
+    }
+
     const s = settings.get(projectId) ?? {}
     const budget = await checkBudget(db, projectId, {
       autofix_max_spend_usd: (s.autofix_max_spend_usd as number | null) ?? null,
@@ -474,7 +488,8 @@ export async function handler(req: Request): Promise<Response> {
   }
   const unauthorized = requireServiceRoleAuth(req)
   if (unauthorized) return unauthorized
-  const summaries = await runSpendDown(getServiceClient())
+  const db = getServiceClient()
+  const summaries = await runSpendDown(db, { healthGate: await createHealthGate(db, 'spend-down') })
   return new Response(JSON.stringify({ ok: true, data: { keys: summaries } }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
