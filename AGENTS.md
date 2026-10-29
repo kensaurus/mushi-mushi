@@ -1012,6 +1012,28 @@ Generated manifest: [`docs/API_ROUTE_MANIFEST.generated.md`](docs/API_ROUTE_MANI
 | `GET /v1/reports/:id/status` | Report status poll |
 | `/v1/sdk/me/*` | Cross-app reporter rewards surface (`rewards.ts`) |
 
+Every `apiKeyAuth` request (except `/ingest-setup` and `/ingest/runner`) also
+writes a heartbeat in the background (`_shared/auth.ts`): `project_api_keys.last_seen_*`
+(latest only, 30 s throttle), and `project_api_key_origins` through
+`record_api_key_origin()` (one row per key and origin kind: `localhost`,
+`live_web`, `native`, `server`, `unknown`, from `_shared/sdk-origin.ts`; first
+and last seen; a scheme + host sample only; 5-minute throttle, 2 s timeout,
+failures logged, never on the request path; migration
+`20261029120000_project_api_key_origins.sql`). A project's first check-in of a
+kind emits `sdk_seen_localhost` or `sdk_seen_live`.
+
+**New-user path events** (plan-simplicity Phase 0, `_shared/funnel-steps.ts`):
+server product events written once per project into the company funnel, each
+with an actor (the person, else the project owner), never onto an app that
+already had the step: `sdk_seen_localhost`, `sdk_seen_live` (heartbeat),
+`first_real_report` (ingest; a deployed app's end-user report, `activation.ts`
+rules; `first_report_received` is unchanged and also counts a localhost test
+bug), `first_diagnosis_viewed` (the setup-funnel diagnosis route),
+`first_fix_dispatched` (`_shared/dispatch.ts` and `POST /v1/admin/fixes/dispatch`;
+not fix-worker's own insert), `first_fix_merged` (`finalizeFixMerge`).
+`company_funnel_weekly` reports them per week for outside projects only
+(no operators, synthetic accounts or complimentary organizations).
+
 ### Host-backend erasure (erase token, no API key)
 
 | Route | Role |
