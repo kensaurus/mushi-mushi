@@ -58,7 +58,24 @@ export function tenantContextFromHono(c: Context): TenantLogContext {
 export interface ScopedRateLimitResult {
   allowed: boolean;
   retryAfterSec?: number;
+  /**
+   * The claim RPC failed for a reason other than the cap. Ingest callers
+   * must refuse (503 RATE_LIMIT_UNAVAILABLE) instead of treating this as a
+   * normal quota hit.
+   */
+  unavailable?: boolean;
 }
+
+/**
+ * Abuse-protection scopes. A statement timeout (57014) or any other claim
+ * error happens under the same load the cap exists to stop, so these scopes
+ * fail closed. Other scopes still fail open: a database blip must not lock
+ * out invites, voice, or push tests.
+ */
+const FAIL_CLOSED_SCOPE = /:runner_ingest$/;
+
+/** Backoff when a fail-closed scope cannot claim a slot. Matches Ask Mushi. */
+const CLAIM_UNAVAILABLE_RETRY_SEC = 30;
 
 /**
  * Fold an opaque scope key into the 8-4-4-4-12 hex shape Postgres's `uuid`
@@ -88,6 +105,11 @@ export async function rateLimitActorId(scopeKey: string): Promise<string> {
  * pipeline starts, push self-test — was silently disabled. That is the same
  * failure the generalize-actor migration was written to fix, so the unexpected
  * -error branch now logs at error level to keep a future signature drift loud.
+ *
+ * Runner ingest (`*:runner_ingest`) is the exception: it fails closed. A
+ * Postgres statement timeout on the hot scope row used to return
+ * `{ allowed: true }` and the push proceeded unthrottled exactly when load
+ * was highest.
  */
 export async function claimTenantRateLimit(
   db: SupabaseClient,
@@ -106,6 +128,12 @@ export async function claimTenantRateLimit(
   if (msg.includes('rate_limit_exceeded')) {
     const match = msg.match(/retry_after=(\d+)/);
     return { allowed: false, retryAfterSec: match ? parseInt(match[1]!, 10) : windowSec };
+  }
+  if (FAIL_CLOSED_SCOPE.test(scopeKey)) {
+    // Ingest abuse protection: a timeout or any other claim error must not
+    // lift the cap. Callers map `unavailable` to 503 RATE_LIMIT_UNAVAILABLE.
+    tenantLog.error('scoped_rate_limit_claim failed — refusing request', { scopeKey, err: msg });
+    return { allowed: false, retryAfterSec: CLAIM_UNAVAILABLE_RETRY_SEC, unavailable: true };
   }
   // Fail open on genuine infra errors so a database blip cannot lock out
   // legitimate traffic — but log loudly, because a silent fail-open here is

@@ -105,4 +105,18 @@ describe('claimTenantRateLimit RPC contract', () => {
     const db = recordingDb({ message: 'connection reset by peer' })
     expect((await tenant.claimTenantRateLimit(db as never, 'project:p1:voice', 30, 60)).allowed).toBe(true)
   })
+
+  it('fails closed on runner_ingest when the claim hits a statement timeout', async () => {
+    const db = recordingDb({ message: 'canceling statement due to statement timeout' })
+    const out = await tenant.claimTenantRateLimit(db as never, 'project:p1:runner_ingest', 60, 60)
+    expect(out).toEqual({ allowed: false, retryAfterSec: 30, unavailable: true })
+  })
+
+  it('fails closed on runner_ingest for any non-quota RPC error', async () => {
+    const db = recordingDb({ message: 'connection reset by peer' })
+    const out = await tenant.claimTenantRateLimit(db as never, 'project:p1:runner_ingest', 60, 60)
+    expect(out.allowed).toBe(false)
+    expect(out.unavailable).toBe(true)
+    expect(out.retryAfterSec).toBe(30)
+  })
 })

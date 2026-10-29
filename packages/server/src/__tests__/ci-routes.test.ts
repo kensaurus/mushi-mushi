@@ -92,7 +92,7 @@ interface Setup {
   db: FakeDb
   app: FakeApp
   calls: string[]
-  rate: { allowed: boolean }
+  rate: { allowed: boolean; unavailable: boolean }
   role: { value: string | null }
   github: Record<string, { status: number; body: unknown }>
   audits: unknown[][]
@@ -126,7 +126,7 @@ function setup(seed: Record<string, Array<Record<string, unknown>>> = {}, dbOpts
     },
   )
   const calls: string[] = []
-  const rate = { allowed: true }
+  const rate = { allowed: true, unavailable: false }
   const role = { value: 'member' as string | null }
   const github: Setup['github'] = {}
   const audits: unknown[][] = []
@@ -145,7 +145,11 @@ function setup(seed: Record<string, Array<Record<string, unknown>>> = {}, dbOpts
     adminOrApiKeyRead: (async (_c: unknown, next: () => Promise<void>) => next()) as never,
     adminOrApiKeyWrite: (async (_c: unknown, next: () => Promise<void>) => next()) as never,
     jwtAuth: (async (_c: unknown, next: () => Promise<void>) => next()) as never,
-    claimRateLimit: async () => ({ allowed: rate.allowed, retryAfterSec: 60 }),
+    claimRateLimit: async () => ({
+      allowed: rate.unavailable ? false : rate.allowed,
+      retryAfterSec: rate.unavailable ? 30 : 60,
+      ...(rate.unavailable ? { unavailable: true as const } : {}),
+    }),
     callerProjectIds: async (c: any) => (c.get('authMethod') === 'apiKey' ? [P1] : [P1, P2]),
     callerCanAccessProject: async () => ({ allowed: role.value != null, role: role.value }) as never,
     collector: { resolveToken: async () => 'ghp_test', now: () => clock },
@@ -208,6 +212,15 @@ describe('POST /v1/ingest/runner', () => {
     expect((await ingest(s, heartbeat(), null)).body.error?.code).toBe('PROJECT_KEY_REQUIRED')
     s.rate.allowed = false
     expect((await ingest(s, heartbeat())).status).toBe(429)
+  })
+
+  it('answers 503 RATE_LIMIT_UNAVAILABLE when the claim RPC fails', async () => {
+    const s = setup()
+    s.rate.unavailable = true
+    const res = await ingest(s, heartbeat())
+    expect(res.status).toBe(503)
+    expect(res.body.error?.code).toBe('RATE_LIMIT_UNAVAILABLE')
+    expect(s.db.table('ci_runner_hosts')).toHaveLength(0)
   })
 
   it('stores a job sample once', async () => {
