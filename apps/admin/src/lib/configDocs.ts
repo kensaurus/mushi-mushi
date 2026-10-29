@@ -1847,7 +1847,7 @@ const BILLING: ConfigDoc[] = [
     summary:
       'Hard USD ceiling on overage charges. When projected spend hits the cap, new diagnoses pause gracefully — no surprise invoice.',
     howItWorks:
-      'Stored on billing_subscriptions.monthly_spend_cap_usd_override and enforced in classify-report before Stage-2 runs. Overrides the plan default (Indie $50, Pro $200). Clear the field to revert to the plan default.',
+      'Stored on billing_subscriptions.monthly_spend_cap_usd_override and enforced in classify-report before Stage-2 runs. Overrides the plan default (Builder $50, Studio $200). Clear the field to revert to the plan default.',
     default: { value: 'plan default' },
     backend: {
       table: 'billing_subscriptions',

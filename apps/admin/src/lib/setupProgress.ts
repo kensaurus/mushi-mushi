@@ -12,15 +12,7 @@
  *            first_fix_dispatched, slack_connected, first_qa_story_passing
  */
 
-import type { SetupProject, SetupStep } from './useSetupStatus'
-
-function requiredSetupSteps(project: SetupProject): SetupStep[] {
-  return project.steps.filter((s) => s.required)
-}
-
-export function nextRequiredSetupStep(project: SetupProject): SetupStep | null {
-  return requiredSetupSteps(project).find((s) => !s.complete) ?? null
-}
+import type { SetupProject } from './useSetupStatus'
 
 /**
  * Required counts from GET /v1/admin/setup (the switcher and Home read it)
@@ -52,4 +44,13 @@ export function withSetupRequiredCounts<
     nextStepId: next ? next.id : stats.setupDone && setupProject.done ? null : stats.nextStepId,
     nextStepLabel: next ? next.label : stats.setupDone && setupProject.done ? null : stats.nextStepLabel,
   }
+}
+
+/**
+ * "3 of 4 done": the one way the console counts setup (required steps only).
+ * Set up, the Home checklist and the sidebar showed 2/4, 4/10 and 3/4 for one
+ * app (2026-10-28).
+ */
+export function setupCountLabel(project: Pick<SetupProject, 'required_complete' | 'required_total'>): string {
+  return `${project.required_complete} of ${project.required_total} done`
 }

@@ -35,6 +35,14 @@ import { checkDiagnosisQuota, invalidateDiagnosisCache } from '../_shared/quota.
 import { emitProductEvent } from '../_shared/product-events.ts';
 import { keepAlive } from '../_shared/background.ts';
 import { isNonRealReport, isNotFirstReportSource, type OldestReportRow } from '../_shared/first-report.ts';
+import { reportOriginFilter } from '../_shared/report-origin.ts';
+import {
+  END_USER_REPORT_SOURCES,
+  activationDedupKey,
+  hadEarlierActivation,
+  isActivationReport,
+  type ActivationReportRow,
+} from '../_shared/activation.ts';
 import {
   findInventoryCandidates,
   formatCandidatesForPrompt,
@@ -879,6 +887,82 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
           });
         })()).catch((err) =>
           log.error('first_diagnosis_ready emit failed', { err: String(err) }),
+        );
+      }
+
+      // Company funnel: `activated` — the organization's first real end-user
+      // report from a deployed app with a diagnosis (_shared/activation.ts),
+      // once per organization (dedup key). Like first_diagnosis_ready, only
+      // reports created before this one decide whether it is the first, so
+      // an organization that activated before this emitter shipped is not
+      // stamped again on its next diagnosis. The public demo project is one
+      // shared key, not an organization's users.
+      const activationRow: ActivationReportRow = {
+        id: reportId,
+        source: (report.source as string | null | undefined) ?? null,
+        custom_metadata: report.custom_metadata as Record<string, unknown> | null,
+        url: typeof report.environment?.url === 'string' ? report.environment.url : null,
+        stage2_model: usedModel,
+        has_diagnosis: true,
+      };
+      if (isActivationReport(activationRow)) {
+        void keepAlive((async () => {
+          const [{ data: proj, error: projErr }, { data: demo }] = await Promise.all([
+            db.from('projects').select('owner_id, organization_id').eq('id', projectId).maybeSingle(),
+            db.from('mushi_runtime_config').select('value').eq('key', 'demo_project_id').maybeSingle(),
+          ]);
+          const organizationId = (proj as { organization_id?: string | null } | null)?.organization_id ?? null;
+          if (projErr || !organizationId) {
+            log.error('activated: project lookup failed; event not emitted', { err: projErr?.message ?? 'no organization' });
+            return;
+          }
+          if ((demo as { value?: string | null } | null)?.value === projectId) return;
+          const { data: orgProjects, error: orgErr } = await db
+            .from('projects')
+            .select('id')
+            .eq('organization_id', organizationId);
+          if (orgErr) {
+            log.error('activated: organization projects lookup failed; event not emitted', { err: orgErr.message });
+            return;
+          }
+          const projectIds = ((orgProjects ?? []) as Array<{ id: string }>).map((p) => p.id);
+          // Dev-server reports are filtered here so the rows left over are
+          // nearly all qualifying ones; fixtures and hand-filed reports
+          // (custom_metadata.source) are filtered in isActivationReport.
+          const deployed = reportOriginFilter('deployed');
+          let earlierQuery = db
+            .from('reports')
+            .select('id, source, custom_metadata, url:environment->>url, stage2_model')
+            .in('project_id', projectIds.length > 0 ? projectIds : [projectId])
+            .neq('id', reportId)
+            .lt('created_at', report.created_at)
+            .in('source', [...END_USER_REPORT_SOURCES])
+            .not('stage2_analysis', 'is', null);
+          if (deployed?.kind === 'or') earlierQuery = earlierQuery.or(deployed.clause);
+          const { data: earlier, error: earlierErr } = await earlierQuery
+            .order('created_at', { ascending: true })
+            .limit(500);
+          if (earlierErr) {
+            log.error('activated: earlier-report lookup failed; event not emitted', { err: earlierErr.message });
+            return;
+          }
+          const earlierRows: ActivationReportRow[] = ((earlier ?? []) as Array<Omit<ActivationReportRow, 'has_diagnosis'>>)
+            .map((r) => ({ ...r, has_diagnosis: true }));
+          if (hadEarlierActivation(earlierRows)) return;
+
+          await emitProductEvent(db, {
+            userId: ((proj as { owner_id?: string | null } | null)?.owner_id) ?? null,
+            eventName: 'activated',
+            surface: 'server',
+            properties: {
+              project_id: projectId,
+              organization_id: organizationId,
+              report_id: reportId,
+            },
+            dedupKey: activationDedupKey(organizationId),
+          });
+        })()).catch((err) =>
+          log.error('activated emit failed', { err: String(err) }),
         );
       }
 

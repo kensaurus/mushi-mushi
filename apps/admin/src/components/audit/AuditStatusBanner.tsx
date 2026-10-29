@@ -43,7 +43,7 @@ export function AuditStatusBanner({ stats, onTab, onFilterFailures, onFilterWarn
     return (
       <StatusBannerShell
         tone="warn"
-        title="Audit log requires Pro or Enterprise"
+        title="Audit log needs Builder or higher"
         subtitle={`${stats.planDisplayName} on ${projectLabel} doesn't include append-only audit history — upgrade to export SOC 2 evidence.`}
         action={
           <Btn to="/billing?tab=plans" size="sm" variant="ghost">View plans</Btn>

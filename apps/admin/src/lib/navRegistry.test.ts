@@ -51,6 +51,12 @@ describe('navigation names', () => {
 describe('palette ranking', () => {
   const top = (q: string) => rankPaletteRoutes(q)[0]?.route.path
 
+  it('finds the first-time user test by the words people use for it (it was a tab called "Fresh eyes")', () => {
+    for (const q of ['fresh eyes', 'first-time user', 'first time user', 'onboarding test', 'new user test', 'first-time user test']) {
+      expect(top(q), q).toBe('/first-user-test')
+    }
+  })
+
   it('finds Settings for "api key" (it used to return Voice/Repo/Portfolio/Recipe)', () => {
     expect(top('api key')).toBe('/settings')
     expect(top('anthropic')).toBe('/settings')

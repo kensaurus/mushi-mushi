@@ -4,31 +4,19 @@ Source: https://kensaur.us/mushi-mushi/docs/integrations/cursor
 
 ---
 title: Cursor integration
-description: Wire Mushi's evolution loop into Cursor with one command — get fix context, lessons, and dispatch right from the editor.
+description: Wire Mushi Mushi into Cursor with one command. Get fix context, lessons and fix dispatch right from the editor.
 ---
 
 # Cursor integration
 
-**The three-line setup:**
+**The short setup:**
 
 ```bash
-npx mushi-mushi login --api-key mushi_xxx --endpoint https://<ref>.supabase.co/functions/v1/api
 npx mushi-mushi setup --ide cursor
-# Restart Cursor
+# Restart Cursor. It asks you to sign in the first time the agent calls Mushi.
 ```
 
 ## Step-by-step
-
-### Log in
-
-```bash
-npx mushi-mushi login \
-  --api-key mushi_xxx \
-  --endpoint https://<ref>.supabase.co/functions/v1/api \
-  --project-id xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-```
-
-Find your credentials in the admin console → **Settings → AI keys**.
 
 ### Wire Cursor
 
@@ -36,8 +24,26 @@ Find your credentials in the admin console → **Settings → AI keys**.
 npx mushi-mushi setup --ide cursor
 ```
 
-This writes `.cursor/mcp.json` with the `mushi` server block. If the file
-already exists, the command merges the block without overwriting other entries.
+This writes `.cursor/mcp.json` with a `mushi` entry that points at the hosted
+Mushi Mushi MCP URL. No key is written to the file: Cursor opens a browser
+sign-in the first time the agent calls Mushi. If the CLI has no saved login
+yet, the command signs you in through your browser first. If the file already
+exists, the command merges the block without overwriting other entries.
+
+Self-hosted, or a machine with no browser? Log in with a key, then write a
+local entry instead:
+
+```bash
+npx mushi-mushi login \
+  --api-key mushi_xxx \
+  --endpoint https://<ref>.supabase.co/functions/v1/api \
+  --project-id xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+npx mushi-mushi setup --ide cursor --stdio
+```
+
+Make that key in the console on **Manage apps → Generate API key** with the
+**MCP read-only** preset, or **MCP read + write** if the agent should dispatch
+fixes. (**Settings → AI keys** is for your own LLM keys, not Mushi keys.)
 
 ### (Optional) Add the evolution-loop coding rules
 
@@ -88,19 +94,20 @@ up-to-date anti-patterns from your project's fix history.
 ## Connecting GitHub for auto-PR
 
 For Cursor to open draft PRs via `dispatch_fix`, install the Mushi GitHub
-App on your repo. In the admin console, go to **Repo** and click
-**"Install Mushi on GitHub"** — it handles the OAuth round-trip and stores
-the installation token automatically.
+App on your repo. In the admin console, open **Integrations** and click
+**Install GitHub App**. Turn on **Automatic fixes** on the same page:
+`dispatch_fix` is refused while it is off.
 
 ## Troubleshooting
 
 **Cursor shows no Mushi tools:** Reload the window and check that
-`.cursor/mcp.json` exists. Run `mushi whoami` to verify credentials.
+`.cursor/mcp.json` exists. Run `npx mushi-mushi whoami` to verify credentials.
 
-**`[INSUFFICIENT_SCOPE]` error:** Your key needs `mcp:write` scope to
-dispatch fixes. Rotate to a key with the right scope in Settings → AI keys.
+**`[INSUFFICIENT_SCOPE]` error:** Your key needs the `mcp:write` scope to
+dispatch fixes. Make one with the **MCP read + write** preset on **Manage apps**
+(the hosted sign-in uses your role in the project instead).
 
-**Stale lessons:** Run `mushi sync-lessons` to pull the latest rules.
+**Stale lessons:** Run `npx mushi-mushi sync-lessons` to pull the latest rules.
 
   See the [MCP quickstart](/quickstart/mcp) for a full tool catalog and
   the [security docs](/security/no-leakage-claim) for what data stays

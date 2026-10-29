@@ -1,6 +1,6 @@
 ---
 title: Launch Week
-description: How Mushi Mushi launches now — one public post per release (Show HN, then Product Hunt), the gate each release must pass, and what we publish after.
+description: How Mushi Mushi launches now. One public post per release (Show HN, then Product Hunt), the gate each release must pass, and what we publish after.
 ---
 
 import { Callout } from 'nextra/components'
@@ -13,6 +13,14 @@ import { Callout } from 'nextra/components'
   ship. The posts did not: no Show HN, no Product Hunt listing and no Reddit
   thread for Mushi Mushi ever went out. We are keeping the shipped list below
   and replacing the rest of the page with what actually happens next.
+</Callout>
+
+<Callout type="info">
+  **Update, 2026-10-29.** The first public posts went out today: a thread on
+  Reddit r/SideProject, a post on X and a post on LinkedIn. The Show HN did not
+  post: Hacker News is restricting Show HNs from new accounts, and we will not
+  resubmit it as a plain story to get around that. The numbers in those posts
+  come from the live [proof page](/proof).
 </Callout>
 
 ## What shipped in June 2026
@@ -48,8 +56,8 @@ real bug report and its owner opened the diagnosis.
 R1 does not post until every line here is true. The list is public so that
 if you read the Show HN and find one of these false, you can say so.
 
-- The demo at [`/connect`](/connect) loads in a private window with no signup
-  and produces a diagnosis.
+- The [sample diagnosis](/demo/diagnosis) and the [free site check](/check)
+  load in a private window with no signup.
 - `npx mushi-mushi` on a fresh Next.js app reaches a first report and
   diagnosis in under five minutes, screen-recorded.
 - The two hero GIF slots on the landing page show that recording.
@@ -59,7 +67,7 @@ if you read the Show HN and find one of these false, you can say so.
 - The privacy policy and terms of service return 200.
 - `CONTRIBUTING.md` promises a first reply on issues within 24 hours on
   weekdays.
-- This page tells the truth (done, 2026-09-21).
+- This page tells the truth (done 2026-09-21, updated 2026-10-29).
 - The site's structured data lists only accounts that exist.
 - The Bluesky queue has no items scheduled in the past.
 - The activation query returns a number, even if that number is zero.

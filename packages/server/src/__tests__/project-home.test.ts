@@ -189,7 +189,7 @@ describe('buildNeedsYou', () => {
       health: [sig('site', 'bad'), sig('ci', 'bad'), sig('sdk', 'good'), sig('errors', 'good')],
       criticalWaiting: 2,
       pipeline: [
-        stage('review', 45, 45, [group('hold', '45 PRs: Opus says hold; a person decides', 45), group('fix_first_working', '3 PRs: moving', 3, 'moving')]),
+        stage('review', 45, 45, [group('hold', '45 PRs: the review says do not merge; you decide', 45), group('fix_first_working', '3 PRs: moving', 3, 'moving')]),
         stage('pr', 7, 7, [group('agent_failed', '7 fixes: agent failed, no PR opened', 7)]),
         stage('train', 2, 2, [group('not_queued', '2 PRs: approved and green, not queued to merge', 2)]),
       ],
@@ -198,7 +198,7 @@ describe('buildNeedsYou', () => {
     expect(items).toHaveLength(NEEDS_YOU_MAX)
     expect(items.map((i) => i.id)).toEqual(['site_broken', 'critical_waiting', 'pipeline_hold', 'ci_red', 'pipeline_agent_failed'])
     const hold = items.find((i) => i.id === 'pipeline_hold')!
-    expect(hold.text).toBe('45 PRs: Opus says hold; a person decides.')
+    expect(hold.text).toBe('45 PRs: the review says do not merge; you decide.')
     expect(hold.action.to).toBe('/pipeline?project=p1')
     expect(items.find((i) => i.id === 'critical_waiting')!.action.to).toBe('/reports?status=open&severity=critical')
   })
@@ -216,6 +216,21 @@ describe('buildNeedsYou', () => {
 
   it('ignores a signal whose read failed', () => {
     expect(buildNeedsYou({ projectId: 'p', health: [sig('site', 'bad', 'error')], criticalWaiting: null, pipeline: null, sdk: null })).toEqual([])
+  })
+
+  it('carries local worker problems, at most two rows, the second counting the rest (ADR 0048 amendment 2026-10-28)', () => {
+    const workers = [
+      { id: 'run_stuck:c1', severity: 'danger' as const, title: 'glot: a run has held an agent space for 4 h' },
+      { id: 'lanes_waiting:h1', severity: 'danger' as const, title: '6 lanes on alienware have waited 3 h for an agent space' },
+      { id: 'account_check:h1', severity: 'warn' as const, title: 'The Cursor account check timed out on alienware' },
+    ]
+    const items = buildNeedsYou({ projectId: 'p1', health: [], criticalWaiting: 0, pipeline: null, sdk: null, workers })
+    expect(items.map((i) => i.id)).toEqual(['worker_run_stuck:c1', 'worker_lanes_waiting:h1'])
+    expect(items[0]).toMatchObject({ text: 'Local worker: glot: a run has held an agent space for 4 h.', action: { label: 'Open Workers', to: '/pipeline?tab=workers&project=p1' } })
+    expect(items[1]!.text).toBe('Local worker: 6 lanes on alienware have waited 3 h for an agent space. (1 more worker problem on Workers)')
+    // A stuck worker outranks a held PR: the PRs wait on it.
+    const ranked = buildNeedsYou({ projectId: 'p1', health: [], criticalWaiting: 0, pipeline: [stage('review', 4, 4, [group('hold', '4 PRs: Opus says hold; a person decides', 4)])], sdk: null, workers: workers.slice(0, 1) })
+    expect(ranked.map((i) => i.id)).toEqual(['worker_run_stuck:c1', 'pipeline_hold'])
   })
 })
 
@@ -304,7 +319,7 @@ describe('setupSignal (fresh-eyes, ADR 0053)', () => {
 
   it('reads minutes and steps, with the light by time', () => {
     const s = setupSignal({ run })!
-    expect(s).toMatchObject({ id: 'setup', label: 'First-time setup', headline: '6 min, 11 steps', light: 'warn', href: '/ux-runs?tab=fresh-eyes' })
+    expect(s).toMatchObject({ id: 'setup', label: 'First-time setup', headline: '6 min, 11 steps', light: 'warn', href: '/first-user-test' })
     expect(s.detail).toBe('2 of 3 first-time visitors reached the goal in the last run.')
     expect(setupSignal({ run: { ...run, ttfv_seconds: 200 } })!.light).toBe('good')
     expect(setupSignal({ run: { ...run, ttfv_seconds: 1200 } })!.light).toBe('bad')

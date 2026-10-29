@@ -970,8 +970,10 @@ export function SdkConnectivityEmptyState({
 }: SdkConnectivityEmptyStateProps) {
   const syntheticKey: SdkHealthApiKey = {
     id: `setup-${projectId}`,
-    key_prefix: 'mushi_xxxx',
-    label: 'Most recent SDK heartbeat',
+    // Not a key: "mushi_xxxx…" on the Bugs empty state read like a real one
+    // (first-time user test, 2026-10-28).
+    key_prefix: 'any SDK key',
+    label: "Your app's latest check-in",
     is_active: true,
     created_at: new Date().toISOString(),
     last_seen_at: diagnostic?.last_sdk_seen_at ?? null,

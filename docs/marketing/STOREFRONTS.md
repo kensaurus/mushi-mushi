@@ -121,7 +121,7 @@ cared-for.
 - [ ] X / Twitter: `@mushimushi_dev` (the underscore because `@mushimushi` is
   probably taken; check both). **Not reserved as of 2026-09-21** (the profile
   404s) — do not reference it in metadata or copy until it exists.
-- [ ] Bio on both: *"Your AI wrote it. Mushi tells you why it broke — plain-English
+- [ ] Bio on both: *"Your AI wrote it. Mushi Mushi tells you why it broke — plain-English
   diagnosis + a paste-ready fix, in your editor. 🐛 OSS, self-hostable, MIT SDKs."*
 - [ ] Profile image: Mushi-chan's happy cameo
   ([`docs/mascot/mushi-happy.png`](../mascot/mushi-happy.png)).
@@ -168,7 +168,7 @@ See [`canonical-urls.md`](./canonical-urls.md). Do not use `api.mushimushi.dev` 
 | Homepage | `https://kensaur.us/mushi-mushi` |
 | Connect | `https://kensaur.us/mushi-mushi/docs/connect` |
 | License | MIT (SDK) · AGPLv3 (server) |
-| One-liner | *Your AI shipped it. Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key.* |
+| One-liner | *Your AI shipped it. Mushi Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key.* |
 
 > **Publish to the official registry FIRST.** Glama, PulseMCP, and VS Code's
 > gallery all auto-index from `registry.modelcontextprotocol.io`. Release CI

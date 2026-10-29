@@ -46,7 +46,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../../lib/useEntitlements', () => ({
-  useEntitlements: () => ({ loading: false, has: () => true, planName: 'Pro' }),
+  useEntitlements: () => ({ loading: false, has: () => true, planName: 'Studio' }),
+  isByokLocked: () => false,
 }))
 vi.mock('./ByokPoolContext', () => ({
   useByokPool: () => ({

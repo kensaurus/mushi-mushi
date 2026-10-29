@@ -4,39 +4,39 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/cordova-to-capacitor
 
 ---
 title: 'Cordova → Capacitor'
-description: Migrate a Cordova app to Capacitor in place — same web code, a new native shell — and re-mount Mushi bug reporting with @mushi-mushi/capacitor.
+description: Migrate a Cordova app to Capacitor in place (same web code, a new native shell) and add Mushi Mushi bug reporting with @mushi-mushi/capacitor.
 ---
 
 # Cordova → Capacitor
 
  
 
-Capacitor is the modern successor to Cordova from the same Ionic team.
-This guide migrates an existing Cordova app to Capacitor in place — same
-web codebase, new native shell — and re-mounts Mushi using the
-`@mushi-mushi/capacitor` plugin.
+Capacitor, built by the Ionic team, is a successor to Cordova. This guide
+migrates an existing Cordova app to Capacitor in place (same web codebase,
+new native shell) and mounts Mushi Mushi with the `@mushi-mushi/capacitor`
+plugin.
 
 The official upstream guide is [capacitorjs.com/cordova](https://capacitorjs.com/cordova);
 this page is the Mushi-aware companion to it.
 
 ## Why migrate
 
-- Cordova plugin maintenance has slowed considerably since 2023.
-- Capacitor uses standard `WKWebView` / `WebView` instead of Cordova's
-  managed shell — easier to debug, plays nicer with modern web platform
-  features.
-- Capacitor's native projects are first-class (`ios/`, `android/`) — you
-  can edit them like any other Xcode / Android Studio project.
-- Mushi ships a first-party Capacitor plugin
-  ([`@mushi-mushi/capacitor`](/sdks/capacitor)); the Cordova SDK has been
-  in maintenance mode since 0.5.
+- Check whether the Cordova plugins you depend on are still maintained;
+  most common ones have an official Capacitor counterpart (table below).
+- Capacitor's native projects are first-class (`ios/`, `android/`): you
+  commit them and edit them like any other Xcode / Android Studio project.
+- Mushi has a Capacitor plugin ([`@mushi-mushi/capacitor`](/sdks/capacitor))
+  with native shake-to-report and screenshot capture. There is no Mushi
+  Cordova plugin; in a Cordova app you would have run `@mushi-mushi/web`
+  inside the WebView.
 
 ## Prerequisites
 
 - Working Cordova app that builds for at least one platform.
-- Node 18+ and the platform SDKs (Xcode 15+ for iOS, Android Studio Hedgehog+
-  for Android).
-- Mushi project already created — we keep the same `projectId` and `apiKey`.
+- For Capacitor 8: Node 22+, Xcode 26+ for iOS, Android Studio 2025.2.1+
+  for Android ([environment setup](https://capacitorjs.com/docs/getting-started/environment-setup)).
+- A Mushi project. If you already use `@mushi-mushi/web` in the Cordova
+  app, keep the same `projectId` and `apiKey`.
 
 ## API mapping (Cordova plugins → Capacitor)
 
@@ -57,7 +57,7 @@ Most popular Cordova plugins have a 1:1 Capacitor counterpart:
 | `cordova-plugin-share` | `@capacitor/share` |
 | `cordova-plugin-firebase-messaging` | `@capacitor/push-notifications` + `@capacitor-firebase/messaging` |
 | `cordova-sqlite-storage` | `@capacitor-community/sqlite` |
-| Mushi Cordova SDK *(deprecated)* | `@mushi-mushi/capacitor` |
+| `@mushi-mushi/web` in the WebView | `@mushi-mushi/capacitor` (adds native shake and screenshots) |
 
 For anything not listed, search the [Capacitor Plugins](https://capacitorjs.com/docs/plugins)
 catalog or the [Capawesome community plugins](https://capawesome.io/plugins/).
@@ -97,8 +97,9 @@ npx @capacitor/assets generate --ios --android
       content: <>Use the table above. After replacing each, run npx cap sync.</>,
 
       id: 'mushi',
-      label: 'Swap the Mushi Cordova SDK for @mushi-mushi/capacitor',
-      content: {`npm uninstall mushi-cordova-plugin
+      label: 'Add @mushi-mushi/capacitor',
+      content: {`# If you ran @mushi-mushi/web in the Cordova WebView, remove its
+# Mushi.init call; the Capacitor plugin replaces it.
 npm install @mushi-mushi/capacitor
 npx cap sync
 
@@ -127,19 +128,21 @@ rm -rf platforms plugins config.xml`},
       id: 'verify',
       label: 'Smoke-test on a device, including a Mushi report',
       optional: false,
-      content: <>Open the app, trigger the Mushi widget (shake or tap), submit a test report, and confirm it appears in Project → Reports on the Mushi admin console within ~5s. Tagged sdk:capacitor.</>,
+      content: <>Open the app, trigger the Mushi widget (shake or tap), submit a test report, and confirm it appears on the Reports page of the Mushi admin console. Filter by SDK to see only the Capacitor build.</>,
 
 />
 
 ## Common gotchas
 
-- **iOS scheme defaults changed.** Capacitor uses `capacitor://` by default;
-  if your app stores anything under origin-bound web APIs (cookies, IndexedDB),
-  set `server.iosScheme: "ionic"` in `capacitor.config.json` to keep
-  `ionic://` and avoid wiping user data.
-- **Splash hide timing.** Capacitor's `@capacitor/splash-screen` doesn't
-  auto-hide — call `SplashScreen.hide()` once your app is mounted, or set
-  `launchAutoHide: true` in config.
+- **iOS scheme defaults changed.** Capacitor uses `capacitor://` by default
+  on iOS. If your app stores anything under origin-bound web APIs
+  (LocalStorage, cookies, IndexedDB), set `server.iosScheme: "ionic"` in
+  `capacitor.config.json` to keep the origin Cordova used and avoid
+  losing user data.
+- **Splash hide timing.** `@capacitor/splash-screen` hides itself after
+  `launchShowDuration` by default (`launchAutoHide: true`). To hide it
+  when your app is ready instead, set `launchAutoHide: false` and call
+  `SplashScreen.hide()` once your app is mounted.
 - **`whitelist` plugin gone.** Capacitor uses native ATS (iOS) and
   `usesCleartextTraffic` (Android) instead of Cordova's whitelist. Add your
   Mushi endpoint and any other API hosts to those if you allow non-HTTPS.
@@ -150,8 +153,8 @@ You branched in step 1, so:
 
 ```bash
 git checkout main
-# Native projects are gitignored if you followed Capacitor's recommendations,
-# so deleting the migration branch leaves your Cordova app untouched.
+# Capacitor's ios/ and android/ projects were committed on the migration
+# branch only, so main still has the Cordova app.
 ```
 
 If you committed and pushed before discovering a regression, revert the
@@ -159,9 +162,9 @@ merge commit; Cordova builds will start working again immediately.
 
 ## Related guides
 
-- [Capacitor → React Native](/migrations/capacitor-to-react-native) — once you're on Capacitor, the next move (if you want it) is well-trodden.
+- [Capacitor → React Native](/migrations/capacitor-to-react-native), if you later want to move on from Capacitor.
 - [`@mushi-mushi/capacitor` SDK reference](/sdks/capacitor)
-- [Capacitor → bottom-dock notes](/sdks/capacitor-bottom-dock) — keep the Mushi widget above your tab bar.
+- [Capacitor bottom-dock notes](/sdks/capacitor-bottom-dock): keep the Mushi widget above your tab bar.
 
 ## References
 

@@ -8,13 +8,16 @@
  *
  * Data: GET /v1/admin/projects/:pid/ux-runs, GET …/ux-runs/:runId
  * Live: Realtime on ux_runs + ux_surfaces for the active project.
+ *
+ * The first-time user test (fresh-eyes runs) was a tab here; it has its own
+ * page now (/first-user-test), and ?tab=fresh-eyes redirects there.
  */
 
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { Badge, EmptyState, Loading, SegmentedControl, StatCard } from '../components/ui'
+import { Badge, EmptyState, Loading, StatCard } from '../components/ui'
 import { formatRelative } from '../components/ui/metrics'
 import { PageLoadError } from '../components/PageLoadError'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -22,7 +25,6 @@ import { UxStartRunCard } from '../components/ux-runs/UxStartRunCard'
 import { UxRunProgress } from '../components/ux-runs/UxRunProgress'
 import { UxRunPullRequest } from '../components/ux-runs/UxRunPullRequest'
 import { UxSurfaceDetail } from '../components/ux-runs/UxSurfaceDetail'
-import { FreshEyesPanel } from '../components/ux-runs/FreshEyesPanel'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
@@ -30,6 +32,9 @@ import { sortSurfaces, UX_RUN_STATUS_LABEL, UX_STATUS_META, uxKeptEdits, type Ux
 
 export function UxRunsPage() {
   const projectId = useActiveProjectId()
+  const [params] = useSearchParams()
+  // Old links (the Home light, bookmarks) to the tab the first-time user test used to be.
+  if (params.get('tab') === 'fresh-eyes') return <Navigate to="/first-user-test" replace />
   if (!projectId) {
     return (
       <div className="flex flex-1 flex-col">
@@ -54,15 +59,6 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
     setParams(next, { replace: true })
   }
   const [showOlder, setShowOlder] = useState(false)
-  // ?tab=fresh-eyes: first-time visitor runs (ADR 0053); the default is the screen-by-screen runs.
-  const tab: UxTab = params.get('tab') === 'fresh-eyes' ? 'fresh-eyes' : 'screens'
-  const setTab = (t: UxTab) => {
-    const next = new URLSearchParams(params)
-    if (t === 'fresh-eyes') next.set('tab', t)
-    else next.delete('tab')
-    next.delete('run')
-    setParams(next, { replace: true })
-  }
   const runId = chosen ?? runs[0]?.local_run_id ?? null
   const shownRuns = showOlder ? runs : runs.slice(0, RUN_LIST_LIMIT)
   const detail = usePageData<UxRunDetail>(runId ? `${listPath}/${runId}` : null)
@@ -97,22 +93,9 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
         helpHowToUse="Start a run from the card at the top: the studio (mushi ux ui) runs on your own computer, or start a cloud run. This page mirrors the run and merges its PR; it cannot open the studio for you. Start with screens marked Moved by another fix or Rolled back. File anything you want fixed as a bug. Review the branch, open it as a draft PR from the studio, and merge it here once its required checks pass. Nothing merges until you confirm."
         helpFlowPath="/ux-runs"
       />
-
-      <SegmentedControl<UxTab>
-        size="sm"
-        ariaLabel="Kind of UX run"
-        value={tab}
-        options={[
-          { id: 'screens', label: 'Screen runs' },
-          { id: 'fresh-eyes', label: 'Fresh eyes' },
-        ]}
-        onChange={setTab}
-      />
-
-      {tab === 'fresh-eyes' && <FreshEyesPanel projectId={projectId} />}
-
-      {tab === 'screens' && (
-        <>
+      <p className="text-2xs text-fg-muted">
+        Want to know if a new user gets through your app? That is the <Link className="text-brand hover:underline" to="/first-user-test">first-time user test</Link>.
+      </p>
 
         <PagePosture
           slots={[
@@ -241,14 +224,9 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
             </div>
           </div>
         )}
-
-        </>
-      )}
     </div>
   )
 }
-
-type UxTab = 'screens' | 'fresh-eyes'
 
 const RUN_LIST_LIMIT = 8
 
