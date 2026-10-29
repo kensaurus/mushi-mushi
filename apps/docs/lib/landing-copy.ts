@@ -13,13 +13,13 @@ export const LANDING_HERO = {
    * one sentence, no paragraph before the first action.
    */
   lead:
-    'A user says your app is broken. Mushi tells you why in plain English and hands the fix to Cursor, Claude Code or Lovable. No Sentry or monitoring needed.',
+    'A user says your app is broken. Mushi Mushi tells you why in plain English and hands the fix to Cursor, Claude Code or Lovable. No Sentry or monitoring needed.',
   /**
    * Stage-fit proof under the actions: what it costs to try. No star count —
    * at this stage a small number is anti-proof. Plain text, no links: the hero
    * has one action (the install box) and one secondary link (the sample).
    */
-  reassure: 'Free: 50 diagnoses a month, no card. Open source.',
+  reassure: 'Free for one app: 100 diagnoses a month, no card. Open source.',
 } as const
 
 /**
@@ -30,6 +30,20 @@ export const LANDING_SAMPLE_LINK = {
   id: 'landing-sample',
   label: 'See a sample diagnosis',
   href: '/demo/diagnosis',
+} as const
+
+/**
+ * The hero's one secondary link since ADR 0052's 2026-10-28 amendment (owner
+ * decision): value before trust. A stranger checks their own live site with
+ * nothing to install and no sign-up; the sample diagnosis moves one scroll down
+ * to "How it works".
+ */
+export const LANDING_CHECK_LINK = {
+  id: 'landing-check',
+  lead: 'Not ready to install?',
+  label: 'Check your live site free',
+  note: 'nothing to install, no sign-up',
+  href: '/check?src=landing-hero',
 } as const
 
 /**
@@ -151,7 +165,7 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
   },
   {
     q: 'Do I need my own AI key?',
-    a: "No. Mushi writes the diagnosis with its own AI, and the free plan covers 50 diagnoses a month with no card. Your editor's AI (Cursor, Claude Code, Lovable) does the fix, with the prompt Mushi hands it.",
+    a: "No. Mushi writes the diagnosis with its own AI, and the free plan watches one app with 100 diagnoses a month, no card. Your editor's AI (Cursor, Claude Code, Lovable) does the fix, with the prompt Mushi hands it.",
   },
   {
     q: 'Who makes it, and can I use it today?',
@@ -167,7 +181,7 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
   },
   {
     q: 'What does npx mushi-mushi do?',
-    a: 'It runs a setup wizard. The wizard works out which framework your app uses (React, Next.js, Vue, Nuxt, Svelte, Angular, React Native, Expo, Capacitor or Node), installs the matching Mushi library, saves your settings (environment variables) and prints the snippet to paste.',
+    a: 'It runs a setup wizard on your computer. The wizard works out which framework your app uses (React, Next.js, Vue, Nuxt, Svelte, Angular, React Native, Expo, Capacitor or Node), installs the matching Mushi library, saves your settings in your env file (and warns you if that file is not in .gitignore), and asks before it adds the setup snippet to your code. It never commits, pushes or touches your Git history, and its source is public on GitHub.',
   },
   {
     q: 'How do I debug an app that Cursor or Claude Code wrote?',
@@ -175,7 +189,11 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
   },
   {
     q: 'Is it open source? Can I self-host?',
-    a: 'Yes. The libraries you add to your app (SDKs) are MIT-licensed and the server is AGPLv3. You can run the whole thing on your own server with one command, or use the hosted free plan: 50 diagnoses a month, no card.',
+    a: 'Yes. The libraries you add to your app (SDKs) are MIT-licensed and the server is AGPLv3. You can run the whole thing on your own server with one command, or use the hosted free plan: one app, 100 diagnoses a month, no card.',
+  },
+  {
+    q: 'Can an AI agent write the fix for me?',
+    a: 'Yes, if you want it to. Connect your GitHub repo and turn on automatic fixes, and an agent opens a pull request for a diagnosed bug. The built-in fixer needs no key of your own; to use Cursor agents, add your Cursor key, or run them on your own computer with mushi work. With your own Anthropic key, a second AI then reads that pull request next to the original report and says merge, fix first, or do not merge, so a fix that only hides the symptom is caught. Nothing merges unless you merge it or turn on automatic merging.',
   },
   {
     q: 'Which frameworks are supported?',
@@ -348,7 +366,7 @@ export const LANDING_COMPARISON_ROWS: readonly LandingComparisonRow[] = [
   {
     label: 'Closing the loop',
     foil: 'Resolve by hand, from a commit that references the issue, or in a release; Seer, the paid AI debugging add-on, is on Team and above',
-    mushi: 'A draft PR from your agent; merging it resolves the linked Linear issue, and the linked Sentry issue once the Sentry plugin is on (Indie and above, or self-hosted)',
+    mushi: 'A draft PR from your agent; merging it resolves the linked Linear issue, and the linked Sentry issue once the Sentry plugin is on (Builder and above, or self-hosted)',
   },
   {
     label: 'Reporter attribution',
@@ -463,7 +481,7 @@ export const LANDING_MEDIATOR = {
   ],
   core: 'One list: duplicates merged, each bug explained in plain English, past fixes remembered as lessons',
   gating:
-    'The SDK, the report button, the diagnosis and the editor connection (MCP server) all work on the free plan. Plugins for other tools need the Indie plan or above on Mushi Cloud, or your own server.',
+    'The SDK, the report button, the diagnosis and the editor connection (MCP server) all work on the free plan. Plugins for other tools need the Builder plan or above on Mushi Cloud, or your own server.',
 } as const satisfies {
   inbound: readonly LandingMediatorLink[]
   outbound: readonly LandingMediatorLink[]
@@ -474,7 +492,7 @@ export const LANDING_MEDIATOR = {
 /** Landing pricing strip — tier rows come from PRICING_TIERS (lib/public-copy.ts). */
 export const LANDING_PRICING_STRIP = {
   heading: 'What it costs',
-  lead: 'You pay per diagnosis (one bug that Mushi explains), not for every error it sees. Duplicate reports and noise are filtered out for free. Every paid plan has a spending cap, so the bill cannot run away.',
+  lead: 'A plan is the number of apps Mushi watches for you. Each includes plain-English diagnoses (one bug that Mushi explains), not a charge for every error: duplicates and noise are filtered out for free, and every paid plan has a spending cap you set.',
   // The solo builder's tiers only (ADR 0052); self-hosting is one click away on /pricing.
   tierIds: ['free', 'indie', 'pro'] as const,
   cta: 'Full pricing and the estimator →',
@@ -545,9 +563,9 @@ export const LANDING_TRUST_LINKS = [
     href: MUSHI_CANONICAL_URLS.repo,
   },
   {
-    label: 'Dogfood',
-    text: 'Runs on glot.it',
-    href: 'https://kensaur.us/glot-it',
+    label: 'Proof',
+    text: 'Runs on my own live apps · numbers public',
+    href: '/proof',
   },
   {
     label: 'Security',

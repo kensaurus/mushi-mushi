@@ -1,6 +1,9 @@
 /**
  * Unit tests for the docs-site funnel helpers (no DOM — storage is injected).
  */
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { MUSHI_EVENTS } from '@mushi-mushi/core'
 import {
@@ -12,7 +15,10 @@ import {
   dntActive,
   firstTouchKey,
   firstTouchReservedProps,
+  pageViewBeaconBody,
+  pageViewBeaconUrl,
   parseUtm,
+  readLandingSrc,
   readFirstTouch,
   readSiteAnalyticsConfig,
   readStoredConsent,
@@ -21,6 +27,7 @@ import {
   sanitizeReferrer,
   sanitizeRefSlug,
   planRouteViews,
+  planSelectionFromCta,
   writeStoredConsent,
   type KeyValueStore,
 } from './site-analytics'
@@ -419,6 +426,28 @@ describe('CTA links', () => {
   })
 })
 
+const HERE = dirname(fileURLToPath(import.meta.url))
+
+describe('plan_selected (60-day price test)', () => {
+  it('maps public tier ids to the console plan ids', () => {
+    expect(planSelectionFromCta({ mushiPlan: 'free' })).toEqual({ plan_id: 'free_cloud', interval: 'monthly' })
+    expect(planSelectionFromCta({ mushiPlan: 'indie', mushiInterval: 'annual' })).toEqual({ plan_id: 'indie', interval: 'annual' })
+    expect(planSelectionFromCta({ mushiPlan: 'enterprise' })?.plan_id).toBe('enterprise')
+  })
+
+  it('ignores CTAs without a plan, and self-host', () => {
+    expect(planSelectionFromCta({})).toBeNull()
+    expect(planSelectionFromCta({ mushiPlan: 'self-host' })).toBeNull()
+  })
+
+  it('is wired to the pricing table and the click handler', () => {
+    const table = readFileSync(join(HERE, '..', 'components', 'PricingTiersTable.tsx'), 'utf8')
+    const handler = readFileSync(join(HERE, '..', 'components', 'MushiSiteAnalytics.tsx'), 'utf8')
+    expect(table).toContain("'data-mushi-plan': tierId")
+    expect(handler).toContain("emit('plan_selected'")
+  })
+})
+
 describe('dntActive', () => {
   it('honours DNT and GPC the way the SDK does', () => {
     expect(dntActive(undefined)).toBe(false)
@@ -427,5 +456,74 @@ describe('dntActive', () => {
     expect(dntActive({ msDoNotTrack: 'yes' })).toBe(true)
     expect(dntActive({ globalPrivacyControl: true })).toBe(true)
     expect(dntActive({}, { doNotTrack: '1' })).toBe(true)
+  })
+})
+
+describe('?src= attribution (November GTM plan §6.1)', () => {
+  it('reads the inbound campaign tag from ?src=, else utm_source, as a lowercase slug', () => {
+    expect(readLandingSrc('?src=HN')).toBe('hn')
+    expect(readLandingSrc('?utm_source=reddit&src=x-thread')).toBe('x-thread')
+    expect(readLandingSrc('?utm_source=Reddit')).toBe('reddit')
+    expect(readLandingSrc('?src=jane@example.com')).toBeNull()
+    expect(readLandingSrc('')).toBeNull()
+  })
+
+  it('records ?src= as the first touch source when there is no utm_source', () => {
+    expect(buildFirstTouch({ search: '?src=hn', referrer: '', pathname: '/' }).utm_source).toBe('hn')
+    expect(buildFirstTouch({ search: '?src=hn&utm_source=x', referrer: '', pathname: '/' }).utm_source).toBe('x')
+  })
+
+  it("forwards this visit's ?src= as ft_src on signup links, with or without consent", () => {
+    for (const consent of [null, 'pending', 'denied', 'blocked', 'granted'] as const) {
+      const params = new URL(
+        decorateSignupHref('https://x.test/admin/signup', { ctaId: 'landing-hero', consent, landingSrc: 'hn' }),
+      ).searchParams
+      // src stays the clicked CTA; the campaign rides in ft_src, which the
+      // console stores as signup_first_touch (the funnel's source).
+      expect(params.get('src')).toBe('landing-hero')
+      expect(params.get('ft_src')).toBe('hn')
+    }
+  })
+
+  it('a consented stored first touch wins over this visit, because it came first', () => {
+    const touch = buildFirstTouch({ search: '?utm_source=reddit', referrer: '', pathname: '/' })
+    const params = new URL(
+      decorateSignupHref('https://x.test/admin/signup', {
+        ctaId: 'landing-hero',
+        consent: 'granted',
+        firstTouch: touch,
+        landingSrc: 'hn',
+      }),
+    ).searchParams
+    expect(params.get('ft_src')).toBe('reddit')
+  })
+})
+
+describe('cookieless page-view beacon', () => {
+  it('posts to the public page-view route of the configured API', () => {
+    expect(pageViewBeaconUrl('https://api.example/functions/v1/api/')).toBe(
+      'https://api.example/functions/v1/api/v1/public/page-view',
+    )
+    expect(pageViewBeaconUrl(undefined)).toBeNull()
+    expect(pageViewBeaconUrl('  ')).toBeNull()
+  })
+
+  it('sends only the path, the src tag and the referrer host', () => {
+    const body = JSON.parse(
+      pageViewBeaconBody({
+        pathname: '/quickstart/web/',
+        src: 'hn',
+        referrer: 'https://news.ycombinator.com/item?id=1',
+        siteHost: 'kensaur.us',
+      }),
+    )
+    expect(body).toEqual({ path: '/quickstart/web', src: 'hn', ref: 'news.ycombinator.com' })
+  })
+
+  it('drops a same-site referrer and an absent src', () => {
+    const body = JSON.parse(
+      pageViewBeaconBody({ pathname: '/', src: null, referrer: 'https://kensaur.us/mushi-mushi/pricing', siteHost: 'kensaur.us' }),
+    )
+    expect(body).toEqual({ path: '/' })
   })
 })

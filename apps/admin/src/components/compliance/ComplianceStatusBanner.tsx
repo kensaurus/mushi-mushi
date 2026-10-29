@@ -52,7 +52,7 @@ export function ComplianceStatusBanner({
     return (
       <StatusBannerShell
         tone="warn"
-        title="SOC 2 console requires Pro or Enterprise"
+        title="SOC 2 console needs Enterprise"
         subtitle={`${stats.planDisplayName} on ${projectLabel} doesn't include the compliance pack — upgrade to unlock evidence vault and DSAR tooling.`}
         action={
           <Btn to="/billing?tab=plans" size="sm" variant="ghost">View plans</Btn>

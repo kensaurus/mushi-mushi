@@ -113,7 +113,7 @@ export function PricingEstimator() {
               position: 'relative',
             }}
           >
-            {t.name}
+            {t.name} · {t.apps === 1 ? '1 app' : `${t.apps} apps`}
             {t.id === POPULAR_TIER_ID && (
               <span
                 style={{

@@ -4,33 +4,37 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/vue
 
 ---
 title: '@mushi-mushi/vue'
-description: Reference for @mushi-mushi/vue — install MushiPlugin, use the useMushi and useMushiReport composables, identify users and submit reports in Vue 3.
+description: Mushi Mushi for Vue 3, @mushi-mushi/vue. MushiPlugin, the useMushi, useMushiReport and useMushiWidget composables, user identity and submitting reports.
 ---
 
 # `@mushi-mushi/vue`
 
-Vue 3 plugin + composables over [`@mushi-mushi/web`](/sdks/web). Shared wrapper
+The Mushi Mushi Vue 3 plugin and composables over [`@mushi-mushi/web`](/sdks/web). Shared wrapper
 notes: [Framework wrappers](/sdks/framework-wrappers).
 
 ```bash
 npm install @mushi-mushi/vue
 ```
 
-  **Still on Vue 2?** This adapter requires Vue 3. See the [Vue 2 → Vue 3 migration guide](/migrations/vue-2-to-vue-3) — it walks through the bridge build and the Mushi-specific bits.
+  **Still on Vue 2?** This adapter requires Vue 3. See the [Vue 2 → Vue 3 migration guide](/migrations/vue-2-to-vue-3), which walks through the bridge build and the Mushi-specific bits.
 
 See [Quickstart → Vue](/quickstart/vue) for the full setup walkthrough.
 
 ## API surface
 
 ```ts
-import { MushiPlugin, useMushi, useMushiReport } from '@mushi-mushi/vue'
+import { MushiPlugin, useMushi, useMushiReport, useMushiWidget } from '@mushi-mushi/vue'
 ```
 
 | Export | Purpose |
 | --- | --- |
-| `MushiPlugin` | `app.use(MushiPlugin, config)` — installs the plugin and boots the SDK |
+| `MushiPlugin` | `app.use(MushiPlugin, config)` installs the plugin and boots the SDK (browser only; it does nothing during SSR) |
 | `useMushi()` | Returns the SDK instance, or `undefined` outside the plugin |
-| `useMushiReport()` | Returns `{ submitReport({ description, category }) }` |
+| `useMushiReport()` | Returns `{ submitReport({ description, category }) }`; sends a report from code without opening the widget. Both fields are required |
+| `useMushiWidget()` | Returns `{ isOpen, open, close }` to control the widget |
+
+The plugin also chains onto `app.config.errorHandler`: your existing handler
+still runs, and the error is sent with `captureException()`.
 
 ## Setup (Vite / Vue 3)
 

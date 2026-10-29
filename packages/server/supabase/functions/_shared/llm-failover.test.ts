@@ -28,6 +28,14 @@ Deno.test('classifyLlmError detects quota errors from message text', () => {
   assertEquals(classifyLlmError(new Error('You exceeded your current quota')), 'quota');
 });
 
+Deno.test('classifyLlmError treats a spent Anthropic key (a 400, not a 429) as quota so failover moves on', () => {
+  assertEquals(classifyLlmError(new Error('AI_APICallError: You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.')), 'quota');
+  assertEquals(classifyLlmError(new Error('400 {"type":"error","error":{"type":"invalid_request_error","message":"You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC."}}')), 'quota');
+  assertEquals(classifyLlmError(new Error('400 invalid_request_error: Your credit balance is too low to access the Anthropic API.')), 'quota');
+  // An ordinary bad request is still not a key problem.
+  assertEquals(classifyLlmError(new Error('400 {"type":"error","error":{"type":"invalid_request_error","message":"messages.0.content.0.pdf.source.base64.data: The PDF specified was not valid."}}')), 'other');
+});
+
 Deno.test('classifyLlmError detects auth errors from message text', () => {
   assertEquals(classifyLlmError(new Error('401 Unauthorized')), 'auth');
   assertEquals(classifyLlmError(new Error('Invalid API Key provided')), 'auth');

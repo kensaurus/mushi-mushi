@@ -437,7 +437,7 @@ export function SlackIntegrationCard({
                     <div className="flex-1 min-w-0">
                       <Input
                         type="text"
-                        placeholder="C0ABC123XYZ"
+                        placeholder="e.g. C0123ABCDEF"
                         className="font-mono text-xs"
                         value={manualChannelId}
                         onChange={(e) => setManualChannelId(e.target.value)}
@@ -482,7 +482,7 @@ export function SlackIntegrationCard({
                   onClick={handleSaveChannel}
                   className="shrink-0"
                 >
-                  {savingChannel ? 'Saving…' : 'Save'}
+                  {savingChannel ? 'Saving…' : 'Save channel'}
                 </Btn>
               </div>
             ) : (
@@ -525,7 +525,8 @@ export function SlackIntegrationCard({
             onClick={() => void handleSaveWebhook()}
             className="shrink-0"
           >
-            Save
+            {/* Two buttons on this card both said "Save" (console sweep, 2026-10-28). */}
+            Save webhook
           </Btn>
         </div>
         <p className="mt-2 text-xs text-fg-tertiary">

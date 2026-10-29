@@ -386,9 +386,11 @@ export function ResearchPage() {
                 }}
                 className="flex flex-col gap-2 sm:flex-row sm:items-end"
               >
-                {/* Input puts className on the <input>. The label is the flex
-                    item, so flex-1 there left the field at its intrinsic width
-                    and clipped the placeholder at a 1440px console. */}
+                {/* className lands on the <input>, which never widened this row
+                    and clipped the placeholder at a 1440px console. The wrapper
+                    is the form's flex item. containerClassName puts the same
+                    min-w-0 flex-1 on the label, the element a flex row sizes
+                    when Input itself is the item. */}
                 <div className="min-w-0 flex-1">
                   <Input
                     label="Web query"
@@ -396,6 +398,7 @@ export function ResearchPage() {
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="error signature, library name, doc topic…"
+                    containerClassName="min-w-0 flex-1"
                     disabled={searching || !stats.firecrawlReady}
                   />
                 </div>

@@ -211,7 +211,7 @@ describe('GET /v1/admin/pipeline', () => {
     expect(ci.items[0]).toMatchObject({ id: F1, failingChecks: ['Build & Test'], title: 'Badge clipped', lastEventAt: '2026-10-26T09:00:00Z', lastEventLabel: 'CI finished: failed' })
     // Auto-fix on, the only Cursor key off: a red group first in Fix PR.
     expect(byId.pr.groups.map((g) => g.id)).toEqual(['autofix_no_agent', 'draft_no_ci'])
-    expect(byId.pr.groups[0].label).toBe('1 app: auto-fix is on but has no agent key; 0 dispatches in 48h')
+    expect(byId.pr.groups[0].label).toBe('1 app: auto-fix is on but has no Cursor key to start fixes; no fix started in the last 2 days')
     const d = (res.body.data as { dispatchers: Array<{ name: string; opener: string; server: { agentKeys: number; offKeys: number } }> }).dispatchers
     expect(d).toEqual([expect.objectContaining({ name: 'glot.it', opener: 'server', server: expect.objectContaining({ agentKeys: 0, offKeys: 1 }) })])
     expect(byId.reported.groups.map((g) => g.id)).toEqual(['intake_rejected', 'triage_slow'])

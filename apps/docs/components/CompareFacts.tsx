@@ -130,7 +130,7 @@ export function FaqList({ items }: { items: readonly FaqEntry[] }) {
 }
 
 /** The one call to action each compare page carries; `href` comes from signupUrl(slug). */
-export function StartFree({ href, label = 'Start free — 50 diagnoses/mo, no card' }: { href: string; label?: string }) {
+export function StartFree({ href, label = 'Start free — 1 app, 100 diagnoses/mo, no card' }: { href: string; label?: string }) {
   return (
     <p className="not-prose my-6">
       <a

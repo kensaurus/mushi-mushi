@@ -4,16 +4,16 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/flutter
 
 ---
 title: 'mushi_mushi (Flutter)'
-description: API reference for mushi_mushi, Mushi's Flutter SDK — configure, report, captureError, showWidget, screenshots and the offline queue. Preview, not on pub.dev.
+description: Reference for mushi_mushi, the Mushi Mushi Flutter SDK. configure, report, captureError, showWidget, screenshots and the offline queue. Preview, not on pub.dev.
 ---
 
 # `mushi_mushi` (Flutter)
 
-Pure-Dart SDK for iOS and Android: `RepaintBoundary` screenshot capture, shake
+The Mushi Mushi Flutter SDK, written in Dart, for iOS and Android: `RepaintBoundary` screenshot capture, shake
 detection via `sensors_plus`, a Material bottom sheet, and a byte-capped
 offline queue.
 
-  **Preview — not on pub.dev yet.** Install it as a `git:` dependency from the
+  **Preview, not on pub.dev yet.** Install it as a `git:` dependency from the
   repository until the first release is published.
 
 ```yaml
@@ -32,7 +32,7 @@ See [Quickstart → Flutter](/quickstart/flutter) for the full setup walkthrough
 
 | Member | Purpose |
 | --- | --- |
-| `Mushi.instance.configure(MushiConfig)` | Boot the SDK — call once in `main()` before `runApp()` |
+| `Mushi.instance.configure(MushiConfig)` | Boot the SDK; call once in `main()` before `runApp()` |
 | `Mushi.instance.report(description:, category:, metadata:)` | Submit a report from code |
 | `Mushi.instance.captureError(error, [stackTrace])` | Report a caught error with its type and stack trace |
 | `Mushi.instance.showWidget(context)` | Present the bottom sheet from any screen |

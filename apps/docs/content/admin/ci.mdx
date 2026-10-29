@@ -1,13 +1,13 @@
 ---
 title: CI runners
-description: The console CI runners page shows where tests run, how long they wait for a machine, and whether a red check was your code or the test machine.
+description: The CI runners page in the Mushi Mushi console shows where tests run, how long they wait for a machine, and whether a red check was your code or the machine.
 ---
 
 # CI runners
 
-**Route:** `/ci`
+**Route:** `/ci` (sidebar: Checks › CI runners. CI runners is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar and on the Checks grid)
 
-Every fix Mushi opens is tested by your CI before it can merge. This page shows the machines that run those tests, the jobs waiting for one, and why a fix takes as long as it does to land. **This app** follows the app you have open. **All apps** reads every project you can see.
+Every fix Mushi Mushi opens is tested by your CI before it can merge. This page shows the machines that run those tests, the jobs waiting for one, and why a fix takes as long as it does to land. **This app** follows the app you have open. **All apps** reads every project you can see.
 
 The page reloads every 30 seconds while the tab is visible, and **Refresh** does the same. Each reload asks GitHub for queued and running jobs. The server does that live read at most once a minute per app.
 
@@ -89,7 +89,7 @@ A classic token, which is what `gh auth login` makes, reads a personal account's
 
 ### Cost advice that reads your workflows
 
-Each item of **Cost advice** gives its evidence and a saving per month. The saving is the billed minutes Mushi recorded over the window, at GitHub's list price. It is zero for public repos and self-hosted runners, which GitHub doesn't charge for. An item marked **one-click fix** can open a pull request that makes the change.
+Each item of **Cost advice** gives its evidence and a saving per month. The saving is the billed minutes Mushi recorded over the window, at GitHub's list price. It is zero for public repos and self-hosted runners, which GitHub doesn't charge for. An item with an **Open fix PR** button can open a pull request that makes the change.
 
 | Advice | When it appears | One-click fix |
 | --- | --- | --- |
@@ -104,6 +104,7 @@ Each item of **Cost advice** gives its evidence and a saving per month. The savi
 | Draft pull requests run the full CI | A pull request workflow doesn't skip drafts | Yes: skip drafts |
 
 Advice that needs data Mushi doesn't have yet stays hidden. It never guesses.
+
 ## Fix it in one PR
 
 Some advice is one edit to one workflow file. Those cards have an **Open fix PR** button for each workflow they found:

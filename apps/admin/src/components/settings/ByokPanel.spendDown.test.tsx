@@ -44,7 +44,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../../lib/useEntitlements', () => ({
-  useEntitlements: () => ({ loading: false, has: () => true, planName: 'Pro' }),
+  useEntitlements: () => ({ loading: false, has: () => true, planName: 'Studio' }),
+  isByokLocked: () => false,
 }))
 // The real pool refetches on reload() and re-renders the panel with what the
 // server now has. The mock does the same so the test walks the whole removal

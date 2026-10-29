@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/use-cases/debug-cursor-apps
 
 ---
 title: Debug apps built with Cursor
-description: How to debug an app Cursor wrote for you — user bug reports become plain-English diagnoses and fix prompts your Cursor agent applies over MCP.
+description: How to debug an app Cursor wrote for you. With Mushi Mushi, user bug reports become plain-English diagnoses and fix prompts your Cursor agent applies over MCP.
 ---
 
 # How to debug an app Cursor wrote for you
@@ -48,7 +48,7 @@ npx mushi-mushi
 npx mushi-mushi setup --ide cursor
 ```
 
-Free tier: 50 diagnoses a month, no card. Open source, self-hostable.
+Free tier: one app, 100 diagnoses a month, no card. Open source, self-hostable.
 
 **Next:** [Cursor integration guide](/integrations/cursor) ·
 [MCP server quickstart](/quickstart/mcp) ·

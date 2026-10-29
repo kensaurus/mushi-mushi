@@ -63,7 +63,7 @@ scores. Full URL table: [`canonical-urls.md`](./canonical-urls.md).
 | Connect | `https://kensaur.us/mushi-mushi/docs/connect` |
 | Docs / MCP quickstart | `https://kensaur.us/mushi-mushi/docs/quickstart/mcp` |
 | License | MIT (SDK) · AGPLv3 (server) |
-| One-liner | *Your AI shipped it. Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key.* |
+| One-liner | *Your AI shipped it. Mushi Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key.* |
 
 > **Registry `description` cap:** `packages/mcp/server.json` `description` must
 > stay ≤ **100 characters** or `mcp-publisher` returns HTTP 422.

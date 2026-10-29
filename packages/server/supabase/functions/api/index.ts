@@ -84,6 +84,7 @@ import { registerIdentitySecretRoutes } from './routes/identity-secret.ts';
 import { registerSessionRoutes } from './routes/sessions.ts';
 import { registerEventRoutes } from './routes/events.ts';
 import { registerGrowthRoutes } from './routes/growth.ts';
+import { forwardPageView } from './page-view-forward.ts';
 import { registerEventsAdminRoutes } from './routes/events-admin.ts';
 import { registerLifecycleEmailRoutes } from './routes/lifecycle-emails.ts';
 import { registerSlackEventsRoutes } from './routes/slack-events.ts';
@@ -109,6 +110,8 @@ function forwardToApiExt(paths: string[]): void {
     app.all(path, (c) =>
       proxyToFunction(c.req.raw, 'api-ext', c.req.path.replace(/^\/api(?=\/)/, ''), {
         supabaseUrl: Deno.env.get('SUPABASE_URL') ?? '',
+        // Signs the visitor's IP for per-IP limits in api-ext (production-check.ts).
+        clientIpSecret: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || undefined,
       }),
     );
   }
@@ -781,6 +784,9 @@ forwardToApiExt([
   '/v1/admin/projects/:pid/ux-runs/:runId/surfaces/:key/report',
   '/v1/admin/projects/:pid/ux-runs/:runId/uploads',
 ]);
+// Free Production Check and the public scoreboard (production-check.ts,
+// public-scoreboard.ts): the docs /check and /proof pages.
+forwardToApiExt(['/v1/public/production-check', '/v1/public/production-check/:id', '/v1/public/scoreboard']);
 // Fresh-eyes runs (fresh-eyes.ts, ADR 0053).
 forwardToApiExt([
   '/v1/admin/fresh-eyes/test-account',
@@ -788,6 +794,7 @@ forwardToApiExt([
   '/v1/admin/projects/:pid/fresh-eyes/:runId',
   '/v1/admin/projects/:pid/fresh-eyes/:runId/uploads',
   '/v1/admin/projects/:pid/fresh-eyes/:runId/findings',
+  '/v1/admin/projects/:pid/fresh-eyes/:runId/cancel',
 ]);
 registerPullRequestRoutes(app);
 registerProjectGroupRoutes(app);
@@ -796,6 +803,11 @@ registerIdentitySecretRoutes(app);
 registerSessionRoutes(app);
 registerEventRoutes(app);
 registerGrowthRoutes(app);
+// Daily GTM scorecard and the cookieless landing page-view beacon
+// (landing-visits.ts in api-ext; api only hashes the visitor IP into the
+// beacon's rate-limit bucket, page-view-forward.ts).
+forwardToApiExt(['/v1/admin/growth/daily']);
+app.post('/v1/public/page-view', forwardPageView);
 registerEventsAdminRoutes(app);
 registerLifecycleEmailRoutes(app);
 registerSlackEventsRoutes(app);

@@ -34,12 +34,12 @@ function withStorage(db: FakeDb) {
   return { uploads, removed }
 }
 
-function fakeFetch(image: { type: string; bytes: number }, scrape: { status?: number; screenshot?: unknown } = {}) {
+function fakeFetch(image: { type: string; bytes: number }, scrape: { status?: number; screenshot?: unknown; markdown?: string; pageStatus?: number } = {}) {
   return vi.fn(async (url: string | URL | Request) => {
     const u = String(url)
     if (u.startsWith('https://api.firecrawl.dev/')) {
       const status = scrape.status ?? 200
-      return new Response(JSON.stringify({ data: { screenshot: 'screenshot' in scrape ? scrape.screenshot : 'https://storage.example.com/shot.png' } }), { status })
+      return new Response(JSON.stringify({ data: { screenshot: 'screenshot' in scrape ? scrape.screenshot : 'https://storage.example.com/shot.png', markdown: scrape.markdown ?? '# My app\n\nWelcome.', metadata: { statusCode: scrape.pageStatus ?? 200 } } }), { status })
     }
     return new Response(new Uint8Array(image.bytes), { status: 200, headers: { 'content-type': image.type } })
   }) as unknown as typeof fetch
@@ -86,6 +86,30 @@ describe('captureThumbnail', () => {
     const { uploads } = withStorage(db)
     await expect(captureThumbnail(db as never, P, 'https://glot.it', 'k', { fetchImpl: fakeFetch({ type: 'image/png', bytes: THUMBNAIL_MAX_BYTES + 1 }) })).rejects.toThrow(/5 MB/)
     expect(uploads).toEqual([])
+  })
+
+  it('keeps the last good picture when the page is an error screen, and says why', async () => {
+    const db = makeFakeDb({ project_home_thumbnails: [{ project_id: P, storage_path: `${P}/home.png`, captured_at: '2026-10-20T00:00:00Z' }] })
+    const { uploads } = withStorage(db)
+    const fetchImpl = fakeFetch({ type: 'image/png', bytes: 10 }, { markdown: "This page couldn't load\n\nReload to try again, or go back." })
+    await expect(captureThumbnail(db as never, P, 'https://kensaur.us/mushi-mushi', 'k', { fetchImpl })).rejects.toThrow(/error .*kept/)
+    expect(uploads).toEqual([])
+    const row = db.table('project_home_thumbnails')[0]
+    expect(row).toMatchObject({ storage_path: `${P}/home.png`, captured_at: '2026-10-20T00:00:00Z' })
+    expect(row.last_error).toMatch(/couldn't load/)
+    await expect(captureThumbnail(db as never, P, 'https://glot.it', 'k', { fetchImpl: fakeFetch({ type: 'image/png', bytes: 10 }, { pageStatus: 503 }) })).rejects.toThrow(/answered 503/)
+  })
+
+  it('tells an error screen from a page that only mentions errors', async () => {
+    const run = (markdown: string) => {
+      const db = makeFakeDb({ project_home_thumbnails: [{ project_id: P }] })
+      withStorage(db)
+      return captureThumbnail(db as never, P, 'https://glot.it', 'k', { fetchImpl: fakeFetch({ type: 'image/png', bytes: 10 }, { markdown }) })
+    }
+    await expect(run('Application error: a client-side exception has occurred')).rejects.toThrow(/Application error/)
+    await expect(run('# Shop\n\nNew arrivals this week.')).resolves.toBe(`${P}/home.png`)
+    // A long page that only mentions an error (an FAQ) is the app, not an error screen.
+    await expect(run(`# FAQ\n\nWhat does Internal Server Error mean? ${'x'.repeat(700)}`)).resolves.toBe(`${P}/home.png`)
   })
 
   it('says the key was refused or out of credits, and needs an https screenshot URL', async () => {

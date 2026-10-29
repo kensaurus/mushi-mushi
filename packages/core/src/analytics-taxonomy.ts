@@ -75,12 +75,18 @@ export const MUSHI_EVENTS = {
   key_minted: { surface: 'server', required: ['project_id'] },
   first_report_received: { surface: 'server', required: ['project_id'] },
   first_diagnosis_ready: { surface: 'server', required: ['project_id'] },
+  // Once per organization: its first real end-user report from a deployed
+  // app (not a dev server) that got a diagnosis (_shared/activation.ts).
+  activated: { surface: 'server', required: ['project_id'] },
   fix_merged: { surface: 'server', required: ['project_id'] },
   upgrade_completed: { surface: 'server', required: ['project_id', 'plan'] },
   repo_digest_created: { surface: 'server', required: ['project_id'] },
   repo_diagram_generated: { surface: 'server', required: ['project_id'] },
   repo_diagram_published: { surface: 'server', required: ['project_id'] },
   public_diagram_viewed: { surface: 'server', required: ['project_id'] },
+  // Free Production Check on the docs site (/check); project_id is Mushi's own.
+  production_check_started: { surface: 'server', required: ['project_id'] },
+  production_check_finished: { surface: 'server', required: ['project_id', 'outcome'] },
   // ── Growth loop (widget "Bug reports by Mushi" mark) ─────────────────────
   loop_impression: { surface: 'web', required: [] },
   loop_click: { surface: 'web', required: [] },

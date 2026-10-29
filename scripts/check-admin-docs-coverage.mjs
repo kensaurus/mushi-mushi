@@ -42,6 +42,8 @@ const ROUTE_TO_MDX = {
   sso: 'sso',
   storage: 'storage',
   users: 'users',
+  // The First-time user test is documented on the UX runs page (it was its Fresh eyes tab).
+  'first-user-test': 'ux-runs',
 }
 
 function extractRoutes(appSrc) {

@@ -59,7 +59,7 @@ export const EMPTY_AUDIT_STATS: AuditStats = {
   projectName: null,
   auditLogEntitlement: false,
   planId: 'hobby',
-  planDisplayName: 'Hobby',
+  planDisplayName: 'Free',
   projectCount: 0,
   totalEvents: 0,
   events24h: 0,

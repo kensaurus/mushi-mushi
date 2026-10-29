@@ -217,8 +217,8 @@ export function CodebaseIndexCard({ projectId, canManage = true }: Props) {
     toast.success(
       next ? 'Autofix enabled' : 'Autofix paused',
       next
-        ? 'Dispatch buttons on the Reports page will now queue a fix worker.'
-        : 'Reports can still be triaged; the Dispatch button is disabled until you re-enable.',
+        ? 'Starting a fix from Bugs works again.'
+        : 'Bugs are still sorted and explained; starting a fix stays off until you turn it back on.',
     )
   }
 
@@ -338,8 +338,8 @@ export function CodebaseIndexCard({ projectId, canManage = true }: Props) {
       </div>
 
       <p className="text-2xs text-fg-secondary pl-2 border-l-2 border-brand/30 leading-snug">
-        Pulls your repo&apos;s source tree into Mushi&apos;s RAG so the auto-fix agent can read real files
-        instead of guessing. Without it, a fix attempt can only leave notes on what to investigate.
+        Lets the fix agent read your repo&apos;s real files instead of guessing. Without it, a fix
+        attempt can only leave notes on what to look at.
       </p>
 
       {/* What gets indexed disclosure */}
@@ -430,7 +430,7 @@ export function CodebaseIndexCard({ projectId, canManage = true }: Props) {
           </GitHubPatDisclosure>
           <Input
             label="GitHub repo URL"
-            placeholder="https://github.com/your-org/your-repo"
+            placeholder="e.g. https://github.com/your-org/your-repo"
             value={repoUrl}
             onChange={(e) => setRepoUrl(e.currentTarget.value)}
           />
@@ -555,14 +555,14 @@ function AutofixToggleRow({
     <div className="flex items-start justify-between gap-3 pt-2 border-t border-edge-subtle">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-fg">Autofix dispatcher</span>
+          <span className="text-xs font-semibold text-fg">Automatic fixes</span>
           <Badge className={isOn ? CHIP_TONE.okSubtle : CHIP_TONE.warnSubtle}>
             {enabled == null ? '\u2014' : isOn ? 'On' : 'Off'}
           </Badge>
         </div>
         <p className="text-2xs text-fg-secondary leading-snug mt-0.5">
-          Controls whether Mushi starts fix attempts for triaged reports. Turn off to pause every
-          dispatch button without removing your GitHub or AI keys.
+          Whether Mushi starts fixes for sorted bugs. Turn it off to pause every fix button without
+          removing your GitHub or AI keys.
         </p>
         {enabled != null && !canToggle && (
           <p className="text-2xs text-fg-muted mt-0.5">

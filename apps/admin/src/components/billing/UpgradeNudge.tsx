@@ -54,20 +54,20 @@ import { trackUpgradeClicked, upgradeCtaCopy } from './UpgradePrompt'
  */
 const NUDGE_COPY: Record<FeatureFlag, { tagline: string; pillLabel: string }> = {
   sso: {
-    tagline: 'Single Sign-On is on Pro. Wire your IdP and stop juggling passwords.',
-    pillLabel: 'PRO',
+    tagline: 'Single Sign-On is on Enterprise. Wire your IdP and stop juggling passwords.',
+    pillLabel: 'ENT',
   },
   byok: {
-    tagline: 'Bring-your-own LLM keys are on Pro — pay your vendor directly, no margin.',
-    pillLabel: 'PRO',
+    tagline: 'Your own AI and Cursor keys work on every plan, Free included.',
+    pillLabel: 'FREE',
   },
   plugins: {
-    tagline: 'Slack, Linear, Jira routing live on the plugin marketplace — Pro and up.',
-    pillLabel: 'PRO',
+    tagline: 'Slack, Linear, Jira routing live on the plugin marketplace — Builder and up.',
+    pillLabel: 'BUILDER',
   },
   intelligence_reports: {
-    tagline: 'Cross-project root-cause analyses ship with Pro.',
-    pillLabel: 'PRO',
+    tagline: 'The weekly report across your apps ships with Studio.',
+    pillLabel: 'STUDIO',
   },
   audit_log: {
     tagline: 'Tamper-evident audit log + export comes with Enterprise.',
@@ -82,20 +82,20 @@ const NUDGE_COPY: Record<FeatureFlag, { tagline: string; pillLabel: string }> = 
     pillLabel: 'ENT',
   },
   teams: {
-    tagline: 'Invite teammates, share projects, and assign roles on Pro.',
-    pillLabel: 'PRO',
+    tagline: 'Invite teammates, share apps, and assign roles on Studio.',
+    pillLabel: 'STUDIO',
   },
   inventory_v2: {
-    tagline: 'Bidirectional inventory + agent gates ship with Pro.',
-    pillLabel: 'PRO',
+    tagline: 'Bidirectional inventory + agent gates ship with Studio.',
+    pillLabel: 'STUDIO',
   },
   rewards_program: {
-    tagline: 'Rewards program — points, tiers, and webhooks — requires Starter.',
-    pillLabel: 'STARTER',
+    tagline: 'Rewards program — points, tiers, and webhooks — needs Builder.',
+    pillLabel: 'BUILDER',
   },
   rewards_monetary: {
-    tagline: 'Monetary payouts via Stripe Connect require Pro.',
-    pillLabel: 'PRO',
+    tagline: 'Monetary payouts via Stripe Connect come with Enterprise.',
+    pillLabel: 'ENT',
   },
   marketplace_publish: {
     tagline: 'Publishing to the Mushi Marketplace requires Pro.',
@@ -111,7 +111,7 @@ interface CommonProps {
   flag: FeatureFlag
   /** Override the default tagline — useful when the surrounding copy
    *  already establishes the feature ("Invite teammate") and we want
-   *  the nudge to be punchier ("Pro plan required"). */
+   *  the nudge to be punchier ("Studio plan required"). */
   taglineOverride?: string
   upgradeTo?: UpgradeTarget | null
   /** Force-render even when the entitlements call is still loading.

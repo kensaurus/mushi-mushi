@@ -1,6 +1,6 @@
 # @mushi-mushi/core
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 The shared types, API client and utilities under every [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) SDK.
 
@@ -19,6 +19,8 @@ const env = captureEnvironment(); // viewport, user agent, connection, page timi
 ```
 
 Docs: [Core SDK reference](https://kensaur.us/mushi-mushi/docs/sdks/core)
+
+Mushi Mushi is built first for people who make apps with AI, mostly on their own. Developers who own their code and teams with bug reports in many places use it too: [who it's for](https://kensaur.us/mushi-mushi/docs/who-its-for).
 
 ```mermaid
 flowchart LR

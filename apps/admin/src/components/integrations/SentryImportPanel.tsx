@@ -155,7 +155,7 @@ export function SentryImportPanel({ sentryProjects, onImported, showHeading = tr
             name="sentry-issue-ids"
             autoComplete="off"
             spellCheck={false}
-            placeholder="WEB-12, WEB-13"
+            placeholder="e.g. WEB-12, WEB-13"
             value={ids}
             onChange={(e) => setIds(e.target.value)}
             error={tooMany ? `At most ${SENTRY_IMPORT_MAX} issues per import` : undefined}

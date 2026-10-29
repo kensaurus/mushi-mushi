@@ -158,6 +158,41 @@ export function failureTail(r: { stdout: string; stderr: string }, max = 600): s
   return kept.length < lines.length ? `[…] ${kept.join(' / ')}` : kept.join(' / ')
 }
 
+/**
+ * @internal Exported for tests only. A git hook run by lefthook that failed:
+ * the names of the steps that failed (its summary's "🥊 name" lines) and, for
+ * each, the error lines from that step's own output, instead of the tail of
+ * the summary. yen-yen's pre-push printed "🥊 test" and nothing else
+ * (2026-10-28), so neither the console nor the owner could see which test.
+ * Returns null when the output is not lefthook's.
+ */
+export function hookFailureDetail(r: { stdout: string; stderr: string }, max = 900): string | null {
+  const text = stripVTControlCharacters([r.stdout, r.stderr].join('\n'))
+  const failed = [...text.matchAll(/^\s*🥊\s+([\w:.-]+)/gmu)].map((m) => m[1]!)
+  if (!failed.length) return null
+  const lines = text.split('\n')
+  const HEADER = /^\s*┃\s+(\S+)\s+❯/u
+  const ERROR = /\b(?:FAIL|ERR!?|Error|error TS\d+|AssertionError|Expected|Received|failed|Unused (?:files|exports|dependencies)|not ok)\b|×|✗|✖/
+  const parts: string[] = []
+  for (const name of failed) {
+    // A step's output starts at its "┃  name ❯" header and runs to the next header.
+    const start = lines.findIndex((l) => HEADER.exec(l)?.[1] === name)
+    let block: string[] = []
+    if (start >= 0) {
+      const next = lines.findIndex((l, i) => i > start && HEADER.test(l))
+      block = lines
+        .slice(start + 1, next < 0 ? lines.length : next)
+        .map((l) => l.replace(/^\s*┃\s?/u, '').trim())
+        .filter(Boolean)
+    }
+    const errors = block.filter((l) => ERROR.test(l)).slice(0, 6)
+    const shown = (errors.length ? errors : block.slice(-4)).map((l) => (l.length > 160 ? `${l.slice(0, 160)}…` : l))
+    parts.push(shown.length ? `${name}: ${shown.join(' | ')}` : name)
+  }
+  const out = `hook steps failed: ${failed.join(', ')}. ${parts.join(' / ')}`.replace(/[ \t]+/g, ' ')
+  return out.length > max ? `${out.slice(0, max)} [cut]` : out
+}
+
 /** Where a run was when it failed. Before the agent starts, every failure is the machine's. */
 export type WorkStage = 'prepare' | 'agent' | 'commit' | 'push' | 'pr'
 
@@ -404,9 +439,18 @@ export interface Proc {
 
 /** Processes this command started that are still running: a stop ends them too (`kill <pid>` reaches only this process). */
 const liveChildren = new Set<ChildProcess>()
+/** Of those, the ones that lead their own process group (started with a time limit). */
+const groupLeaders = new WeakSet<ChildProcess>()
 
 function stopChildren(): void {
-  for (const child of liveChildren) child.kill('SIGTERM')
+  for (const child of liveChildren) {
+    try {
+      if (groupLeaders.has(child) && child.pid) process.kill(-child.pid, 'SIGTERM')
+      else child.kill('SIGTERM')
+    } catch {
+      child.kill('SIGTERM')
+    }
+  }
 }
 
 /**
@@ -419,10 +463,29 @@ function stopChildren(): void {
 const CLOSE_GRACE_MS = 30_000
 
 /** Used by the local worker (worker/daemon.ts). */
-export function runProc(cmd: string, args: readonly string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number; maxBytes?: number; signal?: AbortSignal; closeGraceMs?: number } = {}): Promise<Proc> {
+export function runProc(cmd: string, args: readonly string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number; maxBytes?: number; signal?: AbortSignal; closeGraceMs?: number; input?: string } = {}): Promise<Proc> {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { cwd: opts.cwd, env: opts.env ?? process.env, stdio: ['ignore', 'pipe', 'pipe'], ...(opts.signal ? { signal: opts.signal } : {}) })
+    // With a time limit, the child leads its own process group (not on
+    // Windows) so a timeout ends what it started too: on 2026-10-28 a repo's
+    // commit hook (tsc, eslint) ran on for hours after its git was killed.
+    const group = !!opts.timeoutMs && process.platform !== 'win32'
+    const base = { cwd: opts.cwd, env: opts.env ?? process.env, detached: group, ...(opts.signal ? { signal: opts.signal } : {}) }
+    const child = opts.input === undefined ? spawn(cmd, args, { ...base, stdio: ['ignore', 'pipe', 'pipe'] }) : spawn(cmd, args, { ...base, stdio: ['pipe', 'pipe', 'pipe'] })
+    if (group) groupLeaders.add(child)
+    const stop = (sig: NodeJS.Signals) => {
+      try {
+        if (group && child.pid) process.kill(-child.pid, sig)
+        else child.kill(sig)
+      } catch {
+        child.kill(sig)
+      }
+    }
     liveChildren.add(child)
+    // Input goes through the pipe, never argv or the environment, so `ps` cannot read it.
+    if (opts.input !== undefined) {
+      child.stdin?.on('error', () => undefined)
+      child.stdin?.end(opts.input)
+    }
     let stdout = ''
     let stderr = ''
     const max = opts.maxBytes ?? 2_000_000
@@ -449,8 +512,8 @@ export function runProc(cmd: string, args: readonly string[], opts: { cwd?: stri
     const timer = opts.timeoutMs
       ? setTimeout(() => {
           timedOut = true
-          child.kill('SIGTERM')
-          setTimeout(() => child.kill('SIGKILL'), 10_000).unref()
+          stop('SIGTERM')
+          setTimeout(() => stop('SIGKILL'), 10_000).unref()
         }, opts.timeoutMs)
       : null
     child.stdout.on('data', (d: Buffer) => {
@@ -481,10 +544,24 @@ export async function clearWorktree(repoDir: string, wt: string): Promise<void> 
   await runProc('git', ['worktree', 'prune'], { cwd: repoDir })
 }
 
+/**
+ * How long one git command may run. Commit and push run the repo's own hooks
+ * (type check, lint, tests), so they get longer; a hook that hangs used to
+ * hold a worker slot for hours.
+ */
+const GIT_TIMEOUT_MS = 10 * 60_000
+const GIT_HOOK_TIMEOUT_MS = 25 * 60_000
+
 /** Used by the local worker (worker/conflicts.ts, worker/audit.ts). */
 export async function git(cwd: string, args: string[]): Promise<string> {
-  const r = await runProc('git', args, { cwd })
-  if (r.code !== 0) throw new MushiCliError('E_INTERNAL', `git ${args[0]} failed: ${failureTail(r)}`)
+  const hooks = args[0] === 'commit' || args[0] === 'push'
+  const limit = hooks ? GIT_HOOK_TIMEOUT_MS : GIT_TIMEOUT_MS
+  const r = await runProc('git', args, { cwd, timeoutMs: limit })
+  if (r.timedOut) {
+    const what = hooks ? `the repo's ${args[0] === 'push' ? 'pre-push' : 'commit'} hook` : 'it'
+    throw new MushiCliError('E_INTERNAL', `git ${args[0]} timed out after ${Math.round(limit / 60_000)} min (${what} did not finish); stopped it`)
+  }
+  if (r.code !== 0) throw new MushiCliError('E_INTERNAL', `git ${args[0]} failed: ${(hooks && hookFailureDetail(r)) || failureTail(r)}`)
   return r.stdout.trim()
 }
 
@@ -611,6 +688,8 @@ export interface WorkOptions {
   earlier?: EarlierAttempt[]
   /** Stops the agent when the daemon loses the report's lease. */
   signal?: AbortSignal
+  /** Where the run is (prepare, agent, commit, push, pr), for the daemon's heartbeat. */
+  onStage?: (stage: WorkStage) => void
 }
 
 /** How one run ended, as the daemon reports it back (POST /v1/worker/claims/:id/done). */
@@ -699,6 +778,7 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
 
     o.log(`  agent: cursor-agent in ${wt} (up to ${WORK_AGENT_TIMEOUT_MS / 60_000} min); fix ${fixId} shows as running in the console`)
     stage = 'agent'
+    o.onStage?.(stage)
     const run = await runProc(
       'cursor-agent',
       ['-p', '--force', '--trust', '--output-format', 'text', '--workspace', wt, ...(o.model ? ['--model', o.model] : []), prompt],
@@ -724,7 +804,14 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
       return { reportId: detail.id, result: run.timedOut ? 'timeout' : noPr.verdict ? 'verdict' : 'no_change', outcome: `no change (${noPr.verdict ?? 'no verdict'}): ${noPr.reason}`, fixId }
     }
 
+    // The lease ended while the agent ran (stopped from the console): commit and push nothing.
+    if (o.signal?.aborted) {
+      keep = true
+      await close(stoppedPayload(branch, 'lost lease')).catch(() => undefined)
+      return { reportId: detail.id, result: 'stopped', outcome: `stopped (lease ended) before git commit; the change so far is kept in ${wt}`, fixId }
+    }
     stage = 'commit'
+    o.onStage?.(stage)
     await git(wt, ['add', '-A'])
     const last = run.stdout.trim().split('\n').filter((l) => l.trim()).slice(-6).join(' ')
     await commitWithHooks(wt, ['--quiet', '-m', prTitle(detail.summary, detail.id), '-m', commitBody(`Mushi report: ${detail.id}`, 'Made by a local Cursor agent through `mushi work`.')], o.log)
@@ -737,9 +824,16 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
       if (path) files.push(path)
       lines += (Number(add) || 0) + (Number(del) || 0)
     }
+    if (o.signal?.aborted) {
+      keep = true
+      await close(stoppedPayload(branch, 'lost lease')).catch(() => undefined)
+      return { reportId: detail.id, result: 'stopped', outcome: `stopped (lease ended) before git push; the commit is kept in ${wt}`, fixId }
+    }
     stage = 'push'
-    await git(wt, ['push', '--quiet', '-u', 'origin', branch])
+    o.onStage?.(stage)
+    await pushWithHooks(wt, ['--quiet', '-u', 'origin', branch], o.log)
     stage = 'pr'
+    o.onStage?.(stage)
     const body = `Mushi report: ${detail.id}\n\n${cap(last, 1500) || 'See the commits.'}\n\nOpened by \`mushi work\` with a local Cursor agent; Mushi's Opus review decides whether it merges.`
     const pr = await runProc('gh', ['pr', 'create', '--draft', '--base', base, '--head', branch, '--title', prTitle(detail.summary, detail.id), '--body', body], { cwd: wt })
     const prUrl = pr.stdout.match(/https:\/\/github\.com\/\S+\/pull\/\d+/)?.[0] ?? null
@@ -824,6 +918,7 @@ export async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOp
     await installDeps(wt, o.log)
     const empty = join(tmpdir(), `mushi-work-${process.pid}`)
     mkdirSync(empty, { recursive: true })
+    o.onStage?.('agent')
     o.log(`  agent: cursor-agent on ${claim.branch}, round ${claim.round}, ${claim.findingsSent} finding(s)${claim.findingsDropped ? ` (${claim.findingsDropped} left out by the safety screen)` : ''}`)
     const run = await runProc(
       'cursor-agent',
@@ -842,11 +937,13 @@ export async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOp
       await done(null, why)
       return { fixId: f.fixId, outcome: `no change: ${why || `cursor-agent exited ${run.code}`}` }
     }
+    o.onStage?.('commit')
     await git(wt, ['add', '-A'])
     await commitWithHooks(wt, ['--quiet', '-m', `fix: address the Opus review (round ${claim.round})`, '-m', commitBody(cap(last, 1500) || 'See the diff.', 'Made by a local Cursor agent through `mushi work --followups`.')], o.log)
     const sha = await git(wt, ['rev-parse', 'HEAD'])
     // Fast-forward only: a push rejected because the branch moved fails loudly.
-    await git(wt, ['push', '--quiet', 'origin', `HEAD:refs/heads/${claim.branch}`])
+    o.onStage?.('push')
+    await pushWithHooks(wt, ['--quiet', 'origin', `HEAD:refs/heads/${claim.branch}`], o.log)
     await done(sha, cap(last, 300))
     return { fixId: f.fixId, outcome: `pushed ${sha.slice(0, 7)} (round ${claim.round})`, ...(f.prUrl ? { prUrl: f.prUrl } : {}) }
   } catch (err) {
@@ -903,6 +1000,29 @@ export async function commitWithHooks(wt: string, args: string[], log: (line: st
     log('  commit: a hook could not find a package; installing dependencies and committing again')
     await installDeps(wt, log)
     await git(wt, ['commit', ...args])
+  }
+}
+
+/** @internal Exported for tests only. A push the repo's own pre-push hook refused (not the remote, not auth). */
+export function isHookRejection(message: string): boolean {
+  return /hook steps failed:|pre-push hook|husky - pre-push/i.test(message) && !/non-fast-forward|\[rejected\]|Authentication failed|permission denied/i.test(message)
+}
+
+/**
+ * Push; when the repo's own pre-push hook refused it, run the hook once more
+ * on the same commit. Several agents share one machine, and a test that times
+ * out under that load passes on its own: yen-yen's full suite passed on a
+ * change its hook had refused (2026-10-28), and the fix was dropped. A second
+ * failure is the change's, and is thrown as before.
+ */
+export async function pushWithHooks(wt: string, args: string[], log: (line: string) => void): Promise<void> {
+  try {
+    await git(wt, ['push', ...args])
+  } catch (err) {
+    if (!(err instanceof Error) || !isHookRejection(err.message)) throw err
+    log(`  push: the pre-push hook failed (${err.message.replace(/^git push failed: /, '').slice(0, 200)}); running it once more on the same commit`)
+    await git(wt, ['push', ...args])
+    log('  push: the hook passed the second time, so the first failure was this machine, not the change')
   }
 }
 

@@ -93,7 +93,8 @@ describe('renderSnippet — Vue', () => {
 
   it('falls back to the placeholder API key when one is not yet generated', () => {
     const out = renderSnippet('vue', PROJECT, null)
-    expect(out).toContain("apiKey: 'mushi_xxx'")
+    expect(out).toContain("apiKey: 'YOUR_SDK_KEY'")
+    expect(out).not.toMatch(/mushi_x/)
   })
 })
 

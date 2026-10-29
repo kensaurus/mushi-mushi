@@ -36,7 +36,7 @@ afterEach(() => {
   host.remove()
 })
 
-function project(key: boolean, sdk: boolean): SetupProject {
+function project(key: boolean, sdk: boolean, report = false): SetupProject {
   const step = (id: string, complete: boolean) => ({ id, label: id, description: '', complete, required: true, cta_to: '/', cta_label: 'Go' })
   return {
     project_id: 'p1',
@@ -55,10 +55,10 @@ function project(key: boolean, sdk: boolean): SetupProject {
           last_sdk_endpoint_host: null,
         },
       },
-      step('first_report_received', false),
+      step('first_report_received', report),
     ],
     required_total: 4,
-    required_complete: 1,
+    required_complete: 1 + Number(key) + Number(sdk) + Number(report),
     total: 8,
     complete: 1,
     done: false,
@@ -68,7 +68,7 @@ function project(key: boolean, sdk: boolean): SetupProject {
   } as SetupProject
 }
 
-function render(p: SetupProject, handlers: Partial<{ onMintKey: () => void; onSendTest: () => void; onTab: () => void }> = {}, compact = false) {
+function render(p: SetupProject, handlers: Partial<{ onMintKey: () => void; onSendTest: () => void; onTab: () => void }> = {}, compact = false, apiKey: string | null = null) {
   act(() => {
     root.render(
       createElement(
@@ -76,7 +76,7 @@ function render(p: SetupProject, handlers: Partial<{ onMintKey: () => void; onSe
         null,
         createElement(SetupProgressRail, {
           project: p,
-          apiKey: null,
+          apiKey,
           onTab: handlers.onTab ?? vi.fn(),
           onMintKey: handlers.onMintKey ?? vi.fn(),
           minting: false,
@@ -97,31 +97,50 @@ describe('SetupProgressRail', () => {
   it('without a key, the one button makes it', () => {
     const onMintKey = vi.fn()
     render(project(false, false), { onMintKey })
-    expect(host.textContent).toContain('1 of 4 done. Next: Report key')
-    act(() => button('Make the report key')!.click())
+    expect(host.textContent).toContain('1 of 4 done. Next: make a key')
+    act(() => button('Make the key')!.click())
     expect(onMintKey).toHaveBeenCalled()
   })
 
-  it('with a key but no heartbeat, shows the snippet and Copy snippet', () => {
-    render(project(true, false))
+  // The snippet carried apiKey: 'mushi_xxx' and sent people to another tab for
+  // a key they could no longer see (2026-10-28).
+  it('with a key made earlier, offers to make one on the spot instead of a snippet that cannot work', () => {
+    const onMintKey = vi.fn()
+    render(project(true, false), { onMintKey })
     expect(host.querySelector('[data-testid="setup-next-step"]')?.textContent).toContain('npm install @mushi-mushi/')
-    expect(button('Copy snippet')).toBeTruthy()
-    expect(host.querySelector('[data-testid="setup-heartbeat"]')?.textContent).toMatch(/^No heartbeat from your app yet/)
+    act(() => button('Make a key and fill it in')!.click())
+    expect(onMintKey).toHaveBeenCalled()
+    expect(button('Copy without a key')).toBeTruthy()
+    expect(host.textContent).not.toMatch(/SDK tab/)
+    expect(host.querySelector('[data-testid="setup-heartbeat"]')?.textContent).toMatch(/^Mushi has not heard from your app yet/)
   })
 
-  it('after a heartbeat, waits on a report from the app, offering a test bug', () => {
+  it('with the key just made, the snippet carries it and Copy snippet leads', () => {
+    render(project(true, false), {}, false, 'mushi_live_abc123')
+    expect(host.querySelector('[data-testid="setup-next-step"]')?.textContent).toContain('mushi_live_abc123')
+    expect(button('Copy snippet')).toBeTruthy()
+    expect(button('Make a key and fill it in')).toBeUndefined()
+  })
+
+  it('after a heartbeat with no bug yet, offers a test bug', () => {
     const onSendTest = vi.fn()
-    state.ttfd = { keyMintedAt: null, firstDiagnosisAt: null, ms: null, testDiagnosisAt: new Date().toISOString() }
     render(project(true, true), { onSendTest })
-    expect(host.textContent).toContain('Your test bug was diagnosed')
+    expect(host.textContent).toContain('3 of 4 done. Next: get your first bug')
     expect(host.querySelector('[data-testid="setup-heartbeat"]')?.textContent).toContain('from https://app.example.com')
-    act(() => button('Send another test bug')!.click())
+    act(() => button('Send a test bug')!.click())
     expect(onSendTest).toHaveBeenCalled()
+  })
+
+  it('a test bug counts like the sidebar counts it, and says it was only a test', () => {
+    state.ttfd = { keyMintedAt: null, firstDiagnosisAt: null, ms: null, testDiagnosisAt: new Date().toISOString() }
+    render(project(true, true, true))
+    expect(host.textContent).toContain('Your app is wired up')
+    expect(host.textContent).toContain('Mushi has only seen a test bug so far')
   })
 
   it('done: opens the first report from the app', () => {
     state.ttfd = { keyMintedAt: null, firstDiagnosisAt: new Date().toISOString(), ms: 60_000, firstReportId: 'r-123' }
-    render(project(true, true))
+    render(project(true, true, true))
     expect(host.textContent).toContain('Your app is wired up')
     const link = Array.from(host.querySelectorAll('a')).find((a) => a.textContent === 'Open first report')
     expect(link?.getAttribute('href')).toBe('/reports/r-123')

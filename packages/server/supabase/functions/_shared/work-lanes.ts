@@ -13,6 +13,9 @@
  *          each side refuses anything else.
  */
 
+import { cleanHostTelemetry, cleanLaneTelemetry } from './work-telemetry.ts'
+import { parseCursorLoginReport, type CursorLoginReport } from './cursor-login.ts'
+
 /**
  * What a lane does (ADR 0048; P3 modes: ADR 0049 conflicts, ADR 0050 audit,
  * ADR 0042 amendment skill). An older daemon refuses a mode it does not know
@@ -197,29 +200,43 @@ export function hostGuardsFrom(raw: unknown): HostGuards {
 
 // ── What the daemon sends ───────────────────────────────────────────────────
 
-export const HOST_STATES = ['starting', 'working', 'idle', 'paused', 'mem-wait', 'gh-quota-wait', 'auth-wait', 'slot-wait', 'backoff', 'stopped', 'draining'] as const
+export const HOST_STATES = ['starting', 'working', 'idle', 'paused', 'mem-wait', 'gh-quota-wait', 'auth-wait', 'slot-wait', 'backoff', 'stopped', 'draining', 'not-ready', 'switching-account'] as const
 export const MAX_LANES_PER_HOST = 20
 
 export interface HeartbeatLane {
   name: string
   projectId: string
-  /** lane-v4's status JSON, as numbers and one short state word. */
-  status: Record<string, string | number>
+  /** lane-v4's status JSON (numbers and one short state word), plus the runs in flight (work-telemetry.ts). */
+  status: Record<string, unknown>
   /** Settings the machine proposes for a lane it registers (lanes.conf import); used only when the lane is new. */
   initial: Partial<LaneConfig>
   /** owner/name of the lane's clone (its origin remote); null from a daemon that predates P3. */
   repo: string | null
 }
 
+/**
+ * Claim kinds beyond its lanes' modes a daemon says it can run (ADR 0053
+ * amendment 2026-10-28): `fresh_eyes`, a first-time user test the console
+ * queued. A daemon that predates the list sends none and is offered none.
+ */
+export const HOST_TAKES = ['fresh_eyes'] as const
+export type HostTake = (typeof HOST_TAKES)[number]
+/** What the daemon can do when the console asks (ADR 0048 amendment 2026-10-28): a closed list, stored in the host's status as `can`. */
+export const HOST_CAN = ['cursor_login'] as const
+export type HostCan = (typeof HOST_CAN)[number]
+
 export interface Heartbeat {
-  host: { hostId: string; hostname: string; platform: 'linux' | 'wsl2' | 'macos' | 'windows'; version: string | null }
-  status: Record<string, string | number | boolean>
+  host: { hostId: string; hostname: string; platform: 'linux' | 'wsl2' | 'macos' | 'windows'; version: string | null; takes: HostTake[] }
+  /** Numbers and words (cleanStatus), plus the host's checks, agent spaces and why it waits (work-telemetry.ts). */
+  status: Record<string, unknown>
   lanes: HeartbeatLane[]
   /** Active claims the daemon is still working on: their leases are renewed. */
   claims: string[]
+  /** The Cursor sign-in the console asked for, as the machine reports it. Never stored in `status` (the link is the owner's only). */
+  cursorLogin: CursorLoginReport | null
 }
 
-const STATUS_NUMBERS = ['runs', 'prs', 'pushes', 'timeouts', 'errors', 'idle', 'agentMin', 'agents', 'maxAgents', 'memAvailableGb', 'ghRemaining', 'worktrees', 'branches']
+const STATUS_NUMBERS = ['runs', 'prs', 'pushes', 'timeouts', 'errors', 'idle', 'agentMin', 'agents', 'maxAgents', 'memAvailableGb', 'ghRemaining', 'worktrees', 'branches', 'load1', 'cpus', 'stateSec']
 const STATUS_WORDS: Record<string, readonly string[]> = {
   state: HOST_STATES,
   cursor: ['signed_in', 'signed_out', 'unknown', 'missing'],
@@ -250,6 +267,8 @@ export function parseHeartbeat(raw: unknown): Parsed<Heartbeat> {
   if (!hostname) return { ok: false, message: 'host.hostname is required.' }
   if (!['linux', 'wsl2', 'macos', 'windows'].includes(String(h.platform))) return { ok: false, message: 'host.platform must be linux, wsl2, macos or windows.' }
   const version = typeof h.version === 'string' && /^[0-9A-Za-z.+-]{1,40}$/.test(h.version) ? h.version : null
+  // Capability, not control: a kind this server does not know is dropped, so a newer daemon still registers.
+  const takes = [...new Set((Array.isArray(h.takes) ? h.takes : []).filter((t): t is HostTake => typeof t === 'string' && (HOST_TAKES as readonly string[]).includes(t)))]
   const lanesRaw = Array.isArray(b.lanes) ? b.lanes : []
   if (lanesRaw.length > MAX_LANES_PER_HOST) return { ok: false, message: `At most ${MAX_LANES_PER_HOST} lanes per host.` }
   const lanes: HeartbeatLane[] = []
@@ -267,13 +286,15 @@ export function parseHeartbeat(raw: unknown): Parsed<Heartbeat> {
       initial = p.value
     }
     if (l.repo != null && (typeof l.repo !== 'string' || !REPO_RE.test(l.repo))) return { ok: false, message: `Lane "${name}": repo must be owner/name.` }
-    lanes.push({ name, projectId: l.projectId.toLowerCase(), status: cleanStatus(l.status), initial, repo: typeof l.repo === 'string' ? l.repo.toLowerCase() : null })
+    lanes.push({ name, projectId: l.projectId.toLowerCase(), status: { ...cleanStatus(l.status), ...cleanLaneTelemetry(l.status) }, initial, repo: typeof l.repo === 'string' ? l.repo.toLowerCase() : null })
   }
   const claims = (Array.isArray(b.claims) ? b.claims : []).filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)).slice(0, 50)
-  const status = cleanStatus(b.status)
+  const can = [...new Set((Array.isArray(h.can) ? h.can : []).filter((t): t is HostCan => typeof t === 'string' && (HOST_CAN as readonly string[]).includes(t)))]
+  const status = { ...cleanStatus(b.status), ...cleanHostTelemetry(b.status), ...(can.length ? { can } : {}) }
+  const cursorLogin = parseCursorLoginReport((b.status as Record<string, unknown> | null | undefined)?.cursorLogin)
   return {
     ok: true,
-    value: { host: { hostId: h.hostId, hostname, platform: h.platform as Heartbeat['host']['platform'], version }, status, lanes, claims },
+    value: { host: { hostId: h.hostId, hostname, platform: h.platform as Heartbeat['host']['platform'], version, takes }, status, lanes, claims, cursorLogin },
   }
 }
 
@@ -379,9 +400,10 @@ export async function claimFirstFree<T extends { id: string }>(
 /**
  * How a run ended. `pushed` and `refused` are conflict runs (ADR 0049: a merge
  * commit pushed, or the worker's own checks refused the agent's result);
- * `filed` is an audit run that filed at least one reproduced finding (ADR 0050).
+ * `filed` is an audit run that filed at least one reproduced finding (ADR 0050);
+ * `ran` is a first-time user test that finished and synced (ADR 0053 amendment).
  */
-export const CLAIM_OUTCOMES = ['pr_opened', 'no_change', 'verdict', 'timeout', 'skipped', 'stopped', 'failed', 'pushed', 'refused', 'filed'] as const
+export const CLAIM_OUTCOMES = ['pr_opened', 'no_change', 'verdict', 'timeout', 'skipped', 'stopped', 'failed', 'pushed', 'refused', 'filed', 'ran'] as const
 export type ClaimOutcome = (typeof CLAIM_OUTCOMES)[number]
 export const FAILURE_KINDS = ['infra', 'code'] as const
 export type FailureKind = (typeof FAILURE_KINDS)[number]
