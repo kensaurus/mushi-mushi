@@ -50,6 +50,11 @@ function warnAnthropicQuota(err: unknown, where: string): void {
   })
 }
 
+/** Vitest keeps this module for the whole worker. Tests that init Sentry reset it. */
+export function resetSentryForTests(): void {
+  inited = false
+}
+
 export function ensureSentry(functionName?: string): void {
   if (inited) return
   // Accept both SENTRY_DSN_SERVER (preferred, server-specific) and SENTRY_DSN

@@ -322,6 +322,8 @@ describe('workspace usage limit', () => {
     expect(anthropicUsageLimitDetail(malformed)).toBeNull()
     expect(classifyLlmError(malformed)).toBe('other')
     expect(isOperationalAnthropicQuota(new Error('temperature is deprecated'))).toBe(false)
+    expect(isOperationalAnthropicQuota(new Error(USAGE_LIMIT))).toBe(false)
+    expect(isOperationalAnthropicQuota(raw)).toBe(true)
   })
 
   it('does not retry a usage-limit error on the same key', async () => {

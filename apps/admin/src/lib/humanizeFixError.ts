@@ -311,15 +311,18 @@ export function humanizeFixError(
 
   // LLM: rate limit / workspace usage cap / all keys exhausted.
   // Anthropic's cap is a 400 ("specified API usage limits"), not a 429.
-  const usageCap = m.includes('specified api usage limits') || m.includes('claude quota exceeded');
+  // `m` is already `raw.toLowerCase()`. The pool code is uppercase in the
+  // thrown message, so it has to be compared on this same lowercased copy.
+  const lowered = raw.toLowerCase();
+  const usageCap = lowered.includes('specified api usage limits') || lowered.includes('claude quota exceeded');
+  const allExhausted = lowered.includes('all_keys_exhausted');
   if (
-    m.includes('ALL_KEYS_EXHAUSTED') ||
-    m.includes('rate limit') ||
-    m.includes('429') ||
+    allExhausted ||
+    lowered.includes('rate limit') ||
+    lowered.includes('429') ||
     usageCap ||
     category === 'llm_rate_limit'
   ) {
-    const allExhausted = m.includes('ALL_KEYS_EXHAUSTED');
     return {
       title: usageCap
         ? 'The Anthropic workspace has reached its usage limit.'
