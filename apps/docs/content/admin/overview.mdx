@@ -1,23 +1,24 @@
 ---
-title: Overview (portfolio)
-description: The Overview page is the organization-wide portfolio view — seven-day activity and open tickets for every connected project at a glance.
+title: Overview (Home view)
+description: The Overview view on Home in the Mushi Mushi console shows seven-day activity and open bugs for every connected app in a team at a glance.
 ---
 
 import { Callout } from 'nextra/components'
 
 # Overview
 
-**Route:** `/overview`
+**Route:** `/dashboard?view=apps` (**Home → Overview**). The old `/overview` link redirects
+there. For setup state, hole checks and spend across apps, see [Apps](/admin/portfolio).
 
 > **Scenario:** You manage several connected projects and want a single org-scoped
 > glance at 7-day activity and open tickets before diving into any one app.
 
 <AdminDocHero page="overview" />
 
-Overview is the portfolio dashboard for the active organization. Each card is one
-connected project — sessions, users, open reports, and a DAU sparkline — with
-footer links that switch the active project and open Activity, Reports, or the
-project Dashboard.
+In Mushi Mushi, Overview covers every app in the active team. Each card is one
+connected app (sessions, users, open bugs and a DAU sparkline) with footer links
+that switch the active app and open **User activity**, **Bugs** (or **Open bugs**),
+**Home**, or **Recipe** when the app has a recipe state.
 
 ---
 
@@ -28,10 +29,10 @@ project Dashboard.
 | **Portfolio totals** | Aggregated 7-day sessions / users and open-ticket counts across projects |
 | **Project cards** | Per-project `sessions_7d`, `users_7d`, open + critical reports, last report time |
 | **DAU sparkline** | Daily active users for the last week on that project |
-| **Health tone** | Critical if any critical reports; warn if open reports &gt; 5; otherwise ok |
-| **Footer links** | Switch active project → Activity, Reports, or Dashboard |
+| **Health tone** | Critical if any critical reports; then not connected (no SDK heartbeat ever) or silent (heartbeat stopped); warn if open reports &gt; 5; quiet if no sessions in 7 days; otherwise ok |
+| **Footer links** | Switch the active app, then open User activity, Bugs, Home or Recipe |
 
-Cards sort so unhealthy projects float first (critical → warn → ok).
+Cards sort so apps that need attention come first.
 
 ---
 
@@ -44,20 +45,20 @@ GET /v1/admin/portfolio
 Requires a console JWT and `X-Mushi-Org-Id` (set automatically from the org
 switcher). Backed by the `org_portfolio_summary` RPC.
 
-Empty state means no projects are linked to this org yet — create or connect one
-from [Projects](/admin/projects).
+Empty state means no apps are linked to this team yet: **Create your first project →**
+opens [Set up](/admin/onboarding).
 
 ---
 
 ## Related
 
-- [Activity](/admin/activity) — per-project session and engagement detail (30-day window)
-- [Dashboard](/admin/dashboard) — morning PDCA / fix pipeline snapshot for the active project
-- [Reports](/admin/reports) — triage queue
+- [User activity](/admin/activity) — per-app session and engagement detail (30-day window)
+- [Home](/admin/dashboard) — the summary for the active app
+- [Bugs](/admin/reports) — triage queue
 - SDK session telemetry is emitted by `@mushi-mushi/web` / `@mushi-mushi/core`
   (opt out with `trackSessions: false` in `MushiConfig`)
 
 <Callout type="info">
-  Overview is org-scoped. Activity and most other console pages are project-scoped —
-  use a card footer link to switch project context before drilling in.
+  Overview covers the whole team. User activity and most other console pages cover one
+  app: use a card footer link to switch app before drilling in.
 </Callout>

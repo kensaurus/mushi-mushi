@@ -1,6 +1,6 @@
 # @mushi-mushi/server
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 Supabase edge functions and admin API — self-host the comprehension layer.
 

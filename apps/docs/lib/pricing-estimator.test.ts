@@ -23,8 +23,8 @@ describe('estimateCost', () => {
     expect(estimateCost(indie, 1200)).toEqual({ total: 35, overage: 6, capped: false })
   })
 
-  it('clamps Builder at its $50 spend cap', () => {
-    expect(estimateCost(indie, 5000)).toEqual({ total: 50, overage: 21, capped: true })
+  it('clamps Builder overage at its $50 spend cap, on top of the $29 base', () => {
+    expect(estimateCost(indie, 5000)).toEqual({ total: 79, overage: 50, capped: true })
   })
 
   it('hard-stops Free past 100 diagnoses', () => {
@@ -38,11 +38,11 @@ describe('estimateCost', () => {
   })
 
   it('shows the Studio spend cap within slider range', () => {
-    // Studio's included diagnoses plus (cap - base) / overage price: 3,000 + 121 / 0.03, rounded up.
-    const atCap = 7034
+    // Studio's included diagnoses plus cap / overage price: 3,000 + 200 / 0.03, rounded up.
+    const atCap = 9667
     expect(atCap).toBeLessThanOrEqual(MAX_SLIDER)
     const atCapResult = estimateCost(pro, atCap)
-    expect(atCapResult.total).toBe(200)
+    expect(atCapResult.total).toBe(279)
     expect(atCapResult.capped).toBe(true)
   })
 

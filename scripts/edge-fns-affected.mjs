@@ -77,6 +77,10 @@ export function affectedFunctions({ root, changed }) {
       sharedChanged.push(resolve(root, path))
     } else if (names.includes(top)) {
       affected.add(top)
+      // Another function can import this file too: api-ext serves routes from
+      // api/routes/ (2026-10-29: a public-scoreboard change deployed api only,
+      // and the route kept running old code in api-ext).
+      if (CODE.test(rest)) sharedChanged.push(resolve(root, path))
     } else if (!rest.includes('/')) {
       // A file directly under functions/ (not a function): be safe.
       return { all: true, functions: names }

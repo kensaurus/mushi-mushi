@@ -1,179 +1,232 @@
 # Launch log: what was posted where
 
-One entry per post. Each entry keeps the exact text, a screenshot of it, and
-the live link once it is up. Screenshots are cropped to the post itself (no
-feeds, inboxes or subscription lists: this repo is public).
+One entry per post: the exact text, a screenshot, the live link. Screenshots are
+cropped to the post itself (no feeds, inboxes or subscription lists: this repo is
+public). The product name is **Mushi Mushi** (`mushi-mushi`); never shorten it
+to "Mushi" in posts.
 
-When a post goes live: set **Status** to `posted`, fill **Live URL** and
-**Posted at** (JST), and add a screenshot of the live post as
-`YYYY-MM-DD-<platform>-live.png`.
+## 2026-10-29
 
-Numbers in every post come from the public scoreboard
-(`GET /v1/public/scoreboard`, also https://kensaur.us/mushi-mushi/docs/proof),
-read 2026-10-29 at 00:02 UTC: 9 apps, 676 user reports from 314
-reporters, 234 fixes merged (median 26.4 h), 835 AI reviews, 304 of them
-"do not merge". The two blocked-fix stories are real reviews:
-the-wanting-mind #222 and help-her-take-photo #163 (`fix_reviews`).
+| Platform | Account | Status | Live URL | Posted at (UTC) |
+|---|---|---|---|---|
+| Hacker News (Show HN) | kensaurus | **not posted**: HN is "temporarily restricting Show HNs" from new accounts (account created 2026-10-29, karma 1) | | |
+| Reddit r/SideProject | u/sakuramoto | posted | https://redd.it/1xi6gtf | 2026-10-29 ~01:20 |
+| X | @sakuramotokenji | posted, links reply posted by the owner | https://x.com/sakuramotokenji/status/2115612842812735787 | 2026-10-29 01:13 |
+| LinkedIn | kenji sakuramoto | posted | https://www.linkedin.com/in/kenjisakuramoto/recent-activity/all/ (post of 2026-10-29) | 2026-10-29 ~01:25 |
+| Zenn (Idea) | kensaurus | **draft**, saved unpublished; topics ai, claudecode, cursor, 個人開発, oss | https://zenn.dev/articles/b7f223e0c9bf5d/edit (editor) | |
+| note | kensaurus | **draft**, saved unpublished | https://editor.note.com/notes/n2157e8d303d9/edit/ (editor) | |
 
-## Tone (2026-10-29)
+Zenn and note are Japanese. Both use the numbers as of 2026-10-29 02:43 UTC
+(839 reviews, 305 "do not merge"), a few more than the English posts had. The
+Zenn draft links the earlier Zenn article on how the pipeline works
+(https://zenn.dev/kensaurus/articles/0c8f927b20adaf, 2026-10-10) instead of
+repeating it. Hacker News is set aside for now (owner, 2026-10-29).
+
+### Numbers used, and where they come from
+
+`GET /v1/public/scoreboard` (https://kensaur.us/mushi-mushi/docs/proof), last 60
+days, after the 2026-10-29 fix (migration `20261029100000`, PR #893): 8 apps;
+32 reports from people on real devices (16 devices, the owner's testing
+included); 1,068 found by the owner's own checks (console and API filings, AI
+audits and sweeps, imports, Sentry, site checks); 234 fixes merged, 1 of them for
+a person's report; 835 AI reviews, 304 "do not merge".
+
+The first drafts of this round (and `../show-hn.md`, `../reddit-vibecoding.md`,
+`../x-thread.md`, `../linkedin.md`) used the old page's numbers, which counted
+Mushi Mushi's own reports as user reports (676 "from 314 people"). Those were
+wrong and were never posted.
+
+The held fix in every post is public: https://github.com/kensaurus/mushi-mushi/pull/864
+(the AI review: "Hold: don't merge this as it is").
+
+### Tone
 
 Problem first, in the owner's voice, with what is still rough. No hard sell.
+No em dashes, no "Here's what I learned", no emoji hooks, no reflex lists of
+three, no "not X but Y", no price pitch. Every claim checked against the data
+before posting (2026-10-29: "835 fixes" became 835 reviews; "most of my bugs"
+became "a lot of my bugs"; the 32 user reports say some were the owner testing).
 
-- Say who you are and the pain: building alone, "it's broken" messages about
-  code you did not write by hand.
-- Two true stories and the measured numbers, nothing rounded up.
-- Name what is still rough: nearly all use is the owner's own apps; a first-time
-  visitor test got stuck at the login page; setup has too many steps.
-- End on a real question. On Reddit, say you built it, and link the code and
-  the held PR so readers can check, not a landing page.
-- No em dashes, no "Here's what I learned", no emoji hooks, no reflex lists of
-  three, no "not X but Y", no price pitch up front.
+### Hacker News (not posted)
 
-Every post gives readers something to check: the public repo
-(https://github.com/kensaurus/mushi-mushi), a held PR with the AI review in
-full (https://github.com/kensaurus/mushi-mushi/pull/864), the live numbers
-(https://kensaur.us/mushi-mushi/docs/proof), and npm (`npx mushi-mushi`,
-`@mushi-mushi/web`). The `/mushi-mushi/proof` path opens the console, not the
-proof page: always link `/mushi-mushi/docs/proof`.
+HN shows https://news.ycombinator.com/showlim to new accounts: "We're temporarily
+restricting Show HNs because of a massive influx… Take some time to get to know
+the community, become a good contributor, and then it will be fine to post an
+occasional Show HN." Do not repost it as a plain story to get around that. Use
+the account for a while, then post this text:
 
-## Images
-
-All three are screenshots of public pages, so anyone can open the original.
-
-| File | What it shows | Original |
-|---|---|---|
-| ![](media/ai-review-hold-pr864.png) | The AI review on mushi-mushi PR #864: "Hold: don't merge this as it is", with the reasons | https://github.com/kensaurus/mushi-mushi/pull/864 |
-| ![](media/proof-numbers-2026-10-29.png) | The live numbers, as of 2026-10-29 00:31 UTC | https://kensaur.us/mushi-mushi/docs/proof |
-| ![](media/sample-diagnosis.png) | The docs' sample diagnosis (labelled SAMPLE on the page) | https://kensaur.us/mushi-mushi/docs/demo/diagnosis |
-
-Used on: X (first two), LinkedIn (all three). HN takes no images; r/SideProject
-allows none in a post body, so both link to the originals instead.
-
-## Where not to post yet
-
-r/vibecoding rule 2: "Vibe coding dev tools must be approved". A tool is
-submitted by posting about it in the Vibe Coding community on X
-(https://x.com/i/communities/1898129646782497027); if the moderators approve,
-they DM you on X and allow one introduction post. Rule 3 is "No shilling".
-Do that before any r/vibecoding post.
-
-Sources: Show HN guidelines (news.ycombinator.com/showhn.html: something people
-can try without sign-up, explain how and why you made it, no landing pages);
-the AI-tell list in the docs-writer skill (`references/plain-language-ste.md`);
-r/SideProject's sidebar (title format "[Project name] - [Short description]").
-
-## 2026-10-29 drafts
-
-| Platform | Account | Status | Live URL | Posted at |
-|---|---|---|---|---|
-| Hacker News (Show HN) | owner | drafted, not posted | | |
-| Reddit r/SideProject | u/sakuramoto | drafted, not posted | | |
-| X | owner | drafted, not posted | | |
-| LinkedIn | kenji sakuramoto | drafted, not posted | | |
-
-### Hacker News
-
-![Show HN submit form, filled](2026-10-29-hn-draft.png)
-
-- **Title:** Show HN: Mushi - user bug reports to reviewed fix PRs, for AI-built apps
+- **Title:** Show HN: Mushi Mushi - AI fixes my apps' bugs, and a second AI reviews every fix
 - **URL:** https://github.com/kensaurus/mushi-mushi
-- **Text** (HN does not say whether text sent with a URL becomes the first
-  comment; if it does not show on the post, paste it as the first comment):
 
 ```text
-Hi HN, I'm Kenji. I build apps on my own in Japan with Cursor and Claude Code, and I also run a small campsite in the mountains of Gunma. Nine of the apps have real users now.
+Hi HN, I'm Kenji. I build small apps by myself with Cursor and Claude Code. Eight of them are live.
 
-The problem I kept hitting: someone writes "it's broken", I open code I didn't write by hand, and I can't tell where to start. When I asked an agent to fix it, the fix often looked right and wasn't.
+My problem has been bugs in code I didn't write by hand. When something breaks I often don't know where to look. So I started letting agents find and fix bugs, which worked until I noticed some fixes were wrong in ways CI didn't catch.
 
-Mushi is what I built to cope with that. A user taps a report button in the app. Mushi attaches the screen, console and network calls, writes a plain-English diagnosis, and an agent opens a pull request. Then a second model reads the original report and the diff and decides whether it may merge.
+Mushi Mushi puts a second model in front of every fix PR. It reads the bug report and the diff and decides whether the PR fixes what the report describes. Over the last 60 days on my apps it reviewed 835 times and said "do not merge" 304 times. 234 fixes merged.
 
-Over the last 60 days on my own apps: 676 reports from 314 users, 234 fixes merged, and 304 reviews that said do not merge. Two of the blocked fixes stayed with me. One fixed a "0d" label in Japanese, Thai and Chinese and quietly changed the English label the report asked to keep. Another made a photo count match by leaving out the photos that had not finished uploading, from the app down to the database, when the report asked to show them as pending.
+One you can read in full: https://github.com/kensaurus/mushi-mushi/pull/864. A banner said everything was triaged while the "Top 3 to triage" list still showed reports. The fix changed what the banner counts and left the list alone. The reviewer held it.
 
-What is still rough: nearly all the use so far is my own. This week an AI playing a first-time visitor got stuck at our login page. Setup has more steps than I want.
+Something I didn't expect: my users almost never report bugs. 32 reports from real people in 60 days, across 8 apps, and some of those were me testing. Nearly everything Mushi Mushi fixed was found by my own checks: AI audits, Sentry, site crawls, and bugs I or my coding agents filed. The live page counts the two separately: https://kensaur.us/mushi-mushi/docs/proof
 
-Things you can check without signing up:
-- the code: https://github.com/kensaurus/mushi-mushi (SDKs MIT, server AGPL)
-- a held PR with the review in full: https://github.com/kensaurus/mushi-mushi/pull/864
-- the numbers above, counted live: https://kensaur.us/mushi-mushi/docs/proof
-- a free check of any live site: https://kensaur.us/mushi-mushi/docs/check?src=hn
+It's early. I'm most of its users, and setup has more steps than it should. The SDKs are MIT, the server is AGPL, and a separate enterprise folder is source-available: https://github.com/kensaurus/mushi-mushi. There's also a free check you can run on any live site without signing up: https://kensaur.us/mushi-mushi/docs/check?src=hn
 
-Install is npx mushi-mushi in your app folder; the browser SDK is @mushi-mushi/web on npm.
-
-Website: https://kensaur.us/mushi-mushi/?src=hn I would like to hear how you catch bad AI fixes today, and where this breaks for you.
+If you let agents change your code, how do you decide which fixes to trust?
 ```
-
-Post on a weekday morning US time and answer comments for the first hours.
-Not the same day as Reddit.
 
 ### Reddit, r/SideProject
 
-![r/SideProject text post, filled](2026-10-29-reddit-draft.png)
+![The live r/SideProject post](2026-10-29-reddit-live.png)
 
-- **Title:** Mushi - turns user bug reports into fix PRs, with a second AI that blocks the bad fixes
-- Title follows the sidebar format "[Project name] - [Short description]". No flair required.
-- The account has little karma (55 when drafted); a filter may hold the post
-  for moderators.
+- **Title:** mushi-mushi - an open-source bug fixer I run on my own apps, where a second AI can refuse the fix
+- r/vibecoding was not used: its rule 2 says vibe-coding dev tools need moderator
+  approval first, through its X community
+  (https://x.com/i/communities/1898129646782497027).
 
 ```text
-I build apps alone with Cursor and Claude Code. Nine are live now, and the part I was not ready for was support. A user writes "it's broken", and I am looking at code I did not write by hand with no idea where to start. That cost me whole afternoons.
+I build small apps on my own with Cursor and Claude Code, eight of them live. I made this because I kept getting stuck on bugs in code I didn't write by hand.
 
-So I asked agents to fix the reports. That helped, until I noticed how many fixes looked fine and were not. Two real examples from my apps:
+Agents find and fix the bugs, and before anything merges a second model reads the bug report next to the diff and says whether the fix actually fixes it. In 60 days it said "do not merge" 304 times out of 835 reviews. 234 fixes went in.
 
-- A stats page showed "0d" in Japanese, Thai and Chinese. The fix corrected those, and also changed the English label the user had said was fine.
-- An album showed the wrong photo count. The fix made the count match by leaving out the photos that had not finished uploading, all the way down to the database. The user had asked to see them as pending.
+Here's one it held, public on GitHub: https://github.com/kensaurus/mushi-mushi/pull/864. The bug was a banner saying "all triaged" while the "Top 3 to triage" list still had reports in it. The agent changed what the banner counts and never touched the list.
 
-The first one passed CI. What caught them was a second model that reads the original report next to the diff and can say "do not merge". Over 60 days it said that 304 times out of 835 reviews, while 234 fixes did merge.
+The thing that surprised me most: real users barely report bugs. 32 reports from people in 60 days, across 8 apps, and some of those were me testing. Almost everything got found by automated checks instead. I put the numbers on a page with the two counted separately: https://kensaur.us/mushi-mushi/docs/proof
 
-I turned this into an open-source tool (I am the developer, so I am biased). Here is a real review on one of its own PRs, where it said do not merge: https://github.com/kensaurus/mushi-mushi/pull/864
+Code is here: https://github.com/kensaurus/mushi-mushi. It's rough, and so far I'm most of its users.
 
-The code: https://github.com/kensaurus/mushi-mushi
-
-The numbers above, counted live: https://kensaur.us/mushi-mushi/docs/proof It is still rough: almost nobody outside my own apps has used it yet, and the setup has too many steps.
-
-Mostly I am curious how others handle this. When your users report a bug in an app you built with AI, how do you find the cause, and how do you check that the AI's fix did not break something else?
+Do your users report bugs? Mine mostly don't, and I'm curious whether that's normal.
 ```
 
 ### X
 
-![X compose box, filled, two images attached](2026-10-29-x-draft.png)
+![The live X post, with the PR #864 review attached](2026-10-29-x-live.png)
 
-Images: media/ai-review-hold-pr864.png, media/proof-numbers-2026-10-29.png.
-
-One post (a 5-post thread was cut: threads with a hook line read as AI).
+Image: media/ai-review-hold-pr864.png.
 
 ```text
-I build apps alone with Cursor and Claude Code. The hard part is support: a user writes "it's broken" and I'm reading code I didn't write by hand.
+I build apps alone with Cursor and Claude Code. Agents fix a lot of my bugs, and a second AI reviews each fix.
 
-So agents fix the reports, and a second model checks each fix. In 60 days it said "do not merge" 304 times.
+60 days: 234 fixes merged. The reviewer said "do not merge" 304 times.
+
+Users reported 32 bugs in that time (some were me testing). My own checks found the rest.
 ```
 
-Reply to it right after posting:
+Owed: a reply with the links (the post names no link and no product):
 
 ```text
-It's still rough. Nearly all the use is my own apps, and this week an AI playing a first-time visitor got stuck at our login page.
+It is called Mushi Mushi, and it is open source: https://github.com/kensaurus/mushi-mushi
 
-Code: https://github.com/kensaurus/mushi-mushi
+The held fix in the picture: https://github.com/kensaurus/mushi-mushi/pull/864
 Live numbers: https://kensaur.us/mushi-mushi/docs/proof
 ```
 
 ### LinkedIn
 
-![LinkedIn post window, text](2026-10-29-linkedin-draft.png)
+![The live LinkedIn post](2026-10-29-linkedin-live.png)
 
-![LinkedIn post window, the three attached images](2026-10-29-linkedin-draft-images.png)
+Images: media/ai-review-hold-pr864.png, media/sample-diagnosis.png.
 
 ```text
-I build apps on my own with AI coding tools, and I run a small campsite in the mountains of Gunma. Nine of the apps have real users now.
+I build small apps on my own with AI coding tools, and I run a campsite in the mountains of Gunma. Eight of the apps are live.
 
-The part I did not plan for was support. When someone writes "it's broken", I often look at code I did not write by hand and cannot tell where to start.
+For a while the worst part was bugs in code I hadn't written by hand. So I set up agents to find and fix them, with one rule: a second model reads the bug report next to each proposed change and can refuse it.
 
-For the last 60 days I let AI agents fix the bugs my users reported. A second model read each user's report next to the proposed change before anything could merge. 234 fixes merged. 304 reviews said do not merge.
+In the last 60 days that reviewer checked fixes 835 times and said "do not merge" 304 times. 234 fixes went in. One of the refused ones is public if you want to see what that looks like: github.com/kensaurus/mushi-mushi/pull/864
 
-The blocked ones taught me the most. One fix corrected a label in Japanese, Thai and Chinese and also changed the English label the user said was fine. Another made a photo count match by leaving out photos that had not finished uploading. The first passed every automated check.
+The surprise was where the bugs came from. People using my apps reported 32 in those 60 days, and some of those were me testing. Almost everything else was found by automated checks: AI audits, error monitoring, site crawls. If I had waited for users to tell me, I would have fixed very little.
 
-I packaged this as an open-source tool called Mushi. It is early. Nearly all the use so far is my own, and the setup still has too many steps.
+I packaged this as an open-source tool called mushi-mushi. It is early and I am most of its users. The numbers are live here, with users' reports and my own checks counted separately: kensaur.us/mushi-mushi/docs/proof
 
-If you run an app built with Lovable, Bolt, Cursor or Claude Code, I would like to hear how you handle bug reports from your users. The code is open: github.com/kensaurus/mushi-mushi
-The numbers above, counted live: kensaur.us/mushi-mushi/docs/proof
-A free check for any live site: kensaur.us/mushi-mushi/docs/check?src=li
+Code: github.com/kensaurus/mushi-mushi
+
+The second picture is the sample diagnosis from the docs, to show what a report turns into.
 ```
+
+### Zenn (draft)
+
+![The Zenn draft in preview](2026-10-29-zenn-draft.png)
+
+Title: AIに直させたバグ修正を、別のAIが305回「マージするな」と止めた話
+
+```markdown
+個人でアプリを作っています。Cursor と Claude Code でほとんど書いていて、いま 8 つのアプリが動いています。開発はひとりです。
+
+困っていたのは、自分で一行ずつ書いたわけではないコードのバグでした。「動かない」と言われても、どこから見ればいいのか分からないことがある。そこで、バグの報告を AI に読ませて、修正の PR を AI エージェントに出させるようにしました。仕組みは前の記事に書きました。
+https://zenn.dev/kensaurus/articles/0c8f927b20adaf
+
+最初はうまくいっているように見えました。テストも通る。でも、よく見ると「直っていない」修正が混ざっていました。
+
+## 2つ目の AI にレビューさせる
+
+そこで、修正 PR がマージされる前に、別のモデルに「元のバグ報告」と「差分」を並べて読ませ、「マージしてよい」「先に直して」「マージするな」のどれかを理由つきで返させるようにしました。
+
+直近 60 日の数字です（10 月 29 日時点、自分のアプリだけ。公開ページでいつでも見られます）。
+
+- レビュー 839 回、そのうち「マージするな」が 305 回
+- マージされた修正 234 件
+
+止められた例をひとつ。管理画面に「すべて仕分け済み」というバナーが出ているのに、その下の「次に仕分ける3件」のリストにはまだ報告が残っている、というバグでした。エージェントの修正は、バナーが数える対象を広げただけで、リストには一切触れていませんでした。テストは通っていました。レビューの AI はこれを「報告の問題を直していない」として止めました。この PR とレビューは GitHub でそのまま読めます。
+https://github.com/kensaurus/mushi-mushi/pull/864
+
+## いちばん意外だったこと
+
+ユーザーはほとんどバグを報告してくれません。60 日間、8 つのアプリで、実際の人からの報告は 32 件でした（しかも一部は自分のテストです）。
+
+一方で、自分で仕掛けたチェック（AI によるコード監査、Sentry、サイトの巡回、自分で書いた報告）から見つかったバグは 1,000 件を超えていました。マージされた修正のうち、ユーザーの報告から始まったものは 1 件だけです。
+
+バグはだいたい報告されません。困った人は、黙って離れていきます。
+
+## いま作っているもの
+
+この仕組みを Mushi Mushi というオープンソースのツールにしています（SDK は MIT、サーバーは AGPL）。アプリに報告ボタンを置くと、報告ごとに原因を平易な言葉で説明して、Cursor や Claude Code にそのまま渡せる修正の指示を作ります。報告を待たずに、初めてのユーザーのふりをして迷う場所を探すテストや、サイトの見守り、既知の脆弱性のチェックもします。
+
+まだ早い段階で、使っているのはほぼ自分です。セットアップの手順も多すぎると思っています。
+
+- コード: https://github.com/kensaurus/mushi-mushi
+- 数字（ユーザーの報告と自分のチェックを分けて数えています）: https://kensaur.us/mushi-mushi/docs/proof
+- 何ができるか: https://kensaur.us/mushi-mushi/docs/what-it-does
+
+AI に書かせたアプリを人に使ってもらっている方に聞いてみたいです。ユーザーはバグを報告してくれますか。AI の修正、どうやって信用していますか。
+```
+
+### note (draft)
+
+![The note draft in the editor](2026-10-29-note-draft.png)
+
+Title: ユーザーはバグを報告してくれない。8つのアプリを60日見て分かったこと
+
+```text
+群馬県嬬恋村でキャンプ場を運営しながら、AI を使ってアプリを作っています。いま動いているのは 8 つ。家計簿、語学の練習、写真、ひとり法人の決算、キャンプ場の管理まわりなどです。
+
+コードのほとんどは AI が書いています。速く作れるのはいいのですが、困るのはバグが出たときです。自分で書いていないので、どこを見ればいいのか分からない。
+
+それで、バグの報告を AI に読ませて原因を説明させ、修正も AI に作らせるようにしました。ただ、AI の修正は「それらしく見えて直っていない」ことがよくあります。なので、修正が入る前に、もうひとつの AI に「本当に報告の問題を直しているか」を確認させています。10 月 29 日までの 60 日で 839 回確認して、305 回「これは入れるな」と止めました。
+
+でも、いちばん驚いたのは別のことでした。
+
+ユーザーは、ほとんどバグを報告してくれないんです。60 日間、8 つのアプリで、実際の人から届いた報告は 32 件。そのうち何件かは自分のテストでした。
+
+一方、自分で用意したチェック（AI によるコードの点検、エラーの監視、サイトの見回り、自分が見つけたもの）からは 1,000 件以上見つかっていました。結局、直したバグのほとんどは、ユーザーが教えてくれたものではありませんでした。
+
+考えてみれば当たり前で、困ったとき、わざわざ報告するより、そっと閉じるほうが簡単です。
+
+この仕組みは Mushi Mushi という名前で公開しています。オープンソースで、1 つのアプリまでは無料です。まだ早い段階で、使っているのはほとんど自分です。
+
+数字はここで公開しています。ユーザーからの報告と、自分のチェックで見つけたものを分けて数えています。
+https://kensaur.us/mushi-mushi/docs/proof
+
+アプリを作って人に使ってもらっている方、ユーザーはバグを教えてくれますか。
+```
+
+## Images
+
+All are screenshots of public pages, so anyone can open the original.
+
+| File | What it shows | Original |
+|---|---|---|
+| ![](media/ai-review-hold-pr864.png) | The AI review on mushi-mushi PR #864: "Hold: don't merge this as it is" | https://github.com/kensaurus/mushi-mushi/pull/864 |
+| ![](media/sample-diagnosis.png) | The docs' sample diagnosis (labelled SAMPLE on the page and in the LinkedIn text) | https://kensaur.us/mushi-mushi/docs/demo/diagnosis |
+| ![](media/proof-numbers-2026-10-29.png) | **Wrong numbers, not used**: /proof before the fix (676 "from 314 people") | kept as a record of the error |
+
+The draft screenshots (`2026-10-29-*-draft*.png`) show earlier drafts; the live
+screenshots above are what went out.
