@@ -30,9 +30,9 @@ function heroDecideLabel(stats: ProjectsStats): string {
     case 'never_ingested':
       return 'No ingest yet'
     case 'no_sdk_heartbeat':
-      return 'No SDK heartbeat'
+      return 'App not checked in'
     case 'sdk_missing':
-      return `${stats.sdkMissingCount ?? 0} without an SDK heartbeat`
+      return `${stats.sdkMissingCount ?? 0} not checked in`
     case 'partial_ingest':
       return `${stats.neverIngestedCount} never ingested`
     case 'no_projects':

@@ -17,6 +17,7 @@
 
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
+import { fetchFailingCheckNames } from '../../supabase/functions/_shared/github.ts'
 
 const state = vi.hoisted(() => ({
   db: null as unknown,
@@ -26,6 +27,7 @@ const state = vi.hoisted(() => ({
   enqueue: { queued: false, reason: 'followups_off' } as { queued: boolean; reason?: string; error?: string },
   followupsOn: false,
   finalized: [] as string[],
+  failingNames: null as Set<string> | null,
 }))
 
 const fakeLog = vi.hoisted(() => {
@@ -136,6 +138,7 @@ function setup() {
       return true
     },
     now: () => NOW,
+    failingCheckNames: async () => state.failingNames,
   }
   const db: FakeDb = makeFakeDb({
     projects: [
@@ -191,6 +194,7 @@ function setup() {
   state.finalized = []
   state.enqueue = { queued: false, reason: 'followups_off' }
   state.followupsOn = false
+  state.failingNames = null
   const app = new FakeApp()
   routes.registerPipelineRoutes(app as never, deps as never)
   return { app, db, calls }
@@ -211,7 +215,7 @@ describe('GET /v1/admin/pipeline', () => {
     expect(ci.items[0]).toMatchObject({ id: F1, failingChecks: ['Build & Test'], title: 'Badge clipped', lastEventAt: '2026-10-26T09:00:00Z', lastEventLabel: 'CI finished: failed' })
     // Auto-fix on, the only Cursor key off: a red group first in Fix PR.
     expect(byId.pr.groups.map((g) => g.id)).toEqual(['autofix_no_agent', 'draft_no_ci'])
-    expect(byId.pr.groups[0].label).toBe('1 app: auto-fix is on but has no agent key; 0 dispatches in 48h')
+    expect(byId.pr.groups[0].label).toBe('1 app: auto-fix is on but has no Cursor key to start fixes; no fix started in the last 2 days')
     const d = (res.body.data as { dispatchers: Array<{ name: string; opener: string; server: { agentKeys: number; offKeys: number } }> }).dispatchers
     expect(d).toEqual([expect.objectContaining({ name: 'glot.it', opener: 'server', server: expect.objectContaining({ agentKeys: 0, offKeys: 1 }) })])
     expect(byId.reported.groups.map((g) => g.id)).toEqual(['intake_rejected', 'triage_slow'])
@@ -468,6 +472,15 @@ describe('what /pipeline offers is what the action routes do', () => {
 })
 
 describe('GET /v1/admin/pipeline/fix/:id', () => {
+  it('names the live failing checks from GitHub, ahead of an older ci_jobs row', async () => {
+    expect(routes.defaultPipelineDeps.failingCheckNames).toBe(fetchFailingCheckNames)
+    const { app } = setup()
+    state.failingNames = new Set(['zeta job', 'alpha job'])
+    const res = await app.call('GET', '/v1/admin/pipeline/fix/:id', undefined, { id: F1 })
+    expect(res.status).toBe(200)
+    expect((res.body.data as { item: { failingChecks: string[] } }).item.failingChecks).toEqual(['alpha job', 'zeta job'])
+  })
+
   it("returns one fix's group, actions, refusals and failing checks", async () => {
     const { app } = setup()
     const res = await app.call('GET', '/v1/admin/pipeline/fix/:id', undefined, { id: F1 })

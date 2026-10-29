@@ -4,14 +4,14 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/verified-merge
 
 ---
 title: Verified merge
-description: Mushi merges an agent's fix on its own only with proof — a test that fails without the fix and passes with it, run in your own CI.
+description: Mushi Mushi merges a cloud agent's fix on its own only with proof, a test that fails without the fix and passes with it, run in your own CI.
 ---
 
 # Verified merge
 
 Your agents open more fix PRs than you can read. A green CI run does not
 prove a fix: an agent can make CI green by editing or skipping a test.
-Verified merge asks for proof instead. A fix PR merges on its own only when
+Verified merge asks for proof instead. A cloud agent's fix PR merges on its own only when
 **a test fails without the fix and passes with it**, no test was weakened,
 the change is small, and two reviews from different model families raise no
 problem.
@@ -21,7 +21,7 @@ A model's review can stop a merge. It can never approve one on its own
 
 ## The gates
 
-Mushi checks every gate against the PR's latest commit. A new commit starts
+Mushi Mushi checks every gate against the PR's latest commit. A new commit starts
 from zero. The fix card in the console shows the list, and so does
 `mushi fixes verify `.
 
@@ -34,16 +34,19 @@ from zero. The fix card in the console shows the list, and so does
 | **Small change** | At most 3 source files and 150 changed lines (you can raise both) | A big change needs a person. |
 | **Second review** | A model from another family (OpenAI or OpenRouter, on your own key) says `merge` | It runs only after the other five pass. Without a key it reads **unavailable** and blocks automatic merge. |
 
-Each gate reads one of **pass**, **fail**, **pending**, **unavailable** or
-**not set up**.
+Each gate reads one of **Passed**, **Failed**, **Waiting**, **Unavailable** or
+**Not set up** (`pass`, `fail`, `pending`, `unavailable`, `not_set_up` in the API).
+
+A fix from your own local `mushi work` lane is checked only by its Opus review
+and its CI. The other gates run on cloud agents' pull requests.
 
 ## Add the workflow
 
 The **Test proves the fix** gate needs one workflow in your repo. Get it with
 your runner labels and test command already filled in, in any of three ways:
 
-- Console: **Settings → Fixes → Verified merge → Open a PR that adds it**, or
-  **Copy workflow**.
+- Console: **Settings → General → Fixes and CI** (click **Show**) **→ Verified merge →
+  Mushi verify workflow → Open a PR that adds it**, or **Copy workflow**.
 - Terminal: `mushi verify workflow --out .github/workflows/mushi-verify.yml`,
   then commit it to your default branch.
 - By hand: save the file below as `.github/workflows/mushi-verify.yml` and
@@ -166,7 +169,7 @@ never run as a command. Use your runner's "run these files" form:
 | pytest | `pytest {files}` |
 | Node test runner | `node --test {files}` |
 
-Set it in the console (**Settings → Fixes → Verified merge → Test command**)
+Set it in the console (**Settings → General → Fixes and CI → Verified merge → Test command**)
 so `mushi verify workflow` and the PR button fill it in.
 
 A test file is one under `__tests__/`, `test/`, `tests/` or `e2e/`, or named
@@ -184,8 +187,8 @@ minutes, your own toolchain), set it up as a runner first:
 mushi runner add --repo you/your-app   # prints the label, e.g. mushi-nuc
 ```
 
-Then add that label under **Settings → Fixes → Verified merge → Runner
-labels** (the console suggests the runners it has seen), and get the workflow
+Then add that label under **Settings → General → Fixes and CI → Verified merge →
+Where the proof runs** (the console suggests the runners it has seen), and get the workflow
 again. The `runs-on` line becomes, for example:
 
 ```yaml
@@ -200,9 +203,9 @@ for the safe defaults.
 
 ## Turn on automatic merge
 
-Automatic merge is **off** until you turn it on in **Settings → Fixes →
-Verified merge**. When it is on and every gate passes, Mushi squash-merges the
-PR's exact commit, up to a daily limit per app (5 by default). It never turns
+Automatic merge is **off** until you turn on **Merge proven fixes automatically**
+in **Settings → General → Fixes and CI → Verified merge**. When it is on and every
+gate passes, Mushi squash-merges the cloud agent's PR at its exact commit, up to a daily limit per app (5 by default). It never turns
 on GitHub's own auto-merge, which merges on green CI alone.
 
 You can still merge any PR yourself, from the console, GitHub or
@@ -221,7 +224,7 @@ broke something:
 
 Mushi never merges a revert PR by itself: a person does. If later commits
 changed the same files, Mushi opens no revert PR and tells you to revert by
-hand. Turn revert PRs off with **Auto-revert → Off**. A regressed fix also
+hand. Turn revert PRs off with **If a merged fix breaks something → When it breaks → Off**. A regressed fix also
 counts against that app in the spend-down stop-loss, which pauses automatic
 fixes for an app whose fixes keep failing.
 

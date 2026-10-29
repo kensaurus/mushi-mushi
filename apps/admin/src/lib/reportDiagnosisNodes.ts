@@ -7,6 +7,7 @@
 import { reportDiagnosisView } from './reportDiagnosis'
 import { humanizeFixError } from './humanizeFixError'
 import { CLOSE_REASONS } from './closeReasons'
+import { verdictFromError } from './pdcaAct'
 import { DIAGNOSIS_ANCHORS, NEEDS_LOOK_BELOW, headline, type DiagnosisNode } from './reportDiagnosisModel'
 import type { ReportDetail, ReportFixAttempt } from '../components/report-detail/types'
 
@@ -290,7 +291,7 @@ export function diagnosisNodes(report: ReportDetail): DiagnosisNode[] {
     return [{ ...base, title: 'Diagnosis failed', detail: 'deep diagnosis did not finish', state: 'failed', needsLook: true, why: view.message }]
   }
   if (view.kind === 'stage1_only') {
-    return [{ ...base, title: 'Fast filter was confident; no deep diagnosis', detail: 'stage 1 only', state: 'ok', needsLook: false, why: 'The fast filter classified this report with enough confidence that the deep diagnosis was skipped. Run it from the classification card if you want a root cause.' }]
+    return [{ ...base, title: 'Quick summary only; no full diagnosis', detail: 'first check only', state: 'ok', needsLook: false, why: 'The first check was sure what kind of bug this is, so the full diagnosis (why it broke and how to fix it) did not run. The fix prompt still gives your agent everything Mushi Mushi knows.' }]
   }
   return [{ ...base, title: 'Diagnosis in progress', detail: 'usually under a minute', state: 'pending', needsLook: false, why: 'Mushi is still reading this report.' }]
 }
@@ -372,12 +373,16 @@ export function fixNodes(report: ReportDetail, diagnosisReady: boolean): Diagnos
   let next: Pick<DiagnosisNode, 'title' | 'detail' | 'why' | 'state'> | null = null
   // A closed report ends on the decision, never on "retry" (report f5575c9e).
   const closedLabel = CLOSE_REASONS.find((r) => r.value === report.closed_reason)?.label
-  const needsPerson = attempts[0]?.failure_category === 'needs_human'
+  // Local-lane runs before 2026-10-29 carry the verdict only in the error line.
+  const verdict = attempts[0]?.failure_category ?? verdictFromError(attempts[0]?.error)
+  const needsPerson = verdict === 'needs_human'
   if (status === 'verified') next = { title: 'Verified in production', detail: 'loop closed', why: 'The fix shipped and the bug did not come back.', state: 'done' }
   else if (status === 'dismissed') next = { title: closedLabel ? `Closed: ${closedLabel}` : 'Closed', detail: 'decision', why: 'Someone closed this report, so nothing runs on it. Reopen it from the triage bar if it comes back.', state: 'done' }
   else if (status === 'fixed' || latest?.state === 'done') next = { title: 'Check it in production', detail: 'next step', why: 'The fix merged. Watch for the bug to come back; Mushi reopens the report if it does.', state: 'open' }
   else if (latest?.state === 'ok') next = { title: 'Review and merge the pull request', detail: 'next step', why: 'Read the diff and the CI result, then merge from the Fixes page or GitHub.', state: 'open' }
   else if (latest?.state === 'failed' && needsPerson) next = { title: 'A person decides this one', detail: 'next step', why: 'The agent said this needs a decision, not a code change. Decide it yourself, or close it as "Not a code bug" in the triage bar; a retry would stop the same way.', state: 'open' }
+  else if (latest?.state === 'failed' && verdict === 'already_fixed') next = { title: 'Check it is fixed, then close it', detail: 'next step', why: 'The agent found the bug already fixed in the code. If your app agrees, close the report as fixed; if not, send it again with what you still see.', state: 'open' }
+  else if (latest?.state === 'failed' && (verdict === 'not_actionable' || verdict === 'wrong_repo')) next = { title: verdict === 'wrong_repo' ? 'Connect the right repo, or close it' : 'Close it, or point at the code', detail: 'next step', why: verdict === 'wrong_repo' ? 'The agent says the code is in another repo. Connect that repo and send it again.' : 'The agent found nothing in the code to change: often config, an outage or expected behaviour. Close it as "Not a code bug", or send it again with the file or screen to look at.', state: 'open' }
   else if (latest?.state === 'failed') next = { title: 'Check the weak spots, then retry', detail: 'next step', why: 'Look at the marked nodes first: a vague component or missing repro steps usually stop the agent. Fix those in the triage bar, then dispatch again or paste the fix prompt into your editor.', state: 'open' }
   else if (!latest && diagnosisReady && status !== 'dismissed') next = { title: 'Fix it: dispatch or paste the prompt', detail: 'next step', why: 'Copy the fix prompt into your coding agent, or dispatch a cloud agent from "Fix it with your coding agent".', state: 'open' }
   if (next) nodes.push({ id: 'next', lane: 'fix', confidence: null, needsLook: false, source: 'status · fix_attempts', anchor: DIAGNOSIS_ANCHORS.diagnosis, ...next })

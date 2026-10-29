@@ -6,14 +6,35 @@
  *          order, and its last runs. Conflict and audit runs hold no report,
  *          so they show as text, not a report link.
  *          Each change saves just that setting; the machine reads it at its
- *          next heartbeat, within a minute.
+ *          next heartbeat, within a minute. A run in flight shows its stage,
+ *          how long it has been there and its last log lines (ADR 0048
+ *          amendment 2026-10-28), with "Stop this run".
  */
 
 import { useState } from 'react'
+import { ConfirmDialog } from '../ConfirmDialog'
 import { Link } from 'react-router-dom'
 import { Badge, Btn, Card, Input, SelectField, Toggle } from '../ui'
 import { IconChevronDown, IconChevronUp, IconClose, IconExternalLink } from '../icons'
-import { LANE_MODES, laneCountsLine, MODEL_RE, moveItem, OUTCOME_LABEL, reportIdsIn, sinceLabel, type LaneConfig, type LaneSettings, type WorkerHost, type WorkerLane, type WriteResult } from '../../lib/workers'
+import {
+  durationLabel,
+  LANE_MODES,
+  laneCountsLine,
+  laneRuns,
+  MODEL_RE,
+  moveItem,
+  OUTCOME_LABEL,
+  reportIdsIn,
+  sinceLabel,
+  STAGE_LABEL,
+  stopRun,
+  type LaneConfig,
+  type LaneSettings,
+  type RunTelemetry,
+  type WorkerHost,
+  type WorkerLane,
+  type WriteResult,
+} from '../../lib/workers'
 
 interface Props {
   lane: WorkerLane
@@ -23,6 +44,70 @@ interface Props {
   onPatch: (lane: WorkerLane, patch: LaneSettings) => Promise<WriteResult>
   /** Replace the queue with this order, or (append) add these at its end. */
   onQueue: (lane: WorkerLane, reportIds: string[], append?: boolean) => Promise<WriteResult>
+  /** After a run was stopped. */
+  onChanged?: () => void
+}
+
+/** A run that holds an agent space this long is a problem (the server's RUN_STUCK_MS). */
+const STUCK_SEC = 45 * 60
+
+/** Where a run is and what it last said; nothing from a CLI that does not report it. */
+function RunDetail({ run, testId }: { run: RunTelemetry | undefined; testId: string }) {
+  if (!run) return null
+  const stuck = run.ageSec >= STUCK_SEC
+  return (
+    <div className="ml-2 space-y-0.5" data-testid={`${testId}-detail`}>
+      <p className="flex flex-wrap items-center gap-1.5 text-2xs text-fg-muted">
+        <Badge tone={stuck ? 'danger' : run.stage === 'agent' ? 'ok' : 'neutral'}>{STAGE_LABEL[run.stage] ?? run.stage}</Badge>
+        <span>
+          for {durationLabel(run.stageSec)} · run {durationLabel(run.ageSec)}
+          {run.model ? ` · ${run.model}` : ''}
+        </span>
+      </p>
+      {run.log.length > 0 && (
+        <ol className="rounded-sm border border-edge-subtle bg-surface-overlay px-2 py-0.5 font-mono text-2xs text-fg-secondary" aria-label="Last log lines">
+          {run.log.map((line, i) => (
+            <li key={i} className="wrap-anywhere">
+              {line}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  )
+}
+
+function StopRun({ claimId, onChanged, testId }: { claimId: string; onChanged?: () => void; testId: string }) {
+  const [asking, setAsking] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState<WriteResult | null>(null)
+  return (
+    <>
+      <Btn size="sm" variant="ghost" onClick={() => setAsking(true)} data-testid={`${testId}-stop`}>
+        Stop
+      </Btn>
+      {note && <span className={`text-2xs ${note.ok ? 'text-ok-foreground' : 'text-danger-foreground'}`}>{note.message}</span>}
+      {asking && (
+        <ConfirmDialog
+          title="Stop this run"
+          body="The report is free again: the next lane or a cloud agent can take it. The machine stops the agent at its next heartbeat, within a minute, and commits and pushes nothing more; a git hook already running ends at git's own time limit."
+          confirmLabel="Stop the run"
+          tone="danger"
+          loading={busy}
+          onConfirm={() => {
+            setBusy(true)
+            void stopRun(claimId).then((res) => {
+              setBusy(false)
+              setAsking(false)
+              setNote(res)
+              if (res.ok) onChanged?.()
+            })
+          }}
+          onCancel={() => setAsking(false)}
+        />
+      )}
+    </>
+  )
 }
 
 /** ISO → the value a datetime-local input shows, in the viewer's time zone. */
@@ -44,7 +129,7 @@ function RunTitle({ reportId, title, className }: { reportId: string | null; tit
   )
 }
 
-export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue }: Props) {
+export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue, onChanged }: Props) {
   const c = lane.config
   const [model, setModel] = useState(c.model ?? '')
   const [reviewModel, setReviewModel] = useState(lane.reviewModel ?? '')
@@ -58,6 +143,8 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue }: P
   const modelError = model && !MODEL_RE.test(model) ? 'Letters, digits, ".", "_", ":" and "-" only.' : undefined
   const state = c.paused ? 'paused' : c.drain ? 'draining' : String(lane.status.state ?? (host?.online ? 'starting' : 'offline'))
   const testId = `worker-lane-${lane.id}`
+  const runs = laneRuns(lane)
+  const followups = runs.filter((r) => r.kind === 'followup')
 
   const save = async (key: string, patch: LaneSettings) => {
     setBusy(key)
@@ -187,14 +274,24 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue }: P
         )}
       </div>
 
-      {lane.active.length > 0 && (
+      {(lane.active.length > 0 || followups.length > 0) && (
         <div className="space-y-1">
           <p className="text-2xs font-medium text-fg-secondary">Working on now</p>
-          <ul className="space-y-0.5 text-xs">
+          <ul className="space-y-1.5 text-xs">
             {lane.active.map((a) => (
-              <li key={a.claimId} className="flex flex-wrap items-baseline gap-x-2">
-                <RunTitle reportId={a.reportId} title={a.title} className="min-w-0 truncate text-fg" />
-                <span className="text-2xs text-fg-muted">since {sinceLabel(a.since, now)}</span>
+              <li key={a.claimId} data-testid={`${testId}-run-${a.claimId}`}>
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <RunTitle reportId={a.reportId} title={a.title} className="min-w-0 truncate text-fg" />
+                  <span className="text-2xs text-fg-muted">since {sinceLabel(a.since, now)}</span>
+                  <StopRun claimId={a.claimId} onChanged={onChanged} testId={`${testId}-run-${a.claimId}`} />
+                </div>
+                <RunDetail run={runs.find((r) => r.runId === a.claimId)} testId={`${testId}-run-${a.claimId}`} />
+              </li>
+            ))}
+            {followups.map((r) => (
+              <li key={r.runId} data-testid={`${testId}-run-${r.runId}`}>
+                <span className="text-fg">A review follow-up</span>
+                <RunDetail run={r} testId={`${testId}-run-${r.runId}`} />
               </li>
             ))}
           </ul>

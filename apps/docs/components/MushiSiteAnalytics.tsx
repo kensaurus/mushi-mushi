@@ -29,6 +29,8 @@
  *   cta_click        any click inside `[data-mushi-cta]`
  *   signup_click     …when that element links to `/signup`
  *   connect_demo_click …when it links to `/connect`
+ *   plan_selected    …when it carries `data-mushi-plan` (the 60-day price
+ *                    test; `pricing_view` is its docs-side pricing_viewed)
  * View events carry reserved `$utm_*`, `$referrer`, `$route`, `$ref` and
  * `$first_touch` (true on the first tracked view after the first-touch
  * record was created — i.e. this visitor's very first session). The first
@@ -38,6 +40,20 @@
  * (the widget mark's project hash) appended at click time, so MDX links stay
  * static. `ref=` is the console's growth-loop referral and never carries a
  * UTM source.
+ *
+ * Campaign tag: the `?src=` (else `utm_source`) this visit landed with is
+ * held in memory for the visit, never stored, and rides on signup links as
+ * `ft_src` when there is no consented first touch, so a launch-post visitor
+ * who never answers the consent bar is still attributed to that post.
+ *
+ * Cookieless page-view count (no consent needed, nothing stored)
+ * ----------------------------------------------------------------
+ * Separately from the SDK, every route change sends one beacon to
+ * POST /v1/public/page-view with only `{ path, src, ref }` (ref = the
+ * external referrer's host name, on the first view of a page load). No
+ * cookie, storage, id or fingerprint: the server keeps a daily count per
+ * (path, src, referrer host) and no IP (landing_page_views_daily). Skipped
+ * under Do-Not-Track / GPC. It needs only NEXT_PUBLIC_MUSHI_SELF_API_ENDPOINT.
  *
  * Config: NEXT_PUBLIC_MUSHI_SELF_{PROJECT_ID,API_KEY,API_ENDPOINT}
  * (apps/docs/.env.example). Unset → renders nothing, does nothing.
@@ -53,8 +69,12 @@ import {
   decorateSignupHref,
   dntActive,
   firstTouchReservedProps,
+  pageViewBeaconBody,
+  pageViewBeaconUrl,
   planRouteViews,
+  planSelectionFromCta,
   readFirstTouch,
+  readLandingSrc,
   readSiteAnalyticsConfig,
   readStoredConsent,
   reservedViewProps,
@@ -150,6 +170,8 @@ function loadTracker(config: SiteAnalyticsConfig): Promise<Tracker | null> {
 }
 
 const CONFIG = readSiteAnalyticsConfig(SITE_ANALYTICS_ENV)
+/** The cookieless page-view beacon needs only the API endpoint. */
+const BEACON_URL = pageViewBeaconUrl(SITE_ANALYTICS_ENV.apiEndpoint)
 
 export function MushiSiteAnalytics() {
   // Site-relative: a visit to the /mushi-mushi/ landing alias is a visit to
@@ -171,6 +193,18 @@ export function MushiSiteAnalytics() {
   const firstTouchAttachedRef = useRef(false)
   /** The `?ref=` this page load arrived with (widget mark hash), forwarded to signup. */
   const landingRefRef = useRef<string | null>(null)
+  /**
+   * The `?src=` / utm_source this visit landed with, read once from the first
+   * page's URL (undefined = not read yet). In memory only.
+   */
+  const landingSrcRef = useRef<string | null | undefined>(undefined)
+  /** Route of the last page-view beacon; null before the first one. */
+  const lastBeaconRef = useRef<string | null>(null)
+
+  const landingSrc = useCallback((): string | null => {
+    if (landingSrcRef.current === undefined) landingSrcRef.current = readLandingSrc(window.location.search)
+    return landingSrcRef.current
+  }, [])
 
   /** Write the first-touch record — a no-op unless consent is `granted`. */
   const persistFirstTouch = useCallback((consent: StoredConsent) => {
@@ -259,6 +293,29 @@ export function MushiSiteAnalytics() {
     // re-record anything (recordFirstTouchOnce is write-once regardless).
   }, [activate, persistFirstTouch])
 
+  // Cookieless page-view beacon: one per route change, no consent needed
+  // because nothing is stored and nothing personal is sent (file header).
+  useEffect(() => {
+    if (!BEACON_URL) return
+    if (dntActive(navigator, window as Window & { doNotTrack?: string | null })) return
+    if (lastBeaconRef.current === pathname) return
+    const firstView = lastBeaconRef.current === null
+    lastBeaconRef.current = pathname
+    const body = pageViewBeaconBody({
+      pathname,
+      src: landingSrc(),
+      // Only the first view of a page load has an outside referrer; after a
+      // client navigation document.referrer still names the original site.
+      referrer: firstView ? document.referrer : '',
+      siteHost: window.location.hostname,
+    })
+    try {
+      navigator.sendBeacon?.(BEACON_URL, body)
+    } catch {
+      /* a lost page view is fine; never break the page */
+    }
+  }, [pathname, landingSrc])
+
   // Route views — `usePathname` changes on every client navigation
   // (Nextra catch-all included); planRouteViews dedupes so StrictMode /
   // same-route re-renders never double-fire.
@@ -290,6 +347,8 @@ export function MushiSiteAnalytics() {
       if (!ctaId) return
       const ctaLocation = el.dataset.mushiLocation ?? 'unknown'
       emit('cta_click', { cta_id: ctaId, location: ctaLocation })
+      const plan = planSelectionFromCta(el.dataset)
+      if (plan) emit('plan_selected', { ...plan, surface: 'docs_pricing' })
       if (!(el instanceof HTMLAnchorElement)) return
       const kind = ctaHrefKind(el.getAttribute('href'))
       if (kind === 'signup') {
@@ -297,6 +356,7 @@ export function MushiSiteAnalytics() {
           ctaId,
           consent: consentRef.current,
           firstTouch: firstTouchStoredRef.current,
+          landingSrc: landingSrc(),
           landingRef: landingRefRef.current,
         })
         if (next !== el.href) el.href = next
@@ -307,7 +367,7 @@ export function MushiSiteAnalytics() {
     }
     document.addEventListener('click', onClick, true)
     return () => document.removeEventListener('click', onClick, true)
-  }, [emit])
+  }, [emit, landingSrc])
 
   if (!CONFIG || !showBar) return null
 

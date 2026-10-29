@@ -27,6 +27,7 @@ export type PipelineAction =
   | 'close'
   | 'followup'
   | 'dismiss'
+  | 'mark_fixed'
   | 'requeue'
 
 export interface PipelineItem {
@@ -219,6 +220,13 @@ export const ACTION_META: Record<PipelineAction, ActionMeta> = {
     needsReason: false,
     variant: 'ghost',
   },
+  mark_fixed: {
+    label: 'It is fixed: close',
+    confirm: 'The agent found each bug already fixed in the code. Check your app first; this closes each report as fixed and tells its reporter.',
+    needsConfirm: true,
+    needsReason: false,
+    variant: 'primary',
+  },
   requeue: {
     label: 'Requeue',
     confirm: 'Puts each report back at the front of the local worker lane that ran it. The machine stopped it, not the code, so it never counts against the report.',
@@ -277,7 +285,7 @@ async function perFix(ids: string[], kind: 're_review' | 'rerun_ci'): Promise<Ac
 }
 
 /** "Not a code bug": close each item's report through the report route (the reporter is told). */
-async function dismissReports(fixIds: string[], reportIds: Array<string | null>, reason?: string): Promise<ActionOutcome[]> {
+async function dismissReports(fixIds: string[], reportIds: Array<string | null>, reason?: string, status: 'dismissed' | 'fixed' = 'dismissed'): Promise<ActionOutcome[]> {
   const out: ActionOutcome[] = []
   for (let i = 0; i < fixIds.length; i++) {
     const reportId = reportIds[i]
@@ -288,7 +296,7 @@ async function dismissReports(fixIds: string[], reportIds: Array<string | null>,
     const res = await apiFetch<unknown>(`/v1/admin/reports/${encodeURIComponent(reportId)}`, {
       method: 'PATCH',
       scope: 'enumeration',
-      body: JSON.stringify({ status: 'dismissed', ...(reason ? { closed_reason: reason } : {}) }),
+      body: JSON.stringify(status === 'fixed' ? { status } : { status, ...(reason ? { closed_reason: reason } : {}) }),
     })
     out.push(res.ok ? { id: fixIds[i], ok: true, message: 'Report closed; its reporter is told.' } : { id: fixIds[i], ok: false, message: res.error?.message ?? 'The report was not closed.' })
   }
@@ -300,7 +308,7 @@ async function dismissReports(fixIds: string[], reportIds: Array<string | null>,
  * already refuse. A bulk button runs on these only and says how many.
  */
 export function actionableIds(items: readonly Pick<PipelineItem, 'id' | 'prUrl' | 'reportId' | 'blocked'>[], action: PipelineAction): string[] {
-  return items.filter((i) => (action === 'dismiss' || action === 'requeue' ? !!i.reportId : !!i.prUrl) && !i.blocked?.[action]).map((i) => i.id)
+  return items.filter((i) => (action === 'dismiss' || action === 'mark_fixed' || action === 'requeue' ? !!i.reportId : !!i.prUrl) && !i.blocked?.[action]).map((i) => i.id)
 }
 
 /** The one reason every item gives for an action, or null when they differ or some can run. */
@@ -315,6 +323,7 @@ export function sharedBlockReason(items: readonly Pick<PipelineItem, 'blocked'>[
 export async function runPipelineAction(action: PipelineAction, fixIds: string[], reason?: string, reportIds: Array<string | null> = []): Promise<ActionOutcome[]> {
   if (fixIds.length === 0) return []
   if (action === 'dismiss') return dismissReports(fixIds, reportIds, reason)
+  if (action === 'mark_fixed') return dismissReports(fixIds, reportIds, undefined, 'fixed')
   if (action === 're_review' || action === 'rerun_ci') return perFix(fixIds, action)
   if (action === 'queue_merge') {
     const res = await apiFetch<{ queued: number; skipped: Array<{ fixId: string; reason: string }> }>('/v1/admin/merge-queue', {

@@ -4,12 +4,12 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/eslint-plugin
 
 ---
 title: 'eslint-plugin-mushi-mushi'
-description: eslint-plugin-mushi-mushi flags empty event handlers and leftover mock data in production code — the no-dead-handler and no-mock-leak rules and preset.
+description: eslint-plugin-mushi-mushi, the Mushi Mushi ESLint plugin. Its no-dead-handler and no-mock-leak rules and preset flag empty handlers and mock data in production.
 ---
 
 # `eslint-plugin-mushi-mushi`
 
-Two lint rules for bugs AI coding tools often ship — **`no-dead-handler`**
+The Mushi Mushi ESLint plugin has two lint rules for bugs AI coding tools often ship: **`no-dead-handler`**
 flags event handlers that do nothing (`onClick={() => {}}`, a body that only
 logs) and **`no-mock-leak`** flags faker / placeholder data left in
 production paths. They run wherever ESLint runs: your editor, `pnpm lint`,
@@ -116,6 +116,8 @@ export const projects = [
 ## In CI
 
 Run ESLint as its own step (for example `npx eslint .`) so a PR fails when
-either rule reports. The [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) `gates`
-command does not run ESLint and sends no lint findings, so its
-`dead_handler` and `mock_leak` gates pass on their own.
+either rule reports. To record the findings in Mushi Mushi as well, write a
+JSON report (`npx eslint -f json -o mushi-eslint.json src/`) and pass it to the
+[`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) `gates` command as `eslint-report`. That
+command does not run ESLint itself, and its `dead_handler` and `mock_leak`
+gates fail when no report is given.

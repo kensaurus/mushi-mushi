@@ -1,57 +1,67 @@
 ---
 title: 'SDK health'
-description: The SDK health card shows the live heartbeat of every Mushi SDK that reported in the last 24 hours, so an SDK that never shipped is obvious.
+description: SDK health in Mushi Mushi lists what stops your app's reports arriving, like a missing install, missing CI keys, an outdated SDK or a blocking CSP, with fixes.
 ---
 <AdminDocHero page="sdk-health" />
 
 
 # SDK health
 
-Every project page surfaces a **SDK health** card with the live
-heartbeat of every SDK runtime that's reported in the last 24 h. It's
-the surface that catches "I installed the SDK two weeks ago and forgot
-to ship the deploy" before a stakeholder catches it for you.
+**SDK health** is a section of the [Connect](/admin/connect) page
+(`/connect#connect-sdk-health`), not a page of its own. Mushi Mushi checks the active
+app's repo, keys, CI and live site, and lists the problems that stop bug reports from
+arriving, each with a fix. It catches "I installed the SDK two weeks ago and forgot to
+ship the deploy".
 
-## What it shows
+## What it checks
 
-For each SDK runtime that's posted in the last 24 h:
+| Problem | Severity | Fix offered |
+| --- | --- | --- |
+| No GitHub repo is connected | error (warn once the SDK has checked in) | none: connect a repo |
+| The SDK isn't in your app yet | error | **File install task** for your fix agent |
+| GitHub Actions is missing the Mushi keys | error (warn once seen) | **Write CI secrets** to the repo |
+| This app has no working SDK key | error | **Write CI secrets** (mints a key and writes it) |
+| The SDK has never checked in | error | none |
+| An SDK update is out | warn | **Open upgrade PR**, or a link to the upgrade PR already open with its CI state |
+| Your site's security policy blocks Mushi | error | **File CSP task** |
+| Cold: no check-in for N days | warn (after 7 days) | none |
 
-- **Heartbeat dot** — green / amber / red based on age of the most
-  recent successful API call (≤ 5 min / ≤ 1 h / older).
-- **Version** with an inline link to the matching npm release notes.
-  An out-of-date pill appears when the project is more than one minor
-  behind the latest published version.
-- **Origin / platform** — the user-agent fingerprint of the runtime
-  (browser, iOS app, React Native, Node).
-- **Last error** if any — clipped to the most recent classification
-  failure, with a click-through to the report detail.
+A check that could not run (no live site address known, the SDK versions could not be
+read, …) is listed under the problems as a note. The section never says "No SDK problems
+found" while a check could not run.
 
-## Out-of-date detection
+**Fix all** runs every pending fix in order: CI secrets first, then the install task,
+then the upgrade PR, then the CSP task. Writing secrets to GitHub and **Fix all** ask
+you to confirm first. **Check again** re-runs the checks.
 
-The SDK health card watches the **published** versions on npm and
-compares against the version each runtime calls in with. The check is
-gentle — minor-behind nudges live in the card; major-behind pops a
-banner across the project page until it's acknowledged or the SDK is
-upgraded.
+## Heartbeat freshness
 
-## Setup checklist integration
+The same freshness scale is used wherever the console shows the SDK heartbeat (the
+project switcher, the Connect snapshot and the key list):
 
-The first SDK heartbeat flips the **Connect SDK** step on the project
-setup checklist from open to complete. If a heartbeat hasn't arrived
-within an hour of the API key being issued, the checklist surfaces the
-diagnostics card directly so you can see which call is failing.
+- **Healthy**: last check-in under 1 hour ago
+- **Stale**: up to 7 days
+- **Cold**: more than 7 days
+- **Never**: no check-in yet
 
 ## Where it lives
 
-- **Project page** — collapsed by default unless any SDK is in the red.
-- **Onboarding wizard** — the same card mounts on the final step so the
-  first heartbeat lands while the developer's still in flow.
-- **Organization → Health** — rolls up across every project in the org,
-  for organisations with several internal apps to keep an eye on.
+- **Connect page**: the **SDK health** section.
+- **Setup checklist**: the "Install the SDK in your app" step's **Fix** button opens the same panel.
+- **Project switcher**: each app shows a one-line heartbeat that links to SDK health.
+
+## API
+
+```bash
+GET  /v1/admin/projects/:id/sdk-health
+POST /v1/admin/projects/:id/sdk-health/tasks
+```
 
 ## Related
 
-- [SDK reference → Overview](/sdks) — every published SDK with its
+- [SDK reference → Overview](/sdks): every published SDK with its
   current latest version.
-- [Concepts → Architecture](/concepts/architecture) — where the
+- [SDK upgrade lockfile helper](/admin/sdk-upgrade-lockfile): make upgrade PRs pass a
+  frozen-lockfile install.
+- [Concepts → Architecture](/concepts/architecture): where the
   heartbeat data flows in the gateway.

@@ -15,6 +15,12 @@ describe('fixFirstOrder', () => {
     expect(order.map((x) => x.id)).toEqual(['high-ten', 'critical', 'low-many', 'high-one'])
   })
 
+  it('shows one row per duplicate group, the best of it', () => {
+    const g = (id: string, users: number) => ({ ...r(id, 'high', users), report_group_id: 'grp-timeout' })
+    const order = fixFirstOrder([g('dup-1', 5), g('dup-2', 5), g('dup-3', 2), r('other', 'medium', 1)])
+    expect(order.map((x) => x.id)).toEqual(['dup-1', 'other'])
+  })
+
   it('leaves out reports whose fix is already on the way', () => {
     expect(fixFirstOrder([r('a', 'critical', 5, undefined, 'fixing'), r('b', 'low')]).map((x) => x.id)).toEqual(['b'])
   })
@@ -43,6 +49,20 @@ describe('bugQuestions', () => {
     expect(qs).toEqual([
       'Where in the code does "Checkout total shows NaN" come from?',
       'Where in the code does "Lesson rail crashes" come from?',
+      'Where in the code does "Footer link is grey" come from?',
+    ])
+  })
+
+  // Three reports with one title made three identical chips and a React duplicate-key error on Code map (2026-10-28).
+  it('asks about a shared title once and fills up with the next bug', () => {
+    const qs = bugQuestions([
+      { ...r('a', 'high'), title: 'DbError: canceling statement' },
+      { ...r('b', 'high'), title: 'DbError: canceling statement' },
+      { ...r('c', 'high'), title: 'DbError: canceling statement' },
+      { ...r('d', 'low'), title: 'Footer link is grey' },
+    ])
+    expect(qs).toEqual([
+      'Where in the code does "DbError: canceling statement" come from?',
       'Where in the code does "Footer link is grey" come from?',
     ])
   })

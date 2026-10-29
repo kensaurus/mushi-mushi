@@ -53,11 +53,13 @@ export function DashboardPage() {
   const navigate = useNavigate()
   const copy = usePageCopy('/dashboard')
 
-  // A report, fix or deploy changes Home at once; 1 s debounce for bursts.
+  // A report or fix on this app changes Home. One /home read is several
+  // seconds of queries, and a busy pipeline writes fix events every few
+  // seconds: only this app's rows, at most one reload per 5-15 s.
   const { channelState } = useRealtimeReload(
     ['reports', 'fix_attempts', 'fix_events', 'fix_dispatch_jobs'],
     reload,
-    { debounceMs: 1000, enabled: !loading && !error && !!data },
+    { debounceMs: 5000, maxWaitMs: 15_000, projectId: activeProjectId, enabled: !loading && !error && !!data },
   )
 
   // The first merged fix is the proof the loop closed on this app.
@@ -177,7 +179,7 @@ export function DashboardPage() {
           </div>
 
           <div className="grid gap-3 lg:grid-cols-2 [&>*]:min-w-0">
-            <NeedsYouCard section={data.needsYou} partial={data.partial} />
+            <NeedsYouCard section={data.needsYou} fixFirst={data.fixFirst} partial={data.partial} />
             <ReleaseCard section={data.release} projectId={activeProjectId} />
           </div>
 

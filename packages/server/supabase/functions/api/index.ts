@@ -11,10 +11,7 @@ import { registerSdkAssistantRoutes } from './routes/sdk-assistant.ts';
 import { registerConsoleKnowledgeRoutes } from './routes/console-knowledge.ts';
 import { registerAdminOpsRoutes } from './routes/admin-ops.ts';
 import { registerSiteWatchRoutes } from './routes/site-watch.ts';
-import { registerByokSpendDownRoutes } from './routes/byok-spend-down.ts';
-import { registerByokReviewFollowupRoutes } from './routes/byok-review-followups.ts';
 import { registerBillingChangePlanRoutes } from './routes/billing-change-plan.ts';
-import { registerDoctorRoutes } from './routes/doctor.ts';
 import { registerBillingProjectsQueueGraphRoutes } from './routes/billing-projects-queue-graph.ts';
 import { registerCodebaseRoutes } from './routes/codebase.ts';
 import { registerRepoDigestRoutes } from './routes/repo-digest.ts';
@@ -84,6 +81,7 @@ import { registerIdentitySecretRoutes } from './routes/identity-secret.ts';
 import { registerSessionRoutes } from './routes/sessions.ts';
 import { registerEventRoutes } from './routes/events.ts';
 import { registerGrowthRoutes } from './routes/growth.ts';
+import { forwardPageView } from './page-view-forward.ts';
 import { registerEventsAdminRoutes } from './routes/events-admin.ts';
 import { registerLifecycleEmailRoutes } from './routes/lifecycle-emails.ts';
 import { registerSlackEventsRoutes } from './routes/slack-events.ts';
@@ -109,6 +107,8 @@ function forwardToApiExt(paths: string[]): void {
     app.all(path, (c) =>
       proxyToFunction(c.req.raw, 'api-ext', c.req.path.replace(/^\/api(?=\/)/, ''), {
         supabaseUrl: Deno.env.get('SUPABASE_URL') ?? '',
+        // Signs the visitor's IP for per-IP limits in api-ext (production-check.ts).
+        clientIpSecret: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || undefined,
       }),
     );
   }
@@ -653,15 +653,21 @@ registerAdminOpsRoutes(app);
 
 // Live-site watch: Firecrawl monitors that file broken pages as reports (ADR 0024).
 registerSiteWatchRoutes(app);
-registerByokSpendDownRoutes(app);
-// Review follow-ups (ADR 0032). GET /v1/admin/byok/cursor/models is the
-// list spend-down, Integrations, and follow-ups share.
-registerByokReviewFollowupRoutes(app);
+// Spend-down and review follow-ups (ADR 0028, 0032): served by api-ext (api size budget).
+// GET /v1/admin/byok/cursor/models is the list spend-down, Integrations, and follow-ups share.
+forwardToApiExt([
+  '/v1/admin/byok/spend-down',
+  '/v1/admin/byok/spend-down/projects/:projectId/resume',
+  '/v1/admin/byok/keys/:keyId/spend-down',
+  '/v1/admin/byok/review-followups',
+  '/v1/admin/byok/cursor/models',
+]);
 
 // In-app plan change (Indie ↔ Pro, monthly ↔ annual) for paying projects.
 registerBillingChangePlanRoutes(app);
 
-registerDoctorRoutes(app);
+// Server doctor: served by api-ext with the Health check that reuses its checks (ADR 0054).
+forwardToApiExt(['/v1/admin/doctor']);
 
 forwardToApiExt(['/v1/admin/inventory', '/v1/admin/inventory/*']);
 
@@ -782,6 +788,9 @@ forwardToApiExt([
   '/v1/admin/projects/:pid/ux-runs/:runId/surfaces/:key/report',
   '/v1/admin/projects/:pid/ux-runs/:runId/uploads',
 ]);
+// Free Production Check and the public scoreboard (production-check.ts,
+// public-scoreboard.ts): the docs /check and /proof pages.
+forwardToApiExt(['/v1/public/production-check', '/v1/public/production-check/:id', '/v1/public/scoreboard']);
 // Fresh-eyes runs (fresh-eyes.ts, ADR 0053).
 forwardToApiExt([
   '/v1/admin/fresh-eyes/test-account',
@@ -789,6 +798,7 @@ forwardToApiExt([
   '/v1/admin/projects/:pid/fresh-eyes/:runId',
   '/v1/admin/projects/:pid/fresh-eyes/:runId/uploads',
   '/v1/admin/projects/:pid/fresh-eyes/:runId/findings',
+  '/v1/admin/projects/:pid/fresh-eyes/:runId/cancel',
 ]);
 registerPullRequestRoutes(app);
 registerProjectGroupRoutes(app);
@@ -797,6 +807,11 @@ registerIdentitySecretRoutes(app);
 registerSessionRoutes(app);
 registerEventRoutes(app);
 registerGrowthRoutes(app);
+// Daily GTM scorecard and the cookieless landing page-view beacon
+// (landing-visits.ts in api-ext; api only hashes the visitor IP into the
+// beacon's rate-limit bucket, page-view-forward.ts).
+forwardToApiExt(['/v1/admin/growth/daily']);
+app.post('/v1/public/page-view', forwardPageView);
 registerEventsAdminRoutes(app);
 registerLifecycleEmailRoutes(app);
 registerSlackEventsRoutes(app);
@@ -823,6 +838,8 @@ forwardToApiExt(['/v1/admin/projects/:id/sdk-health', '/v1/admin/projects/:id/sd
 forwardToApiExt(['/v1/admin/projects/:id/home', '/v1/admin/projects/:id/home/thumbnail']);
 // setup-gaps.ts and release-batch.ts (console ops plan P1, read-only); deploy size limit, 2026-10-27.
 forwardToApiExt(['/v1/admin/setup-gaps', '/v1/admin/release-batch']);
+// health-checks.ts: the Health check registry (plan-simplicity-2026-10 Phase 1, read-only); deploy size limit.
+forwardToApiExt(['/v1/admin/health-checks']);
 // work.ts: local workers (`mushi work --daemon`, ADR 0048); deploy size limit, 2026-10-27.
 forwardToApiExt(['/v1/worker/*', '/v1/admin/work/*']);
 // repo-housekeeping.ts (ADR 0051, console ops plan P4): repo clean-up from /repo; deploy size limit, 2026-10-27.

@@ -7,7 +7,7 @@ Canonical URLs: [`canonical-urls.md`](./canonical-urls.md)
 | Field | Public surface | Value |
 | --- | --- | --- |
 | **Title** | Page heading | `Mushi Mushi` |
-| **Description** | Subtitle under `@kensaurus` | Your AI shipped it. Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key. |
+| **Description** | Subtitle under `@kensaurus` | Your AI shipped it. Mushi Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key. |
 | **Content** | Overview tab | Unnamed `<textarea>` (4th on form, index 3) — not TipTap; paste markdown below |
 | **Server Config** | Right rail | JSON below |
 

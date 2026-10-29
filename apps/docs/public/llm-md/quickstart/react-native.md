@@ -4,13 +4,13 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/react-native
 
 ---
 title: React Native quickstart
-description: Add shake-to-report bug capture to a React Native or Expo app with @mushi-mushi/react-native — install, mount the provider, and verify the first report.
+description: Add Mushi Mushi shake-to-report to a React Native or Expo app with @mushi-mushi/react-native. Install, mount the provider, and check the first report.
 ---
 
 # React Native quickstart
 
-Add a shake-to-report button to your iOS or Android app — same API key powers
-the widget and your editor tools.
+Add Mushi Mushi's shake-to-report and floating bug button to your iOS or
+Android app.
 
 Works for **bare React Native CLI** apps and **Expo** apps (managed-with-dev-client
 or bare). Peer dependency is React Native **≥ 0.72**; this quickstart targets
@@ -110,12 +110,13 @@ patch for these (`__require` errors in Metro); releases with this fix need none.
 
 Run your app on a simulator or a device, tap the bug button, type a
 description, and submit. The report should appear in the Mushi admin console
-within a couple of seconds, tagged `sdk:react-native@`.
+within a couple of seconds, showing the SDK that sent it
+(`@mushi-mushi/react-native` and its version).
 
 If nothing arrives:
 
 - Confirm `apiKey` is a Mushi project key (it starts with `mushi_`, like every
-  Mushi key) with the `report:write` scope — not the Supabase service-role key.
+  Mushi key) with the `report:write` scope, not the Supabase service-role key.
 - Confirm `` is at the **root** of the component tree, above
   any `NavigationContainer`.
 - iOS release builds must use HTTPS for the Mushi endpoint (the default).
