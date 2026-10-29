@@ -32,16 +32,16 @@ function feedbackSignalTooltip(signal: FeedbackSignal): string {
 function feedbackSignalToneClass(signal: FeedbackSignal): string {
   switch (signal) {
     case 'confirms':
-      return `border-ok/40 ${CHIP_TONE.okSubtle}`
+      return CHIP_TONE.okSubtle
     case 'already_fixed':
-      return `border-info/40 ${CHIP_TONE.infoSubtle}`
+      return CHIP_TONE.infoSubtle
     case 'wrong_target':
     case 'agent_fixed_wrong_thing':
-      return `border-warn/40 ${CHIP_TONE.warnSubtle}`
+      return CHIP_TONE.warnSubtle
     case 'noise':
-      return `border-danger/40 ${CHIP_TONE.dangerSubtle}`
+      return CHIP_TONE.dangerSubtle
     case 'not_fixed':
-      return `border-warn/40 ${CHIP_TONE.warnSubtle}`
+      return CHIP_TONE.warnSubtle
     default:
       return 'border-edge-subtle bg-surface-overlay text-fg-muted'
   }
@@ -164,7 +164,7 @@ export function ReportComments({
           <button
             type="button"
             onClick={() => setVisibleToReporter(true)}
-            className={`inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-md border border-accent/35 ${CHIP_TONE.accentSubtle} hover:bg-accent/10 motion-safe:transition-opacity`}
+            className={`inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-md ${CHIP_TONE.accentSubtle} hover:bg-accent/10 motion-safe:transition-opacity`}
           >
             Message reporter
           </button>
