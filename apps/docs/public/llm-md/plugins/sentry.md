@@ -4,19 +4,19 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/sentry
 
 ---
 title: Sentry
-description: Two-way Sentry integration — Sentry errors flow into Mushi's queue, merging a Mushi fix resolves the Sentry issue, and critical reports mirror back.
+description: Two-way Sentry integration. Sentry errors land in the Mushi Mushi queue, merging a fix resolves the issue, and an optional plugin copies triaged reports back.
 ---
 
 # Sentry plugin
 
-Two-way Sentry integration: Sentry errors flow **into** Mushi's queue, and Mushi
-fixes flow **back** — merging a fix resolves the linked Sentry issue, resolving
-in Sentry resolves the linked report. The outbound plugin below also mirrors
-critical Mushi reports into Sentry.
+Two-way Sentry integration: Sentry errors flow **into** the Mushi Mushi queue,
+and fixes flow **back**. Merging a fix resolves the linked Sentry issue, and
+resolving in Sentry resolves the linked report. The outbound plugin below
+also copies triaged Mushi reports into Sentry.
 
-## Route Sentry errors into Mushi (inbound)
+## Route Sentry errors into Mushi Mushi (inbound)
 
-No plugin needed — this is built into the hosted API:
+No plugin needed. This is built into the hosted API:
 
 1. In Sentry: **Settings → Developer Settings → Custom Integrations → Create
    New Integration → Internal Integration**. Set its webhook URL to the
@@ -24,7 +24,7 @@ No plugin needed — this is built into the hosted API:
    (`/v1/webhooks/sentry?projectId=<your-project-id>`), subscribe to the
    **issue** resource, enable **Alert Rule Action**, and give it **Issue &
    Event: Read & Write**.
-2. In the Mushi console: **Integrations → Sentry** — paste the integration's
+2. In the Mushi console, open **Integrations → Sentry** and paste the integration's
    **Client Secret** as the **Webhook secret**, plus your org slug, project
    slug and auth token. Sentry signs every delivery with that secret
    (`Sentry-Hook-Signature`, HMAC-SHA256 of the body); Mushi also requires a
@@ -62,24 +62,24 @@ In the console, all of this is on the Sentry card:
 
 Behavior:
 
-- **Deduped per Sentry issue** — repeat alerts land on the same report;
+- **Deduped per Sentry issue**: repeat alerts land on the same report;
   re-importing a linked issue returns the existing report.
-- **Regressions reopen** — an alert for an already-fixed report flips it to
+- **Regressions reopen**: an alert for an already-fixed report flips it to
   `reopened` and bumps the regression counter instead of filing a duplicate.
-- **Resolves both ways** — when a Mushi fix PR merges, Mushi resolves the
+- **Resolves both ways**: when a Mushi fix PR merges, Mushi resolves the
   linked Sentry issue through the Sentry API (`resolvedInNextRelease`, else
   `resolved`) and comments the PR link; the fix commit also carries
   `Fixes <SHORT-ID>` for Sentry's GitHub integration. A failed resolve shows
   on the fix timeline. `action: resolved` from Sentry resolves the linked
   Mushi report.
-- **Fix context** — the files named in an imported issue's stack are indexed
+- **Fix context**: the files named in an imported issue's stack are indexed
   right away, and codebase sweeps index stack-frame files of open
   Sentry-linked reports first.
 - Your Sentry **alert rules are the noise filter**: only alerts you route at
   the webhook are ingested. Sentry User Feedback submissions are also ingested
   on the same endpoint.
 
-## Copy Mushi reports into Sentry (outbound plugin)
+## Copy Mushi Mushi reports into Sentry (outbound plugin)
 
 Everything above is built in. The plugin is only for the other direction:
 copying the bugs your users report through Mushi into Sentry, so they sit
@@ -92,7 +92,7 @@ next to your Sentry errors. You run it on your own server.
    export MUSHI_PLUGIN_SECRET=...   # must match the signing secret in step 2
    export SENTRY_DSN=...
    export SEVERITY_THRESHOLD=high   # optional: low | medium | high | critical
-   # Optional: resolve on fix.applied and attach as User Feedback
+   # Optional: resolve the matching Sentry issue on fix.applied
    export SENTRY_AUTH_TOKEN=...     # event:admin + project:read
    export SENTRY_ORG_SLUG=acme
    export SENTRY_PROJECT_SLUG=web
@@ -111,6 +111,6 @@ next to your Sentry errors. You run it on your own server.
 
 | Event | Action |
 | --- | --- |
-| `report.classified` (severity ≥ threshold) | Attach as Sentry User Feedback when the report has a `sentry_event_id` and an auth token is set; otherwise capture a Sentry event fingerprinted `['mushi', projectId, reportId]` |
+| `report.classified` (severity ≥ threshold, default `high`) | Capture a Sentry event fingerprinted `['mushi', projectId, reportId]`. The plugin can attach the report as Sentry User Feedback instead when the event carries `report.sentry_event_id` and an auth token is set, but Mushi Mushi does not put `sentry_event_id` in the event today |
 | `fix.proposed` | Capture an `info` event, only with `MARK_IN_PROGRESS=true` |
-| `fix.applied` | Capture an `info` event tagged `mushi.fixed=true`; with an auth token, resolve the matching Sentry issue |
+| `fix.applied` | Capture an `info` event tagged `mushi.fixed=true`; with an auth token, resolve the matching Sentry issue. The PR link is attached as the `mushi.pr_url` tag |

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
+import type * as ConfigModule from './config.js'
 import {
   HOSTED_CONSOLE_BASE,
   consoleUrl,
@@ -9,6 +10,9 @@ import {
   apiKeyHint,
   cliSetupDeepLink,
 } from './console-url.js'
+
+// The machine's own ~/.config/mushi/config.json (a consoleUrl, a profile) must not decide these results.
+vi.mock('./config.js', async (importOriginal) => ({ ...(await importOriginal<typeof ConfigModule>()), loadConfig: () => ({}) }))
 
 describe('console-url', () => {
   const originalEnv = process.env['MUSHI_CONSOLE_URL']
@@ -35,6 +39,7 @@ describe('console-url', () => {
   })
 
   it('resolveConsoleUrlSync falls back to hosted when not in monorepo', () => {
+    delete process.env['MUSHI_CONSOLE_URL']
     vi.spyOn(process, 'cwd').mockReturnValue('/tmp/some-other-app')
     expect(resolveConsoleUrlSync()).toBe(HOSTED_CONSOLE_BASE)
     vi.restoreAllMocks()

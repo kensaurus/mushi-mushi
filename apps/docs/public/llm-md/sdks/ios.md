@@ -4,18 +4,18 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/ios
 
 ---
 title: 'MushiMushi (iOS)'
-description: API reference for MushiMushi, Mushi's native Swift SDK — configure, report, captureError, breadcrumbs and PII scrubbing. Preview, via SwiftPM from master.
+description: Reference for MushiMushi, the Mushi Mushi native Swift SDK. configure, report, captureError, breadcrumbs and PII scrubbing. Preview, via SwiftPM from master.
 ---
 
 # `MushiMushi` (iOS / macOS / tvOS)
 
-Native Swift SDK with no third-party dependencies.
+The Mushi Mushi native Swift SDK, with no third-party dependencies.
 
-  **Preview.** Not on CocoaPods and no release tag yet — add the package with
+  **Preview.** Not on CocoaPods and no release tag yet. Add the package with
   Swift Package Manager on the `master` branch.
 
 ```swift
-// Swift Package Manager — Package.swift
+// Swift Package Manager: Package.swift
 .package(url: "https://github.com/kensaurus/mushi-mushi.git", branch: "master")
 ```
 
@@ -25,7 +25,7 @@ See [Quickstart → iOS](/quickstart/ios) for the full setup walkthrough.
 
 | Method | Purpose |
 | --- | --- |
-| `Mushi.shared.configure(with: MushiConfig(...))` | Boot the SDK — call in `App.init()` or `application(_:didFinishLaunchingWithOptions:)` |
+| `Mushi.shared.configure(with: MushiConfig(...))` | Boot the SDK; call in `App.init()` or `application(_:didFinishLaunchingWithOptions:)` |
 | `Mushi.shared.report(description:category:metadata:)` | Submit a report from code, no UI |
 | `Mushi.shared.captureError(_:context:)` | Report a Swift `Error` with its name, message and cause |
 | `Mushi.shared.showWidget(category:metadata:)` | Present the bottom-sheet widget |
@@ -63,7 +63,7 @@ Mushi.shared.setUser(["id": user.id, "email": user.email])
 
 Reports that fail to send are appended to
 `Application Support/MushiMushi/queue.ndjson`, capped by
-`offlineQueueMaxBytes` (oldest entries trimmed first), and flushed on a timer
+`offlineQueueMaxBytes` (default 1 MB; oldest entries trimmed first), and flushed on a timer
 and when the network comes back.
 
 ## Screenshot capture

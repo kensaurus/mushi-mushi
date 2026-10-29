@@ -52,7 +52,8 @@ export function errorSection<T>(err: unknown): HomeSection<T> {
 /** good / warn / bad are traffic lights; busy = running now; off = no signal. */
 export type Light = 'good' | 'warn' | 'bad' | 'busy' | 'off'
 
-export type HealthId = 'site' | 'errors' | 'sdk' | 'ci'
+/** `setup` shows only on apps with a finished fresh-eyes run (ADR 0053). */
+export type HealthId = 'site' | 'errors' | 'sdk' | 'ci' | 'setup'
 
 export interface HealthSignal {
   id: HealthId
@@ -232,6 +233,33 @@ export function ciSignal(input: CiInput): HealthSignal {
   return { ...base, status: 'ok', light: 'good', headline: 'Passing', detail: `${plural(jobs.length, 'check')} green on the latest commit.`, at, connect: null }
 }
 
+export interface SetupInput {
+  /** The latest finished fresh-eyes run that was not a dry run, or null. */
+  run: { ttfv_seconds: number | null; steps: number | null; reached: number | null; stalled_at: { screen: string; reason: string } | null; finished_at: string | null; counts: { sessions?: number } | null } | null
+}
+
+/** First-time setup under this is a good light; over SETUP_SLOW_S, a bad one. */
+export const SETUP_GOOD_S = 5 * 60
+export const SETUP_SLOW_S = 15 * 60
+export const FRESH_EYES_HREF = '/first-user-test'
+
+/**
+ * "First-time setup: 6 min, 11 steps", from the latest fresh-eyes run. Null
+ * when the app has none, so apps that never ran one get no extra light.
+ */
+export function setupSignal(input: SetupInput): HealthSignal | null {
+  const r = input.run
+  if (!r) return null
+  const base = { id: 'setup' as const, label: 'First-time setup', href: FRESH_EYES_HREF, status: 'ok' as const, at: r.finished_at, connect: null }
+  const sessions = r.counts?.sessions ?? 0
+  if (!r.reached || r.ttfv_seconds == null) {
+    return { ...base, light: 'bad', headline: r.stalled_at ? `Stalls at ${r.stalled_at.screen}` : 'Goal not reached', detail: `None of ${plural(sessions, 'first-time visitor')} reached the goal in the last run.` }
+  }
+  const minutes = Math.max(1, Math.round(r.ttfv_seconds / 60))
+  const light: Light = r.ttfv_seconds <= SETUP_GOOD_S ? 'good' : r.ttfv_seconds <= SETUP_SLOW_S ? 'warn' : 'bad'
+  return { ...base, light, headline: `${minutes} min, ${plural(r.steps ?? 0, 'step')}`, detail: `${r.reached} of ${plural(sessions, 'first-time visitor')} reached the goal in the last run.` }
+}
+
 // ── Release ─────────────────────────────────────────────────────────────────
 
 export type StationId = 'fix' | 'ci' | 'train' | 'merged' | 'deployed'
@@ -306,6 +334,7 @@ export const NEEDS_YOU_MAX = 5
 
 /** Pipeline groups that need a person, by how much they cost if ignored. */
 const GROUP_IMPACT: Record<string, { impact: number; action: string }> = {
+  review_no_key: { impact: 82, action: 'Add a Claude key' },
   hold: { impact: 80, action: 'Decide' },
   autofix_no_agent: { impact: 76, action: 'Set up agents' },
   agent_failed: { impact: 70, action: 'See why' },
@@ -325,7 +354,12 @@ export interface NeedsYouInput {
   criticalWaiting: number | null
   pipeline: PipelineStage[] | null
   sdk: { status: string; version: string | null; latest: string | null } | null
+  /** Local worker flags for this app, worst first (work-flags.ts); null when the read failed. */
+  workers?: ReadonlyArray<{ id: string; severity: 'danger' | 'warn'; title: string }> | null
 }
+
+/** Worker problems take at most this many Needs you rows; the rest are counted in the last one. */
+const WORKER_ITEMS_MAX = 2
 
 /** At most NEEDS_YOU_MAX items, highest impact first; each one sentence and one button. */
 export function buildNeedsYou(input: NeedsYouInput): NeedsYouItem[] {
@@ -351,6 +385,13 @@ export function buildNeedsYou(input: NeedsYouInput): NeedsYouItem[] {
       const meta = GROUP_IMPACT[g.id] ?? DEFAULT_GROUP
       items.push({ id: `pipeline_${g.id}`, impact: meta.impact, text: `${g.label}.`, action: { label: meta.action, to: pipelineHref } })
     }
+  }
+  // A local worker that stopped doing useful work (ADR 0048 amendment 2026-10-28): never hidden.
+  const workers = input.workers ?? []
+  const workersHref = `/pipeline?tab=workers&project=${encodeURIComponent(input.projectId)}`
+  for (const [i, f] of workers.slice(0, WORKER_ITEMS_MAX).entries()) {
+    const more = i === WORKER_ITEMS_MAX - 1 && workers.length > WORKER_ITEMS_MAX ? ` (${plural(workers.length - WORKER_ITEMS_MAX, 'more worker problem')} on Workers)` : ''
+    items.push({ id: `worker_${f.id}`, impact: f.severity === 'danger' ? 85 : 58, text: `Local worker: ${f.title}.${more}`, action: { label: 'Open Workers', to: workersHref } })
   }
   if (input.sdk && (input.sdk.status === 'outdated' || input.sdk.status === 'deprecated')) {
     const range = input.sdk.version && input.sdk.latest ? ` from ${input.sdk.version} to ${input.sdk.latest}` : ''

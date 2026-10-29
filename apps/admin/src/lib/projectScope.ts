@@ -24,7 +24,7 @@
  */
 
 import { useCallback, useSyncExternalStore } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { createSearchParams, useLocation, useNavigate, useSearchParams, type SetURLSearchParams } from 'react-router-dom'
 import {
   ACTIVE_PROJECT_QUERY_PARAM,
   getActiveProjectIdSnapshot,
@@ -176,9 +176,29 @@ export function useProjectScope(): ProjectScope {
   return { mode: 'project', projectId: isValidProjectId(fromUrl) ? fromUrl : getActiveProjectIdSnapshot() }
 }
 
+/**
+ * `useSearchParams`, but its setter keeps the `#hash`. React Router's setter
+ * navigates to a bare `?…`, which drops it, so `/settings?tab=ci-cost` lost
+ * its section the moment the switcher added `?project=` (console sweep,
+ * 2026-10-28). Use it for every write that only adds a scope param.
+ */
+export function useSearchParamsKeepingHash(): [URLSearchParams, SetURLSearchParams] {
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const { hash } = useLocation()
+  const setSearchParams = useCallback<SetURLSearchParams>(
+    (nextInit, navigateOpts) => {
+      const next = createSearchParams(typeof nextInit === 'function' ? nextInit(searchParams) : nextInit)
+      navigate({ search: `?${next}`, hash }, navigateOpts)
+    },
+    [navigate, searchParams, hash],
+  )
+  return [searchParams, setSearchParams]
+}
+
 /** Switch between one app and all apps, in storage and the URL together. */
 export function useSetProjectScopeMode(): (mode: ProjectScopeMode) => void {
-  const [, setSearchParams] = useSearchParams()
+  const [, setSearchParams] = useSearchParamsKeepingHash()
   return useCallback(
     (mode: ProjectScopeMode) => {
       setStoredProjectScopeMode(mode)

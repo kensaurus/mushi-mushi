@@ -40,7 +40,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 // TypeScript's own parser and printer (never by regex, which cannot tell a
 // comment from a `//` inside a string or template), JSON minified. Smaller
 // functions upload byte-for-byte, so their stack traces keep source lines.
-export const UPLOAD_COMPACT_BYTES = 4_800_000
+// 2026-10-28: api-ext uploaded uncompacted at 4,645.7 KiB (4.76 MB, under the
+// old 4.8 MB mark) and got "exceeds the maximum deployment size (5 MB)", while
+// api passed at 4,419.4 KiB compacted; the real cap is lower than it looks.
+export const UPLOAD_COMPACT_BYTES = 4_300_000
 
 function loadTypescript() {
   const roots = [process.env.MUSHI_TYPESCRIPT_DIR, SERVER_PKG_ABS, fileURLToPath(new URL('../apps/admin/', import.meta.url))]

@@ -142,7 +142,9 @@ export function PageHelpBanner({
   const iconClass = 'bg-surface-overlay text-fg-muted'
 
   // Related pages stay visible under the help row: the owner could not find
-  // the cross-links while they sat inside the closed help (2026-10-08).
+  // the cross-links while they sat inside the closed help (2026-10-08). While
+  // the help is open its own "Related pages" section shows them, so the row
+  // hides rather than list the same links twice (2026-10-27).
   const visibleLinks = resolvedLinks.filter((l) => l.to.split('#')[0] !== pathname)
   return (
     <div className="mb-3 flex w-full min-w-0 flex-col gap-1">
@@ -197,7 +199,7 @@ export function PageHelpBanner({
         </div>
       </div>
     </details>
-    <RelatedLinksRow links={visibleLinks} />
+    {open ? null : <RelatedLinksRow links={visibleLinks} />}
     </div>
   )
 }

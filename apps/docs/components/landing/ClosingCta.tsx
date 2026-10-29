@@ -1,7 +1,8 @@
 'use client'
 
 /**
- * Closing CTA — solo primary path + team operators link (no scroll hijack).
+ * Closing CTA — the solo signup and the community line (no scroll hijack).
+ * Team and enterprise setup is operator material and never leads (ADR 0052).
  */
 import Link from 'next/link'
 import { motion } from 'motion/react'
@@ -63,18 +64,6 @@ export function ClosingCta() {
                 {LANDING_OPERATOR.soloCta}
               </Link>
             )}
-          </p>
-        </LandingStaggerItem>
-        <LandingStaggerItem>
-          <p className="landing-section-lead landing-closing-team">
-            {LANDING_OPERATOR.teamLead}{' '}
-            <a
-              href={LANDING_OPERATOR.teamHref}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {LANDING_OPERATOR.teamCta}
-            </a>
           </p>
         </LandingStaggerItem>
         <LandingStaggerItem>

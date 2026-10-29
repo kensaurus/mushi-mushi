@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/core",
-  "version": "1.33.3",
+  "version": "1.33.4",
   "description": "Types, API client and pre-filter for Mushi SDKs. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
   "license": "MIT",
   "type": "module",
@@ -99,7 +99,7 @@
   "size-limit": [
     {
       "path": "dist/index.js",
-      "limit": "25.5 KB"
+      "limit": "25.7 KB"
     }
   ],
   "devDependencies": {

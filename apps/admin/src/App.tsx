@@ -1,4 +1,5 @@
 import { legacyHubRoutes } from './lib/pageHubs'
+import { ReportsHomeRedirect } from './lib/reportsHomeRedirect'
 import { HubRedirect } from './components/PageHubView'
 import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom'
@@ -60,6 +61,7 @@ const DesignPage = lazy(() => import('./pages/DesignPage').then(m => ({ default:
 const TeamPage = lazy(() => import('./pages/TeamPage').then(m => ({ default: m.TeamPage })))
 const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })))
 const UxRunsPage = lazy(() => import('./pages/UxRunsPage').then(m => ({ default: m.UxRunsPage })))
+const FirstUserTestPage = lazy(() => import('./pages/FirstUserTestPage').then(m => ({ default: m.FirstUserTestPage })))
 const PortfolioPage = lazy(() => import('./pages/PortfolioPage').then(m => ({ default: m.PortfolioPage })))
 const PromptLabPage = lazy(() => import('./pages/PromptLabPage').then(m => ({ default: m.PromptLabPage })))
 const MarketplacePage = lazy(() => import('./pages/MarketplacePage').then(m => ({ default: m.MarketplacePage })))
@@ -239,7 +241,7 @@ function TesterRoute({ children }: { children: ReactNode }) {
           <h1 className="text-lg font-semibold">Mushi Bounties requires Mushi Cloud</h1>
           <p className="text-sm text-fg-muted">
             The tester marketplace and reward system are hosted features — they
-            require a Mushi Cloud account with Pro or higher.
+            require a Mushi Cloud account on Studio or higher.
           </p>
           <a
             href="https://kensaur.us/mushi-mushi/pricing"
@@ -303,11 +305,12 @@ export function App() {
         {/* The marketing landing lives at the product root (kensaur.us/mushi-mushi/),
             served by the docs static export via the CloudFront internal rewrite
             (scripts/cloudfront-mushi-spa-router.js). The admin SPA root
-            (/mushi-mushi/admin/) is the app itself, so `/` bounces straight to the
-            dashboard — ProtectedRoute redirects to /login when unauthenticated.
+            (/mushi-mushi/admin/) is the app itself, so `/` bounces to /reports
+            and keeps the query (`?project=`) and hash. ProtectedRoute redirects
+            to /login when unauthenticated.
             (Retired PublicHomePage so the noindex admin shell no longer duplicates
             the indexable landing.) */}
-        <Route path="/" element={<Navigate to="/reports" replace />} />
+        <Route path="/" element={<ReportsHomeRedirect />} />
         <Route path="/login" element={<LoginPage />} />
         {/* Bare /signup lands directly on the signup form instead of bouncing
             through ProtectedRoute -> /login (see docs/pricing.mdx CTA and
@@ -373,6 +376,9 @@ export function App() {
                     <Route key={path} path={path} element={<HubRedirect hub={hub} viewId={viewId} />} />
                   ))}
                   <Route path="/team" element={<TeamPage />} />
+                  {/* Stripe Checkout returns here (STRIPE_SUCCESS_URL / STRIPE_CANCEL_URL defaults); lib/billingFunnel.ts. */}
+                  <Route path="/billing/success" element={<Navigate to="/team?view=billing&checkout=success" replace />} />
+                  <Route path="/billing/cancel" element={<Navigate to="/team?view=billing&checkout=cancelled" replace />} />
                   <Route path="/dashboard" element={<HomePage />} />
                   <Route path="/console" element={<Navigate to="/dashboard" replace />} />
                   <Route path="/reports" element={<ReportsPage />} />
@@ -398,6 +404,7 @@ export function App() {
                   <Route path="/credits" element={<CreditsPage />} />
                   <Route path="/design" element={<DesignPage />} />
                   <Route path="/ux-runs" element={<UxRunsPage />} />
+                  <Route path="/first-user-test" element={<FirstUserTestPage />} />
                   <Route path="/portfolio" element={<PortfolioPage />} />
                   <Route path="/prompt-lab" element={<PromptLabPage />} />
                   <Route path="/fine-tuning" element={<Navigate to="/prompt-lab" replace />} />

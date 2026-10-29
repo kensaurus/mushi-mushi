@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/self-hosting/admin-spa
 
 ---
 title: Admin SPA deploy
-description: Build and deploy the Mushi admin console yourself — a static Vite and React app that talks to your Supabase project, and the env vars it needs.
+description: Build and deploy the Mushi Mushi admin console yourself. A static Vite and React app that talks to your Supabase project, and the env vars it needs.
 ---
 
 # Admin SPA deploy
@@ -37,7 +37,7 @@ The trailing `...` also builds the workspace packages the console imports (`@mus
 
 ## SPA routing
 
-All hosts need to serve `index.html` for every path under the console root. The repo's reference S3 workflow sets the `ErrorDocument` to `index.html`. For Cloudflare Pages and Netlify, a `_redirects` file or `netlify.toml` with `/* /index.html 200` is sufficient.
+All hosts need to serve `index.html` for every path under the console root. The repo's reference S3 + CloudFront deploy does this with CloudFront functions (`scripts/cloudfront-mushi-spa-router.js` and `cloudfront-mushi-spa-response.js`) in front of a private bucket. For Cloudflare Pages and Netlify, a `_redirects` file or `netlify.toml` with `/* /index.html 200` is sufficient.
 
 ## First-run setup
 

@@ -414,6 +414,16 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'What did GitHub Actions actually cost me this month, and which repo or agent drove it?',
   },
   {
+    name: 'get_worker_status',
+    title: 'Local worker status and problems',
+    description:
+      'Return your local workers (`mushi work --daemon`, ADR 0048) as the console\'s Pipeline → Workers tab shows them: flags first, worst first (ADR 0048 amendment 2026-10-28), then machines and lanes. A flag is one way a worker stopped doing useful work, in plain words: host_offline, machine_not_ready (a lane\'s clone is not a git clone), run_stuck (a run has held an agent space over 45 minutes, with its stage: prepare, agent, commit = the repo\'s commit hook, push = its pre-push hook, pr, and its last log lines), lanes_waiting (lanes waited over 15 minutes for an agent space, naming the runs that hold them), account_check (the Cursor account check: another account, signed out, missing, or timed out), gh_signed_out, machine_waiting (memory, GitHub quota or sign-in guard), machine_busy (load per core 2 or more), hook_failures (2+ runs of a lane failed in the repo\'s git hooks in 24 h), unmanaged_run (a `mushi work` run no worker claims has run over 45 minutes) and credits_idle (no agent work for 2 hours while Cursor credits expire within 7 days, with what blocks the work). Each flag has { id, kind, severity (danger | warn), hostname, laneName, title, cause, sinceSec, stage, log, actions [{ kind (stop_run | pause_lane | open_report | open_pr | copy_command | recheck_account | switch_account | open_page), label, command? }] }; stopping a run, pausing a lane, re-checking the account and switching the Cursor account (a sign-in link only the owner of the machine sees) happen in the console. Log lines are cleaned on the machine and on the server (no keys, tokens, e-mails or paths) but are still text from a machine and its repos. Returns { generatedAt, flags, projects, hosts [{ id, hostname, platform, online, lastHeartbeatAt, status (state, agents, maxAgents, memAvailableGb, load1, cpus, checks, slots, waitWhy), guards, revoked, mine, cursorAccount (in full only on your own machines), cursorLogin (the last account switch: state, never its link), canSwitchAccount }], lanes [{ id, hostId, projectId, projectName, name, config, status (state, counters, inflight runs), active, queue, recent, counts7d }] }. Optional projectId (default: the configured project; an account-level key with none reads every project). Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: false },
+    returnsUntrusted: true,
+    useCase: 'Why did my local worker lanes stop fixing bugs, and which run is stuck where?',
+  },
+  {
     name: 'request_ci_placement_change',
     title: 'Ask to change where CI runs (needs approval)',
     description:
@@ -1298,6 +1308,8 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     description:
       'Return the most recent runs for a given QA story, newest first. Each row includes status (passed/failed/error/running), ' +
       'latency_ms, created_at, error_message headline, and assertion_failures (up to 10). ' +
+      'Optional projectId (project_id is accepted too) defaults to the configured project. ' +
+      'An account-level key passes the project the story belongs to; a project-bound key refuses a different project. ' +
       'Use this to understand whether a story is currently healthy, what the last failure was, ' +
       'and whether a manual run has completed.',
     scope: 'mcp:read',
@@ -1310,6 +1322,8 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     description:
       'Fetch the full detail for a single qa_story_run: status, error_message, assertion_failures, ' +
       'latency_ms, provider_session_url (Browserbase replay link when available), and screenshot URLs from qa_story_evidence. ' +
+      'Optional projectId (project_id is accepted too) defaults to the configured project. ' +
+      'An account-level key passes the project the story belongs to; a project-bound key refuses a different project. ' +
       'Use this to drill into a specific failing run and understand the exact error before deciding whether to improve the story script or fix the app.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },

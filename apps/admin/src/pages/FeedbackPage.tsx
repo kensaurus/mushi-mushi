@@ -275,6 +275,8 @@ export function FeedbackPage() {
         }
         helpFlowPath="/feedback"
       >
+        {/* Only what needs you: "EMPTY" / "CLEAR" restated the status line. */}
+        {stats.awaitingReply > 0 || stats.activeTickets > 0 ? (
         <Badge
           className={
             bannerSeverity === 'ok'
@@ -286,14 +288,9 @@ export function FeedbackPage() {
                   : CHIP_TONE.infoSubtle
           }
         >
-          {stats.awaitingReply > 0
-            ? `${stats.awaitingReply} REPLY`
-            : stats.activeTickets > 0
-              ? `${stats.activeTickets} ACTIVE`
-              : stats.totalTickets === 0
-                ? 'EMPTY'
-                : 'CLEAR'}
+          {stats.awaitingReply > 0 ? `${stats.awaitingReply} REPLY` : `${stats.activeTickets} ACTIVE`}
         </Badge>
+        ) : null}
         <FreshnessPill at={statsFetchedAt} isValidating={statsValidating || ticketsQuery.isValidating} />
         <Btn size="sm" onClick={() => openFeedback('bug')}>
           Report a bug

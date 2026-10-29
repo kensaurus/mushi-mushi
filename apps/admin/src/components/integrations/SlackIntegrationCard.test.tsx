@@ -71,6 +71,17 @@ describe('isSlackInstallUnavailable', () => {
   })
 })
 
+describe('SlackIntegrationCard buttons', () => {
+  // The card had two buttons both called "Save": one for the channel, one for
+  // the legacy webhook (console sweep, 2026-10-28).
+  it('names what each Save button saves', () => {
+    mocks.apiFetch.mockResolvedValue({ ok: true, data: {} })
+    render()
+    expect(buttons('Save')).toHaveLength(0)
+    expect(buttons('Save webhook')).toHaveLength(1)
+  })
+})
+
 describe('SlackIntegrationCard on a server without a Slack app', () => {
   it('turns "Add to Slack" into the webhook form, in plain words', async () => {
     mocks.apiFetch.mockResolvedValue({

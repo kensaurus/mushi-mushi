@@ -4,12 +4,12 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/react
 
 ---
 title: React & Next.js bug reporting SDK
-description: Reference for @mushi-mushi/react — MushiProvider, the useMushi, useMushiSdk and useMushiReport hooks, identifying users, and the rewards hooks and badge.
+description: Reference for @mushi-mushi/react, Mushi Mushi for React. MushiProvider, useMushi, useMushiSdk and useMushiReport hooks, user identity, rewards hooks and badge.
 ---
 
 # `@mushi-mushi/react`
 
-React provider + hooks. Wraps `@mushi-mushi/web`.
+The Mushi Mushi React provider and hooks. Wraps `@mushi-mushi/web`.
 
 ```tsx
 import {
@@ -25,13 +25,18 @@ import {
 
 | Export                  | Purpose                                               |
 | ----------------------- | ----------------------------------------------------- |
-| `` | App-level boot — `config` takes the same options as `Mushi.init` |
+| `` | App-level boot; `config` takes the same options as `Mushi.init` |
 | `useMushi()`            | Returns `{ report, pulseTrigger, isReady, … }`; `report()` opens the widget |
 | `useMushiSdk()`         | The SDK instance (`captureEvent`, `captureException`, `identify`), or `null` before init |
 | `useMushiReport()`      | Returns a function that opens the widget, optionally with a category |
-| `useReputation()`       | Current user's point totals (polls on mount)          |
-| `useTier()`             | Current user's tier object (polls on mount)           |
+| `useReputation()`       | Current user's point totals (fetched once when the SDK is ready) |
+| `useTier()`             | Current user's tier object (fetched once when the SDK is ready) |
 | `` | Polymorphic tier + points badge component             |
+| `useMushiReady()`       | `true` once the SDK has initialised                   |
+| `useMushiTrack()`       | Returns `track(event, properties)` for [product analytics](/sdks/analytics) |
+| ``        | Polymorphic element (a `` by default) that opens the reporter on click; optional `category` |
+| `` | Renders nothing; opens the reporter when the element matching `selector` is clicked |
+| ``  | Error boundary with `fallback` and `onError`; attaches the caught error to the next report's metadata |
 
 See [Quickstart → React](/quickstart/react).
 
@@ -39,7 +44,7 @@ See [Quickstart → React](/quickstart/react).
 
 ## Identifying users
 
-Call `identify()` on the SDK instance when auth state changes — typically
+Call `identify()` on the SDK instance when auth state changes, typically
 inside a `useEffect` that watches your auth context:
 
 ```tsx filename="lib/auth-watcher.tsx"
@@ -151,7 +156,7 @@ function TierBanner() {
 ```typescript
 interface MushiTierResult {
   id: string               // DB UUID
-  slug: string             // 'free' | 'explorer' | 'contributor' | 'champion'
+  slug: string             // defined per project, e.g. 'explorer'
   displayName: string      // e.g. 'Explorer'
   pointsThreshold: number  // minimum points to reach this tier
   perks: Record<string, unknown>  // your custom perks payload
@@ -163,12 +168,12 @@ interface MushiTierResult {
 ## ``
 
 Drop-in badge that renders the current user's tier name (and optionally
-their point total). Polymorphic — renders as a `` by default.
+their point total). It is polymorphic and renders as a `` by default.
 
 ```tsx
 import { MushiRewardsBadge } from '@mushi-mushi/react'
 
-// Minimal — just the tier name
+// Minimal: just the tier name
 <MushiRewardsBadge />
 
 // With point count
@@ -187,25 +192,24 @@ import { MushiRewardsBadge } from '@mushi-mushi/react'
 | `loadingFallback` | `ReactNode` | `null` | Rendered while tier data is loading |
 | `className` | `string` | — | CSS class on the outer element |
 
-The badge colour is driven by tier slug (`free` → grey, `explorer` → blue,
-`contributor` → purple, `champion` → amber). Override with CSS if needed.
+A small dot before the name is coloured by tier slug (`free` → grey,
+`explorer` → blue, `contributor` → purple, `champion` → amber, any other slug
+→ violet). The colour is an inline style on the dot.
 
 ---
 
 ## Submitting custom activity
 
-Access the singleton to fire custom events:
+Use the SDK instance to record a custom rewards activity:
 
 ```tsx
-import { useMushi } from '@mushi-mushi/react'
+import { useMushiSdk } from '@mushi-mushi/react'
 
 function LessonCard({ lessonId }) {
-  const sdk = useMushi()
+  const sdk = useMushiSdk()
 
-  const onComplete = async () => {
-    await sdk?.submitActivity([
-      { action: 'lesson_complete', metadata: { lessonId } },
-    ])
+  const onComplete = () => {
+    sdk?.recordActivity('lesson_complete', { lessonId })
   }
 
   return <button onClick={onComplete}>Complete lesson</button>

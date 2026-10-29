@@ -223,7 +223,17 @@ describe('POST /v1/admin/projects/:id/reports', () => {
     expect(report.severity).toBeUndefined()
     expect(report.component).toBeUndefined()
     expect(report.custom_metadata).toEqual({ source: 'admin_file', filed_via: 'console', filed_by: 'u1' })
+    expect(report.category).toBe('other')
     expect(state.audits[0].actorType).toBe('user')
+  })
+
+  it('takes the kind of issue from the widget categories, and refuses any other', async () => {
+    const { db, app } = setup()
+    const res = await app.call(P1, { title: 'Account page takes 5 s to open', description: 'Tap Account; blank for 5 s.', category: 'slow' })
+    expect(res.status).toBe(201)
+    const [report] = rows(db, 'reports')
+    expect(report).toMatchObject({ category: 'slow', user_category: 'slow' })
+    expect(shared.parseFileReportBody({ title: 'ok title', description: 'd', category: 'feature' }).ok).toBe(false)
   })
 
   it('answers 422 on a bad body and 400 on bad JSON or a bad id, writing nothing', async () => {

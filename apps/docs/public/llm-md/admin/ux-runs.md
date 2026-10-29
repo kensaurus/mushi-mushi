@@ -4,18 +4,18 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/ux-runs
 
 ---
 title: UX runs
-description: Each screen your coding agent worked on in a mushi ux run, with its plan, every attempt, before and after screenshots, and what was kept.
+description: The UX runs page in Mushi Mushi shows each screen your agent worked on in a mushi ux run, with its plan, attempts, before/after screenshots, and what was kept.
 ---
 
 # UX runs
 
-**Route:** `/ux-runs`
+**Route:** `/ux-runs` (sidebar: More pages → Fix → UX runs. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
 
 > **Scenario:** You let your coding agent work through every page, tab and dialog of
 > your app overnight and want to see, screen by screen, what it changed and whether
 > anything got worse.
 
-`mushi ux run` runs on your machine. It maps your running app, gives one screen at a
+`mushi ux run` (from the Mushi Mushi `@mushi-mushi/ux` package) runs on your machine. It maps your running app, gives one screen at a
 time to the agent you choose (Claude Code, Cursor, Codex) in a separate git branch, and
 keeps an edit only when accessibility, layout and console measurements did not get
 worse. With `--sync` it mirrors the run here as it goes.
@@ -107,10 +107,56 @@ model to point out concrete visual defects on whole pages. `--file` files at mos
 reports a run and skips one still open or filed in the last 14 days; `--dry-run` lists
 them instead.
 
+## First-time user test
+
+The **First-time user test** page (it was the Fresh eyes tab of this page) tests the path
+a stranger takes: a model that has never seen your app tries one goal from your start
+page, such as "sign up and start using the app", reading only what is on screen. Code
+decides everything else:
+
+- **Time to first value**: how long the app made the visitor wait, plus the time to read
+  each new screen, until the goal check passes (a URL, visible text, a selector or an API
+  that answers with data). The model's own thinking time is never counted.
+- **Where it stalled**: a sign-in it cannot pass, a captcha (never solved), a dead end, an
+  error, or a step that needs something outside the app (an inbox, an API key, a
+  terminal, another account).
+- **What gets filed**: measured problems once a replay of the steps without the model
+  shows them again; opinions such as "confusing" only when two sessions agree. Reports
+  come in as source `fresh_eyes`, at most 15 a run.
+
+**Run now** starts it from the console. The start page comes from your app (its last
+test, its live-site watch or site audit address) and the goal is plain words you can
+change. The test runs on your own computer, where its browser and AI run: if Mushi runs
+there for this app (`mushi worker install`, shown on Pipeline → Workers), it picks the
+test up within a minute and the page follows it live. If not, the page says so and shows
+the one thing to set up. Pick **Look around, file nothing** to see where a visitor gets
+stuck, or **File what stops them** to turn each problem into a bug report.
+
+From a terminal it is the same run:
+
+```bash
+mushi ux fresh-eyes --url https://your-app.com --goal "get my first report" --dry-run
+# with a test account for your app, mirrored here and filed:
+MUSHI_FRESH_EYES_EMAIL=… MUSHI_FRESH_EYES_PASSWORD=… \
+  mushi ux fresh-eyes --url https://your-app.com --goal "get my first report" --sync --file
+```
+
+The run is signed out in a clean browser. It may only write to your app's own origins
+(`--app-host` adds its API); payments, "Continue with Google/GitHub/Apple", public sign-up
+forms and anything labelled delete or revoke are refused. Without an account it stops at
+your sign-up page and says so; `--dry-run` never writes to your app.
+
+The page shows each test: time to first value, steps, how many visitors reached the goal,
+the trend over tests, and every step with its screenshot and wait. A waiting test can be
+cancelled; a failed one says why. Once an app has a finished test, Home shows a
+**First-time setup** light with the minutes and steps.
+
 ## Where the changes are
 
 Kept edits are commits on the branch shown above the screen list
-(`mushi-ux/`). Nothing is merged for you: review the branch and open it as a
-draft PR. Screenshots are kept for the project's retention window (30 days by default).
+(`mushi-ux/`). Nothing is merged for you: review the branch and open a draft PR
+with **Open draft PR** in the studio (`mushi ux ui`). Once a run has a pull request,
+this page shows it with its required checks and a **Merge to &lt;base&gt;** button that asks
+you to confirm first. Screenshots are kept for the project's retention window (30 days by default).
 
 See also: [CLI reference](/sdks/cli#ux-pass-over-every-screen).

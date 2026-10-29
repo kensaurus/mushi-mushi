@@ -4,12 +4,12 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/linear
 
 ---
 title: Linear
-description: File Linear issues from Mushi bug reports — connect Linear on the Integrations page, or run the self-hosted Linear plugin with an API key and team id.
+description: File Linear issues from Mushi Mushi bug reports. Connect Linear on the Integrations page, or run the self-hosted Linear plugin with an API key and team id.
 ---
 
 # Linear plugin
 
-Opens a Linear issue for each new Mushi report and updates it once the
+Opens a Linear issue for each new Mushi Mushi report and updates it once the
 report is triaged.
 
 **Most people don't need the plugin.** Connect Linear on the console's
@@ -19,7 +19,7 @@ calls from your own server.
 
 ## Setup (self-run plugin)
 
-1. Create a Linear API key: **Settings → API → Personal API keys** → **New key**.
+1. Create a Linear API key: **Settings → Security & access → Personal API keys** → **New key**.
 2. Start the server where Mushi can reach it over public HTTPS:
 
    ```bash
@@ -49,9 +49,9 @@ for the same report.
 
 ## Troubleshooting
 
-- **Issues not created** — check the plugin's last delivery status on the
+- **Issues not created**: check the plugin's last delivery status on the
   **Marketplace** page. A `401` from your server means the signing secret
   differs from `MUSHI_PLUGIN_SECRET`; a Linear error in your server log
   usually means the API key or `LINEAR_TEAM_ID` is wrong.
-- **Duplicate issues** — see the in-memory mapping above, and check you have
+- **Duplicate issues**: see the in-memory mapping above, and check you have
   not connected Linear both on the Integrations page and through this plugin.

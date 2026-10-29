@@ -4,18 +4,17 @@ Source: https://kensaur.us/mushi-mushi/docs/roadmap
 
 ---
 title: Roadmap
-description: Where Mushi Mushi is headed — upcoming SDK platforms, diagnosis speed targets, and console features, updated as work lands.
+description: Where Mushi Mushi is headed. Upcoming SDK platforms, agent-fix safety and console features, updated as work lands.
 ---
 
-# Roadmap
+# Mushi Mushi roadmap
 
-Mushi is built in the open. [VISION.md](https://github.com/kensaurus/mushi-mushi/blob/master/VISION.md) documents the full architectural target — code catches up release by release.
+Mushi Mushi is built in the open. [VISION.md](https://github.com/kensaurus/mushi-mushi/blob/master/VISION.md) documents the full architectural target; code catches up release by release.
 
-  **Currently shipping:** v1.25.x (Wave D complete; Wave E in progress). See the [Changelog](/changelog) for what landed.
+  **Currently shipping:** `@mushi-mushi/core` and `@mushi-mushi/web` 1.33.x (Wave D complete; Wave E in progress). See the [Changelog](/changelog) for what landed.
 
 ## Live boards
 
-- **[Public roadmap board](https://github.com/users/kensaurus/projects/1)** — every active issue, sorted by Wave + milestone.
 - **[Open issues](https://github.com/kensaurus/mushi-mushi/issues)** — file a bug, feature request, or RFC.
 - **[Discussions](https://github.com/kensaurus/mushi-mushi/discussions)** — design conversation, Q&A, show-and-tell.
 
@@ -25,7 +24,7 @@ Mushi is built in the open. [VISION.md](https://github.com/kensaurus/mushi-mushi
 | --- | --- | --- |
 | **A** | Vision air-gap, MCP correctness, RAG, sandbox | ✅ Shipped |
 | **B** | WASM SLM classifier, real-time collab, AG-UI, fine-tuning pipeline | ✅ Shipped |
-| **C** | Mobile parity (RN + iOS + Android + Flutter + Capacitor), A2A protocol, SOC 2 readiness, data residency pinning, BYOK, BYO storage | ✅ Shipped |
+| **C** | Mobile SDKs (React Native and Capacitor on npm; iOS, Android and Flutter as unpublished previews), A2A protocol, SOC 2 readiness, data residency pinning (one live region today), BYOK, BYO storage | ✅ Shipped, with the noted gaps |
 | **D** | Plugin marketplace GA, docs site, Mushi Cloud GA, multi-repo coordinated fixes, PDCA console enhancements, QA coverage stories, SDK install & upgrade one-click, Skill-driven triage, Codebase Atlas | ✅ Shipped |
 | **E** | v1.0.0 cross-platform stable API, Launch Week, frictionless onboarding, self-hosting one-click | 🔄 In-flight |
 
@@ -33,10 +32,10 @@ Mushi is built in the open. [VISION.md](https://github.com/kensaurus/mushi-mushi
 
 | Feature | Status | Notes |
 | --- | --- | --- |
-| `@mushi-mushi/*` 1.0.0 stable API locks | 🔄 In-flight | Coordinated 1.0 across all 0.x packages (capacitor, node, vue, svelte, angular) |
+| `@mushi-mushi/*` 1.0.0 stable API locks | 🔄 In-flight | vue, svelte, angular, capacitor and node are 1.x on npm; `@mushi-mushi/react-native` is still 0.24 |
 | Frictionless onboarding | 🔄 In-flight | GitHub/Google OAuth signup, auto-provisioned project+key; **`mushi login` device flow shipped** (Jul 2026) |
 | Self-hosting one-click | 🔄 In-flight | Railway / Render deploy button, `MUSHI_INIT_*` headless bootstrap |
-| Launch Week | ⏭ Next | Public Show HN + Product Hunt + Reddit coordinated launch |
+| Launch | 🔄 In-flight | One public post per release, not a coordinated week ([how we launch](/launch-week)). First posts went out 2026-10-29 on r/SideProject, X and LinkedIn; Show HN is not posted yet |
 
 ## Agent fixes you can trust (October 2026)
 
@@ -57,14 +56,14 @@ Mushi is built in the open. [VISION.md](https://github.com/kensaurus/mushi-mushi
 - **Codebase Atlas (`/explore`)** — semantic codebase search, ask, tour, and knowledge surface
 - **sdk-versions-cron** — daily npm sync keeps SDK freshness chips accurate
 - **Backend drift scanner** — daily schema snapshot diff, `gate_findings` of type `schema_drift`
-- **MCP tool surface** — `@mushi-mushi/mcp`, `mcp:read` + `mcp:write` scopes, 10 feature groups (see [`@mushi-mushi/mcp`](/sdks/mcp) for the current, catalog-sourced tool count)
+- **MCP tool surface** — `@mushi-mushi/mcp`, `mcp:read` + `mcp:write` scopes, tools grouped into feature groups you switch on (see [`@mushi-mushi/mcp`](/sdks/mcp) for the current, catalog-sourced tool count)
 
 ## Completed highlights (Wave C, v0.8.0)
 
 - **Native SDKs** — iOS (Swift), Android (Kotlin) and Flutter implementations in the repo, plus the Capacitor plugin on npm. The three native SDKs are previews: publishing to CocoaPods / SwiftPM release tags, Maven Central and pub.dev is still open
 - **A2A discovery** — `a2a-push-notify` edge function; agents can subscribe to Mushi events as A2A peers
-- **SOC 2 readiness module** — retention policies, DSAR, RLS coverage snapshots, quarterly evidence pack
-- **Data residency** — US / EU / JP region pinning at project creation
+- **SOC 2 readiness module** — retention policies, data-subject request tracking and nightly snapshots of five controls (RLS coverage among them). Not a certification
+- **Data residency** — a region (US / EU / JP) is picked at project creation, but Mushi Cloud runs one production cluster in Tokyo today; EU and US clusters are reserved, not live ([details](/security/data-residency))
 - **BYO storage** — S3, Cloudflare R2, GCS, MinIO, or Supabase Storage per project
 - **BYOK** — project-scoped Anthropic + OpenAI keys via Supabase Vault
 - **PDCA runner** — closed-loop iteration engine: fix → judge → promote, visible in the Iterate console page

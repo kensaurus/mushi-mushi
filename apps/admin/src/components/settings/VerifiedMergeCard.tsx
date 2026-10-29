@@ -404,7 +404,7 @@ export function VerifiedMergeCard({ projectId }: { projectId: string | null }) {
                   <Input
                     label="Add a label"
                     value={newLabel}
-                    placeholder="alienware-glot-1"
+                    placeholder="e.g. my-runner-1"
                     error={labelError ?? undefined}
                     onChange={(e) => {
                       setNewLabel(e.target.value)
@@ -436,7 +436,7 @@ export function VerifiedMergeCard({ projectId }: { projectId: string | null }) {
             <Input
               label="Command"
               value={draft.verify_test_command}
-              placeholder="pnpm vitest run {files}"
+              placeholder="e.g. pnpm vitest run {files}"
               disabled={readOnly}
               maxLength={VERIFY_BOUNDS.testCommandMax + 50}
               className="font-mono"

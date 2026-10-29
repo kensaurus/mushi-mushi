@@ -1,21 +1,22 @@
-# Code health
+# Code size
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/code-health
 
 ---
-title: Code health
-description: The Code health page charts bundle size and oversized files from your CI over time, so you notice an app getting heavier before your users do.
+title: Code size
+description: The Code size view in the Mushi Mushi console charts bundle size and oversized files from your CI over time, so you see an app getting heavier before users do.
 ---
 
-# Code health
+# Code size
 
-**Route:** `/code-health`
+**Route:** `/health?view=code` (**Mushi health → Code size**). The old `/code-health` link
+redirects there. Until October 2026 this was its own page, called Code health.
 
 > **Scenario:** Your mobile CI posts bundle KB and god-file LOC on every push to
 > `main`. You want one console view that shows whether the app is getting heavier
 > or sprouting unmaintainable files — without opening GitHub Actions logs.
 
-This page **reads only** — it never triggers a scan. Data arrives via
+Mushi Mushi only **reads** here: the view never triggers a scan. Data arrives via
 `POST /v1/ingest/metrics` from your repo's CI workflow.
 
 ---
@@ -27,6 +28,7 @@ This page **reads only** — it never triggers a scan. Data arrives via
 | **Status sentence** | How many files are over or close to the 2,000-line budget, the largest file, and the latest bundle KB |
 | **Oversized files** | A bar per large file, longest first, against the budget line (`code_health.*` gate) |
 | **Bundle size over time** | Sparkline per `bundle.*` metric from `metric_series` |
+| **Largest file over time** | The longest file's line count per run, when CI sends it |
 | **How to split each file** | Each oversized file with its split hint |
 
 Known security holes in your dependencies are not repeated here: one line links to
@@ -36,20 +38,23 @@ Known security holes in your dependencies are not repeated here: one line links 
 
 ## Wiring CI ingest
 
-1. Mint an SDK **ingest** key on [Projects](/admin/projects).
+1. Mint an SDK **ingest** key on [Manage apps](/admin/projects).
 2. Add repo secrets: `MUSHI_API_URL`, `MUSHI_INGEST_KEY`.
-3. Post on every `main` push:
+3. In CI, build a JSON body of `metrics` (names starting `bundle.` or `code_health.`)
+   and `findings`, then post it with the key in the `X-Mushi-Api-Key` header:
 
 ```yaml
-- name: Mushi code health ingest
-  run: node scripts/scan-god-files.mjs && node scripts/post-metrics.mjs
+- name: Push code-health metrics to Mushi Mushi
   env:
     MUSHI_API_URL: ${{ secrets.MUSHI_API_URL }}
     MUSHI_INGEST_KEY: ${{ secrets.MUSHI_INGEST_KEY }}
+  run: |
+    curl -sf -X POST "${MUSHI_API_URL}/v1/ingest/metrics" \n      -H "Content-Type: application/json" \n      -H "X-Mushi-Api-Key: ${MUSHI_INGEST_KEY}" \n      --data-binary @mushi-payload.json
 ```
 
-Reference implementation: `kensaurus/yen-yen` — `.github/workflows/bundle-budget.yml`
-+ `scripts/scan-god-files.mjs`.
+Mushi Mushi does not ship the script that writes `mushi-payload.json`; your CI builds it.
+Reference implementation: `kensaurus/yen-yen`, `.github/workflows/bundle-budget.yml`
+with `scripts/scan-god-files.mjs`.
 
 ---
 
@@ -70,5 +75,5 @@ own project; an account-level key needs `projectId` (`project_id` on the API).
 ## Related pages
 
 - [Full-stack audit](/admin/fullstack-audit) — DB advisors + gate runs (push-button)
-- [Drift scanner](/admin/drift) — schema drift vs previous snapshot
+- [Schema changes](/admin/drift) — schema drift vs previous snapshot
 - [Connect](/admin/connect) — wire GitHub + CI secrets in one place

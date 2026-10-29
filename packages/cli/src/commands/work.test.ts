@@ -1,4 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   checkCursorSignIn,
   cursorSignInState,
@@ -8,6 +12,9 @@ import {
   freeBranchName,
   isMissingModuleFailure,
   failureTail,
+  hookFailureDetail,
+  isHookRejection,
+  pushWithHooks,
   agentEnv,
   branchNameFor,
   runProc,
@@ -28,6 +35,7 @@ import {
   stoppedPayload,
   classifyFailure,
   WORK_INFRA_PREFIX,
+  workOne,
 } from './work.js'
 
 const R1 = '11111111-1111-4111-8111-111111111111'
@@ -416,6 +424,27 @@ describe('local workers (ADR 0048): infra failures never count against a report'
 })
 
 describe('runProc', () => {
+  it.skipIf(process.platform === 'win32')('a timeout ends what the process started, not only the process (a hung commit hook)', async () => {
+    // The child starts a grandchild in its own process group and waits on it, as git waits on a hook.
+    const script = "const c = require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { stdio: 'ignore' }); console.log('grandchild ' + c.pid); setTimeout(() => {}, 60000)"
+    const r = await runProc(process.execPath, ['-e', script], { timeoutMs: 1500, closeGraceMs: 300 })
+    expect(r.timedOut).toBe(true)
+    const pid = Number(/grandchild (\d+)/.exec(r.stdout)?.[1])
+    expect(pid).toBeGreaterThan(0)
+    await new Promise((res) => setTimeout(res, 300))
+    let alive = true
+    try {
+      process.kill(pid, 0)
+    } catch {
+      alive = false
+    }
+    expect(alive).toBe(false)
+  }, 20_000)
+
+  it('a git command that times out names it as infra, so the report is retried', () => {
+    expect(classifyFailure("git commit timed out after 25 min (the repo's commit hook did not finish); stopped it", 'commit')).toBe('infra')
+  })
+
   it('answers when the process exited but something it started still holds the output (the 51-minute audit hang)', async () => {
     // The grandchild inherits stdout and lives on; Node then never fires 'close'.
     const hold = "require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 8000)'], { stdio: 'inherit', detached: true }).unref(); console.log('parent done')"
@@ -425,5 +454,143 @@ describe('runProc', () => {
     expect(r.code).toBe(0)
     expect(r.stdout).toContain('parent done')
     expect(r.stderr).toMatch(/output pipes still open/)
+  })
+})
+
+describe('a run stopped from the console (ADR 0048 amendment 2026-10-28)', () => {
+  it.skipIf(process.platform === 'win32')('reports each stage, and after a stop during git commit pushes nothing', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mushi-work-stop-'))
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    // No gh on purpose: the default branch comes from origin. The agent writes one file.
+    writeFileSync(join(bin, 'gh'), '#!/bin/sh\nexit 1\n', { mode: 0o755 })
+    writeFileSync(join(bin, 'cursor-agent'), '#!/bin/sh\necho "fixed it" > fix.txt\necho done\n', { mode: 0o755 })
+    const sh = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, stdio: 'pipe' }).toString()
+    const origin = join(root, 'origin.git')
+    sh(root, 'init', '-q', '--bare', '-b', 'main', origin)
+    const clone = join(root, 'clone')
+    sh(root, 'clone', '-q', origin, clone)
+    sh(clone, 'config', 'user.email', 'w@example.com')
+    sh(clone, 'config', 'user.name', 'worker')
+    sh(clone, 'commit', '-q', '--allow-empty', '-m', 'first')
+    sh(clone, 'push', '-q', 'origin', 'HEAD:main')
+    sh(clone, 'remote', 'set-head', 'origin', 'main')
+    const saved = { PATH: process.env['PATH'], HOME: process.env['HOME'] }
+    process.env['PATH'] = `${bin}:${saved.PATH}`
+    process.env['HOME'] = root
+    const patches: unknown[] = []
+    const api = (async (path: string, init?: RequestInit) => {
+      if (init?.method === 'POST' && path === '/v1/admin/fixes') return { fixId: 'f1' }
+      if (init?.method === 'PATCH') patches.push(JSON.parse(String(init.body)))
+      return {}
+    }) as never
+    const ac = new AbortController()
+    const stages: string[] = []
+    try {
+      const out = await workOne(api, { id: R1, summary: 'Total is wrong', category: 'bug' } as never, {
+        repoDir: clone,
+        agent: 'cursor',
+        log: () => {},
+        earlier: [],
+        signal: ac.signal,
+        onStage: (s) => {
+          stages.push(s)
+          // "Stop this run" arrives while the repo's commit hook runs.
+          if (s === 'commit') ac.abort()
+        },
+      })
+      expect(stages).toEqual(['agent', 'commit'])
+      expect(out.result).toBe('stopped')
+      expect(out.outcome).toMatch(/before git push/)
+      expect(sh(clone, 'ls-remote', '--heads', 'origin')).not.toMatch(/bugfix|fix\//)
+      expect(patches.at(-1)).toMatchObject({ status: 'failed', error: expect.stringMatching(new RegExp(`^${WORK_STOPPED_PREFIX}`)) })
+    } finally {
+      process.env['PATH'] = saved.PATH
+      process.env['HOME'] = saved.HOME
+      rmSync(root, { recursive: true, force: true })
+    }
+  }, 30_000)
+})
+
+// A lefthook pre-push run, as yen-yen's printed it on 2026-10-28 (shortened).
+const LEFTHOOK_FAIL = [
+  '┃  lint ❯ ',
+  'apps/web lint: Done',
+  '┃  test ❯ ',
+  '> turbo run test',
+  ' FAIL  lib/powersync/queries.test.ts > closed accounts > hides a closed account',
+  'AssertionError: expected [ 2 ] to deeply equal [ 1 ]',
+  '┃  knip ❯ ',
+  'Unused exports (1)',
+  'closedAccountIds  apps/mobile/lib/powersync/queries.ts:12:14',
+  '────────────────────────────────────',
+  'summary: (done in 206.89 seconds)',
+  '✔️ lint (206.89 seconds)',
+  '🥊 test (22.29 seconds)',
+  '🥊 knip (25.07 seconds)',
+].join('\n')
+
+describe('hookFailureDetail', () => {
+  it("names each failed lefthook step with its own error lines, not the summary's tail", () => {
+    const d = hookFailureDetail({ stdout: LEFTHOOK_FAIL, stderr: "error: failed to push some refs to 'https://github.com/o/r.git'" })!
+    expect(d).toMatch(/^hook steps failed: test, knip\./)
+    expect(d).toContain('test: FAIL lib/powersync/queries.test.ts > closed accounts > hides a closed account | AssertionError: expected [ 2 ] to deeply equal [ 1 ]')
+    expect(d).toContain('knip: Unused exports (1)')
+    expect(d).not.toContain('apps/web lint')
+  })
+
+  it('is null for output that is not a lefthook run', () => {
+    expect(hookFailureDetail({ stdout: '', stderr: 'fatal: not a git repository' })).toBeNull()
+  })
+})
+
+describe('isHookRejection', () => {
+  it('retries only a refusal by the repo\'s own hook, never the remote or auth', () => {
+    expect(isHookRejection('git push failed: hook steps failed: test. test: FAIL a.test.ts')).toBe(true)
+    expect(isHookRejection('git push failed: error: failed to push some refs (pre-push hook declined)')).toBe(true)
+    expect(isHookRejection('git push failed: ! [rejected] HEAD -> main (non-fast-forward)')).toBe(false)
+    expect(isHookRejection('git push failed: remote: Permission denied to bot. fatal: Authentication failed')).toBe(false)
+    expect(isHookRejection('git push failed: fatal: unable to access github.com')).toBe(false)
+  })
+})
+
+describe('pushWithHooks', () => {
+  const setup = (hook: (root: string) => string) => {
+    const root = mkdtempSync(join(tmpdir(), 'mushi-work-push-'))
+    const sh = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, stdio: 'pipe' }).toString()
+    const origin = join(root, 'origin.git')
+    sh(root, 'init', '-q', '--bare', '-b', 'main', origin)
+    const clone = join(root, 'clone')
+    sh(root, 'clone', '-q', origin, clone)
+    sh(clone, 'config', 'user.email', 'w@example.com')
+    sh(clone, 'config', 'user.name', 'worker')
+    sh(clone, 'commit', '-q', '--allow-empty', '-m', 'first')
+    writeFileSync(join(clone, '.git', 'hooks', 'pre-push'), hook(root), { mode: 0o755 })
+    return { root, clone, origin, sh }
+  }
+
+  it.skipIf(process.platform === 'win32')('runs a failed pre-push hook once more and pushes when it passes the second time', async () => {
+    // Fails the first time (as a test under load does), passes the second.
+    // An absolute marker: git does not always set GIT_DIR for a pre-push hook.
+    const { root, clone, origin, sh } = setup((r) => `#!/bin/sh\nif [ -f '${r}/flaky-seen' ]; then exit 0; fi\ntouch '${r}/flaky-seen'\necho '┃  test ❯ '\necho ' FAIL  slow.test.ts > times out under load'\necho '🥊 test (60 seconds)'\nexit 1\n`)
+    const logs: string[] = []
+    try {
+      await pushWithHooks(clone, ['--quiet', 'origin', 'HEAD:refs/heads/fix'], (l) => logs.push(l))
+      expect(sh(origin, 'branch', '--list', 'fix').trim()).toContain('fix')
+      expect(logs[0]).toContain('hook steps failed: test')
+      expect(logs[1]).toContain('passed the second time')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it.skipIf(process.platform === 'win32')('a hook that fails twice is the change\'s failure, with the failing step named', async () => {
+    const { root, clone, origin, sh } = setup(() => `#!/bin/sh\necho '┃  test ❯ '\necho ' FAIL  a.test.ts > breaks'\necho '🥊 test (2 seconds)'\nexit 1\n`)
+    try {
+      await expect(pushWithHooks(clone, ['--quiet', 'origin', 'HEAD:refs/heads/fix'], () => {})).rejects.toThrow(/hook steps failed: test\. test: FAIL a\.test\.ts > breaks/)
+      expect(sh(origin, 'branch', '--list', 'fix').trim()).toBe('')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })

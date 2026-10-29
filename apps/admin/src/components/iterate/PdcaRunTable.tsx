@@ -29,11 +29,7 @@ export function PdcaRunTable({ runs, projectName, onOpen, onAbort, onTrigger, bu
     return (
       <EmptyState
         title={projectName ? `No improvement runs for ${projectName} yet` : 'No improvement runs yet'}
-        description="Switch to New Run, enter a target URL and critic persona, then trigger the producer/critic loop."
-        hints={[
-          'Queued runs need a manual Trigger unless cron picks them up',
-          'Open a run to inspect score timeline and critique text per iteration',
-        ]}
+        description="Start one on New Run: give the page address and who should review it. Each run lists its rounds, their scores and the reviewer's notes."
       />
     )
   }

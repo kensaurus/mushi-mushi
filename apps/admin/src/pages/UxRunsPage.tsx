@@ -8,10 +8,13 @@
  *
  * Data: GET /v1/admin/projects/:pid/ux-runs, GET …/ux-runs/:runId
  * Live: Realtime on ux_runs + ux_surfaces for the active project.
+ *
+ * The first-time user test (fresh-eyes runs) was a tab here; it has its own
+ * page now (/first-user-test), and ?tab=fresh-eyes redirects there.
  */
 
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Badge, EmptyState, Loading, StatCard } from '../components/ui'
@@ -29,6 +32,9 @@ import { sortSurfaces, UX_RUN_STATUS_LABEL, UX_STATUS_META, uxKeptEdits, type Ux
 
 export function UxRunsPage() {
   const projectId = useActiveProjectId()
+  const [params] = useSearchParams()
+  // Old links (the Home light, bookmarks) to the tab the first-time user test used to be.
+  if (params.get('tab') === 'fresh-eyes') return <Navigate to="/first-user-test" replace />
   if (!projectId) {
     return (
       <div className="flex flex-1 flex-col">
@@ -87,135 +93,137 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
         helpHowToUse="Start a run from the card at the top: the studio (mushi ux ui) runs on your own computer, or start a cloud run. This page mirrors the run and merges its PR; it cannot open the studio for you. Start with screens marked Moved by another fix or Rolled back. File anything you want fixed as a bug. Review the branch, open it as a draft PR from the studio, and merge it here once its required checks pass. Nothing merges until you confirm."
         helpFlowPath="/ux-runs"
       />
+      <p className="text-2xs text-fg-muted">
+        Want to know if a new user gets through your app? That is the <Link className="text-brand hover:underline" to="/first-user-test">first-time user test</Link>.
+      </p>
 
-      <PagePosture
-        slots={[
-          {
-            priority: POSTURE_PRIORITY.status,
-            show: detail.data != null,
-            children: (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <StatCard
-                  label="Edits kept"
-                  value={keptEdits}
-                  detail={`on ${counts.accepted ?? 0} improved screen${(counts.accepted ?? 0) === 1 ? '' : 's'}`}
-                />
-                <StatCard label={UX_STATUS_META.regressed.label} value={counts.regressed ?? 0} detail="check these first" />
-                <StatCard label={UX_STATUS_META.reverted.label} value={counts.reverted ?? 0} detail="made something worse" />
-                <StatCard label={UX_STATUS_META.blocked.label} value={counts.blocked ?? 0} detail="the screen note says why" />
-              </div>
-            ),
-          },
-        ]}
-      />
-
-      {list.error && <PageLoadError error={list.error} resource="UX runs" endpoint={listPath} onRetry={list.reload} />}
-      {list.loading && !list.data && <Loading text="Loading UX runs…" />}
-
-      {list.data && <UxStartRunCard hasRuns={runs.length > 0} projectId={projectId} />}
-      {list.data && runs.length === 0 && (
-        <p className="text-2xs text-fg-muted">
-          Exploring your app never sends a write request. Sign-in screens: run <code>mushi ux login --url http://localhost:5173</code> first.
-        </p>
-      )}
-
-      {runs.length > 0 && (
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-          <nav aria-label="Runs" className="flex shrink-0 flex-col gap-1 lg:w-64">
-            {shownRuns.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => {
-                  setChosen(r.local_run_id)
-                  setSelectedKey(null)
-                }}
-                aria-current={r.local_run_id === runId}
-                className={`rounded-md border px-3 py-2 text-left text-xs ${r.local_run_id === runId ? 'border-brand/40 bg-surface-raised' : 'border-edge-subtle hover:bg-surface-raised'}`}
-              >
-                <span className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-fg">{formatRelative(r.started_at)}</span>
-                  <Badge tone={r.status === 'running' ? 'infoSubtle' : r.status === 'done' ? 'okSubtle' : r.status === 'failed' ? 'dangerSubtle' : 'warnSubtle'}>
-                    {UX_RUN_STATUS_LABEL[r.status] ?? r.status}
-                  </Badge>
-                </span>
-                <span className="mt-0.5 block text-2xs text-fg-secondary">{runSummary(r)}</span>
-              </button>
-            ))}
-            {runs.length > RUN_LIST_LIMIT && (
-              <button type="button" onClick={() => setShowOlder((v) => !v)} className="px-3 py-1 text-left text-2xs text-fg-muted underline">
-                {showOlder ? 'Show fewer' : `Show ${runs.length - RUN_LIST_LIMIT} older`}
-              </button>
-            )}
-          </nav>
-
-          <div className="flex min-w-0 flex-1 flex-col gap-3">
-            {detail.error && <PageLoadError error={detail.error} resource="this run" endpoint={`${listPath}/${runId}`} onRetry={detail.reload} />}
-            {detail.data && <UxRunProgress run={detail.data.run} surfaces={detail.data.surfaces} />}
-            {run?.pr_url && runId ? (
-              <UxRunPullRequest
-                key={runId}
-                projectId={projectId}
-                runId={runId}
-                run={run}
-                onMerged={() => {
-                  detail.reload()
-                  list.reload()
-                }}
-              />
-            ) : (
-              run?.branch && (
-                <p className="text-xs text-fg-secondary">
-                  Kept changes are on <code className="font-mono">{run.branch}</code>. When you are happy with them, open a draft PR with the Open draft PR button in the studio (<code className="font-mono">mushi ux ui</code>).
-                </p>
-              )
-            )}
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-start">
-              <ul aria-label="Screens" className="flex shrink-0 flex-col gap-1 xl:w-80">
-                {surfaces.map((s) => {
-                  const meta = UX_STATUS_META[s.status]
-                  const active = s.surface_key === selected?.surface_key
-                  return (
-                    <li key={s.id}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedKey(s.surface_key)}
-                        aria-current={active}
-                        className={`flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-xs ${active ? 'border-brand/40 bg-surface-raised' : 'border-edge-subtle hover:bg-surface-raised'}`}
-                      >
-                        <span className="min-w-0">
-                          <span className="flex items-center gap-1.5 truncate font-medium text-fg">
-                            {s.surface_key === currentKey && (
-                              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-info motion-safe:animate-pulse" aria-label="Agent working here" />
-                            )}
-                            <span className="truncate">{s.label}</span>
-                          </span>
-                          <span className="block truncate font-mono text-2xs text-fg-muted">{s.path}</span>
-                        </span>
-                        <Badge tone={meta.tone} title={meta.hint} className="shrink-0">{meta.label}</Badge>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-              {selected && runId && (
-                <div className="min-w-0 flex-1">
-                  <UxSurfaceDetail
-                    key={selected.id}
-                    projectId={projectId}
-                    runId={runId}
-                    surface={selected}
-                    iterations={(detail.data?.iterations ?? []).filter((i) => i.surface_id === selected.id)}
-                    workingAttempt={selected.surface_key === currentKey ? (run?.current_attempt ?? null) : null}
-                    onFiled={detail.reload}
+        <PagePosture
+          slots={[
+            {
+              priority: POSTURE_PRIORITY.status,
+              show: detail.data != null,
+              children: (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <StatCard
+                    label="Edits kept"
+                    value={keptEdits}
+                    detail={`on ${counts.accepted ?? 0} improved screen${(counts.accepted ?? 0) === 1 ? '' : 's'}`}
                   />
+                  <StatCard label={UX_STATUS_META.regressed.label} value={counts.regressed ?? 0} detail="check these first" />
+                  <StatCard label={UX_STATUS_META.reverted.label} value={counts.reverted ?? 0} detail="made something worse" />
+                  <StatCard label={UX_STATUS_META.blocked.label} value={counts.blocked ?? 0} detail="the screen note says why" />
                 </div>
+              ),
+            },
+          ]}
+        />
+
+        {list.error && <PageLoadError error={list.error} resource="UX runs" endpoint={listPath} onRetry={list.reload} />}
+        {list.loading && !list.data && <Loading text="Loading UX runs…" />}
+
+        {list.data && <UxStartRunCard hasRuns={runs.length > 0} projectId={projectId} />}
+        {list.data && runs.length === 0 && (
+          <p className="text-2xs text-fg-muted">
+            Exploring your app never sends a write request. Sign-in screens: run <code>mushi ux login --url http://localhost:5173</code> first.
+          </p>
+        )}
+
+        {runs.length > 0 && (
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+            <nav aria-label="Runs" className="flex shrink-0 flex-col gap-1 lg:w-64">
+              {shownRuns.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => {
+                    setChosen(r.local_run_id)
+                    setSelectedKey(null)
+                  }}
+                  aria-current={r.local_run_id === runId}
+                  className={`rounded-md border px-3 py-2 text-left text-xs ${r.local_run_id === runId ? 'border-brand/40 bg-surface-raised' : 'border-edge-subtle hover:bg-surface-raised'}`}
+                >
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-fg">{formatRelative(r.started_at)}</span>
+                    <Badge tone={r.status === 'running' ? 'infoSubtle' : r.status === 'done' ? 'okSubtle' : r.status === 'failed' ? 'dangerSubtle' : 'warnSubtle'}>
+                      {UX_RUN_STATUS_LABEL[r.status] ?? r.status}
+                    </Badge>
+                  </span>
+                  <span className="mt-0.5 block text-2xs text-fg-secondary">{runSummary(r)}</span>
+                </button>
+              ))}
+              {runs.length > RUN_LIST_LIMIT && (
+                <button type="button" onClick={() => setShowOlder((v) => !v)} className="px-3 py-1 text-left text-2xs text-fg-muted underline">
+                  {showOlder ? 'Show fewer' : `Show ${runs.length - RUN_LIST_LIMIT} older`}
+                </button>
               )}
+            </nav>
+
+            <div className="flex min-w-0 flex-1 flex-col gap-3">
+              {detail.error && <PageLoadError error={detail.error} resource="this run" endpoint={`${listPath}/${runId}`} onRetry={detail.reload} />}
+              {detail.data && <UxRunProgress run={detail.data.run} surfaces={detail.data.surfaces} />}
+              {run?.pr_url && runId ? (
+                <UxRunPullRequest
+                  key={runId}
+                  projectId={projectId}
+                  runId={runId}
+                  run={run}
+                  onMerged={() => {
+                    detail.reload()
+                    list.reload()
+                  }}
+                />
+              ) : (
+                run?.branch && (
+                  <p className="text-xs text-fg-secondary">
+                    Kept changes are on <code className="font-mono">{run.branch}</code>. When you are happy with them, open a draft PR with the Open draft PR button in the studio (<code className="font-mono">mushi ux ui</code>).
+                  </p>
+                )
+              )}
+              <div className="flex flex-col gap-3 xl:flex-row xl:items-start">
+                <ul aria-label="Screens" className="flex shrink-0 flex-col gap-1 xl:w-80">
+                  {surfaces.map((s) => {
+                    const meta = UX_STATUS_META[s.status]
+                    const active = s.surface_key === selected?.surface_key
+                    return (
+                      <li key={s.id}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedKey(s.surface_key)}
+                          aria-current={active}
+                          className={`flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-xs ${active ? 'border-brand/40 bg-surface-raised' : 'border-edge-subtle hover:bg-surface-raised'}`}
+                        >
+                          <span className="min-w-0">
+                            <span className="flex items-center gap-1.5 truncate font-medium text-fg">
+                              {s.surface_key === currentKey && (
+                                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-info motion-safe:animate-pulse" aria-label="Agent working here" />
+                              )}
+                              <span className="truncate">{s.label}</span>
+                            </span>
+                            <span className="block truncate font-mono text-2xs text-fg-muted">{s.path}</span>
+                          </span>
+                          <Badge tone={meta.tone} title={meta.hint} className="shrink-0">{meta.label}</Badge>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+                {selected && runId && (
+                  <div className="min-w-0 flex-1">
+                    <UxSurfaceDetail
+                      key={selected.id}
+                      projectId={projectId}
+                      runId={runId}
+                      surface={selected}
+                      iterations={(detail.data?.iterations ?? []).filter((i) => i.surface_id === selected.id)}
+                      workingAttempt={selected.surface_key === currentKey ? (run?.current_attempt ?? null) : null}
+                      onFiled={detail.reload}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
-
+        )}
     </div>
   )
 }
