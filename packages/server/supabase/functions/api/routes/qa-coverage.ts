@@ -176,7 +176,8 @@ function assertUuid(c: Context, value: string, name: string) {
 // key (report:write only) still fails the scope check.
 async function jwtOrApiKey(c: Context<{ Variables: Variables }>, next: Next) {
   const needed = c.req.method === 'GET' ? 'mcp:read' : 'mcp:write';
-  let mismatch: Response | null = null;
+  // Assigned inside the callback, so a declared type would narrow to null.
+  let mismatch = null as Response | null;
   const rejected = await adminOrApiKey({ scope: needed })(c as never, async () => {
     // A project-bound key stays on its own project. An account key has no
     // bound project; the handler checks the owner can reach :pid.

@@ -30,6 +30,26 @@ describe('QA story writes refuse viewers', () => {
     expect(gate).toBeGreaterThan(0)
     expect(body.indexOf(write)).toBeGreaterThan(gate)
   })
+
+  it('the gate uses the shared viewer rule, skips project-bound keys and checks account keys', () => {
+    const start = src.indexOf('async function qaViewerDenied')
+    expect(start).toBeGreaterThan(0)
+    const helper = src.slice(start, src.indexOf('\n  }', start))
+    expect(helper).toContain("if (c.get('authMethod') === 'apiKey' && !c.get('isOrgScopedKey')) return null")
+    expect(helper).toContain('if (!userId) return null')
+    expect(helper).toContain('userCanAccessProject(db, userId, projectId)')
+    expect(helper).toContain('denyViewerWrite(c, access.role, action)')
+  })
+})
+
+describe('the QA key gate keeps a project key on its own project', () => {
+  it('declares the mismatch so the callback assignment is not narrowed away', () => {
+    const start = src.indexOf('async function jwtOrApiKey')
+    const gate = src.slice(start, src.indexOf('\n}', start))
+    expect(gate).toContain('let mismatch = null as Response | null')
+    expect(gate).not.toMatch(/let mismatch: Response \| null = null/)
+    expect(gate).toContain('if (mismatch) return mismatch')
+  })
 })
 
 describe('inventory writes refuse viewers', () => {
