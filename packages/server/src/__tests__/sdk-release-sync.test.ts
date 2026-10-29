@@ -8,12 +8,14 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
+import { reportMessage } from '../../supabase/functions/_shared/sentry.ts'
 import {
   deriveSdkReleaseUpdate,
   describeGithubReadFailure,
   syncSdkReleaseJob,
   type SdkReleaseJob,
 } from '../../supabase/functions/_shared/sdk-release-sync.ts'
+import { syncSdkReleaseJobRetryingPersist } from '../../supabase/functions/sdk-release-sync/persist.ts'
 
 const P = '1000000a-0000-4000-8000-000000000000'
 const J = '2000000a-0000-4000-8000-000000000000'
@@ -173,6 +175,122 @@ describe('deriveSdkReleaseUpdate', () => {
     const out = deriveSdkReleaseUpdate(STORED, { pr: openPr as never, commitSha: 'sha-1', checks: null, deploy: null, workflow: null }, now)
     expect(out.update).not.toHaveProperty('deploy_status')
     expect(out.releaseStatus).toBe('pr_opened')
+  })
+})
+
+const GATEWAY_HTML =
+  '<!DOCTYPE html><html><head><title>502 Bad Gateway</title></head><body>Cloudflare Ray ID: <strong>8f21aa9c0d4e1b2a-NRT</strong></body></html>'
+
+/**
+ * The fake query builder has no way to fail an update. This stands in for
+ * PostgREST: the first N updates answer with a gateway error, then the real
+ * write runs. `attempts` counts update calls only.
+ */
+function withUpdateFailures(
+  inner: FakeDb,
+  failures: Array<{ message: string; status?: number; code?: string }>,
+): { db: FakeDb; attempts: () => number } {
+  let attempts = 0
+  const queue = [...failures]
+  return {
+    db: {
+      from(table: string) {
+        const query = inner.from(table) as {
+          update: (payload: Record<string, unknown>) => { eq: (key: string, value: unknown) => Promise<unknown> }
+        }
+        const realUpdate = query.update.bind(query)
+        query.update = (payload) => {
+          attempts += 1
+          const fail = queue.shift()
+          if (fail) {
+            return {
+              eq: () => Promise.resolve({
+                data: null,
+                error: { message: fail.message, code: fail.code ?? '' },
+                ...(fail.status != null ? { status: fail.status } : {}),
+              }),
+            }
+          }
+          return realUpdate(payload)
+        }
+        return query
+      },
+    } as unknown as FakeDb,
+    attempts: () => attempts,
+  }
+}
+
+const noWait = async () => {}
+
+describe('sync persist retry (Mushi report 547db71b)', () => {
+  it('retries a Cloudflare 502 and then stores the CI state', async () => {
+    vi.mocked(reportMessage).mockClear()
+    gh.checks.mockResolvedValue({ status: 'completed', conclusion: 'success' })
+    const inner = db
+    const gateway = withUpdateFailures(inner, [{ message: '502 Bad Gateway' }])
+    const result = await syncSdkReleaseJobRetryingPersist(gateway.db as never, 'tok', STORED, { sleep: noWait })
+    expect(result.ok).toBe(true)
+    expect(gateway.attempts()).toBe(2)
+    expect(inner.table('sdk_upgrade_jobs')[0]).toMatchObject({ release_status: 'ready_to_merge' })
+    expect(reportMessage).not.toHaveBeenCalled()
+  })
+
+  it('gives up after three gateway 502s, keeps the row, and logs the cf-ray without the HTML page', async () => {
+    vi.mocked(reportMessage).mockClear()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const inner = db
+    const gateway = withUpdateFailures(inner, Array.from({ length: 5 }, () => ({ status: 502, message: GATEWAY_HTML })))
+    const result = await syncSdkReleaseJobRetryingPersist(gateway.db as never, 'tok', STORED, { sleep: noWait })
+    const logged = warn.mock.calls.map((call) => String(call[0])).join('\n')
+    warn.mockRestore()
+    expect(result).toMatchObject({ ok: false, code: 'SYNC_PERSIST_FAILED' })
+    expect(result.ok ? '' : result.message).toBe('Could not save the CI status (HTTP 502). Retry in a moment.')
+    expect(result.ok ? '' : result.message).not.toContain('<')
+    expect(logged).toContain('8f21aa9c0d4e1b2a-NRT')
+    expect(logged).toContain('502 Bad Gateway')
+    expect(logged).not.toContain('<!DOCTYPE')
+    expect(gateway.attempts()).toBe(3)
+    expect(inner.table('sdk_upgrade_jobs')[0]).toEqual(STORED_ROW)
+    expect(reportMessage).not.toHaveBeenCalled()
+  })
+
+  it('retries when the update throws a gateway page', async () => {
+    vi.mocked(reportMessage).mockClear()
+    gh.checks.mockResolvedValue({ status: 'completed', conclusion: 'success' })
+    const inner = db
+    let calls = 0
+    const flaky = {
+      from(table: string) {
+        const query = inner.from(table) as {
+          update: (payload: Record<string, unknown>) => { eq: (key: string, value: unknown) => Promise<unknown> }
+        }
+        const realUpdate = query.update.bind(query)
+        query.update = (payload) => {
+          calls += 1
+          if (calls === 1) return { eq: () => Promise.reject(new Error(GATEWAY_HTML)) }
+          return realUpdate(payload)
+        }
+        return query
+      },
+    }
+    const result = await syncSdkReleaseJobRetryingPersist(flaky as never, 'tok', STORED, { sleep: noWait })
+    expect(result.ok).toBe(true)
+    expect(calls).toBe(2)
+    expect(inner.table('sdk_upgrade_jobs')[0]).toMatchObject({ release_status: 'ready_to_merge' })
+    expect(reportMessage).not.toHaveBeenCalled()
+  })
+
+  it('does not retry a database error that is not a gateway blip', async () => {
+    vi.mocked(reportMessage).mockClear()
+    const inner = db
+    const gateway = withUpdateFailures(inner, [
+      { status: 409, message: 'duplicate key value violates unique constraint' },
+    ])
+    const result = await syncSdkReleaseJobRetryingPersist(gateway.db as never, 'tok', STORED, { sleep: noWait })
+    expect(result).toMatchObject({ ok: false, code: 'SYNC_PERSIST_FAILED' })
+    expect(gateway.attempts()).toBe(1)
+    expect(inner.table('sdk_upgrade_jobs')[0]).toEqual(STORED_ROW)
+    expect(reportMessage).toHaveBeenCalled()
   })
 })
 
