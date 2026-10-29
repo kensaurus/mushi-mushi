@@ -54,6 +54,7 @@ import {
   evaluateTokenDelivery,
   parseClientId,
 } from '../../_shared/cli-auth-helpers.ts'
+import { insertProjectAllocatingSlug } from '../../_shared/project-slug.ts'
 
 /** Generate a 9-char user-friendly code in the format XXXX-XXXX (RFC 8628 §6.1). */
 function generateUserCode(): string {
@@ -671,18 +672,21 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       )
     }
 
-    let slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48)
-    if (!slug) slug = `project-${crypto.randomUUID().slice(0, 8)}`
-
-    const { data, error } = await db
-      .from('projects')
-      .insert({ name, slug, owner_id: userId, organization_id: organizationId })
-      .select('id')
-      .single()
-
-    if (error) {
-      return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    // Same global slug as the console create. A taken handle retries; any
+    // other database error stops. `error` is never null, so `.message` is safe.
+    const created = await insertProjectAllocatingSlug(db, {
+      name,
+      owner_id: userId,
+      organization_id: organizationId,
+    })
+    if (!created.ok) {
+      return c.json(
+        { ok: false, error: { code: 'DB_ERROR', message: created.error.message ?? 'Could not create the project' } },
+        500,
+      )
     }
+    const data = { id: created.id }
+    const slug = created.slug
 
     await db.from('project_settings').insert({ project_id: data.id })
     await db.from('project_members').upsert(

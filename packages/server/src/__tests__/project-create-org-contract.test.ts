@@ -54,10 +54,16 @@ describe('POST /v1/admin/projects org-id contract (Sentry MUSHI-MUSHI-SERVER-M)'
   });
 
   it('passes organization_id to the projects insert', () => {
-    // Regex tolerates whitespace, comments, and other fields between the
-    // `from('projects').insert({` open brace and the `organization_id` key.
+    // The insert moved into `_shared/project-slug.ts` so a taken slug can
+    // retry. The handler must still hand the resolved org id to that insert.
+    expect(handler).toContain('insertProjectAllocatingSlug(');
+    expect(handler).toMatch(/organization_id:\s*organizationId/);
+    const helper = readFileSync(
+      resolve(__dirname, '../../supabase/functions/_shared/project-slug.ts'),
+      'utf8',
+    );
     const insertsOrg = /from\('projects'\)[\s\S]*?\.insert\(\{[\s\S]*?organization_id\s*:/.test(
-      handler,
+      helper,
     );
     expect(insertsOrg).toBe(true);
   });
