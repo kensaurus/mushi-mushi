@@ -81,7 +81,7 @@ export function ActionButtons({
   onAction: Props['onAction']
   testIdPrefix: string
 }) {
-  const shown = actions.filter((a) => items.some((i) => (a === 'dismiss' || a === 'requeue' ? i.reportId : i.prUrl)))
+  const shown = actions.filter((a) => items.some((i) => (a === 'dismiss' || a === 'mark_fixed' || a === 'requeue' ? i.reportId : i.prUrl)))
   if (shown.length === 0) return null
   return (
     <span className="flex flex-wrap gap-1">

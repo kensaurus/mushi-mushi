@@ -341,6 +341,7 @@ const GROUP_IMPACT: Record<string, { impact: number; action: string }> = {
   agent_failed: { impact: 70, action: 'See why' },
   agent_failed_person: { impact: 68, action: 'Decide' },
   agent_failed_nothing: { impact: 45, action: 'Close' },
+  agent_said_fixed: { impact: 45, action: 'Check and close' },
   intake_rejected: { impact: 66, action: 'See rejects' },
   fix_first: { impact: 60, action: 'Send back' },
   after_red_train: { impact: 56, action: 'Review' },
