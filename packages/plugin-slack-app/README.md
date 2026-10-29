@@ -1,6 +1,6 @@
 # `@mushi-mushi/plugin-slack-app`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 For people who run their own Mushi Mushi backend and want bug reports and the
 `/mushi` command in Slack. It has the building blocks for a Slack app: the

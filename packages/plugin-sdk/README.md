@@ -1,6 +1,6 @@
 # `@mushi-mushi/plugin-sdk`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 For developers who want Mushi Mushi to drive a tool it does not connect to
 yet. Write a small HTTPS server that reacts when Mushi files, triages or fixes

@@ -83,7 +83,7 @@ bug. It is not a way to touch production.
 ## Getting the answer back
 
 When the draft pull request opens, or a confirmation is needed, or a fix fails,
-Mushi tells you on whichever surface you used:
+Mushi Mushi tells you on whichever surface you used:
 
 - **Push to this phone** — tap *Notify this device* on the voice page. Uses Web
   Push, so it reaches you with the console closed.

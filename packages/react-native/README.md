@@ -1,6 +1,6 @@
 # @mushi-mushi/react-native
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 The React Native and Expo SDK for [Mushi Mushi](https://www.npmjs.com/package/mushi-mushi). It adds a bug button and a report sheet to your iOS and Android app. When a user reports a problem, Mushi gets a screenshot, the screen, device details and recent console and network entries, explains the cause in plain English, and hands your editor a fix to start from.
 

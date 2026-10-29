@@ -1,6 +1,6 @@
 # `@mushi-mushi/plugin-rollbar`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 For teams who live in Rollbar and want to see what users report there too.
 This copies each bug Mushi Mushi triages into Rollbar as an item, next to your

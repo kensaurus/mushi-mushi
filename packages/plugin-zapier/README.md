@@ -1,6 +1,6 @@
 # `@mushi-mushi/plugin-zapier`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 For people who want Mushi Mushi bug events in a tool it does not connect to.
 This sends each event to a Zapier "Catch Hook", so you can pass bug reports and

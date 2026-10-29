@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/dashboard
 
 ---
 title: Home
-description: Home in the Mushi Mushi console shows how one app is doing: is it up, what needs you, what is shipping, which pages have bugs and who can reach it.
+description: "Home in the Mushi Mushi console shows how one app is doing: is it up, what needs you, what is shipping, which pages have bugs and who can reach it."
 ---
 
 # Home

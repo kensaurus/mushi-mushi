@@ -1,6 +1,6 @@
 # `@mushi-mushi/adapters`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 Already send errors to Sentry, Crashlytics, Bugsnag or Rollbar? These webhook
 handlers forward them into [Mushi Mushi](https://github.com/kensaurus/mushi-mushi),

@@ -1,6 +1,6 @@
 # @mushi-mushi/plugin-cursor-cloud
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 [![npm](https://img.shields.io/npm/v/@mushi-mushi/plugin-cursor-cloud)](https://www.npmjs.com/package/@mushi-mushi/plugin-cursor-cloud)
 [![license](https://img.shields.io/npm/l/@mushi-mushi/plugin-cursor-cloud)](./LICENSE)

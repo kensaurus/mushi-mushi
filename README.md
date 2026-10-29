@@ -2,9 +2,9 @@
 
 # Mushi Mushi
 
-**Your AI wrote it. Mushi tells you why it broke.**
+**Your AI wrote it. Mushi Mushi tells you why it broke.**
 
-A user says your app is broken. Mushi tells you why in plain English and hands the fix to Cursor, Claude Code or Lovable. No Sentry or monitoring needed.
+A user says your app is broken. Mushi Mushi tells you why in plain English and hands the fix to Cursor, Claude Code or Lovable. No Sentry or monitoring needed.
 
 ```bash
 npx mushi-mushi

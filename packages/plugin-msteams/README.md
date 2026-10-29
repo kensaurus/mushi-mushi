@@ -1,6 +1,6 @@
 # `@mushi-mushi/plugin-msteams`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 For teams that work in Microsoft Teams. This posts a card to a Teams channel
 when Mushi Mushi triages a bug, proposes a fix, or applies it.

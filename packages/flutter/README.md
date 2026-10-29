@@ -1,6 +1,6 @@
 # Mushi Mushi for Flutter (`mushi_mushi`)
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 The Flutter SDK for [Mushi Mushi](https://kensaur.us/mushi-mushi), for iOS and
 Android apps built with Flutter whose users find bugs you never see. A user

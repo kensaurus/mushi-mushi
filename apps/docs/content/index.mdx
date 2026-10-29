@@ -1,6 +1,6 @@
 ---
 title: Mushi Mushi — know why your AI-built app broke, with the fix ready
-description: "Your AI shipped it. Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional."
+description: "Your AI shipped it. Mushi Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional."
 ---
 
 import { LANDING_HERO, LANDING_WHAT_THIS_IS } from '@/lib/landing-copy'
@@ -16,7 +16,7 @@ import { LANDING_HERO, LANDING_WHAT_THIS_IS } from '@/lib/landing-copy'
 
 <CinematicEditorialHero
   eyebrow={LANDING_HERO.eyebrow}
-  title={<>Your AI wrote it. Mushi tells you <em>why it broke.</em></>}
+  title={<>Your AI wrote it. Mushi Mushi tells you <em>why it broke.</em></>}
   lead={LANDING_HERO.lead}
 />
 
@@ -35,6 +35,16 @@ import { LANDING_HERO, LANDING_WHAT_THIS_IS } from '@/lib/landing-copy'
 <OssTrustStrip />
 
 <PricingStrip />
+
+## Why I built it
+
+I build apps with Cursor and Claude Code, mostly on my own, and eight of them have real users. When one broke, I often didn't know where to start, because I hadn't written the code line by line.
+
+So I built Mushi Mushi and ran it on all eight. In the 60 days to 2026-10-29, people sent 32 bug reports, and some of those were my own testing. My own checks (code audits, Sentry, the site watch, the first-time user test) found more than 1,000. Of the 234 fixes merged, one started from a user's report. [The live numbers are here](/proof).
+
+That is why Mushi Mushi doesn't wait for reports: most people who hit a bug just leave.
+
+It is early, and I'm still its main user. If something confuses you, [open an issue](https://github.com/kensaurus/mushi-mushi/issues) and I'll read it. — Kenji
 
 ## What this is (and is not)
 

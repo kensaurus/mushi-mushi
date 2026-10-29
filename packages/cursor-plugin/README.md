@@ -1,6 +1,6 @@
 # Mushi Mushi plugin for Cursor
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 For people who build with Cursor and get bug reports from real users. This
 plugin connects Cursor to your Mushi Mushi project, so the agent can read a

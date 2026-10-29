@@ -1,6 +1,6 @@
 # `@mushi-mushi/plugin-github-issues`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 For people who track work in GitHub Issues. This opens a GitHub issue
 (labelled `mushi-bug`) for each bug Mushi Mushi triages and closes it when

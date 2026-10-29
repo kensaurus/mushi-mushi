@@ -255,7 +255,7 @@ function DiagramView({
 
       <footer className="space-y-2 border-t border-mushi-rule pt-4 text-sm text-mushi-ink-muted">
         <p>
-          Made with Mushi: when something in your app breaks, Mushi tells you why in plain English, with the fix ready
+          Made with Mushi: when something in your app breaks, Mushi Mushi tells you why in plain English, with the fix ready
           to go.
         </p>
         <SignupLink href={diagramSignupHref(diagram.owner, diagram.repo)} />

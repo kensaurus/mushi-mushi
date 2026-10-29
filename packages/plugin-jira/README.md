@@ -1,6 +1,6 @@
 # `@mushi-mushi/plugin-jira`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 For teams that track bugs in Jira Cloud. This opens a Jira issue for each new
 Mushi Mushi bug report, moves it through your Jira workflow as the report

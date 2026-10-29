@@ -1,6 +1,6 @@
 # create-mushi-mushi
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 Adds [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) to the app you
 already have, so when a user says something is broken you get the likely cause

@@ -1,6 +1,6 @@
 # @mushi-mushi/inventory-schema
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 AI-built apps often ship a button that looks finished but is wired to
 nothing. An `inventory.yaml` lists your app's pages, the buttons and forms on

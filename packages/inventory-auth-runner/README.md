@@ -1,6 +1,6 @@
 # @mushi-mushi/inventory-auth-runner
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 Mushi Mushi's crawler and synthetic monitor can only check pages they can
 reach, and most app pages sit behind a login. This runner signs in to your app

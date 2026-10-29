@@ -29,7 +29,7 @@ The critical audit of 2026-10-27 measured the front door:
 ## Decision
 
 - **One job leads every public surface.** "A user said your app is broken.
-  Mushi tells you why in plain English and hands Cursor, Claude Code or
+  Mushi Mushi tells you why in plain English and hands Cursor, Claude Code or
   Lovable the fix." It works without Sentry or any monitoring, and the free
   plan needs no AI key of the user's own.
 - **The landing has one primary action and one secondary link.** The action is
@@ -53,7 +53,7 @@ The critical audit of 2026-10-27 measured the front door:
   local workers, credits and spend-down, CI cost and portfolio views are never
   on the public path: not in the landing, the README's first screen or the
   quickstarts.
-- **Unchanged.** The tagline ("Your AI wrote it. Mushi tells you why it
+- **Unchanged.** The tagline ("Your AI wrote it. Mushi Mushi tells you why it
   broke."), the north-star sentence, the category line and the buyer stay as
   `VISION.md` §1 states them. The one job is a compression of the north star.
 

@@ -1,6 +1,6 @@
 # Mushi Mushi for VS Code
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 For people who fix bugs in VS Code's agent mode. This extension registers the
 Mushi Mushi [MCP](https://modelcontextprotocol.io/) server, so the agent can

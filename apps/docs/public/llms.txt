@@ -38,7 +38,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 
 ## All pages
 
-- [Mushi Mushi — know why your AI-built app broke, with the fix ready](https://kensaur.us/mushi-mushi/docs): Your AI shipped it. Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional.
+- [Mushi Mushi — know why your AI-built app broke, with the fix ready](https://kensaur.us/mushi-mushi/docs): Your AI shipped it. Mushi Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional.
 - [Mushi Mushi admin console](https://kensaur.us/mushi-mushi/docs/admin): Guide to the Mushi Mushi admin console. The Bugs list, fix drafts and pull requests, plain-English questions about your bug data, and links to every page.
 - [User activity](https://kensaur.us/mushi-mushi/docs/admin/activity): The User activity view on Home in the Mushi Mushi console shows an app's end-user sessions, top pages, and signed-in vs anonymous users over the last 30 days.
 - [Unusual spikes](https://kensaur.us/mushi-mushi/docs/admin/anomalies): The Unusual spikes view in the Mushi Mushi console runs statistical detectors on your metrics and files a bug report when a spike starts right after a release.

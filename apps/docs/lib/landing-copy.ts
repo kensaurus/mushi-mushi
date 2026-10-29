@@ -13,7 +13,7 @@ export const LANDING_HERO = {
    * one sentence, no paragraph before the first action.
    */
   lead:
-    'A user says your app is broken. Mushi tells you why in plain English and hands the fix to Cursor, Claude Code or Lovable. No Sentry or monitoring needed.',
+    'A user says your app is broken. Mushi Mushi tells you why in plain English and hands the fix to Cursor, Claude Code or Lovable. No Sentry or monitoring needed.',
   /**
    * Stage-fit proof under the actions: what it costs to try. No star count —
    * at this stage a small number is anti-proof. Plain text, no links: the hero

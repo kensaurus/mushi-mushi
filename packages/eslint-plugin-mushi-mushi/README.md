@@ -1,6 +1,6 @@
 # eslint-plugin-mushi-mushi
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 ESLint rules from Mushi Mushi for two bugs AI coding tools often ship: a button
 wired to a handler that does nothing, and fake data (faker, MSW, `John Doe`

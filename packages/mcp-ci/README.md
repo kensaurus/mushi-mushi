@@ -1,6 +1,6 @@
 # `@mushi-mushi/mcp-ci`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 A GitHub Action for people who already use Mushi Mushi and want CI to act on
 their bug reports: hand one report to an agent that opens a fix PR, ask

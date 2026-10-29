@@ -1,6 +1,6 @@
 # @mushi-mushi/capacitor
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 The Capacitor and Ionic plugin for [Mushi Mushi](https://kensaur.us/mushi-mushi). Users shake the phone or tap a button to report a bug. Mushi gets a screenshot and their note, explains the cause in plain English, and hands your editor a fix to start from.
 

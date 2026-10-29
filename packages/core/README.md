@@ -1,6 +1,6 @@
 # @mushi-mushi/core
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 The shared types, API client and utilities under every [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) SDK.
 

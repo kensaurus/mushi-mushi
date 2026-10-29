@@ -1,6 +1,6 @@
 # @mushi-mushi/codebase-graph
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 Internal package, not published to npm. It builds the file and symbol graph
 behind the Mushi Mushi console's codebase explorer (`/explore`), from files

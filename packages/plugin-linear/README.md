@@ -1,6 +1,6 @@
 # `@mushi-mushi/plugin-linear`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 For people who plan their work in Linear. This opens a Linear issue for each
 new Mushi Mushi bug report, updates it once Mushi has triaged the report, and

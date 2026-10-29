@@ -1,6 +1,6 @@
 # @mushi-mushi/wasm-classifier
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 An optional junk filter for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) bug reports, for web apps that get a lot of "hi" and "asdf". It runs in the browser and stops empty or nonsense reports before they are sent, so they never reach the server or an LLM. Most apps do not need it: the web SDK already runs its own pattern filter first.
 

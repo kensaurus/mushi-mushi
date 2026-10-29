@@ -1,6 +1,6 @@
 # @mushi-mushi/verify
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 Internal package, not published to npm. It checks a fix before anyone trusts
 it: it replays the bug report's steps in a Playwright browser against the fix's

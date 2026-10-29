@@ -1,6 +1,6 @@
 # `@mushi-mushi/plugin-crashlytics`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 For mobile apps that use Firebase. When Mushi Mushi applies a fix, this writes
 a `mushi_resolved_<reportId>` flag to your Firebase Remote Config, which your

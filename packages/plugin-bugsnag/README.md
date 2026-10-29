@@ -1,6 +1,6 @@
 # `@mushi-mushi/plugin-bugsnag`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 For teams who live in Bugsnag and want to see what users report there too.
 This copies each bug Mushi Mushi triages into Bugsnag as an error, next to

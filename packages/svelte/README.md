@@ -1,6 +1,6 @@
 # @mushi-mushi/svelte
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 Adds a bug-report widget to your Svelte or SvelteKit app. When a user reports
 a problem, [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) gets a

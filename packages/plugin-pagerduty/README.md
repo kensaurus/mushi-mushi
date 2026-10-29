@@ -1,6 +1,6 @@
 # `@mushi-mushi/plugin-pagerduty`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 For teams with someone on call. This pages whoever is on call in PagerDuty
 when Mushi Mushi triages a bug as critical, and resolves the page when the fix

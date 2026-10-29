@@ -1,6 +1,6 @@
 # `@mushi-mushi/plugin-discord`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 For small teams and communities that talk in Discord. This posts a message to
 a Discord channel when Mushi Mushi triages a bug, proposes a fix, applies it,
