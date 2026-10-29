@@ -6,6 +6,8 @@
  * blocked | merged | deploying` states, polls GitHub for current check-run +
  * deployment status, and upserts results into sdk_upgrade_jobs
  * (_shared/sdk-release-sync.ts). A failed GitHub read writes nothing.
+ * A Cloudflare 502/503/504 on the write is retried in persist.ts; the
+ * gateway page is not logged or returned.
  *
  * Before that, jobs in status `awaiting_lockfile` (ADR 0019) get their PR
  * opened once the host's lockfile workflow pushed, or after 30 minutes.
@@ -20,7 +22,8 @@ import { withSentry } from '../_shared/sentry.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { logDbFailure } from '../_shared/error-codes.ts'
 import { resolveProjectGithubToken } from '../_shared/github.ts'
-import { syncSdkReleaseJob, type SdkReleaseJob } from '../_shared/sdk-release-sync.ts'
+import { type SdkReleaseJob } from '../_shared/sdk-release-sync.ts'
+import { syncSdkReleaseJobRetryingPersist } from './persist.ts'
 import { syncAwaitingLockfileJobs } from '../_shared/sdk-upgrade-lockfile.ts'
 
 const log = rootLog.child('sdk-release-sync')
@@ -68,10 +71,13 @@ app.post('/sdk-release-sync', async (c) => {
 
       // A failed GitHub read (403 rate limit, 5xx, timeout) stores nothing:
       // the job keeps its last known CI state until the next tick.
-      const result = await syncSdkReleaseJob(db, token, rawJob)
+      // A gateway 502 on the write is retried inside syncSdkReleaseJobRetryingPersist.
+      const result = await syncSdkReleaseJobRetryingPersist(db, token, rawJob)
       if (!result.ok) {
-        if (result.code === 'SYNC_PERSIST_FAILED') log.error('failed to persist sync', { jobId: rawJob.id, err: result.message })
-        else log.warn('sync skipped', { jobId: rawJob.id, code: result.code, err: result.message })
+        // Persist failures are logged next to the retry (status title, cf-ray).
+        if (result.code !== 'SYNC_PERSIST_FAILED') {
+          log.warn('sync skipped', { jobId: rawJob.id, code: result.code, err: result.message })
+        }
         results.push({ jobId: rawJob.id, releaseStatus: rawJob.release_status ?? 'pr_opened', error: result.message })
         continue
       }

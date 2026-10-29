@@ -949,7 +949,7 @@ function ProjectContextRail({ project }: { project: Project }) {
         <ContextDetailRow label="Integrations" icon={<IconIntegrations className="h-4 w-4" />}>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             {planTier && planTier !== 'free' && (
-              <Badge className={`border border-brand/20 capitalize ${CHIP_TONE.brand}`}>
+              <Badge className={`capitalize ${CHIP_TONE.brand}`}>
                 {planTier}
               </Badge>
             )}
@@ -960,7 +960,7 @@ function ProjectContextRail({ project }: { project: Project }) {
             )}
             {sentryConnected && (
               <Badge
-                className={`inline-flex items-center gap-1 border border-accent/30 ${CHIP_TONE.accentSubtle}`}
+                className={`inline-flex items-center gap-1 ${CHIP_TONE.accentSubtle}`}
                 title={
                   sentryReports > 0
                     ? `${sentryReports} report${sentryReports === 1 ? '' : 's'} with Sentry trace in the last 30 days`

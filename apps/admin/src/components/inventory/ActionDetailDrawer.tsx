@@ -154,7 +154,7 @@ export function ActionDetailDrawer({
             Verified by ({tests.length})
           </p>
           {tests.length === 0 ? (
-            <div className={`rounded-sm border border-danger/25 ${CHIP_TONE.dangerSubtle} p-2 text-2xs`}>
+            <div className={`rounded-sm ${CHIP_TONE.dangerSubtle} p-2 text-2xs`}>
               No <code className="font-mono">verified_by</code> entry. Without a test reference,
               this action can never reach <strong>verified</strong> status — the reconciler will
               keep it at <strong>wired</strong> at best. Add a Playwright/Vitest spec and
