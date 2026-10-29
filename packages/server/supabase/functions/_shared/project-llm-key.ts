@@ -11,21 +11,31 @@
  *
  * A project over its monthly AI budget gets `null` instead of a thrown
  * LlmBudgetExceededError: a batch job skips that project and carries on with
- * the rest, which is what the budget is for.
+ * the rest, which is what the budget is for. `onMiss` tells that apart from
+ * a project with no key configured; both still return null.
  */
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { resolveLlmKey, type LlmProvider, type ResolvedKey } from './byok.ts'
 import { LlmBudgetExceededError } from './llm-budget.ts'
 
+/** Why `projectLlmKey` returned null. A resolved key does not call `onMiss`. */
+export type ProjectLlmKeyMiss = 'unconfigured' | 'budget_exhausted'
+
 export async function projectLlmKey(
   db: SupabaseClient,
   projectId: string,
   provider: LlmProvider,
+  onMiss?: (reason: ProjectLlmKeyMiss) => void,
 ): Promise<ResolvedKey | null> {
   try {
-    return await resolveLlmKey(db, projectId, provider)
+    const key = await resolveLlmKey(db, projectId, provider)
+    if (!key) onMiss?.('unconfigured')
+    return key
   } catch (err) {
-    if (err instanceof LlmBudgetExceededError) return null
+    if (err instanceof LlmBudgetExceededError) {
+      onMiss?.('budget_exhausted')
+      return null
+    }
     throw err
   }
 }
