@@ -371,11 +371,7 @@ describe('formatDoctorResult', () => {
 });
 
 describe('checkHealthRegistry', () => {
-  const config: DoctorCliConfig = {
-    endpoint: 'https://x.supabase.co/functions/v1/api',
-    apiKey: 'mushi_test',
-    projectId: '00000000-0000-0000-0000-000000000000',
-  };
+  const config = makeConfig();
   const row = (over: Record<string, unknown>) => ({
     id: 'x', key: 'x', status: 'ok', severity: 'warn', title: 'X', detail: 'Fine.', source: 'setup_gaps', affects: null, fix: null, ...over,
   });

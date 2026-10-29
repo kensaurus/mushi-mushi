@@ -1316,8 +1316,14 @@ export async function checkHealthRegistry(
   doFetch: typeof fetch,
 ): Promise<DoctorCheck[]> {
   if (!config.endpoint || !config.apiKey || !config.projectId) return [];
+  let creds: ReturnType<typeof sanitizeCliCredentials>;
   try {
-    const { endpoint, apiKey, projectId } = sanitizeCliCredentials(config);
+    creds = sanitizeCliCredentials(config);
+  } catch {
+    return []; // The config checks above already name a malformed key or project.
+  }
+  try {
+    const { endpoint, apiKey, projectId } = creds;
     const res = await doFetch(`${endpoint}/v1/admin/health-checks?projectId=${encodeURIComponent(projectId)}`, {
       headers: apiKeyHeaders(apiKey, projectId),
       signal: AbortSignal.timeout(30_000),

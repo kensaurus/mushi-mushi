@@ -181,7 +181,9 @@ describe('GET /v1/admin/health-checks', () => {
     const { json } = await get(`/v1/admin/health-checks?projectId=${P1}`)
     const rows = json.data.projects[0].checks as Array<{ id: string; status: string; source: string }>
     const sdkRows = rows.filter((r) => r.source === 'sdk_health')
-    expect(sdkRows).toHaveLength(8)
+    // Eight SDK checks; "no repo" is setup gaps' github_access line here, kept once.
+    expect(sdkRows).toHaveLength(7)
+    expect(rows.filter((r) => r.id === 'github_access')).toHaveLength(1)
     expect(sdkRows.every((r) => r.status === 'unknown')).toBe(true)
     expect(rows.filter((r) => r.source === 'doctor').map((r) => [r.id, r.status])).toEqual([
       ['stranded_reports', 'unknown'],
