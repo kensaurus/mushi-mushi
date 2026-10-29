@@ -32,6 +32,7 @@ import { ActionPill, InlineProof } from './ReportSurface'
 import type { DispatchState } from '../../lib/dispatchFix'
 import { isReportClassified } from '../../lib/reportDiagnosis'
 import { humanizeFixError } from '../../lib/humanizeFixError'
+import { stripAnsi } from './reportLogFormat'
 import { reportHasCodeLocation } from '../../lib/reportCodeLocation'
 import type { ReportDetail, ReportFixAttempt } from './types'
 
@@ -309,7 +310,7 @@ export function buildStoryNodes(
   const actHeadline = (() => {
     if (status === 'fixed') return 'Loop closed — report marked fixed and routed back upstream'
     if (status === 'dismissed') return 'Loop closed — report dismissed (no fix needed)'
-    if (fixStatus === 'failed') return `Loop blocked — ${fix?.error ?? 'fix attempt failed'}`
+    if (fixStatus === 'failed') return `Loop blocked — ${stripAnsi(fix?.error ?? '').trim() || 'fix attempt failed'}`
     if (blocker) return ACT_BLOCKER_COPY[blocker]
     if (actState === 'pending') return 'Awaiting merge — review the PR and click Open PR to ship'
     return 'Not yet — needs Plan + Do + Check first'
