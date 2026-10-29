@@ -20,7 +20,9 @@
  * Before emitting, each caller checks that the project had no earlier
  * occurrence (an earlier dispatch, merge, origin of that kind, …). Without
  * that, an existing app would be stamped "first" at its next occurrence
- * after this shipped — the backdating first-report.ts describes.
+ * after this shipped — the backdating first-report.ts describes. For
+ * sdk_seen_* that history is the migration's backfill of each key's one
+ * stored origin, so it is best effort.
  *
  * Every step has an actor: the person who did it when known, else the
  * project's owner (emitProductEvent actorFallback).

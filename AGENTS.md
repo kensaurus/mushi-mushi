@@ -1025,7 +1025,8 @@ kind emits `sdk_seen_localhost` or `sdk_seen_live`.
 **New-user path events** (plan-simplicity Phase 0, `_shared/funnel-steps.ts`):
 server product events written once per project into the company funnel, each
 with an actor (the person, else the project owner), never onto an app that
-already had the step: `sdk_seen_localhost`, `sdk_seen_live` (heartbeat),
+already had the step (for `sdk_seen_*` best effort: before this, each key kept
+only its latest origin, which the migration backfilled): `sdk_seen_localhost`, `sdk_seen_live` (heartbeat),
 `first_real_report` (ingest; a deployed app's end-user report, `activation.ts`
 rules; `first_report_received` is unchanged and also counts a localhost test
 bug), `first_diagnosis_viewed` (the setup-funnel diagnosis route),
