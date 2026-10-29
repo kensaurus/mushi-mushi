@@ -5,6 +5,13 @@ import { pickPrimaryFixAttempt } from '../../lib/mergeFix'
 import { isReportClassified } from '../../lib/reportDiagnosis'
 import { KNOWN_ISSUES_SEARCH_HREF } from '../../lib/settingsTabs'
 import { NO_CODE_LOCATION_REASON } from '../../lib/reportCodeLocation'
+import { stripAnsi } from './reportLogFormat'
+
+/** A failed attempt's error, without terminal color codes from a git hook. */
+function plainFixError(error: string | null | undefined, fallback: string): string {
+  const plain = stripAnsi(error ?? '').replace(/[ \t]+\n/g, '\n').trim()
+  return plain || fallback
+}
 
 /** The opt-in's name as the fix worker quotes it in a skip reason. */
 const WEB_SEARCH_SETTING_NAME = 'Search the web for known fixes'
@@ -406,9 +413,10 @@ function recommendationFor(
     ) {
       return {
         title: 'Fix failed — validation or sandbox error',
-        description:
-          latest.error ??
+        description: plainFixError(
+          latest.error,
           'The patch was rejected by the validation step. Review the Fixes pipeline log and retry.',
+        ),
         tone: 'urgent',
         meta: lastAttemptMeta,
         actions: [
@@ -422,8 +430,10 @@ function recommendationFor(
     if (isFailed) {
       return {
         title: 'Fix attempt failed',
-        description:
-          latest.error ?? 'An unexpected error stopped the agent. Check the Fixes pipeline for details.',
+        description: plainFixError(
+          latest.error,
+          'An unexpected error stopped the agent. Check the Fixes pipeline for details.',
+        ),
         tone: 'urgent',
         meta: lastAttemptMeta,
         actions: [

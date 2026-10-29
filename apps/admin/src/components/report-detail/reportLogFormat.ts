@@ -1,8 +1,15 @@
 import { CHIP_TONE } from '../../lib/chipTone'
 
-/** Strip ANSI SGR sequences from SDK / terminal log lines. */
-function stripAnsi(text: string): string {
-  return text.replace(/\u001b\[[0-9;]*m/g, '')
+/**
+ * Drop terminal color and cursor sequences so hook output can be read as text.
+ * Lefthook's border is truecolor `\u001b[38;2;56;56;56m`; leaving it in a
+ * report makes the push failure unreadable.
+ */
+export function stripAnsi(text: string): string {
+  return text
+    .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
+    .replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, '')
+    .replace(/\u001b[@-_]/g, '')
 }
 
 export type ConsoleLevel = 'error' | 'warn' | 'info' | 'log' | 'debug'

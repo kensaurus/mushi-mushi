@@ -146,7 +146,7 @@ function cap(text: string | null | undefined, max: number): string {
  * failure read as "✓ check-no-secrets … [cut]", 2026-10-24).
  */
 export function failureTail(r: { stdout: string; stderr: string }, max = 600): string {
-  const t = [r.stdout, r.stderr].map((x) => x.trim()).filter(Boolean).join('\n').replace(/[ \t]+/g, ' ')
+  const t = stripVTControlCharacters([r.stdout, r.stderr].map((x) => x.trim()).filter(Boolean).join('\n')).replace(/[ \t]+/g, ' ')
   const lines = t.split('\n').map((l) => l.trim()).filter(Boolean)
   const kept: string[] = []
   let size = 0
@@ -168,7 +168,12 @@ export function failureTail(r: { stdout: string; stderr: string }, max = 600): s
  */
 export function hookFailureDetail(r: { stdout: string; stderr: string }, max = 900): string | null {
   const text = stripVTControlCharacters([r.stdout, r.stderr].join('\n'))
-  const failed = [...text.matchAll(/^\s*🥊\s+([\w:.-]+)/gmu)].map((m) => m[1]!)
+  // Lefthook paints its summary inside a #383838 border, so the failed step
+  // is "│ 🥊 name", not a line that starts with the glove. The banner line
+  // "│ 🥊 lefthook" is the tool, not a failed step.
+  const failed = [...text.matchAll(/^[\s│┃┌└├┤┬┴┼╭╮╯╰─]*🥊\s+([\w:.-]+)/gmu)]
+    .map((m) => m[1]!)
+    .filter((name) => name !== 'lefthook')
   if (!failed.length) return null
   const lines = text.split('\n')
   const HEADER = /^\s*┃\s+(\S+)\s+❯/u

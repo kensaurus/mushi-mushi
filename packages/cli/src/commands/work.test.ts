@@ -202,6 +202,12 @@ describe('failureTail', () => {
     expect(failureTail({ stdout: '', stderr: 'fatal: not a git repository' })).toBe('fatal: not a git repository')
     expect(failureTail({ stdout: 'x'.repeat(50), stderr: '' }, 10)).toBe(`[…] ${'x'.repeat(10)}`)
   })
+
+  it('drops lefthook truecolor codes so the tail can be read', () => {
+    const out = failureTail({ stdout: '\u001b[38;2;56;56;56m│ test failed: expected 1\u001b[0m', stderr: '' })
+    expect(out).toBe('│ test failed: expected 1')
+    expect(out).not.toMatch(/\u001b/)
+  })
 })
 
 describe('inLocalCooldown', () => {
@@ -541,6 +547,23 @@ describe('hookFailureDetail', () => {
 
   it('is null for output that is not a lefthook run', () => {
     expect(hookFailureDetail({ stdout: '', stderr: 'fatal: not a git repository' })).toBeNull()
+  })
+
+  it('reads a failed step painted inside lefthook’s gray border, without the color codes', () => {
+    const gray = (s: string) => `\u001b[38;2;56;56;56m${s}\u001b[0m`
+    const stdout = [
+      `${gray('│')} 🥊 lefthook  ${gray('v2.0.0 hook: pre-push')}`,
+      `${gray('┃')}  test ❯ `,
+      ' FAIL  lib/queries.test.ts > hides a closed account',
+      'AssertionError: expected [ 2 ] to deeply equal [ 1 ]',
+      gray(' ' + '─'.repeat(20)),
+      `${gray('│')} 🥊 test (22.29 seconds) ${gray('│')}`,
+    ].join('\n')
+    const d = hookFailureDetail({ stdout, stderr: '' })!
+    expect(d).toMatch(/^hook steps failed: test\./)
+    expect(d).toContain('FAIL lib/queries.test.ts')
+    expect(d).not.toContain('lefthook')
+    expect(d).not.toMatch(/\u001b/)
   })
 })
 

@@ -49,4 +49,20 @@ describe('ReportPdcaStory plan stage', () => {
   it('a classifier error on an unclassified report is a failed plan', () => {
     expect(buildStoryNodes(report({ processing_error: 'schema mismatch' }), idle).plan.state).toBe('failed')
   })
+
+  it('strips lefthook color codes from a failed push on the act line', () => {
+    const nodes = buildStoryNodes(
+      report({
+        status: 'fixing',
+        fix_attempts: [{
+          id: 'f1',
+          status: 'failed',
+          error: 'git push failed: \u001b[38;2;56;56;56m│\u001b[0m hook steps failed: test',
+        }] as ReportDetail['fix_attempts'],
+      }),
+      idle,
+    )
+    expect(nodes.act.headline).toContain('hook steps failed: test')
+    expect(nodes.act.headline).not.toMatch(/\u001b/)
+  })
 })
