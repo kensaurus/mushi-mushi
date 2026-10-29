@@ -28,7 +28,17 @@ const state = vi.hoisted(() => ({
       { id: 'run1', project_id: 'p2', skill_slug: 'audit-accessibility', scope: 'the booking flow', rounds_max: 3, round: 2, auto_merge: true, status: 'active', stop_reason: null, current_report_id: 'rep2', history: [{ round: 1, reportId: 'rep1', outcome: 'merged', prUrl: 'https://github.com/o/r/pull/9' }], created_at: '2026-10-23T09:00:00Z', updated_at: '2026-10-23T10:00:00Z' },
     ],
   } as unknown,
+  lanes: null as unknown,
 }))
+
+const WORKER_LANES = {
+  generatedAt: '2026-10-23T02:00:00Z',
+  projects: [{ id: 'p2', name: 'tsumagoi' }],
+  hosts: [{ id: 'h1', hostname: 'alienware', platform: 'wsl2', version: null, online: true, lastHeartbeatAt: '2026-10-23T01:59:00Z', status: {}, guards: { max_agents: 6, min_free_mem_gb: 5, gh_floor: 800 }, revoked: false, mine: true }],
+  lanes: [
+    { id: 'l1', hostId: 'h1', projectId: 'p2', projectName: 'tsumagoi', name: 'tsumagoi', config: { paused: false, concurrency: 1, model: 'claude-opus-5-5-medium', mode: 'fix', stop_at: null, drain: false, prune_own: false }, status: {}, lastSeenAt: '2026-10-23T01:59:00Z', active: [], queue: [], recent: [], counts7d: { runs: 0, prs: 0, noChange: 0, timeouts: 0, errors: 0, infra: 0 } },
+  ],
+}
 
 const KEY: SpendDownKeyStatus = {
   id: 'k1',
@@ -115,15 +125,13 @@ vi.mock('../lib/usePageData', () => ({
             : path === '/v1/admin/projects'
               ? { projects: [{ id: 'p1', name: 'mushi-mushi' }, { id: 'p2', name: 'tsumagoi' }, { id: 'p3', name: 'lets-talk' }] }
               : path === '/v1/admin/work/lanes'
-                ? {
-                    generatedAt: '2026-10-23T02:00:00Z',
-                    projects: [{ id: 'p2', name: 'tsumagoi' }],
-                    flags: state.workerFlags,
-                    hosts: [{ id: 'h1', hostname: 'alienware', platform: 'wsl2', version: null, online: true, lastHeartbeatAt: '2026-10-23T01:59:00Z', status: {}, guards: { max_agents: 6, min_free_mem_gb: 5, gh_floor: 800 }, revoked: false, mine: true }],
-                    lanes: [
-                      { id: 'l1', hostId: 'h1', projectId: 'p2', projectName: 'tsumagoi', name: 'tsumagoi', config: { paused: false, concurrency: 1, model: 'claude-opus-5-5-medium', mode: 'fix', stop_at: null, drain: false, prune_own: false }, status: {}, lastSeenAt: '2026-10-23T01:59:00Z', active: [], queue: [], recent: [], counts7d: { runs: 0, prs: 0, noChange: 0, timeouts: 0, errors: 0, infra: 0 } },
-                    ],
-                  }
+                // Lanes stay on `state.lanes` so a test can swap the fixture
+                // (empty lanes). Flags are read here, not copied onto the
+                // fixture, because the idle-credits test replaces
+                // `state.workerFlags` with a new array.
+                ? state.lanes == null
+                  ? null
+                  : { ...(state.lanes as Record<string, unknown>), flags: state.workerFlags }
                 : null
     return { data, loading: false, error: null, isValidating: false, reload: () => {}, lastFetchedAt: null }
   },
@@ -145,6 +153,8 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date('2026-10-23T02:00:00Z'))
   state.calls = []
+  state.lanes = WORKER_LANES
+  state.workerFlags = []
   state.watches = {
     p1: { watch: { base_url: 'https://kensaur.us/mushi-mushi', page_limit: 100, status: 'active', estimated_credits_per_month: 6000 }, openPages: [], suggestedUrl: null, firecrawlReady: true },
     p2: { watch: { base_url: 'https://tsumagoi.kensaur.us', page_limit: 30, status: 'active', estimated_credits_per_month: 1800 }, openPages: [], suggestedUrl: null, firecrawlReady: true },
@@ -183,6 +193,19 @@ async function render() {
   await act(async () => {
     await Promise.resolve()
   })
+}
+
+/**
+ * Axe `link-in-text-block`: an in-text link needs a resting underline, not
+ * color plus hover only. `hover:underline` is a different class token.
+ */
+function expectRestingUnderline(rootEl: ParentNode) {
+  const links = Array.from(rootEl.querySelectorAll('a'))
+  expect(links.length).toBeGreaterThan(0)
+  for (const a of links) {
+    const tokens = a.className.split(/\s+/)
+    expect(tokens, a.textContent ?? a.getAttribute('href') ?? 'link').toEqual(expect.arrayContaining(['underline', 'underline-offset-2']))
+  }
 }
 
 function toggle(label: string): HTMLButtonElement | HTMLInputElement {
@@ -366,6 +389,62 @@ describe('Cursor key model on /credits', () => {
     expect(text).toContain("each app's Cursor model")
     const changes = Array.from(host.querySelectorAll('a')).filter((a) => a.textContent === 'Change')
     expect(changes.map((a) => a.getAttribute('href'))).toEqual(['/settings?tab=byok', '/settings?tab=byok'])
+  })
+})
+
+describe('in-text links on /credits', () => {
+  it('underlines every link at rest so color is not the only cue', async () => {
+    await render()
+    expect(host.textContent).toContain('current round')
+    expect(host.textContent).toContain('Change models and lanes on the Workers tab')
+    expectRestingUnderline(host)
+
+    state.lanes = { ...WORKER_LANES, lanes: [] }
+    await render()
+    expect(host.textContent).toContain('set one up')
+    expectRestingUnderline(host)
+
+    const { CursorLevers } = await import('../components/credits/CursorLevers')
+    const bare: SpendDownKeyStatus = { ...KEY, id: 'k-bare', enabled: false, creditsExpireAt: null }
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(CursorLevers, {
+        spendDown: { projectId: 'p1', keys: [] },
+        followups: null,
+        now: new Date('2026-10-23T02:00:00Z'),
+        onChanged: () => {},
+      })))
+    })
+    expect(host.textContent).toContain('No Cursor key yet')
+    expectRestingUnderline(host)
+
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(CursorLevers, {
+        spendDown: { projectId: 'p1', keys: [bare] },
+        followups: null,
+        now: new Date('2026-10-23T02:00:00Z'),
+        onChanged: () => {},
+      })))
+    })
+    expect(host.textContent).toContain('Set the expiry date first')
+    expectRestingUnderline(host)
+
+    state.watches = {
+      p1: { watch: null, openPages: [], suggestedUrl: null, firecrawlReady: false },
+    }
+    const { FirecrawlLevers } = await import('../components/credits/FirecrawlLevers')
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(FirecrawlLevers, {
+        balance: null,
+        projects: [{ id: 'p1', name: 'mushi-mushi' }],
+        now: new Date('2026-10-23T02:00:00Z'),
+      })))
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(host.textContent).toContain('Add one in Settings')
+    expect(host.textContent).toContain('This app has no Firecrawl key')
+    expectRestingUnderline(host)
   })
 })
 
