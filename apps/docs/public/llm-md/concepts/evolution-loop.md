@@ -1,10 +1,10 @@
-# The evolution loop — how Mushi closes the cycle
+# The evolution loop: how Mushi Mushi closes the cycle
 
 Source: https://kensaur.us/mushi-mushi/docs/concepts/evolution-loop
 
 ---
-title: The evolution loop — how Mushi closes the cycle
-description: The five stages that turn a user-felt bug into a merged fix and a lesson rule — the loop that improves your app without Jira, QA teams or PM bottlenecks.
+title: "The evolution loop: how Mushi Mushi closes the cycle"
+description: The five Mushi Mushi stages that turn a user-felt bug into a merged fix and a lesson rule, without Jira, QA teams or PM bottlenecks.
 ---
 
 # The evolution loop
@@ -101,7 +101,7 @@ Fixes that score below the threshold are flagged for human review. High-confiden
 
 ### ⑤ Remember
 
-When the judge score exceeds the promotion threshold (`project_settings.lesson_threshold`, default 0.80), a lesson rule is extracted from the fix and written to `.mushi/lessons.json` in your repo. The lesson includes:
+`mistake-clusterer` groups similar reports by embedding every hour. When a group has at least 3 reports and a judge rates it coherent (≥ 0.75), it is promoted to a lesson and `mistake-summarizer` writes the rule. `mushi sync-lessons` writes the promoted lessons to `.mushi/lessons.json` in your repo. The lesson includes:
 
 - What pattern caused the bug
 - What fix resolved it

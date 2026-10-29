@@ -15,6 +15,22 @@
 import type { Command } from 'commander'
 import { apiCall, die, requireConfig } from '../cli-shared.js'
 
+/** Plan ids keep their 2025 names; people see Free / Builder / Studio (2026-10-28). */
+const PLAN_NAMES: Readonly<Record<string, string>> = {
+  free_cloud: 'Free',
+  hobby: 'Free',
+  starter: 'Builder',
+  indie: 'Builder',
+  pro: 'Studio',
+  enterprise: 'Enterprise',
+}
+
+/** @internal Exported for tests only. */
+export function planLabel(planId: string | null | undefined): string {
+  if (!planId) return '—'
+  return PLAN_NAMES[planId] ?? planId
+}
+
 interface UsageStats {
   planId: string
   diagnosesUsed: number
@@ -65,7 +81,7 @@ Examples:
       const badge = s.overDiagnosisQuota ? ' ⚠ OVER LIMIT' : s.approachingDiagnosisQuota ? ' ⚠ approaching limit' : ''
 
       console.log(`\nDiagnoses this period: ${s.diagnosesUsed} / ${limitStr} (${pctStr})${badge}`)
-      console.log(`Plan: ${s.planId ?? '—'}`)
+      console.log(`Plan: ${planLabel(s.planId)}`)
       console.log(`Spend cap: ${capStr}`)
       console.log(`Period ends: ${s.periodEnd ? s.periodEnd.slice(0, 10) : '?'}`)
       if (s.overDiagnosisQuota) {
@@ -102,7 +118,7 @@ Examples:
       const capStr = s.monthlySpendCapUsd != null ? `$${s.monthlySpendCapUsd}/mo` : 'none'
       const overageStr = s.overageRateDiagnoses != null ? `$${s.overageRateDiagnoses}/diagnosis` : 'N/A'
 
-      console.log(`\nPlan:        ${s.planId ?? '—'}`)
+      console.log(`\nPlan:        ${planLabel(s.planId)}`)
       console.log(`Status:      ${s.subscriptionStatus ?? 'free'}${s.cancelAtPeriodEnd ? ' (cancels at period end)' : ''}`)
       console.log(`Diagnoses:   ${s.diagnosesUsed} / ${limitStr} (${pctStr})`)
       console.log(`Overage:     ${overageStr}`)

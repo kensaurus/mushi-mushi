@@ -45,7 +45,7 @@ export const EMPTY_BILLING_STATS: BillingStats = {
   organizationId: null,
   billingMode: null,
   planId: 'hobby',
-  planDisplayName: 'Hobby',
+  planDisplayName: 'Free',
   subscriptionStatus: null,
   isComplimentary: false,
   hasStripeCustomer: false,
@@ -67,7 +67,7 @@ export const EMPTY_BILLING_STATS: BillingStats = {
 }
 
 export interface PlanCatalog {
-  id: 'hobby' | 'starter' | 'pro' | 'enterprise' | string
+  id: 'free_cloud' | 'indie' | 'pro' | 'enterprise' | string
   display_name: string
   position: number
   monthly_price_usd: number
@@ -77,6 +77,8 @@ export interface PlanCatalog {
   overage_unit_amount_decimal: number | null
   included_diagnoses_per_month?: number | null
   overage_unit_amount_decimal_diagnoses?: number | null
+  /** Apps a team may watch on this plan; null = no limit (2026-10-28). */
+  max_projects?: number | null
   retention_days: number
   seat_limit: number | null
   is_self_serve: boolean
@@ -99,6 +101,8 @@ interface ProjectTier {
 
 export interface BillingProject {
   project_id: string
+  /** The team the app belongs to; apps per team is the plan limit. */
+  organization_id?: string | null
   project_name: string
   plan: string
   tier?: ProjectTier

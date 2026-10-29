@@ -4,12 +4,14 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/fullstack-audit
 
 ---
 title: Full-stack audit
-description: The Full-stack audit runs one health check across RLS gaps, recent backend errors and API contract drift, and returns a readable scorecard.
+description: The Full-stack audit in Mushi Mushi runs one health check across RLS gaps, recent backend errors and API contract drift, and returns a readable scorecard.
 ---
 
 # Full-stack audit
 
-**Route:** `/fullstack-audit`
+**Route:** `/fullstack-audit` (sidebar: Checks › Full-stack audit)
+
+The Full-stack audit reads your app's Supabase backend and every Mushi Mushi check in one pass.
 
 **First on the page:** one sentence with the exact number of open errors and
 warnings (counted on the server, not from the capped list) and **Copy fix prompt
@@ -26,8 +28,8 @@ Code size links here instead of repeating them.
 > RLS gaps, recent backend errors, API contract drift — without opening five
 > different tabs.
 
-One **Run audit** button fans out to `POST /v1/admin/projects/:id/audit` and
-returns a severity-ranked scorecard in ~10 seconds.
+One **Run audit** button calls `POST /v1/admin/projects/:id/audit` and
+returns a severity-ranked scorecard.
 
 ---
 
@@ -39,7 +41,7 @@ returns a severity-ranked scorecard in ~10 seconds.
 | **DB advisors** | Security + performance findings from Supabase MCP |
 | **RLS gaps** | Tables without row-level security |
 | **Error log** | Recent backend ERROR-level log count |
-| **Gate runs** | The newest run of every check in the last 7 days, by name: the inventory gates (G1–G8), schema drift, code health, the recipe drift checks (design, CI, deploy, env vars), Mushi setup checks, the app hole checks and the store review checklist |
+| **Gate runs** | The newest run of every check in the last 7 days, by name: the eight inventory gates, schema drift, code health, the recipe drift checks (design, CI, deploy, env vars), Mushi setup checks, the app hole checks and the store review checklist |
 
 If a part of the audit could not be read (the settings, the advisors, the logs,
 the table list or the gate runs), the page lists it and the verdict reads
@@ -85,7 +87,7 @@ check.
 
 ## Prerequisites
 
-Set the Supabase project ref under **Settings → General → Supabase project**,
+Set the Supabase project ref under **Settings → General → Your database → Supabase project**,
 then add a scoped Supabase access token under **Settings → AI keys → Supabase**:
 this one project only, with Database, Edge Functions, Advisors and Logs set to
 Read, and an expiry. CLI equivalent: `mushi audit`.
@@ -104,7 +106,7 @@ mushi audit --project-id <uuid>
 
 ## Related pages
 
-- [Code health](/admin/code-health) — bundle + god-file trends from CI ingest
-- [Drift scanner](/admin/drift) — scheduled schema drift findings
-- [Integration health](/admin/health) — Slack / Sentry / GitHub probe status
-- [Inventory](/admin/inventory) — the same findings next to the inventory graph (inventory plans)
+- [Code size](/admin/code-health) — bundle + god-file trends from CI ingest (Mushi health → Code size)
+- [Schema changes](/admin/drift) — scheduled schema drift findings (Mushi health → Schema changes)
+- [Mushi health](/admin/health) — Slack / Sentry / GitHub probe status
+- [User stories](/admin/inventory) — the same findings next to the inventory graph (inventory plans)

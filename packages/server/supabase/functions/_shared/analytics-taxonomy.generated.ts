@@ -150,10 +150,57 @@ export const MUSHI_EVENTS = {
       "project_id"
     ]
   },
+  "activated": {
+    "surface": "server",
+    "required": [
+      "project_id"
+    ]
+  },
   "fix_merged": {
     "surface": "server",
     "required": [
       "project_id"
+    ]
+  },
+  "sdk_seen_localhost": {
+    "surface": "server",
+    "required": [
+      "project_id",
+      "origin_kind"
+    ]
+  },
+  "sdk_seen_live": {
+    "surface": "server",
+    "required": [
+      "project_id",
+      "origin_kind"
+    ]
+  },
+  "first_real_report": {
+    "surface": "server",
+    "required": [
+      "project_id",
+      "report_id"
+    ]
+  },
+  "first_diagnosis_viewed": {
+    "surface": "server",
+    "required": [
+      "project_id"
+    ]
+  },
+  "first_fix_dispatched": {
+    "surface": "server",
+    "required": [
+      "project_id",
+      "report_id"
+    ]
+  },
+  "first_fix_merged": {
+    "surface": "server",
+    "required": [
+      "project_id",
+      "report_id"
     ]
   },
   "upgrade_completed": {
@@ -185,6 +232,19 @@ export const MUSHI_EVENTS = {
     "surface": "server",
     "required": [
       "project_id"
+    ]
+  },
+  "production_check_started": {
+    "surface": "server",
+    "required": [
+      "project_id"
+    ]
+  },
+  "production_check_finished": {
+    "surface": "server",
+    "required": [
+      "project_id",
+      "outcome"
     ]
   },
   "loop_impression": {

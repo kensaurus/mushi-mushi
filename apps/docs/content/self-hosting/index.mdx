@@ -1,13 +1,13 @@
 ---
 title: Self-hosting
-description: Run the whole Mushi Mushi stack yourself with one command — Docker Compose, your own keys, AGPLv3 server, MIT SDKs, no usage limits.
+description: Run the whole Mushi Mushi stack yourself with Docker Compose. Your own keys, AGPLv3 server, MIT SDKs, no usage limits.
 ---
 
 import { Callout } from 'nextra/components'
 
 # Self-hosting
 
-Mushi is **OSS-first**. Mushi Cloud at `kensaur.us/mushi-mushi/admin` runs the same code as this repo — there is no closed-source plus-tier. Every edge function, migration, and admin SPA you see here is what powers Mushi Cloud. The one difference is data: the hosted service keeps its own tuning (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. The repo ships working default prompts, so your stack has every feature. See [Open source & licensing](/concepts/open-source#what-the-hosted-service-keeps).
+Mushi Mushi is **OSS-first**. Mushi Cloud at `kensaur.us/mushi-mushi/admin` runs the same code as this repo — there is no closed-source plus-tier. Every edge function, migration, and admin SPA you see here is what powers Mushi Cloud. The one difference is data: the hosted service keeps its own tuning (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. The repo ships working default prompts, so your stack has every feature. See [Open source & licensing](/concepts/open-source#what-the-hosted-service-keeps).
 
 <Callout type="info">
   **Prerequisite:** Node ≥ 22, a [Supabase](https://supabase.com) project, and the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started).
@@ -21,7 +21,7 @@ Mushi is **OSS-first**. Mushi Cloud at `kensaur.us/mushi-mushi/admin` runs the s
 | Edge Functions | 50+ Supabase Edge functions (Deno) — run `pnpm docs-stats` for live count | AGPLv3 |
 | Admin SPA | React + Vite, deployed to any static host | AGPLv3 |
 | Observability | Langfuse + Sentry | MIT / Commercial |
-| Sandbox | E2B managed (or self-hosted Modal) | External |
+| Sandbox *(optional)* | E2B, Modal or Cloudflare, through `@mushi-mushi/agents` | External |
 
 ## Fastest path — Docker Compose
 

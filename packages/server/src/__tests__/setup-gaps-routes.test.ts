@@ -25,6 +25,7 @@ const state = vi.hoisted(() => ({
   accessible: [] as string[],
   role: null as string | null,
   env: {} as Record<string, string>,
+  tasks: [] as Promise<unknown>[],
 }))
 const fakeLog = vi.hoisted(() => {
   const logger: Record<string, unknown> = {}
@@ -34,6 +35,11 @@ const fakeLog = vi.hoisted(() => {
 })
 
 vi.mock('../../supabase/functions/_shared/db.ts', () => ({ getServiceClient: () => state.db }))
+vi.mock('../../supabase/functions/_shared/background.ts', () => ({
+  runInBackground: (task: Promise<unknown>) => {
+    state.tasks.push(task)
+  },
+}))
 vi.mock('../../supabase/functions/_shared/logger.ts', () => ({ log: fakeLog, createLogger: () => fakeLog }))
 vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
   jwtAuth: async (c: { set: (k: string, v: string) => void }, next: () => Promise<void>) => {
@@ -116,6 +122,7 @@ beforeEach(() => {
   state.accessible = [P1, P2]
   state.role = null
   state.env = { SLACK_CLIENT_ID: 'id' }
+  state.tasks = []
   calls.github = []
   calls.mint = 0
   calls.dispatch = 0
@@ -170,6 +177,42 @@ describe('GET /v1/admin/setup-gaps', () => {
     expect(calls.mint).toBe(first)
   })
 
+  it('stores each fresh answer, so another isolate can serve it', async () => {
+    await get(`/v1/admin/setup-gaps?projectId=${P1}`)
+    const rows = (state.db as FakeDb).table('setup_gap_results')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ project_id: P1, checked_at: NOW.toISOString() })
+  })
+
+  it('a stored answer under 10 minutes old is served without asking GitHub (sweep #37)', async () => {
+    const stored = { projectId: P1, name: 'glot.it', checkedAt: new Date(NOW.getTime() - 5 * 60_000).toISOString(), gaps: [{ id: 'stored', status: 'ok' }] }
+    state.db = seed({ setup_gap_results: [{ project_id: P1, value: stored, checked_at: stored.checkedAt }] })
+    const { json } = await get(`/v1/admin/setup-gaps?projectId=${P1}`)
+    expect(calls.mint).toBe(0)
+    expect(calls.github).toEqual([])
+    expect(json.data.projects[0].gaps).toEqual([{ id: 'stored', status: 'ok' }])
+  })
+
+  it('an older stored answer is shown at once and re-checked in the background, which stores the new one', async () => {
+    const old = new Date(NOW.getTime() - 2 * 3600_000).toISOString()
+    state.db = seed({ setup_gap_results: [{ project_id: P1, value: { projectId: P1, name: 'glot.it', checkedAt: old, gaps: [{ id: 'old', status: 'ok' }] }, checked_at: old }] })
+    const { json } = await get(`/v1/admin/setup-gaps?projectId=${P1}`)
+    expect(json.data.projects[0].gaps).toEqual([{ id: 'old', status: 'ok' }])
+    expect(state.tasks).toHaveLength(1)
+    await Promise.all(state.tasks)
+    expect(calls.mint).toBe(1)
+    const row = (state.db as FakeDb).table('setup_gap_results')[0] as { checked_at: string; value: { gaps: unknown[] } }
+    expect(row.checked_at).toBe(NOW.toISOString())
+    expect(row.value.gaps.length).toBeGreaterThan(1)
+  })
+
+  it('refresh=1 ignores the stored answer and checks live', async () => {
+    const recent = new Date(NOW.getTime() - 5 * 60_000).toISOString()
+    state.db = seed({ setup_gap_results: [{ project_id: P1, value: { projectId: P1, name: 'glot.it', checkedAt: recent, gaps: [] }, checked_at: recent }] })
+    await get(`/v1/admin/setup-gaps?projectId=${P1}&refresh=1`)
+    expect(calls.mint).toBe(1)
+  })
+
   it('every app the caller can open, with no repo and no organization as their own lines', async () => {
     const res = await get('/v1/admin/setup-gaps')
     const names = res.json.data.projects.map((p: { name: string }) => p.name)
@@ -189,7 +232,9 @@ describe('GET /v1/admin/setup-gaps', () => {
     expect(m.get('github_access:kensaurus/glot.it')).toMatchObject({ status: 'ok', summary: expect.stringContaining('Your GitHub token') })
     expect(calls.github).toEqual(['/repos/kensaurus/glot.it'])
 
+    // A second, independent check: no cached or stored answer from the first.
     routes.clearSetupGapsCache()
+    state.db = seed()
     calls.github = []
     gh.scopes = null
     gh.status = { '/actions/secrets/public-key': 403 }
@@ -212,13 +257,15 @@ describe('GET /v1/admin/setup-gaps', () => {
     const db = seed()
     const from = db.from.bind(db)
     db.from = ((name: string) => {
-      if (name === 'deploy_observations' || name === 'project_repos') throw new Error('connection reset')
+      if (name === 'deploy_observations') throw new Error('connection reset')
+      if (name === 'project_repos') throw Object.assign(new Error('canceling statement due to statement timeout'), { code: '57014' })
       return from(name)
     }) as never
     state.db = db
     const m = byId((await get(`/v1/admin/setup-gaps?projectId=${P1}`)).json.data.projects[0].gaps)
+    // A statement timeout reads in plain words, never as the raw Postgres text.
     expect(m.get('deploy_events')).toMatchObject({ status: 'unknown', summary: expect.stringContaining('connection reset') })
-    expect(m.get('github_access')).toMatchObject({ status: 'unknown', summary: expect.stringContaining("could not read this app's repos") })
+    expect(m.get('github_access')).toMatchObject({ status: 'unknown', summary: "Mushi could not read this app's repos (the database was too slow to answer; try again in a minute)." })
   })
 })
 

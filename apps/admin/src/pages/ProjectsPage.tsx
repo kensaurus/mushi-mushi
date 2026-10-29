@@ -671,6 +671,7 @@ export function ProjectsPage() {
                 activeTeamName={activeTeamName}
                 roleHint={roleHint}
                 onTab={setTab}
+                activeTab={activeTab}
                 onRefresh={reloadAll}
                 refreshing={validating}
               />
@@ -739,7 +740,8 @@ export function ProjectsPage() {
           {stats.projectCount === 0 ? (
             <CliSetupGuide projectId={activeProjectId} />
           ) : null}
-          {stats.topPriority === 'healthy' && (
+          {/* Advanced mode's hero already says it. */}
+          {stats.topPriority === 'healthy' && !isAdvanced && (
             <RecommendedAction
               tone="success"
               title="All projects ingesting"

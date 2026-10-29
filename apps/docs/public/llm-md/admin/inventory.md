@@ -4,19 +4,22 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/inventory
 
 ---
 title: 'User stories · Inventory'
-description: The User stories page manages your inventory.yaml — every page, action and story your app should have — and shows which of them the gates cover.
+description: The User stories page in the Mushi Mushi console manages inventory.yaml, the pages, actions and stories your app should have, and shows which the gates cover.
 ---
 
 # User stories · Inventory
 
-The **User stories** surface (sidebar → Checks → User stories) is the v2 positive
+**Route:** `/inventory` (sidebar: Checks › User stories)
+
+The **User stories** page in Mushi Mushi is the v2 positive
 side of the loop. Where Reports / Graph / Fixes catch what your users
 *felt* break, the inventory describes what should *exist* — every page,
 every action, every expected outcome — so the gates can fail when the
 two diverge.
 
-  User stories sits under **Checks** in the sidebar: open Checks and the
-  sidebar lists it with the other checks.
+  User stories needs a plan that includes it. On such a plan it is listed under
+  **Checks** in the sidebar; otherwise its card on [Checks](/admin/checks) shows an
+  Upgrade pill.
 
 ## What you see
 
@@ -45,11 +48,14 @@ The tabs are **User stories**, **All actions** (the page × element table),
 ## Check every action / Crawl the app
 
 The status line has one **Check every action** and one **Crawl the app**
-for the whole project. Both short-circuit to the same code path the GitHub
+for the whole project. They call the same server routes the GitHub
 Action uses ([`@mushi-mushi/mcp-ci`](/sdks/mcp-ci)):
 
-- **Check every action** runs all five code checks against the current
-  branch and posts the composite check back to your most recent open PR.
+- **Check every action** runs the server-side checks: status claims, API contract,
+  unused backend endpoints and calls to unknown endpoints. Results show on the
+  **Code checks** tab.
+  It posts nothing to a pull request: the lint checks (dead handlers, mock data)
+  need your ESLint report, which only the GitHub Action sends.
 - **Crawl the app** crawls every page in the map and reconciles it with
   `inventory.yaml`. Differences land in the *Out of sync* tab.
 
@@ -88,21 +94,20 @@ The same inventory powers a **Surface** toggle on the
 overlaid on the live bug graph so the dead corners (high-traffic
 elements with no `expected_outcome`) light up.
 
-## Five gates
+## The gates
 
-The composite GitHub check is rolled up from:
+The GitHub Action rolls these into one composite check. The **Code checks**
+tab lists their findings under the names in the first column:
 
-| Gate                              | Surfaced as                      |
-| --------------------------------- | -------------------------------- |
-| `mushi-mushi/no-dead-handler`     | ESLint — empty `onClick` etc.    |
-| `mushi-mushi/no-mock-leak`        | ESLint — faker / placeholder data in non-test paths |
-| **Inventory drift**               | Action runner — added / removed / renamed actions |
-| **Agentic-failure detection**     | Action runner — handler regressions across deploys |
-| **Synthetic walk health**         | Synthetic monitor — last walk against staging |
-
-Drilling into any failing gate from a story card opens the relevant
-finding panel — `GateFindingCard` for the static rules, `DriftDiffPanel`
-for inventory drift, `SyntheticTimeline` for the synthetic walks.
+| Gate (console name)            | Id               | What it checks |
+| ------------------------------ | ---------------- | -------------- |
+| **Dead handlers**              | `dead_handler`   | ESLint `mushi-mushi/no-dead-handler`: buttons and links whose handler does nothing. Needs your ESLint report from CI |
+| **Mock data in production**    | `mock_leak`      | ESLint `mushi-mushi/no-mock-leak`: faker or placeholder data in non-test paths. Needs your ESLint report from CI |
+| **API contract**               | `api_contract`   | Frontend calls whose request or response does not match the API (server side) |
+| **Live route crawl**           | `crawl`          | Every page in the map loaded live; runs through **Crawl the app**, not as part of the composite check |
+| **Status claims**              | `status_claim`   | Actions marked `verified` or `wired` in the map whose derived status disagrees |
+| **Unused backend endpoints**   | `orphan_endpoint`| Backend endpoints nothing calls |
+| **Calls to unknown endpoints** | `unknown_call`   | Frontend calls to endpoints the backend does not have |
 
 ## Watch your live site
 
@@ -128,13 +133,11 @@ The crawler sends `MushiSiteWatch` in its `User-Agent` header (`MushiSiteWatch/1
 ## Synthetic monitor
 
 Mushi re-walks the inventory's `expected_outcome` checks against your
-staging URL on a configurable cron (default: hourly). The monitor is
-**fail-closed by default** — write paths (POST / PUT / DELETE actions)
-are skipped unless you opt in per-project:
-
-```yaml filename="inventory.yaml"
-synthetic_monitor_allow_mutations: true
-```
+staging URL every 15 minutes once you enable it. The monitor is
+**fail-closed by default**: write paths (POST / PUT / DELETE actions)
+are skipped unless you turn on **Allow mutations** for the project in
+**Map file → Crawler & probes** (the `synthetic_monitor_allow_mutations`
+project setting; it is not an `inventory.yaml` key).
 
 Set this only when staging is fully isolated from production and the
 write endpoints have an idempotency key or roll back cleanly.
@@ -156,16 +159,12 @@ graph edge `classify-report` writes) carries that link end-to-end:
   Soft warnings (no changed file references the contract's required
   DB table or page route) land on
   `fix_attempts.spec_validation_warnings JSONB` and surface in the
-  Fixes drawer as a yellow "Sanity-check before merging" callout.
+  fix's detail panel under **Spec validation warnings**.
 - A targeted post-PR synthetic probe is queued for the originating
   Action immediately after the PR opens. The synthetic-monitor cron
   drains the queue with priority on its next tick — so a fix that
   immediately makes the action `regressed` shows up here within
   minutes of merge, not on the next 15-min reconciler sweep.
-
-Open any element / action drawer to see the **"Recent fixes"** strip
-at the bottom — every fix attempt that mutated this Action, with its
-spec-validation warnings (if any) and the post-PR synthetic result.
 
 External AI agents (Cursor, Claude Code, OpenAI Agents SDK,
 LangGraph, CrewAI, A2A v1.0.0) get the same anchor — see

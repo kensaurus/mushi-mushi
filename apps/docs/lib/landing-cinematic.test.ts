@@ -12,6 +12,7 @@ import {
   LANDING_HERO_START,
   LANDING_INSTALL,
   LANDING_INSTALL_LOVABLE,
+  LANDING_CHECK_LINK,
   LANDING_SAMPLE_LINK,
   LANDING_SETUP_PROMPT,
   LANDING_FIX_PROMPT,
@@ -22,6 +23,7 @@ import {
   LANDING_QUICKSTART_PLATFORMS,
   LANDING_COMPARISON_ROWS,
   LANDING_TRUST_LINKS,
+  LANDING_FAQ,
 } from './landing-copy'
 import { MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
 import { ADMIN_DEMO_BASE } from '../data/admin-screenshots'
@@ -47,11 +49,18 @@ describe('landing cinematic copy SSOT', () => {
   })
 
   it('keeps the free-plan pricing claim under the hero install box', () => {
-    expect(LANDING_HERO.reassure).toMatch(/50 diagnoses/i)
+    // Free since 2026-10-28: one app, 100 diagnoses a month (docs/plan-pricing.md).
+    expect(LANDING_HERO.reassure).toMatch(/one app: 100 diagnoses/i)
   })
 
-  it('explains the one job in three steps: a user reports, Mushi explains, your AI fixes (ADR 0052)', () => {
-    expect(LANDING_PILLARS.map((p) => p.name)).toEqual(['A user reports it', 'Mushi explains it', 'Your AI fixes it'])
+  it('sells the pricing strip by apps watched, with no retired plan names', () => {
+    expect(LANDING_PRICING_STRIP.lead).toMatch(/number of apps/)
+    expect(read('components', 'landing', 'PricingStrip.tsx')).toContain('apps')
+    expect(JSON.stringify(LANDING_FAQ)).not.toMatch(/\bIndie\b|50 diagnoses/)
+  })
+
+  it('explains the one job in three steps: a user reports, Mushi Mushi explains, your AI fixes (ADR 0052)', () => {
+    expect(LANDING_PILLARS.map((p) => p.name)).toEqual(['A user reports it', 'Mushi Mushi explains it', 'Your AI fixes it'])
     expect(LANDING_PILLARS.map((p) => p.glyph)).toEqual(['report', 'diagnose', 'ship'])
   })
 
@@ -92,7 +101,7 @@ describe('landing cinematic copy SSOT', () => {
     // cannot answer prompts) and send a test report it can show.
     expect(LANDING_SETUP_PROMPT).toContain('npx mushi-mushi --yes')
     expect(LANDING_SETUP_PROMPT).toContain('npx mushi-mushi test')
-    expect(LANDING_FIX_PROMPT).toMatch(/latest Mushi report/)
+    expect(LANDING_FIX_PROMPT).toMatch(/latest Mushi Mushi report/)
     const hero = readFileSync(join(__dirname, '..', 'components', 'landing', 'CinematicEditorialHero.tsx'), 'utf8')
     expect(hero).toContain('<LandingInstallStrip />')
     // The install lives in the hero only.
@@ -125,11 +134,16 @@ describe('landing cinematic copy SSOT', () => {
     expect(LANDING_HERO.lead).toMatch(/No Sentry/)
   })
 
-  it('has one primary action and one secondary link in the hero: the install box and the sample diagnosis', () => {
+  it('has one primary action and one secondary link in the hero: the install box and the free check (ADR 0052 amendment)', () => {
     const hero = read('components', 'landing', 'CinematicEditorialHero.tsx')
     expect(hero.match(/<LandingInstallStrip \/>/g)).toHaveLength(1)
     expect(hero.match(/<Link /g)).toHaveLength(1)
-    expect(hero).toContain('LANDING_SAMPLE_LINK.href')
+    expect(hero).toContain('LANDING_CHECK_LINK.href')
+    expect(LANDING_CHECK_LINK.href).toMatch(/^\/check\?src=/)
+    expect(LANDING_CHECK_LINK.note).toMatch(/nothing to install, no sign-up/)
+    expect(existsSync(join(DOCS, 'app', 'check', 'page.tsx'))).toBe(true)
+    // The sample stays one scroll down, in How it works.
+    expect(read('components', 'landing', 'DiagnosisScrollStage.tsx')).toContain('LANDING_SAMPLE_LINK.href')
     // No signup, star or other-editor links compete with the install box.
     expect(hero).not.toMatch(/<a\s/)
     expect(hero).not.toContain('LANDING_HERO_START')

@@ -102,6 +102,8 @@ export function IntegrationsPage() {
   const platform = platformQuery.data?.platform ?? null
   /** Flat map: field name → where the effective value came from ('project'|'org'|'env'|null) */
   const sourceByField = platformQuery.data?.sourceByField ?? {}
+  // The user's own Langfuse (not Mushi's environment default) keeps its fold open.
+  const langfuseOwn = Object.entries(sourceByField).some(([field, source]) => field.startsWith('langfuse_') && (source === 'project' || source === 'org'))
   const organizationId = platformQuery.data?.organizationId ?? null
   const history = historyQuery.data?.history ?? []
   const routing = routingQuery.data?.integrations ?? []
@@ -473,6 +475,8 @@ export function IntegrationsPage() {
                   canPost: Boolean(settingsQuery.data?.slackCanPost),
                   channelId: settingsQuery.data?.slackChannelId ?? null,
                 }}
+                discordConfigured={Boolean(settingsQuery.data?.discordConfigured)}
+                teamsConfigured={Boolean(settingsQuery.data?.teamsConfigured)}
                 linearConnected={linearConnected}
               />
             ),
@@ -485,20 +489,26 @@ export function IntegrationsPage() {
           variant="inline"
           requires={['project_created']}
           emptyTitle="Create a project before wiring integrations"
-          emptyDescription="Integrations are scoped to a project. Once you have one, you can wire Sentry, Langfuse, GitHub, and your issue trackers."
+          emptyDescription="Integrations belong to an app. Once you have one, connect GitHub, your alerts and your issue tracker."
           emptyIcon={<HeroPlugIntegration />}
           blockedIcon={<HeroPlugIntegration accent="text-fg-faint" />}
         />
       )}
 
-      <PanelSectionLabel>Core platform</PanelSectionLabel>
+      {/* Positioning (AGENTS.md): no monitoring stack required. The page led
+          with Sentry and Langfuse as a "core platform" (integrator's walk and
+          the first-time user test, 2026-10-28). It now leads with what a solo
+          builder needs: GitHub, then alerts in Slack or Discord, then the fix
+          agent and their editor. Monitoring is an optional on-ramp at the foot. */}
+      <PanelSectionLabel>Your code</PanelSectionLabel>
       <Panel className="mb-6" data-dav-anchor="integrations:decide">
         <div className="p-4">
-          <p className="text-2xs text-fg-muted mb-2 pl-2 border-l-2 border-brand/30 leading-snug">
-            Connect all three to close the full loop: Sentry surfaces error context, Langfuse traces every LLM call, and GitHub lets the fix-worker open draft PRs.
+          <p className="text-2xs text-fg-muted mb-2 pl-2 border-l-2 border-brand/30 leading-snug" data-testid="integrations-core-lede">
+            GitHub is the one Mushi needs: fixes arrive as pull requests on your repo.
           </p>
           <div className="space-y-2" id="integrations-required">
-            {PLATFORM_DEFS.filter((d) => d.group === 'required').map((def) => (
+            {PLATFORM_DEFS.filter((d) => d.group === 'required' && d.kind === 'github')
+              .map((def) => (
               <div key={def.kind} id={`platform-card-${def.kind}`}>
                 <PlatformIntegrationCard
                   def={def}
@@ -531,13 +541,63 @@ export function IntegrationsPage() {
         </div>
       </Panel>
 
+      <PanelSectionLabel>Alerts</PanelSectionLabel>
+      <Panel className="mb-6">
+        <p className="px-4 pt-3 pb-2 text-xs text-fg-muted border-b border-panel-border">
+          Where Mushi tells you about a new bug, a failing test or a merged fix. One channel is enough.
+        </p>
+        {!canManage && (
+          <p className="px-4 py-2 text-xs text-fg-muted border-b border-panel-border">{ADMIN_ONLY_HINT}</p>
+        )}
+        {/* Where alerts go is owner/admin only on the server; a disabled
+            fieldset locks every field and button in the three cards. */}
+        <fieldset disabled={!canManage} className="contents">
+        <div className="grid gap-4 p-4 md:grid-cols-2 2xl:grid-cols-3">
+          <SlackIntegrationCard
+            projectId={activeProjectId ?? null}
+            slackConfigured={Boolean(settingsQuery.data?.slackConfigured)}
+            teamName={settingsQuery.data?.slackTeamName ?? null}
+            channelId={settingsQuery.data?.slackChannelId ?? null}
+            canPost={Boolean(settingsQuery.data?.slackCanPost)}
+            latestProbe={latestByKind['slack']}
+            sparkline={sparklineByKind['slack'] ?? []}
+            onChanged={reloadChannels}
+          />
+          <DiscordIntegrationCard
+            projectId={activeProjectId ?? null}
+            discordConfigured={Boolean(settingsQuery.data?.discordConfigured)}
+            latestProbe={latestByKind['discord']}
+            sparkline={sparklineByKind['discord'] ?? []}
+            onChanged={reloadChannels}
+          />
+          <TeamsIntegrationCard
+            projectId={activeProjectId ?? null}
+            teamsConfigured={Boolean(settingsQuery.data?.teamsConfigured)}
+            latestProbe={latestByKind['teams']}
+            onChanged={reloadChannels}
+          />
+        </div>
+        </fieldset>
+
+        {activeProjectId && (
+          <div id="alerts" className="border-t border-panel-border px-4 py-4 scroll-mt-chrome">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-fg-muted mb-1">
+              Alert events
+            </h4>
+            <p className="text-2xs text-fg-muted mb-3 leading-snug">
+              Choose which events send an alert to every connected channel for this project.
+            </p>
+            <NotificationPrefsMatrix projectId={activeProjectId} />
+          </div>
+        )}
+      </Panel>
+
       <PanelSectionLabel>Fix agent</PanelSectionLabel>
       <Panel className="mb-6 divide-y divide-panel-border">
         <div className="p-4">
           <p className="text-2xs text-fg-muted mb-2 pl-2 border-l-2 border-brand/30 leading-snug">
-            Connect the cloud agent that should write fixes and open the PR. To fix with an agent in
-            your own editor instead, see{' '}
-            <Link to="/mcp" className="text-accent-foreground hover:text-accent underline-offset-2 hover:underline">Editor agents</Link>.
+            Fix bugs with the agent in your own editor (Cursor, Claude Code, VS Code) from{' '}
+            <Link to="/mcp" className="text-accent-foreground hover:text-accent underline-offset-2 hover:underline">Editor agents</Link>, or connect a cloud agent here to write the fix and open the pull request.
           </p>
           <div className="space-y-2" id="integrations-fix-agent">
             {PLATFORM_DEFS.filter((d) => d.group === 'fix-agent').map((def) => (
@@ -591,57 +651,6 @@ export function IntegrationsPage() {
             />
           </DisclosurePanel>
         </div>
-      </Panel>
-
-      <PanelSectionLabel>Alerts</PanelSectionLabel>
-      <Panel className="mb-6">
-        <p className="px-4 pt-3 pb-2 text-xs text-fg-muted border-b border-panel-border">
-          Connect one or more channels to get an alert when a report is triaged, a QA story fails, or a fix is merged.
-        </p>
-        {!canManage && (
-          <p className="px-4 py-2 text-xs text-fg-muted border-b border-panel-border">{ADMIN_ONLY_HINT}</p>
-        )}
-        {/* Where alerts go is owner/admin only on the server; a disabled
-            fieldset locks every field and button in the three cards. */}
-        <fieldset disabled={!canManage} className="contents">
-        <div className="grid gap-4 p-4 md:grid-cols-2 2xl:grid-cols-3">
-          <SlackIntegrationCard
-            projectId={activeProjectId ?? null}
-            slackConfigured={Boolean(settingsQuery.data?.slackConfigured)}
-            teamName={settingsQuery.data?.slackTeamName ?? null}
-            channelId={settingsQuery.data?.slackChannelId ?? null}
-            canPost={Boolean(settingsQuery.data?.slackCanPost)}
-            latestProbe={latestByKind['slack']}
-            sparkline={sparklineByKind['slack'] ?? []}
-            onChanged={reloadChannels}
-          />
-          <DiscordIntegrationCard
-            projectId={activeProjectId ?? null}
-            discordConfigured={Boolean(settingsQuery.data?.discordConfigured)}
-            latestProbe={latestByKind['discord']}
-            sparkline={sparklineByKind['discord'] ?? []}
-            onChanged={reloadChannels}
-          />
-          <TeamsIntegrationCard
-            projectId={activeProjectId ?? null}
-            teamsConfigured={Boolean(settingsQuery.data?.teamsConfigured)}
-            latestProbe={latestByKind['teams']}
-            onChanged={reloadChannels}
-          />
-        </div>
-        </fieldset>
-
-        {activeProjectId && (
-          <div id="alerts" className="border-t border-panel-border px-4 py-4 scroll-mt-chrome">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-fg-muted mb-1">
-              Alert events
-            </h4>
-            <p className="text-2xs text-fg-muted mb-3 leading-snug">
-              Choose which events send an alert to every connected channel for this project.
-            </p>
-            <NotificationPrefsMatrix projectId={activeProjectId} />
-          </div>
-        )}
       </Panel>
 
       <PanelSectionLabel>Issue trackers</PanelSectionLabel>
@@ -700,6 +709,87 @@ export function IntegrationsPage() {
               />
             )
           })}
+        </div>
+      </Panel>
+
+      <PanelSectionLabel>Errors you already catch (optional)</PanelSectionLabel>
+      <Panel className="mb-6">
+        <div className="p-4">
+          <p className="text-2xs text-fg-muted mb-2 pl-2 border-l-2 border-brand/30 leading-snug" data-testid="integrations-monitoring-lede">
+            Mushi works without a monitoring tool. If you already use Sentry, the errors it catches can become bugs here too.
+          </p>
+          <div className="space-y-2" id="integrations-monitoring">
+            {PLATFORM_DEFS.filter((d) => d.group === 'required' && d.kind !== 'github')
+              .map((def) => (
+              <div key={def.kind} id={`platform-card-${def.kind}`}>
+                <PlatformIntegrationCard
+                  def={def}
+                  config={platform?.[def.kind] ?? {}}
+                  sourceByField={sourceByField}
+                  latestProbe={latestByKind[def.kind]}
+                  sparkline={sparklineByKind[def.kind] ?? []}
+                  isEditing={editing === def.kind}
+                  draft={drafts[def.kind] ?? {}}
+                  saving={saving === def.kind}
+                  testing={testing === def.kind}
+                  onStartEdit={() => startEdit(def.kind)}
+                  onCancelEdit={cancelEdit}
+                  onChangeField={(name, value) => {
+                    setDrafts((d) => ({ ...d, [def.kind]: { ...d[def.kind], [name]: value } }))
+                    clearInlineError(def.kind)
+                  }}
+                  inlineError={inlineErrors[def.kind] ?? null}
+                  onSave={() => void saveKind(def.kind)}
+                  onTest={() => void testKind(def.kind)}
+                  onApplyToAll={organizationId ? () => setPendingApplyKind(def.kind) : undefined}
+                  applyingToAll={applyingKind === def.kind}
+                  onRemoveKey={() => setPendingRemoveKeyKind(def.kind)}
+                  removingKey={removingKeyKind === def.kind}
+                  canManage={canManage}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="px-4 pb-4">
+          {/* Open when the user connected their own, so its grid tile's Fix lands on a visible card. */}
+          <DisclosurePanel
+            key={langfuseOwn ? 'langfuse-own' : 'langfuse-default'}
+            title="Advanced: trace Mushi's AI calls in your own Langfuse"
+            defaultOpen={langfuseOwn}
+          >
+            <div className="space-y-2" id="integrations-advanced">
+              {PLATFORM_DEFS.filter((d) => d.group === 'advanced').map((def) => (
+                <div key={def.kind} id={`platform-card-${def.kind}`}>
+                  <PlatformIntegrationCard
+                    def={def}
+                    config={platform?.[def.kind] ?? {}}
+                    sourceByField={sourceByField}
+                    latestProbe={latestByKind[def.kind]}
+                    sparkline={sparklineByKind[def.kind] ?? []}
+                    isEditing={editing === def.kind}
+                    draft={drafts[def.kind] ?? {}}
+                    saving={saving === def.kind}
+                    testing={testing === def.kind}
+                    onStartEdit={() => startEdit(def.kind)}
+                    onCancelEdit={cancelEdit}
+                    onChangeField={(name, value) => {
+                      setDrafts((d) => ({ ...d, [def.kind]: { ...d[def.kind], [name]: value } }))
+                      clearInlineError(def.kind)
+                    }}
+                    inlineError={inlineErrors[def.kind] ?? null}
+                    onSave={() => void saveKind(def.kind)}
+                    onTest={() => void testKind(def.kind)}
+                    onApplyToAll={organizationId ? () => setPendingApplyKind(def.kind) : undefined}
+                    applyingToAll={applyingKind === def.kind}
+                    onRemoveKey={() => setPendingRemoveKeyKind(def.kind)}
+                    removingKey={removingKeyKind === def.kind}
+                    canManage={canManage}
+                  />
+                </div>
+              ))}
+            </div>
+          </DisclosurePanel>
         </div>
       </Panel>
 

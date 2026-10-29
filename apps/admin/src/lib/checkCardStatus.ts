@@ -99,6 +99,21 @@ export interface CheckCardsInput {
   recipeElements: ObservedElement[]
   design: ObservedElement | null
   ci: ObservedElement | null
+  /**
+   * First-time user tests, newest first. Absent or loading: the card stays
+   * blank. A queued or running test is not a result.
+   */
+  firstUserTest?: {
+    phase: 'loading' | 'error' | 'ready' | 'no_project'
+    runs: ReadonlyArray<{
+      status: 'queued' | 'running' | 'done' | 'failed' | 'stopped'
+      finished_at: string | null
+      started_at: string
+      findings: readonly unknown[] | null
+      stalled_at: unknown
+      detail?: string | null
+    }>
+  }
 }
 
 /** Matches the inbox: a judge run older than this is not a fresh pass. */
@@ -256,6 +271,23 @@ function fromPrompts(prompts: CheckCardsInput['prompts']): CheckCardView {
   return NOT_CHECKED
 }
 
+function fromFirstUserTest(test: NonNullable<CheckCardsInput['firstUserTest']>, now: number): CheckCardView | null {
+  if (test.phase === 'loading') return null
+  if (test.phase === 'no_project') return notSetUp('/projects')
+  if (test.phase === 'error') return UNAVAILABLE
+  // A stopped test (the person cancelled it) says nothing about the app.
+  const last = test.runs.find((r) => r.status === 'done' || r.status === 'failed')
+  if (!last) return NOT_CHECKED
+  const at = last.finished_at ?? last.started_at
+  if (last.status === 'failed') {
+    const view = failed(at, now)
+    return last.detail ? { ...view, detail: last.detail } : view
+  }
+  // Getting stuck is itself what the test looks for, even with nothing else filed.
+  const n = (last.findings?.length ?? 0) || (last.stalled_at ? 1 : 0)
+  return n > 0 ? findings(n, at, now) : pass(at, now)
+}
+
 function judgeAgeHours(judge: NonNullable<CheckCardsInput['judge']>, now: number): number | null {
   if (typeof judge.staleHours === 'number' && Number.isFinite(judge.staleHours)) return judge.staleHours
   const age = ageMs(judge.lastEvalAt, now)
@@ -333,5 +365,6 @@ export function buildCheckCardViews(input: CheckCardsInput, now = Date.now()): R
     '/judge': slice(input.judge, (judge) => fromJudge(judge, now)),
     '/lessons': slice(input.lessons, (lessons) => fromLessons(lessons)),
     '/prompt-lab': slice(input.prompts, (prompts) => fromPrompts(prompts)),
+    '/first-user-test': input.firstUserTest ? fromFirstUserTest(input.firstUserTest, now) : null,
   }
 }

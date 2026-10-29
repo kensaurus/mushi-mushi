@@ -10,17 +10,20 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 
 ### Highlights
 
-- **Resolve merge conflicts** — (`conflicts`): takes a merge-queue PR of the lane's own repository that waits for a conflict agent. It merges the base branch into the commit Mushi saw, and lets the agent change only the conflicted files. It refuses the result when a conflict marker is left or any other file changed. Then it commits with your hooks and pushes the merge commit, fast-forward only.
-- **Audit the code, screen by screen** — (`audit`): a model proposes bugs in read-only mode. Each comes with the line, the code there and a check (a pattern, or one of the repo's lint, typecheck, test or check scripts). The machine runs the check itself, an optional second model may only veto, and only reproduced findings are filed.
-- **Run skill runs** — (`skill`): runs only the rounds of skill runs started on /credits with this lane.
+- **`mushi connect` uses your saved key** — when you pass no key, it uses the one `npx mushi-mushi` or `mushi login` already saved, so the command the setup wizard prints works as it is. The wizard's last checklist names the console tab by its current label, "Test it".
+- **`mushi doctor` shows the app's Health check** — it reads the server's Health check (setup gaps, SDK health, the report button) and prints each problem once as a warning, with how many items wait on it and its fix. It does not change whether `mushi doctor` passes. A check the server could not read shows as not checked. Older servers without the route are skipped.
+- **Six new server events in the analytics vocabulary** — `sdk_seen_localhost`, `sdk_seen_live`, `first_real_report`, `first_diagnosis_viewed`, `first_fix_dispatched` and `first_fix_merged` mark the new-user path, once per project. Only Mushi Mushi's server sends them; nothing changes for apps that call `Mushi.track()`.
+- **`diagnose_setup` names the root cause first** — in full mode it reads the app's Health check and returns its "Fix these first" list as `health`; when the connection, ingest and dispatch checks pass, `nextAction` is the first root cause and its fix.
+- **Docs answers match the product** — the docs index behind `search_mushi_docs` is rebuilt from the proofread docs.
+- **Hono and Fastify reports drop URL query values** — the error handlers scrub query values (tokens, emails) from the request URL before putting it into the report description, as the Express handler already did.
 
 ## v1.33.x
 
-Latest tag: `v1.33.3`
+Latest tag: `v1.33.4`
 
 ### Packages bumped
 
-- `@mushi-mushi/core` → 1.33.3
+- `@mushi-mushi/core` → 1.33.4
 - `@mushi-mushi/react` → 1.33.3
 - `@mushi-mushi/web` → 1.33.3
 
@@ -496,6 +499,20 @@ Latest tag: `v1.0.4`
 - `@mushi-mushi/vue` → 1.0.4
 - `@mushi-mushi/web` → 1.0.0
 
+## v0.35.x
+
+Latest tag: `v0.35.0`
+
+### Highlights
+
+- **Resolve merge conflicts** — (`conflicts`): takes a merge-queue PR of the lane's own repository that waits for a conflict agent. It merges the base branch into the commit Mushi saw, and lets the agent change only the conflicted files. It refuses the result when a conflict marker is left or any other file changed. Then it commits with your hooks and pushes the merge commit, fast-forward only.
+- **Audit the code, screen by screen** — (`audit`): a model proposes bugs in read-only mode. Each comes with the line, the code there and a check (a pattern, or one of the repo's lint, typecheck, test or check scripts). The machine runs the check itself, an optional second model may only veto, and only reproduced findings are filed.
+- **Run skill runs** — (`skill`): runs only the rounds of skill runs started on /credits with this lane.
+
+### Packages bumped
+
+- `@mushi-mushi/cli` → 0.35.0
+
 ## v0.34.x
 
 Latest tag: `v0.34.1`
@@ -535,6 +552,7 @@ Latest tag: `v0.30.6`
 ### Packages bumped
 
 - `@mushi-mushi/cli` → 0.30.6
+- `@mushi-mushi/mcp` → 0.30.0
 
 ## v0.29.x
 
@@ -929,7 +947,7 @@ Latest tag: `v0.9.1`
 
 ## v0.8.x
 
-Latest tag: `v0.8.10`
+Latest tag: `v0.8.11`
 
 ### Highlights
 
@@ -952,7 +970,7 @@ Latest tag: `v0.8.10`
 - `@mushi-mushi/svelte` → 0.8.4
 - `@mushi-mushi/vue` → 0.8.4
 - `@mushi-mushi/web` → 0.8.0
-- `mushi-mushi` → 0.8.10
+- `mushi-mushi` → 0.8.11
 
 ## v0.7.x
 
@@ -990,7 +1008,7 @@ Latest tag: `v0.7.17`
 
 ## v0.6.x
 
-Latest tag: `v0.6.10`
+Latest tag: `v0.6.11`
 
 ### Highlights
 
@@ -1016,7 +1034,7 @@ Latest tag: `v0.6.10`
 - `@mushi-mushi/node` → 0.6.0
 - `@mushi-mushi/plugin-cursor-cloud` → 0.6.3
 - `@mushi-mushi/plugin-sdk` → 0.6.0
-- `create-mushi-mushi` → 0.6.10
+- `create-mushi-mushi` → 0.6.11
 - `mushi-mushi` → 0.6.5
 
 ## v0.5.x
@@ -1122,6 +1140,7 @@ Latest tag: `v0.3.8`
 - `@mushi-mushi/react` → 0.3.1
 - `@mushi-mushi/react-native` → 0.3.2
 - `@mushi-mushi/svelte` → 0.3.2
+- `@mushi-mushi/ux` → 0.3.0
 - `@mushi-mushi/vue` → 0.3.2
 - `@mushi-mushi/web` → 0.3.1
 - `eslint-plugin-mushi-mushi` → 0.3.6

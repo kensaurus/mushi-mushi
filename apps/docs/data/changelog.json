@@ -6,16 +6,28 @@
     "versions": [],
     "highlights": [
       {
-        "title": "Resolve merge conflicts",
-        "description": "(`conflicts`): takes a merge-queue PR of the lane's own repository that waits for a conflict agent. It merges the base branch into the commit Mushi saw, and lets the agent change only the conflicted files. It refuses the result when a conflict marker is left or any other file changed. Then it commits with your hooks and pushes the merge commit, fast-forward only."
+        "title": "`mushi connect` uses your saved key",
+        "description": "when you pass no key, it uses the one `npx mushi-mushi` or `mushi login` already saved, so the command the setup wizard prints works as it is. The wizard's last checklist names the console tab by its current label, \"Test it\"."
       },
       {
-        "title": "Audit the code, screen by screen",
-        "description": "(`audit`): a model proposes bugs in read-only mode. Each comes with the line, the code there and a check (a pattern, or one of the repo's lint, typecheck, test or check scripts). The machine runs the check itself, an optional second model may only veto, and only reproduced findings are filed."
+        "title": "`mushi doctor` shows the app's Health check",
+        "description": "it reads the server's Health check (setup gaps, SDK health, the report button) and prints each problem once as a warning, with how many items wait on it and its fix. It does not change whether `mushi doctor` passes. A check the server could not read shows as not checked. Older servers without the route are skipped."
       },
       {
-        "title": "Run skill runs",
-        "description": "(`skill`): runs only the rounds of skill runs started on /credits with this lane."
+        "title": "Six new server events in the analytics vocabulary",
+        "description": "`sdk_seen_localhost`, `sdk_seen_live`, `first_real_report`, `first_diagnosis_viewed`, `first_fix_dispatched` and `first_fix_merged` mark the new-user path, once per project. Only Mushi Mushi's server sends them; nothing changes for apps that call `Mushi.track()`."
+      },
+      {
+        "title": "`diagnose_setup` names the root cause first",
+        "description": "in full mode it reads the app's Health check and returns its \"Fix these first\" list as `health`; when the connection, ingest and dispatch checks pass, `nextAction` is the first root cause and its fix."
+      },
+      {
+        "title": "Docs answers match the product",
+        "description": "the docs index behind `search_mushi_docs` is rebuilt from the proofread docs."
+      },
+      {
+        "title": "Hono and Fastify reports drop URL query values",
+        "description": "the error handlers scrub query values (tokens, emails) from the request URL before putting it into the report description, as the Express handler already did."
       }
     ],
     "packages": []
@@ -25,6 +37,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "1.33.4",
       "1.33.3",
       "1.33.2",
       "1.33.1",
@@ -34,7 +47,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/core",
-        "version": "1.33.3"
+        "version": "1.33.4"
       },
       {
         "name": "@mushi-mushi/react",
@@ -1220,6 +1233,34 @@
     ]
   },
   {
+    "majorMinor": "0.35",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.35.0"
+    ],
+    "highlights": [
+      {
+        "title": "Resolve merge conflicts",
+        "description": "(`conflicts`): takes a merge-queue PR of the lane's own repository that waits for a conflict agent. It merges the base branch into the commit Mushi saw, and lets the agent change only the conflicted files. It refuses the result when a conflict marker is left or any other file changed. Then it commits with your hooks and pushes the merge commit, fast-forward only."
+      },
+      {
+        "title": "Audit the code, screen by screen",
+        "description": "(`audit`): a model proposes bugs in read-only mode. Each comes with the line, the code there and a check (a pattern, or one of the repo's lint, typecheck, test or check scripts). The machine runs the check itself, an optional second model may only veto, and only reproduced findings are filed."
+      },
+      {
+        "title": "Run skill runs",
+        "description": "(`skill`): runs only the rounds of skill runs started on /credits with this lane."
+      }
+    ],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.35.0"
+      }
+    ]
+  },
+  {
     "majorMinor": "0.34",
     "headline": null,
     "pending": false,
@@ -1298,6 +1339,10 @@
       {
         "name": "@mushi-mushi/cli",
         "version": "0.30.6"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
+        "version": "0.30.0"
       }
     ]
   },
@@ -2370,6 +2415,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.8.11",
       "0.8.10",
       "0.8.9",
       "0.8.8",
@@ -2451,7 +2497,7 @@
       },
       {
         "name": "mushi-mushi",
-        "version": "0.8.10"
+        "version": "0.8.11"
       }
     ]
   },
@@ -2585,6 +2631,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.6.11",
       "0.6.10",
       "0.6.9",
       "0.6.8",
@@ -2678,7 +2725,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.6.10"
+        "version": "0.6.11"
       },
       {
         "name": "mushi-mushi",
@@ -3051,6 +3098,10 @@
       {
         "name": "@mushi-mushi/svelte",
         "version": "0.3.2"
+      },
+      {
+        "name": "@mushi-mushi/ux",
+        "version": "0.3.0"
       },
       {
         "name": "@mushi-mushi/vue",

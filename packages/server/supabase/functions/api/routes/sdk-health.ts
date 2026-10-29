@@ -57,6 +57,7 @@ import {
   type PackageJsonFile,
   type Read,
   type SdkHealthInput,
+  type SdkHealthResult,
   type SdkHealthTaskKind,
   type TaskReport,
 } from '../../_shared/sdk-health.ts'
@@ -226,98 +227,113 @@ async function fileTask(
   return c.json({ ok: true, data: { reportId, existing: false } })
 }
 
+/**
+ * SDK health for one app: the repo, Actions secrets, key heartbeats, the npm
+ * catalogue and the live site's CSP, read side by side. The caller checks
+ * access. Shared by GET /v1/admin/projects/:id/sdk-health and the Health
+ * check registry (GET /v1/admin/health-checks).
+ */
+export async function readSdkHealth(
+  db: Db,
+  projectId: string,
+): Promise<{ ok: true; data: SdkHealthResult & { repoUrl: string | null; siteUrl: string | null; checkedAt: string } } | { ok: false; error: Parameters<typeof dbError>[1] }> {
+  const endpoint = mushiEndpoint()
+
+  // The site fetch runs beside the repo reads, so a slow GitHub and a slow site do not add up.
+  const site = siteUrl(db, projectId)
+  const cspRead: Promise<CspRead> = site.then(
+    (url) => readCsp(url, endpoint),
+    (err) => ({ ok: false, reason: `the site address could not be read (${reason(err)})` }),
+  )
+  const [projectRes, keysRes, versionsRes, upgradeRes, repoRes] = await Promise.all([
+    db.from('projects').select('slug').eq('id', projectId).maybeSingle(),
+    db
+      .from('project_api_keys')
+      .select('scopes, last_seen_at, last_seen_origin, last_seen_user_agent')
+      .eq('project_id', projectId)
+      .eq('is_active', true),
+    db.from('sdk_versions').select('package, version'),
+    db
+      .from('sdk_upgrade_jobs')
+      .select('status, pr_url, pr_state, merged_at, check_run_status, check_run_conclusion')
+      .eq('project_id', projectId)
+      .eq('status', 'completed')
+      .not('pr_url', 'is', null)
+      // The same window and relevance rule the Update center uses (sdk-upgrade in-flight).
+      .gte('finished_at', new Date(Date.now() - 30 * 86_400_000).toISOString())
+      .order('finished_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    resolveRecipeRepo(db, projectId).catch((err): { ok: false; reason: string } => ({ ok: false, reason: reason(err) })),
+  ])
+  if (keysRes.error) return { ok: false, error: keysRes.error }
+  const slug = (projectRes.data as { slug?: string } | null)?.slug ?? null
+
+  // SDK keys only: a CLI or MCP key's calls are not the app's SDK.
+  const keys = ((keysRes.data ?? []) as Array<KeyHeartbeat & { scopes?: string[] | null }>).filter((k) => isSdkKey(k.scopes))
+
+  let packages: Read<PackageJsonFile[]>
+  let ci: Read<string[]>
+  let repoLabel: string | null = null
+  const repoUrl = repoRes.ok ? repoRes.repo.repoUrl : null
+  if (!repoRes.ok) {
+    packages = { ok: false, reason: repoRes.reason }
+    ci = { ok: false, reason: repoRes.reason }
+  } else {
+    repoLabel = repoLabelOf(repoRes.repo)
+    const [read, names] = await Promise.allSettled([
+      within(readRepo(repoRes.repo), REPO_READ_MS, 'Reading the repo'),
+      within(listActionsNames(repoRes.repo), REPO_READ_MS, 'Listing Actions secrets'),
+    ])
+    packages = read.status === 'fulfilled' ? { ok: true, value: read.value.files } : { ok: false, reason: reason(read.reason) }
+    // The names to expect depend on the framework, so an unread repo leaves them unknown.
+    const stack = packages.ok ? resolveStack(slug, detectAppTarget(appPackageFiles(packages.value))?.stack) : null
+    ci = names.status === 'rejected'
+      ? { ok: false, reason: reason(names.reason) }
+      : !stack
+        ? { ok: false, reason: "the repo's package.json files could not be read, so the expected names are unknown" }
+        : { ok: true, value: missingCiVars(requiredCiVarNames(stack), names.value) ?? [] }
+  }
+
+  let latest: Read<Record<string, string>>
+  if (versionsRes.error) {
+    latest = { ok: false, reason: versionsRes.error.message.slice(0, 160) }
+  } else {
+    const byPkg = new Map<string, Array<{ version: string }>>()
+    for (const row of (versionsRes.data ?? []) as Array<{ package: string; version: string }>) {
+      // Pre-releases are never the version an upgrade PR moves to.
+      if (!row.version || /[-+]/.test(row.version)) continue
+      byPkg.set(row.package, [...(byPkg.get(row.package) ?? []), row])
+    }
+    latest = { ok: true, value: Object.fromEntries([...byPkg].map(([pkg, rows]) => [pkg, pickHighestVersion(rows)!.version])) }
+  }
+
+  const result = sdkHealthProblems({
+    projectId,
+    // A failed lookup (DB error) is not "no repo": only say that when the row is missing.
+    repoConnected: repoRes.ok || !('repoConnected' in repoRes) || repoRes.repoConnected,
+    repoLabel,
+    packages,
+    missingCiVars: ci,
+    lastSeenAt: lastHeartbeatAt(keys),
+    nativeEverSeen: nativeEverSeen(keys),
+    sdkKeyCount: keys.length,
+    openUpgradePr: openUpgradePr(upgradeRes.data as UpgradeJobRow | null),
+    latest,
+    csp: await cspRead,
+    now: new Date(),
+  })
+  return { ok: true, data: { ...result, repoUrl, siteUrl: await site.catch(() => null), checkedAt: new Date().toISOString() } }
+}
+
 export function registerSdkHealthRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/admin/projects/:id/sdk-health', jwtAuth, async (c) => {
     const db = getServiceClient()
     const a = await access(c, db, false)
     if ('response' in a) return a.response
-    const endpoint = mushiEndpoint()
-
-    // The site fetch runs beside the repo reads, so a slow GitHub and a slow site do not add up.
-    const site = siteUrl(db, a.projectId)
-    const cspRead: Promise<CspRead> = site.then(
-      (url) => readCsp(url, endpoint),
-      (err) => ({ ok: false, reason: `the site address could not be read (${reason(err)})` }),
-    )
-    const [projectRes, keysRes, versionsRes, upgradeRes, repoRes] = await Promise.all([
-      db.from('projects').select('slug').eq('id', a.projectId).maybeSingle(),
-      db
-        .from('project_api_keys')
-        .select('scopes, last_seen_at, last_seen_origin, last_seen_user_agent')
-        .eq('project_id', a.projectId)
-        .eq('is_active', true),
-      db.from('sdk_versions').select('package, version'),
-      db
-        .from('sdk_upgrade_jobs')
-        .select('status, pr_url, pr_state, merged_at, check_run_status, check_run_conclusion')
-        .eq('project_id', a.projectId)
-        .eq('status', 'completed')
-        .not('pr_url', 'is', null)
-        // The same window and relevance rule the Update center uses (sdk-upgrade in-flight).
-        .gte('finished_at', new Date(Date.now() - 30 * 86_400_000).toISOString())
-        .order('finished_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      resolveRecipeRepo(db, a.projectId).catch((err): { ok: false; reason: string } => ({ ok: false, reason: reason(err) })),
-    ])
-    if (keysRes.error) return dbError(c, keysRes.error)
-    const slug = (projectRes.data as { slug?: string } | null)?.slug ?? null
-
-    // SDK keys only: a CLI or MCP key's calls are not the app's SDK.
-    const keys = ((keysRes.data ?? []) as Array<KeyHeartbeat & { scopes?: string[] | null }>).filter((k) => isSdkKey(k.scopes))
-
-    let packages: Read<PackageJsonFile[]>
-    let ci: Read<string[]>
-    let repoLabel: string | null = null
-    const repoUrl = repoRes.ok ? repoRes.repo.repoUrl : null
-    if (!repoRes.ok) {
-      packages = { ok: false, reason: repoRes.reason }
-      ci = { ok: false, reason: repoRes.reason }
-    } else {
-      repoLabel = repoLabelOf(repoRes.repo)
-      const [read, names] = await Promise.allSettled([
-        within(readRepo(repoRes.repo), REPO_READ_MS, 'Reading the repo'),
-        within(listActionsNames(repoRes.repo), REPO_READ_MS, 'Listing Actions secrets'),
-      ])
-      packages = read.status === 'fulfilled' ? { ok: true, value: read.value.files } : { ok: false, reason: reason(read.reason) }
-      // The names to expect depend on the framework, so an unread repo leaves them unknown.
-      const stack = packages.ok ? resolveStack(slug, detectAppTarget(appPackageFiles(packages.value))?.stack) : null
-      ci = names.status === 'rejected'
-        ? { ok: false, reason: reason(names.reason) }
-        : !stack
-          ? { ok: false, reason: "the repo's package.json files could not be read, so the expected names are unknown" }
-          : { ok: true, value: missingCiVars(requiredCiVarNames(stack), names.value) ?? [] }
-    }
-
-    let latest: Read<Record<string, string>>
-    if (versionsRes.error) {
-      latest = { ok: false, reason: versionsRes.error.message.slice(0, 160) }
-    } else {
-      const byPkg = new Map<string, Array<{ version: string }>>()
-      for (const row of (versionsRes.data ?? []) as Array<{ package: string; version: string }>) {
-        // Pre-releases are never the version an upgrade PR moves to.
-        if (!row.version || /[-+]/.test(row.version)) continue
-        byPkg.set(row.package, [...(byPkg.get(row.package) ?? []), row])
-      }
-      latest = { ok: true, value: Object.fromEntries([...byPkg].map(([pkg, rows]) => [pkg, pickHighestVersion(rows)!.version])) }
-    }
-
-    const result = sdkHealthProblems({
-      projectId: a.projectId,
-      // A failed lookup (DB error) is not "no repo": only say that when the row is missing.
-      repoConnected: repoRes.ok || !('repoConnected' in repoRes) || repoRes.repoConnected,
-      repoLabel,
-      packages,
-      missingCiVars: ci,
-      lastSeenAt: lastHeartbeatAt(keys),
-      nativeEverSeen: nativeEverSeen(keys),
-      sdkKeyCount: keys.length,
-      openUpgradePr: openUpgradePr(upgradeRes.data as UpgradeJobRow | null),
-      latest,
-      csp: await cspRead,
-      now: new Date(),
-    })
-    return c.json({ ok: true, data: { ...result, repoUrl, siteUrl: await site.catch(() => null), checkedAt: new Date().toISOString() } })
+    const read = await readSdkHealth(db, a.projectId)
+    if (!read.ok) return dbError(c, read.error)
+    return c.json({ ok: true, data: read.data })
   })
 
   app.post('/v1/admin/projects/:id/sdk-health/tasks', jwtAuth, async (c) => {

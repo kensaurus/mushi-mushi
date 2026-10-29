@@ -33,13 +33,14 @@ const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`
 function sessionMarkdown(s: FreshEyesSession): string[] {
   const head =
     s.outcome === 'reached'
-      ? `### Session ${s.index}: reached the goal in ${s.steps.length - 1} steps, ${s.ttfvSeconds} s to first value`
+      ? `### Session ${s.index}: reached the goal in ${s.steps.length - 1} steps, ${s.ttfvSeconds == null ? 'time not measured (a wait hit its cap)' : `${s.ttfvSeconds} s to first value`}`
       : `### Session ${s.index}: ${STALL_TEXT[s.stall?.reason ?? 'out_of_steps']} at ${s.stall?.screen ?? '?'} (step ${s.stall?.step ?? '?'})`
   const lines = [
     head,
     '',
     `App time ${s.appSeconds} s, reading ${s.readSeconds} s, model think time ${s.modelSeconds} s (not counted), ${s.backtracks} backtrack(s).`,
     s.stall ? `Why it stopped: ${s.stall.detail}` : '',
+    s.accountId ? `Synthetic account: ${s.accountId} (deleted by the retention sweep after 24 h).` : '',
     '',
     '| # | Step | Screen | App wait | Reading | Notes |',
     '| --- | --- | --- | --- | --- | --- |',
@@ -48,6 +49,7 @@ function sessionMarkdown(s: FreshEyesSession): string[] {
     const notes = [
       st.outcome !== 'ok' ? st.outcome : '',
       st.note ?? '',
+      st.capped ? (st.outcome === 'ok' ? 'waited the full cap for a loading sign: not the app\'s real wait' : 'waited the full cap after the guard stopped it: not counted as app time') : '',
       st.backtrack ? 'backtrack' : '',
       st.deadEnd ? 'dead end' : '',
       st.requirements?.length ? `needs: ${st.requirements.join(', ')}` : '',
@@ -149,6 +151,7 @@ export function runSnapshot(r: FreshEyesResult, status: 'running' | 'done' | 'fa
         requirements: [...new Set(st.requirements ?? [])].slice(0, 4),
         signals: [...new Set(st.signals ?? [])].slice(0, 20),
         shot: st.shot ?? null,
+        ...(st.capped ? { capped: true } : {}),
       })),
     })),
     cli_version: cliVersion,
@@ -235,7 +238,7 @@ export async function fileFreshEyesFindings(cfg: SyncConfig | null, r: FreshEyes
 
 /** A synthetic account for Mushi itself (operator only). The password is returned once and never printed. */
 export async function mintTestAccount(cfg: SyncConfig): Promise<Identity> {
-  const data = (await call(cfg, 'POST', '/v1/admin/fresh-eyes/test-account', { purpose: 'fresh_eyes' })) as { email: string; password: string; name?: string }
+  const data = (await call(cfg, 'POST', '/v1/admin/fresh-eyes/test-account', { purpose: 'fresh_eyes' })) as { email: string; password: string; name?: string; user_id?: string }
   if (!data?.email || !data?.password) throw new Error('The console did not return an account.')
-  return { email: data.email, password: data.password, name: data.name }
+  return { email: data.email, password: data.password, name: data.name, ...(typeof data.user_id === 'string' ? { userId: data.user_id } : {}) }
 }

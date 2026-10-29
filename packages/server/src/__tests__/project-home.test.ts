@@ -12,6 +12,8 @@ import { describe, expect, it } from 'vitest'
 import {
   buildActivity,
   buildNeedsYou,
+  appAddresses,
+  belongsToApp,
   buildSitemap,
   buildStations,
   buildWeek,
@@ -189,7 +191,7 @@ describe('buildNeedsYou', () => {
       health: [sig('site', 'bad'), sig('ci', 'bad'), sig('sdk', 'good'), sig('errors', 'good')],
       criticalWaiting: 2,
       pipeline: [
-        stage('review', 45, 45, [group('hold', '45 PRs: Opus says hold; a person decides', 45), group('fix_first_working', '3 PRs: moving', 3, 'moving')]),
+        stage('review', 45, 45, [group('hold', '45 PRs: the review says do not merge; you decide', 45), group('fix_first_working', '3 PRs: moving', 3, 'moving')]),
         stage('pr', 7, 7, [group('agent_failed', '7 fixes: agent failed, no PR opened', 7)]),
         stage('train', 2, 2, [group('not_queued', '2 PRs: approved and green, not queued to merge', 2)]),
       ],
@@ -198,8 +200,8 @@ describe('buildNeedsYou', () => {
     expect(items).toHaveLength(NEEDS_YOU_MAX)
     expect(items.map((i) => i.id)).toEqual(['site_broken', 'critical_waiting', 'pipeline_hold', 'ci_red', 'pipeline_agent_failed'])
     const hold = items.find((i) => i.id === 'pipeline_hold')!
-    expect(hold.text).toBe('45 PRs: Opus says hold; a person decides.')
-    expect(hold.action.to).toBe('/pipeline?project=p1')
+    expect(hold.text).toBe('45 PRs: the review says do not merge; you decide.')
+    expect(hold.action.to).toBe('/pipeline?project=p1&group=hold')
     expect(items.find((i) => i.id === 'critical_waiting')!.action.to).toBe('/reports?status=open&severity=critical')
   })
 
@@ -216,6 +218,21 @@ describe('buildNeedsYou', () => {
 
   it('ignores a signal whose read failed', () => {
     expect(buildNeedsYou({ projectId: 'p', health: [sig('site', 'bad', 'error')], criticalWaiting: null, pipeline: null, sdk: null })).toEqual([])
+  })
+
+  it('carries local worker problems, at most two rows, the second counting the rest (ADR 0048 amendment 2026-10-28)', () => {
+    const workers = [
+      { id: 'run_stuck:c1', severity: 'danger' as const, title: 'glot: a run has held an agent space for 4 h' },
+      { id: 'lanes_waiting:h1', severity: 'danger' as const, title: '6 lanes on alienware have waited 3 h for an agent space' },
+      { id: 'account_check:h1', severity: 'warn' as const, title: 'The Cursor account check timed out on alienware' },
+    ]
+    const items = buildNeedsYou({ projectId: 'p1', health: [], criticalWaiting: 0, pipeline: null, sdk: null, workers })
+    expect(items.map((i) => i.id)).toEqual(['worker_run_stuck:c1', 'worker_lanes_waiting:h1'])
+    expect(items[0]).toMatchObject({ text: 'Local worker: glot: a run has held an agent space for 4 h.', action: { label: 'Open Workers', to: '/pipeline?tab=workers&project=p1' } })
+    expect(items[1]!.text).toBe('Local worker: 6 lanes on alienware have waited 3 h for an agent space. (1 more worker problem on Workers)')
+    // A stuck worker outranks a held PR: the PRs wait on it.
+    const ranked = buildNeedsYou({ projectId: 'p1', health: [], criticalWaiting: 0, pipeline: [stage('review', 4, 4, [group('hold', '4 PRs: Opus says hold; a person decides', 4)])], sdk: null, workers: workers.slice(0, 1) })
+    expect(ranked.map((i) => i.id)).toEqual(['worker_run_stuck:c1', 'pipeline_hold'])
   })
 })
 
@@ -247,6 +264,67 @@ describe('sitemap', () => {
 
   it('is empty with no signal at all', () => {
     expect(buildSitemap({ views: [], viewsCapped: false, bugUrls: [], brokenUrls: [] }).pages).toEqual([])
+  })
+
+  it('leaves out report URLs on other sites (an imported GitHub link is not an app page)', () => {
+    const map = buildSitemap({
+      views: [],
+      viewsCapped: false,
+      bugUrls: ['https://github.com/kensaurus/mushi-mushi/blob/master/docs/BACKLOG.md', 'https://github.com/o/r/issues/12', 'https://glot.it/lessons/7'],
+      brokenUrls: [],
+      addresses: appAddresses(['https://glot.it']),
+    })
+    expect(map.pages.map((p) => p.path)).toEqual(['/', '/lessons', '/lessons/:id'])
+  })
+})
+
+describe('belongsToApp', () => {
+  const app = appAddresses(['https://www.example.com', 'https://preview-123.vercel.app', null, 'not a url'])
+
+  it('keeps the app hosts, www or not, any default port', () => {
+    expect(belongsToApp('https://example.com/a', app)).toBe(true)
+    expect(belongsToApp('https://WWW.Example.com:443/a', app)).toBe(true)
+    expect(belongsToApp('https://preview-123.vercel.app/x', app)).toBe(true)
+    expect(belongsToApp('https://github.com/o/r/blob/main/x.md', app)).toBe(false)
+    // A subdomain of the app's host is the app's too (an apex watch covers app.example.com).
+    expect(belongsToApp('https://app.example.com/settings', app)).toBe(true)
+    expect(belongsToApp('https://notexample.com/x', app)).toBe(false)
+  })
+
+  it('keeps paths, local development and app schemes; drops browser-internal URLs', () => {
+    expect(belongsToApp('/settings', app)).toBe(true)
+    expect(belongsToApp('settings/profile', app)).toBe(true)
+    expect(belongsToApp('http://localhost:3000/x', app)).toBe(true)
+    expect(belongsToApp('http://127.0.0.1:5173/', app)).toBe(true)
+    expect(belongsToApp('capacitor://localhost/tabs/home', app)).toBe(true)
+    expect(belongsToApp('ionic://localhost/home', app)).toBe(true)
+    expect(belongsToApp('file:///android_asset/www/index.html', app)).toBe(true)
+    expect(belongsToApp('about:blank', app)).toBe(false)
+    expect(belongsToApp('chrome-extension://abc/popup.html', app)).toBe(false)
+    expect(belongsToApp('https://exa mple.com', app)).toBe(false)
+  })
+
+  it('on a shared host, only the app\'s base path counts, even next to a pathless SDK origin', () => {
+    const mushi = appAddresses(['https://kensaur.us/mushi-mushi/', 'https://kensaur.us'])
+    expect(belongsToApp('https://kensaur.us/mushi-mushi', mushi)).toBe(true)
+    expect(belongsToApp('https://kensaur.us/mushi-mushi/admin/fixes', mushi)).toBe(true)
+    expect(belongsToApp('https://kensaur.us/glot-it/practice', mushi)).toBe(false)
+    expect(belongsToApp('https://kensaur.us/mushi-mushi-old/x', mushi)).toBe(false)
+  })
+
+  it('a base that is a page or a language still covers the app, not one page', () => {
+    // Only the first segment scopes: a watch on /app/login covers all of /app.
+    const deep = appAddresses(['https://example.com/app/login'])
+    expect(belongsToApp('https://example.com/app/settings', deep)).toBe(true)
+    expect(belongsToApp('https://example.com/blog', deep)).toBe(false)
+    // A locale is a language, not a place on the host.
+    for (const base of ['https://example.com/en', 'https://example.com/ja-JP/']) {
+      expect(belongsToApp('https://example.com/pricing', appAddresses([base]))).toBe(true)
+    }
+  })
+
+  it('keeps everything when no address is known (as before)', () => {
+    expect(belongsToApp('https://anything.example/x', [])).toBe(true)
   })
 })
 
@@ -304,7 +382,7 @@ describe('setupSignal (fresh-eyes, ADR 0053)', () => {
 
   it('reads minutes and steps, with the light by time', () => {
     const s = setupSignal({ run })!
-    expect(s).toMatchObject({ id: 'setup', label: 'First-time setup', headline: '6 min, 11 steps', light: 'warn', href: '/ux-runs?tab=fresh-eyes' })
+    expect(s).toMatchObject({ id: 'setup', label: 'First-time setup', headline: '6 min, 11 steps', light: 'warn', href: '/first-user-test' })
     expect(s.detail).toBe('2 of 3 first-time visitors reached the goal in the last run.')
     expect(setupSignal({ run: { ...run, ttfv_seconds: 200 } })!.light).toBe('good')
     expect(setupSignal({ run: { ...run, ttfv_seconds: 1200 } })!.light).toBe('bad')

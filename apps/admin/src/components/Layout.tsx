@@ -397,6 +397,16 @@ export function Layout({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (onMorePage) setMorePagesOpen(true)
   }, [onMorePage])
+  // ...and scrolls it into view: a page low in "More pages" sat below the
+  // fold, so the highlight was there but you could not see it.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      document
+        .querySelectorAll<HTMLElement>('nav[aria-label="Main navigation"] [aria-current="page"]')
+        .forEach((el) => el.scrollIntoView?.({ block: 'nearest' }))
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [pathname, search, morePagesOpen])
 
   function selectSection(id: string, options?: { expandSidebar?: boolean }) {
     if (options?.expandSidebar) {

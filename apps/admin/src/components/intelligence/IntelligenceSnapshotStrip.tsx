@@ -28,7 +28,9 @@ function insightsSentence(stats: IntelligenceStats): string {
   }
   const week = weekOf(stats.latestWeekStart)
   const latest = `The latest summary covers ${week ? `the week of ${week}` : 'last week'}: ${pluralizeWithCount(stats.totalReportsInLatest, 'bug')} reported`
-  const failed = stats.failedJobCount > 0 ? ` The last ${stats.failedJobCount === 1 ? 'summary run' : `${stats.failedJobCount} summary runs`} failed.` : ''
+  // Only the latest run counts: an old failure a later summary replaced is not
+  // news, and the green banner said "up to date" beside it (2026-10-28).
+  const failed = stats.topPriority === 'job_failed' ? ' The last summary run failed.' : ''
   return `${latest}.${failed}`
 }
 
@@ -36,7 +38,7 @@ export function IntelligenceSnapshotStrip({ stats, statsFetchedAt, statsValidati
   return (
     <PageStatus
       ariaLabel="Weekly insights status"
-      tone={stats.failedJobCount > 0 ? 'danger' : stats.pendingFindings > 0 ? 'warn' : stats.reportCount > 0 ? 'ok' : 'neutral'}
+      tone={stats.topPriority === 'job_failed' ? 'danger' : stats.pendingFindings > 0 ? 'warn' : stats.reportCount > 0 ? 'ok' : 'neutral'}
       sentence={insightsSentence(stats)}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       metrics={[

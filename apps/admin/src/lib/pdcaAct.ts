@@ -75,9 +75,28 @@ export const ACT_BLOCKER_LINK_LABEL: Record<ActBlocker, string> = {
   needs_review: 'Review PR',
 }
 
+const VERDICT_PREFIXES: ReadonlyArray<readonly [string, string]> = [
+  ['Agent found nothing to change:', 'already_fixed'],
+  ['Agent says the code is in another repo:', 'wrong_repo'],
+  ['Agent found nothing it can tie to code:', 'not_actionable'],
+  ['Agent says this needs a person:', 'needs_human'],
+]
+
+/**
+ * The agent's no-PR verdict from its error line (server `noPrErrorText`).
+ * Local-lane runs before 2026-10-29 carry it only there, with no
+ * failure_category, and read as "Unrecognised error" with a retry offer.
+ */
+export function verdictFromError(error: string | null | undefined): string | null {
+  const hit = VERDICT_PREFIXES.find(([prefix]) => (error ?? '').startsWith(prefix))
+  return hit ? hit[1] : null
+}
+
 /** Breakdown key for a counted failure. Mirrors `fixFailureBucket` on the server. */
 export function fixFailureBucket(fix: ActFixSignals & { failure_category?: string | null }): string {
   if (fix.failure_category) return fix.failure_category
+  const verdict = verdictFromError(fix.error)
+  if (verdict) return verdict
   if (fix.pr_state === 'closed') return 'pr_closed_unmerged'
   if (fix.pr_url && fix.ci_infra?.infra) return 'ci_infra'
   if (fix.pr_url && fix.status === 'completed') return 'ci_failed'

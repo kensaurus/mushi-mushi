@@ -1,23 +1,24 @@
-# Content quality
+# Content checks
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/content
 
 ---
-title: Content quality
-description: The Content quality page queues AI-generated copy, release notes and knowledge snippets that scored poorly or were flagged, so you can fix them.
+title: Content checks
+description: The Content checks page in the Mushi Mushi console queues low-scoring or flagged AI-generated copy, release notes and knowledge snippets so you can fix them.
 ---
 
-# Content quality
+# Content checks
 
-**Route:** `/content`
+**Route:** `/content` (sidebar: **Content checks**, under Verify)
 
 With nothing open and no filter from a link, the page is its empty state with
 **Show past issues**; the filter row appears once there is something to filter.
 
 > **Scenario:** AI-generated copy, release notes, or knowledge snippets scored
-> poorly or got user flags — you need a queue of fixable assets.
+> poorly or got user flags, and you need a queue of fixable assets.
 
-The Content Quality Debug Station lists assets that need review:
+Your own app sends these items to Mushi Mushi (`POST /v1/content-quality` with your
+project API key). Content checks lists the ones that need review:
 
 | Reason | Meaning |
 |--------|---------|
@@ -26,8 +27,8 @@ The Content Quality Debug Station lists assets that need review:
 | `low_star_rating` | Aggregate star rating is low |
 | `high_downvote_ratio` | Downvotes dominate |
 
-Open a row (`/content/:id`) to inspect scores and trigger regeneration. Stats
-strip and readout follow the standard PagePosture chrome.
+Open a row (`/content/:id`) to inspect scores and click **Regenerate & push**. Your app
+judges the new candidate and promotes it only if the score improves.
 
 To clear noise in bulk, tick rows or filter the list (status, reason, content
 type, source, score band), then choose **Dismiss selected** or **Dismiss all
@@ -38,5 +39,5 @@ flags, new downvotes or a clearly lower score reopen it.
 
 ## Related pages
 
-- [Judge dashboard](/admin/judge) — quality grades that feed this queue
+- [Triage grading](/admin/judge) — Mushi's own grading of its triage (not the scores your app sends here)
 - [Releases](/admin/releases) — changelog / release-note surfaces

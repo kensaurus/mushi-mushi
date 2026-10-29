@@ -423,26 +423,27 @@ function ProjectHealthCard({ card, recipeWorst }: { card: ProjectCard; recipeWor
       {/* Footer links — z-10 so they sit above the stretched title link */}
       <div className="relative z-10 flex gap-2 border-t border-edge px-4 py-2">
         <Link
-          to="/activity"
+          to="/dashboard?view=users"
           onClick={handleSwitchProject}
           className="inline-flex min-h-6 items-center text-2xs text-brand hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm"
         >
-          Activity →
+          User activity →
         </Link>
-        {/* The count is the open-status list (QA 175), so the link opens that list. */}
+        {/* The open-status list (QA 175). The badge above already gives the
+            count; the footer said "65 open" a third time (2026-10-28). */}
         <Link
           to={card.open_reports > 0 ? '/reports?status=open' : '/reports'}
           onClick={handleSwitchProject}
           className="inline-flex min-h-6 items-center text-2xs text-fg-muted hover:text-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm"
         >
-          {card.open_reports > 0 ? `${card.open_reports} open` : 'Reports'}
+          {card.open_reports > 0 ? 'Open bugs' : 'Bugs'}
         </Link>
         <Link
           to="/dashboard"
           onClick={handleSwitchProject}
           className="inline-flex min-h-6 items-center text-2xs text-fg-muted hover:text-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm"
         >
-          Dashboard
+          Home
         </Link>
         {recipeWorst && (
           <Link

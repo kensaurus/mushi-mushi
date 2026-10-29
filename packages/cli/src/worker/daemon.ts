@@ -11,7 +11,9 @@
  *            2. the guards run here (worker/guards.ts): free memory, the
  *               GitHub API quota, the Cursor sign-in, one agent cap for the
  *               whole host, each lane's stop date;
- *            3. a lane runs review follow-ups first, then claims by its mode:
+ *            3. a lane runs review follow-ups first, then claims: a first-time
+ *               user test the console queued for its app comes first
+ *               (worker/fresh-eyes.ts, ADR 0053 amendment), then by its mode:
  *               `fix` a report (its queue first, then the ranked ones) and runs
  *               `mushi work`'s own workOne on it in its clone; `skill` only the
  *               skill-run rounds in its queue (ADR 0042 amendment); `conflicts`
@@ -29,7 +31,7 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs'
-import { freemem } from 'node:os'
+import { availableParallelism, freemem, loadavg } from 'node:os'
 import { apiCall, type ApiResult } from '../cli-shared.js'
 import { loadConfig, type CliConfig } from '../config.js'
 import { MushiCliError } from '../errors.js'
@@ -52,11 +54,29 @@ import {
 import { CURSOR_CONFIRM_GRACE_MS, hostGate, memAvailableGb, pastStop, type MachineReadings } from './guards.js'
 import { auditPass } from './audit.js'
 import { repoOfRemote, resolveConflict } from './conflicts.js'
+import { runFreshEyesClaim } from './fresh-eyes.js'
+import { createCursorLogin, type CursorLogin } from './cursor-login.js'
+import {
+  cleanLine,
+  cursorCheckResult,
+  ghCheckResult,
+  maskEmail,
+  newRun,
+  pushLog,
+  runStatus,
+  setStage,
+  slotStatus,
+  type CursorCheckResult,
+  type GhCheckResult,
+  type RunKind,
+  type RunTrack,
+} from './telemetry.js'
 import {
   loadWorkerConfig,
   parseClaim,
   parseHeartbeatAnswer,
   WORKER_KEY_PATH,
+  type FreshEyesTarget,
   type HostGuards,
   type LaneConfig,
   type LocalLane,
@@ -74,12 +94,23 @@ const CURSOR_CHECK_MS = 20 * 60_000
 
 type Call = <T>(path: string, init?: RequestInit) => Promise<ApiResult<T>>
 
+/** What the machine reads before each pass: the gate's inputs, and what the console shows about them. */
+type HostReadings = Omit<MachineReadings, 'agents'> & {
+  /** The account and gh checks as they really answered, with when (ms since epoch, this machine's clock). */
+  checks?: {
+    cursor?: { result: CursorCheckResult; at: number; detail: string }
+    gh?: { result: GhCheckResult; at: number; detail: string }
+  }
+  load1?: number | null
+  cpus?: number | null
+}
+
 /** @internal Exported for tests only. */
 export interface DaemonDeps {
   call: Call
   workOne: typeof workOne
   followUpOne: typeof followUpOne
-  readings: () => Promise<Omit<MachineReadings, 'agents'>>
+  readings: () => Promise<HostReadings>
   now: () => number
   log: (line: string) => void
   host: { hostId: string; hostname: string; platform: 'linux' | 'wsl2' | 'macos' | 'windows'; version: string }
@@ -90,6 +121,18 @@ export interface DaemonDeps {
   auditPass?: typeof auditPass
   /** owner/name of each lane's clone (its origin remote), by lane name; sent so conflict claims match the clone. */
   repos?: ReadonlyMap<string, string>
+  /** The console asked for a new Cursor account check (heartbeat answer `recheckAccount`). */
+  recheck?: () => void
+  /** Lanes that could not start, with why (a clone that is not a git clone): registered, shown, never run. */
+  notReady?: ReadonlyMap<string, string>
+  /** The account the agents must run as; only its masked form leaves the machine. */
+  cursorAccount?: string
+  /** The console named another account (heartbeat answer `cursorAccount`): the readings expect it from now on. */
+  setCursorAccount?: (account: string) => void
+  /** "Switch account" from the console. Without it the daemon does not offer to switch (no `can: cursor_login`). */
+  cursorLogin?: CursorLogin
+  /** Runs a first-time user test the console queued. Without it the daemon does not offer to take them. */
+  freshEyes?: (t: FreshEyesTarget, o: { projectId: string; signal: AbortSignal; log: (line: string) => void }) => Promise<JobOutcome>
 }
 
 /** What a P3 run reports back (conflicts and audit). */
@@ -117,6 +160,11 @@ interface LaneRuntime {
   nextClaimAt: number
   nextFollowupAt: number
   state: string
+  /** The state the last heartbeat sent, and since when (for "waited 3 h for an agent space"). */
+  seenState: string
+  stateAt: number
+  /** Runs in flight, by claim id (or `followup-<fix>`): stage, ages, model, last log lines. */
+  tracks: Map<string, RunTrack>
   counters: { runs: number; prs: number; pushes: number; timeouts: number; errors: number; idle: number; agentMs: number }
   last: string
 }
@@ -131,14 +179,22 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     followup: false,
     nextClaimAt: 0,
     nextFollowupAt: 0,
-    state: 'starting',
+    state: deps.notReady?.has(local.name) ? 'not-ready' : 'starting',
+    seenState: '',
+    stateAt: deps.now(),
+    tracks: new Map(),
     counters: { runs: 0, prs: 0, pushes: 0, timeouts: 0, errors: 0, idle: 0, agentMs: 0 },
     last: '',
   }))
   let guards: HostGuards | null = null
   let hostState = 'starting'
-  let lastReadings: Omit<MachineReadings, 'agents'> | null = null
+  let hostSeenState = ''
+  let hostStateAt = deps.now()
+  let waitWhy: string | null = null
+  let lastReadings: HostReadings | null = null
   let stopped: string | null = null
+  /** The account the agents must run as: worker.json's, until the console names another. */
+  let account = deps.cursorAccount
   const reported = new Set<string>()
   const pending = new Set<Promise<void>>()
 
@@ -162,9 +218,45 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     say(null, `stopping: ${why}`)
   }
 
-  function heartbeatBody() {
+  /** Seconds a lane's state has lasted, as of this heartbeat. */
+  function stateSec(lane: LaneRuntime, now: number): number {
+    if (lane.state !== lane.seenState) {
+      lane.seenState = lane.state
+      lane.stateAt = now
+    }
+    return Math.round((now - lane.stateAt) / 1000)
+  }
+
+  /** What the console shows about the machine beyond lane-v4's counters (worker/telemetry.ts). */
+  function hostTelemetry(now: number) {
+    if (hostState !== hostSeenState) {
+      hostSeenState = hostState
+      hostStateAt = now
+    }
+    const c = lastReadings?.checks
+    const age = (at: number) => Math.max(0, Math.round((now - at) / 1000))
+    const notReady = [...(deps.notReady ?? new Map<string, string>())].map(([lane, problem]) => ({ lane, problem: cleanLine(problem) ?? 'it could not start' }))
     return {
-      host: deps.host,
+      stateSec: Math.round((now - hostStateAt) / 1000),
+      ...(lastReadings?.load1 != null ? { load1: Math.round(lastReadings.load1 * 10) / 10 } : {}),
+      ...(lastReadings?.cpus ? { cpus: lastReadings.cpus } : {}),
+      ...(waitWhy ? { waitWhy } : {}),
+      checks: {
+        ...(c?.cursor ? { cursor: { result: c.cursor.result, ageSec: age(c.cursor.at), detail: cleanLine(c.cursor.detail) ?? '', account: account ? maskEmail(account) : null } } : {}),
+        ...(c?.gh ? { gh: { result: c.gh.result, ageSec: age(c.gh.at), detail: cleanLine(c.gh.detail) ?? '' } } : {}),
+        ...(notReady.length ? { notReady } : {}),
+      },
+      // Which lane holds each agent space, and in which stage.
+      slots: lanes.flatMap((l) => [...l.tracks.values()].map((t) => slotStatus(l.local.name, t, now))),
+    }
+  }
+
+  function heartbeatBody() {
+    const now = deps.now()
+    return {
+      // `takes`: the claim kinds beyond the lanes' modes this daemon runs (a closed list on the server).
+      // `can`: what this daemon does when the console asks (a closed list on the server).
+      host: { ...deps.host, takes: deps.freshEyes ? ['fresh_eyes'] : [], can: deps.cursorLogin ? ['cursor_login'] : [] },
       status: {
         state: hostState,
         agents: agents(),
@@ -172,13 +264,16 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
         ...(lastReadings?.memAvailableGb != null ? { memAvailableGb: lastReadings.memAvailableGb } : {}),
         ...(lastReadings?.ghRemaining != null ? { ghRemaining: lastReadings.ghRemaining } : {}),
         ...(lastReadings ? { cursor: lastReadings.cursor } : {}),
+        ...hostTelemetry(now),
+        // The switch the console asked for, with its approve link while that is the step: the server keeps it for the owner only.
+        ...(deps.cursorLogin?.report() ? { cursorLogin: deps.cursorLogin.report() } : {}),
       },
       lanes: lanes.map((l) => {
         const { agentMs, ...counts } = l.counters
         return {
           name: l.local.name,
           projectId: l.local.projectId,
-          status: { state: l.state, ...counts, agentMin: Math.round(agentMs / 60_000), last: l.last },
+          status: { state: l.state, ...counts, agentMin: Math.round(agentMs / 60_000), last: cleanLine(l.last) ?? '', stateSec: stateSec(l, now), inflight: [...l.tracks.values()].map((t) => runStatus(t, now)) },
           ...(l.local.initial ? { initial: l.local.initial } : {}),
           ...(deps.repos?.get(l.local.name) ? { repo: deps.repos.get(l.local.name) } : {}),
         }
@@ -192,6 +287,9 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     lane.running.set(claim.id, ac)
     lane.state = 'working'
     const t0 = deps.now()
+    const model = claim.model ?? lane.config?.model ?? undefined
+    const track = newRun(claim.id, 'fix', { reportId: claim.report.id, model, now: t0, stage: 'prepare' })
+    lane.tracks.set(claim.id, track)
     say(lane, `claimed ${claim.report.id.slice(0, 8)}: ${(claim.report.summary ?? '').slice(0, 80)}`)
     const run = (async () => {
       let out: WorkOutcome
@@ -199,10 +297,14 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
         out = await deps.workOne(api, claim.report, {
           repoDir: lane.local.repoDir,
           agent: 'cursor',
-          model: claim.model ?? lane.config?.model ?? undefined,
-          log: (l) => say(lane, l.trim()),
+          model,
+          log: (l) => {
+            pushLog(track, l)
+            say(lane, l.trim())
+          },
           earlier: claim.earlier,
           signal: ac.signal,
+          onStage: (stage) => setStage(track, stage, deps.now()),
         })
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
@@ -231,6 +333,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
       .catch((err: unknown) => say(lane, `  run error: ${err instanceof Error ? err.message : String(err)}`))
       .finally(() => {
         lane.running.delete(claim.id)
+        lane.tracks.delete(claim.id)
         pending.delete(run)
         deps.wake?.()
       })
@@ -238,16 +341,22 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
   }
 
   /** A conflict or audit run: the same lease, counters and done call as a fix run. */
-  function startJob(lane: LaneRuntime, claimId: string, label: string, job: (signal: AbortSignal) => Promise<JobOutcome>): void {
+  function startJob(lane: LaneRuntime, claimId: string, kind: RunKind, label: string, job: (signal: AbortSignal, log: (line: string) => void) => Promise<JobOutcome>): void {
     const ac = new AbortController()
     lane.running.set(claimId, ac)
     lane.state = 'working'
     const t0 = deps.now()
+    const track = newRun(claimId, kind, { model: lane.config?.model ?? null, now: t0 })
+    lane.tracks.set(claimId, track)
+    const log = (l: string) => {
+      pushLog(track, l)
+      say(lane, l.trim())
+    }
     say(lane, label)
     const run = (async () => {
       let out: JobOutcome
       try {
-        out = await job(ac.signal)
+        out = await job(ac.signal, log)
       } catch (err) {
         out = { result: 'failed', failureKind: 'infra', detail: err instanceof Error ? err.message : String(err) }
       }
@@ -272,6 +381,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
       .catch((err: unknown) => say(lane, `  run error: ${err instanceof Error ? err.message : String(err)}`))
       .finally(() => {
         lane.running.delete(claimId)
+        lane.tracks.delete(claimId)
         pending.delete(run)
         deps.wake?.()
       })
@@ -289,9 +399,22 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
   function startFollowup(lane: LaneRuntime, f: LocalFollowupCandidate): void {
     lane.followup = true
     const t0 = deps.now()
+    // A follow-up holds an agent space like a claim does, so the console sees it too.
+    const runId = `followup-${f.fixId.replace(/-/g, '').slice(0, 8).toLowerCase()}`
+    const track = newRun(runId, 'followup', { model: lane.config?.model ?? null, now: t0, stage: 'prepare' })
+    lane.tracks.set(runId, track)
     say(lane, `follow-up ${f.prUrl ?? f.fixId}`)
     const run = deps
-      .followUpOne(api, f, { repoDir: lane.local.repoDir, agent: 'cursor', model: lane.config?.model ?? undefined, log: (l) => say(lane, l.trim()) })
+      .followUpOne(api, f, {
+        repoDir: lane.local.repoDir,
+        agent: 'cursor',
+        model: lane.config?.model ?? undefined,
+        log: (l) => {
+          pushLog(track, l)
+          say(lane, l.trim())
+        },
+        onStage: (stage) => setStage(track, stage, deps.now()),
+      })
       .then((r) => {
         lane.counters.runs++
         if (/^pushed /.test(r.outcome)) lane.counters.pushes++
@@ -306,6 +429,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
       .finally(() => {
         lane.counters.agentMs += deps.now() - t0
         lane.followup = false
+        lane.tracks.delete(runId)
         pending.delete(run)
         deps.wake?.()
       })
@@ -314,6 +438,10 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
 
   async function laneStep(lane: LaneRuntime, now: number, g: HostGuards): Promise<void> {
     const c = lane.config
+    if (deps.notReady?.has(lane.local.name)) {
+      lane.state = 'not-ready'
+      return
+    }
     if (!lane.serverId || !c) {
       lane.state = 'stopped'
       return
@@ -379,13 +507,18 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
         startRun(lane, k.raw as unknown as ClaimFromServer)
       } else if (k.kind === 'conflict' && c.mode === 'conflicts') {
         const t = k.conflict
-        startJob(lane, k.id, `conflict ${t.repo}#${t.prNumber} (${t.headRef} at ${t.headSha.slice(0, 7)})`, (signal) =>
-          (deps.resolveConflict ?? resolveConflict)(t, { repoDir: lane.local.repoDir, model, log: (l) => say(lane, l.trim()), signal }),
+        startJob(lane, k.id, 'conflict', `conflict ${t.repo}#${t.prNumber} (${t.headRef} at ${t.headSha.slice(0, 7)})`, (signal, log) =>
+          (deps.resolveConflict ?? resolveConflict)(t, { repoDir: lane.local.repoDir, model, log, signal }),
         )
       } else if (k.kind === 'audit' && c.mode === 'audit') {
-        startJob(lane, k.id, `audit pass (${k.audit.findingsLeft} finding(s) left this hour)`, (signal) =>
-          (deps.auditPass ?? auditPass)(api, k.id, { repoDir: lane.local.repoDir, laneName: lane.local.name, model, reviewModel: k.audit.reviewModel, log: (l) => say(lane, l.trim()), signal }),
+        startJob(lane, k.id, 'audit', `audit pass (${k.audit.findingsLeft} finding(s) left this hour)`, (signal, log) =>
+          (deps.auditPass ?? auditPass)(api, k.id, { repoDir: lane.local.repoDir, laneName: lane.local.name, model, reviewModel: k.audit.reviewModel, log, signal }),
         )
+      } else if (k.kind === 'fresh_eyes' && deps.freshEyes) {
+        // Any lane of the app runs it: the test needs no clone. Never log the target (it can hold passwords).
+        const run = deps.freshEyes
+        const t = k.freshEyes
+        startJob(lane, k.id, 'fresh_eyes', `first-time user test ${t.runId}`, (signal, log) => run(t, { projectId: lane.local.projectId, signal, log }))
       } else {
         await giveBack(lane, k.id, `a ${k.kind} claim for a lane in ${c.mode} mode`)
         lane.nextClaimAt = now + BACKOFF_MS
@@ -418,11 +551,20 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     for (const b of bad) once(`bad:${b}`, null, `lane settings refused (it stays idle): ${b}`)
     for (const r of answer.refused) once(`refused:${r.name}:${r.reason}`, null, `lane ${r.name} not registered: ${r.reason}`)
     guards = answer.guards
+    if (answer.recheckAccount) deps.recheck?.()
+    if (answer.cursorAccount && answer.cursorAccount !== account) {
+      account = answer.cursorAccount
+      deps.setCursorAccount?.(answer.cursorAccount)
+      say(null, `the console set the Cursor account to ${maskEmail(answer.cursorAccount)}`)
+    }
+    if (answer.cursorLogin && account) deps.cursorLogin?.start(answer.cursorLogin.requestId, account)
     for (const l of lanes) {
       const server = answer.lanes.find((s) => s.name === l.local.name && s.projectId === l.local.projectId)
       l.serverId = server?.id ?? null
       l.config = server?.config ?? null
     }
+    // A first-time user test waits for these lanes' app: ask now, not after the idle wait.
+    for (const l of lanes) if (l.serverId && answer.wake.includes(l.serverId)) l.nextClaimAt = 0
     for (const id of answer.lost) {
       for (const l of lanes) {
         const ac = l.running.get(id)
@@ -433,20 +575,30 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
       }
     }
     lastReadings = await deps.readings()
+    // A switch of the Cursor account takes nothing new; the runs in flight finish first.
+    if (deps.cursorLogin?.busy()) {
+      if (hostState !== 'switching-account') say(null, 'waiting: switching the Cursor account (asked from the console)')
+      hostState = 'switching-account'
+      waitWhy = 'Switching the Cursor account (asked from the console)'
+      for (const l of lanes) if (!l.running.size && !l.followup && !deps.notReady?.has(l.local.name)) l.state = 'switching-account'
+      return
+    }
     const gate = hostGate(guards, { ...lastReadings, agents: agents() })
     if (!gate.ok) {
       if (hostState !== gate.state) say(null, `waiting: ${gate.why}`)
       hostState = gate.state
-      for (const l of lanes) if (!l.running.size && !l.followup) l.state = gate.state
+      waitWhy = cleanLine(gate.why)
+      for (const l of lanes) if (!l.running.size && !l.followup && !deps.notReady?.has(l.local.name)) l.state = gate.state
       return
     }
+    waitWhy = null
     hostState = 'working'
     const now = deps.now()
     for (const l of lanes) {
       if (stopped) break
       await laneStep(l, now, guards)
     }
-    if (lanes.every((l) => l.state === 'idle' || l.state === 'paused' || l.state === 'stopped')) hostState = 'idle'
+    if (lanes.every((l) => l.state === 'idle' || l.state === 'paused' || l.state === 'stopped' || l.state === 'not-ready')) hostState = 'idle'
   }
 
   /** Stop taking work; the claims still running are told "stopped" (their fix rows close through workOne). */
@@ -463,6 +615,8 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
   return {
     tick,
     shutdown,
+    /** Agents running now (a switch of the Cursor account waits for them). */
+    agents,
     stopAll,
     get stopped() {
       return stopped
@@ -523,29 +677,98 @@ export function cursorStateFor(s: { state: CursorSignIn; output: string }, accou
   return s.output.toLowerCase().includes(account.toLowerCase()) ? 'signed_in' : 'signed_out'
 }
 
-async function machineReadings(
-  state: { ghAt: number; gh: number | null; cursorAt: number; cursor: CursorSignIn; confirmedAt: number | null },
-  now: number,
-  cursorAccount: string | undefined,
-): Promise<Omit<MachineReadings, 'agents'>> {
-  const meminfo = process.platform === 'linux' ? nodeHostIO.readFile('/proc/meminfo') : null
-  const mem = memAvailableGb(meminfo) ?? Math.floor(freemem() / 1024 ** 3)
-  if (now - state.ghAt >= GH_CHECK_MS) {
-    const r = await runProc('gh', ['api', 'rate_limit', '--jq', '.resources.core.remaining'], { timeoutMs: 30_000 })
-    // A hung or failed call is unknown, not an empty quota.
-    state.gh = r.code === 0 && /^\d+$/.test(r.stdout.trim()) ? Number(r.stdout.trim()) : null
-    state.ghAt = now
+/**
+ * @internal Exported for tests only. The machine's readings before each pass,
+ * and the checks behind them as they really answered. The Cursor account check
+ * runs in the background after the first one (it can take up to 3 minutes
+ * under load and must not hold the heartbeat); `recheck()` starts one at the
+ * next reading (the console's "Re-check the account").
+ */
+export function createHostReadings(o: {
+  cursorAccount?: string
+  now: () => number
+  log: (line: string) => void
+  run?: typeof runProc
+  checkCursor?: () => ReturnType<typeof checkCursorSignIn>
+  memGb?: () => number
+  load?: () => number
+  cpus?: () => number
+}) {
+  const run = o.run ?? runProc
+  const checkCursor = o.checkCursor ?? (() => checkCursorSignIn())
+  let acct = o.cursorAccount
+  const st = {
+    ghAt: -Infinity,
+    gh: null as number | null,
+    cursorAt: -Infinity,
+    cursor: 'unknown' as CursorSignIn,
+    confirmedAt: null as number | null,
+    first: true,
+    asked: false,
+    running: null as Promise<void> | null,
+    checks: {} as NonNullable<HostReadings['checks']>,
   }
-  if (now - state.cursorAt >= CURSOR_CHECK_MS) {
-    const s = await checkCursorSignIn()
-    state.cursor = cursorStateFor(s, cursorAccount)
-    if (s.state === 'signed_in' && state.cursor === 'signed_out') process.stdout.write(`worker: the Cursor CLI is signed in, but not as ${cursorAccount}; taking nothing new.\n`)
-    if (state.cursor === 'signed_in') state.confirmedAt = now
-    state.cursorAt = now
+  const cursorCheck = (): Promise<void> => {
+    if (st.running) return st.running
+    st.cursorAt = o.now()
+    st.running = checkCursor()
+      .then((s) => {
+        const at = o.now()
+        st.cursor = cursorStateFor(s, acct)
+        if (s.state === 'signed_in' && st.cursor === 'signed_out') o.log(`worker: the Cursor CLI is signed in, but not as ${acct ? maskEmail(acct) : 'the expected account'}; taking nothing new.`)
+        if (st.cursor === 'signed_in') st.confirmedAt = at
+        st.checks.cursor = { result: cursorCheckResult(s, acct), at, detail: s.detail }
+      })
+      .catch((err: unknown) => {
+        st.checks.cursor = { result: 'unclear', at: o.now(), detail: err instanceof Error ? err.message : String(err) }
+      })
+      .finally(() => {
+        st.running = null
+      })
+    return st.running
   }
-  // A status call that timed out under load still counts as signed in for 2 h after the last confirmation.
-  const cursor = state.cursor === 'unknown' && state.confirmedAt !== null && now - state.confirmedAt < CURSOR_CONFIRM_GRACE_MS ? 'signed_in' : state.cursor
-  return { memAvailableGb: mem, ghRemaining: state.gh, cursor }
+  return {
+    recheck(): void {
+      st.asked = true
+    },
+    /** The console named another account: expect it, and check again at once. */
+    setAccount(account: string): void {
+      if (account === acct) return
+      acct = account
+      st.confirmedAt = null
+      st.asked = true
+    },
+    async read(): Promise<HostReadings> {
+      const now = o.now()
+      if (now - st.ghAt >= GH_CHECK_MS) {
+        const r = await run('gh', ['api', 'rate_limit', '--jq', '.resources.core.remaining'], { timeoutMs: 30_000 })
+        // A hung or failed call is unknown, not an empty quota.
+        st.gh = r.code === 0 && /^\d+$/.test(r.stdout.trim()) ? Number(r.stdout.trim()) : null
+        st.ghAt = now
+        const result = ghCheckResult(r)
+        st.checks.gh = { result, at: o.now(), detail: result === 'signed_in' ? 'signed in' : r.timedOut ? 'gh did not answer in 30 s' : r.stderr.trim().split('\n')[0] ?? '' }
+      }
+      if (st.asked || now - st.cursorAt >= CURSOR_CHECK_MS) {
+        st.asked = false
+        const p = cursorCheck()
+        // The first check is awaited, as before: nothing is claimed before the account is known.
+        if (st.first) await p
+      }
+      st.first = false
+      // A status call that timed out under load still counts as signed in for 2 h after the last confirmation.
+      const t = o.now()
+      const cursor = st.cursor === 'unknown' && st.confirmedAt !== null && t - st.confirmedAt < CURSOR_CONFIRM_GRACE_MS ? 'signed_in' : st.cursor
+      return {
+        memAvailableGb: o.memGb ? o.memGb() : (memAvailableGb(process.platform === 'linux' ? nodeHostIO.readFile('/proc/meminfo') : null) ?? Math.floor(freemem() / 1024 ** 3)),
+        ghRemaining: st.gh,
+        gh: st.checks.gh?.result,
+        cursor,
+        checks: { ...st.checks },
+        load1: (o.load ?? (() => loadavg()[0]!))(),
+        cpus: (o.cpus ?? availableParallelism)(),
+      }
+    },
+  }
 }
 
 export async function runDaemon(opts: { configPath?: string } = {}): Promise<void> {
@@ -558,13 +781,19 @@ export async function runDaemon(opts: { configPath?: string } = {}): Promise<voi
   if (!hostId) throw new MushiCliError('E_INVALID_INPUT', 'Could not read a machine id on this host.', 'Linux and WSL2 need /etc/machine-id; Windows reads MachineGuid.')
   const platform = detectPlatform(nodeHostIO)
 
-  // The machine is ready before the first claim: gh can push, every clone is a git repo.
+  // A machine that is not ready still starts and says so: the console shows it
+  // (gh signed out waits on the gate; a lane whose clone is broken stays out).
   const gh = await runProc('gh', ['auth', 'status'], { timeoutMs: 30_000 })
-  if (gh.code !== 0) throw new MushiCliError('E_AUTH_MISSING', 'gh is not signed in on this machine.', 'Run: gh auth login')
+  if (gh.code !== 0) process.stdout.write('worker: gh is not signed in on this machine; lanes take nothing until it is (run: gh auth login).\n')
   const repos = new Map<string, string>()
+  const notReady = new Map<string, string>()
   for (const lane of cfg.lanes) {
     const g = await runProc('git', ['rev-parse', '--git-dir'], { cwd: lane.repoDir, timeoutMs: 30_000 })
-    if (g.code !== 0) throw new MushiCliError('E_INVALID_INPUT', `Lane ${lane.name}: ${lane.repoDir} is not a git clone.`, `git clone <repo> ${lane.repoDir}`)
+    if (g.code !== 0) {
+      process.stdout.write(`worker: lane ${lane.name}: ${lane.repoDir} is not a git clone; the lane stays out until it is (git clone <repo> ${lane.repoDir}, then restart).\n`)
+      notReady.set(lane.name, 'Its folder on this machine is not a git clone (git rev-parse failed); clone the repo there and restart the worker')
+      continue
+    }
     // Which repository the clone is: conflict claims (ADR 0049) offer only its PRs.
     const origin = await runProc('git', ['remote', 'get-url', 'origin'], { cwd: lane.repoDir, timeoutMs: 30_000 })
     const repo = origin.code === 0 ? repoOfRemote(origin.stdout) : null
@@ -573,20 +802,36 @@ export async function runDaemon(opts: { configPath?: string } = {}): Promise<voi
 
   const conf: CliConfig = { apiKey: key, endpoint }
   let wake: () => void = () => undefined
+  const readings = createHostReadings({ cursorAccount: cfg.cursorAccount, now: () => Date.now(), log: (l) => process.stdout.write(`${l}\n`) })
+  // "Switch account" from the console. It counts the daemon's runs, which exist once the daemon does.
+  const live = { agents: () => 0 }
+  const cursorLogin = createCursorLogin({
+    now: () => Date.now(),
+    log: (l) => process.stdout.write(`${l}\n`),
+    activeRuns: () => live.agents(),
+    onSignedIn: (a) => {
+      readings.setAccount(a)
+      readings.recheck()
+    },
+  })
   const daemon = createDaemon(cfg, {
     call: (path, init) => apiCall(path, conf, init, { timeoutMs: 30_000 }),
     workOne,
     followUpOne,
-    readings: (() => {
-      const state = { ghAt: 0, gh: null as number | null, cursorAt: 0, cursor: 'unknown' as CursorSignIn, confirmedAt: null as number | null }
-      return () => machineReadings(state, Date.now(), cfg.cursorAccount)
-    })(),
+    readings: () => readings.read(),
+    recheck: () => readings.recheck(),
+    notReady,
+    ...(cfg.cursorAccount ? { cursorAccount: cfg.cursorAccount } : {}),
+    setCursorAccount: (a) => readings.setAccount(a),
+    cursorLogin,
     now: () => Date.now(),
     log: (l) => process.stdout.write(`${l}\n`),
     host: { hostId, hostname: nodeHostIO.hostname.split('.')[0]!.slice(0, 80) || 'host', platform, version: MUSHI_CLI_VERSION },
     wake: () => wake(),
     repos,
+    freshEyes: (t, o) => runFreshEyesClaim(t, { ...o, apiKey: key, endpoint }),
   })
+  live.agents = daemon.agents
   onInterrupt((signal) => daemon.shutdown(signal))
   process.stdout.write(`mushi worker: ${cfg.lanes.length} lane(s) on ${platform}; heartbeat every ${HEARTBEAT_MS / 1000} s. Stop with Ctrl-C or systemctl --user stop mushi-worker.\n`)
 

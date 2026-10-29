@@ -1,5 +1,24 @@
 # @mushi-mushi/mcp
 
+## 0.30.0
+
+### Minor Changes
+
+- e421853: New tool `open_ci_cost_fix`: opens a draft pull request that applies the one-click fix a CI cost advice item offers (`advice[].autofix`) to one workflow file. Nothing changes until a person reviews and merges it.
+- 2de87bf: New tools `preview_ci_cost_fix_rollout`, `apply_ci_cost_fix_rollout` and `get_ci_cost_fix_bundle`: preview every CI cost fix Mushi can open across your apps, grouped per repo with the estimated saving, then open them as one draft pull request per repo, so each repo runs CI once for all its fixes. Refused fixes are listed, never dropped.
+- e421853: Add `get_ci_bill`: what GitHub actually charged for Actions, measured from GitHub's billing (net, gross and discount per repo, SKU and day, this month so far, the change against the previous period when Mushi holds all of it, and the share of paid minutes that ran on Mushi agent branches). When there is no bill yet, it says how to connect one.
+- 0c93c23: New read-only tool `get_worker_status`: your local workers as the console's Workers tab shows them, problems first (a run stuck in a repo's git hook with its stage and last log lines, an offline machine, a failing Cursor account check, lanes waiting for an agent space, idle credits), then machines and lanes.
+- 346cc0e: Add the `vibe` preset: `MUSHI_FEATURES=vibe` (stdio) or `?features=vibe` (hosted) lists only the 12 tools of the reported-bug loop: recent and searched reports, report detail, fix context, mark fixed, reply to the reporter, file a report, setup diagnosis, `use_mushi` and the docs tools. Chat connectors such as Lovable, and clients that slow down with many tools, get a short list; `vibe` combines with groups (`vibe,qa`), and the default and `all` surfaces are unchanged.
+
+### Patch Changes
+
+- 2d77b72: The docs search index includes the rewritten quickstart, MCP, incident-loop and CLI loop pages, so `search_mushi_docs` returns the new numbered steps.
+- 346cc0e: The docs index that `search_mushi_docs` reads includes the UX runs page's Fresh eyes section.
+- 0491cc9: `list_qa_story_runs` and `get_qa_story_run` take an optional `projectId`, so an account connection can read QA runs for another app that key can reach. A project-bound connection still refuses a different project.
+- Updated dependencies [0c93c23]
+- Updated dependencies [0c93c23]
+  - @mushi-mushi/core@1.33.4
+
 ## 0.29.2
 
 ### Patch Changes

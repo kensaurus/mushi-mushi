@@ -44,6 +44,12 @@ describe('fixNodes: the next step', () => {
     expect(step?.title).not.toMatch(/retry/i)
   })
 
+  it('a local-lane run that said needs_human only in its error line also says a person decides', () => {
+    // 87 `mushi work` runs in 30 days (2026-10-29) had no failure_category.
+    const step = nextStep(report('classified', failedAttempt({ agent: 'mcp', failure_category: null, error: 'Agent says this needs a person: Mushi verdict: needs_human. Pick a query budget.' })))
+    expect(step?.title).toBe('A person decides this one')
+  })
+
   it('an agent error on an open report still points at the weak spots', () => {
     const step = nextStep(report('classified', failedAttempt({ failure_category: 'sandbox_timeout', error: 'timed out' })))
     expect(step?.title).toBe('Check the weak spots, then retry')
