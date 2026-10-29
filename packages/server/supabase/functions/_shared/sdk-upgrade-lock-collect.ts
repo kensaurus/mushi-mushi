@@ -9,25 +9,22 @@
 import { cmpSemVer } from './sdk-upgrade-semver.ts'
 import {
   bumpedRanges,
+  dirOf,
   governedLocks,
+  LOCK_PATH_IGNORE,
   lockKeyFor,
   mushiNamesInLock,
   overridesOf,
   packageManagerOf,
   refreshCommand,
+  SCOPE,
   type LockfileEdit,
   type LockKind,
 } from './sdk-upgrade-lock-edit.ts'
 import { type NpmPackument } from './sdk-upgrade-npm-lock.ts'
 import { patchNpmLockfile } from './sdk-upgrade-npm-patch.ts'
 
-const SCOPE = '@mushi-mushi/'
 const ROOT_LOCKS = ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock']
-const IGNORE = /(^|\/)(node_modules|dist|build|out|\.next|\.turbo|\.output|coverage|vendor|\.git)\//
-
-function dirOf(manifestPath: string): string {
-  return manifestPath === 'package.json' ? '' : manifestPath.slice(0, -'/package.json'.length)
-}
 
 async function fetchPackument(name: string, fetchImpl: typeof fetch): Promise<NpmPackument | null> {
   const ac = new AbortController()
@@ -77,7 +74,7 @@ export async function collectLockfileChanges(opts: {
 }): Promise<LockfileEdit> {
   const none: LockfileEdit = { files: [], outcome: 'none', commands: [], reasons: [] }
   if (opts.bumps.length === 0 || opts.manifests.length === 0) return none
-  const files = new Set(opts.blobs.map((blob) => blob.path).filter((path) => !IGNORE.test(path)))
+  const files = new Set(opts.blobs.map((blob) => blob.path).filter((path) => !LOCK_PATH_IGNORE.test(path)))
   const shaByPath = new Map(opts.blobs.filter((blob) => blob.sha).map((blob) => [blob.path, blob.sha!]))
   if (!opts.treeComplete) {
     for (const name of ROOT_LOCKS) {
