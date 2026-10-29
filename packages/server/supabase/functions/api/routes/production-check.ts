@@ -32,7 +32,7 @@ import { sendTransactionalEmail } from '../../_shared/email.ts'
 import { renderEmailHtml, renderEmailText, type EmailDoc } from '../../_shared/email-layout.ts'
 import { hmacSha256Hex } from '../../_shared/connectors/jwt.ts'
 import { clientIpOf, verifiedClientIp } from '../../_shared/edge-proxy.ts'
-import { checkPublicUrl, resolvesPublic, runtimeResolver } from '../../_shared/public-url-guard.ts'
+import { checkPublicUrl, resolvesPublic, runtimeResolver, sameAddressVariants } from '../../_shared/public-url-guard.ts'
 import { runProductionCheck, severityCounts, type CheckResult } from '../../_shared/production-check.ts'
 
 const plog = log.child('production-check')
@@ -133,7 +133,7 @@ export function buildReportEmail(
         preheader: `${counts}. Each one comes with how to fix it.`,
         heading: `${plural(n, 'thing', 'things')} to fix on ${host}`,
         blocks: [
-          { kind: 'p', text: `Mushi read the public pages of ${host} the way a first-time visitor sees them: ${counts}.` },
+          { kind: 'p', text: `Mushi Mushi read the public pages of ${host} the way a first-time visitor sees them: ${counts}.` },
           {
             kind: 'findings',
             rows: shown.map((f) => ({ severity: f.severity, title: f.title, detail: `How to fix: ${f.fix}` })),
@@ -142,29 +142,29 @@ export function buildReportEmail(
           { kind: 'button', label: 'Open the full report', url: reportUrl(id) },
           {
             kind: 'p',
-            text: 'Want this caught before your users hit it? Mushi watches your live app, explains each bug in plain English and opens a reviewed fix. Free for one app:',
+            text: 'Want this caught before your users hit it? Mushi Mushi watches your live app, explains each bug in plain English and opens a reviewed fix. Free for one app:',
           },
-          { kind: 'link', label: 'Set up Mushi', url: SIGNUP_FROM_EMAIL },
+          { kind: 'link', label: 'Set up Mushi Mushi', url: SIGNUP_FROM_EMAIL },
         ],
         footer: [
-          'You asked for this email on the Mushi Production Check page. It is the only one you will get about this check: your address is not on any mailing list, and it was deleted after this email was sent.',
+          'You asked for this email on the Mushi Mushi Production Check page. It is the only one you will get about this check: your address is not on any mailing list, and it was deleted after this email was sent.',
         ],
       }
     : {
-        preheader: `Nothing to fix on the pages Mushi could read.`,
+        preheader: `Nothing to fix on the pages Mushi Mushi could read.`,
         heading: `${host} passed the Production Check`,
         blocks: [
-          { kind: 'p', text: `Mushi read the public pages of ${host} the way a first-time visitor sees them and found nothing to fix.` },
+          { kind: 'p', text: `Mushi Mushi read the public pages of ${host} the way a first-time visitor sees them and found nothing to fix.` },
           ...(result.summary ? [{ kind: 'checks' as const, items: passedChecks(result.summary) }] : []),
           { kind: 'button', label: 'Open the full report', url: reportUrl(id) },
           {
             kind: 'p',
-            text: 'A clean first visit is half of it; the other half is the bugs your users hit after they sign in. Mushi turns their reports into plain-English diagnoses and reviewed fixes. Free for one app:',
+            text: 'A clean first visit is half of it; the other half is the bugs your users hit after they sign in. Mushi Mushi turns their reports into plain-English diagnoses and reviewed fixes. Free for one app:',
           },
-          { kind: 'link', label: 'Set up Mushi', url: SIGNUP_FROM_EMAIL },
+          { kind: 'link', label: 'Set up Mushi Mushi', url: SIGNUP_FROM_EMAIL },
         ],
         footer: [
-          'You asked for this email on the Mushi Production Check page. It is the only one you will get about this check: your address is not on any mailing list, and it was deleted after this email was sent.',
+          'You asked for this email on the Mushi Mushi Production Check page. It is the only one you will get about this check: your address is not on any mailing list, and it was deleted after this email was sent.',
         ],
       }
   return {
@@ -189,7 +189,7 @@ async function sendReportEmail(
   result: Pick<CheckResult, 'findings'> & { summary?: CheckResult['summary'] },
   send: typeof sendTransactionalEmail = sendTransactionalEmail,
 ): Promise<boolean> {
-  const mail = buildReportEmail(new URL(url).host, id, result)
+  const mail = buildReportEmail(addressLabel(url), id, result)
   const sent = await send({ to, subject: mail.subject, text: mail.text, html: mail.html, tags: { kind: 'production_check' } })
   if (!sent.ok) plog.warn('report email not sent', { checkId: id, reason: sent.reason })
   return sent.ok
@@ -253,6 +253,12 @@ export async function runAndStore(
   })
 }
 
+/** Host plus path ("kensaur.us/glot-it"): apps under a path share a host. */
+function addressLabel(url: string): string {
+  const u = new URL(url)
+  return `${u.host}${u.pathname.replace(/\/+$/, '')}`
+}
+
 export function registerProductionCheckRoutes(app: Hono<{ Variables: Variables }>) {
   app.post('/v1/public/production-check', async (c) => {
     const body = (await c.req.json().catch(() => null)) as { url?: unknown; email?: unknown; src?: unknown } | null
@@ -275,11 +281,16 @@ export function registerProductionCheckRoutes(app: Hono<{ Variables: Variables }
     const origin = checked.origin
     const db = getServiceClient()
 
-    // A report for this site from the last 24 h: hand it back, spend nothing.
+    // A report for this address from the last 24 h: hand it back, spend
+    // nothing. Per address, not per origin: apps hosted under a path share an
+    // origin (kensaur.us/glot-it, kensaur.us/yen-yen) and must not get each
+    // other's report (production_check_begin applies the same rule).
+    const sameAddress = sameAddressVariants(checked.url.href)
     const { data: recent, error: recentErr } = await db
       .from('production_checks')
       .select('id, status, created_at')
       .eq('origin', origin)
+      .in('url', sameAddress)
       .gt('created_at', new Date(Date.now() - 24 * 3_600_000).toISOString())
       .order('created_at', { ascending: false })
       .limit(5)

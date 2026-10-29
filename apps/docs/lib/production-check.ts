@@ -106,12 +106,19 @@ const COUNT_WORDS: Record<Severity, string> = { high: 'to fix first', medium: 't
 /** "2 to fix first, 1 to fix soon": only the non-zero parts. */
 export function countLine(findings: readonly CheckFinding[]): string {
   const parts = groupBySeverity(findings).map((g) => `${g.items.length} ${COUNT_WORDS[g.severity]}`)
-  return parts.length ? parts.join(', ') : 'Nothing to fix on the pages Mushi could read'
+  return parts.length ? parts.join(', ') : 'Nothing to fix on the pages Mushi Mushi could read'
 }
 
+/**
+ * The address as a person typed it: host plus path, no scheme, query or
+ * trailing slash ("kensaur.us/the-wanting-mind"). An app hosted under a path
+ * must see its own path in the report title, not just the shared host.
+ */
 export function hostOf(url: string): string {
   try {
-    return new URL(url).host
+    const u = new URL(url)
+    const path = u.pathname.replace(/\/+$/, '')
+    return `${u.host}${path}`
   } catch {
     return url
   }
@@ -126,7 +133,7 @@ async function call<T>(path: string, init: RequestInit | undefined, fetchImpl: t
     if (res.ok && body?.ok && body.data) return { ok: true, data: body.data }
     return { ok: false, status: res.status, message: body?.error?.message ?? 'Something went wrong. Try again in a minute.' }
   } catch {
-    return { ok: false, status: 0, message: 'Could not reach Mushi. Check your connection and try again.' }
+    return { ok: false, status: 0, message: 'Could not reach Mushi Mushi. Check your connection and try again.' }
   }
 }
 
