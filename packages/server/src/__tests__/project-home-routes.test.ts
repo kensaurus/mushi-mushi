@@ -14,6 +14,8 @@
  */
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fromSetupGap } from '../../supabase/functions/_shared/health-checks.ts'
+import { deployGap, followupKeyGap, noRepoGap } from '../../supabase/functions/_shared/setup-gaps.ts'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
 
 const state = vi.hoisted(() => ({
@@ -139,7 +141,7 @@ function seed(): Record<string, Array<Record<string, unknown>>> {
   }
 }
 
-function setup(opts: { failRead?: (t: string) => string | { code: string; message: string } | null; noThumbTable?: boolean; workerFlags?: (db: unknown, userId: string, projectId: string) => Promise<unknown[]> } = {}) {
+function setup(opts: { failRead?: (t: string) => string | { code: string; message: string } | null; noThumbTable?: boolean; workerFlags?: (db: unknown, userId: string, projectId: string) => Promise<unknown[]>; healthChecks?: (db: unknown, project: { id: string }) => Promise<unknown[]> } = {}) {
   const db: FakeDb = makeFakeDb(seed(), {
     failRead: (t) => (opts.noThumbTable && t === 'project_home_thumbnails' ? { code: '42P01', message: 'relation "project_home_thumbnails" does not exist' } : opts.failRead?.(t) ?? null),
   })
@@ -166,6 +168,7 @@ function setup(opts: { failRead?: (t: string) => string | { code: string; messag
     }) as never,
     lookupUser: async () => ({ name: 'Kenji', avatarUrl: 'https://avatars.githubusercontent.com/u/1' }),
     ...(opts.workerFlags ? { workerFlags: opts.workerFlags as never } : {}),
+    ...(opts.healthChecks ? { healthChecks: opts.healthChecks as never } : {}),
   })
   return { app, db }
 }
@@ -245,6 +248,32 @@ describe('GET /v1/admin/projects/:id/home', () => {
     // A failed worker read is named, never shown as "no problems".
     const failing = setup({ workerFlags: async () => { throw new Error('work_lanes: timeout') } })
     expect((await failing.app.call('GET', '/v1/admin/projects/:id/home')).body.data!.partial).toEqual(['workers'])
+  })
+
+  it('Fix these first (plan-simplicity Phase 1): root causes from the stored Health check, unconnected parts of a new app not among them', async () => {
+    const at = '2026-10-27T11:00:00Z'
+    const followups = followupKeyGap({ projectId: P, settings: { enabled: false, offReason: 'the Cursor key chosen for review follow-ups was deleted.', keyId: null } })
+    const asked: string[] = []
+    const { app } = setup({
+      healthChecks: async (_db, project) => {
+        asked.push(project.id)
+        return [fromSetupGap(noRepoGap(P), at), fromSetupGap(deployGap(P, null, new Date(at)), at), fromSetupGap(followups, at)]
+      },
+    })
+    const d = (await app.call('GET', '/v1/admin/projects/:id/home')).body.data!
+    expect(asked).toEqual([P])
+    expect(d.fixFirst.status).toBe('ok')
+    expect((d.fixFirst.data as Array<{ id: string }>).map((f) => f.id)).toEqual(['review_followup_key'])
+    // The hold group is not explained by it, so it stays in Needs you.
+    expect((d.needsYou.data as Array<{ id: string }>).map((n) => n.id)).toContain('pipeline_hold')
+    // Without the dependency (older deploys of this route), Home is as before.
+    const plain = setup()
+    expect((await plain.app.call('GET', '/v1/admin/projects/:id/home')).body.data!.fixFirst).toMatchObject({ status: 'ok', data: [] })
+    // A failed read is named, never shown as "nothing to fix".
+    const failing = setup({ healthChecks: async () => { throw new Error('setup_gap_results: timeout') } })
+    const f = (await failing.app.call('GET', '/v1/admin/projects/:id/home')).body.data!
+    expect(f.fixFirst.status).toBe('error')
+    expect(f.partial).toEqual(['health'])
   })
 
   it('answers before the thumbnail table exists, falling back to the icon', async () => {

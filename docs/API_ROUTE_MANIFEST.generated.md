@@ -2,13 +2,13 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-28 · **800** routes.
+> Generated: 2026-10-29 · **801** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 218 |
+| `adminOrApiKey` | 219 |
 | `apiKeyAuth` | 59 |
 | `jwtAuth` | 405 |
 | `jwtOrApiKey` | 2 |
@@ -189,6 +189,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/groups/:id/merge` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | GET | `/v1/admin/growth/daily` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/landing-visits.ts` |
 | GET | `/v1/admin/growth/funnel` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/growth.ts` |
+| GET | `/v1/admin/health-checks` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/health-checks.ts` |
 | GET | `/v1/admin/health/cron` | `jwtAuth` | `packages/server/supabase/functions/api/routes/health.ts` |
 | POST | `/v1/admin/health/cron/:job/trigger` | `jwtAuth` | `packages/server/supabase/functions/api/routes/health.ts` |
 | GET | `/v1/admin/health/history` | `jwtAuth` | `packages/server/supabase/functions/api/routes/modernization-health-super.ts` |

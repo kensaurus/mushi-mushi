@@ -42,178 +42,198 @@ export interface DoctorCheck {
   hint?: string;
 }
 
+export interface DoctorOptions {
+  /** Narrow the per-project checks to these apps (the caller checked access); default: the caller's own apps. */
+  projectIds?: string[];
+  /** Include the super-admin platform secret checks (default true). */
+  platform?: boolean;
+}
+
+/**
+ * The doctor's checks, worst status first in `status`. Shared by
+ * GET /v1/admin/doctor and the Health check registry
+ * (GET /v1/admin/health-checks, which narrows it to one app).
+ */
+export async function runDoctorChecks(
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+  opts: DoctorOptions = {},
+): Promise<{ status: 'pass' | 'warn' | 'fail'; checks: DoctorCheck[] }> {
+  const checks: DoctorCheck[] = [];
+
+  const projectIds = opts.projectIds ?? await ownedProjectIds(db, userId);
+
+  const [tokenRes, cronRes, strandedRes, deadRes, settingsRes, reposRes] = await Promise.all([
+    db.from('mushi_runtime_config').select('key').eq('key', 'internal_caller_token').maybeSingle(),
+    db
+      .from('cron_runs')
+      .select('status, finished_at, metadata')
+      .eq('job_name', 'pipeline-recovery')
+      .order('finished_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    projectIds.length
+      ? db
+          .from('reports')
+          .select('id', { count: 'exact', head: true })
+          .in('project_id', projectIds)
+          .in('status', ['new', 'queued'])
+          .lt('created_at', new Date(Date.now() - 10 * 60_000).toISOString())
+      : Promise.resolve({ count: 0, error: null }),
+    projectIds.length
+      ? db
+          .from('processing_queue')
+          .select('id', { count: 'exact', head: true })
+          .in('project_id', projectIds)
+          .eq('status', 'dead_letter')
+      : Promise.resolve({ count: 0, error: null }),
+    projectIds.length
+      ? db
+          .from('project_settings')
+          .select('project_id, codebase_index_enabled')
+          .in('project_id', projectIds)
+          .eq('codebase_index_enabled', true)
+      : Promise.resolve({ data: [], error: null }),
+    projectIds.length
+      ? db
+          .from('project_repos')
+          .select('project_id, last_indexed_at, last_index_error, index_swept_at, index_files_indexed, index_files_eligible, index_file_cap, index_tree_truncated, index_coverage_state')
+          .in('project_id', projectIds)
+          .eq('is_primary', true)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  // ── Recovery token ────────────────────────────────────────────────
+  if (tokenRes.error) {
+    checks.push({
+      name: 'recovery_token',
+      status: 'warn',
+      summary: `Could not read mushi_runtime_config: ${tokenRes.error.message}`,
+    });
+  } else if (!tokenRes.data) {
+    checks.push({
+      name: 'recovery_token',
+      status: 'fail',
+      summary: 'internal_caller_token is not configured — pipeline recovery is skipping every run.',
+      hint: 'Set mushi_runtime_config.internal_caller_token and the MUSHI_INTERNAL_CALLER_SECRET function secret (SELF_HOSTED.md → pg_cron section).',
+    });
+  } else {
+    checks.push({ name: 'recovery_token', status: 'pass', summary: 'internal_caller_token configured.' });
+  }
+
+  // ── Recovery cron freshness + reconciled outcome ───────────────────
+  const run = cronRes.data as
+    | { status: string; finished_at: string; metadata?: Record<string, unknown> }
+    | null;
+  if (!run) {
+    checks.push({
+      name: 'recovery_cron',
+      status: 'fail',
+      summary: 'pipeline-recovery has never run.',
+      hint: "Register the pg_cron schedule (SELF_HOSTED.md → 'Recommended pg_cron schedules').",
+    });
+  } else {
+    const ageMin = (Date.now() - new Date(run.finished_at).getTime()) / 60_000;
+    if (ageMin > 15) {
+      checks.push({
+        name: 'recovery_cron',
+        status: 'fail',
+        summary: `pipeline-recovery last ran ${Math.round(ageMin)} minutes ago (expected every 5).`,
+        hint: 'Check cron.job_run_details for errors, and that pg_cron + pg_net are enabled.',
+      });
+    } else if (run.status === 'skipped') {
+      checks.push({
+        name: 'recovery_cron',
+        status: 'fail',
+        summary: 'pipeline-recovery is running but skipping: no internal caller token.',
+        hint: 'Set mushi_runtime_config.internal_caller_token (see recovery_token check).',
+      });
+    } else if (run.status === 'degraded' || (run.metadata?.responses_failed as number | undefined ?? 0) > 0) {
+      checks.push({
+        name: 'recovery_cron',
+        status: 'warn',
+        summary: 'Recent recovery posts to fast-filter returned non-2xx.',
+        hint: 'Inspect cron_runs.metadata (responses_failed) and edge-function logs for fast-filter.',
+      });
+    } else {
+      checks.push({ name: 'recovery_cron', status: 'pass', summary: `pipeline-recovery healthy (last run ${Math.round(ageMin)}m ago).` });
+    }
+  }
+
+  // ── Stranded reports ───────────────────────────────────────────────
+  const strandedCount = (strandedRes as { count: number | null }).count ?? 0;
+  checks.push(
+    strandedCount > 0
+      ? {
+          name: 'stranded_reports',
+          status: 'warn',
+          summary: `${strandedCount} report(s) stuck in new/queued for >10 minutes.`,
+          hint: 'They retry automatically (3 attempts); persistent stranding means fast-filter is failing — check its logs and reports.processing_error.',
+        }
+      : { name: 'stranded_reports', status: 'pass', summary: 'No stranded reports.' },
+  );
+
+  // ── Dead-lettered work ─────────────────────────────────────────────
+  const deadCount = (deadRes as { count: number | null }).count ?? 0;
+  checks.push(
+    deadCount > 0
+      ? {
+          name: 'dead_letter',
+          status: 'warn',
+          summary: `${deadCount} queue item(s) dead-lettered after exhausting retries.`,
+          hint: 'Review them in the console DLQ page and requeue after fixing the cause.',
+        }
+      : { name: 'dead_letter', status: 'pass', summary: 'Dead-letter queue is empty.' },
+  );
+
+  // ── Codebase index health (the "repo added but unused" detector) ───
+  const enabledProjects = new Set(
+    ((settingsRes.data ?? []) as Array<{ project_id: string }>).map((s) => s.project_id),
+  );
+  const repoByProject = new Map(
+    ((reposRes.data ?? []) as DoctorRepoRow[]).map((r) => [r.project_id, r]),
+  );
+  for (const pid of enabledProjects) {
+    checks.push(codebaseIndexDoctorCheck(pid, repoByProject.get(pid)));
+  }
+
+  // ── Observability transports ───────────────────────────────────────
+  const langfuseConfigured = Boolean(Deno.env.get('LANGFUSE_SECRET_KEY') && Deno.env.get('LANGFUSE_PUBLIC_KEY'));
+  const sentryConfigured = Boolean(Deno.env.get('SENTRY_DSN'));
+  checks.push({
+    name: 'observability',
+    status: langfuseConfigured && sentryConfigured ? 'pass' : 'warn',
+    summary: `Langfuse: ${langfuseConfigured ? 'configured' : 'not configured'}; Sentry: ${sentryConfigured ? 'configured' : 'not configured'}.`,
+    ...(langfuseConfigured && sentryConfigured
+      ? {}
+      : { hint: 'Set LANGFUSE_SECRET_KEY/LANGFUSE_PUBLIC_KEY and SENTRY_DSN function secrets for full pipeline observability.' }),
+  });
+
+  // ── Platform secrets (super-admins only; app owners never see these) ──
+  if (opts.platform !== false && (await getUserRole(userId)) === SUPER_ADMIN_ROLE) {
+    for (const g of platformGaps((name) => !!Deno.env.get(name))) {
+      checks.push({
+        name: g.id,
+        status: g.status === 'gap' ? 'fail' : 'pass',
+        summary: g.summary,
+        ...(g.status === 'gap' ? { hint: `Set ${g.missing.join(' and ')} as function secrets (${g.fixHref}).` } : {}),
+      });
+    }
+  }
+
+  const worst = checks.some((ch) => ch.status === 'fail')
+    ? 'fail'
+    : checks.some((ch) => ch.status === 'warn')
+      ? 'warn'
+      : 'pass';
+
+  return { status: worst, checks };
+}
+
 export function registerDoctorRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/admin/doctor', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const checks: DoctorCheck[] = [];
-
-    const projectIds = await ownedProjectIds(db, userId);
-
-    const [tokenRes, cronRes, strandedRes, deadRes, settingsRes, reposRes] = await Promise.all([
-      db.from('mushi_runtime_config').select('key').eq('key', 'internal_caller_token').maybeSingle(),
-      db
-        .from('cron_runs')
-        .select('status, finished_at, metadata')
-        .eq('job_name', 'pipeline-recovery')
-        .order('finished_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      projectIds.length
-        ? db
-            .from('reports')
-            .select('id', { count: 'exact', head: true })
-            .in('project_id', projectIds)
-            .in('status', ['new', 'queued'])
-            .lt('created_at', new Date(Date.now() - 10 * 60_000).toISOString())
-        : Promise.resolve({ count: 0, error: null }),
-      projectIds.length
-        ? db
-            .from('processing_queue')
-            .select('id', { count: 'exact', head: true })
-            .in('project_id', projectIds)
-            .eq('status', 'dead_letter')
-        : Promise.resolve({ count: 0, error: null }),
-      projectIds.length
-        ? db
-            .from('project_settings')
-            .select('project_id, codebase_index_enabled')
-            .in('project_id', projectIds)
-            .eq('codebase_index_enabled', true)
-        : Promise.resolve({ data: [], error: null }),
-      projectIds.length
-        ? db
-            .from('project_repos')
-            .select('project_id, last_indexed_at, last_index_error, index_swept_at, index_files_indexed, index_files_eligible, index_file_cap, index_tree_truncated, index_coverage_state')
-            .in('project_id', projectIds)
-            .eq('is_primary', true)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
-
-    // ── Recovery token ────────────────────────────────────────────────
-    if (tokenRes.error) {
-      checks.push({
-        name: 'recovery_token',
-        status: 'warn',
-        summary: `Could not read mushi_runtime_config: ${tokenRes.error.message}`,
-      });
-    } else if (!tokenRes.data) {
-      checks.push({
-        name: 'recovery_token',
-        status: 'fail',
-        summary: 'internal_caller_token is not configured — pipeline recovery is skipping every run.',
-        hint: 'Set mushi_runtime_config.internal_caller_token and the MUSHI_INTERNAL_CALLER_SECRET function secret (SELF_HOSTED.md → pg_cron section).',
-      });
-    } else {
-      checks.push({ name: 'recovery_token', status: 'pass', summary: 'internal_caller_token configured.' });
-    }
-
-    // ── Recovery cron freshness + reconciled outcome ───────────────────
-    const run = cronRes.data as
-      | { status: string; finished_at: string; metadata?: Record<string, unknown> }
-      | null;
-    if (!run) {
-      checks.push({
-        name: 'recovery_cron',
-        status: 'fail',
-        summary: 'pipeline-recovery has never run.',
-        hint: "Register the pg_cron schedule (SELF_HOSTED.md → 'Recommended pg_cron schedules').",
-      });
-    } else {
-      const ageMin = (Date.now() - new Date(run.finished_at).getTime()) / 60_000;
-      if (ageMin > 15) {
-        checks.push({
-          name: 'recovery_cron',
-          status: 'fail',
-          summary: `pipeline-recovery last ran ${Math.round(ageMin)} minutes ago (expected every 5).`,
-          hint: 'Check cron.job_run_details for errors, and that pg_cron + pg_net are enabled.',
-        });
-      } else if (run.status === 'skipped') {
-        checks.push({
-          name: 'recovery_cron',
-          status: 'fail',
-          summary: 'pipeline-recovery is running but skipping: no internal caller token.',
-          hint: 'Set mushi_runtime_config.internal_caller_token (see recovery_token check).',
-        });
-      } else if (run.status === 'degraded' || (run.metadata?.responses_failed as number | undefined ?? 0) > 0) {
-        checks.push({
-          name: 'recovery_cron',
-          status: 'warn',
-          summary: 'Recent recovery posts to fast-filter returned non-2xx.',
-          hint: 'Inspect cron_runs.metadata (responses_failed) and edge-function logs for fast-filter.',
-        });
-      } else {
-        checks.push({ name: 'recovery_cron', status: 'pass', summary: `pipeline-recovery healthy (last run ${Math.round(ageMin)}m ago).` });
-      }
-    }
-
-    // ── Stranded reports ───────────────────────────────────────────────
-    const strandedCount = (strandedRes as { count: number | null }).count ?? 0;
-    checks.push(
-      strandedCount > 0
-        ? {
-            name: 'stranded_reports',
-            status: 'warn',
-            summary: `${strandedCount} report(s) stuck in new/queued for >10 minutes.`,
-            hint: 'They retry automatically (3 attempts); persistent stranding means fast-filter is failing — check its logs and reports.processing_error.',
-          }
-        : { name: 'stranded_reports', status: 'pass', summary: 'No stranded reports.' },
-    );
-
-    // ── Dead-lettered work ─────────────────────────────────────────────
-    const deadCount = (deadRes as { count: number | null }).count ?? 0;
-    checks.push(
-      deadCount > 0
-        ? {
-            name: 'dead_letter',
-            status: 'warn',
-            summary: `${deadCount} queue item(s) dead-lettered after exhausting retries.`,
-            hint: 'Review them in the console DLQ page and requeue after fixing the cause.',
-          }
-        : { name: 'dead_letter', status: 'pass', summary: 'Dead-letter queue is empty.' },
-    );
-
-    // ── Codebase index health (the "repo added but unused" detector) ───
-    const enabledProjects = new Set(
-      ((settingsRes.data ?? []) as Array<{ project_id: string }>).map((s) => s.project_id),
-    );
-    const repoByProject = new Map(
-      ((reposRes.data ?? []) as DoctorRepoRow[]).map((r) => [r.project_id, r]),
-    );
-    for (const pid of enabledProjects) {
-      checks.push(codebaseIndexDoctorCheck(pid, repoByProject.get(pid)));
-    }
-
-    // ── Observability transports ───────────────────────────────────────
-    const langfuseConfigured = Boolean(Deno.env.get('LANGFUSE_SECRET_KEY') && Deno.env.get('LANGFUSE_PUBLIC_KEY'));
-    const sentryConfigured = Boolean(Deno.env.get('SENTRY_DSN'));
-    checks.push({
-      name: 'observability',
-      status: langfuseConfigured && sentryConfigured ? 'pass' : 'warn',
-      summary: `Langfuse: ${langfuseConfigured ? 'configured' : 'not configured'}; Sentry: ${sentryConfigured ? 'configured' : 'not configured'}.`,
-      ...(langfuseConfigured && sentryConfigured
-        ? {}
-        : { hint: 'Set LANGFUSE_SECRET_KEY/LANGFUSE_PUBLIC_KEY and SENTRY_DSN function secrets for full pipeline observability.' }),
-    });
-
-    // ── Platform secrets (super-admins only; app owners never see these) ──
-    if ((await getUserRole(userId)) === SUPER_ADMIN_ROLE) {
-      for (const g of platformGaps((name) => !!Deno.env.get(name))) {
-        checks.push({
-          name: g.id,
-          status: g.status === 'gap' ? 'fail' : 'pass',
-          summary: g.summary,
-          ...(g.status === 'gap' ? { hint: `Set ${g.missing.join(' and ')} as function secrets (${g.fixHref}).` } : {}),
-        });
-      }
-    }
-
-    const worst = checks.some((ch) => ch.status === 'fail')
-      ? 'fail'
-      : checks.some((ch) => ch.status === 'warn')
-        ? 'warn'
-        : 'pass';
-
-    return c.json({ ok: true, data: { status: worst, checks } });
+    return c.json({ ok: true, data: await runDoctorChecks(db, userId) });
   });
 }

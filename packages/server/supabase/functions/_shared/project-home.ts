@@ -15,6 +15,7 @@
  */
 
 import type { PipelineStage } from './pipeline-view.ts'
+import { rootCauses, type HealthCheck, type HealthFix, type HealthPart, type HealthSeverity } from './health-checks.ts'
 
 // ── Section envelope ────────────────────────────────────────────────────────
 
@@ -356,6 +357,12 @@ export interface NeedsYouInput {
   sdk: { status: string; version: string | null; latest: string | null } | null
   /** Local worker flags for this app, worst first (work-flags.ts); null when the read failed. */
   workers?: ReadonlyArray<{ id: string; severity: 'danger' | 'warn'; title: string }> | null
+  /**
+   * The root causes Home shows in "Fix these first" (buildFixFirst). A
+   * pipeline group one of them explains (`rootCause`, tagRootCauses) is left
+   * out here, so one cause shows once. Absent: every group shows as before.
+   */
+  fixFirst?: ReadonlyArray<Pick<FixFirstItem, 'id'>> | null
 }
 
 /** Worker problems take at most this many Needs you rows; the rest are counted in the last one. */
@@ -379,9 +386,11 @@ export function buildNeedsYou(input: NeedsYouInput): NeedsYouItem[] {
     items.push({ id: 'sdk_silent', impact: 65, text: sdk.status === 'not_connected' ? 'Your app is not sending to Mushi yet, so users cannot report bugs.' : 'Your app stopped checking in over a week ago.', action: { label: 'Fix it', to: sdk.href } })
   }
   // Same groups, labels and counts the /pipeline page shows.
+  const shown = new Set((input.fixFirst ?? []).map((f) => f.id))
   for (const stage of input.pipeline ?? []) {
     for (const g of stage.groups) {
       if (g.tone !== 'stuck' || g.count === 0) continue
+      if (g.rootCause && shown.has(g.rootCause.checkId)) continue
       const meta = GROUP_IMPACT[g.id] ?? DEFAULT_GROUP
       items.push({ id: `pipeline_${g.id}`, impact: meta.impact, text: `${g.label}.`, action: { label: meta.action, to: pipelineHref } })
     }
@@ -398,6 +407,27 @@ export function buildNeedsYou(input: NeedsYouInput): NeedsYouItem[] {
     items.push({ id: 'sdk_upgrade', impact: input.sdk.status === 'deprecated' ? 45 : 30, text: `Update the Mushi SDK${range}.`, action: { label: 'Update', to: '/connect' } })
   }
   return items.sort((a, b) => b.impact - a.impact).slice(0, NEEDS_YOU_MAX)
+}
+
+// ── Fix these first (Health checks, plan-simplicity-2026-10 Phase 1) ────────
+
+export interface FixFirstItem {
+  /** The check id (`review_followup_key`, `github_access`, …). */
+  id: string
+  /** The check's row key (`github_access:owner/repo` for one repo). */
+  key: string
+  part: HealthPart
+  severity: HealthSeverity
+  title: string
+  detail: string
+  /** "<N> are waiting on this", when counted. */
+  affects: number | null
+  fix: HealthFix | null
+}
+
+/** At most three root causes, worst and most waited-on first (health-checks.ts rootCauses). */
+export function buildFixFirst(checks: HealthCheck[]): FixFirstItem[] {
+  return rootCauses(checks).map((c) => ({ id: c.id, key: c.key, part: c.part, severity: c.severity, title: c.title, detail: c.detail, affects: c.affects, fix: c.fix }))
 }
 
 // ── Sitemap ─────────────────────────────────────────────────────────────────
