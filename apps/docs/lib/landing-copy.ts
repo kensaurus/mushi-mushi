@@ -560,7 +560,7 @@ export const LANDING_TRUST_LINKS = [
   },
   {
     label: 'Proof',
-    text: 'Runs on 9 live apps · numbers public',
+    text: 'Runs on my own live apps · numbers public',
     href: '/proof',
   },
   {

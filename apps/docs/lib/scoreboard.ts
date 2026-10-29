@@ -11,7 +11,9 @@ export interface Scoreboard {
   apps: number
   userReports: number
   reporters: number
+  otherReports: number
   fixesMerged: number
+  mergedFromUsers: number
   reviews: number
   reviewsHold: number
   medianHoursToMergedFix: number | null
