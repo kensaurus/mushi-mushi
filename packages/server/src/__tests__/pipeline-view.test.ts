@@ -306,6 +306,22 @@ describe('buildPipeline', () => {
     }
   })
 
+  it('an agent verdict stays listed past 7 days while its report is open; an agent error does not', () => {
+    const old = (id: string, category: string | null, report_id: string) =>
+      attempt({ id, report_id, status: 'failed', pr_url: null, pr_number: null, pr_state: null, commit_sha: null, created_at: '2026-10-01T00:00:00Z', completed_at: '2026-10-01T00:00:00Z', failure_category: category })
+    const report = (id: string, status: string) => ({ id, project_id: P, status, title: id, summary: null, description: null, created_at: '2026-09-30T00:00:00Z', processing_error: null })
+    const stages = run({
+      // r-closed is not loaded: the route reads open reports only.
+      attempts: [old('a1', 'already_fixed', 'r-open'), old('a2', 'sandbox_error', 'r-open2'), old('a3', 'not_actionable', 'r-closed')],
+      reviews: [],
+      reports: [report('r-open', 'classified'), report('r-open2', 'classified')],
+      actionFacts: { cloud: new Map(), prior: new Map(), roundHeads: new Map(), rerunRefused: new Set() },
+    })
+    expect(group(stages, 'agent_said_fixed')?.group.items.map((i) => i.id)).toEqual(['a1'])
+    expect(group(stages, 'agent_failed')).toBeNull()
+    expect(group(stages, 'agent_failed_nothing')).toBeNull()
+  })
+
   it('blocked: without the read facts nothing is blocked; with them, known refusals are named', () => {
     const red = new Map([['h1', [job({ conclusion: 'failure' })]]])
     expect(group(run({ ciJobs: red }), 'ci_red')?.group.items[0].blocked).toEqual({})
