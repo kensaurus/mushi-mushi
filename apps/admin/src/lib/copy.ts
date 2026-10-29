@@ -1467,7 +1467,7 @@ const COPY: CopyRegistry = {
     },
     '/onboarding': {
       title: 'Set up',
-      description: 'Three short steps: create a project, install the widget, send a test bug to see it work.',
+      description: 'Name your app, then send a test bug. This page shows that one next step.',
       sections: { snapshot: 'Setup snapshot' },
       statLabels: {
         required: 'Required steps',
@@ -1477,16 +1477,18 @@ const COPY: CopyRegistry = {
       },
       // No tabLabels: the page's own plain names apply ("More to connect", "Test it",
       // "Install"); "Steps / Verify / SDK" here overrode them (2026-10-28).
+      // First-visit help sits on the same screen as the wizard. "Create a
+      // project" and "the checklist tracks progress automatically" were the
+      // two opposite readings fresh-eyes sessions hesitated on (report 2a8d4a76).
       help: {
         title: 'About setup',
         whatIsIt:
-          'A guided walk-through that gets you from zero to your first auto-drafted fix. Should take about 10 minutes.',
+          'Name your app, send one test bug, and read the diagnosis here. Installing the widget comes after that.',
         useCases: [
-          'First-time setup of a new project',
-          'Add a second project (e.g. staging vs production)',
-          'Re-install the widget on a new app',
+          'See a plain-English diagnosis before installing anything',
+          'Copy the widget into your app once the test bug is diagnosed',
         ],
-        howToUse: 'Follow the steps in order. The checklist tracks your progress automatically.',
+        howToUse: 'Do the step this page names. The button is the next action.',
       },
     },
   },

@@ -318,14 +318,23 @@ export function FirstDiagnosisScreen({
       <Card className="p-5 space-y-4">
         <div>
           <SignalChip tone="brand" className="uppercase tracking-wider text-3xs">
-            Step 2 of 2
+            Next
           </SignalChip>
-          <h2 className="mt-1.5 text-base font-semibold text-fg">See your first diagnosis</h2>
+          <h2 className="mt-1.5 text-base font-semibold text-fg">
+            {diagnosed ? 'Install the widget' : 'Send a test bug'}
+          </h2>
           <ContainedBlock tone="muted" className="mt-2">
             <p className="text-xs leading-relaxed text-fg-muted">
-              Send one synthetic bug report to <span className="font-mono text-fg-secondary">{projectName}</span>.
-              Mushi turns what a user felt into a plain-English diagnosis in about a minute — no SDK
-              install needed for this step.
+              {diagnosed ? (
+                <>
+                  The diagnosis below is from a test bug. Install the widget in your app so a real bug gets the same read.
+                </>
+              ) : (
+                <>
+                  Send one test bug to <span className="font-mono text-fg-secondary">{projectName}</span>.
+                  The diagnosis shows up on this page. Installing the widget is the step after that.
+                </>
+              )}
             </p>
           </ContainedBlock>
         </div>
@@ -381,10 +390,12 @@ export function FirstDiagnosisScreen({
           <Card className="p-4 space-y-3">
             <div>
               <h3 className="text-sm font-semibold text-fg">
-                {diagnosed ? 'Now get this for real bugs' : 'Install the SDK'}
+                {diagnosed ? 'Paste this into your app' : 'Install the widget'}
               </h3>
               <p className="mt-0.5 text-xs text-fg-muted">
-                Drop the widget into your app and every report your users file gets the same read.
+                {diagnosed
+                  ? 'Load any page after pasting. A bug from your app then gets the same read as the test.'
+                  : 'Paste the widget into your app. Every report your users file gets the same read.'}
               </p>
             </div>
             <SdkInstallCard

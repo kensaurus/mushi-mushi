@@ -55,6 +55,34 @@ describe('Set up page progress', () => {
     }
   })
 
+  // Two fresh-eyes sessions on this page hesitated in opposite directions
+  // (report 2a8d4a76): "Step N of 2", "the only input we need", "{name} is
+  // ready" and "Skip setup" read as finished, while a second heading
+  // "Create your first project" plus the first-visit help read as a
+  // different task. One next action, and the help says the same thing.
+  it('names one next action on the first-run screen', () => {
+    const wizardAt = src.indexOf('const firstRunWizard')
+    const wizard = src.slice(wizardAt, src.indexOf('return (', wizardAt))
+    expect(wizard).toContain('Name your app')
+    expect(wizard).toContain('createProjectForm(false)')
+    expect(wizard).toContain('<FirstDiagnosisScreen')
+    for (const phrase of ['Step 1 of 2', 'only input we need', 'is ready', 'Preparing your first diagnosis', 'Create your first project']) {
+      expect(wizard, phrase).not.toContain(phrase)
+    }
+    expect(src).toMatch(/!ux\.hideFooterLinks && !firstRun/)
+    const copy = readFileSync(join(__dirname, '../lib/copy.ts'), 'utf8')
+    const start = copy.indexOf("'/onboarding': {", copy.indexOf('\n  beginner: {'))
+    const block = copy.slice(start, copy.indexOf('\n  advanced: {'))
+    expect(block).not.toContain('create a project')
+    expect(block).not.toContain('tracks your progress automatically')
+    expect(block).toContain('Name your app')
+    const diagnosis = readFileSync(join(__dirname, '../components/onboarding/FirstDiagnosisScreen.tsx'), 'utf8')
+    const screen = diagnosis.slice(diagnosis.indexOf('data-testid="onboarding-first-diagnosis"'), diagnosis.indexOf('FirstDiagnosisInlineProps'))
+    expect(screen).toContain('Send a test bug')
+    expect(screen).toContain('Install the widget')
+    expect(screen).not.toContain('Step 2 of 2')
+  })
+
   it('says what happens in plain words on the new-user path', () => {
     for (const phrase of ['evolution loop', 'Watch the loop', 'pipeline live', 'generate a report key']) {
       expect(src, phrase).not.toContain(phrase)
