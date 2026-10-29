@@ -187,7 +187,9 @@ const upsertSubscription = async (db: Db, raw: Record<string, unknown>) => {
   // Company funnel (mushi-self): a paid plan going active. Dedup on the Stripe
   // subscription id so created/updated retries collapse to one row.
   if (sub.status === 'active' && planId && planId !== 'free_cloud') {
+    // Actor: the project's owner (a webhook carries no console user).
     void emitProductEvent(db, {
+      actorFallback: 'project_owner',
       eventName: 'upgrade_completed',
       surface: 'server',
       properties: { project_id: projectId, plan: planId },
