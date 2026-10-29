@@ -5,6 +5,7 @@
  * OVERVIEW:
  * - Opaque design-token panels (no white/5 dark-mode-only hacks)
  * - Page intro, stat grid, link cards, pipeline rows, progress tracks
+ * - A progress tick is centered on its percentage so a caption can share it
  * - Wraps admin design-system Card, StatCard, Section, Btn, Badge
  *
  * DEPENDENCIES:
@@ -209,7 +210,7 @@ export function TesterProgressTrack({
       />
       {markerPct != null && (
         <div
-          className="absolute top-0 h-full w-px bg-warn"
+          className="absolute top-0 h-full w-px -translate-x-1/2 bg-warn"
           style={{ left: `${Math.min(100, Math.max(0, markerPct))}%` }}
           title={markerLabel}
         />
