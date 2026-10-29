@@ -9,6 +9,7 @@ import { log } from '../../_shared/logger.ts';
 import { jwtAuth, adminOrApiKey, apiKeyAuth } from '../../_shared/auth.ts';
 import { requireFeature } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
+import { invalidateSetupGapsForKey, type KeyOwner as SetupGapKeyOwner } from '../../_shared/setup-gap-invalidate.ts';
 import { brandFooterDefaultForProject } from '../../_shared/brand-footer.ts';
 import {
   dbError,
@@ -3832,6 +3833,14 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         probe.status === 'ok' &&
         (await legacyByokRef(db, project.id, provider)) !== null;
 
+      // A new key can clear "auto-fix has no key" or the follow-up key gap:
+      // drop the stored Health answer so Home re-checks it.
+      await invalidateSetupGapsForKey(db, {
+        project_id: sharedOrgId || universalUserId ? null : project.id,
+        organization_id: sharedOrgId,
+        owner_user_id: universalUserId ?? null,
+      });
+
       return c.json({
         ok: true,
         data: {
@@ -4181,12 +4190,15 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       const sharedDenied = await sharedKeyWriteGuard(c, db, project, keyId, owner);
       if (sharedDenied) return sharedDenied;
 
-      const { data: keyRow } = await db
+      const { data: keyData } = await db
         .from('byok_keys')
-        .select('provider_slug, vault_secret_id')
+        .select(withOwnerUserColumn('provider_slug, vault_secret_id, project_id, organization_id', await ownerUserColumnReady(db)))
         .eq('id', keyId)
         .or(keyOwnerFilter(owner))
         .single();
+      const keyRow = keyData as unknown as
+        | ({ provider_slug: string; vault_secret_id: string | null } & SetupGapKeyOwner)
+        | null;
 
       if (!keyRow) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
@@ -4224,6 +4236,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       } catch {
         /* best-effort */
       }
+
+      // A removed key can leave auto-fix or follow-ups with nothing to run on:
+      // drop the stored Health answer so Home re-checks it.
+      await invalidateSetupGapsForKey(db, keyRow);
 
       return c.json({ ok: true, data: { removed: true, keyId } });
     },

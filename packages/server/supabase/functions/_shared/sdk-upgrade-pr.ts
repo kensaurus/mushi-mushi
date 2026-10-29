@@ -63,19 +63,24 @@ workflow (package manager CLI, \`--ignore-scripts\`), so a frozen install
 > The workflow is in this repo but pushed no lockfile commit within 30 minutes;
 > check its run on this branch.`
     : `> Tip: add the Mushi lockfile workflow so upgrade PRs arrive with a refreshed lockfile: ${LOCKFILE_HELPER_DOCS_URL}`
-  return `### After merging
+  return `### Before merging: update the lockfile on this branch
 
-Run your package manager to refresh the lockfile:
+This PR changes only the version strings. CI installs from your lockfile, so
+until the lockfile is updated on this branch, CI still installs the old
+versions and a check that compares them to npm stays red. Check out this
+branch and run the command for your package manager, then commit and push the
+lockfile:
 
 \`\`\`sh
-# npm
-npm install
+# npm (use the npm major that wrote package-lock.json: npm 11 records
+# "libc" fields that npm 10 drops)
+npm install --package-lock-only --ignore-scripts
 
 # pnpm
-pnpm install
+pnpm install --lockfile-only --ignore-scripts
 
 # yarn
-yarn install
+yarn install --mode update-lockfile
 \`\`\`
 
 ${note}`

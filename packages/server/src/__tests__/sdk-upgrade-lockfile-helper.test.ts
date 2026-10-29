@@ -148,6 +148,13 @@ describe('runSdkUpgradeJob — lockfile helper', () => {
     const body = String(opts.body)
     expect(body).toContain(LOCKFILE_HELPER_DOCS_URL)
     expect(body.split('\n').filter((l) => l.includes(LOCKFILE_HELPER_DOCS_URL))).toHaveLength(1)
+    // Without the helper the PR carries only version strings, so CI stays red
+    // until the lockfile is updated on the branch: say so before merge, with
+    // lockfile-only commands (BL-170, 2026-10-29).
+    expect(body).toContain('Before merging: update the lockfile on this branch')
+    expect(body).not.toContain('After merging')
+    expect(body).toContain('npm install --package-lock-only --ignore-scripts')
+    expect(body).toContain('pnpm install --lockfile-only --ignore-scripts')
     expect(lastUpdate(queries).status).toBe('completed')
   })
 })

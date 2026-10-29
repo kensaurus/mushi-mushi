@@ -27,6 +27,7 @@ import type { Variables } from '../types.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth } from '../../_shared/auth.ts'
 import { logAudit } from '../../_shared/audit.ts'
+import { invalidateSetupGapsForOrg } from '../../_shared/setup-gap-invalidate.ts'
 import { dbError, resolveOwnedProject } from '../shared.ts'
 import { byokKeyIdSchema } from '../../_shared/byok-validation.ts'
 import { canManageSharedKeys, keyOwnerFilter, keyOwnerForProject } from '../../_shared/byok-scope.ts'
@@ -256,6 +257,9 @@ export function registerByokReviewFollowupRoutes(app: Hono<{ Variables: Variable
     if (error) return dbError(c, error)
     if (!data) return bad(c, 'NOT_FOUND', 'Organization not found.', 404)
     await logAudit(db, project.id, userId, 'settings.updated', 'organization', orgId, { reviewFollowups: patch }).catch(() => {})
+    // The follow-up key is a Health check root cause: drop the stored answer so
+    // Home's "Fix these first" re-checks instead of showing the old state.
+    await invalidateSetupGapsForOrg(db, orgId)
     return c.json({ ok: true, data: { settings: followupSettingsFromRow(data as Record<string, unknown>) } })
   })
 
