@@ -10,9 +10,9 @@ to "Mushi" in posts.
 | Platform | Account | Status | Live URL | Posted at (UTC) |
 |---|---|---|---|---|
 | Hacker News (Show HN) | kensaurus | **not posted**: HN is "temporarily restricting Show HNs" from new accounts (account created 2026-10-29, karma 1) | | |
-| Reddit r/SideProject | u/sakuramoto | posted | https://redd.it/1xi6gtf | 2026-10-29 ~01:20 |
-| X | @sakuramotokenji | posted, links reply posted by the owner | https://x.com/sakuramotokenji/status/2115612842812735787 | 2026-10-29 01:13 |
-| LinkedIn | kenji sakuramoto | posted | https://www.linkedin.com/in/kenjisakuramoto/recent-activity/all/ (post of 2026-10-29) | 2026-10-29 ~01:25 |
+| Reddit r/SideProject | u/sakuramoto | **removed by Reddit's filters** (seen 2026-10-29 ~03:30 UTC, 0 comments); a message asking the moderators to approve it is drafted for the owner to send | https://redd.it/1xi6gtf | 2026-10-29 ~01:20 |
+| X | @sakuramotokenji | posted, links reply posted by the owner; an image reply (4 pictures) is drafted for the owner to send | https://x.com/sakuramotokenji/status/2115612842812735787 | 2026-10-29 01:13 |
+| LinkedIn | kenji sakuramoto | posted | https://www.linkedin.com/in/kenjisakuramoto/recent-activity/all/ (post of 2026-10-29); an image comment is drafted for the owner to send | 2026-10-29 ~01:25 |
 | Zenn (Idea) | kensaurus | **draft**, saved unpublished; topics ai, claudecode, cursor, 個人開発, oss | https://zenn.dev/articles/b7f223e0c9bf5d/edit (editor) | |
 | note | kensaurus | **draft**, saved unpublished | https://editor.note.com/notes/n2157e8d303d9/edit/ (editor) | |
 
@@ -217,6 +217,28 @@ https://kensaur.us/mushi-mushi/docs/proof
 
 アプリを作って人に使ってもらっている方、ユーザーはバグを教えてくれますか。
 ```
+
+## Pictures added on 2026-10-29
+
+The owner found the first posts plain ("not eye catching"). The pictures below
+are the owner's own pixel-art sage avatar (Zenn profile) redrawn in four
+retro-game scenes by fal `flux-pro/kontext` (prompts in the session scratchpad,
+`gen-sage.mjs`), with an RPG text box carrying the real numbers as of
+2026-10-29 02:43 UTC. The village scene had made-up letters on a shop sign;
+they are painted over. The real screenshots (PR #864 review, a real glot.it
+diagnosis) stay in the posts as the proof.
+
+| File | Used in |
+|---|---|
+| ![](media/card-ja-hero.png) | note header, Zenn top |
+| ![](media/card-ja-review.png) | note, Zenn ("2つ目の AI にレビューさせる") |
+| ![](media/card-ja-boss.png) | Zenn ("エラーにならないバグ") |
+| ![](media/card-ja-quiet.png) | note, Zenn ("いちばん意外だったこと") |
+| ![](media/card-en-hero.png) | X image reply, LinkedIn image comment |
+| ![](media/card-en-review.png) | X image reply |
+| ![](media/card-en-quiet.png) | X image reply |
+| ![](media/card-en-boss.png) | not used yet |
+| ![](media/real-diagnosis-glot-skip.png) | Zenn: the real diagnosis of a 3x "Skip" tap on glot.it (50% confidence, no error logged; merged on the 4th agent attempt, 2026-10-03) |
 
 ## Images
 
