@@ -12,6 +12,7 @@
 
 import { fetchWithTimeout } from './http.ts'
 import type { getServiceClient } from './db.ts'
+import { isOperatorProject } from './operator-gate.ts'
 
 async function importPkcs8(pem: string): Promise<CryptoKey> {
   const stripped = pem
@@ -188,9 +189,25 @@ export async function resolveProjectGithubToken(
     }
   }
 
-  // Step 3: env fallback.
+  // Step 3: the platform token, for the operator's own apps only.
   if (opts.allowEnvFallback === false) return null
-  return Deno.env.get('GITHUB_TOKEN') ?? null
+  return platformGithubTokenFor(db, projectId)
+}
+
+/**
+ * The platform `GITHUB_TOKEN` is the operator's own GitHub credential, so only
+ * a project whose owner is an operator (MUSHI_OPERATOR_USER_IDS) may use it,
+ * as with the env Slack bot (`isOperatorProject`). Every other app brings its
+ * own GitHub App install or token. Self-hosters list their user id in
+ * MUSHI_OPERATOR_USER_IDS. Fails closed.
+ */
+export async function platformGithubTokenFor(
+  db: unknown,
+  projectId: string | null | undefined,
+): Promise<string | null> {
+  const token = Deno.env.get('GITHUB_TOKEN')
+  if (!token) return null
+  return (await isOperatorProject(db as never, projectId)) ? token : null
 }
 
 export interface GithubRepoRef {
