@@ -33,6 +33,7 @@ import { compareSemver, resolveSdkFreshnessStatus } from '../../_shared/sdk-vers
 import { fetchLatestStampedSdkReports, fetchProjectSdkObservations, resolveProjectSdkIdentity } from '../../_shared/sdk-observation.ts'
 import {
   buildActivity,
+  buildFixFirst,
   buildNeedsYou,
   buildSitemap,
   buildStations,
@@ -73,7 +74,10 @@ import {
   THUMBNAIL_URL_TTL_SEC,
   type ThumbnailRow,
 } from '../../_shared/home-thumbnail.ts'
-import { readPipeline } from './pipeline.ts'
+import { readPipeline, type DispatcherProject } from './pipeline.ts'
+import { homeHealthChecks } from './health-checks.ts'
+import { attachAffects, problemsByProject, type HealthCheck } from '../../_shared/health-checks.ts'
+import { tagRootCauses } from '../../_shared/pipeline-view.ts'
 import { readWorkerFlags } from './work-status.ts'
 import { flagsForProject, type WorkerFlag } from '../../_shared/work-flags.ts'
 import { reportWindowStartIso } from '../../_shared/report-list-filters.ts'
@@ -99,6 +103,11 @@ export interface ProjectHomeDeps {
   lookupUser: (db: Db, userId: string) => Promise<{ name: string | null; avatarUrl: string | null }>
   /** Local worker flags that touch this app (work-flags.ts); the default reads them like the Workers tab. */
   workerFlags?: (db: Db, userId: string, projectId: string, now: Date) => Promise<WorkerFlag[]>
+  /**
+   * The app's Health checks for "Fix these first" (stored answers only, never
+   * a live probe). Absent: Home shows no "Fix these first" and Needs you as before.
+   */
+  healthChecks?: (db: Db, project: DispatcherProject) => Promise<HealthCheck[]>
 }
 
 async function workerFlags(db: Db, userId: string, projectId: string, now: Date): Promise<WorkerFlag[]> {
@@ -124,6 +133,7 @@ export const defaultProjectHomeDeps: ProjectHomeDeps = {
   captureThumbnail,
   lookupUser,
   workerFlags,
+  healthChecks: (db, project) => homeHealthChecks(db, project),
 }
 
 function within<T>(p: PromiseLike<T>, what: string, ms = SECTION_MS): Promise<T> {
@@ -241,6 +251,8 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
   const firecrawlP = settle(within(deps.resolveFirecrawl(db, id), 'firecrawl key'))
   // Local workers that stopped doing useful work for this app (ADR 0048 amendment 2026-10-28).
   const workersP = settle(userId ? within((deps.workerFlags ?? workerFlags)(db, userId, id, now), 'local workers') : Promise.resolve([] as WorkerFlag[]))
+  // Root causes for "Fix these first" (plan-simplicity-2026-10 Phase 1): stored answers only.
+  const healthP = deps.healthChecks ? settle(within(deps.healthChecks(db, project), 'health checks')) : null
 
   const [keys, watch, broken, liveUrls, repo, pipeline, deploy, thumb, firecrawl] = await Promise.all([
     keysP, watchP, brokenP, liveUrlP, repoP, pipelineP, deployP, thumbP, firecrawlP,
@@ -516,16 +528,23 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
     release = hasAnything || (repo.ok && repo.value) ? okSection(data) : notConnected({ label: 'Connect GitHub', to: '/connect' }, data)
   }
 
-  // ── Needs you ──
+  // ── Fix these first, then Needs you ──
+  const healthRead = healthP ? await healthP : null
+  const checks = healthRead?.ok ? healthRead.value : null
+  // Each stuck group a problem explains carries it (rootCause), so the cause shows once.
+  const stages = pipeline.ok ? (checks ? tagRootCauses(pipeline.value.stages, problemsByProject(checks)) : pipeline.value.stages) : null
+  const fixFirstItems = checks ? buildFixFirst(attachAffects(checks, (stages ?? []).flatMap((s) => s.groups))) : []
+  const fixFirst = healthRead && !healthRead.ok ? errorSection<typeof fixFirstItems>(healthRead.error) : okSection(fixFirstItems)
   const sdkFreshness = access.ok ? access.value.sdk : null
   const needsYou = okSection(
     buildNeedsYou({
       projectId: id,
       health,
       criticalWaiting: waiting.ok ? waiting.value.counts.critical : null,
-      pipeline: pipeline.ok ? pipeline.value.stages : null,
+      pipeline: stages,
       sdk: sdkFreshness,
       workers: workers.ok ? workers.value : null,
+      fixFirst: fixFirstItems,
     }),
   )
 
@@ -540,6 +559,7 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
     projectId: id,
     app,
     health: okSection(health),
+    fixFirst,
     needsYou,
     release,
     sitemap: sitemapSection,
@@ -547,7 +567,7 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
     activity: activity.ok ? okSection(activity.value) : errorSection(activity.error),
     access: access.ok ? okSection(access.value) : errorSection(access.error),
     // Reads Needs you could not use, so the console can say the list may be incomplete.
-    partial: [!pipeline.ok && 'pipeline', !waiting.ok && 'waiting', !workers.ok && 'workers'].filter(Boolean) as string[],
+    partial: [!pipeline.ok && 'pipeline', !waiting.ok && 'waiting', !workers.ok && 'workers', healthRead && !healthRead.ok && 'health'].filter(Boolean) as string[],
   }
 }
 

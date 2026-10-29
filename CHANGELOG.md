@@ -11,6 +11,9 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 ### Highlights
 
 - **`mushi connect` uses your saved key** — when you pass no key, it uses the one `npx mushi-mushi` or `mushi login` already saved, so the command the setup wizard prints works as it is. The wizard's last checklist names the console tab by its current label, "Test it".
+- **`mushi doctor` shows the app's Health check** — it reads the server's Health check (setup gaps, SDK health, the report button) and prints each problem once as a warning, with how many items wait on it and its fix. It does not change whether `mushi doctor` passes. A check the server could not read shows as not checked. Older servers without the route are skipped.
+- **Six new server events in the analytics vocabulary** — `sdk_seen_localhost`, `sdk_seen_live`, `first_real_report`, `first_diagnosis_viewed`, `first_fix_dispatched` and `first_fix_merged` mark the new-user path, once per project. Only Mushi Mushi's server sends them; nothing changes for apps that call `Mushi.track()`.
+- **`diagnose_setup` names the root cause first** — in full mode it reads the app's Health check and returns its "Fix these first" list as `health`; when the connection, ingest and dispatch checks pass, `nextAction` is the first root cause and its fix.
 - **Docs answers match the product** — the docs index behind `search_mushi_docs` is rebuilt from the proofread docs.
 - **Hono and Fastify reports drop URL query values** — the error handlers scrub query values (tokens, emails) from the request URL before putting it into the report description, as the Express handler already did.
 

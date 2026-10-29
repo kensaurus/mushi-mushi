@@ -24,6 +24,7 @@ const MOVED: Array<{ file: string; register: string; count: number }> = [
   { file: 'pipeline', register: 'registerPipelineRoutes', count: 3 },
   { file: 'fresh-eyes', register: 'registerFreshEyesRoutes', count: 6 },
   { file: 'landing-visits', register: 'registerLandingVisitRoutes', count: 2 },
+  { file: 'health-checks', register: 'registerHealthCheckRoutes', count: 1 },
 ]
 
 describe('route groups that run in api-ext', () => {

@@ -14,6 +14,9 @@
 
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb } from './__stubs__/fake-supabase.ts'
+import { createHealthGate } from '../../supabase/functions/_shared/health-gate.ts'
+import { fromSetupGap } from '../../supabase/functions/_shared/health-checks.ts'
+import { autofixKeyGap, followupKeyGap } from '../../supabase/functions/_shared/setup-gaps.ts'
 import {
   cachedYieldSamples,
   type SpendDownYieldCache,
@@ -349,6 +352,41 @@ function seed(extra: Record<string, unknown[]> = {}, opts: NonNullable<Parameter
 const allowAll = async () => ({ allowed: true, dispatchesToday: 0, maxDispatchesPerDay: 30 }) as never
 
 describe('runSpendDownForKey', () => {
+  describe('health gate (ADR 0054, Proposed): observe changes nothing, enforce only withholds', () => {
+    const noAgent = fromSetupGap(autofixKeyGap({ projectId: P1, dispatcher: { autofixOn: true, server: { agentKeys: 0, offKeys: 0 } } }), NOW.toISOString())
+    const followupsOnly = fromSetupGap(followupKeyGap({ projectId: P1, settings: { enabled: true, offReason: null, keyId: 'x' }, keyStatus: null }), NOW.toISOString())
+    const unknown = fromSetupGap(followupKeyGap({ projectId: P1, settings: null }), NOW.toISOString())
+    const gate = (mode: 'observe' | 'enforce', checks: typeof noAgent[]) =>
+      createHealthGate(makeFakeDb() as never, 'spend-down', { readMode: async () => mode, loadChecks: async (_db, pid) => checks.filter((c) => c.projectId === pid), record: async () => {}, now: () => NOW })
+    const run = async (healthGate?: Awaited<ReturnType<typeof gate>>) => {
+      const calls: Array<Record<string, unknown>> = []
+      const summary = await worker.runSpendDownForKey(seed() as never, key(), {
+        now: NOW,
+        checkBudget: allowAll,
+        dispatch: async (input) => (calls.push(input as never), { ok: true }),
+        ...(healthGate ? { healthGate } : {}),
+      })
+      return { calls, summary }
+    }
+
+    it('observe: byte-for-byte the same dispatches and summary as with the gate off', async () => {
+      const off = await run()
+      const observe = await run(await gate('observe', [noAgent]))
+      expect(off.calls.length).toBeGreaterThan(0)
+      expect(JSON.stringify(observe.calls)).toBe(JSON.stringify(off.calls))
+      expect(JSON.stringify(observe.summary)).toBe(JSON.stringify(off.summary))
+    })
+
+    it('enforce: the paused app gets no dispatch and says why; unrelated or unknown checks change nothing', async () => {
+      const off = await run()
+      const enforce = await run(await gate('enforce', [noAgent]))
+      expect(enforce.calls).toEqual([])
+      expect(enforce.summary.projects.find((p) => p.projectId === P1)).toMatchObject({ dispatched: 0, healthPaused: true, stopped: expect.stringContaining('Paused until this is fixed: Auto-fix agent key') })
+      const other = await run(await gate('enforce', [followupsOnly, unknown]))
+      expect(JSON.stringify(other.calls)).toBe(JSON.stringify(off.calls))
+    })
+  })
+
   it('dispatches the best open reports of the apps the key serves, as automatic cursor_cloud fixes', async () => {
     const db = seed()
     const calls: Array<Record<string, unknown>> = []

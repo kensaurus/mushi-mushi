@@ -137,7 +137,7 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `webhooks-linear-agent` | Linear AgentSessionEvent webhooks (acknowledge within 10s; may dispatch fix-worker) |
 | `reporter-notify-fanout` | Email / push for a developer reply to a reporter; enqueued by the `report_comments` trigger, which stays the in-app writer (Plan 018) |
 
-Also: **`api`** (Hono REST router), **`api-ext`** (the overflow half of the admin API: `api` forwards the CI runner, verified-fix, inventory, Ask Mushi, Codebase Atlas, modernization / super-admin, agent-skills, QA coverage, full-stack audit, UX-run, pipeline, tester-marketplace, per-app Home, setup-gaps, release-batch, local-worker (`work.ts`: `/v1/worker/*`, `/v1/admin/work/*`) and repo clean-up (`repo-housekeeping.ts`, ADR 0051) paths there with the caller's headers, because `api` hit Supabase's 5 MB deployment size limit on 2026-10-21 and again on 2026-10-22 (tester marketplace moved 2026-10-26); public URLs are unchanged, `_shared/edge-proxy.ts`; `scripts/deploy-edge-function.test.mjs` holds `api` under the last upload size known to deploy) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
+Also: **`api`** (Hono REST router), **`api-ext`** (the overflow half of the admin API: `api` forwards the CI runner, verified-fix, inventory, Ask Mushi, Codebase Atlas, modernization / super-admin, agent-skills, QA coverage, full-stack audit, UX-run, pipeline, tester-marketplace, per-app Home, setup-gaps, Health check (`health-checks.ts`: `/v1/admin/health-checks`), release-batch, local-worker (`work.ts`: `/v1/worker/*`, `/v1/admin/work/*`), server doctor (`/v1/admin/doctor`), review follow-up settings (`/v1/admin/byok/review-followups`, `/v1/admin/byok/cursor/models`; moved 2026-10-29 to keep `api` under its upload budget) and repo clean-up (`repo-housekeeping.ts`, ADR 0051) paths there with the caller's headers, because `api` hit Supabase's 5 MB deployment size limit on 2026-10-21 and again on 2026-10-22 (tester marketplace moved 2026-10-26); public URLs are unchanged, `_shared/edge-proxy.ts`; `scripts/deploy-edge-function.test.mjs` holds `api` under the last upload size known to deploy) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
 
 ---
 
@@ -991,6 +991,26 @@ Opening Home captures a new screenshot in the background only while the
 app's live-site watch is on, with its own Firecrawl key, and the last
 capture is over 7 days old (at most one try a day).
 
+## Health check (Oct 2026)
+
+One registry of every setup and health check (plan-simplicity-2026-10 Phase 1,
+ADR 0054, Proposed). `_shared/health-checks.ts` adapts setup gaps, SDK health,
+the SDK diagnostics launcher verdict and the server doctor into one shape:
+id, status (`ok` / `problem` / `unknown`; a check that cannot be read is never
+`problem`), plain-English detail, fix (`auto`, `one_click`, `guided`), the
+automations it `blocks` and its part. Route in `api/routes/health-checks.ts`
+(served by `api-ext`).
+
+| Route | Auth | Role |
+| --- | --- | --- |
+| `GET /v1/admin/health-checks` | `adminOrApiKey(mcp:read)`, members; a project key only its own app | `?projectId=` one app, else every app the caller opens (≤10); `refresh=1` re-checks setup gaps; `audience=platform` adds the doctor's platform lines. Per app: `checks` (problems first), `fixFirst` (≤3 root causes with `affects`, the items of /pipeline groups each explains), `counts`, `gate.today` (shadow counts); top level `gate.mode`. Read by `mushi doctor` (warnings only) and MCP `diagnose_setup`; Home's "Fix these first" uses the same registry from the stored setup gaps only (`homeHealthChecks`, never a live probe) |
+
+| Object | Role |
+| --- | --- |
+| `_shared/health-gate.ts` | Stop the line: `fix-worker` (automatic dispatches), `review-followup`, `merge-queue` (train tick, a PR's turn, a conflict agent) and `spend-down-worker` ask it before starting work for an app. Switch `mushi_runtime_config.health_gate_mode`: `off` (default; missing row, failed read or any other value), `observe` (records, runs as before), `enforce` (withholds; the work stays where it was and resumes on its own). Reads the stored `setup_gap_results` (over an hour old = `unknown`) and the follow-up key live; `unknown` never pauses. Only withholds: never around `gatedMergePullRequest` / `gatedTrainMerge`, the Opus hold, verified merge or draft → ready |
+| `health_gate_shadow` | Per app, automation, check, UTC day and mode: how often the gate would pause (observe) or paused (enforce); `health_gate_record()` RPC. Service role only. Migration `20261029150000_health_gate_shadow.sql` |
+| `pipeline-view.ts` `tagRootCauses` | A stuck /pipeline group gets `rootCause: { checkId, count }` when that check is a problem for every item's app; Home then shows the cause once instead of the group |
+
 ---
 
 ## HTTP API surfaces — operator reference
@@ -1011,6 +1031,29 @@ Generated manifest: [`docs/API_ROUTE_MANIFEST.generated.md`](docs/API_ROUTE_MANI
 | `GET /v1/sdk/config` | Runtime SDK config pull |
 | `GET /v1/reports/:id/status` | Report status poll |
 | `/v1/sdk/me/*` | Cross-app reporter rewards surface (`rewards.ts`) |
+
+Every `apiKeyAuth` request (except `/ingest-setup` and `/ingest/runner`) also
+writes a heartbeat in the background (`_shared/auth.ts`): `project_api_keys.last_seen_*`
+(latest only, 30 s throttle), and `project_api_key_origins` through
+`record_api_key_origin()` (one row per key and origin kind: `localhost`,
+`live_web`, `native`, `server`, `unknown`, from `_shared/sdk-origin.ts`; first
+and last seen; a scheme + host sample only; 5-minute throttle, 2 s timeout,
+failures logged, never on the request path; migration
+`20261029120000_project_api_key_origins.sql`). A project's first check-in of a
+kind emits `sdk_seen_localhost` or `sdk_seen_live`.
+
+**New-user path events** (plan-simplicity Phase 0, `_shared/funnel-steps.ts`):
+server product events written once per project into the company funnel, each
+with an actor (the person, else the project owner), never onto an app that
+already had the step (for `sdk_seen_*` best effort: before this, each key kept
+only its latest origin, which the migration backfilled): `sdk_seen_localhost`, `sdk_seen_live` (heartbeat),
+`first_real_report` (ingest; a deployed app's end-user report, `activation.ts`
+rules; `first_report_received` is unchanged and also counts a localhost test
+bug), `first_diagnosis_viewed` (the setup-funnel diagnosis route),
+`first_fix_dispatched` (`_shared/dispatch.ts` and `POST /v1/admin/fixes/dispatch`;
+not fix-worker's own insert), `first_fix_merged` (`finalizeFixMerge`).
+`company_funnel_weekly` reports them per week for outside projects only
+(no operators, synthetic accounts or complimentary organizations).
 
 ### Host-backend erasure (erase token, no API key)
 
