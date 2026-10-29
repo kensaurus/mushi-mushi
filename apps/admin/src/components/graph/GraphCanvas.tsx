@@ -1,8 +1,8 @@
 /**
  * FILE: apps/admin/src/components/graph/GraphCanvas.tsx
  * PURPOSE: ReactFlow visualization wrapper. Owns the canvas chrome
- *          (background, controls, minimap, in-canvas hint, legend, empty
- *          panel) so the page can stay focused on data + state.
+ *          (background, controls, minimap, pan/zoom hint above the canvas,
+ *          legend, empty panel) so the page can stay focused on data + state.
  */
 
 import { useEffect, useState } from 'react'
@@ -98,6 +98,19 @@ interface Props {
 
 const HINT_KEY = 'mushi.graph.hintSeen'
 
+function hintAlreadySeen(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(HINT_KEY) === '1'
+  } catch {
+    return true
+  }
+}
+
+// Breaks only on the separators. A single sentence in a narrow column wraps
+// mid-phrase ("scroll to" / "zoom · click") at phone width.
+const HINT_PHRASES = ['Drag to pan', 'scroll to zoom', 'click a node for blast radius'] as const
+
 export function GraphCanvas({
   flowNodes,
   flowEdges,
@@ -112,25 +125,17 @@ export function GraphCanvas({
   blastLoading = false,
   onClearSelection,
 }: Props) {
-  const [hintDismissed, setHintDismissed] = useState(false)
+  const [hintDismissed, setHintDismissed] = useState(() => hintAlreadySeen())
   const { resolved } = useTheme()
   const dotGrid = readVizToken(
     resolved === 'dark' ? 'viz-node-border-dark' : 'viz-node-border-light',
   )
 
   // Auto-fade the pan/zoom hint after 6s. Stored in localStorage so it doesn't
-  // re-appear every refresh once the user has seen it.
+  // re-appear every refresh once the user has seen it. The first paint
+  // already reads that flag so a returning visit does not resize the canvas.
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      if (window.localStorage.getItem(HINT_KEY) === '1') {
-        setHintDismissed(true)
-        return
-      }
-    } catch {
-      setHintDismissed(true)
-      return
-    }
+    if (hintAlreadySeen()) return
     const t = setTimeout(() => {
       setHintDismissed(true)
       try {
@@ -167,12 +172,42 @@ export function GraphCanvas({
       className="border border-edge rounded-md bg-surface-root"
       style={{
         height: 'clamp(380px, calc(100dvh - 540px), 600px)',
-        display: hidden ? 'none' : 'block',
+        // Grid (not a block) so the hint takes its own row and the flow
+        // fills the rest. A top-center Panel is left:50% + shrink-to-fit,
+        // which at 390px is only half the canvas: the hint wraps mid-phrase
+        // and the tall chip covers the nodes.
+        display: hidden ? 'none' : 'grid',
+        gridTemplateRows: hintDismissed ? 'minmax(0, 1fr)' : 'auto minmax(0, 1fr)',
       }}
       role="region"
       aria-label={`Knowledge graph visualization with ${filteredCount} nodes and ${filteredEdgeCount} edges. Switch to Table view for a screen-reader-friendly list.`}
       tabIndex={0}
     >
+      {!hintDismissed && (
+        <div
+          data-testid="graph-pan-zoom-hint"
+          className="flex items-center gap-2 border-b border-edge-subtle bg-surface-raised px-3 py-1.5 text-2xs text-fg-secondary"
+        >
+          <span aria-hidden="true" className="shrink-0">🖱️</span>
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5">
+            {HINT_PHRASES.map((phrase, i) => (
+              <span key={phrase} className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                {i > 0 && <span aria-hidden="true">·</span>}
+                <span data-hint-phrase className="whitespace-nowrap">{phrase}</span>
+              </span>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={dismissHint}
+            className="shrink-0 rounded-sm px-1 text-danger hover:bg-danger-muted/50 text-xs leading-none"
+            aria-label="Dismiss hint"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      <div className="h-full min-h-0 overflow-hidden">
       <ReactFlow
         nodes={flowNodes}
         edges={flowEdges}
@@ -197,22 +232,6 @@ export function GraphCanvas({
         <Panel position="bottom-right">
           <ZoomControls />
         </Panel>
-        {!hintDismissed && (
-          <Panel position="top-center">
-            <Card  className="flex items-center gap-2 backdrop-blur px-3 py-1.5 text-2xs text-fg-secondary">
-              <span aria-hidden="true">🖱️</span>
-              <span>Drag to pan · scroll to zoom · click a node for blast radius</span>
-              <button
-                type="button"
-                onClick={dismissHint}
-                className="ml-2 rounded-sm px-1 text-danger hover:bg-danger-muted/50 text-xs leading-none"
-                aria-label="Dismiss hint"
-              >
-                ✕
-              </button>
-            </Card>
-          </Panel>
-        )}
         <Panel position="bottom-left">
           <GraphLegend />
         </Panel>
@@ -255,6 +274,7 @@ export function GraphCanvas({
           </Panel>
         )}
       </ReactFlow>
+      </div>
     </div>
   )
 }
