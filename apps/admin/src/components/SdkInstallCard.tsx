@@ -41,7 +41,8 @@ import {
   type Framework,
   type SdkPreviewConfig,
 } from '../lib/sdkSnippets'
-import { resolveDefaultSdkFramework } from '../lib/sdkInstallDefaults'
+import { detectWebBundler, resolveDefaultSdkFramework } from '../lib/sdkInstallDefaults'
+import { usePageData } from '../lib/usePageData'
 import { fromRemoteConfig, toRemoteConfig } from './sdk-install/sdk-install-config-mappers'
 import { SdkInstallConfigurator } from './sdk-install/SdkInstallConfigurator'
 import { SdkInstallKeyPanel } from './sdk-install/SdkInstallKeyPanel'
@@ -59,9 +60,18 @@ export function SdkInstallCard({
   embedded = false,
   showConnectionStatus = false,
 }: SdkInstallCardProps) {
+  // The app's own package.json (its connected repo) picks the tab and, for
+  // Vite or Next, an env-var snippet. Best effort: no repo, no access or a
+  // failed read leave the generic React snippet.
+  const repoStack = usePageData<{ repo: string | null; packageJson: string | null; reason: string | null }>(
+    projectId && !linkedPackageJson ? `/v1/admin/projects/${projectId}/github/stack` : null,
+  )
+  const packageJson = linkedPackageJson ?? repoStack.data?.packageJson ?? null
+  const stackRepo = repoStack.data?.packageJson ? repoStack.data.repo : null
+  const bundler = useMemo(() => detectWebBundler(packageJson), [packageJson])
   const detectedFramework = useMemo(
-    () => resolveDefaultSdkFramework(projectSlug, linkedPackageJson),
-    [projectSlug, linkedPackageJson],
+    () => resolveDefaultSdkFramework(projectSlug, packageJson),
+    [projectSlug, packageJson],
   )
   const [framework, setFramework] = useState<Framework>(() => detectedFramework)
   const autoFrameworkApplied = useRef(false)
@@ -88,8 +98,8 @@ export function SdkInstallCard({
   const snippetKey = apiKey ?? rotatedKey ?? null
 
   const code = useMemo(
-    () => renderSnippet(framework, projectId, snippetKey, config, projectSlug),
-    [framework, projectId, snippetKey, config, projectSlug],
+    () => renderSnippet(framework, projectId, snippetKey, config, projectSlug, framework === 'react' ? bundler : null),
+    [framework, projectId, snippetKey, config, projectSlug, bundler],
   )
   const install = installCommand(framework)
   const isDirty = enabled !== savedEnabled || JSON.stringify(config) !== JSON.stringify(savedConfig)
@@ -249,9 +259,22 @@ export function SdkInstallCard({
           <span className="font-medium text-fg">Make a key and fill it in</span> above.
         </p>
       ) : null}
+      {stackRepo && (
+        <p className="text-2xs text-fg-muted" data-testid="sdk-stack-note">
+          Matched to <span className="font-mono text-fg-secondary">{stackRepo}</span>:{' '}
+          {framework === 'react' && bundler === 'vite'
+            ? 'React on Vite, so the snippet reads your key from .env.local.'
+            : framework === 'react' && bundler === 'next'
+              ? 'React on Next.js, so the snippet reads your key from .env.local.'
+              : `the ${framework} tab is selected from its package.json.`}{' '}
+          Pick another tab if that is wrong.
+        </p>
+      )}
 
       <div className="@container/sdk">
-      <div className={`grid gap-4 ${isServerFramework(framework) ? '' : '@2xl/sdk:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'}`}>
+      {/* Compact (setup): snippet first, one column, widget settings folded
+          away; the defaults work, so minute two is one copy, not 14 choices. */}
+      <div className={`grid gap-4 ${isServerFramework(framework) || compact ? '' : '@2xl/sdk:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'}`}>
         {/* ─── LEFT COLUMN: live preview + configurator ─── */}
         {/* Hidden for server frameworks — the widget only runs in browsers. */}
         {isServerFramework(framework) ? (
@@ -270,7 +293,7 @@ export function SdkInstallCard({
             </p>
           </SdkInstallShell>
         ) : (
-        <div className="space-y-3">
+        <WidgetCustomizeColumn compact={compact}>
           <div>
             <div className="flex items-center justify-between">
               <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Live preview</span>
@@ -311,10 +334,11 @@ export function SdkInstallCard({
               {savingConfig ? 'Saving…' : isDirty ? 'Save config' : 'Saved'}
             </button>
           </div>
-        </div>
+        </WidgetCustomizeColumn>
         )}
 
         {/* ─── RIGHT COLUMN: framework picker, install, snippet ─── */}
+        <div className={compact ? 'order-first' : undefined}>
         <SdkInstallSnippetColumn
           framework={framework}
           onFrameworkChange={setFramework}
@@ -322,6 +346,7 @@ export function SdkInstallCard({
           code={code}
           install={install}
         />
+        </div>
       </div>
       </div>
     </SdkInstallShell>
@@ -340,4 +365,17 @@ function SdkInstallShell({
 }) {
   if (embedded) return <div className={className}>{children}</div>
   return <Card className={className}>{children}</Card>
+}
+
+/** The widget preview and settings: a closed disclosure on setup, a column elsewhere. */
+function WidgetCustomizeColumn({ compact, children }: { compact?: boolean; children: React.ReactNode }) {
+  if (!compact) return <div className="space-y-3">{children}</div>
+  return (
+    <details className="group rounded-sm border border-edge-subtle">
+      <summary className="cursor-pointer select-none px-3 py-2 text-xs text-fg-secondary hover:text-fg">
+        Customize the report button (optional, the defaults work)
+      </summary>
+      <div className="space-y-3 border-t border-edge-subtle p-3">{children}</div>
+    </details>
+  )
 }

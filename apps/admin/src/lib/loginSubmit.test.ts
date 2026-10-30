@@ -5,7 +5,41 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { NO_ACCOUNT_FOR_EMAIL_LINK, classifyAuthError, loginActionFor } from './loginSubmit'
+import { CONFIRMATION_EMAIL_FAILED, NO_ACCOUNT_FOR_EMAIL_LINK, classifyAuthError, emailFormatProblem, loginActionFor } from './loginSubmit'
+
+describe('emailFormatProblem', () => {
+  it('accepts a full address', () => {
+    expect(emailFormatProblem('sakura@gmail.com')).toBeNull()
+    expect(emailFormatProblem('a.b+tag@mail.example.co.jp')).toBeNull()
+    expect(emailFormatProblem('')).toBeNull()
+  })
+
+  it('names what is wrong with an address the mail server would refuse', () => {
+    expect(emailFormatProblem('sakura@gmail')).toContain('"gmail" is not a full domain')
+    expect(emailFormatProblem('sakura@gmail.')).toContain('not a full domain')
+    expect(emailFormatProblem('sakura')).toContain('whole email address')
+    expect(emailFormatProblem('@gmail.com')).toContain('whole email address')
+    expect(emailFormatProblem('sa kura@gmail.com')).toContain('spaces')
+  })
+})
+
+describe('classifyAuthError server failures', () => {
+  it('never shows a raw empty object', () => {
+    const msg = classifyAuthError('{}', { cloud: true })
+    expect(msg).not.toContain('{}')
+    expect(msg).toContain('nothing was saved')
+    expect(classifyAuthError('', { cloud: true })).toContain('nothing was saved')
+  })
+
+  it('explains a confirmation email the mail server refused', () => {
+    expect(classifyAuthError('Error sending confirmation email', { cloud: true })).toBe(CONFIRMATION_EMAIL_FAILED)
+    expect(classifyAuthError('Unable to validate email address: invalid format', { cloud: true })).toBe(CONFIRMATION_EMAIL_FAILED)
+  })
+
+  it('names the password rule', () => {
+    expect(classifyAuthError('Password should be at least 6 characters.', { cloud: true })).toContain('at least 6')
+  })
+})
 
 describe('loginActionFor', () => {
   it('honours the Password tab on the tester track', () => {

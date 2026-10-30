@@ -1,6 +1,7 @@
 export default {
   index: 'Choose your stack',
   'incident-loop': 'Incident loop (start here)',
+  'team-setup': 'Team setup checklist',
   'lovable-mcp': 'Lovable, Claude Code, Cursor',
   'lovable-bolt': 'Lovable or Bolt (no terminal)',
   'cli-console-loop': 'CLI ↔ console loop',

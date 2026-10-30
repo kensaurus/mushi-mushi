@@ -12,6 +12,8 @@ import { IconCheck, IconArrowRight, IconIntegrations } from '../icons'
 import { BrandIcon } from '../ui/BrandIcon'
 import { usePageData } from '../../lib/usePageData'
 import { repoRoleMeta } from '../../lib/repoRoles'
+import { GitHubConnectCard } from '../GitHubConnectCard'
+import { isReturningFromGithub } from '../../lib/githubConnect'
 
 /** The project_repos columns this card reads (GET /v1/admin/repo/repos). */
 interface LinkedRepo {
@@ -40,6 +42,12 @@ export function GithubConnectionCard({
   const repoUrl = preflight.repoUrl ?? fallbackRepoUrl ?? linked[0]?.repo_url ?? null
   const hasGithub = Boolean(repoUrl) && (githubCheck?.ready ?? Boolean(repoUrl))
   const loading = preflight.loading && !repoUrl
+
+  // Not connected (or back from GitHub): the connect flow itself, not a link
+  // to another page that has it.
+  if (projectId && ((!loading && !hasGithub) || isReturningFromGithub(projectId))) {
+    return <GitHubConnectCard projectId={projectId} returnTo="connect" currentRepoUrl={hasGithub ? repoUrl : null} />
+  }
 
   return (
     <Card>

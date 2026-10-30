@@ -327,6 +327,12 @@ export function renderSnippet(
   apiKey?: string | null,
   cfg: SdkPreviewConfig = DEFAULT_SDK_CONFIG,
   projectSlug?: string | null,
+  /**
+   * The app's bundler, read from its repository. React apps on Vite or Next
+   * then read the id and key from env vars (with the `.env.local` lines),
+   * the way those apps keep config; unknown keeps the inline snippet.
+   */
+  bundler?: 'vite' | 'next' | null,
 ): string {
   const key = apiKey || API_KEY_PLACEHOLDER
   const env = mushiEnvVarsForProjectSlug(projectSlug)
@@ -377,6 +383,27 @@ ${attrs.join('\n')}
   {/* Attach the reporter to an existing DOM element */}
   <MushiAttach selector="${cfg.attachToSelector.trim() || '#report-button'}" />`
         : ''
+    if (bundler === 'vite' || bundler === 'next') {
+      const read = bundler === 'vite'
+        ? (name: string) => `import.meta.env.VITE_MUSHI_${name}`
+        : (name: string) => `process.env.NEXT_PUBLIC_MUSHI_${name}`
+      const prefix = bundler === 'vite' ? 'VITE_' : 'NEXT_PUBLIC_'
+      return `// .env.local (keep it out of git):
+// ${prefix}MUSHI_PROJECT_ID=${projectId}
+// ${prefix}MUSHI_API_KEY=${key}
+${bundler === 'next' ? "'use client'\n" : ''}import { MushiProvider } from '@mushi-mushi/react'${triggerImport}
+
+function App() {
+  return (
+    <MushiProvider config={{
+      projectId: ${read('PROJECT_ID')},
+      apiKey: ${read('API_KEY')},
+${extras}    }}>${triggerUsage}
+      <YourApp />
+    </MushiProvider>
+  )
+}`
+    }
     return `import { MushiProvider } from '@mushi-mushi/react'${triggerImport}
 
 function App() {

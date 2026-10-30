@@ -280,7 +280,17 @@ async function deployEventsGap(db: Db, projectId: string, now: Date): Promise<Se
       'deploy events',
     )
     if (error) throw new Error(error.message)
-    return deployGap(projectId, ((data ?? []) as Array<{ observed_at: string }>)[0]?.observed_at ?? null, now)
+    const lastDeployAt = ((data ?? []) as Array<{ observed_at: string }>)[0]?.observed_at ?? null
+    // Never deployed: a gap only once a fix has shipped (a failed read counts as shipped).
+    let hasMergedFix = true
+    if (lastDeployAt === null) {
+      const merged = await within(
+        db.from('fix_attempts').select('id').eq('project_id', projectId).not('merged_at', 'is', null).limit(1),
+        'merged fixes',
+      ).catch(() => null)
+      if (merged && !merged.error) hasMergedFix = (merged.data ?? []).length > 0
+    }
+    return deployGap(projectId, lastDeployAt, now, hasMergedFix)
   } catch (err) {
     return { ...deployGap(projectId, undefined, now), summary: `Mushi could not read the deploy events (${why(err)}).` }
   }

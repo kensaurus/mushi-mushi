@@ -10,6 +10,7 @@ import { parseGithubRepoUrl, resolveProjectGithubToken } from '../../_shared/git
 import { applyHeadCheckRollup, type HeadCheckDb } from '../../_shared/check-run-head.ts';
 import { pickHighestVersion } from '../../_shared/sdk-version-compare.ts';
 import { unverifiedGithubInstallsAllowed } from '../../_shared/github-install-trust.ts';
+import { authorizeUrl, openConnectState, readGithubAppConfig } from '../../_shared/github-connect.ts';
 import { reportError } from '../../_shared/sentry.ts';
 import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import {
@@ -1543,6 +1544,17 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       return c.redirect(`${adminBase}/?github_installed=1`, 302)
     }
 
+    // A state minted by "Connect GitHub" (api/routes/github-connect.ts) goes
+    // on to GitHub's authorize page, which proves who installed: the
+    // installation id here is never trusted on its own.
+    const connectCfg = readGithubAppConfig((name) => Deno.env.get(name))
+    if (connectCfg.ok) {
+      const opened = await openConnectState(connectCfg.config.secret, stateRaw, Math.floor(Date.now() / 1000))
+      if (opened.ok) return c.redirect(authorizeUrl(connectCfg.config, stateRaw), 302)
+      if (opened.reason === 'expired') {
+        return c.redirect(`${adminBase}/onboarding?github_error=state_expired`, 302)
+      }
+    }
     // Neither the installation id nor the state is authenticated here, so the
     // binding is refused unless this is a single-tenant install that opted in
     // (see _shared/github-install-trust.ts).

@@ -164,4 +164,19 @@ describe('GET /v1/admin/integrations/stats platformAttention', () => {
     expect(data.platformAttention).toBe(1)
     expect(data.topPriority).toBe('attention')
   })
+
+  it('an agent key only the server environment provides, never tested, is not attention', async () => {
+    seed({ sentry_auto_import: true, sentry_auto_import_last_at: freshAt })
+    effective.sourceByField = { ...effective.sourceByField, claude_api_key_ref: 'env' }
+    const data = await loadStats()
+    expect(data.platformAttention).toBe(0)
+    expect(data.topPriority).toBe('healthy')
+  })
+
+  it('the same agent key saved by the team and never tested is attention', async () => {
+    seed({ sentry_auto_import: true, sentry_auto_import_last_at: freshAt })
+    effective.settings = { ...CONNECTED, claude_api_key_ref: 'vault://claude' }
+    const data = await loadStats()
+    expect(data.platformAttention).toBe(1)
+  })
 })
