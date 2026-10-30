@@ -17,6 +17,7 @@ import { createFakeDb, findQueries, eqValue, hasFilter } from './__stubs__/fake-
 const mocks = vi.hoisted(() => ({
   notifyTeamFixEvent: vi.fn(async () => undefined),
   dispatchPluginEventDetached: vi.fn(async () => undefined),
+  resolveLinkedSentryIssues: vi.fn(async (..._args: unknown[]) => ({ resolved: [] as string[], failed: [] as unknown[] })),
   resolveLlmKey: vi.fn(async (): Promise<unknown> => null),
   resolveLlmKeys: vi.fn(async (): Promise<unknown[]> => []),
   resolveProjectGithubToken: vi.fn(async (..._args: unknown[]): Promise<string | null> => null),
@@ -49,6 +50,9 @@ vi.mock('../../supabase/functions/_shared/github-pr.ts', () => ({
 vi.mock('../../supabase/functions/_shared/team-notify.ts', () => ({
   notifyTeamFixEvent: (...args: unknown[]) => mocks.notifyTeamFixEvent(...(args as [])),
 }))
+vi.mock('../../supabase/functions/_shared/sentry-resolve-back.ts', () => ({
+  resolveLinkedSentryIssues: (...args: unknown[]) => mocks.resolveLinkedSentryIssues(...args),
+}))
 vi.mock('../../supabase/functions/_shared/plugins.ts', () => ({
   dispatchPluginEventDetached: (...args: unknown[]) => mocks.dispatchPluginEventDetached(...(args as [])),
 }))
@@ -79,6 +83,7 @@ const TARGET = { attemptId: 'fa-1', projectId: PROJECT, reportId: REPORT, agent:
 beforeEach(() => {
   mocks.notifyTeamFixEvent.mockClear()
   mocks.dispatchPluginEventDetached.mockClear()
+  mocks.resolveLinkedSentryIssues.mockClear()
   mocks.resolveLlmKey.mockReset()
   mocks.resolveLlmKey.mockResolvedValue(null)
   mocks.resolveProjectGithubToken.mockReset()
@@ -343,6 +348,8 @@ describe('applyCloudAgentOutcome', () => {
     expect(resolved).toBeTruthy()
     expect(hasFilter(resolved!, 'in', 'status')).toBe(true)
     expect(findQueries(queries, 'fix_events', 'insert').map((q) => (q.payload as { label: string }).label)).toContain('Resolved: the agent found it already fixed')
+    // The linked Sentry issue leaves Sentry's unresolved list too (2026-10-30).
+    expect(mocks.resolveLinkedSentryIssues).toHaveBeenCalledWith(db, expect.objectContaining({ projectId: PROJECT, reportId: REPORT, prUrl: null }))
   })
 
   it('an "already fixed" verdict leaves the report open while another attempt or PR is live', async () => {
@@ -353,6 +360,7 @@ describe('applyCloudAgentOutcome', () => {
     })
     await applyCloudAgentOutcome(db, TARGET, { kind: 'completed_no_pr', summary: 'Mushi verdict: already_fixed. Nothing to change.' })
     expect(findQueries(queries, 'reports', 'update').some((q) => (q.payload as { status?: string }).status === 'resolved')).toBe(false)
+    expect(mocks.resolveLinkedSentryIssues).not.toHaveBeenCalled()
   })
 
   it('completed_no_pr with notes but no verdict is unknown, not cursor_api_error (2026-10-21)', async () => {

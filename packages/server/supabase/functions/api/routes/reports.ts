@@ -1007,7 +1007,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       // can say "resolves when the fix merges" vs "resolved in Sentry".
       db
         .from('report_external_issues')
-        .select('external_id, external_url, resolved_at')
+        .select('external_id, external_url, resolved_at, archived_at')
         .eq('report_id', reportId)
         .eq('project_id', data.project_id as string)
         .eq('system', 'sentry')
