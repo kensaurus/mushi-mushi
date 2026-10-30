@@ -105,7 +105,7 @@ const navbar = (
   <Navbar
     logo={
       <span className="whitespace-nowrap font-semibold tracking-tight">
-        {/* "— docs" drops on phones so the logo, GitHub, Console and Sign in fit one row at 390px. */}
+        {/* "— docs" drops on phones so the logo, GitHub and Start free fit one row at 390px. */}
         Mushi Mushi <span className="hidden opacity-60 sm:inline">— docs</span>
       </span>
     }
@@ -114,11 +114,10 @@ const navbar = (
     <Anchor href="https://github.com/kensaurus/mushi-mushi" aria-label="GitHub repository">
       <GitHubIcon height="24" aria-hidden="true" />
     </Anchor>
-    {/* Auth-aware chrome: renders avatar pill + "Console" + "Sign out" when
-        a session is active (populated via the postMessage bridge in
-        migrationProgress.ts), or a "Console" link + "Sign in" button when
-        signed out. Client component — SSR pass renders the anonymous shell
-        so there's never a flash of wrong identity. */}
+    {/* Auth-aware chrome: avatar pill + "Console" + "Sign out" when a session
+        is active (postMessage bridge in migrationProgress.ts). Signed out,
+        including the static HTML, "Sign in" and "Start free" go to the
+        console's login and sign-up — not "Console" to the auth-gated root. */}
     <NavbarAuthChrome />
   </Navbar>
 )
