@@ -123,6 +123,9 @@ screenshots/
 !docs/**/*.png
 !apps/docs/public/**/*.png
 !apps/admin/public/**/*.png
+# Bounties share image. layout.tsx points at /og-card.png; without this
+# exception the blanket *.png rule drops it and the live URL 404s.
+!apps/testers/public/og-card.png
 !apps/admin/public/**/*.gif
 !packages/**/assets/**/*.png
 # The MCP registry icon: packages/mcp/server.json serves it from

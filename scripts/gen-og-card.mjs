@@ -13,9 +13,9 @@
  *   colours  editorialTokens (paper, ink, vermillion), the landing page's palette
  *
  * Output: docs/social-preview/og-card.png at 1200×630 (the size Open Graph,
- * X and LinkedIn crop to), copied to apps/docs/public/social-preview/ where the
- * docs site serves it (scripts/sync-docs-og-card.mjs makes the same copy in the
- * docs prebuild, so a build never ships a stale card; keep both). The file
+ * X and LinkedIn crop to), copied to apps/docs/public/social-preview/ and
+ * apps/testers/public/ (scripts/sync-docs-og-card.mjs makes the same copies;
+ * the testers prebuild runs it). The file
  * apps/docs/lib/structured-data.ts declares the same size
  * and docs-meta.test.ts reads the PNG header, so change all three together.
  *
@@ -36,7 +36,10 @@ import { MUSHI_CANONICAL_URLS, MUSHI_OSS, MUSHI_TAGLINE_V2, editorialTokens } fr
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const OUT = join(ROOT, 'docs/social-preview/og-card.png')
-const DOCS_COPY = join(ROOT, 'apps/docs/public/social-preview/og-card.png')
+const COPIES = [
+  join(ROOT, 'apps/docs/public/social-preview/og-card.png'),
+  join(ROOT, 'apps/testers/public/og-card.png'),
+]
 const WIDTH = 1200
 const HEIGHT = 630
 
@@ -134,10 +137,12 @@ async function main() {
   } finally {
     await browser.close()
   }
-  mkdirSync(dirname(DOCS_COPY), { recursive: true })
-  copyFileSync(OUT, DOCS_COPY)
+  for (const dest of COPIES) {
+    mkdirSync(dirname(dest), { recursive: true })
+    copyFileSync(OUT, dest)
+  }
   const kb = (statSync(OUT).size / 1024).toFixed(0)
-  console.log(`[gen-og-card] wrote docs/social-preview/og-card.png (${WIDTH}×${HEIGHT}, ${kb} KB) and the apps/docs/public copy`)
+  console.log(`[gen-og-card] wrote docs/social-preview/og-card.png (${WIDTH}×${HEIGHT}, ${kb} KB) and the docs and testers public copies`)
 }
 
 main().catch((err) => {

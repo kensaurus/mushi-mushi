@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 /**
- * Copies docs/social-preview/og-card.png → apps/docs/public/social-preview/
- * so the static export serves it at the URL the metadata advertises:
- *   https://kensaur.us/mushi-mushi/docs/social-preview/og-card.png
- * (see apps/docs/app/layout.tsx + app/[[...mdxPath]]/page.tsx openGraph.images).
+ * Copies docs/social-preview/og-card.png into the static exports that
+ * advertise it:
+ *   apps/docs/public/social-preview/og-card.png
+ *     → https://kensaur.us/mushi-mushi/docs/social-preview/og-card.png
+ *   apps/testers/public/og-card.png
+ *     → https://kensaur.us/mushi-mushi/testers/og-card.png
+ * (docs layout + apps/testers/app/layout.tsx openGraph.images).
  *
- * Mirrors scripts/sync-docs-screenshots.mjs. Runs in the docs `prebuild`.
+ * The testers copy has to land in public/ before `next build`; the testers
+ * prebuild runs this script. *.png is gitignored, so the testers file is
+ * allow-listed in .gitignore or the deploy never receives it.
  *
  * Usage: node scripts/sync-docs-og-card.mjs
  */
@@ -17,18 +22,23 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SRC = join(ROOT, 'docs/social-preview/og-card.png')
-const DEST_DIR = join(ROOT, 'apps/docs/public/social-preview')
-const DEST = join(DEST_DIR, 'og-card.png')
+const COPIES = [
+  join(ROOT, 'apps/docs/public/social-preview/og-card.png'),
+  join(ROOT, 'apps/testers/public/og-card.png'),
+]
 
 async function main() {
   if (!existsSync(SRC)) {
     console.error(`[sync-og-card] source missing: ${SRC}`)
     process.exit(1)
   }
-  await mkdir(DEST_DIR, { recursive: true })
   const info = await stat(SRC)
-  await cp(SRC, DEST)
-  console.log(`[sync-og-card] copied og-card.png (${(info.size / 1024).toFixed(0)} KB) → apps/docs/public/social-preview/`)
+  const kb = (info.size / 1024).toFixed(0)
+  for (const dest of COPIES) {
+    await mkdir(dirname(dest), { recursive: true })
+    await cp(SRC, dest)
+    console.log(`[sync-og-card] copied og-card.png (${kb} KB) → ${dest.slice(ROOT.length + 1)}`)
+  }
 }
 
 main().catch((err) => {
