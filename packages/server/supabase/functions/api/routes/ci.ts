@@ -4,6 +4,8 @@
  *   POST /v1/ingest/runner               apiKeyAuth + scope runner:write, 60/min
  *        `mushi runner heartbeat` (kind 'heartbeat') and the runner job hooks
  *        (kind 'job'). Host ids arrive hashed; raw machine ids are refused.
+ *        A claim RPC error (statement timeout included) fails closed:
+ *        503 RATE_LIMIT_UNAVAILABLE, so the limit is not skipped under load.
  *        Only a runner:write key: the public SDK key (report:write, shipped in
  *        app bundles) could otherwise forge hosts and memory figures, and an
  *        mcp:write key must not sit on a runner, where CI jobs run as the
@@ -141,6 +143,9 @@ async function ingestRunner(c: Context, deps: CiRouteDeps): Promise<Response> {
   const rate = await deps.claimRateLimit(db, `project:${projectId}:runner_ingest`, RUNNER_INGEST_PER_MINUTE, 60)
   if (!rate.allowed) {
     c.header('Retry-After', String(rate.retryAfterSec ?? 60))
+    if (rate.unavailable) {
+      return jsonError(c, 'RATE_LIMIT_UNAVAILABLE', 'Runner ingest is paused for a moment. Retry shortly.', 503)
+    }
     return jsonError(c, 'RATE_LIMITED', 'Too many runner pushes. Retry in a minute.', 429)
   }
   let raw: unknown

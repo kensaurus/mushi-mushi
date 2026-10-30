@@ -58,6 +58,27 @@ export function tenantContextFromHono(c: Context): TenantLogContext {
 export interface ScopedRateLimitResult {
   allowed: boolean;
   retryAfterSec?: number;
+  /**
+   * The claim RPC failed for a reason other than quota (timeout, connection,
+   * missing function). Set only for scopes that fail closed. Callers answer
+   * 503 RATE_LIMIT_UNAVAILABLE; `allowed` is already false.
+   */
+  unavailable?: boolean;
+}
+
+/**
+ * Runner ingest is an abuse limit on a public-ish write path. A statement
+ * timeout (57014) happens under the same hot-key load an attacker would
+ * generate, so failing open there removes the limit exactly when it matters.
+ * Other scopes still fail open: a database blip must not lock out voice,
+ * skill starts, or push tests.
+ */
+const FAIL_CLOSED_SCOPE_SUFFIX = ':runner_ingest'
+/** Short on purpose. Job hooks run inline and must not be told to wait long. */
+const FAIL_CLOSED_RETRY_SEC = 5
+
+function failsClosedOnClaimError(scopeKey: string): boolean {
+  return scopeKey.endsWith(FAIL_CLOSED_SCOPE_SUFFIX)
 }
 
 /**
@@ -88,6 +109,8 @@ export async function rateLimitActorId(scopeKey: string): Promise<string> {
  * pipeline starts, push self-test — was silently disabled. That is the same
  * failure the generalize-actor migration was written to fix, so the unexpected
  * -error branch now logs at error level to keep a future signature drift loud.
+ * `*:runner_ingest` is the exception: any non-quota RPC error, including
+ * Postgres 57014 (statement timeout), fails closed.
  */
 export async function claimTenantRateLimit(
   db: SupabaseClient,
@@ -106,6 +129,15 @@ export async function claimTenantRateLimit(
   if (msg.includes('rate_limit_exceeded')) {
     const match = msg.match(/retry_after=(\d+)/);
     return { allowed: false, retryAfterSec: match ? parseInt(match[1]!, 10) : windowSec };
+  }
+  if (failsClosedOnClaimError(scopeKey)) {
+    // Refusing is the limit. A timeout under load must not let the request through.
+    tenantLog.error('scoped_rate_limit_claim failed — refusing request', {
+      scopeKey,
+      err: msg,
+      code: 'code' in error && error.code ? String(error.code) : null,
+    });
+    return { allowed: false, retryAfterSec: FAIL_CLOSED_RETRY_SEC, unavailable: true };
   }
   // Fail open on genuine infra errors so a database blip cannot lock out
   // legitimate traffic — but log loudly, because a silent fail-open here is

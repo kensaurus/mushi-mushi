@@ -30,7 +30,7 @@ let tenant: Tenant
 /** The deployed signature, verified against prod `pg_proc` on 2026-09-12. */
 const DEPLOYED_ARGS = ['p_user_id', 'p_scope', 'p_max_per_window', 'p_window'] as const
 
-function recordingDb(error: { message: string } | null = null) {
+function recordingDb(error: { message: string; code?: string } | null = null) {
   const calls: Array<{ fn: string; args: Record<string, unknown> }> = []
   return {
     calls,
@@ -104,5 +104,28 @@ describe('claimTenantRateLimit RPC contract', () => {
   it('fails open on an unexpected RPC error rather than blocking traffic', async () => {
     const db = recordingDb({ message: 'connection reset by peer' })
     expect((await tenant.claimTenantRateLimit(db as never, 'project:p1:voice', 30, 60)).allowed).toBe(true)
+  })
+
+  it('fails open on a statement timeout for scopes that are not ingest abuse limits', async () => {
+    const db = recordingDb({ message: 'canceling statement due to statement timeout', code: '57014' })
+    expect((await tenant.claimTenantRateLimit(db as never, 'project:p1:voice', 30, 60)).allowed).toBe(true)
+  })
+
+  it('fails closed when runner_ingest hits a statement timeout', async () => {
+    const db = recordingDb({ message: 'canceling statement due to statement timeout', code: '57014' })
+    const out = await tenant.claimTenantRateLimit(db as never, 'project:p1:runner_ingest', 60, 60)
+    expect(out.allowed).toBe(false)
+    expect(out.unavailable).toBe(true)
+    expect(out.retryAfterSec).toBe(5)
+  })
+
+  it('fails closed on any other runner_ingest RPC error, and keeps a quota hit as a normal denial', async () => {
+    const down = recordingDb({ message: 'remaining connection slots are reserved', code: '53300' })
+    const refused = await tenant.claimTenantRateLimit(down as never, 'project:p1:runner_ingest', 60, 60)
+    expect(refused).toEqual({ allowed: false, retryAfterSec: 5, unavailable: true })
+
+    const quota = recordingDb({ message: 'rate_limit_exceeded: scope=project:p1:runner_ingest count=61 cap=60 window=00:01:00' })
+    const limited = await tenant.claimTenantRateLimit(quota as never, 'project:p1:runner_ingest', 60, 60)
+    expect(limited).toEqual({ allowed: false, retryAfterSec: 60 })
   })
 })
