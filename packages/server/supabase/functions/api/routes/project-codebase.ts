@@ -7,7 +7,7 @@ import { dbError, callerProjectIds, resolveOwnedProject, callerCanAccessProject 
 import { buildImportEdges, detectExploreLayer, getProjectCodebaseScope } from '../../_shared/codebase-understand.ts';
 import { pathMatchesScope } from '../../_shared/codebase-scope.ts';
 import { unverifiedGithubInstallsAllowed } from '../../_shared/github-install-trust.ts';
-import { resolveProjectGithubToken } from '../../_shared/github.ts';
+import { platformGithubTokenFor, resolveProjectGithubToken } from '../../_shared/github.ts';
 import { resolveBranchForConnect } from '../../_shared/github-branch.ts';
 import { dereferenceMaybeVault, storeSettingsSecret } from '../../_shared/settings-secrets.ts';
 import { isVaultRef } from '../../_shared/vault-ref.ts';
@@ -322,10 +322,10 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     // Check the same resolution chain the indexer sweep uses:
     //   1. installation_id in this request → GitHub App will mint a token at sweep time
     //   2. project-level PAT ref in project_settings
-    //   3. GITHUB_TOKEN env fallback (self-hosted operator credential)
+    //   3. the platform GITHUB_TOKEN, on the operator's own apps only
     // The org-level PAT and the GitHub App env (GITHUB_APP_ID+GITHUB_APP_PRIVATE_KEY)
     // also cover it when installation_id is present, so 1 or 3 is sufficient.
-    if (installationId === null && !Deno.env.get('GITHUB_TOKEN')) {
+    if (installationId === null && !(await platformGithubTokenFor(db, projectId))) {
       // Check project-level PAT.
       const { data: settingsCheck } = await db
         .from('project_settings')

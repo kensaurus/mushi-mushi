@@ -24,6 +24,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import type { PlatformSettings } from './integration-probes.ts'
 import { log as rootLog } from './logger.ts'
+import { isOperatorProject } from './operator-gate.ts'
 
 // Deno global — edge-function runtime only.
 declare const Deno: { env: { get(name: string): string | undefined } }
@@ -67,6 +68,12 @@ const FIELD_ENV_VAR: Partial<Record<PlatformField, string>> = {
   slack_bot_token_ref: 'SLACK_BOT_TOKEN',
   linear_api_key_ref: 'LINEAR_API_KEY',
 }
+
+/** Env-backed fields whose credential is the operator's own account. */
+const OPERATOR_ONLY_ENV_FIELDS: ReadonlySet<PlatformField> = new Set<PlatformField>([
+  'github_installation_token_ref',
+  'slack_bot_token_ref',
+])
 
 /**
  * Fields present in organization_integration_settings (mirrors the migration
@@ -173,6 +180,16 @@ export async function resolveEffectivePlatformSettings(
     orgRow = (orgData ?? {}) as Record<string, string | null>
   }
 
+  // Env credentials that belong to the operator's own accounts back only the
+  // operator's own apps (see platformGithubTokenFor); elsewhere they are not a
+  // source, so the card never tells another app it may leave the field empty.
+  let operatorProject: boolean | null = null
+  const envAllowed = async (field: PlatformField): Promise<boolean> => {
+    if (!OPERATOR_ONLY_ENV_FIELDS.has(field)) return true
+    operatorProject ??= await isOperatorProject(db as never, projectId)
+    return operatorProject
+  }
+
   // Step 3: Merge project → org → env, tracking source per field.
   const settings: Record<string, string | null> = {}
   const sourceByField: Record<string, FieldSource> = {}
@@ -195,7 +212,7 @@ export async function resolveEffectivePlatformSettings(
     const envVar = FIELD_ENV_VAR[field]
     if (envVar) {
       const envVal = Deno.env.get(envVar)
-      if (envVal) {
+      if (envVal && (await envAllowed(field))) {
         // For env-backed fields, store a sentinel so callers (probes) that
         // already do Deno.env.get() directly still work without double-reading.
         // We set the effective value to null here — the existing probe logic

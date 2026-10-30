@@ -34,7 +34,7 @@ import { requeueReviewForNewHead } from '../_shared/fix-review-db.ts';
 import { canonicalPrUrl } from '../_shared/pr-substance.ts';
 import { classifyIndexerError } from '../_shared/sweep-error-classifier.ts';
 import { fetchRepoTreeWithBranchFallback, lookupBranchHeadSha } from '../_shared/github-branch.ts';
-import { isAdvisoryCheckRun, parseGithubRepoUrl, resolveProjectGithubToken as resolveCiGithubToken } from '../_shared/github.ts';
+import { isAdvisoryCheckRun, parseGithubRepoUrl, platformGithubTokenFor, resolveProjectGithubToken as resolveCiGithubToken } from '../_shared/github.ts';
 import { applyHeadCheckRollup, type HeadCheckDb } from '../_shared/check-run-head.ts';
 import {
   ciGithub,
@@ -1045,8 +1045,8 @@ async function resolveProjectGithubToken(
     }
   }
 
-  // Step 3: env fallback.
-  return Deno.env.get('GITHUB_TOKEN') ?? null;
+  // Step 3: the platform token, for the operator's own apps only.
+  return platformGithubTokenFor(db, projectId);
 }
 
 /**

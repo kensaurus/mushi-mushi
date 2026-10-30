@@ -28,7 +28,7 @@ import { jwtAuth } from '../../_shared/auth.ts'
 import { log } from '../../_shared/logger.ts'
 import { fetchWithTimeout } from '../../_shared/http.ts'
 import { runInBackground } from '../../_shared/background.ts'
-import { mintInstallationAccess, parseGithubRepoUrl, resolveProjectGithubToken, type GithubRepoRef } from '../../_shared/github.ts'
+import { mintInstallationAccess, parseGithubRepoUrl, platformGithubTokenFor, resolveProjectGithubToken, type GithubRepoRef } from '../../_shared/github.ts'
 import { readFollowupKeyGap } from '../../_shared/setup-gap-followup.ts'
 import {
   abilitiesFromClassicScopes,
@@ -130,7 +130,8 @@ export interface SetupGapsDeps {
   now: () => Date
   mintInstallation: typeof mintInstallationAccess
   resolvePat: (db: Db, projectId: string) => Promise<string | null>
-  platformToken: () => string | null
+  /** The platform token when this app may use it (the operator's own apps only). */
+  platformToken: (db: Db, projectId: string) => Promise<string | null>
   /** A GitHub GET: its status and the classic-token scope header (null when GitHub sent none). */
   githubGet: (token: string, path: string) => Promise<{ status: number; scopes: string | null } | null>
   readDispatchers: typeof readDispatchers
@@ -140,7 +141,7 @@ export const defaultSetupGapsDeps: SetupGapsDeps = {
   now: () => new Date(),
   mintInstallation: mintInstallationAccess,
   resolvePat: (db, projectId) => resolveProjectGithubToken(db, projectId, null, { allowEnvFallback: false }),
-  platformToken: () => Deno.env.get('GITHUB_TOKEN') ?? null,
+  platformToken: (db, projectId) => platformGithubTokenFor(db, projectId),
   githubGet: async (token, path) => {
     const res = await fetchWithTimeout(
       `https://api.github.com${path}`,
@@ -195,7 +196,7 @@ async function probeRepo(db: Db, projectId: string, repo: GithubRepoRef, install
     // 3. Mushi's own fallback token is never probed: the repo URL is the
     // tenant's choice, so the answer would tell any app owner what Mushi's
     // token can reach.
-    return { projectId, repo: name, source: deps.platformToken() ? 'platform' : 'none', abilities: null, readError: null }
+    return { projectId, repo: name, source: (await deps.platformToken(db, projectId)) ? 'platform' : 'none', abilities: null, readError: null }
   }
   const token = pat
   const head = await deps.githubGet(token, path)
