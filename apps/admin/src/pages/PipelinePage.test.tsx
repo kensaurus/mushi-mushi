@@ -370,6 +370,35 @@ describe('PipelinePage', () => {
     expect(q('pipeline-intake-not-recorded')!.textContent).toBe('not recorded yet')
     expect(q('pipeline-intake-p1-rejected')).toBeNull()
     expect(q('pipeline-intake')!.textContent).toContain('no deploy recorded in 14 days')
+    // An old deploy with no newer merge is not a warning (9f64a77b).
+    expect(q('pipeline-intake-p1-deploy-lag')).toBeNull()
+  })
+
+  it('renders how to send a deploy on a stuck merge, and flags a merge newer than the last deploy', async () => {
+    const data = state.data as PipelineData
+    const merged = data.stages.find((s) => s.id === 'merged')!
+    merged.groups.push({
+      id: 'not_deployed',
+      stage: 'merged',
+      tone: 'stuck',
+      label: '1 fix: merged over a day ago, no deploy seen since',
+      count: 1,
+      oldestAt: '2026-10-24T12:00:00Z',
+      actions: [],
+      settings: {
+        label: 'How to send a deploy',
+        to: '/recipe',
+        hint: 'POST /v1/ingest/recipe/events with deploy.completed',
+      },
+      items: [item('f3', { since: '2026-10-24T12:00:00Z' })],
+    })
+    data.projects[0] = { id: 'p1', name: 'glot.it', lastDeploy: { at: '2026-10-13T00:00:00Z', version: '1.1.0', ok: true } }
+    await render()
+    expect(q('pipeline-group-not_deployed-settings')!.getAttribute('href')).toBe('/recipe')
+    expect(q('pipeline-group-not_deployed-settings-hint')!.textContent).toContain('deploy.completed')
+    expect(q('pipeline-intake-p1-deploy-lag')!.textContent).toBe('a fix merged after the last deploy seen')
+    expect(q('pipeline-intake-deploy-howto')!.textContent).toContain('"type":"deploy.completed"')
+    expect(q('pipeline-intake-deploy-howto')!.textContent).toContain('X-Mushi-Api-Key')
   })
 
   it('the Workers tab reads the local workers instead of the pipeline', async () => {

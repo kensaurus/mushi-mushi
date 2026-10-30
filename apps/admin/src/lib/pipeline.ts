@@ -3,7 +3,9 @@
  * PURPOSE: The bug-to-merge pipeline view (/pipeline): its read model and its
  *          one-click actions. The server decides stages and stuck groups
  *          (_shared/pipeline-view.ts); this file names the actions, says what
- *          each one changes before it runs, and calls its route:
+ *          each one changes before it runs, and calls its route.
+ *          deploysBehindMerges flags an app whose newest undeployed merge
+ *          is newer than the last deploy seen (report 9f64a77b).
  *
  *            re_review, rerun_ci, queue_merge → the existing fix and merge-queue routes
  *            dismiss                          → the report's own close route (PATCH /v1/admin/reports/:id)
@@ -118,6 +120,52 @@ export function openerSummary(dispatchers: DispatcherStatus[]): { server: number
     if (!s && !l) nobody++
   }
   return { server, local, nobody }
+}
+
+/**
+ * What CI posts so a merged fix can leave Merged (report 9f64a77b).
+ * `targetId` is a production deploy target on the Recipe page.
+ * The header is a project API key kept in CI secrets, not the key shipped in the app.
+ */
+export const DEPLOY_EVENT_BODY =
+  '{"events":[{"type":"deploy.completed","targetId":"web","environment":"production","commit":"<sha>","ok":true}]}'
+
+export interface DeployLag {
+  projectId: string
+  name: string
+  /** Newest merge still waiting on a deploy, inside the pipeline window. */
+  mergedAt: string
+  lastDeployAt: string | null
+}
+
+/** `since` on these groups is the merge time. The deployed group's `since` is the deploy. */
+const UNDEPLOYED_MERGE_GROUPS = new Set(['merged', 'not_deployed'])
+
+/**
+ * Apps whose newest still-undeployed merge is newer than the last deploy
+ * Mushi has seen, or that have a merge and no deploy at all. A deploy that
+ * is merely old, with no newer merge, is not a lag.
+ */
+export function deploysBehindMerges(data: Pick<PipelineData, 'projects' | 'stages'>): DeployLag[] {
+  const mergedAt = new Map<string, string>()
+  for (const stage of data.stages) {
+    for (const group of stage.groups) {
+      if (!UNDEPLOYED_MERGE_GROUPS.has(group.id)) continue
+      for (const item of group.items) {
+        const cur = mergedAt.get(item.projectId)
+        if (!cur || item.since > cur) mergedAt.set(item.projectId, item.since)
+      }
+    }
+  }
+  const lags: DeployLag[] = []
+  for (const project of data.projects) {
+    const at = mergedAt.get(project.id)
+    if (!at) continue
+    const last = project.lastDeploy?.at ?? null
+    if (last && Date.parse(last) >= Date.parse(at)) continue
+    lags.push({ projectId: project.id, name: project.name, mergedAt: at, lastDeployAt: last })
+  }
+  return lags
 }
 
 export interface PipelineData {
