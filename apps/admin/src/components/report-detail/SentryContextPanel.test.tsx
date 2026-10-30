@@ -31,6 +31,24 @@ describe('SentryContextPanel for an imported Sentry issue', () => {
     expect(done).not.toContain('when the fix merges')
   })
 
+  it('a closed report with an open Sentry issue offers to close it here (2026-10-30)', () => {
+    const link = { external_id: '4501', external_url: null, resolved_at: null }
+    const dismissed = html({ sentryLinks: [link], reportId: 'r1', reportStatus: 'dismissed' })
+    expect(dismissed).toContain('Still open in Sentry')
+    expect(dismissed).toContain('Archive in Sentry')
+    expect(dismissed).not.toContain('when the fix merges')
+
+    expect(html({ sentryLinks: [link], reportId: 'r1', reportStatus: 'fixed' })).toContain('Resolve in Sentry')
+    // An open report waits for its fix; no button.
+    const open = html({ sentryLinks: [link], reportId: 'r1', reportStatus: 'fixing' })
+    expect(open).toContain('Resolves in Sentry when the fix merges')
+    expect(open).not.toContain('data-testid="sentry-close"')
+    // Archived: said so, and no button again.
+    const archived = html({ sentryLinks: [{ ...link, archived_at: new Date(Date.now() - 60_000).toISOString() }], reportId: 'r1', reportStatus: 'dismissed' })
+    expect(archived).toContain('Archived in Sentry')
+    expect(archived).not.toContain('data-testid="sentry-close"')
+  })
+
   it('still renders nothing for a report with no Sentry data at all', () => {
     expect(html({})).toBe('')
   })

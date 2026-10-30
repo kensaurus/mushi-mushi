@@ -38,6 +38,7 @@ import { generateCursorCloudBranchName, validateFixBranchName } from './github-p
 import { notifyTeamFixEvent } from './team-notify.ts'
 import { dispatchPluginEventDetached } from './plugins.ts'
 import { enqueueFixReview } from './fix-review-db.ts'
+import { resolveLinkedSentryIssues } from './sentry-resolve-back.ts'
 import {
   CursorApiError,
   buildV0WebhookSecret,
@@ -1119,6 +1120,18 @@ async function resolveAlreadyFixed(db: SupabaseClient, target: CloudAgentOutcome
       dedupe_key: `already-fixed-resolved:${target.attemptId}`,
       payload: { agent: target.agent, verdict: 'already_fixed' },
     })
+    // This write skips report-transition, so close the Sentry side here too.
+    // Without it a report imported from Sentry read resolved in Mushi while
+    // Sentry kept listing the issue (GLOT-IT-BE, TSUMAGOI-35, 2026-10-30).
+    // A recurrence regresses the Sentry issue and reopens the report.
+    const sentry = await resolveLinkedSentryIssues(db, {
+      projectId: target.projectId,
+      reportId: target.reportId,
+      fixAttemptId: target.attemptId,
+      prUrl: null,
+      note: 'the fix agent found it already fixed, so no pull request was needed.',
+    })
+    if (sentry.failed.length) alog.error('Sentry resolve on already-fixed failed', { reportId: target.reportId, failed: sentry.failed })
   } catch (err) {
     alog.warn('already-fixed report not resolved', { reportId: target.reportId, err: err instanceof Error ? err.message : String(err) })
   }

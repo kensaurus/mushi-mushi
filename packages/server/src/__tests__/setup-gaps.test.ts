@@ -23,6 +23,7 @@ import {
   followupKeyGap,
   forAudience,
   githubAccessGap,
+  llmBudgetGap,
   noRepoGap,
   SETUP_GAPS_CACHE_MS,
   slackGap,
@@ -232,5 +233,20 @@ describe('knownWorkflowsAbility', () => {
     expect(knownWorkflowsAbility(P, 'acme/app', 1000)).toBe('no')
     expect(knownWorkflowsAbility('1000000b-0000-4000-8000-000000000000', 'acme/app', 1000)).toBeNull()
     expect(knownWorkflowsAbility(P, 'acme/app', 10 * 60_000)).toBeNull()
+  })
+})
+
+describe('llmBudgetGap (MUSHI-MUSHI-SERVER-3J, 2026-10-30)', () => {
+  const resetsAt = '2026-11-01T00:00:00.000Z'
+  it('is a gap with the spend, the budget, the reset day and a button to the budget field when the app is over it', () => {
+    const gap = llmBudgetGap(P, { budgetUsd: 50, spendUsd: 50.02, over: true, resetsAt })
+    expect(gap).toMatchObject({ id: 'llm_budget', status: 'gap', fixHref: '/settings#spend-limits', audience: 'app_owner' })
+    expect(gap.summary).toContain('$50.02 of its $50.00')
+    expect(gap.summary).toContain('2026-11-01')
+  })
+  it('passes under the budget and with no budget, and is unknown when the read failed', () => {
+    expect(llmBudgetGap(P, { budgetUsd: 50, spendUsd: 12, over: false, resetsAt })).toMatchObject({ status: 'ok', summary: '$12.00 of $50.00 spent this month.' })
+    expect(llmBudgetGap(P, { budgetUsd: null, spendUsd: 0, over: false, resetsAt }).status).toBe('ok')
+    expect(llmBudgetGap(P, undefined).status).toBe('unknown')
   })
 })

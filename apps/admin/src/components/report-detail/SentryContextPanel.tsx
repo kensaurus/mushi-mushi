@@ -16,7 +16,9 @@
  */
 
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Section, Badge, CodeValue } from '../ui'
+import { Section, Badge, Btn, CodeValue } from '../ui'
+import { apiFetch } from '../../lib/supabase'
+import { useToast } from '../../lib/toast'
 import { formatRelative as formatAgo } from '../ui/metrics'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { IconBolt, IconExternalLink, IconClock, IconLink, IconAlertTriangle } from '../icons'
@@ -44,6 +46,24 @@ interface Props {
   sentryLinks?: ReportSentryLink[] | null
   /** Tags surface — also rendered as filter chips. */
   tags?: Record<string, string | number | boolean> | null
+  /** With the report's status, a closed report offers to close its Sentry issues here. */
+  reportId?: string
+  reportStatus?: string | null
+  /** Called after Sentry issues were closed, so the page reads the report again. */
+  onSentryClosed?: () => void
+}
+
+/** What closing a report's open Sentry issues does: mirrors sentryCloseKind in api/routes/report-sentry.ts. */
+function sentryCloseKind(status: string | null | undefined): 'resolve' | 'archive' | null {
+  if (status === 'fixed' || status === 'resolved') return 'resolve'
+  if (status === 'dismissed') return 'archive'
+  return null
+}
+
+interface SentryCloseReply {
+  kind: 'resolve' | 'archive'
+  done: string[]
+  failed: Array<{ issueId: string; error: string }>
 }
 
 interface UnifiedCrumb {
@@ -197,7 +217,12 @@ export function SentryContextPanel({
   sentryIssueUrl,
   sentryLinks,
   tags,
+  reportId,
+  reportStatus,
+  onSentryClosed,
 }: Props) {
+  const toast = useToast()
+  const [closing, setClosing] = useState(false)
   const unified = useMemo(
     () => unifyTimelines(mushiBreadcrumbs, sentryContext?.breadcrumbs),
     [mushiBreadcrumbs, sentryContext?.breadcrumbs],
@@ -214,6 +239,28 @@ export function SentryContextPanel({
   const transactionName = sentryContext?.transactionName ?? null
   const sentryUser = sentryContext?.user ?? null
   const links = sentryLinks ?? []
+  const closeKind = sentryCloseKind(reportStatus)
+  const openLinks = links.filter((l) => !l.resolved_at && !l.archived_at)
+  const canClose = Boolean(reportId && closeKind && openLinks.length > 0)
+
+  async function closeInSentry() {
+    if (!reportId) return
+    setClosing(true)
+    try {
+      const res = await apiFetch<SentryCloseReply>(`/v1/admin/reports/${reportId}/sentry/close`, { method: 'POST' })
+      if (!res.ok) {
+        toast.error('Sentry was not changed', res.error?.message ?? 'Retry in a moment.')
+        return
+      }
+      const done = res.data?.done.length ?? 0
+      const failed = res.data?.failed.length ?? 0
+      if (failed > 0) toast.error(`${failed} Sentry issue${failed === 1 ? '' : 's'} not changed`, res.data?.failed[0]?.error ?? 'Check the Sentry token.')
+      else if (done > 0) toast.success(res.data?.kind === 'archive' ? 'Archived in Sentry' : 'Resolved in Sentry', 'Sentry reopens it if the error comes back.')
+      onSentryClosed?.()
+    } finally {
+      setClosing(false)
+    }
+  }
   const issueUrl = sentryIssueUrl ?? sentryContext?.issueUrl ?? links.find((l) => l.external_url)?.external_url ?? null
 
   const hasSentry =
@@ -273,12 +320,30 @@ export function SentryContextPanel({
                 <Badge className={CHIP_TONE.okSubtle} title={new Date(link.resolved_at).toLocaleString()}>
                   Resolved in Sentry {formatAgo(link.resolved_at)}
                 </Badge>
+              ) : link.archived_at ? (
+                <Badge className={CHIP_TONE.neutral} title={new Date(link.archived_at).toLocaleString()}>
+                  Archived in Sentry {formatAgo(link.archived_at)}
+                </Badge>
+              ) : closeKind ? (
+                <Badge className={CHIP_TONE.warnSubtle}>Still open in Sentry</Badge>
               ) : (
                 <Badge className={CHIP_TONE.neutral}>Resolves in Sentry when the fix merges</Badge>
               )}
             </li>
           ))}
         </ul>
+      )}
+      {canClose && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-2xs text-fg-muted">
+          <Btn size="sm" variant="primary" loading={closing} onClick={() => void closeInSentry()} data-testid="sentry-close">
+            {closeKind === 'archive' ? 'Archive in Sentry' : 'Resolve in Sentry'}
+          </Btn>
+          <span>
+            {closeKind === 'archive'
+              ? 'This report is closed, so Sentry can stop listing it. Sentry brings it back if it escalates.'
+              : 'This report is fixed, so Sentry can stop listing it. Sentry reopens it if the error comes back.'}
+          </span>
+        </div>
       )}
 
       {hasSentry && (
