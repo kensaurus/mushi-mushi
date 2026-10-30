@@ -169,10 +169,10 @@ interface LaneRuntime {
   last: string
 }
 
-/** @internal Exported for tests only. The local worker's state machine; `tick()` is one heartbeat and one pass over the lanes. */
 /** Heartbeats in a row on which the server must refuse the key before the worker stops for good. */
-export const KEY_REFUSALS_TO_STOP = 3
+const KEY_REFUSALS_TO_STOP = 3
 
+/** @internal Exported for tests only. The local worker's state machine; `tick()` is one heartbeat and one pass over the lanes. */
 export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
   const lanes: LaneRuntime[] = cfg.lanes.map((local) => ({
     local,
