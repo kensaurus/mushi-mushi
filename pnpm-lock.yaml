@@ -1473,6 +1473,12 @@ importers:
       '@ai-sdk/ui-utils':
         specifier: 1.2.11
         version: 1.2.11(zod@3.25.76)
+      '@electric-sql/pglite':
+        specifier: 0.5.11
+        version: 0.5.11
+      '@electric-sql/pglite-pgvector':
+        specifier: 0.0.12
+        version: 0.0.12(@electric-sql/pglite@0.5.11)
       '@mushi-mushi/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
@@ -2702,6 +2708,14 @@ packages:
 
   '@dimforge/rapier3d-compat@0.12.0':
     resolution: {integrity: sha512-uekIGetywIgopfD97oDL5PfeezkFpNhwlzlaEYNOA0N6ghdsOvh/HYjSMek5Q2O1PYvRSDFcqFVJl4r4ZBwOow==}
+
+  '@electric-sql/pglite-pgvector@0.0.12':
+    resolution: {integrity: sha512-n3TJqjWI9FXwFrGhuTVMghef8SL3E6nb4lxZnxYFW3UTg/7/hMUWfz7v2y0+idWzEsQ/raRpMNCsw9zvSdC/SA==}
+    peerDependencies:
+      '@electric-sql/pglite': 0.5.11
+
+  '@electric-sql/pglite@0.5.11':
+    resolution: {integrity: sha512-SWuqsTjA4DDWqgZ05PC1RJaq8e00p5KACxbqaikDFQ8dIGA0SLRzuPniky7IW+q/c5RDNMdEXwv7mFBWIx9Hxw==}
 
   '@emnapi/core@1.11.2':
     resolution: {integrity: sha512-TC8MkTuZUtcTSiFeuC0ksCh9QIJ5+F21MvZ4Wn4ORfYaFJ/0dsiudv5tVkejgwZlwQ39jL9WWDe2lz8x0WglOA==}
@@ -11878,6 +11892,12 @@ snapshots:
   '@dagrejs/graphlib@4.0.5': {}
 
   '@dimforge/rapier3d-compat@0.12.0': {}
+
+  '@electric-sql/pglite-pgvector@0.0.12(@electric-sql/pglite@0.5.11)':
+    dependencies:
+      '@electric-sql/pglite': 0.5.11
+
+  '@electric-sql/pglite@0.5.11': {}
 
   '@emnapi/core@1.11.2':
     dependencies:
