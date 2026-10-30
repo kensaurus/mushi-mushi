@@ -1849,21 +1849,26 @@ as **draft** pull requests. Nothing lands on your main branch without a merge.
 
 **Do this:**
 
-1. Open **Connect** and find the **GitHub** section, or open
-   **Integrations → GitHub (code repo)**.
-2. Install the Mushi Mushi GitHub App. GitHub's own install screen asks which
-   repositories the app may see. Pick only the repos this app lives in.
-3. Set the **Default branch** if it is not `main`.
+1. Open **Connect** (or **Integrations**) and press **Connect GitHub**.
+2. Sign in to GitHub. If the Mushi Mushi GitHub App is not on your account or
+   organization yet, GitHub asks you to install it first. Pick only the
+   repositories this app lives in.
+3. Pick the repository. The list shows only repositories you can open, with
+   the one named like your app first. Mushi Mushi saves it with its default
+   branch.
 
-**Self-hosted, or no GitHub App?** Use a fine-grained personal access token
-instead. It needs **Contents: write** and **Pull requests: write** on the repo.
-Add **Actions secrets: read and write** only if you want Mushi Mushi to write
-CI secrets for you. Paste it as the **Installation token** on the GitHub card.
+Each teammate connects with their own GitHub sign-in, and sees only the
+repositories they can open themselves.
 
-**Check it worked:** on the GitHub card, click **Test connection** and get a
-green result. Then open **Set up** and read **Setup gaps**: the GitHub access
-line for your repo should not be red. See [Integrations](/admin/integrations)
-and [Set up](/admin/onboarding#setup-gaps).
+**Self-hosted, or no GitHub App?** Open **Use a GitHub token instead** under
+the GitHub card and paste a fine-grained personal access token. It needs
+**Contents: write** and **Pull requests: write** on the repo. Add **Secrets:
+read and write** only if you want Mushi Mushi to write CI secrets for you.
+
+**Check it worked:** the GitHub card reads **Connected: owner/repo**. Then open
+**Set up** and read **Setup gaps**: the GitHub access line for your repo should
+not be red. See [Integrations](/admin/integrations) and
+[Set up](/admin/onboarding#setup-gaps).
 
 ## 3. Install the SDK in your app
 
@@ -1941,8 +1946,8 @@ Who gets what:
 | The billing contact | Usage emails at 50%, 80% and 100% of included diagnoses | **Team → Billing** (defaults to the owner) |
 | The person who reported the bug | Messages in your app when it is diagnosed and fixed | **Reporter updates** |
 
-**Check it worked:** click **Test connection** on the Slack or Discord card. A
-test message should arrive in the channel. See [Slack app](/plugins/slack) and
+**Check it worked:** press **Send test** on the Slack, Discord or Teams card.
+A test message should arrive in the channel. See [Slack app](/plugins/slack) and
 [Discord](/plugins/discord).
 
 ## 6. AI keys and cost
@@ -1997,6 +2002,13 @@ Decide how a fix gets from a draft pull request to your main branch.
    it on later, if you want, once you trust the gates.
 3. Choose **Batch** (release trains) or **Each PR** in the **Merge when ready**
    panel on **Fixes**.
+4. Decide how much CI a fix pull request runs. Open **CI runners → CI
+   settings**. Where your workflows read `vars.CI_PROFILE`, **Checks on fix
+   pull requests** offers **Economy** (the default: fix pull requests may skip
+   slow, billed checks, which still run before a deploy) or **Thorough**
+   (every check on every pull request). A move to GitHub-hosted runners
+   switches back on its own after the time you pick. See
+   [CI runners](/operating/ci-runners).
 
 **Check it worked:** open **Pipeline**. Each stage shows a count, and nothing
 is stuck without a reason. See [Agent PR review](/concepts/agent-pr-review),
@@ -2060,7 +2072,7 @@ See [Security](/security) for the full summary.
 | Area | Done when |
 | --- | --- |
 | Team | Every developer has accepted an invite with the right role |
-| GitHub | **Test connection** is green; Setup gaps shows no red GitHub line |
+| GitHub | The GitHub card reads **Connected: owner/repo**; Setup gaps shows no red GitHub line |
 | SDK | The report button shows in production; **App checked in** is on |
 | Secrets | The key is in `.env.local`, hosting and CI, not in git |
 | Editor | Each developer's editor lists the Mushi Mushi tools |
@@ -18962,10 +18974,10 @@ and shows a fused verdict:
 **One-click sync:** `POST /v1/admin/projects/:id/sync-ci-secrets` mints a
 scoped ingest key and writes each required var via sealed-box encryption.
 
-The Mushi GitHub App requests `Contents` + `Pull requests` only — not Actions
-secrets. Auto-write works when a fine-grained PAT with **Actions secrets: Read
-and write** is stored in project settings. Otherwise the card expands guided
-`gh secret set` commands and a CI `env:` YAML block.
+The Mushi GitHub App can read Actions secrets but not write them. Auto-write
+works when a fine-grained token with **Secrets: Read and write** is stored in
+the project's settings. Otherwise the card shows the `gh secret set` commands
+to run and the `env:` block to add to your CI workflow.
 
 See also: [Self-hosting](/self-hosting) · [`AGENTS.md` native CI section](https://github.com/kensaurus/mushi-mushi/blob/master/AGENTS.md#native-ci-secrets-diagnostic--auto-write-jun-2026)
 
@@ -18992,8 +19004,10 @@ CLI equivalent: see [SDK reference → CLI](/sdks/cli) (`mushi upgrade` for loca
 ## Quick path (5 minutes)
 
 ### Connect GitHub
-Install the Mushi GitHub App on your primary repo (or paste a fine-grained PAT
-with Contents + PR + Actions secrets if you need CI auto-write).
+Press **Connect GitHub**, sign in to GitHub and pick your repository. The list
+shows only repositories you can open, with the one named like your app first.
+If the Mushi GitHub App is not on your account yet, GitHub asks you to install
+it first.
 
 ### Install SDK
 Copy the framework snippet → paste into your app → deploy or run locally.
@@ -21043,12 +21057,16 @@ For more event routing (Discord, Teams, Zapier and more, or your own webhooks), 
 ## Common tasks
 
 ### Connecting GitHub so the fix agent can open PRs
-1. Install the Mushi Mushi GitHub App on your repo, or create a fine-grained PAT with
-   Contents: write and Pull requests: write.
-2. On the **GitHub (code repo)** card, click **Configure integration**.
-3. Enter the repo URL, default branch and the installation token.
-4. Click **Save**, then **Test connection**, and confirm the probe returns green.
-5. Open [Pull requests](/admin/repo): the header should show your connected repo.
+1. On the **Your code on GitHub** card, press **Connect GitHub**.
+2. Sign in to GitHub. If the Mushi Mushi GitHub App is not on your account or
+   organization yet, GitHub asks you to install it and choose its repositories.
+3. Pick the repository. Mushi Mushi lists only repositories you can open, with
+   the one named like your app first, and saves it with its default branch.
+4. Open [Pull requests](/admin/repo): the header shows your connected repo.
+
+Self-hosted, or no GitHub App? Open **Use a GitHub token instead** under the
+card and paste a fine-grained token with Contents: write and Pull requests:
+write.
 
 ### Bringing Sentry errors into Mushi Mushi
 1. On the **Sentry** card, click **Configure integration**.
