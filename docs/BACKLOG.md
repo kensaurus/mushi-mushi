@@ -8,6 +8,7 @@ regenerating it.** Plans stay the source of truth for their own detail
 parked work is visible in one place.
 
 - **Last regenerated:** 2026-10-30 (fifth run; delta against 2026-10-27 below)
+- **Added 2026-10-30 (runner ingest rate limit):** BL-198, hot-row lock contention in `scoped_rate_limit_claim`. A statement timeout on that row now fails closed for runner ingest.
 - **Delta 2026-10-30 (journey live pass):** 5 new (BL-192..BL-196: live from-scratch GitHub install, console CI settings, demo-app heartbeat warning, raw backend host on GitHub authorize, Langfuse probe per app) · 1 closed (BL-173). Later the same day: 5 closed (BL-193, BL-194, BL-195, BL-196, and BL-197 found and fixed the same day).
 - **Delta 2026-10-30:** 12 new (BL-180..BL-191: health gate Phase 2, simplicity Phases 2–5, GTM D1, held PRs, code-only stale verdicts, owner-gated live tests, retention-sweep check, red host branches and hook failures, Chromium-only layout tests, tsumagoi #968 red) · 0 closed · 0 newly stale · 1 added as verify-done (BL-188). Partly done since 10-27, still open: BL-146 (2 of 2 visitors reached a diagnosis, a412bae73), BL-156 (per-address reuse applied, 39dce567b), BL-164 (newStatus / pullRequestUrl, 6a24a3517), BL-170 (lockfile commands in the PR body, 39dce567b), BL-174 (plain "did not run" wording, a412bae73), BL-177 (no call for a running check, a9b1bd0c6). Code markers since 10-26: no new TODO/FIXME; 7 new `skipIf` guards (2 Chromium-only, BL-190; 5 skip on Windows and run in Linux CI). Already settled, no row: the backfill migration file landed in #918, the `report_presence` migration file ships with this register, the Zenn article is being published. The open count below counts the table; the 10-27 figure (73) had drifted.
 - **Added 2026-10-29 (docs proofread):** BL-164..BL-169, code bugs and leftovers the public-docs proofread found.
@@ -31,7 +32,7 @@ parked work is visible in one place.
 - **Added 2026-10-23 (site audit, ADR 0040):** BL-116, a parked part of the site audit. Closed BL-117 on 2026-10-23.
 - **Added 2026-10-24 (local fix worker, `mushi work`):** BL-118..BL-119, parked parts of the local worker.
 - **Delta 2026-10-17:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 124 · **Recently closed:** 34 (BL-192, BL-195, BL-197, BL-193, BL-194, BL-196, BL-173 on 2026-10-30; BL-011, BL-154 on 2026-10-29; BL-117, BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 125 · **Recently closed:** 34 (BL-192, BL-195, BL-197, BL-193, BL-194, BL-196, BL-173 on 2026-10-30; BL-011, BL-154 on 2026-10-29; BL-117, BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
@@ -42,8 +43,8 @@ parked work is visible in one place.
 | decision-needed | 16 |
 | unfinished-feature | 38 |
 | product | 3 |
-| ux | 2 |
-| perf | 1 |
+| ux | 1 |
+| perf | 2 |
 | dependency | 2 |
 | needs-triage | 1 |
 
@@ -226,6 +227,7 @@ parked work is visible in one place.
 | BL-189 | known-bug | Host repos with a red default branch: Help Her Take Photo "Mobile Release" (yen-yen actionlint is BL-133, glot Capacitor build is BL-131). Hook failures outside BL-171 also stop lanes: glot readme-counts drift, solo-boss public-shell-isolation baseline, mushi-mushi admin hex check and a `getPackageJSONURL` crash inside a hook | relevant | med | `docs/HANDOVER-2026-10-29.md` | — |
 | BL-190 | test-gap | Phone-width (390px) layout tests run only where Chromium is installed (`it.skipIf(!chromiumBin)`); the CI unit job has no browser, so they never run in CI: `PromptStageTable.test.tsx:118`, `ExperimentsPage.test.tsx:237` | relevant | low | those two files | — |
 | BL-191 | known-bug | tsumagoi #968 (SDK upgrade + the BL-132 renames) is red on Browser gates 4/4: `booking-summary-status` "Saved in your booking" not found (`reserve-visuals` 390/1440) and the LINE hand-off button under 48px (`sennin-chat`). PRs merged just before it passed the same gates, so the PR's reservation changes are the suspect. Also: ~40 tsumagoi unit specs assume `/` paths or LF endings, so its pre-push cannot pass from Windows | relevant | high | kensaurus/tsumagoi#968 run 40899880476; `docs/HANDOVER-2026-10-29.md` | tsumagoi#968 |
+| BL-198 | perf | `scoped_rate_limit_claim` serializes every claim for one scope onto one window row (`INSERT ... ON CONFLICT DO UPDATE`; primary key `(user_id, scope, window_start)` and index `scoped_rate_limits_user_scope_window_idx` already exist; `scoped_rate_limit_prune` deletes windows older than 7 days daily at 03:17 UTC). A hot `runner_ingest` key waits on that row until Postgres `statement_timeout` (57014). Those errors fail closed, so legitimate runner pushes get 503 `RATE_LIMIT_UNAVAILABLE` for as long as the row is hot. Next: a short `statement_timeout` local to the function so the wait fails fast, and a claim shape that does not queue every request on that one row. Do not prune inside the claim. Refusals alert as `tenant.runner_ingest.rate_limit_unavailable` | relevant | med | `_shared/tenant-observability.ts`; `20260423010000_wave_s_hardening.sql`; `20261028220000_scoped_rate_limit_prune_cron.sql` | — |
 
 ---
 
