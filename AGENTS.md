@@ -632,8 +632,10 @@ requiredVars, presentVars, missingVars, lastSeenAt, recommendedFix, repoUrl, has
 
 ### GitHub App vs PAT permission boundary (critical for agent implementers)
 
-The **Mushi GitHub App** currently requests only `Contents: write` and
-`Pull requests: write`. It does **not** have `Actions secrets: write`. This means:
+The **Mushi GitHub App** has `Contents`, `Pull requests`, `Actions`,
+`Actions variables` and `Workflows` write (variables since 2026-10-30, ADR 0037
+amendment), and only **read** on `Actions secrets`. It does **not** have
+`Actions secrets: write`. This means:
 
 - Auto-write works **only** when a **fine-grained PAT** with
   `Actions secrets: Read and write` is stored in the project's GitHub connection
@@ -646,7 +648,7 @@ The **Mushi GitHub App** currently requests only `Contents: write` and
   commands + CI `env:` block).
 
 **To enable full auto-write via the GitHub App** (instead of a PAT):
-1. Add `Secrets: Read and write` to the App's requested permissions on GitHub.
+1. Raise `Secrets` from read to `Read and write` in the App's permissions on GitHub.
 2. This forces a re-consent for all installations (users must approve the new scope).
 3. Until then, the guided PAT path is the supported route for CI secret auto-write.
 

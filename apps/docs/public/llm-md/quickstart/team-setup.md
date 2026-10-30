@@ -55,21 +55,26 @@ as **draft** pull requests. Nothing lands on your main branch without a merge.
 
 **Do this:**
 
-1. Open **Connect** and find the **GitHub** section, or open
-   **Integrations → GitHub (code repo)**.
-2. Install the Mushi Mushi GitHub App. GitHub's own install screen asks which
-   repositories the app may see. Pick only the repos this app lives in.
-3. Set the **Default branch** if it is not `main`.
+1. Open **Connect** (or **Integrations**) and press **Connect GitHub**.
+2. Sign in to GitHub. If the Mushi Mushi GitHub App is not on your account or
+   organization yet, GitHub asks you to install it first. Pick only the
+   repositories this app lives in.
+3. Pick the repository. The list shows only repositories you can open, with
+   the one named like your app first. Mushi Mushi saves it with its default
+   branch.
 
-**Self-hosted, or no GitHub App?** Use a fine-grained personal access token
-instead. It needs **Contents: write** and **Pull requests: write** on the repo.
-Add **Actions secrets: read and write** only if you want Mushi Mushi to write
-CI secrets for you. Paste it as the **Installation token** on the GitHub card.
+Each teammate connects with their own GitHub sign-in, and sees only the
+repositories they can open themselves.
 
-**Check it worked:** on the GitHub card, click **Test connection** and get a
-green result. Then open **Set up** and read **Setup gaps**: the GitHub access
-line for your repo should not be red. See [Integrations](/admin/integrations)
-and [Set up](/admin/onboarding#setup-gaps).
+**Self-hosted, or no GitHub App?** Open **Use a GitHub token instead** under
+the GitHub card and paste a fine-grained personal access token. It needs
+**Contents: write** and **Pull requests: write** on the repo. Add **Secrets:
+read and write** only if you want Mushi Mushi to write CI secrets for you.
+
+**Check it worked:** the GitHub card reads **Connected: owner/repo**. Then open
+**Set up** and read **Setup gaps**: the GitHub access line for your repo should
+not be red. See [Integrations](/admin/integrations) and
+[Set up](/admin/onboarding#setup-gaps).
 
 ## 3. Install the SDK in your app
 
@@ -147,8 +152,8 @@ Who gets what:
 | The billing contact | Usage emails at 50%, 80% and 100% of included diagnoses | **Team → Billing** (defaults to the owner) |
 | The person who reported the bug | Messages in your app when it is diagnosed and fixed | **Reporter updates** |
 
-**Check it worked:** click **Test connection** on the Slack or Discord card. A
-test message should arrive in the channel. See [Slack app](/plugins/slack) and
+**Check it worked:** press **Send test** on the Slack, Discord or Teams card.
+A test message should arrive in the channel. See [Slack app](/plugins/slack) and
 [Discord](/plugins/discord).
 
 ## 6. AI keys and cost
@@ -203,6 +208,13 @@ Decide how a fix gets from a draft pull request to your main branch.
    it on later, if you want, once you trust the gates.
 3. Choose **Batch** (release trains) or **Each PR** in the **Merge when ready**
    panel on **Fixes**.
+4. Decide how much CI a fix pull request runs. Open **CI runners → CI
+   settings**. Where your workflows read `vars.CI_PROFILE`, **Checks on fix
+   pull requests** offers **Economy** (the default: fix pull requests may skip
+   slow, billed checks, which still run before a deploy) or **Thorough**
+   (every check on every pull request). A move to GitHub-hosted runners
+   switches back on its own after the time you pick. See
+   [CI runners](/operating/ci-runners).
 
 **Check it worked:** open **Pipeline**. Each stage shows a count, and nothing
 is stuck without a reason. See [Agent PR review](/concepts/agent-pr-review),
@@ -266,7 +278,7 @@ See [Security](/security) for the full summary.
 | Area | Done when |
 | --- | --- |
 | Team | Every developer has accepted an invite with the right role |
-| GitHub | **Test connection** is green; Setup gaps shows no red GitHub line |
+| GitHub | The GitHub card reads **Connected: owner/repo**; Setup gaps shows no red GitHub line |
 | SDK | The report button shows in production; **App checked in** is on |
 | Secrets | The key is in `.env.local`, hosting and CI, not in git |
 | Editor | Each developer's editor lists the Mushi Mushi tools |

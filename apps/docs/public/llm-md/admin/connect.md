@@ -69,10 +69,10 @@ and shows a fused verdict:
 **One-click sync:** `POST /v1/admin/projects/:id/sync-ci-secrets` mints a
 scoped ingest key and writes each required var via sealed-box encryption.
 
-The Mushi GitHub App requests `Contents` + `Pull requests` only — not Actions
-secrets. Auto-write works when a fine-grained PAT with **Actions secrets: Read
-and write** is stored in project settings. Otherwise the card expands guided
-`gh secret set` commands and a CI `env:` YAML block.
+The Mushi GitHub App can read Actions secrets but not write them. Auto-write
+works when a fine-grained token with **Secrets: Read and write** is stored in
+the project's settings. Otherwise the card shows the `gh secret set` commands
+to run and the `env:` block to add to your CI workflow.
 
 See also: [Self-hosting](/self-hosting) · [`AGENTS.md` native CI section](https://github.com/kensaurus/mushi-mushi/blob/master/AGENTS.md#native-ci-secrets-diagnostic--auto-write-jun-2026)
 
@@ -99,8 +99,10 @@ CLI equivalent: see [SDK reference → CLI](/sdks/cli) (`mushi upgrade` for loca
 ## Quick path (5 minutes)
 
 ### Connect GitHub
-Install the Mushi GitHub App on your primary repo (or paste a fine-grained PAT
-with Contents + PR + Actions secrets if you need CI auto-write).
+Press **Connect GitHub**, sign in to GitHub and pick your repository. The list
+shows only repositories you can open, with the one named like your app first.
+If the Mushi GitHub App is not on your account yet, GitHub asks you to install
+it first.
 
 ### Install SDK
 Copy the framework snippet → paste into your app → deploy or run locally.
