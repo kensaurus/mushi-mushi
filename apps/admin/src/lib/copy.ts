@@ -383,7 +383,7 @@ const COPY: CopyRegistry = {
       actionLabels: {
         setup: 'Go to Setup',
         connect: 'Connect repo',
-        install: 'Install app',
+        install: 'Connect GitHub',
         stuck: 'Review stuck',
         ci: 'Open failing CI',
         reports: 'Open Reports',
