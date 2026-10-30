@@ -124,10 +124,44 @@ describe('CiPlacementSection', () => {
     expect(preview).toContain('Visual — Pinned to GitHub: pixel baselines')
     expect(preview).toContain('−$4.20')
     expect(preview).toContain('(estimated)')
-    await click(button('Ask for this change', card))
-    expect(state.apiFetch.mock.calls[1]![0]).toBe('/v1/admin/ci/placement/requests')
+    // An owner applies in one click: request, approve that exact payload, run.
+    state.apiFetch.mockImplementation(async (path: string) =>
+      path.endsWith('/requests')
+        ? { ok: true, data: { id: 'r9', payloadSha256: 'f'.repeat(64) } }
+        : path.endsWith('/execute')
+          ? { ok: true, data: { detail: 'Set LINUX_RUNNER to “kensaurus-local” on kensaurus/yen-yen.' } }
+          : { ok: true, data: {} },
+    )
+    expect(button('Ask for this change', card)).toBeUndefined()
+    await click(button('Apply now', card))
+    const calls = state.apiFetch.mock.calls.slice(1).map(([p, init]) => [p, (init as RequestInit).body ?? null])
+    expect(calls).toEqual([
+      ['/v1/admin/ci/placement/requests', JSON.stringify({ projectId: PROJECT, repo: 'kensaurus/yen-yen', variable: 'LINUX_RUNNER', value: 'kensaurus-local' })],
+      ['/v1/admin/ci/placement/requests/r9/approve', JSON.stringify({ payloadSha256: 'f'.repeat(64) })],
+      ['/v1/admin/ci/placement/requests/r9/execute', null],
+    ])
     expect(state.reload).toHaveBeenCalled()
-    expect(card.textContent).toContain('Requested. Approve it below, then run it.')
+    expect(card.textContent).toContain('Set LINUX_RUNNER to “kensaurus-local” on kensaurus/yen-yen. Mushi watches the next jobs.')
+  })
+
+  it('Apply now that GitHub refuses for the App permission says where to approve it, and keeps the request', async () => {
+    state.apiFetch.mockImplementation(async (path: string) =>
+      path.endsWith('/preview')
+        ? { ok: true, data: previewFixture() }
+        : path.endsWith('/requests')
+          ? { ok: true, data: { id: 'r9', payloadSha256: 'f'.repeat(64) } }
+          : path.endsWith('/execute')
+            ? { ok: false, error: { code: 'GITHUB_VARIABLES_PERMISSION', message: 'The GitHub token cannot change Actions variables.' } }
+            : { ok: true, data: {} },
+    )
+    await render()
+    const card = q('ci-placement-repo-kensaurus/yen-yen')
+    await click(radio('Self-hosted: kensaurus-local', card))
+    await click(button('Preview', card))
+    await click(button('Apply now', card))
+    expect(card.textContent).toContain('The GitHub token cannot change Actions variables. It is approved below; run it there once fixed.')
+    const link = Array.from(card.querySelectorAll('a')).find((a) => /Review request/.test(a.textContent ?? ''))
+    expect(link?.getAttribute('href')).toBe('https://github.com/settings/installations')
   })
 
   it('a blocked preview shows why and offers no request', async () => {
