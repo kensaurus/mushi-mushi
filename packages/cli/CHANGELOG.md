@@ -1,5 +1,12 @@
 # @mushi-mushi/cli
 
+## 0.35.1
+
+### Patch Changes
+
+- 6a24a35: - **`mushi connect` uses your saved key**: when you pass no key, it uses the one `npx mushi-mushi` or `mushi login` already saved, so the command the setup wizard prints works as it is. The wizard's last checklist names the console tab by its current label, "Test it".
+- 545f106: - **`mushi doctor` shows the app's Health check**: it reads the server's Health check (setup gaps, SDK health, the report button) and prints each problem once as a warning, with how many items wait on it and its fix. It does not change whether `mushi doctor` passes. A check the server could not read shows as not checked. Older servers without the route are skipped.
+
 ## 0.35.0
 
 ### Minor Changes
