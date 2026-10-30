@@ -257,11 +257,24 @@ describe('buildPipeline', () => {
   it('merged fixes count as deployed only when a deploy was seen after the merge', () => {
     const merged = attempt({ pr_state: 'merged', merged_at: '2026-10-25T00:00:00Z' })
     const none = run({ attempts: [merged] })
-    expect(group(none, 'merged')?.group.label).toBe('1 fix: merged (this app records no deploys)')
+    // No deploy at all, and the merge is over a day old: stuck, with how to send one (9f64a77b).
+    const stuckNone = group(none, 'not_deployed')
+    expect(stuckNone?.group.tone).toBe('stuck')
+    expect(stuckNone?.group.label).toBe('1 fix: merged over a day ago, no deploy seen since')
+    expect(stuckNone?.group.settings?.label).toBe('How to send a deploy')
+    expect(stuckNone?.group.settings?.hint).toContain('deploy.completed')
+    expect(stuckNone?.group.settings?.hint).toContain('X-Mushi-Api-Key')
     const seen = run({ attempts: [merged], deploys: [{ project_id: P, observed_version: '1.2.0', ok: true, observed_at: '2026-10-25T02:00:00Z' }] })
     expect(group(seen, 'deployed')?.stage.id).toBe('deployed')
+    expect(group(seen, 'not_deployed')).toBeNull()
     const before = run({ attempts: [merged], deploys: [{ project_id: P, observed_version: '1.1.0', ok: true, observed_at: '2026-10-20T00:00:00Z' }] })
     expect(group(before, 'not_deployed')?.group.tone).toBe('stuck')
+    expect(group(before, 'not_deployed')?.group.settings?.to).toBe('/recipe')
+    // Under a day, an app that records no deploys stays in Merged and still says how.
+    const fresh = run({ attempts: [attempt({ pr_state: 'merged', merged_at: '2026-10-26T02:00:00Z' })] })
+    const waiting = group(fresh, 'merged')
+    expect(waiting?.group.label).toBe('1 fix: merged (this app records no deploys)')
+    expect(waiting?.group.settings?.hint).toContain('{"type":"deploy.completed"')
   })
 
   // Report f5575c9e: "43 agent failed" counted attempts, and dismissed and

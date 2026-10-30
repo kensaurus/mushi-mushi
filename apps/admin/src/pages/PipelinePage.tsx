@@ -9,7 +9,8 @@
  * their own CI is red"), each with its items, their evidence and only the
  * fixes the server would not refuse (the rest disabled, with the reason);
  * then the release trains of the last 7 days per repo, who opens fixes
- * (folded), and what intake and deploys report.
+ * (folded), and what intake and deploys report. A merged fix newer than
+ * the app's last deploy is flagged there, with the deploy.completed post.
  *
  * Scope follows the header switcher (lib/projectScope.ts): one app, or "All
  * apps". Every action asks first, shows its busy state and each PR's
@@ -50,6 +51,8 @@ import {
   ACTION_META,
   actionableIds,
   ageLabel,
+  DEPLOY_EVENT_BODY,
+  deploysBehindMerges,
   openerSummary,
   outcomeSummary,
   retryTrains,
@@ -134,6 +137,8 @@ export function PipelinePage() {
   // The biggest stuck group and the first of its actions the server would take.
   const top = useMemo(() => topStuck(stages.flatMap((s) => s.groups)), [stages])
   const openers = useMemo(() => (data?.dispatchers ? openerSummary(data.dispatchers) : null), [data])
+  const deployLags = useMemo(() => (data ? deploysBehindMerges(data) : []), [data])
+  const deployLagByProject = useMemo(() => new Map(deployLags.map((lag) => [lag.projectId, lag])), [deployLags])
 
   usePublishPageContext({
     route: '/pipeline',
@@ -382,9 +387,23 @@ export function PipelinePage() {
                   ) : (
                     <span>no deploy recorded in 14 days</span>
                   )}
+                  {deployLagByProject.has(p.id) && (
+                    <span className="font-medium text-danger-foreground" data-testid={`pipeline-intake-${p.id}-deploy-lag`}>
+                      {deployLagByProject.get(p.id)?.lastDeployAt
+                        ? 'a fix merged after the last deploy seen'
+                        : 'a fix merged and no deploy has been seen'}
+                    </span>
+                  )}
                 </li>
                 )
               })}
+              {deployLags.length > 0 && (
+                <li className="text-fg-muted" data-testid="pipeline-intake-deploy-howto">
+                  From CI, POST /v1/ingest/recipe/events with header X-Mushi-Api-Key set to a project API key kept in CI secrets (from mushi login, not the key shipped in the app) and body{' '}
+                  <code className="text-fg-secondary">{DEPLOY_EVENT_BODY}</code>
+                  . targetId is the deploy target id on the Recipe page.
+                </li>
+              )}
             </ul>
           </Section>
         </>

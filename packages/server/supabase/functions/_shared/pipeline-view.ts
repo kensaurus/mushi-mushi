@@ -252,7 +252,7 @@ export const CI_STUCK_MS = 3 * HOUR
 export const CONFLICT_STUCK_MS = 90 * 60_000
 /** The merge queue's per-PR conflict-agent cap (`MAX_CONFLICT_AGENTS`). */
 export const CONFLICT_AGENT_CAP = 2
-/** Merged and no deploy seen after this, on an app that records deploys. */
+/** Merged and no deploy seen after this. An app that records none is stuck too (report 9f64a77b). */
 export const DEPLOY_STUCK_MS = 24 * HOUR
 /** Merged/deployed/failed-agent windows. */
 export const RECENT_MS = 7 * 24 * HOUR
@@ -270,6 +270,18 @@ export const DISPATCH_SETTING = { label: 'Cursor keys and spend-down', to: '/cre
 export const CLAUDE_KEY_SETTING = { label: 'AI keys', to: '/settings?tab=byok' }
 /** Local workers (ADR 0048): their lanes, queues and runs. */
 export const WORKERS_SETTING = { label: 'Local workers', to: '/pipeline?tab=workers' }
+/**
+ * How a merged fix becomes Deployed (report 9f64a77b). Any project API key
+ * may POST this; the key shipped in the app is the wrong one to put in CI.
+ * `targetId` should be a production deploy target on the Recipe page.
+ * One ok event is what moves the fix; it does not by itself tell the reporter.
+ */
+export const DEPLOY_HOWTO = {
+  label: 'How to send a deploy',
+  to: '/recipe',
+  hint:
+    'No deploy has been seen since this merged, so it is not marked deployed. From CI, POST /v1/ingest/recipe/events with header X-Mushi-Api-Key set to a project API key kept in CI secrets (from mushi login, not the key shipped in the app) and body {"events":[{"type":"deploy.completed","targetId":"web","environment":"production","commit":"<sha>","ok":true}]}. targetId is the deploy target id on the Recipe page. One ok:true event moves the fix to Deployed.',
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -489,7 +501,7 @@ interface GroupSpec {
   noun: [string, string]
   text: string
   actions: PipelineAction[]
-  settings?: { label: string; to: string } | null
+  settings?: { label: string; to: string; hint?: string } | null
 }
 
 class Groups {
@@ -606,10 +618,11 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       const after = deploys.filter((d) => Date.parse(d.observed_at) >= Date.parse(at)).sort((x, y) => x.observed_at.localeCompare(y.observed_at))[0]
       if (after) {
         groups.add('deployed', { stage: 'deployed', tone: 'done', noun: ['fix', 'fixes'], text: 'deployed', actions: [] }, itemOf(a, after.observed_at, { lastEventAt: after.observed_at, queueDetail: after.observed_version ? `Seen live in ${after.observed_version}.` : null }))
-      } else if (deploys.length > 0 && age(now, at) > DEPLOY_STUCK_MS) {
-        groups.add('not_deployed', { stage: 'merged', tone: 'stuck', noun: ['fix', 'fixes'], text: 'merged over a day ago, no deploy seen since', actions: [] }, itemOf(a, at))
+      } else if (age(now, at) > DEPLOY_STUCK_MS) {
+        // No successful deploy since the merge, including an app that has recorded none.
+        groups.add('not_deployed', { stage: 'merged', tone: 'stuck', noun: ['fix', 'fixes'], text: 'merged over a day ago, no deploy seen since', actions: [], settings: DEPLOY_HOWTO }, itemOf(a, at))
       } else {
-        groups.add('merged', { stage: 'merged', tone: 'done', noun: ['fix', 'fixes'], text: deploys.length ? 'merged, waiting for the next deploy' : 'merged (this app records no deploys)', actions: [] }, itemOf(a, at))
+        groups.add('merged', { stage: 'merged', tone: 'done', noun: ['fix', 'fixes'], text: deploys.length ? 'merged, waiting for the next deploy' : 'merged (this app records no deploys)', actions: [], settings: DEPLOY_HOWTO }, itemOf(a, at))
       }
       continue
     }
