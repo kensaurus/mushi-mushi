@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-30 · **806** routes.
+> Generated: 2026-10-30 · **807** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,7 +10,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 219 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 409 |
+| `jwtAuth` | 410 |
 | `jwtOrApiKey` | 2 |
 | `public` | 66 |
 | `unknown` | 51 |
@@ -563,6 +563,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/reports/:id/reply` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | GET | `/v1/admin/reports/:id/reporter-view` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reporter-admin.ts` |
 | POST | `/v1/admin/reports/:id/request-info` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reporter-admin.ts` |
+| POST | `/v1/admin/reports/:id/sentry/close` | `jwtAuth` | `packages/server/supabase/functions/api/routes/report-sentry.ts` |
 | GET | `/v1/admin/reports/:id/timeline` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | POST | `/v1/admin/reports/bulk` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | POST | `/v1/admin/reports/bulk/:mutationId/undo` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reports.ts` |

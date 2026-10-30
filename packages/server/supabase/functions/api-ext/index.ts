@@ -55,6 +55,7 @@ import { registerSearchRankRoutes } from '../api/routes/search-rank.ts'
 import { registerLocalFollowupRoutes } from '../api/routes/local-followups.ts'
 import { registerSdkHealthRoutes } from '../api/routes/sdk-health.ts'
 import { registerPipelineRoutes } from '../api/routes/pipeline.ts'
+import { registerReportSentryRoutes } from '../api/routes/report-sentry.ts'
 import { registerTesterMarketplaceRoutes } from '../api/routes/tester-marketplace.ts'
 import { registerProjectHomeRoutes } from '../api/routes/project-home.ts'
 import { registerSetupGapsRoutes } from '../api/routes/setup-gaps.ts'
@@ -102,6 +103,7 @@ registerSearchRankRoutes(app)
 registerLocalFollowupRoutes(app)
 registerSdkHealthRoutes(app)
 registerPipelineRoutes(app)
+registerReportSentryRoutes(app)
 registerTesterMarketplaceRoutes(app)
 registerProjectHomeRoutes(app)
 registerSetupGapsRoutes(app)

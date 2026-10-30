@@ -11,7 +11,7 @@
  * Data: GET /v1/admin/pipeline/fix/:id (the item, its group and actions).
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge } from '../ui'
 import { ActionButtons, BlockedReasons } from '../pipeline/PipelineGroups'
@@ -23,6 +23,8 @@ interface Props {
   fixId: string
   /** Called after an action ran, so the page reads the fix again. */
   onChanged?: () => void
+  /** The page's own decision, e.g. Merge: shown with the actions, or alone while the pipeline view is missing. */
+  children?: ReactNode
 }
 
 /** "1 PR: their own CI is red" → "their own CI is red": one PR needs no count. */
@@ -30,7 +32,7 @@ function reasonOf(label: string): string {
   return label.replace(/^\d+\s+[A-Za-z]+:\s*/, '')
 }
 
-export function ReportFixActions({ fixId, onChanged }: Props) {
+export function ReportFixActions({ fixId, onChanged, children }: Props) {
   const toast = useToast()
   const [view, setView] = useState<PipelineFixView | null>(null)
   const [pending, setPending] = useState<{ action: PendingAction; key: string } | null>(null)
@@ -65,7 +67,7 @@ export function ReportFixActions({ fixId, onChanged }: Props) {
   )
 
   const item = view?.item
-  if (!view || !item || !view.groupLabel) return null
+  if (!view || !item || !view.groupLabel) return children ? <div className="flex flex-wrap items-center gap-2">{children}</div> : null
   const stuck = view.tone === 'stuck'
 
   return (
@@ -89,8 +91,9 @@ export function ReportFixActions({ fixId, onChanged }: Props) {
           ))}
         </p>
       )}
-      {view.actions.length > 0 && (
+      {(view.actions.length > 0 || children) && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
+          {children}
           <ActionButtons
             actions={view.actions}
             items={[item]}

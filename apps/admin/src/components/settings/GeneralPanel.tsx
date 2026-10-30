@@ -682,6 +682,7 @@ function Slider({ label, value, onChange, helpId }: SliderProps) {
       </span>
       <input
         type="range"
+        aria-label={label}
         min="0.5"
         max="0.99"
         step="0.01"
@@ -715,6 +716,7 @@ function RangeField({
       </span>
       <input
         type="range"
+        aria-label={label}
         min={min}
         max={max}
         step={step}
