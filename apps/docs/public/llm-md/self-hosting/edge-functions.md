@@ -124,7 +124,9 @@ npx supabase secrets set FIRECRAWL_API_KEY=…
 npx supabase secrets set ADMIN_BASE_URL=https://your-domain.example.com/admin
 ```
 
-Tenants can override `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` per project via [BYOK](/security/byok). `E2B_API_KEY` is read by the Node fix orchestrator in `@mushi-mushi/agents`, not by the edge functions; set it where that runs if you use the E2B sandbox.
+Tenants can override `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` per project via [BYOK](/security/byok).
+
+The server-wide `GITHUB_TOKEN`, `SLACK_BOT_TOKEN` and `LANGFUSE_*` keys belong to the operator's own accounts, so they count as an app's own GitHub, Slack or Langfuse connection only for apps owned by a user listed in `MUSHI_OPERATOR_USER_IDS` (comma-separated user ids). The pipeline's own Langfuse tracing still uses the keys for every app. Every other app connects its own GitHub (the GitHub App, or a token on its Integrations page) and its own Slack. On a single-team self-host, put your own user id there, or the server-wide token serves no app. `E2B_API_KEY` is read by the Node fix orchestrator in `@mushi-mushi/agents`, not by the edge functions; set it where that runs if you use the E2B sandbox.
 
 ## JWT verification
 

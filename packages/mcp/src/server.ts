@@ -1874,14 +1874,22 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       inputSchema: z.object({
         projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project'),
         repo: z.string().regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/).describe('owner/repo, connected to the project'),
-        variable: z.string().regex(/^(?:LINUX_RUNNER|RUNNER_[A-Z0-9_]{1,60})$/).describe('LINUX_RUNNER or RUNNER_<WORKFLOW>'),
-        value: z.string().min(1).max(100).nullable().describe('One runner label, or null to remove the variable'),
+        variable: z.string().regex(/^(?:LINUX_RUNNER|RUNNER_[A-Z0-9_]{1,60}|CI_PROFILE)$/).describe('LINUX_RUNNER, RUNNER_<WORKFLOW>, or CI_PROFILE (only where a workflow reads it)'),
+        value: z.string().min(1).max(100).nullable().describe('One runner label (CI_PROFILE: economy or thorough), or null to remove the variable'),
+        revertAfterHours: z.number().int().min(1).max(168).optional().describe('A move to GitHub-hosted runners switches back after this many hours'),
         reason: z.string().max(500).optional().describe('Why, shown to the approver'),
       }),
     },
     async (args) => {
       const pid = await resolveProjectId(args.projectId);
-      const body = { projectId: pid, repo: args.repo, variable: args.variable, value: args.value, ...(args.reason ? { reason: args.reason } : {}) };
+      const body = {
+        projectId: pid,
+        repo: args.repo,
+        variable: args.variable,
+        value: args.value,
+        ...(args.revertAfterHours ? { revertAfterHours: args.revertAfterHours } : {}),
+        ...(args.reason ? { reason: args.reason } : {}),
+      };
       return jsonText(await apiCall('/v1/admin/ci/placement/requests', { method: 'POST', body: JSON.stringify(body) }));
     },
   );

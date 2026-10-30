@@ -754,7 +754,10 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
     const sdkConnectedProjects = new Set<string>(
       accessibleIds.filter((id) => freshestHeartbeat(sdkKeysByProject.get(id) ?? []) !== null),
     );
-    const sdkMissingIds = accessibleIds.filter((id) => !sdkConnectedProjects.has(id));
+    // The public demo app (sample data, never ships an SDK) is not "missing" one.
+    const { data: demoRow } = await db.from('mushi_runtime_config').select('value').eq('key', 'demo_project_id').maybeSingle();
+    const demoProjectId = (demoRow as { value?: unknown } | null)?.value;
+    const sdkMissingIds = accessibleIds.filter((id) => !sdkConnectedProjects.has(id) && id !== demoProjectId);
     const { data: missingRows } = sdkMissingIds.length > 0
       ? await db.from('projects').select('id, name, created_at').in('id', sdkMissingIds).order('name').limit(5)
       : { data: [] };

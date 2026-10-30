@@ -17,8 +17,9 @@
  * Legacy-backed GitHub (ADR 0037): a CI placement action names
  * `connector_kind = 'github'` instead of a connector instance, because GitHub
  * runs on the project's own stored token. Execution resolves that token with
- * `legacyGithubToken` (the project's stored token, else its organization's;
- * never the App installation or the platform token); the connector's act()
+ * `legacyGithubToken` (the project's stored token, else its organization's,
+ * else the GitHub App installation bound to the target repo; never the
+ * platform token); the connector's act()
  * checks the allowlist, the binding, the policy and the compare-and-set
  * itself. CI placement actions go only through requestLegacyConnectorAction
  * (the /v1/admin/ci/placement routes build the payload from a preview); the
@@ -31,7 +32,7 @@ import { sha256Hex } from './connectors/jwt.ts'
 import { getConnector } from './connectors/index.ts'
 import { resolveCredential } from './connectors/credentials.ts'
 import type { ApprovedConnectorAction, ConnectorActionResult } from './connectors/types.ts'
-import { resolveProjectGithubToken } from './github.ts'
+import { placementGithubToken } from './github.ts'
 import { PLACEMENT_ACTIONS } from './ci-placement.ts'
 import { isHousekeepingAction, USE_REPO_CLEANUP_MESSAGE } from './repo-housekeeping-acts.ts'
 
@@ -177,12 +178,12 @@ export interface ExecuteDeps {
   now: () => Date
   resolveCredential?: typeof resolveCredential
   /** The token a legacy-backed GitHub action runs with (default: the project's stored PAT, no platform fallback). */
-  legacyGithubToken?: (db: Db, projectId: string) => Promise<string | null>
+  legacyGithubToken?: (db: Db, projectId: string, repo?: string | null) => Promise<string | null>
   /** The repo clean-up executor (ADR 0051); only api-ext passes it. Without it those actions are refused unclaimed. */
   housekeepingAct?: (input: { db: Db; organizationId: string; projectId: string; userId: string; action: ApprovedConnectorAction }) => Promise<ConnectorActionResult>
 }
 
-const defaultLegacyGithubToken = (db: Db, projectId: string) => resolveProjectGithubToken(db, projectId, null, { allowEnvFallback: false })
+const defaultLegacyGithubToken = (db: Db, projectId: string, repo?: string | null) => placementGithubToken(db, projectId, repo)
 
 /** Run one approved action once. Never retries; a failure is recorded, not hidden. */
 export async function executeConnectorAction(db: Db, id: string, organizationId: string, userId: string, deps: ExecuteDeps): Promise<ActionOutcome<ConnectorActionResult>> {
@@ -226,7 +227,8 @@ export async function executeConnectorAction(db: Db, id: string, organizationId:
         await finish(result)
         return result.ok ? { ok: true, value: result } : { ok: false, code: result.code ?? 'ACTION_FAILED', message: result.detail, status: result.status ?? 502 }
       }
-      const token = await (deps.legacyGithubToken ?? defaultLegacyGithubToken)(db, row.project_id)
+      const repo = typeof (row.payload as { repo?: unknown }).repo === 'string' ? (row.payload as { repo: string }).repo : null
+      const token = await (deps.legacyGithubToken ?? defaultLegacyGithubToken)(db, row.project_id, repo)
       result = await getConnector('github').act!({
         db, organizationId, projectId: row.project_id, instanceId: null, config: {},
         readCredential: token, writeCredential: token, fetch: deps.fetch, now: deps.now,
