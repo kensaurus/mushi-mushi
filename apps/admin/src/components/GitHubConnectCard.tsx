@@ -1,9 +1,10 @@
 /**
  * FILE: apps/admin/src/components/GitHubConnectCard.tsx
  * PURPOSE: One "Connect GitHub" for an app, used by setup, Integrations and
- *          Connect: install (or reuse) the Mushi GitHub App, sign in to GitHub
- *          once so Mushi can check the installation is yours, then pick the
- *          repository. Every outcome ends on a plain next step.
+ *          Connect: sign in to GitHub once so Mushi can check which
+ *          installations are yours (GitHub offers the install step when there
+ *          is none), then pick the repository. The repo named like the app is
+ *          offered first. Every outcome ends on a plain next step.
  *
  * Flow and security: lib/githubConnect.ts, api/routes/github-connect.ts.
  */
@@ -103,7 +104,7 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
     cardRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [projectId, loadRepos])
 
-  const start = async (mode: 'install' | 'authorize') => {
+  const start = async () => {
     setPhase({ kind: 'starting' })
     setError(null)
     const res = await requestConnectLinks(projectId, returnTo)
@@ -112,8 +113,10 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
       setPhase({ kind: 'idle' })
       return
     }
+    // Sign-in first: someone who already installed the App goes straight to
+    // the picker; the server sends everyone else on to the install page.
     // Same tab: GitHub returns here, and a pop-up blocker cannot eat the step.
-    window.location.assign(mode === 'install' ? res.data.installUrl : res.data.authorizeUrl)
+    window.location.assign(res.data.authorizeUrl)
   }
 
   const pick = async (list: RepoList, fullName: string) => {
@@ -161,7 +164,7 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
           title="GitHub is not connected yet"
           message={error.message}
           code={error.code}
-          onRetry={() => void start('install')}
+          onRetry={() => void start()}
         />
       )}
 
@@ -179,19 +182,12 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
             size="sm"
             loading={phase.kind === 'starting'}
             disabled={phase.kind === 'starting'}
-            onClick={() => void start('install')}
+            onClick={() => void start()}
           >
             {connectedName ? 'Change repository' : 'Connect GitHub'}
           </Btn>
           {!connectedName && (
-            <button
-              type="button"
-              className="text-2xs text-fg-muted underline underline-offset-2 hover:text-fg"
-              onClick={() => void start('authorize')}
-              disabled={phase.kind === 'starting'}
-            >
-              Already installed the Mushi GitHub App? Continue
-            </button>
+            <span className="text-2xs text-fg-muted">You sign in to GitHub, then pick the repository.</span>
           )}
         </div>
       )}
@@ -213,7 +209,7 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
               <p>The Mushi GitHub App cannot see any repository yet. On GitHub, choose the repositories it may use, then come back.</p>
               <div className="flex flex-wrap gap-2">
                 {phase.list.manageUrl && (
-                  <a className="text-xs underline underline-offset-2" href={phase.list.manageUrl}>Choose repositories on GitHub</a>
+                  <a className="text-xs underline underline-offset-2" href={phase.list.manageUrl} target="_blank" rel="noreferrer">Choose repositories on GitHub</a>
                 )}
                 {grant && <Btn variant="ghost" size="sm" onClick={() => void loadRepos(grant)}>Refresh the list</Btn>}
               </div>
@@ -222,11 +218,15 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
             <ul className="max-h-72 overflow-y-auto divide-y divide-edge-subtle rounded-sm border border-edge-subtle" aria-label="Repositories">
               {visible.map((r) => {
                 const current = repoFullName(phase.list.currentRepoUrl) === r.fullName
+                const suggested = !current && phase.list.suggestedFullName === r.fullName
                 const saving = phase.kind === 'saving' && phase.fullName === r.fullName
                 return (
                   <li key={`${r.installationId}:${r.fullName}`} className="flex items-center justify-between gap-2 px-3 py-2">
                     <div className="min-w-0">
-                      <p className="truncate text-xs font-medium text-fg">{r.fullName}</p>
+                      <p className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-fg">
+                        <span className="truncate">{r.fullName}</span>
+                        {suggested && <Badge tone="okSubtle" className="shrink-0">Matches this app</Badge>}
+                      </p>
                       <p className="text-2xs text-fg-muted">
                         {r.private ? 'Private' : 'Public'} · branch {r.defaultBranch}
                         {current ? ' · connected now' : ''}
@@ -234,7 +234,7 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
                     </div>
                     <Btn
                       size="sm"
-                      variant={current ? 'ghost' : 'primary'}
+                      variant={suggested ? 'primary' : 'ghost'}
                       loading={saving}
                       disabled={phase.kind === 'saving'}
                       onClick={() => void pick(phase.list, r.fullName)}
@@ -253,8 +253,19 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
             </p>
           )}
           {phase.list.repos.length > 0 && phase.list.manageUrl && (
-            <p className="text-2xs text-fg-muted">
-              Not in the list? <a className="underline underline-offset-2" href={phase.list.manageUrl}>Let the Mushi GitHub App see more repositories</a>.
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-fg-muted">
+              <span>
+                Not in the list?{' '}
+                <a className="underline underline-offset-2" href={phase.list.manageUrl} target="_blank" rel="noreferrer">
+                  Let the Mushi GitHub App see more repositories
+                </a>
+                , then come back here.
+              </span>
+              {grant && (
+                <button type="button" className="underline underline-offset-2 hover:text-fg" onClick={() => void loadRepos(grant)}>
+                  Refresh the list
+                </button>
+              )}
             </p>
           )}
         </div>

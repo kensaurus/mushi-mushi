@@ -22,7 +22,7 @@ import { Btn } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import { buildSetupRail, heartbeatSentence, type SetupRail, type SetupRailStep, type TimeToFirstDiagnosis } from '../../lib/setupRail'
 import { DEFAULT_SDK_CONFIG, installCommand, renderSnippet } from '../../lib/sdkSnippets'
-import { resolveDefaultSdkFramework } from '../../lib/sdkInstallDefaults'
+import { detectWebBundler, resolveDefaultSdkFramework } from '../../lib/sdkInstallDefaults'
 import type { SetupProject } from '../../lib/useSetupStatus'
 import type { OnboardingTabId } from './types'
 
@@ -224,8 +224,14 @@ function SnippetStep({
   minting: boolean
 }) {
   const [copied, setCopied] = useState(false)
-  const framework = resolveDefaultSdkFramework(project.project_slug)
-  const code = `${installCommand(framework)}\n\n${renderSnippet(framework, project.project_id, apiKey, DEFAULT_SDK_CONFIG, project.project_slug)}`
+  // Same read as SdkInstallCard: the connected repo's package.json picks the
+  // framework and, for Vite or Next, the env-var snippet, so this step and
+  // Connect never show two different snippets for one app (live pass 2026-10-30).
+  const stack = usePageData<{ repo: string | null; packageJson: string | null }>(`/v1/admin/projects/${project.project_id}/github/stack`)
+  const packageJson = stack.data?.packageJson ?? null
+  const framework = resolveDefaultSdkFramework(project.project_slug, packageJson)
+  const bundler = framework === 'react' ? detectWebBundler(packageJson) : null
+  const code = `${installCommand(framework)}\n\n${renderSnippet(framework, project.project_id, apiKey, DEFAULT_SDK_CONFIG, project.project_slug, bundler)}`
   const copy = () => {
     void navigator.clipboard.writeText(code).then(
       () => {
@@ -248,6 +254,12 @@ function SnippetStep({
         <Btn size="sm" variant="primary" onClick={onMintKey} loading={minting} disabled={minting} data-testid="setup-snippet-make-key">
           Make a key and fill it in
         </Btn>
+      )}
+      {packageJson && stack.data?.repo && (
+        <p className="text-2xs text-fg-muted" data-testid="setup-snippet-stack">
+          Matched to <span className="font-mono text-fg-secondary">{stack.data.repo}</span>
+          {bundler ? ': the key is read from .env.local.' : '.'}
+        </p>
       )}
       <CodePanel label="Install and start the SDK" language="tsx" code={code} onCopy={copy} copied={copied} maxHeight="max-h-56" />
       <div className="flex flex-wrap items-center gap-3">

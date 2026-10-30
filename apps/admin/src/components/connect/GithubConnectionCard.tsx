@@ -63,16 +63,19 @@ export function GithubConnectionCard({
             <ul className="mt-1 space-y-1">
               {linked.map((repo) => {
                 const { label, Icon, tone } = repoRoleMeta(repo.role)
+                // Roles tell several repos apart; one repo is just "the repository".
                 return (
                   <li key={repo.id} className="flex items-center gap-2 min-w-0">
-                    <Badge tone={tone} className="text-3xs gap-1 shrink-0">
-                      <Icon size={11} />
-                      {label}
-                    </Badge>
+                    {linked.length > 1 && (
+                      <Badge tone={tone} className="text-3xs gap-1 shrink-0">
+                        <Icon size={11} />
+                        {label}
+                      </Badge>
+                    )}
                     <span className="text-xs text-fg-muted font-mono truncate" title={repo.repo_url}>
                       {repo.repo_url.replace(/^https?:\/\/(www\.)?github\.com\//, '')}
                     </span>
-                    {repo.is_primary && <span className="text-3xs text-fg-faint shrink-0">primary</span>}
+                    {repo.is_primary && linked.length > 1 && <span className="text-3xs text-fg-faint shrink-0">primary</span>}
                   </li>
                 )
               })}

@@ -32,6 +32,8 @@ export interface RepoList {
   unreachableInstallations: number[]
   manageUrl: string | null
   currentRepoUrl: string | null
+  /** The repo named like the app (listed first), or null when unclear. */
+  suggestedFullName?: string | null
 }
 
 export interface SavedRepo {
@@ -50,7 +52,7 @@ const MESSAGES: Record<string, string> = {
   state_expired: 'That GitHub link was older than 30 minutes. Press Connect GitHub again.',
   state_invalid: 'That GitHub link could not be checked. Start again from Connect GitHub on this page.',
   install_unverified: 'Mushi only connects repositories after you sign in to GitHub from this page. Press Connect GitHub to finish.',
-  no_installation: 'Your GitHub account has not installed the Mushi GitHub App yet. Press Connect GitHub and choose Install.',
+  no_installation: 'GitHub shows no installation of the Mushi GitHub App you can use. If you installed it on an organization, an owner there may need to approve it first. Then press Connect GitHub again.',
   installation_suspended: 'The Mushi GitHub App is suspended on your GitHub account. Unsuspend it in GitHub → Settings → Applications, then connect again.',
   not_allowed: 'You can no longer change this app (your role changed). Ask an owner or admin to connect GitHub.',
   missing_installation_id: 'GitHub did not say which installation was used. Press Connect GitHub again.',

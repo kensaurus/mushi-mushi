@@ -73,3 +73,27 @@ describe('Manage apps with no app yet', () => {
     expect(buttons()).toHaveLength(0)
   })
 })
+
+describe('Manage apps with an app made today', () => {
+  // Live journey (2026-10-30): a new app was greeted with "no SDK heartbeat"
+  // in warn, and after a test report with "compare endpoint host vs this admin".
+  const today = new Date(Date.now() - 60_000).toISOString()
+  const lastWeek = new Date(Date.now() - 7 * 86_400_000).toISOString()
+  const base: ProjectsStats = { ...EMPTY_PROJECTS_STATS, projectCount: 1, sdkMissingCount: 1 }
+
+  it('reads as setup left, with one way to finish it, before and after a test report', () => {
+    for (const topPriority of ['never_ingested', 'no_sdk_heartbeat', 'sdk_missing'] as const) {
+      show(ProjectsStatusBanner, { stats: { ...base, topPriority, sdkMissingProjects: [{ id: 'p1', name: 'kensaur.us', createdAt: today }] } })
+      expect(container.textContent).toContain('kensaur.us is waiting for its first SDK heartbeat')
+      expect(container.textContent).not.toContain('compare endpoint host')
+      expect(container.querySelector('a')?.getAttribute('href')).toBe('/connect?project=p1#connect-sdk-health')
+    }
+  })
+
+  it('still warns about an app that should have checked in by now', () => {
+    show(ProjectsStatusBanner, {
+      stats: { ...base, topPriority: 'sdk_missing', topPriorityTo: '/connect?project=p1', sdkMissingProjects: [{ id: 'p1', name: 'old app', createdAt: lastWeek }] },
+    })
+    expect(container.textContent).toContain('old app has no SDK heartbeat')
+  })
+})
