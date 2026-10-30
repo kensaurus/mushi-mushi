@@ -687,6 +687,31 @@ export async function resolveSlackBotToken(db: unknown, projectId: string | null
   return Deno.env.get('SLACK_BOT_TOKEN') ?? null
 }
 
+/**
+ * chat.postMessage / conversations.info errors that mean the configured
+ * channel cannot take a post however often it is retried: it was deleted or
+ * never existed for this bot, it is archived, or it is private and the bot
+ * is not in it. A setup gap, not a fault: the stored channel of three
+ * projects was not found on every send, 426 Sentry errors in four days
+ * (MUSHI-MUSHI-SERVER-3A, 2026-10-31).
+ */
+export const SLACK_CHANNEL_UNUSABLE_ERRORS: readonly string[] = ['channel_not_found', 'is_archived', 'not_in_channel']
+
+export function isSlackChannelUnusable(error: string | null | undefined): boolean {
+  return !!error && SLACK_CHANNEL_UNUSABLE_ERRORS.includes(error)
+}
+
+/** How long this worker skips a channel Slack refused. The health probe re-checks it every 15 min. */
+export const UNUSABLE_CHANNEL_SKIP_MS = 60 * 60 * 1000
+
+/** Per worker: `<token tail>:<channel>` → when to try it again, and Slack's error. */
+const unusableChannels = new Map<string, { until: number; error: string }>()
+
+/** Test hook. */
+export function resetUnusableSlackChannels(): void {
+  unusableChannels.clear()
+}
+
 export async function sendBotMessage(opts: BotMessageOptions): Promise<BotMessageResult> {
   // Explicit token, else the per-project vaulted token, else SLACK_BOT_TOKEN.
   const token = opts.token || (await resolveSlackBotToken(opts.db, opts.projectId))
@@ -699,6 +724,12 @@ export async function sendBotMessage(opts: BotMessageOptions): Promise<BotMessag
   if (!channel) {
     slackLog.warn('sendBotMessage: no channel — skipping')
     return { ok: false, ts: null, error: 'no_channel' }
+  }
+
+  const channelKey = `${token.slice(-6)}:${channel}`
+  const refused = unusableChannels.get(channelKey)
+  if (refused && refused.until > Date.now()) {
+    return { ok: false, ts: null, error: refused.error }
   }
 
   const body: Record<string, unknown> = {
@@ -720,6 +751,18 @@ export async function sendBotMessage(opts: BotMessageOptions): Promise<BotMessag
     })
     const json = await res.json() as { ok: boolean; ts?: string; error?: string }
     if (!json.ok) {
+      if (isSlackChannelUnusable(json.error)) {
+        // The integration health probe reports this channel as down and the
+        // Slack setup gap tells the owner to fix it; paging on every send
+        // added nothing (MUSHI-MUSHI-SERVER-3A).
+        unusableChannels.set(channelKey, { until: Date.now() + UNUSABLE_CHANNEL_SKIP_MS, error: json.error! })
+        slackLog.warn('chat.postMessage: channel cannot take posts — skipping it for an hour', {
+          slackError: json.error,
+          channel,
+          projectId: opts.projectId ?? null,
+        })
+        return { ok: false, ts: null, error: json.error }
+      }
       slackLog.error('chat.postMessage failed', { slackError: json.error })
       return { ok: false, ts: null, error: json.error }
     }
