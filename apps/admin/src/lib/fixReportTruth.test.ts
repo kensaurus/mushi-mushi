@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FixAttempt } from '../components/fixes/types'
 import {
+  countsAsInFlight,
   credentialAdvice,
   failureCause,
   failureHeadline,
@@ -17,9 +18,11 @@ import {
   fixCiInfraLabel,
   CI_INFRA_STOPPED_LABEL,
   fixReportLabel,
+  isLiveFixAttempt,
   isSuperseded,
   needsAttention,
   openPrReports,
+  queuedMergeAttemptIds,
   retryCandidates,
   supersededLabel,
 } from './fixReportTruth'
@@ -166,5 +169,41 @@ describe('rows from an older server (no report fields)', () => {
     expect(needsAttention(legacy)).toBe(false)
     expect(retryCandidates([legacy])).toEqual([])
     expect(isSuperseded(legacy)).toBe(false)
+  })
+})
+
+describe('in flight (report 8daa23e6)', () => {
+  it('counts a live attempt only when the report is in flight', () => {
+    expect(isLiveFixAttempt(fix({ status: 'running', report_fix_state: 'in_flight' }))).toBe(true)
+    expect(isLiveFixAttempt(fix({ status: 'queued', report_fix_state: 'in_flight', is_latest_attempt: false }))).toBe(true)
+    expect(isLiveFixAttempt(fix({ status: 'running', report_fix_state: 'resolved' }))).toBe(false)
+    expect(isLiveFixAttempt(fix({ status: 'running', report_fix_state: 'failed' }))).toBe(false)
+    expect(isLiveFixAttempt(fix({ status: 'completed', report_fix_state: 'in_flight', is_latest_attempt: true }))).toBe(false)
+    expect(isLiveFixAttempt(fix({ status: 'running' }))).toBe(true)
+  })
+
+  it('counts a PR waiting for the next release train even when the attempt is not running', () => {
+    const waiting = fix({ id: 'train', status: 'completed', report_fix_state: 'pr_open', pr_state: 'open' })
+    const ids = queuedMergeAttemptIds({
+      stages: [{ groups: [{ id: 'next_train', items: [{ id: 'train' }] }, { id: 'not_queued', items: [{ id: 'other' }] }] }],
+    })
+    expect(countsAsInFlight(waiting, ids)).toBe(true)
+    expect(countsAsInFlight(fix({ id: 'other', status: 'completed', report_fix_state: 'pr_open' }), ids)).toBe(false)
+  })
+
+  it('does not label every stopped report CI failed', () => {
+    const rows = [
+      fix({ status: 'completed', pr_url: 'u', check_run_conclusion: 'failure' }),
+      fix({ status: 'completed', pr_url: 'u', check_run_conclusion: 'failure' }),
+      fix({ status: 'completed', pr_url: 'u', check_run_conclusion: 'success', review_passed: false, review_reasoning: 'Read the payment path.' }),
+      fix({ status: 'failed', failure_category: 'sandbox_timeout', pr_url: 'u' }),
+    ]
+    expect(rows.map((row) => failureCause(row)).filter((cause) => cause === 'ci_failed')).toHaveLength(2)
+    expect(rows.map((row) => fixCauseLabel(failureCause(row)))).toEqual([
+      'CI failed',
+      'CI failed',
+      'Needs review',
+      'Ran out of time',
+    ])
   })
 })

@@ -10,6 +10,21 @@ import { FixDetailPanel } from './FixDetailPanel'
 import type { FixAttempt } from './types'
 import { FIXES_STICKY_LEAD, FIXES_TABLE_COL, TABLE_CELL } from './fixesTableLayout'
 
+/**
+ * Caption for the compact list. Shipped rows are not drafts: calling every
+ * row a draft fix was wrong once any of them had merged (report 8daa23e6).
+ */
+export function fixesListCaption(
+  fixes: ReadonlyArray<{ status?: string | null; pr_state?: string | null; merged_at?: string | null }>,
+): string {
+  const n = fixes.length
+  const shipped = fixes.filter((f) => f.pr_state === 'merged' || f.status === 'merged' || Boolean(f.merged_at)).length
+  const tail = ' — tap a row for details'
+  if (shipped === 0) return `${n} draft fix${n === 1 ? '' : 'es'}${tail}`
+  if (shipped === n) return `${n} shipped fix${n === 1 ? '' : 'es'}${tail}`
+  return `${n} fixes — ${shipped} shipped${tail}`
+}
+
 interface InventoryActionNodeLike {
   actionNodeId?: string
   id?: string
@@ -80,7 +95,7 @@ export function FixesTable({
       ) : (
         <div className="px-3 py-1.5 border-b border-edge-subtle bg-surface-raised/50">
           <span className="text-2xs text-fg-muted">
-            {fixes.length} draft fix{fixes.length === 1 ? '' : 'es'} — tap a row for details
+            {fixesListCaption(fixes)}
           </span>
         </div>
       )}

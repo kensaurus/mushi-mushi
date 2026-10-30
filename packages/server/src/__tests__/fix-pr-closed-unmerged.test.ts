@@ -96,7 +96,9 @@ describe('fix-loop-status pure rules', () => {
   it('buckets PR failures by why they are blocked when the worker set no category', () => {
     expect(fixFailureBucket({ status: 'failed', failure_category: 'sandbox_timeout' })).toBe('sandbox_timeout')
     expect(fixFailureBucket({ status: 'completed', pr_url: 'u', pr_state: 'closed' })).toBe('pr_closed_unmerged')
-    expect(fixFailureBucket({ status: 'completed', pr_url: 'u' })).toBe('ci_failed')
+    expect(fixFailureBucket({ status: 'completed', pr_url: 'u', check_run_conclusion: 'failure' })).toBe('ci_failed')
+    expect(fixFailureBucket({ status: 'completed', pr_url: 'u', check_run_conclusion: 'success' })).toBe('unknown')
+    expect(fixFailureBucket({ status: 'completed', pr_url: 'u' })).toBe('unknown')
     expect(fixFailureBucket({ status: 'failed' })).toBe('unknown')
   })
 

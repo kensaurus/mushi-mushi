@@ -99,6 +99,9 @@ export function fixFailureBucket(fix: ActFixSignals & { failure_category?: strin
   if (verdict) return verdict
   if (fix.pr_state === 'closed') return 'pr_closed_unmerged'
   if (fix.pr_url && fix.ci_infra?.infra) return 'ci_infra'
-  if (fix.pr_url && fix.status === 'completed') return 'ci_failed'
+  // A completed PR is a CI failure only when the checks actually failed.
+  // Otherwise every stopped PR read "CI failed" (report 8daa23e6).
+  if (fix.pr_url && CI_HARD_FAIL.has((fix.check_run_conclusion ?? '').toLowerCase())) return 'ci_failed'
+  if (fix.pr_url && agentFlaggedFix(fix)) return 'needs_review'
   return 'unknown'
 }

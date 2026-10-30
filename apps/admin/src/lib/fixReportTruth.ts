@@ -38,6 +38,49 @@ export function needsAttention(fix: FixAttempt): boolean {
   return fix.report_fix_state === 'failed' && fix.is_latest_attempt === true
 }
 
+const LIVE_ATTEMPT_STATUSES: ReadonlySet<string> = new Set(['queued', 'running', 'pending', 'dispatched'])
+
+/**
+ * This attempt is still running on a report that is in flight.
+ * A queued or running status on a shipped, stopped, or open-PR report is
+ * history: the report's current state already moved on (report 8daa23e6).
+ * A non-live status is not in flight even when the report is, because a
+ * sibling attempt is the one still running.
+ * Unknown state (an older server) keeps the live status.
+ */
+export function isLiveFixAttempt(fix: Pick<FixAttempt, 'status' | 'report_fix_state'>): boolean {
+  if (!LIVE_ATTEMPT_STATUSES.has((fix.status ?? '').toLowerCase())) return false
+  if (fix.report_fix_state == null) return true
+  return fix.report_fix_state === 'in_flight'
+}
+
+/** Attempt ids waiting in the merge queue for the next release train. */
+export function queuedMergeAttemptIds(
+  pipeline: { stages?: ReadonlyArray<{ groups?: ReadonlyArray<{ id: string; items?: ReadonlyArray<{ id: string }> }> }> } | null | undefined,
+): Set<string> {
+  const ids = new Set<string>()
+  for (const stage of pipeline?.stages ?? []) {
+    for (const group of stage.groups ?? []) {
+      if (group.id !== 'next_train') continue
+      for (const item of group.items ?? []) ids.add(item.id)
+    }
+  }
+  return ids
+}
+
+/**
+ * In flight for the filter, the summary tile, and the status line.
+ * A PR queued for the next release train counts even though its attempt
+ * is not running: that row is on the page, so the total cannot be 0.
+ */
+export function countsAsInFlight(
+  fix: Pick<FixAttempt, 'id' | 'status' | 'report_fix_state'>,
+  queuedMergeIds?: ReadonlySet<string>,
+): boolean {
+  if (queuedMergeIds?.has(fix.id)) return true
+  return isLiveFixAttempt(fix)
+}
+
 /** An attempt (failed, skipped or a closed PR) on a report that a later attempt fixed. */
 export function isSuperseded(fix: FixAttempt): boolean {
   return fix.report_fix_state === 'resolved' && !isFixMerged(fix)

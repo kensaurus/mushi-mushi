@@ -66,6 +66,14 @@ describe('a test machine that stopped (ADR 0033)', () => {
     expect(fixFailureBucket({ ...OOM, ci_infra: null })).toBe('ci_failed')
   })
 
+  it('labels only real CI failures as CI failed (report 8daa23e6)', () => {
+    const completed = { status: 'completed', pr_url: 'https://github.com/acme/app/pull/1', failure_category: null }
+    expect(fixFailureBucket({ ...completed, check_run_conclusion: 'failure' })).toBe('ci_failed')
+    expect(fixFailureBucket({ ...completed, check_run_conclusion: 'success' })).toBe('unknown')
+    expect(fixFailureBucket({ ...completed, check_run_conclusion: 'success', review_passed: false, review_reasoning: 'A person should read this.' })).toBe('needs_review')
+    expect(fixFailureBucket({ ...completed })).toBe('unknown')
+  })
+
   it('a non-infra verdict keeps the plain CI reading', () => {
     expect(actBlocker({ ...OOM, ci_infra: { infra: false, kind: 'code_failure' }, check_run_conclusion: 'failure' })).toBe('ci_failed')
   })
