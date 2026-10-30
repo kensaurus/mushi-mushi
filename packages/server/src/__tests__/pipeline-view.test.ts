@@ -10,6 +10,8 @@ import { describe, expect, it } from 'vitest'
 import {
   buildDispatchers,
   buildPipeline,
+  DEPLOY_EVENT_BODY,
+  DEPLOY_HOWTO,
   dispatcherGroup,
   intakeGroup,
   summarizeIntake,
@@ -264,6 +266,14 @@ describe('buildPipeline', () => {
     expect(stuckNone?.group.settings?.label).toBe('How to send a deploy')
     expect(stuckNone?.group.settings?.hint).toContain('deploy.completed')
     expect(stuckNone?.group.settings?.hint).toContain('X-Mushi-Api-Key')
+    // The pasted body must name a placeholder. "web" matches nothing on a mobile app (yen-yen).
+    expect(stuckNone?.group.settings?.hint).toContain('"targetId":"<deploy-target-id>"')
+    expect(stuckNone?.group.settings?.hint).not.toContain('"targetId":"web"')
+    expect(stuckNone?.group.settings?.hint).toContain(DEPLOY_EVENT_BODY)
+    expect(DEPLOY_HOWTO.hint).toBe(stuckNone?.group.settings?.hint)
+    // The stuck total includes these merges: that is what surfaces an app that records no deploys.
+    expect(group(none, 'not_deployed')?.stage.stuck).toBe(1)
+    expect(group(none, 'not_deployed')?.stage.id).toBe('merged')
     const seen = run({ attempts: [merged], deploys: [{ project_id: P, observed_version: '1.2.0', ok: true, observed_at: '2026-10-25T02:00:00Z' }] })
     expect(group(seen, 'deployed')?.stage.id).toBe('deployed')
     expect(group(seen, 'not_deployed')).toBeNull()

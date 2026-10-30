@@ -271,16 +271,24 @@ export const CLAUDE_KEY_SETTING = { label: 'AI keys', to: '/settings?tab=byok' }
 /** Local workers (ADR 0048): their lanes, queues and runs. */
 export const WORKERS_SETTING = { label: 'Local workers', to: '/pipeline?tab=workers' }
 /**
+ * What CI posts so a merged fix can leave Merged (report 9f64a77b).
+ * Replace `<deploy-target-id>` with a production deploy target id from the
+ * Recipe page. A literal `web` matches nothing on an app that has no web target.
+ * The console prints this string; it does not keep a second copy.
+ */
+export const DEPLOY_EVENT_BODY =
+  '{"events":[{"type":"deploy.completed","targetId":"<deploy-target-id>","environment":"production","commit":"<sha>","ok":true}]}'
+
+/**
  * How a merged fix becomes Deployed (report 9f64a77b). Any project API key
  * may POST this; the key shipped in the app is the wrong one to put in CI.
- * `targetId` should be a production deploy target on the Recipe page.
  * One ok event is what moves the fix; it does not by itself tell the reporter.
  */
 export const DEPLOY_HOWTO = {
   label: 'How to send a deploy',
   to: '/recipe',
   hint:
-    'No deploy has been seen since this merged, so it is not marked deployed. From CI, POST /v1/ingest/recipe/events with header X-Mushi-Api-Key set to a project API key kept in CI secrets (from mushi login, not the key shipped in the app) and body {"events":[{"type":"deploy.completed","targetId":"web","environment":"production","commit":"<sha>","ok":true}]}. targetId is the deploy target id on the Recipe page. One ok:true event moves the fix to Deployed.',
+    `No deploy has been seen since this merged, so it is not marked deployed. From CI, POST /v1/ingest/recipe/events with header X-Mushi-Api-Key set to a project API key kept in CI secrets (from mushi login, not the key shipped in the app) and body ${DEPLOY_EVENT_BODY}. targetId is the deploy target id on the Recipe page. One ok:true event moves the fix to Deployed.`,
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

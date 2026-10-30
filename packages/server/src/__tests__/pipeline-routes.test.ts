@@ -18,6 +18,7 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
 import { fetchFailingCheckNames } from '../../supabase/functions/_shared/github.ts'
+import { DEPLOY_EVENT_BODY } from '../../supabase/functions/_shared/pipeline-view.ts'
 
 const state = vi.hoisted(() => ({
   db: null as unknown,
@@ -229,6 +230,10 @@ describe('GET /v1/admin/pipeline', () => {
       apps: [{ projectId: P1, rejected: 4, byReason: [{ reason: 'fingerprintHash:invalid_string', count: 4 }], sdkPackages: ['@mushi-mushi/react-native'], lastAt: '2026-10-26T07:00:00Z' }],
     })
     expect(data.projects.map((p) => p.name)).toEqual(['glot.it'])
+    // One body, owned here, so the console cannot drift to a hard-coded "web".
+    expect((res.body.data as { deployEventBody: string }).deployEventBody).toBe(DEPLOY_EVENT_BODY)
+    expect(DEPLOY_EVENT_BODY).toContain('"targetId":"<deploy-target-id>"')
+    expect(DEPLOY_EVENT_BODY).not.toContain('"targetId":"web"')
   })
 
   it('all apps: every app the caller can open, including a conflict row that used both agents', async () => {

@@ -67,6 +67,7 @@ import {
   buildDispatchers,
   buildPipeline,
   CONFLICT_AGENT_CAP,
+  DEPLOY_EVENT_BODY,
   dispatcherGroup,
   intakeGroup,
   keyServes,
@@ -318,6 +319,8 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
     // null: nothing counted yet (or the table is not there): "not recorded yet", never 0.
     intake,
     ciReadable,
+    // The one deploy.completed body. The console prints this and keeps no copy.
+    deployEventBody: DEPLOY_EVENT_BODY,
   };
 }
 
