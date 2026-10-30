@@ -9294,7 +9294,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `refresh_recipe` | Refresh the app recipe | Read mushi.recipe.json and the design-token files from the connected repo again and store a new recipe snapshot, instead of waiting for the daily refresh. At most once per project every 5 minutes (429 RATE_LIMITED otherwise). Optional projectId. Returns \{ ok, state, reason, snapshotId, tokensHash, manifestPresent, tokenCount, issues } where state is ok \| drift \| unknown \| not_connected \| error and issues lists manifest problems with their path. Write: it stores a snapshot; nothing in the repo changes. Use after editing mushi.recipe.json or the tokens; then read get_app_recipe or get_design_tokens. |
 | `run_design_deviance` | Run the design deviance scan | Refresh the design tokens and start a new deviance scan of the repo (off-token colours, fonts, spacing, radius, contrast below AA, raw interactive elements). The scan reads up to 1,500 files in the background: the result is \{ refresh, run } with run.status "running" (poll get_design_deviance until running clears), or run null when the repo has no tokens to compare against (refresh says why). At most one scan per project every 5 minutes (429 RATE_LIMITED otherwise). Optional projectId. Write: it records a scan; nothing in the repo changes. |
 | `run_store_review` | Run the store review | Run the store review for one project now: listing text in the repo against what is live on the App Store and Google Play, listing claims against the code, privacy labels against data-collecting SDKs, screenshots, length limits and the pre-submission checklist. Each result is ok \| finding \| unknown (not checked, never healthy). This is a check against the code, not legal advice. At most one review per project every 30 minutes (429 RATE_LIMITED otherwise). Optional projectId. Returns \{ projectId, checkedAt, status, results, checklist, findings, note }; read it again later with get_store_status. Write: it records a gate run; nothing is submitted to a store. |
-| `request_ci_placement_change` | Ask to change where CI runs (needs approval) | Ask to change where one repository's CI runs by setting or removing one repo Actions variable that its workflows read in runs-on (ADR 0037). Only LINUX_RUNNER and RUNNER_\ may be changed; value is one runner label, or null to remove the variable so jobs use the workflow's fallback (usually GitHub-hosted). Mushi builds the change itself from a fresh preview: the jobs that move and the ones that stay (pinned to GitHub, main-branch and Dependabot runs), the target runners and their wait, the cost change, and the variable's current value, which the change must still match when it runs. Your organization's CI policy is checked now and again when it runs: no paid GitHub-hosted minutes on private repos when that rule is on, repos managed by an external controller are refused, standby runners are never a target. This only creates a request: a team owner or admin approves it in the console and runs it there within an hour; this tool can never approve or run it, and Mushi never changes runner labels or registrations. Confirm with the user first. Returns \{ id, status: "pending_approval", payloadSha256, preview }, or an error with the reason (VARIABLE_NOT_ALLOWED, POLICY_NO_PAID_HOSTED, EXTERNAL_CONTROLLER, POLICY_STANDBY_TARGET, VARIABLE_UNREADABLE, NO_CHANGE) and the preview. Write. |
+| `request_ci_placement_change` | Ask to change where CI runs (needs approval) | Ask to change where one repository's CI runs by setting or removing one repo Actions variable that its workflows read in runs-on (ADR 0037). Only LINUX_RUNNER, RUNNER_\ and CI_PROFILE may be changed; value is one runner label, or null to remove the variable so jobs use the workflow's fallback (usually GitHub-hosted). CI_PROFILE (economy, the default, or thorough) is offered only where a workflow reads vars.CI_PROFILE and moves no job. A move to GitHub-hosted can carry revertAfterHours (1–168): Mushi switches it back when the time is up unless someone changed it. Mushi builds the change itself from a fresh preview: the jobs that move and the ones that stay (pinned to GitHub, main-branch and Dependabot runs), the target runners and their wait, the cost change, and the variable's current value, which the change must still match when it runs. Your organization's CI policy is checked now and again when it runs: no paid GitHub-hosted minutes on private repos when that rule is on, repos managed by an external controller are refused, standby runners are never a target. This only creates a request: a team owner or admin approves it in the console and runs it there within an hour; this tool can never approve or run it, and Mushi never changes runner labels or registrations. Confirm with the user first. Returns \{ id, status: "pending_approval", payloadSha256, preview }, or an error with the reason (VARIABLE_NOT_ALLOWED, POLICY_NO_PAID_HOSTED, EXTERNAL_CONTROLLER, POLICY_STANDBY_TARGET, VARIABLE_UNREADABLE, NO_CHANGE) and the preview. Write. |
 | `open_ci_cost_fix` | Open a CI cost fix PR (draft) | Open a DRAFT pull request that applies one CI cost fix to one workflow file (ADR 0047), the fix a CI advice item offers as autofix (get_ci_overview / get_ci_costs advice[].autofix \{ kind, projectId, repo, workflowPath }). kind: add_concurrency (a concurrency group that cancels superseded pull request runs, never a push), skip_drafts (ready_for_review added to the pull_request types and every job skips drafts), weekly_cron (a schedule that fires more than weekly runs once a week), ignore_docs_paths (paths-ignore for docs-only changes, Markdown, docs/, license and issue templates, on pull_request and push; refused when a job looks like a required check, because a skipped workflow never reports and the PR could not merge). The repo must be connected to the project. Mushi reads the workflow from the default branch, edits only that file (comments kept), opens the PR as a draft with a conventional ci: title, and records the workflow's billed minutes per day for the 14 days before; nothing changes until a person reviews, readies and merges it. The job runs in the background: read it again with the job id (GET /v1/admin/ci/cost-fixes/\{id}, or `mushi runner fix-status`); after the merge it shows the saving measured per day. Writing a workflow file needs the GitHub App's Workflows: Read and write permission or a token with the workflow scope. Confirm with the user first. Returns \{ job: \{ id, status (queued \| running \| pr_opened \| no_change \| refused \| failed), summary, errorCode, error, prUrl, baseline, measured, saving } }, or an error (REPO_NOT_IN_PROJECT, PR_ALREADY_OPEN with the job, COST_FIX_IN_PROGRESS, RATE_LIMITED: 10 an hour per project). Write. |
 | `apply_ci_cost_fix_rollout` | Open CI cost fixes for every app (one draft PR per repo) | Open the CI cost fixes from preview_ci_cost_fix_rollout as ONE draft pull request per repo (ADR 0047 amendment), so each repo runs CI once for all its fixes instead of once per fix. repos: [\{ projectId, repo, items: [\{ workflowPath, kind }] }], at most 10 repos and 20 items each (pass the preview's ready items). Mushi rebuilds the advice itself and opens only items it still advises (evidence and saving come from the server), skips an edit whose PR is still open or that is being opened, and counts each repo once against its project's 10 CI fix PRs an hour. In each repo it reads every workflow once, applies the kinds in turn with the same refusals as open_ci_cost_fix, and opens one draft PR with a ci: title whose body lists each change and each refusal; a refused item is never dropped, and when every item is refused no PR is opened. Nothing changes until a person reviews, readies and merges the PR. Needs the GitHub App's Workflows: Read and write permission (or a token with the workflow scope). Confirm with the user first. Returns \{ queued, results [\{ projectId, repo, status (queued \| skipped \| error), bundleId, jobs, skipped [\{ workflowPath, kind, code (NOT_ADVISED \| PR_ALREADY_OPEN \| COST_FIX_IN_PROGRESS), message, prUrl }], error \{ code (NOT_FOUND \| FORBIDDEN \| REPO_NOT_IN_PROJECT \| RATE_LIMITED \| COST_FIX_IN_PROGRESS \| MIGRATION_PENDING), message } }] }. Follow each bundle with get_ci_cost_fix_bundle. Write. |
 | `set_design_settings` | Set design score actions | Change what the design deviance score may do for one project: threshold (0–100), failCi (true fails `mushi recipe check --push` above the threshold) and autofix. Send at least one. An API key can turn autofix off but never on: turning it on lets the project spend on fixes by itself, so it needs a signed-in owner or admin in the console (403 otherwise). Project owners and admins only. Optional projectId. Returns the saved settings. Write. |
@@ -15195,7 +15195,9 @@ npx supabase secrets set FIRECRAWL_API_KEY=…
 npx supabase secrets set ADMIN_BASE_URL=https://your-domain.example.com/admin
 ```
 
-Tenants can override `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` per project via [BYOK](/security/byok). `E2B_API_KEY` is read by the Node fix orchestrator in `@mushi-mushi/agents`, not by the edge functions; set it where that runs if you use the E2B sandbox.
+Tenants can override `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` per project via [BYOK](/security/byok).
+
+The server-wide `GITHUB_TOKEN`, `SLACK_BOT_TOKEN` and `LANGFUSE_*` keys belong to the operator's own accounts, so they count as an app's own GitHub, Slack or Langfuse connection only for apps owned by a user listed in `MUSHI_OPERATOR_USER_IDS` (comma-separated user ids). The pipeline's own Langfuse tracing still uses the keys for every app. Every other app connects its own GitHub (the GitHub App, or a token on its Integrations page) and its own Slack. On a single-team self-host, put your own user id there, or the server-wide token serves no app. `E2B_API_KEY` is read by the Node fix orchestrator in `@mushi-mushi/agents`, not by the edge functions; set it where that runs if you use the E2B sandbox.
 
 ## JWT verification
 
@@ -17087,7 +17089,7 @@ mushi runner status --json
 | Actions: read | Jobs, their times, runner names and why a job was cancelled |
 | Administration: read (optional) | The runner list: online, offline, busy, labels |
 | Metadata: read | Whether a repo is public or private (read once a day): it decides what GitHub-hosted minutes cost |
-| Variables: read and write (optional) | Changing where CI runs: Mushi reads and writes only `LINUX_RUNNER` and `RUNNER_`, with the GitHub token stored in the project's settings (or, without one, the organization's). Never the Mushi GitHub App, which does not have this permission, and never Mushi's own token |
+| Variables: read and write (optional) | Changing where CI runs: Mushi reads and writes only `LINUX_RUNNER`, `RUNNER_` and `CI_PROFILE`, with the GitHub token stored in the project's settings (or, without one, the organization's), else the Mushi GitHub App installation for that repo once you approve its "Variables: Read and write" permission. Never Mushi's own token |
 
 Without Administration: read, Mushi shows the runners it saw in jobs and says
 so.
@@ -17200,7 +17202,39 @@ same approval.
 mushi runner placement show
 mushi runner placement preview --repo you/your-app --value my-runner-label
 mushi runner placement request --repo you/your-app --value my-runner-label --reason "save paid minutes"
-mushi runner placement preview --repo you/your-app --remove     # back to GitHub-hosted
+mushi runner placement preview --repo you/your-app --remove --revert-after 4     # GitHub-hosted for 4 hours
+mushi runner placement request --repo you/your-app --variable CI_PROFILE --value thorough
+```
+
+### Time-boxed GitHub-hosted runs
+
+A move to GitHub-hosted runners can switch back on its own. In the console,
+**Switch back after** defaults to 4 hours (`--revert-after `,
+1–168). The time box is part of the change you approve. When it is up, Mushi
+files the ordinary revert in the approver's name and runs it within 10
+minutes, with the same compare-and-set: if anyone changed the variable in the
+meantime, Mushi leaves it alone and records why. A move without a time box
+says so in its preview, because GitHub-hosted minutes on a private repo are
+billed until someone switches back.
+
+### Checks on fix pull requests (`CI_PROFILE`)
+
+If your workflows read `vars.CI_PROFILE`, the repo also shows **Checks on fix
+pull requests**:
+
+- **Economy** (recommended, and the default when the variable is unset): your
+  workflows may skip slow, billed checks on Mushi fix pull requests. Those
+  checks still run on the release train and on main before a deploy.
+- **Thorough**: every check on every pull request, fix pull requests
+  included. More GitHub-hosted minutes on a private repo.
+
+It moves no `runs-on`, so it goes through the same preview, request, approve
+and run steps without a runner target. A repo whose workflows do not read
+`vars.CI_PROFILE` shows no switch, because changing it would do nothing.
+
+```yaml
+# Skip the visual audit on Mushi fix PRs unless the repo asks for thorough.
+if: ${{ vars.CI_PROFILE == 'thorough' || !(startsWith(github.head_ref, 'bugfix/MUSHI-') || (startsWith(github.head_ref, 'mushi/') && !startsWith(github.head_ref, 'mushi/train/'))) }}
 ```
 
 ### Your CI agreement

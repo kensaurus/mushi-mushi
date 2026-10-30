@@ -93,3 +93,42 @@ standby and never a target.
   request → approve → execute path as other connector actions.
 - **Pricing with the old 1 / 2 / 10 multipliers** and **counting
   self-hosted or public-repo minutes as billed**: both overstated cost.
+
+## Amendment 2026-10-30: CI_PROFILE, time-boxed GitHub-hosted moves, App token
+
+The owner delegated these on 2026-10-30, after another session (SBC) asked
+for CI cost and speed options in the console, with the cheaper option as
+default. Nothing above is loosened; three things are added.
+
+1. **`CI_PROFILE` joins the allowlist**, with the values `economy` and
+   `thorough` only. Unset means economy. On economy, a repo's workflows may
+   let Mushi fix pull requests skip slow, billed checks; those checks still
+   run on the release train and on main before a deploy. Thorough runs
+   everything on every pull request. The console offers the switch only for
+   a repo whose workflow text reads `vars.CI_PROFILE`. It moves no `runs-on`,
+   so only the external-controller rule applies to it, not the
+   hosted-minutes rule. The request → approve → execute path,
+   compare-and-set and audit are unchanged.
+2. **A move to GitHub-hosted runners can carry `revertAfterHours`
+   (1–168)** in its hashed payload, so approving the change approves its time
+   box.
+   - When it is due, the CI collector tick (every 10 minutes) files the
+     ordinary revert, approves it in the original approver's name and runs it.
+   - act() still checks the allowlist, the binding, the policy and the
+     compare-and-set. If anyone changed the variable in between, the revert is
+     refused (VARIABLE_MOVED), recorded as failed and never retried: a
+     person's later choice wins.
+   - A move without a time box says "No time limit" in its preview. On
+     2026-10-30 a hand-set `ubuntu-latest` on tsumagoi was never switched
+     back; those fallbacks were 79% of its hosted minutes.
+3. **The token.** The project's or organization's stored token still comes
+   first. Without one, the GitHub App installation bound to that repo is
+   used; never the platform token.
+   - The App's "Actions variables" permission moves from read to read and
+     write. Each installation re-approves it.
+   - Until it does, GitHub answers 403, and the change fails with
+     `GITHUB_VARIABLES_PERMISSION` and the steps to approve.
+
+Still rejected: any other variable name, toggles without approval,
+time boxes on moves to self-hosted runners (they save money and need no
+timer), and writes through the platform token.

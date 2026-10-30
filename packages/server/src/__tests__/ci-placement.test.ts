@@ -23,6 +23,7 @@ import {
   normalizePolicy,
   payloadProblem,
   policyVerdict,
+  revertDueAt,
   revertPayload,
   targetOf,
   variableMatches,
@@ -347,5 +348,89 @@ jobs:
     // A GitHub-hosted (larger) runner carrying the label does not prove it is yours.
     const larger = [{ runner_name: 'GitHub Actions 3', status: 'online', labels: ['linux-16core'], kind: 'github_hosted' }]
     expect(buildPlacementPreview(input({ value: 'linux-16core', runners: larger })).blocked?.code).toBe('POLICY_UNKNOWN_TARGET')
+  })
+})
+
+describe('CI_PROFILE (economy | thorough)', () => {
+  const PROFILE_CI = `name: CI
+on: pull_request
+jobs:
+  audit:
+    if: \${{ vars.CI_PROFILE == 'thorough' || !startsWith(github.head_ref, 'bugfix/MUSHI-') }}
+    runs-on: ubuntu-latest
+    steps: []
+`
+  const withProfile = parseRepoWorkflows([{ path: '.github/workflows/ci.yml', text: PROFILE_CI }])
+
+  it('is allowed, with economy or thorough only, and never a time box', () => {
+    expect(isAllowedPlacementVariable('CI_PROFILE')).toBe(true)
+    const ok = { repo: 'kensaurus/yen-yen', name: 'CI_PROFILE', value: 'thorough', expected: { exists: false, value: null, updatedAt: null }, jobs: [], expectedLabels: [] }
+    expect(payloadProblem(ok, 'set_actions_variable')).toBeNull()
+    expect(payloadProblem({ ...ok, value: 'kensaurus-local' }, 'set_actions_variable')).toMatch(/economy or thorough/)
+    expect(payloadProblem({ ...ok, revertAfterHours: 4 }, 'set_actions_variable')).toMatch(/GitHub-hosted/)
+  })
+
+  it('a repo whose workflows read it: thorough is requestable, moves no job, and says what it costs', () => {
+    const p = buildPlacementPreview(input({ variable: 'CI_PROFILE', value: 'thorough', parsed: withProfile }))
+    expect(p.blocked).toBeNull()
+    expect(p.payload).toMatchObject({ name: 'CI_PROFILE', value: 'thorough', jobs: [], expectedLabels: [] })
+    expect(p.warnings.join(' ')).toMatch(/billed GitHub-hosted minutes/)
+    // The private-repo hosted policy is about runners; it does not refuse a profile.
+    expect(p.policy.allowed).toBe(true)
+  })
+
+  it('is refused where no workflow reads it, or the workflows are unread', () => {
+    expect(buildPlacementPreview(input({ variable: 'CI_PROFILE', value: 'thorough' })).blocked?.code).toBe('PROFILE_NOT_READ')
+    expect(buildPlacementPreview(input({ variable: 'CI_PROFILE', value: 'thorough', parsed: null })).blocked?.code).toBe('WORKFLOWS_UNREAD')
+    expect(buildPlacementPreview(input({ variable: 'CI_PROFILE', value: 'fast', parsed: withProfile })).blocked?.code).toBe('VALIDATION_ERROR')
+  })
+
+  it('still respects an external controller', () => {
+    const p = buildPlacementPreview(input({ repo: 'kensaurus/tsumagoi', variable: 'CI_PROFILE', value: 'thorough', parsed: withProfile }))
+    expect(p.blocked?.code).toBe('EXTERNAL_CONTROLLER')
+  })
+})
+
+describe('time-boxed move to GitHub-hosted', () => {
+  const current = { exists: true, value: 'kensaurus-local', updatedAt: '2026-10-01T00:00:00Z' }
+
+  it('carries revertAfterHours in the approved payload and says when it switches back', () => {
+    const p = buildPlacementPreview(input({ value: 'ubuntu-latest', current, policy: null, revertAfterHours: 4 }))
+    expect(p.blocked).toBeNull()
+    expect(p.payload?.revertAfterHours).toBe(4)
+    expect(p.warnings.join(' ')).toMatch(/Switches back to “kensaurus-local” 4 hours after it runs/)
+    expect(revertDueAt(p.payload!, '2026-10-30T00:00:00Z')?.toISOString()).toBe('2026-10-30T04:00:00.000Z')
+  })
+
+  it('time-boxes removing the variable too, when every job falls back to GitHub-hosted', () => {
+    const p = buildPlacementPreview(input({ value: null, current, policy: null, revertAfterHours: 4 }))
+    expect(p.blocked).toBeNull()
+    expect(p.action).toBe('delete_actions_variable')
+    expect(p.payload?.revertAfterHours).toBe(4)
+    expect(payloadProblem(p.payload, 'delete_actions_variable')).toBeNull()
+    expect(payloadProblem({ ...p.payload, fallbackLabels: ['kensaurus-local'] }, 'delete_actions_variable')).toMatch(/GitHub-hosted/)
+  })
+
+  it('warns when a move to GitHub-hosted has no time limit', () => {
+    const p = buildPlacementPreview(input({ value: 'ubuntu-latest', current, policy: null }))
+    expect(p.payload?.revertAfterHours).toBeUndefined()
+    expect(p.warnings.join(' ')).toMatch(/No time limit/)
+  })
+
+  it('refuses a time box on a move to your own machines, or out of range', () => {
+    expect(buildPlacementPreview(input({ revertAfterHours: 4 })).blocked?.code).toBe('VALIDATION_ERROR')
+    expect(buildPlacementPreview(input({ value: 'ubuntu-latest', current, policy: null, revertAfterHours: 0 })).blocked?.code).toBe('VALIDATION_ERROR')
+    expect(buildPlacementPreview(input({ value: 'ubuntu-latest', current, policy: null, revertAfterHours: 169 })).blocked?.code).toBe('VALIDATION_ERROR')
+    const ok = { repo: 'kensaurus/yen-yen', name: 'LINUX_RUNNER', value: 'ubuntu-latest', expected: current, jobs: [], expectedLabels: [], revertAfterHours: 4 }
+    expect(payloadProblem(ok, 'set_actions_variable')).toBeNull()
+    expect(payloadProblem({ ...ok, value: 'kensaurus-local' }, 'set_actions_variable')).toMatch(/GitHub-hosted/)
+    expect(payloadProblem({ ...ok, revertAfterHours: 2.5 }, 'set_actions_variable')).toMatch(/whole number/)
+  })
+
+  it('the revert of a time-boxed change carries no time box of its own', () => {
+    const p = buildPlacementPreview(input({ value: 'ubuntu-latest', current, policy: null, revertAfterHours: 4 }))
+    const back = revertPayload(p.payload!, { exists: true, value: 'ubuntu-latest', updatedAt: '2026-10-30T00:00:01Z' })
+    expect(back.value).toBe('kensaurus-local')
+    expect(back.revertAfterHours).toBeUndefined()
   })
 })
