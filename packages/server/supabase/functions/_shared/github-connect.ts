@@ -20,8 +20,12 @@
  *      install (`x`) and returns to authorize. A second empty list is an
  *      error, never another round trip.
  *   4. The console gets a signed short-lived grant { project, user,
- *      installation ids } in the URL fragment, lists those installations'
- *      repositories, and saves the one the person picks.
+ *      installation ids, repository ids } in the URL fragment. The
+ *      repository ids are the ones that person can reach through each
+ *      installation (`GET /user/installations/{id}/repositories`): an
+ *      organization member sees the org's installation but only the repos
+ *      their own access allows, so the picker and the save are limited to
+ *      those, never to everything the App can see.
  *
  * Nothing here is stored: the grant is the proof, it expires in 30 minutes
  * and only the person who started the flow can use it for that project.
@@ -49,6 +53,8 @@ export interface ConnectGrant {
   u: string
   /** installation ids the person can reach */
   i: number[]
+  /** repository ids the person can reach through those installations */
+  r: number[]
   /** GitHub login that authorized */
   g: string
   exp: number
@@ -91,8 +97,12 @@ async function sign(secret: string, purpose: string, payload: object): Promise<s
   return `${body}.${b64url(await hmac(secret, purpose, body))}`
 }
 
+/** Largest grant: up to MAX_GRANT_REPOS repository ids. */
+const MAX_TOKEN_CHARS: Record<string, number> = { state: 4096, grant: 24_576 }
+export const MAX_GRANT_REPOS = 1000
+
 async function open(secret: string, purpose: string, token: string | null | undefined): Promise<Record<string, unknown> | null> {
-  if (!token || token.length > 4096) return null
+  if (!token || token.length > (MAX_TOKEN_CHARS[purpose] ?? 4096)) return null
   const [body, mac, extra] = token.split('.')
   if (!body || !mac || extra !== undefined) return null
   const given = fromB64url(mac)
@@ -139,10 +149,11 @@ export async function openConnectGrant(
   if (
     !v || typeof v.p !== 'string' || typeof v.u !== 'string' || typeof v.g !== 'string' ||
     !Array.isArray(v.i) || !v.i.every((n) => Number.isSafeInteger(n) && (n as number) > 0) ||
-    v.i.length > 50 || typeof v.exp !== 'number'
+    v.i.length > 50 || typeof v.exp !== 'number' ||
+    !Array.isArray(v.r) || !v.r.every((n) => Number.isSafeInteger(n) && (n as number) > 0) || v.r.length > MAX_GRANT_REPOS
   ) return { ok: false, reason: 'invalid' }
   if (v.exp < nowSeconds) return { ok: false, reason: 'expired' }
-  return { ok: true, grant: { p: v.p, u: v.u, g: v.g, i: v.i as number[], exp: v.exp } }
+  return { ok: true, grant: { p: v.p, u: v.u, g: v.g, i: v.i as number[], r: v.r as number[], exp: v.exp } }
 }
 
 export interface GithubAppConfig {
@@ -285,6 +296,8 @@ export async function listUserInstallations(
 }
 
 export interface InstallationRepo {
+  /** GitHub repository id */
+  id: number
   fullName: string
   private: boolean
   defaultBranch: string
@@ -336,6 +349,7 @@ export async function listInstallationRepos(
     const rows = body.repositories ?? []
     for (const r of rows) {
       out.push({
+        id: Number(r.id ?? 0),
         fullName: String(r.full_name ?? ''),
         private: r.private === true,
         defaultBranch: String(r.default_branch ?? 'main'),
@@ -345,5 +359,31 @@ export async function listInstallationRepos(
     }
     if (rows.length < 100) break
   }
-  return out.filter((r) => r.fullName.includes('/'))
+  return out.filter((r) => r.fullName.includes('/') && Number.isSafeInteger(r.id) && r.id > 0)
+}
+
+/**
+ * Repository ids one installation reaches *for this person* (≤ 3 pages of
+ * 100), with their user access token. Throws when GitHub does not answer, so
+ * the caller fails closed instead of granting the whole installation.
+ */
+export async function listUserInstallationRepoIds(
+  installationId: number,
+  userToken: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<number[]> {
+  const headers = { Accept: 'application/vnd.github+json', Authorization: `Bearer ${userToken}`, 'X-GitHub-Api-Version': '2022-11-28' }
+  const out: number[] = []
+  for (let page = 1; page <= 3; page++) {
+    const res = await fetchImpl(`https://api.github.com/user/installations/${installationId}/repositories?per_page=100&page=${page}`, { headers, signal: AbortSignal.timeout(10_000) })
+    if (!res.ok) throw new Error(`GitHub answered ${res.status}`)
+    const body = (await res.json()) as { repositories?: Array<Record<string, unknown>> }
+    const rows = body.repositories ?? []
+    for (const r of rows) {
+      const id = Number(r.id)
+      if (Number.isSafeInteger(id) && id > 0) out.push(id)
+    }
+    if (rows.length < 100) break
+  }
+  return out
 }

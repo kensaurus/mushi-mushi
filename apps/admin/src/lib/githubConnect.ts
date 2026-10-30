@@ -60,7 +60,7 @@ const MESSAGES: Record<string, string> = {
   GRANT_EXPIRED: 'That GitHub sign-in is older than 30 minutes. Press Connect GitHub again.',
   GRANT_INVALID: 'This GitHub sign-in could not be checked. Press Connect GitHub again.',
   GRANT_MISMATCH: 'This GitHub sign-in was started for another app or person. Press Connect GitHub here.',
-  REPO_NOT_REACHABLE: 'The Mushi GitHub App cannot see that repository. Add it to the App’s repositories on GitHub, then refresh the list.',
+  REPO_NOT_REACHABLE: 'That repository is not one you and the Mushi GitHub App can both reach. Pick one from the list, or add it to the App’s repositories on GitHub (or ask someone with access), then refresh the list.',
   GITHUB_APP_NOT_CONFIGURED: 'Connecting through the GitHub App is not set up on this server. Use a GitHub token instead.',
 }
 
