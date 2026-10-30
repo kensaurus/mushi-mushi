@@ -31,7 +31,7 @@ Restart the editor and ask *"what's broken in prod?"*. For Cursor and Claude, `s
   "mcpServers": {
     "mushi-mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.30.1"],
+      "args": ["-y", "@mushi-mushi/mcp@0.30.2"],
       "env": {
         "MUSHI_API_KEY": "mushi_xxxxxxxxxxxxxxxxxxxx",
         "MUSHI_PROJECT_ID": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
