@@ -47,7 +47,7 @@ beforeEach(() => {
   db = makeFakeDb({
     projects: [
       { id: A, name: 'glot.it' },
-      { id: B, name: 'lets-talk' },
+      { id: B, name: 'lets-talk', created_at: '2026-10-13T07:41:32Z' },
     ],
     project_api_keys: [
       { project_id: A, is_active: true, scopes: ['report:write'], last_seen_at: now },
@@ -72,7 +72,7 @@ describe('GET /v1/admin/projects/stats', () => {
     const data = await stats()
     expect(data.sdkConnectedCount).toBe(1)
     expect(data.sdkMissingCount).toBe(1)
-    expect(data.sdkMissingProjects).toEqual([{ id: B, name: 'lets-talk' }])
+    expect(data.sdkMissingProjects).toEqual([{ id: B, name: 'lets-talk', createdAt: '2026-10-13T07:41:32Z' }])
     expect(data.topPriority).toBe('sdk_missing')
     expect(data.topPriorityLabel).toContain('lets-talk has no SDK heartbeat')
     expect(data.topPriorityTo).toBe(`/connect?project=${B}#connect-sdk-health`)

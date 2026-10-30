@@ -67,13 +67,13 @@ async function setup(query: Record<string, string>) {
 }
 
 describe('GitHub App setup URL', () => {
-  it('sends a signed connect state on to GitHub authorize, binding nothing', async () => {
-    const state = await connect.signConnectState(ENV.MUSHI_GITHUB_CONNECT_SECRET, {
-      p: P, u: USER, r: 'onboarding', exp: Math.floor(Date.now() / 1000) + 600,
-    })
+  it('sends a signed connect state on to GitHub authorize, marked back from install, binding nothing', async () => {
+    const exp = Math.floor(Date.now() / 1000) + 600
+    const state = await connect.signConnectState(ENV.MUSHI_GITHUB_CONNECT_SECRET, { p: P, u: USER, r: 'onboarding', exp })
     const loc = await setup({ installation_id: '12345', setup_action: 'install', state })
     expect(loc.origin + loc.pathname).toBe('https://github.com/login/oauth/authorize')
-    expect(loc.searchParams.get('state')).toBe(state)
+    const opened = await connect.openConnectState(ENV.MUSHI_GITHUB_CONNECT_SECRET, loc.searchParams.get('state'), exp - 600)
+    expect(opened).toEqual({ ok: true, state: { p: P, u: USER, r: 'onboarding', exp, x: 1 } })
     expect(loc.searchParams.get('client_id')).toBe('Iv1.client')
     expect(db.table('project_repos')).toHaveLength(0)
     expect(db.table('project_settings')).toHaveLength(0)

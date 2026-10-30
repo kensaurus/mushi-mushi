@@ -23,6 +23,8 @@ export interface ProjectsCreatePanelProps {
   orgDataLoaded: boolean
   canManageProjects: boolean
   activeOrgRole: OrgRole
+  /** The team the app goes into; set only when the person is in several. */
+  teamName?: string | null
   onNavigateTeam: () => void
   newName: string
   onNewNameChange: (value: string) => void
@@ -39,6 +41,7 @@ export function ProjectsCreatePanel({
   orgDataLoaded,
   canManageProjects,
   activeOrgRole,
+  teamName,
   onNavigateTeam,
   newName,
   onNewNameChange,
@@ -59,6 +62,12 @@ export function ProjectsCreatePanel({
             <p className="text-2xs leading-relaxed text-fg-muted">
               One project per app or environment — your API key and setup command appear on the next screen.
             </p>
+            {teamName && (
+              <p className="mt-1 text-2xs leading-relaxed text-fg-muted" data-testid="create-project-team">
+                It goes into team <strong className="text-fg-secondary">{teamName}</strong>, so everyone in that team sees it.
+                Switch team at the top to put it somewhere else.
+              </p>
+            )}
           </ContainedBlock>
           {orgDataLoaded && !canManageProjects && (
             <ContainedBlock tone="warn" className="mb-3">

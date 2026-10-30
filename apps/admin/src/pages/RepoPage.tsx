@@ -531,7 +531,7 @@ export function RepoPage() {
           'Multi-repo: link a backend repo so fix PRs can span both codebases in a single dispatch',
         ]}
         helpHowToUse={copy?.help?.howToUse ?? [
-          'Connect your primary repo: go to Integrations → GitHub, paste the repo URL, then install the Mushi GitHub App ("Install Mushi on GitHub" under Repository settings once the URL is set).',
+          'Connect your primary repo: on Connect, press Connect GitHub, sign in to GitHub and pick the repository.',
           'Add a second repo: open Repository settings → + Add repo, set role=backend, and set path_globs (e.g. src/**) so the fix worker knows which files to target (the same globs limit which files are indexed).',
           'Enable Autofix: Settings → Autofix must be ON and Sandbox must be set to e2b/modal (not local-noop) for PRs to open in production.',
           'Review: Pull requests lists every fix PR with CI status. Activity lists dispatches, commits, and CI results; filter it by event type.',
