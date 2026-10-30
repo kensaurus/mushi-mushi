@@ -14,7 +14,13 @@ import { useScrollToHash } from './useScrollToHash'
 
 function Probe({ ready }: { ready: boolean }) {
   useScrollToHash(ready)
-  return createElement('div', { id: 'platform-card-sentry' }, 'Sentry')
+  // Like the console: the page scrolls inside <main>, not the window.
+  return createElement(
+    'main',
+    { style: { overflowY: 'auto' } },
+    createElement('section', { id: 'above' }, 'Cards above'),
+    createElement('div', { id: 'platform-card-sentry' }, 'Sentry'),
+  )
 }
 
 describe('useScrollToHash', () => {
@@ -45,8 +51,10 @@ describe('useScrollToHash', () => {
   describe('when cards above the target finish loading after the scroll', () => {
     let grow: (() => void) | null = null
     const disconnect = vi.fn()
+    const observed: Element[] = []
     beforeEach(() => {
       grow = null
+      observed.length = 0
       disconnect.mockClear()
       vi.stubGlobal(
         'ResizeObserver',
@@ -54,10 +62,18 @@ describe('useScrollToHash', () => {
           constructor(cb: () => void) {
             grow = cb
           }
-          observe() {}
+          observe(el: Element) {
+            observed.push(el)
+          }
           disconnect = disconnect
         },
       )
+    })
+
+    it('watches the scroll container\'s content, not just <body> (/ci#ci-placement stayed 5,867 px off)', async () => {
+      Element.prototype.scrollIntoView = vi.fn()
+      await render('/ci#platform-card-sentry', true)
+      expect(observed.map((e) => e.id || e.tagName)).toEqual(expect.arrayContaining(['BODY', 'above', 'platform-card-sentry']))
     })
     afterEach(() => {
       vi.unstubAllGlobals()
@@ -88,7 +104,7 @@ describe('useScrollToHash', () => {
       const spy = vi.fn()
       Element.prototype.scrollIntoView = spy
       await render('/settings#platform-card-sentry', true)
-      vi.advanceTimersByTime(4000)
+      vi.advanceTimersByTime(8000)
       grow!()
       expect(spy).toHaveBeenCalledTimes(1)
     })
