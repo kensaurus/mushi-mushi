@@ -58,7 +58,8 @@ export function AccessCard({ section, auditLog }: Props) {
             </Row>
             <Row term="SDK">
               <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-                <span className="font-mono text-xs text-fg">{a.sdk.version ? `${a.sdk.package ?? 'SDK'} ${a.sdk.version}` : 'Not seen yet'}</span>
+                {/* With no version yet the chip says it once ("Version not seen yet"). */}
+                {a.sdk.version && <span className="font-mono text-xs text-fg">{`${a.sdk.package ?? 'SDK'} ${a.sdk.version}`}</span>}
                 {a.sdk.latest && a.sdk.status !== 'up-to-date' && <span className="text-xs text-fg-muted">latest {a.sdk.latest}</span>}
                 <Link to="/connect">
                   <Badge tone={SDK_TONE[a.sdk.status].tone}>{SDK_TONE[a.sdk.status].text}</Badge>

@@ -214,6 +214,8 @@ describe('buildNeedsYou', () => {
       sdk: null,
     })
     expect(items.map((i) => i.id)).toEqual(['sdk_silent'])
+    // Never set up is a step to take, not "Fix it".
+    expect(items[0]!.action.label).toBe('Set up the SDK')
   })
 
   it('ignores a signal whose read failed', () => {

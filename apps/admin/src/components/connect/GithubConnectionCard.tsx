@@ -101,6 +101,9 @@ export function GithubConnectionCard({
               {linked.length > 1 ? 'Manage repos' : 'Add a repo'}
               <IconArrowRight className="h-3.5 w-3.5" aria-hidden />
             </Btn>
+            <Btn to={`/ci${projectId ? `?project=${encodeURIComponent(projectId)}` : ''}#ci-placement`} size="sm" variant="ghost" title="Where CI runs and how much of it fix pull requests run">
+              CI settings
+            </Btn>
           </div>
         ) : (
           <Btn to={githubCheck?.fixHref ?? '/integrations/config'} size="sm" variant="ghost" className="gap-1.5 shrink-0">
