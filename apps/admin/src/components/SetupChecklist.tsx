@@ -360,10 +360,12 @@ function SdkDiagnostic({ tone, lines }: { tone: 'ok' | 'warn' | 'info'; lines: s
 function useSdkFix(step: SetupStep, projectId: string) {
   const [open, setOpen] = useState(false)
   if (step.id !== 'sdk_installed' || step.complete || !projectId) return { button: null, panel: null }
+  // Never checked in: steps to take, not a fault ("Fix it" read as broken on a new app).
+  const neverSeen = !step.diagnostic?.last_sdk_seen_at
   return {
     button: (
       <Btn size="sm" variant={open ? 'ghost' : 'primary'} className="shrink-0" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        {open ? 'Hide' : 'Fix it'}
+        {open ? 'Hide' : neverSeen ? 'Show me how' : 'Fix it'}
       </Btn>
     ),
     panel: open ? (
