@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/team-setup
 
 ---
 title: Set up Mushi Mushi for a team
-description: A checklist for a small dev team adopting Mushi Mushi, in order, from sign-up to a weekly routine. What to do, where in the console, and how to check each step worked.
+description: A checklist for a small dev team adopting Mushi Mushi, from sign-up to a weekly routine. Each step says what to do, where, and how to check it.
 ---
 
 # Set up Mushi Mushi for a team

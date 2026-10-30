@@ -35,12 +35,9 @@ export function AuthConfirmPage() {
     const { tokenHash, type, redirectTo } = readConfirmParams(search)
     const landing = confirmLandingPath(redirectTo, window.location.origin, import.meta.env.BASE_URL)
     void (async () => {
-      if (!tokenHash) {
-        const { data } = await supabase.auth.getSession()
-        if (data.session) return navigate(landing, { replace: true })
-        return setState({ kind: 'failed', message: confirmErrorMessage('invalid') })
-      }
-      const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type })
+      // Only Supabase decides: a missing or bad token fails verification and
+      // falls through to the session check, never a branch on the URL.
+      const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash ?? '', type })
       if (!error) return navigate(landing, { replace: true })
       // Opened twice (email scanners pre-open links): already signed in is fine.
       const { data } = await supabase.auth.getSession()
