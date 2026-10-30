@@ -18,6 +18,11 @@
  *          the chosen time (4 hours by default; ADR 0037 amendment), so a
  *          one-off fast run does not stay billed.
  *
+ *          A team owner or admin gets "Apply now" after the preview: one
+ *          click files, approves and runs that exact change in their console
+ *          session (lib/ciPlacementApply.ts). Others ask, and an owner or
+ *          admin decides below.
+ *
  *          Data: GET /v1/admin/ci/placement?project_id=; POST …/preview,
  *          …/requests, …/requests/:id/{approve,reject,execute,revert}.
  */
@@ -40,6 +45,7 @@ import {
 import { formatDelta } from '../../lib/ciCompareView'
 import { formatSeconds } from '../../lib/ciView'
 import { apiFetch } from '../../lib/supabase'
+import { applyPlacementNow, GITHUB_INSTALLATIONS_URL, type ApplyResult } from '../../lib/ciPlacementApply'
 import { usePageData } from '../../lib/usePageData'
 import { useNow } from '../../lib/useNow'
 import { Badge, Btn, Callout, ErrorAlert, Input, Loading, RelativeTime, ResultChip, SelectField } from '../ui'
@@ -125,8 +131,8 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
   const [other, setOther] = useState('')
   const [revertAfter, setRevertAfter] = useState<number>(4)
   const [preview, setPreview] = useState<PlacementPreview | null>(null)
-  const [busy, setBusy] = useState<'preview' | 'request' | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<'preview' | 'request' | 'apply' | null>(null)
+  const [error, setError] = useState<{ message: string; code: string | null } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const groupId = useId()
 
@@ -148,10 +154,26 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
     setBusy(null)
     if (!res.ok || !res.data) {
       setPreview(null)
-      setError(res.error?.message ?? 'Mushi could not build the preview.')
+      setError({ message: res.error?.message ?? 'Mushi could not build the preview.', code: res.error?.code ?? null })
       return
     }
     setPreview(res.data)
+  }
+
+  async function applyNow() {
+    setBusy('apply')
+    setError(null)
+    const r = await applyPlacementNow(body())
+    setBusy(null)
+    if (!r.ok) {
+      setError(applyFailure(r))
+      onChanged()
+      return
+    }
+    setPreview(null)
+    setChoice(null)
+    setNotice(`${r.detail} Mushi watches the next jobs.`)
+    onChanged()
   }
 
   async function request() {
@@ -160,7 +182,7 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
     const res = await apiFetch<{ id: string }>('/v1/admin/ci/placement/requests', { method: 'POST', body: JSON.stringify(body()) })
     setBusy(null)
     if (!res.ok) {
-      setError(res.error?.message ?? 'Mushi could not save the request.')
+      setError({ message: res.error?.message ?? 'Mushi could not save the request.', code: res.error?.code ?? null })
       return
     }
     setPreview(null)
@@ -287,13 +309,20 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
                 </div>
               )}
               <p id={`${groupId}-hint`} className="text-2xs text-fg-muted">
-                Preview changes nothing. A request changes nothing until an owner or admin approves it and runs it within the hour.
+                {data.canDecide
+                  ? 'Preview changes nothing. Apply now makes exactly the change you previewed, and it can be reverted below.'
+                  : 'Preview changes nothing. A request changes nothing until an owner or admin approves it and runs it within the hour.'}
               </p>
               <div className="flex flex-wrap gap-2">
                 <Btn size="sm" variant="ghost" onClick={() => void runPreview()} disabled={busy !== null || value === undefined || (value !== null && !value)}>
                   {busy === 'preview' ? 'Previewing…' : 'Preview'}
                 </Btn>
-                {preview && !preview.blocked && preview.payload && (
+                {preview && !preview.blocked && preview.payload && data.canDecide && (
+                  <Btn size="sm" onClick={() => void applyNow()} disabled={busy !== null} data-testid="ci-placement-apply">
+                    {busy === 'apply' ? 'Applying…' : 'Apply now'}
+                  </Btn>
+                )}
+                {preview && !preview.blocked && preview.payload && !data.canDecide && (
                   <Btn size="sm" onClick={() => void request()} disabled={busy !== null}>
                     {busy === 'request' ? 'Asking…' : 'Ask for this change'}
                   </Btn>
@@ -305,10 +334,29 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
           {repo.profile && <ProfileControl projectId={projectId} repo={repo} data={data} onChanged={onChanged} />}
         </>
       )}
-      {error && <ErrorAlert title="Not done" message={error} />}
+      {error && <ChangeError error={error} />}
       {notice && <ResultChip tone="success">{notice}</ResultChip>}
     </li>
   )
+}
+
+/** A failed change; GitHub's missing permission gets the page that fixes it. */
+function ChangeError({ error }: { error: { message: string; code: string | null } }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <ErrorAlert title="Not done" message={error.message} />
+      {error.code === 'GITHUB_VARIABLES_PERMISSION' && (
+        <a className="text-xs underline underline-offset-2" href={GITHUB_INSTALLATIONS_URL} target="_blank" rel="noreferrer">
+          Open GitHub → Applications → Mushi Mushi App → Review request
+        </a>
+      )}
+    </div>
+  )
+}
+
+function applyFailure(r: Extract<ApplyResult, { ok: false }>): { message: string; code: string | null } {
+  const where = r.step === 'request' ? '' : r.step === 'approve' ? ' It is saved as a request below; approve it there.' : ' It is approved below; run it there once fixed.'
+  return { message: `${r.message}${where}`, code: r.code }
 }
 
 const PROFILE_CHOICES = [
@@ -321,8 +369,8 @@ function ProfileControl({ projectId, repo, data, onChanged }: { projectId: strin
   const now = profileNow(repo.profile?.current)
   const [pick, setPick] = useState<'economy' | 'thorough' | null>(null)
   const [preview, setPreview] = useState<PlacementPreview | null>(null)
-  const [busy, setBusy] = useState<'preview' | 'request' | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<'preview' | 'request' | 'apply' | null>(null)
+  const [error, setError] = useState<{ message: string; code: string | null } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const groupId = useId()
   // Economy is the default: going back to it removes the variable.
@@ -336,7 +384,7 @@ function ProfileControl({ projectId, repo, data, onChanged }: { projectId: strin
     const res = await apiFetch<PlacementPreview & { id?: string }>(path, { method: 'POST', body: JSON.stringify(body()) })
     setBusy(null)
     if (!res.ok || !res.data) {
-      setError(res.error?.message ?? (kind === 'preview' ? 'Mushi could not build the preview.' : 'Mushi could not save the request.'))
+      setError({ message: res.error?.message ?? (kind === 'preview' ? 'Mushi could not build the preview.' : 'Mushi could not save the request.'), code: res.error?.code ?? null })
       return
     }
     if (kind === 'preview') {
@@ -345,7 +393,24 @@ function ProfileControl({ projectId, repo, data, onChanged }: { projectId: strin
     }
     setPreview(null)
     setPick(null)
-    setNotice(data.canDecide ? 'Requested. Approve it below, then run it.' : 'Requested. A team owner or admin approves and runs it.')
+    setNotice('Requested. A team owner or admin approves and runs it.')
+    onChanged()
+  }
+
+  async function applyNow() {
+    setBusy('apply')
+    setError(null)
+    setNotice(null)
+    const r = await applyPlacementNow(body())
+    setBusy(null)
+    if (!r.ok) {
+      setError(applyFailure(r))
+      onChanged()
+      return
+    }
+    setPreview(null)
+    setPick(null)
+    setNotice(r.detail)
     onChanged()
   }
 
@@ -382,7 +447,12 @@ function ProfileControl({ projectId, repo, data, onChanged }: { projectId: strin
           <Btn size="sm" variant="ghost" onClick={() => void run('preview')} disabled={busy !== null || pick === null}>
             {busy === 'preview' ? 'Previewing…' : 'Preview'}
           </Btn>
-          {preview && !preview.blocked && preview.payload && (
+          {preview && !preview.blocked && preview.payload && data.canDecide && (
+            <Btn size="sm" onClick={() => void applyNow()} disabled={busy !== null} data-testid="ci-profile-apply">
+              {busy === 'apply' ? 'Applying…' : 'Apply now'}
+            </Btn>
+          )}
+          {preview && !preview.blocked && preview.payload && !data.canDecide && (
             <Btn size="sm" onClick={() => void run('request')} disabled={busy !== null}>
               {busy === 'request' ? 'Asking…' : 'Ask for this change'}
             </Btn>
@@ -405,7 +475,7 @@ function ProfileControl({ projectId, repo, data, onChanged }: { projectId: strin
           ))}
         </div>
       )}
-      {error && <ErrorAlert title="Not done" message={error} />}
+      {error && <ChangeError error={error} />}
       {notice && <ResultChip tone="success">{notice}</ResultChip>}
     </fieldset>
   )
