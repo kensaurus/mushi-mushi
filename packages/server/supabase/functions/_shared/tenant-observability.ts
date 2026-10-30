@@ -5,6 +5,7 @@
  * OVERVIEW:
  * - Attaches org/project ids to structured logs for admin API requests
  * - Wraps scoped_rate_limit_claim for per-tenant throttling
+ * - Alerts when runner ingest fails closed, without another database write
  * - Provides org-anchored audit events that survive project deletion
  *
  * DEPENDENCIES:
@@ -19,6 +20,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { log } from './logger.ts';
 import type { AuditAction } from './audit.ts';
 import { logAudit } from './audit.ts';
+import { reportMessage } from './sentry.ts';
 
 const tenantLog = log.child('tenant');
 
@@ -76,6 +78,13 @@ export interface ScopedRateLimitResult {
 const FAIL_CLOSED_SCOPE_SUFFIX = ':runner_ingest'
 /** Short on purpose. Job hooks run inline and must not be told to wait long. */
 const FAIL_CLOSED_RETRY_SEC = 5
+/**
+ * Stable Sentry message for a fail-closed claim. The error log stays, with
+ * `sentry: false`, so this is the one alert a bad migration or a timeout
+ * storm pages on. Not written to the database: the database is what failed.
+ * Hot-row contention that causes the timeout is BL-198.
+ */
+const RUNNER_INGEST_UNAVAILABLE_METRIC = 'tenant.runner_ingest.rate_limit_unavailable'
 
 function failsClosedOnClaimError(scopeKey: string): boolean {
   return scopeKey.endsWith(FAIL_CLOSED_SCOPE_SUFFIX)
@@ -110,7 +119,9 @@ export async function rateLimitActorId(scopeKey: string): Promise<string> {
  * failure the generalize-actor migration was written to fix, so the unexpected
  * -error branch now logs at error level to keep a future signature drift loud.
  * `*:runner_ingest` is the exception: any non-quota RPC error, including
- * Postgres 57014 (statement timeout), fails closed.
+ * Postgres 57014 (statement timeout) and a missing RPC, fails closed and
+ * emits `tenant.runner_ingest.rate_limit_unavailable`. Lock contention on
+ * the hot window row that produces the timeout is BL-198.
  */
 export async function claimTenantRateLimit(
   db: SupabaseClient,
@@ -132,10 +143,24 @@ export async function claimTenantRateLimit(
   }
   if (failsClosedOnClaimError(scopeKey)) {
     // Refusing is the limit. A timeout under load must not let the request through.
+    const code = 'code' in error && error.code ? String(error.code) : null
     tenantLog.error('scoped_rate_limit_claim failed — refusing request', {
+      event: 'runner_ingest_rate_limit_unavailable',
+      metric: RUNNER_INGEST_UNAVAILABLE_METRIC,
+      // The logger would also open a Sentry issue. The reportMessage below
+      // is the alert, so this line stays in the logs only.
+      sentry: false,
       scopeKey,
       err: msg,
-      code: 'code' in error && error.code ? String(error.code) : null,
+      code,
+    });
+    reportMessage(RUNNER_INGEST_UNAVAILABLE_METRIC, 'error', {
+      tags: {
+        alert: 'runner_ingest_rate_limit_unavailable',
+        metric: RUNNER_INGEST_UNAVAILABLE_METRIC,
+        ...(code ? { pg_code: code } : {}),
+      },
+      extra: { scopeKey, err: msg },
     });
     return { allowed: false, retryAfterSec: FAIL_CLOSED_RETRY_SEC, unavailable: true };
   }
