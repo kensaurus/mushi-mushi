@@ -128,6 +128,8 @@ function seed(): Record<string, Array<Record<string, unknown>>> {
       report(4, { severity: null, created_at: ago(24 * 9) }),
       // 23:00 UTC yesterday: inside a rolling 24 h, but yesterday on the report list's calendar days.
       report(5, { severity: 'low', status: 'fixed', created_at: '2026-10-26T23:00:00Z' }),
+      // The "Send a test report" sample: not a bug of this app, never counted or mapped.
+      report(6, { severity: 'high', created_at: ago(1), environment: { url: '/login' }, custom_metadata: { source: 'admin_test_report' } }),
     ],
     fix_attempts: [{ id: 'f1', project_id: P, merged_at: ago(1), created_at: ago(20), pr_url: 'https://github.com/kensaurus/glot.it/pull/1' }],
     deploy_observations: [{ id: 'd1', project_id: P, observed_at: ago(3), observed_version: 'v1.103.0', ok: true }],
@@ -215,6 +217,7 @@ describe('GET /v1/admin/projects/:id/home', () => {
     expect(d.week.data.find((r: { id: string }) => r.id === 'reports')).toMatchObject({ thisWeek: 4, lastWeek: 1 })
     expect((d.activity.data as Array<{ text: string }>).map((l) => l.text)).toContain('1 fix merged today')
     expect(d.sitemap.status).toBe('ok')
+    expect(JSON.stringify(d.sitemap.data)).not.toContain('/login')
   })
 
   it('a failed read makes only its own section an error', async () => {

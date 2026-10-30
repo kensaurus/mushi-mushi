@@ -129,6 +129,14 @@ describe('deployGap: the 14-day rule (report 9f64a77b)', () => {
     expect(deployGap(P, daysAgo(0.2), NOW).summary).toBe('A deploy was seen today.')
     expect(deployGap(P, undefined, NOW).status).toBe('unknown')
   })
+
+  it('a new app with no fix shipped yet is not a gap: there is nothing to announce', () => {
+    const fresh = deployGap(P, null, NOW, false)
+    expect(fresh.status).toBe('ok')
+    expect(fresh.summary).toContain('No fix has shipped yet')
+    // Once a fix shipped, never seeing a deploy is the gap again.
+    expect(deployGap(P, null, NOW, true).status).toBe('gap')
+  })
 })
 
 describe('followupKeyGap', () => {

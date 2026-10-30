@@ -662,6 +662,16 @@ forwardToApiExt([
   '/v1/admin/byok/cursor/models',
 ]);
 
+// Verified "Connect GitHub" (GitHub App install + OAuth check + repo picker):
+// served by api-ext (api size budget). The setup URL stays in public.ts.
+forwardToApiExt([
+  '/v1/admin/projects/:id/github/connect',
+  '/v1/admin/projects/:id/github/repos',
+  '/v1/admin/projects/:id/github/repo',
+  '/v1/admin/projects/:id/github/stack',
+  '/v1/webhooks/github/app-authorize',
+]);
+
 // In-app plan change (Indie ↔ Pro, monthly ↔ annual) for paying projects.
 registerBillingChangePlanRoutes(app);
 

@@ -469,7 +469,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   const inputClassName = `${FIELD_BASE} ${hasRevealToggle ? 'pr-9' : ''} ${secret ? 'font-mono' : ''} ${maskClass} ${className}`
 
   return (
-    <label className={`block ${containerClassName}`}>
+    // htmlFor: a help button (helpId) inside the label is a labelable element,
+    // so without it the label named that button and the field read only as
+    // its placeholder to screen readers.
+    <label htmlFor={inputId} className={`block ${containerClassName}`}>
       {label && (
         <span className={`${FIELD_LABEL} flex items-center gap-1`}>
           {label}

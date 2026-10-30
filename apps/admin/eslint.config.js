@@ -53,6 +53,7 @@ export default [
           pagePattern: 'Page\\.tsx$',
           skipBasenames: [
             'AcceptInvitePage.tsx',
+            'AuthConfirmPage.tsx',
             'CliAuthPage.tsx',
             'ContentQualityDetailPage.tsx',
             'DocsBridgePage.tsx',
