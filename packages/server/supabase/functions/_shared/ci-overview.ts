@@ -4,14 +4,15 @@
  *          stored CI data of the projects the caller can read: hosts →
  *          runners → repos → live jobs, stats and advice.
  *
- *   loadCiOverviewRows — the reads (one query per table, scoped by project
- *                        or by the projects' organizations)
+ *   loadCiOverviewRows — the reads. One query per table, except ci_jobs:
+ *                        each project's newest rows, then `steps` for the
+ *                        rows kept (see readOverviewJobs)
  *   buildCiOverview    — pure: rows → CiOverview (ci-overview-types.ts)
  *
  * Jobs: every queued / running job in the window first, never cut off, then
  * the newest finished jobs, up to 200 in total. Stats read at most 1,000
- * finished jobs (PostgREST max_rows), newest first. The pass rate is
- * passed ÷ jobs that finished testing; a machine stop is not in it.
+ * finished jobs, newest first. The pass rate is passed ÷ jobs that finished
+ * testing; a machine stop is not in it.
  */
 
 import { adviseCi, percentile, slowSteps, STALE_HEARTBEAT_MS, type AdvisorJob } from './ci-advisor.ts'
@@ -24,6 +25,10 @@ type Db = { from: (table: string) => any }
 
 export const OVERVIEW_JOB_LIMIT = 200
 const FINISHED_READ_LIMIT = 1000
+/** Projects whose job windows are read at once. Each read is one index range. */
+const JOB_PROJECT_CONCURRENCY = 4
+/** Primary-key lookups for `steps`. 100 uuids stay inside a PostgREST URL. */
+const STEP_ID_CHUNK = 100
 
 export interface JobRow {
   id: string
@@ -108,8 +113,75 @@ export interface OverviewRows {
   workflows: Array<{ projectId: string; repo: string; path: string; text: string }>
 }
 
-const JOB_COLUMNS =
-  'id, project_id, repo, run_id, run_attempt, job_id, workflow_name, job_name, head_branch, pr_number, status, conclusion, ci_kind, infra, infra_detail, runner_name, runner_kind, runner_group_name, runner_labels, queue_seconds, duration_seconds, gh_created_at, started_at, completed_at, html_url, steps'
+/** Everything the overview reads except `steps` (loaded later, by primary key). */
+const NARROW_JOB_COLUMNS =
+  'id, project_id, repo, run_id, run_attempt, job_id, workflow_name, job_name, head_branch, pr_number, status, conclusion, ci_kind, infra, infra_detail, runner_name, runner_kind, runner_group_name, runner_labels, queue_seconds, duration_seconds, gh_created_at, started_at, completed_at, html_url'
+
+function throwIfReadFailed(what: string, error: { message?: string } | null | undefined): void {
+  if (error) throw new Error(`${what} read failed: ${error.message ?? 'unknown error'}`)
+}
+
+/** Newest `limit` jobs by `gh_created_at`. `kept` is already in that order. */
+function mergeNewest(kept: JobRow[], extra: JobRow[], limit: number): JobRow[] {
+  if (extra.length === 0) return kept
+  const merged = kept.concat(extra)
+  merged.sort((a, b) => (a.gh_created_at < b.gh_created_at ? 1 : a.gh_created_at > b.gh_created_at ? -1 : 0))
+  if (merged.length > limit) merged.length = limit
+  return merged
+}
+
+/**
+ * Newest unfinished and finished jobs in the window.
+ *
+ * `project_id IN (...) ORDER BY gh_created_at DESC` makes Postgres gather
+ * every matching row — and detoast its `steps` jsonb — before LIMIT. That
+ * statement hits the 8s timeout (`ci_jobs read failed: canceling statement
+ * due to statement timeout`). One project at a time, with `project_id =`,
+ * uses idx_ci_jobs_project_created and idx_ci_jobs_unfinished
+ * (`WHERE status <> 'completed'`, so the unfinished read must stay
+ * `neq`) and stops at FINISHED_READ_LIMIT. The global newest
+ * FINISHED_READ_LIMIT is unchanged: any job in it is among its own
+ * project's newest FINISHED_READ_LIMIT.
+ */
+async function readOverviewJobs(db: Db, projectIds: string[], fromIso: string): Promise<{ unfinished: JobRow[]; finished: JobRow[] }> {
+  const ids = [...new Set(projectIds)]
+  if (ids.length === 0) return { unfinished: [], finished: [] }
+
+  const readProject = async (projectId: string, completed: boolean): Promise<JobRow[]> => {
+    const q = db.from('ci_jobs').select(NARROW_JOB_COLUMNS).eq('project_id', projectId).gte('gh_created_at', fromIso)
+    // `neq` matches the partial index predicate `status <> 'completed'`.
+    if (completed) q.eq('status', 'completed')
+    else q.neq('status', 'completed')
+    const res = await q.order('gh_created_at', { ascending: false }).limit(FINISHED_READ_LIMIT)
+    throwIfReadFailed('ci_jobs', res.error)
+    return ((res.data ?? []) as JobRow[]).map((row) => ({ ...row, steps: null }))
+  }
+
+  let unfinished: JobRow[] = []
+  let finished: JobRow[] = []
+  for (let i = 0; i < ids.length; i += JOB_PROJECT_CONCURRENCY) {
+    const parts = await Promise.all(ids.slice(i, i + JOB_PROJECT_CONCURRENCY).map(async (projectId) => {
+      const [open, done] = await Promise.all([readProject(projectId, false), readProject(projectId, true)])
+      return { open, done }
+    }))
+    for (const part of parts) {
+      unfinished = mergeNewest(unfinished, part.open, FINISHED_READ_LIMIT)
+      finished = mergeNewest(finished, part.done, FINISHED_READ_LIMIT)
+    }
+  }
+
+  const byId = new Map([...unfinished, ...finished].map((job) => [job.id, job]))
+  const stepIds = [...byId.keys()]
+  for (let i = 0; i < stepIds.length; i += STEP_ID_CHUNK) {
+    const res = await db.from('ci_jobs').select('id, steps').in('id', stepIds.slice(i, i + STEP_ID_CHUNK))
+    throwIfReadFailed('ci_jobs', res.error)
+    for (const row of (res.data ?? []) as Array<{ id: string; steps: JobRow['steps'] }>) {
+      const job = byId.get(row.id)
+      if (job) job.steps = row.steps ?? null
+    }
+  }
+  return { unfinished, finished }
+}
 
 function repoOf(url: unknown): string | null {
   if (typeof url !== 'string') return null
@@ -121,17 +193,16 @@ function repoOf(url: unknown): string | null {
 export async function loadCiOverviewRows(db: Db, projectIds: string[], from: Date): Promise<OverviewRows> {
   const fromIso = from.toISOString()
   const check = <T>(res: { data: unknown; error: { message?: string } | null }, what: string): T[] => {
-    if (res.error) throw new Error(`${what} read failed: ${res.error.message ?? 'unknown error'}`)
+    throwIfReadFailed(what, res.error)
     return (res.data ?? []) as T[]
   }
-  const [projectsRes, reposRes, unfinishedRes, finishedRes, runnersRes, stateRes, snapsRes] = await Promise.all([
+  const [projectsRes, reposRes, runnersRes, stateRes, snapsRes, jobs] = await Promise.all([
     db.from('projects').select('id, name, organization_id').in('id', projectIds),
     db.from('project_repos').select('project_id, repo_url').in('project_id', projectIds),
-    db.from('ci_jobs').select(JOB_COLUMNS).in('project_id', projectIds).neq('status', 'completed').gte('gh_created_at', fromIso).order('gh_created_at', { ascending: false }).limit(FINISHED_READ_LIMIT),
-    db.from('ci_jobs').select(JOB_COLUMNS).in('project_id', projectIds).eq('status', 'completed').gte('gh_created_at', fromIso).order('gh_created_at', { ascending: false }).limit(FINISHED_READ_LIMIT),
     db.from('ci_runners').select('project_id, repo, runner_name, status, busy, labels, kind, first_seen_at, last_job_at').in('project_id', projectIds),
     db.from('ci_collector_state').select('project_id, permissions, last_live_sync_at').in('project_id', projectIds),
     db.from('connector_snapshots').select('project_id, snapshot').in('project_id', projectIds).eq('kind', 'github').eq('is_current', true).eq('ok', true),
+    readOverviewJobs(db, projectIds, fromIso),
   ])
   const projects = check<OverviewRows['projects'][number]>(projectsRes, 'projects')
   const orgIds = [...new Set(projects.map((p) => p.organization_id).filter((x): x is string => !!x))]
@@ -159,8 +230,7 @@ export async function loadCiOverviewRows(db: Db, projectIds: string[], from: Dat
     }
   }
 
-  const unfinished = check<JobRow>(unfinishedRes, 'ci_jobs')
-  const finished = check<JobRow>(finishedRes, 'ci_jobs')
+  const { unfinished, finished } = jobs
   const runners = check<RunnerRow>(runnersRes, 'ci_runners')
   healRunnerKinds([...unfinished, ...finished], runners)
 
