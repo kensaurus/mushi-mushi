@@ -154,6 +154,20 @@ describe('call sites share one eligibility rule', () => {
     expect(src).not.toMatch(/\.in\('status', \['classified', 'grouped', 'fixing', 'fixed'\]\)/)
   })
 
+  // A project $0.02 over its monthly cap is an owner setting, not a broken
+  // judge. Logging it as `Failed to evaluate report` pages Sentry once per
+  // report (MUSHI-MUSHI-SERVER-3J) and the report stays ungraded so the next
+  // night does it again.
+  it('skips a project that is over its monthly LLM budget instead of failing each report', () => {
+    const src = read('judge-batch/index.ts')
+    const errorLog = src.indexOf("error('Failed to evaluate report'")
+    expect(errorLog).toBeGreaterThan(-1)
+    const handler = src.slice(src.lastIndexOf('catch (err)', errorLog), errorLog)
+    expect(handler).toMatch(/instanceof LlmBudgetExceededError/)
+    expect(handler).toMatch(/\breturn\b/)
+    expect(src).toContain("warn('Judge skipped: monthly LLM budget reached'")
+  })
+
   it('POST /judge/run pre-flights eligibility before the paid dispatch', () => {
     const src = read('api/routes/judge.ts')
     const route = src.slice(src.indexOf("app.post('/v1/admin/judge/run'"))
