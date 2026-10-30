@@ -184,7 +184,7 @@ export function buildLifecycleEmail(input: LifecycleEmailInput): LifecycleEmailC
       blocks = [
         { p: 'Hi,' },
         {
-          p: 'Thanks for signing up for Mushi. The fastest way to see what it does is to send yourself a test report:',
+          p: 'Thanks for signing up for Mushi Mushi. The fastest way to see what it does is to send yourself a test report:',
         },
         { link: testReportUrl, label: 'Send a test report' },
         {
@@ -215,7 +215,7 @@ export function buildLifecycleEmail(input: LifecycleEmailInput): LifecycleEmailC
       ]
       break
     case 'day7_stalled':
-      subject = 'One question about Mushi'
+      subject = 'One question about Mushi Mushi'
       blocks = [
         { p: 'Hi,' },
         {
@@ -235,7 +235,7 @@ export function buildLifecycleEmail(input: LifecycleEmailInput): LifecycleEmailC
         {
           p: 'Your project has received its first report and Mushi has diagnosed it. The next step is to make the fix land where you work.',
         },
-        { p: 'Connect Cursor (or Claude Code) to Mushi’s MCP server:' },
+        { p: 'Connect Cursor (or Claude Code) to the Mushi Mushi MCP server:' },
         { pre: CURSOR_SETUP },
         {
           p: 'After that, get_fix_context inside your editor pulls the diagnosis, the evidence and the suggested change for any report. No copy-paste.',
@@ -249,7 +249,7 @@ export function buildLifecycleEmail(input: LifecycleEmailInput): LifecycleEmailC
   const footer: Block[] = unsub
     ? [
         {
-          p: `You get these few setup emails because you created a Mushi account${input.signedUpOn ? ` on ${input.signedUpOn}` : ''}. Unsubscribe with one click:`,
+          p: `You get these few setup emails because you created a Mushi Mushi account${input.signedUpOn ? ` on ${input.signedUpOn}` : ''}. Unsubscribe with one click:`,
         },
         { link: unsub, label: 'Unsubscribe' },
       ]
@@ -258,7 +258,7 @@ export function buildLifecycleEmail(input: LifecycleEmailInput): LifecycleEmailC
   const all = [...blocks, ...footer]
   const htmlFooter: EmailDoc['footer'] = unsub
     ? [
-        `You get these few setup emails because you created a Mushi account${input.signedUpOn ? ` on ${input.signedUpOn}` : ''}.`,
+        `You get these few setup emails because you created a Mushi Mushi account${input.signedUpOn ? ` on ${input.signedUpOn}` : ''}.`,
         { label: 'Unsubscribe with one click', url: unsub },
       ]
     : ['This is a one-time account email about your new Mushi project.']
