@@ -242,7 +242,9 @@ Deno.serve(withSentry('judge-batch', async (req) => {
       // stays bounded because the per-report insert is a single round-trip.
       // The pre-check above caches for a minute. A long batch can cross the
       // cap after that; stop the rest of this project instead of erroring.
-      let budgetHit: LlmBudgetExceededError | null = null
+      // `as` keeps the closure write visible to tsc. `: T | null = null` stays
+      // narrowed to null after mapWithConcurrency, so the read below is `never`.
+      let budgetHit = null as LlmBudgetExceededError | null
       await mapWithConcurrency(reports, 5, async (report) => {
         if (budgetHit) {
           llmBudgetSkipped++
@@ -334,6 +336,8 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
               usage = result.usage
               void recordLlmUsage(db, anthropicUsage, { result })
             } catch (err) {
+              // Same monthly cap as the fallback, so do not start another paid call.
+              if (err instanceof LlmBudgetExceededError) throw err
               void recordLlmUsage(db, anthropicUsage, { error: err })
               // Preserve diagnostic fidelity on the first failure — the
               // Anthropic SDK puts the HTTP status on `status` (AI SDK used

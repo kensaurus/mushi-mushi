@@ -1,14 +1,18 @@
 /**
  * FILE: judge-batch-budget.test.ts
- * PURPOSE: The judge cron's monthly-budget pre-check skips an over-budget
- *          project without a per-report error, and any other pre-check
- *          failure stays inside that project so the rest of the cron runs.
+ * PURPOSE: The judge cron skips a project that is over its monthly LLM
+ *          budget without a per-report error. Covers the pre-check, a
+ *          budget error thrown by the model call after that pre-check
+ *          passed, and the `budgetHit` declaration that tsc can narrow
+ *          to `never` after the concurrent loop.
  *
- * The source-text pin in judge-eligibility.test.ts matches the catch clause
- * even when the handler still logs `Failed to evaluate report` or never
- * skips. These tests call the handler.
+ * DEPENDENCIES: vitest, typescript, the judge-batch handler, fake Supabase.
+ * USAGE: `pnpm --filter @mushi-mushi/server exec vitest run src/__tests__/judge-batch-budget.test.ts`
  */
 
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import ts from 'typescript'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
 import { LlmBudgetExceededError } from '../../supabase/functions/_shared/llm-budget.ts'
@@ -21,6 +25,8 @@ const h = vi.hoisted(() => ({
   budgetCalls: [] as Array<{ projectId: string; provider: string }>,
   budgetByProject: {} as Record<string, 'over' | 'down' | 'ok'>,
   resolveCalls: [] as string[],
+  generateCalls: 0,
+  generateError: null as Error | null,
 }))
 
 vi.mock('../../supabase/functions/_shared/logger.ts', () => {
@@ -84,19 +90,23 @@ vi.mock('../../supabase/functions/_shared/plugins.ts', () => ({
   dispatchPluginEventDetached: () => Promise.resolve(),
 }))
 vi.mock('../../supabase/functions/_shared/claude-messages.ts', () => ({
-  claudeGenerateObject: async () => ({
-    object: {
-      accuracy: 0.9,
-      severity_calibration: 0.8,
-      component_tagging: 0.7,
-      repro_quality: 0.6,
-      classification_agreed: true,
-      reasoning: 'scores match the report',
-      suggested_correction: null,
-      disagreement_reason: null,
-    },
-    usage: { promptTokens: 10, completionTokens: 4 },
-  }),
+  claudeGenerateObject: async () => {
+    h.generateCalls++
+    if (h.generateError) throw h.generateError
+    return {
+      object: {
+        accuracy: 0.9,
+        severity_calibration: 0.8,
+        component_tagging: 0.7,
+        repro_quality: 0.6,
+        classification_agreed: true,
+        reasoning: 'scores match the report',
+        suggested_correction: null,
+        disagreement_reason: null,
+      },
+      usage: { promptTokens: 10, completionTokens: 4 },
+    }
+  },
 }))
 
 const P_OVER = 'p-over'
@@ -171,6 +181,8 @@ beforeEach(() => {
   h.failed = false
   h.budgetCalls.length = 0
   h.resolveCalls.length = 0
+  h.generateCalls = 0
+  h.generateError = null
   h.budgetByProject = {}
   h.db = null
 })
@@ -228,5 +240,87 @@ describe('judge-batch monthly LLM budget', () => {
     expect(h.logs.filter((l) => l.level === 'fatal')).toEqual([])
     expect(h.logs.some((l) => l.level === 'warn' && l.msg === 'Judge budget pre-check failed; grading this project anyway')).toBe(true)
     expect(h.db!.table('classification_evaluations').map((row) => row.project_id).sort()).toEqual([P_DOWN, P_OK])
+  })
+
+  it('skips the remaining reports when the model call hits the monthly budget', async () => {
+    h.generateError = new LlmBudgetExceededError(P_OK, 50.02, 50, '2026-11-01T00:00:00.000Z')
+    const reports = Array.from({ length: 7 }, (_, i) => report(P_OK, `r-mid-${i}`))
+    h.db = seed([{ id: P_OK, name: 'Ok' }], reports)
+
+    const { status, body } = await runJson()
+
+    expect(status).toBe(200)
+    expect(body.ok).toBe(true)
+    expect(body.data.totalEvaluated).toBe(0)
+    expect(body.data.llmBudgetSkipped).toBe(reports.length)
+    expect(h.generateCalls).toBeGreaterThan(0)
+    expect(h.generateCalls).toBeLessThan(reports.length)
+    expect(h.logs.filter((l) => l.level === 'error' && l.msg === 'Failed to evaluate report')).toEqual([])
+    expect(h.logs.some((l) => l.level === 'warn' && l.msg === 'Judge skipped: monthly LLM budget reached')).toBe(true)
+    expect(h.failed).toBe(false)
+    expect(h.db!.table('classification_evaluations')).toEqual([])
+  })
+})
+
+/**
+ * `let budgetHit: LlmBudgetExceededError | null = null` stays narrowed to
+ * null across `mapWithConcurrency`, so the read after the loop is `never`.
+ * This compiles that declaration and that read from the handler source.
+ */
+function budgetHitDiagnostics(declaration: string, ifBlock: string): string[] {
+  const snippet = `
+class LlmBudgetExceededError extends Error {
+  spendUsd = 0
+  budgetUsd = 0
+}
+declare function mapWithConcurrency(items: unknown[], limit: number, worker: (item: unknown) => Promise<void>): Promise<void>
+declare const reports: unknown[]
+declare let llmBudgetSkipped: number
+declare const rootLog: { child(name: string): { warn(msg: string, fields: object): void } }
+declare const project: { id: string }
+export async function run(): Promise<void> {
+  ${declaration}
+  await mapWithConcurrency(reports, 5, async () => {
+    if (budgetHit) {
+      llmBudgetSkipped++
+      return
+    }
+    budgetHit = new LlmBudgetExceededError()
+  })
+  ${ifBlock}
+}
+`
+  const fileName = resolve(process.cwd(), 'budget-hit-check.ts')
+  const options: ts.CompilerOptions = {
+    strict: true,
+    noEmit: true,
+    target: ts.ScriptTarget.ES2022,
+    module: ts.ModuleKind.ESNext,
+    skipLibCheck: true,
+  }
+  const host = ts.createCompilerHost(options)
+  const getSourceFile = host.getSourceFile.bind(host)
+  host.getSourceFile = (fn, languageVersion, onError, shouldCreate) => {
+    if (fn === fileName) return ts.createSourceFile(fn, snippet, languageVersion, true, ts.ScriptKind.TS)
+    return getSourceFile(fn, languageVersion, onError, shouldCreate)
+  }
+  const fileExists = host.fileExists.bind(host)
+  host.fileExists = (fn) => fn === fileName || fileExists(fn)
+  const program = ts.createProgram([fileName], options, host)
+  return ts.getPreEmitDiagnostics(program)
+    .filter((d) => d.file?.fileName === fileName)
+    .map((d) => `TS${d.code} ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`)
+}
+
+describe('judge-batch budgetHit type', () => {
+  it('stays the budget error after the concurrent loop', () => {
+    const src = readFileSync(resolve(__dirname, '../../supabase/functions/judge-batch/index.ts'), 'utf8')
+    const declaration = src.match(/let budgetHit\b[^\n]*/)?.[0]
+    expect(declaration, 'budgetHit declaration').toBeTruthy()
+    const ifAt = src.lastIndexOf('if (budgetHit)')
+    expect(ifAt).toBeGreaterThan(-1)
+    const ifBlock = src.slice(ifAt, src.indexOf('\n      }', ifAt) + '\n      }'.length)
+    expect(ifBlock).toContain('budgetHit.spendUsd')
+    expect(budgetHitDiagnostics(declaration!, ifBlock)).toEqual([])
   })
 })
