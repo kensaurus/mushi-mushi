@@ -87,6 +87,8 @@ export interface ReleaseSettings {
   mode: ReleaseMode
   intervalMinutes: number
   maxMembers: number
+  /** "Decide for me" (ADR 0055): Mushi queues approved fix PRs and closes held ones. Absent on older API responses. */
+  autoDecide?: boolean
 }
 
 export const TRAIN_INTERVAL_OPTIONS = [60, 180, 360, 720, 1440] as const
@@ -132,7 +134,7 @@ export async function loadMergeQueue(projectId: string | null) {
   return apiFetch<{ rows: MergeQueueRow[]; trains?: ReleaseTrain[]; release?: ReleaseSettings[] }>(`/v1/admin/merge-queue${qs}`, { cache: 'no-store' })
 }
 
-export async function saveReleaseSettings(projectId: string, patch: Partial<Pick<ReleaseSettings, 'mode' | 'intervalMinutes' | 'maxMembers'>>) {
+export async function saveReleaseSettings(projectId: string, patch: Partial<Pick<ReleaseSettings, 'mode' | 'intervalMinutes' | 'maxMembers' | 'autoDecide'>>) {
   return apiFetch<Record<string, unknown>>(`/v1/admin/projects/${encodeURIComponent(projectId)}/release-settings`, {
     method: 'PUT',
     body: JSON.stringify(patch),
