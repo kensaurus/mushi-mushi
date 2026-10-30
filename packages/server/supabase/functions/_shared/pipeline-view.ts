@@ -643,20 +643,29 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       const off = queueDetailKind(q.detail) === 'followups_off'
       // No agent_started_at means nothing is merging. Ageing that from queued_at
       // (often days earlier) said "waiting on a conflict agent for over 90 min"
-      // the moment the train marked the row, including when no Cursor key exists.
+      // the moment the train marked the row. The "run mushi work --conflicts"
+      // line is only when the detail says no cloud key. A blocked row says it
+      // in the held group below. A project with a key is waiting for the next
+      // tick, or in line for a free agent slot.
       const started = !!q.agent_started_at
-      const overdue = age(now, since) > CONFLICT_STUCK_MS
-      const stuck = off || !started || overdue
+      const noCloud = !started && queueDetailKind(q.detail) === 'conflict_local'
+      const inLine = !started && !noCloud && (q.detail ?? '').toLowerCase().includes('waits for a free conflict agent')
+      const overdue = started && age(now, since) > CONFLICT_STUCK_MS
+      const stuck = off || noCloud || overdue
       const text = off
         ? 'merge conflict and no agent may push (follow-ups are off): needs a person, resolve on GitHub'
-        : !started
+        : noCloud
           ? 'no conflict agent has started: run mushi work --conflicts, or add a Cursor key'
-          : capped && overdue
-            ? 'merge conflict, both conflict agents used: needs a person, resolve on GitHub'
-            : overdue
-              ? `waiting on a conflict agent for over ${Math.round(CONFLICT_STUCK_MS / 60_000)} min`
-              : 'a conflict agent is merging the base in'
-      const id = off ? 'conflict_off' : !started ? 'conflict_idle' : capped && overdue ? 'conflict_capped' : overdue ? 'conflict_stuck' : 'conflict_running'
+          : inLine
+            ? 'waiting in line for a conflict agent'
+            : !started
+              ? 'waiting for a conflict agent'
+              : capped && overdue
+                ? 'merge conflict, both conflict agents used: needs a person, resolve on GitHub'
+                : overdue
+                  ? `waiting on a conflict agent for over ${Math.round(CONFLICT_STUCK_MS / 60_000)} min`
+                  : 'a conflict agent is merging the base in'
+      const id = off ? 'conflict_off' : noCloud ? 'conflict_idle' : inLine ? 'conflict_inline' : !started ? 'conflict_waiting' : capped && overdue ? 'conflict_capped' : overdue ? 'conflict_stuck' : 'conflict_running'
       groups.add(id, {
         stage: 'train',
         tone: stuck ? 'stuck' : 'moving',
