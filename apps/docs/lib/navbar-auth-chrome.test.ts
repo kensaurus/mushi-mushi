@@ -6,8 +6,13 @@
  * at the admin root, which the console redirects to /login.
  *
  * A stored session hides that same shell before first paint (the links keep
- * their box) and the signed-in chrome fades in after hydration.
+ * their box) and the signed-in chrome fades in after hydration. The probe
+ * script is one inline script in the root layout head. If that bundle never
+ * hydrates, the hide comes off after a few seconds so the links return.
  */
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { runInThisContext } from 'node:vm'
 import { act, createElement } from 'react'
 
@@ -16,13 +21,24 @@ import { act, createElement } from 'react'
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 import { createRoot, type Root } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NavbarAuthChrome } from '../components/NavbarAuthChrome'
+import {
+  DOCS_NAV_AUTH_SHELL_STYLE_ID,
+  DOCS_NAV_HYDRATED_ATTR,
+  DOCS_NAV_HYDRATION_FALLBACK_MS,
+  DOCS_NAV_SESSION_PROBE,
+} from './docs-nav-session-probe'
 import { ADMIN_CONSOLE_URL } from './migrationProgress'
 
 const ADMIN = ADMIN_CONSOLE_URL
 const SESSION_KEY = 'mushi:docs:auth'
-const SHELL_STYLE_ID = 'mushi-docs-auth-shell'
+const SHELL_STYLE_ID = DOCS_NAV_AUTH_SHELL_STYLE_ID
+const HYDRATED_ATTR = DOCS_NAV_HYDRATED_ATTR
+
+const HERE = dirname(fileURLToPath(import.meta.url))
+const layoutSource = readFileSync(join(HERE, '../app/layout.tsx'), 'utf8')
+const chromeSource = readFileSync(join(HERE, '../components/NavbarAuthChrome.tsx'), 'utf8')
 
 function liveSession(overrides: Record<string, unknown> = {}) {
   return {
@@ -41,14 +57,9 @@ function staticHtml(): string {
   return renderToStaticMarkup(createElement(NavbarAuthChrome))
 }
 
-function probeSource(html: string): string {
-  return html.match(/<script>([\s\S]*?)<\/script>/)?.[1] ?? ''
-}
-
-function runProbe(html: string): void {
-  const script = probeSource(html)
-  expect(script).not.toBe('')
-  runInThisContext(script)
+function runProbe(): void {
+  expect(DOCS_NAV_SESSION_PROBE).not.toBe('')
+  runInThisContext(DOCS_NAV_SESSION_PROBE)
 }
 
 describe('NavbarAuthChrome signed-out shell', () => {
@@ -65,26 +76,57 @@ describe('NavbarAuthChrome signed-out shell', () => {
   })
 })
 
+describe('NavbarAuthChrome probe placement', () => {
+  it('renders no script tag from the client navbar', () => {
+    expect(staticHtml()).not.toMatch(/<script[\s>/]/)
+    expect(chromeSource).not.toMatch(/<script\b/)
+  })
+
+  it('emits the pre-paint probe once from the root layout head, before the navbar', () => {
+    const headStart = layoutSource.indexOf('<Head>')
+    const headEnd = layoutSource.indexOf('</Head>')
+    expect(headStart).toBeGreaterThan(-1)
+    expect(headEnd).toBeGreaterThan(headStart)
+    const head = layoutSource.slice(headStart, headEnd)
+    expect(head).toContain('<script')
+    expect(head).toContain('dangerouslySetInnerHTML={{ __html: DOCS_NAV_SESSION_PROBE }}')
+    expect(head).not.toContain('NavbarAuthChrome')
+    expect(head).not.toContain('text/plain')
+    expect(layoutSource.match(/<script\b/g)).toHaveLength(1)
+    // The navbar const is declared above the layout return. In the document
+    // the head script still precedes the body, where that navbar is mounted.
+    const bodyStart = layoutSource.indexOf('<body>', headEnd)
+    expect(bodyStart).toBeGreaterThan(headEnd)
+    expect(layoutSource.slice(bodyStart)).toContain('navbar={navbar}')
+  })
+})
+
 describe('NavbarAuthChrome pre-paint session shell', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
   afterEach(() => {
+    vi.useRealTimers()
     document.getElementById(SHELL_STYLE_ID)?.remove()
+    document.documentElement.removeAttribute(HYDRATED_ATTR)
     sessionStorage.clear()
     document.body.replaceChildren()
   })
 
   it('hides the signed-out links before paint when a session is stored, keeping their box', () => {
     const html = staticHtml()
-    expect(html.indexOf('<script>')).toBeGreaterThan(-1)
-    expect(html.indexOf('<script>')).toBeLessThan(html.indexOf('>Start free<'))
+    expect(html).not.toMatch(/<script[\s>/]/)
     expect(html).toContain('data-docs-nav="signed-out"')
-    expect(html).toContain('[data-docs-nav="signed-out"]{visibility:hidden}')
+    expect(DOCS_NAV_SESSION_PROBE).toContain('[data-docs-nav="signed-out"]{visibility:hidden}')
+    expect(DOCS_NAV_SESSION_PROBE).not.toContain('display:none')
     expect(html).not.toContain('display:none')
     expect(html).toContain('@keyframes docs-nav-auth-in{from{opacity:0}to{opacity:1}}')
     expect(html).toContain('@media (prefers-reduced-motion:reduce){[data-docs-nav="signed-in"]{animation:none}}')
 
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(liveSession()))
     document.body.innerHTML = html
-    runProbe(html)
+    runProbe()
 
     const shell = document.getElementById(SHELL_STYLE_ID)
     expect(shell?.textContent).toBe('[data-docs-nav="signed-out"]{visibility:hidden}')
@@ -95,7 +137,6 @@ describe('NavbarAuthChrome pre-paint session shell', () => {
   })
 
   it('leaves the sign-up links visible when nothing usable is stored', () => {
-    const html = staticHtml()
     const unusable = [
       null,
       '{',
@@ -107,9 +148,42 @@ describe('NavbarAuthChrome pre-paint session shell', () => {
       document.getElementById(SHELL_STYLE_ID)?.remove()
       sessionStorage.clear()
       if (raw !== null) sessionStorage.setItem(SESSION_KEY, raw)
-      expect(() => runProbe(html)).not.toThrow()
+      expect(() => runProbe()).not.toThrow()
       expect(document.getElementById(SHELL_STYLE_ID)).toBeNull()
     }
+  })
+
+  it('restores the signed-out links if the bundle never hydrates', () => {
+    const html = staticHtml()
+    expect(DOCS_NAV_SESSION_PROBE).toContain(String(DOCS_NAV_HYDRATION_FALLBACK_MS))
+    expect(DOCS_NAV_HYDRATION_FALLBACK_MS).toBeGreaterThanOrEqual(2_000)
+    expect(DOCS_NAV_HYDRATION_FALLBACK_MS).toBeLessThanOrEqual(8_000)
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(liveSession()))
+    document.body.innerHTML = html
+    runProbe()
+    const startFree = [...document.body.querySelectorAll('a')].find((a) => a.textContent === 'Start free')
+    expect(getComputedStyle(startFree!).visibility).toBe('hidden')
+    vi.advanceTimersByTime(DOCS_NAV_HYDRATION_FALLBACK_MS - 1)
+    expect(document.getElementById(SHELL_STYLE_ID)).not.toBeNull()
+    vi.advanceTimersByTime(1)
+    expect(document.getElementById(SHELL_STYLE_ID)).toBeNull()
+    expect(getComputedStyle(startFree!).visibility).toBe('visible')
+    expect(startFree?.getAttribute('href')).toBe(`${ADMIN}/signup?src=docs-nav`)
+  })
+
+  it('keeps the pre-paint hide when the navbar hydrates before the fallback', () => {
+    const html = staticHtml()
+    expect(DOCS_NAV_SESSION_PROBE).toContain(HYDRATED_ATTR)
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(liveSession()))
+    document.body.innerHTML = html
+    runProbe()
+    document.documentElement.setAttribute(HYDRATED_ATTR, '1')
+    vi.advanceTimersByTime(DOCS_NAV_HYDRATION_FALLBACK_MS)
+    expect(document.getElementById(SHELL_STYLE_ID)?.textContent).toBe(
+      '[data-docs-nav="signed-out"]{visibility:hidden}',
+    )
+    const startFree = [...document.body.querySelectorAll('a')].find((a) => a.textContent === 'Start free')
+    expect(getComputedStyle(startFree!).visibility).toBe('hidden')
   })
 })
 
@@ -122,6 +196,7 @@ describe('NavbarAuthChrome after hydration', () => {
     if (mounted) act(() => mounted.unmount())
     root = undefined
     document.getElementById(SHELL_STYLE_ID)?.remove()
+    document.documentElement.removeAttribute(HYDRATED_ATTR)
     sessionStorage.clear()
     document.body.replaceChildren()
   })
@@ -146,6 +221,19 @@ describe('NavbarAuthChrome after hydration', () => {
     expect(host.innerHTML).toContain(`href="${ADMIN}/login"`)
     expect(host.innerHTML).not.toContain('>Console<')
     expect(host.querySelector(`a[href="${ADMIN}/dashboard"]`)).toBeNull()
+  })
+
+  it('marks the document hydrated and does not insert a script when the shell switches', () => {
+    render()
+    expect(host.innerHTML).not.toMatch(/<script[\s>/]/)
+    expect(document.documentElement.getAttribute(HYDRATED_ATTR)).toBe('1')
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(liveSession()))
+    act(() => {
+      window.dispatchEvent(new CustomEvent('mushi:docs:auth-change'))
+    })
+    expect(host.innerHTML).not.toMatch(/<script[\s>/]/)
+    expect(host.innerHTML).toContain('data-docs-nav="signed-in"')
+    expect(document.documentElement.getAttribute(HYDRATED_ATTR)).toBe('1')
   })
 
   it('shows Console and the dashboard when a session is stored', () => {

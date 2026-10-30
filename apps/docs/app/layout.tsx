@@ -4,6 +4,7 @@ import { GitHubIcon } from 'nextra/icons'
 import { getPageMap } from 'nextra/page-map'
 import Link from 'next/link'
 import { NavbarAuthChrome } from '../components/NavbarAuthChrome'
+import { DOCS_NAV_SESSION_PROBE } from '../lib/docs-nav-session-probe'
 import { MushiSiteAnalytics } from '../components/MushiSiteAnalytics'
 import { SiteFooter } from '../components/SiteFooter'
 /* globals.css imports both `tailwindcss` AND `nextra-theme-docs/style.css`,
@@ -131,6 +132,8 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html lang="en" dir="ltr" suppressHydrationWarning>
       <Head>
+        {/* One inline probe. It runs while the document parses, before the navbar paints. */}
+        <script dangerouslySetInnerHTML={{ __html: DOCS_NAV_SESSION_PROBE }} />
       </Head>
       <body>
         <JsonLd data={ORGANIZATION_JSONLD} />
