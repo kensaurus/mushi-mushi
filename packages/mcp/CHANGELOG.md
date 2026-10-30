@@ -1,5 +1,14 @@
 # @mushi-mushi/mcp
 
+## 0.30.1
+
+### Patch Changes
+
+- 545f106: - **`diagnose_setup` names the root cause first**: in full mode it reads the app's Health check and returns its "Fix these first" list as `health`; when the connection, ingest and dispatch checks pass, `nextAction` is the first root cause and its fix.
+- 6a24a35: - **Docs answers match the product**: the docs index behind `search_mushi_docs` is rebuilt from the proofread docs.
+- Updated dependencies [545f106]
+  - @mushi-mushi/core@1.33.5
+
 ## 0.30.0
 
 ### Minor Changes
