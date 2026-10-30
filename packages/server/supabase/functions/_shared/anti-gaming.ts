@@ -60,6 +60,23 @@ export function multiAccountReason(tokens: number, userAgent: string | null | un
     : `Multi-account: ${tokens} reporter tokens from same device`
 }
 
+const MULTI_ACCOUNT_COUNT = /^(Multi-account: )(\d+)( reporter tokens\b)/
+
+/**
+ * The sentence is written once, at the first flag. Tokens added later raise
+ * the device card's count and leave this number behind. Replace only the
+ * count. A later request's User-Agent must not rewrite "same device" or
+ * "scripted client (...)" — that clause is the signal from the flag itself.
+ */
+export function alignMultiAccountReason(
+  reason: string | null | undefined,
+  tokenCount: number,
+): string | null | undefined {
+  if (typeof reason !== 'string') return reason
+  if (!Number.isInteger(tokenCount) || tokenCount < 0) return reason
+  return reason.replace(MULTI_ACCOUNT_COUNT, `$1${tokenCount}$3`)
+}
+
 export async function checkAntiGaming(
   db: SupabaseClient,
   projectId: string,
@@ -169,10 +186,14 @@ async function runMultiAccountCheck(
     let flagged = existing.flagged_as_suspicious
     let reason = existing.flag_reason
 
-    // Multi-account detection
+    // Multi-account detection. Once flagged, keep the sentence's count equal
+    // to the token list. The admin card shows both, and a frozen count
+    // contradicts the chip. Only the count moves; the clause stays.
     if (unreviewedTokenCount(tokens.length, existing.reviewed_token_count) > MULTI_ACCOUNT_THRESHOLD && !flagged) {
       flagged = true
       reason = multiAccountReason(tokens.length, device.userAgent)
+    } else if (flagged) {
+      reason = alignMultiAccountReason(reason, tokens.length)
     }
 
     await db.from('reporter_devices').update({
