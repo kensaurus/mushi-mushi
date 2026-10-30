@@ -69,7 +69,7 @@ export function JudgeAgreementOverview({
   const rows = worst.data?.evaluations ?? []
 
   return (
-    <div className="grid min-w-0 gap-3 lg:grid-cols-2" data-testid="judge-agreement-overview">
+    <div className="grid min-w-0 gap-3 lg:grid-cols-2 [&>*]:min-w-0" data-testid="judge-agreement-overview">
       <Section title="How often the grader agrees">
         {points.length > 0 ? (
           <>

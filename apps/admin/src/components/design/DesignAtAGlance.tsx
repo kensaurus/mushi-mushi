@@ -33,7 +33,7 @@ export function DesignAtAGlance({ design }: { design: DesignPlaneResponse }) {
     .filter((t): t is typeof t & { score: number } => typeof t.score === 'number')
     .map((t) => ({ ts: t.at, value: t.score }))
   return (
-    <div className="grid min-w-0 gap-3 lg:grid-cols-2" data-testid="design-at-a-glance">
+    <div className="grid min-w-0 gap-3 lg:grid-cols-2 [&>*]:min-w-0" data-testid="design-at-a-glance">
       <Section
         title="Your colours"
         action={<span className="text-2xs text-fg-faint">{colorCount.toLocaleString()} colour tokens</span>}

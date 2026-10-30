@@ -110,6 +110,26 @@ describe('useScrollToHash', () => {
     })
   })
 
+  it('waits for a target that mounts after the page is ready (Fix → /settings#spend-limits opened at the top)', async () => {
+    const spy = vi.fn()
+    Element.prototype.scrollIntoView = spy
+    function Late({ show }: { show: boolean }) {
+      useScrollToHash(true)
+      return createElement('main', null, show ? createElement('div', { id: 'spend-limits' }, 'Spend limits') : null)
+    }
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    const at = (show: boolean) => createElement(MemoryRouter, { initialEntries: ['/settings#spend-limits'] }, createElement(Late, { show }))
+    await act(async () => root!.render(at(false)))
+    expect(spy).not.toHaveBeenCalled()
+    await act(async () => root!.render(at(true)))
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
   it('waits until the page is ready', async () => {
     const spy = vi.fn()
     Element.prototype.scrollIntoView = spy
