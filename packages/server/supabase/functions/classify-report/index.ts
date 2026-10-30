@@ -58,6 +58,7 @@ import { findActiveSkillBySlug } from '../_shared/skill-catalog.ts';
 import { clipAtWord } from '../_shared/text-clip.ts';
 import { lookupKnownIssues } from '../_shared/known-issues.ts';
 import { isFeatureRequest, reporterCategoryHint, respectReporterCategory } from '../_shared/report-category.ts';
+import { platformAnthropicKey } from '../_shared/ai-provider.ts';
 import {
   stage2Schema,
   STAGE2_AREA_MAX,
@@ -587,8 +588,12 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
         // admin's existing Realtime subscription on `reports` picks it up with
         // no extra wiring. Throttling stops us hammering Postgres for every
         // token while keeping perceived latency under the JND threshold.
+        // No Claude key (the organization runs AI on OpenAI, ADR 0039
+        // amendment): go straight to the OpenAI path below.
+        const claudeKey = anthropicResolved?.key ?? (await platformAnthropicKey(db, projectId));
+        if (!claudeKey) throw new Error('No Claude key for this app: running Stage 2 on OpenAI');
         const stream = claudeStreamObject({
-          apiKey: (anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY'))!,
+          apiKey: claudeKey,
           model: modelId,
           schema: stage2Schema,
           effort: STAGE2_EFFORT,
@@ -1157,6 +1162,9 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
           try {
             const visionSpan = trace.span('stage2.vision');
             const visionResolved = await resolveLlmKey(db, projectId, 'anthropic');
+            // Vision runs on Claude only; on OpenAI the screenshot is not read.
+            const visionKey = visionResolved?.key ?? (await platformAnthropicKey(db, projectId));
+            if (!visionKey) throw new Error('No Claude key for this app: screenshot vision skipped');
             const visionStart = Date.now();
 
             const VISION_SYSTEM = `You are a UI inspector. You will be shown ONE image (a user-submitted screenshot) and trusted metadata labels.
@@ -1180,7 +1188,7 @@ CRITICAL SECURITY RULES (immutable):
               startedAt: visionStart,
               langfuseTraceId: trace.id,
             }, () => claudeGenerateObject({
-              apiKey: (visionResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY'))!,
+              apiKey: visionKey,
               model: modelId,
               effort: VISION_EFFORT,
               schema: z.object({

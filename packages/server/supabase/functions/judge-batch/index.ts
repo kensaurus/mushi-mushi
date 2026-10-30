@@ -18,6 +18,7 @@ import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { resolveClaudeModel } from '../_shared/claude-request.ts'
 import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { JUDGE_ELIGIBLE_STATUSES, judgeEmptyResult, onlyJudgeable } from '../_shared/judge-eligibility.ts'
+import { platformAnthropicKey } from '../_shared/ai-provider.ts'
 
 /**
  * OpenRouter / Together / Fireworks expect `vendor/model` slugs. Operators
@@ -244,13 +245,15 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
 
           // C9: per-project BYOK resolution.
           const anthropicResolved = await resolveLlmKey(db!, project.id, 'anthropic')
+          // The platform key too follows the organization's AI provider (ADR 0039 amendment).
+          const claudeEnvKey = await platformAnthropicKey(db!, project.id)
           // V5.3 §2.7 + §2.18: BYOK-only deployments commonly run on a single
           // OpenAI-compatible gateway (OpenRouter, Together, …) instead of a
           // direct Anthropic key. If we have no Anthropic key at all, skip the
           // primary path entirely — calling the Anthropic API without a
           // key throws a noisy 401 that pollutes the judge log and wastes a
           // round-trip on every report.
-          const tryAnthropic = !!(anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY'))
+          const tryAnthropic = !!(anthropicResolved?.key ?? claudeEnvKey)
           let primaryErr: unknown = tryAnthropic ? null : new Error('No Anthropic key — skipping primary path')
 
           const judgeUsageCtx = {
@@ -278,7 +281,7 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
               // structured outputs, sends no thinking config, and keeps
               // `temperature: 0` only on models that still accept it.
               const result = await claudeGenerateObject({
-                apiKey: (anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY'))!,
+                apiKey: (anthropicResolved?.key ?? claudeEnvKey)!,
                 model: modelId,
                 schema: judgeSchema,
                 effort: JUDGE_EFFORT,

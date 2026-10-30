@@ -48,6 +48,7 @@ import {
 import { RowStatus, SettingsList, SettingsRow } from './SettingsRow';
 import { SpendDownSection } from './SpendDownSection';
 import { ReviewFollowupsSection } from './ReviewFollowupsSection';
+import { AiProviderSection } from './AiProviderSection';
 
 interface ProviderMeta {
   name: string;
@@ -700,6 +701,13 @@ export function ByokPanel() {
               : ''
         }`}
       >
+        <AiProviderSection
+          keysToken={allKeys.filter((k) => k.provider_slug === 'openai').map((k) => k.id).join(',')}
+          onNeedOpenAiKey={() => {
+            if (addProvider !== 'openai') openAddForm('openai');
+            document.getElementById('key-openai')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+          }}
+        />
         {DISPLAY_PROVIDERS.map((provider) => {
           const meta = PROVIDER_META[provider];
           if (!meta) return null;
