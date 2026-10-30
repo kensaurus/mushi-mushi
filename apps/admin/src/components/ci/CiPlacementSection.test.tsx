@@ -193,7 +193,42 @@ describe('CiPlacementSection', () => {
     await render()
     const link = Array.from(host.querySelectorAll('a')).find((a) => a.textContent?.includes('Import from your CI agreement'))!
     expect(link.getAttribute('href')).toBe('/settings?tab=ci-policy')
-    expect(host.textContent).toContain('No GitHub token is stored')
+    expect(host.textContent).toContain('Mushi has no GitHub access for this app’s repositories')
     expect(radio('GitHub-hosted', q('ci-placement-repo-kensaurus/yen-yen')).disabled).toBe(false)
+  })
+
+  it('a move to GitHub-hosted switches back after 4 hours unless told otherwise', async () => {
+    const data = placementFixture()
+    state.data = { ...data, policy: null }
+    state.apiFetch.mockResolvedValue({ ok: true, data: previewFixture() })
+    await render()
+    const card = q('ci-placement-repo-kensaurus/yen-yen')
+    await click(radio('GitHub-hosted', card))
+    expect(card.textContent).toContain('Switch back after')
+    await click(button('Preview', card))
+    expect(JSON.parse(String((state.apiFetch.mock.calls[0]![1] as RequestInit).body))).toMatchObject({ variable: 'LINUX_RUNNER', value: null, revertAfterHours: 4 })
+    const select = card.querySelector('select') as HTMLSelectElement
+    await act(async () => {
+      select.value = '0'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await click(button('Preview', card))
+    expect(JSON.parse(String((state.apiFetch.mock.calls[1]![1] as RequestInit).body)).revertAfterHours).toBeUndefined()
+  })
+
+  it('offers economy or thorough where a workflow reads CI_PROFILE, economy being current when unset', async () => {
+    const data = placementFixture()
+    state.data = { ...data, repos: data.repos.map((r) => (r.repo === 'kensaurus/yen-yen' ? { ...r, profile: { current: { exists: false, value: null, updatedAt: null } } } : r)) }
+    state.apiFetch.mockResolvedValue({ ok: true, data: previewFixture({ variable: 'CI_PROFILE', warnings: ['Thorough runs every check'] }) })
+    await render()
+    const block = q('ci-profile-kensaurus/yen-yen')
+    expect(block.textContent).toContain('Now: Economy')
+    expect(radio('Economy (recommended, default)', block).disabled).toBe(true)
+    await click(radio('Thorough (more expensive)', block))
+    await click(button('Preview', block))
+    expect(JSON.parse(String((state.apiFetch.mock.calls[0]![1] as RequestInit).body))).toEqual({ projectId: PROJECT, repo: 'kensaurus/yen-yen', variable: 'CI_PROFILE', value: 'thorough' })
+    expect(q('ci-profile-preview').textContent).toContain('Thorough runs every check')
+    // A repo whose workflows do not read it shows no switch.
+    expect(host.querySelector('[data-testid="ci-profile-kensaurus/tsumagoi"]')).toBeNull()
   })
 })

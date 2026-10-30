@@ -127,6 +127,51 @@ export async function installationIdForAttempt(
   return toId(match?.github_app_installation_id)
 }
 
+/** The GitHub App installation bound to one of the project's repos (owner/repo), else its primary repo's. */
+export async function installationIdForRepo(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  repoFullName?: string | null,
+): Promise<number | null> {
+  const { data } = await db
+    .from('project_repos')
+    .select('repo_url, is_primary, github_app_installation_id')
+    .eq('project_id', projectId)
+  const rows = (data ?? []) as Array<{ repo_url: string | null; is_primary: boolean | null; github_app_installation_id: unknown }>
+  const want = repoFullName?.toLowerCase() ?? null
+  const match = want
+    ? rows.find((r) => {
+        const ref = parseGithubRepoUrl(r.repo_url ?? '')
+        return ref != null && `${ref.owner}/${ref.repo}`.toLowerCase() === want
+      })
+    : rows.find((r) => r.is_primary)
+  const id = Number(match?.github_app_installation_id)
+  return id > 0 ? id : null
+}
+
+/**
+ * The token for changing a repo's Actions variables (CI placement, ADR 0037):
+ * the project's or organization's stored token first (the owner chose it for
+ * this), else the GitHub App installation bound to that repo. Never the
+ * platform token. The App needs "Variables: Read and write" for writes; act()
+ * says so plainly when GitHub answers 403.
+ */
+export async function placementGithubToken(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  repoFullName?: string | null,
+): Promise<string | null> {
+  const stored = await resolveProjectGithubToken(db, projectId, null, { allowEnvFallback: false })
+  if (stored) return stored
+  const installationId = await installationIdForRepo(db, projectId, repoFullName)
+  if (!installationId) return null
+  try {
+    return await mintInstallationToken(installationId)
+  } catch {
+    return null
+  }
+}
+
 export async function resolveProjectGithubToken(
   db: ReturnType<typeof getServiceClient>,
   projectId: string,

@@ -17,8 +17,8 @@
  *          _shared/repo-housekeeping-run.ts, injected in api-ext.
  *
  *          Act (ADR 0037): set_actions_variable / delete_actions_variable,
- *          for the allowlisted runner variables only (LINUX_RUNNER,
- *          RUNNER_<WORKFLOW>). act() checks the approved hash, the allowlist,
+ *          for the allowlisted variables only (LINUX_RUNNER,
+ *          RUNNER_<WORKFLOW>, CI_PROFILE). act() checks the approved hash, the allowlist,
  *          the organization's CI policy (fresh repo visibility from GitHub,
  *          runners from ci_runners) and a compare-and-set on the variable's
  *          value and updated_at (409 VARIABLE_MOVED), then writes. Legacy-
@@ -43,8 +43,7 @@ import {
   normalizePolicy,
   payloadProblem,
   PLACEMENT_ACTIONS,
-  policyVerdictAll,
-  targetsOf,
+  placementVerdict,
   variableMatches,
   type PlacementPayload,
   type PolicyRow,
@@ -85,7 +84,7 @@ export const githubConnector: RecipeConnector = {
     snapshot: ['contents:read', 'actions:read', 'secrets:read (names only)', 'metadata:read'],
     propose: ['contents:write', 'pull_requests:write'],
     act: [
-      'variables:write (LINUX_RUNNER and RUNNER_<WORKFLOW> only)',
+      'variables:write (LINUX_RUNNER, RUNNER_<WORKFLOW> and CI_PROFILE only)',
       'contents:write (repo clean-up: delete or restore branches Mushi recorded)',
       "pull_requests:write (repo clean-up: close Mushi's own fix PRs)",
       'administration:write (optional: turn on "Automatically delete head branches")',
@@ -269,7 +268,7 @@ export const githubConnector: RecipeConnector = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const VARIABLES_PERMISSION =
-  'The GitHub token Mushi uses for this project cannot change Actions variables. Store a fine-grained token with "Variables: Read and write" on this repository (or a classic token with the repo scope) in the project settings. The Mushi GitHub App does not have that permission.'
+  'The GitHub token Mushi uses for this project cannot change Actions variables. Either approve the Mushi GitHub App’s "Variables: Read and write" permission on this repository’s account (GitHub → Settings → Applications → Mushi Mushi App → Review request), or store a fine-grained token with that permission (or a classic token with the repo scope) in the project settings.'
 
 /** `owner/repo` as a URL path, each segment encoded. */
 function repoPath(repo: string): string {
@@ -331,7 +330,7 @@ async function actOnRunnerVariable(ctx: ConnectorContext, action: ApprovedConnec
   const { data: runnerRows, error: runnersErr } = await ctx.db.from('ci_runners').select('runner_name, status, busy, labels, kind').eq('project_id', ctx.projectId).eq('repo', p.repo)
   if (runnersErr) return { ok: false, code: 'POLICY_UNREADABLE', status: 409, detail: 'Mushi could not read this repo\'s runners, so it did not change anything.' }
   const fallbacks = p.fallbackLabels ?? (action.action === 'delete_actions_variable' ? p.expectedLabels : [])
-  const verdict = policyVerdictAll(policy, { repo: p.repo, visibility, targets: targetsOf(p.value, fallbacks), runners: (runnerRows ?? []) as RunnerSeen[] })
+  const verdict = placementVerdict(policy, { repo: p.repo, visibility, name: p.name, value: p.value, fallbacks, runners: (runnerRows ?? []) as RunnerSeen[] })
   if (!verdict.allowed) return { ok: false, code: verdict.code ?? 'POLICY_REFUSED', status: 403, detail: verdict.reason ?? 'Your CI agreement refuses this change.' }
 
   // Compare-and-set: the variable must be exactly what the person saw.

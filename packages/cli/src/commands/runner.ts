@@ -10,7 +10,7 @@
  *          - bill       what GitHub actually charged, read with your own gh
  *                       login; --push uploads it (POST /v1/admin/ci/bill)
  *          - placement  where each repo's CI runs, the dry run of a change,
- *                       and a request for one (ADR 0037: only LINUX_RUNNER /
+ *                       and a request for one (ADR 0037: only CI_PROFILE, LINUX_RUNNER /
  *                       RUNNER_<WORKFLOW>; an owner or admin approves and
  *                       runs it in the console)
  *          - fix        open a draft PR that applies one CI cost fix to a
@@ -385,13 +385,24 @@ owner must own one of the project's repositories.`)
     .command('placement')
     .description('Where each repo\'s CI runs, and changing it through one runner variable with approval (ADR 0037)')
 
-  const placementBody = (opts: { projectId?: string; project?: string; repo: string; variable: string; value?: string; remove?: boolean }, config: CliConfig) => {
-    if (!opts.remove && !opts.value) throw new MushiCliError('E_INVALID_INPUT', 'Pass --value <runner label>, or --remove to delete the variable.')
+  const placementBody = (opts: { projectId?: string; project?: string; repo: string; variable: string; value?: string; remove?: boolean; revertAfter?: string }, config: CliConfig) => {
+    if (!opts.remove && !opts.value) throw new MushiCliError('E_INVALID_INPUT', 'Pass --value <runner label | economy | thorough>, or --remove to delete the variable.')
     if (opts.remove && opts.value) throw new MushiCliError('E_INVALID_INPUT', 'Pass either --value or --remove, not both.')
     if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(opts.repo)) throw new MushiCliError('E_INVALID_INPUT', '--repo must be owner/repo.')
     const raw = opts.projectId ?? opts.project ?? config.projectId
     if (!raw) throw new MushiCliError('E_INVALID_INPUT', 'Pass --project-id (or configure a project).')
-    return { projectId: requireUuid(raw, 'project id'), repo: opts.repo, variable: opts.variable, value: opts.remove ? null : (opts.value as string) }
+    let revertAfterHours: number | undefined
+    if (opts.revertAfter !== undefined) {
+      revertAfterHours = Number(opts.revertAfter)
+      if (!Number.isInteger(revertAfterHours) || revertAfterHours < 1 || revertAfterHours > 168) throw new MushiCliError('E_INVALID_INPUT', '--revert-after is a whole number of hours from 1 to 168.')
+    }
+    return {
+      projectId: requireUuid(raw, 'project id'),
+      repo: opts.repo,
+      variable: opts.variable,
+      value: opts.remove ? null : (opts.value as string),
+      ...(revertAfterHours !== undefined ? { revertAfterHours } : {}),
+    }
   }
 
   placement
@@ -414,7 +425,7 @@ owner must own one of the project's repositories.`)
     })
 
   const placementAction = (verb: 'preview' | 'request') =>
-    async (opts: { projectId?: string; project?: string; repo: string; variable: string; value?: string; remove?: boolean; reason?: string; json?: boolean }) => {
+    async (opts: { projectId?: string; project?: string; repo: string; variable: string; value?: string; remove?: boolean; revertAfter?: string; reason?: string; json?: boolean }) => {
       const config = requireConfig()
       const body = { ...placementBody(opts, config), ...(verb === 'request' && opts.reason ? { reason: opts.reason.slice(0, 500) } : {}) }
       const path = verb === 'preview' ? '/v1/admin/ci/placement/preview' : '/v1/admin/ci/placement/requests'
@@ -436,8 +447,9 @@ owner must own one of the project's repositories.`)
   const changeOptions = (cmd: Command): Command =>
     cmd
       .requiredOption('--repo <owner/repo>', 'Repository connected to the project')
-      .option('--variable <name>', 'LINUX_RUNNER or RUNNER_<WORKFLOW>', 'LINUX_RUNNER')
-      .option('--value <label>', 'The runner label jobs should ask for')
+      .option('--variable <name>', 'LINUX_RUNNER, RUNNER_<WORKFLOW>, or CI_PROFILE (where a workflow reads it)', 'LINUX_RUNNER')
+      .option('--value <label>', 'The runner label jobs should ask for (CI_PROFILE: economy or thorough)')
+      .option('--revert-after <hours>', 'A move to GitHub-hosted runners switches back after this many hours (1-168)')
       .option('--remove', 'Remove the variable (jobs use the workflow\'s fallback, usually GitHub-hosted)')
       .option('--project-id <id>', 'Project ID (defaults to the configured project)')
       .option('--project <id>', 'Same as --project-id')

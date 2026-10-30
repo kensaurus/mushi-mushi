@@ -1,5 +1,22 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "Unreleased",
+    "pending": true,
+    "versions": [],
+    "highlights": [
+      {
+        "title": "`mushi runner placement preview|request` takes CI_PROFILE and a time box",
+        "description": "`--variable CI_PROFILE --value economy|thorough` asks to switch a repo's checks on fix pull requests (only where a workflow reads `vars.CI_PROFILE`), and `--revert-after <hours>` (1-168) makes a move to GitHub-hosted runners switch back on its own when the time is up."
+      },
+      {
+        "title": "`request_ci_placement_change` takes CI_PROFILE and `revertAfterHours`",
+        "description": "CI_PROFILE (economy, the default, or thorough) is accepted where a workflow reads it, and a move to GitHub-hosted runners can carry `revertAfterHours` (1-168) so it switches back on its own."
+      }
+    ],
+    "packages": []
+  },
+  {
     "majorMinor": "1.33",
     "headline": null,
     "pending": false,

@@ -24,6 +24,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { resolveProjectGithubToken } from '../_shared/github.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
 import { runCiCollector, type CollectorDeps } from '../_shared/ci-collector.ts'
+import { defaultTimeboxDeps, runTimedReverts } from '../_shared/ci-placement-timebox.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -37,6 +38,8 @@ const liveDeps: CollectorDeps = {
   // The bill: the project's own stored token only (no App installation, no platform GITHUB_TOKEN).
   resolveBillingToken: (db, projectId) => resolveProjectGithubToken(db as never, projectId, null, { allowEnvFallback: false }),
   now: () => new Date(),
+  // Time-boxed moves to GitHub-hosted runners switch back when due (ADR 0037).
+  timedReverts: (db, now) => runTimedReverts(db, now, defaultTimeboxDeps({ fetch: (url, init) => fetch(url, init), now: () => new Date() })),
 }
 
 function json(body: unknown, status = 200): Response {
