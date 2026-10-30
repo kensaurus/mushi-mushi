@@ -69,10 +69,17 @@ const FIELD_ENV_VAR: Partial<Record<PlatformField, string>> = {
   linear_api_key_ref: 'LINEAR_API_KEY',
 }
 
-/** Env-backed fields whose credential is the operator's own account. */
+/**
+ * Env-backed fields whose credential is the operator's own account. Langfuse
+ * too: the env keys trace Mushi's own pipeline, so another app never "has
+ * Langfuse connected" (a new account's Integrations badge counted it).
+ */
 const OPERATOR_ONLY_ENV_FIELDS: ReadonlySet<PlatformField> = new Set<PlatformField>([
   'github_installation_token_ref',
   'slack_bot_token_ref',
+  'langfuse_host',
+  'langfuse_public_key_ref',
+  'langfuse_secret_key_ref',
 ])
 
 /**
