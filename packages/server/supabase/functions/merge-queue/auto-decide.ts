@@ -13,7 +13,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log as rootLog } from '../_shared/logger.ts'
 import type { GithubRepoRef, PullRequestDetails } from '../_shared/github.ts'
-import type { ChecksView } from '../_shared/merge-queue.ts'
+import { failuresOnBase, type ChecksView } from '../_shared/merge-queue.ts'
 import type { requeueReviewForNewHead } from '../_shared/fix-review-db.ts'
 import {
   closeComment,
@@ -41,6 +41,8 @@ export interface AutoDecideDeps {
   pull: (token: string, ref: GithubRepoRef, n: number) => Promise<PullRequestDetails | null>
   checks: (token: string, ref: GithubRepoRef, sha: string) => Promise<ChecksView>
   closePr: (token: string, ref: GithubRepoRef, n: number, comment: string) => Promise<void>
+  /** The head commit of a branch; absent → red CI is never checked against the base. */
+  baseSha?: (token: string, ref: GithubRepoRef, branch: string) => Promise<string | null>
   requeueReview: typeof requeueReviewForNewHead
 }
 
@@ -208,6 +210,13 @@ export async function runAutoDecide(
       const sibs = (a.report_id ? siblings.get(a.report_id) ?? [] : []).filter((s) => !s.merged_at && (s.pr_state === null || s.pr_state === 'open' || s.pr_state === 'draft'))
       const keeper = pickKeeper(sibs.map((s) => ({ id: s.id, verdict: siblingVerdict.get(s.id) ?? null, createdAt: s.created_at })))
       const checks = open && !pr.merged && headSha ? await deps.checks(token, ref, headSha) : { pending: 0, failed: [] }
+      let ci = ownCi(checks)
+      // A check that fails on the base branch too is not this PR's fault: never
+      // close an approved PR because main is red (the merge queue's rule).
+      if (ci === 'red' && deps.baseSha && pr.baseRef) {
+        const baseHead = await deps.baseSha(token, ref, pr.baseRef)
+        if (baseHead && failuresOnBase(checks.failed, await deps.checks(token, ref, baseHead))) ci = 'pending'
+      }
       decision = decideFix({
         pr: { open, merged: pr.merged, headSha },
         report: { closed: CLOSED_REPORT.has(reportStatus.get(a.report_id ?? '') ?? '') },
@@ -222,7 +231,7 @@ export async function runAutoDecide(
               completedAt: (rv.completed_at as string | null) ?? null,
             }
           : null,
-        ci: ownCi(checks),
+        ci,
         repairActive: repairing.has(a.id),
         prAttempts: a.report_id ? (siblings.get(a.report_id) ?? []).length : 1,
         now,
