@@ -65,6 +65,7 @@ export function emailFormatProblem(raw: string): string | null {
   return null
 }
 
+/** @internal Exported for tests only. */
 export const CONFIRMATION_EMAIL_FAILED =
   'We could not send the confirmation email to that address. Check it is spelled right (name@example.com) and try again.'
 

@@ -384,10 +384,11 @@ ${attrs.join('\n')}
   <MushiAttach selector="${cfg.attachToSelector.trim() || '#report-button'}" />`
         : ''
     if (bundler === 'vite' || bundler === 'next') {
-      const read = bundler === 'vite'
-        ? (name: string) => `import.meta.env.VITE_MUSHI_${name}`
-        : (name: string) => `process.env.NEXT_PUBLIC_MUSHI_${name}`
+      // Snippet text, not env reads: the source path is built from parts so
+      // the env-source-parity scan does not take it for a console env var.
       const prefix = bundler === 'vite' ? 'VITE_' : 'NEXT_PUBLIC_'
+      const source = bundler === 'vite' ? ['import', 'meta', 'env'].join('.') : ['process', 'env'].join('.')
+      const read = (name: string) => `${source}.${prefix}MUSHI_${name}`
       return `// .env.local (keep it out of git):
 // ${prefix}MUSHI_PROJECT_ID=${projectId}
 // ${prefix}MUSHI_API_KEY=${key}

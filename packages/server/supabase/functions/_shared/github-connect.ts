@@ -277,13 +277,6 @@ export async function listUserInstallations(
   return { ok: true, login, installations: out }
 }
 
-/** GitHub's page where the account picks which repositories the App sees. */
-export function installationSettingsUrl(inst: Pick<UserInstallation, 'id' | 'account' | 'accountType'>): string {
-  return inst.accountType === 'Organization'
-    ? `https://github.com/organizations/${encodeURIComponent(inst.account)}/settings/installations/${inst.id}`
-    : `https://github.com/settings/installations/${inst.id}`
-}
-
 export interface InstallationRepo {
   fullName: string
   private: boolean

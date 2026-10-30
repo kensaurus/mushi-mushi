@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-29 · **801** routes.
+> Generated: 2026-10-30 · **806** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,9 +10,9 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 219 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 405 |
+| `jwtAuth` | 409 |
 | `jwtOrApiKey` | 2 |
-| `public` | 65 |
+| `public` | 66 |
 | `unknown` | 51 |
 
 ## Routes by path
@@ -383,6 +383,10 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/projects/:id/design/tokens` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe.ts` |
 | GET | `/v1/admin/projects/:id/evolution-history` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/evolution.ts` |
 | POST | `/v1/admin/projects/:id/fixes/dry-run` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
+| POST | `/v1/admin/projects/:id/github/connect` | `jwtAuth` | `packages/server/supabase/functions/api/routes/github-connect.ts` |
+| POST | `/v1/admin/projects/:id/github/repo` | `jwtAuth` | `packages/server/supabase/functions/api/routes/github-connect.ts` |
+| POST | `/v1/admin/projects/:id/github/repos` | `jwtAuth` | `packages/server/supabase/functions/api/routes/github-connect.ts` |
+| GET | `/v1/admin/projects/:id/github/stack` | `jwtAuth` | `packages/server/supabase/functions/api/routes/github-connect.ts` |
 | GET | `/v1/admin/projects/:id/home` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-home.ts` |
 | POST | `/v1/admin/projects/:id/home/thumbnail` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-home.ts` |
 | DELETE | `/v1/admin/projects/:id/identity-secret` | `jwtAuth` | `packages/server/supabase/functions/api/routes/identity-secret.ts` |
@@ -807,6 +811,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/tester/wallet/redeem` | `jwtAuth` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | POST | `/v1/webhooks/fine-tuning/openai` | `public` | `packages/server/supabase/functions/api/routes/fine-tuning.ts` |
 | POST | `/v1/webhooks/github` | `public` | `packages/server/supabase/functions/api/routes/public.ts` |
+| GET | `/v1/webhooks/github/app-authorize` | `public` | `packages/server/supabase/functions/api/routes/github-connect.ts` |
 | GET | `/v1/webhooks/github/app-installation` | `public` | `packages/server/supabase/functions/api/routes/public.ts` |
 | POST | `/v1/webhooks/sentry` | `public` | `packages/server/supabase/functions/api/routes/public.ts` |
 | POST | `/v1/webhooks/sentry/seer` | `public` | `packages/server/supabase/functions/api/routes/public.ts` |

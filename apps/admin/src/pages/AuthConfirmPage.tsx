@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Btn, Input, Loading } from '../components/ui'
+import { Btn, Card, Input, Loading } from '../components/ui'
 import { supabase } from '../lib/supabase'
 import { authRedirectUrl } from '../lib/authRedirect'
 import { confirmErrorMessage, confirmLandingPath, readConfirmParams } from '../lib/authConfirm'
@@ -78,7 +78,8 @@ export function AuthConfirmPage() {
         <p className="text-center text-lg font-semibold text-fg">Mushi Mushi</p>
         {state.kind === 'verifying' && <Loading text="Confirming your email…" />}
         {state.kind === 'failed' && (
-          <div className="rounded-md border border-edge-subtle bg-surface-raised p-5 space-y-4" role="alert">
+          <Card className="p-5 space-y-4">
+            <div role="alert" className="space-y-4">
             <p className="text-sm text-fg">{state.message}</p>
             <Btn to="/login" variant="primary" size="sm">Sign in</Btn>
             <form onSubmit={resend} className="space-y-2 border-t border-edge-subtle pt-4">
@@ -94,14 +95,17 @@ export function AuthConfirmPage() {
               />
               <Btn type="submit" variant="ghost" size="sm" loading={sending} disabled={sending}>Send a new link</Btn>
             </form>
-          </div>
+            </div>
+          </Card>
         )}
         {state.kind === 'resent' && (
-          <div className="rounded-md border border-edge-subtle bg-surface-raised p-5 space-y-2" role="status">
+          <Card className="p-5 space-y-2">
+            <div role="status" className="space-y-2">
             <p className="text-sm text-fg">A new link is on its way to <strong>{state.email}</strong>.</p>
             <p className="text-xs text-fg-muted">It can take a minute. Check spam if it does not arrive.</p>
             <Link to="/login" className="text-xs underline underline-offset-2">Back to sign in</Link>
-          </div>
+            </div>
+          </Card>
         )}
       </div>
     </div>

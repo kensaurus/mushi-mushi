@@ -12,6 +12,7 @@
 /** Pages a new account reaches by default; deep links elsewhere are kept. */
 const DEFAULT_LANDINGS = new Set(['/', '/reports', '/dashboard'])
 
+/** @internal Exported for tests only. */
 export function isDefaultLanding(pathname: string): boolean {
   return DEFAULT_LANDINGS.has(pathname.replace(/\/+$/, '') || '/')
 }

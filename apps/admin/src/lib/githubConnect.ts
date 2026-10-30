@@ -18,7 +18,7 @@ export interface ConnectLinks {
   expiresAt: string
 }
 
-export interface PickableRepo {
+interface PickableRepo {
   fullName: string
   private: boolean
   defaultBranch: string
