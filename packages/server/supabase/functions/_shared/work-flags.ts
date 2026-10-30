@@ -190,7 +190,18 @@ const posix = (platform: string) => platform !== 'windows'
 function serviceCommand(platform: string): string {
   if (platform === 'windows') return `schtasks /Query /TN "${WINDOWS_TASK}" /V /FO LIST`
   if (platform === 'macos') return 'mushi worker status'
-  return `systemctl --user status ${SYSTEMD} --no-pager; journalctl --user -u ${SYSTEMD} -n 50 --no-pager`
+  // `mushi worker install` writes a user unit; a machine-wide unit is common
+  // too (the owner's WSL worker), and `--user` alone said nothing about it.
+  const log = `journalctl --user -u ${SYSTEMD} -n 50 --no-pager 2>/dev/null; sudo journalctl -u ${SYSTEMD} -n 50 --no-pager`
+  return platform === 'wsl2' ? `wsl -u root -- journalctl -u ${SYSTEMD} -n 50 --no-pager` : log
+}
+
+/** Starts a stopped worker again; on WSL it runs from Windows. */
+function restartCommand(platform: string): string | null {
+  if (platform === 'windows') return `schtasks /Run /TN "${WINDOWS_TASK}"`
+  if (platform === 'macos') return null
+  const both = `systemctl --user restart ${SYSTEMD} 2>/dev/null || sudo systemctl restart ${SYSTEMD}`
+  return platform === 'wsl2' ? `wsl -u root -- systemctl restart ${SYSTEMD}` : both
 }
 
 function stuckCommand(platform: string): string {
@@ -245,7 +256,10 @@ export function deriveWorkerFlags(input: FlagInput): WorkerFlag[] {
         title,
         cause: `No heartbeat for ${durationText(heartbeatAge ?? 0)}. ${lanes.length === 1 ? 'Its lane takes' : `Its ${lanes.length} lanes take`} nothing${queued ? `, and ${queued} queued report${queued === 1 ? ' waits' : 's wait'}` : ''}. The worker process stopped, or the machine is off or asleep.`,
         sinceSec: heartbeatAge,
-        actions: [{ kind: 'copy_command', label: 'Check the worker on that machine', command: serviceCommand(host.platform) }],
+        actions: [
+          ...(restartCommand(host.platform) ? [{ kind: 'copy_command' as const, label: 'Restart the worker', command: restartCommand(host.platform)! }] : []),
+          { kind: 'copy_command', label: 'See why it stopped', command: serviceCommand(host.platform) },
+        ],
       })
       continue
     }

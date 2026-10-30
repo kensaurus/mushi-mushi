@@ -6,6 +6,10 @@
     "versions": [],
     "highlights": [
       {
+        "title": "`mushi work --daemon` rides out a server blip",
+        "description": "a single 401 on its key no longer stops the worker for good. It stops when the key is refused on 3 heartbeats in a row, or at once on an explicit revoke (a 403 naming a revoke or a missing scope). On 2026-10-30 a one-second server error was read as \"key revoked\", and the worker stayed offline for 11 hours because its service does not restart after exit code 2."
+      },
+      {
         "title": "`mushi work` no longer loops on a half-made worktree",
         "description": "a run killed inside `git worktree add` left git's record locked as \"initializing\" with no folder, and every later run of that report failed with \"already used by worktree\" within seconds. The worker now unlocks and prunes that record (the path is its own cache) before it adds the worktree again."
       }
