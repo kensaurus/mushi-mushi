@@ -49,6 +49,7 @@ import {
 } from '../components/report-detail/ReportSurface'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { CHIP_TONE } from '../lib/chipTone'
+import { eventTokenChipText, flagReasonForTokenCount } from '../lib/antiGamingReason'
 import { shortReporterKey } from '../lib/reporterKey'
 import { PageLoadError } from '../components/PageLoadError'
 
@@ -267,7 +268,7 @@ export function AntiGamingPage() {
     return allDevices.filter((d) =>
       d.device_fingerprint.toLowerCase().includes(needle)
       || d.fingerprint_hash?.toLowerCase().includes(needle)
-      || d.flag_reason?.toLowerCase().includes(needle)
+      || flagReasonForTokenCount(d.flag_reason, d.reporter_tokens.length)?.toLowerCase().includes(needle)
       || d.reporter_tokens.some((t) => t.toLowerCase().includes(needle))
       || d.ip_addresses.some((ip) => ip.toLowerCase().includes(needle)),
     )
@@ -704,9 +705,7 @@ export function AntiGamingPage() {
                     <span className="text-fg-secondary truncate flex-1">{g.reason ?? '—'}</span>
                     <span title={tokTip}>
                       <SignalChip tone="neutral" className="shrink-0 max-w-32 truncate font-mono">
-                        {g.tokens.length === 1
-                          ? `tok:${shortReporterKey(g.tokens[0])}…`
-                          : `${g.tokens.length} tokens`}
+                        {eventTokenChipText(g.tokens, g.reason)}
                       </SignalChip>
                     </span>
                     {g.ip_address && (
@@ -821,6 +820,8 @@ interface DeviceCardProps {
  * parent so this component stays grouping-agnostic).
  */
 function DeviceCard({ device: d, isExpanded, isBusy, onToggleExpand, onFlag, onUnflag }: DeviceCardProps) {
+  const tokenCount = d.reporter_tokens.length
+  const reason = flagReasonForTokenCount(d.flag_reason, tokenCount)
   return (
     <Card className="overflow-hidden">
       <div className="p-3">
@@ -842,7 +843,7 @@ function DeviceCard({ device: d, isExpanded, isBusy, onToggleExpand, onFlag, onU
                 </code>
               )}
               <div className="flex flex-wrap items-center gap-1.5">
-                <SignalChip tone="neutral">{pluralizeWithCount(d.reporter_tokens.length, 'token')}</SignalChip>
+                <SignalChip tone="neutral">{pluralizeWithCount(tokenCount, 'token')}</SignalChip>
                 <SignalChip tone="info">{pluralizeWithCount(d.ip_addresses.length, 'IP')}</SignalChip>
                 <SignalChip tone="brand">{pluralizeWithCount(d.report_count, 'report')}</SignalChip>
                 {d.distinct_user_count > 0 ? (
@@ -850,9 +851,9 @@ function DeviceCard({ device: d, isExpanded, isBusy, onToggleExpand, onFlag, onU
                 ) : null}
               </div>
             </div>
-            {d.flag_reason && (
+            {reason && (
               <ContainedBlock tone="warn" className="mt-2">
-                <p className="text-xs text-danger leading-relaxed max-w-prose wrap-break-word text-pretty">{d.flag_reason}</p>
+                <p className="text-xs text-danger leading-relaxed max-w-prose wrap-break-word text-pretty">{reason}</p>
               </ContainedBlock>
             )}
             <InlineProof className="mt-2">
@@ -906,7 +907,7 @@ function DeviceCard({ device: d, isExpanded, isBusy, onToggleExpand, onFlag, onU
       </div>
       {isExpanded && (
         <div className="border-t border-edge-subtle bg-surface-overlay/30 px-3 py-2 space-y-2">
-          <ContainedBlock tone="muted" label={`Reporter tokens (${d.reporter_tokens.length})`}>
+          <ContainedBlock tone="muted" label={`Reporter tokens (${tokenCount})`}>
             <div className="flex flex-wrap gap-1">
               {d.reporter_tokens.map((t) => (
                 <SignalChip key={t} tone="neutral" className="font-mono">
