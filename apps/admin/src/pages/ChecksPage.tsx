@@ -257,7 +257,13 @@ export function ChecksPage() {
                       <Badge tone={view.tone} title={view.detail ?? view.chip}>
                         {view.chip}
                       </Badge>
-                    ) : null}
+                    ) : (
+                      // App blueprint and Design system wait on a slow read (7–30 s,
+                      // 2026-10-30); a blank corner read as broken.
+                      <Badge tone="neutral" className="motion-safe:animate-pulse">
+                        Checking…
+                      </Badge>
+                    )}
                   </span>
                 </div>
                 <p className="text-xs leading-snug text-fg-muted">{item.description}</p>
