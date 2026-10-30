@@ -18,6 +18,7 @@ import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import { extractAnthropicCacheUsage, logLlmInvocation } from '../_shared/telemetry.ts'
 import { reportError, withSentry } from '../_shared/sentry.ts'
 import { isStage1LlmUnavailable, sanitizeLlmError, withAnthropicOrOpenAi } from '../_shared/llm-failover.ts'
+import { isSpendCapMessage, llmErrorText, quotaUserMessage } from '../_shared/llm-quota.ts'
 import { HEURISTIC_STAGE1_MODEL, heuristicStage1Classification } from '../_shared/stage1-heuristic.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { parseBody, FastFilterBodySchema } from '../_shared/validate.ts'
@@ -239,6 +240,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
     let cacheReadInputTokens: number | null = null
     let keySource: 'byok' | 'env' | null = null
     let usedHeuristic = false
+    let quotaNotice: string | null = null
     try {
       const { result, usedProvider } = await withAnthropicOrOpenAi(
         db,
@@ -312,19 +314,26 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       // Dual-provider 401/exhausted keys must not become "Unhandled error"
       // (MUSHI-MUSHI-SERVER-19). Heuristic classification lets the report
       // leave status=new so pipeline-recovery stops retry-storming.
+      const detail = llmErrorText(llmErr)
+      quotaNotice = isSpendCapMessage(detail) ? quotaUserMessage(detail) : null
       usedHeuristic = true
       usedModel = HEURISTIC_STAGE1_MODEL
       fallbackUsed = true
-      fallbackReason = sanitizeLlmError(llmErr).slice(0, 500)
+      fallbackReason = (quotaNotice ?? sanitizeLlmError(detail)).slice(0, 500)
       classification = heuristicStage1Classification(scrubbedReport)
       log.warn('Stage 1 LLM unavailable; using heuristic classification', {
         err: fallbackReason,
         sentry: false,
       })
-      reportError(llmErr instanceof Error ? llmErr : new Error(fallbackReason), {
-        tags: { function: 'fast-filter', llm_fallback: 'heuristic' },
-        extra: { reportId, projectId },
-      })
+      // A spend cap is expected until the key or the limit changes. Reporting
+      // it made an AI_APICallError issue (report d6183705). Auth failures still
+      // report: a bad key is worth a look.
+      if (!quotaNotice) {
+        reportError(llmErr instanceof Error ? llmErr : new Error(fallbackReason), {
+          tags: { function: 'fast-filter', llm_fallback: 'heuristic' },
+          extra: { reportId, projectId },
+        })
+      }
       await logLlmInvocation(db, {
         projectId, reportId, functionName: 'fast-filter', stage: 'stage1',
         primaryModel: PRIMARY_MODEL, usedModel,
@@ -378,7 +387,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       confidence: classification.confidence,
       processing_attempts: (report.processing_attempts ?? 0) + 1,
       processing_error: usedHeuristic
-        ? `stage1_llm_unavailable: ${fallbackReason}`
+        ? (quotaNotice ?? `stage1_llm_unavailable: ${fallbackReason}`)
         : null,
     }).eq('id', reportId)
 
@@ -698,19 +707,31 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
     }), { headers: { 'Content-Type': 'application/json' } })
 
   } catch (err) {
-    const message = sanitizeLlmError(err)
+    const detail = llmErrorText(err)
+    const message = sanitizeLlmError(detail)
+    const spendCap = isSpendCapMessage(detail)
     // Do not forward this generic string to Sentry.captureMessage — that is
     // what grouped 1188 events as "Unhandled error" with the real 401 filtered
     // (MUSHI-MUSHI-SERVER-19). captureException below keeps the true type.
-    rootLog.child('fast-filter').error('Unhandled error', { err: message, sentry: false })
-    reportError(err instanceof Error ? err : new Error(message), {
-      tags: { function: 'fast-filter' },
-    })
+    // A spend cap is not that type: the operator sees the quota sentence.
+    if (spendCap) {
+      rootLog.child('fast-filter').warn('Stage 1 provider quota', {
+        err: quotaUserMessage(detail),
+        sentry: false,
+      })
+    } else {
+      rootLog.child('fast-filter').error('Unhandled error', { err: message, sentry: false })
+      reportError(err instanceof Error ? err : new Error(message), {
+        tags: { function: 'fast-filter' },
+      })
+    }
     if (failureDb && failureReportId) {
       const { error: stampError } = await failureDb
         .from('reports')
         .update({
-          processing_error: `stage1_unhandled: ${message.slice(0, 300)}`,
+          processing_error: spendCap
+            ? quotaUserMessage(detail).slice(0, 500)
+            : `stage1_unhandled: ${message.slice(0, 300)}`,
           processing_attempts: failureAttempts + 1,
         })
         .eq('id', failureReportId)

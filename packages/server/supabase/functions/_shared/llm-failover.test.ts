@@ -28,6 +28,17 @@ Deno.test('classifyLlmError detects quota errors from message text', () => {
   assertEquals(classifyLlmError(new Error('You exceeded your current quota')), 'quota');
 });
 
+Deno.test('classifyLlmError reads a spend cap that the AI SDK left on responseBody', () => {
+  const err = Object.assign(new Error('Bad Request'), {
+    name: 'AI_APICallError',
+    statusCode: 400,
+    responseBody:
+      '{"message":"You have reached your specified API usage limits. You will regain access on 2099-01-01 at 00:00 UTC."}',
+  });
+  assertEquals(classifyLlmError(err), 'quota');
+  assertEquals(isStage1LlmUnavailable(err), true);
+});
+
 Deno.test('classifyLlmError treats a spent Anthropic key (a 400, not a 429) as quota so failover moves on', () => {
   assertEquals(classifyLlmError(new Error('AI_APICallError: You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.')), 'quota');
   assertEquals(classifyLlmError(new Error('400 {"type":"error","error":{"type":"invalid_request_error","message":"You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC."}}')), 'quota');

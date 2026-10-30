@@ -37,6 +37,7 @@ import {
   type KeyScope,
 } from './byok-scope.ts';
 import { assertLlmBudget, isBudgetedProvider, LlmBudgetUnavailableError } from './llm-budget.ts';
+import { quotaCooldownUntil } from './llm-quota.ts';
 
 const log = rootLog.child('byok');
 
@@ -637,6 +638,8 @@ function envCandidates(projectId: string, provider: LlmProvider): ResolvedKey[] 
 /**
  * Mark a byok_keys row with a new status (called by withLlmFailover on error).
  * Quota exhaustion sets a 1-hour cooldown so the key is tried again later.
+ * The provider's reset date is not used: it can be weeks away, and raising
+ * the spend limit would not take effect until the key was re-saved.
  */
 export async function markKeyStatus(
   db: SupabaseClient,
@@ -644,8 +647,7 @@ export async function markKeyStatus(
   status: Extract<KeyStatus, 'quota_exhausted' | 'auth_failed'>,
   reason: string,
 ): Promise<void> {
-  const cooldownUntil =
-    status === 'quota_exhausted' ? new Date(Date.now() + 60 * 60 * 1000).toISOString() : null;
+  const cooldownUntil = status === 'quota_exhausted' ? quotaCooldownUntil(Date.now()) : null;
 
   // PostgREST query builders are thenables (`then` only) — they have no
   // `.catch`, and they resolve with `{ error }` rather than rejecting. Await

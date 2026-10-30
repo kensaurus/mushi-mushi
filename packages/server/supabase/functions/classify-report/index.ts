@@ -17,7 +17,9 @@ import { logLlmInvocation } from '../_shared/telemetry.ts';
 import { withLlmUsage } from '../_shared/llm-usage.ts';
 import { withSentry, tagLangfuseTrace, reportError } from '../_shared/sentry.ts';
 import { GENERIC_ERROR_MESSAGE } from '../_shared/safe-error.ts';
-import { resolveLlmKey } from '../_shared/byok.ts';
+import { markKeyStatus, resolveLlmKey } from '../_shared/byok.ts';
+import { isSpendCapMessage, llmErrorText, quotaUserMessage } from '../_shared/llm-quota.ts';
+import { sanitizeLlmError } from '../_shared/llm-error-sanitize.ts';
 import { LlmBudgetExceededError } from '../_shared/llm-budget.ts';
 import { awardPointsForEndUser } from '../_shared/reputation.ts';
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts';
@@ -638,7 +640,12 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
         cacheCreationInputTokens = anthropicMeta?.cacheCreationInputTokens ?? null;
         cacheReadInputTokens = anthropicMeta?.cacheReadInputTokens ?? null;
       } catch (primaryErr) {
-        log.warn('Anthropic Stage 2 failed, falling back to OpenAI', { err: String(primaryErr) });
+        const primaryText = llmErrorText(primaryErr);
+        const primaryCap = isSpendCapMessage(primaryText);
+        if (primaryCap && anthropicResolved?.keyId) {
+          await markKeyStatus(db, anthropicResolved.keyId, 'quota_exhausted', sanitizeLlmError(primaryText).slice(0, 500));
+        }
+        log.warn('Anthropic Stage 2 failed, falling back to OpenAI', { err: sanitizeLlmError(primaryText).slice(0, 300) });
         const openaiResolved = await resolveLlmKey(db, projectId, 'openai');
         const openaiKey = openaiResolved?.key ?? Deno.env.get('OPENAI_API_KEY');
         keySource = openaiResolved?.source ?? (openaiKey ? 'env' : keySource);
@@ -652,17 +659,23 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
             usedModel: modelId,
             fallbackUsed: false,
             status: 'error',
-            errorMessage: `Primary failed and no OPENAI_API_KEY: ${String(primaryErr)}`,
+            errorMessage: `Primary failed and no OPENAI_API_KEY: ${sanitizeLlmError(primaryText).slice(0, 500)}`,
             latencyMs: Date.now() - startTime,
             promptVersion: promptSelection.promptVersion,
             keySource,
             langfuseTraceId: trace.id,
           });
+          // No second provider. A spend cap must not throw: that was the
+          // unhandled AI_APICallError, and recovery would call the same key.
+          if (primaryCap) {
+            await stampProviderQuota(db, reportId, primaryErr);
+            return providerQuotaResponse(primaryErr);
+          }
           throw primaryErr;
         }
         usedModel = FALLBACK_MODEL;
         fallbackUsed = true;
-        fallbackReason = String(primaryErr).slice(0, 500);
+        fallbackReason = sanitizeLlmError(primaryText).slice(0, 500);
 
         // V5.3 §2.7 BYOK extension: OpenAI-compatible base URL routes the same
         // SDK at any gateway (OpenRouter, Together, Fireworks…). Falls back to
@@ -707,6 +720,15 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
           }).catch(() => {
             /* observability must not mask the real failure */
           });
+          const fallbackCap = isSpendCapMessage(llmErrorText(fallbackErr));
+          if (fallbackCap && openaiResolved?.keyId) {
+            await markKeyStatus(db, openaiResolved.keyId, 'quota_exhausted', sanitizeLlmError(llmErrorText(fallbackErr)).slice(0, 500));
+          }
+          // OpenAI's own spend cap stops here. A schema or auth error still throws.
+          if (fallbackCap) {
+            await stampProviderQuota(db, reportId, fallbackErr);
+            return providerQuotaResponse(fallbackErr);
+          }
           throw fallbackErr;
         }
       }
@@ -1524,6 +1546,10 @@ CRITICAL SECURITY RULES (immutable):
                 await stampLlmBudgetStop(db, reportId, err);
                 return;
               }
+              if (isSpendCapMessage(llmErrorText(err))) {
+                await stampProviderQuota(db, reportId, err);
+                return;
+              }
               log.error('Stage 2 background crashed', { reportId, err: String(err) });
               reportError(err, {
                 tags: { function: 'classify-report', phase: 'background' },
@@ -1563,6 +1589,15 @@ CRITICAL SECURITY RULES (immutable):
           JSON.stringify({ ok: false, error: { code: err.code, message: err.message } }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         );
+      }
+      if (isSpendCapMessage(llmErrorText(err))) {
+        try {
+          const body = (await new Response(req.body).json().catch(() => ({}))) as Record<string, unknown>;
+          if (typeof body.reportId === 'string') await stampProviderQuota(getServiceClient(), body.reportId, err);
+        } catch {
+          /* best-effort */
+        }
+        return providerQuotaResponse(err);
       }
       rootLog.child('classify-report').error('Unhandled error', { err: String(err) });
 
@@ -1607,6 +1642,46 @@ CRITICAL SECURITY RULES (immutable):
  * must not page Sentry once per report, and it must not count as a failed
  * attempt the recovery cron retries.
  */
+/** Provider spend cap: tell the operator, stop recovery, do not page Sentry. */
+function providerQuotaResponse(err: unknown): Response {
+  return new Response(
+    JSON.stringify({
+      ok: false,
+      error: { code: 'QUOTA_EXHAUSTED', message: quotaUserMessage(llmErrorText(err)) },
+    }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  );
+}
+
+async function stampProviderQuota(
+  db: ReturnType<typeof getServiceClient>,
+  reportId: string,
+  err: unknown,
+): Promise<void> {
+  const message = quotaUserMessage(llmErrorText(err)).slice(0, 500);
+  rootLog.child('classify-report').warn('Stage 2 stopped: provider quota exhausted', {
+    reportId,
+    sentry: false,
+  });
+  const { error } = await db
+    .from('reports')
+    .update({
+      processing_error: message,
+      summary: message,
+      stage2_partial: null,
+      // status=new would be re-fired every 5 minutes against the same key.
+      status: 'classified',
+    })
+    .eq('id', reportId);
+  if (error) {
+    rootLog.child('classify-report').warn('provider quota stamp failed', {
+      reportId,
+      err: error.message,
+      sentry: false,
+    });
+  }
+}
+
 async function stampLlmBudgetStop(
   db: ReturnType<typeof getServiceClient>,
   reportId: string,
