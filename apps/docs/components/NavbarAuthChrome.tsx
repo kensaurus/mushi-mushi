@@ -20,9 +20,13 @@
  * that route is auth-gated and redirects to /login. A session already in
  * this tab hides those links before first paint (they keep their box) and
  * the signed-in chrome fades in after hydration, so a returning visitor
- * does not briefly read "Sign in" and "Start free". The probe only checks
- * that a non-expired access token is stored; it does not copy the token
- * into the page. We store the token in
+ * does not briefly read "Sign in" and "Start free". The probe script is
+ * emitted once from the root layout head (`docs-nav-session-probe.ts`);
+ * this client component only marks hydration and clears that hide. The
+ * probe only checks that a non-expired access token is stored; it does not
+ * copy the token into the page. If the bundle never hydrates, the probe
+ * drops the hide after a few seconds so Start free and Sign in return.
+ * We store the token in
  * tab-scoped `sessionStorage` and listen to `mushi:docs:auth-change` events
  * so every component that needs the session stays in sync.
  *
@@ -56,6 +60,10 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import {
+  DOCS_NAV_AUTH_SHELL_STYLE_ID,
+  markDocsNavHydrated,
+} from '../lib/docs-nav-session-probe'
+import {
   ADMIN_CONSOLE_URL as ADMIN_CONSOLE,
   getDocsAuthSession,
   signOutDocs,
@@ -65,34 +73,8 @@ import {
 /**
  * Head style inserted by the pre-paint probe while a session is stored.
  * Removed when this tab has no usable session, including after sign-out.
+ * The probe itself is the one script in the root layout head.
  */
-const DOCS_NAV_AUTH_SHELL_STYLE_ID = 'mushi-docs-auth-shell'
-
-/**
- * Runs from the static HTML, before the sign-up links are parsed. Session
- * state is not available at export time, so the links stay in the markup
- * for a first visit; this only hides them when this tab already has a
- * usable token. `visibility: hidden` keeps their box so the bar does not
- * collapse, then the signed-in row fades into that slot.
- */
-const SESSION_PROBE = `(function () {
-  try {
-    var raw = sessionStorage.getItem('mushi:docs:auth')
-    if (!raw) return
-    var session = JSON.parse(raw)
-    if (!session || typeof session.accessToken !== 'string' || session.accessToken.length === 0) return
-    if (typeof session.expiresAt !== 'number') return
-    if (!(session.expiresAt * 1000 > Date.now() + 5000)) return
-    var id = '${DOCS_NAV_AUTH_SHELL_STYLE_ID}'
-    if (document.getElementById(id)) return
-    var style = document.createElement('style')
-    style.id = id
-    style.textContent = '[data-docs-nav="signed-out"]{visibility:hidden}'
-    document.head.appendChild(style)
-  } catch {
-    /* sessionStorage unavailable — keep the signed-out links */
-  }
-})()`
 
 /** Fade only the signed-in row. The signed-out links stay visible in the static HTML. */
 const SIGNED_IN_FADE =
@@ -107,8 +89,6 @@ function clearPrePaintAuthShell(): void {
 function AuthShell({ mode, children }: { mode: 'signed-out' | 'signed-in'; children: ReactNode }) {
   return (
     <div className="flex items-center gap-1" data-docs-nav={mode}>
-      {/* Probe first, so it runs before the links are parsed. */}
-      <script dangerouslySetInnerHTML={{ __html: SESSION_PROBE }} />
       <style dangerouslySetInnerHTML={{ __html: SIGNED_IN_FADE }} />
       {children}
     </div>
@@ -137,9 +117,10 @@ export function NavbarAuthChrome() {
   const [hydrated, setHydrated] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
 
-  // Hydrate once on mount. No usable session means the pre-paint hide
-  // should not stay up.
+  // Hydrate once on mount. The marker tells the head probe's fallback to
+  // keep the hide. No usable session means that hide should not stay up.
   useEffect(() => {
+    markDocsNavHydrated()
     const current = getDocsAuthSession()
     if (!current) clearPrePaintAuthShell()
     setSession(current)
