@@ -18,6 +18,21 @@
 import * as Sentry from 'npm:@sentry/deno@^9'
 import type { Context } from 'npm:hono@4'
 import { dbDiagnosticMessage, isHtmlGatewayDbMessage, SAFE_DB_MESSAGE } from './error-codes.ts'
+import { isSpendCapMessage } from './llm-quota.ts'
+
+/** Exception text Sentry would title the issue with. Spend caps are expected. */
+function sentryEventText(event: {
+  message?: string
+  exception?: { values?: Array<{ type?: string; value?: string }> }
+}): string {
+  const parts: string[] = []
+  if (event.message) parts.push(event.message)
+  for (const ex of event.exception?.values ?? []) {
+    if (ex.type) parts.push(ex.type)
+    if (ex.value) parts.push(ex.value)
+  }
+  return parts.join('\n')
+}
 
 const TOKEN_QUERY_RX = /([?&](?:api_key|apiKey|token|key|access_token|session)=)[^&]+/gi
 
@@ -37,6 +52,9 @@ export function ensureSentry(functionName?: string): void {
     tracesSampleRate: Number(Deno.env.get('SENTRY_TRACES_SAMPLE_RATE') ?? '0.05'),
     initialScope: functionName ? { tags: { function: functionName } } : undefined,
     beforeSend(event) {
+      // A provider spend cap is an operator state, not an app bug. Drop it
+      // before it becomes an issue titled AI_APICallError (report d6183705).
+      if (isSpendCapMessage(sentryEventText(event))) return null
       if (event.request?.url) {
         event.request.url = event.request.url.replace(TOKEN_QUERY_RX, '$1[redacted]')
       }

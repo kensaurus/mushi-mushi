@@ -40,6 +40,7 @@ import { logLlmInvocation } from '../../_shared/telemetry.ts'
 import { createTrace } from '../../_shared/observability.ts'
 import { tagLangfuseTrace } from '../../_shared/sentry.ts'
 import { withAnthropicOrOpenAi } from '../../_shared/llm-failover.ts'
+import { isSpendCapMessage, llmErrorText, quotaUserMessage } from '../../_shared/llm-quota.ts'
 import { generateValidatedObject } from '../../_shared/structured-output.ts'
 import { verifyEndUserToken, MUSHI_USER_TOKEN_HEADER } from '../../_shared/end-user-identity.ts'
 import { projectConfigDenied } from '../helpers.ts'
@@ -308,7 +309,9 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
 
       return c.json({ ok: true, data: { ...reply, threadId } })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const detail = llmErrorText(err)
+      const spendCap = isSpendCapMessage(detail)
+      const msg = spendCap ? quotaUserMessage(detail) : (err instanceof Error ? err.message : String(err))
       const latencyMs = Date.now() - started
       llmSpan.end({ model: usedModel, error: msg, latencyMs })
       await trace.end().catch(() => {})
@@ -326,6 +329,13 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
         langfuseTraceId: trace.id,
         keySource,
       })
+      if (spendCap) {
+        // A normal assistant reply, so widgets already in the field show the
+        // sentence. ok:false would render as "No response" and log.error would
+        // page Sentry (report d6183705).
+        log.warn('sdk_assistant_provider_quota', { projectId, sentry: false })
+        return c.json({ ok: true, data: { kind: 'answer' as const, text: msg, threadId } })
+      }
       log.error('sdk_assistant_llm_error', { projectId, error: msg })
       return c.json({ ok: false, error: { code: 'ASSISTANT_ERROR', message: 'The assistant is temporarily unavailable.' } }, 502)
     }

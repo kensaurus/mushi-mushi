@@ -6,7 +6,18 @@
  * `supabase/functions/api/__tests__/claude-messages.test.ts`.
  */
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+const byokMocks = vi.hoisted(() => {
+  const defaultKeys = async (_db: unknown, _projectId: string, provider: string) => [
+    { key: `${provider}-key`, source: 'byok' as const, hint: 'abcd', keyId: `${provider}-1` },
+  ]
+  return {
+    resolveLlmKeys: vi.fn(defaultKeys),
+    markKeyStatus: vi.fn(async () => {}),
+    defaultKeys,
+  }
+})
 
 // llm-failover.ts reads its retry tuning from Deno.env at module load.
 vi.hoisted(() => {
@@ -21,10 +32,8 @@ vi.mock('npm:ai@4', async (importOriginal) => ({
 }))
 
 vi.mock('../../supabase/functions/_shared/byok.ts', () => ({
-  resolveLlmKeys: async (_db: unknown, _projectId: string, provider: string) => [
-    { key: `${provider}-key`, source: 'byok', hint: 'abcd', keyId: `${provider}-1` },
-  ],
-  markKeyStatus: vi.fn(async () => {}),
+  resolveLlmKeys: byokMocks.resolveLlmKeys,
+  markKeyStatus: byokMocks.markKeyStatus,
   markKeyUsed: vi.fn(async () => {}),
   // Budget enforcement is covered in llm-budget-enforcement.test.ts.
   enforceLlmBudget: async () => {},
@@ -48,7 +57,8 @@ import {
   toClaudeOutputSchema,
   toLegacyUsage,
 } from '../../supabase/functions/_shared/claude-request.ts'
-import { classifyLlmError, withAnthropicOrOpenAi } from '../../supabase/functions/_shared/llm-failover.ts'
+import { classifyLlmError, isStage1LlmUnavailable, LlmFailoverError, withAnthropicOrOpenAi } from '../../supabase/functions/_shared/llm-failover.ts'
+import { isSpendCapMessage, quotaUserMessage } from '../../supabase/functions/_shared/llm-quota.ts'
 import {
   ASSIST_MODEL,
   FIX_MODEL,
@@ -290,5 +300,66 @@ describe('refusal handling', () => {
     await expect(
       withAnthropicOrOpenAi(db, 'project-1', async () => { throw err }, async () => 'x'),
     ).rejects.toBe(err)
+  })
+})
+
+const SPEND_CAP_BODY =
+  '{"type":"error","error":{"message":"You have reached your specified API usage limits. You will regain access on 2099-01-01 at 00:00 UTC."}}'
+
+function spendCapError(): Error {
+  return Object.assign(new Error('Bad Request'), {
+    name: 'AI_APICallError',
+    statusCode: 400,
+    responseBody: SPEND_CAP_BODY,
+  })
+}
+
+afterEach(() => {
+  byokMocks.resolveLlmKeys.mockImplementation(byokMocks.defaultKeys)
+  byokMocks.markKeyStatus.mockClear()
+})
+
+describe('provider spend cap', () => {
+  const db = {} as never
+
+  it('classifies an AI_APICallError whose cap sentence is only on responseBody', () => {
+    const err = spendCapError()
+    expect(String(err)).not.toMatch(/usage limits/i)
+    expect(classifyLlmError(err)).toBe('quota')
+    expect(isStage1LlmUnavailable(err)).toBe(true)
+    expect(quotaUserMessage(SPEND_CAP_BODY)).toBe(
+      'Provider quota exhausted until 2099-01-01 at 00:00 UTC. Update your key in Settings.',
+    )
+  })
+
+  it('Anthropic spend cap with no OpenAI key exhausts the pool instead of throwing AI_APICallError', async () => {
+    byokMocks.resolveLlmKeys.mockImplementation(async (_db: unknown, _id: string, provider: string) => {
+      if (provider === 'openai') return []
+      return [{ key: 'sk-ant', source: 'byok' as const, hint: 'abcd', keyId: 'ant-1' }]
+    })
+    const openai = vi.fn(async () => 'should-not-run')
+    const thrown = await withAnthropicOrOpenAi(
+      db,
+      'project-1',
+      async () => {
+        throw spendCapError()
+      },
+      openai,
+    ).catch((e: unknown) => e)
+
+    expect(openai).not.toHaveBeenCalled()
+    expect(thrown).toBeInstanceOf(LlmFailoverError)
+    expect((thrown as Error).name).not.toBe('AI_APICallError')
+    const failover = thrown as LlmFailoverError
+    expect(failover.code).toBe('ALL_KEYS_EXHAUSTED')
+    expect(isSpendCapMessage(failover.lastError)).toBe(true)
+    expect(isStage1LlmUnavailable(failover)).toBe(true)
+    expect(quotaUserMessage(failover.lastError)).toContain('2099-01-01 at 00:00 UTC')
+    expect(byokMocks.markKeyStatus).toHaveBeenCalledWith(
+      expect.anything(),
+      'ant-1',
+      'quota_exhausted',
+      expect.stringMatching(/usage limits/i),
+    )
   })
 })

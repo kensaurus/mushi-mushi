@@ -287,6 +287,12 @@ describe('fast-filter (Stage 1)', () => {
       expect(src).toContain('heuristicStage1Classification')
     })
 
+    it('shows a provider spend cap in plain words and does not report it to Sentry', () => {
+      expect(src).toContain('isSpendCapMessage')
+      expect(src).toContain('quotaUserMessage')
+      expect(src).toContain('if (!quotaNotice)')
+    })
+
     it("forwards the project's first real report to Stage 2 even at high confidence", () => {
       // 31% of reports stopped at stage1_final with no root cause; a new
       // user's first report must get the full diagnosis.

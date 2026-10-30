@@ -22,7 +22,7 @@
  *   })
  */
 
-import { isQuotaMessage } from './llm-quota.ts';
+import { isQuotaMessage, isSpendCapMessage, llmErrorText } from './llm-quota.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { isClaudeRefusal } from './claude-request.ts';
 import {
@@ -87,7 +87,10 @@ export function isStage1LlmUnavailable(err: unknown): boolean {
   // Over budget: Stage 1 falls back to heuristic triage instead of going dark.
   if (err instanceof LlmBudgetExceededError) return true;
   if (err instanceof LlmFailoverError) return true;
-  return classifyLlmError(err) === 'auth';
+  const kind = classifyLlmError(err);
+  // A raw spend-cap or 401 that escaped the pool still degrades. Leaving it
+  // to throw is what paged Sentry as AI_APICallError (report d6183705).
+  return kind === 'auth' || kind === 'quota';
 }
 
 /**
@@ -97,7 +100,9 @@ export function isStage1LlmUnavailable(err: unknown): boolean {
  * and the transient-retry decision are pure and worth testing in isolation.
  */
 export function classifyLlmError(err: unknown): 'quota' | 'auth' | 'transient' | 'other' {
-  const msg = String(err).toLowerCase();
+  // String(err) is only "AI_APICallError: Bad Request" when the sentence lives
+  // on responseBody. Read that too, or a spent key is a fatal rethrow.
+  const msg = llmErrorText(err).toLowerCase();
 
   // HTTP status codes in the error message (Vercel AI SDK wraps them)
   // 429s, rate limits, and a spent Anthropic key (a 400 "usage limits", not a
@@ -132,7 +137,9 @@ export function classifyLlmError(err: unknown): 'quota' | 'auth' | 'transient' |
     code?: string;
   };
   const statusCode = errObj?.status ?? errObj?.statusCode ?? errObj?.response?.status;
-  if (statusCode === 429) return 'quota';
+  // 402 is the provider's "out of credit" status. 400 is not: a bad request
+  // stays 'other' unless the body text already matched above.
+  if (statusCode === 429 || statusCode === 402) return 'quota';
   if (statusCode === 401 || statusCode === 403) return 'auth';
   if (statusCode !== undefined && statusCode >= 500 && statusCode < 600) return 'transient';
 
@@ -222,7 +229,7 @@ export async function callWithTransientRetry<T>(
       const result = await fn(candidate);
       return { ok: true, result };
     } catch (err) {
-      const lastError = sanitizeLlmError(err).slice(0, 500);
+      const lastError = sanitizeLlmError(llmErrorText(err)).slice(0, 500);
       const kind = classifyLlmError(err);
 
       if (kind === 'transient') {
@@ -411,6 +418,7 @@ export async function withAnthropicOrOpenAi<T>(
   openAiFn: (key: ResolvedKey) => Promise<T>,
 ): Promise<{ result: T; usedProvider: 'anthropic' | 'openai' }> {
   // Try Anthropic pool first
+  let anthropicFailure: LlmFailoverError | null = null;
   try {
     const result = await withLlmFailover(db, projectId, 'anthropic', anthropicFn);
     return { result, usedProvider: 'anthropic' };
@@ -423,6 +431,7 @@ export async function withAnthropicOrOpenAi<T>(
       (err.code === 'NO_KEYS_CONFIGURED' || err.code === 'ALL_KEYS_EXHAUSTED')
     ) {
       // No Anthropic keys available — fall through to OpenAI.
+      anthropicFailure = err;
       log.warn('Anthropic exhausted, trying OpenAI', { projectId, reason: err.code });
     } else if ((await import('./ai-sdk.ts')).NoObjectGeneratedError.isInstance(err)) {
       // (ai@4 loads here, after a model call, never at boot: ai-sdk.ts.)
@@ -441,7 +450,26 @@ export async function withAnthropicOrOpenAi<T>(
     }
   }
 
-  // Try OpenAI pool
-  const result = await withLlmFailover(db, projectId, 'openai', openAiFn);
-  return { result, usedProvider: 'openai' };
+  // Try OpenAI pool. When Anthropic stopped on a spend cap and OpenAI has no
+  // key (or is capped too), keep the cap text. Otherwise the caller only sees
+  // "No openai key configured" and pages Sentry with a raw provider error.
+  try {
+    const result = await withLlmFailover(db, projectId, 'openai', openAiFn);
+    return { result, usedProvider: 'openai' };
+  } catch (err) {
+    if (
+      anthropicFailure &&
+      isSpendCapMessage(anthropicFailure.lastError) &&
+      err instanceof LlmFailoverError &&
+      (err.code === 'NO_KEYS_CONFIGURED' || isSpendCapMessage(err.lastError))
+    ) {
+      throw new LlmFailoverError({
+        code: 'ALL_KEYS_EXHAUSTED',
+        provider: 'anthropic',
+        attempts: anthropicFailure.attempts + err.attempts,
+        lastError: isSpendCapMessage(err.lastError) ? err.lastError : anthropicFailure.lastError,
+      });
+    }
+    throw err;
+  }
 }
