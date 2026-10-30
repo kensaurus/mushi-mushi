@@ -30,6 +30,7 @@ import { fetchWithTimeout } from '../../_shared/http.ts'
 import { runInBackground } from '../../_shared/background.ts'
 import { mintInstallationAccess, parseGithubRepoUrl, platformGithubTokenFor, resolveProjectGithubToken, type GithubRepoRef } from '../../_shared/github.ts'
 import { readFollowupKeyGap } from '../../_shared/setup-gap-followup.ts'
+import { readLlmBudgetState } from '../../_shared/llm-budget.ts'
 import {
   abilitiesFromClassicScopes,
   abilitiesFromInstallation,
@@ -41,6 +42,7 @@ import {
   deployGap,
   forAudience,
   githubAccessGap,
+  llmBudgetGap,
   noRepoGap,
   rememberRepoAbilities,
   SETUP_GAPS_CACHE_MS,
@@ -321,21 +323,30 @@ async function slackTokenGap(db: Db, projectId: string, now: Date): Promise<Setu
   }
 }
 
+async function budgetGap(db: Db, projectId: string, now: Date): Promise<SetupGap> {
+  try {
+    return llmBudgetGap(projectId, await within(readLlmBudgetState(db as never, projectId, now), 'AI budget'))
+  } catch (err) {
+    return { ...llmBudgetGap(projectId, undefined), summary: `Mushi could not read this month's AI spend (${why(err)}).` }
+  }
+}
+
 /** Every app-owner check for one app. Each check settles on its own. */
 export async function checkProject(db: Db, project: DispatcherProject, deps: SetupGapsDeps): Promise<ProjectGaps> {
   const now = deps.now()
-  const [github, followup, dispatch, deploy, slack] = await Promise.all([
+  const [github, followup, dispatch, deploy, slack, budget] = await Promise.all([
     githubGaps(db, project.id, deps),
     followupGap(db, project),
     dispatchGap(db, project, now, deps),
     deployEventsGap(db, project.id, now),
     slackTokenGap(db, project.id, now),
+    budgetGap(db, project.id, now),
   ])
   return {
     projectId: project.id,
     name: project.name,
     checkedAt: now.toISOString(),
-    gaps: sortGaps(forAudience([...github, followup, dispatch, deploy, slack], 'app_owner')),
+    gaps: sortGaps(forAudience([...github, followup, dispatch, deploy, slack, budget], 'app_owner')),
   }
 }
 

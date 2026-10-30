@@ -48,6 +48,7 @@ export const FIX_HREFS = {
   cursorKeys: '/credits#cursor-fix-bugs',
   deploys: '/recipe',
   slack: '/integrations/config',
+  budget: '/settings#spend-limits',
 } as const
 
 const DAY = 24 * 3600_000
@@ -341,6 +342,36 @@ export function slackGap(input: SlackInput, now: Date): SetupGap {
   }
   if (row.status === 'ok') return { ...base, status: 'ok', summary: 'Slack accepts the bot token.' }
   return { ...base, status: 'unknown', summary: `The last Slack check did not pass: ${(row.message ?? row.status).slice(0, 160)}` }
+}
+
+// ── Monthly AI budget ───────────────────────────────────────────────────────
+
+export interface LlmBudgetInput {
+  budgetUsd: number | null
+  spendUsd: number
+  over: boolean
+  /** When the budget starts over (the 1st, 00:00 UTC). */
+  resetsAt: string
+}
+
+/**
+ * Over its monthly AI budget, an app's bugs stop being triaged, reviewed and
+ * fixed (llm-budget.ts), and the only sign was an error in Sentry
+ * (MUSHI-MUSHI-SERVER-3J, 83 events, 2026-10-29). `state` undefined: the read failed.
+ */
+export function llmBudgetGap(projectId: string, state: LlmBudgetInput | undefined): SetupGap {
+  const base = { id: 'llm_budget', projectId, audience: 'app_owner' as const, title: 'Monthly AI budget', fixHref: FIX_HREFS.budget }
+  if (!state) return { ...base, status: 'unknown', summary: 'Mushi could not read this month\'s AI spend.' }
+  if (state.budgetUsd == null) return { ...base, status: 'ok', summary: 'No monthly AI budget is set.' }
+  const money = (n: number) => `$${n.toFixed(2)}`
+  if (state.over) {
+    return {
+      ...base,
+      status: 'gap',
+      summary: `This app spent ${money(state.spendUsd)} of its ${money(state.budgetUsd)} monthly AI budget, so Mushi stopped triaging and fixing its bugs until ${state.resetsAt.slice(0, 10)}. Raise the budget to start again now.`,
+    }
+  }
+  return { ...base, status: 'ok', summary: `${money(state.spendUsd)} of ${money(state.budgetUsd)} spent this month.` }
 }
 
 // ── Lists ───────────────────────────────────────────────────────────────────

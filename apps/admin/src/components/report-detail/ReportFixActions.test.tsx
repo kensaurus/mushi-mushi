@@ -77,9 +77,9 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-async function render() {
+async function render(child?: ReturnType<typeof createElement>) {
   await act(async () => {
-    root.render(createElement(MemoryRouter, null, createElement(ReportFixActions, { fixId: 'f1' })))
+    root.render(createElement(MemoryRouter, null, createElement(ReportFixActions, { fixId: 'f1' }, child)))
   })
   await act(async () => {
     for (let i = 0; i < 5; i++) await Promise.resolve()
@@ -115,6 +115,21 @@ describe('ReportFixActions', () => {
     })
     expect(state.posts[0]).toEqual({ path: '/v1/admin/pipeline/actions', body: { action: 'update_branch', fixIds: ['f1'] } })
     expect(q('report-fix-actions')!.textContent).toContain('CI runs again on the new commit')
+  })
+
+  it('shows the page Merge with the actions, so "you decide" is decided here (2026-10-30)', async () => {
+    state.view = view({ groupId: 'hold', groupLabel: '1 PR: the review says do not merge; you decide', actions: ['re_review', 'close'] })
+    await render(createElement('button', { 'data-testid': 'merge-here' }, 'Merge draft PR 853'))
+    const bar = q('report-fix-actions')!
+    expect(bar.contains(q('merge-here'))).toBe(true)
+    expect(bar.textContent).toContain('you decide')
+  })
+
+  it('still shows Merge when the fix sits in no pipeline group', async () => {
+    state.view = view({ groupLabel: null, item: null, actions: [] })
+    await render(createElement('button', { 'data-testid': 'merge-here' }, 'Merge PR #1'))
+    expect(q('report-fix-actions')).toBeNull()
+    expect(q('merge-here')).not.toBeNull()
   })
 
   it('renders nothing when the fix sits in no pipeline group', async () => {

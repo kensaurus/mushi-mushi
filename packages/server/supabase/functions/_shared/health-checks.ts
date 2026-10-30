@@ -88,6 +88,7 @@ export const CHECK_META: Readonly<Record<string, CheckMeta>> = {
   autofix_agent_key: { part: 'ai_keys', severity: 'critical', blocks: ['autofix'] },
   deploy_events: { part: 'release', severity: 'warn', blocks: ['reporter_updates'] },
   slack_bot_token: { part: 'notifications', severity: 'warn', blocks: [] },
+  llm_budget: { part: 'ai_keys', severity: 'critical', blocks: ['triage', 'review', 'autofix'] },
   // SDK health (sdk-health.ts); the plan's ids where it names one
   sdk_not_installed: { part: 'sdk', severity: 'critical', blocks: ['reports'] },
   sdk_no_repo: { part: 'github', severity: 'warn', blocks: [] },
@@ -160,6 +161,7 @@ const GAP_FIX_LABEL: Record<string, string> = {
   autofix_agent_key: 'Pick a key',
   deploy_events: 'Connect deploys',
   slack_bot_token: 'Reconnect Slack',
+  llm_budget: 'Raise the budget',
 }
 
 /** A setup gap as a registry row. `gap` is a problem; the rest keep their meaning. */

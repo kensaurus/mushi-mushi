@@ -604,10 +604,29 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         ]}
       />
 
-      {/* Where the open fix PR is stuck, its failing checks, and only the actions the server would take. */}
+      {/* Where the open fix PR is stuck, its failing checks, and only the actions the server would take.
+          Merge sits in the same bar: "you decide" used to offer only Re-run review and Close PR, with
+          Merge further down the page and "Review & merge" linking out to GitHub (owner, 2026-10-30). */}
       {latestFix?.pr_url && !latestFix.merged_at && latestFix.pr_state !== 'merged' && latestFix.pr_state !== 'closed' ? (
         <div className="mb-3">
-          <ReportFixActions fixId={latestFix.id} onChanged={onReload} />
+          <ReportFixActions fixId={latestFix.id} onChanged={onReload}>
+            {mergeTarget ? (
+          <MergeFixPreflight
+            fixId={mergeTarget.id}
+            prUrl={mergeTarget.pr_url!}
+            prNumber={mergeTarget.pr_number}
+            summary={null}
+            ciConclusion={mergeTarget.check_run_conclusion}
+            ciStatus={mergeTarget.check_run_status}
+            ciUpdatedAt={mergeTarget.check_run_updated_at}
+            ciInfra={mergeTarget.ci_infra}
+            projectId={report.project_id}
+            prState={mergeTarget.pr_state}
+            agent={mergeTarget.agent}
+            onMerged={handleMerged}
+          />
+            ) : null}
+          </ReportFixActions>
         </div>
       ) : null}
 
@@ -658,25 +677,6 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         meta={recommendation.meta}
         actions={recommendation.actions}
       />
-
-      {mergeTarget && (
-        <div className="mb-3 flex justify-end">
-          <MergeFixPreflight
-            fixId={mergeTarget.id}
-            prUrl={mergeTarget.pr_url!}
-            prNumber={mergeTarget.pr_number}
-            summary={null}
-            ciConclusion={mergeTarget.check_run_conclusion}
-            ciStatus={mergeTarget.check_run_status}
-            ciUpdatedAt={mergeTarget.check_run_updated_at}
-            ciInfra={mergeTarget.ci_infra}
-            projectId={report.project_id}
-            prState={mergeTarget.pr_state}
-            agent={mergeTarget.agent}
-            onMerged={handleMerged}
-          />
-        </div>
-      )}
 
       <ReportTriageBar
         report={report}
@@ -832,6 +832,9 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           sentryIssueUrl={report.sentry_issue_url}
           sentryLinks={report.sentry_links}
           tags={report.tags}
+          reportId={report.id}
+          reportStatus={report.status}
+          onSentryClosed={onReload}
         />
       </div>
 
