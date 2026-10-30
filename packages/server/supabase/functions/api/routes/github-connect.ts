@@ -27,7 +27,9 @@ import {
   exchangeCode,
   installUrl,
   listInstallationRepos,
+  listUserInstallationRepoIds,
   listUserInstallations,
+  MAX_GRANT_REPOS,
   openConnectGrant,
   openConnectState,
   readGithubAppConfig,
@@ -100,7 +102,7 @@ async function readGrant(
   cfg: GithubAppConfig,
   projectId: string,
   now: number,
-): Promise<{ ok: true; installations: number[]; login: string } | { ok: false; res: Response }> {
+): Promise<{ ok: true; installations: number[]; repoIds: Set<number>; login: string } | { ok: false; res: Response }> {
   const body = (await c.req.json().catch(() => null)) as { grant?: unknown } | null
   const opened = await openConnectGrant(cfg.secret, typeof body?.grant === 'string' ? body.grant : null, now)
   if (!opened.ok) {
@@ -115,7 +117,7 @@ async function readGrant(
   if (grant.p !== projectId || grant.u !== c.get('userId')) {
     return { ok: false, res: jsonError(c, 'GRANT_MISMATCH', 'This GitHub sign-in was started for another app or person. Press Connect GitHub again here.', 403) }
   }
-  return { ok: true, installations: grant.i, login: grant.g }
+  return { ok: true, installations: grant.i, repoIds: new Set(grant.r), login: grant.g }
 }
 
 const PACKAGE_JSON_MAX_BYTES = 256 * 1024
@@ -227,11 +229,24 @@ export function registerGithubConnectRoutes(app: Hono<{ Variables: Variables }>,
       if (!state.x) return c.redirect(installUrl(config, c.req.query('state') ?? ''), 302)
       return back({ error: 'no_installation' })
     }
+    // The repositories this person can reach, per installation: an org
+    // member sees the org's installation, not every repo it covers. GitHub
+    // not answering ends the flow; it never widens to the whole installation.
+    const repoIds: number[] = []
+    try {
+      for (const inst of usable) {
+        repoIds.push(...(await listUserInstallationRepoIds(inst.id, exchanged.token, deps.fetchImpl)))
+        if (repoIds.length >= MAX_GRANT_REPOS) break
+      }
+    } catch {
+      return back({ error: 'github_unreachable' })
+    }
     const grant = await signConnectGrant(config.secret, {
       p: state.p,
       u: state.u,
       g: listed.login,
       i: usable.map((i) => i.id),
+      r: repoIds.slice(0, MAX_GRANT_REPOS),
       exp: deps.now() + CONNECT_TTL_SECONDS,
     })
     log.info('GitHub connect authorized', { projectId: state.p, installations: usable.length })
@@ -255,7 +270,8 @@ export function registerGithubConnectRoutes(app: Hono<{ Variables: Variables }>,
     for (const installationId of grant.installations) {
       try {
         const token = await deps.mintToken(installationId)
-        repos.push(...(await listInstallationRepos(installationId, token, deps.fetchImpl)))
+        // Only the repos this person can reach (the grant), not all the App sees.
+        repos.push(...(await listInstallationRepos(installationId, token, deps.fetchImpl)).filter((r) => grant.repoIds.has(r.id)))
       } catch (err) {
         unreachable.push(installationId)
         log.warn('installation repositories unreadable', { installationId, err: err instanceof Error ? err.message : String(err) })
@@ -308,13 +324,13 @@ export function registerGithubConnectRoutes(app: Hono<{ Variables: Variables }>,
       try {
         const token = await deps.mintToken(installationId)
         const found = (await listInstallationRepos(installationId, token, deps.fetchImpl)).find(
-          (r) => r.fullName.toLowerCase() === fullName.toLowerCase(),
+          (r) => r.fullName.toLowerCase() === fullName.toLowerCase() && grant.repoIds.has(r.id),
         )
         if (found) { chosen = found; break }
       } catch { /* try the next installation */ }
     }
     if (!chosen) {
-      return jsonError(c, 'REPO_NOT_REACHABLE', `The Mushi GitHub App cannot see ${fullName}. On GitHub, add it to the App's repositories, then pick it again.`, 409)
+      return jsonError(c, 'REPO_NOT_REACHABLE', `${fullName} is not one you and the Mushi GitHub App can both reach. Pick it from the list; if it is missing, add it to the App's repositories on GitHub (or ask someone with access to it), then refresh the list.`, 409)
     }
 
     const repoUrl = `https://github.com/${chosen.fullName}`

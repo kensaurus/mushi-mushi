@@ -73,6 +73,8 @@ let gh: {
   tokenError?: string
   installations: Array<Record<string, unknown>>
   repos: Record<number, Array<Record<string, unknown>>>
+  /** Repo ids the signed-in person reaches per installation (null = GitHub fails). */
+  userRepoIds: Record<number, number[] | null>
 }
 
 const fetchImpl = vi.fn(async (url: string) => {
@@ -81,6 +83,12 @@ const fetchImpl = vi.fn(async (url: string) => {
     return json(200, gh.token ? { access_token: gh.token } : { error: gh.tokenError ?? 'bad_verification_code' })
   }
   if (url === 'https://api.github.com/user') return json(200, { login: 'kensaurus' })
+  const userRepos = /api\.github\.com\/user\/installations\/(\d+)\/repositories/.exec(url)
+  if (userRepos) {
+    const ids = gh.userRepoIds[Number(userRepos[1])]
+    if (ids === null) return json(502, {})
+    return json(200, { repositories: (ids ?? []).map((id) => ({ id })) })
+  }
   if (url.startsWith('https://api.github.com/user/installations')) return json(200, { installations: gh.installations })
   if (url.includes('/contents/package.json')) {
     if (!gh.packageJson) return new Response('{}', { status: 404 })
@@ -125,10 +133,11 @@ beforeEach(() => {
     installations: [{ id: 7, app_slug: 'mushi-mushi-app', app_id: 42, account: { login: 'kensaurus', type: 'User' }, suspended_at: null }],
     repos: {
       7: [
-        { full_name: 'kensaurus/kensaur.us', private: true, default_branch: 'main', pushed_at: '2026-10-29T00:00:00Z' },
-        { full_name: 'kensaurus/old', private: false, default_branch: 'master', pushed_at: '2025-01-01T00:00:00Z' },
+        { id: 101, full_name: 'kensaurus/kensaur.us', private: true, default_branch: 'main', pushed_at: '2026-10-29T00:00:00Z' },
+        { id: 102, full_name: 'kensaurus/old', private: false, default_branch: 'master', pushed_at: '2025-01-01T00:00:00Z' },
       ],
     },
+    userRepoIds: { 7: [101, 102] },
   }
   fetchImpl.mockClear()
   kicked.length = 0
@@ -206,7 +215,18 @@ describe('GET /v1/webhooks/github/app-authorize', () => {
     expect(loc.pathname).toBe('/mushi-mushi/admin/onboarding')
     expect(loc.searchParams.get('project')).toBe(P)
     const grant = decodeURIComponent(loc.hash.replace('#gh_grant=', ''))
-    expect(await connect.openConnectGrant(SECRET, grant, NOW)).toMatchObject({ ok: true, grant: { p: P, u: USER, i: [7], g: 'kensaurus' } })
+    expect(await connect.openConnectGrant(SECRET, grant, NOW)).toMatchObject({ ok: true, grant: { p: P, u: USER, i: [7], r: [101, 102], g: 'kensaurus' } })
+  })
+
+  it('carries only the repos the person reaches, and fails closed when GitHub will not say', async () => {
+    gh.userRepoIds = { 7: [101] }
+    const loc = await callback({ code: 'abc', state: await goodState() })
+    const grant = decodeURIComponent(loc.hash.replace('#gh_grant=', ''))
+    expect(await connect.openConnectGrant(SECRET, grant, NOW)).toMatchObject({ ok: true, grant: { r: [101] } })
+    gh.userRepoIds = { 7: null }
+    const failed = await callback({ code: 'abc', state: await goodState() })
+    expect(failed.searchParams.get('github_error')).toBe('github_unreachable')
+    expect(failed.hash).toBe('')
   })
 
   it('sends a person with no installation on to install, once', async () => {
@@ -245,8 +265,8 @@ describe('GET /v1/webhooks/github/app-authorize', () => {
 })
 
 describe('repository picker', () => {
-  const grantFor = (over: Partial<{ p: string; u: string; i: number[]; exp: number }> = {}) =>
-    connect.signConnectGrant(SECRET, { p: P, u: USER, i: [7], g: 'kensaurus', exp: NOW + 600, ...over })
+  const grantFor = (over: Partial<{ p: string; u: string; i: number[]; r: number[]; exp: number }> = {}) =>
+    connect.signConnectGrant(SECRET, { p: P, u: USER, i: [7], r: [101, 102], g: 'kensaurus', exp: NOW + 600, ...over })
 
   it('puts the repository named like the app first', async () => {
     state.db = makeFakeDb({ project_repos: [], project_settings: [{ project_id: P }], projects: [{ id: P, name: 'old' }] })
@@ -286,6 +306,26 @@ describe('repository picker', () => {
     expect(primary[0]).toMatchObject({ repo_url: 'https://github.com/kensaurus/kensaur.us', default_branch: 'main', github_app_installation_id: 7 })
     expect((state.db as FakeDb).table('project_settings')[0]).toMatchObject({ github_repo_url: 'https://github.com/kensaurus/kensaur.us' })
     expect(kicked).toEqual([P])
+  })
+
+  it('an org member sees and saves only the repos they can reach, not every repo the App covers', async () => {
+    const list = await app().request(`/v1/admin/projects/${P}/github/repos`, { method: 'POST', body: JSON.stringify({ grant: await grantFor({ r: [101] }) }) })
+    const { data } = (await list.json()) as { data: { repos: Array<{ fullName: string }> } }
+    expect(data.repos.map((r) => r.fullName)).toEqual(['kensaurus/kensaur.us'])
+    const save = await app().request(`/v1/admin/projects/${P}/github/repo`, {
+      method: 'POST',
+      body: JSON.stringify({ grant: await grantFor({ r: [101] }), fullName: 'kensaurus/old' }),
+    })
+    expect(save.status).toBe(409)
+    expect(((await save.json()) as { error: { code: string } }).error.code).toBe('REPO_NOT_REACHABLE')
+    expect((state.db as FakeDb).table('project_repos')).toHaveLength(0)
+  })
+
+  it('refuses a grant without its repository list (issued before the list existed)', async () => {
+    const old = await connect.signConnectGrant(SECRET, { p: P, u: USER, i: [7], g: 'kensaurus', exp: NOW + 600 } as never)
+    const res = await app().request(`/v1/admin/projects/${P}/github/repos`, { method: 'POST', body: JSON.stringify({ grant: old }) })
+    expect(res.status).toBe(400)
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe('GRANT_INVALID')
   })
 
   it('refuses a repository the installation cannot see, and a malformed name', async () => {
