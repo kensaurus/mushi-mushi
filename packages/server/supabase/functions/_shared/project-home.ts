@@ -384,7 +384,9 @@ export function buildNeedsYou(input: NeedsYouInput): NeedsYouItem[] {
   if (ci?.light === 'bad') items.push({ id: 'ci_red', impact: 72, text: `CI on your main branch is failing. ${ci.detail ?? ''}`.trim(), action: { label: 'Open CI', to: '/ci' } })
   const sdk = input.health.find((h) => h.id === 'sdk')
   if (sdk && (sdk.light === 'bad' || sdk.status === 'not_connected')) {
-    items.push({ id: 'sdk_silent', impact: 65, text: sdk.status === 'not_connected' ? 'Your app is not sending to Mushi yet, so users cannot report bugs.' : 'Your app stopped checking in over a week ago.', action: { label: 'Fix it', to: sdk.href } })
+    // Never set up is a step to take, not a fault to fix.
+    const neverSent = sdk.status === 'not_connected'
+    items.push({ id: 'sdk_silent', impact: 65, text: neverSent ? 'Your app is not sending to Mushi yet, so users cannot report bugs.' : 'Your app stopped checking in over a week ago.', action: { label: neverSent ? 'Set up the SDK' : 'Fix it', to: sdk.href } })
   }
   // Same groups, labels and counts the /pipeline page shows.
   const shown = new Set((input.fixFirst ?? []).map((f) => f.id))
