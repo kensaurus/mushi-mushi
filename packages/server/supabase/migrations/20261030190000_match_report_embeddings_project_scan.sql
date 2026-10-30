@@ -20,6 +20,18 @@
 -- that parameter is rejected and CREATE FUNCTION would fail. The version is
 -- checked at call time; older servers keep the exact sort. The function is
 -- volatile because that check applies set_config for the scan.
+--
+-- Those set_config calls are transaction-local (the third argument is true).
+-- The previous hnsw.iterative_scan, hnsw.ef_search and enable_seqscan values
+-- are saved and written back before the function returns, and again when the
+-- scan errors, so a caller that runs this RPC inside a larger transaction
+-- keeps its own planner settings for later statements.
+--
+-- When the iterative scan returns fewer rows than match_count, raise
+-- match_report_embeddings_hnsw_short. A strict threshold also returns a
+-- short list, so the warning is a signal to compare with match_count, not
+-- proof a neighbor was dropped. pgvector older than 0.8 never takes this
+-- branch (extversion is read at call time) and can still exact-scan.
 
 create or replace function public.match_report_embeddings(
   query_embedding vector,
@@ -43,6 +55,10 @@ declare
   project_rows integer;
   use_hnsw boolean := false;
   vector_version text;
+  prev_iterative_scan text;
+  prev_ef_search text;
+  prev_seqscan text;
+  hnsw_rows integer := 0;
 begin
   -- Stop once the exact-scan cap is crossed. A full count would read every
   -- report of a large project before choosing the index plan.
@@ -71,14 +87,15 @@ begin
            or split_part(vector_version, '.', 2)::int >= 8
          )
       then
-        -- Transaction-local. iterative_scan keeps the project filter in the
-        -- HNSW walk until match_count rows qualify. The text cast on
-        -- project_id stops idx_reports_project from winning the plan; with
-        -- sequential scans discouraged, the partial HNSW index is what remains.
-        perform set_config('hnsw.iterative_scan', 'relaxed_order', true);
-        perform set_config('hnsw.ef_search', '100', true);
-        perform set_config('enable_seqscan', 'off', true);
-        use_hnsw := true;
+        prev_iterative_scan := current_setting('hnsw.iterative_scan', true);
+        prev_ef_search := current_setting('hnsw.ef_search', true);
+        prev_seqscan := current_setting('enable_seqscan', true);
+        if prev_iterative_scan is not null
+           and prev_ef_search is not null
+           and prev_seqscan is not null
+        then
+          use_hnsw := true;
+        end if;
       end if;
     exception
       when undefined_object or invalid_parameter_value or insufficient_privilege
@@ -88,32 +105,70 @@ begin
   end if;
 
   if use_hnsw then
-    return query
-      with hits as materialized (
+    begin
+      -- A failure on the second or third setting is undone here. The
+      -- subtransaction rolls those writes back; the explicit restore covers
+      -- a rollback that does not.
+      perform set_config('hnsw.iterative_scan', 'relaxed_order', true);
+      perform set_config('hnsw.ef_search', '100', true);
+      perform set_config('enable_seqscan', 'off', true);
+    exception
+      when undefined_object or invalid_parameter_value or insufficient_privilege
+        or data_exception then
+        perform set_config('hnsw.iterative_scan', prev_iterative_scan, true);
+        perform set_config('hnsw.ef_search', prev_ef_search, true);
+        perform set_config('enable_seqscan', prev_seqscan, true);
+        use_hnsw := false;
+    end;
+  end if;
+
+  if use_hnsw then
+    begin
+      return query
+        with hits as materialized (
+          select
+            re.report_id,
+            (re.embedding <=> query_embedding) as distance,
+            r.description,
+            r.category,
+            r.created_at,
+            r.report_group_id
+          from public.report_embeddings re
+          join public.reports r on r.id = re.report_id
+          where r.project_id::text = p_project_id::text
+            and re.model = 'text-embedding-3-small'
+            and (1 - (re.embedding <=> query_embedding)) > match_threshold
+          order by re.embedding <=> query_embedding
+          limit match_count
+        )
         select
-          re.report_id,
-          (re.embedding <=> query_embedding) as distance,
-          r.description,
-          r.category,
-          r.created_at,
-          r.report_group_id
-        from public.report_embeddings re
-        join public.reports r on r.id = re.report_id
-        where r.project_id::text = p_project_id::text
-          and re.model = 'text-embedding-3-small'
-          and (1 - (re.embedding <=> query_embedding)) > match_threshold
-        order by re.embedding <=> query_embedding
-        limit match_count
-      )
-      select
-        h.report_id,
-        (1 - h.distance)::double precision,
-        h.description,
-        h.category,
-        h.created_at,
-        h.report_group_id
-      from hits h
-      order by h.distance;
+          h.report_id,
+          (1 - h.distance)::double precision,
+          h.description,
+          h.category,
+          h.created_at,
+          h.report_group_id
+        from hits h
+        order by h.distance;
+      get diagnostics hnsw_rows = row_count;
+    exception
+      when others then
+        perform set_config('hnsw.iterative_scan', prev_iterative_scan, true);
+        perform set_config('hnsw.ef_search', prev_ef_search, true);
+        perform set_config('enable_seqscan', prev_seqscan, true);
+        raise;
+    end;
+
+    perform set_config('hnsw.iterative_scan', prev_iterative_scan, true);
+    perform set_config('hnsw.ef_search', prev_ef_search, true);
+    perform set_config('enable_seqscan', prev_seqscan, true);
+
+    -- Fewer rows than requested: the iterative walk can stop early, and a
+    -- high threshold also stops early. Either way the caller asked for more.
+    if match_count is not null and hnsw_rows < match_count then
+      raise warning 'match_report_embeddings_hnsw_short project_id=% returned=% match_count=%',
+        p_project_id, hnsw_rows, match_count;
+    end if;
   else
     return query
       with scoped as materialized (
