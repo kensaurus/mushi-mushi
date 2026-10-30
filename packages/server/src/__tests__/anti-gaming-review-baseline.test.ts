@@ -1,6 +1,7 @@
 /**
  * FILE: anti-gaming-review-baseline.test.ts
  * PURPOSE: An unflag must stick, and a scripted client's flag must say so.
+ *          A later report updates the token count in that sentence only.
  *
  * Regression (2026-10-08): one IP + User-Agent ("node") was flagged
  * multi-account in five projects. Unflag cleared the flag but kept the token
@@ -14,11 +15,15 @@ import { makeFakeDb } from './__stubs__/fake-supabase.ts'
 vi.mock('../../supabase/functions/_shared/telemetry.ts', () => ({ logAntiGamingEvent: async () => {} }))
 
 import {
+  alignMultiAccountReason,
   checkAntiGaming,
   multiAccountReason,
   scriptedClientName,
   unreviewedTokenCount,
 } from '../../supabase/functions/_shared/anti-gaming.ts'
+
+const SCRIPTED =
+  'Multi-account: 4 reporter tokens from one scripted client (node). A server sending reports for many users looks like this.'
 
 const P = 'p1'
 const FP = 'fp-node'
@@ -55,12 +60,57 @@ describe('multi-account check after an unflag', () => {
     expect(result.reason).toContain('scripted client (node)')
   })
 
+  it('raises only the count on a later report and keeps the scripted-client clause', async () => {
+    const db = deviceDb({
+      reporter_tokens: tokens(4),
+      flagged_as_suspicious: true,
+      flag_reason: SCRIPTED,
+    })
+    const browser = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/151.0.0.0 Safari/537.36'
+    const result = await checkAntiGaming(db as never, P, 'rk1_new', { fingerprint: FP, userAgent: browser })
+    const expected = SCRIPTED.replace('4 reporter tokens', '5 reporter tokens')
+    expect(result.reason).toBe(expected)
+    expect(db.table('reporter_devices')[0]?.flag_reason).toBe(expected)
+  })
+
+  it('does not relabel a same-device flag when a later request comes from a script', async () => {
+    const same = 'Multi-account: 4 reporter tokens from same device'
+    const db = deviceDb({
+      reporter_tokens: tokens(4),
+      flagged_as_suspicious: true,
+      flag_reason: same,
+    })
+    const result = await checkAntiGaming(db as never, P, 'rk1_new', { fingerprint: FP, userAgent: 'node' })
+    expect(result.reason).toBe('Multi-account: 5 reporter tokens from same device')
+    expect(db.table('reporter_devices')[0]?.flag_reason).toBe('Multi-account: 5 reporter tokens from same device')
+  })
+
   it('still flags a never-reviewed device past three tokens', async () => {
     const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/151.0.0.0 Safari/537.36'
     const db = deviceDb({ reporter_tokens: tokens(3), flagged_as_suspicious: false })
     const result = await checkAntiGaming(db as never, P, 'rk1_new', { fingerprint: FP, userAgent: ua })
     expect(result.flagged).toBe(true)
     expect(result.reason).toBe('Multi-account: 4 reporter tokens from same device')
+  })
+})
+
+describe('alignMultiAccountReason', () => {
+  it('replaces the count and leaves every other clause', () => {
+    expect(alignMultiAccountReason(SCRIPTED, 16)).toBe(
+      SCRIPTED.replace('4 reporter tokens', '16 reporter tokens'),
+    )
+    expect(alignMultiAccountReason('Multi-account: 4 reporter tokens from same device', 6)).toBe(
+      'Multi-account: 6 reporter tokens from same device',
+    )
+  })
+
+  it('leaves manual and velocity reasons alone', () => {
+    expect(alignMultiAccountReason('Suspicious activity confirmed', 9)).toBe('Suspicious activity confirmed')
+    expect(alignMultiAccountReason('Velocity anomaly: 12 reports in 24h', 9)).toBe(
+      'Velocity anomaly: 12 reports in 24h',
+    )
+    expect(alignMultiAccountReason(null, 4)).toBeNull()
+    expect(alignMultiAccountReason(undefined, 4)).toBeUndefined()
   })
 })
 
