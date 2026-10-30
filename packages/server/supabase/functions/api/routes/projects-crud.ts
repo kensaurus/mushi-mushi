@@ -674,7 +674,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       projectsWithReports: 0,
       sdkConnectedCount: 0,
       /** Projects with no SDK-key heartbeat (first 5 by name), so a banner can name them. */
-      sdkMissingProjects: [] as Array<{ id: string; name: string }>,
+      sdkMissingProjects: [] as Array<{ id: string; name: string; createdAt: string | null }>,
       sdkMissingCount: 0,
       neverIngestedCount: 0,
       reportsLast24h: 0,
@@ -756,9 +756,10 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
     );
     const sdkMissingIds = accessibleIds.filter((id) => !sdkConnectedProjects.has(id));
     const { data: missingRows } = sdkMissingIds.length > 0
-      ? await db.from('projects').select('id, name').in('id', sdkMissingIds).order('name').limit(5)
+      ? await db.from('projects').select('id, name, created_at').in('id', sdkMissingIds).order('name').limit(5)
       : { data: [] };
-    const sdkMissingProjects = ((missingRows ?? []) as Array<{ id: string; name: string }>).map((r) => ({ id: r.id, name: r.name }));
+    // createdAt lets the console tell a just-made app (setup left) from a broken one.
+    const sdkMissingProjects = ((missingRows ?? []) as Array<{ id: string; name: string; created_at?: string }>).map((r) => ({ id: r.id, name: r.name, createdAt: r.created_at ?? null }));
     const projectsWithReportsSet = new Set<string>(reportProjectRows ?? []);
 
     const projectCount = accessibleIds.length;

@@ -102,4 +102,17 @@ describe('the GitHub card source', () => {
     expect(await source(OPERATOR_PROJECT)).toBe('env');
     expect(await source(TENANT_PROJECT)).toBeNull();
   });
+
+  it('treats the env Langfuse keys as the operator account too', async () => {
+    stubEnv({ ...ENV, LANGFUSE_BASE_URL: 'https://lf.example', LANGFUSE_PUBLIC_KEY: 'pk', LANGFUSE_SECRET_KEY: 'sk' });
+    vi.resetModules();
+    const { resolveEffectivePlatformSettings } = await import(
+      '../../supabase/functions/_shared/integration-settings.ts'
+    );
+    const tenant = await resolveEffectivePlatformSettings(fakeDb() as never, TENANT_PROJECT);
+    expect(tenant.sourceByField.langfuse_public_key_ref ?? null).toBeNull();
+    expect(tenant.settings.langfuse_secret_key_ref ?? null).toBeNull();
+    const operator = await resolveEffectivePlatformSettings(fakeDb() as never, OPERATOR_PROJECT);
+    expect(operator.sourceByField.langfuse_public_key_ref).toBe('env');
+  });
 });

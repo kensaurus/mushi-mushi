@@ -10,10 +10,15 @@
  *
  *   1. The console asks for a connect link (signed-in member, non-viewer).
  *      `state` = HMAC-signed { project, user, return page, expiry }.
- *   2. GitHub installs the App and sends the browser to the setup URL; with a
- *      valid state it goes on to GitHub's authorize page (same state data).
+ *   2. The browser goes to GitHub's authorize page first, so a person who
+ *      already installed the App never lands on GitHub's "Configure" page,
+ *      which has no way back.
  *   3. The authorize callback exchanges `code` for a user token and lists the
  *      installations of this App that user can reach (`GET /user/installations`).
+ *      None yet: on to the install page with the same state; GitHub then
+ *      sends the browser to the setup URL, which marks the state as back from
+ *      install (`x`) and returns to authorize. A second empty list is an
+ *      error, never another round trip.
  *   4. The console gets a signed short-lived grant { project, user,
  *      installation ids } in the URL fragment, lists those installations'
  *      repositories, and saves the one the person picks.
@@ -35,6 +40,8 @@ export interface ConnectState {
   r: ConnectReturnPage
   /** expiry, unix seconds */
   exp: number
+  /** 1 once the browser came back through the App's setup URL (installed). */
+  x?: 1
 }
 
 export interface ConnectGrant {
@@ -116,7 +123,7 @@ export async function openConnectState(
     typeof v.r !== 'string' || !RETURN_PAGES.has(v.r as ConnectReturnPage) || typeof v.exp !== 'number'
   ) return { ok: false, reason: 'invalid' }
   if (v.exp < nowSeconds) return { ok: false, reason: 'expired' }
-  return { ok: true, state: { p: v.p, u: v.u, r: v.r as ConnectReturnPage, exp: v.exp } }
+  return { ok: true, state: { p: v.p, u: v.u, r: v.r as ConnectReturnPage, exp: v.exp, ...(v.x === 1 ? { x: 1 as const } : {}) } }
 }
 
 export function signConnectGrant(secret: string, grant: ConnectGrant): Promise<string> {
@@ -283,6 +290,35 @@ export interface InstallationRepo {
   defaultBranch: string
   installationId: number
   pushedAt: string | null
+}
+
+const repoKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+/**
+ * The repository that most likely holds this app, by name: the repo named
+ * like the app ("kensaur.us" → kensaurus/kensaur.us), else one whose name
+ * contains the app's or the other way round. Null when nothing is close or
+ * two repos tie, so the person always picks when it is unclear.
+ */
+export function suggestRepo(repos: Array<Pick<InstallationRepo, 'fullName'>>, appName: string | null | undefined): string | null {
+  const app = repoKey(appName ?? '')
+  if (app.length < 3) return null
+  const score = (fullName: string): number => {
+    const name = repoKey(fullName.split('/')[1] ?? '')
+    if (!name) return 0
+    if (name === app) return 3
+    if (name.includes(app) || (name.length >= 3 && app.includes(name))) return 2
+    return 0
+  }
+  let best: string | null = null
+  let bestScore = 0
+  let tie = false
+  for (const r of repos) {
+    const s = score(r.fullName)
+    if (s > bestScore) { best = r.fullName; bestScore = s; tie = false }
+    else if (s > 0 && s === bestScore) tie = true
+  }
+  return bestScore > 0 && !tie ? best : null
 }
 
 /** Repositories one installation can reach (≤ 3 pages of 100), with an installation token. */

@@ -776,6 +776,7 @@ export function ProjectsPage() {
           orgDataLoaded={orgDataLoaded}
           canManageProjects={canManageProjects}
           activeOrgRole={activeOrgRole as OrgRole}
+          teamName={(orgData?.organizations?.length ?? 0) > 1 ? activeTeamName : null}
           onNavigateTeam={() => navigate('/organization/members')}
           newName={newName}
           onNewNameChange={setNewName}

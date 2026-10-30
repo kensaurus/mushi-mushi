@@ -33,6 +33,7 @@ import {
   readGithubAppConfig,
   signConnectGrant,
   signConnectState,
+  suggestRepo,
   type ConnectReturnPage,
   type GithubAppConfig,
   type InstallationRepo,
@@ -220,7 +221,11 @@ export function registerGithubConnectRoutes(app: Hono<{ Variables: Variables }>,
     if (!listed.ok) return back({ error: listed.reason })
     const usable = listed.installations.filter((i) => !i.suspended)
     if (usable.length === 0) {
-      return back({ error: listed.installations.length > 0 ? 'installation_suspended' : 'no_installation' })
+      if (listed.installations.length > 0) return back({ error: 'installation_suspended' })
+      // Signed in, nothing installed yet: install with the same state. The
+      // setup URL brings the browser back here marked `x`, so this happens once.
+      if (!state.x) return c.redirect(installUrl(config, c.req.query('state') ?? ''), 302)
+      return back({ error: 'no_installation' })
     }
     const grant = await signConnectGrant(config.secret, {
       p: state.p,
@@ -257,12 +262,13 @@ export function registerGithubConnectRoutes(app: Hono<{ Variables: Variables }>,
       }
     }
     repos.sort((a, b) => (b.pushedAt ?? '').localeCompare(a.pushedAt ?? ''))
-    const { data: current } = await db
-      .from('project_repos')
-      .select('repo_url')
-      .eq('project_id', projectId)
-      .eq('is_primary', true)
-      .maybeSingle()
+    const [{ data: current }, { data: project }] = await Promise.all([
+      db.from('project_repos').select('repo_url').eq('project_id', projectId).eq('is_primary', true).maybeSingle(),
+      db.from('projects').select('name').eq('id', projectId).maybeSingle(),
+    ])
+    // The repo named like the app goes first, so the likely pick is one click.
+    const suggested = suggestRepo(repos, (project as { name?: string } | null)?.name)
+    if (suggested) repos.sort((a, b) => Number(b.fullName === suggested) - Number(a.fullName === suggested))
     return c.json({
       ok: true,
       data: {
@@ -274,6 +280,7 @@ export function registerGithubConnectRoutes(app: Hono<{ Variables: Variables }>,
           ? `https://github.com/apps/${cfg.config.slug}/installations/new`
           : null,
         currentRepoUrl: (current as { repo_url?: string } | null)?.repo_url ?? null,
+        suggestedFullName: suggested,
       },
     })
   })
