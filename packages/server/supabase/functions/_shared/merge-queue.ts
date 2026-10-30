@@ -23,6 +23,23 @@ export const MAX_CONFLICT_AGENTS = 2
 /** An agent that has not pushed after this long is given up. */
 export const CONFLICT_AGENT_TIMEOUT_MS = 90 * 60_000
 
+/**
+ * What a conflicted PR says when no cloud agent can start (no Cursor key,
+ * follow-ups off). Starts with "Merge conflict" so a local conflicts lane can
+ * claim it, and names `mushi work --conflicts` so the row is not stuck
+ * "waiting on a conflict agent".
+ */
+export function noCloudConflictDetail(reason: string): string {
+  const why = reason.replace(/\s+/g, ' ').trim().slice(0, 160) || 'No Cursor key can start a conflict agent.'
+  return `Merge conflict. ${why} Run \`mushi work --conflicts --repo-dir <clone>\` to resolve it on this machine.`
+}
+
+/** The /pipeline "New conflict agent" refusal when no cloud agent can run. */
+export function noCloudConflictAction(why: string, prUrl: string | null): string {
+  const where = prUrl ?? 'the pull request'
+  return `No cloud conflict agent can run (${why}). Run \`mushi work --conflicts --repo-dir <clone>\` on a clone of this repo, or resolve it on GitHub (${where}).`
+}
+
 export interface PullView {
   state: string | null
   merged: boolean

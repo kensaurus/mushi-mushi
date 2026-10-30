@@ -53,6 +53,7 @@ import { registerMergeQueueRoutes } from '../api/routes/merge-queue.ts'
 import { registerSkillRunRoutes } from '../api/routes/skill-runs.ts'
 import { registerSearchRankRoutes } from '../api/routes/search-rank.ts'
 import { registerLocalFollowupRoutes } from '../api/routes/local-followups.ts'
+import { registerLocalConflictRoutes } from '../api/routes/local-conflicts.ts'
 import { registerSdkHealthRoutes } from '../api/routes/sdk-health.ts'
 import { registerPipelineRoutes } from '../api/routes/pipeline.ts'
 import { registerReportSentryRoutes } from '../api/routes/report-sentry.ts'
@@ -101,6 +102,7 @@ registerMergeQueueRoutes(app)
 registerSkillRunRoutes(app)
 registerSearchRankRoutes(app)
 registerLocalFollowupRoutes(app)
+registerLocalConflictRoutes(app)
 registerSdkHealthRoutes(app)
 registerPipelineRoutes(app)
 registerReportSentryRoutes(app)

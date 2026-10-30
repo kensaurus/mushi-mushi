@@ -23,7 +23,7 @@
 import { RESOLVED_REPORT_STATUSES } from './fix-report-truth.ts'
 import { ciHeadState, followupTrigger, FOLLOWUP_REASONS, type CiHeadState, type CiJobForRepair, type PriorFollowup } from './review-followup.ts'
 import { localHandoff } from './local-followup.ts'
-import { parseCheckNameList } from './merge-queue.ts'
+import { noCloudConflictAction, parseCheckNameList } from './merge-queue.ts'
 import { ROOT_CAUSE_OF_GROUP } from './health-checks.ts'
 
 export const PIPELINE_STAGES = [
@@ -320,9 +320,10 @@ export function repoOfPrUrl(url: string | null): string | null {
  */
 export function queueDetailKind(
   detail: string | null,
-): 'followups_off' | 'conflict_person' | 'ci_failed' | 'own_ci_red' | 'base_red' | 'draft' | 'fix_first' | 'hold' | 'train_failed' | 'train_conflict' | 'next_train' | 'other' {
+): 'followups_off' | 'conflict_local' | 'conflict_person' | 'ci_failed' | 'own_ci_red' | 'base_red' | 'draft' | 'fix_first' | 'hold' | 'train_failed' | 'train_conflict' | 'next_train' | 'other' {
   const d = (detail ?? '').toLowerCase()
   if (d.includes('follow-ups are off')) return 'followups_off'
+  if (d.includes('mushi work --conflicts')) return 'conflict_local'
   // Conflicts no agent will take (merge-queue worker): a person resolves them.
   if ((d.startsWith('merge conflict') && !d.includes('agent is merging')) || d.includes('resolve it on github')) return 'conflict_person'
   if (d.startsWith('ci failed')) return 'ci_failed'
@@ -461,7 +462,7 @@ function blockedActions(actions: readonly PipelineAction[], ctx: BlockContext): 
         if (!active) why = 'Not in the merge queue.'
         else if ((active.conflict_agents ?? 0) >= CONFLICT_AGENT_CAP) why = `Both conflict agents (${CONFLICT_AGENT_CAP} of ${CONFLICT_AGENT_CAP}) were used on this PR. Update the branch, or resolve it on GitHub.`
         else if (active.state !== 'resolving' && active.state !== 'blocked') why = 'Only a conflicted PR gets a conflict agent.'
-        else if (cloud && !cloud.ready) why = `Needs a person: resolve the conflict on GitHub (${a.pr_url ?? 'the pull request'}). ${cloud.why}, so no conflict agent can run.`
+        else if (cloud && !cloud.ready) why = noCloudConflictAction(cloud.why ?? 'no cloud agent', a.pr_url)
         break
       }
       case 'update_branch':
@@ -640,15 +641,23 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       const since = q.agent_started_at ?? q.queued_at
       const capped = (q.conflict_agents ?? 0) >= CONFLICT_AGENT_CAP
       const off = queueDetailKind(q.detail) === 'followups_off'
-      const stuck = off || age(now, since) > CONFLICT_STUCK_MS
+      // No agent_started_at means nothing is merging. Ageing that from queued_at
+      // (often days earlier) said "waiting on a conflict agent for over 90 min"
+      // the moment the train marked the row, including when no Cursor key exists.
+      const started = !!q.agent_started_at
+      const overdue = age(now, since) > CONFLICT_STUCK_MS
+      const stuck = off || !started || overdue
       const text = off
         ? 'merge conflict and no agent may push (follow-ups are off): needs a person, resolve on GitHub'
-        : capped && stuck
-          ? 'merge conflict, both conflict agents used: needs a person, resolve on GitHub'
-          : stuck
-            ? `waiting on a conflict agent for over ${Math.round(CONFLICT_STUCK_MS / 60_000)} min`
-            : 'a conflict agent is merging the base in'
-      groups.add(off ? 'conflict_off' : capped && stuck ? 'conflict_capped' : stuck ? 'conflict_stuck' : 'conflict_running', {
+        : !started
+          ? 'no conflict agent has started: run mushi work --conflicts, or add a Cursor key'
+          : capped && overdue
+            ? 'merge conflict, both conflict agents used: needs a person, resolve on GitHub'
+            : overdue
+              ? `waiting on a conflict agent for over ${Math.round(CONFLICT_STUCK_MS / 60_000)} min`
+              : 'a conflict agent is merging the base in'
+      const id = off ? 'conflict_off' : !started ? 'conflict_idle' : capped && overdue ? 'conflict_capped' : overdue ? 'conflict_stuck' : 'conflict_running'
+      groups.add(id, {
         stage: 'train',
         tone: stuck ? 'stuck' : 'moving',
         noun: PR,
@@ -764,6 +773,7 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
     if (q.state === 'blocked') {
       const spec: Record<string, Omit<GroupSpec, 'stage' | 'noun'>> = {
         followups_off: { tone: 'stuck', text: 'held: merge conflict and follow-ups are off: needs a person, resolve on GitHub', actions: ['update_branch', 'remove'], settings: FOLLOWUPS_SETTING },
+        conflict_local: { tone: 'stuck', text: 'held: merge conflict and no cloud agent: run mushi work --conflicts', actions: ['conflict_agent', 'update_branch', 'remove'] },
         conflict_person: { tone: 'stuck', text: 'held: merge conflict, needs a person: resolve on GitHub', actions: ['update_branch', 'remove'] },
         ci_failed: { tone: 'stuck', text: 'held: CI failed', actions: ['ci_repair', 'rerun_ci', 'remove'] },
         own_ci_red: { tone: 'stuck', text: 'held: their own CI is red', actions: ['ci_repair', 'rerun_ci', 'remove'], settings: FOLLOWUPS_SETTING },

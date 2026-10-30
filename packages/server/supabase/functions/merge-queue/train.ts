@@ -448,7 +448,15 @@ export async function runTrainTick(
         r.head_sha === pull.headSha && now.getTime() - Date.parse(r.updated_at ?? '') < CONFLICT_RECHECK_MS
       if (blockedHere) continue
       if ((r.conflict_agents ?? 0) < MAX_CONFLICT_AGENTS) {
-        await setRows(db, [r.id], { state: 'resolving', cursor_agent_id: null, detail: 'Conflicts with the base branch; a Cursor agent merges it in, then it rides a release train.' })
+        // Record the head the conflict is at, so a later block (no cloud key)
+        // and a local `mushi work --conflicts` run know which commit to merge.
+        const patch: Record<string, unknown> = {
+          state: 'resolving',
+          cursor_agent_id: null,
+          detail: 'Conflicts with the base branch; a Cursor agent merges it in, then it rides a release train.',
+        }
+        if (pull.headSha) patch.head_sha = pull.headSha
+        await setRows(db, [r.id], patch)
       } else if (r.state !== 'blocked') {
         await setRows(db, [r.id], { state: 'blocked', detail: `Merge conflict: ${MAX_CONFLICT_AGENTS} agent runs did not resolve it. Resolve it on GitHub.` })
       }

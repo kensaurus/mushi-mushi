@@ -23,7 +23,7 @@ import {
   type ReviewRow,
 } from '../../supabase/functions/_shared/pipeline-view.ts'
 import type { CiJobForRepair } from '../../supabase/functions/_shared/review-followup.ts'
-import { checkNameList } from '../../supabase/functions/_shared/merge-queue.ts'
+import { checkNameList, noCloudConflictDetail } from '../../supabase/functions/_shared/merge-queue.ts'
 
 const NOW = new Date('2026-10-26T12:00:00Z')
 const P = '00000000-0000-4000-8000-000000000001'
@@ -194,6 +194,23 @@ describe('buildPipeline', () => {
 
     const fresh = queue({ state: 'resolving', agent_started_at: '2026-10-24T05:00:00Z', conflict_agents: 1 })
     expect(group(run({ queue: [fresh] }), 'conflict_stuck')?.group.actions).toContain('conflict_agent')
+  })
+
+  it('a resolving conflict with no agent started is not shown as an agent that is merging', () => {
+    const q = queue({ state: 'resolving', agent_started_at: null, queued_at: '2026-10-26T11:50:00Z', detail: 'Conflicts with the base branch; a Cursor agent merges it in.' })
+    const hit = group(run({ queue: [q] }), 'conflict_idle')
+    expect(hit?.group.tone).toBe('stuck')
+    expect(hit?.group.label).toContain('mushi work --conflicts')
+    expect(group(run({ queue: [q] }), 'conflict_running')).toBeNull()
+    expect(group(run({ queue: [q] }), 'conflict_stuck')).toBeNull()
+  })
+
+  it('a blocked conflict with no cloud key says to run mushi work --conflicts', () => {
+    const q = queue({ state: 'blocked', detail: noCloudConflictDetail('No Cursor key of yours serves this app.') })
+    const hit = group(run({ queue: [q] }), 'held_conflict_local')
+    expect(hit?.group.tone).toBe('stuck')
+    expect(hit?.group.label).toContain('mushi work --conflicts')
+    expect(queueDetailKind(q.detail)).toBe('conflict_local')
   })
 
   it('the follow-ups link on a red-CI group shows only where follow-ups are off', () => {

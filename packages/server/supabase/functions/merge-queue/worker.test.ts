@@ -11,6 +11,7 @@
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import type { PullRequestDetails } from '../_shared/github.ts'
+import { noCloudConflictDetail } from '../_shared/merge-queue.ts'
 import { pickConflictRows, processRow, runMergeQueue, type MergeQueueDeps, type QueueRow } from './worker.ts'
 
 const { test } = Deno
@@ -208,7 +209,7 @@ test('a conflict without follow-ups on says why instead of starting an agent', a
     cursorKey: () => Promise.resolve({ ok: false, reason: 'Review follow-ups are off.' }),
   }))
   assertEquals(out, 'blocked')
-  assertEquals(lastState(writes)?.detail, 'Merge conflict. Review follow-ups are off.')
+  assertEquals(lastState(writes)?.detail, noCloudConflictDetail('Review follow-ups are off.'))
 })
 
 test('a resolving row continues once the agent pushed a new head', async () => {
@@ -316,7 +317,7 @@ test('in a train app, a conflict no agent may take stays blocked with the reason
     return writes.slice(before).filter((w) => w.table === 'fix_merge_queue' && 'state' in w.value).map((w) => w.value.state)
   }
   assertEquals(await tick(0), ['resolving', 'blocked'])
-  assertEquals([rows[0].state, rows[0].detail], ['blocked', 'Merge conflict. Review follow-ups are off.'])
+  assertEquals([rows[0].state, rows[0].detail], ['blocked', noCloudConflictDetail('Review follow-ups are off.')])
   assertEquals(await tick(5), [])
   assertEquals(await tick(30), [])
   // An hour later it is offered again, in case follow-ups were turned on.
@@ -379,6 +380,106 @@ test('a local claim the lane ended on refused checks keeps its cap slot', async 
   const last = lastState(writes)!
   assertEquals('conflict_agents' in last, false)
   assertEquals(String(last.detail).includes('could not resolve it (conflict markers remain in a.ts)'), true)
+})
+
+const trainStub = { branchSha: () => Promise.reject(new Error('no train')), createBranch: () => Promise.reject(new Error('no train')), mergeInto: () => Promise.reject(new Error('no train')), openPr: () => Promise.reject(new Error('no train')), closePr: () => Promise.reject(new Error('no train')), deleteBranch: () => Promise.reject(new Error('no train')), mergeMethod: () => Promise.reject(new Error('no train')), trainMerge: () => Promise.reject(new Error('no train')) } as never
+
+test('no cloud key blocks every resolving conflict, not only the two a tick would start', async () => {
+  const sha = 'ab'.repeat(20)
+  const rows = [7, 8, 9].map((n) => ({
+    ...row({ id: `r${n}`, state: 'resolving', pr_number: n, head_sha: sha }),
+    queued_at: '2026-10-23T08:00:00Z',
+    claimed_until: null,
+    updated_at: '2026-10-23T08:00:00Z',
+  }))
+  const { db, writes } = fakeDb({
+    fix_attempts: [{ ...attempt }],
+    fix_merge_queue: rows,
+    fix_events: [],
+    project_settings: [{ project_id: 'p1', release_mode: 'train' }],
+  })
+  let started = 0
+  await runMergeQueue(db, deps({
+    cursorKey: () => Promise.resolve({ ok: false, reason: 'No Cursor key of yours serves this app.' }),
+    createAgent: () => (started++, Promise.reject(new Error('must not start'))),
+    pull: () => Promise.resolve(pull({ mergeable: false, mergeableState: 'dirty', headSha: sha })),
+    train: trainStub,
+  }))
+  assertEquals(started, 0)
+  const detail = noCloudConflictDetail('No Cursor key of yours serves this app.')
+  for (const r of rows) assertEquals([r.state, r.detail, r.head_sha], ['blocked', detail, sha])
+  assertEquals(writes.some((w) => String(w.value.detail ?? '').includes('waits for a free conflict agent')), false)
+})
+
+test('a failed no-key block leaves the row for the per-row pass', async () => {
+  const sha = 'cd'.repeat(20)
+  const stored = [{ ...row({ id: 'r7', state: 'resolving', pr_number: 7, head_sha: sha }), queued_at: '2026-10-23T08:00:00Z', claimed_until: null, updated_at: '2026-10-23T08:00:00Z' }]
+  const { db: inner } = fakeDb({
+    fix_attempts: [{ ...attempt }],
+    fix_merge_queue: stored,
+    fix_events: [],
+    project_settings: [{ project_id: 'p1', release_mode: 'train' }],
+  })
+  const db = {
+    from: (t: string) => {
+      const b = inner.from(t) as { update: (p: Row) => unknown }
+      if (t !== 'fix_merge_queue') return b
+      const origUpdate = b.update.bind(b)
+      b.update = (p: Row) => {
+        if (p.state === 'blocked' && !('head_sha' in p)) {
+          const fail: Record<string, unknown> = {}
+          const chain = () => fail
+          fail.in = chain
+          fail.is = chain
+          fail.eq = chain
+          fail.select = chain
+          fail.then = (ok: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { message: 'update failed' } }).then(ok)
+          return fail
+        }
+        return origUpdate(p)
+      }
+      return b
+    },
+  } as unknown as SupabaseClient
+  let pulls = 0
+  await runMergeQueue(db, deps({
+    cursorKey: () => Promise.resolve({ ok: false, reason: 'No Cursor key of yours serves this app.' }),
+    createAgent: () => Promise.reject(new Error('must not start')),
+    pull: () => (pulls++, Promise.resolve(pull({ mergeable: false, mergeableState: 'dirty', headSha: sha }))),
+    train: trainStub,
+  }))
+  assertEquals(pulls, 1)
+  assertEquals(stored[0].state, 'blocked')
+  assertEquals(String(stored[0].detail).includes('mushi work --conflicts'), true)
+})
+
+test('mushi work --conflicts holding a row is not blocked as if no agent existed', async () => {
+  const sha = 'ef'.repeat(20)
+  const held = {
+    ...row({ id: 'held', state: 'resolving', pr_number: 7, head_sha: sha, cursor_agent_id: 'local:00000000-0000-4000-8000-000000000099', agent_head_sha: sha, agent_started_at: '2026-10-23T08:50:00Z', conflict_agents: 1 }),
+    queued_at: '2026-10-23T08:00:00Z',
+    claimed_until: null,
+  }
+  const waiting = {
+    ...row({ id: 'wait', state: 'resolving', pr_number: 8, head_sha: sha }),
+    queued_at: '2026-10-23T08:01:00Z',
+    claimed_until: null,
+  }
+  const rows = [held, waiting]
+  const { db } = fakeDb({
+    fix_attempts: [{ ...attempt }],
+    fix_merge_queue: rows,
+    fix_events: [],
+    project_settings: [{ project_id: 'p1', release_mode: 'train' }],
+  })
+  await runMergeQueue(db, deps({
+    cursorKey: () => Promise.resolve({ ok: false, reason: 'No Cursor key of yours serves this app.' }),
+    createAgent: () => Promise.reject(new Error('must not start')),
+    pull: () => Promise.resolve(pull({ mergeable: false, mergeableState: 'dirty', headSha: sha })),
+    train: trainStub,
+  }))
+  assertEquals([held.state, held.cursor_agent_id], ['resolving', 'local:00000000-0000-4000-8000-000000000099'])
+  assertEquals(waiting.state, 'blocked')
 })
 
 test("a local lane's conflict counts as a running agent in its repo", () => {
