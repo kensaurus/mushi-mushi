@@ -1,8 +1,10 @@
 /**
  * FILE: pipeline-view.test.ts
  * PURPOSE: The console's pipeline picture (/pipeline): each open item lands in
- *          one stage and one plain-English group, its age is the time it
- *          entered that stage (never `updated_at`), a PR's own red CI wins
+ *          one stage and one plain-English group. A resolving conflict that
+ *          has not started ages from `updated_at` (when it was marked
+ *          resolving). Every other age is the moment it entered that stage,
+ *          never `updated_at`. A PR's own red CI wins
  *          over "waiting for the next train", a test machine stop is not a
  *          code failure, and `skipped` is not green.
  */
@@ -196,11 +198,18 @@ describe('buildPipeline', () => {
     expect(group(run({ queue: [fresh] }), 'conflict_stuck')?.group.actions).toContain('conflict_agent')
   })
 
-  it('a resolving conflict that has not started yet is waiting, when the detail still expects a cloud agent', () => {
-    const q = queue({ state: 'resolving', agent_started_at: null, queued_at: '2026-10-20T00:00:00Z', detail: 'Conflicts with the base branch; a Cursor agent merges it in, then it rides a release train.' })
+  it('a resolving conflict that has not started yet is waiting, when it was marked resolving recently', () => {
+    const q = queue({
+      state: 'resolving',
+      agent_started_at: null,
+      queued_at: '2026-10-20T00:00:00Z',
+      updated_at: '2026-10-26T11:40:00Z',
+      detail: 'Conflicts with the base branch; a Cursor agent merges it in, then it rides a release train.',
+    })
     const hit = group(run({ queue: [q] }), 'conflict_waiting')
     expect(hit?.group.tone).toBe('moving')
     expect(hit?.group.label).toBe('1 PR: waiting for a conflict agent')
+    expect(hit?.group.items[0].since).toBe('2026-10-26T11:40:00Z')
     expect(hit?.group.label).not.toContain('mushi work --conflicts')
     expect(hit?.group.label).not.toContain('add a Cursor key')
     expect(hit?.group.actions).toEqual([])
@@ -209,11 +218,30 @@ describe('buildPipeline', () => {
     expect(group(run({ queue: [q] }), 'conflict_stuck')).toBeNull()
   })
 
+  it('a resolving conflict with no agent for over 90 minutes is stuck, aged from when it was marked resolving', () => {
+    // queued_at is minutes ago; updated_at is when the train marked it resolving.
+    const q = queue({
+      state: 'resolving',
+      agent_started_at: null,
+      queued_at: '2026-10-26T11:50:00Z',
+      updated_at: '2026-10-26T09:00:00Z',
+      conflict_agents: 0,
+      detail: 'Conflicts with the base branch; a Cursor agent merges it in, then it rides a release train.',
+    })
+    const hit = group(run({ queue: [q] }), 'conflict_stuck')
+    expect(hit?.group.tone).toBe('stuck')
+    expect(hit?.group.label).toContain('over 90 min')
+    expect(hit?.group.actions).toContain('conflict_agent')
+    expect(hit?.group.items[0].since).toBe('2026-10-26T09:00:00Z')
+    expect(group(run({ queue: [q] }), 'conflict_waiting')).toBeNull()
+  })
+
   it('a resolving conflict waiting for a free slot stays in line, not "add a Cursor key"', () => {
     const q = queue({
       state: 'resolving',
       agent_started_at: null,
       queued_at: '2026-10-20T00:00:00Z',
+      updated_at: '2026-10-26T11:40:00Z',
       detail: 'Conflicts with the base branch; waits for a free conflict agent (2 ahead in this repo), then rides a release train.',
     })
     const hit = group(run({ queue: [q] }), 'conflict_inline')
@@ -223,8 +251,23 @@ describe('buildPipeline', () => {
     expect(group(run({ queue: [q] }), 'conflict_idle')).toBeNull()
   })
 
+  it('a resolving conflict in line for over 90 minutes is stuck, with a way to start an agent', () => {
+    const q = queue({
+      state: 'resolving',
+      agent_started_at: null,
+      queued_at: '2026-10-26T11:50:00Z',
+      updated_at: '2026-10-26T09:00:00Z',
+      detail: 'Conflicts with the base branch; waits for a free conflict agent (2 ahead in this repo), then rides a release train.',
+    })
+    const hit = group(run({ queue: [q] }), 'conflict_stuck')
+    expect(hit?.group.tone).toBe('stuck')
+    expect(hit?.group.actions).toContain('conflict_agent')
+    expect(group(run({ queue: [q] }), 'conflict_inline')).toBeNull()
+    expect(group(run({ queue: [q] }), 'conflict_waiting')).toBeNull()
+  })
+
   it('a resolving conflict whose detail says there is no cloud key tells you to run mushi work --conflicts', () => {
-    const q = queue({ state: 'resolving', agent_started_at: null, queued_at: '2026-10-26T11:50:00Z', detail: noCloudConflictDetail('No Cursor key of yours serves this app.') })
+    const q = queue({ state: 'resolving', agent_started_at: null, queued_at: '2026-10-26T11:50:00Z', updated_at: '2026-10-20T00:00:00Z', detail: noCloudConflictDetail('No Cursor key of yours serves this app.') })
     const hit = group(run({ queue: [q] }), 'conflict_idle')
     expect(hit?.group.tone).toBe('stuck')
     expect(hit?.group.label).toContain('no conflict agent has started')
