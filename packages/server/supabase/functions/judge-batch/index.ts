@@ -197,18 +197,26 @@ Deno.serve(withSentry('judge-batch', async (req) => {
       // owner set. Skip the project once. Do not grade, and do not log a
       // per-report error — that pages Sentry for every ungraded report and
       // the next night retries them all (MUSHI-MUSHI-SERVER-3J).
+      // Any other throw (a lookup that escaped the shared helper) is logged
+      // and grading continues. Rethrowing here aborts the cron for every
+      // project after this one.
       try {
         await enforceLlmBudget(db!, project.id, 'anthropic')
       } catch (err) {
-        if (!(err instanceof LlmBudgetExceededError)) throw err
-        llmBudgetSkipped += reports.length
-        rootLog.child('judge').warn('Judge skipped: monthly LLM budget reached', {
+        if (err instanceof LlmBudgetExceededError) {
+          llmBudgetSkipped += reports.length
+          rootLog.child('judge').warn('Judge skipped: monthly LLM budget reached', {
+            projectId: project.id,
+            reports: reports.length,
+            spendUsd: err.spendUsd,
+            budgetUsd: err.budgetUsd,
+          })
+          continue
+        }
+        rootLog.child('judge').warn('Judge budget pre-check failed; grading this project anyway', {
           projectId: project.id,
-          reports: reports.length,
-          spendUsd: err.spendUsd,
-          budgetUsd: err.budgetUsd,
+          err: String(err),
         })
-        continue
       }
 
       const trace = createTrace('judge-batch', { projectId: project.id, reportCount: reports.length })
