@@ -9,7 +9,8 @@ import { recordPromptResult, checkPromotionEligibility, promoteCandidate, getPro
 import { startCronRun } from '../_shared/telemetry.ts'
 import { recordLlmUsage } from '../_shared/llm-usage.ts'
 import { withSentry } from '../_shared/sentry.ts'
-import { resolveLlmKey } from '../_shared/byok.ts'
+import { enforceLlmBudget, resolveLlmKey } from '../_shared/byok.ts'
+import { LlmBudgetExceededError } from '../_shared/llm-budget.ts'
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { mapWithConcurrency } from '../_shared/concurrency.ts'
@@ -131,6 +132,9 @@ Deno.serve(withSentry('judge-batch', async (req) => {
     // Capture per-report failures so the operator can see WHY rows_affected=0
     // without fishing through edge-function stdout. Surfaced on cron_runs.metadata.
     const evalErrors: Array<{ reportId: string; err: string }> = []
+    // Reports left ungraded because the project is over its monthly AI budget.
+    // An owner cap, not a judge failure: counted here so a 0-eval run says why.
+    let llmBudgetSkipped = 0
 
     // Wave S (2026-04-23, PERF): the previous loop issued one
     // project_settings SELECT per project. For cron runs that span 50+
@@ -189,6 +193,32 @@ Deno.serve(withSentry('judge-batch', async (req) => {
       if (!reports?.length) continue
       eligibleReports += reports.length
 
+      // Same rule as classify-report: over the monthly cap is a state the
+      // owner set. Skip the project once. Do not grade, and do not log a
+      // per-report error — that pages Sentry for every ungraded report and
+      // the next night retries them all (MUSHI-MUSHI-SERVER-3J).
+      // Any other throw (a lookup that escaped the shared helper) is logged
+      // and grading continues. Rethrowing here aborts the cron for every
+      // project after this one.
+      try {
+        await enforceLlmBudget(db!, project.id, 'anthropic')
+      } catch (err) {
+        if (err instanceof LlmBudgetExceededError) {
+          llmBudgetSkipped += reports.length
+          rootLog.child('judge').warn('Judge skipped: monthly LLM budget reached', {
+            projectId: project.id,
+            reports: reports.length,
+            spendUsd: err.spendUsd,
+            budgetUsd: err.budgetUsd,
+          })
+          continue
+        }
+        rootLog.child('judge').warn('Judge budget pre-check failed; grading this project anyway', {
+          projectId: project.id,
+          err: String(err),
+        })
+      }
+
       const trace = createTrace('judge-batch', { projectId: project.id, reportCount: reports.length })
 
       // Wave S (2026-04-23, PERF): resolve the judge prompt ONCE per project
@@ -210,7 +240,16 @@ Deno.serve(withSentry('judge-batch', async (req) => {
       // 50-report batch completes in ~10× fewer wall-clock seconds. The
       // provider rate limit (~50 req/min) tolerates this; DB pool pressure
       // stays bounded because the per-report insert is a single round-trip.
+      // The pre-check above caches for a minute. A long batch can cross the
+      // cap after that; stop the rest of this project instead of erroring.
+      // `as` keeps the closure write visible to tsc. `: T | null = null` stays
+      // narrowed to null after mapWithConcurrency, so the read below is `never`.
+      let budgetHit = null as LlmBudgetExceededError | null
       await mapWithConcurrency(reports, 5, async (report) => {
+        if (budgetHit) {
+          llmBudgetSkipped++
+          return
+        }
         const span = trace.span('judge.evaluate')
         const start = Date.now()
 
@@ -297,6 +336,8 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
               usage = result.usage
               void recordLlmUsage(db, anthropicUsage, { result })
             } catch (err) {
+              // Same monthly cap as the fallback, so do not start another paid call.
+              if (err instanceof LlmBudgetExceededError) throw err
               void recordLlmUsage(db, anthropicUsage, { error: err })
               // Preserve diagnostic fidelity on the first failure — the
               // Anthropic SDK puts the HTTP status on `status` (AI SDK used
@@ -444,6 +485,12 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
           totalEvaluated++
           span.end({ model: usedJudgeModel, fallback: judgeFallbackUsed, latencyMs: Date.now() - start, score: compositeScore, inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens })
         } catch (err) {
+          if (err instanceof LlmBudgetExceededError) {
+            budgetHit = err
+            llmBudgetSkipped++
+            span.end({ skipped: 'llm_budget_exceeded' })
+            return
+          }
           // AI SDK wraps provider errors in AI_APICallError — pull the raw
           // response body / status when available so the operator can see
           // "model not found" vs "rate limit" vs "invalid key" at a glance.
@@ -488,6 +535,14 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
           span.end({ error: errMsg })
         }
       })
+
+      if (budgetHit) {
+        rootLog.child('judge').warn('Judge skipped: monthly LLM budget reached', {
+          projectId: project.id,
+          spendUsd: budgetHit.spendUsd,
+          budgetUsd: budgetHit.budgetUsd,
+        })
+      }
 
       // Drift detection
       const { data: drift } = await db!.rpc('weekly_judge_scores', {
@@ -557,12 +612,13 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
         // same error.
         evalErrors: evalErrors.slice(0, 3),
         evalErrorCount: evalErrors.length,
+        ...(llmBudgetSkipped > 0 ? { llmBudgetSkipped } : {}),
       },
     })
 
     return new Response(JSON.stringify({
       ok: true,
-      data: { totalEvaluated, driftAlerts, ...(empty ? empty : {}) },
+      data: { totalEvaluated, driftAlerts, ...(empty ? empty : {}), ...(llmBudgetSkipped > 0 ? { llmBudgetSkipped } : {}) },
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })
   } catch (err) {
     rootLog.child('judge-batch').fatal('Unhandled error', { err: String(err) })
