@@ -481,7 +481,7 @@ export function OnboardingPage() {
         </h3>
         <ContainedBlock tone="muted" className="mt-2">
           <p className="text-xs text-fg-muted">
-            A project groups all bug reports from one application. Name it after your app.
+            A project is one app: its bug reports, its key and its fixes (the sidebar lists them under Apps). Name it after your app.
           </p>
         </ContainedBlock>
       </div>
@@ -618,7 +618,7 @@ export function OnboardingPage() {
             children: (
               <SetupProgressRail
                 project={project}
-                apiKey={apiKey?.key ?? null}
+                apiKey={createdProject?.apiKey ?? apiKey?.key ?? null}
                 onTab={setActiveTab}
                 onMintKey={() => void generateKey()}
                 minting={generatingKey}
@@ -1012,7 +1012,7 @@ export function OnboardingPage() {
               )}
             </Card>
           )}
-          <SdkInstallCard projectId={project.project_id} projectSlug={project.project_slug} apiKey={apiKey?.key} showConnectionStatus />
+          <SdkInstallCard projectId={project.project_id} projectSlug={project.project_slug} apiKey={createdProject?.apiKey ?? apiKey?.key} showConnectionStatus />
           <div className="flex gap-2">
             <Btn variant="ghost" onClick={() => navigate('/dashboard')}>Go to Dashboard</Btn>
           </div>

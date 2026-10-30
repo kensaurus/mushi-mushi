@@ -292,9 +292,19 @@ export function autofixKeyGap(input: DispatchInput): SetupGap {
  * means that message is not going out (report 9f64a77b).
  * `lastDeployAt` undefined: the read failed.
  */
-export function deployGap(projectId: string, lastDeployAt: string | null | undefined, now: Date): SetupGap {
+export function deployGap(
+  projectId: string,
+  lastDeployAt: string | null | undefined,
+  now: Date,
+  /** False: no fix merged yet, so there is no "your fix is live" to send. Unknown counts as true. */
+  hasMergedFix = true,
+): SetupGap {
   const base = { id: 'deploy_events', projectId, audience: 'app_owner' as const, title: 'Deploy events', fixHref: FIX_HREFS.deploys }
   if (lastDeployAt === undefined) return { ...base, status: 'unknown', summary: 'Mushi could not read the deploy events.' }
+  if (lastDeployAt === null && !hasMergedFix) {
+    // A new app: nothing has shipped, so nothing is missing yet.
+    return { ...base, status: 'ok', summary: 'No fix has shipped yet. Once one does, send deploy events so reporters hear their fix is live.' }
+  }
   if (lastDeployAt === null) {
     return { ...base, status: 'gap', summary: 'Mushi has never seen a deploy of this app, so reporters are not told when their fix goes live.' }
   }

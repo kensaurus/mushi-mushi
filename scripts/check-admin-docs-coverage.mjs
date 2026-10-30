@@ -22,6 +22,7 @@ const SKIP_ROUTES = new Set([
   'login',
   'signup',
   'reset-password',
+  'auth/confirm', // email confirmation link landing, not a console page
   'invite',
   'email', // public reporter email links (Plan 018), not a console page
   'tester',

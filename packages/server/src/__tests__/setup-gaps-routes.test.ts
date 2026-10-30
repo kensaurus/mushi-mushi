@@ -111,6 +111,8 @@ function seed(over: Record<string, Array<Record<string, unknown>>> = {}): FakeDb
     organizations: [{ id: ORG, review_followup_enabled: false, review_followup_off_reason: 'The Cursor key it used was deleted.' }],
     byok_keys: [],
     deploy_observations: [{ project_id: P1, observed_at: daysAgo(20) }],
+    // yen-yen has shipped a fix, so never seeing a deploy is its gap.
+    fix_attempts: [{ id: 'fa-1', project_id: P2, merged_at: daysAgo(3) }],
     project_settings: [{ project_id: P1, slack_bot_token_ref: 'vault-1' }],
     integration_health_history: [{ project_id: P1, kind: 'slack', status: 'down', message: 'Slack auth.test error: invalid_auth', checked_at: daysAgo(0.01) }],
     ...over,

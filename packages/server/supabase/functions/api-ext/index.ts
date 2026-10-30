@@ -62,6 +62,7 @@ import { registerHealthCheckRoutes } from '../api/routes/health-checks.ts'
 import { registerDoctorRoutes } from '../api/routes/doctor.ts'
 import { registerByokReviewFollowupRoutes } from '../api/routes/byok-review-followups.ts'
 import { registerByokSpendDownRoutes } from '../api/routes/byok-spend-down.ts'
+import { registerGithubConnectRoutes } from '../api/routes/github-connect.ts'
 import { registerReleaseBatchRoutes } from '../api/routes/release-batch.ts'
 import { registerWorkRoutes } from '../api/routes/work.ts'
 import { registerRepoHousekeepingRoutes } from '../api/routes/repo-housekeeping.ts'
@@ -108,6 +109,7 @@ registerHealthCheckRoutes(app)
 registerDoctorRoutes(app)
 registerByokReviewFollowupRoutes(app)
 registerByokSpendDownRoutes(app)
+registerGithubConnectRoutes(app)
 registerReleaseBatchRoutes(app)
 registerWorkRoutes(app)
 registerRepoHousekeepingRoutes(app)

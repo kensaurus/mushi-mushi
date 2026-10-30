@@ -8,6 +8,8 @@ import { logAudit } from '../../_shared/audit.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { dbError } from '../shared.ts';
 import { memberRemovalDenial, roleChangeDenial } from '../../_shared/org-member-policy.ts';
+import { sendTransactionalEmail } from '../../_shared/email.ts';
+import { existingUserInviteEmail } from '../../_shared/invite-email.ts';
 
 const ORG_ROLES = ['owner', 'admin', 'member', 'viewer'] as const;
 const INVITE_ROLES = ['admin', 'member', 'viewer'] as const;
@@ -62,7 +64,7 @@ async function ownerCount(db: ReturnType<typeof getServiceClient>, orgId: string
 
 const INVITE_EMAIL_FAILED = 'The invite email could not be sent. Copy the invite link and send it to them.';
 const INVITE_EMAIL_EXISTING_USER =
-  'This person already has a Mushi account, so no invite email was sent. Copy the invite link and send it to them.';
+  'This person already has a Mushi Mushi account and the invite email could not be sent. Copy the invite link and send it to them.';
 
 /**
  * Send (or re-send) the Supabase invite email and report what happened.
@@ -81,7 +83,21 @@ async function sendInviteEmail(
     if (!error) return { emailSent: true, emailError: null };
     const raw = (error.message ?? '').toLowerCase();
     const existing = raw.includes('already') && (raw.includes('registered') || raw.includes('exists'));
-    return { emailSent: false, emailError: existing ? INVITE_EMAIL_EXISTING_USER : INVITE_EMAIL_FAILED };
+    if (!existing) return { emailSent: false, emailError: INVITE_EMAIL_FAILED };
+    // An existing account: Supabase will not invite it, so send the same
+    // invite through our own mailer (it used to get no email at all).
+    const d = options.data as { org_name?: string; inviter_name?: string; inviter_email?: string | null; role?: string; note?: string | null; accept_url?: string };
+    const mail = existingUserInviteEmail({
+      to: email,
+      orgName: d.org_name ?? 'your team',
+      inviterName: d.inviter_name ?? '',
+      inviterEmail: d.inviter_email ?? null,
+      role: d.role ?? 'member',
+      note: d.note ?? null,
+      acceptUrl: d.accept_url ?? options.redirectTo,
+    });
+    const sent = await sendTransactionalEmail({ to: email, subject: mail.subject, html: mail.html, text: mail.text, tags: { kind: 'team_invite' } });
+    return sent.ok ? { emailSent: true, emailError: null } : { emailSent: false, emailError: INVITE_EMAIL_EXISTING_USER };
   } catch {
     return { emailSent: false, emailError: INVITE_EMAIL_FAILED };
   }

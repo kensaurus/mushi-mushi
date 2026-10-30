@@ -207,7 +207,10 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
   const weekStart = reportWindowStartIso(7, now)
   const priorStart = reportWindowStartIso(14, now)
   const sdkHref = `/connect?project=${encodeURIComponent(id)}#connect-sdk-health`
-  const reportCount = () => db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', id)
+  // The sample from "Send a test report" (and the demo seed) is not one of the
+  // app's bugs: it never counts as waiting, new today or a page of the app.
+  const NOT_SAMPLE = 'custom_metadata->>source.is.null,custom_metadata->>source.not.in.(admin_test_report,mushi-marketing-seed)'
+  const reportCount = () => db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', id).or(NOT_SAMPLE)
   const mergedCount = () => db.from('fix_attempts').select('id', { count: 'exact', head: true }).eq('project_id', id)
 
   // Reads several sections share.
@@ -385,7 +388,7 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
     (async () => {
       const [views, bugs, sdkOrigins, keyRows, watchRow, sites] = await Promise.all([
         rows<{ route: string }>('session_page_views', db.from('session_page_views').select('route').eq('project_id', id).gte('ts', weekStart).order('ts', { ascending: false }).limit(PAGE_VIEW_SAMPLE)),
-        rows<{ url: string | null }>('report urls', db.from('reports').select('url:environment->>url').eq('project_id', id).gte('created_at', priorStart).limit(2000)),
+        rows<{ url: string | null }>('report urls', db.from('reports').select('url:environment->>url').eq('project_id', id).or(NOT_SAMPLE).gte('created_at', priorStart).limit(2000)),
         // Where the SDK ran (preview deploys too). Optional: an older self-host without the table keeps every URL.
         rows<{ origin_sample: string | null }>('key origins', db.from('project_api_key_origins').select('origin_sample').eq('project_id', id).order('last_seen_at', { ascending: false }).limit(100)).catch(() => []),
         keysP,

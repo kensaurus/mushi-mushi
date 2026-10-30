@@ -56,6 +56,7 @@ import { readIntegrationOAuthReturn } from '../lib/integrationOAuthReturn'
 import { describeApiFailure } from '../lib/humanizeApiError'
 import { useScrollToHash } from '../lib/useScrollToHash'
 import { PageLoadError } from '../components/PageLoadError'
+import { GitHubConnectCard } from '../components/GitHubConnectCard'
 
 export function IntegrationsPage() {
   const toast = useToast()
@@ -507,9 +508,25 @@ export function IntegrationsPage() {
             GitHub is the one Mushi needs: fixes arrive as pull requests on your repo.
           </p>
           <div className="space-y-2" id="integrations-required">
+            {/* Links to #platform-card-github land on Connect GitHub first. */}
+            <div id="platform-card-github" className="scroll-mt-chrome space-y-2">
+            {activeProjectId && (
+              <GitHubConnectCard projectId={activeProjectId} returnTo="integrations" />
+            )}
             {PLATFORM_DEFS.filter((d) => d.group === 'required' && d.kind === 'github')
               .map((def) => (
-              <div key={def.kind} id={`platform-card-${def.kind}`}>
+              // The token form is the advanced path (self-hosted, or no App
+              // install allowed). Open when a token is already set, so its
+              // health stays visible.
+              <details
+                key={def.kind}
+                id={`platform-card-${def.kind}-token`}
+                open={Boolean(sourceByField?.github_installation_token_ref) || editing === def.kind || !activeProjectId}
+                className="group"
+              >
+                <summary className="cursor-pointer select-none text-2xs text-fg-muted hover:text-fg py-1">
+                  Use a GitHub token instead (self-hosted, or when the GitHub App is not an option)
+                </summary>
                 <PlatformIntegrationCard
                   def={def}
                   config={platform?.[def.kind] ?? {}}
@@ -535,8 +552,9 @@ export function IntegrationsPage() {
                   removingKey={removingKeyKind === def.kind}
                   canManage={canManage}
                 />
-              </div>
+              </details>
             ))}
+            </div>
           </div>
         </div>
       </Panel>

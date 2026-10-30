@@ -195,8 +195,9 @@ export function resolveNavBadge(
   const { slices } = navCounts
 
   switch (path) {
+    // Set up carries the remaining-steps count; Connect repeating it showed
+    // a new account the same warning twice.
     case '/onboarding':
-    case '/connect':
       return sliceBadgeSpec(onboardingNavBadge(slices.onboarding))
     case '/dashboard':
       return sliceBadgeSpec(dashboardNavBadge(slices.dashboard))
