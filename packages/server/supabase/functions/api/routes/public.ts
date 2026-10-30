@@ -10,7 +10,7 @@ import { parseGithubRepoUrl, resolveProjectGithubToken } from '../../_shared/git
 import { applyHeadCheckRollup, type HeadCheckDb } from '../../_shared/check-run-head.ts';
 import { pickHighestVersion } from '../../_shared/sdk-version-compare.ts';
 import { unverifiedGithubInstallsAllowed } from '../../_shared/github-install-trust.ts';
-import { authorizeUrl, openConnectState, readGithubAppConfig } from '../../_shared/github-connect.ts';
+import { authorizeUrl, openConnectState, readGithubAppConfig, signConnectState } from '../../_shared/github-connect.ts';
 import { reportError } from '../../_shared/sentry.ts';
 import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import {
@@ -1532,7 +1532,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       return c.redirect(`${adminBase}/integrations/config?github_error=missing_installation_id`, 302)
     }
 
-    // State is the projectId (passed when building the install URL in GitHubAppInstallButton)
+    // A bare project id as state: old install links and hand-made URLs (the console no longer builds them)
     const projectId = stateRaw.trim()
     if (!projectId || projectId.length < 10) {
       // No project context — log the installation and redirect to the dashboard root
@@ -1546,11 +1546,15 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
 
     // A state minted by "Connect GitHub" (api/routes/github-connect.ts) goes
     // on to GitHub's authorize page, which proves who installed: the
-    // installation id here is never trusted on its own.
+    // installation id here is never trusted on its own. `x` marks it as back
+    // from install, so an empty installation list ends there, not in a loop.
     const connectCfg = readGithubAppConfig((name) => Deno.env.get(name))
     if (connectCfg.ok) {
       const opened = await openConnectState(connectCfg.config.secret, stateRaw, Math.floor(Date.now() / 1000))
-      if (opened.ok) return c.redirect(authorizeUrl(connectCfg.config, stateRaw), 302)
+      if (opened.ok) {
+        const back = await signConnectState(connectCfg.config.secret, { ...opened.state, x: 1 })
+        return c.redirect(authorizeUrl(connectCfg.config, back), 302)
+      }
       if (opened.reason === 'expired') {
         return c.redirect(`${adminBase}/onboarding?github_error=state_expired`, 302)
       }

@@ -28,6 +28,9 @@ import {
   type SdkHealthProblem,
 } from '../lib/sdkHealth'
 
+/** Problems that only mean setup is not finished yet. */
+const SETUP_STEPS = new Set<SdkHealthProblem['id']>(['not_installed', 'no_repo', 'no_sdk_key', 'ci_secrets_missing', 'never_seen'])
+
 const SEVERITY_DOT: Record<SdkHealthProblem['severity'], string> = {
   error: 'bg-danger',
   warn: 'bg-warn',
@@ -78,6 +81,8 @@ export function SdkHealthPanel({ projectId, bare }: SdkHealthPanelProps) {
 
   const problems = health.data?.problems ?? []
   const notes = health.data?.notes ?? []
+  // Never checked in and only setup steps listed: steps left, not something broken.
+  const settingUp = Boolean(health.data) && !health.data?.lastSeenAt && problems.every((p) => SETUP_STEPS.has(p.id))
   const plan = fixAllPlan(problems)
   const pending = plan.filter((k) => !fixStarted(fixes, k))
   const busy = fixes.runningAll || fixes.running !== null
@@ -103,7 +108,9 @@ export function SdkHealthPanel({ projectId, bare }: SdkHealthPanelProps) {
                   ? // Never "all good" while a check could not run.
                     `No problems in the checks that ran, but ${notes.length} ${notes.length === 1 ? 'check' : 'checks'} could not run (below).`
                   : 'No SDK problems found.'
-              : `${problems.length} ${problems.length === 1 ? 'problem' : 'problems'} found.`}
+              : settingUp
+                ? `${problems.length} ${problems.length === 1 ? 'step' : 'steps'} left before this app sends bug reports.`
+                : `${problems.length} ${problems.length === 1 ? 'problem' : 'problems'} found.`}
         </p>
         <div className="flex items-center gap-2">
           <Btn size="sm" variant="ghost" className="gap-1.5" onClick={() => health.reload()} loading={health.isValidating && !health.loading}>
@@ -127,7 +134,7 @@ export function SdkHealthPanel({ projectId, bare }: SdkHealthPanelProps) {
       {problems.length > 0 && (
         <ul className="divide-y divide-edge-subtle/60 rounded-md border border-edge-subtle">
           {problems.map((p) => (
-            <ProblemRow key={p.id} problem={p} fixes={fixes} busy={busy} onFix={(k) => start([k])} />
+            <ProblemRow key={p.id} problem={p} fixes={fixes} busy={busy} settingUp={settingUp} onFix={(k) => start([k])} />
           ))}
         </ul>
       )}
@@ -194,17 +201,19 @@ function ProblemRow({
   problem,
   fixes,
   busy,
+  settingUp,
   onFix,
 }: {
   problem: SdkHealthProblem
   fixes: SdkHealthFixes
   busy: boolean
+  settingUp: boolean
   onFix: (k: SdkHealthFixKind) => void
 }) {
   const kind = problem.fix?.kind ?? null
   return (
     <li className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-start" data-testid={`sdk-health-problem-${problem.id}`}>
-      <span aria-hidden className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${SEVERITY_DOT[problem.severity]}`} />
+      <span aria-hidden className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${settingUp ? SEVERITY_DOT.info : SEVERITY_DOT[problem.severity]}`} />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-fg">{problem.title}</p>
         <p className="mt-0.5 text-xs text-fg-muted">{problem.detail}</p>

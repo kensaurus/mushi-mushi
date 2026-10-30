@@ -156,6 +156,24 @@ describe('signed state and grant', () => {
   })
 })
 
+describe('suggestRepo', () => {
+  const repos = [{ fullName: 'kensaurus/kensaur.us' }, { fullName: 'kensaurus/mushi-mushi' }, { fullName: 'acme/web' }]
+  it('matches the app name ignoring case and punctuation', () => {
+    expect(connect.suggestRepo(repos, 'kensaur.us')).toBe('kensaurus/kensaur.us')
+    expect(connect.suggestRepo(repos, 'Mushi Mushi')).toBe('kensaurus/mushi-mushi')
+  })
+  it('prefers an exact name over a partial one, and takes a partial one alone', () => {
+    expect(connect.suggestRepo([{ fullName: 'a/mushi-mushi-docs' }, { fullName: 'a/mushi-mushi' }], 'mushi-mushi')).toBe('a/mushi-mushi')
+    expect(connect.suggestRepo([{ fullName: 'a/glot-it-web' }, { fullName: 'a/other' }], 'glot.it')).toBe('a/glot-it-web')
+  })
+  it('suggests nothing when unclear: a tie, no match, or a tiny name', () => {
+    expect(connect.suggestRepo([{ fullName: 'a/shop-web' }, { fullName: 'a/shop-api' }], 'shop')).toBeNull()
+    expect(connect.suggestRepo(repos, 'Something else')).toBeNull()
+    expect(connect.suggestRepo(repos, 'ab')).toBeNull()
+    expect(connect.suggestRepo(repos, null)).toBeNull()
+  })
+})
+
 describe('POST /github/connect', () => {
   it('gives an owner install and authorize links carrying a signed state', async () => {
     const res = await app().request(`/v1/admin/projects/${P}/github/connect`, { method: 'POST', body: JSON.stringify({ returnTo: 'integrations' }) })
@@ -191,11 +209,17 @@ describe('GET /v1/webhooks/github/app-authorize', () => {
     expect(await connect.openConnectGrant(SECRET, grant, NOW)).toMatchObject({ ok: true, grant: { p: P, u: USER, i: [7], g: 'kensaurus' } })
   })
 
-  it('ignores other apps’ installations and says when there is none', async () => {
+  it('sends a person with no installation on to install, once', async () => {
     gh.installations = [{ id: 8, app_slug: 'someone-else', app_id: 1, account: { login: 'x', type: 'User' } }]
-    const loc = await callback({ code: 'abc', state: await goodState() })
-    expect(loc.searchParams.get('github_error')).toBe('no_installation')
-    expect(loc.hash).toBe('')
+    const first = await goodState()
+    const loc = await callback({ code: 'abc', state: first })
+    expect(loc.origin + loc.pathname).toBe('https://github.com/apps/mushi-mushi-app/installations/new')
+    expect(loc.searchParams.get('state')).toBe(first)
+    // Back from install (the setup URL marks the state): no second round trip.
+    const back = await connect.signConnectState(SECRET, { p: P, u: USER, r: 'onboarding', exp: NOW + 600, x: 1 })
+    const again = await callback({ code: 'abc', state: back })
+    expect(again.searchParams.get('github_error')).toBe('no_installation')
+    expect(again.hash).toBe('')
   })
 
   it('names a suspended installation', async () => {
@@ -223,6 +247,14 @@ describe('GET /v1/webhooks/github/app-authorize', () => {
 describe('repository picker', () => {
   const grantFor = (over: Partial<{ p: string; u: string; i: number[]; exp: number }> = {}) =>
     connect.signConnectGrant(SECRET, { p: P, u: USER, i: [7], g: 'kensaurus', exp: NOW + 600, ...over })
+
+  it('puts the repository named like the app first', async () => {
+    state.db = makeFakeDb({ project_repos: [], project_settings: [{ project_id: P }], projects: [{ id: P, name: 'old' }] })
+    const res = await app().request(`/v1/admin/projects/${P}/github/repos`, { method: 'POST', body: JSON.stringify({ grant: await grantFor() }) })
+    const { data } = (await res.json()) as { data: { repos: Array<{ fullName: string }>; suggestedFullName: string | null } }
+    expect(data.suggestedFullName).toBe('kensaurus/old')
+    expect(data.repos.map((r) => r.fullName)).toEqual(['kensaurus/old', 'kensaurus/kensaur.us'])
+  })
 
   it('lists the repositories the grant reaches, newest push first', async () => {
     const res = await app().request(`/v1/admin/projects/${P}/github/repos`, { method: 'POST', body: JSON.stringify({ grant: await grantFor({ i: [7, 999] }) }) })
