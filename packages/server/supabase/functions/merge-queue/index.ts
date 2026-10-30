@@ -209,7 +209,7 @@ export async function handler(req: Request): Promise<Response> {
   const body = (await req.json().catch(() => ({}))) as { projectId?: unknown; autoDecide?: unknown; limit?: unknown }
   const db = getServiceClient()
   const projectId = typeof body.projectId === 'string' ? body.projectId : undefined
-  const decideDeps = { token: liveDeps.token, pull: liveDeps.pull, checks: liveDeps.checks, closePr: trainDeps.closePr, requeueReview: liveDeps.requeueReview }
+  const decideDeps = { token: liveDeps.token, pull: liveDeps.pull, checks: liveDeps.checks, closePr: trainDeps.closePr, baseSha: trainDeps.branchSha, requeueReview: liveDeps.requeueReview }
   if (body.autoDecide === 'dry_run') {
     if (!projectId) return new Response(JSON.stringify({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'A dry run needs projectId.' } }), { status: 400 })
     const limit = Math.min(200, Math.max(1, Number(body.limit) || 50))

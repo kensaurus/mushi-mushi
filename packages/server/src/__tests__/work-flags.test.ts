@@ -219,12 +219,21 @@ describe('deriveWorkerFlags: the 2026-10-28 incident', () => {
 
 describe('deriveWorkerFlags: each other failure', () => {
   it('an offline machine with lanes, and nothing about its stale telemetry', () => {
-    const flags = deriveWorkerFlags(input({ hosts: [host({ state: 'slot-wait', checks: { gh: { result: 'signed_out', ageSec: 1, detail: '' } } }, { lastHeartbeatAt: ago(2 * HOUR) })], lanes: [lane(1, { state: 'slot-wait', stateSec: HOUR }, { queued: 2 })] }))
+    const flags = deriveWorkerFlags(input({ hosts: [host({ state: 'slot-wait', checks: { gh: { result: 'signed_out', ageSec: 1, detail: '' } } }, { lastHeartbeatAt: ago(2 * HOUR), platform: 'linux' })], lanes: [lane(1, { state: 'slot-wait', stateSec: HOUR }, { queued: 2 })] }))
     expect(flags.map((f) => f.kind)).toEqual(['host_offline'])
     expect(flags[0]!.title).toBe('alienware is offline')
     expect(flags[0]!.cause).toContain('No heartbeat for 2 h')
     expect(flags[0]!.cause).toContain('2 queued reports wait')
-    expect(flags[0]!.actions[0]).toMatchObject({ kind: 'copy_command', command: expect.stringContaining('systemctl --user status mushi-worker.service') })
+    // Restart first, then the log; both work for a user unit and a machine-wide one (2026-10-30).
+    expect(flags[0]!.actions.map((a) => a.label)).toEqual(['Restart the worker', 'See why it stopped'])
+    expect(flags[0]!.actions[0]).toMatchObject({ kind: 'copy_command', command: expect.stringMatching(/systemctl --user restart mushi-worker\.service .*\|\| sudo systemctl restart mushi-worker\.service/) })
+    expect(flags[0]!.actions[1]).toMatchObject({ command: expect.stringContaining('sudo journalctl -u mushi-worker.service') })
+  })
+
+  it('an offline WSL worker gets commands to paste in Windows', () => {
+    const flags = deriveWorkerFlags(input({ hosts: [host({}, { lastHeartbeatAt: ago(2 * HOUR), platform: 'wsl2' })], lanes: [lane(1, {}, {})] }))
+    expect(flags[0]!.actions[0]).toMatchObject({ command: 'wsl -u root -- systemctl restart mushi-worker.service' })
+    expect(flags[0]!.actions[1]).toMatchObject({ command: expect.stringContaining('wsl -u root -- journalctl') })
   })
 
   it('gh signed out, another Cursor account, a lane that could not start, a memory wait', () => {

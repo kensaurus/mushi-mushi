@@ -538,9 +538,15 @@ export function runProc(cmd: string, args: readonly string[], opts: { cwd?: stri
  */
 /** Used by the local worker (worker/conflicts.ts, worker/audit.ts). */
 export async function clearWorktree(repoDir: string, wt: string): Promise<void> {
-  if (!existsSync(wt)) return
-  await runProc('git', ['worktree', 'remove', '--force', wt], { cwd: repoDir })
-  if (existsSync(wt)) rmSync(wt, { recursive: true, force: true })
+  if (existsSync(wt)) {
+    await runProc('git', ['worktree', 'remove', '--force', wt], { cwd: repoDir })
+    if (existsSync(wt)) rmSync(wt, { recursive: true, force: true })
+  }
+  // A run killed inside `worktree add` leaves git's record locked as
+  // "initializing" with no folder; prune skips locked records, so every later
+  // run failed with "already used by worktree" in a loop (yen-yen, 2026-10-30).
+  // The path is Mushi's own cache, so unlocking it is safe.
+  await runProc('git', ['worktree', 'unlock', wt], { cwd: repoDir })
   await runProc('git', ['worktree', 'prune'], { cwd: repoDir })
 }
 
