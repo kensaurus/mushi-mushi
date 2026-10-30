@@ -56,7 +56,7 @@ const P2 = '1000000b-0000-4000-8000-000000000000'
 const FIX = '3000000a-0000-4000-8000-000000000000'
 const HOST = 'a'.repeat(64)
 
-type Res = { status: number; body: { ok: boolean; data?: any; error?: { code: string; message: string } } }
+type Res = { status: number; body: { ok: boolean; data?: any; error?: { code: string; message: string } }; headers?: Record<string, string> }
 type Handler = (c: unknown) => Promise<unknown> | unknown
 
 class FakeApp {
@@ -82,7 +82,7 @@ class FakeApp {
       get: (k: string) => vars[k],
       set: (k: string, v: unknown) => { vars[k] = v },
       header: (k: string, v: string) => { headers[k] = v },
-      json: (b: unknown, status = 200) => ({ body: b, status }),
+      json: (b: unknown, status = 200) => ({ body: b, status, headers }),
     }
     return (await route.handler(c)) as Res
   }
@@ -92,7 +92,7 @@ interface Setup {
   db: FakeDb
   app: FakeApp
   calls: string[]
-  rate: { allowed: boolean }
+  rate: { allowed: boolean; unavailable?: boolean; retryAfterSec?: number }
   role: { value: string | null }
   github: Record<string, { status: number; body: unknown }>
   audits: unknown[][]
@@ -145,7 +145,7 @@ function setup(seed: Record<string, Array<Record<string, unknown>>> = {}, dbOpts
     adminOrApiKeyRead: (async (_c: unknown, next: () => Promise<void>) => next()) as never,
     adminOrApiKeyWrite: (async (_c: unknown, next: () => Promise<void>) => next()) as never,
     jwtAuth: (async (_c: unknown, next: () => Promise<void>) => next()) as never,
-    claimRateLimit: async () => ({ allowed: rate.allowed, retryAfterSec: 60 }),
+    claimRateLimit: async () => ({ allowed: rate.allowed, retryAfterSec: rate.retryAfterSec ?? 60, unavailable: rate.unavailable }),
     callerProjectIds: async (c: any) => (c.get('authMethod') === 'apiKey' ? [P1] : [P1, P2]),
     callerCanAccessProject: async () => ({ allowed: role.value != null, role: role.value }) as never,
     collector: { resolveToken: async () => 'ghp_test', now: () => clock },
@@ -207,7 +207,22 @@ describe('POST /v1/ingest/runner', () => {
     const s = setup()
     expect((await ingest(s, heartbeat(), null)).body.error?.code).toBe('PROJECT_KEY_REQUIRED')
     s.rate.allowed = false
-    expect((await ingest(s, heartbeat())).status).toBe(429)
+    const limited = await ingest(s, heartbeat())
+    expect(limited.status).toBe(429)
+    expect(limited.body.error?.code).toBe('RATE_LIMITED')
+    expect(s.db.table('ci_runner_hosts')).toHaveLength(0)
+  })
+
+  it('answers 503 when the runner ingest claim itself fails', async () => {
+    const s = setup()
+    s.rate.allowed = false
+    s.rate.unavailable = true
+    s.rate.retryAfterSec = 5
+    const res = await ingest(s, heartbeat())
+    expect(res.status).toBe(503)
+    expect(res.body.error?.code).toBe('RATE_LIMIT_UNAVAILABLE')
+    expect(res.headers?.['Retry-After']).toBe('5')
+    expect(s.db.table('ci_runner_hosts')).toHaveLength(0)
   })
 
   it('stores a job sample once', async () => {
