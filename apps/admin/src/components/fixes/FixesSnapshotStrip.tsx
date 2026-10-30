@@ -15,6 +15,12 @@ interface Props {
   stats: FixesStats
   /** Fix PRs ready to merge (countDefinitions isReadyToMerge), from the loaded list. */
   ready?: number
+  /**
+   * In-flight count from the same rows as the filter. When set, the sentence
+   * uses it instead of the stats endpoint, which can read 0 while a queued
+   * merge is on the page.
+   */
+  inFlight?: number
   statsFetchedAt: string | null
   statsValidating?: boolean
 }
@@ -32,8 +38,8 @@ function fixesSentence(stats: FixesStats, inFlight: number, ready: number): stri
   return `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`
 }
 
-export function FixesSnapshotStrip({ stats, ready = 0, statsFetchedAt, statsValidating }: Props) {
-  const inFlight = stats.inProgress + stats.inflightDispatches
+export function FixesSnapshotStrip({ stats, ready = 0, inFlight: inFlightOverride, statsFetchedAt, statsValidating }: Props) {
+  const inFlight = inFlightOverride ?? stats.inProgress + stats.inflightDispatches
   return (
     <PageStatus
       ariaLabel="Fixes status"

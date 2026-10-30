@@ -165,11 +165,15 @@ export function fixFailureBucket(a: {
   pr_url?: string | null
   pr_state?: string | null
   failure_category?: string | null
+  check_run_conclusion?: string | null
   ci_infra?: unknown
 }): string {
   if (typeof a.failure_category === 'string' && a.failure_category) return a.failure_category
   if (a.pr_state === 'closed') return 'pr_closed_unmerged'
-  if (a.pr_url && a.status === 'completed') return readFixCiInfra(a.ci_infra)?.infra ? 'ci_infra' : 'ci_failed'
+  if (a.pr_url && readFixCiInfra(a.ci_infra)?.infra) return 'ci_infra'
+  // Completed with a PR is not itself a CI failure. Only a hard-fail
+  // conclusion is (report 8daa23e6: 4 stopped reports all read "CI failed").
+  if (a.pr_url && CI_HARD_FAIL.has((a.check_run_conclusion ?? '').toLowerCase())) return 'ci_failed'
   return 'unknown'
 }
 

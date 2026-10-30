@@ -43,13 +43,19 @@ function fix(over: Partial<FixAttempt>): FixAttempt {
   } as FixAttempt
 }
 
-const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), fixes: [] as unknown[], total: 0 }))
+const mocks = vi.hoisted(() => ({
+  apiFetch: vi.fn(),
+  fixes: [] as unknown[],
+  total: 0,
+  pipeline: null as unknown,
+  summary: null as unknown,
+}))
 
 vi.mock('../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../lib/usePageData', () => ({
   usePageData: (path: string | null) => ({
     // The stats read; the pipeline read (release stations) is not under test here.
-    data: path?.startsWith('/v1/admin/pipeline') ? null : { ...EMPTY_FIXES_STATS, hasAnyProject: true },
+    data: path?.startsWith('/v1/admin/pipeline') ? mocks.pipeline : { ...EMPTY_FIXES_STATS, hasAnyProject: true, inProgress: 0 },
     loading: false,
     error: null,
     reload: vi.fn(),
@@ -102,6 +108,8 @@ beforeEach(() => {
     disconnect() {}
   })
   window.matchMedia = ((q: string) => ({ matches: false, media: q, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {} })) as unknown as typeof window.matchMedia
+  mocks.pipeline = null
+  mocks.summary = null
   mocks.apiFetch.mockReset()
   mocks.apiFetch.mockImplementation(async (path: string) => {
     if (path.startsWith('/v1/admin/fixes?')) {
@@ -109,6 +117,7 @@ beforeEach(() => {
       return { ok: true, data: { fixes: offset === 0 ? mocks.fixes : [fix({ id: 'old1', report_id: 'r9', retryable: false })], total: mocks.total } }
     }
     if (path === '/v1/admin/fixes/dispatches') return { ok: true, data: { dispatches: [] } }
+    if (path === '/v1/admin/fixes/summary') return { ok: true, data: mocks.summary }
     if (path === '/v1/admin/fixes/dispatch') return { ok: true, data: { dispatchId: 'd1' } }
     return { ok: true, data: null }
   })
@@ -340,5 +349,120 @@ describe('FixesPage', () => {
       expect(calls).toHaveLength(1)
       expect(JSON.parse((calls[0][1] as RequestInit).body as string)).toMatchObject({ reportId: 'r1' })
     })
+  })
+
+  it('In flight matches the summary and includes a queued merge, not a stale run (report 8daa23e6)', async () => {
+    mocks.summary = {
+      total: 4,
+      completed: 0,
+      failed: 0,
+      inProgress: 0,
+      prsOpen: 1,
+      prsCiPassing: 0,
+      days: [],
+    }
+    mocks.pipeline = {
+      generatedAt: '2026-10-30T00:00:00Z',
+      projects: [],
+      stages: [{
+        id: 'train',
+        label: 'In train',
+        count: 1,
+        stuck: 0,
+        oldestAt: null,
+        groups: [{
+          id: 'next_train',
+          stage: 'train',
+          tone: 'moving',
+          label: '1 PR: approved, waiting for the next release train',
+          count: 1,
+          oldestAt: null,
+          actions: [],
+          settings: null,
+          items: [{
+            id: 'train',
+            projectId: 'p1',
+            reportId: 'waiting',
+            title: 'Waits for the train',
+            repo: 'kensaurus/cooler-heads',
+            prNumber: 137,
+            prUrl: 'https://github.com/kensaurus/cooler-heads/pull/137',
+            queueId: 'q1',
+            since: '2026-10-30T00:00:00Z',
+            lastError: null,
+            lastEventAt: null,
+            lastEventLabel: null,
+            failingChecks: [],
+            review: null,
+            queueDetail: 'Approved; waits for the next release train.',
+          }],
+        }],
+      }],
+      dispatchers: null,
+      trains: [],
+      intake: null,
+      ciReadable: true,
+    }
+    mocks.fixes = [
+      fix({
+        id: 'stale',
+        report_id: 'shipped',
+        status: 'running',
+        report_fix_state: 'resolved',
+        is_latest_attempt: false,
+        report_title: 'Already shipped',
+        retryable: false,
+      }),
+      fix({
+        id: 'train',
+        report_id: 'waiting',
+        status: 'completed',
+        pr_url: 'https://github.com/kensaurus/cooler-heads/pull/137',
+        pr_number: 137,
+        pr_state: 'open',
+        report_fix_state: 'pr_open',
+        is_latest_attempt: true,
+        report_title: 'Waits for the train',
+        retryable: false,
+      }),
+      fix({
+        id: 'sibling',
+        report_id: 'live',
+        status: 'completed',
+        report_fix_state: 'in_flight',
+        is_latest_attempt: true,
+        report_title: 'Completed while another runs',
+        retryable: false,
+      }),
+      fix({
+        id: 'running',
+        report_id: 'live',
+        status: 'running',
+        report_fix_state: 'in_flight',
+        is_latest_attempt: false,
+        report_title: 'Actually running',
+        retryable: false,
+      }),
+    ]
+    mocks.total = 4
+    await render('/fixes')
+
+    expect(document.body.textContent).toContain('Already shipped')
+    const chip = [...document.querySelectorAll('[role="radio"]')].find((el) => el.textContent?.includes('In flight'))
+    expect(chip?.textContent).toContain('2')
+    const tile = [...document.querySelectorAll('div')].find((el) => el.textContent === 'In flight')
+    const value = tile?.parentElement?.parentElement?.parentElement?.querySelector('.tabular-nums')
+    expect(value?.textContent).toBe('2')
+
+    click(chip)
+    expect(document.body.textContent).toContain('Waits for the train')
+    expect(document.body.textContent).toContain('Actually running')
+    expect(document.body.textContent).not.toContain('Already shipped')
+    expect(document.body.textContent).not.toContain('Completed while another runs')
+
+    const failed = [...document.querySelectorAll('[role="radio"]')].find((el) => el.textContent?.includes('Failed'))
+    expect(failed?.textContent).toContain('0')
+    const shipped = [...document.querySelectorAll('[role="radio"]')].find((el) => el.textContent?.includes('Shipped'))
+    expect(shipped?.textContent).toContain('0')
   })
 })

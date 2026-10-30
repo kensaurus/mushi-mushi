@@ -40,7 +40,7 @@ import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
 import { queueMerges } from '../lib/mergeQueue'
 import { MergeQueuePanel } from '../components/fixes/MergeQueuePanel'
-import { failureCause, fixCauseLabel, fixReportLabel, needsAttention, retryCandidates } from '../lib/fixReportTruth'
+import { countsAsInFlight, failureCause, fixCauseLabel, fixReportLabel, needsAttention, queuedMergeAttemptIds, retryCandidates } from '../lib/fixReportTruth'
 import {
   RETRY_AGENT_OPTIONS,
   commonRetryAgent,
@@ -110,10 +110,14 @@ function bucketFromUrl(status: string | null, tab: string | null): StatusBucket 
   return 'all'
 }
 
-/** The one exclusive bucket of an attempt; PR open is matched separately. */
-function bucketize(fix: FixAttempt): StatusBucket {
-  const status = fix.status?.toLowerCase()
-  if (status === 'queued' || status === 'running') return 'inflight'
+/**
+ * The one exclusive bucket of an attempt; PR open is matched separately.
+ * A stale queued/running attempt on a report that already moved on is not
+ * In flight, Failed, or Shipped: it stays in All. A completed attempt is
+ * not In flight just because a sibling is still running.
+ */
+function bucketize(fix: FixAttempt, queuedMergeIds: ReadonlySet<string>): StatusBucket {
+  if (countsAsInFlight(fix, queuedMergeIds)) return 'inflight'
   // "Failed / skipped" holds the latest attempt of each report that is
   // still unfixed after it failed, was skipped (2026-08-16 audit P1-4), or
   // its PR went red / closed unmerged (2026-10-02). Earlier attempts on a
@@ -124,13 +128,13 @@ function bucketize(fix: FixAttempt): StatusBucket {
   return 'all'
 }
 
-function inStatusBucket(fix: FixAttempt, bucket: StatusBucket): boolean {
+function inStatusBucket(fix: FixAttempt, bucket: StatusBucket, queuedMergeIds: ReadonlySet<string>): boolean {
   if (bucket === 'all') return true
   // Every attempt with an open PR, whatever CI says: the rule /repo counts by,
   // so "PR open" is the same number on both pages. A red-CI PR is also in Failed.
   if (bucket === 'pr_open') return matchesRepoFilter(fix, 'open')
   if (bucket === 'review_merge') return fix.review_verdict === 'merge' && matchesRepoFilter(fix, 'open')
-  return bucketize(fix) === bucket
+  return bucketize(fix, queuedMergeIds) === bucket
 }
 
 interface CodebaseStats {
@@ -378,13 +382,23 @@ export function FixesPage() {
     () => (reportFilter ? fixes.filter((f) => f.report_id === reportFilter) : fixes),
     [fixes, reportFilter],
   )
+  // PRs waiting for the next release train. The chip must count one even
+  // when that attempt is not in the loaded page.
+  const queuedMergeIds = useMemo(() => queuedMergeAttemptIds(pipelineData), [pipelineData])
   const bucketCounts = useMemo(() => {
     const counts: Record<StatusBucket, number> = { all: 0, inflight: 0, pr_open: 0, review_merge: 0, merged: 0, failed: 0 }
     for (const f of scopedFixes) {
-      for (const b of STATUS_BUCKETS) if (inStatusBucket(f, b.id)) counts[b.id] += 1
+      for (const b of STATUS_BUCKETS) if (inStatusBucket(f, b.id, queuedMergeIds)) counts[b.id] += 1
     }
     return counts
-  }, [scopedFixes])
+  }, [scopedFixes, queuedMergeIds])
+  const unseenQueuedMerges = useMemo(() => {
+    let n = 0
+    for (const id of queuedMergeIds) if (!scopedFixes.some((f) => f.id === id)) n += 1
+    return n
+  }, [queuedMergeIds, scopedFixes])
+  // Same number on the status line, the summary tile, and the filter chip.
+  const inFlightTotal = bucketCounts.inflight + unseenQueuedMerges
 
   // Open PRs and green CI per attempt, by the rule /repo uses, so the snapshot
   // tiles show the same numbers as Pull requests.
@@ -411,10 +425,10 @@ export function FixesPage() {
 
   // "Common causes" chips narrow the failed list to one cause (console QA 93).
   const visibleFixes = useMemo(() => {
-    const inBucket = statusBucket === 'all' ? scopedFixes : scopedFixes.filter((f) => inStatusBucket(f, statusBucket))
+    const inBucket = statusBucket === 'all' ? scopedFixes : scopedFixes.filter((f) => inStatusBucket(f, statusBucket, queuedMergeIds))
     if (!causeFilter || statusBucket !== 'failed') return inBucket
     return inBucket.filter((f) => failureCause(f) === causeFilter)
-  }, [scopedFixes, statusBucket, causeFilter])
+  }, [scopedFixes, statusBucket, causeFilter, queuedMergeIds])
 
   const reviewFailedCause = useCallback(
     (category: string) => {
@@ -457,7 +471,7 @@ export function FixesPage() {
       )
       return
     }
-    if (!inStatusBucket(target, statusBucket)) setStatusBucket('all')
+    if (!inStatusBucket(target, statusBucket, queuedMergeIds)) setStatusBucket('all')
     setExpanded(target.id)
     let tries = 0
     const scroll = () => {
@@ -466,7 +480,7 @@ export function FixesPage() {
       else if (++tries < 10) window.setTimeout(scroll, 50)
     }
     window.setTimeout(scroll, 0)
-  }, [deepLinkFixId, loading, error, fixes, statusBucket, toast])
+  }, [deepLinkFixId, loading, error, fixes, statusBucket, queuedMergeIds, toast])
 
   // (Page context publish moved below retryAllFailed so the action
   // closures bind to the live function reference without TDZ issues.)
@@ -754,7 +768,7 @@ export function FixesPage() {
     summary: loading
       ? 'Loading fix pipeline…'
       // Same number as the banner and the stopped-dispatch cards (B3).
-      : `${pluralizeWithCount(fixes.length, 'fix', 'fixes')} · ${bucketCounts.inflight} in flight · ${Math.max(bucketCounts.failed, fixesStats.failed)} failed`,
+      : `${pluralizeWithCount(fixes.length, 'fix', 'fixes')} · ${inFlightTotal} in flight · ${Math.max(bucketCounts.failed, fixesStats.failed)} failed`,
     filters: {
       bucket: statusBucket,
     },
@@ -765,8 +779,8 @@ export function FixesPage() {
       bucketCounts.failed > 0
         ? `Why did the ${pluralizeWithCount(bucketCounts.failed, 'failed fix', 'failed fixes')} fail?`
         : 'Is the auto-fix pipeline healthy right now?',
-      bucketCounts.inflight > 0
-        ? `What is taking the longest among the ${bucketCounts.inflight} in-flight fixes?`
+      inFlightTotal > 0
+        ? `What is taking the longest among the ${inFlightTotal} in-flight fixes?`
         : 'Which report should I dispatch next?',
       'Which fixes are waiting on a human review?',
     ],
@@ -893,6 +907,7 @@ export function FixesPage() {
               <FixesSnapshotStrip
                 stats={snapshotStats}
                 ready={readyCount}
+                inFlight={inFlightTotal}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
               />
@@ -933,7 +948,7 @@ export function FixesPage() {
 
       {/* Quick mode has no snapshot strip, so the KPI row stands in for it. */}
       {summary && ux.hideFixesSnapshot && (
-        <FixSummaryRow summary={{ ...summary, prsOpen: prCounts.open }} successRate={successRate} />
+        <FixSummaryRow summary={{ ...summary, inProgress: inFlightTotal, prsOpen: prCounts.open }} successRate={successRate} />
       )}
 
       {fixes.length > 0 && (
@@ -1006,7 +1021,11 @@ export function FixesPage() {
               scrollable
               ariaLabel="Filter fix attempts by status"
               value={statusBucket}
-              options={STATUS_BUCKETS.map((b) => ({ id: b.id, label: b.label, count: bucketCounts[b.id] }))}
+              options={STATUS_BUCKETS.map((b) => ({
+                id: b.id,
+                label: b.label,
+                count: b.id === 'inflight' ? inFlightTotal : bucketCounts[b.id],
+              }))}
               onChange={setStatusBucket}
             />
             <Link
