@@ -70,7 +70,26 @@ export const WATCH_STATUS: Record<PlacementWatchRow['status'], { label: string; 
 /** One line for a request: "LINUX_RUNNER → kensaurus-local" / "LINUX_RUNNER removed". */
 export function requestSummary(r: PlacementRequestRow): string {
   const p = r.payload
-  return `${p.revertOf ? 'Revert: ' : ''}${p.name} ${p.value === null ? 'removed' : `→ ${p.value}`}`
+  const prefix = p.timeBox ? 'Time box over: ' : p.revertOf ? 'Revert: ' : ''
+  const box = p.revertAfterHours ? ` (switches back after ${p.revertAfterHours} h)` : ''
+  return `${prefix}${p.name} ${p.value === null ? 'removed' : `→ ${p.value}`}${box}`
+}
+
+/** "Switch back after" choices for a move to GitHub-hosted runners; 0 = never. */
+export const REVERT_AFTER_CHOICES = [
+  { hours: 4, label: '4 hours (recommended)' },
+  { hours: 1, label: '1 hour' },
+  { hours: 8, label: '8 hours' },
+  { hours: 24, label: '1 day' },
+  { hours: 72, label: '3 days' },
+  { hours: 0, label: 'Do not switch back (billed until someone does)' },
+] as const
+
+/** CI_PROFILE now: unset means economy. */
+export function profileNow(current: { exists: boolean; value: string | null } | null | undefined): 'economy' | 'thorough' | 'unknown' {
+  if (!current) return 'unknown'
+  if (!current.exists) return 'economy'
+  return current.value === 'thorough' ? 'thorough' : current.value === 'economy' ? 'economy' : 'unknown'
 }
 
 /** Minutes until an approval expires; null when not approved. */

@@ -86,6 +86,13 @@ describe('GET /v1/admin/projects/stats', () => {
     expect(data.topPriority).toBe('healthy')
   })
 
+  it('does not count the public demo app (sample data) as missing an SDK', async () => {
+    db.table('mushi_runtime_config').push({ key: 'demo_project_id', value: B })
+    const data = await stats()
+    expect(data.sdkMissingProjects).toEqual([])
+    expect(data.topPriority).not.toBe('sdk_missing')
+  })
+
   it('a revoked SDK key does not count', async () => {
     db.table('project_api_keys').push({ project_id: B, is_active: false, scopes: ['report:write'], last_seen_at: now })
     expect((await stats()).topPriority).toBe('sdk_missing')

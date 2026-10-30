@@ -98,10 +98,15 @@ function hasSentry(s: PlatformSettingsRow): boolean {
   return !!(s.sentry_auth_token_ref && s.sentry_org_slug)
 }
 
-function hasLangfuse(s: PlatformSettingsRow): boolean {
+/**
+ * The env LANGFUSE_* keys trace Mushi's own pipeline, so they count only for
+ * the operator's own apps (as in _shared/integration-settings.ts). Otherwise
+ * every app got a Langfuse probe, and a "healthy" row, it never set up.
+ */
+function hasLangfuse(s: PlatformSettingsRow, operatorOwned: boolean): boolean {
   return !!(
     (s.langfuse_public_key_ref && s.langfuse_secret_key_ref) ||
-    (Deno.env.get('LANGFUSE_PUBLIC_KEY') && Deno.env.get('LANGFUSE_SECRET_KEY'))
+    (operatorOwned && Deno.env.get('LANGFUSE_PUBLIC_KEY') && Deno.env.get('LANGFUSE_SECRET_KEY'))
   )
 }
 
@@ -230,11 +235,12 @@ async function handler(req: Request): Promise<Response> {
 
     // ── 3. Build probe task list ────────────────────────────────────────
     const tasks: ProbeTask[] = []
+    const operatorOwnedProjects = new Set(projectRows.filter((p) => isOperatorUser(p.owner_id)).map((p) => p.id))
 
     for (const rawS of allSettings) {
       const s = mergeWithOrg(rawS)
       if (hasSentry(s)) tasks.push({ projectId: s.project_id, kind: 'sentry', settings: s, routingConfig: {} })
-      if (hasLangfuse(s)) tasks.push({ projectId: s.project_id, kind: 'langfuse', settings: s, routingConfig: {} })
+      if (hasLangfuse(s, operatorOwnedProjects.has(s.project_id))) tasks.push({ projectId: s.project_id, kind: 'langfuse', settings: s, routingConfig: {} })
       if (hasGithub(s)) tasks.push({ projectId: s.project_id, kind: 'github', settings: s, routingConfig: {} })
       if (hasClaudeCodeAgent(s)) {
         tasks.push({ projectId: s.project_id, kind: 'claude_code_agent', settings: s, routingConfig: {} })
