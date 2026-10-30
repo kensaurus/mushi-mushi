@@ -19,6 +19,7 @@ import { resolveRoutingSecrets } from './routing-secrets.ts'
 import { safeFetch } from './inventory-guards.ts'
 import { isCodebaseIndexFailing } from './sweep-error-classifier.ts'
 import { dereferenceMaybeVault } from './settings-secrets.ts'
+import { resolveLlmKey } from './byok.ts'
 
 // Deno global — declared only where consumed (edge functions).
 declare const Deno: { env: { get(name: string): string | undefined } }
@@ -134,6 +135,16 @@ export { dereferenceMaybeVault }
  * @param settings        - Row from project_settings (platform integrations).
  * @param routingConfig   - Row from project_integrations.config (routing providers).
  */
+/** The pooled key a fix would use for `provider`; null when none or unreadable. Never spends the budget. */
+async function pooledKey(db: SupabaseClient, projectId: string | undefined, provider: 'cursor' | 'anthropic'): Promise<string | null> {
+  if (!projectId) return null
+  try {
+    return (await resolveLlmKey(db, projectId, provider, { purpose: 'probe' }))?.key ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function probeIntegration(
   kind: IntegrationKind,
   db: SupabaseClient,
@@ -521,7 +532,11 @@ export async function probeIntegration(
 
   // ── cursor_cloud ──────────────────────────────────────────────────────────
   if (kind === 'cursor_cloud') {
+    // The key a fix would use (the key pool first, cursorKeyForNewWork), then
+    // the old per-app field. Probing only the old field said "invalid or
+    // revoked" while every fix ran on a working pooled key (2026-10-30).
     const apiKey =
+      (await pooledKey(db, projectId, 'cursor')) ||
       (await dereferenceMaybeVault(db, settings.cursor_api_key_ref ?? null)) ||
       Deno.env.get('CURSOR_API_KEY') ||
       ''
@@ -558,7 +573,9 @@ export async function probeIntegration(
 
   // ── claude_code_agent ─────────────────────────────────────────────────────
   if (kind === 'claude_code_agent') {
+    // claude_code fixes run on the Anthropic key pool (withAnthropicOrOpenAi); probe that key first.
     const apiKey =
+      (await pooledKey(db, projectId, 'anthropic')) ||
       (await dereferenceMaybeVault(db, settings.claude_api_key_ref ?? null)) ||
       Deno.env.get('ANTHROPIC_API_KEY') ||
       ''

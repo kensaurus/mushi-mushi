@@ -6,8 +6,11 @@
  * Zero sidebar counts are not a run. A slice that could not be read is
  * Status unavailable, never Failed. Not run yet means nothing has run.
  *
- * States: Not set up, Not run yet, Status unavailable, Pass, and a result
- * (N findings or Failed). Pass and a result include the last run time when
+ * States: Not set up, Not run yet, Status unavailable, Watching, Pass, and a
+ * result (N findings or Failed). Watching is a monitor with nothing open:
+ * content checks and lessons run on their own all the time, so "Not run yet"
+ * sent people looking for a Run button that does not exist (owner,
+ * 2026-10-30). It is still never a Pass. Pass and a result include the last run time when
  * one was stored. Content issues and lesson reinforcements are not check
  * runs, so those cards never say Pass or Last run.
  *
@@ -17,7 +20,7 @@
 
 import { relativeTime } from './setupGuideSteps'
 
-export type CheckCardState = 'not_set_up' | 'not_checked' | 'unavailable' | 'pass' | 'findings' | 'failed'
+export type CheckCardState = 'not_set_up' | 'not_checked' | 'unavailable' | 'watching' | 'pass' | 'findings' | 'failed'
 
 export interface CheckCardView {
   state: CheckCardState
@@ -242,6 +245,10 @@ function fromInventory(inv: CheckCardsInput['inventory'], now: number): CheckCar
   return withTime(NOT_CHECKED, inv.lastGateRunAt, now)
 }
 
+function watching(chip: string, detail: string): CheckCardView {
+  return { state: 'watching', chip, detail, setupTo: null, tone: 'neutral' }
+}
+
 function fromContent(content: CheckCardsInput['content']): CheckCardView {
   if (!content) return UNAVAILABLE
   // Open issues and a failed regen are real. This card has no check-run
@@ -249,7 +256,7 @@ function fromContent(content: CheckCardsInput['content']): CheckCardView {
   if ((content.failedRegenCount ?? 0) > 0) return FAILED
   const open = content.needsAttentionCount ?? content.openCount ?? 0
   if (open > 0) return findings(open, null, 0)
-  return NOT_CHECKED
+  return watching('No issues', 'Checks new content every 15 minutes')
 }
 
 function fromLessons(lessons: CheckCardsInput['lessons']): CheckCardView {
@@ -258,7 +265,7 @@ function fromLessons(lessons: CheckCardsInput['lessons']): CheckCardView {
   const n = (lessons.criticalLessons ?? 0) + (lessons.readyToPromote ?? 0)
   if (n > 0) return findings(n, null, 0)
   // Reinforcing a lesson is not a check run, so a quiet catalog is not a pass.
-  return NOT_CHECKED
+  return watching('Learning', 'Applied to every new diagnosis')
 }
 
 function fromPrompts(prompts: CheckCardsInput['prompts']): CheckCardView {

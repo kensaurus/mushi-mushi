@@ -214,7 +214,8 @@ describe('buildCheckCardViews', () => {
     const quietContent = buildCheckCardViews(input({
       content: { topPriority: 'healthy', needsAttentionCount: 0, openCount: 0, failedRegenCount: 0 },
     }), NOW)['/content']
-    expect(quietContent).toMatchObject({ state: 'not_checked', chip: 'Not run yet', detail: null })
+    // Watching, not "Not run yet": nothing to run by hand (owner, 2026-10-30), and never a Pass.
+    expect(quietContent).toMatchObject({ state: 'watching', chip: 'No issues', detail: 'Checks new content every 15 minutes' })
     expect(quietContent?.chip).not.toBe('Pass')
 
     const openContent = buildCheckCardViews(input({
@@ -226,7 +227,7 @@ describe('buildCheckCardViews', () => {
     const quietLessons = buildCheckCardViews(input({
       lessons: { topPriority: 'healthy', criticalLessons: 0, readyToPromote: 0 },
     }), NOW)['/lessons']
-    expect(quietLessons).toMatchObject({ state: 'not_checked', chip: 'Not run yet', detail: null })
+    expect(quietLessons).toMatchObject({ state: 'watching', chip: 'Learning', detail: 'Applied to every new diagnosis' })
     expect(quietLessons?.chip).not.toBe('Pass')
 
     const criticalLessons = buildCheckCardViews(input({

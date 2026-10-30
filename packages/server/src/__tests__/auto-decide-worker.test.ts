@@ -145,3 +145,29 @@ describe('runAutoDecide', () => {
     expect(findQueries(s.queries, 'reports', 'update')).toEqual([])
   })
 })
+
+describe('runAutoDecide with red CI', () => {
+  const onMaster = async (_t: string, _r: unknown, n: number) => ({ number: n, draft: false, state: 'open', merged: false, headSha: 'h1', htmlUrl: null, headRef: null, baseRef: 'master' })
+
+  it('never closes an approved PR whose only failures also fail on the base branch', async () => {
+    const s = scenario([{ id: 'f5', report: 'r5', n: 15, verdict: 'merge' }])
+    s.deps.pull = onMaster
+    s.deps.baseSha = async () => 'base'
+    s.deps.checks = async (_t, _r, sha) => (sha === 'base' ? { pending: 0, failed: ['deno check'], ran: ['deno check'] } : { pending: 0, failed: ['deno check'], ran: ['deno check', 'test'] })
+    s.deps.now = () => new Date('2026-11-02T12:00:00Z')
+    const out = await runAutoDecide(s.db, s.deps)
+    expect(out.tally).toEqual({ queue: 1 })
+    expect(s.closed).toEqual([])
+  })
+
+  it('closes an approved PR whose own CI stayed red past the repair window', async () => {
+    const s = scenario([{ id: 'f6', report: 'r6', n: 16, verdict: 'merge' }])
+    s.deps.pull = onMaster
+    s.deps.baseSha = async () => 'base'
+    s.deps.checks = async (_t, _r, sha) => (sha === 'base' ? { pending: 0, failed: [], ran: ['deno check'] } : { pending: 0, failed: ['deno check'], ran: ['deno check'] })
+    // The scenario's reviews are a day old, inside the 48 h repair window: wait first.
+    expect((await runAutoDecide(s.db, s.deps)).tally).toEqual({ wait: 1 })
+    s.deps.now = () => new Date('2026-11-02T12:00:00Z')
+    expect((await runAutoDecide(s.db, s.deps)).tally).toEqual({ close_redo: 1 })
+  })
+})
