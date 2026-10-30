@@ -14,6 +14,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 
 import { HEALTH_PROBE_ANTHROPIC_MODEL, HEALTH_PROBE_OPENAI_MODEL } from './models.ts'
 import { isOperatorProject } from './operator-gate.ts'
+import { platformGithubTokenFor } from './github.ts'
 import { resolveRoutingSecrets } from './routing-secrets.ts'
 import { safeFetch } from './inventory-guards.ts'
 import { isCodebaseIndexFailing } from './sweep-error-classifier.ts'
@@ -261,7 +262,7 @@ export async function probeIntegration(
     } else if (kind === 'github') {
       const token =
         (await dereferenceMaybeVault(db, settings.github_installation_token_ref ?? null)) ||
-        Deno.env.get('GITHUB_TOKEN') ||
+        (await platformGithubTokenFor(db, projectId)) ||
         ''
       const url = settings.github_repo_url ?? ''
       // Repo names can contain dots (e.g. glot.it). Strip optional trailing `.git`.

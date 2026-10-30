@@ -152,6 +152,7 @@ import {
 } from '../_shared/agent-adapters.ts';
 import { cursorModelForDispatch } from '../_shared/cursor-cloud.ts';
 import { confirmBaseRef } from '../_shared/github-branch.ts';
+import { platformGithubTokenFor } from '../_shared/github.ts';
 import { isCursorKeyLimitError, isSpendDownPinnedKeyUnavailable } from '../_shared/spend-down.ts';
 
 // ----------------------------------------------------------------------------
@@ -2830,8 +2831,8 @@ async function resolveGithubToken(
     }
   }
 
-  // Step 3: env fallback (self-host / founder dogfood).
-  return Deno.env.get('GITHUB_TOKEN') ?? null;
+  // Step 3: the platform token, for the operator's own apps only.
+  return platformGithubTokenFor(db, projectId);
 }
 
 /**

@@ -81,7 +81,7 @@ function deps(): Parameters<Routes['registerSetupGapsRoutes']>[1] {
       return gh.mint
     },
     resolvePat: async () => gh.pat,
-    platformToken: () => gh.platform,
+    platformToken: async () => gh.platform,
     githubGet: async (_token: string, path: string) => {
       calls.github.push(path)
       const key = Object.keys(gh.status).find((k) => path.endsWith(k))

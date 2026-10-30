@@ -69,7 +69,7 @@ function deps(): Parameters<Routes['registerHealthCheckRoutes']>[1] {
       throw new Error('no app')
     },
     resolvePat: async () => null,
-    platformToken: () => null,
+    platformToken: async () => null,
     githubGet: async () => ({ status: 200, scopes: null }),
     readDispatchers: (async () => [{ projectId: P1, autofixOn: true, server: { agentKeys: 0, offKeys: 1 } }]) as never,
   }

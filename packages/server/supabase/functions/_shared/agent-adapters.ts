@@ -31,7 +31,7 @@ import { log } from './logger.ts'
 import { resolveLlmKey, resolveLlmKeys } from './byok.ts'
 import { keyScopeFor, ownerUserColumnReady, projectKeyOwner, withOwnerUserColumn } from './byok-scope.ts'
 import { isCursorKeyLimitError } from './spend-down.ts'
-import { fetchPullRequestFiles, parseGithubRepoUrl, prNumberFromUrl, resolveProjectGithubToken } from './github.ts'
+import { fetchPullRequestFiles, parseGithubRepoUrl, platformGithubTokenFor, prNumberFromUrl, resolveProjectGithubToken } from './github.ts'
 import { canonicalPrUrl, classifyPrSubstance, parsePullRequestUrl, type PrChangedFile } from './pr-substance.ts'
 import { classifyNoPrSummary, noPrErrorText } from './cloud-agent-no-pr.ts'
 import { generateCursorCloudBranchName, validateFixBranchName } from './github-pr.ts'
@@ -409,7 +409,7 @@ export async function resolveGithubUserToken(db: SupabaseClient, projectId: stri
     const token = await resolveVaultRef(db, ref)
     if (token) return token
   }
-  return (typeof Deno !== 'undefined' ? Deno.env.get('GITHUB_TOKEN') : undefined) ?? null
+  return typeof Deno !== 'undefined' ? platformGithubTokenFor(db, projectId) : null
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
