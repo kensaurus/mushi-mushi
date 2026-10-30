@@ -11,11 +11,25 @@
  * down: /settings?tab=ci-cost landed about 2,750 px past CI cost (2026-10-28).
  * So for a few seconds the page follows the target each time it grows, and
  * stops as soon as the person scrolls, taps or presses a key.
+ *
+ * The console scrolls inside <main>, not the window, so <body> never grows
+ * when a card above loads: /ci#ci-placement stayed 5,867 px off (2026-10-30).
+ * It watches the target's scroll container's children as well.
  */
 import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 
-const FOLLOW_MS = 4000
+const FOLLOW_MS = 8000
+const MAX_OBSERVED = 60
+
+/** The nearest ancestor that scrolls (overflow-y auto or scroll), else null. */
+function scrollContainer(el: Element): Element | null {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const y = getComputedStyle(p).overflowY
+    if (y === 'auto' || y === 'scroll') return p
+  }
+  return null
+}
 
 export function useScrollToHash(ready: boolean): void {
   const location = useLocation()
@@ -46,6 +60,9 @@ export function useScrollToHash(ready: boolean): void {
     const events = ['wheel', 'touchstart', 'keydown', 'mousedown'] as const
     for (const name of events) window.addEventListener(name, stop, { passive: true })
     observer.observe(document.body)
+    // What actually grows: the scroll container's content.
+    const box = scrollContainer(el)
+    if (box) for (const child of Array.from(box.children).slice(0, MAX_OBSERVED)) observer.observe(child)
     const timer = window.setTimeout(stop, FOLLOW_MS)
     return () => {
       window.clearTimeout(timer)
