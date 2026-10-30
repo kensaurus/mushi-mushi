@@ -17,7 +17,12 @@
  * static export, so that markup is what a first-time visitor can click
  * before JS runs), the navbar links straight to the console's sign-up
  * and login (BL-173). It must not offer "Console" to the admin root:
- * that route is auth-gated and redirects to /login. We store the token in
+ * that route is auth-gated and redirects to /login. A session already in
+ * this tab hides those links before first paint (they keep their box) and
+ * the signed-in chrome fades in after hydration, so a returning visitor
+ * does not briefly read "Sign in" and "Start free". The probe only checks
+ * that a non-expired access token is stored; it does not copy the token
+ * into the page. We store the token in
  * tab-scoped `sessionStorage` and listen to `mushi:docs:auth-change` events
  * so every component that needs the session stays in sync.
  *
@@ -49,13 +54,66 @@
  * MigrationChecklist.tsx's button and pill patterns.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import {
   ADMIN_CONSOLE_URL as ADMIN_CONSOLE,
   getDocsAuthSession,
   signOutDocs,
   type DocsAuthSession,
 } from '../lib/migrationProgress'
+
+/**
+ * Head style inserted by the pre-paint probe while a session is stored.
+ * Removed when this tab has no usable session, including after sign-out.
+ */
+const DOCS_NAV_AUTH_SHELL_STYLE_ID = 'mushi-docs-auth-shell'
+
+/**
+ * Runs from the static HTML, before the sign-up links are parsed. Session
+ * state is not available at export time, so the links stay in the markup
+ * for a first visit; this only hides them when this tab already has a
+ * usable token. `visibility: hidden` keeps their box so the bar does not
+ * collapse, then the signed-in row fades into that slot.
+ */
+const SESSION_PROBE = `(function () {
+  try {
+    var raw = sessionStorage.getItem('mushi:docs:auth')
+    if (!raw) return
+    var session = JSON.parse(raw)
+    if (!session || typeof session.accessToken !== 'string' || session.accessToken.length === 0) return
+    if (typeof session.expiresAt !== 'number') return
+    if (!(session.expiresAt * 1000 > Date.now() + 5000)) return
+    var id = '${DOCS_NAV_AUTH_SHELL_STYLE_ID}'
+    if (document.getElementById(id)) return
+    var style = document.createElement('style')
+    style.id = id
+    style.textContent = '[data-docs-nav="signed-out"]{visibility:hidden}'
+    document.head.appendChild(style)
+  } catch {
+    /* sessionStorage unavailable — keep the signed-out links */
+  }
+})()`
+
+/** Fade only the signed-in row. The signed-out links stay visible in the static HTML. */
+const SIGNED_IN_FADE =
+  '@keyframes docs-nav-auth-in{from{opacity:0}to{opacity:1}}' +
+  '[data-docs-nav="signed-in"]{animation:docs-nav-auth-in 180ms ease}' +
+  '@media (prefers-reduced-motion:reduce){[data-docs-nav="signed-in"]{animation:none}}'
+
+function clearPrePaintAuthShell(): void {
+  document.getElementById(DOCS_NAV_AUTH_SHELL_STYLE_ID)?.remove()
+}
+
+function AuthShell({ mode, children }: { mode: 'signed-out' | 'signed-in'; children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-1" data-docs-nav={mode}>
+      {/* Probe first, so it runs before the links are parsed. */}
+      <script dangerouslySetInnerHTML={{ __html: SESSION_PROBE }} />
+      <style dangerouslySetInnerHTML={{ __html: SIGNED_IN_FADE }} />
+      {children}
+    </div>
+  )
+}
 
 // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -79,15 +137,23 @@ export function NavbarAuthChrome() {
   const [hydrated, setHydrated] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
 
-  // Hydrate once on mount
+  // Hydrate once on mount. No usable session means the pre-paint hide
+  // should not stay up.
   useEffect(() => {
-    setSession(getDocsAuthSession())
+    const current = getDocsAuthSession()
+    if (!current) clearPrePaintAuthShell()
+    setSession(current)
     setHydrated(true)
   }, [])
 
-  // Keep in sync when bridge resolves or another tab signs out
+  // Bridge sign-in, and sign-out in this tab or another. Sign-out drops the
+  // pre-paint hide so "Start free" is visible again.
   useEffect(() => {
-    const handleChange = () => setSession(getDocsAuthSession())
+    const handleChange = () => {
+      const current = getDocsAuthSession()
+      if (!current) clearPrePaintAuthShell()
+      setSession(current)
+    }
     window.addEventListener('mushi:docs:auth-change', handleChange)
     return () => window.removeEventListener('mushi:docs:auth-change', handleChange)
   }, [])
@@ -105,11 +171,12 @@ export function NavbarAuthChrome() {
   // Static HTML and the signed-out client render are the same links. A
   // separate pre-hydration shell used to be "Console" → the admin root,
   // which ProtectedRoute sends to /login before a new visitor can sign up.
+  // The pre-paint probe hides this shell when a session is stored.
   if (!hydrated || !session) {
     return (
-      <div className="flex items-center gap-1">
+      <AuthShell mode="signed-out">
         <SignedOutLinks />
-      </div>
+      </AuthShell>
     )
   }
 
@@ -117,7 +184,7 @@ export function NavbarAuthChrome() {
   const label = getDisplayLabel(session)
 
   return (
-    <div className="flex items-center gap-1">
+    <AuthShell mode="signed-in">
       {/* Identity pill: avatar + email (email hidden below sm to prevent
           navbar wrap). Mirrors the admin SPA's SignedInChrome pattern. */}
       <a
@@ -157,7 +224,7 @@ export function NavbarAuthChrome() {
       >
         {signingOut ? '…' : 'Sign out'}
       </button>
-    </div>
+    </AuthShell>
   )
 }
 
