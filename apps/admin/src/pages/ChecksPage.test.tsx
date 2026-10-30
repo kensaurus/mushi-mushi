@@ -130,6 +130,9 @@ describe('ChecksPage', () => {
       if (li.getAttribute('data-testid')?.match(/recipe|design/)) continue
       expect(li.getAttribute('data-state'), li.getAttribute('data-testid')!).not.toBe('loading')
     }
+    // A card whose read is still running says so instead of leaving its corner blank (2026-10-30).
+    const waiting = container.querySelector('[data-testid="checks-card-recipe"]')!
+    if (waiting.getAttribute('data-state') === 'loading') expect(waiting.textContent).toContain('Checking…')
   })
 
   it('leads with one sentence and one action to the failing check', () => {
