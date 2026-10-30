@@ -393,11 +393,15 @@ describe('PipelinePage', () => {
       items: [item('f3', { since: '2026-10-24T12:00:00Z' })],
     })
     data.projects[0] = { id: 'p1', name: 'glot.it', lastDeploy: { at: '2026-10-13T00:00:00Z', version: '1.1.0', ok: true } }
+    // The intake panel prints the body the server sent, not a second copy that can drift.
+    const body = '{"events":[{"type":"deploy.completed","targetId":"<deploy-target-id>","environment":"production","commit":"<sha>","ok":true}]}'
+    data.deployEventBody = body
     await render()
     expect(q('pipeline-group-not_deployed-settings')!.getAttribute('href')).toBe('/recipe')
     expect(q('pipeline-group-not_deployed-settings-hint')!.textContent).toContain('deploy.completed')
     expect(q('pipeline-intake-p1-deploy-lag')!.textContent).toBe('a fix merged after the last deploy seen')
-    expect(q('pipeline-intake-deploy-howto')!.textContent).toContain('"type":"deploy.completed"')
+    expect(q('pipeline-intake-deploy-howto')!.textContent).toContain(body)
+    expect(q('pipeline-intake-deploy-howto')!.textContent).not.toContain('"targetId":"web"')
     expect(q('pipeline-intake-deploy-howto')!.textContent).toContain('X-Mushi-Api-Key')
   })
 

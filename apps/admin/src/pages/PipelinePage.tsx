@@ -51,7 +51,6 @@ import {
   ACTION_META,
   actionableIds,
   ageLabel,
-  DEPLOY_EVENT_BODY,
   deploysBehindMerges,
   openerSummary,
   outcomeSummary,
@@ -399,8 +398,12 @@ export function PipelinePage() {
               })}
               {deployLags.length > 0 && (
                 <li className="text-fg-muted" data-testid="pipeline-intake-deploy-howto">
-                  From CI, POST /v1/ingest/recipe/events with header X-Mushi-Api-Key set to a project API key kept in CI secrets (from mushi login, not the key shipped in the app) and body{' '}
-                  <code className="text-fg-secondary">{DEPLOY_EVENT_BODY}</code>
+                  From CI, POST /v1/ingest/recipe/events with header X-Mushi-Api-Key set to a project API key kept in CI secrets (from mushi login, not the key shipped in the app)
+                  {data.deployEventBody ? (
+                    <>
+                      {' '}and body <code className="text-fg-secondary">{data.deployEventBody}</code>
+                    </>
+                  ) : null}
                   . targetId is the deploy target id on the Recipe page.
                 </li>
               )}

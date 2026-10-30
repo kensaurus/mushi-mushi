@@ -122,14 +122,6 @@ export function openerSummary(dispatchers: DispatcherStatus[]): { server: number
   return { server, local, nobody }
 }
 
-/**
- * What CI posts so a merged fix can leave Merged (report 9f64a77b).
- * `targetId` is a production deploy target on the Recipe page.
- * The header is a project API key kept in CI secrets, not the key shipped in the app.
- */
-export const DEPLOY_EVENT_BODY =
-  '{"events":[{"type":"deploy.completed","targetId":"web","environment":"production","commit":"<sha>","ok":true}]}'
-
 export interface DeployLag {
   projectId: string
   name: string
@@ -182,6 +174,11 @@ export interface PipelineData {
     apps: Array<{ projectId: string; rejected: number; byReason: Array<{ reason: string; count: number }>; sdkPackages: string[]; lastAt: string | null }>
   } | null
   ciReadable: boolean
+  /**
+   * The deploy.completed body CI should POST (`_shared/pipeline-view.ts`
+   * `DEPLOY_EVENT_BODY`). Absent on an older server: the intake line omits the code.
+   */
+  deployEventBody?: string
 }
 
 const ACTIONS_PATH = '/v1/admin/pipeline/actions'

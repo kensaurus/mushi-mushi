@@ -13,7 +13,7 @@ vi.mock('./supabase', () => ({
   },
 }))
 
-import { ageLabel, DEPLOY_EVENT_BODY, deploysBehindMerges, openerSummary, outcomeSummary, runPipelineAction, type DispatcherStatus, type PipelineData } from './pipeline'
+import { ageLabel, deploysBehindMerges, openerSummary, outcomeSummary, runPipelineAction, type DispatcherStatus, type PipelineData } from './pipeline'
 
 beforeEach(() => {
   state.posts = []
@@ -121,7 +121,6 @@ describe('pipeline helpers', () => {
     const after = data({})
     after.projects = [{ id: 'p1', name: 'glot.it', lastDeploy: { at: '2026-10-26T00:00:00Z', version: '1.3.0', ok: true } }]
     expect(deploysBehindMerges(after)).toEqual([])
-    expect(DEPLOY_EVENT_BODY).toContain('"type":"deploy.completed"')
   })
 
   it('openerSummary counts apps by who opened a fix in 24 h', () => {
