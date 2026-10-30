@@ -72,7 +72,10 @@ export function PagePosture({ slots, maxRows, className }: PagePostureProps) {
   if (visible.length === 0) return null
 
   return (
-    <div className={className ?? PAGE_CONTENT_STACK} data-page-posture="">
+    // Hidden when no slot wrapper holds anything: a slot whose component renders nothing (QuotaBanner with no
+    // quota warning) left a 0px block that still took a gap; Home showed a
+    // ~50px blank band under its header (owner, 2026-10-30).
+    <div className={`${className ?? PAGE_CONTENT_STACK} [&:not(:has(>*>*))]:hidden`} data-page-posture="">
       {visible.map((slot, idx) => (
         <SpringChromeEnter key={slot.id ?? slot.priority} delay={idx * 0.04}>
           {slot.children}

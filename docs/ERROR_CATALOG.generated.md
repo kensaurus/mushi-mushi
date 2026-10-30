@@ -9,7 +9,7 @@ Every admin / SDK / webhook failure should return:
 { "ok": false, "error": { "code": "<CODE>", "message": "<safe text>", "requestId": "<optional>" } }
 ```
 
-## Codes (62)
+## Codes (63)
 
 | Code | Group |
 | --- | --- |
@@ -17,6 +17,7 @@ Every admin / SDK / webhook failure should return:
 | `INVALID_TOKEN` | Auth / identity |
 | `MISSING_API_KEY` | Auth / identity |
 | `INVALID_API_KEY` | Auth / identity |
+| `AUTH_UNAVAILABLE` | Auth / identity |
 | `INSUFFICIENT_SCOPE` | Auth / identity |
 | `KEY_NOT_MIGRATED` | Auth / identity |
 | `ORG_KEY_NOT_ALLOWED` | Auth / identity |

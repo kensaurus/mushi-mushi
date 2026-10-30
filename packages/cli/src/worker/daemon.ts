@@ -169,6 +169,9 @@ interface LaneRuntime {
   last: string
 }
 
+/** Heartbeats in a row on which the server must refuse the key before the worker stops for good. */
+const KEY_REFUSALS_TO_STOP = 3
+
 /** @internal Exported for tests only. The local worker's state machine; `tick()` is one heartbeat and one pass over the lanes. */
 export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
   const lanes: LaneRuntime[] = cfg.lanes.map((local) => ({
@@ -211,6 +214,13 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     return r.data
   }
   const refusedByKey = (r: ApiResult<unknown>) => !r.ok && (r.httpStatus === 401 || (r.httpStatus === 403 && /REVOKED|INVALID_API_KEY|WORKER_KEY_REQUIRED|INSUFFICIENT_SCOPE/.test(r.error.code)))
+  /** A 403 that names a revoke or a missing scope is a decision someone made in the console: stop at once. */
+  const revokedForSure = (r: ApiResult<unknown>) => !r.ok && r.httpStatus === 403 && /REVOKED|WORKER_KEY_REQUIRED|INSUFFICIENT_SCOPE/.test(r.error.code)
+  // A bare 401 can be the server failing to look the key up: on 2026-10-30 a
+  // one-second gateway error answered INVALID_API_KEY, this worker stopped
+  // for good and stayed offline 11 hours. It now stops only after the key is
+  // refused on KEY_REFUSALS_TO_STOP heartbeats in a row.
+  let keyRefusals = 0
 
   function stopAll(why: string): void {
     stopped = why
@@ -477,7 +487,13 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     while (!stopped && lane.running.size < c.concurrency && agents() < g.max_agents && now >= lane.nextClaimAt) {
       const r = await deps.call<{ claim: unknown; reason?: string }>('/v1/worker/claim', { method: 'POST', body: JSON.stringify({ laneId: lane.serverId }) })
       if (refusedByKey(r)) {
-        stopAll(`the server refused this worker's key (${(r as { error: { code: string } }).error.code}); it was revoked or lost access`)
+        if (revokedForSure(r)) stopAll(`the server refused this worker's key (${(r as { error: { code: string } }).error.code}); it was revoked or lost access`)
+        else {
+          // The heartbeat decides whether the key is really gone; this lane waits.
+          lane.nextClaimAt = now + BACKOFF_MS
+          lane.state = 'backoff'
+          say(lane, `claim refused (${(r as { error: { code: string } }).error.code}); the next heartbeat checks the key again`)
+        }
         return
       }
       if (!r.ok) {
@@ -533,9 +549,17 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     if (stopped) return
     const hb = await deps.call<unknown>('/v1/worker/heartbeat', { method: 'POST', body: JSON.stringify(heartbeatBody()) })
     if (refusedByKey(hb)) {
-      stopAll(`the server refused this worker's key (${(hb as { error: { code: string } }).error.code}); it was revoked or lost access`)
+      const code = (hb as { error: { code: string } }).error.code
+      keyRefusals++
+      if (revokedForSure(hb) || keyRefusals >= KEY_REFUSALS_TO_STOP) {
+        stopAll(`the server refused this worker's key (${code}) ${keyRefusals > 1 ? `${keyRefusals} times in a row` : ''}; it was revoked or lost access`.replace(/\s+;/, ';'))
+        return
+      }
+      hostState = 'backoff'
+      say(null, `the server refused this worker's key (${code}); checking again before stopping (${keyRefusals} of ${KEY_REFUSALS_TO_STOP})`)
       return
     }
+    if (hb.ok) keyRefusals = 0
     if (!hb.ok) {
       hostState = 'backoff'
       say(null, `heartbeat failed: ${hb.error.code} ${hb.error.message}`)

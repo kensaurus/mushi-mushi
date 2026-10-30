@@ -181,13 +181,15 @@ export function PageHelpBanner({
           <HelpSection tone="info" title="What it is" className="md:col-span-2">
             <HelpRichText text={whatIsIt} />
           </HelpSection>
+          {/* A section without its partner takes the full row; "How to use it"
+              alone sat in half the width (/checks, owner 2026-10-30). */}
           {useCases && useCases.length > 0 && (
-            <HelpSection tone="tip" title="When to use it">
+            <HelpSection tone="tip" title="When to use it" className={howToUse ? undefined : 'md:col-span-2'}>
               <HelpBulletList items={useCases} />
             </HelpSection>
           )}
           {howToUse && (
-            <HelpSection tone="steps" title="How to use it">
+            <HelpSection tone="steps" title="How to use it" className={useCases && useCases.length > 0 ? undefined : 'md:col-span-2'}>
               <HelpRichText text={howToUse} />
             </HelpSection>
           )}

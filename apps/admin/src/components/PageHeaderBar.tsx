@@ -166,7 +166,7 @@ export function PageHeaderBar({
   ])
 
   return (
-    <div className="mb-4 w-full min-w-0">
+    <div className="mb-4 w-full min-w-0" data-page-header="">
       {/* ── Primary row ──────────────────────────────────────────────── */}
       {/* flex-wrap: on a phone the actions drop under the title instead of
           pushing past the column edge (they used to scroll <main> sideways

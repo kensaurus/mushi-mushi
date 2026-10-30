@@ -22,7 +22,7 @@ function authError(
   c: Context,
   code: ApiErrorCode,
   message: string,
-  status: 401 | 403 = 401,
+  status: 401 | 403 | 503 = 401,
 ): Response {
   const requestId = c.get('requestId') as string | undefined
   return c.json(
@@ -31,7 +31,22 @@ function authError(
       error: { code, message, ...(requestId ? { requestId } : {}) },
     },
     status,
+    status === 503 ? { 'Retry-After': '30' } : undefined,
   )
+}
+
+/**
+ * The key lookup itself failed (the database or its gateway answered an
+ * error), so nothing is known about the key. A 401 here told callers their key
+ * was revoked: on 2026-10-30 a one-second gateway error (an HTML error page
+ * at 00:31 UTC) made the local worker read INVALID_API_KEY, stop for good,
+ * and stay offline for 11 hours. A 503 says "try again".
+ */
+const KEY_CHECK_UNAVAILABLE = 'Mushi could not check this API key just now. Try again in a moment.'
+
+/** PostgREST answers PGRST116 for `.single()` with no row: that is "not found", not a failure. */
+function isNoRow(error: { code?: string } | null | undefined): boolean {
+  return error?.code === 'PGRST116'
 }
 
 /**
@@ -480,7 +495,7 @@ function recordOrgMemberActivity(opts: {
     })
 }
 
-async function lookupActiveApiKey(apiKey: string): Promise<ApiKeyRow | null> {
+async function lookupActiveApiKey(apiKey: string): Promise<ApiKeyRow | null | 'unavailable'> {
   const db = getServiceClient()
   const keyHash = await hashApiKey(apiKey)
   // Use a left-join (`projects(name)` not `projects!inner(name)`) so org-scoped
@@ -493,7 +508,8 @@ async function lookupActiveApiKey(apiKey: string): Promise<ApiKeyRow | null> {
     .eq('key_hash', keyHash)
     .eq('is_active', true)
     .single()
-  if (error || !data) return null
+  if (error && !isNoRow(error)) return 'unavailable'
+  if (!data) return null
   return data as unknown as ApiKeyRow
 }
 
@@ -520,6 +536,7 @@ async function authenticateApiKey(
   requiredScope: McpScope | readonly McpScope[],
 ): Promise<Response | null> {
   const keyRow = await lookupActiveApiKey(apiKey)
+  if (keyRow === 'unavailable') return authError(c, 'AUTH_UNAVAILABLE', KEY_CHECK_UNAVAILABLE, 503)
   if (!keyRow) {
     return authError(c, 'INVALID_API_KEY', 'Invalid or revoked API key')
   }
@@ -617,7 +634,8 @@ export async function apiKeyAuth(c: Context, next: Next) {
     | 'last_seen_origin'
     | 'browser_seen_at'
   > | null
-  if (error || !keyRow) {
+  if (error && !isNoRow(error)) return authError(c, 'AUTH_UNAVAILABLE', KEY_CHECK_UNAVAILABLE, 503)
+  if (!keyRow) {
     return authError(c, 'INVALID_API_KEY', 'Invalid or revoked API key')
   }
 
