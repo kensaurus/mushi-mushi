@@ -494,6 +494,57 @@ test("a local lane's conflict counts as a running agent in its repo", () => {
   assertEquals(inLine.map((x) => [x.row.id, x.ahead]), [['b', 2]])
 })
 
+test('a failed conflict re-read does not abort the tick; it uses the resolving rows already loaded', async () => {
+  const sha = 'ab'.repeat(20)
+  const resolving = {
+    ...row({ id: 'r7', state: 'resolving', pr_number: 7, head_sha: sha }),
+    queued_at: '2026-10-23T08:00:00Z',
+    claimed_until: null,
+    updated_at: '2026-10-23T08:00:00Z',
+  }
+  const other = {
+    ...row({ id: 'q2', project_id: 'p2', repo: 'o/s', state: 'queued', pr_number: 3, head_sha: sha }),
+    queued_at: '2026-10-23T08:00:00Z',
+    claimed_until: null,
+  }
+  const { db: inner } = fakeDb({
+    fix_attempts: [{ ...attempt }],
+    fix_merge_queue: [resolving, other],
+    fix_events: [],
+    project_settings: [{ project_id: 'p1', release_mode: 'train' }],
+    reports: [],
+  })
+  const db = {
+    from: (t: string) => {
+      const b = inner.from(t) as unknown as { eq: (col: string, v: unknown) => unknown; then: (ok: (v: unknown) => unknown) => Promise<unknown> }
+      if (t !== 'fix_merge_queue') return b
+      const origEq = b.eq.bind(b)
+      const origThen = b.then.bind(b)
+      let resolvingRead = false
+      b.eq = (col: string, v: unknown) => {
+        if (col === 'state' && v === 'resolving') resolvingRead = true
+        return origEq(col, v)
+      }
+      b.then = (ok: (v: unknown) => unknown) => {
+        if (resolvingRead) return Promise.resolve({ data: null, error: { message: 'conflict read down' } }).then(ok)
+        return origThen(ok)
+      }
+      return b
+    },
+  } as unknown as SupabaseClient
+  const started: string[] = []
+  const tally = await runMergeQueue(db, deps({
+    cursorKey: () => Promise.resolve({ ok: true, apiKey: 'ck', model: 'grok-4.7' }),
+    createAgent: ((_k: string, input: Row) => (started.push(String(input.name)), Promise.resolve({ agentId: 'a' }))) as never,
+    pull: (_t, _r, n) => Promise.resolve(n === 3 ? pull({ state: 'closed' }) : pull({ mergeable: false, mergeableState: 'dirty', headSha: sha })),
+    train: trainStub,
+  }))
+  assertEquals(started, ['Mushi merge conflict #7'])
+  assertEquals(other.state, 'removed')
+  assertEquals(tally.resolving, 1)
+  assertEquals(tally.removed, 1)
+})
+
 test('a merge-queue tick never leases a row a lane claimed after the tick read it', async () => {
   const tables: Record<string, Row[]> = {
     fix_attempts: [{ ...attempt }],

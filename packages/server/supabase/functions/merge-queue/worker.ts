@@ -607,17 +607,27 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
     // wait a whole tick with no agent.
     const trainIds = [...trainProjects.keys()]
     if (trainIds.length) {
+      // Capped at 500, the same as this tick's first read. A conflict past
+      // that waits for a later tick. Rows a tick still holds (claimed_until)
+      // stay with that tick, as they did on the in-memory snapshot.
       const { data: resolvingNow, error: resolvingErr } = await db
         .from('fix_merge_queue')
         .select(ROW_COLUMNS)
         .eq('state', 'resolving')
         .in('project_id', trainIds)
         .limit(500)
-      if (resolvingErr) throw new Error(`merge-queue conflict read failed: ${resolvingErr.message}`)
-      conflictRows = ((resolvingNow ?? []) as typeof rows).filter((r) => {
-        if (!trainProjects.has(r.project_id) || express.has(r.id)) return false
-        return !r.claimed_until || r.claimed_until < nowIso
-      })
+      if (resolvingErr) {
+        // A failed read must not abort the tick for every project. The rows
+        // loaded at the start of the tick are the snapshot: a real client
+        // does not see conflicts the train just marked, so those wait one tick.
+        log.warn('merge-queue conflict read failed; using the rows already read', { err: resolvingErr.message })
+        conflictRows = rows.filter((r) => trainProjects.has(r.project_id) && !express.has(r.id) && r.state === 'resolving')
+      } else {
+        conflictRows = ((resolvingNow ?? []) as typeof rows).filter((r) => {
+          if (!trainProjects.has(r.project_id) || express.has(r.id)) return false
+          return !r.claimed_until || r.claimed_until < nowIso
+        })
+      }
     }
     rows = rows.filter((r) => !trainProjects.has(r.project_id) || express.has(r.id))
   }
