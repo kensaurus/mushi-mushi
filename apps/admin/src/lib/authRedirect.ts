@@ -18,7 +18,7 @@ function normalizeRelativePath(path: string): string {
   return path
 }
 
-/** @internal Exported for tests only. */
+/** A same-origin console path from an untrusted `next`, or the fallback. */
 export function sanitizeNextPath(next: string | null | undefined): string {
   if (!next) return FALLBACK_PATH
   const normalized = normalizeRelativePath(next)

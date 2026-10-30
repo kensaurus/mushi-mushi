@@ -41,6 +41,8 @@ import {
 import { Badge, Btn, Card, CodeValue, ResultChip } from '../ui'
 import { ContainedBlock, SignalChip } from '../report-detail/ReportSurface'
 import { SdkInstallCard } from '../SdkInstallCard'
+import { GitHubConnectCard } from '../GitHubConnectCard'
+import { isReturningFromGithub } from '../../lib/githubConnect'
 import { ClientConnectButton } from '../ClientConnectButton'
 import { startFirstRunTour } from '../FirstRunTour'
 import { recordDiagnosisViewed, type DiagnosisSurface } from '../../lib/diagnosisViewed'
@@ -311,7 +313,10 @@ export function FirstDiagnosisScreen({
   const [showInstall, setShowInstall] = useState(false)
   const diagnosed = state.phase === 'diagnosed'
   const busy = state.phase === 'sending' || isPolling(state)
-  const installVisible = diagnosed || showInstall
+  // Back from GitHub (connect flow): the steps below must render so the
+  // repository picker can take the grant, even before a diagnosis this visit.
+  const [githubReturn] = useState(() => isReturningFromGithub(projectId))
+  const installVisible = diagnosed || showInstall || githubReturn
 
   return (
     <div className="space-y-4" data-testid="onboarding-first-diagnosis">
@@ -395,6 +400,8 @@ export function FirstDiagnosisScreen({
               embedded
             />
           </Card>
+
+          <GitHubConnectCard projectId={projectId} returnTo="onboarding" />
 
           <Card className="p-4 space-y-3">
             <div>

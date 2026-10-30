@@ -41,7 +41,7 @@ describe('every page has a place in the sidebar', () => {
     const routes = [...app.matchAll(/path="(\/[^"*]*)"/g)].map((m) => m[1] as string)
     // Sign-in, public and redirect routes, and detail pages reached from a list.
     const notPages = new Set([
-      '/', '/login', '/signup', '/reset-password', '/email/reporter', '/invite/accept', '/integrations',
+      '/', '/login', '/signup', '/reset-password', '/auth/confirm', '/email/reporter', '/invite/accept', '/integrations',
       '/tester', '/console', '/fine-tuning', '/mcp/manual', '/mcp-auth',
       '/projects/:pid/qa-coverage/:storyId', '/rewards/tester-review', '/org/:slug/settings/',
       // Stripe Checkout's return URLs, redirected to Billing (lib/billingFunnel.ts).

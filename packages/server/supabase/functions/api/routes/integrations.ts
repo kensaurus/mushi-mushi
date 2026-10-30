@@ -351,9 +351,13 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     for (const kind of FIX_AGENT_KINDS as string[]) {
       const field = fixAgentRequired[kind];
       if (!field) continue;
-      const configured = (row[field] != null && row[field] !== '') || envBackedFields.has(field);
+      const savedHere = row[field] != null && row[field] !== '';
+      const configured = savedHere || envBackedFields.has(field);
       if (!configured) continue;
       const probe = latestProbeByKind.get(kind);
+      // A key only the server environment provides, never tested, is not
+      // something this team set up: no "needs attention" on a new account.
+      if (!savedHere && !probe) continue;
       const verdict = classifyPlatformConnection({
         probeStatus: probe?.status,
         probeCheckedAt: probe?.checked_at,

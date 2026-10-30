@@ -15,6 +15,18 @@ const MOBILE_FRAMEWORKS = new Set<Framework>(['react-native', 'expo', 'capacitor
  * Slug wins for known Expo reporter projects; otherwise high-confidence
  * detection from package.json (expo / react-native / capacitor).
  */
+/** The web bundler a package.json declares, for env-var snippets. */
+export function detectWebBundler(packageJsonText: string | null | undefined): 'vite' | 'next' | null {
+  if (!packageJsonText?.trim()) return null
+  try {
+    const pkg = JSON.parse(packageJsonText) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> }
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies }
+    if ('next' in deps) return 'next'
+    if ('vite' in deps) return 'vite'
+  } catch { /* not JSON: no bundler */ }
+  return null
+}
+
 export function resolveDefaultSdkFramework(
   slug: string | null | undefined,
   packageJsonText?: string | null,
@@ -23,7 +35,10 @@ export function resolveDefaultSdkFramework(
 
   if (packageJsonText?.trim()) {
     const detected = detectFromPackageJson(packageJsonText)
-    if (detected.confidence >= 0.8 && MOBILE_FRAMEWORKS.has(detected.framework)) {
+    // A confident read of the app's own package.json picks its tab (React,
+    // Vue, Svelte, mobile…). `vanilla` is the detector's "unknown", so the
+    // React default stays for it.
+    if (detected.confidence >= 0.8 && (MOBILE_FRAMEWORKS.has(detected.framework) || detected.framework !== 'vanilla')) {
       return detected.framework
     }
   }
