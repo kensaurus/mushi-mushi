@@ -17,6 +17,7 @@ import { apiFetch } from './supabase'
 import { useToast } from './toast'
 import { scopedHref } from './humanPageHints'
 import { invalidateSetupStatus } from './useSetupStatus'
+import { invalidateTimeToFirstDiagnosis } from './useTimeToFirstDiagnosis'
 
 type SendTestReportResult =
   | { ok: true; reportId: string; projectName: string }
@@ -47,7 +48,11 @@ export function useSendTestReport(): (projectId: string) => Promise<SendTestRepo
       // key (api/routes/project-integrations.ts); the console must not emit
       // it again (decision 394, docs/marketing/scorecard.md).
       // The checklist's "first report" step reads this; refresh every copy.
+      // The Test it card reads time-to-first-diagnosis, which still says
+      // "Waiting…" until this reload (report 9b7624e6). The diagnosis is
+      // already stored when this POST returns.
       invalidateSetupStatus()
+      invalidateTimeToFirstDiagnosis()
       toast.success(
         projectName ? `Test report sent to ${projectName}` : 'Test report sent',
         'Mushi is writing the diagnosis now, usually in under 30 seconds.',
