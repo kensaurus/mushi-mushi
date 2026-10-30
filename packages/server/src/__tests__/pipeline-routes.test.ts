@@ -240,6 +240,50 @@ describe('GET /v1/admin/pipeline', () => {
     expect(train.stuck).toBe(1)
   })
 
+  it('a resolving conflict with no agent ages from updated_at, and the queue read includes that column', async () => {
+    const { app, db } = setup()
+    const selects: string[] = []
+    const orig = db.from.bind(db)
+    db.from = ((table: string) => {
+      const q = orig(table)
+      if (table === 'fix_merge_queue') {
+        const origSelect = q.select.bind(q)
+        q.select = ((cols?: string, opts?: { count?: string; head?: boolean }) => {
+          if (typeof cols === 'string') selects.push(cols)
+          return origSelect(cols, opts)
+        }) as typeof q.select
+      }
+      return q
+    }) as typeof db.from
+    const id = '3000000d-0000-4000-8000-000000000000'
+    db.table('fix_attempts').push(attempt(id, {
+      pr_number: 40,
+      pr_url: 'https://github.com/kensaurus/glot.it/pull/40',
+      check_run_conclusion: 'success',
+    }))
+    db.table('fix_merge_queue').push({
+      id: 'q-age',
+      fix_attempt_id: id,
+      project_id: P1,
+      repo: 'kensaurus/glot.it',
+      pr_number: 40,
+      state: 'resolving',
+      detail: 'Conflicts with the base branch; a Cursor agent merges it in, then it rides a release train.',
+      queued_at: '2026-10-26T11:50:00Z',
+      updated_at: '2026-10-26T09:00:00Z',
+      agent_started_at: null,
+      conflict_agents: 0,
+    })
+    state.query = { projectId: P1 }
+    const res = await app.call('GET', '/v1/admin/pipeline')
+    const stages = (res.body.data as { stages: Stage[] }).stages
+    const train = stages.find((s) => s.id === 'train')!
+    const stuck = train.groups.find((g) => g.id === 'conflict_stuck')
+    expect(stuck?.items.some((item) => item.id === id)).toBe(true)
+    expect(stuck?.label).toContain('over 90 min')
+    expect(selects.some((cols) => cols.includes('updated_at'))).toBe(true)
+  })
+
   it('intake reads "not recorded" (null) while nothing was ever counted', async () => {
     const { app, db } = setup()
     db.table('report_ingest_rejections').length = 0

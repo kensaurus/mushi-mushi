@@ -3,9 +3,11 @@
  * PURPOSE: `mushi work --conflicts` against a temp git repo: no conflicted
  *          rows, a clean merge that pushes, conflict markers left (no push),
  *          and a commit hook that fails (no push, hooks not skipped).
+ *          HOME points at a temp directory so the conflict worktree is not
+ *          created under the developer's real home.
  */
 import { execFileSync } from 'node:child_process'
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, delimiter, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -51,7 +53,9 @@ function writeExe(path: string, source: string) {
 }
 
 /** A clone whose origin URL is GitHub and whose fetch/push go to a local bare repo. */
-function conflictRepo(kind: 'clean' | 'markers'): { repo: string; bare: string; headSha: string; mainSha: string; hookLog: string } {
+function conflictRepo(kind: 'clean' | 'markers'): { repo: string; bare: string; headSha: string; mainSha: string; hookLog: string; home: string } {
+  const home = mkdtempSync(join(tmpdir(), 'mushi-wc-home-'))
+  remember('HOME', home)
   const repo = mkdtempSync(join(tmpdir(), 'mushi-wc-'))
   const bare = `${repo}-origin.git`
   const hookLog = `${repo}-hooks.log`
@@ -107,14 +111,14 @@ printf '%s\\n' push >> '${hookLog}'
 exit 0
 `)
   cleanups.push(() => {
-    rmSync(join(homedir(), '.cache', 'mushi', 'conflicts', basename(repo)), { recursive: true, force: true })
+    rmSync(home, { recursive: true, force: true })
     rmSync(repo, { recursive: true, force: true })
     rmSync(bare, { recursive: true, force: true })
     rmSync(hookLog, { force: true })
     rmSync(gitConfig, { force: true })
     rmSync(failFlag, { force: true })
   })
-  return { repo, bare, headSha, mainSha, hookLog }
+  return { repo, bare, headSha, mainSha, hookLog, home }
 }
 
 function tip(bare: string, ref = 'refs/heads/fix/pr'): string {
@@ -227,6 +231,7 @@ describe('mushi work --conflicts', () => {
   })
 
   it('pushes a clean merge and runs the commit and push hooks', async () => {
+    const realHome = homedir()
     const fx = conflictRepo('clean')
     installFakes(fx)
     const { run, done } = await runConflicts(fx.repo, [conflictRow(fx.headSha)])
@@ -237,6 +242,9 @@ describe('mushi work --conflicts', () => {
     const parents = execFileSync('git', ['--git-dir', fx.bare, 'rev-list', '--parents', '-n', '1', 'refs/heads/fix/pr'], { env: process.env, encoding: 'utf8' }).trim().split(' ')
     expect(parents).toEqual([done?.headAfter, fx.headSha, fx.mainSha])
     expect(hookText(fx.hookLog)).toBe('commit\npush\n')
+    const cacheName = basename(fx.repo)
+    expect(existsSync(join(fx.home, '.cache', 'mushi', 'conflicts', cacheName))).toBe(true)
+    expect(existsSync(join(realHome, '.cache', 'mushi', 'conflicts', cacheName))).toBe(false)
   }, 60_000)
 
   it('does not push when conflict markers are left', async () => {

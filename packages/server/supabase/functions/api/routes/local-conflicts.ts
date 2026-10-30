@@ -10,7 +10,8 @@
  *
  * The lock is `cursor_agent_id = local:<token>` (local-conflict-run.ts), the
  * same cap of 2 as a cloud or daemon conflict agent. A push re-queues the
- * Opus review of the new head.
+ * Opus review of the new head. A push that arrives after the 90-minute free
+ * still records that head and the resolved event.
  */
 
 import type { Context, Hono } from 'npm:hono@4';
@@ -26,6 +27,7 @@ import {
   localConflictClaimPatch,
   localConflictClaimRefusal,
   localConflictDonePatch,
+  localConflictUnheldDone,
   type LocalConflictDone,
 } from '../../_shared/local-conflict-run.ts';
 import type { ConflictQueueRow } from '../../_shared/work-modes.ts';
@@ -59,6 +61,36 @@ async function queueEvent(db: Db, row: { fix_attempt_id: string; project_id: str
     payload: { repo: row.repo, pr: row.pr_number, local: true },
   });
   if (error && (error as { code?: string }).code !== '23505') clog.warn('merge-queue event not written', { err: error.message });
+}
+
+/** Record a push whose commit landed after this run lost the row, or null when it must stay CONFLICT_NOT_HELD. */
+async function settleUnheld(
+  c: Ctx,
+  db: Db,
+  row: ConflictQueueRow & { fix_attempt_id: string },
+  run: LocalConflictDone,
+): Promise<Response | null> {
+  const late = localConflictUnheldDone(row, run);
+  if (late.action === 'refuse') return null;
+  if (late.action === 'already') return c.json({ ok: true, data: { state: late.state, already: true } });
+  const nowIso = new Date().toISOString();
+  const { data: moved, error: upErr } = await db
+    .from('fix_merge_queue')
+    .update({ ...late.patch, updated_at: nowIso, claimed_until: null })
+    .eq('id', row.id)
+    .in('state', ['resolving', 'blocked', 'waiting', 'queued'])
+    .select('id');
+  if (upErr) return dbError(c, upErr);
+  if (!moved || (moved as unknown[]).length === 0) return null;
+  const headAfter = String(late.patch.head_sha);
+  await queueEvent(db, row, 'ok', 'Conflict resolved by mushi work --conflicts', `New head ${headAfter.slice(0, 7)}; the queue continues.`, `mq-resolved:${row.id}:${headAfter}`);
+  const { data: att } = await db.from('fix_attempts').select('id, project_id, report_id, pr_url').eq('id', row.fix_attempt_id).maybeSingle();
+  const a = att as { id: string; project_id: string; report_id: string | null; pr_url: string | null } | null;
+  if (a) {
+    const r = await requeueReviewForNewHead(db, { fixAttemptId: a.id, projectId: a.project_id, reportId: a.report_id, prUrl: a.pr_url }, headAfter, new Date());
+    if (r === 'error') clog.warn('review not re-queued after mushi work --conflicts', { rowId: row.id });
+  }
+  return c.json({ ok: true, data: { state: 'waiting' } });
 }
 
 export function registerLocalConflictRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -160,9 +192,8 @@ export function registerLocalConflictRoutes(app: Hono<{ Variables: Variables }>)
     if ('response' in allowed) return allowed.response;
     const run: LocalConflictDone = { outcome, failureKind, detail, headAfter };
     if (row.cursor_agent_id !== localConflictAgentId(token) || row.state !== 'resolving') {
-      if (outcome === 'pushed' && headAfter && row.head_sha === headAfter && (row.state === 'waiting' || row.state === 'queued')) {
-        return c.json({ ok: true, data: { state: row.state, already: true } });
-      }
+      const settled = await settleUnheld(c, db, row, run);
+      if (settled) return settled;
       return c.json({ ok: false, error: { code: 'CONFLICT_NOT_HELD', message: 'This run no longer holds the conflict.' } }, 409);
     }
     const { patch, requeue } = localConflictDonePatch(row, run);
@@ -176,6 +207,13 @@ export function registerLocalConflictRoutes(app: Hono<{ Variables: Variables }>)
       .select('id');
     if (upErr) return dbError(c, upErr);
     if (!moved || (moved as unknown[]).length === 0) {
+      const { data: fresh, error: again } = await db.from('fix_merge_queue').select(QUEUE_COLUMNS).eq('id', row.id).maybeSingle();
+      if (again) return dbError(c, again);
+      const next = fresh as (ConflictQueueRow & { fix_attempt_id: string }) | null;
+      if (next) {
+        const settled = await settleUnheld(c, db, next, run);
+        if (settled) return settled;
+      }
       return c.json({ ok: false, error: { code: 'CONFLICT_NOT_HELD', message: 'This run no longer holds the conflict.' } }, 409);
     }
     if (requeue && headAfter) {

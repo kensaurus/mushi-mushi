@@ -205,7 +205,7 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
       .limit(500),
     db
       .from('fix_merge_queue')
-      .select('id, fix_attempt_id, project_id, repo, pr_number, state, detail, queued_at, agent_started_at, conflict_agents')
+      .select('id, fix_attempt_id, project_id, repo, pr_number, state, detail, queued_at, updated_at, agent_started_at, conflict_agents')
       .in('project_id', projectIds)
       .in('state', ['queued', 'waiting', 'resolving', 'blocked'])
       .limit(2000),

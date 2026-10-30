@@ -10,6 +10,7 @@ import {
   localConflictClaimPatch,
   localConflictClaimRefusal,
   localConflictDonePatch,
+  localConflictUnheldDone,
 } from '../../supabase/functions/_shared/local-conflict-run.ts'
 import type { ConflictQueueRow } from '../../supabase/functions/_shared/work-modes.ts'
 
@@ -95,6 +96,62 @@ describe('local conflict done', () => {
     })
     expect(requeue).toBe(false)
     expect(patch.state).toBe('blocked')
+    expect(patch.head_sha).toBeUndefined()
     expect(String(patch.detail)).toContain('without a commit sha')
+  })
+
+  it('a push with no head at all is the same blocked case', () => {
+    const { patch, requeue } = localConflictDonePatch(row({ conflict_agents: 1 }), {
+      outcome: 'pushed',
+      failureKind: null,
+      detail: 'pushed',
+      headAfter: null,
+    })
+    expect(requeue).toBe(false)
+    expect(patch.state).toBe('blocked')
+    expect(patch.head_sha).toBeUndefined()
+    expect(String(patch.detail)).toContain('without a commit sha')
+  })
+})
+
+describe('a push that arrives after the hold ended', () => {
+  it('adopts the new head when the 90-minute free already released the row', () => {
+    const late = localConflictUnheldDone(
+      { state: 'blocked', head_sha: SHA, cursor_agent_id: null, local_claim_id: null, conflict_agents: 0 },
+      { outcome: 'pushed', headAfter: NEXT },
+    )
+    expect(late.action).toBe('adopt')
+    if (late.action !== 'adopt') return
+    expect(late.patch).toMatchObject({ state: 'waiting', head_sha: NEXT, cursor_agent_id: null, local_claim_id: null })
+    expect(late.patch.conflict_agents).toBeUndefined()
+  })
+
+  it('adopts the new head and gives back the slot when another agent re-claimed the row', () => {
+    const late = localConflictUnheldDone(
+      { state: 'resolving', head_sha: SHA, cursor_agent_id: 'local:other', local_claim_id: null, conflict_agents: 1 },
+      { outcome: 'pushed', headAfter: NEXT },
+    )
+    expect(late.action).toBe('adopt')
+    if (late.action !== 'adopt') return
+    expect(late.patch).toMatchObject({ state: 'waiting', head_sha: NEXT, cursor_agent_id: null, conflict_agents: 0 })
+  })
+
+  it('is already recorded when the queue is waiting on that same head', () => {
+    const late = localConflictUnheldDone(
+      { state: 'waiting', head_sha: NEXT, cursor_agent_id: null, local_claim_id: null, conflict_agents: 1 },
+      { outcome: 'pushed', headAfter: NEXT },
+    )
+    expect(late).toEqual({ action: 'already', state: 'waiting' })
+  })
+
+  it('refuses a push with no commit sha, and a push onto a merged row', () => {
+    expect(localConflictUnheldDone(
+      { state: 'blocked', head_sha: SHA, cursor_agent_id: null, local_claim_id: null, conflict_agents: 0 },
+      { outcome: 'pushed', headAfter: null },
+    )).toEqual({ action: 'refuse' })
+    expect(localConflictUnheldDone(
+      { state: 'merged', head_sha: SHA, cursor_agent_id: null, local_claim_id: null, conflict_agents: 1 },
+      { outcome: 'pushed', headAfter: NEXT },
+    )).toEqual({ action: 'refuse' })
   })
 })

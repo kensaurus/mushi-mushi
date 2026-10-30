@@ -7,6 +7,8 @@
  *          start a cloud agent on it and a second CLI cannot take it.
  *
  * Pure: no Deno globals, no npm: specifiers, so vitest imports it directly.
+ * A push with no commit sha blocks the row. A push that arrives after the
+ * 90-minute free (the row is no longer held) still names the new head.
  */
 
 import { MAX_CONFLICT_AGENTS } from './merge-queue.ts'
@@ -77,9 +79,40 @@ export function localConflictDonePatch(
   const n = row.conflict_agents ?? 0
   if (conflictSlotBack(run.outcome, run.failureKind) && n > 0) patch.conflict_agents = n - 1
   const requeue = run.outcome === 'pushed' && !!run.headAfter && SHA_RE.test(run.headAfter)
-  if (run.outcome === 'pushed' && run.headAfter && !requeue) {
+  // The done route turns a non-sha into null before this runs, so a missing
+  // head and a garbage head are the same refusal. Do not keep a non-sha as head_sha.
+  if (run.outcome === 'pushed' && !requeue) {
     patch.state = 'blocked'
     patch.detail = 'Merge conflict. `mushi work --conflicts` reported a push without a commit sha.'
+    delete patch.head_sha
   }
   return { patch, requeue }
+}
+
+/**
+ * The CLI's done call arrived after this run no longer holds the row (the
+ * 90-minute free, or another agent took it while the push was in flight).
+ * A real commit sha still moves the queue onto that head. Anything else,
+ * and a row already merged or removed, stays `CONFLICT_NOT_HELD`.
+ */
+export function localConflictUnheldDone(
+  row: Pick<ConflictQueueRow, 'state' | 'head_sha' | 'cursor_agent_id' | 'local_claim_id' | 'conflict_agents'>,
+  run: Pick<LocalConflictDone, 'outcome' | 'headAfter'>,
+): { action: 'already'; state: string } | { action: 'adopt'; patch: Record<string, unknown> } | { action: 'refuse' } {
+  const head = run.outcome === 'pushed' && run.headAfter && SHA_RE.test(run.headAfter) ? run.headAfter.toLowerCase() : null
+  if (!head) return { action: 'refuse' }
+  if ((row.state === 'waiting' || row.state === 'queued') && row.head_sha === head) {
+    return { action: 'already', state: row.state }
+  }
+  if (row.state === 'merged' || row.state === 'removed') return { action: 'refuse' }
+  const patch: Record<string, unknown> = {
+    state: 'waiting',
+    head_sha: head,
+    cursor_agent_id: null,
+    local_claim_id: null,
+    detail: `\`mushi work --conflicts\` pushed ${head.slice(0, 7)} after its hold ended; the queue checks it and Opus reviews the new head.`,
+  }
+  const n = row.conflict_agents ?? 0
+  if ((row.cursor_agent_id || row.local_claim_id) && n > 0) patch.conflict_agents = n - 1
+  return { action: 'adopt', patch }
 }

@@ -7,10 +7,12 @@
  *          CI is red"), with the time it entered that stage.
  *
  *          Pure: the route reads the rows, this file decides. Time in stage
- *          never comes from `updated_at`, which the workers touch on every
- *          tick; it comes from the moment the item entered the stage
- *          (queued_at, agent_started_at, the review's completed_at, the
- *          PR's created_at, the report's created_at).
+ *          comes from the moment the item entered the stage (queued_at,
+ *          agent_started_at, the review's completed_at, the PR's created_at,
+ *          the report's created_at). A resolving conflict that has not
+ *          started is the exception: it ages from `updated_at`, when the
+ *          train marked it resolving, because `queued_at` is often days
+ *          earlier. Workers that still write the row keep that clock fresh.
  *
  *          Order matters. A PR's own CI decides before its place in the
  *          merge queue: a red PR "waiting for the next train" only makes the
@@ -174,6 +176,12 @@ export interface QueueRow {
   state: string
   detail: string | null
   queued_at: string
+  /**
+   * When the row was last written. A resolving conflict with no
+   * `agent_started_at` ages from this (the train marks it resolving here),
+   * not from `queued_at`.
+   */
+  updated_at?: string | null
   agent_started_at: string | null
   conflict_agents: number | null
 }
@@ -638,19 +646,19 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
 
     // 2. A conflict agent's row: resolving until the agent pushes.
     if (q?.state === 'resolving') {
-      const since = q.agent_started_at ?? q.queued_at
       const capped = (q.conflict_agents ?? 0) >= CONFLICT_AGENT_CAP
       const off = queueDetailKind(q.detail) === 'followups_off'
-      // No agent_started_at means nothing is merging. Ageing that from queued_at
-      // (often days earlier) said "waiting on a conflict agent for over 90 min"
-      // the moment the train marked the row. The "run mushi work --conflicts"
-      // line is only when the detail says no cloud key. A blocked row says it
-      // in the held group below. A project with a key is waiting for the next
-      // tick, or in line for a free agent slot.
+      // No agent_started_at means nothing is merging. Age that from updated_at
+      // (when the train marked the row resolving), not queued_at (often days
+      // earlier, which said "over 90 min" the moment it was marked). Past
+      // CONFLICT_STUCK_MS it is stuck and a person can start an agent. The
+      // "run mushi work --conflicts" line is only when the detail says no
+      // cloud key. A worker that still writes the row keeps updated_at fresh.
       const started = !!q.agent_started_at
       const noCloud = !started && queueDetailKind(q.detail) === 'conflict_local'
-      const inLine = !started && !noCloud && (q.detail ?? '').toLowerCase().includes('waits for a free conflict agent')
-      const overdue = started && age(now, since) > CONFLICT_STUCK_MS
+      const since = q.agent_started_at ?? q.updated_at ?? q.queued_at
+      const overdue = age(now, since) > CONFLICT_STUCK_MS
+      const inLine = !started && !noCloud && !overdue && (q.detail ?? '').toLowerCase().includes('waits for a free conflict agent')
       const stuck = off || noCloud || overdue
       const text = off
         ? 'merge conflict and no agent may push (follow-ups are off): needs a person, resolve on GitHub'
@@ -658,14 +666,14 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
           ? 'no conflict agent has started: run mushi work --conflicts, or add a Cursor key'
           : inLine
             ? 'waiting in line for a conflict agent'
-            : !started
+            : !started && !overdue
               ? 'waiting for a conflict agent'
               : capped && overdue
                 ? 'merge conflict, both conflict agents used: needs a person, resolve on GitHub'
                 : overdue
                   ? `waiting on a conflict agent for over ${Math.round(CONFLICT_STUCK_MS / 60_000)} min`
                   : 'a conflict agent is merging the base in'
-      const id = off ? 'conflict_off' : noCloud ? 'conflict_idle' : inLine ? 'conflict_inline' : !started ? 'conflict_waiting' : capped && overdue ? 'conflict_capped' : overdue ? 'conflict_stuck' : 'conflict_running'
+      const id = off ? 'conflict_off' : noCloud ? 'conflict_idle' : inLine ? 'conflict_inline' : !started && !overdue ? 'conflict_waiting' : capped && overdue ? 'conflict_capped' : overdue ? 'conflict_stuck' : 'conflict_running'
       groups.add(id, {
         stage: 'train',
         tone: stuck ? 'stuck' : 'moving',
