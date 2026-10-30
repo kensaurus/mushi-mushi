@@ -8,8 +8,8 @@
  *            - POST /v1/admin/pipeline/actions: viewers and other teams are
  *              refused per item; close and remove need a reason, kept as a
  *              team note on the report; a conflict agent is refused once the
- *              PR used both, and with no cloud agent possible says a
- *              person resolves it on GitHub; CI repair and fix-first
+ *              PR used both, and with no cloud agent possible says to run
+ *              mushi work --conflicts; CI repair and fix-first
  *              follow-ups go to the cloud agent when it can run, else to
  *              the local mushi work lanes (or say why neither can); train
  *              retry says honestly when no train could leave.
@@ -320,7 +320,7 @@ describe('POST /v1/admin/pipeline/actions', () => {
     const [r] = (res.body.data as { results: Array<{ ok: boolean; message: string }> }).results
     expect(r.ok).toBe(false)
     expect(r.message).toBe(
-      'Needs a person: resolve the conflict on GitHub (https://github.com/kensaurus/glot.it/pull/0). Review follow-ups are off for this team, so no conflict agent can run.',
+      'No cloud conflict agent can run (Review follow-ups are off for this team). Run `mushi work --conflicts --repo-dir <clone>` on a clone of this repo, or resolve it on GitHub (https://github.com/kensaurus/glot.it/pull/0).',
     )
     expect(db.table('fix_merge_queue').find((q) => q.id === 'q3')).toMatchObject({ state: 'resolving', conflict_agents: 1 })
     expect(calls).toEqual([])

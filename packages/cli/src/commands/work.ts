@@ -1116,16 +1116,18 @@ export function registerWorkCommands(program: Command): void {
     .option('--max <n>', 'Reports per run', '3')
     .option('--report <id>', 'Work on this report only')
     .option('--followups', 'Instead of new reports: fix the Opus "fix first" findings on PRs mushi work opened, and push to them')
+    .option('--conflicts', 'Instead of new reports: merge the base into conflicted fix PRs (no cloud Cursor key required) and push the merge')
     .option('--keep', 'Keep the worktree after the run')
     .option('--dry-run', 'Show what would run; change nothing')
     .option('--json', 'Machine-readable JSON output')
     .option('--daemon', 'Run as a local worker: register this machine, send a heartbeat every 60 s, take the console\'s lane settings and claim reports (set up with `mushi worker install`)')
     .option('--worker-config <path>', 'With --daemon: the lanes file (default ~/.config/mushi/worker.json)')
-    .action(async (opts: { repoDir?: string; project?: string; agent: string; model?: string; max: string; report?: string; followups?: boolean; keep?: boolean; dryRun?: boolean; json?: boolean; daemon?: boolean; workerConfig?: string }) => {
+    .action(async (opts: { repoDir?: string; project?: string; agent: string; model?: string; max: string; report?: string; followups?: boolean; conflicts?: boolean; keep?: boolean; dryRun?: boolean; json?: boolean; daemon?: boolean; workerConfig?: string }) => {
       if (opts.agent !== 'cursor') throw new MushiCliError('E_INVALID_INPUT', `Unknown agent "${opts.agent}".`, 'Only --agent cursor is supported.')
+      if (opts.followups && opts.conflicts) throw new MushiCliError('E_INVALID_INPUT', '--followups and --conflicts cannot be used together.', 'mushi work --conflicts --repo-dir <clone>')
       if (opts.daemon) {
-        if (opts.repoDir || opts.report || opts.followups) {
-          throw new MushiCliError('E_INVALID_INPUT', '--daemon takes its lanes and clones from the worker config, not from --repo-dir, --report or --followups.', 'mushi worker install')
+        if (opts.repoDir || opts.report || opts.followups || opts.conflicts) {
+          throw new MushiCliError('E_INVALID_INPUT', '--daemon takes its lanes and clones from the worker config, not from --repo-dir, --report, --followups or --conflicts.', 'mushi worker install')
         }
         const { runDaemon } = await import('../worker/daemon.js')
         await runDaemon({ configPath: opts.workerConfig })
@@ -1165,6 +1167,55 @@ export function registerWorkCommands(program: Command): void {
           results.push(r)
         }
         if (results.some((r) => r.outcome.startsWith('failed:'))) process.exitCode = 1
+        if (opts.json) process.stdout.write(`${JSON.stringify({ results }, null, 2)}\n`)
+        return
+      }
+      if (opts.conflicts) {
+        if (opts.report) throw new MushiCliError('E_INVALID_INPUT', '--conflicts takes the merge queue\'s conflicted PRs, not --report.', 'mushi work --conflicts --repo-dir <clone>')
+        const { repoOfRemote, resolveConflict } = await import('../worker/conflicts.js')
+        const origin = await git(repoDir, ['remote', 'get-url', 'origin'])
+        const repo = repoOfRemote(origin)
+        if (!repo) throw new MushiCliError('E_INVALID_INPUT', 'origin is not a GitHub repository.', 'mushi work --conflicts --repo-dir <clone of the app>')
+        const listed = await api<{ conflicts: Array<{ queueId: string; repo: string; prNumber: number; headRef: string; headSha: string; prUrl: string | null; fixAttemptId: string }> }>(`/v1/admin/projects/${cfg.projectId}/local-conflicts`)
+        const due = listed.conflicts.filter((c) => c.repo.toLowerCase() === repo).slice(0, max)
+        if (opts.dryRun || !due.length) {
+          if (opts.json) process.stdout.write(`${JSON.stringify({ dryRun: !!opts.dryRun, repo, conflicts: due }, null, 2)}\n`)
+          else for (const c of due) log(`would resolve ${c.repo}#${c.prNumber} at ${c.headSha.slice(0, 7)}`)
+          if (!due.length) log('No pull request of this clone is waiting on a merge conflict.')
+          return
+        }
+        await preflight(repoDir, warn)
+        await requireWriteScope(cfg)
+        const results = []
+        for (const c of due) {
+          if (interruptedBy()) break
+          log(`conflict ${c.repo}#${c.prNumber}`)
+          const claim = await api<{ token: string }>(`/v1/admin/merge-queue/${c.queueId}/local-conflict`, { method: 'POST', body: '{}' }).catch((err: unknown) => {
+            log(`  → skipped: ${err instanceof Error ? err.message : String(err)}`)
+            return null
+          })
+          if (!claim) continue
+          const run = await resolveConflict(
+            { queueId: c.queueId, repo: c.repo, prNumber: c.prNumber, headRef: c.headRef, headSha: c.headSha, prUrl: c.prUrl },
+            { repoDir, model: opts.model, log },
+          ).catch((err: unknown) => ({
+            result: 'failed' as const,
+            failureKind: 'infra' as const,
+            detail: err instanceof Error ? err.message : String(err),
+            headAfter: undefined,
+          }))
+          const recorded = await api<{ state: string }>(`/v1/admin/merge-queue/${c.queueId}/local-conflict/done`, {
+            method: 'POST',
+            body: JSON.stringify({ token: claim.token, result: run.result, headAfter: run.headAfter ?? null, detail: run.detail, failureKind: run.failureKind ?? null }),
+          }).catch((err: unknown) => {
+            log(`  → Mushi did not record it: ${err instanceof Error ? err.message : String(err)}`)
+            return null
+          })
+          const outcome = `${run.result}${recorded ? ` (${recorded.state})` : ''}: ${run.detail}`
+          log(`  → ${outcome}`)
+          results.push({ queueId: c.queueId, result: run.result, outcome })
+        }
+        if (results.some((r) => r.result === 'failed' || r.result === 'refused')) process.exitCode = 1
         if (opts.json) process.stdout.write(`${JSON.stringify({ results }, null, 2)}\n`)
         return
       }

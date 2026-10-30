@@ -20,9 +20,11 @@ import {
   MAX_CONFLICT_AGENTS,
   conflictPrompt,
   nextQueueStep,
+  noCloudConflictDetail,
   reviewRefusal,
   type ChecksView,
 } from '../_shared/merge-queue.ts'
+import { isLocalConflictAgent } from '../_shared/local-conflict-run.ts'
 import { isCursorKeyLimitError } from '../_shared/spend-down.ts'
 import { conflictRowAfterRun, conflictSlotBack } from '../_shared/work-modes.ts'
 import { OFF_GATE, pauseReason, type HealthGate } from '../_shared/health-gate.ts'
@@ -149,6 +151,30 @@ export async function processRow(db: SupabaseClient, row: QueueRow, deps: MergeQ
       await set({ state: 'waiting', detail: 'The agent pushed a merge; checking it.', head_sha: head, cursor_agent_id: null })
       await event(db, row, 'ok', 'Conflict resolved by an agent', `New head ${head.slice(0, 7)}; the queue continues.`, `mq-resolved:${row.id}:${head}`)
       return 'resolved'
+    }
+    // `mushi work --conflicts` holds the row (cursor_agent_id `local:<token>`).
+    // Do not poll Cursor. If the CLI dies, give the cap slot back after 90 min.
+    if (isLocalConflictAgent(row.cursor_agent_id)) {
+      const started = row.agent_started_at ? Date.parse(row.agent_started_at) : Number.NaN
+      if (!Number.isFinite(started) || now().getTime() - started > CONFLICT_AGENT_TIMEOUT_MS) {
+        const patch: Record<string, unknown> = {
+          state: 'blocked',
+          detail: noCloudConflictDetail('`mushi work --conflicts` did not push within 90 minutes.'),
+          cursor_agent_id: null,
+          head_sha: head,
+        }
+        if (row.conflict_agents > 0) patch.conflict_agents = row.conflict_agents - 1
+        const { data: freed } = await db
+          .from('fix_merge_queue')
+          .update({ ...patch, updated_at: now().toISOString(), claimed_until: null })
+          .eq('id', row.id)
+          .eq('cursor_agent_id', row.cursor_agent_id)
+          .eq('state', 'resolving')
+          .select('id')
+        return freed && (freed as unknown[]).length > 0 ? 'blocked' : 'resolving'
+      }
+      await set({})
+      return 'resolving'
     }
     const key = await deps.cursorKey(db, row.project_id)
     const started = row.agent_started_at ? Date.parse(row.agent_started_at) : now().getTime()
@@ -374,7 +400,7 @@ async function resolve(
   }
   const key = await deps.cursorKey(db, row.project_id)
   if (!key.ok) {
-    await set({ state: 'blocked', detail: `Merge conflict. ${key.reason}`, head_sha: head })
+    await set({ state: 'blocked', detail: noCloudConflictDetail(key.reason), head_sha: head })
     return 'blocked'
   }
   const prUrl = canonicalPrUrl(attempt.pr_url) ?? attempt.pr_url!
@@ -473,6 +499,50 @@ export function pickConflictRows<T extends { repo: string; cursor_agent_id: stri
   return { work, inLine }
 }
 
+/**
+ * Block every conflict that is waiting for an agent when no cloud Cursor key
+ * can start one. Returns the ids that were actually updated. A failed update
+ * is left out, so the per-row pass still sees those rows.
+ */
+async function blockConflictsWithoutCloudKey(
+  db: SupabaseClient,
+  conflictRows: Array<QueueRow & { claimed_until?: string | null }>,
+  deps: MergeQueueDeps,
+  nowIso: string,
+): Promise<Set<string>> {
+  const blocked = new Set<string>()
+  const waiting = conflictRows.filter((r) => !r.cursor_agent_id && !r.local_claim_id && !isLocalConflictAgent(r.cursor_agent_id))
+  const byProject = new Map<string, string[]>()
+  for (const r of waiting) byProject.set(r.project_id, [...(byProject.get(r.project_id) ?? []), r.id])
+  for (const [pid, ids] of byProject) {
+    let key: Awaited<ReturnType<MergeQueueDeps['cursorKey']>> | null = null
+    try {
+      key = await deps.cursorKey(db, pid)
+    } catch (err) {
+      log.warn('conflict key check failed', { projectId: pid, err: err instanceof Error ? err.message : String(err) })
+      continue
+    }
+    if (!key || key.ok) continue
+    const detail = noCloudConflictDetail(key.reason)
+    for (let i = 0; i < ids.length; i += 100) {
+      const chunk = ids.slice(i, i + 100)
+      const { data, error } = await db
+        .from('fix_merge_queue')
+        .update({ state: 'blocked', detail, updated_at: nowIso, claimed_until: null, cursor_agent_id: null })
+        .in('id', chunk)
+        .is('cursor_agent_id', null)
+        .is('local_claim_id', null)
+        .select('id')
+      if (error || !data) {
+        log.warn('conflict block update failed', { projectId: pid, err: error?.message ?? 'no rows' })
+        continue
+      }
+      for (const row of data as Array<{ id: string }>) blocked.add(row.id)
+    }
+  }
+  return blocked
+}
+
 export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, projectId?: string): Promise<Record<string, number>> {
   const now = deps.now ?? (() => new Date())
   const gate = deps.healthGate ?? OFF_GATE
@@ -531,9 +601,30 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
     // Train apps keep two things on the single-PR path: express fixes, and
     // PRs a conflict agent is resolving (the train marked them `resolving`).
     // The latter do not share the repo's one-row slot the train just took.
-    conflictRows = rows.filter((r) => trainProjects.has(r.project_id) && !express.has(r.id) && r.state === 'resolving')
+    // Re-read: the train just marked rows `resolving` in the database. The
+    // `rows` snapshot was taken before that, and a real client does not
+    // mutate it (the test fake does). Without the re-read those conflicts
+    // wait a whole tick with no agent.
+    const trainIds = [...trainProjects.keys()]
+    if (trainIds.length) {
+      const { data: resolvingNow, error: resolvingErr } = await db
+        .from('fix_merge_queue')
+        .select(ROW_COLUMNS)
+        .eq('state', 'resolving')
+        .in('project_id', trainIds)
+        .limit(500)
+      if (resolvingErr) throw new Error(`merge-queue conflict read failed: ${resolvingErr.message}`)
+      conflictRows = ((resolvingNow ?? []) as typeof rows).filter((r) => {
+        if (!trainProjects.has(r.project_id) || express.has(r.id)) return false
+        return !r.claimed_until || r.claimed_until < nowIso
+      })
+    }
     rows = rows.filter((r) => !trainProjects.has(r.project_id) || express.has(r.id))
   }
+  // No cloud key: block every waiting conflict now. The two-at-a-time cap
+  // would otherwise leave the rest `resolving` ("waiting on a conflict agent")
+  // for hours, because an agent that cannot start never frees a slot.
+  const blockedNoCloud = await blockConflictsWithoutCloudKey(db, conflictRows, deps, nowIso)
   // One active row per repo, then some blocked re-checks.
   const picked: QueueRow[] = []
   for (const r of rows) {
@@ -549,7 +640,9 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
     repos.add(r.repo)
     picked.push(r)
   }
-  const { work: conflictWork, inLine } = pickConflictRows(conflictRows)
+  const pickedConflicts = pickConflictRows(conflictRows)
+  const conflictWork = pickedConflicts.work.filter((r) => !blockedNoCloud.has(r.id))
+  const inLine = pickedConflicts.inLine.filter((x) => !blockedNoCloud.has(x.row.id))
   for (const { row, ahead } of inLine) {
     const detail = `Conflicts with the base branch; waits for a free conflict agent (${ahead} ahead in this repo), then rides a release train.`
     if (row.detail !== detail) await db.from('fix_merge_queue').update({ detail, updated_at: nowIso }).eq('id', row.id)

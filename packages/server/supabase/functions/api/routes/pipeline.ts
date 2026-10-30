@@ -19,8 +19,8 @@
  *   update_branch   GitHub "Update branch", pinned to the head Mushi saw
  *   conflict_agent  hand a conflicted queue row back to the worker for a new
  *                   conflict agent (≤ 2 per PR, ADR 0041); with no cloud agent
- *                   possible it says a person resolves it on GitHub (the local
- *                   lanes push only commits that change files, not merges)
+ *                   possible it says to run `mushi work --conflicts` (or a
+ *                   conflicts lane) instead of waiting on an agent that cannot start
  *   mark_ready      take a draft PR out of draft so CI runs
  *   remove          take the PR out of the merge queue, with a reason
  *   close           close the PR without merging, with a reason
@@ -60,6 +60,7 @@ import { ciJobsForHeads, enqueueReviewFollowup, followupsEnabledForProject } fro
 import { localCiRepairRequestDedupe, localHandoff, type LocalFollowupKind } from '../../_shared/local-followup.ts';
 import { roundHeadsFor } from './local-followups.ts';
 import { ciHeadState, FOLLOWUP_REASONS, type CiJobForRepair, type PriorFollowup } from '../../_shared/review-followup.ts';
+import { noCloudConflictAction, noCloudConflictDetail } from '../../_shared/merge-queue.ts';
 import { postTeamNote } from '../../_shared/reporter-comms.ts';
 import { RERUN_REFUSED_DEDUPE_PREFIX } from '../../_shared/ci-jobs.ts';
 import { closeFixPullRequest, closePullRequest } from '../../_shared/fix-close.ts';
@@ -955,18 +956,20 @@ async function runAction(
     if (q.local_claim_id) return { id: a.id, ok: false, message: 'A local worker is resolving this conflict right now.', url };
     const cloud = await cloudReady(db, a.project_id, cloudCache);
     if (!cloud.ready) {
-      // No cloud agent can run; a local worker lane in conflicts mode (ADR 0049) can.
+      // No cloud agent can run; a local worker lane in conflicts mode (ADR 0049)
+      // or `mushi work --conflicts` on a clone can.
+      const why = cloud.why ?? 'no cloud agent'
       const { data: lanes } = await db.from('work_lanes').select('id').eq('project_id', a.project_id).eq('mode', 'conflicts').eq('paused', false).limit(1);
       if (((lanes ?? []) as unknown[]).length > 0) {
         const { error: upErr } = await db
           .from('fix_merge_queue')
-          .update({ state: 'blocked', cursor_agent_id: null, claimed_until: null, detail: 'Merge conflict: waits for a local worker lane in conflicts mode.', updated_at: now.toISOString() })
+          .update({ state: 'blocked', cursor_agent_id: null, claimed_until: null, detail: noCloudConflictDetail(why), updated_at: now.toISOString() })
           .eq('id', q.id)
           .is('local_claim_id', null);
         if (upErr) return { id: a.id, ok: false, message: 'Could not hand it back to the merge queue.', url };
-        return { id: a.id, ok: true, message: 'A local worker lane in conflicts mode takes it at its next claim.', url };
+        return { id: a.id, ok: true, message: 'A local worker lane in conflicts mode takes it at its next claim. Or run `mushi work --conflicts --repo-dir <clone>`.', url };
       }
-      return { id: a.id, ok: false, message: `Needs a person: resolve the conflict on GitHub (${url ?? 'the pull request'}). ${cloud.why}, so no conflict agent can run.`, url };
+      return { id: a.id, ok: false, message: noCloudConflictAction(why, url), url };
     }
     // The worker starts a new agent for a `resolving` row with no agent when the PR still conflicts.
     const { error: upErr } = await db

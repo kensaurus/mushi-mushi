@@ -2,13 +2,13 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-30 · **807** routes.
+> Generated: 2026-10-30 · **810** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 219 |
+| `adminOrApiKey` | 222 |
 | `apiKeyAuth` | 59 |
 | `jwtAuth` | 410 |
 | `jwtOrApiKey` | 2 |
@@ -269,6 +269,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/merge-queue` | `jwtAuth` | `packages/server/supabase/functions/api/routes/merge-queue.ts` |
 | POST | `/v1/admin/merge-queue` | `jwtAuth` | `packages/server/supabase/functions/api/routes/merge-queue.ts` |
 | DELETE | `/v1/admin/merge-queue/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/merge-queue.ts` |
+| POST | `/v1/admin/merge-queue/:id/local-conflict` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/local-conflicts.ts` |
+| POST | `/v1/admin/merge-queue/:id/local-conflict/done` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/local-conflicts.ts` |
 | GET | `/v1/admin/migrations/progress` | `jwtAuth` | `packages/server/supabase/functions/api/routes/migration-progress.ts` |
 | DELETE | `/v1/admin/migrations/progress/:guide_slug` | `jwtAuth` | `packages/server/supabase/functions/api/routes/migration-progress.ts` |
 | PUT | `/v1/admin/migrations/progress/:guide_slug` | `jwtAuth` | `packages/server/supabase/functions/api/routes/migration-progress.ts` |
@@ -395,6 +397,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/projects/:id/keys` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-keys.ts` |
 | DELETE | `/v1/admin/projects/:id/keys/:keyId` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-keys.ts` |
 | POST | `/v1/admin/projects/:id/keys/rotate` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-keys.ts` |
+| GET | `/v1/admin/projects/:id/local-conflicts` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/local-conflicts.ts` |
 | GET | `/v1/admin/projects/:id/local-followups` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/local-followups.ts` |
 | GET | `/v1/admin/projects/:id/preflight` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
 | GET | `/v1/admin/projects/:id/privacy-status` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/evolution.ts` |

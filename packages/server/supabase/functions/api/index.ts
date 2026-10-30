@@ -764,6 +764,8 @@ forwardToApiExt(['/v1/admin/pipeline', '/v1/admin/pipeline/actions', '/v1/admin/
 forwardToApiExt(['/v1/admin/reports/:id/sentry/close']);
 
 forwardToApiExt(['/v1/admin/projects/:id/local-followups', '/v1/admin/fixes/:id/local-followup', '/v1/admin/fixes/:id/local-followup/done']);
+// local-conflicts.ts (`mushi work --conflicts`); deploy size limit.
+forwardToApiExt(['/v1/admin/projects/:id/local-conflicts', '/v1/admin/merge-queue/:id/local-conflict', '/v1/admin/merge-queue/:id/local-conflict/done']);
 // skill-runs.ts (ADR 0042); deploy size limit, 2026-10-23.
 forwardToApiExt(['/v1/admin/skill-runs', '/v1/admin/projects/:id/skill-runs', '/v1/admin/projects/:id/skill-runs/:runId/stop']);
 // search-rank.ts; deploy size limit, 2026-10-23.
