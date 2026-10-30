@@ -111,6 +111,15 @@ describe('setup count', () => {
     expect(labels()).toContain('Fix it')
   })
 
+  it('says optional once: the chip, not "(optional)" in the name too', () => {
+    const named: SetupProject = { ...DEMO, steps: DEMO.steps.map((st) => (st.id === 'slack_connected' ? { ...st, label: 'Connect Slack (optional)' } : st)) }
+    act(() => {
+      root.render(createElement(MemoryRouter, null, createElement(SetupChecklist, { project: named, mode: 'banner' })))
+    })
+    expect(container.textContent).toContain('Connect Slack')
+    expect(container.textContent).not.toContain('(optional)')
+  })
+
   // Set up showed the rail, this checklist's count and progress bar, and the
   // same four steps again (first-time user test, 2026-10-28).
   it('lists only the optional steps under Set up, with no second count', () => {

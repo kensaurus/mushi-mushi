@@ -105,7 +105,7 @@ export async function buildSetupResponse(
       {
         id: 'github_connected',
         label: 'Connect GitHub',
-        description: 'Required for auto-fix PRs and code grounding.',
+        description: 'Lets Mushi read your code to explain bugs and open fixes as pull requests.',
         complete: hasGithub,
         required: false,
         cta_to: '/integrations/config#platform-card-github',
