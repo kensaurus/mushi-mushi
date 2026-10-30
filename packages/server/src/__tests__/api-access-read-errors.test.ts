@@ -30,7 +30,7 @@ const ORG = '5000000a-0000-4000-8000-000000000000'
 const P_ORG = '1000000a-0000-4000-8000-000000000000'
 const USER = 'member-user'
 
-function db(failing: string | null, message = 'connection reset') {
+function db(failing: string | null, message: string | { code: string; message: string } = 'connection reset') {
   return makeFakeDb(
     {
       projects: [{ id: P_ORG, name: 'Team app', owner_id: 'someone-else', organization_id: ORG }],
@@ -111,6 +111,24 @@ describe('accessibleProjectIds lenient mode', () => {
     expect(message).toContain('[upstream gateway error] abc.supabase.co | 522: Connection timed out')
     expect(message).not.toContain('<!DOCTYPE')
     expect(message.length).toBeLessThan(200)
+  })
+
+  // MUSHI-MUSHI-SERVER-35 (2026-10-31): the gateway's "upstream request
+  // timeout" body was reported as an app error on /onboarding/stats.
+  it('marks a gateway "upstream request timeout" as transient, so it is not reported', async () => {
+    const err = await access
+      // The gateway body carries no SQLSTATE.
+      .accessibleProjectIds(db('project_members', { code: '', message: 'upstream request timeout' }) as never, USER, {
+        strict: true,
+      })
+      .then(
+        () => {
+          throw new Error('expected ProjectAccessReadError')
+        },
+        (caught: unknown) => caught,
+      )
+    expect(err).toBeInstanceOf(access.ProjectAccessReadError)
+    expect((err as InstanceType<typeof access.ProjectAccessReadError>).transient).toBe(true)
   })
 
   it('lenient mode logs the one-line summary, not the HTML page', async () => {
