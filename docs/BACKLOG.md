@@ -8,6 +8,7 @@ regenerating it.** Plans stay the source of truth for their own detail
 parked work is visible in one place.
 
 - **Last regenerated:** 2026-10-30 (fifth run; delta against 2026-10-27 below)
+- **Delta 2026-10-31 (viz tokens):** 1 closed (BL-079: `@theme static` emits dark `--color-viz-*`; `readVizToken` no longer keeps a second palette).
 - **Delta 2026-10-31 (holder string and CLA):** 1 closed (BL-105: kensaurus LLC everywhere, CLA Maintainer included) · 1 new (BL-199: accept or reject ADR 0036, split from BL-105).
 - **Delta 2026-10-30 (journey live pass):** 5 new (BL-192..BL-196: live from-scratch GitHub install, console CI settings, demo-app heartbeat warning, raw backend host on GitHub authorize, Langfuse probe per app) · 1 closed (BL-173). Later the same day: 5 closed (BL-193, BL-194, BL-195, BL-196, and BL-197 found and fixed the same day).
 - **Delta 2026-10-30:** 12 new (BL-180..BL-191: health gate Phase 2, simplicity Phases 2–5, GTM D1, held PRs, code-only stale verdicts, owner-gated live tests, retention-sweep check, red host branches and hook failures, Chromium-only layout tests, tsumagoi #968 red) · 0 closed · 0 newly stale · 1 added as verify-done (BL-188). Partly done since 10-27, still open: BL-146 (2 of 2 visitors reached a diagnosis, a412bae73), BL-156 (per-address reuse applied, 39dce567b), BL-164 (newStatus / pullRequestUrl, 6a24a3517), BL-170 (lockfile commands in the PR body, 39dce567b), BL-174 (plain "did not run" wording, a412bae73), BL-177 (no call for a running check, a9b1bd0c6). Code markers since 10-26: no new TODO/FIXME; 7 new `skipIf` guards (2 Chromium-only, BL-190; 5 skip on Windows and run in Linux CI). Already settled, no row: the backfill migration file landed in #918, the `report_presence` migration file ships with this register, the Zenn article is being published. The open count below counts the table; the 10-27 figure (73) had drifted.
@@ -32,13 +33,13 @@ parked work is visible in one place.
 - **Added 2026-10-23 (site audit, ADR 0040):** BL-116, a parked part of the site audit. Closed BL-117 on 2026-10-23.
 - **Added 2026-10-24 (local fix worker, `mushi work`):** BL-118..BL-119, parked parts of the local worker.
 - **Delta 2026-10-17:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 124 · **Recently closed:** 35 (BL-105 on 2026-10-31; BL-192, BL-195, BL-197, BL-193, BL-194, BL-196, BL-173 on 2026-10-30; BL-011, BL-154 on 2026-10-29; BL-117, BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 123 · **Recently closed:** 36 (BL-079, BL-105 on 2026-10-31; BL-192, BL-195, BL-197, BL-193, BL-194, BL-196, BL-173 on 2026-10-30; BL-011, BL-154 on 2026-10-29; BL-117, BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
 | deferred-plan-phase | 19 |
 | test-gap | 7 |
-| tech-debt | 18 |
+| tech-debt | 17 |
 | known-bug | 18 |
 | decision-needed | 16 |
 | unfinished-feature | 38 |
@@ -50,7 +51,7 @@ parked work is visible in one place.
 
 | Status | Open |
 |---|---|
-| relevant | 121 |
+| relevant | 120 |
 | verify-done | 4 |
 | stale (propose removal) | 0 |
 
@@ -129,7 +130,6 @@ parked work is visible in one place.
 | BL-073 | tech-debt | Dead-code categories not run: C6 duplication measured (jscpd 1.7%, 397 clones) but not ratcheted (needs a devDependency and a CI step, housekeep-gates); C7 orphan assets, C8 suppression debt and C9 schema not examined | relevant | low | `docs/plan-dead-code-2026-10-16.md` | — |
 | BL-074 | decision-needed | Owner launch gates with no code work left: tester marketplace (26 items incl. KYB, Tremendous keys, OFAC and attorney review), Capacitor-to-RN cutover (9), marketplace and storefront submission checklists, awesome-list submissions (one a week, plus checking the MCP registry `websiteUrl`), VS Code Marketplace deferred 2026-09-21 | relevant | low | `docs/runbooks/tester-marketplace-launch.md`; `docs/migrations/capacitor-to-react-native.md:825`-`:838`; `docs/marketplace/cursor-submission-checklist.md`; `docs/marketing/STOREFRONTS.md:211`; `docs/marketing/GTM-DISTRIBUTION.md`; `docs/marketing/awesome-list-submissions.md:76`-`:81` | #38 |
 | BL-077 | tech-debt | Agent browser sessions on the owner PC (stored playwright profiles glot-guest, testprof, tsumagoi) raised most of glot.it's 2026-10-16 Sentry issues: a minimized window reports `visible` but never paints, so FCP/LCP/TTFB look like 8-16 s. `app.automated` stays false because the window is not webdriver-flagged. Tag these sessions (or the minimized-window signal) so web vitals from them are dropped | relevant | med | glot.it GLOT-IT-D0/CY/CZ/DA/DB/DE-DK closed 2026-10-16 as ours | — |
-| BL-079 | tech-debt | Dark `--color-viz-*` tokens never reach the CSS (Tailwind drops unused `@theme` colours), so `readVizToken()` falls back to the copy in `lib/vizTokens.ts`, a second source for chart colours. `@theme static` would make the stylesheet the one source | relevant | low | `apps/admin/src/lib/vizTokens.ts`; `docs/design/housekeep-design-state-2026-10-16.md` | — |
 | BL-080 | unfinished-feature | PR #338 "feat(observability): metrics, logs & traces as first-class evidence" (+1000/−31, branch `feat/observability-evidence-pillars`) has been open since 2026-07-22, last updated 2026-10-10. Merge it in a batch, rebase it, or close it. The positioning check matters here: AGENTS.md rules out "observability" as our category, so the copy needs that test before it lands | relevant | low | PR #338 | #338 |
 | BL-081 | tech-debt | 15 open Dependabot PRs, the oldest from 2026-07-09 (#304–#308 Actions bumps, #386, #414–#420, #426, #436 dependency groups). Fold them into the next release batch (ci-cost rule 7) or close the ones a later bump superseded | relevant | low | `gh pr list --author app/dependabot` | #304–#308, #386, #414–#420, #426, #436 |
 | BL-082 | decision-needed | yen-yen code-health ingest has been silent since 2026-07-16. yen-yen's `bundle-budget.yml` dropped its push-to-main trigger on purpose (a cost cut), and its "Push code-health metrics to Mushi" step is gated on `github.event_name == 'push'`, so the `workflow_dispatch` path its own comment offers never posts either. `/code-health` for yen-yen shows July data with no staleness signal, and AGENTS.md ("Code Health Ingest") still says it posts on every push to `main`. Decide: let the step run on `workflow_dispatch` or a weekly schedule in yen-yen, or update AGENTS.md and show staleness on the page | relevant | low | `kensaurus/yen-yen` `.github/workflows/bundle-budget.yml:24`-`:37`, `:168`; `AGENTS.md` (Code Health Ingest); BL-009 | — |
@@ -235,6 +235,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-079 | Dark `--color-viz-*` tokens never reached the CSS, so chart colours had a second palette in `vizTokens.ts` | 2026-10-31 | Viz tokens are in `@theme static` in `apps/admin/src/styles/theme-tokens.css`. `readVizToken()` no longer keeps a palette; colour maps read the stylesheet on access. `scripts/viz-token-emit.mjs` (via `pnpm check:design-tokens`) compiles the theme with no utilities and fails if a read token is missing or a call runs at import. |
 | BL-105 | One copyright holder string for ADR 0036, and the CLA Maintainer | 2026-10-31 | The owner chose "kensaurus LLC". Every LICENSE, NOTICE, TRADEMARK.md and source header carries it (#969), and CLA.md names kensaurus LLC as the Maintainer. Accepting ADR 0036 itself moves to BL-199. |
 | BL-192 | A live walk of Connect GitHub for an account with no Mushi App installation | 2026-10-30 | Closed as not walkable here: the owner has one GitHub account and it already has the App, so `GET /user/installations` never comes back empty; uninstalling to test would cut every connected app off. The branch is covered by `github-connect.test.ts` (install once, then `no_installation`, never a loop) and `github-app-setup-url.test.ts`; the legs around it were walked live (authorize, round trip, picker, save). |
 | BL-195 | GitHub's sign-in page named the raw backend host | 2026-10-30 | The hosted-MCP CloudFront function 302s `/mushi-mushi/hosted-mcp/github/app-authorize` to the api callback; the App's callback URLs include it and `GITHUB_APP_OAUTH_REDIRECT_URL` points at it. Live: the connect link's `redirect_uri` is the kensaur.us address, and Change repository → picker → Keep works. |
