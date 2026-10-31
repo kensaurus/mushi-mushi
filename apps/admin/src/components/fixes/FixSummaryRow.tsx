@@ -96,7 +96,7 @@ export function FixSummaryRow({ summary, successRate }: Props) {
         label="In flight"
         value={summary.inProgress}
         accent={summary.inProgress > 0 ? 'info' : 'muted'}
-        sublabel="queued or running"
+        sublabel="still running"
         meaning="Runs currently being attempted or sitting in the dispatch queue. Watch for ones idling > 10 minutes."
       />
       <KpiTile
