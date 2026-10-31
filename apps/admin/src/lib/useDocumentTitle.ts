@@ -23,7 +23,7 @@ import { usePageContext } from './pageContext'
 const APP_SUFFIX = 'Mushi Mushi'
 const DEFAULT_TITLE = 'Mushi Mushi — Bug Intelligence for Software Teams'
 
-function composeTitle(primary: string | null, summary?: string | null): string {
+export function composeTitle(primary: string | null, summary?: string | null): string {
   if (!primary) return DEFAULT_TITLE
   const trimmedSummary = summary?.trim() ?? ''
   const body = trimmedSummary ? `${primary} · ${trimmedSummary}` : primary

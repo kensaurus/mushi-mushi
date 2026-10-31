@@ -47,6 +47,9 @@ export function ReadoutPanel({
           Developer details{' '}
           <span className="font-normal text-fg-muted">
             · {title.replace(/\s*readout$/i, '')} endpoints and raw signals
+            {/* Space text node so the freshness word stays separate from
+                "raw signals". CSS gap is invisible to the accessible name. */}
+            {' '}
           </span>
         </span>
       }
