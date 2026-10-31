@@ -137,10 +137,39 @@ export function normalizeAdvisors(raw: unknown): AdvisorResult[] {
     metadata: {
       ...(typeof l.remediation === 'string' ? { remediation: l.remediation } : {}),
       ...(typeof l.count === 'number' ? { count: l.count } : {}),
+      ...(Array.isArray(l.categories) ? { categories: l.categories } : {}),
       ...(Array.isArray(l.findings) ? { findings: l.findings } : {}),
       ...(l.metadata && typeof l.metadata === 'object' ? (l.metadata as Record<string, unknown>) : {}),
     },
   }))
+}
+
+/**
+ * Run one read-only SELECT through the hosted MCP (`read_only=true`) and
+ * return its rows. The MCP wraps results in an untrusted-data envelope.
+ */
+export async function executeReadOnlySql(opts: SupabaseMcpClientOptions, query: string): Promise<unknown[]> {
+  return sqlRows(await callTool<unknown>(opts, 'execute_sql', { query }))
+}
+
+/**
+ * Rows from an execute_sql result: a bare array, the untrusted-data text, or
+ * `{ result: "<text>" }` (the shape the hosted MCP returns as of 2026-10-31).
+ *
+ * @internal Exported for tests only.
+ */
+export function sqlRows(result: unknown): unknown[] {
+  if (Array.isArray(result)) return result
+  const text = typeof result === 'string' ? result : result && typeof result === 'object' && typeof (result as { result?: unknown }).result === 'string' ? (result as { result: string }).result : null
+  if (text == null) return []
+  const unwrapped = unwrapUntrusted(text)
+  if (Array.isArray(unwrapped)) return unwrapped
+  try {
+    const direct = JSON.parse(text)
+    return Array.isArray(direct) ? direct : []
+  } catch {
+    return []
+  }
 }
 
 /**

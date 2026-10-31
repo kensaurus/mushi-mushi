@@ -472,7 +472,7 @@ export function IntegrationsPage() {
                 platform={platformQuery.data ?? null}
                 history={history}
                 slack={{
-                  configured: Boolean(settingsQuery.data?.slackConfigured),
+                  configured: settingsQuery.data ? Boolean(settingsQuery.data.slackConfigured) : null,
                   canPost: Boolean(settingsQuery.data?.slackCanPost),
                   channelId: settingsQuery.data?.slackChannelId ?? null,
                 }}
@@ -573,7 +573,7 @@ export function IntegrationsPage() {
         <div className="grid gap-4 p-4 md:grid-cols-2 2xl:grid-cols-3">
           <SlackIntegrationCard
             projectId={activeProjectId ?? null}
-            slackConfigured={Boolean(settingsQuery.data?.slackConfigured)}
+            slackConfigured={settingsQuery.data ? Boolean(settingsQuery.data.slackConfigured) : null}
             teamName={settingsQuery.data?.slackTeamName ?? null}
             channelId={settingsQuery.data?.slackChannelId ?? null}
             canPost={Boolean(settingsQuery.data?.slackCanPost)}

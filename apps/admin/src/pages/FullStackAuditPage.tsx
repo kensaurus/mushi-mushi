@@ -33,6 +33,7 @@ import { gateLabel } from '../lib/gateLabels'
 import { GateFindingsSection } from '../components/gates/GateFindingsSection'
 import { CopyFixPromptButton } from '../components/gates/CopyFixPromptButton'
 import { KnownHolesCard } from '../components/code-health/KnownHolesCard'
+import { DatabaseHealthCard } from '../components/fullstack-audit/DatabaseHealthCard'
 import { PageStatus, type PageStatusTone } from '../components/ui/page-status'
 import { latestOpenFindings, type GateFindingsPayload } from '../lib/gateFindings'
 import { pluralizeWithCount } from '../lib/format'
@@ -254,6 +255,9 @@ export function FullStackAuditPage() {
       {error && <ErrorAlert title="The audit failed" message={error} onRetry={projectId ? () => void runAudit() : undefined} />}
 
       {result && <AuditResultCard result={result} />}
+
+      {/* The linked Supabase project's grade, size, cache and advisors, with advice (2026-10-31). */}
+      {projectId && <DatabaseHealthCard projectId={projectId} />}
 
       {projectId && (
         <Section title="Open findings by check">
