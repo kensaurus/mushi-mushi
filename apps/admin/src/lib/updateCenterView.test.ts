@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deriveUpdateCenterView, normalizeVersion } from './updateCenterView'
+import { deriveUpdateCenterView, lockfileNoteFromPlan, normalizeVersion } from './updateCenterView'
 
 const MUSHI = {
   sdk_package: '@mushi-mushi/web',
@@ -98,6 +98,19 @@ describe('deriveUpdateCenterView', () => {
     const v = deriveUpdateCenterView({ sdk_status: 'unknown' }, { status: 'idle' })
     expect(v.mode).toBe('not_checked')
     expect(v.packages).toEqual([])
+  })
+
+  it('shows the lockfile command stored on the upgrade plan', () => {
+    const note = 'This PR needs `pnpm install --lockfile-only`.'
+    const v = deriveUpdateCenterView(GLOT, {
+      status: 'completed',
+      prUrl: 'https://github.com/acme/app/pull/1',
+      plan: [{ package: '@mushi-mushi/web', from: '1.31.0', to: '1.33.2', lockfileNote: note }],
+      prState: 'open',
+    })
+    expect(v.mode).toBe('pr_open')
+    expect(v.lockfileNote).toBe(note)
+    expect(lockfileNoteFromPlan([{ package: '@mushi-mushi/web', from: '1', to: '2' }])).toBeNull()
   })
 
   it('compares versions with or without a v prefix', () => {
