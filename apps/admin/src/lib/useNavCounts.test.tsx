@@ -208,7 +208,7 @@ describe('useNavCounts', () => {
     expect(seen.layout.flaggedDevices).toBe(4)
   })
 
-  it('realtime changes re-read at most once per 15 s, the last change still picked up', async () => {
+  it('realtime changes re-read at most once per 45 s, the last change still picked up', async () => {
     // Background workers write fix_events every few seconds; each nav-meta
     // read costs the server seconds (2026-10-23: 14 reads in 2 minutes).
     api.apiFetch.mockResolvedValue({ ok: true, data: navMeta() })
@@ -226,6 +226,11 @@ describe('useNavCounts', () => {
       expect(api.apiFetch).toHaveBeenCalledTimes(afterFirst)
       await act(async () => {
         vi.advanceTimersByTime(15_000)
+      })
+      // 20 s in: still inside the window (it was 15 s before 2026-10-31).
+      expect(api.apiFetch).toHaveBeenCalledTimes(afterFirst)
+      await act(async () => {
+        vi.advanceTimersByTime(30_000)
       })
       expect(api.apiFetch).toHaveBeenCalledTimes(afterFirst + 1)
       expect(String(api.apiFetch.mock.calls.at(-1)![0])).toContain('fresh=1')
