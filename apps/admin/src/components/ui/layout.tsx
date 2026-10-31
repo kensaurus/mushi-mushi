@@ -304,15 +304,18 @@ interface SectionProps {
   freshness?: SectionFreshness
   /** Anchor id so other surfaces can link to this section (`#id`). */
   id?: string
+  /** Heading level. Default h3 sits under a page h2. A page h1 passes h2. */
+  as?: 'h2' | 'h3'
 }
 
-export function Section({ title, children, className = '', action, icon, freshness, id }: SectionProps) {
+export function Section({ title, children, className = '', action, icon, freshness, id, as = 'h3' }: SectionProps) {
   return (
     <Card id={id} className={`p-3 scroll-mt-6 ${className}`}>
       <PanelHeader
         title={title}
         icon={icon}
         uppercase={false}
+        as={as}
         action={
           <>
             {freshness && <FreshnessPill {...freshness} />}

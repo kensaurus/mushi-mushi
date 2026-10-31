@@ -80,7 +80,7 @@ export function FixGateChecklist({ fixId }: Props) {
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <h4 className="text-xs font-medium text-fg">Merge checks</h4>
+          <h3 className="text-xs font-medium text-fg">Merge checks</h3>
           {verification && (
             <p className="text-2xs text-fg-muted" data-testid="fix-gate-summary">
               {gatesSummary(gates)}

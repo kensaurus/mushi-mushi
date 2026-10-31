@@ -45,6 +45,8 @@ describe('InflightDispatches', () => {
     })
     const text = container.textContent ?? ''
     expect(text).toContain('Fix requests running')
+    expect(container.querySelector('h2')?.textContent).toContain('Fix requests running')
+    expect(container.querySelector('h3')).toBeNull()
     expect(text).toContain('2 fix requests stopped without a pull request')
     expect(text).not.toMatch(/dispatch/i)
   })
