@@ -18,7 +18,7 @@
  *   - Producer/Critic pattern (2026 canonical, LangGraph-style)
  *   - Personas defined in agent_personas table (extensible without redeploys)
  *   - Producer and judge default to Claude Sonnet 5.5 (pdca-models.ts); the
- *     OpenAI fallback is gpt-5.4; overridable only within that priced table
+ *     OpenAI fallback is gpt-6.1-sol; overridable only within that priced table
  *   - The critic asks for native structured output (`output_config.format`),
  *     never a forced tool call: Sonnet 5.5 rejects a forced tool_choice
  *   - Monotonicity guard: abort if score regresses (prevents fruitless cycles)

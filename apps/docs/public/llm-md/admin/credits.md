@@ -4,14 +4,14 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/credits
 
 ---
 title: Spend credits
-description: Spend credits lists expiring Cursor and Firecrawl credits and every way Mushi can spend them fixing bugs, improving apps with skills and checking sites.
+description: Spend credits lists expiring Cursor and Firecrawl credits and every way Mushi Mushi can spend them fixing bugs, improving apps with skills and checking sites.
 ---
 
 # Spend credits
 
-**Route:** `/credits`
+**Route:** `/credits` (sidebar: More pages → Account → Spend credits)
 
-Cursor and Firecrawl credits that lapse at the end of a period are worth more spent on your apps. This page shows when each key's credits expire and lists every place Mushi can spend them, with a switch for each. The full form behind each switch stays where it was (Settings → AI keys, Settings → Web tools, Inventory → Discovery); this page answers one question: is anything spending them, and on what?
+Cursor and Firecrawl credits that lapse at the end of a period are worth more spent on your apps. This page shows when each key's credits expire and lists every place Mushi Mushi can spend them, with a switch for each. The full form behind each switch stays where it was (Settings → AI keys, Settings → Web tools, Inventory → Discovery); this page answers one question: is anything spending them, and on what?
 
 ## Cursor: fix bugs
 
@@ -46,7 +46,7 @@ A broken page becomes a bug report only after a second check confirms it, and sp
 
 ### Site audit
 
-Under each app's watch, **Audit links, accessibility and translations weekly** turns on its [site audit](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0040-site-audit-deterministic-live-site-checks.md). Once a week (the first run starts within the hour) Mushi maps the live site, reads every page under its address (up to 200, one Firecrawl credit each) and checks:
+Under each app's watch, **Audit links, accessibility and translations** turns its [site audit](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0040-site-audit-deterministic-live-site-checks.md) on or off. It starts weekly and reads up to 200 pages. While it is on, **Daily**, **Every 3 days** or **Weekly** sets how often it runs (a schedule outside those three stays shown), and the page menu sets how many pages a run reads: 50, 100, 200, 500, or the limit already saved. One Firecrawl credit a page; the row shows that cost. The first run starts within the hour. Mushi maps the live site, reads every page under its address up to that limit, and checks:
 
 - links to the site's own pages, to other sites and to images that are 404, 410, 5xx or unreachable (a 401, 403 or 429 is often a bot wall and does not count; Facebook, Instagram, LinkedIn, X and calendar links are skipped);
 - pages with no title, meta description or ``;

@@ -59,6 +59,7 @@ import {
   type GhRun,
 } from './ci-jobs.ts'
 import { evaluateWatch, type WatchJob } from './ci-placement.ts'
+import type { TimeboxSummary } from './ci-placement-timebox.ts'
 import { billingRowsFromUsage, fetchBillingUsage, isGithubLogin, monthsToSync, nextCoveredFrom, type BillingOwnerType } from './ci-billing.ts'
 
 // deno-lint-ignore no-explicit-any
@@ -116,6 +117,8 @@ export interface CollectorDeps {
   resolveBillingToken?: (db: Db, projectId: string) => Promise<string | null>
   fetchImpl?: CiGithub['fetchImpl']
   now: () => Date
+  /** Switches time-boxed placement changes back (ADR 0037); unset = not this tick. */
+  timedReverts?: (db: Db, now: Date) => Promise<TimeboxSummary>
 }
 
 interface RepoBinding {
@@ -293,6 +296,8 @@ export interface CollectorSummary {
   deleted: { jobs: number | null; samples: number | null }
   /** CI placement watches updated this tick (ADR 0037). */
   watches: number
+  /** Time-boxed placement changes switched back this tick. */
+  timedReverts?: TimeboxSummary
   /** Closed pull requests listed and PR file lists read this tick. */
   prs: { repos: number; stored: number; classified: number }
   /** GitHub bills read this tick (once a day per owner). */
@@ -389,6 +394,7 @@ export async function runCiCollector(db: Db, deps: CollectorDeps, opts: { projec
 
   summary.settled = await settleStaleLiveJobs(db, deps, { calls: SETTLE_CALLS_PER_TICK, now, bindings, tokens })
   summary.watches = await runPlacementWatches(db, now).catch(() => 0)
+  if (deps.timedReverts) summary.timedReverts = await deps.timedReverts(db, now).catch(() => ({ due: 0, reverted: 0, failed: 1 }))
   summary.deleted = await deleteExpiredCiRows(db, now)
   return summary
 }

@@ -142,7 +142,9 @@ export function PageHelpBanner({
   const iconClass = 'bg-surface-overlay text-fg-muted'
 
   // Related pages stay visible under the help row: the owner could not find
-  // the cross-links while they sat inside the closed help (2026-10-08).
+  // the cross-links while they sat inside the closed help (2026-10-08). While
+  // the help is open its own "Related pages" section shows them, so the row
+  // hides rather than list the same links twice (2026-10-27).
   const visibleLinks = resolvedLinks.filter((l) => l.to.split('#')[0] !== pathname)
   return (
     <div className="mb-3 flex w-full min-w-0 flex-col gap-1">
@@ -179,13 +181,15 @@ export function PageHelpBanner({
           <HelpSection tone="info" title="What it is" className="md:col-span-2">
             <HelpRichText text={whatIsIt} />
           </HelpSection>
+          {/* A section without its partner takes the full row; "How to use it"
+              alone sat in half the width (/checks, owner 2026-10-30). */}
           {useCases && useCases.length > 0 && (
-            <HelpSection tone="tip" title="When to use it">
+            <HelpSection tone="tip" title="When to use it" className={howToUse ? undefined : 'md:col-span-2'}>
               <HelpBulletList items={useCases} />
             </HelpSection>
           )}
           {howToUse && (
-            <HelpSection tone="steps" title="How to use it">
+            <HelpSection tone="steps" title="How to use it" className={useCases && useCases.length > 0 ? undefined : 'md:col-span-2'}>
               <HelpRichText text={howToUse} />
             </HelpSection>
           )}
@@ -197,7 +201,7 @@ export function PageHelpBanner({
         </div>
       </div>
     </details>
-    <RelatedLinksRow links={visibleLinks} />
+    {open ? null : <RelatedLinksRow links={visibleLinks} />}
     </div>
   )
 }

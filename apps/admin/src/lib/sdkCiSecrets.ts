@@ -103,7 +103,7 @@ export function sdkCiStatusMeta(
         label: 'Connected',
         description: nativeEverSeen
           ? 'CI secrets present and the SDK has been seen from native builds.'
-          : 'CI secrets present — waiting for first native heartbeat.',
+          : 'CI secrets are set. Waiting for a store build to check in.',
         severity: 'ok',
         cta: hasGithubToken ? 'Re-sync secrets' : 'Copy setup commands',
         playbookSteps: [
@@ -135,7 +135,7 @@ export function sdkCiStatusMeta(
         subtitle:
           'We see web or CI activity but not a TestFlight or Play build — confirm env vars are in your release workflow.',
         label: 'No native ping',
-        description: 'Web/CI heartbeats exist but no native Capacitor, iOS, or Android origin yet.',
+        description: 'Your web build checks in, but no iOS or Android build has yet.',
         severity: 'warn',
         cta: hasGithubToken ? 'Sync CI secrets automatically' : 'Copy setup commands',
         playbookSteps: [

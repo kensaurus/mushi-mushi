@@ -20,12 +20,15 @@ import { Link } from 'react-router-dom'
 import type { SetupProject, SetupStep } from '../lib/useSetupStatus'
 import { CHIP_TONE } from '../lib/chipTone'
 import { useClaimNextStep, useNextStep } from '../lib/useNextStep'
+import { setupCountLabel } from '../lib/setupProgress'
 import { Btn, Card, RefreshIconButton } from './ui'
 import { SdkHealthPanel } from './SdkHealthPanel'
 
 interface SetupChecklistProps {
   project: SetupProject
   mode: 'banner' | 'wizard'
+  /** Wizard only: list just the optional steps (Set up's rail counts the required ones). */
+  extrasOnly?: boolean
   onRefresh?: () => void
   /**
    * Hostname this admin is reading from (from /v1/admin/setup's
@@ -57,7 +60,7 @@ function formatRelativeTime(iso: string | null | undefined): string | null {
   return `${Math.round(seconds / 86400)} days ago`
 }
 
-export function SetupChecklist({ project, mode, onRefresh, adminEndpointHost }: SetupChecklistProps) {
+export function SetupChecklist({ project, mode, extrasOnly, onRefresh, adminEndpointHost }: SetupChecklistProps) {
   const requiredDone = project.required_complete >= project.required_total
   const allDone = project.complete >= project.total
   const pct = Math.round((project.required_complete / Math.max(1, project.required_total)) * 100)
@@ -87,6 +90,7 @@ export function SetupChecklist({ project, mode, onRefresh, adminEndpointHost }: 
       nextRequiredId={nextRequiredId}
       onRefresh={onRefresh}
       adminEndpointHost={adminEndpointHost}
+      extrasOnly={extrasOnly}
     />
   )
 }
@@ -98,6 +102,7 @@ interface InternalProps {
   nextRequiredId: string | null
   onRefresh?: () => void
   adminEndpointHost?: string | null
+  extrasOnly?: boolean
 }
 
 function BannerChecklist({
@@ -121,15 +126,15 @@ function BannerChecklist({
       ? '✓ Setup complete'
       : requiredDone
         ? '✓ All set — optional integrations available'
-        : `Setup ${project.required_complete}/${project.required_total} required`
+        : `Set up: ${setupCountLabel(project)}`
     return (
       <button
         type="button"
         onClick={() => setOpen(true)}
         className={`mb-4 inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-2xs motion-safe:transition-opacity ${
           allDone || requiredDone
-            ? `border-ok/30 ${CHIP_TONE.okSubtle}`
-            : `border-warn/30 ${CHIP_TONE.warnSubtle}`
+            ? CHIP_TONE.okSubtle
+            : CHIP_TONE.warnSubtle
         } hover:brightness-110`}
         aria-label="Show setup checklist"
       >
@@ -147,8 +152,10 @@ function BannerChecklist({
             <span className={`text-xs font-semibold ${requiredDone ? 'text-ok-foreground' : 'text-warn-foreground'}`}>
               {requiredDone ? 'Setup complete' : 'Finish setting up Mushi Mushi'}
             </span>
-            <span className="text-2xs font-mono text-fg-muted">
-              {project.complete}/{project.total} done · {pct}% required
+            {/* One count everywhere: "4/10 done · 75% required" sat beside "3 of 4"
+                in the header and "Set up · 3/4" in the sidebar (2026-10-28). */}
+            <span className="text-2xs text-fg-muted" data-testid="setup-checklist-count">
+              {setupCountLabel(project)}
             </span>
           </div>
           <p className="mt-0.5 text-2xs text-fg-muted truncate">
@@ -201,8 +208,25 @@ function BannerChecklist({
   )
 }
 
-function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndpointHost }: InternalProps) {
+function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndpointHost, extrasOnly }: InternalProps) {
   useClaimNextStep('setup', nextRequiredId !== null)
+  // On Set up the rail already counts the required steps; a second count
+  // and progress bar here made three trackers (first-time user test).
+  if (extrasOnly) {
+    const extras = project.steps.filter((step) => !step.required)
+    return (
+      <div className="space-y-3" data-testid="setup-extras">
+        <p className="text-xs text-fg-muted">Optional. Each one adds something once your app is set up.</p>
+        <ol className="space-y-2">
+          {extras.map((step) => (
+            <li key={step.id}>
+              <ChecklistCard step={step} current={false} adminEndpointHost={adminEndpointHost} projectId={project.project_id} />
+            </li>
+          ))}
+        </ol>
+      </div>
+    )
+  }
   return (
     <div className="space-y-3">
       <Card  className="px-3 py-2.5">
@@ -210,8 +234,8 @@ function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndp
           <span className="text-xs font-semibold text-fg">
             {requiredDone ? 'You\u2019re set up' : 'Setup progress'}
           </span>
-          <span className="text-2xs font-mono text-fg-muted">
-            {project.required_complete}/{project.required_total} required · {pct}%
+          <span className="text-2xs text-fg-muted" data-testid="setup-checklist-count">
+            {setupCountLabel(project)}
           </span>
         </div>
         <div className="mt-2 h-1 w-full overflow-hidden rounded-sm bg-surface-overlay">
@@ -315,11 +339,11 @@ function buildSdkDiagnostic(
 function SdkDiagnostic({ tone, lines }: { tone: 'ok' | 'warn' | 'info'; lines: string[] }) {
   const palette =
     tone === 'warn'
-      ? `border-warn/30 ${CHIP_TONE.warnSubtle}`
+      ? CHIP_TONE.warnSubtle
       : tone === 'ok'
-        ? `border-ok/30 ${CHIP_TONE.okSubtle}`
+        ? CHIP_TONE.okSubtle
         : 'border-edge-subtle bg-surface-overlay/40 text-fg-secondary'
-  const label = tone === 'warn' ? 'Backend mismatch' : tone === 'ok' ? 'SDK heartbeat' : 'Heartbeat'
+  const label = tone === 'warn' ? 'Wrong server' : 'App check-in'
   return (
     <div className={`mt-1.5 rounded-sm border px-2 py-1 text-2xs ${palette}`}>
       <span className="mr-1.5 font-semibold uppercase tracking-wider">{label}</span>
@@ -332,14 +356,21 @@ function SdkDiagnostic({ tone, lines }: { tone: 'ok' | 'warn' | 'info'; lines: s
   )
 }
 
+/** The step's name; an optional step already carries the OPTIONAL chip, so no "(optional)" twice. */
+function stepLabel(step: SetupStep): string {
+  return step.required ? step.label : step.label.replace(/\s*\(optional\)\s*$/i, '')
+}
+
 /** The sdk_installed step's Fix button and, once pressed, the SDK health panel with its fixes. */
 function useSdkFix(step: SetupStep, projectId: string) {
   const [open, setOpen] = useState(false)
   if (step.id !== 'sdk_installed' || step.complete || !projectId) return { button: null, panel: null }
+  // Never checked in: steps to take, not a fault ("Fix it" read as broken on a new app).
+  const neverSeen = !step.diagnostic?.last_sdk_seen_at
   return {
     button: (
       <Btn size="sm" variant={open ? 'ghost' : 'primary'} className="shrink-0" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        {open ? 'Hide' : 'Fix it'}
+        {open ? 'Hide' : neverSeen ? 'Show me how' : 'Fix it'}
       </Btn>
     ),
     panel: open ? (
@@ -371,7 +402,7 @@ function ChecklistRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className={`text-xs ${step.complete ? 'text-fg-secondary line-through' : 'text-fg'}`}>
-            {step.label}
+            {stepLabel(step)}
           </span>
           {current && (
             <span className="rounded-sm px-1 py-0.5 text-2xs uppercase tracking-wider bg-brand/12 text-brand border border-brand/28">
@@ -429,7 +460,7 @@ function ChecklistCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h4 className={`text-sm font-medium ${step.complete ? 'text-fg-secondary' : 'text-fg'}`}>
-              {step.label}
+              {stepLabel(step)}
             </h4>
             {current && (
               <span className="rounded-sm bg-brand text-brand-fg px-1.5 py-0.5 text-2xs uppercase tracking-wider font-semibold">

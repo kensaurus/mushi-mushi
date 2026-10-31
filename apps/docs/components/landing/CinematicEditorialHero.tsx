@@ -1,13 +1,14 @@
 'use client'
 
 /**
- * Cinematic landing hero — H1, one-line lead, the install box (pick Claude Code / Cursor / other, then three steps with one prompt), Motion stamp / line stagger, lazy R3F ink.
+ * Cinematic landing hero — H1, the one-job lead, the install box (pick Claude Code / Cursor / Lovable or Bolt / other, then three steps), one secondary link to the sample diagnosis, Motion stamp / line stagger, lazy R3F ink.
  * No scroll timelines (docs/MOTION.md).
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import { motion } from 'motion/react'
-import { LANDING_HERO, LANDING_HERO_START } from '@/lib/landing-copy'
+import { LANDING_CHECK_LINK, LANDING_HERO } from '@/lib/landing-copy'
 import { LandingInstallStrip } from './LandingInstallStrip'
 import { usePrefersReducedMotion } from './use-prefers-reduced-motion'
 import { landingStampVariants } from './landing-stagger'
@@ -103,26 +104,16 @@ export function CinematicEditorialHero({
           )
         ) : null}
         <LandingInstallStrip />
-        <p className="landing-hero-reassure">
-          {LANDING_HERO.reassure}{' '}
-          <a
-            href={LANDING_HERO_START.console.href}
-            data-mushi-cta={LANDING_HERO_START.console.id}
-            data-mushi-location="hero"
-          >
-            {LANDING_HERO_START.console.label}
-          </a>
-          {' · '}
-          <a
-            href={LANDING_HERO.star.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-mushi-cta={LANDING_HERO.star.ctaId}
-            data-mushi-location="hero"
-          >
-            {LANDING_HERO.star.label}
-          </a>
+        {/* The one secondary link (ADR 0052, amended 2026-10-28): the free
+            Production Check, value before trust. The sample is in How it works. */}
+        <p className="landing-hero-sample">
+          {LANDING_CHECK_LINK.lead}{' '}
+          <Link href={LANDING_CHECK_LINK.href} data-mushi-cta={LANDING_CHECK_LINK.id} data-mushi-location="hero">
+            {LANDING_CHECK_LINK.label} →
+          </Link>{' '}
+          <span className="landing-hero-note">({LANDING_CHECK_LINK.note})</span>
         </p>
+        <p className="landing-hero-reassure">{LANDING_HERO.reassure}</p>
       </div>
     </header>
   )

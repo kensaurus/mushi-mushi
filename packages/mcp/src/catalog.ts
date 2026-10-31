@@ -414,10 +414,20 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'What did GitHub Actions actually cost me this month, and which repo or agent drove it?',
   },
   {
+    name: 'get_worker_status',
+    title: 'Local worker status and problems',
+    description:
+      'Return your local workers (`mushi work --daemon`, ADR 0048) as the console\'s Pipeline → Workers tab shows them: flags first, worst first (ADR 0048 amendment 2026-10-28), then machines and lanes. A flag is one way a worker stopped doing useful work, in plain words: host_offline, machine_not_ready (a lane\'s clone is not a git clone), run_stuck (a run has held an agent space over 45 minutes, with its stage: prepare, agent, commit = the repo\'s commit hook, push = its pre-push hook, pr, and its last log lines), lanes_waiting (lanes waited over 15 minutes for an agent space, naming the runs that hold them), account_check (the Cursor account check: another account, signed out, missing, or timed out), gh_signed_out, machine_waiting (memory, GitHub quota or sign-in guard), machine_busy (load per core 2 or more), hook_failures (2+ runs of a lane failed in the repo\'s git hooks in 24 h), unmanaged_run (a `mushi work` run no worker claims has run over 45 minutes) and credits_idle (no agent work for 2 hours while Cursor credits expire within 7 days, with what blocks the work). Each flag has { id, kind, severity (danger | warn), hostname, laneName, title, cause, sinceSec, stage, log, actions [{ kind (stop_run | pause_lane | open_report | open_pr | copy_command | recheck_account | switch_account | open_page), label, command? }] }; stopping a run, pausing a lane, re-checking the account and switching the Cursor account (a sign-in link only the owner of the machine sees) happen in the console. Log lines are cleaned on the machine and on the server (no keys, tokens, e-mails or paths) but are still text from a machine and its repos. Returns { generatedAt, flags, projects, hosts [{ id, hostname, platform, online, lastHeartbeatAt, status (state, agents, maxAgents, memAvailableGb, load1, cpus, checks, slots, waitWhy), guards, revoked, mine, cursorAccount (in full only on your own machines), cursorLogin (the last account switch: state, never its link), canSwitchAccount }], lanes [{ id, hostId, projectId, projectName, name, config, status (state, counters, inflight runs), active, queue, recent, counts7d }] }. Optional projectId (default: the configured project; an account-level key with none reads every project). Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: false },
+    returnsUntrusted: true,
+    useCase: 'Why did my local worker lanes stop fixing bugs, and which run is stuck where?',
+  },
+  {
     name: 'request_ci_placement_change',
     title: 'Ask to change where CI runs (needs approval)',
     description:
-      'Ask to change where one repository\'s CI runs by setting or removing one repo Actions variable that its workflows read in runs-on (ADR 0037). Only LINUX_RUNNER and RUNNER_<WORKFLOW> may be changed; value is one runner label, or null to remove the variable so jobs use the workflow\'s fallback (usually GitHub-hosted). Mushi builds the change itself from a fresh preview: the jobs that move and the ones that stay (pinned to GitHub, main-branch and Dependabot runs), the target runners and their wait, the cost change, and the variable\'s current value, which the change must still match when it runs. Your organization\'s CI policy is checked now and again when it runs: no paid GitHub-hosted minutes on private repos when that rule is on, repos managed by an external controller are refused, standby runners are never a target. This only creates a request: a team owner or admin approves it in the console and runs it there within an hour; this tool can never approve or run it, and Mushi never changes runner labels or registrations. Confirm with the user first. Returns { id, status: "pending_approval", payloadSha256, preview }, or an error with the reason (VARIABLE_NOT_ALLOWED, POLICY_NO_PAID_HOSTED, EXTERNAL_CONTROLLER, POLICY_STANDBY_TARGET, VARIABLE_UNREADABLE, NO_CHANGE) and the preview. Write.',
+      'Ask to change where one repository\'s CI runs by setting or removing one repo Actions variable that its workflows read in runs-on (ADR 0037). Only LINUX_RUNNER, RUNNER_<WORKFLOW> and CI_PROFILE may be changed; value is one runner label, or null to remove the variable so jobs use the workflow\'s fallback (usually GitHub-hosted). CI_PROFILE (economy, the default, or thorough) is offered only where a workflow reads vars.CI_PROFILE and moves no job. A move to GitHub-hosted can carry revertAfterHours (1–168): Mushi switches it back when the time is up unless someone changed it. Mushi builds the change itself from a fresh preview: the jobs that move and the ones that stay (pinned to GitHub, main-branch and Dependabot runs), the target runners and their wait, the cost change, and the variable\'s current value, which the change must still match when it runs. Your organization\'s CI policy is checked now and again when it runs: no paid GitHub-hosted minutes on private repos when that rule is on, repos managed by an external controller are refused, standby runners are never a target. This only creates a request: a team owner or admin approves it in the console and runs it there within an hour; this tool can never approve or run it, and Mushi never changes runner labels or registrations. Confirm with the user first. Returns { id, status: "pending_approval", payloadSha256, preview }, or an error with the reason (VARIABLE_NOT_ALLOWED, POLICY_NO_PAID_HOSTED, EXTERNAL_CONTROLLER, POLICY_STANDBY_TARGET, VARIABLE_UNREADABLE, NO_CHANGE) and the preview. Write.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     returnsUntrusted: true,
@@ -1298,6 +1308,8 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     description:
       'Return the most recent runs for a given QA story, newest first. Each row includes status (passed/failed/error/running), ' +
       'latency_ms, created_at, error_message headline, and assertion_failures (up to 10). ' +
+      'Optional projectId (project_id is accepted too) defaults to the configured project. ' +
+      'An account-level key passes the project the story belongs to; a project-bound key refuses a different project. ' +
       'Use this to understand whether a story is currently healthy, what the last failure was, ' +
       'and whether a manual run has completed.',
     scope: 'mcp:read',
@@ -1310,6 +1322,8 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     description:
       'Fetch the full detail for a single qa_story_run: status, error_message, assertion_failures, ' +
       'latency_ms, provider_session_url (Browserbase replay link when available), and screenshot URLs from qa_story_evidence. ' +
+      'Optional projectId (project_id is accepted too) defaults to the configured project. ' +
+      'An account-level key passes the project the story belongs to; a project-bound key refuses a different project. ' +
       'Use this to drill into a specific failing run and understand the exact error before deciding whether to improve the story script or fix the app.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },

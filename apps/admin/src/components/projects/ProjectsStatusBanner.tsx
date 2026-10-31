@@ -5,6 +5,7 @@
 
 import { Btn } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
+import { missingAppsAreNew } from '../../lib/newApps'
 import type { ProjectsStats, ProjectsTabId } from './types'
 
 interface Props {
@@ -14,6 +15,8 @@ interface Props {
   /** Viewer/member guidance when destructive actions are hidden. */
   roleHint?: string | null
   onTab?: (tab: ProjectsTabId) => void
+  /** The open tab: on `create` the form is right below, so no second "Create project" button. */
+  activeTab?: ProjectsTabId
   onRefresh?: () => void
   refreshing?: boolean
 }
@@ -25,7 +28,7 @@ function tabFromPath(path: string | null): ProjectsTabId | null {
   return null
 }
 
-export function ProjectsStatusBanner({ stats, activeTeamName, roleHint, onTab, onRefresh, refreshing }: Props) {
+export function ProjectsStatusBanner({ stats, activeTeamName, roleHint, onTab, activeTab, onRefresh, refreshing }: Props) {
   const priority = stats.topPriority
   const label = stats.topPriorityLabel
   const actionTab = tabFromPath(stats.topPriorityTo)
@@ -40,11 +43,40 @@ export function ProjectsStatusBanner({ stats, activeTeamName, roleHint, onTab, o
         title="No projects in this workspace yet"
         subtitle={roleHint ?? label}
         action={
-          roleHint ? undefined : onTab ? (
+          // A first-time user test (2026-10-29) clicked this twice on the
+          // create tab, where it only re-opened the tab it was on.
+          roleHint || activeTab === 'create' ? undefined : onTab ? (
             <Btn size="sm" variant="primary" onClick={() => onTab('create')}>Create project</Btn>
           ) : (
             <Btn to="/projects?tab=create" size="sm" variant="primary">Create project</Btn>
           )
+        }
+      />
+    )
+  }
+
+  // Every app without a heartbeat was made today: setup to finish, not a
+  // fault, whether or not a test report has landed (live journey 2026-10-30).
+  const missing = stats.sdkMissingProjects ?? []
+  const missingCount = stats.sdkMissingCount ?? missing.length
+  if (
+    (priority === 'never_ingested' || priority === 'no_sdk_heartbeat' || priority === 'sdk_missing') &&
+    missingAppsAreNew(missing, missingCount)
+  ) {
+    const first = missing[0]!
+    return (
+      <StatusBannerShell
+        tone="info"
+        title={
+          missingCount === 1
+            ? `${first.name} is waiting for its first SDK heartbeat`
+            : `${missingCount} new apps are waiting for their first SDK heartbeat`
+        }
+        subtitle="Install the SDK and open the app once; it checks in on its own."
+        action={
+          <Btn to={`/connect?project=${encodeURIComponent(first.id)}#connect-sdk-health`} size="sm" variant="primary" data-testid="projects-sdk-fix">
+            Finish setting up {first.name}
+          </Btn>
         }
       />
     )
@@ -124,6 +156,10 @@ export function ProjectsStatusBanner({ stats, activeTeamName, roleHint, onTab, o
       />
     )
   }
+
+  // Healthy needs no banner: the Overview tab and the tiles say it, and the
+  // page said "All projects ingesting" up to three times (console sweep).
+  if (priority === 'healthy') return null
 
   return (
     <StatusBannerShell

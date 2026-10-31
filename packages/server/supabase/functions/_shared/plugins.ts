@@ -198,12 +198,40 @@ export function dispatchPluginEventDetached(
   return p
 }
 
+/**
+ * Fills the fields the plugin SDK documents (packages/plugin-sdk/src/types.ts)
+ * from the ones the call sites send: `newStatus` on report.status_changed (sent
+ * as `report.status`) and `fix.pullRequestUrl` on fix events (sent as
+ * `fix.prUrl`), plus `fix.status` from the event name. Without it Jira transitions, the Linear state map and PagerDuty
+ * resolve never ran, and no plugin showed a PR link (2026-10-29).
+ */
+export function normalizePluginEventData(event: string, data: unknown): unknown {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return data
+  const d: Record<string, unknown> = { ...(data as Record<string, unknown>) }
+  if (event === 'report.status_changed' && d.newStatus === undefined) {
+    const report = d.report as Record<string, unknown> | undefined
+    if (report && typeof report.status === 'string') d.newStatus = report.status
+  }
+  const fix = d.fix as Record<string, unknown> | undefined
+  if (fix && typeof fix === 'object') {
+    const next: Record<string, unknown> = { ...fix }
+    if (next.pullRequestUrl === undefined && typeof next.prUrl === 'string') next.pullRequestUrl = next.prUrl
+    // Only fix.requested sent a status; Discord and Teams cards showed an empty
+    // "Fix status" field. The event name says it: fix.proposed → "proposed".
+    const fromEvent = /^fix\.(proposed|applied|failed)$/.exec(event)?.[1]
+    if (next.status === undefined && fromEvent) next.status = fromEvent
+    d.fix = next
+  }
+  return d
+}
+
 export async function dispatchPluginEvent(
   db: SupabaseClient,
   projectId: string,
   event: MushiEventName | string,
   data: unknown,
 ): Promise<void> {
+  data = normalizePluginEventData(event, data)
   const { data: rows, error } = await db
     .from('project_plugins')
     .select('plugin_slug, webhook_url, webhook_secret_vault_ref, subscribed_events, config')

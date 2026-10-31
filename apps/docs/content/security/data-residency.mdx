@@ -1,15 +1,15 @@
 ---
 title: Data residency
-description: Where Mushi Cloud stores data today (Tokyo, ap-northeast-1), how the region picked at project creation works, and what the SDK does about regions.
+description: Where Mushi Mushi Cloud stores data today (Tokyo, ap-northeast-1), how the region picked at project creation works, and what the SDK does about regions.
 ---
 
 import { Callout } from 'nextra/components'
 
 # Data residency
 
-> **Scenario:** Your EU customers' data must stay in the EU to comply with GDPR. You need to ensure that report ingestion, embeddings, screenshots, and AI calls never leave your chosen region.
+> **Scenario:** Your EU customers' data must stay in the EU. You need to know where report ingestion, embeddings, screenshots, and AI calls actually go today.
 
-Mushi Cloud is designed for regional isolation — separate Supabase projects per region with **no inter-region replication**. Today all production traffic runs on a single Supabase project in `ap-northeast-1` (Tokyo, `dxptnwrhwsqckaftyymj`), whatever region a project picked. EU and US regional clusters are reserved, not live.
+Mushi Mushi Cloud is designed for one Supabase project per region with no replication between them. Today all production traffic runs on a single Supabase project in `ap-northeast-1` (Tokyo, `dxptnwrhwsqckaftyymj`), whatever region a project picked. The US and EU clusters are planned, not live. Model calls go to the US-based providers listed in the [Privacy Policy](/legal/privacy#5-sub-processors), unless you self-host and choose otherwise.
 
 ## Regions
 
@@ -20,7 +20,7 @@ Mushi Cloud is designed for regional isolation — separate Supabase projects pe
 | **JP** | Tokyo, same project | `ap-northeast-1` |
 
 <Callout type="warning">
-  Region is **immutable** — it is set at project creation and cannot be changed. Create a new project to move regions.
+  Pick the region at project creation. Moving a project that already has data to another region needs an export and restore, so create a new project in the region you want instead.
 </Callout>
 
 ## How the SDK routes
@@ -46,7 +46,7 @@ const endpoint = await resolveRegionEndpoint({
 
 ## Attestation
 
-A nightly cron writes a `no_cross_region_transfer` attestation row to `soc2_evidence`. This record confirms that no row in `reports`, `embeddings`, `fix_attempts`, or `reporter_identities` was written outside the configured region that day. The evidence is included in the quarterly SOC 2 pack.
+There is no cross-region attestation yet. With one hosted project there is nothing to compare against; the region you pick is recorded in `projects.data_residency_region` and mirrored to `region_routing`, which the gateway will use to redirect calls once a second cluster exists. The **Compliance → Residency** tab shows each project's region.
 
 ## Self-hosting
 
@@ -54,6 +54,6 @@ If you self-host on your own Supabase project, you control the region entirely �
 
 ## GDPR notes
 
-- All PII columns (`reporter_email`, `reporter_name`, `screenshot_url`) are encrypted at rest via `pgsodium`.
-- DSAR (data subject access requests) are tracked in the `data_subject_requests` table via `POST /v1/admin/compliance/dsars` — see [SOC 2 readiness](/security/soc2#dsar-data-subject-access-request).
-- When the EU region cluster ships, AI model calls from EU projects will be routed to Anthropic's EU endpoints where available.
+- Data is encrypted at rest by Supabase's disk encryption. Report columns are not encrypted separately.
+- DSARs (data subject access requests) are tracked in the `data_subject_requests` table via `POST /v1/admin/compliance/dsars`; see [SOC 2 readiness](/security/soc2#dsar-data-subject-access-request).
+- Transfers from the EEA and UK to Japan rely on the EU's adequacy decision for Japan; transfers to US model providers are covered in the [Privacy Policy](/legal/privacy).

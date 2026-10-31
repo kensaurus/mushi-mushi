@@ -18,6 +18,7 @@ import { notifyTeamFixEvent } from './team-notify.ts';
 import { notifyReportStatusTransition } from './report-status-notify.ts';
 import { resolveExternalIssue } from './integrations.ts';
 import { emitProductEvent } from './product-events.ts';
+import { decideFirstStep, emitFunnelStep, funnelStepMemo } from './funnel-steps.ts';
 import {
   decideFixingReport,
   FIXING_GRACE_MS,
@@ -172,6 +173,42 @@ export function resolveMergedAt(githubMergedAt: string | null | undefined, now: 
 }
 
 /** Idempotent post-merge bookkeeping shared by console merge + GitHub webhooks. */
+/**
+ * New-user path step `first_fix_merged` (_shared/funnel-steps.ts): only when
+ * no other attempt of the project was ever merged, so an app with a merge
+ * history is not stamped "first" by its next merge. Never throws.
+ */
+async function emitFirstFixMerged(db: Db, attempt: FixAttemptMergeRow, actorUserId: string | null): Promise<void> {
+  if (!funnelStepMemo.claim('first_fix_merged', attempt.project_id)) return;
+  try {
+    const { count, error } = await db
+      .from('fix_attempts')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', attempt.project_id)
+      .not('merged_at', 'is', null)
+      .neq('id', attempt.id);
+    const decision = decideFirstStep(error ? null : count);
+    if (decision === 'unknown') {
+      funnelStepMemo.release('first_fix_merged', attempt.project_id);
+      log.warn('first_fix_merged: earlier-merge lookup failed; step not recorded yet', {
+        projectId: attempt.project_id,
+        err: error?.message ?? 'no count',
+      });
+      return;
+    }
+    if (decision === 'not_first') return;
+    await emitFunnelStep(db, {
+      step: 'first_fix_merged',
+      projectId: attempt.project_id,
+      actorUserId,
+      properties: { report_id: attempt.report_id },
+    });
+  } catch (err) {
+    funnelStepMemo.release('first_fix_merged', attempt.project_id);
+    log.warn('first_fix_merged emit failed', { projectId: attempt.project_id, err: String(err) });
+  }
+}
+
 export async function finalizeFixMerge(
   db: Db,
   attempt: FixAttemptMergeRow,
@@ -309,7 +346,11 @@ export async function finalizeFixMerge(
 
   if (justMerged) {
     // Company funnel (mushi-self): fire-and-forget, deduped per fix attempt.
+    // Actor: the person who merged, else the project's owner (a webhook,
+    // ci-sync or the merge queue saw the merge).
     void emitProductEvent(db, {
+      userId: meta.actorUserId ?? null,
+      actorFallback: 'project_owner',
       eventName: 'fix_merged',
       surface: 'server',
       properties: {
@@ -319,6 +360,7 @@ export async function finalizeFixMerge(
       },
       dedupKey: `fix_merged:${attempt.id}`,
     });
+    void keepAlive(emitFirstFixMerged(db, attempt, meta.actorUserId ?? null));
 
     dispatchPluginEventDetached(db, attempt.project_id, 'fix.applied', {
       report: { id: attempt.report_id },

@@ -64,6 +64,7 @@ import {
 } from '../../_shared/github.ts';
 import { resolveBranchForConnect } from '../../_shared/github-branch.ts';
 import { canMergeReportGroups, mergeReportGroups } from '../../_shared/report-groups.ts';
+import { noPrCategoryFromError } from '../../_shared/cloud-agent-no-pr.ts';
 import { dbError, ownedProjectIds, callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds, callerCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
@@ -1869,6 +1870,11 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
       if (allowed[key]) updates[key] = value;
+    }
+    // `mushi work` sends its no-PR verdict only in `error` (2026-10-29).
+    if (updates.status === 'failed') {
+      const category = noPrCategoryFromError(updates.error);
+      if (category) updates.failure_category = category;
     }
 
     // ADR 0030: one spelling per PR. A trailing slash, query or odd casing

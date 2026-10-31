@@ -14,6 +14,10 @@
  *            - Quiet when empty: chips with 0 results still render so
  *              the user learns the shape of the inbox (and knows the
  *              filter exists), but use a muted tone.
+ *            - Narrow viewports: status and severity are separate groups
+ *              stacked in a column. The divider lives in the severity
+ *              group and only shows from the sm breakpoint, so a wrap
+ *              cannot leave it alone at the start of the next line.
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -58,7 +62,7 @@ export function ReportsQuickFilters({ status, severity, scope = 'project', onSet
 
   return (
     <div
-      className="sticky top-0 z-10 -mx-1 mb-2 flex flex-wrap items-center gap-1.5 rounded-sm border border-edge-subtle/60 bg-surface/95 px-2 py-2 backdrop-blur-sm"
+      className="sticky top-0 z-10 -mx-1 mb-2 flex flex-col gap-1.5 rounded-sm border border-edge-subtle/60 bg-surface/95 px-2 py-2 backdrop-blur-sm sm:flex-row sm:items-center"
       role="toolbar"
       aria-label="Quick filters"
     >
@@ -85,18 +89,20 @@ export function ReportsQuickFilters({ status, severity, scope = 'project', onSet
           )
         })}
       </FilterChipRail>
-      <span aria-hidden className="mx-1 h-4 w-px bg-edge/60" />
-      {SEVERITY_CHIPS.map((b) => (
-        <FilterChip
-          key={b.value}
-          label={b.label}
-          count={stats ? (bySeverity[b.value] ?? 0) : null}
-          active={severity === b.value}
-          onClick={() => onSetFilter('severity', severity === b.value ? '' : b.value)}
-          tone={b.tone}
-          hint={`Filter to ${b.value}-severity reports`}
-        />
-      ))}
+      <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0" role="group" aria-label="Severity filters">
+        <span aria-hidden className="mx-1 hidden h-4 w-px shrink-0 bg-edge/60 sm:inline-block" />
+        {SEVERITY_CHIPS.map((b) => (
+          <FilterChip
+            key={b.value}
+            label={b.label}
+            count={stats ? (bySeverity[b.value] ?? 0) : null}
+            active={severity === b.value}
+            onClick={() => onSetFilter('severity', severity === b.value ? '' : b.value)}
+            tone={b.tone}
+            hint={`Filter to ${b.value}-severity reports`}
+          />
+        ))}
+      </div>
     </div>
   )
 }

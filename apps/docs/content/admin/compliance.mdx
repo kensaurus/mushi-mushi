@@ -1,6 +1,6 @@
 ---
 title: Compliance
-description: The Compliance page shows SOC 2 control status, retention policies and DSAR requests, and exports an evidence PDF for procurement reviews.
+description: The Compliance view in the Mushi Mushi console has SOC 2 control evidence, retention policies, data subject requests and residency, and prints an evidence PDF.
 ---
 
 import { Callout } from 'nextra/components'
@@ -9,34 +9,40 @@ import { Callout } from 'nextra/components'
 
 # Compliance
 
-**Route:** `/compliance`
+**Route:** `/team?view=compliance` (**Team → Compliance**; the old `/compliance` address redirects there)
 
-> **Scenario 1:** Your enterprise customer is asking for your SOC 2 Type 1 evidence
-> before signing. You need to export a PDF of your current control status without
-> scheduling a meeting with your security team.
+<Callout type="info">
+Compliance needs the `soc2` entitlement, which only the **Enterprise** plan includes.
+Without it the Team tab is hidden, and opening the address shows which plan includes it.
+</Callout>
+
+> **Scenario 1:** A customer asks how you handle security before signing. You want
+> to show the current control status and retention settings in one place, and
+> export the audit log as a CSV (Team → Audit), without a meeting. Mushi Mushi is
+> not SOC 2 certified; it collects evidence toward it.
 >
 > **Scenario 2:** A user emails saying they want all their data deleted (GDPR Article
 > 17). You need to log the request, track its status, and respond within 30 days.
 
-The Compliance page handles both of these without leaving the console — SOC 2 evidence
-snapshots, data-residency pinning, retention policies, and DSAR management.
+The Compliance view in Mushi Mushi handles both in the console. It has five tabs:
+**Overview**, **Evidence**, **Retention**, **DSARs** and **Residency**.
 
 ---
 
 ## Navigating the page
 
-Use the filter chips at the top to focus on what matters right now:
+On the Overview tab, filter chips focus the page:
 
-| Chip | Use it when |
-|------|-------------|
-| **All** | General review |
-| **Open** | Pre-audit — see which controls haven't reached PASS yet |
-| **Failing** | Urgent — controls at FAIL need immediate attention |
-| **At risk** | Controls at WARN — review before your next audit window |
-| **Legal hold** | Projects with active legal holds — deletion is suspended |
+| Chip | Shows |
+|------|-------|
+| **All** | Every section: controls, DSARs, retention, residency |
+| **Open** | Failing or warning controls, plus pending and in-progress DSARs |
+| **Failing** | Failing controls, plus open DSARs 21 days old or older |
+| **At risk** | Controls with warnings |
+| **Legal hold** | Projects on legal hold; retention sweeps are paused |
 
-The **hero stat cards** give you a quick dashboard: green/warn/fail counts and the
-number of open DSARs.
+The snapshot strip shows **Controls** (passing out of total), **Open DSARs**, **Legal
+holds** and the **Cluster** region.
 
 ---
 
@@ -52,40 +58,35 @@ automatically.
 | **WARN** ⚠ | Control is partially satisfied — needs attention |
 | **FAIL** ✗ | Control is violated — action required before audit |
 
-Click **View payload** on any row to see the raw JSON evidence that was used to compute
-the status — this is what you'd share with an auditor.
+The table shows Control, Label, Project, Status and Generated. The payload button on a
+row opens the raw JSON evidence that was used to compute the status.
 
 **To generate a fresh snapshot:** click **Refresh evidence**. This triggers the
 `soc2-evidence` edge function which re-assesses all controls against the current state.
 
-**To export for an auditor:** click **Export PDF** — this prints the current evidence
-table as a PDF document.
+**To export for an auditor:** click **Export PDF**. It opens the browser's print dialog
+for the page, so you can save it as a PDF.
 
 ---
 
 ## Data residency
 
-Each project can be pinned to a region. Once pinned, Mushi routes all data (reports,
-fixes, LLM traces) through infrastructure in that region.
-
-| Region | Infrastructure |
-|--------|---------------|
-| **US** | Supabase US East |
-| **EU** | Supabase EU West |
-| **JP** | Supabase AP Northeast |
-| **Self** | Your self-hosted Supabase instance |
+Each project can be pinned to a region: `us`, `eu`, `jp` or `self`.
 
 <Callout type="warning">
-Region pinning is **permanent** for a project. There is no UI migration path — changing
-regions requires a data migration. Pin carefully, ideally before any real data is
-collected.
+Pinning records the region; it does not move data today. Mushi Mushi cloud runs on a
+single Supabase project, and the regional hostnames are reserved for future routing, so
+every region currently resolves to the same API. Once pinned, a project cannot be
+re-pinned from the console (the API answers 409); moving regions means contacting
+support.
 </Callout>
 
 ---
 
 ## Retention policies
 
-Control how long Mushi keeps different data categories for each project.
+Control how long Mushi Mushi keeps different data categories for each project. A project
+with no custom policy shows **Set a custom policy**.
 
 | Category | Default | When to change |
 |----------|---------|---------------|
@@ -94,10 +95,11 @@ Control how long Mushi keeps different data categories for each project.
 | **LLM traces** | 90 days | Shorten for cost (storage); lengthen if you need longer A/B test history |
 | **BYOK audit** | 365 days | Keep at 365 for key rotation audit trails |
 
-**Legal hold** toggle — enable for a project to suspend all automated deletion. Use
-when you receive a litigation hold notice.
+**Place on legal hold** / **Lift legal hold**: suspends automated deletion for a project.
+Use it when you receive a litigation hold notice.
 
-Values save automatically when you blur each input field.
+Changing a value opens a confirmation that says what the nightly sweep will delete;
+the change saves when you confirm.
 
 ---
 
@@ -108,12 +110,10 @@ or similar regulations.
 
 ### Filing a DSAR
 
-1. Click **File DSAR**.
-2. Enter the **request type** (access, deletion, rectification, or portability).
-3. Enter the **subject email** and/or **subject ID** (the Mushi reporter token hash
-   if you have it).
-4. Add **notes** — include any context from the user's email.
-5. Click **File**.
+1. On the DSARs tab, choose the **Request type**: Access, Export, Deletion or Rectification.
+2. Enter the **Subject email**, and the **Subject user ID (optional)** if you have it.
+3. Add **Notes (optional)** with any context from the user's email.
+4. Click **File DSAR**.
 
 The request appears in the DSAR table with status `pending`.
 
@@ -121,45 +121,46 @@ The request appears in the DSAR table with status `pending`.
 
 | Status | Action | When |
 |--------|--------|------|
-| `pending` | **Start review** | Within 24 hours of receipt |
+| `pending` | **Start triage** | Soon after receipt |
 | `in_progress` | **Complete** | When data export/deletion is done |
-| `in_progress` | **Reject** | Only with a valid legal basis — you must provide a written reason |
+| `in_progress` | **Reject…** | Only with a valid legal basis; you must give a **Rejection reason** |
 
-**SLA badge** — an **overdue** badge appears if the request is > 30 days old without
-resolution. An **at-risk** badge appears at 25 days. Both are surfaced in the **At risk**
-filter chip for quick review.
+**Age** turns amber at 21 days and shows **overdue** at 30 days for an open request.
+Open requests 21 days old or older also appear under the **Failing** chip.
 
 ---
 
 ## Common tasks
 
 ### Preparing for a SOC 2 audit
-1. Open the **Failing** filter — resolve every FAIL control first.
-2. Switch to **At risk** — plan remediation for WARN controls.
+1. Open the **Failing** filter and resolve every failing control first.
+2. Switch to **At risk** and plan remediation for controls with warnings.
 3. Click **Refresh evidence** to get a fresh snapshot.
 4. Click **Export PDF** and share with your auditor.
 
 ### Responding to a deletion request (GDPR Article 17)
-1. **File DSAR** → type: `deletion`, enter subject email → **File**.
-2. **Start review** immediately.
-3. Manually delete the user's reports from your database (or use the DSAR export to identify them).
-4. Mark as **Complete** with a note of when deletion was performed.
-5. Archive the DSAR row as your compliance record.
+1. Choose **Deletion**, enter the subject email, then **File DSAR**.
+2. Click **Start triage**.
+3. Delete the user's data. Filing a DSAR does not delete anything by itself; your
+   backend can call `POST /v1/sdk/erase-subject` for that end user.
+4. Click **Complete** once deletion is done.
+5. The DSAR row stays as your compliance record.
 
-### Checking a project's data location before sharing with an enterprise customer
-1. Open the Data Residency section.
-2. Find the customer's project. If region shows `US` and they require EU: pin to `EU`
-   before any sensitive data is collected.
+### Checking a project's recorded region
+1. Open the **Residency** tab.
+2. Find the project and its pinned region. Remember that pinning is a record today, not
+   a separate data location (see [Data residency](#data-residency)).
 
 ---
 
 ## API
 
 ```bash
+GET   /v1/admin/compliance/stats
 GET   /v1/admin/compliance/evidence
 POST  /v1/admin/compliance/evidence/refresh
 GET   /v1/admin/compliance/retention
-PUT   /v1/admin/compliance/retention/:projectId    { reports_days, audit_days, llm_days, byok_days, legal_hold }
+PUT   /v1/admin/compliance/retention/:projectId    { reports_retention_days, audit_retention_days, llm_traces_retention_days, byok_audit_retention_days, legal_hold, legal_hold_reason }
 GET   /v1/admin/compliance/dsars
 POST  /v1/admin/compliance/dsars                   { projectId, request_type, subject_email, subject_id, notes }
 PATCH /v1/admin/compliance/dsars/:id               { status, rejection_reason, evidence_url, notes }
@@ -171,6 +172,6 @@ PUT   /v1/admin/residency/:projectId               { region }
 
 ## Related pages
 
-- [Audit log](/admin/audit) — source data for many SOC 2 controls
-- [Security → Data residency](/security/data-residency) — infrastructure and encryption detail
-- [Security → SOC 2](/security/soc2) — the full control framework Mushi maps to
+- [Audit log](/admin/audit): source data for many SOC 2 controls
+- [Security → Data residency](/security/data-residency): infrastructure and encryption detail
+- [Security → SOC 2](/security/soc2): the control framework Mushi Mushi maps to

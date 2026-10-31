@@ -24,6 +24,7 @@ import { featureRequestDispatchBlock } from './report-category.ts'
 import { fixDispatchResolvedBlock } from './fix-report-truth.ts'
 import type { DispatchTrigger } from './autofix-budget.ts'
 import { reportHasActiveWorkClaim } from './work-claims.ts'
+import { emitFirstFixDispatched } from './funnel-steps.ts'
 
 export interface DispatchResult {
   ok: boolean
@@ -196,6 +197,14 @@ export async function dispatchFixForReport(input: DispatchInput): Promise<Dispat
       dispatchId: job.id,
       err: String(err),
     })
+  })
+
+  // New-user path step (funnel-steps.ts); actor = the requester, else the owner.
+  emitFirstFixDispatched(db, {
+    projectId: input.projectId,
+    reportId: input.reportId,
+    dispatchId: job.id,
+    actorUserId: input.requestedBy ?? null,
   })
 
   // Team channels: "auto-fix started" (gated by the 'fix.dispatched' pref).

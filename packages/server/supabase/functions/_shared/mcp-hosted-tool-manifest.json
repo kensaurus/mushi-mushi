@@ -238,7 +238,8 @@
     "description": "Recent QA story runs.",
     "method": "GET",
     "path": "/v1/admin/projects/{projectId}/qa-stories/{storyId}/runs?limit={limit|10}",
-    "required": ["storyId"]
+    "required": ["storyId"],
+    "requiresProject": true
   },
   "get_qa_story_run": {
     "scope": "mcp:read",
@@ -246,7 +247,8 @@
     "method": "GET",
     "path": "/v1/admin/projects/{projectId}/qa-stories/{storyId}/runs?limit=50",
     "required": ["storyId", "runId"],
-    "transform": "qa_run_pick"
+    "transform": "qa_run_pick",
+    "requiresProject": true
   },
   "test_notification_channel": {
     "scope": "mcp:write",
@@ -486,6 +488,13 @@
     "description": "What GitHub actually charged for Actions (measured from GitHub's bill): net, gross and discount per repo, SKU and day, this month, the change, and the agent PR share.",
     "method": "GET",
     "path": "/v1/admin/ci/bill?project_id={projectId}&days={days|30}",
+    "hints": { "destructive": false, "idempotent": true }
+  },
+  "get_worker_status": {
+    "scope": "mcp:read",
+    "description": "Your local workers' problems, worst first (a run stuck in a git hook with its stage and log, an offline machine, a failing Cursor account check, idle credits), then machines and lanes.",
+    "method": "GET",
+    "path": "/v1/admin/work/lanes?projectId={projectId}",
     "hints": { "destructive": false, "idempotent": true }
   },
   "preview_ci_cost_fix_rollout": {

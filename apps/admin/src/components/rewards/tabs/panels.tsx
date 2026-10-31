@@ -237,7 +237,8 @@ export function OverviewTab() {
               <div className="text-2xs text-fg-muted mt-0.5">total events</div>
             </div>
             <div className="rounded-lg bg-surface-overlay p-2 text-center">
-              <div className="text-lg font-semibold tabular-nums text-ok">{feedData.stats_24h.accepted}</div>
+              {/* text-ok is under 4.5:1 on this overlay in light mode. */}
+              <div className="text-lg font-semibold tabular-nums text-ok-foreground">{feedData.stats_24h.accepted}</div>
               <div className="text-2xs text-fg-muted mt-0.5">accepted</div>
             </div>
             <div className={`rounded-lg bg-surface-overlay p-2 text-center ${feedData.stats_24h.rejected > 0 ? 'ring-1 ring-danger/30' : ''}`}>
@@ -269,7 +270,13 @@ export function OverviewTab() {
         {recentEvents.length === 0 ? (
           <EmptyState title="No events in last 24 hours" description="Activity events will appear here as SDK clients send data." />
         ) : (
-          <div className="max-h-64 overflow-y-auto divide-y divide-edge-subtle text-xs">
+          <div
+            role="region"
+            aria-label="Activity in the last 24 hours"
+            tabIndex={0}
+            className="max-h-64 overflow-y-auto divide-y divide-edge-subtle text-xs rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+          >
+            {/* Focusable so keyboard users can scroll the feed (axe scrollable-region-focusable). */}
             {recentEvents.map((ev) => {
               const rejected = !!ev.rejected_reason
               return (
@@ -375,7 +382,7 @@ export function ActivityRulesTab({ canEdit }: { canEdit: boolean }) {
     <div className="space-y-4">
       {!canEdit && (
         <div className="rounded-xl p-3 text-xs bg-warn-muted/50 text-warn-foreground border border-warn/25">
-          Upgrade to Starter or higher to configure activity rules.
+          Upgrade to Builder or higher to configure activity rules.
         </div>
       )}
 
@@ -515,7 +522,7 @@ export function TierLadderTab({ canEdit }: { canEdit: boolean }) {
     <div className="space-y-4">
       {!canEdit && (
         <div className="rounded-xl p-3 text-xs bg-warn-muted/50 text-warn-foreground border border-warn/25">
-          Upgrade to Starter or higher to edit tier thresholds.
+          Upgrade to Builder or higher to edit tier thresholds.
         </div>
       )}
 
@@ -651,7 +658,7 @@ function ContributorDrawer({
   displayName: string | null
   onClose: () => void
   onDataChange?: () => void
-  /** Award / Set tier are writes: hidden on read-only (Hobby) plans. */
+  /** Award / Set tier are writes: hidden on read-only (Free) plans. */
   canEdit?: boolean
 }) {
   const toast = useToast()
@@ -798,7 +805,7 @@ function ContributorDrawer({
                     placeholder="Reason (e.g. beta participation)"
                     value={bonusReason}
                     onChange={(e) => setBonusReason(e.target.value)}
-                    className="flex-1"
+                    containerClassName="min-w-0 flex-1"
                   />
                   <Btn variant="success" size="sm" loading={awardingBonus} onClick={awardBonus}>
                     Award
@@ -824,7 +831,7 @@ function ContributorDrawer({
                     placeholder="Reason (optional)"
                     value={tierReason}
                     onChange={(e) => setTierReason(e.target.value)}
-                    className="flex-1"
+                    containerClassName="min-w-0 flex-1"
                   />
                   <Btn variant="ghost" size="sm" loading={settingTier} onClick={setTier}>
                     Set

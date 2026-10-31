@@ -14,7 +14,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { WorkLanesData } from '../../lib/workers'
+import type { WorkerFlagAction, WorkLanesData } from '../../lib/workers'
 
 const state = vi.hoisted(() => ({
   data: null as unknown,
@@ -119,6 +119,24 @@ async function click(el: Element | null) {
 }
 
 describe('WorkersPanel', () => {
+  it('shows the Cursor account the lanes spend, and Switch account for the machine\'s owner only', async () => {
+    const data = fixture()
+    data.hosts[0] = { ...data.hosts[0]!, cursorAccount: 'kensaurus@gmail.com', cursorLogin: { requestId: 'x', state: 'link_ready', account: 'kensaurus@gmail.com', requestedAt: '2026-10-27T11:58:00Z', at: '2026-10-27T11:59:00Z', detail: null }, canSwitchAccount: true }
+    state.data = data
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    expect(q('worker-host-h1-account')!.textContent).toContain('Lanes spend:kensaurus@gmail.com')
+    expect(q('worker-host-h1-account')!.textContent).toContain('sign-in link ready')
+    expect(q('worker-host-h1-switch-account')!.textContent).toBe('Open the sign-in')
+    act(() => root.unmount())
+    root = createRoot(host)
+    const other = fixture()
+    other.hosts[0] = { ...other.hosts[0]!, mine: false, cursorAccount: 'k***@g***.com' }
+    state.data = other
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    expect(q('worker-host-h1-account')!.textContent).toContain('k***@g***.com')
+    expect(q('worker-host-h1-switch-account')).toBeNull()
+  })
+
   it('reads this app and shows the machine, its lane, what it runs, its queue and its runs', async () => {
     await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
     expect(state.paths[0]).toBe('/v1/admin/work/lanes?projectId=p1')
@@ -250,5 +268,169 @@ describe('Requeue', () => {
   it('posts local worker run ids as claimIds', async () => {
     await runPipelineAction('requeue', ['c2'])
     expect(state.calls).toEqual([{ path: '/v1/admin/pipeline/actions', method: 'POST', body: { action: 'requeue', claimIds: ['c2'] } }])
+  })
+})
+
+describe('worker problems are loud and fixable (ADR 0048 amendment 2026-10-28)', () => {
+  function withIncident(): WorkLanesData {
+    const data = fixture()
+    data.hosts[0]!.status = {
+      ...data.hosts[0]!.status,
+      load1: 37,
+      cpus: 16,
+      checks: { cursor: { result: 'timed_out', ageSec: 900, detail: 'timed out after 90 s', account: 's***@g***.com' }, gh: { result: 'signed_in', ageSec: 60, detail: '' } },
+      slots: [{ lane: 'glot', runId: 'c9', kind: 'fix', ageSec: 4 * 3600 + 600, stage: 'commit', stageSec: 4 * 3600 }],
+      waitWhy: "6 agents running, the host's cap is 6",
+    }
+    data.lanes[0]!.status = { state: 'working', runs: 4, inflight: [{ runId: 'c9', kind: 'fix', reportId: 'r9', ageSec: 4 * 3600 + 600, stage: 'commit', stageSec: 4 * 3600, model: 'grok-4.7-xhigh-fast', log: ['commit: pnpm exec tsc --noEmit'] }] }
+    data.flags = [
+      {
+        id: 'run_stuck:c9',
+        kind: 'run_stuck',
+        severity: 'danger',
+        hostId: 'h1',
+        hostname: 'alienware',
+        laneId: 'l1',
+        laneName: 'glot',
+        projectId: 'p1',
+        title: 'glot: a run has held an agent space for 4 h 10 min',
+        cause: "It has been in the repo's own commit hook (git commit) for 4 h.",
+        sinceSec: 4 * 3600 + 600,
+        stage: 'commit',
+        log: ['commit: pnpm exec tsc --noEmit'],
+        actions: [
+          { kind: 'stop_run', label: 'Stop this run', claimId: 'c9' },
+          { kind: 'open_report', label: 'Open the report', reportId: 'r9' },
+          { kind: 'copy_command', label: 'Find it on the machine', command: "ps -eo pid,etime,stat,args | grep -E 'git (commit|push)' | grep -v grep" },
+        ],
+      },
+      {
+        id: 'account_check:h1',
+        kind: 'account_check',
+        severity: 'warn',
+        hostId: 'h1',
+        hostname: 'alienware',
+        laneId: null,
+        laneName: null,
+        projectId: null,
+        title: 'The Cursor account check timed out on alienware',
+        cause: '`cursor-agent status` did not answer in time under load 37 on 16 cores 15 min ago.',
+        sinceSec: 900,
+        actions: [
+          { kind: 'recheck_account', label: 'Re-check the account', hostId: 'h1' },
+          { kind: 'copy_command', label: 'Check it on the machine', command: 'cursor-agent status' },
+        ],
+      },
+    ]
+    return data
+  }
+  const buttonByText = (text: string) => [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === text) ?? null
+
+  it('shows a stuck run first: what, why, its stage and last log lines, and the command for the machine', async () => {
+    state.data = withIncident()
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    const list = q('worker-flags')!
+    expect(list.textContent).toContain('2 things stop your local workers from fixing bugs (1 need you now).')
+    expect(list.textContent).toContain('An agent space is one coding agent running at a time')
+    const stuck = q('worker-flag-run_stuck')!
+    expect(stuck.textContent).toContain('Stuck run')
+    expect(stuck.textContent).toContain('glot: a run has held an agent space for 4 h 10 min')
+    expect(stuck.textContent).toContain('for 4 h 10 min')
+    expect(q('worker-flag-run_stuck-stage')!.textContent).toContain("in the repo's commit hook")
+    expect(q('worker-flag-run_stuck-log')!.textContent).toContain('commit: pnpm exec tsc --noEmit')
+    expect(stuck.textContent).toContain('Find it on the machine, on alienware:')
+    expect(stuck.textContent).toContain("ps -eo pid,etime,stat,args")
+    expect(stuck.querySelector('a[href="/reports/r9"]')).not.toBeNull()
+    // The status line leads with the worst problem, not "all fine".
+    expect(q('workers-status')!.textContent).toContain('glot: a run has held an agent space for 4 h 10 min.')
+    // The machine card says who holds the spaces, and the account check as it answered.
+    expect(q('worker-host-h1-slots')!.textContent).toContain("glot (4 h 10 min, in the repo's commit hook)")
+    expect(q('worker-host-h1-checks')!.textContent).toContain('check timed out')
+    expect(q('worker-host-h1-checks')!.textContent).toContain('(s***@g***.com) checked 15 min ago: "timed out after 90 s"')
+    expect(q('worker-host-h1')!.textContent).toContain('load 37 on 16 cores')
+    // The lane card shows the run's stage and log too.
+    expect(q('worker-lane-l1-run-c9-detail')!.textContent).toContain("in the repo's commit hook")
+    expect(q('worker-lane-l1-run-c9-detail')!.textContent).toContain('for 4 h · run 4 h 10 min · grok-4.7-xhigh-fast')
+  })
+
+  it('Stop this run asks first, then ends the claim', async () => {
+    state.data = withIncident()
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    await click(q('worker-flag-run_stuck-stop_run'))
+    expect(state.calls).toEqual([])
+    await click(buttonByText('Stop the run'))
+    expect(state.calls).toEqual([{ path: '/v1/admin/work/claims/c9/stop', method: 'POST', body: {} }])
+  })
+
+  it('Re-check the account asks the machine', async () => {
+    state.data = withIncident()
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    await click(q('worker-flag-account_check-recheck_account'))
+    expect(state.calls).toEqual([{ path: '/v1/admin/work/hosts/h1/recheck', method: 'POST', body: {} }])
+  })
+
+  it('flags show even with no machine registered (a script ran mushi work outside the worker)', async () => {
+    state.data = {
+      ...fixture(),
+      hosts: [],
+      lanes: [],
+      flags: [{ id: 'unmanaged_run:f1', kind: 'unmanaged_run', severity: 'danger', hostId: null, hostname: null, laneId: null, laneName: null, projectId: 'p1', title: 'A local mushi work run has been running 4 h outside the worker', cause: 'A script on a machine started it.', sinceSec: 4 * 3600, actions: [{ kind: 'open_report', label: 'Open the report', reportId: 'r1' }] }],
+    }
+    await render(createElement(WorkersPanel, { projectId: null, now: NOW }))
+    expect(q('worker-flag-unmanaged_run')!.textContent).toContain('outside the worker')
+    expect(q('workers-first-step')).not.toBeNull()
+  })
+
+  it('a machine whose CLI predates the telemetry says to update it, never "all fine"', async () => {
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    expect(q('worker-host-h1')!.textContent).toContain('does not report its checks')
+    expect(q('worker-flags')).toBeNull()
+  })
+})
+
+describe('every worker flag kind renders loud, with its label, title and fix (ADR 0048 amendment 2026-10-28)', () => {
+  const base = { hostId: 'h1', hostname: 'alienware', laneId: null, laneName: null, projectId: 'p1', cause: 'Because.', sinceSec: 1200 }
+  const cases: Array<{ kind: string; severity: 'danger' | 'warn'; label: string; title: string; actions?: WorkerFlagAction[] }> = [
+    { kind: 'host_offline', severity: 'danger', label: 'Machine offline', title: 'alienware is offline', actions: [{ kind: 'copy_command', label: 'Check the worker on that machine', command: 'systemctl --user status mushi-worker.service --no-pager' }] },
+    { kind: 'machine_not_ready', severity: 'danger', label: 'Lane cannot start', title: 'glot on alienware could not start' },
+    { kind: 'lanes_waiting', severity: 'danger', label: 'Waiting for an agent space', title: '6 lanes on alienware have waited 3 h for an agent space' },
+    { kind: 'gh_signed_out', severity: 'danger', label: 'GitHub sign-in', title: 'gh is not signed in on alienware', actions: [{ kind: 'copy_command', label: 'Sign in on the machine', command: 'gh auth login' }] },
+    { kind: 'machine_waiting', severity: 'warn', label: 'Machine waiting', title: 'alienware has taken nothing new for 20 min' },
+    { kind: 'machine_busy', severity: 'warn', label: 'Machine overloaded', title: 'alienware is overloaded: load 37 on 16 cores' },
+    {
+      kind: 'hook_failures',
+      severity: 'warn',
+      label: 'Git hooks failing',
+      title: "glot: 2 runs failed in the repo's git hooks in 24 h",
+      actions: [
+        { kind: 'pause_lane', label: 'Pause this lane', laneId: 'l1' },
+        { kind: 'open_pr', label: 'Open its PR', prUrl: 'https://github.com/kensaurus/glot.it/pull/12' },
+      ],
+    },
+    { kind: 'credits_idle', severity: 'danger', label: 'Credits idle', title: 'Cursor credits idle for 7 h', actions: [{ kind: 'open_page', label: 'Spend credits', to: '/credits' }] },
+  ]
+
+  it.each(cases)('$kind: $label', async (c) => {
+    state.data = { ...fixture(), flags: [{ ...base, id: `${c.kind}:x`, kind: c.kind, severity: c.severity, title: c.title, actions: c.actions ?? [] }] }
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    const el = q(`worker-flag-${c.kind}`)!
+    expect(el.textContent).toContain(c.label)
+    expect(el.textContent).toContain(c.title)
+    expect(el.textContent).toContain('for 20 min')
+    for (const a of c.actions ?? []) {
+      if (a.kind === 'copy_command') expect(el.textContent).toContain(a.command)
+      else expect(el.textContent).toContain(a.label)
+    }
+    // The status line names the problem; it never says all is well.
+    expect(q('workers-status')!.textContent).toContain(c.title)
+  })
+
+  it('Pause this lane sends only paused, and the PR link opens the PR', async () => {
+    const hooks = cases.find((c) => c.kind === 'hook_failures')!
+    state.data = { ...fixture(), flags: [{ ...base, id: 'hook_failures:l1', kind: hooks.kind, severity: hooks.severity, title: hooks.title, actions: hooks.actions! }] }
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    expect(q('worker-flag-hook_failures-open_pr')!.getAttribute('href')).toBe('https://github.com/kensaurus/glot.it/pull/12')
+    await click(q('worker-flag-hook_failures-pause_lane'))
+    expect(state.calls).toEqual([{ path: '/v1/admin/work/lanes/l1', method: 'PATCH', body: { paused: true } }])
   })
 })

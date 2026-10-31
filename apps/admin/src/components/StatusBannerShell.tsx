@@ -4,6 +4,7 @@
 
 import type { ReactNode } from 'react'
 import { SpringChromeEnter } from './motion/SpringChromeEnter'
+import { useHandOffBannerAction, usePageStatusShown } from '../lib/pageStatusPresence'
 
 export type StatusBannerTone = 'info' | 'brand' | 'danger' | 'warn' | 'ok'
 
@@ -28,6 +29,13 @@ export function StatusBannerShell({
   action?: ReactNode
   pulseDot?: boolean
 }) {
+  // An "all good" banner over the page's status sentence said the same thing
+  // twice; problems (warn, danger) and running work (brand) still show.
+  const pageStatusShown = usePageStatusShown()
+  const steppedAside = tone === 'ok' && pageStatusShown
+  // Its button (Refresh, View catalog…) moves to the status block, not away.
+  useHandOffBannerAction(action, steppedAside)
+  if (steppedAside) return null
   const shell = BANNER_SHELL[tone]
   return (
     <SpringChromeEnter>

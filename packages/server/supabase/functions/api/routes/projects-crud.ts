@@ -16,6 +16,9 @@ import { apiKeyAuth, jwtAuth } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { emitProductEvent } from '../../_shared/product-events.ts';
 import { dbError, enumerateAccessibleProjectIds } from '../shared.ts';
+import { resolvePlanForScope } from '../../_shared/entitlements.ts';
+import { appLimitDenial } from '../../_shared/plan-app-limit.ts';
+import { insertProjectWithFreeSlug } from '../../_shared/project-slug.ts';
 import { failedFixPreviews, loadRecentFixTruths } from '../../_shared/fix-report-truth-load.ts';
 import { projectCapabilities } from '../../_shared/project-capabilities.ts';
 import { freshestHeartbeat, isSdkKey, loadProjectCounts } from '../../_shared/setup-signals.ts';
@@ -671,7 +674,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       projectsWithReports: 0,
       sdkConnectedCount: 0,
       /** Projects with no SDK-key heartbeat (first 5 by name), so a banner can name them. */
-      sdkMissingProjects: [] as Array<{ id: string; name: string }>,
+      sdkMissingProjects: [] as Array<{ id: string; name: string; createdAt: string | null }>,
       sdkMissingCount: 0,
       neverIngestedCount: 0,
       reportsLast24h: 0,
@@ -751,11 +754,15 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
     const sdkConnectedProjects = new Set<string>(
       accessibleIds.filter((id) => freshestHeartbeat(sdkKeysByProject.get(id) ?? []) !== null),
     );
-    const sdkMissingIds = accessibleIds.filter((id) => !sdkConnectedProjects.has(id));
+    // The public demo app (sample data, never ships an SDK) is not "missing" one.
+    const { data: demoRow } = await db.from('mushi_runtime_config').select('value').eq('key', 'demo_project_id').maybeSingle();
+    const demoProjectId = (demoRow as { value?: unknown } | null)?.value;
+    const sdkMissingIds = accessibleIds.filter((id) => !sdkConnectedProjects.has(id) && id !== demoProjectId);
     const { data: missingRows } = sdkMissingIds.length > 0
-      ? await db.from('projects').select('id, name').in('id', sdkMissingIds).order('name').limit(5)
+      ? await db.from('projects').select('id, name, created_at').in('id', sdkMissingIds).order('name').limit(5)
       : { data: [] };
-    const sdkMissingProjects = ((missingRows ?? []) as Array<{ id: string; name: string }>).map((r) => ({ id: r.id, name: r.name }));
+    // createdAt lets the console tell a just-made app (setup left) from a broken one.
+    const sdkMissingProjects = ((missingRows ?? []) as Array<{ id: string; name: string; created_at?: string }>).map((r) => ({ id: r.id, name: r.name, createdAt: r.created_at ?? null }));
     const projectsWithReportsSet = new Set<string>(reportProjectRows ?? []);
 
     const projectCount = accessibleIds.length;
@@ -964,40 +971,34 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       );
     }
 
-    // Slug derivation:
-    //   1. Lowercase, collapse non-alphanumerics to '-', trim leading /
-    //      trailing dashes — the historical shape.
-    //   2. If the user typed something like "!!!" or all-emoji that
-    //      reduces to an empty string, fall back to a short random tail
-    //      so we never write an empty slug. Empty slugs broke the slug
-    //      UNIQUE constraint as soon as a second emoji-named project
-    //      landed AND surfaced in the URL as `/projects//settings`,
-    //      which the React Router stopped resolving cleanly.
-    //   3. Cap the length at 48 chars so the slug fits in the URL bar
-    //      and in the audit log without truncation. Random suffixes
-    //      append AFTER the trim so a long-name + collision retry
-    //      below stays under the column cap.
-    let slug = name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 48);
-    if (!slug) {
-      slug = `project-${crypto.randomUUID().slice(0, 8)}`;
+    // The plan's app limit (docs/plan-pricing.md, 2026-10-28): apps watched
+    // is what a plan sells. Only a new app is refused; existing apps stay.
+    {
+      const [plan, { count, error: countErr }] = await Promise.all([
+        resolvePlanForScope(db, { organizationId }),
+        db.from('projects').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId),
+      ]);
+      if (countErr) return dbError(c, countErr);
+      const denial = appLimitDenial(plan, count ?? 0);
+      if (denial) {
+        return c.json(
+          { ok: false, error: { code: denial.code, message: denial.message }, data: { limit: denial.limit, used: denial.used, upgradeTo: denial.upgradeTo } },
+          402,
+        );
+      }
     }
-    const { data, error } = await db
-      .from('projects')
-      .insert({
-        name: name.trim(),
-        slug,
-        owner_id: userId,
-        organization_id: organizationId,
-      })
-      .select('id')
-      .single();
 
-    if (error) return dbError(c, error);
+    // Slugs are unique across every account, so a name someone else already
+    // used ("My SaaS App", our own placeholder) gets a short random tail
+    // instead of a 500 (_shared/project-slug.ts). Empty or emoji-only names
+    // get `project-<random>`; slugs stay ≤48 chars.
+    const { data, error } = await insertProjectWithFreeSlug(db, {
+      name: name.trim(),
+      owner_id: userId,
+      organization_id: organizationId,
+    });
+
+    if (error || !data) return dbError(c, error);
 
     // Company funnel (mushi-self): fire-and-forget, never on the response path.
     void emitProductEvent(db, {
@@ -1071,7 +1072,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
 
     // apiKeyId lets the success panel rotate exactly this key (QA #31).
     return c.json(
-      { ok: true, data: { id: data.id, slug, apiKey: autoKey, keyPrefix: autoKeyPrefix, apiKeyId: autoKeyId } },
+      { ok: true, data: { id: data.id, slug: data.slug, apiKey: autoKey, keyPrefix: autoKeyPrefix, apiKeyId: autoKeyId } },
       201,
     );
   });

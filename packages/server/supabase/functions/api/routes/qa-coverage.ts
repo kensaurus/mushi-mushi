@@ -18,14 +18,15 @@
  *
  * DEPENDENCIES:
  * - qa_stories, qa_story_runs, qa_story_coverage_24h, qa_platform_rollup_24h (migration 20260514)
- * - jwtAuth, ownedProjectIds, dbError
+ * - jwtAuth, adminOrApiKey, ownedProjectIds, dbError
  */
 
 import type { Hono } from 'npm:hono@4';
 import type { Context, Next } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 import { z } from 'npm:zod@3';
-import { jwtAuth, apiKeyAuth, requireApiKeyScope } from '../../_shared/auth.ts';
+import { jwtAuth, apiKeyAuth, requireApiKeyScope, adminOrApiKey } from '../../_shared/auth.ts';
+import { boundKeyTargetsOtherProject } from '../../_shared/bound-key.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { dbError, ownedProjectIds, jsonError, userCanAccessProject } from '../shared.ts';
 import { denyViewerWrite } from '../viewer-gate.ts';
@@ -494,13 +495,19 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
 
     const { data: mv } = await db
       .from('qa_story_coverage_24h')
-      .select('story_id, name, pass_rate_pct')
-      .eq('project_id', pid)
-      .order('pass_rate_pct', { ascending: true });
+      .select('story_id, name, passed_24h, failed_24h, error_24h')
+      .eq('project_id', pid);
 
-    const rows = mv ?? [];
+    // Same finished-run rate as the banner. The view's pass_rate_pct counts
+    // skipped runs, so a story that only skipped was 0% and looked failing.
+    const rows = (mv ?? []).map((r) => ({
+      story_id: r.story_id as string,
+      name: r.name as string,
+      pass_rate_pct: finishedPassRate(r as Record<string, unknown>),
+    }));
+    rows.sort((a, b) => (a.pass_rate_pct ?? 101) - (b.pass_rate_pct ?? 101));
     const total = rows.length;
-    const passing = rows.filter((r) => (r.pass_rate_pct ?? 0) >= 80).length;
+    const passing = rows.filter((r) => r.pass_rate_pct != null && r.pass_rate_pct >= 80).length;
     const failing = rows.filter((r) => r.pass_rate_pct != null && r.pass_rate_pct < 80).length;
     const error_count = 0; // MV doesn't separate error from fail at summary level
     const top_failing = rows
@@ -610,16 +617,28 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
   });
 
   // ── List runs for a story ─────────────────────────────────────────────────
-  app.get('/v1/admin/projects/:pid/qa-stories/:sid/runs', jwtOrApiKey, async (c) => {
+  // Account keys (MCP account connection) are rejected by apiKeyAuth, which
+  // jwtOrApiKey uses, so this read uses adminOrApiKey. The other QA routes
+  // stay on jwtAuth / jwtOrApiKey: creating or running a story is unchanged.
+  // mcp:read (mcp:write implies it). A project key stays pinned to its project.
+  app.get('/v1/admin/projects/:pid/qa-stories/:sid/runs', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
     const pid = c.req.param('pid')!;
     const sid = c.req.param('sid')!;
     const uuidErr = assertUuid(c, sid, 'story_id') ?? assertUuid(c, pid, 'project_id');
     if (uuidErr) return uuidErr;
     const limit = Math.min(Number(c.req.query('limit')) || 20, 50);
-    const contextPid = c.get('projectId' as keyof Variables) as string | undefined;
     const db = getServiceClient();
-    if (!(await resolveProject(db, userId, pid, contextPid))) return c.json({ error: 'Not found' }, 404);
+    const boundProjectId = c.get('projectId');
+    if (boundKeyTargetsOtherProject(c.get('authMethod'), boundProjectId, pid)) {
+      return c.json({ error: { code: 'FORBIDDEN', message: 'API key does not belong to this project' } }, 403);
+    }
+    // Project key: the middleware pinned it to this project. Account key and
+    // console session: membership, including a selected-projects limit.
+    const pinnedKey = c.get('authMethod') === 'apiKey' && typeof boundProjectId === 'string' && boundProjectId === pid;
+    if (!pinnedKey && !(userId && (await ownedProjectIds(db, userId)).includes(pid))) {
+      return c.json({ error: 'Not found' }, 404);
+    }
 
     const { data, error } = await db
       .from('qa_story_runs')

@@ -2,25 +2,30 @@
 
 # Mushi Mushi
 
-**Your AI wrote it. Mushi tells you why it broke.**
+**Your AI wrote it. Mushi Mushi tells you why it broke.**
 
-When a user hits a bug, Mushi explains the cause in plain English and hands your editor a fix to start from.<br/>
-Built for the vibe coder who ships fast with Cursor, Claude Code, Lovable or Bolt, so a bug costs five minutes instead of an afternoon.
+A user says your app is broken. Mushi Mushi tells you why in plain English and hands the fix to Cursor, Claude Code or Lovable. No Sentry or monitoring needed.
 
-[![Add to Cursor](https://img.shields.io/badge/Add%20to-Cursor-0098FF)](https://kensaur.us/mushi-mushi/docs/connect)
-[![Try the demo — no signup](https://img.shields.io/badge/Try%20the%20demo-no%20signup-E34234)](https://kensaur.us/mushi-mushi/docs/connect)
+```bash
+npx mushi-mushi
+```
+
+**[See a sample diagnosis →](https://kensaur.us/mushi-mushi/docs/demo/diagnosis)** No signup, nothing to install.
+
+<sub>Built for the vibe coder who ships fast with Cursor, Claude Code, Lovable or Bolt. No terminal? [Add it to Lovable or Bolt with one prompt](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt).</sub>
+
 [![npm](https://img.shields.io/npm/v/@mushi-mushi/react?label=%40mushi-mushi%2Freact&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react)
 [![Server](https://img.shields.io/badge/server-AGPL--3.0-brightgreen.svg)](./packages/server/LICENSE)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/kensaurus/mushi-mushi/badge)](https://scorecard.dev/viewer/?uri=github.com/kensaurus/mushi-mushi)
 [![npm provenance](https://img.shields.io/badge/npm-provenance-2ea44f?logo=npm)](./SECURITY.md#verifying-a-mushi-mushi-tarball-before-installing)
 
-[Quick start](#quick-start) · [How it works](#how-it-works) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Demo](https://kensaur.us/mushi-mushi/docs/connect) · [Why not Sentry?](#why-not-just-sentry) · [Self-host](#self-host) · [Vision](./VISION.md)
+[Quick start](#quick-start) · [How it works](#how-it-works) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Sample diagnosis](https://kensaur.us/mushi-mushi/docs/demo/diagnosis) · [Why not Sentry?](#why-not-just-sentry) · [Self-host](#self-host) · [Vision](./VISION.md)
 
-<a href="https://kensaur.us/mushi-mushi/docs/connect" title="Try the read-only demo — no signup">
-  <img alt="Report detail — plain-English root cause, confidence chip, paste-ready Cursor fix prompt, and PDCA receipt strip." src="./docs/screenshots/report-detail-dark.png" width="100%" />
+<a href="https://kensaur.us/mushi-mushi/docs/demo/diagnosis" title="See a sample diagnosis: no signup">
+  <img alt="The Mushi console's report list: each user report with a plain-English summary, how serious it is and how sure Mushi is." src="./docs/screenshots/report-detail-dark.png" width="100%" />
 </a>
 
-<sub>↑ a diagnosis: the root cause in plain English and a paste-ready fix prompt. Click to open the read-only demo.</sub>
+<sub>↑ reports in the Mushi Mushi console, each with a plain-English summary. Click for one full sample diagnosis you can read without signing up.</sub>
 
 </div>
 
@@ -35,9 +40,9 @@ flowchart LR
     P --> R["Release<br/>report closes, user is told"]
 ```
 
-1. **Capture.** A user taps the widget. Mushi records a screenshot, the route, their note, and the last console and network events.
-2. **Diagnose.** Mushi writes the root cause in plain English with a fix prompt. Twenty reports of the same broken button become one row.
-3. **Fix.** Your editor reads the diagnosis over MCP. If you want, an agent opens a **draft** PR that you review like any other. A second model (Claude Opus, on your own key) reviews each agent PR first, and Mushi will not merge one it says to hold.
+1. **Capture.** A user taps the widget. Mushi Mushi records a screenshot, the route, their note, and the last console and network events.
+2. **Diagnose.** Mushi Mushi writes the root cause in plain English with a fix prompt. Twenty reports of the same broken button become one row.
+3. **Fix.** Your editor reads the diagnosis over MCP and makes the fix with its own model. If you prefer, an agent opens a **draft** PR that you review like any other. On hosted Mushi Mushi the built-in fixer needs no key of your own; Cursor's agents need your Cursor key; or run fixes on your own computer with the Mushi Mushi worker. With your own Anthropic key, a second AI (Claude Opus) reviews each agent PR first. Mushi Mushi will not merge a PR it says to hold unless you override it in the console and give a reason.
 
 It catches the bugs that never throw an error: the pay button hidden under the keyboard, the Save button tapped twice because nothing happened, the dashboard that takes 12 seconds.
 
@@ -45,19 +50,20 @@ It catches the bugs that never throw an error: the pay button hidden under the k
 
 ```bash
 npx mushi-mushi                      # detects your framework, installs the SDK, writes env vars, sends a test report
-npx mushi-mushi setup --ide cursor   # or --ide claude: your editor can now read diagnoses
 ```
 
-Then ask your editor: *"what's broken in prod?"*
+Then connect your editor so it can read diagnoses: one click on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect), or `npx mushi-mushi setup --ide cursor` (or `--ide claude`). Ask it: *"Get the latest Mushi report and fix it."*
 
-The SDK needs two env vars (`VITE_MUSHI_PROJECT_ID` / `VITE_MUSHI_API_KEY`, or `NEXT_PUBLIC_MUSHI_*`; see [`examples/sdk.env.example`](./examples/sdk.env.example)). No Sentry, no LLM key, no monitoring stack. The hosted free tier covers 50 diagnoses a month with no card, or you can [self-host](#self-host).
+Building in Lovable or Bolt, with no terminal? Paste one script tag through your prompt instead: [Mushi Mushi in Lovable or Bolt](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt).
+
+The SDK needs two env vars (`VITE_MUSHI_PROJECT_ID` / `VITE_MUSHI_API_KEY`, or `NEXT_PUBLIC_MUSHI_*`; see [`examples/sdk.env.example`](./examples/sdk.env.example)). No Sentry, no LLM key, no monitoring stack. The hosted free plan covers one app and 100 diagnoses a month, with no card and no AI key of your own ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Or you can [self-host](#self-host).
 
 <details>
 <summary><b>Let your AI editor do the setup</b></summary>
 
 Paste this into Cursor or Claude Code:
 
-> Install the Mushi skills from github.com/kensaurus/mushi-mushi (`npx skills add kensaurus/mushi-mushi`), then run the mushi-setup skill to wire the Mushi SDK and MCP server into this app and send a test report to verify the connection.
+> Install the Mushi Mushi skills from github.com/kensaurus/mushi-mushi (`npx skills add kensaurus/mushi-mushi`), then run the mushi-setup skill to wire the Mushi Mushi SDK and MCP server into this app and send a test report to verify the connection.
 
 The skills also add `/mushi-debug` (why ingest or MCP fails), `/mushi-health` (pass/fail across CLI, API and keys) and `/mushi-integration` (fix dispatch and the two-way loop).
 
@@ -90,6 +96,14 @@ Native SDKs (iOS, Android, Flutter) are a preview and install from this reposito
 
 </details>
 
+## Who it's for
+
+- **You build apps with AI, mostly on your own.** You use Lovable, Bolt, Cursor or Claude Code, your app has real users, and you didn't write most of the code by hand. When someone says "it's broken", Mushi Mushi tells you the likely cause in plain English and gives your editor a fix prompt.
+- **You're a developer and you own your code.** You read the diffs and may already run Sentry. User reports and Sentry errors land in one list with duplicates merged, and an agent's fix gets a second AI review before it can merge.
+- **You run a team.** Reports arrive from the app, Sentry, store reviews and Slack, and nobody sees all of them. Here they share one list, each with a diagnosis, and they can go on to Linear, Jira or GitHub Issues.
+
+The pains each group has, and where each should start: [who it's for](https://kensaur.us/mushi-mushi/docs/who-its-for).
+
 ## What's inside
 
 | Package | For | What it does |
@@ -105,25 +119,39 @@ Native SDKs (iOS, Android, Flutter) are a preview and install from this reposito
 
 Full list and maturity: [SDK reference](https://kensaur.us/mushi-mushi/docs/sdks). Architecture: [how the pipeline fits together](https://kensaur.us/mushi-mushi/docs/concepts/architecture).
 
-Agent PRs get an independent review before anyone merges them: **merge**, **fix first** or **hold**, with findings on the PR. A "fix first" PR can go back to the agent once with those findings ([agent PR review](https://kensaur.us/mushi-mushi/docs/concepts/agent-pr-review)).
+## What else it does
 
-Fix waiting to land? `mushi runner status` shows where your tests run, why they wait, and whether a red check was your code or a test machine that stopped ([CI runners](https://kensaur.us/mushi-mushi/docs/operating/ci-runners)).
+Most bugs never get reported. People just leave. So beyond the reports people send, Mushi Mushi can look for bugs itself and check the fixes. Each of these is off until you switch it on, and several need your own key.
+
+| Feature | What it does | Needs |
+| --- | --- | --- |
+| [First-time user test](https://kensaur.us/mushi-mushi/docs/what-it-does#first-user-test) | An AI that has never seen your app tries one goal, such as signing up, and files the places it got stuck, with screenshots | The Mushi Mushi worker on a computer of yours, or one run of `mushi ux fresh-eyes` |
+| [A second AI reviews every fix](https://kensaur.us/mushi-mushi/docs/what-it-does#ai-review) | Reads each agent PR next to the original report and says merge, fix first or hold, with its reasons | Your GitHub repo and your own Anthropic key |
+| [Live-site watch](https://kensaur.us/mushi-mushi/docs/what-it-does#site-watch) | Checks your live pages every hour. A broken page is filed only after a second check confirms it | Your own Firecrawl key |
+| [Weekly site audit](https://kensaur.us/mushi-mushi/docs/what-it-does#site-audit) | Reads every page once a week and files dead links, missing titles, text in the wrong language and images without a text description | Your own Firecrawl key |
+| [Known security holes](https://kensaur.us/mushi-mushi/docs/what-it-does#vulnerabilities) | Checks your lockfiles daily against the public vulnerability database and says which package to update | Your GitHub repo |
+| [CI bill and runners](https://kensaur.us/mushi-mushi/docs/what-it-does#ci-cost) | Shows which workflows cost the most and where minutes are wasted, and tells a code failure from a broken CI machine (`mushi runner status`) | Your GitHub repo. Reading the bill needs a token that can see billing |
+| [Playbooks in rounds](https://kensaur.us/mushi-mushi/docs/what-it-does#skill-runs) | Runs a playbook such as "make it accessible" on part of your app, one fix PR per round, five rounds at most | Your own Cursor key, or the Mushi Mushi worker |
+| [Store reviews](https://kensaur.us/mushi-mushi/docs/what-it-does#store-reviews) | Turns low-star App Store and Google Play reviews into bug reports | Your store accounts connected |
+| [Phone reports](https://kensaur.us/mushi-mushi/docs/what-it-does#voice) | Say or type a bug into Telegram, Slack or an iPhone shortcut | One of those connected from the console |
+
+A "fix first" review can go back to the agent with its findings, at most twice per PR. That is off by default and uses your organization's Cursor key ([agent PR review](https://kensaur.us/mushi-mushi/docs/concepts/agent-pr-review), [CI runners](https://kensaur.us/mushi-mushi/docs/operating/ci-runners)). Every feature, with what it solves: [what else it does](https://kensaur.us/mushi-mushi/docs/what-it-does).
 
 ## Why not just Sentry?
 
 > **Sentry is built around what the code threw, with a User Feedback widget and
-> replay alongside. Mushi starts from what the user reported, ingests Sentry's
+> replay alongside. Mushi Mushi starts from what the user reported, ingests Sentry's
 > errors too, explains each one in plain English, and hands your agent a fix
 > prompt to start from. One queue, with or without Sentry.**
 
-| | Mushi | Sentry |
+| | Mushi Mushi | Sentry |
 | --- | --- | --- |
 | Catches | Thrown errors **and** silent UX bugs (dead clicks, slow screens, broken layouts) | Thrown errors, performance traces |
 | You get | A plain-English root cause and a fix prompt, in your editor | A stack trace and breadcrumbs, in a dashboard |
-| Auto-fix | Optional: an agent opens a draft PR | Seer add-on (paid) |
-| Setup | One command that signs you in through the browser; the demo needs no account | SDK + DSN + dashboard |
+| Auto-fix | Optional: an agent opens a draft PR, with the built-in fixer, your Cursor key, or the worker on your computer | Seer add-on (paid) |
+| Setup | One command that signs you in through the browser; the sample diagnosis needs no account | SDK + DSN + dashboard |
 
-**It works with what you already run.** Point a Sentry alert webhook at `/v1/webhooks/sentry?projectId=<id>` and errors land in the same queue. Merging a Mushi fix resolves the Sentry issue, and the reverse. Adapters also bring in Datadog, Bugsnag, Rollbar, Crashlytics and others. Plugins keep Linear, Jira, GitHub Issues, Slack, Discord, Teams and PagerDuty in sync. Nothing gets ripped out. Details: [Sentry vs Mushi](https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi).
+**It works with what you already run.** Point a Sentry alert webhook at `/v1/webhooks/sentry?projectId=<id>` and errors land in the same queue. Merging a Mushi Mushi fix resolves the Sentry issue, and the reverse. Adapters also bring in Datadog, Bugsnag, Rollbar, Crashlytics and others. Plugins keep Linear, Jira, GitHub Issues, Slack, Discord, Teams and PagerDuty in sync. Nothing gets ripped out. Details: [Sentry vs Mushi Mushi](https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi).
 
 ## Self-host
 
@@ -132,19 +160,20 @@ cd deploy && cp .env.example .env   # add ANTHROPIC_API_KEY and your Supabase cr
 docker compose up -d
 ```
 
-Walkthroughs: [`SELF_HOSTED.md`](./SELF_HOSTED.md) and [Docker Compose guide](https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose). Self-hosting is bring-your-own-key: you pay your LLM vendor at list price. The hosted service needs no key; it bills per diagnosis with a spend cap ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Teams wiring Mushi into an existing stack (SSO, retention, region routing, Kubernetes) start at [`docs/operators/`](./docs/operators/). Only the public `api` function should face the internet: see [internal caller authentication](./packages/server/README.md#internal-caller-authentication-sec-1).
+Walkthroughs: [`SELF_HOSTED.md`](./SELF_HOSTED.md) and [Docker Compose guide](https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose). Self-hosting is bring-your-own-key: you pay your LLM vendor at list price. The hosted service needs no key; it bills per diagnosis with a spend cap ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Teams wiring Mushi Mushi into an existing stack (SSO, retention, region routing, Kubernetes) start at [`docs/operators/`](./docs/operators/). Only the public `api` function should face the internet: see [internal caller authentication](./packages/server/README.md#internal-caller-authentication-sec-1).
 
 ## Where it stops
 
 | Area | Still partial |
 | --- | --- |
+| Track record | Mushi Mushi is young. Most of its use so far is on the maker's own apps. There, people reported only a small share of the bugs. The rest came from checks, Sentry errors and bugs the maker filed. The [live numbers](https://kensaur.us/mushi-mushi/docs/proof) count the two separately |
 | Native SDKs | iOS, Android and Flutter are previews, not yet on CocoaPods, Maven Central or pub.dev |
 | Fine-tuning | OpenAI and Bedrock work. Anthropic fine-tuning is not self-service, so its adapter links to the access form |
 | Knowledge graph | SQL adjacency everywhere. Apache AGE only where the extension is installed (not managed Supabase) |
 | Inventory and QA gates | Behind the `inventory_v2` plan flag; reachable from Checks |
 | Multi-region | Region pinning works. Active/active write replication is not automated |
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~590K TS lines · ~2,600 source files · 45 workspace / 37 npm packages · 77 edge functions · 517 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~610K TS lines · ~2,700 source files · 45 workspace / 37 npm packages · 77 edge functions · 541 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ## Community and contributing
 
@@ -166,7 +195,7 @@ Open core. Each package directory's own `LICENSE` governs that package; the [roo
 | SDKs, CLI, MCP, plugins, adapters | [MIT](./LICENSE) | Use anywhere, including closed-source products |
 | Server (`server`, `agents`, `verify`) and console (`apps/admin`) | [AGPLv3](./packages/server/LICENSE) | Self-host and modify freely. Offer a modified server or console as a service: publish your changes or get a [commercial license](./COMMERCIAL-LICENSE.md) |
 | Enterprise features (`packages/server/ee/`) | [EE license](./packages/server/ee/LICENSE) | SSO, audit ingest, retention, region pinning. Paid for production use |
-| Name, logo, icons, mascot | [Trademark policy](./TRADEMARK.md) | All rights reserved. Link to Mushi with the unmodified logo; forks must rename |
+| Name, logo, icons, mascot | [Trademark policy](./TRADEMARK.md) | All rights reserved. Link to Mushi Mushi with the unmodified logo; forks must rename |
 
 Self-hosting is free and complete: the repo has every feature and working default prompts. Mushi Cloud runs the same code and keeps its own tuning data (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. Contributions come in under a [CLA](./CLA.md). Why it is set up this way: [ADR 0036](./docs/adr/0036-licensing-posture.md). Third-party notices: [NOTICE](./NOTICE).
 
@@ -189,5 +218,5 @@ All apps live under [kensaur.us](https://kensaur.us).
 ---
 
 <div align="center">
-<sub>If Mushi helped, <a href="https://github.com/kensaurus/mushi-mushi/stargazers">star the repo</a> so the next vibe coder finds it. <a href="https://github.com/kensaurus/mushi-mushi/issues/new/choose">Open an issue</a> · <a href="https://bsky.app/profile/kensaurus.bsky.social">Follow on Bluesky</a></sub>
+<sub>If Mushi Mushi helped, <a href="https://github.com/kensaurus/mushi-mushi/stargazers">star the repo</a> so the next vibe coder finds it. <a href="https://github.com/kensaurus/mushi-mushi/issues/new/choose">Open an issue</a> · <a href="https://bsky.app/profile/kensaurus.bsky.social">Follow on Bluesky</a></sub>
 </div>

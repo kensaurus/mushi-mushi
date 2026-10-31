@@ -68,13 +68,16 @@ vi.mock('../../supabase/functions/_shared/agent-adapters.ts', () => ({
 
 import {
   pickFairBatch,
+  pickOpenAiReviewModel,
   pickReviewModel,
   READY_AFTER_REVIEW_LABEL,
   READY_WITHOUT_REVIEW_LABEL,
   readiesOnVerdict,
   readReviewSettings,
+  resolveReviewKey,
   REVIEW_MAX_TRIES,
   REVIEW_RETRY_BACKOFF_MS,
+  reviewerName,
   runAgentPrReview,
   type ReviewDeps,
 } from '../../supabase/functions/agent-pr-review/index.ts'
@@ -133,6 +136,12 @@ interface Script {
   gaveUp?: unknown[]
   /** The review row's last completed verdict (read by the no-review fallback). */
   lastVerdict?: string | null
+  /** Skipped or failed reviews read by resumeKeyBlocked. */
+  stopped?: unknown[]
+  /** Fix attempts whose PR is still open, for resumeKeyBlocked. */
+  stillOpen?: unknown[]
+  /** The byok_keys row of the app's resolved key. */
+  keyRow?: unknown
 }
 
 function scripted(s: Script = {}) {
@@ -144,14 +153,21 @@ function scripted(s: Script = {}) {
       }
       if (q.op === 'update' && payload.status === 'running') return { data: s.claim === false ? [] : [{ id: 'rev-1' }] }
       if (q.op === 'update' && hasFilter(q, 'eq', 'run_id')) return { data: s.superseded ? [] : [{ id: 'rev-1' }] }
+      if (q.op === 'update' && hasFilter(q, 'in', 'id')) {
+        const ids = q.filters.find((f) => f.method === 'in' && f.args[0] === 'id')!.args[1] as string[]
+        return { data: ids.map((id) => ({ id })) }
+      }
       if (q.op === 'update') return { data: [] }
       if (q.op === 'select' && q.columns === 'fix_attempt_id') return { data: s.existingReviews ?? [] }
       if (q.op === 'select' && q.columns === 'verdict') return { data: { verdict: s.lastVerdict ?? null } }
       if (q.op === 'select' && hasFilter(q, 'not', 'verdict')) return { data: s.rereviews ?? [] }
+      if (q.op === 'select' && hasFilter(q, 'in', 'status')) return { data: s.stopped ?? [] }
       if (q.op === 'select') return { data: s.queue ?? [QUEUE_ROW] }
       return { data: null }
     }
+    if (q.table === 'byok_keys') return { data: s.keyRow ?? null }
     if (q.table === 'fix_attempts' && q.op === 'select') {
+      if (hasFilter(q, 'in', 'pr_state') && !hasFilter(q, 'in', 'agent')) return { data: s.stillOpen ?? [] }
       if (hasFilter(q, 'in', 'agent')) {
         // Honour .range() like PostgREST, so backfill paging is exercised.
         const r = q.filters.find((f) => f.method === 'range')
@@ -334,7 +350,8 @@ describe('a completed review', () => {
     expect(ev.payload).toMatchObject({ verdict: 'hold', blockers: 1, model: 'claude-opus-5-5' })
 
     expect(d.calls.comment).toHaveLength(1)
-    expect(d.calls.comment[0]).toContain('### Mushi review (claude-opus-5-5): hold')
+    expect(d.calls.comment[0]).toContain("### Mushi review: Hold: don't merge this as it is")
+    expect(d.calls.comment[0]).toContain('Reviewed by Claude Opus 5.5')
     expect(d.calls.comment[0]).toContain('https://console.example/reports/' + REPORT)
     // The comment never quotes the report or the summary.
     expect(d.calls.comment[0]).not.toContain('Lesson page crashes')
@@ -670,6 +687,91 @@ describe('backfill', () => {
     expect(queuedIds).toEqual(['fa-50', 'fa-51', 'fa-52', 'fa-53', 'fa-54'])
     const pages = findQueries(queries, 'fix_attempts', 'select').filter((q) => hasFilter(q, 'in', 'agent'))
     expect(pages).toHaveLength(2)
+  })
+})
+
+describe('reviews a missing or spent key stopped resume on their own (2026-10-28)', () => {
+  const STOPPED_AT = '2026-10-28T05:36:00Z'
+  const skippedNoKey = { id: 'rv-skip', project_id: PROJECT, fix_attempt_id: 'fa-1', status: 'skipped', skip_reason: 'no_anthropic_key', error: null, completed_at: STOPPED_AT }
+  const failedSpent = {
+    id: 'rv-spent',
+    project_id: PROJECT,
+    fix_attempt_id: 'fa-2',
+    status: 'failed',
+    skip_reason: null,
+    error: '400 {"type":"error","error":{"type":"invalid_request_error","message":"You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC."}}',
+    completed_at: STOPPED_AT,
+  }
+  const ordinaryFailure = { ...failedSpent, id: 'rv-other', fix_attempt_id: 'fa-3', error: 'Claude declined to review this pull request.' }
+  const withKey = (over: Partial<ReviewDeps> = {}) =>
+    deps({ resolveAnthropicKey: async () => ({ key: 'sk-ant-new', source: 'byok', hint: 'new', keyId: 'key-new' }), ...over })
+  const resumedIds = (queries: FakeQuery[]) =>
+    findQueries(queries, 'fix_reviews', 'update')
+      .filter((q) => (q.payload as { status?: string }).status === 'queued' && hasFilter(q, 'in', 'id'))
+      .flatMap((q) => q.filters.find((f) => f.method === 'in' && f.args[0] === 'id')!.args[1] as string[])
+
+  it('queues a no-key skip and a usage-limit failure again once a key added after they stopped works', async () => {
+    const { db, queries } = scripted({
+      queue: [],
+      stopped: [skippedNoKey, failedSpent, ordinaryFailure],
+      stillOpen: [{ id: 'fa-1' }, { id: 'fa-2' }, { id: 'fa-3' }],
+      keyRow: { status: 'active', created_at: '2026-10-28T06:58:37Z', rotated_at: null },
+    })
+    const summary = await runAgentPrReview(db, {}, withKey())
+    expect(summary.resumed).toBe(2)
+    expect(resumedIds(queries)).toEqual(['rv-skip', 'rv-spent'])
+    const write = findQueries(queries, 'fix_reviews', 'update').find((q) => hasFilter(q, 'in', 'id'))!
+    expect(write.payload).toMatchObject({ status: 'queued', attempts: 0, error: null, skip_reason: null, completed_at: null })
+  })
+
+  it('leaves them alone when the key is the one that ran out, the PR closed, or the app has no key', async () => {
+    const older = scripted({ queue: [], stopped: [skippedNoKey], stillOpen: [{ id: 'fa-1' }], keyRow: { status: 'active', created_at: '2026-08-16T08:29:54Z', rotated_at: null } })
+    expect((await runAgentPrReview(older.db, {}, withKey())).resumed).toBe(0)
+    const closed = scripted({ queue: [], stopped: [skippedNoKey], stillOpen: [], keyRow: { status: 'active', created_at: '2026-10-28T06:58:37Z', rotated_at: null } })
+    expect((await runAgentPrReview(closed.db, {}, withKey())).resumed).toBe(0)
+    const none = scripted({ queue: [], stopped: [skippedNoKey], stillOpen: [{ id: 'fa-1' }] })
+    expect((await runAgentPrReview(none.db, {}, deps({ resolveAnthropicKey: async () => null }))).resumed).toBe(0)
+    const platform = scripted({ queue: [], stopped: [skippedNoKey], stillOpen: [{ id: 'fa-1' }] })
+    expect((await runAgentPrReview(platform.db, {}, deps({ resolveAnthropicKey: async () => ({ key: 'sk-env', source: 'env', hint: 'env' }) }))).resumed).toBe(0)
+  })
+})
+
+describe('a review runs on OpenAI when the app has no Claude key (owner, 2026-10-31)', () => {
+  const openAi = { key: 'sk-openai', source: 'byok' as const, hint: 'oa' }
+
+  it('resolveReviewKey: the Claude key first, then the OpenAI key, never a platform key', async () => {
+    const claude = { key: 'sk-ant', source: 'byok' as const, hint: 'c' }
+    const pick = (a: unknown, o: unknown) => async (_d: unknown, _p: string, provider: 'anthropic' | 'openai') => (provider === 'anthropic' ? a : o) as never
+    expect(await resolveReviewKey({} as never, 'p1', pick(claude, openAi))).toMatchObject({ key: 'sk-ant', reviewProvider: 'anthropic' })
+    expect(await resolveReviewKey({} as never, 'p1', pick(null, openAi))).toMatchObject({ key: 'sk-openai', reviewProvider: 'openai' })
+    expect(await resolveReviewKey({} as never, 'p1', pick({ ...claude, source: 'env' }, { ...openAi, source: 'env' }))).toBeNull()
+  })
+
+  it('pickOpenAiReviewModel keeps a GPT id the project chose, else GPT-6.1 Sol', () => {
+    expect(pickOpenAiReviewModel('gpt-6-astra')).toBe('gpt-6-astra')
+    expect(pickOpenAiReviewModel('claude-opus-5-5')).toBe('gpt-6.1-sol')
+    expect(pickOpenAiReviewModel(null)).toBe('gpt-6.1-sol')
+    expect(reviewerName('gpt-6.1-sol')).toBe('GPT')
+    expect(reviewerName('openai/gpt-6.1-sol')).toBe('GPT')
+    expect(reviewerName('claude-opus-5-5')).toBe('Opus')
+  })
+
+  it('completes the review on gpt-6.1-sol and names GPT as the reviewer', async () => {
+    const { db, queries } = scripted()
+    let sent: { model: string; provider?: string } | null = null
+    const d = deps({
+      resolveAnthropicKey: async () => null,
+      resolveOpenAiKey: async () => openAi,
+      callModel: async (input) => {
+        sent = { model: input.model, provider: input.provider }
+        return { object: HOLD, usage: { promptTokens: 1, completionTokens: 1 } }
+      },
+    })
+    const summary = await runAgentPrReview(db, {}, d)
+    expect(summary.results[0]).toMatchObject({ outcome: 'completed' })
+    expect(sent).toEqual({ model: 'gpt-6.1-sol', provider: 'openai' })
+    const labels = findQueries(queries, 'fix_events', 'insert').map((q) => (q.payload as { label?: string }).label)
+    expect(labels).toContain('GPT review: hold')
   })
 })
 

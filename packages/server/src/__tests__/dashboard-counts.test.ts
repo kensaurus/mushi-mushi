@@ -136,6 +136,48 @@ describe('dashboard/stats', () => {
     expect(status).toBeGreaterThanOrEqual(500)
     expect(body.ok).toBe(false)
   })
+
+  // MUSHI-MUSHI-SERVER-3Q (2026-10-30): a failed HEAD count has an empty body,
+  // so postgrest-js gives `{ message: '' }` and no code, and the report was
+  // titled "Unknown DB error (unknown)". The HTTP status is all that is left.
+  describe('a count read that failed with no response body', () => {
+    function failHeadCount(table: string, res: { status: number; statusText: string }) {
+      const realFrom = db.from.bind(db)
+      ;(db as unknown as { from: unknown }).from = (t: string) => {
+        if (t !== table) return realFrom(t)
+        const q: Record<string, unknown> = {}
+        for (const m of ['select', 'in', 'eq', 'gte', 'is', 'not', 'order', 'limit']) q[m] = () => q
+        q.then = (resolve: (v: unknown) => unknown) =>
+          Promise.resolve({ data: null, count: null, error: { message: '' }, ...res }).then(resolve)
+        return q
+      }
+    }
+
+    it('names the read and the HTTP status in the reported error', async () => {
+      const { reportError } = await import('../../supabase/functions/_shared/sentry.ts')
+      vi.mocked(reportError).mockClear()
+      seed([report(1, {})])
+      failHeadCount('llm_invocations', { status: 500, statusText: 'Internal Server Error' })
+      const { status } = await get('/v1/admin/dashboard/stats')
+      expect(status).toBe(500)
+      const reported = vi.mocked(reportError).mock.calls.at(-1)![0] as Error
+      expect(reported.message).toContain('HTTP 500 Internal Server Error')
+      expect(reported.message).toContain('llm calls 14d')
+      expect(reported.message).not.toContain('Unknown DB error')
+    })
+
+    it('treats a gateway status as the transient outage it is: a 503, not reported', async () => {
+      const { reportError } = await import('../../supabase/functions/_shared/sentry.ts')
+      vi.mocked(reportError).mockClear()
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      seed([report(1, {})])
+      failHeadCount('llm_invocations', { status: 520, statusText: '' })
+      const { status } = await get('/v1/admin/dashboard/stats')
+      expect(status).toBe(503)
+      expect(reportError).not.toHaveBeenCalled()
+      warn.mockRestore()
+    })
+  })
 })
 
 describe('inbox/stats', () => {
@@ -171,6 +213,30 @@ describe('inbox/stats', () => {
     expect(body.data.urgentOpenReports).toBe(2)
     expect(body.data.openPlan).toBe(true)
     expect(body.data.openActions).toBeGreaterThanOrEqual(1)
+    expect(body.data.topPriorityLabel).toBe(
+      'Read each diagnosis, then dispatch a fix or close it as not a code bug.',
+    )
+  })
+
+  it('does not tell you to close failing connections as not a code bug', async () => {
+    // Four stages can be open at once. Act and Ops are the same red
+    // integration counted as two items; the banner used to apply the Plan
+    // hint to all of them.
+    seed(
+      [
+        report(1, { severity: 'high', status: 'classified' }),
+        report(2, { severity: 'critical', status: 'classified' }),
+      ],
+      [{ project_id: P, kind: 'github', last_status: 'down', last_at: iso(60_000), ok_count: 0, total_count: 3 }],
+    )
+    const { body } = await get('/v1/admin/inbox/stats')
+    expect(body.data.openPlan).toBe(true)
+    expect(body.data.openAct).toBe(true)
+    expect(body.data.openOps).toBe(true)
+    expect(body.data.openActions).toBe(3)
+    expect(body.data.topPriorityLabel).toBe(
+      'Read each diagnosis, then dispatch a fix or close it as not a code bug. 2 of these 3 are failing connections — reconnect them instead.',
+    )
   })
 })
 

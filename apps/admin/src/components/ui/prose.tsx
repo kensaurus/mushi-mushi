@@ -34,7 +34,10 @@ export function looksLikeMarkdown(text: string): boolean {
 }
 
 /**
- * First paragraph of markdown-ish copy, headings stripped, length-capped.
+ * First paragraph of markdown-ish copy that says something, headings
+ * stripped, length-capped. A paragraph that is only a heading is skipped:
+ * Weekly insights' summary card showed just "Mushi Mushi Weekly Bug Digest",
+ * the digest's title (2026-10-28). All headings: the first one.
  * @internal Exported for tests only.
  */
 export function excerptFirstParagraph(
@@ -42,9 +45,13 @@ export function excerptFirstParagraph(
   max = 380,
 ): string {
   if (!md) return ''
-  const trimmed = md.trim()
-  const split = trimmed.split(/\n\s*\n/, 2)
-  const first = (split[0] ?? trimmed).replace(/^#+\s*/gm, '').trim()
+  const paragraphs = md.trim().split(/\n\s*\n/).filter((p) => p.trim())
+  const isHeading = (p: string) => p.trim().split('\n').every((line) => /^\s{0,3}#{1,6}\s/.test(line))
+  // "**Project:** x | **Week of:** y": a label line, not something to read.
+  const isLabelLine = (p: string) => !p.trim().includes('\n') && /^\*\*[^*]+:\*\*/.test(p.trim())
+  const pick = paragraphs.find((p) => !isHeading(p) && !isLabelLine(p)) ?? paragraphs[0] ?? ''
+  // Plain text: the excerpt renders as-is, so bold markers would show as "**".
+  const first = pick.replace(/^#+\s*/gm, '').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/__([^_]+)__/g, '$1').trim()
   if (!first) return ''
   return first.length > max ? `${first.slice(0, max)}…` : first
 }

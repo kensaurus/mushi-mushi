@@ -358,4 +358,6 @@ export interface ReportSentryLink {
   external_id: string
   external_url: string | null
   resolved_at: string | null
+  /** When Mushi archived the issue in Sentry (until it escalates). Absent on older API responses. */
+  archived_at?: string | null
 }

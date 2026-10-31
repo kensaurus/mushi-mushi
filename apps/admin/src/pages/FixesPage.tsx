@@ -64,7 +64,7 @@ import { statsWithProjectPresence } from '../lib/projectPresence'
 import { trackSelf } from '../lib/track'
 import { FixesFirstView } from '../components/fixes/FixesFirstView'
 import type { PipelineData } from '../lib/pipeline'
-import { readyToMerge } from '../lib/countDefinitions'
+import { isReadyToMerge, pipelineApprovedGreen } from '../lib/countDefinitions'
 interface InventoryActionNode {
   actionNodeId?: string
   id?: string
@@ -834,7 +834,14 @@ export function FixesPage() {
   }, [reloadStats, reloadPipeline, loadFixes])
 
   const setupBlocked = ['no_project', 'no_github', 'no_index'].includes(fixesStats.topPriority)
-  const readyCount = useMemo(() => new Set(fixes.filter(readyToMerge).map((f) => f.pr_url)).size, [fixes])
+  // With no attempts yet the empty state below asks for GitHub itself; the
+  // banner and an empty merge queue only repeated it (2026-10-27).
+  const emptyAsksForGithub = fixes.length === 0 && fixesStats.topPriority === 'no_github'
+  // Same rule as the Ready to merge list below, with /pipeline's CI read.
+  const readyCount = useMemo(() => {
+    const approvedGreen = pipelineApprovedGreen(pipelineData ?? null)
+    return new Set(fixes.filter((f) => isReadyToMerge(f, approvedGreen)).map((f) => f.pr_url)).size
+  }, [fixes, pipelineData])
 
   if (loading) return <TableSkeleton rows={6} columns={5} showFilters label="Loading fixes" />
   if (error) return <ErrorAlert message="Failed to load fix attempts." onRetry={loadFixes} />
@@ -868,7 +875,7 @@ export function FixesPage() {
             priority: POSTURE_PRIORITY.status,
             // The red "stopped" banner said what the status line says; it
             // stays for what blocks auto-fix itself.
-            show: setupBlocked,
+            show: setupBlocked && !emptyAsksForGithub,
             children: (
               <FixesStatusBanner
                 stats={fixesStats}
@@ -934,6 +941,7 @@ export function FixesPage() {
           fixes={fixes}
           pipeline={pipelineData ?? null}
           projectId={activeProjectId ?? null}
+          stoppedTotal={fixesStats.failed}
           busy={bulkBusy || retryingAll}
           onQueue={(list) => void queueFixes(list)}
           onShowCause={reviewFailedCause}
@@ -946,7 +954,9 @@ export function FixesPage() {
         <FixRecommendation fixes={fixes} dispatches={mergedDispatches} />
       )}
 
-      <MergeQueuePanel projectId={activeProjectId ?? null} refreshKey={queueRefresh} onMerged={loadFixes} />
+      {emptyAsksForGithub ? null : (
+        <MergeQueuePanel projectId={activeProjectId ?? null} refreshKey={queueRefresh} onMerged={loadFixes} />
+      )}
 
       {mergeFailures.length > 0 && (
         <section aria-label="Pull requests that did not merge" className="rounded-md border border-warn/30 bg-warn-muted/40 p-3 space-y-2">

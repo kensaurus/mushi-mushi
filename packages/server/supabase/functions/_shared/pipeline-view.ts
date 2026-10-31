@@ -24,6 +24,7 @@ import { RESOLVED_REPORT_STATUSES } from './fix-report-truth.ts'
 import { ciHeadState, followupTrigger, FOLLOWUP_REASONS, type CiHeadState, type CiJobForRepair, type PriorFollowup } from './review-followup.ts'
 import { localHandoff } from './local-followup.ts'
 import { parseCheckNameList } from './merge-queue.ts'
+import { ROOT_CAUSE_OF_GROUP } from './health-checks.ts'
 
 export const PIPELINE_STAGES = [
   { id: 'reported', label: 'Reported' },
@@ -51,6 +52,8 @@ export type PipelineAction =
   | 'followup'
   /** Close the report with a reason (the console's report dismiss route). */
   | 'dismiss'
+  /** Close the report as fixed: the agent found the fix already in the code (same route, status fixed). */
+  | 'mark_fixed'
   /** Put a report a local worker could not run (the machine failed, ADR 0048) back in its lane. Item ids are work_claims ids. */
   | 'requeue'
 
@@ -95,6 +98,12 @@ export interface PipelineGroup {
   /** The setting that holds this group; `hint` says what it needs. */
   settings: { label: string; to: string; hint?: string } | null
   items: PipelineItem[]
+  /**
+   * The Health check that explains this stuck group while it is a problem
+   * for every item's app (`tagRootCauses`); `count` is how many wait on it.
+   * Absent when no check explains it.
+   */
+  rootCause?: { checkId: string; count: number }
 }
 
 export interface PipelineStage {
@@ -152,6 +161,8 @@ export interface ReviewRow {
   queued_at?: string | null
   /** The commit the verdict is about. */
   head_sha?: string | null
+  /** Why a skipped review did not run (fix-review.ts REVIEW_SKIP_REASONS). */
+  skip_reason?: string | null
 }
 
 export interface QueueRow {
@@ -255,6 +266,8 @@ export const FOLLOWUPS_SETTING = {
 }
 /** Spend-down (ADR 0028) is the server's automatic dispatcher; its on/off switch per Cursor key. */
 export const DISPATCH_SETTING = { label: 'Cursor keys and spend-down', to: '/credits#cursor-fix-bugs' }
+/** Fix reviews read a Claude key from Settings, AI keys only; the server's own key is never used for them. */
+export const CLAUDE_KEY_SETTING = { label: 'AI keys', to: '/settings?tab=byok' }
 /** Local workers (ADR 0048): their lanes, queues and runs. */
 export const WORKERS_SETTING = { label: 'Local workers', to: '/pipeline?tab=workers' }
 
@@ -351,13 +364,14 @@ export function failedChecksFromDetail(detail: string | null): string[] {
 
 // ── Agent failures and action availability ──────────────────────────────────
 
-type AgentFailureKind = 'person' | 'nothing' | 'error'
+type AgentFailureKind = 'person' | 'fixed' | 'nothing' | 'error'
 
 /** The cloud agent's own no-PR verdicts (fix-report-truth.ts AGENT_VERDICT_CATEGORIES). */
 function agentFailureKind(category: string | null | undefined): AgentFailureKind {
   const c = (category ?? '').toLowerCase()
   if (c === 'needs_human') return 'person'
-  if (c === 'already_fixed' || c === 'not_actionable' || c === 'wrong_repo') return 'nothing'
+  if (c === 'already_fixed') return 'fixed'
+  if (c === 'not_actionable' || c === 'wrong_repo') return 'nothing'
   return 'error'
 }
 
@@ -368,6 +382,8 @@ function agentFailureKind(category: string | null | undefined): AgentFailureKind
  */
 const AGENT_FAILED_GROUPS: Record<AgentFailureKind, { id: string; text: string }> = {
   person: { id: 'agent_failed_person', text: 'the agent says a person must do it, no PR opened' },
+  // Already fixed is not "not a code bug": closing it that way told the reporter the wrong thing.
+  fixed: { id: 'agent_said_fixed', text: 'the agent says the bug is already fixed in the code' },
   nothing: { id: 'agent_failed_nothing', text: 'the agent found nothing to change in the code' },
   error: { id: 'agent_failed', text: 'the agent failed, no PR opened' },
 }
@@ -454,6 +470,7 @@ function blockedActions(actions: readonly PipelineAction[], ctx: BlockContext): 
         why = a.pr_url ? null : NO_PR
         break
       case 'dismiss':
+      case 'mark_fixed':
         why = a.report_id ? null : 'No report to close.'
         break
       default:
@@ -574,6 +591,12 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
     return !(status && RESOLVED_REPORT_STATUSES.has(status))
   }
 
+  // An agent's verdict waits for a person, not for time: it stays listed while
+  // its report is still open, past the 7-day window an agent error gets
+  // (console sweep 2026-10-30). Reports are only loaded while open.
+  const verdictStillOpen = (a: AttemptRow): boolean =>
+    agentFailureKind(a.failure_category) !== 'error' && !!a.report_id && reportsById.has(a.report_id)
+
   for (const a of input.attempts) {
     // Merged (last 7 days): Merged, or Deployed when a deploy was seen after it.
     if (a.merged_at || a.pr_state === 'merged') {
@@ -596,10 +619,10 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       if (a.status === 'running' || a.status === 'pending') {
         const stuck = age(now, a.created_at) > AGENT_STUCK_MS
         groups.add(stuck ? 'agent_slow' : 'agent_running', { stage: 'pr', tone: stuck ? 'stuck' : 'moving', noun: ['fix', 'fixes'], text: stuck ? 'agent still running after 6 hours' : 'agent writing the fix', actions: [] }, itemOf(a, a.created_at))
-      } else if (a.status === 'failed' && age(now, a.created_at) <= RECENT_MS && isAgentFailedReport(a)) {
+      } else if (a.status === 'failed' && (age(now, a.created_at) <= RECENT_MS || verdictStillOpen(a)) && isAgentFailedReport(a)) {
         // The agent's own verdict is an answer a re-run repeats; an error is not (fix-report-truth.ts).
         const kind = agentFailureKind(a.failure_category)
-        groups.add(AGENT_FAILED_GROUPS[kind].id, { stage: 'pr', tone: 'stuck', noun: REPORT, text: AGENT_FAILED_GROUPS[kind].text, actions: ['dismiss'] }, itemOf(a, a.completed_at ?? a.created_at, { lastError: clip(a.error) }))
+        groups.add(AGENT_FAILED_GROUPS[kind].id, { stage: 'pr', tone: 'stuck', noun: REPORT, text: AGENT_FAILED_GROUPS[kind].text, actions: kind === 'fixed' ? ['mark_fixed', 'dismiss'] : ['dismiss'] }, itemOf(a, a.completed_at ?? a.created_at, { lastError: clip(a.error) }))
       }
       continue
     }
@@ -646,20 +669,27 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
         stage: 'review',
         tone: stuck ? 'stuck' : 'moving',
         noun: PR,
-        text: failed ? 'the review failed' : rv ? (stuck ? 'review not finished after 2 hours' : 'Opus is reviewing') : stuck ? 'never reviewed' : 'waiting for a review',
+        text: failed ? 'the review failed' : rv ? (stuck ? 'review not finished after 2 hours' : 'the AI review is running') : stuck ? 'never reviewed' : 'waiting for a review',
         actions: stuck ? ['re_review'] : [],
       }, itemOf(a, askedAt, { lastError: clip(rv?.error) }))
       continue
     }
+    // Skipped for want of a key, a PR was silently treated as reviewed and no one
+    // was told: reviews stopped for hours on 2026-10-28 while the new Claude key
+    // sat only in the server secrets.
+    if (rv.status === 'skipped' && rv.skip_reason === 'no_anthropic_key') {
+      groups.add('review_no_key', { stage: 'review', tone: 'stuck', noun: PR, text: 'not reviewed: no working Claude key in Settings, AI keys', actions: ['re_review'], settings: CLAUDE_KEY_SETTING }, itemOf(a, rv.completed_at ?? rv.created_at))
+      continue
+    }
     if (rv.verdict === 'hold') {
-      groups.add('hold', { stage: 'review', tone: 'stuck', noun: PR, text: 'Opus says hold; a person decides', actions: ['re_review', 'close'] }, itemOf(a, reviewedAt))
+      groups.add('hold', { stage: 'review', tone: 'stuck', noun: PR, text: 'the review says do not merge; you decide', actions: ['re_review', 'close'] }, itemOf(a, reviewedAt))
       continue
     }
     if (rv.verdict === 'fix_first') {
       if (followupActive.has(a.id)) {
-        groups.add('fix_first_working', { stage: 'review', tone: 'moving', noun: PR, text: 'a follow-up agent works on the review findings', actions: [] }, itemOf(a, reviewedAt))
+        groups.add('fix_first_working', { stage: 'review', tone: 'moving', noun: PR, text: 'an agent is fixing what the review found', actions: [] }, itemOf(a, reviewedAt))
       } else {
-        groups.add('fix_first', { stage: 'review', tone: 'stuck', noun: PR, text: 'Opus says fix first; no follow-up agent is on it', actions: ['followup', 're_review', 'close'], settings: FOLLOWUPS_SETTING }, itemOf(a, reviewedAt))
+        groups.add('fix_first', { stage: 'review', tone: 'stuck', noun: PR, text: 'the review asked for changes; no agent is making them', actions: ['followup', 're_review', 'close'], settings: FOLLOWUPS_SETTING }, itemOf(a, reviewedAt))
       }
       continue
     }
@@ -737,8 +767,8 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
         conflict_person: { tone: 'stuck', text: 'held: merge conflict, needs a person: resolve on GitHub', actions: ['update_branch', 'remove'] },
         ci_failed: { tone: 'stuck', text: 'held: CI failed', actions: ['ci_repair', 'rerun_ci', 'remove'] },
         own_ci_red: { tone: 'stuck', text: 'held: their own CI is red', actions: ['ci_repair', 'rerun_ci', 'remove'], settings: FOLLOWUPS_SETTING },
-        fix_first: { tone: 'stuck', text: 'held: Opus says fix first', actions: ['followup', 're_review', 'remove'], settings: FOLLOWUPS_SETTING },
-        hold: { tone: 'stuck', text: 'held: Opus says hold', actions: ['re_review', 'remove', 'close'] },
+        fix_first: { tone: 'stuck', text: 'held: the AI review asked for changes', actions: ['followup', 're_review', 'remove'], settings: FOLLOWUPS_SETTING },
+        hold: { tone: 'stuck', text: 'held: the review says do not merge', actions: ['re_review', 'remove', 'close'] },
       }
       const s = spec[kind] ?? { tone: 'stuck' as const, text: 'held by the merge queue', actions: ['update_branch', 'remove'] as PipelineAction[] }
       groups.add(`held_${kind in spec ? kind : 'other'}`, { stage: 'train', noun: PR, ...s }, itemOf(a, since, { lastError: clip(q.detail), failingChecks: failedChecksFromDetail(q.detail) }))
@@ -937,9 +967,9 @@ export function buildDispatchers(input: DispatcherInput): DispatcherStatus[] {
       // A local worker lane takes this app's reports: nothing is left unopened.
       problem = null
     } else if (autofixOn && agentKeys === 0) {
-      problem = `Auto-fix is on but has no agent key${keys.length ? ` (${keys.length} Cursor key${keys.length === 1 ? '' : 's'} off or spend-down off)` : ''}; ${dispatches48h} dispatches in 48h`
+      problem = `Auto-fix is on but has no Cursor key to start fixes${keys.length ? ` (${keys.length} Cursor key${keys.length === 1 ? '' : 's'} off or spend-down off)` : ''}; ${startedIn2Days(dispatches48h)}`
     } else if (autofixOn && dispatches48h === 0) {
-      problem = 'Auto-fix has an agent key but dispatched nothing in 48h'
+      problem = 'Auto-fix has a Cursor key but started no fix in the last 2 days'
     }
     return {
       projectId: p.id,
@@ -951,6 +981,10 @@ export function buildDispatchers(input: DispatcherInput): DispatcherStatus[] {
       problem,
     }
   })
+}
+
+function startedIn2Days(n: number): string {
+  return n === 0 ? 'no fix started in the last 2 days' : `${plural(n, 'fix', 'fixes')} started in the last 2 days`
 }
 
 /** The "Fix PR" stage's stuck group for apps whose auto-fix cannot or does not dispatch. */
@@ -986,7 +1020,7 @@ export function dispatcherGroup(dispatchers: DispatcherStatus[], now: Date): Pip
     id: 'autofix_no_agent',
     stage: 'pr',
     tone: 'stuck',
-    label: `${plural(bad.length, 'app')}: ${noKey ? 'auto-fix is on but has no agent key' : 'auto-fix dispatches nothing'}; ${bad.reduce((n, d) => n + d.server.dispatches48h, 0)} dispatches in 48h`,
+    label: `${plural(bad.length, 'app')}: ${noKey ? 'auto-fix is on but has no Cursor key to start fixes' : 'auto-fix starts no fixes'}; ${startedIn2Days(bad.reduce((n, d) => n + d.server.dispatches48h, 0))}`,
     count: bad.length,
     oldestAt: items[0]?.since ?? null,
     actions: [],
@@ -1004,6 +1038,29 @@ export function withDispatcherGroup(stages: PipelineStage[], group: PipelineGrou
     const oldest = [s.oldestAt, group.oldestAt].filter((x): x is string => !!x).sort()[0] ?? null
     return { ...s, groups, count: s.count + group.count, stuck: s.stuck + group.count, oldestAt: oldest }
   })
+}
+
+// ── Root causes (Health checks, plan-simplicity-2026-10 Phase 1) ────────────
+
+/**
+ * Tag each stuck group with the Health check that explains it
+ * (ROOT_CAUSE_OF_GROUP), when that check is a problem for the app of every
+ * item in the group, so the console can show "<N> are waiting on this" once
+ * instead of the group as its own row. A post-pass like the `followupsOn`
+ * one in buildPipeline: additive, and a group no check explains is returned
+ * unchanged. `problems`: check ids that are a problem, by app.
+ */
+export function tagRootCauses(stages: PipelineStage[], problems: ReadonlyMap<string, ReadonlySet<string>>): PipelineStage[] {
+  if (problems.size === 0) return stages
+  return stages.map((s) => ({
+    ...s,
+    groups: s.groups.map((g) => {
+      const checkId = ROOT_CAUSE_OF_GROUP[g.id]
+      if (!checkId || g.tone !== 'stuck' || g.items.length === 0) return g
+      const explained = g.items.every((i) => problems.get(i.projectId)?.has(checkId))
+      return explained ? { ...g, rootCause: { checkId, count: g.count } } : g
+    }),
+  }))
 }
 
 // ── Intake rejects ──────────────────────────────────────────────────────────

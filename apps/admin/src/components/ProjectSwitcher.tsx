@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import {
   ACTIVE_PROJECT_QUERY_PARAM,
@@ -21,13 +21,14 @@ import {
   setActiveProjectIdSnapshot,
 } from '../lib/activeProject'
 import { invalidateApiCache } from '../lib/supabase'
-import { useCreateProject } from '../lib/useCreateProject'
+import { PLAN_APP_LIMIT_TITLE, PLANS_HREF, useCreateProject } from '../lib/useCreateProject'
 import { ACTIVE_ORG_QUERY_PARAM, getActiveOrgIdSnapshot, setActiveOrgIdSnapshot, useActiveOrgSignal } from '../lib/activeOrg'
 import {
   PROJECT_DIRECTORY_PATH,
   TEAM_AUTO_SWITCH_EVENT,
   claimStaleLinkRecovery,
   lastTeamProject,
+  listBelongsToTeam,
   pickRecoveryProject,
   rememberProjectTeams,
   rememberTeamProject,
@@ -60,6 +61,7 @@ import {
   getStoredProjectScopeMode,
   setStoredProjectScopeMode,
   useProjectScopeMode,
+  useSearchParamsKeepingHash,
 } from '../lib/projectScope'
 
 /** Four tiles: "every app". Shared by the header chip and the dropdown row. */
@@ -77,7 +79,8 @@ function AllAppsGlyph({ size }: { size: number }) {
 export function ProjectSwitcher() {
   const setup = useSetupStatus()
   const snapshots = useProjectSnapshots()
-  const [searchParams, setSearchParams] = useSearchParams()
+  // Adding ?project= or ?apps= must keep a link's #section (lib/projectScope.ts).
+  const [searchParams, setSearchParams] = useSearchParamsKeepingHash()
   const [open, setOpen] = useState(false)
   // "All apps" (lib/projectScope.ts) rides on top of the active project:
   // `?project=` keeps the last concrete app for pages that show one.
@@ -86,6 +89,7 @@ export function ProjectSwitcher() {
   // route that can't combine apps, "All apps" in the header contradicted the
   // one app below it (report ee6547f5). The dropdown keeps the chosen mode.
   const { pathname } = useLocation()
+  const navigate = useNavigate()
   const pageCombinesApps = allAppsSupportFor(pathname) !== 'single'
   // Inline "create new project" affordance — exposed in the dropdown
   // footer so users don't have to navigate away to /projects to spin up
@@ -115,7 +119,11 @@ export function ProjectSwitcher() {
     // Stamp only when a new list arrives; an org change alone must not
     // re-label the old list as the new team's, so activeOrg stays out of deps.
   }, [setup.data])
-  const listIsCurrent = listOrg === activeOrg
+  // The stamp alone is not enough: the list object is rebuilt when the active
+  // project changes (the switch clears it), which re-stamped the old team's
+  // list as the new one's. Its projects must not be known to another team.
+  const listIsCurrent =
+    listOrg === activeOrg && listBelongsToTeam(setup.data?.projects.map((p) => p.project_id) ?? [], activeOrg)
 
   // A deep link to a project in another of the user's teams: find that team
   // and switch to it, once per project id. apiFetch usually did this before
@@ -669,9 +677,10 @@ export function ProjectSwitcher() {
             {createError ? (
               <div className="border-t border-edge-subtle p-2">
                 <ErrorAlert
-                  title="Couldn't create project"
+                  title={createError.code === 'PLAN_APP_LIMIT' ? PLAN_APP_LIMIT_TITLE : "Couldn't create project"}
                   message={createError.message}
                   code={createError.code}
+                  actions={createError.code === 'PLAN_APP_LIMIT' ? [{ label: 'See plans', onClick: () => navigate(PLANS_HREF) }] : undefined}
                 />
               </div>
             ) : null}

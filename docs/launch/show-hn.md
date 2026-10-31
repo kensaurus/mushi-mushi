@@ -46,7 +46,7 @@ broken there. The reports in it are samples I wrote; the diagnoses are real
 model output.
 
 Open source: SDKs MIT, server AGPLv3, self-hosting is one command. Hosted
-free tier: 50 diagnoses a month, no card.
+free tier: 1 app, 100 diagnoses a month, no card.
 
 If you already run Sentry: it starts from what the code threw. Mushi starts
 from what the user reported, can take Sentry's errors into the same queue

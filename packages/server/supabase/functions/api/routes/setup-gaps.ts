@@ -27,8 +27,10 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth } from '../../_shared/auth.ts'
 import { log } from '../../_shared/logger.ts'
 import { fetchWithTimeout } from '../../_shared/http.ts'
-import { mintInstallationAccess, parseGithubRepoUrl, resolveProjectGithubToken, type GithubRepoRef } from '../../_shared/github.ts'
-import { loadFollowupSettings } from '../../_shared/review-followup-db.ts'
+import { runInBackground } from '../../_shared/background.ts'
+import { mintInstallationAccess, parseGithubRepoUrl, platformGithubTokenFor, resolveProjectGithubToken, type GithubRepoRef } from '../../_shared/github.ts'
+import { readFollowupKeyGap } from '../../_shared/setup-gap-followup.ts'
+import { readLlmBudgetState } from '../../_shared/llm-budget.ts'
 import {
   abilitiesFromClassicScopes,
   abilitiesFromInstallation,
@@ -38,9 +40,9 @@ import {
   countByStatus,
   createTtlCache,
   deployGap,
-  followupKeyGap,
   forAudience,
   githubAccessGap,
+  llmBudgetGap,
   noRepoGap,
   rememberRepoAbilities,
   SETUP_GAPS_CACHE_MS,
@@ -70,6 +72,14 @@ const MAX_PROJECTS = 30
 const PROJECT_CONCURRENCY = 4
 /** A refresh within this long of the last check reuses it. */
 const REFRESH_MIN_MS = 60_000
+/**
+ * A stored result older than SETUP_GAPS_CACHE_MS but younger than this is
+ * shown at once and re-checked in the background. The in-memory cache is per
+ * isolate, so most visits missed it and waited 4–9 s for GitHub (console sweep
+ * #37, measured 2026-10-29); `setup_gap_results` holds the last answer across
+ * isolates.
+ */
+const STORED_STALE_MAX_MS = 24 * 3600_000
 
 export interface ProjectGaps {
   projectId: string
@@ -79,11 +89,37 @@ export interface ProjectGaps {
 }
 
 const cache = createTtlCache<ProjectGaps>(SETUP_GAPS_CACHE_MS)
+/** Apps this isolate is already re-checking in the background. */
+const refreshing = new Set<string>()
 
 /** @internal Tests reset the per-isolate cache between cases. */
 export function clearSetupGapsCache(): void {
   cache.clear()
+  refreshing.clear()
   clearRepoAbilities()
+}
+
+/** The last stored answer per app; an unreadable or missing table reads as none. */
+async function readStored(db: Db, ids: string[]): Promise<Map<string, { value: ProjectGaps; at: number }>> {
+  const out = new Map<string, { value: ProjectGaps; at: number }>()
+  if (!ids.length) return out
+  const { data, error } = await db.from('setup_gap_results').select('project_id, value, checked_at').in('project_id', ids)
+  if (error) {
+    slog.warn('stored setup gaps unreadable; checking live', { err: error.message })
+    return out
+  }
+  for (const row of (data ?? []) as Array<{ project_id: string; value: ProjectGaps; checked_at: string }>) {
+    const at = Date.parse(row.checked_at)
+    if (Number.isFinite(at) && row.value && Array.isArray(row.value.gaps)) out.set(row.project_id, { value: row.value, at })
+  }
+  return out
+}
+
+async function storeResult(db: Db, result: ProjectGaps): Promise<void> {
+  const { error } = await db
+    .from('setup_gap_results')
+    .upsert({ project_id: result.projectId, value: result, checked_at: result.checkedAt }, { onConflict: 'project_id' })
+  if (error) slog.warn('setup gaps not stored', { projectId: result.projectId, err: error.message })
 }
 
 interface RepoRow {
@@ -96,7 +132,8 @@ export interface SetupGapsDeps {
   now: () => Date
   mintInstallation: typeof mintInstallationAccess
   resolvePat: (db: Db, projectId: string) => Promise<string | null>
-  platformToken: () => string | null
+  /** The platform token when this app may use it (the operator's own apps only). */
+  platformToken: (db: Db, projectId: string) => Promise<string | null>
   /** A GitHub GET: its status and the classic-token scope header (null when GitHub sent none). */
   githubGet: (token: string, path: string) => Promise<{ status: number; scopes: string | null } | null>
   readDispatchers: typeof readDispatchers
@@ -106,7 +143,7 @@ export const defaultSetupGapsDeps: SetupGapsDeps = {
   now: () => new Date(),
   mintInstallation: mintInstallationAccess,
   resolvePat: (db, projectId) => resolveProjectGithubToken(db, projectId, null, { allowEnvFallback: false }),
-  platformToken: () => Deno.env.get('GITHUB_TOKEN') ?? null,
+  platformToken: (db, projectId) => platformGithubTokenFor(db, projectId),
   githubGet: async (token, path) => {
     const res = await fetchWithTimeout(
       `https://api.github.com${path}`,
@@ -117,7 +154,9 @@ export const defaultSetupGapsDeps: SetupGapsDeps = {
     await res.body?.cancel().catch(() => {})
     return { status: res.status, scopes: res.headers.get('x-oauth-scopes') }
   },
-  readDispatchers,
+  // Looked up when called, not when this module loads, so a module that only
+  // reads stored answers (Home, through health-checks.ts) can import this one.
+  readDispatchers: (...args) => readDispatchers(...args),
 }
 
 function within<T>(p: PromiseLike<T>, what: string, ms = CHECK_MS): Promise<T> {
@@ -128,8 +167,12 @@ function within<T>(p: PromiseLike<T>, what: string, ms = CHECK_MS): Promise<T> {
   return Promise.race([Promise.resolve(p), deadline]).finally(() => clearTimeout(timer))
 }
 
+/** The reason in plain words: a database statement timeout is not shown as its raw Postgres text. */
 function why(err: unknown): string {
-  return (err instanceof Error ? err.message : String(err)).slice(0, 160)
+  const text = err instanceof Error ? err.message : typeof err === 'object' && err && 'message' in err ? String((err as { message: unknown }).message) : String(err)
+  const code = typeof err === 'object' && err && 'code' in err ? String((err as { code: unknown }).code) : ''
+  if (code === '57014' || /statement timeout|canceling statement/i.test(text)) return 'the database was too slow to answer; try again in a minute'
+  return text.slice(0, 160)
 }
 
 const reachable = (status: number | null | undefined): boolean | null =>
@@ -155,7 +198,7 @@ async function probeRepo(db: Db, projectId: string, repo: GithubRepoRef, install
     // 3. Mushi's own fallback token is never probed: the repo URL is the
     // tenant's choice, so the answer would tell any app owner what Mushi's
     // token can reach.
-    return { projectId, repo: name, source: deps.platformToken() ? 'platform' : 'none', abilities: null, readError: null }
+    return { projectId, repo: name, source: (await deps.platformToken(db, projectId)) ? 'platform' : 'none', abilities: null, readError: null }
   }
   const token = pat
   const head = await deps.githubGet(token, path)
@@ -222,22 +265,9 @@ async function githubGaps(db: Db, projectId: string, deps: SetupGapsDeps): Promi
   return out
 }
 
-async function followupGap(db: Db, project: DispatcherProject): Promise<SetupGap> {
-  try {
-    if (!project.organization_id) {
-      return followupKeyGap({ projectId: project.id, settings: { enabled: false, offReason: null, keyId: null } })
-    }
-    const settings = await within(loadFollowupSettings(db as never, project.organization_id), 'follow-up settings')
-    let keyStatus: string | null | undefined
-    if (settings.enabled && settings.keyId) {
-      const { data, error } = await within(db.from('byok_keys').select('status').eq('id', settings.keyId).maybeSingle(), 'follow-up key')
-      if (error) throw new Error(error.message)
-      keyStatus = (data as { status: string } | null)?.status ?? null
-    }
-    return followupKeyGap({ projectId: project.id, settings, keyStatus })
-  } catch (err) {
-    return { ...followupKeyGap({ projectId: project.id, settings: null }), summary: `Mushi could not read the review follow-up settings (${why(err)}).` }
-  }
+/** The shared read (setup-gap-followup.ts), with this route's deadline and wording of a failed read. */
+function followupGap(db: Db, project: DispatcherProject): Promise<SetupGap> {
+  return readFollowupKeyGap(db as never, project, { within: (p, what) => within(p, what), why })
 }
 
 async function dispatchGap(db: Db, project: DispatcherProject, now: Date, deps: SetupGapsDeps): Promise<SetupGap> {
@@ -252,7 +282,17 @@ async function deployEventsGap(db: Db, projectId: string, now: Date): Promise<Se
       'deploy events',
     )
     if (error) throw new Error(error.message)
-    return deployGap(projectId, ((data ?? []) as Array<{ observed_at: string }>)[0]?.observed_at ?? null, now)
+    const lastDeployAt = ((data ?? []) as Array<{ observed_at: string }>)[0]?.observed_at ?? null
+    // Never deployed: a gap only once a fix has shipped (a failed read counts as shipped).
+    let hasMergedFix = true
+    if (lastDeployAt === null) {
+      const merged = await within(
+        db.from('fix_attempts').select('id').eq('project_id', projectId).not('merged_at', 'is', null).limit(1),
+        'merged fixes',
+      ).catch(() => null)
+      if (merged && !merged.error) hasMergedFix = (merged.data ?? []).length > 0
+    }
+    return deployGap(projectId, lastDeployAt, now, hasMergedFix)
   } catch (err) {
     return { ...deployGap(projectId, undefined, now), summary: `Mushi could not read the deploy events (${why(err)}).` }
   }
@@ -283,21 +323,30 @@ async function slackTokenGap(db: Db, projectId: string, now: Date): Promise<Setu
   }
 }
 
+async function budgetGap(db: Db, projectId: string, now: Date): Promise<SetupGap> {
+  try {
+    return llmBudgetGap(projectId, await within(readLlmBudgetState(db as never, projectId, now), 'AI budget'))
+  } catch (err) {
+    return { ...llmBudgetGap(projectId, undefined), summary: `Mushi could not read this month's AI spend (${why(err)}).` }
+  }
+}
+
 /** Every app-owner check for one app. Each check settles on its own. */
 export async function checkProject(db: Db, project: DispatcherProject, deps: SetupGapsDeps): Promise<ProjectGaps> {
   const now = deps.now()
-  const [github, followup, dispatch, deploy, slack] = await Promise.all([
+  const [github, followup, dispatch, deploy, slack, budget] = await Promise.all([
     githubGaps(db, project.id, deps),
     followupGap(db, project),
     dispatchGap(db, project, now, deps),
     deployEventsGap(db, project.id, now),
     slackTokenGap(db, project.id, now),
+    budgetGap(db, project.id, now),
   ])
   return {
     projectId: project.id,
     name: project.name,
     checkedAt: now.toISOString(),
-    gaps: sortGaps(forAudience([...github, followup, dispatch, deploy, slack], 'app_owner')),
+    gaps: sortGaps(forAudience([...github, followup, dispatch, deploy, slack, budget], 'app_owner')),
   }
 }
 
@@ -313,6 +362,61 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
     }),
   )
   return out
+}
+
+export interface LoadSetupGapsOptions {
+  /** Re-check now (not more than once a minute per app). */
+  refresh?: boolean
+  /**
+   * false: never wait for a live check. An app with no answer under a day old
+   * is checked in the background and left out of this answer (Home uses this,
+   * so it never waits on GitHub). Default true.
+   */
+  waitForLive?: boolean
+}
+
+/**
+ * Each app's setup gaps: this isolate's cache, else the stored answer (under
+ * 10 minutes as is, under a day shown and re-checked in the background), else
+ * a live check. Callers check access first. Shared by GET /v1/admin/setup-gaps
+ * and GET /v1/admin/health-checks (health-checks.ts route).
+ */
+export async function loadSetupGaps(db: Db, projects: DispatcherProject[], deps: SetupGapsDeps = defaultSetupGapsDeps, opts: LoadSetupGapsOptions = {}): Promise<ProjectGaps[]> {
+  const refresh = opts.refresh === true
+  const waitForLive = opts.waitForLive !== false
+  const nowMs = deps.now().getTime()
+  const stored = refresh ? new Map<string, { value: ProjectGaps; at: number }>() : await readStored(db, projects.map((p) => p.id))
+  const checkAndStore = async (p: DispatcherProject): Promise<ProjectGaps> => {
+    const fresh = await checkProject(db, p, deps)
+    cache.set(p.id, fresh, deps.now().getTime())
+    await storeResult(db, fresh)
+    return fresh
+  }
+  const inBackground = (p: DispatcherProject) => {
+    if (refreshing.has(p.id)) return
+    refreshing.add(p.id)
+    runInBackground(checkAndStore(p).finally(() => refreshing.delete(p.id)), 'setup-gaps-refresh')
+  }
+  const results = await mapLimit(projects, PROJECT_CONCURRENCY, async (p): Promise<ProjectGaps | null> => {
+    const hit = cache.get(p.id, nowMs)
+    if (hit && (!refresh || nowMs - hit.at < REFRESH_MIN_MS)) return hit.value
+    const last = stored.get(p.id)
+    if (last && nowMs - last.at < SETUP_GAPS_CACHE_MS) {
+      cache.set(p.id, last.value, last.at)
+      return last.value
+    }
+    if (last && nowMs - last.at < STORED_STALE_MAX_MS) {
+      // Show the last answer now; the next visit sees the re-check.
+      inBackground(p)
+      return last.value
+    }
+    if (!waitForLive) {
+      inBackground(p)
+      return null
+    }
+    return await checkAndStore(p)
+  })
+  return results.filter((r): r is ProjectGaps => r !== null)
 }
 
 export function registerSetupGapsRoutes(app: Hono<{ Variables: Variables }>, deps: SetupGapsDeps = defaultSetupGapsDeps): void {
@@ -337,15 +441,7 @@ export function registerSetupGapsRoutes(app: Hono<{ Variables: Variables }>, dep
     const { data: projectRows, error } = await db.from('projects').select('id, name, organization_id, owner_id').in('id', ids)
     if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
     const projects = (projectRows ?? []) as DispatcherProject[]
-    const refresh = c.req.query('refresh') === '1'
-    const nowMs = deps.now().getTime()
-    const results = await mapLimit(projects, PROJECT_CONCURRENCY, async (p) => {
-      const hit = cache.get(p.id, nowMs)
-      if (hit && (!refresh || nowMs - hit.at < REFRESH_MIN_MS)) return hit.value
-      const fresh = await checkProject(db, p, deps)
-      cache.set(p.id, fresh, nowMs)
-      return fresh
-    })
+    const results = await loadSetupGaps(db, projects, deps, { refresh: c.req.query('refresh') === '1' })
     const all = results.flatMap((r) => r.gaps)
     slog.info('setup gaps read', { projects: results.length, ...countByStatus(all) })
     return c.json({

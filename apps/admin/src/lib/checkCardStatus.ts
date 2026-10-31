@@ -6,8 +6,11 @@
  * Zero sidebar counts are not a run. A slice that could not be read is
  * Status unavailable, never Failed. Not run yet means nothing has run.
  *
- * States: Not set up, Not run yet, Status unavailable, Pass, and a result
- * (N findings or Failed). Pass and a result include the last run time when
+ * States: Not set up, Not run yet, Status unavailable, Watching, Pass, and a
+ * result (N findings or Failed). Watching is a monitor with nothing open:
+ * content checks and lessons run on their own all the time, so "Not run yet"
+ * sent people looking for a Run button that does not exist (owner,
+ * 2026-10-30). It is still never a Pass. Pass and a result include the last run time when
  * one was stored. Content issues and lesson reinforcements are not check
  * runs, so those cards never say Pass or Last run.
  *
@@ -17,7 +20,7 @@
 
 import { relativeTime } from './setupGuideSteps'
 
-export type CheckCardState = 'not_set_up' | 'not_checked' | 'unavailable' | 'pass' | 'findings' | 'failed'
+export type CheckCardState = 'not_set_up' | 'not_checked' | 'unavailable' | 'watching' | 'pass' | 'findings' | 'failed'
 
 export interface CheckCardView {
   state: CheckCardState
@@ -99,6 +102,21 @@ export interface CheckCardsInput {
   recipeElements: ObservedElement[]
   design: ObservedElement | null
   ci: ObservedElement | null
+  /**
+   * First-time user tests, newest first. Absent or loading: the card stays
+   * blank. A queued or running test is not a result.
+   */
+  firstUserTest?: {
+    phase: 'loading' | 'error' | 'ready' | 'no_project'
+    runs: ReadonlyArray<{
+      status: 'queued' | 'running' | 'done' | 'failed' | 'stopped'
+      finished_at: string | null
+      started_at: string
+      findings: readonly unknown[] | null
+      stalled_at: unknown
+      detail?: string | null
+    }>
+  }
 }
 
 /** Matches the inbox: a judge run older than this is not a fresh pass. */
@@ -227,6 +245,10 @@ function fromInventory(inv: CheckCardsInput['inventory'], now: number): CheckCar
   return withTime(NOT_CHECKED, inv.lastGateRunAt, now)
 }
 
+function watching(chip: string, detail: string): CheckCardView {
+  return { state: 'watching', chip, detail, setupTo: null, tone: 'neutral' }
+}
+
 function fromContent(content: CheckCardsInput['content']): CheckCardView {
   if (!content) return UNAVAILABLE
   // Open issues and a failed regen are real. This card has no check-run
@@ -234,7 +256,7 @@ function fromContent(content: CheckCardsInput['content']): CheckCardView {
   if ((content.failedRegenCount ?? 0) > 0) return FAILED
   const open = content.needsAttentionCount ?? content.openCount ?? 0
   if (open > 0) return findings(open, null, 0)
-  return NOT_CHECKED
+  return watching('No issues', 'Checks new content every 15 minutes')
 }
 
 function fromLessons(lessons: CheckCardsInput['lessons']): CheckCardView {
@@ -243,7 +265,7 @@ function fromLessons(lessons: CheckCardsInput['lessons']): CheckCardView {
   const n = (lessons.criticalLessons ?? 0) + (lessons.readyToPromote ?? 0)
   if (n > 0) return findings(n, null, 0)
   // Reinforcing a lesson is not a check run, so a quiet catalog is not a pass.
-  return NOT_CHECKED
+  return watching('Learning', 'Applied to every new diagnosis')
 }
 
 function fromPrompts(prompts: CheckCardsInput['prompts']): CheckCardView {
@@ -254,6 +276,23 @@ function fromPrompts(prompts: CheckCardsInput['prompts']): CheckCardView {
   if (n > 0) return findings(n, null, 0)
   // Prompt lab stats have no run timestamp, so a quiet lab is not a pass.
   return NOT_CHECKED
+}
+
+function fromFirstUserTest(test: NonNullable<CheckCardsInput['firstUserTest']>, now: number): CheckCardView | null {
+  if (test.phase === 'loading') return null
+  if (test.phase === 'no_project') return notSetUp('/projects')
+  if (test.phase === 'error') return UNAVAILABLE
+  // A stopped test (the person cancelled it) says nothing about the app.
+  const last = test.runs.find((r) => r.status === 'done' || r.status === 'failed')
+  if (!last) return NOT_CHECKED
+  const at = last.finished_at ?? last.started_at
+  if (last.status === 'failed') {
+    const view = failed(at, now)
+    return last.detail ? { ...view, detail: last.detail } : view
+  }
+  // Getting stuck is itself what the test looks for, even with nothing else filed.
+  const n = (last.findings?.length ?? 0) || (last.stalled_at ? 1 : 0)
+  return n > 0 ? findings(n, at, now) : pass(at, now)
 }
 
 function judgeAgeHours(judge: NonNullable<CheckCardsInput['judge']>, now: number): number | null {
@@ -333,5 +372,6 @@ export function buildCheckCardViews(input: CheckCardsInput, now = Date.now()): R
     '/judge': slice(input.judge, (judge) => fromJudge(judge, now)),
     '/lessons': slice(input.lessons, (lessons) => fromLessons(lessons)),
     '/prompt-lab': slice(input.prompts, (prompts) => fromPrompts(prompts)),
+    '/first-user-test': input.firstUserTest ? fromFirstUserTest(input.firstUserTest, now) : null,
   }
 }

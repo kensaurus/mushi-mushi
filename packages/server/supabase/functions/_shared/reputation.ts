@@ -13,6 +13,7 @@
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
+import { dbDiagnosticMessage, logDbFailure } from './error-codes.ts'
 import { createNotification, buildNotificationMessage } from './notifications.ts'
 import { evaluateTier } from './tier-evaluator.ts'
 
@@ -318,7 +319,14 @@ export async function awardPointsForEndUser(
   })
 
   if (insertErr) {
-    rlog.error('activity_insert_failed', { endUserId, action, error: insertErr.message })
+    // A gateway outage (Cloudflare 521 HTML on 2026-10-27) is a warn, not a
+    // page; the award is simply skipped. Any coded failure stays an error
+    // (MUSHI-MUSHI-SERVER-3B, 2026-10-31).
+    logDbFailure(rlog, 'activity_insert_failed', insertErr, {
+      endUserId,
+      action,
+      error: dbDiagnosticMessage(insertErr.message),
+    })
     return { pointsAwarded: 0, totalPoints: 0, rejectedReason: 'insert_error', tierChanged: false }
   }
 

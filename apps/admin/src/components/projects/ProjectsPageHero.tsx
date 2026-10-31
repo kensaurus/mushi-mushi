@@ -7,6 +7,7 @@ import { PageHero } from '../PageHero'
 import type { PageHeroDecide, PageHeroVerify } from '../PageHero'
 import type { PageAction } from '../PageActionBar'
 import type { ProjectsStats } from './types'
+import { missingAppsAreNew } from '../../lib/newApps'
 
 function heroSeverity(stats: ProjectsStats): PageHeroDecide['severity'] {
   switch (stats.topPriority) {
@@ -15,7 +16,7 @@ function heroSeverity(stats: ProjectsStats): PageHeroDecide['severity'] {
     case 'never_ingested':
     case 'no_sdk_heartbeat':
     case 'sdk_missing':
-      return 'warn'
+      return missingAppsAreNew(stats.sdkMissingProjects, stats.sdkMissingCount) ? 'info' : 'warn'
     case 'no_projects':
       return 'info'
     default:
@@ -24,15 +25,19 @@ function heroSeverity(stats: ProjectsStats): PageHeroDecide['severity'] {
 }
 
 function heroDecideLabel(stats: ProjectsStats): string {
+  if (
+    (stats.topPriority === 'never_ingested' || stats.topPriority === 'no_sdk_heartbeat' || stats.topPriority === 'sdk_missing') &&
+    missingAppsAreNew(stats.sdkMissingProjects, stats.sdkMissingCount)
+  ) return 'New app, setup left'
   switch (stats.topPriority) {
     case 'healthy':
       return 'All projects ingesting'
     case 'never_ingested':
       return 'No ingest yet'
     case 'no_sdk_heartbeat':
-      return 'No SDK heartbeat'
+      return 'App not checked in'
     case 'sdk_missing':
-      return `${stats.sdkMissingCount ?? 0} without an SDK heartbeat`
+      return `${stats.sdkMissingCount ?? 0} not checked in`
     case 'partial_ingest':
       return `${stats.neverIngestedCount} never ingested`
     case 'no_projects':

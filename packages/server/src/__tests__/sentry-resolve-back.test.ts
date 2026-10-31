@@ -27,6 +27,8 @@ interface State {
   report: Row | null
   fixEvents: Row[]
   stamped: string[]
+  /** What each update wrote, in order (stamped holds the row ids). */
+  updates?: Row[]
   fixEventError?: { code: string; message: string } | null
 }
 
@@ -46,9 +48,10 @@ function makeDb(state: State) {
         if (name === 'fix_events') state.fixEvents.push(row)
         return Promise.resolve({ error: name === 'fix_events' ? (state.fixEventError ?? null) : null })
       },
-      update: () => ({
+      update: (row: Row) => ({
         eq: (_c: string, id: string) => {
           state.stamped.push(id)
+          ;(state.updates ??= []).push(row)
           return Promise.resolve({ error: null })
         },
       }),
@@ -267,7 +270,7 @@ describe('archive on close (not-a-bug reasons)', () => {
     }
   })
 
-  it('archives until escalating, comments why, and leaves resolved_at unset', async () => {
+  it('archives until escalating, comments why, and stamps archived_at, never resolved_at', async () => {
     const calls: Array<{ url: string; body: string }> = []
     const fetchImpl = async (url: string, init?: RequestInit) => {
       calls.push({ url: url.replace(api.SENTRY_API_BASE, ''), body: String(init?.body ?? '') })
@@ -281,7 +284,35 @@ describe('archive on close (not-a-bug reasons)', () => {
     })
     expect(calls[1].url).toBe('/organizations/sakuramoto/issues/4501/comments/')
     expect(calls[1].body).toContain('works as intended')
-    expect(state.stamped).toEqual([])
+    // The report page tells an archived issue from an open one (2026-10-30).
+    expect(state.stamped).toEqual(['l1'])
+    expect(Object.keys(state.updates![0])).toEqual(['archived_at'])
+  })
+
+  it('a person may archive for any close reason, and an archived issue is not archived twice', async () => {
+    const calls: string[] = []
+    const fetchImpl = async (url: string, init?: RequestInit) => {
+      calls.push(`${url.replace(api.SENTRY_API_BASE, '')} ${String(init?.body ?? '')}`)
+      return json({})
+    }
+    const byPerson = { ...closed, closedReason: 'not_reproducible', byPerson: true }
+    const result = await rb.archiveLinkedSentryIssues(makeDb(state), byPerson, { credentials: creds, fetchImpl })
+    expect(result).toEqual({ archived: ['4501'], failed: [] })
+    expect(calls[1]).toContain('not reproducible')
+    expect(calls[1]).toContain('console user')
+
+    state.links = [{ id: 'l1', external_id: '4501', archived_at: '2026-10-30T00:00:00Z' }]
+    const again = await rb.archiveLinkedSentryIssues(makeDb(state), byPerson, { credentials: creds, fetchImpl })
+    expect(again.skipped).toBe('no_links')
+  })
+
+  it('a resolve clears an earlier archive', async () => {
+    state.links = [{ id: 'l1', external_id: '4501', archived_at: '2026-10-30T00:00:00Z' }]
+    const fetchImpl = async () => json({})
+    const result = await rb.resolveLinkedSentryIssues(makeDb(state), { ...input, fixAttemptId: null, prUrl: null }, { credentials: creds, fetchImpl })
+    expect(result.resolved).toEqual(['4501'])
+    expect(state.updates![0]).toMatchObject({ archived_at: null })
+    expect(state.updates![0].resolved_at).toEqual(expect.any(String))
   })
 
   it('does nothing for other close reasons', async () => {
@@ -305,7 +336,7 @@ describe('archive on close (not-a-bug reasons)', () => {
 })
 
 describe('reopening a report reopens its Sentry links (2D, 2026-10-09)', () => {
-  it('clears resolved_at only on resolved sentry links of that report and project', async () => {
+  it('clears resolved_at and archived_at only on closed sentry links of that report and project', async () => {
     const calls: Array<{ table: string; row: Row; filters: Array<[string, string, unknown]> }> = []
     const db = {
       from: (table: string) => ({
@@ -314,6 +345,7 @@ describe('reopening a report reopens its Sentry links (2D, 2026-10-09)', () => {
           const q = {
             eq: (c: string, v: unknown) => (filters.push(['eq', c, v]), q),
             not: (c: string, op: string, v: unknown) => (filters.push(['not', `${c} ${op}`, v]), q),
+            or: (expr: string) => (filters.push(['or', expr, null]), q),
             then: (resolve: (v: unknown) => void) => {
               calls.push({ table, row, filters })
               resolve({ error: null })
@@ -327,12 +359,12 @@ describe('reopening a report reopens its Sentry links (2D, 2026-10-09)', () => {
     expect(calls).toEqual([
       {
         table: 'report_external_issues',
-        row: { resolved_at: null },
+        row: { resolved_at: null, archived_at: null },
         filters: [
           ['eq', 'report_id', 'r1'],
           ['eq', 'project_id', 'p1'],
           ['eq', 'system', 'sentry'],
-          ['not', 'resolved_at is', null],
+          ['or', 'resolved_at.not.is.null,archived_at.not.is.null', null],
         ],
       },
     ])
@@ -342,6 +374,7 @@ describe('reopening a report reopens its Sentry links (2D, 2026-10-09)', () => {
     const q: Record<string, unknown> = {}
     q.eq = () => q
     q.not = () => q
+    q.or = () => q
     q.then = (resolve: (v: unknown) => void) => resolve({ error: { message: 'boom' } })
     const db = { from: () => ({ update: () => q }) } as never
     await expect(rb.reopenSentryLinks(db, 'p1', 'r1')).rejects.toThrow('boom')

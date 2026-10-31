@@ -60,6 +60,8 @@ interface SegmentedControlProps<T extends string> {
   wrap?: boolean
   /** Horizontal scroll strip for many tabs — keeps one row on narrow viewports. */
   scrollable?: boolean
+  /** Segments cannot be chosen. Assistive tech and keyboard users hear the control as unavailable. */
+  disabled?: boolean
   className?: string
 }
 
@@ -79,16 +81,18 @@ export function SegmentedControl<T extends string>({
   size = 'md',
   wrap = false,
   scrollable = false,
+  disabled = false,
   className = '',
 }: SegmentedControlProps<T>) {
   const track = (
     <div
       role="radiogroup"
       aria-label={ariaLabel ?? label}
+      aria-disabled={disabled || undefined}
       // w-max: the scroll strip's track sizes to its segments, so the border
       // and background wrap every tab instead of being clipped to the
       // viewport while the tabs overflow it.
-      className={`${wrap ? 'flex flex-wrap' : scrollable ? 'inline-flex w-max flex-nowrap' : 'inline-flex'} items-center gap-0.5 rounded-md border border-edge-subtle bg-surface-raised p-0.5 ${className}`}
+      className={`${wrap ? 'flex flex-wrap' : scrollable ? 'inline-flex w-max flex-nowrap' : 'inline-flex'} items-center gap-0.5 rounded-md border border-edge-subtle bg-surface-raised p-0.5 ${disabled ? 'opacity-40 ' : ''}${className}`}
     >
       {options.map((opt) => {
         const active = opt.id === value
@@ -98,7 +102,11 @@ export function SegmentedControl<T extends string>({
             type="button"
             role="radio"
             aria-checked={active}
-            onClick={() => onChange(opt.id)}
+            disabled={disabled}
+            onClick={() => {
+              if (disabled) return
+              onChange(opt.id)
+            }}
             // Selected = the soft SELECTED_TONE wash, not the filled brand
             // action colour. A filled tab competed with the page's one
             // primary button (Connect: "Studio" tab vs "Add to Cursor").
@@ -220,10 +228,13 @@ const BTN_VARIANTS = {
   ghost:
     'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg hover:border-brand/40 hover:shadow-brand-glow-sm hover:-translate-y-px',
   cancel:
-    `${CHIP_TONE.danger} border-danger/40 hover:bg-danger-muted hover:border-danger/50 hover:-translate-y-px`,
+    // mushi-mushi-allowlist: hover border is the hover state; CHIP_TONE already owns the resting border
+    `${CHIP_TONE.danger} hover:bg-danger-muted hover:border-danger/50 hover:-translate-y-px`,
   danger:
+    // mushi-mushi-allowlist: hover border is the hover state; CHIP_TONE already owns the resting border
     `${CHIP_TONE.dangerSubtle} hover:bg-danger-muted/80 hover:border-danger/40 hover:shadow-glow-danger hover:-translate-y-px`,
   success:
+    // mushi-mushi-allowlist: hover border is the hover state; CHIP_TONE already owns the resting border
     `${CHIP_TONE.okSubtle} hover:bg-ok-muted/80 hover:border-ok/40 hover:shadow-glow-ok hover:-translate-y-px`,
   // The confirm of a dialog that cannot be undone: a solid danger fill, so it never looks like Cancel.
   destructive:
@@ -396,6 +407,10 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   validate?: (value: string) => { message: string; severity?: 'error' | 'warn' } | null
   /** Internal: render as a secret field. Use `<SecretInput>` instead. */
   secret?: boolean
+  /** Classes for the outer label, the element a flex row sizes. `className`
+   *  styles the <input> itself, so `className="flex-1"` never widened the
+   *  field (Research's query box stayed narrow at 1440, 2026-10-28). */
+  containerClassName?: string
 }
 
 /**
@@ -419,7 +434,7 @@ const SECRET_FIELD_ATTRS = {
 } as const
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, className = '', id, error, tooltip, helpId, validate, onBlur, onChange, type, secret, ...rest },
+  { label, className = '', containerClassName = '', id, error, tooltip, helpId, validate, onBlur, onChange, type, secret, ...rest },
   ref,
 ) {
   const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-')
@@ -454,7 +469,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   const inputClassName = `${FIELD_BASE} ${hasRevealToggle ? 'pr-9' : ''} ${secret ? 'font-mono' : ''} ${maskClass} ${className}`
 
   return (
-    <label className="block">
+    // htmlFor: a help button (helpId) inside the label is a labelable element,
+    // so without it the label named that button and the field read only as
+    // its placeholder to screen readers.
+    <label htmlFor={inputId} className={`block ${containerClassName}`}>
       {label && (
         <span className={`${FIELD_LABEL} flex items-center gap-1`}>
           {label}

@@ -1,41 +1,35 @@
 ---
-title: Cost & usage
-description: The Cost page shows LLM token use and estimated spend per model and pipeline for a Mushi project, so you can see what each diagnosis costs.
+title: AI spend
+description: The AI spend view in the Mushi Mushi console shows LLM token use and estimated spend per model and step for a project, so you can see what each diagnosis costs.
 ---
 <AdminDocHero page="cost" />
 
 
-# Cost & usage
+# AI spend
 
-**Route:** `/cost`
+**Route:** `/team?view=spend` (**Team → AI spend**; the old `/cost` address redirects there)
 
-The Cost page shows LLM token consumption and estimated spend across all AI pipelines
-for the selected project and time range.
+The AI spend view shows the LLM calls Mushi Mushi made for the selected project and
+what they cost, as estimated from token counts.
 
 ---
 
 ## What's tracked
 
-| Pipeline | Models logged |
-|----------|---------------|
-| **fix-worker** | Primary model (Anthropic / OpenAI), per `fix_attempts` row |
-| **classify-report** | Classifier model, per `classifications` row |
-| **judge-batch** | Judge model, per `judge_results` row |
-| **inventory-propose** | Inventory model, per `inventory_proposals` row |
-| **pdca-runner** | Planner model, per `pdca_runs` row |
-| **test-gen-from-report** | Test generator model |
-
-Each row records `model`, `prompt_tokens`, `completion_tokens`, and `cost_usd` (estimated
-using public pricing at time of logging).
+Every AI call an edge function makes for the project (diagnosis, fixes, reviews,
+judging and the rest) is written to the `llm_invocations` table with the function and
+stage, the primary and used model, whether a fallback ran, status, latency, input and
+output tokens, cache tokens, the prompt version, which key paid (`key_source`), and
+`cost_usd`, an estimate from the model's price list.
 
 ---
 
-## Charts
+## Tabs
 
-- **Daily spend** — bar chart of estimated USD per day
-- **By pipeline** — donut chart showing which workflows consume the most tokens
-- **By model** — which models are used and what they cost
-- **Token efficiency** — completion tokens per successful fix (lower is better)
+- **Overview**: a **Daily spend** chart, a budget forecast, and **Compare to plan usage**
+  (a link to Billing)
+- **Breakdown**: cost **By operation** and **By model**
+- **Raw log**: the **Invocation log**, one row per call
 
 ---
 
@@ -43,24 +37,15 @@ using public pricing at time of logging).
 
 | Lever | Where to set it |
 |-------|----------------|
-| **Model selection** | Settings → PDCA settings → Model (use a smaller model for planning) |
-| **Max iterations** | Settings → PDCA settings → Max iterations per run |
-| **Fix worker retries** | `fix-worker` retries on Zod validation failure — reduce max_retries in env |
-| **Integration health probe cadence** | Probes run on demand; avoid automating frequent polling |
-| **Monthly AI budget** | Settings → General → Spend limits (or the budget field on this page). AI calls stop for the rest of the month once spend reaches it |
+| **Monthly AI budget** | Settings → General → Spend limits, or the budget card on the Overview tab (team owners and admins). Generation calls stop for the rest of the month once spend reaches it; embeddings count toward it but are not blocked |
 | **Auto-fix limits** | Settings → General → Spend limits: spend per 30 days, automatic fixes per day, and an approval threshold |
-
----
-
-## Export
-
-Click **Export CSV** to download the raw cost log for the selected date range. Useful
-for chargeback / showback reporting in multi-team setups.
+| **Improvement run size** | Each run on [Improvement runs](/admin/iterate) sets its own iteration target |
 
 ---
 
 ## Related pages
 
-- [Iterate](/admin/iterate) — the highest per-run cost driver
-- [Fix drafts](/admin/fixes) — fix-worker spend
-- [Settings](/admin/settings) — model and iteration configuration
+- [Improvement runs](/admin/iterate): a large per-run cost driver
+- [Fixes](/admin/fixes): what the fix agent spends
+- [Settings](/admin/settings): spend limits and AI keys
+- [Billing](/admin/billing): plan usage

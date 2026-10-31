@@ -25,6 +25,8 @@ export interface PricingPlan {
   overage_unit_amount_decimal_diagnoses: number | null;
   /** Default hard spend cap for this plan (USD). NULL = no cap. */
   monthly_spend_cap_usd: number | null;
+  /** Apps an organization may create on this plan. NULL = no limit (docs/plan-pricing.md). */
+  max_projects?: number | null;
   retention_days: number;
   seat_limit: number | null;
   is_self_serve: boolean;
@@ -43,23 +45,24 @@ const plog = log.child('plans');
 /** Hardcoded fallback if the DB read fails — keeps the gateway open. */
 const FREE_CLOUD_FALLBACK: PricingPlan = {
   id: 'free_cloud',
-  display_name: 'Free Cloud',
+  display_name: 'Free',
   position: 10,
   monthly_price_usd: 0,
   base_price_lookup_key: null,
   overage_price_lookup_key: null,
   included_reports_per_month: null,
   overage_unit_amount_decimal: null,
-  included_diagnoses_per_month: 50,
+  included_diagnoses_per_month: 100,
   overage_unit_amount_decimal_diagnoses: null,
   monthly_spend_cap_usd: null,
-  retention_days: 7,
+  max_projects: 1,
+  retention_days: 14,
   seat_limit: 1,
   is_self_serve: true,
   active: true,
   feature_flags: {
     sso: false,
-    byok: false,
+    byok: true,
     plugins: false,
     sla_hours: null,
     audit_log: false,
@@ -67,32 +70,11 @@ const FREE_CLOUD_FALLBACK: PricingPlan = {
   },
 };
 
-/** Legacy fallback for hobby — kept so existing hobby subs never error. */
-const HOBBY_FALLBACK: PricingPlan = {
-  id: 'hobby',
-  display_name: 'Hobby',
-  position: 0,
-  monthly_price_usd: 0,
-  base_price_lookup_key: null,
-  overage_price_lookup_key: null,
-  included_reports_per_month: 1000,
-  overage_unit_amount_decimal: null,
-  included_diagnoses_per_month: 1000,
-  overage_unit_amount_decimal_diagnoses: null,
-  monthly_spend_cap_usd: null,
-  retention_days: 7,
-  seat_limit: 3,
-  is_self_serve: true,
-  active: true,
-  feature_flags: {
-    sso: false,
-    byok: false,
-    plugins: false,
-    sla_hours: null,
-    audit_log: false,
-    teams: false,
-  },
-};
+/**
+ * Retired Hobby: inactive since 2026-06 and mirroring Free since 2026-10-28
+ * (migration 20261028180000), so an organization still naming it gets Free.
+ */
+const HOBBY_FALLBACK: PricingPlan = { ...FREE_CLOUD_FALLBACK, id: 'hobby', display_name: 'Hobby', position: 0, active: false };
 
 async function loadPlans(): Promise<Map<string, PricingPlan>> {
   const now = Date.now();
@@ -104,7 +86,7 @@ async function loadPlans(): Promise<Map<string, PricingPlan>> {
     const { data, error } = await db
       .from('pricing_plans')
       .select(
-        'id, display_name, position, monthly_price_usd, base_price_lookup_key, overage_price_lookup_key, included_reports_per_month, overage_unit_amount_decimal, included_diagnoses_per_month, overage_unit_amount_decimal_diagnoses, monthly_spend_cap_usd, retention_days, seat_limit, is_self_serve, active, feature_flags',
+        'id, display_name, position, monthly_price_usd, base_price_lookup_key, overage_price_lookup_key, included_reports_per_month, overage_unit_amount_decimal, included_diagnoses_per_month, overage_unit_amount_decimal_diagnoses, monthly_spend_cap_usd, max_projects, retention_days, seat_limit, is_self_serve, active, feature_flags',
       )
       .order('position', { ascending: true });
     if (error) {
