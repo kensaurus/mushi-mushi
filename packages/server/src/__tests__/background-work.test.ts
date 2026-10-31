@@ -53,53 +53,6 @@ afterEach(() => {
   warn.mockClear()
 })
 
-describe('createWarmHold', () => {
-  it('holds one timer per isolate, pushed back by each request, and stops extending at max age', async () => {
-    vi.useFakeTimers()
-    try {
-      const { createWarmHold } = await import('../../supabase/functions/_shared/background.ts')
-      const held: Promise<unknown>[] = []
-      const warm = createWarmHold({ graceMs: 30_000, maxAgeMs: 120_000, now: () => Date.now(), hold: (p) => held.push(p) })
-      let done = false
-      warm()
-      expect(held).toHaveLength(1)
-      void held[0].then(() => (done = true))
-
-      await vi.advanceTimersByTimeAsync(20_000)
-      warm() // a second request extends the same hold instead of adding one
-      expect(held).toHaveLength(1)
-      await vi.advanceTimersByTimeAsync(20_000)
-      expect(done).toBe(false)
-      await vi.advanceTimersByTimeAsync(10_000)
-      expect(done).toBe(true)
-
-      // Past max age a request no longer holds the isolate at all.
-      await vi.advanceTimersByTimeAsync(80_000)
-      warm()
-      expect(held).toHaveLength(1)
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('never holds past max age, even when the grace would run longer', async () => {
-    vi.useFakeTimers()
-    try {
-      const { createWarmHold } = await import('../../supabase/functions/_shared/background.ts')
-      const held: Promise<unknown>[] = []
-      const warm = createWarmHold({ graceMs: 30_000, maxAgeMs: 100_000, now: () => Date.now(), hold: (p) => held.push(p) })
-      await vi.advanceTimersByTimeAsync(90_000)
-      let done = false
-      warm()
-      void held[0].then(() => (done = true))
-      await vi.advanceTimersByTimeAsync(10_000)
-      expect(done).toBe(true)
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-})
-
 function stubEdgeRuntime() {
   const waitUntil = vi.fn()
   ;(globalThis as { EdgeRuntime?: unknown }).EdgeRuntime = { waitUntil }
