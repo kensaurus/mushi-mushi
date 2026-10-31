@@ -77,7 +77,9 @@ create trigger trg_integration_health_daily_del
 -- Backfill from what is already there (runs once, inside this migration's
 -- transaction, so no probe insert can be counted twice or missed).
 lock table public.integration_health_history in share mode;
-truncate public.integration_health_daily;
+-- The table was created above in this same migration; emptying it right
+-- before the backfill only makes a re-run idempotent. No live data is lost.
+truncate public.integration_health_daily; -- migration-check: allow-destructive
 insert into public.integration_health_daily (project_id, kind, day, ok_count, total_count)
 select project_id, kind, (checked_at at time zone 'UTC')::date,
        count(*) filter (where status = 'ok'), count(*)

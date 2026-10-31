@@ -12,7 +12,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -85,6 +85,18 @@ function storeDirName(version, suffix) {
   return `metro@${version}${suffix}`.replaceAll('(', '_').replaceAll(')', '')
 }
 
+/**
+ * The installed store folder for a snapshot. On Windows pnpm shortens long
+ * folder names (`metro@0.83.5_patch_hash=410_03d1…`), so when the full name
+ * is absent the one patched folder for that version stands in for it.
+ */
+function installedStoreDir(store, version, suffix) {
+  const full = storeDirName(version, suffix)
+  if (existsSync(path.join(store, full))) return full
+  const patched = readdirSync(store).filter((d) => d.startsWith(`metro@${version}_patch_hash=`))
+  return patched.length === 1 ? patched[0] : full
+}
+
 test('the image-size override is a bounded 2.0.3 floor', () => {
   const pkg = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
   const range = pkg.pnpm?.overrides?.['image-size']
@@ -138,7 +150,7 @@ test('installed Metro measures a PNG from its filename and rejects the old parse
   writeFileSync(pngPath, PNG)
   try {
     for (const snapshot of metros) {
-      const name = storeDirName(snapshot.version, snapshot.suffix)
+      const name = installedStoreDir(store, snapshot.version, snapshot.suffix)
       const assets = path.join(store, name, 'node_modules', 'metro', 'src', 'Assets.js')
       assert.equal(existsSync(assets), true, `missing installed ${name}`)
       const source = readFileSync(assets, 'utf8')
