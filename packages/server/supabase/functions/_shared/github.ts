@@ -48,6 +48,37 @@ export async function mintInstallationToken(installationId: number): Promise<str
  * Setup gaps read them to say what the App can do before anything needs it.
  */
 export async function mintInstallationAccess(installationId: number): Promise<{ token: string; permissions: Record<string, string> | null }> {
+  // An installation token lives an hour. Reuse it until 5 minutes before it
+  // expires, and share one mint between concurrent callers: the Apps page
+  // composed 10 cards on one installation and minted 10 tokens per view
+  // (2026-10-31, 13.9 s against the console's 15 s limit).
+  const now = Date.now()
+  const hit = installationTokenCache.get(installationId)
+  if (hit && hit.expiresMs - now > INSTALLATION_TOKEN_REUSE_MARGIN_MS) return hit.access
+  const pending = installationTokenInflight.get(installationId)
+  if (pending) return pending
+  const minting = mintInstallationAccessUncached(installationId)
+    .then(({ access, expiresMs }) => {
+      installationTokenCache.set(installationId, { access, expiresMs })
+      return access
+    })
+    .finally(() => installationTokenInflight.delete(installationId))
+  installationTokenInflight.set(installationId, minting)
+  return minting
+}
+
+type InstallationAccess = { token: string; permissions: Record<string, string> | null }
+const INSTALLATION_TOKEN_REUSE_MARGIN_MS = 5 * 60_000
+const installationTokenCache = new Map<number, { access: InstallationAccess; expiresMs: number }>()
+const installationTokenInflight = new Map<number, Promise<InstallationAccess>>()
+
+/** Forget cached installation tokens (tests). */
+export function clearInstallationTokenCache(): void {
+  installationTokenCache.clear()
+  installationTokenInflight.clear()
+}
+
+async function mintInstallationAccessUncached(installationId: number): Promise<{ access: InstallationAccess; expiresMs: number }> {
   const appId = Deno.env.get('GITHUB_APP_ID')
   const pem = Deno.env.get('GITHUB_APP_PRIVATE_KEY')
   if (!appId || !pem) throw new Error('GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY required')
@@ -77,8 +108,14 @@ export async function mintInstallationAccess(installationId: number): Promise<{ 
     },
   )
   if (!res.ok) throw new Error(`installation token mint failed: ${res.status}`)
-  const body = await res.json() as { token: string; permissions?: Record<string, string> }
-  return { token: body.token, permissions: body.permissions && typeof body.permissions === 'object' ? body.permissions : null }
+  const body = await res.json() as { token: string; expires_at?: string; permissions?: Record<string, string> }
+  // GitHub states the expiry; without a readable one, assume the shortest
+  // reuse that still helps one page view (10 minutes).
+  const stated = body.expires_at ? Date.parse(body.expires_at) : NaN
+  return {
+    access: { token: body.token, permissions: body.permissions && typeof body.permissions === 'object' ? body.permissions : null },
+    expiresMs: Number.isFinite(stated) ? stated : Date.now() + 15 * 60_000,
+  }
 }
 
 /**
