@@ -71,6 +71,8 @@ describe('MergeQueuePanel', () => {
     expect(frame?.getAttribute('aria-busy')).toBe('true')
     // Named for what it holds; Fixes' own "Ready to merge" list sits above it.
     expect(host.textContent).toContain('Merge queue')
+    expect(host.querySelector('h2')?.textContent).toContain('Merge queue')
+    expect(host.querySelector('h3')).toBeNull()
   })
 
   it('starts the frame at the size the queue had last time', async () => {

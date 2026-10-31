@@ -181,7 +181,7 @@ export function FixDetailPanel({
 
       {timeline ? (
         <div>
-          <h4 className="text-2xs uppercase tracking-wide text-fg-faint mb-1">PDCA timeline</h4>
+          <h3 className="text-2xs uppercase tracking-wide text-fg-faint mb-1">PDCA timeline</h3>
           <FixGitGraph
             events={timeline}
             prUrl={fix.pr_url}
@@ -201,14 +201,14 @@ export function FixDetailPanel({
 
       {fix.rationale && (
         <div>
-          <h4 className="text-2xs uppercase tracking-wide text-fg-faint mb-0.5">Rationale</h4>
+          <h3 className="text-2xs uppercase tracking-wide text-fg-faint mb-0.5">Rationale</h3>
           <p className="text-xs text-fg-secondary whitespace-pre-wrap">{fix.rationale}</p>
         </div>
       )}
 
       {fix.files_changed && fix.files_changed.length > 0 && (
         <div>
-          <h4 className="text-2xs uppercase tracking-wide text-fg-faint mb-0.5">Files changed</h4>
+          <h3 className="text-2xs uppercase tracking-wide text-fg-faint mb-0.5">Files changed</h3>
           <ul className="text-2xs font-mono text-fg-muted space-y-0.5 max-h-32 overflow-y-auto">
             {fix.files_changed.map((f) => (
               <li key={f}>{f}</li>
@@ -219,7 +219,7 @@ export function FixDetailPanel({
 
       {specWarnings.length > 0 && (
         <div>
-          <h4 className="text-2xs uppercase tracking-wide text-fg-faint mb-0.5">Spec validation warnings</h4>
+          <h3 className="text-2xs uppercase tracking-wide text-fg-faint mb-0.5">Spec validation warnings</h3>
           <ul className="text-2xs text-fg-secondary space-y-1">
             {specWarnings.map((w, i) => (
               <li
@@ -243,7 +243,7 @@ export function FixDetailPanel({
 
       {inventoryAction && (
         <div>
-          <h4 className="text-2xs uppercase tracking-wide text-fg-faint mb-1">Origin — Inventory action</h4>
+          <h3 className="text-2xs uppercase tracking-wide text-fg-faint mb-1">Origin — Inventory action</h3>
           <div className="rounded border border-edge bg-surface-overlay px-2 py-1.5 space-y-0.5 text-2xs">
             <div className="flex items-baseline gap-2 flex-wrap">
               <span className="font-mono text-accent">{inventoryAction.actionLabel}</span>

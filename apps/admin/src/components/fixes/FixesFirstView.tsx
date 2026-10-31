@@ -118,7 +118,7 @@ export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy,
   return (
     <div className="space-y-3" data-testid="fixes-first-view">
       {pipeline && (
-        <Section title="Release train" id="fixes-release" icon={<IconReleases />} action={<Link to={pipelineHref} className="text-xs text-link">Pipeline →</Link>}>
+        <Section as="h2" title="Release train" id="fixes-release" icon={<IconReleases />} action={<Link to={pipelineHref} className="text-xs text-link">Pipeline →</Link>}>
           <div className="space-y-3">
             <ReleaseStations stations={stationsFromStages(pipeline.stages)} href={pipelineHref} testId="fixes-release-stations" />
             <p className="text-xs text-fg-secondary">
@@ -129,6 +129,7 @@ export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy,
       )}
 
       <Section
+        as="h2"
         title={`Ready to merge${ready.length ? `: ${ready.length}` : ''}`}
         id="fixes-ready"
         icon={<IconCheck />}
@@ -171,7 +172,7 @@ export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy,
       </Section>
 
       {reasons.length > 0 && (
-        <Section title={`Stopped: ${stopped} ${pluralize(stopped, 'report')}`} id="fixes-stopped" icon={<IconAlertTriangle />}>
+        <Section as="h2" title={`Stopped: ${stopped} ${pluralize(stopped, 'report')}`} id="fixes-stopped" icon={<IconAlertTriangle />}>
           <p className="mb-2 text-2xs text-fg-muted">
             {COUNT_HINTS.stopped}
             {stopped > listed ? ` The reasons below cover the ${listed} in the newest attempts loaded on this page.` : ''}

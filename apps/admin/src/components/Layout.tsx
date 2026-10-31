@@ -27,6 +27,7 @@ import { ProjectScopeNotice } from './ProjectScopeNotice'
 import { OrgSwitcher } from './OrgSwitcher'
 import { useMediaQuery } from '../lib/useMediaQuery'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
+import { pageSuppliesH1 } from '../lib/pageHeading'
 import { NAV_ITEM_BY_PATH, buildOperatorNav, type BuiltNavItem, type BuiltNavSection } from '../lib/buildNav'
 import { CORE_NAV_PATHS } from '../lib/navRegistry'
 import { LAB_FEATURES, useLabs } from '../lib/labs'
@@ -467,6 +468,10 @@ export function Layout({ children }: { children: ReactNode }) {
   // content tree, but section headers, item labels, mode toggle, and most
   // footer chrome are hidden in favour of `title` tooltips. Mobile always
   // gets `compact: false` because the mobile sidebar is a full overlay.
+  // /fixes titles itself with an h1. The wordmark stays a paragraph so the
+  // page has one h1 at desktop and at phone width (the sidebar is display:none
+  // below md, so a wordmark h1 would not count there either).
+  const BrandTag = pageSuppliesH1(pathname) ? 'p' : 'h1'
   const renderSidebarContent = (compact: boolean) => (
     <>
       {/* Brand — collapses to a single "M" stamp in compact mode so the
@@ -474,15 +479,15 @@ export function Layout({ children }: { children: ReactNode }) {
       <div className="border-b border-edge/60 overflow-visible shrink-0">
         <div className={`chrome-top-row ${compact ? 'px-2 justify-center' : 'px-4'}`}>
           {compact ? (
-            <h1 className="text-sm font-bold tracking-tight leading-none text-center" aria-label="mushi mushi admin console">
+            <BrandTag className="text-sm font-bold tracking-tight leading-none text-center" aria-label="mushi mushi admin console">
               <span className="text-brand">m</span>
               <span className="text-fg-secondary">m</span>
-            </h1>
+            </BrandTag>
           ) : (
-            <h1 className="text-sm font-bold tracking-tight leading-none">
+            <BrandTag className="text-sm font-bold tracking-tight leading-none">
               <span className="text-brand">mushi</span>
               <span className="text-fg-secondary">mushi</span>
-            </h1>
+            </BrandTag>
           )}
         </div>
       </div>
