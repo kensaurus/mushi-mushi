@@ -106,6 +106,9 @@ export interface PageHeaderBarProps {
   /** When true, suppresses the subtitle line — use when the page renders its
    *  own PageHero DAV strip below to avoid double-chrome stacking. */
   withPageHero?: boolean
+  /** Page title element. Default h2 sits under the shell wordmark h1.
+   *  Pass h1 on a page that supplies the only level-one heading. */
+  titleAs?: 'h1' | 'h2'
 }
 
 /**
@@ -128,6 +131,7 @@ export function PageHeaderBar({
   helpFlowPath,
   helpDefaultOpen,
   withPageHero = false,
+  titleAs = 'h2',
 }: PageHeaderBarProps) {
   const { pathname } = useLocation()
   const registerPageHelp = usePageHelpRegister()
@@ -139,6 +143,7 @@ export function PageHeaderBar({
       : null
   const hasHelp = Boolean(helpTitle && helpWhatIsIt)
   const showProjectScope = projectScope && !locationChrome.suppressProjectScope
+  const TitleTag = titleAs
 
   useLayoutEffect(() => {
     if (!hasHelp || !helpTitle || !helpWhatIsIt) {
@@ -191,7 +196,7 @@ export function PageHeaderBar({
           )}
 
           {/* Title — aria-label includes the middot scope when present (dot is aria-hidden visually). */}
-          <h2
+          <TitleTag
             className="min-w-0 text-sm font-semibold leading-snug text-fg text-balance"
             {...(showProjectScope ? { 'aria-label': `${title} · ${projectScope}` } : {})}
           >
@@ -202,7 +207,7 @@ export function PageHeaderBar({
                 <span className="font-mono text-xs text-fg-secondary">{projectScope}</span>
               </>
             )}
-          </h2>
+          </TitleTag>
         </div>
 
         {/* Right-side slot. "How this page works" sits at the edge (P2,

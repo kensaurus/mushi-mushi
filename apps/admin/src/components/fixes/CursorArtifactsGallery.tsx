@@ -43,7 +43,7 @@ export function CursorArtifactsGallery({ artifacts }: Props) {
 
   return (
     <div className="space-y-2">
-      <h4 className="text-2xs uppercase tracking-wide text-fg-faint">Cursor agent artifacts</h4>
+      <h3 className="text-2xs uppercase tracking-wide text-fg-faint">Cursor agent artifacts</h3>
 
       {screenshots.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">

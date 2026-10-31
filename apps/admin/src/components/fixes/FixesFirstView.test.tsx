@@ -74,6 +74,11 @@ describe('FixesFirstView', () => {
     expect(container.querySelector('[data-testid="fixes-ready-empty"]')).toBeNull()
     expect(container.querySelector('[data-testid="fixes-ready-fix-839"]')?.textContent).toContain('Pass rate label is wrong')
     expect(container.textContent).toContain('Ready to merge: 1')
+    // Page title is the h1; these sections are the next level, with no skip.
+    const headings = [...container.querySelectorAll('h1, h2, h3, h4')].map((h) => `${h.tagName}:${h.textContent}`)
+    expect(headings.some((h) => h.startsWith('H2:') && h.includes('Release train'))).toBe(true)
+    expect(headings.some((h) => h.startsWith('H2:') && h.includes('Ready to merge'))).toBe(true)
+    expect(headings.some((h) => h.startsWith('H3:') || h.startsWith('H4:') || h.startsWith('H1:'))).toBe(false)
   })
 
   // /pipeline also files a PR whose Opus review was skipped (no key) as

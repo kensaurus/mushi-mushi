@@ -67,6 +67,23 @@ describe('PageHeaderBar overview chip', () => {
     })
   }
 
+  it('renders the page title as an h1 when the page supplies the only one', () => {
+    act(() => {
+      root.render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: ['/fixes'] },
+          createElement(PageHeaderBar, { title: 'Fixes', titleAs: 'h1', showCopyLink: false, projectScope: 'App' }),
+        ),
+      )
+    })
+    const h1 = container.querySelector('h1')
+    expect(h1?.tagName).toBe('H1')
+    expect(h1?.textContent).toContain('Fixes')
+    expect(h1?.getAttribute('aria-label')).toBe('Fixes · App')
+    expect(container.querySelector('h2')).toBeNull()
+  })
+
   it('renders a chip that can shrink instead of overflowing the row', () => {
     renderDashboardHeader()
     const chip = container.querySelector<HTMLElement>('[aria-label^="Overview:"]')
