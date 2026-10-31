@@ -43,7 +43,14 @@ function fix(over: Partial<FixAttempt>): FixAttempt {
   } as FixAttempt
 }
 
-const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), fixes: [] as unknown[], total: 0 }))
+const mocks = vi.hoisted(() => ({
+  apiFetch: vi.fn(),
+  fixes: [] as unknown[],
+  total: 0,
+  dispatches: [] as unknown[],
+  summary: null as Record<string, unknown> | null,
+  pageSummary: null as string | null,
+}))
 
 vi.mock('../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../lib/usePageData', () => ({
@@ -58,7 +65,11 @@ vi.mock('../lib/usePageData', () => ({
   }),
 }))
 vi.mock('../lib/realtime', () => ({ useRealtimeReload: () => ({ channelState: 'idle' }) }))
-vi.mock('../lib/pageContext', () => ({ usePublishPageContext: () => undefined }))
+vi.mock('../lib/pageContext', () => ({
+  usePublishPageContext: (ctx: { summary?: string } | null) => {
+    mocks.pageSummary = ctx?.summary ?? null
+  },
+}))
 vi.mock('../lib/usePlatformIntegrations', () => ({ usePlatformIntegrations: () => ({ traceUrl: () => null }) }))
 vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => ({ activeProject: { project_name: 'App' } }) }))
 vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => 'p1' }))
@@ -102,13 +113,17 @@ beforeEach(() => {
     disconnect() {}
   })
   window.matchMedia = ((q: string) => ({ matches: false, media: q, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {} })) as unknown as typeof window.matchMedia
+  mocks.dispatches = []
+  mocks.summary = null
+  mocks.pageSummary = null
   mocks.apiFetch.mockReset()
   mocks.apiFetch.mockImplementation(async (path: string) => {
     if (path.startsWith('/v1/admin/fixes?')) {
       const offset = Number(new URLSearchParams(path.split('?')[1]).get('offset') ?? 0)
       return { ok: true, data: { fixes: offset === 0 ? mocks.fixes : [fix({ id: 'old1', report_id: 'r9', retryable: false })], total: mocks.total } }
     }
-    if (path === '/v1/admin/fixes/dispatches') return { ok: true, data: { dispatches: [] } }
+    if (path === '/v1/admin/fixes/dispatches') return { ok: true, data: { dispatches: mocks.dispatches } }
+    if (path === '/v1/admin/fixes/summary') return { ok: true, data: mocks.summary }
     if (path === '/v1/admin/fixes/dispatch') return { ok: true, data: { dispatchId: 'd1' } }
     return { ok: true, data: null }
   })
@@ -145,6 +160,25 @@ async function render(url: string) {
     )
   })
   await flush()
+}
+
+/** The numeral on the quick-mode "In flight" card. */
+function inFlightCardValue(): string | undefined {
+  const label = [...document.querySelectorAll('div')].find(
+    (el) => el.className.includes('uppercase') && el.textContent === 'In flight',
+  )
+  return label?.parentElement?.parentElement?.parentElement?.querySelector('.tabular-nums')?.textContent?.trim()
+}
+
+const EMPTY_SUMMARY = {
+  total: 1,
+  completed: 0,
+  failed: 0,
+  inProgress: 0,
+  prsOpen: 0,
+  prsCiPassing: 0,
+  days: [] as { day: string; total: number; completed: number; failed: number }[],
+  failureBreakdown: [] as { category: string; count: number }[],
 }
 
 function buttons(label: string): HTMLButtonElement[] {
@@ -210,6 +244,54 @@ describe('FixesPage', () => {
     await act(async () => { release(null) })
     await flush()
     expect(box().disabled).toBe(false)
+  })
+
+  it('a pending attempt is in flight in the tab title, the card and the filter', async () => {
+    mocks.fixes = [fix({ id: 'a', status: 'pending', report_fix_state: 'in_flight', retryable: false })]
+    mocks.total = 1
+    mocks.summary = { ...EMPTY_SUMMARY, inProgress: 1 }
+    await render('/fixes')
+    expect(mocks.pageSummary).toContain('1 in flight')
+    expect(inFlightCardValue()).toBe('1')
+    const segments = [...document.querySelectorAll('[aria-label="Filter fix attempts by status"] [role="radio"]')]
+    expect(segments.find((b) => b.textContent?.startsWith('In flight'))?.textContent).toBe('In flight1')
+    click(segments.find((b) => b.textContent?.startsWith('In flight')))
+    const selected = document.querySelector('[aria-label="Filter fix attempts by status"] [aria-checked="true"]')
+    expect(selected?.textContent).toContain('In flight')
+    expect(document.body.textContent).toContain('Checkout button does nothing')
+  })
+
+  it('a live attempt on an already-resolved report stays in the In flight filter', async () => {
+    mocks.fixes = [fix({
+      id: 'a',
+      status: 'running',
+      report_fix_state: 'resolved',
+      report_status: 'fixed',
+      retryable: false,
+      report_title: 'Still running',
+    })]
+    mocks.total = 1
+    mocks.summary = { ...EMPTY_SUMMARY, inProgress: 0 }
+    await render('/fixes?status=inflight')
+    expect(mocks.pageSummary).toContain('1 in flight')
+    expect(inFlightCardValue()).toBe('1')
+    expect(document.body.textContent).toContain('Still running')
+  })
+
+  it('a queued dispatch with no attempt yet counts in the title and the card', async () => {
+    mocks.fixes = [fix({ id: 'a', status: 'failed' })]
+    mocks.total = 1
+    mocks.summary = { ...EMPTY_SUMMARY, inProgress: 0 }
+    mocks.dispatches = [{
+      id: 'd1',
+      project_id: 'p1',
+      report_id: 'r-queued',
+      status: 'queued',
+      created_at: '2026-10-31T00:00:00Z',
+    }]
+    await render('/fixes')
+    expect(mocks.pageSummary).toContain('1 in flight')
+    expect(inFlightCardValue()).toBe('1')
   })
 
   it('QA 94: the old pipeline tab link opens the In flight filter', async () => {
