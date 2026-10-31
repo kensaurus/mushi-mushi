@@ -2,6 +2,11 @@
  * PGlite runs one backend, so a sequential claim never waits on the row lock.
  * These probes use a real Postgres with one connection per caller.
  *
+ * Opt-in: MUSHI_SERVER_PG_INTEGRATION=1
+ *   pnpm --filter @mushi-mushi/server test:integration
+ * The ordinary suite does not load this file. The runner that sets the flag
+ * must provide Podman or Docker. The container is always postgres:17-alpine.
+ *
  * A bucket already at the cap must raise rate_limit_exceeded while another
  * transaction still holds the row. Callers that all read a below-cap count
  * and then block on the upsert must not admit more than the cap, must not
@@ -12,6 +17,7 @@ import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { pgIntegrationEnabled, resolvePostgresImage } from './scoped-rate-limit-pg.ts'
 
 const MIGRATION = readFileSync(
   resolve(__dirname, '../../supabase/migrations/20261031150000_scoped_rate_limit_claim_full_window.sql'),
@@ -131,7 +137,9 @@ function fields(line: string): Record<string, string> {
   return out
 }
 
-describe('scoped_rate_limit_claim under concurrent connections', () => {
+const integration = pgIntegrationEnabled(process.env)
+
+describe.skipIf(!integration)('scoped_rate_limit_claim under concurrent connections', () => {
   let bin = ''
 
   beforeAll(async () => {
@@ -139,11 +147,8 @@ describe('scoped_rate_limit_claim under concurrent connections', () => {
     await execFile(bin, ['rm', '-f', NAME])
     const listed = await execFile(bin, ['images', '--format', '{{.Repository}}:{{.Tag}}'])
     if (listed.code !== 0) throw new Error(listed.stderr || listed.stdout)
-    const local = listed.stdout
-      .split('\n')
-      .map((line) => line.trim())
-      .find((line) => line.includes('postgres') && !line.endsWith(':<none>'))
-    const image = local ?? 'postgres:17-alpine'
+    const cached = listed.stdout.split('\n')
+    const { image, local } = resolvePostgresImage(cached)
     const started = await execFile(bin, [
       'run',
       '-d',
