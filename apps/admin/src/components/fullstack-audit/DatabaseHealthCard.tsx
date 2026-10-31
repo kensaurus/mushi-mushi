@@ -60,7 +60,11 @@ function size(mb: number): string {
   return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`
 }
 
-/** "2.1 GB of 10 GB (Micro, about $10/mo)" */
+/**
+ * "2.1 GB of 10 GB (Micro, about $10/mo)"
+ *
+ * @internal Exported for tests only.
+ */
 export function sizeLine(h: NonNullable<DbHealthPayload['health']>): string | null {
   if (h.sizeMb == null) return null
   if (!h.tier) return size(h.sizeMb)
