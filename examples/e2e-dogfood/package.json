@@ -5,7 +5,7 @@
   "description": "End-to-end Playwright suite that drives the full Mushi Mushi PDCA loop (Plan → Do → Check → Act) against a local Supabase + admin dev stack. With E2E_LIVE_GITHUB unset, Act only checks the attempt leaves pending (GitHub is not intercepted). Set E2E_LIVE_GITHUB=1 to require a real pull URL.",
   "type": "module",
   "scripts": {
-    "test": "echo 'e2e-dogfood is driven by pnpm e2e, not pnpm test (requires a live Supabase + admin stack)' && exit 0",
+    "test": "node --test ./discovery.test.mjs",
     "e2e": "playwright test",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
