@@ -597,8 +597,9 @@ jobs:
   e2e:
     # End-to-end Playwright dogfood suite. Runs against a local Supabase
     # stack spun up by the Supabase CLI action — no cloud credentials
-    # required. GitHub is mocked by msw so the Act stage is hermetic (set
-    # E2E_LIVE_GITHUB=1 to override on demand).
+    # required. With E2E_LIVE_GITHUB unset, Act only checks that the
+    # attempt leaves pending; the suite does not intercept GitHub (set
+    # E2E_LIVE_GITHUB=1 to require a real pull URL).
     #
     # Opt-in via repository variable `ENABLE_E2E_CI=true`. When disabled
     # the job is skipped entirely so it doesn't show as a failure on PRs

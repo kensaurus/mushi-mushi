@@ -108,7 +108,7 @@ Only one knip tag was added in this pass. Every other kept finding still counts 
 | `packages/react` | `@testing-library/jest-dom` (dev) | **KILL**. No setup file or import |
 | `eslint-plugin-mushi-mushi` | `@types/eslint`, `@typescript-eslint/utils` (dev) | **KILL**. ESLint 10 ships its own types; no import |
 | `packages/node` | `@types/express` (dev) | **KILL**. The express adapter uses structural types and imports nothing from `express` |
-| `examples/e2e-dogfood` | `msw` (dev) | **KILL**. No import, though two comments claim msw mocks GitHub (BL-041) |
+| `examples/e2e-dogfood` | `msw` (dev) | **KILL**. No import. Comments that claimed msw mocked GitHub now describe the real Act check and Playwright `page.route` (BL-041). |
 | `apps/docs` | `tailwindcss` (dev) | KEEP. `globals.css` has `@import 'tailwindcss'` |
 | `packages/server` | `yaml` (dev) | KEEP. `vitest.config.ts` aliases `npm:yaml@2` to it |
 | `packages/svelte` | `svelte` (dev) | KEEP. It backs the `svelte >=4` peer |

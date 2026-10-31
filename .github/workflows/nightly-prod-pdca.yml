@@ -113,9 +113,9 @@ jobs:
           MUSHI_ADMIN_JWT: ${{ needs.mint-jwt.outputs.jwt }}
           MUSHI_PROJECT_ID: ${{ secrets.PROD_MUSHI_PROJECT_ID }}
           MUSHI_API_KEY: ${{ secrets.PROD_MUSHI_API_KEY }}
-          # Prod nightly uses mocks for Act to avoid opening a real PR
-          # every night. The PDCA dispatch + check + health stages still
-          # exercise live LLM + DB paths, so any regression there surfaces.
+          # Unset: Act only checks the attempt left pending. That does not
+          # intercept GitHub, so a dispatch can still open a pull request.
+          # Check and health still hit live LLM and DB paths.
           E2E_LIVE_GITHUB: ''
         run: pnpm --filter @mushi-mushi/e2e-dogfood exec playwright test
 
