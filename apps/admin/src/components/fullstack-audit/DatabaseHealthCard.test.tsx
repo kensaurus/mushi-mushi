@@ -85,6 +85,12 @@ describe('DatabaseHealthCard', () => {
     expect(container.textContent).not.toContain('Settings →')
   })
 
+  it('says when the stats could not be read, instead of hiding them', () => {
+    state.data = { projectRef: 'ref', health: { ...HEALTH, sizeMb: null, cacheHitPct: null, connections: null }, statsError: 'execute_sql returned no rows Mushi could read' }
+    render()
+    expect(container.textContent).toContain('Size, cache and connections could not be read this time')
+  })
+
   it('sizeLine without a known tier is just the size', () => {
     expect(sizeLine({ ...HEALTH, tier: null, sizeMb: 512 })).toBe('512 MB')
   })
