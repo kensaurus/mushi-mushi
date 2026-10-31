@@ -21,12 +21,15 @@ export function QueueThroughputChart({ throughput }: Props) {
 
   return (
     <Card elevated className="p-3">
-      <div className="flex items-baseline justify-between mb-1">
+      {/* Hyphens are wrap points, so a squeezed range splits after "2026-10-".
+          nowrap keeps the whole range together; the header wraps it under
+          the title when the row is narrower than both (390px). */}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 mb-1">
         <h3 className="text-2xs uppercase tracking-wider text-fg-muted">
           Daily throughput · last 14d
         </h3>
         <div className="flex items-center gap-2">
-          <span className="text-2xs font-mono text-fg-faint">
+          <span className="text-2xs font-mono text-fg-faint whitespace-nowrap shrink-0">
             {throughput[0]?.day} → {throughput[throughput.length - 1]?.day}
           </span>
           <ChartActionsMenu
