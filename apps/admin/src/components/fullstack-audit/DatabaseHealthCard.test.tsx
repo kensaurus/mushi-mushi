@@ -91,6 +91,21 @@ describe('DatabaseHealthCard', () => {
     expect(container.textContent).toContain('Size, cache and connections could not be read this time')
   })
 
+  it('lists where time and space go, and says why a list is empty', () => {
+    const hotspots = {
+      slow: null,
+      slowSince: null,
+      tables: [{ name: 'public.cron_runs', bytes: 180 * 1_048_576, rows: 133_723, dead: 17_223 }],
+      unusedIndexes: [{ name: 'public.idx_cron_runs_job_started', table: 'cron_runs', bytes: 12 * 1_048_576 }],
+    }
+    state.data = { projectRef: 'ref', health: { ...HEALTH, hotspots } }
+    render()
+    const text = container.querySelector('[data-testid="database-hotspots"]')?.textContent ?? ''
+    expect(text).toContain('Query timings could not be read')
+    expect(text).toContain('public.cron_runs180 MB · about 133,723 rows · 17,223 dead rows')
+    expect(text).toContain('Unused indexes (1, 12 MB)')
+  })
+
   it('sizeLine without a known tier is just the size', () => {
     expect(sizeLine({ ...HEALTH, tier: null, sizeMb: 512 })).toBe('512 MB')
   })

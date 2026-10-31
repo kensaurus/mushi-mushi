@@ -12,6 +12,8 @@
  *   `health` is the console's Database health card (_shared/db-health.ts):
  *   advisors plus one read-only stats query (size, connections, cache hit).
  *   A failed stats read leaves those fields null, never the advisors.
+ *   `health.hotspots` adds the biggest tables, never-read indexes and the
+ *   busiest statements (pg_stat_statements); each read may fail on its own.
  *   `sharedWith` names the other apps of the organization on the same
  *   Supabase project, so one project's health is not mistaken for one app's.
  *   { ok: true, data: { projectRef: null, reason }; reason } — no token or no ref
@@ -21,7 +23,7 @@ import { Hono } from 'npm:hono@4'
 import { jwtAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { resolveSupabasePat, getSupabaseAdvisors, executeReadOnlySql } from '../../_shared/supabase-mcp-client.ts'
-import { DB_STATS_SQL, parseDbStats, summarizeDbHealth } from '../../_shared/db-health.ts'
+import { DB_SLOW_SQL, DB_SPACE_SQL, DB_STATS_SQL, parseDbHotspots, parseDbStats, summarizeDbHealth } from '../../_shared/db-health.ts'
 import { resolveOwnedProject } from '../shared.ts'
 import type { Variables } from '../types.ts'
 
@@ -76,7 +78,13 @@ export function registerDbAdvisorsRoutes(parent: Hono<{ Variables: Variables }>)
     try {
       const opts = { projectRef, pat }
       let statsError: string | null = null
-      const [advisors, stats, shared] = await Promise.all([
+      // Hotspots (biggest tables, unused indexes, busiest queries) never fail
+      // the card: a failed read leaves that list out, the rest still shows.
+      const hotspotsRead = Promise.all([
+        executeReadOnlySql(opts, DB_SPACE_SQL).catch(() => null),
+        executeReadOnlySql(opts, DB_SLOW_SQL).catch(() => null),
+      ]).then(([space, slow]) => parseDbHotspots(space, slow))
+      const [advisors, stats, shared, hotspots] = await Promise.all([
         getSupabaseAdvisors(opts),
         executeReadOnlySql(opts, DB_STATS_SQL)
           .then((rows) => {
@@ -96,12 +104,13 @@ export function registerDbAdvisorsRoutes(parent: Hono<{ Variables: Variables }>)
               .eq('projects.organization_id', project.organization_id)
               .neq('project_id', project.id)
           : Promise.resolve({ data: [] }),
+        hotspotsRead,
       ])
       const sharedWith = ((shared.data ?? []) as Array<{ projects?: { name?: string } | Array<{ name?: string }> }>)
         .map((r) => (Array.isArray(r.projects) ? r.projects[0]?.name : r.projects?.name))
         .filter((n): n is string => Boolean(n))
         .sort()
-      return c.json({ ok: true, data: { advisors, projectRef, health: summarizeDbHealth(advisors, stats), sharedWith, statsError } })
+      return c.json({ ok: true, data: { advisors, projectRef, health: summarizeDbHealth(advisors, stats, hotspots), sharedWith, statsError } })
     } catch (err) {
       return c.json({
         ok: false,
