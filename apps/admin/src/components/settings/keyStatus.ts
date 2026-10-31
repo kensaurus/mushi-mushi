@@ -165,10 +165,23 @@ export function keyStatusView(
 
   const exhaustedUntil = 'exhausted_until' in key ? key.exhausted_until : null
   if (exhaustedUntil && Date.parse(exhaustedUntil) > now) {
+    // "Your next key" only when one can take over: on, checked, and not used
+    // up itself. With none, say that new work waits (2026-10-31: the only
+    // other Cursor key was turned off, and the row promised a next key).
+    const backup = context.pool.some(
+      (k) =>
+        k.id !== key.id &&
+        k.provider_slug === key.provider_slug &&
+        isRuntimeEligiblePoolKey(k, now) &&
+        !(k.exhausted_until && Date.parse(k.exhausted_until) > now),
+    )
+    const until = formatClock(exhaustedUntil)
     return {
       state: 'attention',
       label: 'Used up',
-      detail: `The account reached its plan's usage limit. New agents use your next key until ${formatClock(exhaustedUntil)}; agents it already started keep running.`,
+      detail: backup
+        ? `The account reached its plan's usage limit. New agents use your next key until ${until}; agents it already started keep running.`
+        : `The account reached its plan's usage limit and no other ${provider} key is on, so new agents wait until ${until}. Agents already running keep going. Add a backup key to keep fixing now.`,
       action: 'add_backup',
     }
   }

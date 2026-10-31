@@ -75,6 +75,20 @@ describe('keyStatusView', () => {
     expect(v.state).toBe('working')
   })
 
+  it('a used-up key names the next key only when one can take over', () => {
+    const used = pool({ provider_slug: 'cursor', exhausted_until: iso(H) })
+    const off = pool({ id: 'k2', provider_slug: 'cursor', status: 'disabled' })
+    const spare = pool({ id: 'k3', provider_slug: 'cursor' })
+    const alone = keyStatusView(used, { pool: [used, off], now: NOW, providerName: 'Cursor' })
+    expect(alone).toMatchObject({ state: 'attention', label: 'Used up', action: 'add_backup' })
+    expect(alone.detail).toMatch(/no other Cursor key is on, so new agents wait until/)
+    const covered = keyStatusView(used, { pool: [used, spare], now: NOW, providerName: 'Cursor' })
+    expect(covered.detail).toMatch(/New agents use your next key until/)
+    // A spare that is used up too cannot take over.
+    const spent = pool({ id: 'k3', provider_slug: 'cursor', exhausted_until: iso(H) })
+    expect(keyStatusView(used, { pool: [used, spent], now: NOW, providerName: 'Cursor' }).detail).toMatch(/new agents wait until/)
+  })
+
   it('a saved but untested key is "not checked yet", never working', () => {
     expect(view(pool({ status: 'pending_validation', test_status: null, last_tested_at: null }))).toMatchObject({
       state: 'checking',
