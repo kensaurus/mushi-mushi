@@ -39,6 +39,11 @@ export const LLM_PRICING_PER_M_TOKENS: Record<string, { in: number; out: number 
   'gpt-4.1-mini':                { in: 0.40, out: 1.60 },
   'gpt-5':                       { in: 5.00, out: 15.00 },
   'gpt-5.4':                     { in: 5.00, out: 15.00 },
+  // OpenAI pricing page, standard tier, read 2026-10-31.
+  'gpt-6.1-sol':                 { in: 2.00, out: 10.00 },
+  'gpt-6.1-terra':               { in: 1.00, out: 5.00 },
+  'gpt-6-luna':                  { in: 0.10, out: 0.50 },
+  'gpt-6-astra':                 { in: 10.00, out: 50.00 },
   'gpt-5.4-mini':                { in: 0.60, out: 2.40 },
   // Embeddings
   'text-embedding-3-small':      { in: 0.02, out: 0.00 },

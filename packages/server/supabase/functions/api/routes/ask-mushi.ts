@@ -28,6 +28,7 @@ import {
   validateNavReply,
 } from '../../_shared/console-knowledge.ts';
 import { dbError, ownedProjectIds } from '../shared.ts';
+import { platformAnthropicKey } from '../../_shared/ai-provider.ts';
 
 // ============================================================
 // ASK MUSHI — scoped chat sidebar (Cmd/Ctrl+J)
@@ -1049,7 +1050,8 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
       await stream.write(toSseEvent({ threadId, model: primaryModel }, { event: 'start' }));
 
       try {
-        const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
+        // An organization that runs AI on OpenAI never gets the platform Claude key (ADR 0039 amendment).
+        const anthropicKey = activeProject?.id ? await platformAnthropicKey(db, activeProject.id) : Deno.env.get('ANTHROPIC_API_KEY');
         let primaryFailed = false;
         if (anthropicKey) {
           try {

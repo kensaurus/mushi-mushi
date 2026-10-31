@@ -141,4 +141,15 @@ describe('SiteAuditControl', () => {
     expect(group()?.getAttribute('aria-disabled')).toBeNull()
     expect(radios().every((radio) => radio.disabled)).toBe(false)
   })
+
+  it('says the run is starting, without Run now, between the click and the worker claiming it', async () => {
+    const past = new Date(Date.now() - 5_000).toISOString()
+    await render(row({ enabled: true, next_run_at: past, last_run_at: '2026-10-30T21:29:44Z', last_summary: { pages: 200 } }))
+    expect(host.textContent).toContain('Starting: Firecrawl begins reading the pages within a minute.')
+    expect([...host.querySelectorAll('button')].some((b) => b.textContent?.includes('Run now'))).toBe(false)
+    // Due tomorrow: the last run's line and Run now come back.
+    await render(row({ enabled: true, next_run_at: new Date(Date.now() + 86_400_000).toISOString(), last_run_at: '2026-10-30T21:29:44Z', last_summary: { pages: 200 } }))
+    expect(host.textContent).toContain('Last run')
+    expect([...host.querySelectorAll('button')].some((b) => b.textContent?.includes('Run now'))).toBe(true)
+  })
 })

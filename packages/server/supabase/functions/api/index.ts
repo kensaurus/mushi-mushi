@@ -653,12 +653,13 @@ registerAdminOpsRoutes(app);
 
 // Live-site watch: Firecrawl monitors that file broken pages as reports (ADR 0024).
 registerSiteWatchRoutes(app);
-// Spend-down and review follow-ups (ADR 0028, 0032): served by api-ext (api size budget).
+// Spend-down, review follow-ups and the AI provider switch (ADR 0028, 0032, 0039): served by api-ext (api size budget).
 forwardToApiExt([
   '/v1/admin/byok/spend-down',
   '/v1/admin/byok/spend-down/projects/:projectId/resume',
   '/v1/admin/byok/keys/:keyId/spend-down',
   '/v1/admin/byok/review-followups',
+  '/v1/admin/byok/ai-provider',
   '/v1/admin/byok/cursor/models',
 ]);
 

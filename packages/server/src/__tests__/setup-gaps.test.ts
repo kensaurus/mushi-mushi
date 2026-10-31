@@ -180,6 +180,21 @@ describe('slackGap', () => {
     expect(slackGap({ projectId: P, connected: true, latest: row('ok', 'Connected') }, NOW).status).toBe('ok')
     expect(slackGap({ projectId: P, connected: false, latest: null }, NOW).status).toBe('ok')
   })
+
+  // MUSHI-MUSHI-SERVER-3A (2026-10-31): the stored channel was not found on
+  // every send, for apps on the operator bot (no slack_bot_token_ref).
+  it('a channel Slack refuses is a gap, even for an app on the operator bot token', () => {
+    const dead = row('down', 'Slack channel C0B82A322RW cannot take posts (channel_not_found). Invite the Mushi bot to it, or pick another channel in Integrations.')
+    for (const connected of [true, false]) {
+      expect(slackGap({ projectId: P, connected, latest: dead }, NOW)).toMatchObject({
+        status: 'gap',
+        summary: expect.stringContaining('channel_not_found'),
+      })
+    }
+    expect(slackGap({ projectId: P, connected: true, latest: row('down', 'Slack channel C1 cannot take posts (is_archived).') }, NOW).status).toBe('gap')
+    // A stale channel row is not a current gap.
+    expect(slackGap({ projectId: P, connected: false, latest: row('down', 'cannot take posts (channel_not_found)', daysAgo(2)) }, NOW).status).toBe('ok')
+  })
 })
 
 describe('platform checks', () => {

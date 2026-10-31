@@ -426,20 +426,15 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             <SettingsRow
               icon={<IconJudge size={16} />}
               title="Triage model"
-              purpose="The AI model that decides each bug's severity and category."
+              purpose="The AI model that decides each bug's severity and category. To run on OpenAI instead, switch Run AI on under AI keys."
             >
+              {/* No OpenAI ids here: a GPT id went to the Claude call, failed, and the
+                  fallback ran on its own default. "Run AI on" is the real switch (ADR 0039). */}
               <ClaudeModelSelect
                 role="diagnosis"
                 helpId="settings.general.stage2_model"
                 value={settings.stage2_model}
                 onChange={(id) => update({ stage2_model: id })}
-                extraOptions={
-                  <optgroup label="OpenAI fallback">
-                    <option value="gpt-5.4">GPT-5.4</option>
-                    <option value="gpt-5.4-mini">GPT-5.4-mini</option>
-                    <option value="gpt-4.1">GPT-4.1 (legacy)</option>
-                  </optgroup>
-                }
               />
               <SettingsChangeHint current={eff(settings.stage2_model, 'diagnosis')} saved={eff(saved.stage2_model, 'diagnosis')} />
             </SettingsRow>
