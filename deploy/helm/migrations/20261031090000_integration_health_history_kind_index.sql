@@ -16,9 +16,10 @@
 -- it reads them all: EXPLAIN 2026-10-31 on solo-boss-cloud, kind 'slack',
 -- 46,132 rows removed by filter, 2,866 buffers from disk, 2.1 s idle;
 -- pg_stat_statements logged the same statement at 6.8 s, close to the 8 s
--- statement_timeout behind the 57014 DbErrors on the console's stats routes
--- (MUSHI-MUSHI-SERVER-36/38/39). The table holds 373k rows and gains a row
--- per kind per project every 15 minutes.
+-- statement_timeout. These reads add disk load on a small instance whose
+-- console stats routes time out while it is busy (MUSHI-MUSHI-SERVER-36/38/
+-- 39; those routes read the rollup, not this shape). The table holds 373k
+-- rows and gains a row per kind per project every 15 minutes.
 --
 -- The (project_id, checked_at) index stays: integration_health_rollup
 -- filters project_id = any(...) and checked_at >= since, which a leading

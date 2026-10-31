@@ -695,22 +695,17 @@ export async function resolveSlackBotToken(db: unknown, projectId: string | null
  * projects was not found on every send, 426 Sentry errors in four days
  * (MUSHI-MUSHI-SERVER-3A, 2026-10-31).
  */
-export const SLACK_CHANNEL_UNUSABLE_ERRORS: readonly string[] = ['channel_not_found', 'is_archived', 'not_in_channel']
+const SLACK_CHANNEL_UNUSABLE_ERRORS: readonly string[] = ['channel_not_found', 'is_archived', 'not_in_channel']
 
 export function isSlackChannelUnusable(error: string | null | undefined): boolean {
   return !!error && SLACK_CHANNEL_UNUSABLE_ERRORS.includes(error)
 }
 
 /** How long this worker skips a channel Slack refused. The health probe re-checks it every 15 min. */
-export const UNUSABLE_CHANNEL_SKIP_MS = 60 * 60 * 1000
+const UNUSABLE_CHANNEL_SKIP_MS = 60 * 60 * 1000
 
 /** Per worker: `<token tail>:<channel>` → when to try it again, and Slack's error. */
 const unusableChannels = new Map<string, { until: number; error: string }>()
-
-/** Test hook. */
-export function resetUnusableSlackChannels(): void {
-  unusableChannels.clear()
-}
 
 export async function sendBotMessage(opts: BotMessageOptions): Promise<BotMessageResult> {
   // Explicit token, else the per-project vaulted token, else SLACK_BOT_TOKEN.
