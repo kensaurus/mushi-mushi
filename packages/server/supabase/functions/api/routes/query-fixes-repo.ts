@@ -798,7 +798,6 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           inProgress: 0,
           prsOpen: 0,
           prsCiPassing: 0,
-          prsMerged: 0,
           specWarnings: 0,
           failureBreakdown: [],
           days: [],
@@ -870,9 +869,6 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         inProgress,
         prsOpen,
         prsCiPassing,
-        // Deprecated alias so a stale admin FE deployed before this rename
-        // doesn't blank-out the tile. Drop after one release cycle.
-        prsMerged: prsCiPassing,
         specWarnings,
         failureBreakdown,
         days,
