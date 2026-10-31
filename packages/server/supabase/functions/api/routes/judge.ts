@@ -226,6 +226,18 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
       totalEvaluations > 0
         ? Math.round((disagreementCount / totalEvaluations) * 100)
         : null;
+    // A 14-day window that holds every grade, or fewer than 5, is the all-time
+    // rate. Calling it "recent" showed 76/144 while a week inside it was a
+    // different share (64c2b3df). The console uses the same cutoff.
+    const recentShare =
+      agreement != null &&
+      agreement.recentEvaluations >= 5 &&
+      agreement.recentEvaluations < totalEvaluations
+        ? {
+            rate: (agreement.recentDisagreements / agreement.recentEvaluations) * 100,
+            graded: agreement.recentEvaluations,
+          }
+        : null;
 
     const lastEvalAt = lastEvalRes.data?.created_at ?? null;
     let staleHours: number | null = null;
@@ -257,18 +269,13 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
       topPriority = 'drifting';
       topPriorityLabel = `Scores dropped ${weekOverWeekDriftPct}% week-over-week — review mismatches before merging fixes.`;
       topPriorityTo = scoped('/judge?tab=evaluations&filter=disagreement');
-    } else if (
-      agreement && agreement.recentEvaluations >= 5
-        ? (agreement.recentDisagreements / agreement.recentEvaluations) * 100 >= 20
-        : disagreementRatePct != null && disagreementRatePct >= 20
-    ) {
+    } else if ((recentShare?.rate ?? disagreementRatePct ?? -1) >= 20) {
       topPriority = 'disagreements';
-      // Say which window the share covers: the old label said "recent" over
-      // an all-time count (64c2b3df).
-      topPriorityLabel =
-        agreement && agreement.recentEvaluations >= 5
-          ? `The grader disagreed with the diagnosis on ${Math.round((agreement.recentDisagreements / agreement.recentEvaluations) * 100)}% of the ${agreement.recentEvaluations} grades in the last ${RECENT_DAYS} days. Review them before merging their fixes.`
-          : `The grader disagreed with the diagnosis on ${disagreementRatePct}% of all ${totalEvaluations} grades so far. Review them before merging their fixes.`;
+      // Say which window the share covers. "Recent" over a window that holds
+      // every grade is the all-time count (64c2b3df).
+      topPriorityLabel = recentShare
+        ? `The grader disagreed with the diagnosis on ${Math.round(recentShare.rate)}% of the ${recentShare.graded} grades in the last ${RECENT_DAYS} days. Review them before merging their fixes.`
+        : `The grader disagreed with the diagnosis on ${disagreementRatePct}% of all ${totalEvaluations} grades so far. Review them before merging their fixes.`;
       topPriorityTo = scoped('/judge?tab=evaluations&filter=disagreement');
     } else if (staleHours != null && staleHours > 72 && ungradedReports > 0) {
       topPriority = 'stale';
