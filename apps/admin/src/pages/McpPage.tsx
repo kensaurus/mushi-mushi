@@ -48,6 +48,7 @@ import {
   validateMcpJsonSyntax,
 } from '../lib/mcpPageHelpers'
 import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
+import { mcpPageContextTitle } from '../lib/mcpPageTitle'
 import { PageLoadError } from '../components/PageLoadError'
 
 export function McpPage() {
@@ -243,7 +244,7 @@ export function McpPage() {
 
   usePublishPageContext({
     route: '/mcp',
-    title: `${activeMeta.label} · Editor agents`,
+    title: mcpPageContextTitle(activeMeta.label),
     summary: activeMeta.description,
     filters: { tab: activeTab, catalog: catalogTab, project_id: activeProjectId ?? undefined },
     criticalCount: stats.neverConnectedCount + (stats.endpointMismatch ? 1 : 0),
