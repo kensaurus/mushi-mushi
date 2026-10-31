@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
+// Copyright (c) 2024–2026 kensaurus LLC — Mushi Mushi
 /**
  * merge-queue release trains (ADR 0044): one tick for one repo in `train`
  * mode. Batches the repo's approved fix PRs into one branch and one pull

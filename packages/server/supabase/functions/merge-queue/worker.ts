@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
+// Copyright (c) 2024–2026 kensaurus LLC — Mushi Mushi
 /**
  * merge-queue worker: one tick of "Merge when ready" (ADR 0041). Kept apart
  * from index.ts (which serves) so tests import it with fake GitHub and Cursor.
