@@ -112,6 +112,23 @@ describe('SentryImportPanel', () => {
     expect(container.textContent).toContain('That was the last page')
   })
 
+  it('sizes the project menu to the slug instead of a 10rem cap', async () => {
+    await render(['mushi-mushi-admin', 'mushi-mushi-server'])
+    const project = container.querySelector<HTMLSelectElement>('select[aria-label="Sentry project"]')!
+    expect(Array.from(project.options).map((o) => o.textContent)).toEqual(['mushi-mushi-admin', 'mushi-mushi-server'])
+    expect(project.className).toContain('!w-auto')
+    const wrap = project.closest('div')
+    expect(wrap?.className).toContain('w-max')
+    expect(wrap?.className).toContain('shrink-0')
+    expect(wrap?.className).not.toContain('w-40')
+
+    const since = container.querySelector<HTMLSelectElement>('select[aria-label="Seen in"]')!
+    expect(since.className).toContain('!w-auto')
+    const sinceWrap = since.closest('div')
+    expect(sinceWrap?.className).toContain('w-max')
+    expect(sinceWrap?.className).not.toContain('w-36')
+  })
+
   it('hides the picker for a single Sentry project and the search options while ids are typed', async () => {
     api.apiFetchMutate.mockResolvedValueOnce(page(null, 'WEB-12'))
     await render(['web'])

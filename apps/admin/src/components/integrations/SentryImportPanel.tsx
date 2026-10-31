@@ -162,9 +162,12 @@ export function SentryImportPanel({ sentryProjects, onImported, showHeading = tr
           />
         </div>
         {searching && sentryProjects.length > 1 ? (
-          <div className="w-40">
+          // A fixed 10rem box clips "mushi-mushi-admin" to "mushi-mushi-admi"
+          // once the menu arrow takes the right padding. Size to the slug.
+          <div className="w-max max-w-full shrink-0">
             <SelectField
               aria-label="Sentry project"
+              className="!w-auto max-w-full"
               value={chosenProject}
               onChange={(e) => setSentryProject(e.target.value)}
             >
@@ -177,9 +180,11 @@ export function SentryImportPanel({ sentryProjects, onImported, showHeading = tr
           </div>
         ) : null}
         {searching ? (
-          <div className="w-36">
+          // Same as the project menu: a fixed 9rem box clips "Seen in last 90 days".
+          <div className="w-max max-w-full shrink-0">
             <SelectField
               aria-label="Seen in"
+              className="!w-auto max-w-full"
               value={String(sinceDays)}
               onChange={(e) => setSinceDays(Number(e.target.value))}
             >
