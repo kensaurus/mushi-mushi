@@ -69,4 +69,4 @@ Friday's retro post will include: GitHub stars gained during the week, new signu
 
 ---
 
-*Follow along on [Bluesky →](https://bsky.app/profile/kensaurus.bsky.social)*
+*Follow along on [Bluesky →](https://bsky.app/profile/kensaur.us)*
