@@ -123,6 +123,19 @@ describe('hotspots', () => {
     expect(advice).not.toMatch(/project_codebase_files holds/)
   })
 
+  it('unused indexes wait for a week of index counters, not of query counters', () => {
+    // pg_stat_statements is weeks old but the table/index counters reset yesterday:
+    // idx_scan = 0 then says nothing yet.
+    const resetYesterday = { ...SMALL, statsReset: '2026-11-09T00:00:00Z' }
+    const old = parseDbHotspots(space, slow(5_000, '2026-10-01 00:00:00+00'))
+    expect(summarizeDbHealth([], resetYesterday, old, NOW).advice.join('\n')).not.toMatch(/have not been read/)
+    // With no reset recorded, the server start bounds the counters instead.
+    const startedYesterday = { ...SMALL, startedAt: '2026-11-09T00:00:00Z' }
+    expect(summarizeDbHealth([], startedYesterday, old, NOW).advice.join('\n')).not.toMatch(/have not been read/)
+    const startedLongAgo = { ...SMALL, startedAt: '2026-10-01T00:00:00Z' }
+    expect(summarizeDbHealth([], startedLongAgo, old, NOW).advice.join('\n')).toMatch(/2 indexes \(52 MB\) have not been read/)
+  })
+
   it('a share from a handful of calls right after a restart is not advice', () => {
     const advice = summarizeDbHealth([], SMALL, parseDbHotspots(space, slow(8)), NOW).advice.join('\n')
     expect(advice).not.toMatch(/One query takes/)

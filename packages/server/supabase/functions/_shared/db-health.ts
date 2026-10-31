@@ -118,7 +118,10 @@ interface AdviceContext {
   cache: number | null
   sizePct: number | null
   connPct: number | null
+  /** Days of statement counters (pg_stat_statements): query share and step-down. */
   statsDays: number | null
+  /** Days of table and index counters (pg_stat_database): idx_scan resets with these. */
+  indexDays: number | null
 }
 
 /**
@@ -150,7 +153,7 @@ function hotspotAdvice(h: DbHotspots, dbBytes: number | null, ctx: AdviceContext
     out.push(`${bloated.name} has ${bloated.dead.toLocaleString('en-US')} dead rows waiting for vacuum: run VACUUM on it, and lower its autovacuum threshold if they keep coming back.`)
   }
   const unusedBytes = h.unusedIndexes.reduce((sum, i) => sum + i.bytes, 0)
-  if (unusedBytes >= 50 * 1_048_576 && (ctx.statsDays == null || ctx.statsDays >= 7)) {
+  if (unusedBytes >= 50 * 1_048_576 && (ctx.indexDays == null || ctx.indexDays >= 7)) {
     const k = h.unusedIndexes.length
     out.push(`${k} index${k === 1 ? '' : 'es'} (${mb(unusedBytes)}) ${k === 1 ? 'has' : 'have'} not been read since the stats reset: each one slows writes and takes cache. Drop the ones no feature needs.`)
   }
@@ -211,11 +214,16 @@ export function summarizeDbHealth(
     advice.push(`${stats!.connections} of ${stats!.maxConnections} connections are in use: send app and job traffic through the connection pooler.`)
   }
   if (hotspots) {
-    // Counter age: the statement counters' start, else the database counters' reset.
-    const since = hotspots.slowSince ?? stats?.statsReset ?? null
-    const resetAt = since ? Date.parse(since) : NaN
-    const statsDays = Number.isFinite(resetAt) ? Math.floor((now.getTime() - resetAt) / 86_400_000) : null
-    advice.push(...hotspotAdvice(hotspots, stats?.dbBytes ?? null, { tier, cache, sizePct, connPct, statsDays }))
+    // The two counter families reset separately: statements with
+    // pg_stat_statements, idx_scan with the database counters. A null reset
+    // means never reset, so the server start is the next best bound.
+    const days = (since: string | null | undefined) => {
+      const at = since ? Date.parse(since) : NaN
+      return Number.isFinite(at) ? Math.floor((now.getTime() - at) / 86_400_000) : null
+    }
+    const statsDays = days(hotspots.slowSince)
+    const indexDays = days(stats?.statsReset ?? stats?.startedAt)
+    advice.push(...hotspotAdvice(hotspots, stats?.dbBytes ?? null, { tier, cache, sizePct, connPct, statsDays, indexDays }))
   }
   const perf = issues.filter((i) => i.category === 'performance' && i.level !== 'INFO').slice(0, 2)
   for (const p of perf) advice.push(`${p.title} (${p.count}): see the fix link.`)
