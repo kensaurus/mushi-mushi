@@ -544,6 +544,7 @@ async function heartbeat(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
     let row: LaneRow | null = prev ?? null
     if (prev && !laneWriteNeeded(prev, { status: l.status as Record<string, unknown> | null, repo: l.repo ?? null }, now)) {
       // Idle and unchanged: the stored row is still true.
+      row = prev
     } else if (prev) {
       const { data } = await db
         .from('work_lanes')
