@@ -1,6 +1,7 @@
 'use client'
 
 import { useMarketing } from './context'
+import { KENSAURUS_FAMILY } from './kensaurus/family'
 import { KensaurusPortfolioTable } from './KensaurusPortfolioTable'
 import { StatusPill } from './StatusPill'
 
@@ -55,7 +56,18 @@ export function MarketingFooter({ apiBaseUrl }: MarketingFooterProps) {
       <KensaurusPortfolioTable utmSource="mushi-mushi" />
 
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--mushi-rule)] pt-4 font-mono text-[11px] uppercase tracking-[0.22em]">
-        <p>© Mushi Mushi · Cloud runs the same OSS code, hosted by us.</p>
+        <p>
+          © Mushi Mushi · Cloud runs the same OSS code, hosted by us.{' '}
+          <a
+            href={KENSAURUS_FAMILY.brand.href}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-sm underline-offset-2 transition hover:text-[var(--mushi-vermillion)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
+          >
+            {KENSAURUS_FAMILY.brand.credit.en}
+          </a>
+          .
+        </p>
         <p className="text-[var(--mushi-ink-muted)]" lang="ja">むしむし。</p>
       </div>
     </footer>

@@ -1,0 +1,257 @@
+{
+  "$comment": "Pinned copy of the kensaurus family for mushi-mushi. Source: https://kensaur.us/apps.json, built from src/data/family.json in kensaurus/kensaur.us. Do not edit this copy: change the source there, then run `node scripts/family-slice.mjs --app mushi-mushi --out <this file>` in kensaurus/kensaur.us and commit the result here.",
+  "source": "https://kensaur.us/apps.json",
+  "version": 1,
+  "updated": "2026-10-31",
+  "app": "mushi-mushi",
+  "brand": {
+    "name": "kensaurus",
+    "legalName": {
+      "ja": "kensaurus合同会社",
+      "en": "kensaurus LLC"
+    },
+    "site": "https://kensaur.us/",
+    "org": "https://kensaur.us/#org",
+    "founder": "https://kensaur.us/#kenji",
+    "github": "https://github.com/kensaurus",
+    "work": {
+      "ja": "https://kensaur.us/work/?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family",
+      "en": "https://kensaur.us/work/en/?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+    },
+    "credit": {
+      "ja": "kensaurus がつくっています",
+      "en": "Made by kensaurus"
+    },
+    "utm": "utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family",
+    "href": "https://kensaur.us/?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+  },
+  "self": {
+    "id": "mushi-mushi",
+    "name": {
+      "en": "Mushi Mushi",
+      "ja": "Mushi Mushi"
+    },
+    "tagline": {
+      "en": "A report-a-bug button for apps, with AI that sorts the reports",
+      "ja": "アプリの不具合報告を受け取り、AIが仕分けるツール"
+    },
+    "url": "https://kensaur.us/mushi-mushi/",
+    "href": "https://kensaur.us/mushi-mushi/?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family",
+    "icon": "https://kensaur.us/mushi-mushi/favicon.svg",
+    "spineId": "mushi-mushi",
+    "story": {
+      "ja": "https://kensaur.us/notes/mushi-mushi/",
+      "en": "https://kensaur.us/notes/mushi-mushi/en/"
+    },
+    "pages": [
+      {
+        "url": "https://kensaur.us/mushi-mushi/docs/demo/diagnosis",
+        "label": {
+          "en": "See a sample diagnosis",
+          "ja": "診断の見本を見る"
+        },
+        "href": "https://kensaur.us/mushi-mushi/docs/demo/diagnosis?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+      },
+      {
+        "url": "https://kensaur.us/mushi-mushi/docs/quickstart",
+        "label": {
+          "en": "Quickstart",
+          "ja": "クイックスタート"
+        },
+        "href": "https://kensaur.us/mushi-mushi/docs/quickstart?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+      },
+      {
+        "url": "https://kensaur.us/mushi-mushi/docs/proof",
+        "label": {
+          "en": "Mushi on our own apps",
+          "ja": "自社アプリでの実績"
+        },
+        "href": "https://kensaur.us/mushi-mushi/docs/proof?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+      },
+      {
+        "url": "https://github.com/kensaurus/mushi-mushi",
+        "label": {
+          "en": "Source on GitHub",
+          "ja": "GitHub のソース"
+        },
+        "href": "https://github.com/kensaurus/mushi-mushi"
+      }
+    ]
+  },
+  "related": [
+    {
+      "id": "kenji-skills",
+      "name": {
+        "en": "kenji skills",
+        "ja": "kenji skills"
+      },
+      "tagline": {
+        "en": "Step-by-step playbooks that keep AI coding assistants on track",
+        "ja": "AIのコーディング助手を、最後まで正しく動かす手順書集"
+      },
+      "url": "https://github.com/kensaurus/skills",
+      "href": "https://github.com/kensaurus/skills",
+      "icon": "https://github.com/kensaurus.png",
+      "spineId": "cursor-kenji",
+      "story": {
+        "ja": "https://kensaur.us/notes/kenji-skills/",
+        "en": "https://kensaur.us/notes/kenji-skills/en/"
+      },
+      "pages": [
+        {
+          "url": "https://www.skills.sh/kensaurus/skills",
+          "label": {
+            "en": "Install",
+            "ja": "インストール"
+          },
+          "href": "https://www.skills.sh/kensaurus/skills?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+        },
+        {
+          "url": "https://github.com/kensaurus/skills/blob/main/docs/GETTING-STARTED.md",
+          "label": {
+            "en": "Getting started",
+            "ja": "はじめかた"
+          },
+          "href": "https://github.com/kensaurus/skills/blob/main/docs/GETTING-STARTED.md"
+        },
+        {
+          "url": "https://github.com/kensaurus/skills/blob/main/docs/CATALOG.md",
+          "label": {
+            "en": "Every skill",
+            "ja": "スキル一覧"
+          },
+          "href": "https://github.com/kensaurus/skills/blob/main/docs/CATALOG.md"
+        }
+      ]
+    },
+    {
+      "id": "solo-boss",
+      "name": {
+        "en": "Solo Boss",
+        "ja": "一人社長"
+      },
+      "tagline": {
+        "en": "Bookkeeping through to tax filing, for one-person companies",
+        "ja": "一人会社の帳簿づけから、決算・申告まで"
+      },
+      "url": "https://solo-boss.kensaur.us/",
+      "href": "https://solo-boss.kensaur.us/?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family",
+      "icon": "https://solo-boss.kensaur.us/apple-touch-icon.png",
+      "spineId": "solo-boss",
+      "story": {
+        "ja": "https://kensaur.us/notes/solo-boss/",
+        "en": "https://kensaur.us/notes/solo-boss/en/"
+      },
+      "pages": [
+        {
+          "url": "https://solo-boss.kensaur.us/why",
+          "label": {
+            "en": "Why it exists",
+            "ja": "つくった理由"
+          },
+          "href": "https://solo-boss.kensaur.us/why?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+        },
+        {
+          "url": "https://solo-boss.kensaur.us/tools",
+          "label": {
+            "en": "Free tools",
+            "ja": "無料ツール"
+          },
+          "href": "https://solo-boss.kensaur.us/tools?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+        },
+        {
+          "url": "https://solo-boss.kensaur.us/simulator?mode=learn",
+          "label": {
+            "en": "Learn bookkeeping",
+            "ja": "簿記を体験する"
+          },
+          "href": "https://solo-boss.kensaur.us/simulator?mode=learn&utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+        },
+        {
+          "url": "https://solo-boss.kensaur.us/pricing",
+          "label": {
+            "en": "Pricing",
+            "ja": "料金"
+          },
+          "href": "https://solo-boss.kensaur.us/pricing?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+        }
+      ]
+    },
+    {
+      "id": "project-flow",
+      "name": {
+        "en": "ProjectFlow",
+        "ja": "ProjectFlow"
+      },
+      "tagline": {
+        "en": "Projects, estimates, invoices and delivery in one place",
+        "ja": "案件・見積・請求・納品を、ひとつの画面で"
+      },
+      "url": "https://kensaur.us/project-flow/",
+      "href": "https://kensaur.us/project-flow/?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family",
+      "icon": "https://kensaur.us/project-flow/favicon.svg",
+      "pages": []
+    },
+    {
+      "id": "tsumagoi",
+      "name": {
+        "en": "Tsumagoi Work&Camp",
+        "ja": "嬬恋牧場Work&Camp"
+      },
+      "tagline": {
+        "en": "A 24-hour mountain lounge, run by us",
+        "ja": "自分たちで運営する、山の24時間ラウンジ"
+      },
+      "url": "https://tsumagoi.kensaur.us/",
+      "href": "https://tsumagoi.kensaur.us/?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family",
+      "icon": "https://tsumagoi.kensaur.us/apple-touch-icon.png",
+      "spineId": "tsumagoi",
+      "story": {
+        "ja": "https://kensaur.us/notes/ranch-monitor/",
+        "en": "https://kensaur.us/notes/ranch-monitor/en/"
+      },
+      "pages": [
+        {
+          "url": "https://tsumagoi.kensaur.us/reserve",
+          "label": {
+            "en": "Book a stay",
+            "ja": "予約する"
+          },
+          "href": "https://tsumagoi.kensaur.us/reserve?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+        },
+        {
+          "url": "https://tsumagoi.kensaur.us/office",
+          "label": {
+            "en": "The fiber office",
+            "ja": "光回線のオフィス"
+          },
+          "href": "https://tsumagoi.kensaur.us/office?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+        },
+        {
+          "url": "https://tsumagoi.kensaur.us/events",
+          "label": {
+            "en": "Events at the ranch",
+            "ja": "牧場のイベント"
+          },
+          "href": "https://tsumagoi.kensaur.us/events?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+        },
+        {
+          "url": "https://tsumagoi.kensaur.us/kenji",
+          "label": {
+            "en": "Who runs it",
+            "ja": "運営者のこと"
+          },
+          "href": "https://tsumagoi.kensaur.us/kenji?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+        },
+        {
+          "url": "https://tsumagoi.kensaur.us/access",
+          "label": {
+            "en": "Getting there",
+            "ja": "アクセス"
+          },
+          "href": "https://tsumagoi.kensaur.us/access?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+        }
+      ]
+    }
+  ]
+}
