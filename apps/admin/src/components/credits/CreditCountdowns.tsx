@@ -46,6 +46,22 @@ function plural(count: number, one: string, many = `${one}s`): string {
   return `${count} ${count === 1 ? one : many}`
 }
 
+/**
+ * Who can switch on an idle key the viewer cannot: a universal key only by
+ * the person who added it (ADR 0031), a shared key by an organization owner
+ * or admin. "The key's owner or a team admin" was wrong for the first
+ * (2026-10-31: a team admin could not change suzu.haruka's key).
+ */
+function whoCanTurnOn(idle: ReadonlyArray<SpendDownKeyStatus | undefined>): string {
+  const universal = idle.filter((k) => k?.scope === 'universal').length
+  if (universal === idle.length) {
+    return `Only the person who added ${idle.length === 1 ? 'it' : 'them'} can turn spend-down on or change the date.`
+  }
+  return universal === 0
+    ? 'Only an organization owner or admin can turn it on.'
+    : 'The person who added each key, or an organization owner or admin for shared keys, can turn it on.'
+}
+
 export function CreditCountdowns({ keys, balance, canManageOrg, now, onChanged }: Props) {
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null)
@@ -86,7 +102,7 @@ export function CreditCountdowns({ keys, balance, canManageOrg, now, onChanged }
       ? `${plural(idle.length, 'Cursor key has', 'Cursor keys have')} an expiry date but spend-down is off. ${
           // Only ask for what this person can do: the switch is greyed out
           // for a key someone else owns (2026-10-28).
-          turnOn ? 'Turn it on so the credits fix bugs.' : `Only ${idle.length === 1 ? "the key's owner" : 'their owners'} or a team admin can turn it on.`
+          turnOn ? 'Turn it on so the credits fix bugs.' : whoCanTurnOn(idle.map((c) => keys.find((k) => k.id === c.id)))
         }`
       : `Every key with an expiry date is being spent. The soonest, ${soonest.name}, ${soonest.verb} in ${plural(soonest.daysLeft, 'day')}.`
 

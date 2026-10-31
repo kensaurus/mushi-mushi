@@ -356,11 +356,32 @@ export async function cursorKeyForNewWork(
   return next ? { key: next.key, keyId: next.keyId ?? null, source: 'pool' } : first
 }
 
+/**
+ * How long a key Cursor refused for its usage limit rests. A first refusal
+ * rests 6 hours (it may be a short spike). Refused again within a day of the
+ * last rest, the plan's allowance is spent: with a known renewal date
+ * (`credits_expire_at`, set in Settings → AI keys → spend-down) it rests until
+ * then, instead of failing every 6 hours until the month turns (2026-10-31:
+ * the kensaurus key was 100% used until Nov 19).
+ *
+ * @internal Exported for tests only.
+ */
+export function cursorKeyRestUntil(now: number, previousRestUntil: string | null | undefined, renewsAt: string | null | undefined): Date {
+  const short = new Date(now + CURSOR_KEY_EXHAUSTED_MS)
+  const previous = previousRestUntil ? Date.parse(previousRestUntil) : NaN
+  const renews = renewsAt ? Date.parse(renewsAt) : NaN
+  const refusedAgain = Number.isFinite(previous) && now - previous < 24 * 3_600_000
+  return refusedAgain && Number.isFinite(renews) && renews > short.getTime() ? new Date(renews) : short
+}
+
 /** Mark a key used up for new agents (Cursor refused it for its usage limit). */
 export async function markCursorKeyExhausted(db: SupabaseClient, keyId: string, reason: string): Promise<void> {
+  const { data: current } = await db.from('byok_keys').select('exhausted_until, credits_expire_at').eq('id', keyId).maybeSingle()
+  const row = (current ?? {}) as { exhausted_until?: string | null; credits_expire_at?: string | null }
+  const until = cursorKeyRestUntil(Date.now(), row.exhausted_until, row.credits_expire_at)
   const { error } = await db
     .from('byok_keys')
-    .update({ exhausted_until: new Date(Date.now() + CURSOR_KEY_EXHAUSTED_MS).toISOString(), last_error: reason.slice(0, 500) })
+    .update({ exhausted_until: until.toISOString(), last_error: reason.slice(0, 500) })
     .eq('id', keyId)
   if (error) alog.warn('Cursor key not marked used up', { keyId, err: error.message })
 }

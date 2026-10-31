@@ -101,16 +101,20 @@ export function CreditsPage() {
       {error && <PageLoadError error={error} resource="credit settings" endpoint="/v1/admin/byok/spend-down" onRetry={() => { spendDown.reload(); credits.reload() }} />}
 
       <Section title="Cursor: fix bugs" id="cursor-fix-bugs">
-        {spendDown.loading && !spendDown.data && <p className="text-xs text-fg-muted">Reading your Cursor keys…</p>}
-        <CursorLevers
-          spendDown={spendDown.data ?? null}
-          followups={followups.data ?? null}
-          now={now}
-          onChanged={() => {
-            spendDown.reload()
-            followups.reload()
-          }}
-        />
+        {/* Until the keys are read, say so: an empty list here reads "No Cursor key yet" (2026-10-31). */}
+        {spendDown.data ? (
+          <CursorLevers
+            spendDown={spendDown.data}
+            followups={followups.data ?? null}
+            now={now}
+            onChanged={() => {
+              spendDown.reload()
+              followups.reload()
+            }}
+          />
+        ) : spendDown.loading ? (
+          <p className="text-xs text-fg-muted">Reading your Cursor keys…</p>
+        ) : null}
       </Section>
 
       <Section title="Local workers: models" id="local-worker-models">
@@ -122,7 +126,11 @@ export function CreditsPage() {
       </Section>
 
       <Section title="Firecrawl: find bugs on your live sites">
-        <FirecrawlLevers balance={balance} projects={projects.data ? (projects.data.projects ?? []) : null} now={now} />
+        {credits.data || !credits.loading ? (
+          <FirecrawlLevers balance={balance} projects={projects.data ? (projects.data.projects ?? []) : null} now={now} />
+        ) : (
+          <p className="text-xs text-fg-muted">Reading your Firecrawl balance…</p>
+        )}
       </Section>
 
       <p className="text-xs text-fg-muted">

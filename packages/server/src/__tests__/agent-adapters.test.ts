@@ -69,6 +69,7 @@ import {
   pinnedCursorKeyIdFromDispatch,
   pollResultToOutcome,
   cursorKeyForNewWork,
+  cursorKeyRestUntil,
   resolveCursorApiKey,
   stopCursorAgentLatestRun,
   validateAgentOverride,
@@ -1212,3 +1213,24 @@ describe('Cursor usage limit: detect it and swap keys (2026-10-24)', () => {
   })
 })
 
+
+describe('cursorKeyRestUntil: a spent plan rests until it renews (2026-10-31)', () => {
+  const now = Date.parse('2026-10-31T03:00:00Z')
+  const sixHours = new Date(now + 6 * 3_600_000).toISOString()
+  const renews = '2026-11-19T23:59:59Z'
+
+  it('a first refusal rests 6 hours, even with a renewal date', () => {
+    expect(cursorKeyRestUntil(now, null, renews).toISOString()).toBe(sixHours)
+    expect(cursorKeyRestUntil(now, '2026-10-20T00:00:00Z', renews).toISOString()).toBe(sixHours)
+  })
+
+  it('refused again within a day of the last rest: rests until the renewal date', () => {
+    expect(cursorKeyRestUntil(now, '2026-10-31T02:37:40Z', renews).toISOString()).toBe('2026-11-19T23:59:59.000Z')
+  })
+
+  it('without a usable renewal date it stays at 6 hours', () => {
+    expect(cursorKeyRestUntil(now, '2026-10-31T02:37:40Z', null).toISOString()).toBe(sixHours)
+    expect(cursorKeyRestUntil(now, '2026-10-31T02:37:40Z', '2026-10-31T05:00:00Z').toISOString()).toBe(sixHours)
+    expect(cursorKeyRestUntil(now, '2026-10-31T02:37:40Z', 'not a date').toISOString()).toBe(sixHours)
+  })
+})

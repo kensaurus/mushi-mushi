@@ -69,6 +69,11 @@ function formatClock(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
+/** A time today ("11:37 AM"), or the date when it is later ("Nov 19, 2026"). */
+function formatUntil(iso: string, now: number): string {
+  return new Date(iso).toDateString() === new Date(now).toDateString() ? formatClock(iso) : formatDay(iso)
+}
+
 function formatDay(iso: string): string {
   return new Date(iso).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
 }
@@ -175,7 +180,7 @@ export function keyStatusView(
         isRuntimeEligiblePoolKey(k, now) &&
         !(k.exhausted_until && Date.parse(k.exhausted_until) > now),
     )
-    const until = formatClock(exhaustedUntil)
+    const until = formatUntil(exhaustedUntil, now)
     return {
       state: 'attention',
       label: 'Used up',

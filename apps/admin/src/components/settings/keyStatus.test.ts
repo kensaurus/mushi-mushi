@@ -89,6 +89,12 @@ describe('keyStatusView', () => {
     expect(keyStatusView(used, { pool: [used, spent], now: NOW, providerName: 'Cursor' }).detail).toMatch(/new agents wait until/)
   })
 
+  it('a key resting until its renewal names the date, not a clock time', () => {
+    const resting = pool({ provider_slug: 'cursor', exhausted_until: iso(19 * 24 * H) })
+    const detail = keyStatusView(resting, { pool: [resting], now: NOW, providerName: 'Cursor' }).detail
+    expect(detail).toContain(new Date(NOW + 19 * 24 * H).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' }))
+  })
+
   it('a saved but untested key is "not checked yet", never working', () => {
     expect(view(pool({ status: 'pending_validation', test_status: null, last_tested_at: null }))).toMatchObject({
       state: 'checking',
