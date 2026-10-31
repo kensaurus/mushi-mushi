@@ -41,7 +41,7 @@ export interface ConnectionGridInput {
   history: readonly HealthRow[]
   sentryDeliveries: InboundDeliveryLike[] | null
   sentryDeliveriesFailed?: boolean
-  slack: { configured: boolean; canPost: boolean; channelId: string | null }
+  slack: { configured: boolean | null; canPost: boolean; channelId: string | null }
   /** Alert channels the page offers beside Slack; the sentence counts them too. */
   discordConfigured?: boolean
   teamsConfigured?: boolean
