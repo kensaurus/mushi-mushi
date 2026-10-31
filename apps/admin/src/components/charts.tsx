@@ -163,7 +163,12 @@ export function KpiTile({
           <div className="text-2xs text-fg-muted uppercase tracking-wider truncate">{label}</div>
           {meaning && (
             <Tooltip content={meaning} side="auto" portal nowrap={false}>
+              {/* A bare span is generic, and axe aria-prohibited-attr rejects
+                  aria-label on that role. role="img" may be named. A button
+                  would nest inside the Reports severity tiles, which are
+                  already buttons. */}
               <span
+                role="img"
                 aria-label={meaning}
                 className="inline-flex h-3 w-3 items-center justify-center rounded-full border border-edge text-3xs text-fg-faint hover:text-fg-muted hover:border-fg-faint cursor-help"
               >
