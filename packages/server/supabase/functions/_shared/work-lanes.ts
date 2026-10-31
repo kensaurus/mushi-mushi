@@ -379,6 +379,44 @@ export function inLocalCooldown(attempts: readonly AttemptLite[], now: Date): bo
 }
 
 /**
+ * An idle lane whose reported state did not change is rewritten at most this
+ * often. Every heartbeat (once a minute) used to rewrite every lane of the
+ * machine, about 20 of them: 1,240 PATCHes an hour on 2026-10-31, each one a
+ * logged API request.
+ */
+export const IDLE_LANE_REFRESH_MS = 5 * 60_000
+
+/** The parts of a lane's reported status that tick by themselves and say nothing new. */
+const TICKING_STATUS_KEYS = new Set(['stateSec'])
+
+function stableStatus(status: Record<string, unknown> | null | undefined): string {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(status ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
+    if (!TICKING_STATUS_KEYS.has(k)) out[k] = v
+  }
+  return JSON.stringify(out)
+}
+
+/**
+ * Whether a heartbeat must write the lane row. A lane with runs in flight is
+ * always written (the Workers tab shows their stages live); an idle lane only
+ * when its state, counters, last line or repo changed, or its row is older
+ * than IDLE_LANE_REFRESH_MS.
+ */
+export function laneWriteNeeded(
+  prev: { status: Record<string, unknown> | null; repo: string | null; last_seen_at: string | null },
+  next: { status: Record<string, unknown> | null; repo?: string | null },
+  now: Date,
+): boolean {
+  const inflight = (next.status as { inflight?: unknown } | null)?.inflight
+  if (Array.isArray(inflight) && inflight.length > 0) return true
+  if (next.repo && next.repo !== prev.repo) return true
+  const seen = prev.last_seen_at ? Date.parse(prev.last_seen_at) : NaN
+  if (!Number.isFinite(seen) || now.getTime() - seen >= IDLE_LANE_REFRESH_MS) return true
+  return stableStatus(prev.status) !== stableStatus(next.status)
+}
+
+/**
  * A claim that ended 'skipped' holds its report back this long. A skip means
  * the worker found the report already handled elsewhere (its branch has an
  * open or merged PR) or unusable; offering it again at once only repeats the
