@@ -7,14 +7,21 @@
  *   a `supabase` BYOK key configured (slug: `supabase`).
  *
  * Response shape:
- *   { ok: true, data: { advisors: AdvisorResult[]; projectRef: string } }
- *   { ok: true, data: null; reason: 'no_supabase_pat' }  — if key not set
+ *   { ok: true, data: { advisors: AdvisorResult[]; projectRef: string;
+ *     health: DbHealth; sharedWith: string[] } }
+ *   `health` is the console's Database health card (_shared/db-health.ts):
+ *   advisors plus one read-only stats query (size, connections, cache hit).
+ *   A failed stats read leaves those fields null, never the advisors.
+ *   `sharedWith` names the other apps of the organization on the same
+ *   Supabase project, so one project's health is not mistaken for one app's.
+ *   { ok: true, data: { projectRef: null, reason }; reason } — no token or no ref
  */
 
 import { Hono } from 'npm:hono@4'
 import { jwtAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
-import { resolveSupabasePat, getSupabaseAdvisors } from '../../_shared/supabase-mcp-client.ts'
+import { resolveSupabasePat, getSupabaseAdvisors, executeReadOnlySql } from '../../_shared/supabase-mcp-client.ts'
+import { DB_STATS_SQL, parseDbStats, summarizeDbHealth } from '../../_shared/db-health.ts'
 import { resolveOwnedProject } from '../shared.ts'
 import type { Variables } from '../types.ts'
 
@@ -39,7 +46,8 @@ export function registerDbAdvisorsRoutes(parent: Hono<{ Variables: Variables }>)
     if (!pat) {
       return c.json({
         ok: true,
-        data: null,
+        // The reason rides inside data too: the console reads `data` only.
+        data: { projectRef: null, reason: 'no_supabase_pat' },
         reason: 'no_supabase_pat',
         hint:
           'Add a scoped, read-only Supabase access token in Settings → AI keys → Supabase ' +
@@ -59,15 +67,41 @@ export function registerDbAdvisorsRoutes(parent: Hono<{ Variables: Variables }>)
     if (!projectRef) {
       return c.json({
         ok: true,
-        data: null,
+        data: { projectRef: null, reason: 'no_project_ref' },
         reason: 'no_project_ref',
         hint: 'Set the Supabase project ref in Settings → General → Supabase project to enable advisor data.',
       })
     }
 
     try {
-      const advisors = await getSupabaseAdvisors({ projectRef, pat })
-      return c.json({ ok: true, data: { advisors, projectRef } })
+      const opts = { projectRef, pat }
+      let statsError: string | null = null
+      const [advisors, stats, shared] = await Promise.all([
+        getSupabaseAdvisors(opts),
+        executeReadOnlySql(opts, DB_STATS_SQL)
+          .then((rows) => {
+            const parsed = parseDbStats(rows)
+            if (!parsed) statsError = 'the stats query returned no rows'
+            return parsed
+          })
+          .catch((err) => {
+            statsError = (err instanceof Error ? err.message : String(err)).slice(0, 200)
+            return null
+          }),
+        project.organization_id
+          ? db
+              .from('project_settings')
+              .select('project_id, projects!inner(name, organization_id)')
+              .eq('supabase_project_ref', projectRef)
+              .eq('projects.organization_id', project.organization_id)
+              .neq('project_id', project.id)
+          : Promise.resolve({ data: [] }),
+      ])
+      const sharedWith = ((shared.data ?? []) as Array<{ projects?: { name?: string } | Array<{ name?: string }> }>)
+        .map((r) => (Array.isArray(r.projects) ? r.projects[0]?.name : r.projects?.name))
+        .filter((n): n is string => Boolean(n))
+        .sort()
+      return c.json({ ok: true, data: { advisors, projectRef, health: summarizeDbHealth(advisors, stats), sharedWith, statsError } })
     } catch (err) {
       return c.json({
         ok: false,

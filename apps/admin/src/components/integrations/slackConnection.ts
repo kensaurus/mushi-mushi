@@ -12,13 +12,17 @@ import { SLACK_VERIFIED_FRESH_MS } from '../settings/slackAlertStatus'
  * so the two never disagree.
  */
 export function slackCardConnection(input: {
-  slackConfigured: boolean
+  /** null: the settings have not been read yet. */
+  slackConfigured: boolean | null
   canPost: boolean
   channelId: string | null
   probe: ProbeLike | undefined
   installUnavailable?: boolean
   now?: number
 }): ConnectionView {
+  // Until the settings arrive, say so: "Add Mushi to a Slack workspace" over
+  // a working install sent people to reinstall (2026-10-31).
+  if (input.slackConfigured === null) return { state: 'checking', detail: 'Reading your Slack settings…' }
   if (!input.slackConfigured) {
     return {
       state: 'not_connected',

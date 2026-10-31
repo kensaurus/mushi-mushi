@@ -136,4 +136,10 @@ describe('connectionGridSentence', () => {
     const empty = input({ platform: { platform: {} }, history: [] })
     expect(connectionGridSentence(buildConnectionGrid(empty)).sentence).toMatch(/^Nothing is connected yet/)
   })
+
+  it('Slack reads as checking, never "not connected", until its settings arrive (2026-10-31)', () => {
+    const slack = buildConnectionGrid(input({ slack: { configured: null, canPost: false, channelId: null } })).find((t) => t.id === 'slack')!
+    expect(slack.view.state).toBe('checking')
+    expect(slack.view.detail).toBe('Reading your Slack settings…')
+  })
 })

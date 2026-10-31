@@ -72,6 +72,7 @@
     "GET /v1/admin/byok/cursor/models": {"allow": "jwt-only", "note": "The review follow-up model picker (ADR 0032): Cursor GET /v1/models for one key, or for the key the app would use. Another app's key needs an organization owner or admin. The Run in the cloud card reads the app key's list through GET /v1/admin/integrations/cursor/models."},
     "GET /v1/admin/byok/firecrawl": {"allow": "jwt-only"},
     "GET /v1/admin/byok/keys": {"mcp": ["list_byok_keys"], "cli": ["keys list"]},
+    "GET /v1/admin/projects/:id/db-advisors": {"allow": "jwt-only", "note": "Full-stack audit → Database health: the linked Supabase project's grade, size against the tier, cache hit, connections and top advisors, read live through the app's scoped read-only token (_shared/db-health.ts). A console read; MCP diagnose_setup covers the link itself."},
     "GET /v1/admin/byok/ai-provider": {"allow": "jwt-only", "note": "Which model family the organization's AI runs on (Claude or OpenAI, ADR 0039 amendment 2026-10-31) and whether it has an OpenAI key: a console setting beside the AI keys."},
     "GET /v1/admin/byok/review-followups": {"allow": "jwt-only", "note": "Review follow-up settings, the organization's Cursor keys and the latest follow-ups (ADR 0032). The scoreboard reaches MCP and the CLI through GET /v1/admin/byok/spend-down (reviewFollowups). Per-app settings with CLI/MCP are BL-100."},
     "GET /v1/admin/byok/spend-down": {"mcp": ["get_spend_down_status"], "cli": ["keys spend-down"]},

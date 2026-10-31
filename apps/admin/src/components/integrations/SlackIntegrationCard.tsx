@@ -53,7 +53,8 @@ function rememberInstallUnavailable(): void {
 
 interface Props {
   projectId: string | null
-  slackConfigured: boolean
+  /** null: the settings have not been read yet. */
+  slackConfigured: boolean | null
   teamName: string | null
   latestProbe?: HealthRow
   sparkline?: HealthRow[]

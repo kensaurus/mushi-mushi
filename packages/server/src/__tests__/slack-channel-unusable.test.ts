@@ -130,4 +130,20 @@ describe('Slack health probe checks the stored channel', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(result.status).toBe('ok')
   })
+
+  it('tells the owner how to add the app to a private channel, and keeps the code setup gaps match on', async () => {
+    const { slackChannelAdvice } = await import('../../supabase/functions/_shared/integration-probes.ts')
+    const { slackGap } = await import('../../supabase/functions/_shared/setup-gaps.ts')
+    const notFound = slackChannelAdvice('C0B82A322RW', 'channel_not_found')
+    expect(notFound).toContain('(channel_not_found)')
+    expect(notFound).toMatch(/private channel, add the app: in Slack open the channel/)
+    expect(notFound).toContain('Send test')
+    expect(slackChannelAdvice('C1', 'is_archived')).toMatch(/is archived \(is_archived\)\. Pick another channel/)
+    const now = new Date('2026-10-31T03:00:00Z')
+    const gap = slackGap(
+      { projectId: 'p1', connected: true, latest: { status: 'down', message: notFound, checked_at: now.toISOString() } },
+      now,
+    )
+    expect(gap.status).toBe('gap')
+  })
 })
