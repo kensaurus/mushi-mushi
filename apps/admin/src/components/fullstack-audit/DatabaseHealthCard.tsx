@@ -33,6 +33,8 @@ export interface DbHealthPayload {
   /** Set instead of health when the app is not linked yet. */
   reason?: 'no_supabase_pat' | 'no_project_ref'
   sharedWith?: string[]
+  /** Why size, cache and connections are missing, when the stats read failed. */
+  statsError?: string | null
   health?: {
     grade: Grade
     tier: { name: string; memoryGb: number; recommendedMaxGb: number; monthlyUsd: number } | null
@@ -128,6 +130,9 @@ function HealthBody({ payload }: { payload: DbHealthPayload }) {
             <li key={f} className="tabular-nums">{f}</li>
           ))}
         </ul>
+      )}
+      {payload.statsError && (
+        <p className="text-xs text-fg-muted">Size, cache and connections could not be read this time ({payload.statsError}). The advisors below are current.</p>
       )}
       {h.advice.length > 0 && (
         <Callout tone={h.grade === 'act' ? 'danger' : h.grade === 'watch' ? 'warn' : 'info'}>

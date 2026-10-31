@@ -149,7 +149,11 @@ export function normalizeAdvisors(raw: unknown): AdvisorResult[] {
  * return its rows. The MCP wraps results in an untrusted-data envelope.
  */
 export async function executeReadOnlySql(opts: SupabaseMcpClientOptions, query: string): Promise<unknown[]> {
-  return sqlRows(await callTool<unknown>(opts, 'execute_sql', { query }))
+  const raw = await callTool<unknown>(opts, 'execute_sql', { query })
+  const rows = sqlRows(raw)
+  // No result text in the message: this helper may read any SELECT.
+  if (rows.length === 0) throw new Error('execute_sql returned no rows Mushi could read')
+  return rows
 }
 
 /**
@@ -255,13 +259,31 @@ export function normalizeMcpEdgeFunctions(raw: unknown): Array<Record<string, un
  */
 export function unwrapUntrusted(raw: unknown): unknown {
   if (typeof raw !== 'string') return raw
-  const m = /<untrusted-data-[\w-]+>\s*([\s\S]*?)\s*<\/untrusted-data-[\w-]+>/.exec(raw)
-  if (!m) return raw
+  const inner = untrustedBlock(raw)
+  if (inner == null) return raw
   try {
-    return JSON.parse(m[1])
+    return JSON.parse(inner)
   } catch {
     return raw
   }
+}
+
+/**
+ * The text inside the hosted MCP's untrusted-data block. Its warning names the
+ * tag before the block ("…within the below <untrusted-data-…> boundaries."),
+ * so the block is what follows the LAST opening tag before the closing tag; a
+ * first-match regex started at the warning and never parsed (2026-10-31: every
+ * Database health stats read came back empty).
+ *
+ * @internal Exported for tests only.
+ */
+export function untrustedBlock(text: string): string | null {
+  const close = /<\/untrusted-data-([\w-]+)>/.exec(text)
+  if (!close) return null
+  const open = `<untrusted-data-${close[1]}>`
+  const start = text.lastIndexOf(open, close.index)
+  if (start < 0) return null
+  return text.slice(start + open.length, close.index).trim()
 }
 
 export interface TableInfo {

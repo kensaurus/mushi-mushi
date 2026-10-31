@@ -32,7 +32,7 @@ import { failureOfStatus, statusReason } from './http-util.ts'
 import { SUPABASE_PROJECT_REF_RE as REF_RE } from '../supabase-project-ref.ts'
 import { ConnectorError, notConnected, type ConnectorContext, type DriftFinding, type RecipeConnector } from './types.ts'
 import { mcpCallTool } from '../mcp-http-session.ts'
-import { normalizeMcpEdgeFunctions, normalizeMcpTables, unwrapUntrusted } from '../supabase-mcp-client.ts'
+import { normalizeMcpEdgeFunctions, normalizeMcpTables, untrustedBlock, unwrapUntrusted } from '../supabase-mcp-client.ts'
 
 const MCP_URL = 'https://mcp.supabase.com/mcp'
 
@@ -52,10 +52,10 @@ export function parseMcpSqlText(text: string): unknown[] | null {
     }
   })()
   if (direct) return direct
-  const m = /<untrusted-data-[\w-]+>\s*([\s\S]*?)\s*<\/untrusted-data-[\w-]+>/.exec(text)
-  if (!m) return null
+  const inner = untrustedBlock(text)
+  if (inner == null) return null
   try {
-    const v = JSON.parse(m[1])
+    const v = JSON.parse(inner)
     return Array.isArray(v) ? v : null
   } catch {
     return null

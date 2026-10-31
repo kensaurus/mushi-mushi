@@ -75,9 +75,19 @@ export function registerDbAdvisorsRoutes(parent: Hono<{ Variables: Variables }>)
 
     try {
       const opts = { projectRef, pat }
+      let statsError: string | null = null
       const [advisors, stats, shared] = await Promise.all([
         getSupabaseAdvisors(opts),
-        executeReadOnlySql(opts, DB_STATS_SQL).then(parseDbStats).catch(() => null),
+        executeReadOnlySql(opts, DB_STATS_SQL)
+          .then((rows) => {
+            const parsed = parseDbStats(rows)
+            if (!parsed) statsError = 'the stats query returned no rows'
+            return parsed
+          })
+          .catch((err) => {
+            statsError = (err instanceof Error ? err.message : String(err)).slice(0, 200)
+            return null
+          }),
         project.organization_id
           ? db
               .from('project_settings')
@@ -91,7 +101,7 @@ export function registerDbAdvisorsRoutes(parent: Hono<{ Variables: Variables }>)
         .map((r) => (Array.isArray(r.projects) ? r.projects[0]?.name : r.projects?.name))
         .filter((n): n is string => Boolean(n))
         .sort()
-      return c.json({ ok: true, data: { advisors, projectRef, health: summarizeDbHealth(advisors, stats), sharedWith } })
+      return c.json({ ok: true, data: { advisors, projectRef, health: summarizeDbHealth(advisors, stats), sharedWith, statsError } })
     } catch (err) {
       return c.json({
         ok: false,
