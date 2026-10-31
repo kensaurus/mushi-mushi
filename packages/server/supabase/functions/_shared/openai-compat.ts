@@ -29,7 +29,7 @@ type OpenAiProvider = ReturnType<typeof createOpenAI>
  * sent to api.openai.com (that 401s and marks the key auth_failed).
  */
 export function openAiProvider(options: OpenAiOptions): OpenAiProvider {
-  const base = createOpenAI(options)
+  const base = createOpenAI(isOpenAiHost(options.baseURL) ? { ...options, fetch: withMaxCompletionTokens(options.fetch ?? fetch) } : options)
   if (!isOpenRouterBaseUrl(options.baseURL)) return base
   const qualified = ((modelId: string, settings?: unknown) =>
     (base as unknown as (id: string, s?: unknown) => unknown)(
@@ -37,4 +37,43 @@ export function openAiProvider(options: OpenAiOptions): OpenAiProvider {
       settings,
     )) as unknown as OpenAiProvider
   return Object.assign(qualified, base)
+}
+
+/** api.openai.com itself (no base URL means the SDK default, which is OpenAI's). */
+function isOpenAiHost(baseURL: string | undefined): boolean {
+  if (!baseURL) return true
+  try {
+    return new URL(baseURL).hostname === 'api.openai.com'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * OpenAI deprecated `max_tokens` on chat completions for `max_completion_tokens`,
+ * which every current model accepts, and newer ones refuse the old name
+ * ("Unsupported parameter: 'max_tokens' … Use 'max_completion_tokens'
+ * instead", gpt-6.1-sol, 2026-10-31). AI SDK 1.x renames it only for models it
+ * knows, so every PR review failed once Mushi ran on OpenAI. Only OpenAI's own
+ * host gets the rename: other OpenAI-compatible hosts may not know the new name.
+ *
+ * @internal Exported for tests only.
+ */
+export function withMaxCompletionTokens(inner: typeof fetch): typeof fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+    if (init?.body && typeof init.body === 'string' && url.endsWith('/chat/completions')) {
+      try {
+        const body = JSON.parse(init.body) as Record<string, unknown>
+        if ('max_tokens' in body) {
+          const { max_tokens, ...rest } = body
+          if (rest.max_completion_tokens === undefined) rest.max_completion_tokens = max_tokens
+          return inner(input, { ...init, body: JSON.stringify(rest) })
+        }
+      } catch {
+        // Not JSON: send it as it is.
+      }
+    }
+    return inner(input, init)
+  }) as typeof fetch
 }

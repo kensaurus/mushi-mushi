@@ -11,11 +11,11 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
-const seen: Array<{ baseURL?: string; modelId: string }> = []
+const seen: Array<{ baseURL?: string; modelId: string; wrappedFetch: boolean }> = []
 vi.mock('npm:@ai-sdk/openai@1', () => ({
-  createOpenAI: (opts: { baseURL?: string }) => {
+  createOpenAI: (opts: { baseURL?: string; fetch?: unknown }) => {
     const provider = (modelId: string) => {
-      seen.push({ baseURL: opts.baseURL, modelId })
+      seen.push({ baseURL: opts.baseURL, modelId, wrappedFetch: typeof opts.fetch === 'function' })
       return { modelId }
     }
     return Object.assign(provider, { embedding: (id: string) => ({ id }) })
@@ -26,6 +26,7 @@ import {
   isOpenRouterBaseUrl,
   openAiCompatibleModelId,
   openAiProvider,
+  withMaxCompletionTokens,
 } from '../../supabase/functions/_shared/openai-compat.ts'
 
 const FN = resolve(__dirname, '../../supabase/functions')
@@ -54,6 +55,46 @@ describe('openAiProvider', () => {
     openAiProvider({ apiKey: 'k', baseURL: 'https://api.openai.com/v1' })('gpt-5.4-mini')
     openAiProvider({ apiKey: 'k' })('gpt-5.4')
     expect(seen.map((s) => s.modelId)).toEqual(['openai/gpt-5.4-mini', 'gpt-5.4-mini', 'gpt-5.4'])
+  })
+})
+
+describe('max_completion_tokens on api.openai.com (2026-10-31)', () => {
+  function capture() {
+    const sent: Array<{ url: string; body: unknown }> = []
+    const inner = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      let body: unknown = init?.body
+      try {
+        body = JSON.parse(String(init?.body))
+      } catch {
+        // Kept as sent.
+      }
+      sent.push({ url: String(input), body })
+      return new Response('{}')
+    }) as typeof fetch
+    return { sent, fetch: withMaxCompletionTokens(inner) }
+  }
+
+  it('renames max_tokens on chat completions, keeping every other field', async () => {
+    const { sent, fetch } = capture()
+    await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', body: JSON.stringify({ model: 'gpt-6.1-sol', max_tokens: 64000, temperature: 0 }) })
+    expect(sent[0].body).toEqual({ model: 'gpt-6.1-sol', max_completion_tokens: 64000, temperature: 0 })
+  })
+
+  it('keeps an explicit max_completion_tokens, and leaves other paths and bodies alone', async () => {
+    const { sent, fetch } = capture()
+    await fetch('https://api.openai.com/v1/chat/completions', { body: JSON.stringify({ max_tokens: 1, max_completion_tokens: 2 }) })
+    await fetch('https://api.openai.com/v1/embeddings', { body: JSON.stringify({ max_tokens: 5 }) })
+    await fetch('https://api.openai.com/v1/chat/completions', { body: 'not json' })
+    expect(sent.map((x) => x.body)).toEqual([{ max_completion_tokens: 2 }, { max_tokens: 5 }, 'not json'])
+  })
+
+  it('only OpenAI itself gets the wrapper; OpenRouter and other hosts keep max_tokens', () => {
+    seen.length = 0
+    openAiProvider({ apiKey: 'k' })('gpt-6.1-sol')
+    openAiProvider({ apiKey: 'k', baseURL: 'https://api.openai.com/v1' })('gpt-6.1-sol')
+    openAiProvider({ apiKey: 'k', baseURL: 'https://openrouter.ai/api/v1' })('gpt-6.1-sol')
+    openAiProvider({ apiKey: 'k', baseURL: 'https://api.together.xyz/v1' })('gpt-6.1-sol')
+    expect(seen.map((x) => x.wrappedFetch)).toEqual([true, true, false, false])
   })
 })
 
