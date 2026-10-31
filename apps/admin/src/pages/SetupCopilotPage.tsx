@@ -11,7 +11,7 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Section, Card, Btn } from '../components/ui'
 import { LINK_ACCENT } from '../lib/chipTone'
 import { VerifySetupPanel } from '../components/VerifySetupPanel'
-import { SdkHealthSummary } from '../components/SdkHealthSummary'
+import { SdkHealthSummary, activeSdkKeys } from '../components/SdkHealthSummary'
 import { SdkUpgradeCTA } from '../components/SdkUpgradeCTA'
 import { SdkVersionBadge, type SdkStatus } from '../components/SdkVersionBadge'
 import { CodeInline } from '../components/CodePanel'
@@ -43,6 +43,8 @@ interface ProjectRow {
     label?: string | null
     is_active: boolean
     created_at: string
+    /** Present on GET /v1/admin/projects. MCP and CLI keys are not the app SDK. */
+    scopes?: string[] | null
     last_seen_at?: string | null
     last_seen_origin?: string | null
     last_seen_user_agent?: string | null
@@ -52,6 +54,14 @@ interface ProjectRow {
   sdk_package?: string | null
   sdk_version?: string | null
   sdk_latest_version?: string | null
+}
+
+/**
+ * True only when an SDK key (`report:write`, no `mcp:*`) has checked in.
+ * A docs-demo MCP key called by curl is not the app (report fe489587).
+ */
+function sdkHasCheckedIn(keys: ProjectRow['api_keys'] | undefined): boolean {
+  return activeSdkKeys(keys ?? []).some((k) => Boolean(k.last_seen_at))
 }
 
 /**
@@ -91,9 +101,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
   const pageSummary = useMemo(() => {
     if (!projectId) return 'Select a project'
     const { required_complete, required_total } = setup.selectors
-    const sdkLive = Boolean(
-      projectRow?.api_keys?.some((k) => k.is_active && k.last_seen_at),
-    )
+    const sdkLive = sdkHasCheckedIn(projectRow?.api_keys)
     const parts: string[] = []
     if (required_total > 0) {
       parts.push(`Ingest ${required_complete}/${required_total}`)
@@ -198,9 +206,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
                     projectName={projectRow.name}
                     projectSlug={projectRow.slug}
                     reportCount={projectRow.report_count}
-                    sdkConnected={Boolean(
-                      projectRow.api_keys?.some((k) => k.is_active && k.last_seen_at),
-                    )}
+                    sdkConnected={sdkHasCheckedIn(projectRow.api_keys)}
                     connectCmd={connectCmd}
                   />
                 ),
