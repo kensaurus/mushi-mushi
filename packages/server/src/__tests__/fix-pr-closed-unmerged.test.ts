@@ -108,6 +108,13 @@ describe('fix-loop-status pure rules', () => {
     expect(src.match(/summarizeFixTruths\(truths\.values\(\)\)/g)?.length).toBe(2)
     expect(src).not.toMatch(/const failed = (attempts|list)\.filter\(/)
   })
+
+  it('/fixes/summary counts CI-passing PRs only as prsCiPassing', () => {
+    const src = read('api/routes/query-fixes-repo.ts')
+    const summary = src.slice(src.indexOf("app.get('/v1/admin/fixes/summary'"))
+    expect(summary).toMatch(/prsCiPassing/)
+    expect(summary).not.toMatch(/prsMerged/)
+  })
 })
 
 describe('finalizeFixClosedUnmerged', () => {
