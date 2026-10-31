@@ -224,4 +224,14 @@ describe('headline', () => {
     expect(cut.endsWith('…')).toBe(true)
     expect(cut.length).toBeLessThanOrEqual(41)
   })
+
+  it('names where a report came from for every source, never a widget report by default', () => {
+    const title = (source: string | null) =>
+      new Map(buildDiagnosisGraph(report({ source, environment: { url: 'https://app.test/', userAgent: 'Mozilla/5.0' } } as Partial<ReportDetail>)).nodes.map((n) => [n.id, n])).get('report')!.title
+    expect(title('site_audit')).toBe('Found by the site audit')
+    expect(title('code_audit')).toBe('Found by a code audit')
+    expect(title('api')).toBe('Sent through the API')
+    expect(title('widget')).toBe('Reported by a user')
+    expect(title(null)).toBe('Reported by a user')
+  })
 })
