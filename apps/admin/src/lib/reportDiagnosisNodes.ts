@@ -42,14 +42,35 @@ function modelName(model: string | null | undefined): string | null {
   return m ? m.split('?')[0] : null
 }
 
+/**
+ * Every `reports.source` the database allows. Anything not listed fell
+ * through to "Reported by a user · bug widget", so a site-audit finding read as
+ * a user's widget report (2026-10-31). 'widget' and an unset source keep that.
+ */
+const SOURCE_LABEL: Record<string, { title: string; detail: string }> = {
+  site_watch: { title: 'Found by the live-site watch', detail: 'no user reported it' },
+  site_audit: { title: 'Found by the site audit', detail: 'no user reported it' },
+  sentry: { title: 'Imported from Sentry', detail: 'production error' },
+  store_review: { title: 'From an app store review', detail: 'low-star review' },
+  voice: { title: 'Filed by voice', detail: 'transcribed request' },
+  ux_loop: { title: 'Found by a UX run', detail: 'screen check' },
+  code_audit: { title: 'Found by a code audit', detail: 'no user reported it' },
+  security_advisory: { title: 'From a security advisory', detail: 'a dependency is vulnerable' },
+  library_modernizer: { title: 'Found by the library check', detail: 'outdated dependency' },
+  skill_run: { title: 'Found by a skill run', detail: 'improvement round' },
+  fresh_eyes: { title: 'Found by a first-user test', detail: 'new-user journey' },
+  sdk_health: { title: 'Found by the SDK health check', detail: 'setup problem' },
+  linear: { title: 'Imported from Linear', detail: 'linked issue' },
+  slack: { title: 'Filed from Slack', detail: 'team message' },
+  api: { title: 'Sent through the API', detail: 'CLI, MCP or a server' },
+  sdk: { title: 'Sent by the app', detail: 'SDK call' },
+}
+
 function reportSource(report: ReportDetail): { title: string; detail: string } {
   const src = text((report as { source?: unknown }).source)
-  const ua = text(report.environment?.userAgent)
-  if (src === 'site_watch' || ua === 'site-watch') return { title: 'Found by the live-site watch', detail: 'no user reported it' }
-  if (src === 'sentry' || report.sentry_event_id) return { title: 'Imported from Sentry', detail: 'production error' }
-  if (src === 'store_review') return { title: 'From an app store review', detail: 'low-star review' }
-  if (src === 'voice') return { title: 'Filed by voice', detail: 'transcribed request' }
-  if (src === 'ux_loop') return { title: 'Found by a UX run', detail: 'screen check' }
+  if (src && SOURCE_LABEL[src]) return SOURCE_LABEL[src]
+  if (text(report.environment?.userAgent) === 'site-watch') return SOURCE_LABEL.site_watch
+  if (report.sentry_event_id) return SOURCE_LABEL.sentry
   const who = text(report.reporter_display_name)
   return { title: who ? `Reported by ${who}` : 'Reported by a user', detail: 'bug widget' }
 }

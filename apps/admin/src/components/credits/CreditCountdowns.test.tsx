@@ -68,7 +68,7 @@ describe('CreditCountdowns', () => {
     const text = await render(KEY)
     expect(text).toContain('spend-down is off.')
     expect(text).not.toContain('Turn it on')
-    expect(text).toContain("Only the key's owner or a team admin can turn it on.")
+    expect(text).toContain('Only the person who added it can turn spend-down on or change the date.')
   })
 
   it('asks the owner to turn it on', async () => {

@@ -8,6 +8,7 @@ import { NL_QUERY_PLANNER_EFFORT, NL_QUERY_PLANNER_MODEL, NL_QUERY_SUMMARY_MODEL
 import { claudeGenerateObject } from './claude-messages.ts'
 import { withLlmUsage } from './llm-usage.ts'
 import { getPromptForStage } from './prompt-ab.ts'
+import { platformAnthropicKey } from './ai-provider.ts'
 
 // These text checks are defence in depth, not the tenant boundary. The boundary
 // is in the database (migration 20260923000003_nl_query_role_containment):
@@ -258,7 +259,7 @@ export async function executeNaturalLanguageQuery(
         return null
       })
     : null
-  const apiKey = resolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY')
+  const apiKey = resolved?.key ?? (projectIds.length > 0 ? await platformAnthropicKey(db, projectIds[0]) : Deno.env.get('ANTHROPIC_API_KEY'))
   if (!apiKey) throw new Error('No Anthropic key available (BYOK or env)')
   // On the platform key the query is billed, so check the wallet first, as
   // withLlmFailover does for every other billed path.

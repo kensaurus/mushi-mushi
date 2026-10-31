@@ -151,7 +151,10 @@ export function ReviewFollowupsSection({ keysToken }: Props) {
               label="Cursor key"
               helpId="byok.review_followups"
               value={draft.keyId}
-              onChange={(e) => setDraft({ ...draft, keyId: e.target.value, model: '', escalationModel: '' })}
+              // Keep the chosen models: one the new key's account lacks shows as
+              // "Other" with its id, so nothing changes without the user seeing it.
+              // Clearing them reset the model silently on a key switch (2026-10-31).
+              onChange={(e) => setDraft({ ...draft, keyId: e.target.value })}
             >
               <option value="">The key each app&apos;s fixes use</option>
               {keys.map((k) => (

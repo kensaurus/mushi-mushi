@@ -19,8 +19,16 @@
 
 import { describe, it, expect, beforeAll, vi } from 'vitest'
 
+const logged = vi.hoisted(() => ({ warn: [] as string[], error: [] as string[] }))
+
 vi.mock('../../supabase/functions/_shared/logger.ts', () => {
-  const noop = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, child: () => noop }
+  const noop = {
+    info: () => {},
+    warn: (msg: string) => logged.warn.push(msg),
+    error: (msg: string) => logged.error.push(msg),
+    debug: () => {},
+    child: () => noop,
+  }
   return { log: noop }
 })
 
@@ -104,5 +112,26 @@ describe('claimTenantRateLimit RPC contract', () => {
   it('fails open on an unexpected RPC error rather than blocking traffic', async () => {
     const db = recordingDb({ message: 'connection reset by peer' })
     expect((await tenant.claimTenantRateLimit(db as never, 'project:p1:voice', 30, 60)).allowed).toBe(true)
+  })
+
+  // MUSHI-MUSHI-SERVER-3F (2026-10-31): a Cloudflare 520 page during a DB
+  // saturation window paged as an error with the whole HTML page attached.
+  it('logs a gateway outage as a warn (not sent to Sentry) and still fails open', async () => {
+    logged.warn.length = 0
+    logged.error.length = 0
+    const db = recordingDb({
+      message: '<!DOCTYPE html><head><title>supabase.co | 520: Web server is returning an unknown error</title></head>',
+    })
+    expect((await tenant.claimTenantRateLimit(db as never, 'work:x:claim', 30, 60)).allowed).toBe(true)
+    expect(logged.error).toEqual([])
+    expect(logged.warn).toContain('scoped_rate_limit_claim failed — allowing request')
+  })
+
+  it('keeps a signature drift (a coded error) at error level', async () => {
+    logged.warn.length = 0
+    logged.error.length = 0
+    const db = recordingDb({ message: 'Could not find the function public.scoped_rate_limit_claim', code: 'PGRST202' } as never)
+    expect((await tenant.claimTenantRateLimit(db as never, 'project:p1:voice', 30, 60)).allowed).toBe(true)
+    expect(logged.error).toContain('scoped_rate_limit_claim failed — allowing request')
   })
 })
