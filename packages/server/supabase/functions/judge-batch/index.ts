@@ -13,6 +13,7 @@ import { resolveLlmKey } from '../_shared/byok.ts'
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { mapWithConcurrency } from '../_shared/concurrency.ts'
+import { isLlmBudgetExceeded } from '../_shared/llm-account-state.ts'
 import { JUDGE_EFFORT, JUDGE_MODEL, JUDGE_FALLBACK } from '../_shared/models.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { resolveClaudeModel } from '../_shared/claude-request.ts'
@@ -211,7 +212,13 @@ Deno.serve(withSentry('judge-batch', async (req) => {
       // 50-report batch completes in ~10× fewer wall-clock seconds. The
       // provider rate limit (~50 req/min) tolerates this; DB pool pressure
       // stays bounded because the per-report insert is a single round-trip.
+      // Over its monthly AI budget, every report in this project fails the
+      // same way. Stop judging it after the first and log one warning; it
+      // was one Sentry error per report (MUSHI-MUSHI-SERVER-3N, 2026-10-31).
+      // The console shows the budget as a setup gap (llmBudgetGap).
+      let budgetExceeded = false
       await mapWithConcurrency(reports, 5, async (report) => {
+        if (budgetExceeded) return
         const span = trace.span('judge.evaluate')
         const start = Date.now()
 
@@ -447,6 +454,17 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
           totalEvaluated++
           span.end({ model: usedJudgeModel, fallback: judgeFallbackUsed, latencyMs: Date.now() - start, score: compositeScore, inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens })
         } catch (err) {
+          if (isLlmBudgetExceeded(err)) {
+            if (!budgetExceeded) {
+              budgetExceeded = true
+              rootLog.child('judge').warn('judge skipped: project is over its monthly AI budget', {
+                projectId: project.id,
+                err: err instanceof Error ? err.message : String(err),
+              })
+            }
+            span.end({ error: 'llm_budget_exceeded' })
+            return
+          }
           // AI SDK wraps provider errors in AI_APICallError — pull the raw
           // response body / status when available so the operator can see
           // "model not found" vs "rate limit" vs "invalid key" at a glance.

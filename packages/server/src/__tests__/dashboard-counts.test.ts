@@ -136,6 +136,48 @@ describe('dashboard/stats', () => {
     expect(status).toBeGreaterThanOrEqual(500)
     expect(body.ok).toBe(false)
   })
+
+  // MUSHI-MUSHI-SERVER-3Q (2026-10-30): a failed HEAD count has an empty body,
+  // so postgrest-js gives `{ message: '' }` and no code, and the report was
+  // titled "Unknown DB error (unknown)". The HTTP status is all that is left.
+  describe('a count read that failed with no response body', () => {
+    function failHeadCount(table: string, res: { status: number; statusText: string }) {
+      const realFrom = db.from.bind(db)
+      ;(db as unknown as { from: unknown }).from = (t: string) => {
+        if (t !== table) return realFrom(t)
+        const q: Record<string, unknown> = {}
+        for (const m of ['select', 'in', 'eq', 'gte', 'is', 'not', 'order', 'limit']) q[m] = () => q
+        q.then = (resolve: (v: unknown) => unknown) =>
+          Promise.resolve({ data: null, count: null, error: { message: '' }, ...res }).then(resolve)
+        return q
+      }
+    }
+
+    it('names the read and the HTTP status in the reported error', async () => {
+      const { reportError } = await import('../../supabase/functions/_shared/sentry.ts')
+      vi.mocked(reportError).mockClear()
+      seed([report(1, {})])
+      failHeadCount('llm_invocations', { status: 500, statusText: 'Internal Server Error' })
+      const { status } = await get('/v1/admin/dashboard/stats')
+      expect(status).toBe(500)
+      const reported = vi.mocked(reportError).mock.calls.at(-1)![0] as Error
+      expect(reported.message).toContain('HTTP 500 Internal Server Error')
+      expect(reported.message).toContain('llm calls 14d')
+      expect(reported.message).not.toContain('Unknown DB error')
+    })
+
+    it('treats a gateway status as the transient outage it is: a 503, not reported', async () => {
+      const { reportError } = await import('../../supabase/functions/_shared/sentry.ts')
+      vi.mocked(reportError).mockClear()
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      seed([report(1, {})])
+      failHeadCount('llm_invocations', { status: 520, statusText: '' })
+      const { status } = await get('/v1/admin/dashboard/stats')
+      expect(status).toBe(503)
+      expect(reportError).not.toHaveBeenCalled()
+      warn.mockRestore()
+    })
+  })
 })
 
 describe('inbox/stats', () => {

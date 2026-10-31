@@ -17,6 +17,7 @@
 import type { Context } from 'npm:hono@4';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { log } from './logger.ts';
+import { dbDiagnosticMessage, logDbFailure } from './error-codes.ts';
 import type { AuditAction } from './audit.ts';
 import { logAudit } from './audit.ts';
 
@@ -109,8 +110,14 @@ export async function claimTenantRateLimit(
   }
   // Fail open on genuine infra errors so a database blip cannot lock out
   // legitimate traffic — but log loudly, because a silent fail-open here is
-  // indistinguishable from having no rate limit at all.
-  tenantLog.error('scoped_rate_limit_claim failed — allowing request', { scopeKey, err: msg });
+  // indistinguishable from having no rate limit at all. A gateway outage
+  // (Cloudflare 520 HTML, pooler reset) is a warn: it is not a signature
+  // drift, and it paged as MUSHI-MUSHI-SERVER-3F with a 5 KB HTML page as
+  // `err` (2026-10-31). Any coded or unknown error stays an error.
+  logDbFailure(tenantLog, 'scoped_rate_limit_claim failed — allowing request', error, {
+    scopeKey,
+    err: dbDiagnosticMessage(msg),
+  });
   return { allowed: true };
 }
 
