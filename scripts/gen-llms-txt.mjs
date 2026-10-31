@@ -9,6 +9,11 @@
  * Titles and descriptions come from each page's YAML front matter
  * (scripts/lib/frontmatter.mjs) — a regex that stopped at the first
  * apostrophe used to cut "Here's what the data said" down to "Here".
+ *
+ * The closing "More from kensaurus" section is read from the pinned family
+ * slice (packages/marketing-ui/src/kensaurus/kensaurus-family.json, from
+ * https://kensaur.us/apps.json): refresh the slice, not this script, when the
+ * maker's app list changes.
  */
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs"
@@ -20,6 +25,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, "..")
 const CONTENT = path.join(ROOT, "apps/docs/content")
 const OUT = path.join(ROOT, "apps/docs/public/llms.txt")
+const FAMILY = path.join(ROOT, "packages/marketing-ui/src/kensaurus/kensaurus-family.json")
 
 const brand = await import(
   pathToFileURL(path.join(ROOT, "packages/brand/src/index.js")).href
@@ -131,6 +137,14 @@ for (const page of pages) {
   const note = page.description ? `: ${page.description}` : ""
   lines.push(`- [${page.title}](${urlFor(page.route)})${note}`)
 }
+
+const family = JSON.parse(readFileSync(FAMILY, "utf8"))
+lines.push("", "## More from kensaurus", "")
+for (const app of family.related) {
+  lines.push(`- [${linkText(app.name.en)}](${app.url}): ${app.tagline.en}`)
+}
+lines.push("- [All apps as JSON](https://kensaur.us/apps.json)")
+lines.push(`- [kensaurus](${family.brand.site})`)
 
 lines.push("")
 const output = lines.join("\n")

@@ -2,6 +2,7 @@
 
 import { KENSAURUS_APPS, type KensaurusApp } from './kensaurus/spine/apps.generated'
 import { goLink } from './kensaurus/spine/links'
+import { familyPagesFor } from './kensaurus/family'
 
 /**
  * "More from KENSAURUS" — the cross-promo footer shown on the docs site and on
@@ -14,6 +15,13 @@ import { goLink } from './kensaurus/spine/links'
  * for tsumagoi. Rows are derived from the manifest now: to change a name, icon,
  * blurb or link, edit the manifest in yen-yen and re-run the sync. Do not
  * reintroduce a local list here.
+ *
+ * DEEP LINKS: under a row, up to two pages of that app from the pinned family
+ * slice (./kensaurus/kensaurus-family.json, from https://kensaur.us/apps.json).
+ * They use the slice's own UTM'd `href`, never `goLink`: the redirector sends
+ * phone visitors to the App Store / Play Store even when a path is given, so a
+ * deep link to a web page would land them in a store. English labels only:
+ * Mushi's marketing surface is English.
  *
  * LINKS: app rows go through the apex redirector (`goLink`), so a click is
  * attributed — `ref` is the `utmSource` prop, e.g. `mushi-docs` on the docs
@@ -89,6 +97,7 @@ export function KensaurusPortfolioTable({ utmSource }: { utmSource: string }) {
             : goLink(app.id, '', { ref: utmSource, campaign: CAMPAIGN })
           const blurb = pickCopy(app.blurb) || pickCopy(app.tagline)
           const extras = extraLinks(app)
+          const pages = isHub ? [] : familyPagesFor(app.id)
 
           return (
             <li key={app.id}>
@@ -116,6 +125,21 @@ export function KensaurusPortfolioTable({ utmSource }: { utmSource: string }) {
                   </span>
                 </span>
               </a>
+              {pages.length > 0 ? (
+                <p className="m-0 flex flex-wrap gap-x-3 pl-10 text-xs">
+                  {pages.map((page) => (
+                    <a
+                      key={page.href}
+                      href={page.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex min-h-11 items-center rounded-sm text-[var(--mushi-ink-muted)] underline underline-offset-2 transition hover:text-[var(--mushi-vermillion)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
+                    >
+                      {page.label.en}
+                    </a>
+                  ))}
+                </p>
+              ) : null}
               {extras.length > 0 ? (
                 <p className="mt-1 pl-10 text-xs text-[var(--mushi-ink-muted)]">
                   {extras.map((extra, i) => (

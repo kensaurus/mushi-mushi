@@ -55,17 +55,64 @@ const ORGANIZATION_ID = `${PRODUCT_ROOT}#organization`
  * never reserved, so neither may appear in `sameAs` — a `sameAs` URL that
  * 404s (or points at a stranger) is worse for entity resolution than none.
  */
-const BLUESKY_PROFILE_URL = 'https://bsky.app/profile/kensaurus.bsky.social'
+const BLUESKY_PROFILE_URL = 'https://bsky.app/profile/kensaur.us'
 
-/** schema.org Organization — rendered site-wide from app/layout.tsx. */
+/**
+ * The maker's shared node. Every kensaurus app points at the same `@id`, so
+ * the fields must match the hub's own node on https://kensaur.us/ exactly
+ * (name, alternateName, url, sameAs). Change them there first, then here.
+ */
+const KENSAURUS_ORG_ID = 'https://kensaur.us/#org'
+
+const KENSAURUS_ORG_NODE = {
+  '@type': 'Organization',
+  '@id': KENSAURUS_ORG_ID,
+  name: 'kensaurus合同会社',
+  alternateName: ['kensaurus LLC', 'KENSAURUS'],
+  url: 'https://kensaur.us/',
+  sameAs: [
+    'https://github.com/kensaurus',
+    'https://x.com/sakuramotokenji',
+    'https://note.com/kensaurus',
+    'https://zenn.dev/kensaurus',
+    'https://www.linkedin.com/company/142923144/',
+    'https://bsky.app/profile/kensaur.us',
+    'https://kensaur.us/glot-it/',
+    'https://kensaur.us/yen-yen/',
+    'https://kensaur.us/the-wanting-mind/',
+    'https://kensaur.us/help-her-take-photo/',
+    'https://solo-boss.kensaur.us/',
+    'https://tsumagoi.kensaur.us/',
+    'https://talk.kensaur.us/',
+    'https://kensaur.us/mushi-mushi/',
+    'https://kensaur.us/mushi-mushi/docs/',
+    'https://kensaur.us/skin-analysis/',
+    'https://kensaur.us/hear-hear/',
+    'https://github.com/kensaurus/skills',
+    'https://www.youtube.com/@kenjisakuramoto',
+  ],
+} as const
+
+/**
+ * schema.org Organization — rendered site-wide from app/layout.tsx. One
+ * `@graph` holds Mushi's own organization (its `@id` is unchanged) and the
+ * maker's shared node it names as `parentOrganization`, so the shared node is
+ * emitted exactly once per page.
+ */
 export const ORGANIZATION_JSONLD = {
   '@context': 'https://schema.org',
-  '@type': 'Organization',
-  '@id': ORGANIZATION_ID,
-  name: 'Mushi Mushi',
-  url: PRODUCT_ROOT,
-  logo: `${DOCS_SITE}/brand/logo-mark.svg`,
-  sameAs: [MUSHI_CANONICAL_URLS.repo, BLUESKY_PROFILE_URL],
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': ORGANIZATION_ID,
+      name: 'Mushi Mushi',
+      url: PRODUCT_ROOT,
+      logo: `${DOCS_SITE}/brand/logo-mark.svg`,
+      sameAs: [MUSHI_CANONICAL_URLS.repo, BLUESKY_PROFILE_URL],
+      parentOrganization: { '@id': KENSAURUS_ORG_ID },
+    },
+    KENSAURUS_ORG_NODE,
+  ],
 } as const
 
 /** One visible Q&A pair; the same array feeds the FAQPage JSON-LD so markup and schema cannot drift. */
