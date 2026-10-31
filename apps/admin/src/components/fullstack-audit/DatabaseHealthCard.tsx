@@ -47,7 +47,20 @@ export interface DbHealthPayload {
     counts: { error: number; warn: number; info: number }
     top: DbIssue[]
     advice: string[]
+    /** Where time and space go; null when neither read worked. */
+    hotspots?: {
+      slow: Array<{ label?: string; query: string; calls: number; meanMs: number; pct: number }> | null
+      slowSince: string | null
+      tables: Array<{ name: string; bytes: number; rows: number; dead: number }>
+      unusedIndexes: Array<{ name: string; table: string; bytes: number }>
+    } | null
   }
+}
+
+type Hotspots = NonNullable<NonNullable<DbHealthPayload['health']>['hotspots']>
+
+function bytes(n: number): string {
+  return size(Math.round(n / 1_048_576))
 }
 
 const GRADE: Record<Grade, { label: string; tone: BadgeTone }> = {
@@ -164,9 +177,75 @@ function HealthBody({ payload }: { payload: DbHealthPayload }) {
           </ul>
         </div>
       )}
+      {h.hotspots && <HotspotLists hotspots={h.hotspots} />}
       {h.statsReset && (
         <p className="text-2xs text-fg-faint">Read-rate counted since {new Date(h.statsReset).toLocaleDateString()} (the database last restarted then).</p>
       )}
+    </div>
+  )
+}
+
+/**
+ * Where the database spends its time and space, folded so the grade and the
+ * advice stay the first read. Each list says why it is empty instead of
+ * vanishing, so "nothing here" and "could not read" never look alike.
+ */
+function HotspotLists({ hotspots }: { hotspots: Hotspots }) {
+  const unusedTotal = hotspots.unusedIndexes.reduce((n, i) => n + i.bytes, 0)
+  return (
+    <div className="space-y-1 text-sm" data-testid="database-hotspots">
+      <details>
+        <summary className="cursor-pointer text-fg-secondary">
+          Where database time goes
+          {hotspots.slowSince ? <span className="text-xs text-fg-muted"> · since {new Date(hotspots.slowSince).toLocaleString()}</span> : null}
+        </summary>
+        {hotspots.slow == null ? (
+          <p className="py-1 text-xs text-fg-muted">Query timings could not be read (pg_stat_statements is off or not readable with this token).</p>
+        ) : hotspots.slow.length === 0 ? (
+          <p className="py-1 text-xs text-fg-muted">No app queries counted yet; the counters start again after a restart.</p>
+        ) : (
+          <ul className="divide-y divide-edge-subtle" aria-label="Busiest queries">
+            {hotspots.slow.map((q, i) => (
+              <li key={`${i}-${q.query}`} className="py-1.5">
+                <code className="block truncate text-xs text-fg" title={q.query}>{q.label ?? q.query}</code>
+                <span className="text-xs tabular-nums text-fg-muted">
+                  {q.pct}% of time · {q.meanMs} ms avg · {q.calls.toLocaleString()} calls
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </details>
+      <details>
+        <summary className="cursor-pointer text-fg-secondary">Biggest tables</summary>
+        <ul className="divide-y divide-edge-subtle" aria-label="Biggest tables">
+          {hotspots.tables.map((t) => (
+            <li key={t.name} className="flex flex-wrap items-baseline gap-x-3 py-1.5">
+              <code className="text-xs text-fg">{t.name}</code>
+              <span className="text-xs tabular-nums text-fg-muted">
+                {bytes(t.bytes)} · about {t.rows.toLocaleString()} rows{t.dead >= 10_000 ? ` · ${t.dead.toLocaleString()} dead rows` : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </details>
+      <details>
+        <summary className="cursor-pointer text-fg-secondary">
+          Unused indexes{hotspots.unusedIndexes.length > 0 ? ` (${hotspots.unusedIndexes.length}, ${bytes(unusedTotal)})` : ''}
+        </summary>
+        {hotspots.unusedIndexes.length === 0 ? (
+          <p className="py-1 text-xs text-fg-muted">Every index over 8 MB has been read at least once.</p>
+        ) : (
+          <ul className="divide-y divide-edge-subtle" aria-label="Unused indexes">
+            {hotspots.unusedIndexes.map((i) => (
+              <li key={i.name} className="flex flex-wrap items-baseline gap-x-3 py-1.5">
+                <code className="text-xs text-fg">{i.name}</code>
+                <span className="text-xs tabular-nums text-fg-muted">on {i.table} · {bytes(i.bytes)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </details>
     </div>
   )
 }
