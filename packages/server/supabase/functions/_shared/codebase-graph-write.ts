@@ -28,6 +28,7 @@
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import type { IndexedFileRow, KnowledgeGraph } from './codebase-graph-build.ts'
+import { dbDiagnosticMessage } from './error-codes.ts'
 
 const PATH_PAGE = 1000
 /** 100k rows. A full last page means the read was cut off — fail open. */
@@ -228,7 +229,10 @@ export async function writeCodebaseGraph(
       p_graph: args.graph,
     })
     if (!error) return { ok: true }
-    lastMessage = error.message ?? lastMessage
+    // A gateway page collapses to its title: the raw Cloudflare 520 HTML was
+    // stored in codebase_analyze_jobs.error and sent to Sentry
+    // (MUSHI-MUSHI-SERVER-2Q, 2026-10-31).
+    lastMessage = error.message ? dbDiagnosticMessage(error.message) : lastMessage
     if (isGraphWriteBusy(error)) return { ok: false, busy: true, message: lastMessage }
     if (!isStatementTimeout(error)) return { ok: false, busy: false, message: lastMessage }
   }

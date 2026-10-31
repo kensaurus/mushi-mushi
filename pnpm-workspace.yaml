@@ -130,17 +130,6 @@ auditConfig:
     # drops @react-three/fiber (the only reason expo is in the tree).
     - 'GHSA-w3rx-r6r6-pgpr'
     - 'GHSA-5p2g-fcmc-qvqq'
-    # node-forge <=1.4.0 (GHSA-86w9-cpqp-85rv, high): no fixed release
-    # exists. Reachability: packages/react-native declares expo-secure-store
-    # and expo-sensors as OPTIONAL peers; autoInstallPeers pulls them into
-    # the dev graph, and their required `expo` peer brings @expo/cli >
-    # @expo/code-signing-certificates > node-forge. Nothing that ships uses
-    # it: the RN SDK loads expo-sensors via a guarded require and
-    # expo-secure-store via dynamic import, and no test or runtime path
-    # imports @expo/cli. Overrides cannot remove a peer (checked 2026-10-02).
-    # Remove when node-forge ships a fix, or when RN's optional expo peers
-    # stop being auto-installed. Owner decision 2026-10-02.
-    - 'GHSA-86w9-cpqp-85rv'
     # braces <=3.0.3 (GHSA-vfj7-8cjw-p6xm, high): no fixed release exists.
     # Reachability: only via @changesets/cli > @changesets/config > micromatch,
     # a release-time dev tool that globs our own package names. Never in a
@@ -188,6 +177,11 @@ minimumReleaseAgeExclude:
   # examples/realworld/backend-express > express. Pinned exactly so the
   # exclusion admits only this release. Drop the entry after 2026-10-29.
   - 'body-parser@2.4.0'
+  # node-forge 1.4.2 (2026-10-27) clears GHSA-86w9-cpqp-85rv, GHSA-7wch-p9px-956x,
+  # GHSA-jc66-7q78-782g and the other <=1.4.0 highs (docs build only: apps/docs >
+  # @react-three/fiber > expo > @expo/cli; override in package.json). Pinned exactly so the exclusion admits only this release.
+  # Drop the entry after 2026-11-03.
+  - 'node-forge@1.4.2'
   - 'react-router'
   - 'react-router-dom'
   # Security-patched transitive dep. fast-uri 3.1.6 / 4.1.3 clear the SSRF,

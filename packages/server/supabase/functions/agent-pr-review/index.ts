@@ -85,7 +85,7 @@ import {
 } from '../_shared/github.ts'
 import { canonicalPrUrl, parsePullRequestUrl } from '../_shared/pr-substance.ts'
 import { DISPATCHABLE_CLOUD_AGENTS, FIX_WORKER_AGENTS } from '../_shared/agent-adapters.ts'
-import { AGENT_PR_REVIEW_EFFORT, AGENT_PR_REVIEW_MODEL } from '../_shared/models.ts'
+import { AGENT_PR_REVIEW_EFFORT, AGENT_PR_REVIEW_MODEL, OPENAI_PRIMARY } from '../_shared/models.ts'
 import { enqueueFixReview } from '../_shared/fix-review-db.ts'
 import { enqueueReviewFollowup } from '../_shared/review-followup-db.ts'
 import {
@@ -176,6 +176,10 @@ interface AttemptRow {
 
 export interface ModelCallInput {
   apiKey: string
+  /** 'openai' when the review runs on an OpenAI key (ADR 0039 amendment, 2026-10-31). */
+  provider?: 'anthropic' | 'openai'
+  /** The key's own base URL (an OpenRouter key is never sent to api.openai.com). */
+  baseUrl?: string
   model: string
   system: string
   prompt: string
@@ -193,6 +197,8 @@ export interface ReviewDeps {
   /** The claim token for a run; injectable so tests can assert the guarded writes. */
   newRunId?: () => string
   resolveAnthropicKey?: (db: SupabaseClient, projectId: string) => Promise<ResolvedKey | null>
+  /** The OpenAI key a review falls back to; tests pin it (defaults to resolveLlmKey). */
+  resolveOpenAiKey?: (db: SupabaseClient, projectId: string) => Promise<ResolvedKey | null>
   resolveGithubToken?: (db: SupabaseClient, attempt: AttemptRow) => Promise<string | null>
   fetchPr?: (token: string, ref: GithubRepoRef, n: number) => Promise<PullRequestDetails | null>
   fetchFiles?: (token: string, ref: GithubRepoRef, n: number) => Promise<{ files: PullRequestFile[]; complete: boolean } | null>
@@ -269,6 +275,48 @@ export function pickReviewModel(projectModel: string | null | undefined, platfor
 }
 
 /**
+ * The key a review runs on: the app's own (or its organization's) Claude key,
+ * else its OpenAI key (ADR 0039 amendment, 2026-10-31). An organization that
+ * runs AI on OpenAI gets no Claude key from the resolver, so its reviews move
+ * to OpenAI; one whose Claude key ran out moves too, instead of every review
+ * stopping as "no key" and Decide for me (ADR 0055) waiting forever. Never the
+ * platform key: a review the app did not pay for is not one Mushi absorbs.
+ *
+ * @internal Exported for tests only.
+ */
+export async function resolveReviewKey(
+  db: SupabaseClient,
+  projectId: string,
+  resolve: (db: SupabaseClient, projectId: string, provider: 'anthropic' | 'openai') => Promise<ResolvedKey | null> = (d, p, provider) => resolveLlmKey(d, p, provider),
+): Promise<(ResolvedKey & { reviewProvider: 'anthropic' | 'openai' }) | null> {
+  const claude = await resolve(db, projectId, 'anthropic')
+  if (claude && claude.source === 'byok') return { ...claude, reviewProvider: 'anthropic' }
+  const openai = await resolve(db, projectId, 'openai')
+  if (openai && openai.source === 'byok') return { ...openai, reviewProvider: 'openai' }
+  return null
+}
+
+/**
+ * How a verdict names its reviewer: "Opus" for Claude, "GPT" for an OpenAI model.
+ *
+ * @internal Exported for tests only.
+ */
+export function reviewerName(model: string): string {
+  return /(^|\/)gpt-/.test(model) ? 'GPT' : 'Opus'
+}
+
+/**
+ * The OpenAI reviewer model: the project's `agent_pr_review_model` when it is
+ * an OpenAI id (`gpt-…`), else GPT-6.1 Sol (`OPENAI_PRIMARY`).
+ *
+ * @internal Exported for tests only.
+ */
+export function pickOpenAiReviewModel(projectModel: string | null | undefined): string {
+  const chosen = (projectModel ?? '').trim()
+  return /^(openai\/)?gpt-[A-Za-z0-9._-]+$/.test(chosen) ? chosen : OPENAI_PRIMARY
+}
+
+/**
  * Whether reviews are on and which model the project chose. A failed read
  * reviews on the default (the switch defaults to true). Before migration
  * 20261022021555 adds `agent_pr_review_model`, naming it fails the read, so it
@@ -289,6 +337,23 @@ export async function readReviewSettings(
 }
 
 async function defaultCallModel(input: ModelCallInput): Promise<ModelCallResult> {
+  if (input.provider === 'openai') {
+    // The same call the second-family judge makes (fix-verifier, ADR 0035).
+    const [{ generateObject }, { openAiProvider }] = await Promise.all([
+      import('../_shared/ai-sdk.ts'),
+      import('../_shared/openai-compat.ts'),
+    ])
+    const openai = openAiProvider({ apiKey: input.apiKey, ...(input.baseUrl ? { baseURL: input.baseUrl } : {}) })
+    const result = await generateObject({
+      model: openai(input.model),
+      schema: agentPrReviewSchema,
+      system: input.system,
+      prompt: input.prompt,
+      maxTokens: REVIEW_MAX_TOKENS,
+      abortSignal: input.abortSignal,
+    })
+    return result as unknown as ModelCallResult
+  }
   const result = await claudeGenerateObject({
     apiKey: input.apiKey,
     model: input.model,
@@ -426,7 +491,7 @@ export function stoppedForKey(row: { status: string; skip_reason: string | null;
 export async function resumeKeyBlocked(
   db: SupabaseClient,
   now: Date,
-  resolveKey: (db: SupabaseClient, projectId: string) => Promise<ResolvedKey | null> = (d, p) => resolveLlmKey(d, p, 'anthropic'),
+  resolveKey: (db: SupabaseClient, projectId: string) => Promise<ResolvedKey | null> = (d, p) => resolveReviewKey(d, p),
 ): Promise<number> {
   const since = new Date(now.getTime() - RESUME_LOOKBACK_MS).toISOString()
   const { data } = await db
@@ -671,14 +736,13 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
   // Default on: a missing row or a failed read reviews (the column defaults to true).
   const settings = await readReviewSettings(db, attempt.project_id)
   if (!settings.enabled) return finishSkipped(attempt, 'review_off')
-  const reviewModel = pickReviewModel(
-    settings.model,
-    deps.platformModel !== undefined ? deps.platformModel : typeof Deno !== 'undefined' ? Deno.env.get('AGENT_PR_REVIEW_MODEL') : undefined,
-  )
-
-  let key: ResolvedKey | null
+  let key: (ResolvedKey & { reviewProvider: 'anthropic' | 'openai' }) | null
   try {
-    key = await (deps.resolveAnthropicKey ?? ((d, p) => resolveLlmKey(d, p, 'anthropic')))(db, attempt.project_id)
+    key = deps.resolveAnthropicKey
+      ? await resolveReviewKey(db, attempt.project_id, (d, p, provider) =>
+          provider === 'anthropic' ? deps.resolveAnthropicKey!(d, p) : (deps.resolveOpenAiKey ?? ((dd, pp) => resolveLlmKey(dd, pp, 'openai')))(d, p),
+        )
+      : await resolveReviewKey(db, attempt.project_id)
   } catch (err) {
     if ((err as { name?: string } | null)?.name === 'LlmBudgetExceededError') {
       return finishSkipped(attempt, 'llm_budget_exceeded')
@@ -686,8 +750,14 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
     throw err
   }
   // The project's own (or its organization's shared) key only: a review the
-  // project did not pay for would be an unbilled Opus call on the platform key.
-  if (!key || key.source !== 'byok') return finishSkipped(attempt, 'no_anthropic_key')
+  // project did not pay for would be an unbilled call on the platform key.
+  if (!key) return finishSkipped(attempt, 'no_anthropic_key')
+  const reviewModel = key.reviewProvider === 'openai'
+    ? pickOpenAiReviewModel(settings.model)
+    : pickReviewModel(
+        settings.model,
+        deps.platformModel !== undefined ? deps.platformModel : typeof Deno !== 'undefined' ? Deno.env.get('AGENT_PR_REVIEW_MODEL') : undefined,
+      )
 
   const pr = parsePullRequestUrl(attempt.pr_url)
   if (!pr) return finishSkipped(attempt, 'pr_not_found')
@@ -737,6 +807,8 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
   try {
     result = await (deps.callModel ?? defaultCallModel)({
       apiKey: key.key,
+      provider: key.reviewProvider,
+      ...(key.baseUrl ? { baseUrl: key.baseUrl } : {}),
       model: reviewModel,
       system: AGENT_PR_REVIEW_SYSTEM_PROMPT,
       prompt,
@@ -826,7 +898,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
 
   await insertReviewEvent(db, row, {
     status: EVENT_STATUS[review.verdict],
-    label: `Opus review: ${VERDICT_LABEL[review.verdict]}`,
+    label: `${reviewerName(reviewModel)} review: ${VERDICT_LABEL[review.verdict]}`,
     detail: review.summary,
     dedupe: `review:${row.id}:${details.headSha ?? nowIso}:${tries}`,
     payload: {
@@ -887,7 +959,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
           await insertReviewEvent(db, row, {
             status: 'ok',
             label: READY_AFTER_REVIEW_LABEL,
-            detail: `Opus review: ${VERDICT_LABEL[review.verdict]}`,
+            detail: `${reviewerName(reviewModel)} review: ${VERDICT_LABEL[review.verdict]}`,
             dedupe: `review-ready:${row.id}:${details.headSha ?? nowIso}`,
             payload: { reviewId: row.id, verdict: review.verdict, headSha: details.headSha },
           })

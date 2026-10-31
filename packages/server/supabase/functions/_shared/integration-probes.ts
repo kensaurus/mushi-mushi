@@ -20,6 +20,7 @@ import { safeFetch } from './inventory-guards.ts'
 import { isCodebaseIndexFailing } from './sweep-error-classifier.ts'
 import { dereferenceMaybeVault } from './settings-secrets.ts'
 import { resolveLlmKey } from './byok.ts'
+import { isSlackChannelUnusable } from './slack.ts'
 
 // Deno global — declared only where consumed (edge functions).
 declare const Deno: { env: { get(name: string): string | undefined } }
@@ -98,6 +99,8 @@ export interface PlatformSettings {
   claude_api_key_ref?: string | null
   /** UUID of vault secret containing the per-project Slack bot token (xoxb-*). */
   slack_bot_token_ref?: string | null
+  /** Channel Mushi posts report cards to; the probe checks it still takes posts. */
+  slack_channel_id?: string | null
   // ── Linear (vault-backed, replaces project_integrations.config for 'linear') ──
   /** Vault ref for a static Linear Personal API key (lin_api_*). */
   linear_api_key_ref?: string | null
@@ -638,6 +641,16 @@ export async function probeIntegration(
         if (data.ok) {
           status = 'ok'
           detail = `Connected to workspace "${data.team ?? '?'}" as bot ${data.bot_id ?? '?'} (${Date.now() - t0}ms)`
+          // auth.test only proves the token. A stored channel that is gone
+          // failed every send while this card said "ok"
+          // (MUSHI-MUSHI-SERVER-3A, 2026-10-31).
+          const channelProblem = settings.slack_channel_id
+            ? await slackChannelProblem(botToken, settings.slack_channel_id)
+            : null
+          if (channelProblem) {
+            status = 'down'
+            detail = channelProblem
+          }
         } else {
           status = 'down'
           detail = `Slack auth.test error: ${data.error ?? 'unknown'}`
@@ -650,6 +663,28 @@ export async function probeIntegration(
   }
 
   return { status, detail, httpStatus, latencyMs: Date.now() - start }
+}
+
+/**
+ * Why the configured channel cannot take posts, or null when it can or the
+ * bot may not ask (`missing_scope` without channels:read, a network error):
+ * then the token check alone decides. Uses conversations.info, which needs
+ * channels:read (groups:read for private channels), both in the install
+ * scopes (settings-research.ts).
+ */
+async function slackChannelProblem(token: string, channel: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://slack.com/api/conversations.info?channel=${encodeURIComponent(channel)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(8_000),
+    })
+    const data = (await res.json()) as { ok: boolean; error?: string; channel?: { is_archived?: boolean } }
+    const error = data.ok ? (data.channel?.is_archived ? 'is_archived' : null) : (data.error ?? null)
+    if (!isSlackChannelUnusable(error)) return null
+    return `Slack channel ${channel} cannot take posts (${error}). Invite the Mushi bot to it, or pick another channel in Integrations.`
+  } catch {
+    return null
+  }
 }
 
 // ── Linear probe ──────────────────────────────────────────────────────────────

@@ -31,7 +31,9 @@ export const metadata: Metadata = {
     siteName: 'Mushi Bounties',
     type: 'website',
     url: `${SITE}/`,
-    images: [{ url: `${SITE}/og-card.png`, width: 1200, height: 630 }],
+    // The card lives in the docs build (scripts/sync-docs-og-card.mjs); this app has none,
+    // so ${SITE}/og-card.png was a 404 the site audit filed (2026-10-30).
+    images: [{ url: 'https://kensaur.us/mushi-mushi/docs/social-preview/og-card.png', width: 1200, height: 630 }],
   },
   // No `site`: the @mushimushi_dev handle was never registered, and naming
   // an account someone else can claim is worse than naming none (same as

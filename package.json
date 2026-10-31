@@ -181,6 +181,7 @@
   "pnpm": {
     "overrides": {
       "browserslist": ">=4.28.7 <5",
+      "node-forge": "1.4.2",
       "fast-uri": ">=4.1.5 <5",
       "@xmldom/xmldom": ">=0.9.12 <0.10",
       "sharp": ">=0.35.5 <0.36",

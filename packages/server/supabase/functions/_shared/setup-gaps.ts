@@ -328,11 +328,22 @@ export interface SlackInput {
   latest: { status: string; message: string | null; checked_at: string } | null
 }
 
+/** The probe's detail when the stored channel cannot take posts (integration-probes.ts). */
+const SLACK_CHANNEL_DEAD = /\b(channel_not_found|is_archived|not_in_channel)\b/
+
 export function slackGap(input: SlackInput, now: Date): SetupGap {
   const base = { id: 'slack_bot_token', projectId: input.projectId, audience: 'app_owner' as const, title: 'Slack bot token', fixHref: FIX_HREFS.slack }
   if (input.connected === null) return { ...base, status: 'unknown', summary: 'Mushi could not read whether Slack is connected.' }
-  if (!input.connected) return { ...base, status: 'ok', summary: 'Slack is not connected (optional).' }
   const row = input.latest
+  // Checked before `connected`: an operator-owned app posts with the env
+  // bot token and has no slack_bot_token_ref, so it reads as "not
+  // connected" while its stored channel fails every send
+  // (MUSHI-MUSHI-SERVER-3A, glot.it / the-wanting-mind / yen-yen, 2026-10-31).
+  const channelDead = row && row.status === 'down' ? SLACK_CHANNEL_DEAD.exec(row.message ?? '') : null
+  if (row && channelDead && now.getTime() - Date.parse(row.checked_at) <= SLACK_PROBE_STALE_MS) {
+    return { ...base, status: 'gap', summary: `Slack cannot post to this app's channel (${channelDead[1]}), so Mushi's Slack messages are skipped. Invite the Mushi bot to the channel, or pick another one.` }
+  }
+  if (!input.connected) return { ...base, status: 'ok', summary: 'Slack is not connected (optional).' }
   if (!row || now.getTime() - Date.parse(row.checked_at) > SLACK_PROBE_STALE_MS) {
     return { ...base, status: 'unknown', summary: 'Slack is connected, but Mushi has not checked its token in the last day.' }
   }

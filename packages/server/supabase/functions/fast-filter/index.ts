@@ -18,6 +18,7 @@ import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import { extractAnthropicCacheUsage, logLlmInvocation } from '../_shared/telemetry.ts'
 import { reportError, withSentry } from '../_shared/sentry.ts'
 import { isStage1LlmUnavailable, sanitizeLlmError, withAnthropicOrOpenAi } from '../_shared/llm-failover.ts'
+import { isLlmAccountState } from '../_shared/llm-account-state.ts'
 import { HEURISTIC_STAGE1_MODEL, heuristicStage1Classification } from '../_shared/stage1-heuristic.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { parseBody, FastFilterBodySchema } from '../_shared/validate.ts'
@@ -321,10 +322,16 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
         err: fallbackReason,
         sentry: false,
       })
-      reportError(llmErr instanceof Error ? llmErr : new Error(fallbackReason), {
-        tags: { function: 'fast-filter', llm_fallback: 'heuristic' },
-        extra: { reportId, projectId },
-      })
+      // Over budget, or every key out of provider quota, is the account's
+      // state: the console already shows it (llmBudgetGap, key status), and
+      // reporting it paged once per report (MUSHI-MUSHI-SERVER-3J, 84
+      // events, 2026-10-31). A key that fails auth is still reported.
+      if (!isLlmAccountState(llmErr)) {
+        reportError(llmErr instanceof Error ? llmErr : new Error(fallbackReason), {
+          tags: { function: 'fast-filter', llm_fallback: 'heuristic' },
+          extra: { reportId, projectId },
+        })
+      }
       await logLlmInvocation(db, {
         projectId, reportId, functionName: 'fast-filter', stage: 'stage1',
         primaryModel: PRIMARY_MODEL, usedModel,
