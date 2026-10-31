@@ -30,13 +30,30 @@ type OpenAiProvider = ReturnType<typeof createOpenAI>
  */
 export function openAiProvider(options: OpenAiOptions): OpenAiProvider {
   const base = createOpenAI(isOpenAiHost(options.baseURL) ? { ...options, fetch: withMaxCompletionTokens(options.fetch ?? fetch) } : options)
-  if (!isOpenRouterBaseUrl(options.baseURL)) return base
-  const qualified = ((modelId: string, settings?: unknown) =>
-    (base as unknown as (id: string, s?: unknown) => unknown)(
-      openAiCompatibleModelId(modelId, options.baseURL),
-      settings,
-    )) as unknown as OpenAiProvider
-  return Object.assign(qualified, base)
+  const make = ((modelId: string, settings?: unknown) =>
+    jsonObjectMode((base as unknown as (id: string, s?: unknown) => unknown)(openAiCompatibleModelId(modelId, options.baseURL), settings))
+  ) as unknown as OpenAiProvider
+  return Object.assign(make, base)
+}
+
+/**
+ * generateObject on an OpenAI-pool model asks for a JSON answer, never a
+ * forced function call. With structured outputs off (the default here: our
+ * schemas have optional fields strict mode rejects), AI SDK 1.x picked "tool"
+ * mode, and OpenAI refuses function tools alongside a model's default
+ * reasoning on chat completions ("Function tools with reasoning_effort are not
+ * supported for gpt-6.1-sol", 2026-10-31). In "json" mode the SDK puts the
+ * schema in the prompt and validates the answer, and the model keeps reasoning.
+ * A model with structured outputs on already uses "json" with the strict schema.
+ *
+ * @internal Exported for tests only.
+ */
+export function jsonObjectMode<T>(model: T): T {
+  const m = model as { defaultObjectGenerationMode?: string; supportsStructuredOutputs?: boolean } | null
+  if (m && typeof m === 'object' && m.defaultObjectGenerationMode === 'tool' && !m.supportsStructuredOutputs) {
+    Object.defineProperty(m, 'defaultObjectGenerationMode', { value: 'json', configurable: true })
+  }
+  return model
 }
 
 /** api.openai.com itself (no base URL means the SDK default, which is OpenAI's). */

@@ -26,6 +26,7 @@ import {
   isOpenRouterBaseUrl,
   openAiCompatibleModelId,
   openAiProvider,
+  jsonObjectMode,
   withMaxCompletionTokens,
 } from '../../supabase/functions/_shared/openai-compat.ts'
 
@@ -95,6 +96,32 @@ describe('max_completion_tokens on api.openai.com (2026-10-31)', () => {
     openAiProvider({ apiKey: 'k', baseURL: 'https://openrouter.ai/api/v1' })('gpt-6.1-sol')
     openAiProvider({ apiKey: 'k', baseURL: 'https://api.together.xyz/v1' })('gpt-6.1-sol')
     expect(seen.map((x) => x.wrappedFetch)).toEqual([true, true, false, false])
+  })
+})
+
+describe('generateObject asks OpenAI for JSON, never a forced function call (2026-10-31)', () => {
+  // Shaped like @ai-sdk/openai 1.3.24's chat model: both are prototype getters.
+  class FakeChatModel {
+    constructor(private settings: { structuredOutputs?: boolean }) {}
+    get supportsStructuredOutputs() {
+      return this.settings.structuredOutputs ?? false
+    }
+    get defaultObjectGenerationMode() {
+      return this.supportsStructuredOutputs ? 'json' : 'tool'
+    }
+  }
+
+  it('turns tool mode into json mode when structured outputs are off', () => {
+    expect(jsonObjectMode(new FakeChatModel({ structuredOutputs: false })).defaultObjectGenerationMode).toBe('json')
+    expect(jsonObjectMode(new FakeChatModel({})).defaultObjectGenerationMode).toBe('json')
+  })
+
+  it('leaves a strict structured-outputs model and non-models alone', () => {
+    const strict = jsonObjectMode(new FakeChatModel({ structuredOutputs: true }))
+    expect(strict.defaultObjectGenerationMode).toBe('json')
+    expect(Object.getOwnPropertyDescriptor(strict, 'defaultObjectGenerationMode')).toBeUndefined()
+    expect(jsonObjectMode({ id: 'embedding' })).toEqual({ id: 'embedding' })
+    expect(jsonObjectMode(null)).toBeNull()
   })
 })
 
