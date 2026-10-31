@@ -55,7 +55,7 @@ const ORGANIZATION_ID = `${PRODUCT_ROOT}#organization`
  * never reserved, so neither may appear in `sameAs` — a `sameAs` URL that
  * 404s (or points at a stranger) is worse for entity resolution than none.
  */
-const BLUESKY_PROFILE_URL = 'https://bsky.app/profile/kensaurus.bsky.social'
+const BLUESKY_PROFILE_URL = 'https://bsky.app/profile/kensaur.us'
 
 /**
  * The maker's shared node. Every kensaurus app points at the same `@id`, so
@@ -76,7 +76,7 @@ const KENSAURUS_ORG_NODE = {
     'https://note.com/kensaurus',
     'https://zenn.dev/kensaurus',
     'https://www.linkedin.com/company/142923144/',
-    'https://bsky.app/profile/kensaurus.bsky.social',
+    'https://bsky.app/profile/kensaur.us',
     'https://kensaur.us/glot-it/',
     'https://kensaur.us/yen-yen/',
     'https://kensaur.us/the-wanting-mind/',

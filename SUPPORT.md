@@ -22,7 +22,7 @@ Thanks for using Mushi Mushi. Here's the fastest way to get the help you need.
 | Request a feature | [Open a feature request](https://github.com/kensaurus/mushi-mushi/issues/new?template=feature_request.yml) |
 | Ask a question or share what you built | [GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions) |
 | Ask something privately | Email kensaurus@gmail.com |
-| Follow releases | [GitHub Discussions → Announcements](https://github.com/kensaurus/mushi-mushi/discussions) or [Bluesky @kensaurus.bsky.social](https://bsky.app/profile/kensaurus.bsky.social) |
+| Follow releases | [GitHub Discussions → Announcements](https://github.com/kensaurus/mushi-mushi/discussions) or [Bluesky @kensaur.us](https://bsky.app/profile/kensaur.us) |
 | Self-host / run in production | [`SELF_HOSTED.md`](./SELF_HOSTED.md) and [`deploy/helm/`](./deploy/helm/README.md) |
 | Report a security issue | **Privately** — see [`SECURITY.md`](./SECURITY.md). Never open a public issue. |
 | Contribute code | [`CONTRIBUTING.md`](./CONTRIBUTING.md) |
