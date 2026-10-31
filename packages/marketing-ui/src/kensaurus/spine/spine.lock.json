@@ -5,7 +5,7 @@
     "updated": "2026-10-15"
   },
   "files": {
-    "apps.generated.ts": "747739999cfa1d04c4bb29c64919d44469a7342288ce63d5bd9b4ea9e8be27e1",
+    "apps.generated.ts": "461c7d621a738dd82f3a98be5c05a590c3602d18785152bd1f0b28e8000d17ca",
     "account.ts": "a00cb4f34fa6b43849644042e751a446f94de5e6d7fb7bacb933e9b4dbc66f17",
     "events.ts": "0e4af15c7e0bb9d5c44e43c7c9c5973403bc7bdec7a79a89d1abf965160b46aa",
     "links.ts": "ffdd3dcb251cc4f33da94d9d02fc8e06a5376ad1a5edb576eacfb0930739cf1b",
