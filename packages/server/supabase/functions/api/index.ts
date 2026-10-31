@@ -89,6 +89,7 @@ import { registerIntakeVoiceRoutes } from './routes/intake-voice.ts';
 import { registerPushRoutes } from './routes/push.ts';
 import { registerSentryImportRoutes } from './routes/sentry-import.ts';
 import { registerReportFileRoutes } from './routes/report-file.ts';
+import { holdWarm } from '../_shared/background.ts';
 
 ensureSentry('api');
 
@@ -921,6 +922,7 @@ function logClientAbort(req: Request, extra?: Record<string, unknown>): void {
 }
 
 async function fetchWithStatusZeroGuard(req: Request): Promise<Response> {
+  holdWarm();
   try {
     const res = await app.fetch(req);
 

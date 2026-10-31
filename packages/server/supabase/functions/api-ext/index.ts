@@ -72,6 +72,7 @@ import { registerFreshEyesRoutes } from '../api/routes/fresh-eyes.ts'
 import { registerProductionCheckRoutes } from '../api/routes/production-check.ts'
 import { registerPublicScoreboardRoutes } from '../api/routes/public-scoreboard.ts'
 import { registerLandingVisitRoutes } from '../api/routes/landing-visits.ts'
+import { holdWarm } from '../_shared/background.ts'
 
 ensureSentry('api-ext')
 
@@ -124,4 +125,7 @@ registerLandingVisitRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 
-Deno.serve((req) => app.fetch(req))
+Deno.serve((req) => {
+  holdWarm()
+  return app.fetch(req)
+})

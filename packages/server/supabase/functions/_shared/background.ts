@@ -47,6 +47,55 @@ export function keepAlive<T>(promise: Promise<T>): Promise<T> {
 }
 
 /**
+ * Keep a warm isolate for the next request (2026-10-31).
+ *
+ * The hosted runtime retires an isolate as soon as it is idle (shutdown
+ * reason `EarlyDrop`): response sent, no `waitUntil` work pending. Prod logs
+ * showed 45% of console requests on `api` booting a fresh isolate (p50 1.06 s
+ * cold vs 0.47 s warm), because a person's next click rarely lands while the
+ * previous isolate is still busy. One pending timer per isolate, pushed back
+ * by every request, keeps it up for `graceMs` after the last one. It stops
+ * extending once the isolate is `maxAgeMs` old, well inside the 150 s / 400 s
+ * wall-clock limit, so an isolate is never killed mid-request by the hold.
+ */
+export function createWarmHold(opts: {
+  graceMs: number
+  maxAgeMs: number
+  now?: () => number
+  hold?: (promise: Promise<unknown>) => void
+}): () => void {
+  const now = opts.now ?? Date.now
+  const hold = opts.hold ?? ((p: Promise<unknown>) => void keepAlive(p))
+  const startedAt = now()
+  let until = 0
+  let pending = false
+  return () => {
+    const deadline = Math.min(now() + opts.graceMs, startedAt + opts.maxAgeMs)
+    if (deadline <= now()) return
+    until = Math.max(until, deadline)
+    if (pending) return
+    pending = true
+    hold(
+      new Promise<void>((resolve) => {
+        const wait = () => {
+          const left = until - now()
+          if (left > 0) {
+            setTimeout(wait, left)
+          } else {
+            pending = false
+            resolve()
+          }
+        }
+        wait()
+      }),
+    )
+  }
+}
+
+/** The console-facing functions' hold: 30 s after the last request, at most 2 min per isolate. */
+export const holdWarm = createWarmHold({ graceMs: 30_000, maxAgeMs: 120_000 })
+
+/**
  * Run `task` in the background: kept alive past the response, and a rejection
  * is logged instead of surfacing as an unhandled promise rejection.
  */
