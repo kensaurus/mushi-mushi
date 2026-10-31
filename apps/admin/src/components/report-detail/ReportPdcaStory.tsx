@@ -311,11 +311,11 @@ export function buildStoryNodes(
     if (status === 'dismissed') return 'Loop closed — report dismissed (no fix needed)'
     if (fixStatus === 'failed') return `Loop blocked — ${fix?.error ?? 'fix attempt failed'}`
     if (blocker) return ACT_BLOCKER_COPY[blocker]
-    if (actState === 'pending') return 'Awaiting merge — review the PR and click Open PR to ship'
+    if (actState === 'pending') return 'Awaiting merge: press Merge at the top of this page'
     return 'Not yet — needs Plan + Do + Check first'
   })()
   const actLink = fix?.pr_url && actState !== 'done'
-    ? { href: fix.pr_url, label: blocker ? ACT_BLOCKER_LINK_LABEL[blocker] : 'Review & merge' }
+    ? { href: fix.pr_url, label: blocker ? ACT_BLOCKER_LINK_LABEL[blocker] : 'View PR on GitHub' }
     : status === 'fixed'
       ? { href: '/integrations/config', label: 'See routing' }
       : undefined

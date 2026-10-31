@@ -93,17 +93,60 @@ async function readCapped(res: Response, max: number): Promise<Uint8Array> {
   return out
 }
 
-/** Error-page wording seen from frameworks, hosts and browsers. */
-const ERROR_PAGE_TEXT = /this page couldn['’]t load|application error: a (client|server)-side exception|internal server error|bad gateway|service (temporarily )?unavailable|gateway time-?out|this site can['’]t be reached|an error occurred while loading|unexpected application error/i
+/**
+ * Error-page wording from frameworks (Next.js 16's built-in error screen
+ * "This page couldn't load", Next's client exception, React Router's
+ * "Unexpected Application Error"), hosts (Vercel, Netlify, Cloudflare),
+ * browsers, and the same in Japanese, Chinese and Korean. Many of these
+ * answer HTTP 200, so the status code alone misses them.
+ */
+const ERROR_PAGE_TEXT = new RegExp(
+  [
+    "this page couldn['’]t load",
+    'application error: a (client|server)-side exception',
+    'internal server error',
+    'bad gateway',
+    'service (temporarily )?unavailable',
+    'gateway time-?out',
+    "this site can['’]t be reached",
+    'an error occurred while loading',
+    'unexpected application error',
+    'deployment_not_found|deployment not found',
+    'site not found',
+    'web server is down',
+    'error 52[0-9]',
+    'エラーが発生しました',
+    '問題が発生しました',
+    'ページを?読み込めませんでした',
+    'ページが見つかりません',
+    'サーバーエラー',
+    '页面加载失败|出错了|页面未找到|找不到页面',
+    '오류가 발생했습니다|페이지를 찾을 수 없습니다',
+  ].join('|'),
+  'i',
+)
+
+/** A title that is only an error code or a "not found" (soft 404 at HTTP 200). */
+const ERROR_TITLE = /^\s*(?:error\s*)?(?:404|500|502|503|504)(?:\s*[:|–—-]\s*.{0,40}|\s+(?:not found|error|bad gateway|service unavailable|gateway time-?out|internal server error))?\s*$|^\s*(?:404[:\s-]*)?(?:page )?not found\s*$|^\s*something went wrong[.!]?\s*$/i
 
 /**
- * Why a scraped page is an error screen rather than the app, or null. Long
- * pages that merely mention an error (docs, FAQs) are not refused: only a
- * page whose whole text is short and carries an error message. Also used by
- * the free Production Check (`_shared/production-check.ts`).
+ * Why a scraped page is an error screen rather than the app, or null.
+ * Signals, strongest first: the HTTP status, Firecrawl's `metadata.error`,
+ * an error title (any page length), then error wording in a short page.
+ * Long pages that merely mention an error (docs, FAQs) are not refused by
+ * their text. Also used by the free Production Check
+ * (`_shared/production-check.ts`).
  */
-export function errorPageReason(statusCode: unknown, markdown: unknown): string | null {
+export function errorPageReason(
+  statusCode: unknown,
+  markdown: unknown,
+  meta: { title?: unknown; error?: unknown } = {},
+): string | null {
   if (typeof statusCode === 'number' && statusCode >= 400) return `The page answered ${statusCode}.`
+  if (typeof meta.error === 'string' && meta.error.trim()) return `The page failed to load (${meta.error.trim().slice(0, 120)}).`
+  const title = typeof meta.title === 'string' ? meta.title.trim() : ''
+  const titleHit = title.match(ERROR_PAGE_TEXT) ?? title.match(ERROR_TITLE)
+  if (titleHit) return `The page showed an error ("${title.slice(0, 80)}").`
   const text = typeof markdown === 'string' ? markdown.trim() : ''
   if (text.length > 0 && text.length < 600) {
     const hit = text.match(ERROR_PAGE_TEXT)
@@ -145,8 +188,9 @@ export async function captureThumbnail(
     if (res.status === 401 || res.status === 403) throw new ThumbnailError('FIRECRAWL_AUTH_FAILED', 'Firecrawl refused the key.')
     if (res.status === 402) throw new ThumbnailError('FIRECRAWL_NO_CREDITS', 'The Firecrawl account is out of credits.')
     if (!res.ok) throw new ThumbnailError(`FIRECRAWL_HTTP_${res.status}`, `Firecrawl answered ${res.status}.`)
-    const json = (await res.json()) as { data?: { screenshot?: unknown; markdown?: unknown; metadata?: { statusCode?: unknown } } }
-    const broken = errorPageReason(json.data?.metadata?.statusCode, json.data?.markdown)
+    const json = (await res.json()) as { data?: { screenshot?: unknown; markdown?: unknown; metadata?: { statusCode?: unknown; title?: unknown; error?: unknown } } }
+    const meta = json.data?.metadata
+    const broken = errorPageReason(meta?.statusCode, json.data?.markdown, { title: meta?.title, error: meta?.error })
     if (broken) throw new ThumbnailError('ERROR_PAGE', `${broken} The last good picture was kept.`)
     const shot = json.data?.screenshot
     if (typeof shot !== 'string' || !/^https:\/\//i.test(shot)) throw new ThumbnailError('NO_SCREENSHOT', 'Firecrawl returned no screenshot.')

@@ -11,10 +11,7 @@ import { registerSdkAssistantRoutes } from './routes/sdk-assistant.ts';
 import { registerConsoleKnowledgeRoutes } from './routes/console-knowledge.ts';
 import { registerAdminOpsRoutes } from './routes/admin-ops.ts';
 import { registerSiteWatchRoutes } from './routes/site-watch.ts';
-import { registerByokSpendDownRoutes } from './routes/byok-spend-down.ts';
-import { registerByokReviewFollowupRoutes } from './routes/byok-review-followups.ts';
 import { registerBillingChangePlanRoutes } from './routes/billing-change-plan.ts';
-import { registerDoctorRoutes } from './routes/doctor.ts';
 import { registerBillingProjectsQueueGraphRoutes } from './routes/billing-projects-queue-graph.ts';
 import { registerCodebaseRoutes } from './routes/codebase.ts';
 import { registerRepoDigestRoutes } from './routes/repo-digest.ts';
@@ -656,14 +653,31 @@ registerAdminOpsRoutes(app);
 
 // Live-site watch: Firecrawl monitors that file broken pages as reports (ADR 0024).
 registerSiteWatchRoutes(app);
-registerByokSpendDownRoutes(app);
-// Review follow-ups: settings, Cursor model list, scoreboard (ADR 0032).
-registerByokReviewFollowupRoutes(app);
+// Spend-down, review follow-ups and the AI provider switch (ADR 0028, 0032, 0039): served by api-ext (api size budget).
+forwardToApiExt([
+  '/v1/admin/byok/spend-down',
+  '/v1/admin/byok/spend-down/projects/:projectId/resume',
+  '/v1/admin/byok/keys/:keyId/spend-down',
+  '/v1/admin/byok/review-followups',
+  '/v1/admin/byok/ai-provider',
+  '/v1/admin/byok/cursor/models',
+]);
+
+// Verified "Connect GitHub" (GitHub App install + OAuth check + repo picker):
+// served by api-ext (api size budget). The setup URL stays in public.ts.
+forwardToApiExt([
+  '/v1/admin/projects/:id/github/connect',
+  '/v1/admin/projects/:id/github/repos',
+  '/v1/admin/projects/:id/github/repo',
+  '/v1/admin/projects/:id/github/stack',
+  '/v1/webhooks/github/app-authorize',
+]);
 
 // In-app plan change (Indie ↔ Pro, monthly ↔ annual) for paying projects.
 registerBillingChangePlanRoutes(app);
 
-registerDoctorRoutes(app);
+// Server doctor: served by api-ext with the Health check that reuses its checks (ADR 0054).
+forwardToApiExt(['/v1/admin/doctor']);
 
 forwardToApiExt(['/v1/admin/inventory', '/v1/admin/inventory/*']);
 
@@ -747,6 +761,8 @@ forwardToApiExt(['/v1/admin/projects/:id/site-audit', '/v1/admin/projects/:id/si
 forwardToApiExt(['/v1/admin/merge-queue', '/v1/admin/merge-queue/:id', '/v1/admin/projects/:id/release-settings']);
 // pipeline.ts (console /pipeline); deploy size limit, 2026-10-26.
 forwardToApiExt(['/v1/admin/pipeline', '/v1/admin/pipeline/actions', '/v1/admin/pipeline/fix/:id']);
+// report-sentry.ts (close a closed report's Sentry issues from the report page); deploy size limit, 2026-10-30.
+forwardToApiExt(['/v1/admin/reports/:id/sentry/close']);
 
 forwardToApiExt(['/v1/admin/projects/:id/local-followups', '/v1/admin/fixes/:id/local-followup', '/v1/admin/fixes/:id/local-followup/done']);
 // skill-runs.ts (ADR 0042); deploy size limit, 2026-10-23.
@@ -834,6 +850,8 @@ forwardToApiExt(['/v1/admin/projects/:id/sdk-health', '/v1/admin/projects/:id/sd
 forwardToApiExt(['/v1/admin/projects/:id/home', '/v1/admin/projects/:id/home/thumbnail']);
 // setup-gaps.ts and release-batch.ts (console ops plan P1, read-only); deploy size limit, 2026-10-27.
 forwardToApiExt(['/v1/admin/setup-gaps', '/v1/admin/release-batch']);
+// health-checks.ts: the Health check registry (plan-simplicity-2026-10 Phase 1, read-only); deploy size limit.
+forwardToApiExt(['/v1/admin/health-checks']);
 // work.ts: local workers (`mushi work --daemon`, ADR 0048); deploy size limit, 2026-10-27.
 forwardToApiExt(['/v1/worker/*', '/v1/admin/work/*']);
 // repo-housekeeping.ts (ADR 0051, console ops plan P4): repo clean-up from /repo; deploy size limit, 2026-10-27.

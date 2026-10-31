@@ -123,14 +123,14 @@ function SlowJobsTable({ jobs }: { jobs: CiJob[] }) {
             <tr key={j.id}>
               <DataTableCell>
                 {j.htmlUrl ? (
-                  <a href={j.htmlUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-start gap-1 wrap-break-word font-medium text-accent hover:underline">
-                    <span className="min-w-0 wrap-break-word">{j.jobName}</span>
+                  <a href={j.htmlUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-start gap-1 wrap-anywhere font-medium text-accent hover:underline">
+                    <span className="min-w-0 wrap-anywhere">{j.jobName}</span>
                     <IconExternalLink size={10} className="mt-0.5 shrink-0" />
                   </a>
                 ) : (
-                  <span className="block wrap-break-word font-medium text-fg">{j.jobName}</span>
+                  <span className="block wrap-anywhere font-medium text-fg">{j.jobName}</span>
                 )}
-                {j.workflowName && <span className="block wrap-break-word text-2xs text-fg-muted">{j.workflowName}</span>}
+                {j.workflowName && <span className="block wrap-anywhere text-2xs text-fg-muted">{j.workflowName}</span>}
                 <span className="block text-2xs text-fg-faint" title={j.repo}>
                   {repoShortName(j.repo)}
                   {j.prNumber ? ` · PR #${j.prNumber}` : ''}
@@ -170,8 +170,8 @@ function SlowStepsTable({ steps }: { steps: CiOverview['stats']['slowSteps'] }) 
         {steps.map((s) => (
           <tr key={`${s.repo}:${s.job}:${s.step}`}>
             <DataTableCell>
-              <span className="block wrap-break-word font-medium text-fg">{s.step}</span>
-              <span className="block wrap-break-word text-2xs text-fg-faint" title={`${s.repo} · ${s.job}`}>
+              <span className="block wrap-anywhere font-medium text-fg">{s.step}</span>
+              <span className="block wrap-anywhere text-2xs text-fg-faint" title={`${s.repo} · ${s.job}`}>
                 {s.job} · {repoShortName(s.repo)}
               </span>
             </DataTableCell>
@@ -193,11 +193,11 @@ export function CiSlowJobs({ jobs, slowSteps }: { jobs: CiJob[]; slowSteps: CiOv
   const steps = [...slowSteps].sort((a, b) => b.p50s - a.p50s).slice(0, 8)
   return (
     <div className="grid gap-4 xl:grid-cols-2">
-      <div className="min-w-0">
+      <div className="min-w-0 overflow-x-auto">
         <h3 className="mb-1.5 text-xs font-semibold text-fg">Slowest jobs</h3>
         {slow.length === 0 ? <p className="text-xs text-fg-muted">No finished jobs in this window.</p> : <SlowJobsTable jobs={slow} />}
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0 overflow-x-auto">
         <h3 className="mb-1.5 text-xs font-semibold text-fg">Slowest steps</h3>
         <p className="mb-1.5 text-2xs text-fg-muted">Typical time is the median over the runs Mushi holds.</p>
         {steps.length === 0 ? <p className="text-xs text-fg-muted">No step timings yet.</p> : <SlowStepsTable steps={steps} />}

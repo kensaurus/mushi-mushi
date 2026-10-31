@@ -72,6 +72,8 @@ function radio(label: string, within: ParentNode = document.body): HTMLButtonEle
   if (!r) throw new Error(`no option "${label}"`)
   return r
 }
+/** Key-scope radios only: the "Run AI on" switch is a radio group of its own. */
+const scopeRadios = () => [...document.body.querySelectorAll('[role="radio"]')].filter((r) => !r.closest('#ai-provider'))
 const calls = (path: string, method: string) =>
   mocks.apiFetch.mock.calls.filter(([url, init]) => url === path && (init as RequestInit)?.method === method)
 const bodyOf = (call: unknown[]) => JSON.parse(String((call[1] as RequestInit).body))
@@ -251,7 +253,7 @@ describe('ByokPanel key scope', () => {
       await render()
       expect(document.body.textContent).toContain('An owner or admin can change or remove it')
       expect(buttons().some((b) => b.textContent?.trim() === 'Turn off')).toBe(false)
-      expect(document.body.querySelectorAll('[role="radio"]')).toHaveLength(0)
+      expect(scopeRadios()).toHaveLength(0)
     })
 
     it('a Supabase token offers no scope change', async () => {
@@ -265,7 +267,7 @@ describe('ByokPanel key scope', () => {
       mocks.sharing = null
       mocks.universal = { canAdd: false, appCount: 0, organizationCount: 0 }
       await render()
-      expect(document.body.querySelectorAll('[role="radio"]')).toHaveLength(0)
+      expect(scopeRadios()).toHaveLength(0)
     })
   })
 })

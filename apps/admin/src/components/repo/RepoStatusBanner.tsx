@@ -64,11 +64,11 @@ export function RepoStatusBanner({
     return (
       <StatusBannerShell
         tone="warn"
-        title={plainBanner ? 'Install the GitHub App' : 'GitHub App not installed'}
+        title={plainBanner ? 'Connect GitHub' : 'GitHub App not installed'}
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.install ?? 'Install app'}</Btn>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.install ?? 'Connect GitHub'}</Btn>
           ) : null
         }
       />

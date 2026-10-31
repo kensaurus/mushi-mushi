@@ -3,7 +3,7 @@
 > The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Pages: 225
+Pages: 226
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -29,9 +29,9 @@ Your AI wrote it. Mushi Mushi tells you why it broke.</>}
 
 ## What it takes
 
-- **No monitoring stack.** No Sentry, no logging service, no AI key of your own. Mushi's AI writes the diagnosis.
+- **No monitoring stack.** No Sentry, no logging service, no AI key of your own. Mushi Mushi's AI writes the diagnosis.
 - **Free to start.** One app and 100 diagnoses a month with no card. Repeat reports of one bug count once.
-- **Your AI does the fix, you approve it.** Mushi hands Cursor, Claude Code or Lovable the prompt. Nothing ships until you say so. If you let an agent open the fix as a pull request, a second AI reads it next to the original report and can refuse it: [here is one it held](https://github.com/kensaurus/mushi-mushi/pull/864).
+- **Your AI does the fix, you approve it.** Mushi Mushi hands Cursor, Claude Code or Lovable the prompt. Nothing ships until you say so. If you let an agent open the fix as a pull request, a second AI reads it next to the original report and can refuse it: [here is one it held](https://github.com/kensaurus/mushi-mushi/pull/864).
 
 ## Why I built it
 
@@ -53,10 +53,10 @@ Mushi Mushi is the bug mediator for AI-built apps, an open-source tool that give
 
 Words you will see on this page
 
-- **Diagnosis**: Mushi's written explanation of one bug, with how serious it is, the likely cause and a suggested fix.
+- **Diagnosis**: Mushi Mushi's written explanation of one bug, with how serious it is, the likely cause and a suggested fix.
 - **Fix prompt**: the diagnosis plus the evidence, written as instructions you paste into your AI editor.
 - **SDK** or **script tag**: the small piece of code you add to your app. It shows the report button and sends reports to Mushi.
-- **MCP**: the standard way AI code editors such as Cursor and Claude Code connect to outside tools. It is how your editor reads Mushi's reports.
+- **MCP**: the standard way AI code editors such as Cursor and Claude Code connect to outside tools. It is how your editor reads Mushi Mushi's reports.
 
 More: [Who it’s for](/who-its-for) · [What else it does](/what-it-does) · [How a bug moves, step by step](/concepts/closed-loop) ·
 [Sentry, Linear, Slack and other tools](/plugins) ·
@@ -306,7 +306,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.30.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.30.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -333,7 +333,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.30.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.30.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -1789,6 +1789,299 @@ initMushi({
 Call `initMushi` from `hooks.client.ts` or a top-level `+layout.svelte` `onMount`.
 
 API detail: [`@mushi-mushi/svelte`](/sdks/svelte). Widget behavior: [`@mushi-mushi/web`](/sdks/web).
+
+---
+
+## Set up Mushi Mushi for a team
+
+Source: https://kensaur.us/mushi-mushi/docs/quickstart/team-setup
+
+---
+title: Set up Mushi Mushi for a team
+description: A checklist for a small dev team adopting Mushi Mushi, from sign-up to a weekly routine. Each step says what to do, where, and how to check it.
+---
+
+# Set up Mushi Mushi for a team
+
+This page is for a team of 2 to 8 developers shipping a web app built with AI
+tools. It lists what teams usually do when they adopt Mushi Mushi, in order.
+Each step says what to do, where to do it in the console, and how to check it
+worked.
+
+Plan on an hour for steps 1 to 6, and a day of real traffic before step 8.
+
+  **Teams need the Studio or Enterprise plan.** Free and Builder are solo
+  workspaces. Studio has 5 seats (you and up to 4 teammates), and pending
+  invitations count as seats. See [Teams and members](/admin/teams) and
+  [Pricing](/pricing).
+
+## 1. Accounts and team
+
+**Do this:**
+
+1. One person signs up at the console's `/signup` page. This person becomes
+   the owner.
+2. On **Set up**, name your app and create it. Creating it also makes the
+   app's report key (`report:write`).
+3. Upgrade to Studio under **Team → Billing** if you have not yet.
+4. Open **Team → Members**. Invite each teammate by email with a role.
+
+**Pick roles on purpose:**
+
+| Role | Can do | Give it to |
+| --- | --- | --- |
+| Owner | Billing, plan changes, members. The last owner cannot be removed. | One or two people |
+| Admin | Invite people, change project settings and integrations | Whoever sets up tools and keys |
+| Member | Work in shared projects and review reports | Most developers |
+| Viewer | Read-only access | Product, support, a manager |
+
+Only admins can edit integrations. A viewer cannot override a review hold
+(see step 7).
+
+**Check it worked:** each invitee opens the invite email, signs in, and sees
+the app. **Team → Members** lists them with the right role and no pending
+invitation.
+
+## 2. Connect your code (GitHub)
+
+Mushi Mushi needs GitHub access to open fix pull requests. Fixes always open
+as **draft** pull requests. Nothing lands on your main branch without a merge.
+
+**Do this:**
+
+1. Open **Connect** (or **Integrations**) and press **Connect GitHub**.
+2. Sign in to GitHub. If the Mushi Mushi GitHub App is not on your account or
+   organization yet, GitHub asks you to install it first. Pick only the
+   repositories this app lives in.
+3. Pick the repository. The list shows only repositories you can open, with
+   the one named like your app first. Mushi Mushi saves it with its default
+   branch.
+
+Each teammate connects with their own GitHub sign-in, and sees only the
+repositories they can open themselves.
+
+**Self-hosted, or no GitHub App?** Open **Use a GitHub token instead** under
+the GitHub card and paste a fine-grained personal access token. It needs
+**Contents: write** and **Pull requests: write** on the repo. Add **Secrets:
+read and write** only if you want Mushi Mushi to write CI secrets for you.
+
+**Check it worked:** the GitHub card reads **Connected: owner/repo**. Then open
+**Set up** and read **Setup gaps**: the GitHub access line for your repo should
+not be red. See [Integrations](/admin/integrations) and
+[Set up](/admin/onboarding#setup-gaps).
+
+## 3. Install the SDK in your app
+
+The SDK adds the report button to your app and sends reports to Mushi Mushi.
+
+**Do this:**
+
+1. Open **Connect → Bug capture SDK**. Pick your framework tab and copy the
+   snippet. **Make a key and fill it in** puts your key into the snippet.
+2. Put the project ID and key in environment variables, not in code:
+   - Vite (React, Vue, Svelte): `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`
+   - Next.js: `NEXT_PUBLIC_MUSHI_PROJECT_ID` and `NEXT_PUBLIC_MUSHI_API_KEY`
+3. Keep the key out of git. Put it in `.env.local` and make sure that file is
+   in `.gitignore`.
+4. Add the same variables to your hosting provider and to CI. These variables
+   are read at **build time**, so set them where the build runs, then
+   redeploy. A missing variable means the report button does not appear.
+5. Deploy.
+
+Prefer the terminal? `mushi connect` writes the variables to `.env.local` and
+wires your editor in one step. See [CLI ↔ console loop](/quickstart/cli-console-loop).
+Framework details: [React](/quickstart/react), [Vue](/quickstart/vue),
+[Svelte](/quickstart/svelte), [Vanilla JS](/quickstart/web).
+
+**Check it worked:** open your deployed app and look for the report button.
+Then open **Connect**: the **App checked in** pill should be on. If it is not,
+the **SDK health** section names the problem. See [Connect](/admin/connect)
+and [SDK health](/admin/sdk-health).
+
+## 4. Connect each developer's editor (MCP)
+
+With MCP, each developer can ask their editor for a bug's diagnosis and fix
+prompt without opening the console. Every developer does this once, with
+their own account.
+
+**Do this:**
+
+1. Open **Connect**, pick your client (Cursor, Claude Code, VS Code and
+   others), and use the **MCP** lane.
+2. Or, in Claude Code, add the hosted server and sign in:
+
+   ```bash
+   claude mcp add --transport http mushi "https://kensaur.us/mushi-mushi/hosted-mcp/"
+   claude mcp login mushi
+   ```
+
+3. In the browser, sign in, pick which projects the editor may see, and click
+   **Approve**.
+
+The editor gets what the developer's role allows, no more.
+
+**Check it worked:** ask the editor *"list mushi tools"*, then *"get the
+latest Mushi Mushi report"*. You should see the tools and a report. See
+[MCP server](/quickstart/mcp).
+
+## 5. Alerts (optional)
+
+Decide who hears about new bugs, and where.
+
+**Do this:**
+
+1. Open **Integrations → Alerts**. Connect **Slack** (click **Add to Slack**,
+   pick a channel, invite the bot) or **Discord**.
+2. Use one shared channel, such as `#bugs`. Everyone on the team who should
+   triage joins it.
+3. Optional: connect Linear, Jira or GitHub Issues under **Issue trackers** if
+   you want critical and high bugs copied there. PagerDuty pages on-call for
+   critical bugs only.
+
+Who gets what:
+
+| Who | What they get | Where it is set |
+| --- | --- | --- |
+| The team channel | New bugs as cards, with buttons to dispatch a fix, resolve or dismiss (Slack) | **Integrations** |
+| The billing contact | Usage emails at 50%, 80% and 100% of included diagnoses | **Team → Billing** (defaults to the owner) |
+| The person who reported the bug | Messages in your app when it is diagnosed and fixed | **Reporter updates** |
+
+**Check it worked:** press **Send test** on the Slack, Discord or Teams card.
+A test message should arrive in the channel. See [Slack app](/plugins/slack) and
+[Discord](/plugins/discord).
+
+## 6. AI keys and cost
+
+**What you get:** Free includes 100 diagnoses a month, with a hard stop.
+Builder and Studio include more, and monthly plans can run into capped
+overage. Reports are always kept, even when diagnoses pause. See
+[Pricing](/pricing).
+
+**Do this:**
+
+1. Decide whether to bring your own AI key. Under **Settings → AI keys**, add
+   an Anthropic, OpenAI or Cursor key. Mushi Mushi then uses it for fix pull
+   requests and agent work, and you pay that vendor directly. A Cursor key is
+   what lets a cloud agent write fixes.
+2. Set spend limits under **Settings → General → Spend limits**:
+   - **Monthly AI budget**: all AI calls for the app stop at this amount until
+     the 1st of next month.
+   - **Auto-fix spend limit** and **Automatic fixes per day**: cap fixes Mushi
+     Mushi starts on its own. New projects start at $2 per 30 days and 3
+     automatic fixes a day.
+   - **Ask me before fixes that may cost more than**: expensive fixes wait for
+     approval.
+3. On a paid plan, check the **Monthly spend cap** under **Team → Billing**.
+   This caps overage on your bill. It is separate from the AI budget above.
+
+**Check it worked:** after the first few reports, open **Team → AI spend**.
+You should see each call with its model, cost and which key paid. See
+[Settings](/admin/settings), [AI spend](/admin/cost) and [Billing](/admin/billing).
+
+## 7. Review gate and merging
+
+Decide how a fix gets from a draft pull request to your main branch.
+
+**What happens by default:**
+
+1. Each cloud agent fix gets an AI review a few minutes after its pull
+   request opens. The verdict is **merge**, **fix first** or **hold**.
+2. A **hold** blocks merging from Mushi Mushi. Only a project member who is
+   not a viewer can override it, in the console, with a written reason that
+   goes to the audit log.
+3. Your CI must pass. A skipped or stopped check never counts as a pass.
+4. Approved, green pull requests go into a merge queue. By default the queue
+   batches them into a **release train**, so several fixes ship as one deploy.
+
+**Do this:**
+
+1. Agree as a team that a person reads every fix before it merges. The AI
+   review helps you read; it does not replace you.
+2. Leave **Merge proven fixes automatically** off at first. It is off by
+   default, under **Settings → General → Fixes and CI → Verified merge**. Turn
+   it on later, if you want, once you trust the gates.
+3. Choose **Batch** (release trains) or **Each PR** in the **Merge when ready**
+   panel on **Fixes**.
+4. Decide how much CI a fix pull request runs. Open **CI runners → CI
+   settings**. Where your workflows read `vars.CI_PROFILE`, **Checks on fix
+   pull requests** offers **Economy** (the default: fix pull requests may skip
+   slow, billed checks, which still run before a deploy) or **Thorough**
+   (every check on every pull request). A move to GitHub-hosted runners
+   switches back on its own after the time you pick. See
+   [CI runners](/operating/ci-runners).
+
+**Check it worked:** open **Pipeline**. Each stage shows a count, and nothing
+is stuck without a reason. See [Agent PR review](/concepts/agent-pr-review),
+[Verified merge](/admin/verified-merge), [Fixes](/admin/fixes) and
+[Pipeline](/admin/pipeline).
+
+## 8. Test the whole loop
+
+Run one bug through every step before you rely on it.
+
+1. **Test report.** On **Set up**, click **Send test report** (or **Submit
+   test report** on the **Test it** tab). A diagnosis appears on the same
+   screen.
+2. **Real report.** Open your deployed app and file a bug with the report
+   button. Check the screenshot preview before you send it.
+3. **Diagnosis.** Open **Bugs**. The report is there with a plain-English
+   diagnosis.
+4. **Fix.** On the report, click **Dispatch fix**. Follow it on **Fixes**
+   until a draft pull request opens.
+5. **Review.** Read the AI review and the diff. Fix or hold if needed.
+6. **Merge.** Merge from the console, or let the release train take it. The
+   report is marked Fixed.
+7. **Reporter is told.** Open **Reporter updates → Sent**. You should see a
+   `fixed` message for that report.
+8. **Deploy is seen.** To tell reporters "your fix is live", Mushi Mushi needs
+   to see your deploys. Turn on **Release automatically when you ship** on
+   **Releases**. It fires on a published GitHub release, a successful
+   production deployment, or a `release.published` event from your CI.
+
+**Check it worked:** **Set up → Setup gaps** shows no red line for deploy
+events. If no deploy has been seen in 14 days, it says so. See
+[Releases](/admin/releases) and [Reporter updates](/admin/notifications).
+
+## 9. Ongoing routine
+
+**Name one owner for the Bugs queue each week.** Rotate it. The owner does a
+15-minute pass, once or twice a week:
+
+1. **To-do**: clear what needs a person.
+2. **Bugs**: dismiss noise and duplicates, dispatch fixes for real bugs.
+3. **Pipeline**: open stuck groups. Re-run CI, send to follow-up, or decide on
+   holds.
+4. **Checks**: look at anything red or amber.
+5. **Team → AI spend**: compare spend with the budget.
+
+**Privacy and data:**
+
+- **Screenshots.** Reporters see a preview of the screenshot and can remove it
+  before they send. Under **Connect → Bug capture SDK**, keep **Privacy caption
+  on screenshot preview** on, or write your own text.
+- **Retention.** Reports older than your plan's window are deleted daily: Free
+  14 days, Builder 90, Studio 180, Enterprise custom.
+- **Storage.** To keep screenshots in your own bucket, see [Storage](/admin/storage)
+  and [BYO storage](/security/byo-storage).
+- **Who can see what.** Review **Team → Members** when someone joins or leaves.
+
+See [Security](/security) for the full summary.
+
+## Done when
+
+| Area | Done when |
+| --- | --- |
+| Team | Every developer has accepted an invite with the right role |
+| GitHub | The GitHub card reads **Connected: owner/repo**; Setup gaps shows no red GitHub line |
+| SDK | The report button shows in production; **App checked in** is on |
+| Secrets | The key is in `.env.local`, hosting and CI, not in git |
+| Editor | Each developer's editor lists the Mushi Mushi tools |
+| Alerts | A test message arrived in the team channel |
+| Cost | Spend limits are set; AI spend shows real calls |
+| Review | The team agrees a person reads every fix; auto-merge is a deliberate choice |
+| Loop | One real bug went report → diagnosis → draft PR → merge → reporter told |
+| Deploys | Setup gaps shows deploys are seen |
+| Routine | One person owns the Bugs queue this week |
 
 ---
 
@@ -5329,7 +5622,7 @@ flowchart TB
 Mushi ships BOTH MCP transports so you can pick the one that matches
 your client:
 
-- **stdio** — `npx -y @mushi-mushi/mcp@0.30.0`. Default for editor
+- **stdio** — `npx -y @mushi-mushi/mcp@0.30.2`. Default for editor
   integrations (Cursor / Claude Desktop / Claude Code / Continue /
   Cline / Zed / Windsurf). Your client launches the server as a
   subprocess and pipes JSON-RPC over stdio.
@@ -8704,7 +8997,7 @@ entry.
 
 ## Two transports
 
-- **stdio (local)**: `npx -y @mushi-mushi/mcp@0.30.0`. This is what
+- **stdio (local)**: `npx -y @mushi-mushi/mcp@0.30.2`. This is what
   `mushi setup --stdio` writes, and what `setup` always writes for Continue and
   Zed. Use it for any client that only runs local servers. Your client launches
   the server as a subprocess and pipes JSON-RPC over stdio.
@@ -9013,7 +9306,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `refresh_recipe` | Refresh the app recipe | Read mushi.recipe.json and the design-token files from the connected repo again and store a new recipe snapshot, instead of waiting for the daily refresh. At most once per project every 5 minutes (429 RATE_LIMITED otherwise). Optional projectId. Returns \{ ok, state, reason, snapshotId, tokensHash, manifestPresent, tokenCount, issues } where state is ok \| drift \| unknown \| not_connected \| error and issues lists manifest problems with their path. Write: it stores a snapshot; nothing in the repo changes. Use after editing mushi.recipe.json or the tokens; then read get_app_recipe or get_design_tokens. |
 | `run_design_deviance` | Run the design deviance scan | Refresh the design tokens and start a new deviance scan of the repo (off-token colours, fonts, spacing, radius, contrast below AA, raw interactive elements). The scan reads up to 1,500 files in the background: the result is \{ refresh, run } with run.status "running" (poll get_design_deviance until running clears), or run null when the repo has no tokens to compare against (refresh says why). At most one scan per project every 5 minutes (429 RATE_LIMITED otherwise). Optional projectId. Write: it records a scan; nothing in the repo changes. |
 | `run_store_review` | Run the store review | Run the store review for one project now: listing text in the repo against what is live on the App Store and Google Play, listing claims against the code, privacy labels against data-collecting SDKs, screenshots, length limits and the pre-submission checklist. Each result is ok \| finding \| unknown (not checked, never healthy). This is a check against the code, not legal advice. At most one review per project every 30 minutes (429 RATE_LIMITED otherwise). Optional projectId. Returns \{ projectId, checkedAt, status, results, checklist, findings, note }; read it again later with get_store_status. Write: it records a gate run; nothing is submitted to a store. |
-| `request_ci_placement_change` | Ask to change where CI runs (needs approval) | Ask to change where one repository's CI runs by setting or removing one repo Actions variable that its workflows read in runs-on (ADR 0037). Only LINUX_RUNNER and RUNNER_\ may be changed; value is one runner label, or null to remove the variable so jobs use the workflow's fallback (usually GitHub-hosted). Mushi builds the change itself from a fresh preview: the jobs that move and the ones that stay (pinned to GitHub, main-branch and Dependabot runs), the target runners and their wait, the cost change, and the variable's current value, which the change must still match when it runs. Your organization's CI policy is checked now and again when it runs: no paid GitHub-hosted minutes on private repos when that rule is on, repos managed by an external controller are refused, standby runners are never a target. This only creates a request: a team owner or admin approves it in the console and runs it there within an hour; this tool can never approve or run it, and Mushi never changes runner labels or registrations. Confirm with the user first. Returns \{ id, status: "pending_approval", payloadSha256, preview }, or an error with the reason (VARIABLE_NOT_ALLOWED, POLICY_NO_PAID_HOSTED, EXTERNAL_CONTROLLER, POLICY_STANDBY_TARGET, VARIABLE_UNREADABLE, NO_CHANGE) and the preview. Write. |
+| `request_ci_placement_change` | Ask to change where CI runs (needs approval) | Ask to change where one repository's CI runs by setting or removing one repo Actions variable that its workflows read in runs-on (ADR 0037). Only LINUX_RUNNER, RUNNER_\ and CI_PROFILE may be changed; value is one runner label, or null to remove the variable so jobs use the workflow's fallback (usually GitHub-hosted). CI_PROFILE (economy, the default, or thorough) is offered only where a workflow reads vars.CI_PROFILE and moves no job. A move to GitHub-hosted can carry revertAfterHours (1–168): Mushi switches it back when the time is up unless someone changed it. Mushi builds the change itself from a fresh preview: the jobs that move and the ones that stay (pinned to GitHub, main-branch and Dependabot runs), the target runners and their wait, the cost change, and the variable's current value, which the change must still match when it runs. Your organization's CI policy is checked now and again when it runs: no paid GitHub-hosted minutes on private repos when that rule is on, repos managed by an external controller are refused, standby runners are never a target. This only creates a request: a team owner or admin approves it in the console and runs it there within an hour; this tool can never approve or run it, and Mushi never changes runner labels or registrations. Confirm with the user first. Returns \{ id, status: "pending_approval", payloadSha256, preview }, or an error with the reason (VARIABLE_NOT_ALLOWED, POLICY_NO_PAID_HOSTED, EXTERNAL_CONTROLLER, POLICY_STANDBY_TARGET, VARIABLE_UNREADABLE, NO_CHANGE) and the preview. Write. |
 | `open_ci_cost_fix` | Open a CI cost fix PR (draft) | Open a DRAFT pull request that applies one CI cost fix to one workflow file (ADR 0047), the fix a CI advice item offers as autofix (get_ci_overview / get_ci_costs advice[].autofix \{ kind, projectId, repo, workflowPath }). kind: add_concurrency (a concurrency group that cancels superseded pull request runs, never a push), skip_drafts (ready_for_review added to the pull_request types and every job skips drafts), weekly_cron (a schedule that fires more than weekly runs once a week), ignore_docs_paths (paths-ignore for docs-only changes, Markdown, docs/, license and issue templates, on pull_request and push; refused when a job looks like a required check, because a skipped workflow never reports and the PR could not merge). The repo must be connected to the project. Mushi reads the workflow from the default branch, edits only that file (comments kept), opens the PR as a draft with a conventional ci: title, and records the workflow's billed minutes per day for the 14 days before; nothing changes until a person reviews, readies and merges it. The job runs in the background: read it again with the job id (GET /v1/admin/ci/cost-fixes/\{id}, or `mushi runner fix-status`); after the merge it shows the saving measured per day. Writing a workflow file needs the GitHub App's Workflows: Read and write permission or a token with the workflow scope. Confirm with the user first. Returns \{ job: \{ id, status (queued \| running \| pr_opened \| no_change \| refused \| failed), summary, errorCode, error, prUrl, baseline, measured, saving } }, or an error (REPO_NOT_IN_PROJECT, PR_ALREADY_OPEN with the job, COST_FIX_IN_PROGRESS, RATE_LIMITED: 10 an hour per project). Write. |
 | `apply_ci_cost_fix_rollout` | Open CI cost fixes for every app (one draft PR per repo) | Open the CI cost fixes from preview_ci_cost_fix_rollout as ONE draft pull request per repo (ADR 0047 amendment), so each repo runs CI once for all its fixes instead of once per fix. repos: [\{ projectId, repo, items: [\{ workflowPath, kind }] }], at most 10 repos and 20 items each (pass the preview's ready items). Mushi rebuilds the advice itself and opens only items it still advises (evidence and saving come from the server), skips an edit whose PR is still open or that is being opened, and counts each repo once against its project's 10 CI fix PRs an hour. In each repo it reads every workflow once, applies the kinds in turn with the same refusals as open_ci_cost_fix, and opens one draft PR with a ci: title whose body lists each change and each refusal; a refused item is never dropped, and when every item is refused no PR is opened. Nothing changes until a person reviews, readies and merges the PR. Needs the GitHub App's Workflows: Read and write permission (or a token with the workflow scope). Confirm with the user first. Returns \{ queued, results [\{ projectId, repo, status (queued \| skipped \| error), bundleId, jobs, skipped [\{ workflowPath, kind, code (NOT_ADVISED \| PR_ALREADY_OPEN \| COST_FIX_IN_PROGRESS), message, prUrl }], error \{ code (NOT_FOUND \| FORBIDDEN \| REPO_NOT_IN_PROJECT \| RATE_LIMITED \| COST_FIX_IN_PROGRESS \| MIGRATION_PENDING), message } }] }. Follow each bundle with get_ci_cost_fix_bundle. Write. |
 | `set_design_settings` | Set design score actions | Change what the design deviance score may do for one project: threshold (0–100), failCi (true fails `mushi recipe check --push` above the threshold) and autofix. Send at least one. An API key can turn autofix off but never on: turning it on lets the project spend on fixes by itself, so it needs a signed-in owner or admin in the console (403 otherwise). Project owners and admins only. Optional projectId. Returns the saved settings. Write. |
@@ -14344,8 +14637,10 @@ up-to-date anti-patterns from your project's fix history.
 ## Connecting GitHub for auto-PR
 
 For Cursor to open draft PRs via `dispatch_fix`, install the Mushi GitHub
-App on your repo. In the admin console, open **Integrations** and click
-**Install GitHub App**. Turn on **Automatic fixes** on the same page:
+App on your repo. In the admin console, open **Integrations**, click
+**Connect GitHub**, sign in to GitHub and pick the repository (GitHub offers
+the install step if the App is not on your account yet). Turn on
+**Automatic fixes** on the same page:
 `dispatch_fix` is refused while it is off.
 
 ## Troubleshooting
@@ -14912,7 +15207,9 @@ npx supabase secrets set FIRECRAWL_API_KEY=…
 npx supabase secrets set ADMIN_BASE_URL=https://your-domain.example.com/admin
 ```
 
-Tenants can override `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` per project via [BYOK](/security/byok). `E2B_API_KEY` is read by the Node fix orchestrator in `@mushi-mushi/agents`, not by the edge functions; set it where that runs if you use the E2B sandbox.
+Tenants can override `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` per project via [BYOK](/security/byok).
+
+The server-wide `GITHUB_TOKEN`, `SLACK_BOT_TOKEN` and `LANGFUSE_*` keys belong to the operator's own accounts, so they count as an app's own GitHub, Slack or Langfuse connection only for apps owned by a user listed in `MUSHI_OPERATOR_USER_IDS` (comma-separated user ids). The pipeline's own Langfuse tracing still uses the keys for every app. Every other app connects its own GitHub (the GitHub App, or a token on its Integrations page) and its own Slack. On a single-team self-host, put your own user id there, or the server-wide token serves no app. `E2B_API_KEY` is read by the Node fix orchestrator in `@mushi-mushi/agents`, not by the edge functions; set it where that runs if you use the E2B sandbox.
 
 ## JWT verification
 
@@ -15658,7 +15955,7 @@ description: What Mushi Mushi collects, why, who processes it, how long it is ke
   it as a description of current practice, not a finished legal document.
   Questions: kensaurus@gmail.com.
 
-**Effective date:** 2026-10-29 · **Version:** 4. Version 4 lists Langfuse and Browserbase, which we already used but had left out of section 5; neither is new, and we are telling console account holders about the omission by email; says Sentry also receives errors from Mushi Mushi's own servers; says model providers also receive code snippets for fixes and reviews; describes the request tracker as it is (it records requests, it does not produce a signed export); and corrects the tester ID-check threshold to US$400. (Version 3, 2026-10-28, did not include these corrections; version 2, 2026-10-10, did not list the free production check or the cookieless visit count; version 1, 2026-09-21, did not list the opt-in known-fix search sent to Firecrawl.)
+**Effective date:** 2026-10-29 · **Version:** 5. Version 5 adds two things we record from today: for each SDK key, the first and last time it checked in from each kind of place (dev machine, live site, store app, server), with the host only; and milestones our servers record about your account and projects (section 2, "Product usage events" and "SDK key check-ins"). Version 4, earlier the same day, lists Langfuse and Browserbase, which we already used but had left out of section 5; neither is new, and we are telling console account holders about the omission by email; says Sentry also receives errors from Mushi Mushi's own servers; says model providers also receive code snippets for fixes and reviews; describes the request tracker as it is (it records requests, it does not produce a signed export); and corrects the tester ID-check threshold to US$400. (Version 3, 2026-10-28, did not include the version 4 corrections; version 2, 2026-10-10, did not list the free production check or the cookieless visit count; version 1, 2026-09-21, did not list the opt-in known-fix search sent to Firecrawl.)
 
 This policy covers **Mushi Cloud** (the hosted service at
 `kensaur.us/mushi-mushi`), the **admin console**, the **docs site**, the
@@ -15686,7 +15983,8 @@ requests personally.
 | **Account data** | Email address, display name and avatar from Google or GitHub sign-in, the "how did you hear about us" answer and `?src=` signup source, plan and billing status | You, when you create a console account | Run your account, bill you, understand which channels bring users |
 | **End-user report data** | Screenshot, console and network log excerpts, browser user agent, viewport, page URL, the reporter's free-text description, an opaque reporter token, a hashed device fingerprint (a SHA-256 of browser, screen and time-zone traits, used to spot abuse), any end-user identifier (email, user ID) the host app chooses to pass, voice transcripts when the host app turns on voice intake | The SDK in an app that a project owner built | Diagnose the bug and hand the owner a fix |
 | **Fix and repo data** | Repository names, file paths and an index of your code, draft pull requests, MCP tool calls from your editor | The GitHub integration and the MCP server, when you connect them | Produce fixes that fit your codebase |
-| **Product usage events** | Console page views, setup-funnel steps (project created, key minted, first report), feature clicks, and a session heartbeat with your browser user agent, tagged with your user ID | The console, through Mushi's own SDK | Improve activation and find dead ends |
+| **Product usage events** | Console page views, setup-funnel steps (project created, key minted, first report), feature clicks, and a session heartbeat with your browser user agent, tagged with your user ID; and milestones Mushi Mushi's servers record about your account and projects, tied to your user ID and project ID: first SDK check-in from a dev machine and from a live site or app, first report from a live app, first diagnosis viewed, first fix sent to an agent, fixes merged, plan upgrades | The console, through Mushi's own SDK, and Mushi Mushi's servers | Improve activation and find dead ends |
+| **SDK key check-ins** | For each SDK key: when it was first and last used, and from where: the scheme and host of the page or app (for example `https://myapp.com`, `http://localhost:5173` or a local network address), never the path or query; the kind of place (dev machine, live site, store app, server); and the latest user agent | The Mushi Mushi SDK in your app, each time it calls the API | Show you whether your app is live and reaching users, and find where setup stalls |
 | **Docs-site analytics** | Views of the landing, quickstart and pricing pages (route, referring page without its query string, `utm_*` tags), clicks on sign-up and demo buttons, a session heartbeat with your browser user agent, and a random browser ID stored in your browser. These are **pseudonymous, not anonymous**: if you later sign in to the console in the same browser, the console links your earlier docs events to your account | The docs and landing pages, through Mushi's own SDK — only after you accept the consent bar | Measure the funnel from landing to signup |
 | **Docs-site page-view count** | For each page view: the page path, the `?src=` campaign tag of the link you arrived by, and the host name of the site that linked to you (for example `news.ycombinator.com`). Stored only as a count per day, path, tag and host. No IP address, cookie, browser ID, user agent or fingerprint is stored, and nothing is written to your browser. To stop one visitor flooding the count, the rate limiter keeps a one-way hash of your IP address salted with a secret and the date, so it cannot be turned back into the address or linked across days, and it is never stored with the counts | The docs and landing pages, without the SDK, before and without consent; skipped when Do Not Track or Global Privacy Control is on | Count how many people each launch post or link brings |
 | **Console error telemetry** | Stack traces, browser and OS, the console route you were on when something broke | Sentry, from the admin console | Fix bugs in the console itself |
@@ -15791,6 +16089,7 @@ reserved.
 | End-user reports and everything attached to them | The retention window of your plan: **Free 14 days · Builder 90 days · Studio 180 days · Enterprise as agreed**, or a shorter per-project policy you set in **Compliance → Data retention** | A daily `retention-sweep` job hard-deletes rows past the window. Legal-hold rows are skipped |
 | Product usage events (Mushi's own console analytics) | **730 days (2 years)** | Nightly `prune_product_events` job, using the 730-day retention set on Mushi's own analytics project |
 | Docs-site analytics | 730 days (2 years) | Same table and job as above |
+| SDK key check-ins (first and last seen per key and kind of place) | While the key exists | Deleted with the key or the project (database cascade) |
 | Free production checks (address, findings, IP hash, optional email) | 90 days | Daily `retention-sweep` |
 | Docs-site page-view count | Kept as daily counts; they hold no personal data | The `landing_page_views_daily` table. The salted daily hash used against flooding sits in the rate-limit table, apart from the counts |
 | Analytics events your app sends with `Mushi.track()` | 90 days by default, or the per-project override (1–3650 days) | Same nightly job |
@@ -16802,7 +17101,7 @@ mushi runner status --json
 | Actions: read | Jobs, their times, runner names and why a job was cancelled |
 | Administration: read (optional) | The runner list: online, offline, busy, labels |
 | Metadata: read | Whether a repo is public or private (read once a day): it decides what GitHub-hosted minutes cost |
-| Variables: read and write (optional) | Changing where CI runs: Mushi reads and writes only `LINUX_RUNNER` and `RUNNER_`, with the GitHub token stored in the project's settings (or, without one, the organization's). Never the Mushi GitHub App, which does not have this permission, and never Mushi's own token |
+| Variables: read and write (optional) | Changing where CI runs: Mushi reads and writes only `LINUX_RUNNER`, `RUNNER_` and `CI_PROFILE`, with the GitHub token stored in the project's settings (or, without one, the organization's), else the Mushi GitHub App installation for that repo once you approve its "Variables: Read and write" permission. Never Mushi's own token |
 
 Without Administration: read, Mushi shows the runners it saw in jobs and says
 so.
@@ -16915,7 +17214,39 @@ same approval.
 mushi runner placement show
 mushi runner placement preview --repo you/your-app --value my-runner-label
 mushi runner placement request --repo you/your-app --value my-runner-label --reason "save paid minutes"
-mushi runner placement preview --repo you/your-app --remove     # back to GitHub-hosted
+mushi runner placement preview --repo you/your-app --remove --revert-after 4     # GitHub-hosted for 4 hours
+mushi runner placement request --repo you/your-app --variable CI_PROFILE --value thorough
+```
+
+### Time-boxed GitHub-hosted runs
+
+A move to GitHub-hosted runners can switch back on its own. In the console,
+**Switch back after** defaults to 4 hours (`--revert-after `,
+1–168). The time box is part of the change you approve. When it is up, Mushi
+files the ordinary revert in the approver's name and runs it within 10
+minutes, with the same compare-and-set: if anyone changed the variable in the
+meantime, Mushi leaves it alone and records why. A move without a time box
+says so in its preview, because GitHub-hosted minutes on a private repo are
+billed until someone switches back.
+
+### Checks on fix pull requests (`CI_PROFILE`)
+
+If your workflows read `vars.CI_PROFILE`, the repo also shows **Checks on fix
+pull requests**:
+
+- **Economy** (recommended, and the default when the variable is unset): your
+  workflows may skip slow, billed checks on Mushi fix pull requests. Those
+  checks still run on the release train and on main before a deploy.
+- **Thorough**: every check on every pull request, fix pull requests
+  included. More GitHub-hosted minutes on a private repo.
+
+It moves no `runs-on`, so it goes through the same preview, request, approve
+and run steps without a runner target. A repo whose workflows do not read
+`vars.CI_PROFILE` shows no switch, because changing it would do nothing.
+
+```yaml
+# Skip the visual audit on Mushi fix PRs unless the repo asks for thorough.
+if: ${{ vars.CI_PROFILE == 'thorough' || !(startsWith(github.head_ref, 'bugfix/MUSHI-') || (startsWith(github.head_ref, 'mushi/') && !startsWith(github.head_ref, 'mushi/train/'))) }}
 ```
 
 ### Your CI agreement
@@ -18643,10 +18974,10 @@ and shows a fused verdict:
 **One-click sync:** `POST /v1/admin/projects/:id/sync-ci-secrets` mints a
 scoped ingest key and writes each required var via sealed-box encryption.
 
-The Mushi GitHub App requests `Contents` + `Pull requests` only — not Actions
-secrets. Auto-write works when a fine-grained PAT with **Actions secrets: Read
-and write** is stored in project settings. Otherwise the card expands guided
-`gh secret set` commands and a CI `env:` YAML block.
+The Mushi GitHub App can read Actions secrets but not write them. Auto-write
+works when a fine-grained token with **Secrets: Read and write** is stored in
+the project's settings. Otherwise the card shows the `gh secret set` commands
+to run and the `env:` block to add to your CI workflow.
 
 See also: [Self-hosting](/self-hosting) · [`AGENTS.md` native CI section](https://github.com/kensaurus/mushi-mushi/blob/master/AGENTS.md#native-ci-secrets-diagnostic--auto-write-jun-2026)
 
@@ -18673,8 +19004,10 @@ CLI equivalent: see [SDK reference → CLI](/sdks/cli) (`mushi upgrade` for loca
 ## Quick path (5 minutes)
 
 ### Connect GitHub
-Install the Mushi GitHub App on your primary repo (or paste a fine-grained PAT
-with Contents + PR + Actions secrets if you need CI auto-write).
+Press **Connect GitHub**, sign in to GitHub and pick your repository. The list
+shows only repositories you can open, with the one named like your app first.
+If the Mushi GitHub App is not on your account yet, GitHub asks you to install
+it first.
 
 ### Install SDK
 Copy the framework snippet → paste into your app → deploy or run locally.
@@ -20724,12 +21057,16 @@ For more event routing (Discord, Teams, Zapier and more, or your own webhooks), 
 ## Common tasks
 
 ### Connecting GitHub so the fix agent can open PRs
-1. Install the Mushi Mushi GitHub App on your repo, or create a fine-grained PAT with
-   Contents: write and Pull requests: write.
-2. On the **GitHub (code repo)** card, click **Configure integration**.
-3. Enter the repo URL, default branch and the installation token.
-4. Click **Save**, then **Test connection**, and confirm the probe returns green.
-5. Open [Pull requests](/admin/repo): the header should show your connected repo.
+1. On the **Your code on GitHub** card, press **Connect GitHub**.
+2. Sign in to GitHub. If the Mushi Mushi GitHub App is not on your account or
+   organization yet, GitHub asks you to install it and choose its repositories.
+3. Pick the repository. Mushi Mushi lists only repositories you can open, with
+   the one named like your app first, and saves it with its default branch.
+4. Open [Pull requests](/admin/repo): the header shows your connected repo.
+
+Self-hosted, or no GitHub App? Open **Use a GitHub token instead** under the
+card and paste a fine-grained token with Contents: write and Pull requests:
+write.
 
 ### Bringing Sentry errors into Mushi Mushi
 1. On the **Sentry** card, click **Configure integration**.
@@ -21601,7 +21938,7 @@ Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See
   "mcpServers": {
     "mushi-myproject": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.30.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.30.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "<your-project-id>",

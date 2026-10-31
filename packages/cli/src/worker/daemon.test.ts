@@ -130,6 +130,26 @@ describe('mushi work --daemon', () => {
     expect(calls.some((c) => c.path === '/v1/worker/claim')).toBe(false)
   })
 
+  it('rides out a stray 401 (the server could not check the key) and stops only when it repeats (2026-10-30)', async () => {
+    const refused = { ok: false, httpStatus: 401, error: { code: 'INVALID_API_KEY', message: 'Invalid or revoked API key' } } as const
+    // Refused once, then fine: keeps working.
+    const blip = harness({ heartbeat: (n) => (n === 1 ? refused : undefined) })
+    await blip.daemon.tick()
+    expect(blip.daemon.stopped).toBeNull()
+    expect(blip.daemon.hostState).toBe('backoff')
+    await blip.daemon.tick()
+    expect(blip.daemon.stopped).toBeNull()
+
+    // Refused on every heartbeat: stops on the third.
+    const gone = harness({ heartbeat: refused, claim: [claimReply] })
+    await gone.daemon.tick()
+    await gone.daemon.tick()
+    expect(gone.daemon.stopped).toBeNull()
+    await gone.daemon.tick()
+    expect(gone.daemon.stopped).toMatch(/INVALID_API_KEY.*3 times in a row/)
+    expect(gone.calls.some((c) => c.path === '/v1/worker/claim')).toBe(false)
+  })
+
   it('backs off after a network error instead of stopping', async () => {
     const { daemon } = harness({ heartbeat: { ok: false, error: { code: 'NETWORK_ERROR', message: 'ECONNRESET' } } })
     await daemon.tick()

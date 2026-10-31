@@ -29,4 +29,7 @@ export const PAGE_SHELL_CLASS: Record<PageLayoutWidth, string> = {
 }
 
 /** Full-width page body stack — matches shell padding, no extra horizontal inset. */
-export const PAGE_CONTENT_STACK = 'flex w-full min-w-0 flex-col gap-4'
+// The header bar keeps its own bottom margin for pages that are not a stack;
+// inside one, the gap already spaces it, so the margin is dropped (a double
+// 32px gap under every page title, owner 2026-10-30).
+export const PAGE_CONTENT_STACK = 'flex w-full min-w-0 flex-col gap-4 [&>[data-page-header]]:mb-0'

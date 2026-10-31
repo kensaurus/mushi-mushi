@@ -157,18 +157,19 @@ export function registerMergeQueueRoutes(app: Hono<{ Variables: Variables }>): v
         .or(`state.in.(building,testing),updated_at.gte.${since}`)
         .order('created_at', { ascending: false })
         .limit(100),
-      db.from('project_settings').select('project_id, release_mode, train_interval_minutes, train_max_members').in('project_id', projectIds),
+      db.from('project_settings').select('project_id, release_mode, train_interval_minutes, train_max_members, auto_decide_enabled').in('project_id', projectIds),
     ]);
     return c.json({
       ok: true,
       data: {
         rows: data ?? [],
         trains: ((trains ?? []) as Array<Record<string, unknown>>).map((t) => ({ ...t, members: Array.isArray(t.members) ? (t.members as Array<{ prNumber: number }>).map((m) => m.prNumber) : [] })),
-        release: ((settings ?? []) as Array<{ project_id: string; release_mode: string | null; train_interval_minutes: number | null; train_max_members: number | null }>).map((s) => ({
+        release: ((settings ?? []) as Array<{ project_id: string; release_mode: string | null; train_interval_minutes: number | null; train_max_members: number | null; auto_decide_enabled?: boolean | null }>).map((s) => ({
           projectId: s.project_id,
           mode: s.release_mode ?? 'train',
           intervalMinutes: s.train_interval_minutes ?? 360,
           maxMembers: s.train_max_members ?? 15,
+          autoDecide: s.auto_decide_enabled === true,
         })),
       },
     });
@@ -183,7 +184,7 @@ export function registerMergeQueueRoutes(app: Hono<{ Variables: Variables }>): v
     if (!access.allowed) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
     const denied = denyViewerWrite(c, access.role, 'change how fixes are released');
     if (denied) return denied;
-    const body = (await c.req.json().catch(() => ({}))) as { mode?: unknown; intervalMinutes?: unknown; maxMembers?: unknown };
+    const body = (await c.req.json().catch(() => ({}))) as { mode?: unknown; intervalMinutes?: unknown; maxMembers?: unknown; autoDecide?: unknown };
     const patch: Record<string, unknown> = {};
     if (body.mode !== undefined) {
       if (body.mode !== 'train' && body.mode !== 'each') return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'mode is train or each.' } }, 400);
@@ -198,6 +199,14 @@ export function registerMergeQueueRoutes(app: Hono<{ Variables: Variables }>): v
       const n = Number(body.maxMembers);
       if (!Number.isInteger(n) || n < 1 || n > 50) return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'maxMembers is 1 to 50.' } }, 400);
       patch.train_max_members = n;
+    }
+    if (body.autoDecide !== undefined) {
+      if (typeof body.autoDecide !== 'boolean') return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'autoDecide is true or false.' } }, 400);
+      // Decide for me (ADR 0055) merges and closes PRs without a person: owners and admins only.
+      if (access.role !== 'owner' && access.role !== 'admin') {
+        return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Only an owner or admin can let Mushi decide for this app.' } }, 403);
+      }
+      patch.auto_decide_enabled = body.autoDecide;
     }
     if (!Object.keys(patch).length) return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Nothing to change.' } }, 400);
     const { error } = await db.from('project_settings').update(patch).eq('project_id', projectId);

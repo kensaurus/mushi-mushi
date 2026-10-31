@@ -11,6 +11,8 @@ import { InlineProof, SignalChip } from '../report-detail/ReportSurface'
 
 interface FeatureFlags {
   sso?: boolean
+  /** Invites and more than one seat (pricing_plans.feature_flags.teams). */
+  teams?: boolean
   byok?: boolean
   plugins?: boolean
   audit_log?: boolean
@@ -45,7 +47,9 @@ export function PlanBenefitsList({ planId, planName, flags, retentionDays, seatL
     {
       label: 'Admin seats',
       included: true,
-      meta: seatLimit == null ? 'Unlimited' : `${seatLimit}`,
+      // A plan without teams is one person whatever seat_limit says (the
+      // billing tier may omit it, which read as "Unlimited" on Free).
+      meta: !flags.teams ? 'Just you' : seatLimit == null ? 'Unlimited' : `${seatLimit}`,
     },
     {
       label: 'Bring your own LLM key',

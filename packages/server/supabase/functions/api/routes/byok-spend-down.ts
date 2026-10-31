@@ -29,6 +29,7 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { requireFeature } from '../../_shared/entitlements.ts'
 import { logAudit } from '../../_shared/audit.ts'
+import { invalidateSetupGapsForKey, type KeyOwner } from '../../_shared/setup-gap-invalidate.ts'
 import { dbError, resolveOwnedProject, userCanAccessProject } from '../shared.ts'
 import { byokKeyIdSchema } from '../../_shared/byok-validation.ts'
 import {
@@ -440,6 +441,8 @@ export function registerByokSpendDownRoutes(app: Hono<{ Variables: Variables }>)
         provider: 'cursor',
         spendDown: patch,
       }).catch(() => {})
+      // "Auto-fix has a key that can start an agent" reads spend-down: re-check it.
+      await invalidateSetupGapsForKey(db, keyData as unknown as KeyOwner)
       return c.json({
         ok: true,
         data: {

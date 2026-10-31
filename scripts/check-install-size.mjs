@@ -102,7 +102,10 @@ export const BUDGETS = [
   { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 250_000, unpacked: 975_000 },
   // 2026-10-28: packed 262 → 270 kB: release 5's version bump adds its CHANGELOG
   // entries (the changelog ships in the tarball), measured 265.4 kB packed.
-  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 270_000, unpacked: 990_000 },
+  // 2026-10-29: 990 → 995 kB unpacked: `mushi doctor` reads the Health check
+  // registry (ADR 0054, plan-simplicity Phase 1): one more check and its
+  // warning rows. No new dependencies; measured at 990.0 kB unpacked in CI.
+  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 270_000, unpacked: 995_000 },
 ]
 
 const fmt = (n) => `${(n / 1000).toFixed(1)} kB`

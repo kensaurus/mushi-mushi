@@ -28,6 +28,9 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb, type FakeDb, type Row } from './__stubs__/fake-supabase.ts'
+import { createHealthGate } from '../../supabase/functions/_shared/health-gate.ts'
+import { fromSetupGap } from '../../supabase/functions/_shared/health-checks.ts'
+import { autofixKeyGap, followupKeyGap as followupKeyGapLine } from '../../supabase/functions/_shared/setup-gaps.ts'
 
 const fakeLog = vi.hoisted(() => {
   const logger: Record<string, unknown> = {}
@@ -573,6 +576,57 @@ const rowOf = (db: FakeDb, id?: string) => (id ? db.table('fix_review_followups'
 
 describe('review-followup worker', () => {
   beforeEach(() => clearCursorModelCache())
+
+  describe('health gate (ADR 0054, Proposed): observe changes nothing, enforce leaves the row queued', () => {
+    const keyDeleted = fromSetupGap(followupKeyGapLine({ projectId: P1, settings: { enabled: true, offReason: null, keyId: 'gone' }, keyStatus: null }), NOW.toISOString())
+    const autofixOnly = fromSetupGap(autofixKeyGap({ projectId: P1, dispatcher: { autofixOn: true, server: { agentKeys: 0, offKeys: 0 } } }), NOW.toISOString())
+    const unknown = fromSetupGap(followupKeyGapLine({ projectId: P1, settings: null }), NOW.toISOString())
+    const gate = (mode: 'observe' | 'enforce', checks: typeof keyDeleted[]) =>
+      createHealthGate(makeFakeDb() as never, 'review-followup', { readMode: async () => mode, loadChecks: async () => checks, record: async () => {}, now: () => NOW })
+    // Row ids are minted per run, so compare what was decided, not the ids.
+    const decided = (summary: Awaited<ReturnType<typeof runReviewFollowups>>) => ({
+      ...summary,
+      results: summary.results.map(({ followupId: _id, ...o }) => ({ ...o, ...('agentId' in o ? { agentId: 'bc-*' } : {}) })),
+    })
+    const run = async (g?: Awaited<ReturnType<typeof gate>>) => {
+      const db = seed()
+      const d = deps()
+      const summary = g ? await runReviewFollowups(db as never, d, g) : await runReviewFollowups(db as never, d)
+      return { db, d, summary }
+    }
+
+    it('observe: the same agents started, the same rows and the same summary as with the gate off', async () => {
+      const off = await run()
+      clearCursorModelCache()
+      const observe = await run(await gate('observe', [keyDeleted]))
+      expect(off.d.calls.create).toHaveLength(1)
+      expect(JSON.stringify(decided(observe.summary))).toBe(JSON.stringify(decided(off.summary)))
+      expect(observe.d.calls.create.map((c) => c.input.prompt)).toEqual(off.d.calls.create.map((c) => c.input.prompt))
+      expect(rowOf(observe.db)).toMatchObject({ status: rowOf(off.db).status, skip_reason: rowOf(off.db).skip_reason ?? null })
+    })
+
+    it('enforce: a deleted follow-up key leaves the row queued and unclaimed, starts no agent, and resumes once it is fixed', async () => {
+      const db = seed()
+      const d = deps()
+      const paused = await runReviewFollowups(db as never, d, await gate('enforce', [keyDeleted]))
+      expect(d.calls.create).toHaveLength(0)
+      expect(paused).toMatchObject({ dispatched: 0, healthPaused: 1 })
+      expect(rowOf(db).status).toBe('queued')
+      // Never claimed: no run took it.
+      expect(rowOf(db).run_id ?? null).toBeNull()
+      // The key is replaced: the next tick dispatches on its own.
+      const resumed = await runReviewFollowups(db as never, d, await gate('enforce', []))
+      expect(resumed.dispatched).toBe(1)
+      expect(d.calls.create).toHaveLength(1)
+    })
+
+    it('enforce: a problem that stops another automation, or an unknown check, changes nothing', async () => {
+      const off = await run()
+      clearCursorModelCache()
+      const other = await run(await gate('enforce', [autofixOnly, unknown]))
+      expect(JSON.stringify(decided(other.summary))).toBe(JSON.stringify(decided(off.summary)))
+    })
+  })
 
   it('discovers a fix_first review, then dispatches a new agent on the PR with the findings', async () => {
     const db = seed()

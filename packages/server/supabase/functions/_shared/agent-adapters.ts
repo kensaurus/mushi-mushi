@@ -31,13 +31,14 @@ import { log } from './logger.ts'
 import { resolveLlmKey, resolveLlmKeys } from './byok.ts'
 import { keyScopeFor, ownerUserColumnReady, projectKeyOwner, withOwnerUserColumn } from './byok-scope.ts'
 import { isCursorKeyLimitError } from './spend-down.ts'
-import { fetchPullRequestFiles, parseGithubRepoUrl, prNumberFromUrl, resolveProjectGithubToken } from './github.ts'
+import { fetchPullRequestFiles, parseGithubRepoUrl, platformGithubTokenFor, prNumberFromUrl, resolveProjectGithubToken } from './github.ts'
 import { canonicalPrUrl, classifyPrSubstance, parsePullRequestUrl, type PrChangedFile } from './pr-substance.ts'
 import { classifyNoPrSummary, noPrErrorText } from './cloud-agent-no-pr.ts'
 import { generateCursorCloudBranchName, validateFixBranchName } from './github-pr.ts'
 import { notifyTeamFixEvent } from './team-notify.ts'
 import { dispatchPluginEventDetached } from './plugins.ts'
 import { enqueueFixReview } from './fix-review-db.ts'
+import { resolveLinkedSentryIssues } from './sentry-resolve-back.ts'
 import {
   CursorApiError,
   buildV0WebhookSecret,
@@ -355,11 +356,32 @@ export async function cursorKeyForNewWork(
   return next ? { key: next.key, keyId: next.keyId ?? null, source: 'pool' } : first
 }
 
+/**
+ * How long a key Cursor refused for its usage limit rests. A first refusal
+ * rests 6 hours (it may be a short spike). Refused again within a day of the
+ * last rest, the plan's allowance is spent: with a known renewal date
+ * (`credits_expire_at`, set in Settings → AI keys → spend-down) it rests until
+ * then, instead of failing every 6 hours until the month turns (2026-10-31:
+ * the kensaurus key was 100% used until Nov 19).
+ *
+ * @internal Exported for tests only.
+ */
+export function cursorKeyRestUntil(now: number, previousRestUntil: string | null | undefined, renewsAt: string | null | undefined): Date {
+  const short = new Date(now + CURSOR_KEY_EXHAUSTED_MS)
+  const previous = previousRestUntil ? Date.parse(previousRestUntil) : NaN
+  const renews = renewsAt ? Date.parse(renewsAt) : NaN
+  const refusedAgain = Number.isFinite(previous) && now - previous < 24 * 3_600_000
+  return refusedAgain && Number.isFinite(renews) && renews > short.getTime() ? new Date(renews) : short
+}
+
 /** Mark a key used up for new agents (Cursor refused it for its usage limit). */
 export async function markCursorKeyExhausted(db: SupabaseClient, keyId: string, reason: string): Promise<void> {
+  const { data: current } = await db.from('byok_keys').select('exhausted_until, credits_expire_at').eq('id', keyId).maybeSingle()
+  const row = (current ?? {}) as { exhausted_until?: string | null; credits_expire_at?: string | null }
+  const until = cursorKeyRestUntil(Date.now(), row.exhausted_until, row.credits_expire_at)
   const { error } = await db
     .from('byok_keys')
-    .update({ exhausted_until: new Date(Date.now() + CURSOR_KEY_EXHAUSTED_MS).toISOString(), last_error: reason.slice(0, 500) })
+    .update({ exhausted_until: until.toISOString(), last_error: reason.slice(0, 500) })
     .eq('id', keyId)
   if (error) alog.warn('Cursor key not marked used up', { keyId, err: error.message })
 }
@@ -409,7 +431,7 @@ export async function resolveGithubUserToken(db: SupabaseClient, projectId: stri
     const token = await resolveVaultRef(db, ref)
     if (token) return token
   }
-  return (typeof Deno !== 'undefined' ? Deno.env.get('GITHUB_TOKEN') : undefined) ?? null
+  return typeof Deno !== 'undefined' ? platformGithubTokenFor(db, projectId) : null
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1119,6 +1141,18 @@ async function resolveAlreadyFixed(db: SupabaseClient, target: CloudAgentOutcome
       dedupe_key: `already-fixed-resolved:${target.attemptId}`,
       payload: { agent: target.agent, verdict: 'already_fixed' },
     })
+    // This write skips report-transition, so close the Sentry side here too.
+    // Without it a report imported from Sentry read resolved in Mushi while
+    // Sentry kept listing the issue (GLOT-IT-BE, TSUMAGOI-35, 2026-10-30).
+    // A recurrence regresses the Sentry issue and reopens the report.
+    const sentry = await resolveLinkedSentryIssues(db, {
+      projectId: target.projectId,
+      reportId: target.reportId,
+      fixAttemptId: target.attemptId,
+      prUrl: null,
+      note: 'the fix agent found it already fixed, so no pull request was needed.',
+    })
+    if (sentry.failed.length) alog.error('Sentry resolve on already-fixed failed', { reportId: target.reportId, failed: sentry.failed })
   } catch (err) {
     alog.warn('already-fixed report not resolved', { reportId: target.reportId, err: err instanceof Error ? err.message : String(err) })
   }

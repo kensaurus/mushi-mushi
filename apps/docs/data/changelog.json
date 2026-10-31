@@ -1,30 +1,10 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "Unreleased",
-    "pending": true,
-    "versions": [],
-    "highlights": [
-      {
-        "title": "`mushi connect` uses your saved key",
-        "description": "when you pass no key, it uses the one `npx mushi-mushi` or `mushi login` already saved, so the command the setup wizard prints works as it is. The wizard's last checklist names the console tab by its current label, \"Test it\"."
-      },
-      {
-        "title": "Docs answers match the product",
-        "description": "the docs index behind `search_mushi_docs` is rebuilt from the proofread docs."
-      },
-      {
-        "title": "Hono and Fastify reports drop URL query values",
-        "description": "the error handlers scrub query values (tokens, emails) from the request URL before putting it into the report description, as the Express handler already did."
-      }
-    ],
-    "packages": []
-  },
-  {
     "majorMinor": "1.33",
     "headline": null,
     "pending": false,
     "versions": [
+      "1.33.5",
       "1.33.4",
       "1.33.3",
       "1.33.2",
@@ -35,7 +15,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/core",
-        "version": "1.33.4"
+        "version": "1.33.5"
       },
       {
         "name": "@mushi-mushi/react",
@@ -1037,6 +1017,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "1.3.5",
       "1.3.4",
       "1.3.3",
       "1.3.2",
@@ -1047,7 +1028,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/node",
-        "version": "1.3.4"
+        "version": "1.3.5"
       },
       {
         "name": "@mushi-mushi/web",
@@ -1225,6 +1206,9 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.35.3",
+      "0.35.2",
+      "0.35.1",
       "0.35.0"
     ],
     "highlights": [
@@ -1244,7 +1228,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/cli",
-        "version": "0.35.0"
+        "version": "0.35.3"
       }
     ]
   },
@@ -1330,7 +1314,7 @@
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.30.0"
+        "version": "0.30.2"
       }
     ]
   },

@@ -28,6 +28,7 @@ import {
   TEAM_AUTO_SWITCH_EVENT,
   claimStaleLinkRecovery,
   lastTeamProject,
+  listBelongsToTeam,
   pickRecoveryProject,
   rememberProjectTeams,
   rememberTeamProject,
@@ -118,7 +119,11 @@ export function ProjectSwitcher() {
     // Stamp only when a new list arrives; an org change alone must not
     // re-label the old list as the new team's, so activeOrg stays out of deps.
   }, [setup.data])
-  const listIsCurrent = listOrg === activeOrg
+  // The stamp alone is not enough: the list object is rebuilt when the active
+  // project changes (the switch clears it), which re-stamped the old team's
+  // list as the new one's. Its projects must not be known to another team.
+  const listIsCurrent =
+    listOrg === activeOrg && listBelongsToTeam(setup.data?.projects.map((p) => p.project_id) ?? [], activeOrg)
 
   // A deep link to a project in another of the user's teams: find that team
   // and switch to it, once per project id. apiFetch usually did this before

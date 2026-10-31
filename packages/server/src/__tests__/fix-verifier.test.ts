@@ -262,7 +262,7 @@ describe('the second review', () => {
     mocks.resolveLlmKey.mockResolvedValue({ key: 'sk-or', source: 'byok', hint: 'x-or', provider: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1' })
     const { d, calls } = deps({ resolveJudgeKey: undefined })
     await worker.runFixVerifier(db as never, {}, d)
-    expect(calls.judge).toHaveBeenCalledWith(expect.objectContaining({ model: 'openai/gpt-5.4' }))
+    expect(calls.judge).toHaveBeenCalledWith(expect.objectContaining({ model: 'openai/gpt-6.1-sol' }))
     expect(db.table('fix_merge_gates')[0].second_judge).toMatchObject({ provider: 'openrouter' })
   })
 

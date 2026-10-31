@@ -8,6 +8,9 @@ import { trustedSubRequestUser } from './request-memo.ts'
 import { runWithKeyProjectScope } from './key-project-scope.ts'
 import { log } from './logger.ts'
 import { hashApiKey } from './api-key-mint.ts'
+import { keepAlive } from './background.ts'
+import { classifySdkOrigin, funnelStepForOriginKind, OriginWriteThrottle } from './sdk-origin.ts'
+import { emitFunnelStep, funnelStepMemo } from './funnel-steps.ts'
 
 export interface ProjectContext {
   projectId: string
@@ -19,7 +22,7 @@ function authError(
   c: Context,
   code: ApiErrorCode,
   message: string,
-  status: 401 | 403 = 401,
+  status: 401 | 403 | 503 = 401,
 ): Response {
   const requestId = c.get('requestId') as string | undefined
   return c.json(
@@ -28,7 +31,22 @@ function authError(
       error: { code, message, ...(requestId ? { requestId } : {}) },
     },
     status,
+    status === 503 ? { 'Retry-After': '30' } : undefined,
   )
+}
+
+/**
+ * The key lookup itself failed (the database or its gateway answered an
+ * error), so nothing is known about the key. A 401 here told callers their key
+ * was revoked: on 2026-10-30 a one-second gateway error (an HTML error page
+ * at 00:31 UTC) made the local worker read INVALID_API_KEY, stop for good,
+ * and stay offline for 11 hours. A 503 says "try again".
+ */
+const KEY_CHECK_UNAVAILABLE = 'Mushi could not check this API key just now. Try again in a moment.'
+
+/** PostgREST answers PGRST116 for `.single()` with no row: that is "not found", not a failure. */
+function isNoRow(error: { code?: string } | null | undefined): boolean {
+  return error?.code === 'PGRST116'
 }
 
 /**
@@ -326,6 +344,81 @@ function recordSdkHeartbeat(opts: {
 }
 
 /**
+ * Per-origin check-ins (project_api_key_origins, plan-simplicity Phase 0).
+ *
+ * last_seen_origin above keeps only the latest origin, so a key seen live and
+ * then from localhost reads "localhost". This keeps one row per (key, kind)
+ * with first and last seen, and emits sdk_seen_localhost / sdk_seen_live the
+ * first time a project's keys check in from that kind.
+ *
+ * It must never fail or slow ingest:
+ *   - it runs after auth succeeded, detached from the request (keepAlive),
+ *     and independent of the 30 s heartbeat update above: a key seen from
+ *     localhost and from its live site within 30 s still records both;
+ *   - one RPC with its own 2 s timeout; a failure is logged and the
+ *     throttle entry released so the next check-in retries;
+ *   - throttled to one write per (key, kind) per 5 minutes per isolate (the
+ *     RPC repeats the window across isolates);
+ *   - if the table or function is missing (an edge deploy that landed
+ *     before the migration), the isolate stops trying after one warning.
+ */
+const ORIGIN_WRITE_GAP_MS = 5 * 60_000
+const ORIGIN_WRITE_TIMEOUT_MS = 2_000
+const originWriteThrottle = new OriginWriteThrottle(ORIGIN_WRITE_GAP_MS, 10_000)
+let originWritesUnavailable = false
+/** Undefined function (PostgREST), undefined table / function (Postgres). */
+const MISSING_OBJECT_CODES: ReadonlySet<string> = new Set(['PGRST202', 'PGRST205', '42P01', '42883'])
+
+function recordSdkOrigin(opts: {
+  db: ReturnType<typeof getServiceClient>
+  keyId: string | null | undefined
+  origin: string | null
+  userAgent: string | null
+  sdkPackage: string | null
+}): void {
+  const { db, keyId } = opts
+  if (originWritesUnavailable || !keyId) return
+  const { kind, sample } = classifySdkOrigin({ origin: opts.origin, userAgent: opts.userAgent, sdkPackage: opts.sdkPackage })
+  if (!originWriteThrottle.shouldWrite(keyId, kind, Date.now())) return
+
+  keepAlive((async () => {
+    const { data, error } = await db
+      .rpc('record_api_key_origin', {
+        p_key_id: keyId,
+        p_origin_kind: kind,
+        p_origin_sample: sample,
+        p_min_gap_seconds: ORIGIN_WRITE_GAP_MS / 1000,
+      })
+      .abortSignal(AbortSignal.timeout(ORIGIN_WRITE_TIMEOUT_MS))
+    if (error) {
+      originWriteThrottle.forget(keyId, kind)
+      if (error.code && MISSING_OBJECT_CODES.has(error.code)) {
+        originWritesUnavailable = true
+        log.warn('sdk-origin: record_api_key_origin is missing; per-origin check-ins are off in this isolate', { code: error.code })
+        return
+      }
+      log.warn('sdk-origin: check-in write failed', { keyId, kind, code: error.code, error: error.message })
+      return
+    }
+    const row = (Array.isArray(data) ? data[0] : data) as
+      | { project_id?: string | null; first_for_project?: boolean | null }
+      | null
+      | undefined
+    if (!row?.first_for_project || !row.project_id) return
+    const step = funnelStepForOriginKind(kind)
+    if (!step || !funnelStepMemo.claim(step, row.project_id)) return
+    await emitFunnelStep(db, {
+      step,
+      projectId: row.project_id,
+      properties: { origin_kind: kind, key_id: keyId },
+    })
+  })().catch((err: unknown) => {
+    originWriteThrottle.forget(keyId, kind)
+    log.warn('sdk-origin: check-in write failed', { keyId, kind, error: err instanceof Error ? err.message : String(err) })
+  }))
+}
+
+/**
  * Best-effort host extraction from a request URL. Hono guarantees
  * `c.req.url` is well-formed, but Edge Functions can be invoked with a
  * malformed URL during local dev, so we fail closed to null.
@@ -402,7 +495,7 @@ function recordOrgMemberActivity(opts: {
     })
 }
 
-async function lookupActiveApiKey(apiKey: string): Promise<ApiKeyRow | null> {
+async function lookupActiveApiKey(apiKey: string): Promise<ApiKeyRow | null | 'unavailable'> {
   const db = getServiceClient()
   const keyHash = await hashApiKey(apiKey)
   // Use a left-join (`projects(name)` not `projects!inner(name)`) so org-scoped
@@ -415,7 +508,8 @@ async function lookupActiveApiKey(apiKey: string): Promise<ApiKeyRow | null> {
     .eq('key_hash', keyHash)
     .eq('is_active', true)
     .single()
-  if (error || !data) return null
+  if (error && !isNoRow(error)) return 'unavailable'
+  if (!data) return null
   return data as unknown as ApiKeyRow
 }
 
@@ -442,6 +536,7 @@ async function authenticateApiKey(
   requiredScope: McpScope | readonly McpScope[],
 ): Promise<Response | null> {
   const keyRow = await lookupActiveApiKey(apiKey)
+  if (keyRow === 'unavailable') return authError(c, 'AUTH_UNAVAILABLE', KEY_CHECK_UNAVAILABLE, 503)
   if (!keyRow) {
     return authError(c, 'INVALID_API_KEY', 'Invalid or revoked API key')
   }
@@ -539,7 +634,8 @@ export async function apiKeyAuth(c: Context, next: Next) {
     | 'last_seen_origin'
     | 'browser_seen_at'
   > | null
-  if (error || !keyRow) {
+  if (error && !isNoRow(error)) return authError(c, 'AUTH_UNAVAILABLE', KEY_CHECK_UNAVAILABLE, 503)
+  if (!keyRow) {
     return authError(c, 'INVALID_API_KEY', 'Invalid or revoked API key')
   }
 
@@ -564,16 +660,19 @@ export async function apiKeyAuth(c: Context, next: Next) {
   if (!c.req.path.endsWith('/ingest-setup') && !c.req.path.endsWith('/ingest/runner')) {
     const sdkPackage = c.req.header(MUSHI_SDK_PACKAGE_HEADER) ?? null
     const sdkVersion = c.req.header(MUSHI_SDK_VERSION_HEADER) ?? null
+    const origin = c.req.header('Origin') ?? c.req.header('Referer') ?? null
+    const userAgent = c.req.header('User-Agent') ?? null
     recordSdkHeartbeat({
       db,
       keyHash,
       projectId: keyRow.project_id,
-      origin: c.req.header('Origin') ?? c.req.header('Referer') ?? null,
-      userAgent: c.req.header('User-Agent') ?? null,
+      origin,
+      userAgent,
       endpointHost: extractEndpointHost(c.req.url),
       sdkPackage,
       sdkVersion,
     })
+    recordSdkOrigin({ db, keyId: keyRow.id, origin, userAgent, sdkPackage })
   }
 
   c.set('projectId', keyRow.project_id ?? undefined)

@@ -66,6 +66,9 @@ describe('GithubConnectionCard', () => {
     expect(text).toContain('Backend')
     expect(text).toContain('o/api')
     expect(text).toContain('Manage repos')
+    // One click from the repo to its CI settings on /ci.
+    const ci = Array.from(host.querySelectorAll('a')).find((a) => a.textContent === 'CI settings')
+    expect(ci?.getAttribute('href')).toBe(`/ci?project=${P}#ci-placement`)
   })
 
   it('falls back to the preflight URL when no repo rows load', () => {

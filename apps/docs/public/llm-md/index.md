@@ -13,9 +13,9 @@ Your AI wrote it. Mushi Mushi tells you why it broke.</>}
 
 ## What it takes
 
-- **No monitoring stack.** No Sentry, no logging service, no AI key of your own. Mushi's AI writes the diagnosis.
+- **No monitoring stack.** No Sentry, no logging service, no AI key of your own. Mushi Mushi's AI writes the diagnosis.
 - **Free to start.** One app and 100 diagnoses a month with no card. Repeat reports of one bug count once.
-- **Your AI does the fix, you approve it.** Mushi hands Cursor, Claude Code or Lovable the prompt. Nothing ships until you say so. If you let an agent open the fix as a pull request, a second AI reads it next to the original report and can refuse it: [here is one it held](https://github.com/kensaurus/mushi-mushi/pull/864).
+- **Your AI does the fix, you approve it.** Mushi Mushi hands Cursor, Claude Code or Lovable the prompt. Nothing ships until you say so. If you let an agent open the fix as a pull request, a second AI reads it next to the original report and can refuse it: [here is one it held](https://github.com/kensaurus/mushi-mushi/pull/864).
 
 ## Why I built it
 
@@ -37,10 +37,10 @@ Mushi Mushi is the bug mediator for AI-built apps, an open-source tool that give
 
 Words you will see on this page
 
-- **Diagnosis**: Mushi's written explanation of one bug, with how serious it is, the likely cause and a suggested fix.
+- **Diagnosis**: Mushi Mushi's written explanation of one bug, with how serious it is, the likely cause and a suggested fix.
 - **Fix prompt**: the diagnosis plus the evidence, written as instructions you paste into your AI editor.
 - **SDK** or **script tag**: the small piece of code you add to your app. It shows the report button and sends reports to Mushi.
-- **MCP**: the standard way AI code editors such as Cursor and Claude Code connect to outside tools. It is how your editor reads Mushi's reports.
+- **MCP**: the standard way AI code editors such as Cursor and Claude Code connect to outside tools. It is how your editor reads Mushi Mushi's reports.
 
 More: [Who it’s for](/who-its-for) · [What else it does](/what-it-does) · [How a bug moves, step by step](/concepts/closed-loop) ·
 [Sentry, Linear, Slack and other tools](/plugins) ·

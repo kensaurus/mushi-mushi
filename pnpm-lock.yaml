@@ -6,6 +6,7 @@ settings:
 
 overrides:
   browserslist: '>=4.28.7 <5'
+  node-forge: 1.4.2
   fast-uri: '>=4.1.5 <5'
   '@xmldom/xmldom': '>=0.9.12 <0.10'
   sharp: '>=0.35.5 <0.36'
@@ -1473,6 +1474,12 @@ importers:
       '@ai-sdk/ui-utils':
         specifier: 1.2.11
         version: 1.2.11(zod@3.25.76)
+      '@electric-sql/pglite':
+        specifier: 0.5.11
+        version: 0.5.11
+      '@electric-sql/pglite-pgvector':
+        specifier: 0.0.12
+        version: 0.0.12(@electric-sql/pglite@0.5.11)
       '@mushi-mushi/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
@@ -2702,6 +2709,14 @@ packages:
 
   '@dimforge/rapier3d-compat@0.12.0':
     resolution: {integrity: sha512-uekIGetywIgopfD97oDL5PfeezkFpNhwlzlaEYNOA0N6ghdsOvh/HYjSMek5Q2O1PYvRSDFcqFVJl4r4ZBwOow==}
+
+  '@electric-sql/pglite-pgvector@0.0.12':
+    resolution: {integrity: sha512-n3TJqjWI9FXwFrGhuTVMghef8SL3E6nb4lxZnxYFW3UTg/7/hMUWfz7v2y0+idWzEsQ/raRpMNCsw9zvSdC/SA==}
+    peerDependencies:
+      '@electric-sql/pglite': 0.5.11
+
+  '@electric-sql/pglite@0.5.11':
+    resolution: {integrity: sha512-SWuqsTjA4DDWqgZ05PC1RJaq8e00p5KACxbqaikDFQ8dIGA0SLRzuPniky7IW+q/c5RDNMdEXwv7mFBWIx9Hxw==}
 
   '@emnapi/core@1.11.2':
     resolution: {integrity: sha512-TC8MkTuZUtcTSiFeuC0ksCh9QIJ5+F21MvZ4Wn4ORfYaFJ/0dsiudv5tVkejgwZlwQ39jL9WWDe2lz8x0WglOA==}
@@ -8668,8 +8683,8 @@ packages:
       encoding:
         optional: true
 
-  node-forge@1.4.0:
-    resolution: {integrity: sha512-LarFH0+6VfriEhqMMcLX2F7SwSXeWwnEAJEsYm5QKWchiVYVvJyV9v7UDvUv+w5HO23ZpQTXDv/GxdDdMyOuoQ==}
+  node-forge@1.4.2:
+    resolution: {integrity: sha512-rRtAR5XLJ8gCKd9du4qrKAsgCG1ObGP4gLeNJMa4vYSeq4bmBMOJk5IHkrviBV0q7uoAJlVd8HEQYQSVUb4FGQ==}
     engines: {node: '>= 6.13.0'}
 
   node-int64@0.4.0:
@@ -9957,10 +9972,6 @@ packages:
 
   toqr@0.1.1:
     resolution: {integrity: sha512-FWAPzCIHZHnrE/5/w9MPk0kK25hSQSH2IKhYh9PyjS3SG/+IEMvlwIHbhz+oF7xl54I+ueZlVnMjyzdSwLmAwA==}
-
-  tough-cookie@6.0.1:
-    resolution: {integrity: sha512-LktZQb3IeoUWB9lqR5EWTHgW/VTITCXg4D21M+lvybRVdylLrRMnqaIONLVb5mav8vM19m44HIcGq4qASeu2Qw==}
-    engines: {node: '>=16'}
 
   tough-cookie@6.0.2:
     resolution: {integrity: sha512-exgYmnmL/sJpR3upZfXG5PoatXQii55xAiXGXzY+sROLZ/Y+SLcp9PgJNI9Vz37HpQ74WvDcLT8eqm+kV3FzrA==}
@@ -11879,6 +11890,12 @@ snapshots:
 
   '@dimforge/rapier3d-compat@0.12.0': {}
 
+  '@electric-sql/pglite-pgvector@0.0.12(@electric-sql/pglite@0.5.11)':
+    dependencies:
+      '@electric-sql/pglite': 0.5.11
+
+  '@electric-sql/pglite@0.5.11': {}
+
   '@emnapi/core@1.11.2':
     dependencies:
       '@emnapi/wasi-threads': 1.2.2
@@ -12131,7 +12148,7 @@ snapshots:
       glob: 13.0.6
       lan-network: 0.2.1
       multitars: 0.2.5
-      node-forge: 1.4.0
+      node-forge: 1.4.2
       npm-package-arg: 11.0.3
       ora: 3.4.0
       picomatch: 4.0.7
@@ -12167,7 +12184,7 @@ snapshots:
 
   '@expo/code-signing-certificates@0.0.6':
     dependencies:
-      node-forge: 1.4.0
+      node-forge: 1.4.2
 
   '@expo/config-plugins@55.0.10':
     dependencies:
@@ -18438,7 +18455,7 @@ snapshots:
       rettime: 0.11.11
       statuses: 2.0.2
       strict-event-emitter: 0.5.1
-      tough-cookie: 6.0.1
+      tough-cookie: 6.0.2
       type-fest: 5.7.0
       until-async: 3.0.2
       yargs: 17.7.3
@@ -18464,7 +18481,7 @@ snapshots:
       rettime: 0.11.11
       statuses: 2.0.2
       strict-event-emitter: 0.5.1
-      tough-cookie: 6.0.1
+      tough-cookie: 6.0.2
       type-fest: 5.7.0
       until-async: 3.0.2
       yargs: 17.7.3
@@ -18615,7 +18632,7 @@ snapshots:
     optionalDependencies:
       encoding: 0.1.13
 
-  node-forge@1.4.0: {}
+  node-forge@1.4.2: {}
 
   node-int64@0.4.0: {}
 
@@ -20223,11 +20240,6 @@ snapshots:
   toidentifier@1.0.1: {}
 
   toqr@0.1.1: {}
-
-  tough-cookie@6.0.1:
-    dependencies:
-      tldts: 7.4.2
-    optional: true
 
   tough-cookie@6.0.2:
     dependencies:

@@ -14,6 +14,8 @@ export interface FixFirstInput {
   created_at: string
   unique_users?: number
   dedup_count?: number
+  /** Duplicates share a group; the queue shows one row per group. */
+  report_group_id?: string | null
 }
 
 const SEVERITY_WEIGHT: Record<string, number> = { critical: 8, high: 4, medium: 2, low: 1 }
@@ -29,12 +31,23 @@ function fixFirstScore(r: FixFirstInput): number {
   return weight * (1 + Math.log2(peopleHit(r)))
 }
 
-/** Open reports with no fix on the way, best to fix first; newest wins a tie. */
+/**
+ * Open reports with no fix on the way, best to fix first; newest wins a tie.
+ * One per duplicate group: three Sentry imports of the same timeout filled
+ * the top three rows (sweep 2026-10-29).
+ */
 export function fixFirstOrder<T extends FixFirstInput>(reports: readonly T[], max = 5): T[] {
+  const seen = new Set<string>()
   return reports
     .filter((r) => r.status !== 'fixing')
     .slice()
     .sort((a, b) => fixFirstScore(b) - fixFirstScore(a) || b.created_at.localeCompare(a.created_at))
+    .filter((r) => {
+      if (!r.report_group_id) return true
+      if (seen.has(r.report_group_id)) return false
+      seen.add(r.report_group_id)
+      return true
+    })
     .slice(0, max)
 }
 

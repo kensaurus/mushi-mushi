@@ -133,8 +133,8 @@ function BannerChecklist({
         onClick={() => setOpen(true)}
         className={`mb-4 inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-2xs motion-safe:transition-opacity ${
           allDone || requiredDone
-            ? `border-ok/30 ${CHIP_TONE.okSubtle}`
-            : `border-warn/30 ${CHIP_TONE.warnSubtle}`
+            ? CHIP_TONE.okSubtle
+            : CHIP_TONE.warnSubtle
         } hover:brightness-110`}
         aria-label="Show setup checklist"
       >
@@ -339,9 +339,9 @@ function buildSdkDiagnostic(
 function SdkDiagnostic({ tone, lines }: { tone: 'ok' | 'warn' | 'info'; lines: string[] }) {
   const palette =
     tone === 'warn'
-      ? `border-warn/30 ${CHIP_TONE.warnSubtle}`
+      ? CHIP_TONE.warnSubtle
       : tone === 'ok'
-        ? `border-ok/30 ${CHIP_TONE.okSubtle}`
+        ? CHIP_TONE.okSubtle
         : 'border-edge-subtle bg-surface-overlay/40 text-fg-secondary'
   const label = tone === 'warn' ? 'Wrong server' : 'App check-in'
   return (
@@ -356,14 +356,21 @@ function SdkDiagnostic({ tone, lines }: { tone: 'ok' | 'warn' | 'info'; lines: s
   )
 }
 
+/** The step's name; an optional step already carries the OPTIONAL chip, so no "(optional)" twice. */
+function stepLabel(step: SetupStep): string {
+  return step.required ? step.label : step.label.replace(/\s*\(optional\)\s*$/i, '')
+}
+
 /** The sdk_installed step's Fix button and, once pressed, the SDK health panel with its fixes. */
 function useSdkFix(step: SetupStep, projectId: string) {
   const [open, setOpen] = useState(false)
   if (step.id !== 'sdk_installed' || step.complete || !projectId) return { button: null, panel: null }
+  // Never checked in: steps to take, not a fault ("Fix it" read as broken on a new app).
+  const neverSeen = !step.diagnostic?.last_sdk_seen_at
   return {
     button: (
       <Btn size="sm" variant={open ? 'ghost' : 'primary'} className="shrink-0" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        {open ? 'Hide' : 'Fix it'}
+        {open ? 'Hide' : neverSeen ? 'Show me how' : 'Fix it'}
       </Btn>
     ),
     panel: open ? (
@@ -395,7 +402,7 @@ function ChecklistRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className={`text-xs ${step.complete ? 'text-fg-secondary line-through' : 'text-fg'}`}>
-            {step.label}
+            {stepLabel(step)}
           </span>
           {current && (
             <span className="rounded-sm px-1 py-0.5 text-2xs uppercase tracking-wider bg-brand/12 text-brand border border-brand/28">
@@ -453,7 +460,7 @@ function ChecklistCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h4 className={`text-sm font-medium ${step.complete ? 'text-fg-secondary' : 'text-fg'}`}>
-              {step.label}
+              {stepLabel(step)}
             </h4>
             {current && (
               <span className="rounded-sm bg-brand text-brand-fg px-1.5 py-0.5 text-2xs uppercase tracking-wider font-semibold">

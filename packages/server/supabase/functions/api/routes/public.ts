@@ -6,8 +6,11 @@ import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.t
 import { AguiEmitter } from '../../_shared/agui.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
+import { parseGithubRepoUrl, resolveProjectGithubToken } from '../../_shared/github.ts';
+import { applyHeadCheckRollup, type HeadCheckDb } from '../../_shared/check-run-head.ts';
 import { pickHighestVersion } from '../../_shared/sdk-version-compare.ts';
 import { unverifiedGithubInstallsAllowed } from '../../_shared/github-install-trust.ts';
+import { authorizeUrl, openConnectState, readGithubAppConfig, signConnectState } from '../../_shared/github-connect.ts';
 import { reportError } from '../../_shared/sentry.ts';
 import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import {
@@ -1036,17 +1039,40 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       );
     }
 
-    const updates = {
-      check_run_status: checkRun.status ?? null,
-      check_run_conclusion: checkRun.conclusion ?? null,
-      check_run_updated_at: new Date().toISOString(),
-    };
+    // One delivery is one check. The report page reads the head's rollup:
+    // an older failed run of the same workflow must not stick as "CI failed"
+    // after GitHub's merge state is CLEAN (report 9e2ec6f0). A green rollup
+    // (success, neutral, skipped) clears ci_infra so a stale infra flag
+    // cannot survive after CI goes green.
+    const ghRef = parseGithubRepoUrl(`https://github.com/${repo.full_name}`);
+    const installationId = (payload.installation as { id?: unknown } | undefined)?.id;
+    let token: string | null = null;
+    if (ghRef && verifiedProjectId && checkRun.head_sha) {
+      try {
+        token = await resolveProjectGithubToken(
+          db,
+          verifiedProjectId,
+          typeof installationId === 'number' ? installationId : null,
+        );
+      } catch (err) {
+        log.warn('github webhook check rollup failed', { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
 
     const targetIds = verifiedProjectId
       ? candidates.filter((x) => x.project_id === verifiedProjectId).map((x) => x.id)
       : candidates.map((x) => x.id);
 
-    await db.from('fix_attempts').update(updates).in('id', targetIds);
+    await applyHeadCheckRollup(db as unknown as HeadCheckDb, targetIds, 'many', {
+      eventStatus: checkRun.status ?? null,
+      eventConclusion: checkRun.conclusion ?? null,
+      token,
+      ref: ghRef,
+      sha: checkRun.head_sha,
+      onRollupError: (err) => log.warn('github webhook check rollup failed', {
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    });
 
     await auditRow.resolve('accepted', 200, Date.now() - t0);
     return c.json({ ok: true, data: { updated: targetIds.length, verified } });
@@ -1506,7 +1532,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       return c.redirect(`${adminBase}/integrations/config?github_error=missing_installation_id`, 302)
     }
 
-    // State is the projectId (passed when building the install URL in GitHubAppInstallButton)
+    // A bare project id as state: old install links and hand-made URLs (the console no longer builds them)
     const projectId = stateRaw.trim()
     if (!projectId || projectId.length < 10) {
       // No project context — log the installation and redirect to the dashboard root
@@ -1518,6 +1544,21 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       return c.redirect(`${adminBase}/?github_installed=1`, 302)
     }
 
+    // A state minted by "Connect GitHub" (api/routes/github-connect.ts) goes
+    // on to GitHub's authorize page, which proves who installed: the
+    // installation id here is never trusted on its own. `x` marks it as back
+    // from install, so an empty installation list ends there, not in a loop.
+    const connectCfg = readGithubAppConfig((name) => Deno.env.get(name))
+    if (connectCfg.ok) {
+      const opened = await openConnectState(connectCfg.config.secret, stateRaw, Math.floor(Date.now() / 1000))
+      if (opened.ok) {
+        const back = await signConnectState(connectCfg.config.secret, { ...opened.state, x: 1 })
+        return c.redirect(authorizeUrl(connectCfg.config, back), 302)
+      }
+      if (opened.reason === 'expired') {
+        return c.redirect(`${adminBase}/onboarding?github_error=state_expired`, 302)
+      }
+    }
     // Neither the installation id nor the state is authenticated here, so the
     // binding is refused unless this is a single-tenant install that opted in
     // (see _shared/github-install-trust.ts).
