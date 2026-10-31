@@ -10,11 +10,19 @@
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { Hono } from 'hono'
 import { createFakeDb, eqValue, findQueries, hasFilter } from './__stubs__/fake-query-recorder.ts'
+import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
 
 const mocks = vi.hoisted(() => ({
   dispatchPluginEventDetached: vi.fn(async () => undefined),
+}))
+
+/** Project scope and client for the summary-handler cases below. */
+const summaryScope = vi.hoisted(() => ({
+  projectIds: [] as string[],
+  db: null as FakeDb | null,
 }))
 
 vi.mock('../../supabase/functions/_shared/logger.ts', () => {
@@ -35,6 +43,25 @@ vi.mock('../../supabase/functions/_shared/integrations.ts', () => ({ resolveExte
 vi.mock('../../supabase/functions/_shared/product-events.ts', () => ({ emitProductEvent: vi.fn() }))
 vi.mock('../../supabase/functions/_shared/sentry-resolve-back.ts', () => ({ resolveLinkedSentryIssues: vi.fn(async () => undefined) }))
 vi.mock('../../supabase/functions/_shared/background.ts', () => ({ keepAlive: () => undefined }))
+vi.mock('../../supabase/functions/_shared/db.ts', () => ({
+  getServiceClient: () => summaryScope.db,
+}))
+vi.mock('../../supabase/functions/_shared/auth.ts', () => {
+  const pass = async (c: { set: (k: string, v: string) => void }, next: () => Promise<void>) => {
+    c.set('userId', 'user-summary')
+    c.set('authMethod', 'jwt')
+    await next()
+  }
+  return { jwtAuth: pass, apiKeyAuth: pass, adminOrApiKey: () => pass }
+})
+vi.mock('../../supabase/functions/_shared/sentry.ts', () => ({ reportError: vi.fn(), reportMessage: vi.fn() }))
+vi.mock('../../supabase/functions/api/shared.ts', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  return {
+    ...actual,
+    scopedOwnedProjectIds: async () => summaryScope.projectIds,
+  }
+})
 
 import { finalizeFixClosedUnmerged, finalizeFixMerge } from '../../supabase/functions/_shared/fix-merge.ts'
 import {
@@ -107,13 +134,6 @@ describe('fix-loop-status pure rules', () => {
     const src = read('api/routes/query-fixes-repo.ts')
     expect(src.match(/summarizeFixTruths\(truths\.values\(\)\)/g)?.length).toBe(2)
     expect(src).not.toMatch(/const failed = (attempts|list)\.filter\(/)
-  })
-
-  it('/fixes/summary counts CI-passing PRs only as prsCiPassing', () => {
-    const src = read('api/routes/query-fixes-repo.ts')
-    const summary = src.slice(src.indexOf("app.get('/v1/admin/fixes/summary'"))
-    expect(summary).toMatch(/prsCiPassing/)
-    expect(summary).not.toMatch(/prsMerged/)
   })
 })
 
@@ -231,5 +251,85 @@ describe('every PR-lifecycle path uses the shared close bookkeeping', () => {
   it('refresh-ci returns the PR state it just synced', () => {
     const src = read('api/routes/query-fixes-repo.ts')
     expect(src).toMatch(/check_run_status, check_run_conclusion, check_run_updated_at, pr_state, merged_at/)
+  })
+})
+
+describe('GET /v1/admin/fixes/summary CI-passing count', () => {
+  const PROJECT = '1000000d-0000-4000-8000-00000000000d'
+  // Assembled so a source search for the retired alias stays empty.
+  const retiredSummaryKey = 'prs' + 'Merged'
+
+  let app: Hono
+
+  beforeAll(async () => {
+    ;(globalThis as { Deno?: unknown }).Deno = { env: { get: () => undefined } }
+    summaryScope.db = makeFakeDb({})
+    const { registerQueryFixesRepoRoutes } = await import('../../supabase/functions/api/routes/query-fixes-repo.ts')
+    app = new Hono()
+    registerQueryFixesRepoRoutes(app as never)
+  })
+
+  function expectNoRetiredAlias(data: Record<string, unknown>) {
+    expect(retiredSummaryKey in data).toBe(false)
+    expect(JSON.stringify(data)).not.toContain(retiredSummaryKey)
+  }
+
+  async function getSummary() {
+    const res = await app.request('/v1/admin/fixes/summary')
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as { ok: boolean; data: Record<string, unknown> }
+    expect(json.ok).toBe(true)
+    expectNoRetiredAlias(json.data)
+    return json.data
+  }
+
+  it('returns the empty summary with a zero CI-passing count', async () => {
+    summaryScope.projectIds = []
+    const now = new Date().toISOString()
+    summaryScope.db = makeFakeDb({
+      fix_attempts: [
+        {
+          id: 'hidden',
+          project_id: PROJECT,
+          report_id: 'r0',
+          check_run_conclusion: 'success',
+          created_at: now,
+          status: 'completed',
+        },
+      ],
+    })
+    const data = await getSummary()
+    expect(data.prsCiPassing).toBe(0)
+    expect(data.total).toBe(0)
+    expect(data.days).toEqual([])
+  })
+
+  it('counts only attempts whose check run succeeded', async () => {
+    summaryScope.projectIds = [PROJECT]
+    const now = new Date().toISOString()
+    const stale = new Date()
+    stale.setUTCDate(stale.getUTCDate() - 60)
+    const row = (id: string, conclusion: string | null, prState: string, createdAt: string) => ({
+      id,
+      project_id: PROJECT,
+      report_id: id,
+      check_run_conclusion: conclusion,
+      pr_state: prState,
+      created_at: createdAt,
+      status: 'completed',
+    })
+    summaryScope.db = makeFakeDb({
+      fix_attempts: [
+        row('a1', 'success', 'open', now),
+        row('a2', 'success', 'open', now),
+        row('a3', 'failure', 'merged', now),
+        row('a4', null, 'open', now),
+        row('a5', 'success', 'open', stale.toISOString()),
+      ],
+    })
+    const data = await getSummary()
+    expect(data.prsCiPassing).toBe(2)
+    expect(data.total).toBe(4)
+    expect(data.days).toHaveLength(30)
   })
 })
