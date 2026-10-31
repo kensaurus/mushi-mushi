@@ -2,9 +2,10 @@
  * FILE: apps/admin/src/components/integrations/ConnectionGrid.tsx
  * PURPOSE: Top of Integrations: one status sentence with the fix for the
  *          first broken connection, a grid of the six tools (logo, state dot,
- *          last event), and one "needs you" line per broken connection. Each
+ *          last event), and one "needs you" line per broken connection when
+ *          more than one is broken (one goes in the sentence). Each
  *          tile jumps to its card below. The verdicts come from
- *          connectionGrid.ts, which reuses each card's own rules.
+ *          connectionGridModel.ts, which reuses each card's own rules.
  */
 
 import { BrandIcon } from '../ui/BrandIcon'
@@ -19,7 +20,7 @@ import {
   connectionGridSentence,
   type ConnectionGridInput,
   type GridTile,
-} from './connectionGrid'
+} from './connectionGridModel'
 
 const DOT: Record<ConnectionState, string> = {
   working: 'bg-ok',
@@ -65,11 +66,14 @@ export function ConnectionGrid(props: ConnectionGridProps) {
   const broken = brokenConnections(tiles)
   const { sentence, tone } = connectionGridSentence(tiles)
   const first = broken[0]
+  // One broken connection: its reason goes in the sentence. A one-line
+  // "needs you" list under the tiles said it a third time (2026-10-28).
+  const lead = broken.length === 1 && first.view.detail ? `${first.label} needs you: ${first.view.detail}` : sentence
 
   return (
     <section aria-label="Connections" className="space-y-2" data-testid="integrations-connection-grid">
       <PageStatus
-        sentence={sentence}
+        sentence={lead}
         tone={tone}
         ariaLabel="Connection status"
         action={
@@ -85,21 +89,23 @@ export function ConnectionGrid(props: ConnectionGridProps) {
           <ConnectionTile key={tile.id} tile={tile} />
         ))}
       </ul>
-      {broken.length > 0 ? (
+      {broken.length > 1 ? (
         <ul aria-label="Connections that need you" className="space-y-1">
           {broken.map((tile) => (
             <li key={tile.id} className="flex min-w-0 items-start gap-2 text-xs text-fg-secondary">
               <span aria-hidden="true" className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${DOT[tile.view.state]}`} />
-              <span className="min-w-0 flex-1 text-pretty">
-                <strong className="font-medium text-fg">{tile.label}:</strong> {tile.view.detail ?? 'Open its card for the fix.'}
+              {/* The button follows its sentence: at the far edge of a wide
+                  page it read as belonging to nothing (owner, 2026-10-30). */}
+              <span className="min-w-0 text-pretty">
+                <strong className="font-medium text-fg">{tile.label}:</strong> {tile.view.detail ?? 'Open its card for the fix.'}{' '}
+                <button
+                  type="button"
+                  onClick={() => jumpTo(tile.anchor)}
+                  className="whitespace-nowrap text-2xs font-medium text-accent-foreground underline underline-offset-2 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm"
+                >
+                  Fix {tile.label} →
+                </button>
               </span>
-              <button
-                type="button"
-                onClick={() => jumpTo(tile.anchor)}
-                className="shrink-0 text-2xs font-medium text-accent-foreground underline underline-offset-2 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm"
-              >
-                Fix →
-              </button>
             </li>
           ))}
         </ul>

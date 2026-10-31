@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/capacitor
 
 ---
 title: Capacitor quickstart
-description: Add Mushi to an Ionic or Capacitor app — install @mushi-mushi/capacitor, configure shake-to-report and screenshots, and file your first bug report.
+description: Add Mushi Mushi to an Ionic or Capacitor app. Install @mushi-mushi/capacitor, set up shake-to-report and screenshots, and file your first bug report.
 ---
 
 # Capacitor quickstart
@@ -43,7 +43,7 @@ await Mushi.report({
 })
 ```
 
-  **Coming from Cordova?** Migrate in place to Capacitor first — the
+  **Coming from Cordova?** Migrate in place to Capacitor first. The
   [Cordova → Capacitor migration guide](/migrations/cordova-to-capacitor)
   walks through the plugin map and the Mushi widget swap.
 

@@ -138,7 +138,14 @@ export function usePageData<T>(
   const depKey = JSON.stringify(deps)
 
   useEffect(() => {
-    if (!path || !autoLoad) return
+    if (!path || !autoLoad) {
+      // Nothing to load. A request this path set off was aborted when it went
+      // null, and its finally skips the reset: Releases' Refresh spun forever
+      // after the page switched to the New draft tab mid-load (2026-10-28).
+      setLoading(false)
+      setIsValidating(false)
+      return
+    }
     aborted.current = false
 
     // Org/project context switches (the signals in this effect's dep array)

@@ -22,6 +22,7 @@ const SKIP_ROUTES = new Set([
   'login',
   'signup',
   'reset-password',
+  'auth/confirm', // email confirmation link landing, not a console page
   'invite',
   'email', // public reporter email links (Plan 018), not a console page
   'tester',
@@ -42,6 +43,8 @@ const ROUTE_TO_MDX = {
   sso: 'sso',
   storage: 'storage',
   users: 'users',
+  // The First-time user test is documented on the UX runs page (it was its Fresh eyes tab).
+  'first-user-test': 'ux-runs',
 }
 
 function extractRoutes(appSrc) {

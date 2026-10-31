@@ -8,7 +8,13 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { proxyTargetUrl, proxyToFunction } from '../../supabase/functions/_shared/edge-proxy.ts'
+import {
+  CLIENT_IP_HEADER,
+  CLIENT_IP_SIG_HEADER,
+  proxyTargetUrl,
+  proxyToFunction,
+  verifiedClientIp,
+} from '../../supabase/functions/_shared/edge-proxy.ts'
 
 const SUPABASE = 'https://ref.supabase.co'
 
@@ -54,6 +60,31 @@ describe('proxyToFunction', () => {
     res.headers.set('access-control-allow-origin', 'https://kensaur.us')
     expect(res.headers.get('access-control-allow-origin')).toBe('https://kensaur.us')
     expect(await res.json()).toEqual({ ok: true })
+  })
+
+  it('drops a client-supplied IP header and signs the real IP when given a secret', async () => {
+    let sent: Headers | undefined
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      sent = init.headers as Headers
+      return new Response('{}')
+    }) as unknown as typeof fetch
+    const req = new Request(`${SUPABASE}/functions/v1/api/v1/public/production-check`, {
+      method: 'POST',
+      headers: { 'cf-connecting-ip': '198.51.100.4', [CLIENT_IP_HEADER]: '10.0.0.1', [CLIENT_IP_SIG_HEADER]: 'forged' },
+      body: '{}',
+    })
+    await proxyToFunction(req, 'api-ext', '/v1/public/production-check', { supabaseUrl: SUPABASE, fetchImpl, clientIpSecret: 'secret' })
+    expect(sent?.get(CLIENT_IP_HEADER)).toBe('198.51.100.4')
+    const header = (n: string) => sent?.get(n)
+    expect(await verifiedClientIp(header, 'secret')).toBe('198.51.100.4')
+    expect(await verifiedClientIp(header, 'other-secret')).toBeNull()
+
+    const again = new Request(`${SUPABASE}/functions/v1/api/v1/public/scoreboard`, {
+      headers: { 'cf-connecting-ip': '198.51.100.4', [CLIENT_IP_HEADER]: '10.0.0.1', [CLIENT_IP_SIG_HEADER]: 'forged' },
+    })
+    await proxyToFunction(again, 'api-ext', '/v1/public/scoreboard', { supabaseUrl: SUPABASE, fetchImpl })
+    expect(sent?.get(CLIENT_IP_HEADER)).toBeNull()
+    expect(sent?.get(CLIENT_IP_SIG_HEADER)).toBeNull()
   })
 
   it('sends no body for GET', async () => {

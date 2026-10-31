@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/use-cases/mcp-bug-fixing-server
 
 ---
 title: MCP server for bug fixing
-description: What an MCP bug-fixing server is and how Mushi's works — Cursor, Claude Code, or Codex read live bug reports, pull fix context, and dispatch fixes.
+description: What an MCP bug-fixing server is and how the Mushi Mushi one works. Cursor, Claude Code or Codex read live bug reports, pull fix context, and dispatch fixes.
 ---
 
 # MCP server for bug fixing
@@ -43,7 +43,7 @@ worst one."* The full tool list and configuration options live in the
 
 ## Hosted or self-hosted
 
-Point the server at Mushi Cloud (50 diagnoses a month free) or at your own
+Point the server at Mushi Cloud (one app and 100 diagnoses a month free) or at your own
 self-hosted stack — the MCP surface is identical. Reports come from the
 [SDKs](/sdks) your users already trigger; install those with:
 

@@ -20,6 +20,14 @@ import { z } from 'npm:zod@3'
 export const FILED_REPORT_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const
 export type FiledReportSeverity = (typeof FILED_REPORT_SEVERITIES)[number]
 
+/**
+ * What kind of issue it is: the widget's own categories (bug, slow, visual,
+ * confusing, other), so a report filed from the console reads like one a user
+ * sent. Triage may refine it.
+ */
+export const FILED_REPORT_CATEGORIES = ['bug', 'slow', 'visual', 'confusing', 'other'] as const
+export type FiledReportCategory = (typeof FILED_REPORT_CATEGORIES)[number]
+
 /** Reports one app may file through this route per hour (console, CLI and MCP together). */
 export const FILED_REPORTS_PER_HOUR = 30
 export const FILE_REPORT_RATE_SCOPE = 'admin_report_file'
@@ -40,6 +48,7 @@ export const fileReportSchema = z
       .transform(clean)
       .pipe(z.string().min(1, 'description is required').max(10_000, 'description is at most 10000 characters')),
     severity: z.enum(FILED_REPORT_SEVERITIES).optional(),
+    category: z.enum(FILED_REPORT_CATEGORIES).optional(),
     component: z
       .string()
       .transform(clean)
@@ -82,8 +91,8 @@ export function filedReportRow(
     project_id: ctx.projectId,
     title: input.title,
     description: input.description,
-    category: 'other',
-    user_category: 'other',
+    category: input.category ?? 'other',
+    user_category: input.category ?? 'other',
     ...(input.severity ? { severity: input.severity } : {}),
     ...(component ? { component } : {}),
     environment: { platform: 'manual' },

@@ -11,6 +11,8 @@ import { InlineProof, SignalChip } from '../report-detail/ReportSurface'
 
 interface FeatureFlags {
   sso?: boolean
+  /** Invites and more than one seat (pricing_plans.feature_flags.teams). */
+  teams?: boolean
   byok?: boolean
   plugins?: boolean
   audit_log?: boolean
@@ -45,7 +47,9 @@ export function PlanBenefitsList({ planId, planName, flags, retentionDays, seatL
     {
       label: 'Admin seats',
       included: true,
-      meta: seatLimit == null ? 'Unlimited' : `${seatLimit}`,
+      // A plan without teams is one person whatever seat_limit says (the
+      // billing tier may omit it, which read as "Unlimited" on Free).
+      meta: !flags.teams ? 'Just you' : seatLimit == null ? 'Unlimited' : `${seatLimit}`,
     },
     {
       label: 'Bring your own LLM key',
@@ -111,10 +115,10 @@ export function PlanBenefitsList({ planId, planName, flags, retentionDays, seatL
           </li>
         ))}
       </ul>
-      {planId === 'hobby' && (
+      {(planId === 'hobby' || planId === 'free_cloud') && (
         <InlineProof className="mt-2">
-          Unlock BYOK, plugins, and an audit log by upgrading to{' '}
-          <span className="text-brand">Starter · $19/mo</span>.
+          Watch up to 3 apps with automatic fix PRs, plugins and an audit log on{' '}
+          <span className="text-brand">Builder · $29/mo</span>.
         </InlineProof>
       )}
     </section>

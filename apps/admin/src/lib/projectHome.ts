@@ -20,7 +20,7 @@ export interface HomeSection<T> {
 }
 
 export type Light = 'good' | 'warn' | 'bad' | 'busy' | 'off'
-type HealthId = 'site' | 'errors' | 'sdk' | 'ci'
+type HealthId = 'site' | 'errors' | 'sdk' | 'ci' | 'setup'
 
 export interface HealthSignal {
   id: HealthId
@@ -60,6 +60,25 @@ export interface NeedsYouItem {
   impact: number
   text: string
   action: ConnectHint
+}
+
+/** A Health check's fix (server `_shared/health-checks.ts` HealthFix). */
+type HealthFix =
+  | { kind: 'auto'; label: string; action: string }
+  | { kind: 'one_click'; label: string; to: string; action?: string }
+  | { kind: 'guided'; label: string; steps: string[]; to?: string }
+
+/** One root cause in "Fix these first" (server `buildFixFirst`). */
+export interface FixFirstItem {
+  id: string
+  key: string
+  part: string
+  severity: 'critical' | 'warn' | 'info'
+  title: string
+  detail: string
+  /** How many items wait on it, when counted. */
+  affects: number | null
+  fix: HealthFix | null
 }
 
 type StationId = 'fix' | 'ci' | 'train' | 'merged' | 'deployed'
@@ -130,6 +149,8 @@ export interface ProjectHome {
   projectId: string
   app: HomeSection<HomeApp>
   health: HomeSection<HealthSignal[]>
+  /** Root causes first, at most three (older servers send none). */
+  fixFirst?: HomeSection<FixFirstItem[]>
   needsYou: HomeSection<NeedsYouItem[]>
   release: HomeSection<HomeRelease>
   sitemap: HomeSection<HomeSitemap>
@@ -173,10 +194,16 @@ export function initialsOf(name: string | null): string {
   return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '?'
 }
 
-export function hostOf(url: string | null): string | null {
+/**
+ * The site as people say it: host plus path ("kensaur.us/mushi-mushi"). A bare
+ * host named the company homepage for an app that lives under a path.
+ */
+export function siteLabel(url: string | null): string | null {
   if (!url) return null
   try {
-    return new URL(url).host
+    const u = new URL(url)
+    const path = u.pathname.replace(/\/+$/, '')
+    return path ? `${u.host}${path}` : u.host
   } catch {
     return url
   }

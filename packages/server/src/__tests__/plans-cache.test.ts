@@ -73,7 +73,8 @@ describe('pricing plan warm-isolate cache', () => {
 
     const refreshed = await listPlans();
     expect(state.loads).toBe(2);
-    expect(refreshed[0]?.feature_flags).toMatchObject({ byok: false });
+    // Look the plan up by id: the Free and Hobby fallbacks sort before it.
+    expect(refreshed.find((p) => p.id === 'pro')?.feature_flags).toMatchObject({ byok: false });
   });
 
   it('serves the last known-good paid catalog when a refresh fails', async () => {
@@ -94,7 +95,9 @@ describe('pricing plan warm-isolate cache', () => {
 
     const fallback = await getPlan('pro');
     expect(fallback.id).toBe('free_cloud');
-    expect(fallback.feature_flags).toMatchObject({ byok: false });
+    // Conservative = no paid features. Free includes your own AI key since
+    // 2026-10-28 (migration 20261028180000), so byok stays on.
+    expect(fallback.feature_flags).toMatchObject({ byok: true, sso: false, plugins: false, audit_log: false, teams: false });
 
     await getPlan('pro');
     expect(state.loads).toBe(1);

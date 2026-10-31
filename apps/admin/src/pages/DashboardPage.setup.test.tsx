@@ -153,24 +153,25 @@ describe('Home while a required setup step is open', () => {
     await flush()
   }
 
-  it('shows the setup checklist inline, with Fix it on the SDK step, and no dead "Show setup guide"', async () => {
+  it('shows the setup checklist inline, with Show me how on a never-seen SDK step, and no dead "Show setup guide"', async () => {
     await mount()
     const text = container.textContent ?? ''
     expect(text).toContain('Install the SDK in your app')
     expect(text).not.toContain('Show setup guide')
-    const fixIt = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Fix it')
+    const fixIt = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Show me how')
     expect(fixIt).toBeTruthy()
     act(() => fixIt!.click())
     await flush()
     expect(container.querySelector('[data-testid="sdk-health-panel"]')).toBeTruthy()
   })
 
-  it('the hero names the open step with its fix, never "healthy"', async () => {
+  it('names the open step once, in the checklist, never "healthy"', async () => {
     await mount()
-    const hero = container.querySelector('[data-testid="dashboard-hero-setup"]')!
-    expect(hero.textContent).toContain('Setup 3 of 4 done')
-    expect(hero.textContent).toContain('Install the SDK in your app')
-    expect(hero.querySelector('a')!.getAttribute('href')).toBe(`/connect?project=${PROJECT}#connect-sdk-health`)
+    // The hero card that repeated the step, its button and a second count is
+    // gone (owner, 2026-10-27); the checklist marks the step itself.
+    expect(container.querySelector('[data-testid="dashboard-hero-setup"]')).toBeNull()
+    expect(container.textContent).not.toContain('Setup 3 of 4 done')
+    expect(container.textContent).toContain('Install the SDK in your app')
     expect(container.textContent).not.toContain('Loop is clean')
     expect(container.textContent).not.toContain('Nothing waiting on you')
   })

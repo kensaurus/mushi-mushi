@@ -72,7 +72,6 @@ interface DashboardCounts {
 }
 
 import type { PdcaStageId } from '../../lib/pdca'
-export type { PdcaStageId }
 export type PdcaStageTone = 'ok' | 'warn' | 'urgent'
 
 export interface PdcaStage {

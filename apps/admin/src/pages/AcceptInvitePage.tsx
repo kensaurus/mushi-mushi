@@ -31,6 +31,9 @@ const ROLE_TONE: Record<PreviewResponse['invitation']['role'], string> = {
   viewer: 'bg-surface-overlay text-fg-muted',
 }
 
+/** "an admin", "a member": the sentence names the role it grants. */
+const ROLE_ARTICLE: Record<string, string> = { owner: 'an', admin: 'an', member: 'a', viewer: 'a' }
+
 const ROLE_DESCRIPTION: Record<PreviewResponse['invitation']['role'], string> = {
   admin: 'Full access to manage projects, settings, and teammates.',
   member: 'Can read every project and triage reports across the org.',
@@ -236,7 +239,9 @@ export function AcceptInvitePage() {
                 {preview.inviter.email}
               </SignalChip>
             ) : null}{' '}
-            invited you to join as
+            invited you to join{' '}
+            <span className="font-medium text-fg">{preview.organization?.name ?? 'this team'}</span> as{' '}
+            {ROLE_ARTICLE[preview.invitation.role] ?? 'a'} {preview.invitation.role}.
           </InlineProof>
         </ContainedBlock>
 

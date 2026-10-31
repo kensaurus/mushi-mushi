@@ -53,6 +53,7 @@ import {
   ssoNavBadge,
   storageNavBadge,
   usersNavBadge,
+  workersNavBadge,
 } from './extendedNavMeta'
 import {
   membersNavBadge,
@@ -118,6 +119,7 @@ const PATH_SLICES: Readonly<Record<string, readonly string[]>> = {
   '/sso': ['sso'],
   '/compliance': ['compliance'],
   '/storage': ['storage'],
+  '/pipeline': ['workers'],
   '/query': ['query'],
 }
 
@@ -193,11 +195,14 @@ export function resolveNavBadge(
   const { slices } = navCounts
 
   switch (path) {
+    // Set up carries the remaining-steps count; Connect repeating it showed
+    // a new account the same warning twice.
     case '/onboarding':
-    case '/connect':
       return sliceBadgeSpec(onboardingNavBadge(slices.onboarding))
     case '/dashboard':
       return sliceBadgeSpec(dashboardNavBadge(slices.dashboard))
+    case '/pipeline':
+      return sliceBadgeSpec(workersNavBadge(slices.workers))
     case '/content':
       return sliceBadgeSpec(
         contentQualityNavBadge(slices.contentQuality),

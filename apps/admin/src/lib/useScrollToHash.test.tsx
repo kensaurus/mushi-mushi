@@ -9,12 +9,18 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useScrollToHash } from './useScrollToHash'
 
 function Probe({ ready }: { ready: boolean }) {
   useScrollToHash(ready)
-  return createElement('div', { id: 'platform-card-sentry' }, 'Sentry')
+  // Like the console: the page scrolls inside <main>, not the window.
+  return createElement(
+    'main',
+    { style: { overflowY: 'auto' } },
+    createElement('section', { id: 'above' }, 'Cards above'),
+    createElement('div', { id: 'platform-card-sentry' }, 'Sentry'),
+  )
 }
 
 describe('useScrollToHash', () => {
@@ -39,6 +45,88 @@ describe('useScrollToHash', () => {
     const spy = vi.fn()
     Element.prototype.scrollIntoView = spy
     await render('/integrations/config?project=p#platform-card-sentry', true)
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  describe('when cards above the target finish loading after the scroll', () => {
+    let grow: (() => void) | null = null
+    const disconnect = vi.fn()
+    const observed: Element[] = []
+    beforeEach(() => {
+      grow = null
+      observed.length = 0
+      disconnect.mockClear()
+      vi.stubGlobal(
+        'ResizeObserver',
+        class {
+          constructor(cb: () => void) {
+            grow = cb
+          }
+          observe(el: Element) {
+            observed.push(el)
+          }
+          disconnect = disconnect
+        },
+      )
+    })
+
+    it('watches the scroll container\'s content, not just <body> (/ci#ci-placement stayed 5,867 px off)', async () => {
+      Element.prototype.scrollIntoView = vi.fn()
+      await render('/ci#platform-card-sentry', true)
+      expect(observed.map((e) => e.id || e.tagName)).toEqual(expect.arrayContaining(['BODY', 'above', 'platform-card-sentry']))
+    })
+    afterEach(() => {
+      vi.unstubAllGlobals()
+      vi.useRealTimers()
+    })
+
+    it('follows the target as the page grows (Settings > #ci-cost landed 2,750 px off)', async () => {
+      const spy = vi.fn()
+      Element.prototype.scrollIntoView = spy
+      await render('/settings?tab=general#platform-card-sentry', true)
+      grow!()
+      grow!()
+      expect(spy).toHaveBeenCalledTimes(3)
+    })
+
+    it('stops following once the person scrolls', async () => {
+      const spy = vi.fn()
+      Element.prototype.scrollIntoView = spy
+      await render('/settings#platform-card-sentry', true)
+      window.dispatchEvent(new Event('wheel'))
+      grow!()
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(disconnect).toHaveBeenCalled()
+    })
+
+    it('stops following after a few seconds', async () => {
+      vi.useFakeTimers()
+      const spy = vi.fn()
+      Element.prototype.scrollIntoView = spy
+      await render('/settings#platform-card-sentry', true)
+      vi.advanceTimersByTime(8000)
+      grow!()
+      expect(spy).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('waits for a target that mounts after the page is ready (Fix → /settings#spend-limits opened at the top)', async () => {
+    const spy = vi.fn()
+    Element.prototype.scrollIntoView = spy
+    function Late({ show }: { show: boolean }) {
+      useScrollToHash(true)
+      return createElement('main', null, show ? createElement('div', { id: 'spend-limits' }, 'Spend limits') : null)
+    }
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    const at = (show: boolean) => createElement(MemoryRouter, { initialEntries: ['/settings#spend-limits'] }, createElement(Late, { show }))
+    await act(async () => root!.render(at(false)))
+    expect(spy).not.toHaveBeenCalled()
+    await act(async () => root!.render(at(true)))
+    await act(async () => {
+      await Promise.resolve()
+    })
     expect(spy).toHaveBeenCalledTimes(1)
   })
 

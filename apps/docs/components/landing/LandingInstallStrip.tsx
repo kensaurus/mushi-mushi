@@ -7,6 +7,10 @@
  * the cycle of ADR 0027 (connect, bugs come in, a fix you review), and each one
  * ends in what you should see.
  *
+ * The Lovable or Bolt tab has the same three steps without a terminal: sign up
+ * and copy the console's script tag, paste a prompt that adds it to <head>,
+ * read the diagnosis (LANDING_INSTALL_LOVABLE).
+ *
  * Every editor install is URL-only (`buildOAuthInstall`): the editor runs the
  * Mushi OAuth sign-in on first use, so the page needs no key. The Cursor
  * badges are Cursor's official artwork, bundled under public/badges because
@@ -20,6 +24,7 @@ import {
   LANDING_FIX_PROMPT,
   LANDING_HERO_START,
   LANDING_INSTALL,
+  LANDING_INSTALL_LOVABLE as L,
   LANDING_SETUP_PROMPT,
 } from '@/lib/landing-copy'
 import { publicAssetPath } from '@/lib/public-asset-path'
@@ -33,6 +38,20 @@ const claudeInstall = buildOAuthInstall('claude-code', { mcpOAuthUrl: MUSHI_CANO
 const CLAUDE_CMD = claudeInstall.kind === 'command' ? claudeInstall.text : ''
 
 function ConnectAction({ tab }: { tab: TabId }) {
+  if (tab === 'lovable') {
+    // Console signup is another app — plain <a>, same tab, tracked. Its id
+    // stays `landing-hero` so the signup funnel keeps its history.
+    return (
+      <a
+        href={LANDING_HERO_START.console.href}
+        className="landing-hero-cta landing-hero-cta--secondary"
+        data-mushi-cta={LANDING_HERO_START.console.id}
+        data-mushi-location="hero-install"
+      >
+        {LANDING_HERO_START.console.label} →
+      </a>
+    )
+  }
   if (tab === 'claude-code') {
     return <CopyCommand cmd={CLAUDE_CMD} ctaId="landing-copy-claude" location="hero-install" />
   }
@@ -91,6 +110,7 @@ export function LandingInstallStrip() {
   const baseId = useId()
   const tabs = LANDING_INSTALL.tabs
   const current = tabs.find((t) => t.id === tab) ?? tabs[0]
+  const lovable = current.id === 'lovable'
 
   // Arrow keys move between tabs (WAI-ARIA tabs pattern, automatic activation).
   function onKeyDown(e: KeyboardEvent<HTMLButtonElement>, index: number) {
@@ -104,7 +124,7 @@ export function LandingInstallStrip() {
   }
 
   return (
-    <section className="landing-install-box" aria-label="Install Mushi Mushi">
+    <section id="install" className="landing-install-box" aria-label="Install Mushi Mushi">
       <div className="landing-install-box__tabs" role="tablist" aria-label={LANDING_INSTALL.label}>
         <span className="landing-install-box__tabs-label" aria-hidden="true">
           {LANDING_INSTALL.label}
@@ -135,7 +155,7 @@ export function LandingInstallStrip() {
         <li className="landing-install-box__step">
           <span className="landing-install-box__num" aria-hidden="true">1</span>
           <div className="landing-install-box__body">
-            <h3 className="landing-install-box__title">{LANDING_INSTALL.steps.connect}</h3>
+            <h3 className="landing-install-box__title">{lovable ? L.steps.connect : LANDING_INSTALL.steps.connect}</h3>
             <p className="landing-install-box__desc">{current.connect}</p>
             <ConnectAction tab={current.id} />
           </div>
@@ -143,28 +163,58 @@ export function LandingInstallStrip() {
         <li className="landing-install-box__step">
           <span className="landing-install-box__num" aria-hidden="true">2</span>
           <div className="landing-install-box__body">
-            <h3 className="landing-install-box__title">{LANDING_INSTALL.steps.setup}</h3>
-            <CopyCommand cmd={LANDING_SETUP_PROMPT} prompt ctaId="landing-copy-setup-prompt" location="hero-install" />
-            <Check>{LANDING_INSTALL.setupCheck}</Check>
+            <h3 className="landing-install-box__title">{lovable ? L.steps.setup : LANDING_INSTALL.steps.setup}</h3>
+            {lovable ? <p className="landing-install-box__desc">{L.setupLead}</p> : null}
+            <CopyCommand
+              cmd={lovable ? L.prompt : LANDING_SETUP_PROMPT}
+              prompt
+              ctaId={lovable ? 'landing-copy-lovable-prompt' : 'landing-copy-setup-prompt'}
+              location="hero-install"
+            />
+            <Check>{lovable ? L.setupCheck : LANDING_INSTALL.setupCheck}</Check>
           </div>
         </li>
         <li className="landing-install-box__step">
           <span className="landing-install-box__num" aria-hidden="true">3</span>
           <div className="landing-install-box__body">
-            <h3 className="landing-install-box__title">{LANDING_INSTALL.steps.fix}</h3>
-            <p className="landing-install-box__desc">{LANDING_INSTALL.fixLead}</p>
-            <CopyCommand cmd={LANDING_FIX_PROMPT} prompt ctaId="landing-copy-fix-prompt" location="hero-install" />
-            <Check>{LANDING_INSTALL.fixCheck}</Check>
+            <h3 className="landing-install-box__title">{lovable ? L.steps.fix : LANDING_INSTALL.steps.fix}</h3>
+            {lovable ? (
+              <>
+                <p className="landing-install-box__desc">{L.fixLead}</p>
+                <p className="landing-install-box__desc">
+                  <Link href={L.connector.href} data-mushi-cta="landing-lovable-connector" data-mushi-location="hero-install">
+                    {L.connector.label}
+                  </Link>
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="landing-install-box__desc">{LANDING_INSTALL.fixLead}</p>
+                <CopyCommand cmd={LANDING_FIX_PROMPT} prompt ctaId="landing-copy-fix-prompt" location="hero-install" />
+                <Check>{LANDING_INSTALL.fixCheck}</Check>
+              </>
+            )}
           </div>
         </li>
       </ol>
       <div className="landing-install-box__no-editor">
-        <CopyCommand
-          label={LANDING_INSTALL.noEditor}
-          cmd={LANDING_HERO_START.npx.cmd}
-          ctaId={LANDING_HERO_START.npx.id}
-          location="hero-install"
-        />
+        {lovable ? (
+          <Link
+            href={L.guide.href}
+            className="landing-install-box__guide"
+            data-mushi-cta="landing-lovable-guide"
+            data-mushi-location="hero-install"
+          >
+            {L.guide.label}
+          </Link>
+        ) : (
+          <CopyCommand
+            label={LANDING_INSTALL.noEditor}
+            cmd={LANDING_HERO_START.npx.cmd}
+            ctaId={LANDING_HERO_START.npx.id}
+            location="hero-install"
+          />
+        )}
       </div>
     </section>
   )

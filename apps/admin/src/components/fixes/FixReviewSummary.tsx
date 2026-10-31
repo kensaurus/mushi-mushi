@@ -52,7 +52,7 @@ export function FixReviewSummary({ review, loading, error, rerunning, onRerun }:
       )}
       {(review.state === 'queued' || review.rerunning) && (
         <p className="text-2xs text-fg-muted">
-          Claude Opus is reviewing the diff. This takes a few minutes
+          The AI review is reading the diff. This takes a few minutes
           {review.verdict ? '; the last verdict applies until it finishes.' : '.'}
         </p>
       )}

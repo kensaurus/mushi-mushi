@@ -39,6 +39,10 @@ interface PlacementPayload {
   jobs: Array<{ workflow: string; job: string }>
   expectedLabels: string[]
   revertOf?: string
+  /** A move to GitHub-hosted switches back after this many hours. */
+  revertAfterHours?: number
+  /** Filed by the time box, not a person. */
+  timeBox?: boolean
 }
 
 export interface PlacementPreview {
@@ -101,6 +105,8 @@ export interface PlacementRepo {
   workflowsRead: boolean
   controller: ExternalController | null
   variables: Array<{ name: string; jobs: number; fallbacks: string[]; allowed: boolean; current: VariableState | null }>
+  /** Set when a workflow reads vars.CI_PROFILE (economy | thorough; unset = economy). */
+  profile?: { current: VariableState | null } | null
   labels: Array<{ label: string; runners: number; online: number }>
 }
 

@@ -43,6 +43,14 @@ const JUDGE_TOP_K = 5
 // Max reports to process per run (prevents 15-min timeout)
 const MAX_REPORTS_PER_RUN = 200
 
+/** Neither an Anthropic nor an OpenAI key resolved for the project (none set, or over budget). */
+class NoProjectLlmKeyError extends Error {
+  constructor() {
+    super('No Anthropic key for this project')
+    this.name = 'NoProjectLlmKeyError'
+  }
+}
+
 const coherenceSchema = z.object({
   coherence_score: z.number().min(0).max(1).describe(
     'Semantic coherence 0-1: do all these reports describe the same root problem?',
@@ -255,7 +263,7 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
 
           const claudeStart = Date.now()
           try {
-            if (!anthropicKey) throw new Error('No Anthropic key for this project')
+            if (!anthropicKey) throw new NoProjectLlmKeyError()
             const generation = await claudeGenerateObject({
               apiKey: anthropicKey,
               model: MISTAKE_MODEL,
@@ -322,6 +330,18 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
 
           await db.from('mistake_clusters').update(updatePayload).eq('id', clusterId)
         } catch (err) {
+          // No key at all, or the project is over its monthly AI budget
+          // (projectLlmKey returns null then, by design: a batch job skips
+          // the project). An expected state, not a failure: it paged as
+          // MUSHI-MUSHI-SERVER-3K once per cluster per run (2026-10-31).
+          if (err instanceof NoProjectLlmKeyError) {
+            log.warn('coherence judge skipped: no usable AI key (none set, or over the monthly budget)', {
+              scope: 'mistake-clusterer',
+              clusterId,
+              projectId,
+            })
+            continue
+          }
           log.error('coherence judge failed', {
             scope: 'mistake-clusterer',
             clusterId,

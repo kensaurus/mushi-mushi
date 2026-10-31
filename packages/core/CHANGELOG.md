@@ -1,5 +1,18 @@
 # @mushi-mushi/core
 
+## 1.33.5
+
+### Patch Changes
+
+- 545f106: - **Six new server events in the analytics vocabulary**: `sdk_seen_localhost`, `sdk_seen_live`, `first_real_report`, `first_diagnosis_viewed`, `first_fix_dispatched` and `first_fix_merged` mark the new-user path, once per project. Only Mushi Mushi's server sends them; nothing changes for apps that call `Mushi.track()`.
+
+## 1.33.4
+
+### Patch Changes
+
+- 0c93c23: The analytics taxonomy lists `activated`, a server event Mushi Cloud emits once per organization when its first real user report from a deployed app gets a diagnosis.
+- 0c93c23: The analytics taxonomy names two server events for the free Production Check on the docs site: `production_check_started` and `production_check_finished` (with its `outcome`).
+
 ## 1.33.3
 
 ### Patch Changes

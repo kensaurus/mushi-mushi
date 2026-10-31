@@ -8,6 +8,8 @@ function TierCta({ tierId }: { tierId: string }) {
   const tracking = {
     'data-mushi-cta': `pricing-tier-${tierId}`,
     'data-mushi-location': 'pricing-table',
+    // plan_selected for the 60-day price test (lib/site-analytics.ts planSelectionFromCta).
+    'data-mushi-plan': tierId,
   } as const
   if (cta.external) {
     return (
@@ -30,6 +32,7 @@ export function PricingTiersTable() {
       <thead>
         <tr>
           <th>Plan</th>
+          <th>Apps</th>
           <th>Monthly</th>
           <th>Annual (2 mo free)</th>
           <th>Diagnoses</th>
@@ -45,6 +48,7 @@ export function PricingTiersTable() {
             <td>
               <strong>{tier.name}</strong>
             </td>
+            <td>{tier.apps}</td>
             <td>{tier.monthly}</td>
             <td>{tier.annual ?? '—'}</td>
             <td>{tier.diagnoses}</td>
@@ -68,6 +72,7 @@ export function CloudPlansTable() {
       <thead>
         <tr>
           <th>Plan</th>
+          <th>Apps</th>
           <th>Cost</th>
           <th>Diagnoses included</th>
           <th>Notes</th>
@@ -79,6 +84,7 @@ export function CloudPlansTable() {
             <td>
               <strong>{tier.name}</strong>
             </td>
+            <td>{tier.apps}</td>
             <td>{tier.cloudCost ?? tier.monthly}</td>
             <td>{tier.diagnoses}</td>
             <td>{tier.cloudNotes ?? tier.highlights}</td>

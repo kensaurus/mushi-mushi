@@ -374,7 +374,7 @@ function PreflightChecklist({
   }
   if (failing.length === 0) {
     return (
-      <div className={`mt-2 rounded-sm border border-ok/30 ${CHIP_TONE.okSubtle} p-2 text-2xs`}>
+      <div className={`mt-2 rounded-sm ${CHIP_TONE.okSubtle} p-2 text-2xs`}>
         <div className="flex items-center gap-1.5">
           <CheckIcon />
           <span className="font-medium">All {checks.length} prerequisites met</span>

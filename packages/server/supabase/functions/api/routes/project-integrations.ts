@@ -7,6 +7,8 @@ import { dbError, callerCanAccessProject } from '../shared.ts';
 import { ingestReport, triggerClassification } from '../helpers.ts';
 import { emitFunnelEvent } from '../../_shared/setup-funnel.ts';
 import { emitProductEvent } from '../../_shared/product-events.ts';
+import { emitFunnelStep, funnelStepMemo, setupStepWasEarlier } from '../../_shared/funnel-steps.ts';
+import { runInBackground } from '../../_shared/background.ts';
 import { getDemoReportFixture, materializeDemoReport, precomputedClassification } from '../../_shared/demo-report-fixtures.ts';
 import { checkIngestQuota } from '../../_shared/quota.ts';
 import { log } from '../../_shared/logger.ts';
@@ -429,6 +431,34 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
       source: 'console',
       metadata: reportId ? { report_id: reportId } : {},
     });
+
+    // New-user path step `first_diagnosis_viewed` (funnel-steps.ts), actor =
+    // this user. Same trigger as the setup step above: today the console
+    // sends it for the first-run sample diagnosis (diagnosisViewed.ts keeps
+    // real-report views out, so existing apps are not stamped). A project
+    // whose setup row predates this request saw its first diagnosis earlier.
+    if (funnelStepMemo.claim('first_diagnosis_viewed', projectId)) {
+      const viewedAt = Date.now();
+      runInBackground((async () => {
+        const { data: prior, error: priorErr } = await db
+          .from('setup_funnel_events')
+          .select('created_at')
+          .eq('event_name', 'diagnosis_viewed')
+          .eq('dedup_key', projectId)
+          .maybeSingle();
+        if (priorErr) {
+          funnelStepMemo.release('first_diagnosis_viewed', projectId);
+          throw new Error(`first_diagnosis_viewed lookup failed: ${priorErr.message}`);
+        }
+        if (setupStepWasEarlier((prior as { created_at?: string } | null)?.created_at, viewedAt)) return;
+        await emitFunnelStep(db, {
+          step: 'first_diagnosis_viewed',
+          projectId,
+          actorUserId: userId,
+          properties: reportId ? { report_id: reportId } : {},
+        });
+      })(), 'first_diagnosis_viewed');
+    }
 
     return c.json({ ok: true }, 202);
   });

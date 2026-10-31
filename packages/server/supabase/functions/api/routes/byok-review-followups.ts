@@ -16,6 +16,11 @@
  *         that key (cached an hour per key), or for the key this app would
  *         use without keyId. An app key of another app needs an organization
  *         owner or admin. Console (jwtAuth).
+ *   GET   /v1/admin/byok/ai-provider   which model family the organization's
+ *         AI runs on ('anthropic' | 'openai', ADR 0039 amendment 2026-10-31)
+ *         and whether it has an OpenAI key to switch to. Console (jwtAuth).
+ *   PATCH /v1/admin/byok/ai-provider   { aiProvider }. Organization owners
+ *         and admins; 'openai' needs a working OpenAI key first.
  *
  * The scoreboard lives in review-followup-stats.ts; GET
  * /v1/admin/byok/spend-down and MCP get_spend_down_status add it as
@@ -27,10 +32,13 @@ import type { Variables } from '../types.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth } from '../../_shared/auth.ts'
 import { logAudit } from '../../_shared/audit.ts'
+import { invalidateSetupGapsForOrg } from '../../_shared/setup-gap-invalidate.ts'
 import { dbError, resolveOwnedProject } from '../shared.ts'
 import { byokKeyIdSchema } from '../../_shared/byok-validation.ts'
 import { canManageSharedKeys, keyOwnerFilter, keyOwnerForProject } from '../../_shared/byok-scope.ts'
 import { resolveCursorApiKey } from '../../_shared/agent-adapters.ts'
+import { resolveLlmKey } from '../../_shared/byok.ts'
+import { AI_PROVIDERS, clearAiProviderCache, type AiProvider } from '../../_shared/ai-provider.ts'
 import { CursorApiError, listCursorModelsV1, parseCursorModelSpec } from '../../_shared/cursor-cloud.ts'
 import {
   FOLLOWUP_DAILY_LIMIT_MAX,
@@ -256,6 +264,9 @@ export function registerByokReviewFollowupRoutes(app: Hono<{ Variables: Variable
     if (error) return dbError(c, error)
     if (!data) return bad(c, 'NOT_FOUND', 'Organization not found.', 404)
     await logAudit(db, project.id, userId, 'settings.updated', 'organization', orgId, { reviewFollowups: patch }).catch(() => {})
+    // The follow-up key is a Health check root cause: drop the stored answer so
+    // Home's "Fix these first" re-checks instead of showing the old state.
+    await invalidateSetupGapsForOrg(db, orgId)
     return c.json({ ok: true, data: { settings: followupSettingsFromRow(data as Record<string, unknown>) } })
   })
 
@@ -298,5 +309,63 @@ export function registerByokReviewFollowupRoutes(app: Hono<{ Variables: Variable
         : bad(c, 'NO_CURSOR_KEY', 'This Cursor key has no secret stored.')
     }
     return sendModels(c, key.cacheKey, key.apiKey)
+  })
+  app.get('/v1/admin/byok/ai-provider', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
+    const resolved = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: null }),
+    })
+    if ('response' in resolved) return resolved.response
+    const project = resolved.project
+    const orgId = (project.organization_id as string | null) ?? null
+    if (!orgId) return c.json({ ok: true, data: null })
+    const { data, error } = await db.from('organizations').select('ai_provider').eq('id', orgId).maybeSingle()
+    if (error) {
+      if (notMigrated(error as { code?: string })) return c.json({ ok: true, data: null })
+      return dbError(c, error)
+    }
+    const [role, openai] = await Promise.all([orgRole(c, db, orgId), resolveLlmKey(db, project.id, 'openai').catch(() => null)])
+    return c.json({
+      ok: true,
+      data: {
+        organizationId: orgId,
+        aiProvider: ((data as { ai_provider?: string } | null)?.ai_provider === 'openai' ? 'openai' : 'anthropic') as AiProvider,
+        canManage: canManageSharedKeys(role),
+        hasOpenAiKey: openai?.source === 'byok',
+      },
+    })
+  })
+
+  app.patch('/v1/admin/byok/ai-provider', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+    const next = body.aiProvider
+    if (typeof next !== 'string' || !(AI_PROVIDERS as readonly string[]).includes(next)) {
+      return bad(c, 'VALIDATION_ERROR', `aiProvider must be one of: ${AI_PROVIDERS.join(', ')}.`)
+    }
+    const db = getServiceClient()
+    const resolved = await resolveOwnedProject(c, db, userId)
+    if ('response' in resolved) return resolved.response
+    const project = resolved.project
+    const orgId = (project.organization_id as string | null) ?? null
+    if (!orgId) return bad(c, 'NO_ORGANIZATION', 'This app has no organization.')
+    // The switch moves every app's AI spend: owners and admins only.
+    if (!canManageSharedKeys(await orgRole(c, db, orgId))) {
+      return bad(c, 'ORG_ADMIN_ONLY', 'Only an organization owner or admin can change which AI runs your apps.', 403)
+    }
+    if (next === 'openai') {
+      const openai = await resolveLlmKey(db, project.id, 'openai').catch(() => null)
+      if (openai?.source !== 'byok') {
+        return bad(c, 'NO_OPENAI_KEY', 'Add an OpenAI key under Settings → AI keys first, then switch.')
+      }
+    }
+    const { data, error } = await db.from('organizations').update({ ai_provider: next }).eq('id', orgId).select('ai_provider').maybeSingle()
+    if (error) return dbError(c, error)
+    if (!data) return bad(c, 'NOT_FOUND', 'Organization not found.', 404)
+    clearAiProviderCache()
+    await logAudit(db, project.id, userId, 'settings.updated', 'organization', orgId, { aiProvider: next }).catch(() => {})
+    await invalidateSetupGapsForOrg(db, orgId)
+    return c.json({ ok: true, data: { aiProvider: next } })
   })
 }

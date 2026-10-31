@@ -1,51 +1,82 @@
 ---
 title: Webhook events
-description: Reference for every webhook event Mushi plugins receive — the shared envelope, each event's payload, and how to subscribe to only the events you need.
+description: Reference for the webhook events Mushi Mushi plugins receive. The shared envelope, each event's payload, and how to subscribe to only the events you need.
 ---
 
 # Webhook events
 
-Every event ships with this envelope:
+Mushi Mushi sends every plugin event in this envelope (the SDK type is
+`MushiEventEnvelope` from `@mushi-mushi/plugin-sdk`):
 
 ```ts
-interface MushiEvent<TName extends MushiEventName, TData> {
-  event: TName
-  project_id: string
-  occurred_at: string  // ISO 8601 UTC
-  data: TData
+interface MushiEventEnvelope<T = unknown> {
+  event: string        // e.g. 'report.classified'
+  deliveryId: string   // UUID per delivery; use it to drop duplicates
+  occurredAt: string   // ISO 8601
+  projectId: string
+  pluginSlug: string
+  data: T
 }
 ```
 
-## Event reference
+## Events Mushi Mushi sends today
 
-| Event                     | When                                                                         | `data` shape (subset)                                      |
-| ------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `report.created`          | A new report row is inserted                                                 | `{ report_id, severity, title, url }`                      |
-| `report.classified`       | `classify-report` finishes successfully                                      | `{ report_id, taxonomy_path, confidence }`                 |
-| `report.status_changed`   | Status updated via API or admin                                              | `{ report_id, from, to, actor_id }`                        |
-| `report.commented`        | A comment is added to a report                                               | `{ report_id, comment_id, body, visible_to_reporter }`     |
-| `report.dedup_grouped`    | Report is grouped into a dedup cluster                                       | `{ report_id, group_id, peers }`                           |
-| `report.reporter_replied` | The reporter answered in the report's thread (widget reply)                  | `{ report: { id }, comment: { id, body, author_kind } }`   |
-| `fix.requested`           | A fix dispatch has been requested (pre-agent launch)                         | `{ report_id, fix_id }`                                    |
-| `fix.proposed`            | Orchestrator opens a draft PR (standard agent or Cursor Cloud Agent)         | `{ report_id, attempt_id, pr_url }`                        |
-| `fix.applied`             | Draft PR merged                                                              | `{ report_id, attempt_id, pr_url, sha }`                   |
-| `fix.failed`              | Orchestrator gives up after retry budget                                     | `{ report_id, attempt_id, reason }`                        |
-| `qa_story.passed`         | A QA story run completed successfully                                        | `{ story_id, title, duration_ms }`                         |
-| `qa_story.failed`         | A QA story run failed all assertions                                         | `{ story_id, title, failure_reason }`                      |
-| `judge.score_recorded`    | `judge-batch` records a score                                                | `{ report_id, score, prompt_version }`                     |
-| `sla.breached`            | A report has exceeded its severity SLA target                                | `{ report_id, severity, target_seconds, elapsed_seconds }` |
-| `skill_pipeline.step.dispatched` | A skill pipeline step is dispatched for execution (cloud mode)        | `{ runId, stepIndex, skillSlug, contextPacket, projectId }` |
+The `data` column lists what the server puts in the payload today. Treat
+every field as optional and ignore fields you don't know: new ones can be
+added in a minor release.
+
+| Event | When | `data` |
+| --- | --- | --- |
+| `report.created` | A report is saved | `{ report: { id, status, category, title }, source }`. A regression filed by the status reconciler sends `{ source: 'status-reconciler', regressedActionNodeId, actionLabel }` with no `report` |
+| `report.classified` | Triage finishes | `{ report: { id, status, category, severity, title }, classification: { category, severity, confidence, tags } }` |
+| `report.status_changed` | A report's status changes (console, API, Slack, fix merge) | `{ report: { id, status }, previousStatus, newStatus, actor }`. `newStatus` equals `report.status` |
+| `report.reporter_replied` | The person who filed the report answered in its thread | `{ report: { id }, comment: { id, body, author_kind } }`. `body` is untrusted text from your app's users |
+| `fix.requested` | The fix worker has handed a report to a cloud agent (Cursor Cloud or GitHub's cloud agent) | `{ report, fix: { id, status, agent, externalAgentId, externalRunId, statusUrl, branch, pullRequestUrl }, … }`. The agent is already running; don't start another one |
+| `fix.proposed` | A fix PR is open | `{ report: { id }, fix: { id, agent, branch, prUrl, pullRequestUrl, commitSha?, summary? } }` |
+| `fix.applied` | A fix PR merged | `{ report: { id }, fix: { id, agent, branch, prUrl, pullRequestUrl, prNumber?, commitSha, repository? } }` |
+| `fix.failed` | A fix attempt ended without a PR | `{ report: { id }, fix: { id, agent, error, failureCategory? } }` |
+| `qa_story.failed` | A QA story run failed or errored (every such run) | `{ story_id, story_name, run_id, status, summary, consecutive_failures }` |
+| `qa_story.recovered` | A story that was failing passed again | Same shape as `qa_story.failed` |
+| `judge.score_recorded` | The judge graded a report's triage | `{ report: { id }, judge: { model, fallback, score, accuracy, severity, component, repro, classificationAgreed } }` |
+| `skill_pipeline.step.dispatched` | A skill pipeline run in `cloud` mode reaches a step | `{ runId, stepIndex, skillSlug, contextPacket, projectId }` |
+| `linear.issue.updated` | Linear tells Mushi Mushi an issue was created or changed | `{ linearIssueIdentifier, action, stateType, issueData, … }` |
+| `test.delivery` | You press **Test** on an installed plugin | `{ test: true }` |
+
+Whenever a fix event has a PR link, it is sent as both `fix.prUrl` and
+`fix.pullRequestUrl` (the name the SDK's `MushiFixEvent` type uses). Every fix
+event carries `fix.status`: the status the sender set, or else the one in the
+event name (`proposed`, `applied`, `failed`).
+
+## Named in the SDK, not sent to plugins
+
+| Event | Status |
+| --- | --- |
+| `report.commented`, `report.dedup_grouped`, `sla.breached`, `qa_story.passed` | In the SDK's event list, but nothing in Mushi Mushi sends them yet. A failing story that passes again sends `qa_story.recovered` |
+| `reward.points_awarded`, `reward.tier_changed`, `reward.payout_requested`, `reward.payout_paid` | Sent through the project's Rewards webhook, not to plugins. A plugin subscribed to them receives nothing |
 
 ## Subscribing to a subset
 
-Pass `events: ['report.created', 'fix.applied']` when installing the
-plugin and Mushi will only dispatch those. Empty array = subscribe to
-everything (default for first-party plugins).
+The install form has a **Subscribed events** field (comma-separated); the API
+field is `subscribedEvents`. Mushi Mushi only sends the events listed there.
+An empty list or `*` means every event.
+
+For Slack, Discord and Teams plugins, the console's notification settings
+also apply: turning off a notification type, or setting a minimum severity
+for triaged reports, stops those deliveries too. Other plugins are not
+affected by those settings.
 
 ## Cursor Cloud Agent events
 
-The **Cursor Cloud Agent** plugin (`cursor-cloud-agent`) listens to `report.classified`, `fix.requested`, `qa_story.failed`, and `skill_pipeline.step.dispatched`. When these fire, it dispatches a Cursor Cloud Agent run instead of a standard outbound webhook — no `webhookUrl` is required.
+The **Cursor Cloud Agent** plugin (`cursor-cloud-agent`) handles
+`report.classified`, `fix.requested`, `qa_story.failed` and
+`skill_pipeline.step.dispatched` by calling the Cursor API directly instead
+of posting a webhook. The install form still asks for a webhook URL, but
+Mushi Mushi never posts these events to it.
 
-For `skill_pipeline.step.dispatched`, Mushi dispatches to the Cursor Cloud Agent **even when the `cursor-cloud-agent` marketplace plugin is not installed** — credentials are read from **Integrations → Cursor Cloud** (`project_settings.cursor_api_key_ref`). This fan-out is *in addition to* any other plugin (Discord, Teams, custom webhook) subscribed to the same event.
+For `skill_pipeline.step.dispatched`, Mushi Mushi starts the Cursor agent
+**even when the plugin is not installed**, using the key from **Integrations
+→ Cursor Cloud**. Any other plugin subscribed to the same event still gets
+its webhook.
 
-See [Admin → Marketplace](/admin/marketplace) for installation and configuration.
+See [Cursor Cloud Agent](/plugins/cursor-cloud) for what each event does, and
+[Admin → Marketplace](/admin/marketplace) for installing plugins.

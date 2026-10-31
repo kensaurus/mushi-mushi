@@ -1205,6 +1205,22 @@ const BASE_TOOLS: Record<string, HostedTool> = {
           dispatchBlock = 'Could not run dispatch preflight — verify project_id and API key scope.'
         }
       }
+      // The app's Health check (GET /v1/admin/health-checks): the root causes the console's "Fix these first" shows.
+      type FixFirstRow = { title: string; detail: string; affects?: number | null; fix?: { label: string; to?: string } | null }
+      let health: { fixFirst: FixFirstRow[]; counts?: unknown } | null = null
+      if (resolvedId) {
+        try {
+          const h = await apiCall<{ projects: Array<{ fixFirst?: FixFirstRow[]; counts?: unknown }> }>(
+            `/v1/admin/health-checks?projectId=${encodeURIComponent(resolvedId)}`,
+            { headers: ctx.authHeaders },
+          )
+          const p = h.projects?.[0]
+          if (p) health = { fixFirst: p.fixFirst ?? [], counts: p.counts }
+        } catch {
+          // Best-effort: the Health check route may not be deployed yet.
+        }
+      }
+      const rootCause = health?.fixFirst[0]
       const ingestFailed = ingest.steps.filter((s) => s.required && !s.complete)
       const connOk = connIssues.length === 0
       const ready = connOk && ingest.ready && dispatchReady
@@ -1214,6 +1230,8 @@ const BASE_TOOLS: Record<string, HostedTool> = {
         ? (ingestFailed[0]?.hint ?? 'Complete SDK ingest setup.')
         : !dispatchReady
         ? (dispatchBlock ?? 'Complete dispatch preflight in Settings → Integrations.')
+        : rootCause
+        ? `Fix first: ${rootCause.title}. ${rootCause.detail}${rootCause.affects && rootCause.affects > 0 ? ` ${rootCause.affects} waiting on this.` : ''}${rootCause.fix ? ` (${rootCause.fix.label}${rootCause.fix.to ? ` in the console at ${rootCause.fix.to}` : ''})` : ''}`
         : 'All setup checks pass.'
       return {
         mode: 'full',
@@ -1233,6 +1251,7 @@ const BASE_TOOLS: Record<string, HostedTool> = {
         },
         ingest,
         dispatch: resolvedId ? dispatchPayload : null,
+        ...(health ? { health } : {}),
       }
     },
   },
@@ -2167,6 +2186,7 @@ const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   'get_ci_overview',
   'get_ci_costs',
   'get_ci_bill',
+  'get_worker_status',
   'request_ci_placement_change',
   'open_ci_cost_fix',
   'preview_ci_cost_fix_rollout',

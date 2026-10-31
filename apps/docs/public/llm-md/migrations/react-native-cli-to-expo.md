@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/react-native-cli-to-expo
 
 ---
 title: 'React Native CLI ↔ Expo'
-description: Move between React Native CLI and Expo in either direction — EAS Build and OTA updates, or expo prebuild for full native control — with Mushi intact.
+description: Move between React Native CLI and Expo either way (EAS Build and OTA updates, or expo prebuild for full native control) with Mushi Mushi bug reporting intact.
 ---
 
 # React Native CLI ↔ Expo
@@ -18,33 +18,37 @@ Both directions covered. Pick one based on what you need:
 - **Expo → CLI (`expo prebuild`)** if you need a native module Expo Go
   doesn't allow, or you want to fully own the `ios/` and `android/` folders.
 
-  As of 2026, **most projects don't need to choose**. You can run a bare
-  React Native CLI app and selectively `npx install-expo-modules@latest` to
-  pull in just the Expo SDK packages you want. That hybrid setup is what
-  the [Capacitor → RN guide](/migrations/capacitor-to-react-native#52-selectively-pulling-in-expo-sdk-packages-without-expo-cli)
-  recommends for cost-conscious teams.
+  **You may not need to choose.** You can run a bare React Native CLI app
+  and run `npx install-expo-modules@latest` to pull in just the Expo SDK
+  packages you want. That hybrid setup is what
+  [§ 5.2 of the Capacitor → RN plan](https://github.com/kensaurus/mushi-mushi/blob/master/docs/migrations/capacitor-to-react-native.md#52-selectively-pulling-in-expo-sdk-packages-without-expo-cli)
+  recommends for cost-conscious teams. Mushi Mushi works the same in all
+  three setups.
 
 ## Direction A: React Native CLI → Expo (managed-with-dev-client)
 
 ### Why
 
-- Cloud builds via **EAS Build** ($19–$99/mo) — no Mac mini, no Fastlane,
+- Cloud builds via **EAS Build** (free tier; paid plans from $19/mo, see
+  [expo.dev/pricing](https://expo.dev/pricing)): no Mac mini, no Fastlane,
   no GitHub Actions YAML.
-- **OTA updates** via EAS Update without store review.
-- **Expo SDK** packages co-maintained per release; they always work
-  together against the same SDK.
+- **OTA updates** via EAS Update, for JavaScript-only changes, without a
+  new store build.
+- **Expo SDK** packages are released together for each SDK version.
 
 ### Migration checklist
 
 Anything that ships its own iOS/Android code needs an Expo config plugin OR you stay on a "bare" Expo workflow with a dev client.</> },
-    { id: 'install-expo', label: 'Install Expo packages alongside RN', content: {`npx install-expo-modules@latest
-npm install expo expo-dev-client`} },
+    { id: 'install-expo', label: 'Install Expo packages alongside RN', content: {`npx install-expo-modules@latest   # adds expo and wires the native projects
+npx expo install expo-dev-client`} },
     { id: 'config', label: 'Create app.json / app.config.ts', content: <>Move metadata (name, slug, icon, splash, plugins) from native projects into Expo config. Each native customization either becomes an Expo config plugin or stays in the (still-checked-in) native projects.</> },
-    { id: 'dev-client', label: 'Build a dev client', content: {`npx expo prebuild --clean   # regenerates ios/ + android/
-npx expo run:ios            # local dev build
+    { id: 'dev-client', label: 'Build a dev client', content: {`npx expo run:ios            # local dev build, keeps your ios/ project
 # Or via EAS:
-npx eas-cli build --profile development --platform all`} },
-    { id: 'mushi', label: 'Mushi: no changes needed', content: <>Your existing &lt;MushiProvider projectId apiKey /&gt; works as-is on Expo. The only change is that expo-sensors (used for shake-to-report) is now installed automatically via the Expo SDK rather than via npx install-expo-modules.</> },
+npx eas-cli build --profile development --platform all
+
+# Only once every native change lives in a config plugin:
+# npx expo prebuild --clean  # DELETES and regenerates ios/ + android/`} },
+    { id: 'mushi', label: 'Mushi: no code changes needed', content: <>Your existing &lt;MushiProvider projectId apiKey /&gt; works as-is on Expo. Shake-to-report still needs the expo-sensors package and screenshots need react-native-view-shot; neither comes with the Expo SDK, so install them if you haven&apos;t: npx expo install expo-sensors react-native-view-shot.</> },
     { id: 'eas-build', label: 'Move CI to EAS Build (optional)', content: <>If you want EAS to handle store submissions: npx eas-cli build:configure, then npx eas-cli build --platform all. Replaces your Fastlane setup.</> },
 
 />
@@ -57,17 +61,17 @@ npx eas-cli build --profile development --platform all`} },
 - Want to fully own native projects (e.g., specific Xcode build settings
   Expo doesn't expose).
 - Want to switch off EAS Build and own your CI on GitHub Actions + Fastlane
-  (see [Cap → RN § 5](/migrations/capacitor-to-react-native#5-path-b-react-native-cli--github-actions--fastlane-the-chosen-path) for the full recipe).
+  (see [§ 5 of the Cap → RN plan](https://github.com/kensaurus/mushi-mushi/blob/master/docs/migrations/capacitor-to-react-native.md#5-path-b-react-native-cli--github-actions--fastlane-the-chosen-path) for the full recipe).
 
 ### Migration checklist
 
 Prebuild rewrites ios/ and android/. Commit first so you can diff.</> },
     { id: 'prebuild', label: 'Run expo prebuild', content: {`npx expo prebuild --clean
 # Generates ios/ and android/ from your app.json + Expo config plugins`} },
-    { id: 'commit-native', label: 'Commit the generated native projects', content: <>You now own them. Future prebuild runs would overwrite — most teams stop running it after the eject.</> },
+    { id: 'commit-native', label: 'Commit the generated native projects', content: <>You now own them. Running prebuild again would overwrite them, so stop running it once you edit the native projects by hand.</> },
     { id: 'remove-expo-cli', label: 'Optionally remove Expo CLI references', content: <>You can keep using Expo SDK packages (recommended) — just stop using npx expo commands and use react-native CLI instead. Update package.json scripts accordingly.</> },
-    { id: 'mushi', label: 'Mushi: no changes needed', content: <>Same provider, same API key. Shake-to-report keeps working because expo-sensors stays installed.</> },
-    { id: 'ci', label: 'Wire your own CI', content: <>If you were on EAS Build, follow the GitHub Actions + Fastlane recipe from the Cap → RN guide.</> },
+    { id: 'mushi', label: 'Mushi: no changes needed', content: <>Same provider, same API key. Shake-to-report keeps working as long as expo-sensors stays installed.</> },
+    { id: 'ci', label: 'Wire your own CI', content: <>If you were on EAS Build, follow the GitHub Actions + Fastlane recipe in the Cap → RN plan.</> },
 
 />
 
@@ -82,20 +86,21 @@ npm install expo-haptics expo-secure-store expo-image-picker expo-sensors
 cd ios && bundle exec pod install
 ```
 
-That's it. You get the Expo packages co-maintained as a unit, your CI stays
-on Fastlane + GitHub Actions, and Mushi runs the same way it does
-everywhere. This is the [recommended setup for glot.it](/migrations/capacitor-to-react-native).
+You get the Expo packages you picked, your CI stays on Fastlane + GitHub
+Actions, and Mushi runs the same way it does everywhere. The
+[Capacitor → React Native guide](/migrations/capacitor-to-react-native)
+uses this setup.
 
 ## Verification
 
 After either direction, smoke-test:
 
 1. App boots, opens, shows the Mushi widget on tap or shake.
-2. A test report appears in the Mushi admin console within ~5s.
+2. A test report appears on the Reports page of the Mushi admin console.
 3. Native modules (camera, secure storage, etc.) work on a real device.
 
 ## References
 
 - [Expo: Install Expo modules in an existing React Native project](https://docs.expo.dev/bare/installing-expo-modules/)
 - [Expo: prebuild](https://docs.expo.dev/workflow/prebuild/)
-- [Capacitor → React Native § 5.2](/migrations/capacitor-to-react-native#52-selectively-pulling-in-expo-sdk-packages-without-expo-cli) — the hybrid recipe in detail
+- [Capacitor → React Native plan § 5.2](https://github.com/kensaurus/mushi-mushi/blob/master/docs/migrations/capacitor-to-react-native.md#52-selectively-pulling-in-expo-sdk-packages-without-expo-cli): the hybrid recipe in detail

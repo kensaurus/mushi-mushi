@@ -199,7 +199,7 @@ function buildReceipts(
     proof: actProof,
     link:
       fix.pr_url && !shippedOnGithub && (actStamp === 'pending' || blocker)
-        ? { href: fix.pr_url, label: blocker ? ACT_BLOCKER_LINK_LABEL[blocker] : 'Review & merge' }
+        ? { href: fix.pr_url, label: blocker ? ACT_BLOCKER_LINK_LABEL[blocker] : 'View PR on GitHub' }
         : undefined,
   }
 

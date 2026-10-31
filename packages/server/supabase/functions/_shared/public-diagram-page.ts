@@ -292,7 +292,7 @@ ${partsList}
 </ul>
 ${connections ? `<h2>Connections</h2>\n<ul>\n${connections}\n</ul>` : ''}
 <footer>
-<p>Made with Mushi: when something in your app breaks, Mushi tells you why in plain English, with the fix ready to go.</p>
+<p>Made with Mushi: when something in your app breaks, Mushi Mushi tells you why in plain English, with the fix ready to go.</p>
 <p><a href="${escapeHtml(u.signup)}">Get a diagram and plain-English bug fixes for your own app →</a></p>
 </footer>
 </main>

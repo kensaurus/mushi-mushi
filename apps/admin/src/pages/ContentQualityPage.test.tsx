@@ -73,4 +73,18 @@ describe('ContentQualityPage empty state', () => {
     await render('/content?reason=user_flag')
     expect(host.querySelector('[role="toolbar"]')).not.toBeNull()
   })
+
+  it('gives the key search a field wide enough for the whole placeholder', async () => {
+    mocks.total = 0
+    await render('/content?reason=user_flag')
+    const input = host.querySelector('input[type="search"]') as HTMLInputElement
+    // w-64 shows about 21 characters of this Input; the phrase is longer, so
+    // the width lives on the label the toolbar flex row actually sizes.
+    expect(input.placeholder).toBe('Search keys on this page')
+    expect(input.placeholder.length).toBeGreaterThan(21)
+    expect(input.className).not.toMatch(/(?:^|\s)(?:sm:)?w-64(?:\s|$)/)
+    const label = input.closest('label')!
+    expect(label.className).toContain('sm:w-80')
+    expect(label.className).toContain('shrink-0')
+  })
 })

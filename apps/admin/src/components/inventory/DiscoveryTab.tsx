@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { PageLoadError } from '../PageLoadError'
 import { Btn, Card, Badge, Input } from '../ui'
 import { IconNote } from '../icons'
@@ -759,8 +759,20 @@ function LiveCrawlCard({
   onProposalReady: (proposalId: string) => void
 }) {
   const toast = useToast()
-  const [expanded, setExpanded] = useState(false)
+  const [searchParams] = useSearchParams()
+  // "Map my live site" on the empty User stories page opens this form at once.
+  const [expanded, setExpanded] = useState(() => searchParams.get('map') === '1')
   const [baseUrl, setBaseUrl] = useState('')
+  // The address the site watch uses (or the one Mushi suggests from the app), so
+  // nobody has to type the URL Mushi already knows (owner, 2026-10-30).
+  const site = usePageData<{ watch: { base_url?: string | null } | null; suggestedUrl: string | null }>(
+    `/v1/admin/projects/${projectId}/site-watch`,
+    { deps: [projectId] },
+  )
+  const knownUrl = site.data?.watch?.base_url ?? site.data?.suggestedUrl ?? ''
+  useEffect(() => {
+    if (knownUrl) setBaseUrl((current) => current || knownUrl)
+  }, [knownUrl])
   const [maxPages, setMaxPages] = useState(20)
   const [provider, setProvider] = useState<'firecrawl' | 'browserbase'>('firecrawl')
   const [cursorRefine, setCursorRefine] = useState(false)
@@ -839,7 +851,7 @@ function LiveCrawlCard({
   const isActive = latestRun && (latestRun.status === 'pending' || latestRun.status === 'running')
 
   return (
-    <Card className="p-4 space-y-3" data-testid="mushi-live-crawl-card">
+    <Card id="map-live" className="p-4 space-y-3 scroll-mt-6" data-testid="mushi-live-crawl-card">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
@@ -895,9 +907,11 @@ function LiveCrawlCard({
       {expanded && !isActive && (
         <form onSubmit={(e) => { e.preventDefault(); void startMapping() }} className="space-y-3 border-t border-edge/50 pt-3">
           <div className="space-y-1">
-            <label className="text-2xs text-fg-muted">App URL to crawl *</label>
+            <label htmlFor="map-live-url" className="text-2xs text-fg-muted">App URL to crawl *</label>
             <Input
+              id="map-live-url"
               type="url"
+              required
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
               placeholder="https://your-app.vercel.app"

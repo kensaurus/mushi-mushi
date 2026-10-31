@@ -49,7 +49,7 @@ export const EMPTY_QUERY_STATS: QueryStats = {
   projectId: null,
   projectName: null,
   planId: 'hobby',
-  planDisplayName: 'Hobby',
+  planDisplayName: 'Free',
   savedCount: 0,
   recentCount: 0,
   teamSavedCount: 0,

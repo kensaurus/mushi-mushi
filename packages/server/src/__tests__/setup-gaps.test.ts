@@ -23,6 +23,7 @@ import {
   followupKeyGap,
   forAudience,
   githubAccessGap,
+  llmBudgetGap,
   noRepoGap,
   SETUP_GAPS_CACHE_MS,
   slackGap,
@@ -129,6 +130,14 @@ describe('deployGap: the 14-day rule (report 9f64a77b)', () => {
     expect(deployGap(P, daysAgo(0.2), NOW).summary).toBe('A deploy was seen today.')
     expect(deployGap(P, undefined, NOW).status).toBe('unknown')
   })
+
+  it('a new app with no fix shipped yet is not a gap: there is nothing to announce', () => {
+    const fresh = deployGap(P, null, NOW, false)
+    expect(fresh.status).toBe('ok')
+    expect(fresh.summary).toContain('No fix has shipped yet')
+    // Once a fix shipped, never seeing a deploy is the gap again.
+    expect(deployGap(P, null, NOW, true).status).toBe('gap')
+  })
 })
 
 describe('followupKeyGap', () => {
@@ -170,6 +179,21 @@ describe('slackGap', () => {
     expect(slackGap({ projectId: P, connected: true, latest: null }, NOW).status).toBe('unknown')
     expect(slackGap({ projectId: P, connected: true, latest: row('ok', 'Connected') }, NOW).status).toBe('ok')
     expect(slackGap({ projectId: P, connected: false, latest: null }, NOW).status).toBe('ok')
+  })
+
+  // MUSHI-MUSHI-SERVER-3A (2026-10-31): the stored channel was not found on
+  // every send, for apps on the operator bot (no slack_bot_token_ref).
+  it('a channel Slack refuses is a gap, even for an app on the operator bot token', () => {
+    const dead = row('down', 'Slack channel C0B82A322RW cannot take posts (channel_not_found). Invite the Mushi bot to it, or pick another channel in Integrations.')
+    for (const connected of [true, false]) {
+      expect(slackGap({ projectId: P, connected, latest: dead }, NOW)).toMatchObject({
+        status: 'gap',
+        summary: expect.stringContaining('channel_not_found'),
+      })
+    }
+    expect(slackGap({ projectId: P, connected: true, latest: row('down', 'Slack channel C1 cannot take posts (is_archived).') }, NOW).status).toBe('gap')
+    // A stale channel row is not a current gap.
+    expect(slackGap({ projectId: P, connected: false, latest: row('down', 'cannot take posts (channel_not_found)', daysAgo(2)) }, NOW).status).toBe('ok')
   })
 })
 
@@ -224,5 +248,20 @@ describe('knownWorkflowsAbility', () => {
     expect(knownWorkflowsAbility(P, 'acme/app', 1000)).toBe('no')
     expect(knownWorkflowsAbility('1000000b-0000-4000-8000-000000000000', 'acme/app', 1000)).toBeNull()
     expect(knownWorkflowsAbility(P, 'acme/app', 10 * 60_000)).toBeNull()
+  })
+})
+
+describe('llmBudgetGap (MUSHI-MUSHI-SERVER-3J, 2026-10-30)', () => {
+  const resetsAt = '2026-11-01T00:00:00.000Z'
+  it('is a gap with the spend, the budget, the reset day and a button to the budget field when the app is over it', () => {
+    const gap = llmBudgetGap(P, { budgetUsd: 50, spendUsd: 50.02, over: true, resetsAt })
+    expect(gap).toMatchObject({ id: 'llm_budget', status: 'gap', fixHref: '/settings#spend-limits', audience: 'app_owner' })
+    expect(gap.summary).toContain('$50.02 of its $50.00')
+    expect(gap.summary).toContain('2026-11-01')
+  })
+  it('passes under the budget and with no budget, and is unknown when the read failed', () => {
+    expect(llmBudgetGap(P, { budgetUsd: 50, spendUsd: 12, over: false, resetsAt })).toMatchObject({ status: 'ok', summary: '$12.00 of $50.00 spent this month.' })
+    expect(llmBudgetGap(P, { budgetUsd: null, spendUsd: 0, over: false, resetsAt }).status).toBe('ok')
+    expect(llmBudgetGap(P, undefined).status).toBe('unknown')
   })
 })

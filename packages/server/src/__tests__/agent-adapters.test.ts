@@ -17,6 +17,7 @@ import { createFakeDb, findQueries, eqValue, hasFilter } from './__stubs__/fake-
 const mocks = vi.hoisted(() => ({
   notifyTeamFixEvent: vi.fn(async () => undefined),
   dispatchPluginEventDetached: vi.fn(async () => undefined),
+  resolveLinkedSentryIssues: vi.fn(async (..._args: unknown[]) => ({ resolved: [] as string[], failed: [] as unknown[] })),
   resolveLlmKey: vi.fn(async (): Promise<unknown> => null),
   resolveLlmKeys: vi.fn(async (): Promise<unknown[]> => []),
   resolveProjectGithubToken: vi.fn(async (..._args: unknown[]): Promise<string | null> => null),
@@ -49,6 +50,9 @@ vi.mock('../../supabase/functions/_shared/github-pr.ts', () => ({
 vi.mock('../../supabase/functions/_shared/team-notify.ts', () => ({
   notifyTeamFixEvent: (...args: unknown[]) => mocks.notifyTeamFixEvent(...(args as [])),
 }))
+vi.mock('../../supabase/functions/_shared/sentry-resolve-back.ts', () => ({
+  resolveLinkedSentryIssues: (...args: unknown[]) => mocks.resolveLinkedSentryIssues(...args),
+}))
 vi.mock('../../supabase/functions/_shared/plugins.ts', () => ({
   dispatchPluginEventDetached: (...args: unknown[]) => mocks.dispatchPluginEventDetached(...(args as [])),
 }))
@@ -65,6 +69,7 @@ import {
   pinnedCursorKeyIdFromDispatch,
   pollResultToOutcome,
   cursorKeyForNewWork,
+  cursorKeyRestUntil,
   resolveCursorApiKey,
   stopCursorAgentLatestRun,
   validateAgentOverride,
@@ -79,6 +84,7 @@ const TARGET = { attemptId: 'fa-1', projectId: PROJECT, reportId: REPORT, agent:
 beforeEach(() => {
   mocks.notifyTeamFixEvent.mockClear()
   mocks.dispatchPluginEventDetached.mockClear()
+  mocks.resolveLinkedSentryIssues.mockClear()
   mocks.resolveLlmKey.mockReset()
   mocks.resolveLlmKey.mockResolvedValue(null)
   mocks.resolveProjectGithubToken.mockReset()
@@ -343,6 +349,8 @@ describe('applyCloudAgentOutcome', () => {
     expect(resolved).toBeTruthy()
     expect(hasFilter(resolved!, 'in', 'status')).toBe(true)
     expect(findQueries(queries, 'fix_events', 'insert').map((q) => (q.payload as { label: string }).label)).toContain('Resolved: the agent found it already fixed')
+    // The linked Sentry issue leaves Sentry's unresolved list too (2026-10-30).
+    expect(mocks.resolveLinkedSentryIssues).toHaveBeenCalledWith(db, expect.objectContaining({ projectId: PROJECT, reportId: REPORT, prUrl: null }))
   })
 
   it('an "already fixed" verdict leaves the report open while another attempt or PR is live', async () => {
@@ -353,6 +361,7 @@ describe('applyCloudAgentOutcome', () => {
     })
     await applyCloudAgentOutcome(db, TARGET, { kind: 'completed_no_pr', summary: 'Mushi verdict: already_fixed. Nothing to change.' })
     expect(findQueries(queries, 'reports', 'update').some((q) => (q.payload as { status?: string }).status === 'resolved')).toBe(false)
+    expect(mocks.resolveLinkedSentryIssues).not.toHaveBeenCalled()
   })
 
   it('completed_no_pr with notes but no verdict is unknown, not cursor_api_error (2026-10-21)', async () => {
@@ -1204,3 +1213,24 @@ describe('Cursor usage limit: detect it and swap keys (2026-10-24)', () => {
   })
 })
 
+
+describe('cursorKeyRestUntil: a spent plan rests until it renews (2026-10-31)', () => {
+  const now = Date.parse('2026-10-31T03:00:00Z')
+  const sixHours = new Date(now + 6 * 3_600_000).toISOString()
+  const renews = '2026-11-19T23:59:59Z'
+
+  it('a first refusal rests 6 hours, even with a renewal date', () => {
+    expect(cursorKeyRestUntil(now, null, renews).toISOString()).toBe(sixHours)
+    expect(cursorKeyRestUntil(now, '2026-10-20T00:00:00Z', renews).toISOString()).toBe(sixHours)
+  })
+
+  it('refused again within a day of the last rest: rests until the renewal date', () => {
+    expect(cursorKeyRestUntil(now, '2026-10-31T02:37:40Z', renews).toISOString()).toBe('2026-11-19T23:59:59.000Z')
+  })
+
+  it('without a usable renewal date it stays at 6 hours', () => {
+    expect(cursorKeyRestUntil(now, '2026-10-31T02:37:40Z', null).toISOString()).toBe(sixHours)
+    expect(cursorKeyRestUntil(now, '2026-10-31T02:37:40Z', '2026-10-31T05:00:00Z').toISOString()).toBe(sixHours)
+    expect(cursorKeyRestUntil(now, '2026-10-31T02:37:40Z', 'not a date').toISOString()).toBe(sixHours)
+  })
+})

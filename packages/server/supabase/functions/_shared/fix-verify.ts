@@ -950,7 +950,7 @@ export type SecondJudgeState =
 /** Calls on one head that may fail before the gate stops retrying. */
 export const SECOND_JUDGE_MAX_TRIES = 3
 
-export const SECOND_JUDGE_DEFAULT_MODEL = { openai: 'gpt-5.4', openrouter: 'openai/gpt-5.4' } as const
+export const SECOND_JUDGE_DEFAULT_MODEL = { openai: 'gpt-6.1-sol', openrouter: 'openai/gpt-6.1-sol' } as const
 
 /** Read a stored second_judge jsonb defensively. */
 export function readSecondJudge(value: unknown): SecondJudgeRecord | null {

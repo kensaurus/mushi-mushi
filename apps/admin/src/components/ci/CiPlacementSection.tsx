@@ -10,7 +10,18 @@
  *
  *          A repo an external controller manages (another tool's dispatcher)
  *          is shown read-only. Mushi never changes runner labels or
- *          registrations: only LINUX_RUNNER / RUNNER_<WORKFLOW>.
+ *          registrations: only LINUX_RUNNER / RUNNER_<WORKFLOW>, and
+ *          CI_PROFILE where a workflow reads it ("Checks on fix pull
+ *          requests": economy, the cheaper default, or thorough).
+ *
+ *          A move to GitHub-hosted runners switches back on its own after
+ *          the chosen time (4 hours by default; ADR 0037 amendment), so a
+ *          one-off fast run does not stay billed.
+ *
+ *          A team owner or admin gets "Apply now" after the preview: one
+ *          click files, approves and runs that exact change in their console
+ *          session (lib/ciPlacementApply.ts). Others ask, and an owner or
+ *          admin decides below.
  *
  *          Data: GET /v1/admin/ci/placement?project_id=; POST …/preview,
  *          …/requests, …/requests/:id/{approve,reject,execute,revert}.
@@ -24,14 +35,17 @@ import {
   hostedDisabledReason,
   labelChoices,
   minutesLeft,
+  profileNow,
   REQUEST_STATUS,
   requestSummary,
+  REVERT_AFTER_CHOICES,
   targetLabel,
   WATCH_STATUS,
 } from '../../lib/ciPlacementView'
 import { formatDelta } from '../../lib/ciCompareView'
 import { formatSeconds } from '../../lib/ciView'
 import { apiFetch } from '../../lib/supabase'
+import { applyPlacementNow, GITHUB_INSTALLATIONS_URL, type ApplyResult } from '../../lib/ciPlacementApply'
 import { usePageData } from '../../lib/usePageData'
 import { useNow } from '../../lib/useNow'
 import { Badge, Btn, Callout, ErrorAlert, Input, Loading, RelativeTime, ResultChip, SelectField } from '../ui'
@@ -115,14 +129,21 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
   const choices = labelChoices(data.policy, repo)
   const [choice, setChoice] = useState<Choice | null>(null)
   const [other, setOther] = useState('')
+  const [revertAfter, setRevertAfter] = useState<number>(4)
   const [preview, setPreview] = useState<PlacementPreview | null>(null)
-  const [busy, setBusy] = useState<'preview' | 'request' | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<'preview' | 'request' | 'apply' | null>(null)
+  const [error, setError] = useState<{ message: string; code: string | null } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const groupId = useId()
 
   const value = choice?.kind === 'hosted' ? null : choice?.kind === 'label' ? (choice.label === '__other__' ? other.trim() : choice.label) : undefined
-  const body = () => ({ projectId, repo: repo.repo, variable: v?.name ?? '', value: value ?? null })
+  const body = () => ({
+    projectId,
+    repo: repo.repo,
+    variable: v?.name ?? '',
+    value: value ?? null,
+    ...(choice?.kind === 'hosted' && revertAfter > 0 ? { revertAfterHours: revertAfter } : {}),
+  })
 
   async function runPreview() {
     if (value === undefined || (value !== null && !value)) return
@@ -133,10 +154,26 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
     setBusy(null)
     if (!res.ok || !res.data) {
       setPreview(null)
-      setError(res.error?.message ?? 'Mushi could not build the preview.')
+      setError({ message: res.error?.message ?? 'Mushi could not build the preview.', code: res.error?.code ?? null })
       return
     }
     setPreview(res.data)
+  }
+
+  async function applyNow() {
+    setBusy('apply')
+    setError(null)
+    const r = await applyPlacementNow(body())
+    setBusy(null)
+    if (!r.ok) {
+      setError(applyFailure(r))
+      onChanged()
+      return
+    }
+    setPreview(null)
+    setChoice(null)
+    setNotice(`${r.detail} Mushi watches the next jobs.`)
+    onChanged()
   }
 
   async function request() {
@@ -145,7 +182,7 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
     const res = await apiFetch<{ id: string }>('/v1/admin/ci/placement/requests', { method: 'POST', body: JSON.stringify(body()) })
     setBusy(null)
     if (!res.ok) {
-      setError(res.error?.message ?? 'Mushi could not save the request.')
+      setError({ message: res.error?.message ?? 'Mushi could not save the request.', code: res.error?.code ?? null })
       return
     }
     setPreview(null)
@@ -167,6 +204,8 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
         </Callout>
       ) : !repo.workflowsRead ? (
         <p className="text-xs text-fg-muted">Mushi has not read this repo’s workflow files yet (they come with the daily GitHub snapshot).</p>
+      ) : allowed.length === 0 && repo.profile ? (
+        <ProfileControl projectId={projectId} repo={repo} data={data} onChanged={onChanged} />
       ) : allowed.length === 0 ? (
         <p className="text-xs text-fg-muted">No job reads LINUX_RUNNER or a RUNNER_&lt;WORKFLOW&gt; variable: every job names its runner in the workflow. Moving them is a workflow change.</p>
       ) : (
@@ -250,14 +289,40 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
                   <Input label="Runner label" value={other} onChange={(e) => setOther(e.target.value)} placeholder="kensaurus-local" />
                 </div>
               )}
+              {choice?.kind === 'hosted' && (
+                <div className="max-w-xs pl-5">
+                  <SelectField
+                    label="Switch back after"
+                    value={String(revertAfter)}
+                    onChange={(e) => {
+                      setRevertAfter(Number(e.target.value))
+                      setPreview(null)
+                    }}
+                  >
+                    {REVERT_AFTER_CHOICES.map((c) => (
+                      <option key={c.hours} value={c.hours}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </SelectField>
+                  <p className="mt-1 text-2xs text-fg-muted">GitHub-hosted minutes are billed on private repos. Mushi puts the current runner back when the time is up.</p>
+                </div>
+              )}
               <p id={`${groupId}-hint`} className="text-2xs text-fg-muted">
-                Preview changes nothing. A request changes nothing until an owner or admin approves it and runs it within the hour.
+                {data.canDecide
+                  ? 'Preview changes nothing. Apply now makes exactly the change you previewed, and it can be reverted below.'
+                  : 'Preview changes nothing. A request changes nothing until an owner or admin approves it and runs it within the hour.'}
               </p>
               <div className="flex flex-wrap gap-2">
                 <Btn size="sm" variant="ghost" onClick={() => void runPreview()} disabled={busy !== null || value === undefined || (value !== null && !value)}>
                   {busy === 'preview' ? 'Previewing…' : 'Preview'}
                 </Btn>
-                {preview && !preview.blocked && preview.payload && (
+                {preview && !preview.blocked && preview.payload && data.canDecide && (
+                  <Btn size="sm" onClick={() => void applyNow()} disabled={busy !== null} data-testid="ci-placement-apply">
+                    {busy === 'apply' ? 'Applying…' : 'Apply now'}
+                  </Btn>
+                )}
+                {preview && !preview.blocked && preview.payload && !data.canDecide && (
                   <Btn size="sm" onClick={() => void request()} disabled={busy !== null}>
                     {busy === 'request' ? 'Asking…' : 'Ask for this change'}
                   </Btn>
@@ -266,11 +331,153 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
             </fieldset>
           )}
           {preview && <PreviewPanel preview={preview} />}
+          {repo.profile && <ProfileControl projectId={projectId} repo={repo} data={data} onChanged={onChanged} />}
         </>
       )}
-      {error && <ErrorAlert title="Not done" message={error} />}
+      {error && <ChangeError error={error} />}
       {notice && <ResultChip tone="success">{notice}</ResultChip>}
     </li>
+  )
+}
+
+/** A failed change; GitHub's missing permission gets the page that fixes it. */
+function ChangeError({ error }: { error: { message: string; code: string | null } }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <ErrorAlert title="Not done" message={error.message} />
+      {error.code === 'GITHUB_VARIABLES_PERMISSION' && (
+        <a className="text-xs underline underline-offset-2" href={GITHUB_INSTALLATIONS_URL} target="_blank" rel="noreferrer">
+          Open GitHub → Applications → Mushi Mushi App → Review request
+        </a>
+      )}
+    </div>
+  )
+}
+
+function applyFailure(r: Extract<ApplyResult, { ok: false }>): { message: string; code: string | null } {
+  const where = r.step === 'request' ? '' : r.step === 'approve' ? ' It is saved as a request below; approve it there.' : ' It is approved below; run it there once fixed.'
+  return { message: `${r.message}${where}`, code: r.code }
+}
+
+const PROFILE_CHOICES = [
+  { value: 'economy', label: 'Economy (recommended, default)', note: 'Mushi fix pull requests skip the checks their workflows mark as skippable; those still run on the release train and on main before a deploy.' },
+  { value: 'thorough', label: 'Thorough (more expensive)', note: 'Every check on every pull request, fix pull requests included: more billed GitHub-hosted minutes on a private repo.' },
+] as const
+
+/** "Checks on fix pull requests": CI_PROFILE, offered where a workflow reads it. */
+function ProfileControl({ projectId, repo, data, onChanged }: { projectId: string; repo: PlacementRepo; data: CiPlacement; onChanged: () => void }) {
+  const now = profileNow(repo.profile?.current)
+  const [pick, setPick] = useState<'economy' | 'thorough' | null>(null)
+  const [preview, setPreview] = useState<PlacementPreview | null>(null)
+  const [busy, setBusy] = useState<'preview' | 'request' | 'apply' | null>(null)
+  const [error, setError] = useState<{ message: string; code: string | null } | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const groupId = useId()
+  // Economy is the default: going back to it removes the variable.
+  const body = () => ({ projectId, repo: repo.repo, variable: 'CI_PROFILE', value: pick === 'thorough' ? 'thorough' : repo.profile?.current?.exists ? null : 'economy' })
+
+  async function run(kind: 'preview' | 'request') {
+    setBusy(kind)
+    setError(null)
+    setNotice(null)
+    const path = kind === 'preview' ? '/v1/admin/ci/placement/preview' : '/v1/admin/ci/placement/requests'
+    const res = await apiFetch<PlacementPreview & { id?: string }>(path, { method: 'POST', body: JSON.stringify(body()) })
+    setBusy(null)
+    if (!res.ok || !res.data) {
+      setError({ message: res.error?.message ?? (kind === 'preview' ? 'Mushi could not build the preview.' : 'Mushi could not save the request.'), code: res.error?.code ?? null })
+      return
+    }
+    if (kind === 'preview') {
+      setPreview(res.data)
+      return
+    }
+    setPreview(null)
+    setPick(null)
+    setNotice('Requested. A team owner or admin approves and runs it.')
+    onChanged()
+  }
+
+  async function applyNow() {
+    setBusy('apply')
+    setError(null)
+    setNotice(null)
+    const r = await applyPlacementNow(body())
+    setBusy(null)
+    if (!r.ok) {
+      setError(applyFailure(r))
+      onChanged()
+      return
+    }
+    setPreview(null)
+    setPick(null)
+    setNotice(r.detail)
+    onChanged()
+  }
+
+  return (
+    <fieldset className="flex flex-col gap-1.5 border-t border-edge-subtle pt-2" data-testid={`ci-profile-${repo.repo}`}>
+      <legend className="text-xs font-medium text-fg">Checks on fix pull requests</legend>
+      <p className="text-xs text-fg-secondary">
+        Now: <span className="font-medium text-fg">{now === 'unknown' ? 'not readable' : now === 'thorough' ? 'Thorough' : 'Economy'}</span>
+        <span className="text-fg-muted"> (vars.CI_PROFILE)</span>
+      </p>
+      {data.canRequest &&
+        PROFILE_CHOICES.map((c) => (
+          <label key={c.value} className="flex items-start gap-2 text-xs text-fg-secondary">
+            <input
+              type="radio"
+              name={`${groupId}-profile`}
+              className="mt-0.5"
+              checked={pick === c.value}
+              disabled={now === c.value}
+              onChange={() => {
+                setPick(c.value)
+                setPreview(null)
+              }}
+            />
+            <span>
+              {c.label}
+              {now === c.value && <span className="text-fg-muted"> · current</span>}
+              <span className="block text-2xs text-fg-muted">{c.note}</span>
+            </span>
+          </label>
+        ))}
+      {data.canRequest && (
+        <div className="flex flex-wrap gap-2">
+          <Btn size="sm" variant="ghost" onClick={() => void run('preview')} disabled={busy !== null || pick === null}>
+            {busy === 'preview' ? 'Previewing…' : 'Preview'}
+          </Btn>
+          {preview && !preview.blocked && preview.payload && data.canDecide && (
+            <Btn size="sm" onClick={() => void applyNow()} disabled={busy !== null} data-testid="ci-profile-apply">
+              {busy === 'apply' ? 'Applying…' : 'Apply now'}
+            </Btn>
+          )}
+          {preview && !preview.blocked && preview.payload && !data.canDecide && (
+            <Btn size="sm" onClick={() => void run('request')} disabled={busy !== null}>
+              {busy === 'request' ? 'Asking…' : 'Ask for this change'}
+            </Btn>
+          )}
+        </div>
+      )}
+      {preview && (
+        <div className="flex flex-col gap-1 rounded-md border border-edge-subtle bg-surface-overlay/40 p-2.5 text-xs" data-testid="ci-profile-preview">
+          {preview.blocked && (
+            <p className="flex items-start gap-1 text-danger" role="alert">
+              <IconAlertTriangle size={12} className="mt-px shrink-0" />
+              {preview.blocked.message}
+            </p>
+          )}
+          {preview.warnings.map((w) => (
+            <p key={w} className="flex items-start gap-1 text-warn-foreground">
+              <IconAlertTriangle size={12} className="mt-px shrink-0" />
+              {w}
+            </p>
+          ))}
+        </div>
+      )}
+      {error && <ChangeError error={error} />}
+      {notice && <ResultChip tone="success">{notice}</ResultChip>}
+    </fieldset>
   )
 }
 
@@ -395,7 +602,7 @@ export function CiPlacementSection({ projectId, scope }: { projectId: string | n
       )}
       {!data.tokenStored && (
         <Callout tone="warn" label="GitHub access">
-          No GitHub token is stored for this app, so Mushi cannot read or change runner variables. Store a fine-grained token with “Variables: Read and write” on these repositories.
+          Mushi has no GitHub access for this app’s repositories, so it cannot read or change runner variables. Connect them with the Mushi GitHub App (Connect → GitHub), or store a fine-grained token with “Variables: Read and write”.
         </Callout>
       )}
       <ul className="grid gap-3 xl:grid-cols-2">

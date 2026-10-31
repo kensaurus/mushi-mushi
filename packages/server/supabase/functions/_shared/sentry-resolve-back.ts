@@ -59,6 +59,7 @@ export function sentryFixesTrailers(shortIds: readonly string[]): string[] {
 interface SentryLinkRow {
   id: string;
   external_id: string;
+  archived_at?: string | null;
 }
 
 async function loadSentryLinks(
@@ -69,7 +70,7 @@ async function loadSentryLinks(
 ): Promise<SentryLinkRow[]> {
   let q = db
     .from('report_external_issues')
-    .select('id, external_id')
+    .select('id, external_id, archived_at')
     .eq('report_id', reportId)
     .eq('project_id', projectId)
     .eq('system', 'sentry');
@@ -242,7 +243,7 @@ export async function resolveLinkedSentryIssues(
       const { status } = await resolveSentryIssue(creds.token, creds.orgSlug, link.external_id, deps.fetchImpl);
       const { error: stampErr } = await db
         .from('report_external_issues')
-        .update({ resolved_at: new Date().toISOString() })
+        .update({ resolved_at: new Date().toISOString(), archived_at: null })
         .eq('id', link.id);
       if (stampErr) {
         log.error('Sentry issue resolved but resolved_at stamp failed', { linkId: link.id, err: stampErr.message });
@@ -294,11 +295,11 @@ export async function resolveLinkedSentryIssues(
 export async function reopenSentryLinks(db: SupabaseClient, projectId: string, reportId: string): Promise<void> {
   const { error } = await db
     .from('report_external_issues')
-    .update({ resolved_at: null })
+    .update({ resolved_at: null, archived_at: null })
     .eq('report_id', reportId)
     .eq('project_id', projectId)
     .eq('system', 'sentry')
-    .not('resolved_at', 'is', null);
+    .or('resolved_at.not.is.null,archived_at.not.is.null');
   if (error) throw new Error(`report_external_issues reopen failed: ${error.message}`);
 }
 
@@ -330,16 +331,22 @@ export interface SentryArchiveResult {
  */
 export async function archiveLinkedSentryIssues(
   db: SupabaseClient,
-  input: { projectId: string; reportId: string; closedReason: string },
+  input: {
+    projectId: string;
+    reportId: string;
+    closedReason: string;
+    /** A person pressed "Archive in Sentry": any close reason may archive. */
+    byPerson?: boolean;
+  },
   deps: {
     credentials?: (db: SupabaseClient, projectId: string) => Promise<SentryCredentials | null>;
     fetchImpl?: FetchLike;
   } = {},
 ): Promise<SentryArchiveResult> {
-  if (!sentryCloseAction(input.closedReason)) return { archived: [], failed: [], skipped: 'not_archivable' };
-  const label = ARCHIVE_ON_CLOSE[input.closedReason];
-  const links = (await loadSentryLinks(db, input.projectId, input.reportId, true)).filter((l) =>
-    /^\d+$/.test(l.external_id),
+  if (!input.byPerson && !sentryCloseAction(input.closedReason)) return { archived: [], failed: [], skipped: 'not_archivable' };
+  const label = ARCHIVE_ON_CLOSE[input.closedReason] ?? input.closedReason.replace(/_/g, ' ');
+  const links = (await loadSentryLinks(db, input.projectId, input.reportId, true)).filter(
+    (l) => /^\d+$/.test(l.external_id) && !l.archived_at,
   );
   if (links.length === 0) return { archived: [], failed: [], skipped: 'no_links' };
   const creds = await (deps.credentials ?? loadSentryCredentials)(db, input.projectId);
@@ -356,6 +363,11 @@ export async function archiveLinkedSentryIssues(
     try {
       await archiveSentryIssue(creds.token, creds.orgSlug, link.external_id, deps.fetchImpl);
       result.archived.push(link.external_id);
+      const { error: stampErr } = await db
+        .from('report_external_issues')
+        .update({ archived_at: new Date().toISOString() })
+        .eq('id', link.id);
+      if (stampErr) log.error('Sentry issue archived but archived_at stamp failed', { linkId: link.id, err: stampErr.message });
     } catch (err) {
       const message = String(err instanceof Error ? err.message : err).slice(0, 300);
       log.error('Sentry archive failed', { projectId: input.projectId, reportId: input.reportId, issueId: link.external_id, err: message });
@@ -367,7 +379,9 @@ export async function archiveLinkedSentryIssues(
         creds.token,
         creds.orgSlug,
         link.external_id,
-        `Archived by Mushi: the report was closed as "${label}". Sentry brings it back if it escalates.`,
+        input.byPerson
+          ? `Archived from Mushi by a console user (report closed as "${label}"). Sentry brings it back if it escalates.`
+          : `Archived by Mushi: the report was closed as "${label}". Sentry brings it back if it escalates.`,
         deps.fetchImpl,
       );
     } catch (err) {

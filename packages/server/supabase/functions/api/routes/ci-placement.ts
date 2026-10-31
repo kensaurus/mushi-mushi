@@ -36,7 +36,7 @@ import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { claimTenantRateLimit, logOrgAudit } from '../../_shared/tenant-observability.ts'
-import { parseGithubRepoUrl, resolveProjectGithubToken } from '../../_shared/github.ts'
+import { parseGithubRepoUrl, placementGithubToken } from '../../_shared/github.ts'
 import {
   approveConnectorAction,
   executeConnectorAction,
@@ -49,7 +49,9 @@ import {
   buildPlacementPreview,
   externalControllerFor,
   isAllowedPlacementVariable,
+  MAX_REVERT_AFTER_HOURS,
   normalizePolicy,
+  PROFILE_VARIABLE,
   PLACEMENT_ACTIONS,
   REPO_RE,
   revertPayload,
@@ -60,7 +62,7 @@ import {
   type RunnerSeen,
   type VariableState,
 } from '../../_shared/ci-placement.ts'
-import { isHostedLabel, parseRepoWorkflows } from '../../_shared/ci-runs-on.ts'
+import { isHostedLabel, parseRepoWorkflows, workflowsRead } from '../../_shared/ci-runs-on.ts'
 import { snapshotWorkflows } from '../../_shared/verify-workflow-repo.ts'
 import { buildCiCompare } from '../../_shared/ci-compare.ts'
 import { isMissingObject, loadCiCompareInput } from '../../_shared/ci-compare-load.ts'
@@ -87,8 +89,8 @@ export interface CiPlacementRouteDeps {
   callerCanAccessProject: typeof callerCanAccessProject
   claimRateLimit: typeof claimTenantRateLimit
   logOrgAudit: typeof logOrgAudit
-  /** The project's stored GitHub token (PAT path, no platform fallback). */
-  resolveToken: (db: Db, projectId: string) => Promise<string | null>
+  /** The project's stored GitHub token, else the App installation for the repo (never the platform token). */
+  resolveToken: (db: Db, projectId: string, repo?: string | null) => Promise<string | null>
   fetch: FetchLike
   /** The cost comparison for one project, or null when it cannot be built. */
   loadCompare: (db: Db, projectId: string, now: Date) => Promise<CiCompare | null>
@@ -105,7 +107,7 @@ export const defaultCiPlacementDeps: CiPlacementRouteDeps = {
   callerCanAccessProject,
   claimRateLimit: claimTenantRateLimit,
   logOrgAudit,
-  resolveToken: (db, projectId) => resolveProjectGithubToken(db, projectId, null, { allowEnvFallback: false }),
+  resolveToken: (db, projectId, repo) => placementGithubToken(db, projectId, repo),
   fetch: (url, init) => fetch(url, init),
   loadCompare: async (db, projectId, now) => {
     const from = new Date(now.getTime() - 30 * 24 * 60 * 60_000)
@@ -197,6 +199,8 @@ const previewSchema = z
     variable: z.string().min(1).max(80),
     value: z.string().min(1).max(100).nullable(),
     reason: z.string().max(500).optional(),
+    /** A move to GitHub-hosted switches back after this many hours (1–168). */
+    revertAfterHours: z.number().int().min(1).max(MAX_REVERT_AFTER_HOURS).nullable().optional(),
   })
   .strict()
 
@@ -210,7 +214,7 @@ async function previewFor(c: Context, deps: CiPlacementRouteDeps, db: Db, body: 
   const orgId = await projectOrg(db, body.projectId)
   if (!orgId) return refuse(jsonError(c, 'NO_ORGANIZATION', 'This project belongs to no organization.', 409))
   if (!isAllowedPlacementVariable(body.variable)) {
-    return refuse(jsonError(c, 'VARIABLE_NOT_ALLOWED', `Mushi only changes LINUX_RUNNER and RUNNER_<WORKFLOW> variables, not "${body.variable.slice(0, 60)}".`, 403))
+    return refuse(jsonError(c, 'VARIABLE_NOT_ALLOWED', `Mushi only changes LINUX_RUNNER, RUNNER_<WORKFLOW> and CI_PROFILE variables, not "${body.variable.slice(0, 60)}".`, 403))
   }
   const now = deps.now()
   const [{ policy }, visibility, runners, workflows, token, compare] = await Promise.all([
@@ -218,7 +222,7 @@ async function previewFor(c: Context, deps: CiPlacementRouteDeps, db: Db, body: 
     repoVisibility(db, body.projectId, repo),
     repoRunners(db, body.projectId, repo),
     snapshotWorkflows(db as never, body.projectId, repo),
-    deps.resolveToken(db, body.projectId),
+    deps.resolveToken(db, body.projectId, body.repo),
     deps.loadCompare(db, body.projectId, now),
   ])
   let current: VariableState | null = null
@@ -251,9 +255,10 @@ async function previewFor(c: Context, deps: CiPlacementRouteDeps, db: Db, body: 
     waitP95ByLabel,
     cost,
     now,
+    revertAfterHours: body.revertAfterHours ?? null,
   })
   if (!token && preview.blocked?.code === 'VARIABLE_UNREADABLE') {
-    preview.blocked = { code: 'NO_GITHUB_TOKEN', message: 'No GitHub token is stored for this project. Store a fine-grained token with "Variables: Read and write" in the project settings.' }
+    preview.blocked = { code: 'NO_GITHUB_TOKEN', message: 'Mushi has no GitHub access for this repo. Connect it with the Mushi GitHub App (Connect → GitHub), or store a fine-grained token with "Variables: Read and write" in the project settings.' }
   }
   return { preview, orgId }
 }
@@ -395,10 +400,14 @@ async function getPlacement(c: Context, deps: CiPlacementRouteDeps): Promise<Res
   const orgId = await projectOrg(db, access.projectId)
   if (!orgId) return jsonError(c, 'NO_ORGANIZATION', 'This project belongs to no organization.', 409)
   try {
-    const [{ policy, writable }, repos, token] = await Promise.all([loadPolicy(db, orgId), boundRepos(db, access.projectId), deps.resolveToken(db, access.projectId)])
+    const [{ policy, writable }, repos] = await Promise.all([loadPolicy(db, orgId), boundRepos(db, access.projectId)])
     let calls = PLACEMENT_READ_CALLS
     const out = []
+    let anyToken = false
     for (const repo of repos) {
+      // Each repo may sit behind its own GitHub App installation.
+      const token = await deps.resolveToken(db, access.projectId, repo)
+      if (token) anyToken = true
       const [visibility, runners, workflows] = await Promise.all([repoVisibility(db, access.projectId, repo), repoRunners(db, access.projectId, repo), snapshotWorkflows(db as never, access.projectId, repo)])
       const parsed = parseRepoWorkflows(workflows)
       const counts = new Map<string, { jobs: number; fallbacks: Set<string> }>()
@@ -422,6 +431,17 @@ async function getPlacement(c: Context, deps: CiPlacementRouteDeps): Promise<Res
         }
         variables.push({ name, jobs: e.jobs, fallbacks: [...e.fallbacks], allowed: isAllowedPlacementVariable(name), current })
       }
+      // CI_PROFILE moves no runs-on, so it never shows up in the job counts:
+      // offer it wherever a workflow reads vars.CI_PROFILE (unset = economy).
+      let profile: { current: VariableState | null } | null = null
+      if (workflowsRead(parsed, PROFILE_VARIABLE)) {
+        let current: VariableState | null = null
+        if (token && calls > 0) {
+          calls--
+          current = (await readActionsVariable({ fetch: deps.fetch }, token, repo, PROFILE_VARIABLE).catch(() => ({ status: 0, state: null }))).state
+        }
+        profile = { current }
+      }
       const labels = new Map<string, { online: number; runners: number }>()
       for (const r of runners) {
         for (const l of r.labels ?? []) {
@@ -436,6 +456,7 @@ async function getPlacement(c: Context, deps: CiPlacementRouteDeps): Promise<Res
         repo,
         visibility,
         variables,
+        profile,
         workflowsRead: workflows.length > 0,
         controller: externalControllerFor(policy, repo),
         labels: [...labels.entries()].map(([label, v]) => ({ label, ...v })).sort((a, b) => b.online - a.online || a.label.localeCompare(b.label)),
@@ -458,7 +479,7 @@ async function getPlacement(c: Context, deps: CiPlacementRouteDeps): Promise<Res
         organizationId: orgId,
         policy,
         policyWritable: writable,
-        tokenStored: !!token,
+        tokenStored: anyToken,
         repos: out,
         requests: actions ?? [],
         watches: watchesRes.error ? [] : (watchesRes.data ?? []),

@@ -14,6 +14,8 @@
  */
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fromSetupGap } from '../../supabase/functions/_shared/health-checks.ts'
+import { deployGap, followupKeyGap, noRepoGap } from '../../supabase/functions/_shared/setup-gaps.ts'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
 
 const state = vi.hoisted(() => ({
@@ -55,7 +57,7 @@ vi.mock('../../supabase/functions/api/routes/pipeline.ts', () => ({
     if (state.pipelineFails) throw new Error('fix_attempts: timeout')
     return {
       stages: [
-        { id: 'review', label: 'Reviewed', count: 45, stuck: 45, oldestAt: null, groups: [{ id: 'hold', stage: 'review', tone: 'stuck', label: '45 PRs: Opus says hold; a person decides', count: 45, oldestAt: null, actions: [], settings: null, items: [] }] },
+        { id: 'review', label: 'Reviewed', count: 45, stuck: 45, oldestAt: null, groups: [{ id: 'hold', stage: 'review', tone: 'stuck', label: '45 PRs: the review says do not merge; you decide', count: 45, oldestAt: null, actions: [], settings: null, items: [] }] },
         { id: 'train', label: 'Release train', count: 2, stuck: 0, oldestAt: null, groups: [] },
         { id: 'merged', label: 'Merged', count: 3, stuck: 0, oldestAt: null, groups: [] },
       ],
@@ -126,6 +128,8 @@ function seed(): Record<string, Array<Record<string, unknown>>> {
       report(4, { severity: null, created_at: ago(24 * 9) }),
       // 23:00 UTC yesterday: inside a rolling 24 h, but yesterday on the report list's calendar days.
       report(5, { severity: 'low', status: 'fixed', created_at: '2026-10-26T23:00:00Z' }),
+      // The "Send a test report" sample: not a bug of this app, never counted or mapped.
+      report(6, { severity: 'high', created_at: ago(1), environment: { url: '/login' }, custom_metadata: { source: 'admin_test_report' } }),
     ],
     fix_attempts: [{ id: 'f1', project_id: P, merged_at: ago(1), created_at: ago(20), pr_url: 'https://github.com/kensaurus/glot.it/pull/1' }],
     deploy_observations: [{ id: 'd1', project_id: P, observed_at: ago(3), observed_version: 'v1.103.0', ok: true }],
@@ -139,7 +143,7 @@ function seed(): Record<string, Array<Record<string, unknown>>> {
   }
 }
 
-function setup(opts: { failRead?: (t: string) => string | { code: string; message: string } | null; noThumbTable?: boolean } = {}) {
+function setup(opts: { failRead?: (t: string) => string | { code: string; message: string } | null; noThumbTable?: boolean; workerFlags?: (db: unknown, userId: string, projectId: string) => Promise<unknown[]>; healthChecks?: (db: unknown, project: { id: string }) => Promise<unknown[]> } = {}) {
   const db: FakeDb = makeFakeDb(seed(), {
     failRead: (t) => (opts.noThumbTable && t === 'project_home_thumbnails' ? { code: '42P01', message: 'relation "project_home_thumbnails" does not exist' } : opts.failRead?.(t) ?? null),
   })
@@ -165,6 +169,8 @@ function setup(opts: { failRead?: (t: string) => string | { code: string; messag
       return `${P}/home.png`
     }) as never,
     lookupUser: async () => ({ name: 'Kenji', avatarUrl: 'https://avatars.githubusercontent.com/u/1' }),
+    ...(opts.workerFlags ? { workerFlags: opts.workerFlags as never } : {}),
+    ...(opts.healthChecks ? { healthChecks: opts.healthChecks as never } : {}),
   })
   return { app, db }
 }
@@ -198,7 +204,7 @@ describe('GET /v1/admin/projects/:id/home', () => {
 
     const needs = d.needsYou.data as Array<{ id: string; text: string }>
     expect(needs.map((n) => n.id)).toEqual(['site_broken', 'critical_waiting', 'pipeline_hold', 'sdk_upgrade'])
-    expect(needs.find((n) => n.id === 'pipeline_hold')!.text).toBe('45 PRs: Opus says hold; a person decides.')
+    expect(needs.find((n) => n.id === 'pipeline_hold')!.text).toBe('45 PRs: the review says do not merge; you decide.')
 
     expect(d.access.data).toMatchObject({
       repo: { url: 'https://github.com/kensaurus/glot.it', branch: 'main' },
@@ -211,6 +217,7 @@ describe('GET /v1/admin/projects/:id/home', () => {
     expect(d.week.data.find((r: { id: string }) => r.id === 'reports')).toMatchObject({ thisWeek: 4, lastWeek: 1 })
     expect((d.activity.data as Array<{ text: string }>).map((l) => l.text)).toContain('1 fix merged today')
     expect(d.sitemap.status).toBe('ok')
+    expect(JSON.stringify(d.sitemap.data)).not.toContain('/login')
   })
 
   it('a failed read makes only its own section an error', async () => {
@@ -227,6 +234,49 @@ describe('GET /v1/admin/projects/:id/home', () => {
     expect(d.access.status).toBe('ok')
     // Without a site signal, Needs you does not claim the site is fine or broken.
     expect((d.needsYou.data as Array<{ id: string }>).some((n) => n.id === 'site_broken')).toBe(false)
+  })
+
+  it('Needs you leads with a stuck local worker of this app, read for the signed-in user', async () => {
+    const asked: string[] = []
+    const { app } = setup({
+      workerFlags: async (_db, userId, projectId) => {
+        asked.push(`${userId}:${projectId}`)
+        return [{ id: 'run_stuck:c1', severity: 'danger', title: 'glot: a run has held an agent space for 4 h' }]
+      },
+    })
+    const d = (await app.call('GET', '/v1/admin/projects/:id/home')).body.data!
+    expect(asked).toEqual([`u1:${P}`])
+    const needs = d.needsYou.data as Array<{ id: string; text: string; action: { to: string } }>
+    expect(needs.find((n) => n.id === 'worker_run_stuck:c1')).toMatchObject({ text: 'Local worker: glot: a run has held an agent space for 4 h.', action: { to: `/pipeline?tab=workers&project=${P}` } })
+    // A failed worker read is named, never shown as "no problems".
+    const failing = setup({ workerFlags: async () => { throw new Error('work_lanes: timeout') } })
+    expect((await failing.app.call('GET', '/v1/admin/projects/:id/home')).body.data!.partial).toEqual(['workers'])
+  })
+
+  it('Fix these first (plan-simplicity Phase 1): root causes from the stored Health check, unconnected parts of a new app not among them', async () => {
+    const at = '2026-10-27T11:00:00Z'
+    const followups = followupKeyGap({ projectId: P, settings: { enabled: false, offReason: 'the Cursor key chosen for review follow-ups was deleted.', keyId: null } })
+    const asked: string[] = []
+    const { app } = setup({
+      healthChecks: async (_db, project) => {
+        asked.push(project.id)
+        return [fromSetupGap(noRepoGap(P), at), fromSetupGap(deployGap(P, null, new Date(at)), at), fromSetupGap(followups, at)]
+      },
+    })
+    const d = (await app.call('GET', '/v1/admin/projects/:id/home')).body.data!
+    expect(asked).toEqual([P])
+    expect(d.fixFirst.status).toBe('ok')
+    expect((d.fixFirst.data as Array<{ id: string }>).map((f) => f.id)).toEqual(['review_followup_key'])
+    // The hold group is not explained by it, so it stays in Needs you.
+    expect((d.needsYou.data as Array<{ id: string }>).map((n) => n.id)).toContain('pipeline_hold')
+    // Without the dependency (older deploys of this route), Home is as before.
+    const plain = setup()
+    expect((await plain.app.call('GET', '/v1/admin/projects/:id/home')).body.data!.fixFirst).toMatchObject({ status: 'ok', data: [] })
+    // A failed read is named, never shown as "nothing to fix".
+    const failing = setup({ healthChecks: async () => { throw new Error('setup_gap_results: timeout') } })
+    const f = (await failing.app.call('GET', '/v1/admin/projects/:id/home')).body.data!
+    expect(f.fixFirst.status).toBe('error')
+    expect(f.partial).toEqual(['health'])
   })
 
   it('answers before the thumbnail table exists, falling back to the icon', async () => {

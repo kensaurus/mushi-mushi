@@ -68,6 +68,7 @@ export function normalizeNavSlices(raw: Partial<NavStatSlices> | undefined): Nav
     releases: (s.releases as NavStatSlices['releases']) ?? null,
     fullstackAudit: (s.fullstackAudit as NavStatSlices['fullstackAudit']) ?? null,
     dashboard: (s.dashboard as NavStatSlices['dashboard']) ?? null,
+    workers: (s.workers as NavStatSlices['workers']) ?? null,
     explore: (s.explore as NavStatSlices['explore']) ?? null,
     promptLab: (s.promptLab as NavStatSlices['promptLab']) ?? null,
     research: (s.research as NavStatSlices['research']) ?? null,

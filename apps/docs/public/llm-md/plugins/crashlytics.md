@@ -4,12 +4,12 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/crashlytics
 
 ---
 title: Crashlytics
-description: Flag fixed Mushi reports in Firebase Remote Config so your mobile app can hide stale crash notices — a self-hosted plugin with a Google access token.
+description: Flag fixed Mushi Mushi reports in Firebase Remote Config so your mobile app can hide stale crash notices. A self-hosted plugin with a Google access token.
 ---
 
 # Crashlytics plugin
 
-When Mushi applies a fix, writes a `mushi_resolved_` flag to your
+When a Mushi Mushi fix merges, writes a `mushi_resolved_` flag to your
 Firebase Remote Config, which your mobile app can read to stop showing a
 stale crash notice. It does not create Crashlytics issues.
 
@@ -18,7 +18,7 @@ listing, so you can't install it from there. On a Mushi server you run
 yourself, add a `plugin_registry` row for it and install it like any listed
 plugin. To bring Crashlytics crashes *into* Mushi, use `@mushi-mushi/adapters`.
 
-## Setup (self-hosted Mushi)
+## Setup (self-hosted Mushi Mushi)
 
 ```bash
 npm i @mushi-mushi/plugin-crashlytics
@@ -41,4 +41,4 @@ about an hour). Point the plugin's webhook URL at
 
 | Event | Action |
 | --- | --- |
-| `fix.applied` | Set Remote Config `mushi_resolved_` to `"true"`; close the Crashlytics issue only if the event carries `crashlyticsIssueId` (Mushi does not send it today) |
+| `fix.applied` | Set Remote Config `mushi_resolved_` to `"true"` (dashes in the report id become underscores); close the Crashlytics issue only if the event carries `crashlyticsIssueId` (Mushi does not send it today) |

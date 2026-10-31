@@ -1,21 +1,20 @@
-# QA Coverage
+# Scheduled tests
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/qa-coverage
 
 ---
-title: QA Coverage
-description: QA Coverage turns user flows written in plain English into scheduled browser tests, so you find out when login or checkout breaks.
+title: Scheduled tests
+description: Scheduled tests in the Mushi Mushi console turn plain-English user flows into browser tests on a schedule, so you find out when login or checkout breaks.
 ---
 
-# QA Coverage
+# Scheduled tests
 
-**Route:** `/qa-coverage`
+**Route:** `/qa-coverage` (sidebar: Checks › Scheduled tests; formerly QA Coverage)
 
 > **Scenario:** You shipped a login flow last week and want to know automatically
 > if it still works — without writing a full Playwright suite from scratch.
 
-QA Coverage lets you describe user flows in plain English or paste Playwright scripts,
-run them on a schedule, and get screenshots plus failure evidence when something breaks.
+Scheduled tests in Mushi Mushi let you describe user flows in plain English, run them on a schedule, and get screenshots plus failure evidence when something breaks.
 
 ---
 
@@ -42,7 +41,7 @@ Create story (NL prompt or Playwright script)
 | **Browserbase** | Full Chromium in the cloud | Complex UI interactions, video recording, HAR export |
 | **Local** | Playwright on your machine via CLI | Full Playwright access; not schedulable via edge function |
 
-To use Browserbase or Firecrawl, add your BYOK key in **Settings → API keys** first,
+To use Browserbase or Firecrawl, add your key in **Settings → Web tools** first,
 then select the provider when creating a story.
 
 ---
@@ -50,17 +49,19 @@ then select the provider when creating a story.
 ## Creating a story
 
 1. Click **+ New story** (header or empty state).
-2. In the creation modal, fill in:
+2. In the **New QA story** modal, fill in:
    - **Name** — short label for the story card
-   - **Prompt** — your user-story in plain English (e.g. "Open the Reports page, click the first report, verify the classification badge is visible")
-   - **Provider** — Firecrawl / Browserbase / Local
-3. Click **Create**.
+   - **Target URL** — the page the runner opens first (required for Firecrawl and Browserbase)
+   - **Prompt — describe what to verify** — your user story in plain English (e.g. "Open the Reports page, click the first report, verify the classification badge is visible")
+   - **Browser provider** — Firecrawl Actions (recommended) / Browserbase / Local Playwright (CLI only)
+   - **Run schedule** — every hour (default), every 6 hours, daily, weekly, or a custom cron
+3. Click **Create story**.
 
-Schedule and script editing are available in the story drawer after creation.
+In the story drawer you can change the target URL and turn the story on or off.
 
-The **Generate from report** flow (available in the Reports page) automatically creates a
-story and opens a draft GitHub PR with a full Playwright test. The story is pre-configured
-with `local` provider and a weekly cron.
+**Generate test** on a bug's detail page creates a story and opens a draft GitHub PR
+with a full Playwright test. The story uses the `local` provider and runs weekly
+(Mondays 06:00 UTC).
 
 ---
 
@@ -74,7 +75,7 @@ The main grid shows one card per story with:
   From `last_7d` on `GET /v1/admin/projects/:id/qa-coverage` (`null` when the runs
   could not be read).
 - **Run count** and **last run** time
-- **Disabled / Queued** chip when applicable
+- **disabled** / **queued** chip when applicable
 - Link to last failure Browserbase replay session
 
 ## Story drawer
@@ -96,23 +97,21 @@ Click any card to open the story drawer:
 ## Manual run
 
 Click **Run now** on any story to trigger an immediate execution regardless of its
-schedule. The story must be **enabled** to trigger manually (use the toggle on the row).
+schedule. The story must be on: a story that is off says "Turn the story on first";
+turn it on in the story drawer.
 
 ---
 
-## Coverage report
+## Filters
 
-The **Coverage** tab shows a 24-hour summary (powered by the `qa_story_coverage_24h`
-materialised view, refreshed every 15 minutes):
-- Total stories
-- Pass rate
-- Coverage by page / flow
-- Stories that haven't run in 7 days
+The chips above the grid filter the stories: **All**, **Failing**, **Passing**,
+**No runs in 24h** and **Turned off**. The 24-hour pass rates come from the
+`qa_story_coverage_24h` materialised view, refreshed every 15 minutes.
 
 ---
 
 ## Related pages
 
-- [Integration health](/admin/health) — verify Firecrawl / Browserbase keys
-- [Iterate (PDCA)](/admin/iterate) — full autonomous iteration loop
-- [Fix orchestrator](/admin/fixes) — act on test failures
+- [Mushi health](/admin/health) — verify Firecrawl / Browserbase keys
+- [Improvement runs](/admin/iterate) — producer and judge iteration loop
+- [Fixes](/admin/fixes) — act on test failures

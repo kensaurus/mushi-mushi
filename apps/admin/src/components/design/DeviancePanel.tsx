@@ -122,7 +122,7 @@ function Findings({ findings }: { findings: DevianceFinding[] }) {
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <FindingSeverityBadge severity={f.severity} />
             <span className="text-fg">{ruleLabel(f.rule_id)}</span>
-            <span className="font-mono text-2xs text-fg-secondary wrap-break-word">
+            <span className="min-w-0 font-mono text-2xs text-fg-secondary wrap-anywhere">
               {f.file_path ?? '(unknown file)'}
               {f.line !== null ? `:${f.line}` : ''}
             </span>

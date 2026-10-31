@@ -211,7 +211,7 @@ export function AnalyticsPage() {
                 <StatCard
                   label="Anonymous"
                   value={fmt(summary.data.anonymous)}
-                  detail={identifiedPct(summary.data)}
+                  detail={anonymousPct(summary.data)}
                 />
                 <StatCard
                   label="Distinct events"
@@ -651,8 +651,9 @@ function fmt(n: number): string {
   return String(n)
 }
 
-function identifiedPct(data: EventsSummary): string {
+/** The Anonymous tile's own share: "Anonymous 2 · 60% identified" described the other group (2026-10-28). */
+function anonymousPct(data: EventsSummary): string {
   const total = data.identified + data.anonymous
   if (total === 0) return 'no people yet'
-  return `${Math.round((data.identified / total) * 100)}% identified`
+  return `${Math.round((data.anonymous / total) * 100)}% of people`
 }

@@ -4,37 +4,41 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/releases
 
 ---
 title: Releases
-description: The Releases page drafts a changelog for each version from the fixes that shipped, crediting the users whose reports led to each fix.
+description: The Releases page in the Mushi Mushi console drafts a changelog for each version from the bug reports marked fixed, crediting the users who reported them.
 ---
 
 # Releases
 
 **Route:** `/releases`
 
-The Releases page generates AI-drafted changelogs for each version of your app,
-attributed to the reporters whose bug reports drove each fix.
+The Releases page in Mushi Mushi drafts changelogs for each version of your app,
+crediting the reporters whose bug reports were fixed. Publishing tells each credited
+reporter that their fix shipped.
+
+The tabs are **Drafts**, **Published**, **Draft** (generate a new one), **Batch** and
+**App stores**.
 
 ---
 
 ## What it generates
 
-For each release tag, Mushi:
-1. Collects all fix-worker PRs merged between the previous and current tag.
-2. Links each PR back to the original reports that triggered it.
-3. Asks the LLM to write a user-facing changelog entry — plain English, no jargon.
-4. Attributes fixes to the reporters who submitted the original reports (for reward
-   accrual and public credit).
+For a new draft, Mushi Mushi:
+1. Collects up to 50 reports marked **fixed** in the report window (30 days by default)
+   that no earlier published release already shipped.
+2. Asks the AI to write a user-facing changelog: a short summary and a **Bug fixes**
+   list, each line crediting the reporter.
+3. Records a credit for each reporter.
 
 ---
 
 ## Creating a release
 
-1. Click **New release**.
-2. Enter the **version tag** (e.g. `v2.4.1`).
-3. Set the **date range** for the included fixes.
-4. Click **Generate** — the LLM produces a draft in ~10 seconds.
-5. Review and edit the draft.
-6. Click **Publish**.
+1. Open the **Draft** tab.
+2. Enter the **Version** (e.g. `1.2.3`) and, if you like, a **Title (optional)**.
+3. Set the **Report window (days)** (30 by default).
+4. Click **Generate draft with AI**.
+5. Open the draft under **Drafts**, edit the **Changelog** and click **Save draft**.
+6. Click **Publish + notify** and confirm.
 
 The same steps work from a script or an agent with an API key: reads
 (`GET /v1/admin/releases`, `/stats`, `/:id`) take `mcp:read`; drafting,
@@ -113,8 +117,8 @@ leaves next. A release train collects your approved fix pull requests and merges
 them together, so they ship as one deploy. The tab only reads: re-run, merge and
 remove fixes from [Pipeline](/admin/pipeline).
 
-- **Each fix** shows whether it rides or waits, Opus's verdict at its current commit,
-  its CI, and why it waits.
+- **Each fix** shows whether it rides or waits, the AI review's verdict at its current
+  commit (the console labels it **Opus**), its CI, and why it waits.
 - **Rules to ride** count how many fixes pass each rule: Opus said merge at the
   current commit, not a draft, its own CI is green, it did not keep failing trains
   at that commit, and it is not urgent (urgent fixes merge on their own).
@@ -134,32 +138,23 @@ GET /v1/admin/release-batch?projectId=   # one app, or every app you can open
 
 ---
 
-## Release entry fields
+## Release fields
 
 | Field | Description |
 |-------|-------------|
 | **Version** | Tag or semver string |
-| **Title** | Optional human-readable title (e.g. "Performance & stability") |
-| **Highlights** | Bullet-point summary (AI-generated, editable) |
-| **Full changelog** | Detailed list of fixes with links to PRs |
-| **Attribution** | Reporter names/aliases who contributed reports |
+| **Title** | Optional title (e.g. "Performance update") |
+| **Changelog** | Markdown body (AI-drafted for a manual draft, editable) |
+| **Credits** | The reporters credited, with whether each was **notified** or is **pending** |
 | **Published at** | When the release was made public |
 
----
-
-## SDK surface
-
-Once published, releases are queryable via the SDK:
-```ts
-const releases = await mushi.releases.list({ projectId, limit: 5 })
-```
-
-This powers in-app "What's new" surfaces and email digests.
+Published releases are not exposed through an SDK method; reporters hear about them
+through the widget's notifications.
 
 ---
 
 ## Related pages
 
-- [Fix drafts](/admin/fixes) — the PRs that appear in releases
-- [Rewards](/admin/rewards) — attribution drives reward point accrual
-- [Intelligence reports](/admin/intelligence) — weekly digest includes top releases
+- [Fixes](/admin/fixes) — the pull requests behind the fixed reports
+- [Reporter updates](/admin/notifications) — the messages reporters receive
+- [Pipeline](/admin/pipeline) — re-run, merge or remove fixes in a release train

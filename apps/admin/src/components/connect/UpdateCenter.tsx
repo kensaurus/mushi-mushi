@@ -53,7 +53,7 @@ function VersionTable({ view }: { view: UpdateCenterView }) {
     return (
       <p className="text-xs text-fg-muted">
         Not checked yet — no app has reported its Mushi SDK version. It shows up after your app
-        sends its first heartbeat or report.
+        checks in or sends its first report.
       </p>
     )
   }
@@ -302,9 +302,9 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
             ) : null}
           </>
         ) : (
-          <Btn to="/integrations/config#platform-card-github" size="md" variant="ghost" className="gap-2">
+          <Btn to="/connect#connect-github" size="md" variant="ghost" className="gap-2">
             <IconGit className="h-4 w-4" aria-hidden />
-            Connect GitHub in Integrations
+            Connect GitHub
             <IconArrowRight className="h-4 w-4" aria-hidden />
           </Btn>
         )}

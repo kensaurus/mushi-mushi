@@ -16,7 +16,7 @@ can execute without additional context.
 > here, don't fork it. Drift is enforced against by
 > [`scripts/check-positioning-consistency.mjs`](./scripts/check-positioning-consistency.mjs).
 
-**North star.** Your AI shipped it. Mushi tells you why it broke — in plain English, in your editor, with the fix ready to go — so a bug costs you five minutes instead of your whole afternoon.
+**North star.** Your AI shipped it. Mushi Mushi tells you why it broke — in plain English, in your editor, with the fix ready to go — so a bug costs you five minutes instead of your whole afternoon.
 
 **Category we own.** The bug mediator for AI-built apps — one queue between your users, your monitoring (Sentry/Crashlytics/Rollbar), your tracker (Linear/Jira/GitHub), your chat (Slack/Discord/Teams), and your coding agents, where every bug gets a plain-English diagnosis and a ready fix. (Not "error monitoring", not "observability" — those are someone else's ops-coded words.)
 
@@ -25,6 +25,13 @@ recipe element is optional, renders "not connected" when empty, and changes
 ship only as reviewed draft PRs. It never leads a public surface.
 
 **Primary buyer.** The solo / indie **vibe coder** who builds fast with AI (Cursor, Claude Code, Lovable, Bolt), ships to real users, then loses afternoons when something breaks because they don't fully grasp the generated code. Small teams and agencies are secondary; the enterprise SRE running Sentry + Datadog + Firebase is explicitly *not* who we lead with.
+
+**The public surface leads with one job** ([ADR 0052](./docs/adr/0052-public-surface-leads-with-one-job.md)):
+the landing and the README's first screen say only "a user said your app is
+broken; Mushi Mushi tells you why in plain English and hands Cursor, Claude Code or
+Lovable the fix", with one install action and one readable sample diagnosis.
+Integrations, CI cost, voice, rewards and self-host live on docs pages one
+click away; the operator cockpit never appears on the public path.
 
 **Portfolio operator** (ADR 0017) is the same vibe coder with several apps.
 Portfolio and radar features never lead a public surface; the claim is
@@ -80,7 +87,7 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | --- | --- |
 | `fast-filter` | Stage-1 cheap triage before `classify-report` (invoked by `api`) |
 | `ci-sync` | Polls GitHub check-runs for open fix PRs |
-| `ci-jobs-collector` | Every 10 minutes (:02 to :52; Plan 022, ADR 0033): reads GitHub Actions runs updated in the last 2 h on every branch of each project's repos (≤40 calls a tick, fair across projects), classifies each job (`_shared/ci-infra.ts`: runner lost, waiting for a runner and queue expired are infra, never code failures) into `ci_jobs`, derives `ci_runners` (one-job `<label>-<seconds>` runners fold into their label), reads the repo runner list when the token has Administration: read, records each repo's visibility and owner once a day (Metadata: read; ADR 0037: public repos run GitHub minutes free), and deletes job rows and samples older than 30 days. Hosted vs self-hosted comes from the job's `runner_group_name` ("GitHub Actions" = hosted). `GET /v1/admin/ci/overview?refresh=1` live-syncs queued and running jobs at most once a minute per project. Host health arrives through `POST /v1/ingest/runner` with a `runner:write` key only (`mushi runner heartbeat` / job hooks). Cost and speed (ADR 0037): `GET /v1/admin/ci/compare` (SQL aggregate `ci_runner_comparison`, cost figures per organization in `ci_cost_settings`; MCP `get_ci_costs`, `mushi runner compare`), read-only; money is always estimated. Where CI runs (ADR 0037): `api/routes/ci-placement.ts` previews and requests a change to one allowlisted repo variable (`LINUX_RUNNER`, `RUNNER_<WORKFLOW>`) as a legacy-backed GitHub `connector_actions` row; an owner/admin console session approves (1 h) and executes it; the GitHub connector's act() checks the allowlist, `ci_runner_policies` and a compare-and-set (409 `VARIABLE_MOVED`) with the project's stored PAT; each tick also evaluates `ci_placement_watches` from `ci_jobs` (the next 10 moved jobs). Never runner labels, registrations or a dispatcher. The real bill (2026-10-27, migration `20261027091500_ci_billing_real_bill`): with the calls a tick leaves over, once a day per (organization, GitHub owner) it reads this month and last month of GitHub's billing usage API (`/users|organizations/{owner}/settings/billing/usage`, Actions only, `_shared/ci-billing.ts`) with the project's own stored token only (never the App installation or the platform `GITHUB_TOKEN`) into `ci_billing_daily`, recording refusals in plain words in `ci_billing_sync` (retried a day later); `mushi runner bill --push` uploads the same rows from the user's own `gh` login (`POST /v1/admin/ci/bill`, mcp:write). `GET /v1/admin/ci/bill` (MCP `get_ci_bill`, console `CiBillCard`) serves net/gross/discount per repo, SKU and day as measured, plus the agent PR share estimated from `ci_jobs`. Each tick also lists closed pull requests once a day per repo and reads up to two PR file lists (`ci_pull_requests`: merged, docs-only) for the cost rules in `_shared/ci-cost-rules.ts` (cron_too_frequent, missing_path_filter, push_reruns_pr_checks, duplicate_gate, no_affected_only, abandoned_pr_minutes, macos_on_pr), which price their saving from billed minutes (`ci_cost_facts`) |
+| `ci-jobs-collector` | Every 10 minutes (:02 to :52; Plan 022, ADR 0033): reads GitHub Actions runs updated in the last 2 h on every branch of each project's repos (≤40 calls a tick, fair across projects), classifies each job (`_shared/ci-infra.ts`: runner lost, waiting for a runner and queue expired are infra, never code failures) into `ci_jobs`, derives `ci_runners` (one-job `<label>-<seconds>` runners fold into their label), reads the repo runner list when the token has Administration: read, records each repo's visibility and owner once a day (Metadata: read; ADR 0037: public repos run GitHub minutes free), and deletes job rows and samples older than 30 days. Hosted vs self-hosted comes from the job's `runner_group_name` ("GitHub Actions" = hosted). `GET /v1/admin/ci/overview?refresh=1` live-syncs queued and running jobs at most once a minute per project. Host health arrives through `POST /v1/ingest/runner` with a `runner:write` key only (`mushi runner heartbeat` / job hooks). Cost and speed (ADR 0037): `GET /v1/admin/ci/compare` (SQL aggregate `ci_runner_comparison`, cost figures per organization in `ci_cost_settings`; MCP `get_ci_costs`, `mushi runner compare`), read-only; money is always estimated. Where CI runs (ADR 0037): `api/routes/ci-placement.ts` previews and requests a change to one allowlisted repo variable (`LINUX_RUNNER`, `RUNNER_<WORKFLOW>`, and `CI_PROFILE` economy/thorough where a workflow reads it) as a legacy-backed GitHub `connector_actions` row; an owner/admin console session approves (1 h) and executes it; the GitHub connector's act() checks the allowlist, `ci_runner_policies` and a compare-and-set (409 `VARIABLE_MOVED`) with the project's stored PAT, else the repo's GitHub App installation (ADR 0037 amendment 2026-10-30); each tick also evaluates `ci_placement_watches` from `ci_jobs` (the next 10 moved jobs) and switches back a time-boxed move to GitHub-hosted (`revertAfterHours` in the approved payload) when due (`_shared/ci-placement-timebox.ts`). Never runner labels, registrations or a dispatcher. The real bill (2026-10-27, migration `20261027091500_ci_billing_real_bill`): with the calls a tick leaves over, once a day per (organization, GitHub owner) it reads this month and last month of GitHub's billing usage API (`/users|organizations/{owner}/settings/billing/usage`, Actions only, `_shared/ci-billing.ts`) with the project's own stored token only (never the App installation or the platform `GITHUB_TOKEN`) into `ci_billing_daily`, recording refusals in plain words in `ci_billing_sync` (retried a day later); `mushi runner bill --push` uploads the same rows from the user's own `gh` login (`POST /v1/admin/ci/bill`, mcp:write). `GET /v1/admin/ci/bill` (MCP `get_ci_bill`, console `CiBillCard`) serves net/gross/discount per repo, SKU and day as measured, plus the agent PR share estimated from `ci_jobs`. Each tick also lists closed pull requests once a day per repo and reads up to two PR file lists (`ci_pull_requests`: merged, docs-only) for the cost rules in `_shared/ci-cost-rules.ts` (cron_too_frequent, missing_path_filter, push_reruns_pr_checks, duplicate_gate, no_affected_only, abandoned_pr_minutes, macos_on_pr), which price their saving from billed minutes (`ci_cost_facts`) |
 | `ci-cost-fix-worker` | Fired by `POST /v1/admin/ci/cost-fixes` (console "Open fix PR" on CI advice, `mushi runner fix`, MCP `open_ci_cost_fix`), ADR 0047: reads one workflow file through the Contents API, applies one edit (`_shared/ci-cost-fix.ts`: `add_concurrency`, `skip_drafts`, `weekly_cron`, `ignore_docs_paths`; idempotent, comments kept; reads the default branch's required checks and refuses without them; a required job is never skipped on drafts but fails at a first step "Draft PRs run no CI"; the docs filter is refused on a workflow with a required or required-looking check or an existing `paths`; concurrency and weekly cron are refused on deploy/release workflows), stores the workflow's billed minutes per day for the 14 days before from `ci_jobs`, and opens a **draft** PR with a `ci:` title (`ci_cost_fix_jobs`, service role only). `GET /v1/admin/ci/cost-fixes/:id` notices the merge and stores the minutes per day after it (up to 14 days), so the saving shown is measured. With `{ bundleId }` (POST `/v1/admin/ci/cost-fix-rollout`, the console's "Apply to every app", `mushi runner fix --all --apply`, MCP `apply_ci_cost_fix_rollout`) it opens ONE draft PR for several fixes in one repo (`_shared/ci-cost-fix-bundle.ts`: rows sharing `ci_cost_fix_jobs.bundle_id`; each workflow read once and its kinds applied in turn; refused items listed in the body, no PR when all are refused; each workflow measured once). `requireServiceRoleAuth` |
 | `retention-sweep` | Applies data-retention policies |
 | `stripe-webhooks` | Stripe subscription + invoice events |
@@ -130,7 +137,7 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `webhooks-linear-agent` | Linear AgentSessionEvent webhooks (acknowledge within 10s; may dispatch fix-worker) |
 | `reporter-notify-fanout` | Email / push for a developer reply to a reporter; enqueued by the `report_comments` trigger, which stays the in-app writer (Plan 018) |
 
-Also: **`api`** (Hono REST router), **`api-ext`** (the overflow half of the admin API: `api` forwards the CI runner, verified-fix, inventory, Ask Mushi, Codebase Atlas, modernization / super-admin, agent-skills, QA coverage, full-stack audit, UX-run, pipeline, tester-marketplace, per-app Home, setup-gaps, release-batch, local-worker (`work.ts`: `/v1/worker/*`, `/v1/admin/work/*`) and repo clean-up (`repo-housekeeping.ts`, ADR 0051) paths there with the caller's headers, because `api` hit Supabase's 5 MB deployment size limit on 2026-10-21 and again on 2026-10-22 (tester marketplace moved 2026-10-26); public URLs are unchanged, `_shared/edge-proxy.ts`; `scripts/deploy-edge-function.test.mjs` holds `api` under the last upload size known to deploy) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
+Also: **`api`** (Hono REST router), **`api-ext`** (the overflow half of the admin API: `api` forwards the CI runner, verified-fix, inventory, Ask Mushi, Codebase Atlas, modernization / super-admin, agent-skills, QA coverage, full-stack audit, UX-run, pipeline, tester-marketplace, per-app Home, setup-gaps, Health check (`health-checks.ts`: `/v1/admin/health-checks`), release-batch, local-worker (`work.ts`: `/v1/worker/*`, `/v1/admin/work/*`), server doctor (`/v1/admin/doctor`), review follow-up settings (`/v1/admin/byok/review-followups`, `/v1/admin/byok/cursor/models`; moved 2026-10-29 to keep `api` under its upload budget), spend-down (`/v1/admin/byok/spend-down`, `…/projects/:projectId/resume`, `/v1/admin/byok/keys/:keyId/spend-down`; moved 2026-10-30, same reason) and repo clean-up (`repo-housekeeping.ts`, ADR 0051) paths there with the caller's headers, because `api` hit Supabase's 5 MB deployment size limit on 2026-10-21 and again on 2026-10-22 (tester marketplace moved 2026-10-26); public URLs are unchanged, `_shared/edge-proxy.ts`; `scripts/deploy-edge-function.test.mjs` holds `api` under the last upload size known to deploy) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
 
 ---
 
@@ -291,13 +298,13 @@ Live App URL
 | **Setup & account** | `mushi init`, `mushi setup`, `mushi connect`, `mushi login`, `mushi upgrade`, `mushi reset`, `mushi whoami`, `mushi status`, `mushi doctor`, `mushi ping`, `mushi test` (synthetic report through ingest), `mushi migrate` (suggests a migration guide), `mushi completion`, `mushi nudge`, `mushi profile list/current/use` |
 | **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit`, `mushi radar scan/show`, `mushi recipe init/check/show/sources/change`, `mushi store pull/reviews/reviews-pull/reviews-set`, `mushi repo digest/cleanup/diagram`, `mushi code-health show/stats`, `mushi design settings/set/dispatch-findings` |
 | **Reports & lessons** | `mushi reports list/show/search/triage/file/…`, `mushi lessons list/show`, `mushi sync-lessons`, `mushi feedback board`, `mushi sentry import`, `mushi outbox list/edit/release/discard` |
-| **Fixes & releases** | `mushi fix`, `mushi fixes tail/refresh-ci/rerun-ci/merge/review/verify`, `mushi work` (a local Cursor CLI agent; you push and open the PR; `--followups` fixes Opus "fix first" findings on those PRs, and on cloud-agent PRs while cloud follow-ups are off), `mushi work --daemon` and `mushi worker install/status/revoke` (a local worker the console steers, ADR 0048; lanes fix reports, run follow-ups, resolve merge-queue conflicts (ADR 0049), audit the code (ADR 0050) or run skill-run rounds), `mushi console watch <reportId>`, `mushi releases draft/list/show/edit/publish/delete/stats/auto-release/calendar` |
+| **Fixes & releases** | `mushi fix`, `mushi fixes tail/refresh-ci/rerun-ci/merge/review/verify`, `mushi work` (a local Cursor CLI agent; you push and open the PR; `--followups` fixes Opus "fix first" findings on those PRs, and on cloud-agent PRs while cloud follow-ups are off), `mushi work --daemon` and `mushi worker install/status/revoke` (a local worker the console steers, ADR 0048; lanes fix reports, run follow-ups, resolve merge-queue conflicts (ADR 0049), audit the code (ADR 0050) or run skill-run rounds; any claiming lane also runs the first-time user tests the console queues, ADR 0053 amendment), `mushi console watch <reportId>`, `mushi releases draft/list/show/edit/publish/delete/stats/auto-release/calendar` |
 | **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve/run`, `mushi stories map`, `mushi ux discover/login/run/open` (local UX loop, `@mushi-mushi/ux`, ADR 0020), `mushi ux-runs list/show/file` |
 | **Skills / pipeline** | `mushi skills list/show/sync`, `mushi pipeline start/watch/checkin` |
 | **CI runners** (ADR 0033, 0037, 0047) | `mushi runner status/compare/bill/placement show/preview/request/revert/fix/fix-status/heartbeat/hooks install/key/add/audit` |
 | **Verified merge** (ADR 0035) | `mushi verify workflow` (the `mushi-verify` workflow for your repo; a fix's gates: `mushi fixes verify`) |
 | **Integrations** | `mushi integrations list/test`, `mushi slack status/test`, `mushi keys list/add/spend-down`, `mushi connectors list/status/actions` |
-| **Portfolio** (account-level key) | `mushi portfolio show/findings/resources/groups`, `mushi funnel show/set/growth`, `mushi accounts list/add/edit/remove/export/domain`, `mushi spend show/import/remove` |
+| **Portfolio** (account-level key) | `mushi portfolio show/findings/resources/groups`, `mushi funnel show/set/growth/daily`, `mushi accounts list/add/edit/remove/export/domain`, `mushi spend show/import/remove` |
 | **Billing** | `mushi usage`, `mushi billing status/cap`, `mushi budgets show/autofix` |
 
 ```bash
@@ -371,7 +378,7 @@ mushi billing cap 0                    # clear spend cap
 
 ### MCP Tools
 
-Full catalog: **129 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
+Full catalog: **130 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
 
 Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_fix_context`, `query_lessons`, `list_lessons`, `list_qa_story_runs`, `get_qa_story_run`
 
@@ -625,8 +632,10 @@ requiredVars, presentVars, missingVars, lastSeenAt, recommendedFix, repoUrl, has
 
 ### GitHub App vs PAT permission boundary (critical for agent implementers)
 
-The **Mushi GitHub App** currently requests only `Contents: write` and
-`Pull requests: write`. It does **not** have `Actions secrets: write`. This means:
+The **Mushi GitHub App** has `Contents`, `Pull requests`, `Actions`,
+`Actions variables` and `Workflows` write (variables since 2026-10-30, ADR 0037
+amendment), and only **read** on `Actions secrets`. It does **not** have
+`Actions secrets: write`. This means:
 
 - Auto-write works **only** when a **fine-grained PAT** with
   `Actions secrets: Read and write` is stored in the project's GitHub connection
@@ -639,7 +648,7 @@ The **Mushi GitHub App** currently requests only `Contents: write` and
   commands + CI `env:` block).
 
 **To enable full auto-write via the GitHub App** (instead of a PAT):
-1. Add `Secrets: Read and write` to the App's requested permissions on GitHub.
+1. Raise `Secrets` from read to `Read and write` in the App's permissions on GitHub.
 2. This forces a re-consent for all installations (users must approve the new scope).
 3. Until then, the guided PAT path is the supported route for CI secret auto-write.
 
@@ -907,22 +916,27 @@ lease every dispatcher reads). Migration `20261027150000_local_workers.sql`.
 
 | Route | Auth | Role |
 | --- | --- | --- |
-| `POST /v1/worker/heartbeat` | `worker:run` key only | Register the machine and its lanes, renew leases; answers only each lane's closed settings (paused, concurrency, model, mode, stop_at, drain, prune_own) and the host guards (max_agents, min_free_mem_gb, gh_floor) |
-| `POST /v1/worker/claim` | `worker:run` key only | By the lane's mode. `fix`: the lane's queue first, then classified/reopened reports ranked as `pickReports` does; never a report with an active claim, an in-flight cloud dispatch, a live run, an open PR, or one queued in another lane; returns the report, fix packet and earlier reviews. `skill`: only skill-run rounds in its own queue. `conflicts` (ADR 0049): a merge-queue row of the lane's repository waiting for a conflict agent, under the cap of 2 per PR, by compare-and-set; returns the PR, branch and head. `audit` (ADR 0050): one pass per lane under the hourly cap; returns the models only |
-| `POST /v1/worker/claims/:id/renew` / `…/done` | `worker:run` key only | Extend the lease; record the outcome with an infra/code split (infra requeues once a week, then /pipeline `requeue`); a conflict claim's `pushed` needs `headAfter`, and only a claim's own kind of outcome is taken (fix: `pr_opened`/`verdict`; conflict: `pushed`/`refused`; audit: `filed`) |
+| `POST /v1/worker/heartbeat` | `worker:run` key only | Register the machine and its lanes (and `host.takes`, the extra claim kinds the daemon runs: `fresh_eyes`), renew leases; answers only each lane's closed settings (paused, concurrency, model, mode, stop_at, drain, prune_own), the host guards (max_agents, min_free_mem_gb, gh_floor) and `wake` (lane ids whose app has a first-time user test waiting) |
+| `POST /v1/worker/claim` | `worker:run` key only | First a first-time user test the console queued for the lane's app, when the daemon takes `fresh_eyes` (ADR 0053 amendment; any claiming lane; returns a run id, start page, goal, visitors, and test accounts only for the operator who queued it on their own machine). Then by the lane's mode. `fix`: the lane's queue first, then classified/reopened reports ranked as `pickReports` does; never a report with an active claim, an in-flight cloud dispatch, a live run, an open PR, or one queued in another lane; returns the report, fix packet and earlier reviews. `skill`: only skill-run rounds in its own queue. `conflicts` (ADR 0049): a merge-queue row of the lane's repository waiting for a conflict agent, under the cap of 2 per PR, by compare-and-set; returns the PR, branch and head. `audit` (ADR 0050): one pass per lane under the hourly cap; returns the models only |
+| `POST /v1/worker/claims/:id/renew` / `…/done` | `worker:run` key only | Extend the lease; record the outcome with an infra/code split (infra requeues once a week, then /pipeline `requeue`); a conflict claim's `pushed` needs `headAfter`, and only a claim's own kind of outcome is taken (fix: `pr_opened`/`verdict`; conflict: `pushed`/`refused`; audit: `filed`; fresh_eyes: `ran`, and the run row says why a test failed, stopped or lost its lease) |
 | `POST /v1/worker/claims/:id/findings` | `worker:run` key only | An audit claim files one finding its worker reproduced (ADR 0050): screened like a review finding, deduped by file + rule + a hash of the evidence line (`code_audit_keys`), ≤12 an hour per app under `FILED_REPORTS_PER_HOUR`, `source = 'code_audit'`, queued for a fix lane on the same machine |
 | `POST /v1/worker/revoke` | `worker:run` key only | The key revokes itself |
-| `GET /v1/admin/work/lanes` | `adminOrApiKey(mcp:read)` | Hosts, lanes, queues, recent runs (`mushi worker status`, the /pipeline Workers tab) |
+| `GET /v1/admin/work/lanes` | `adminOrApiKey(mcp:read)` | Hosts, lanes, queues, recent runs, and `flags` worst first (`mushi worker status`, MCP `get_worker_status`, the /pipeline Workers tab) |
+| `GET /v1/admin/work/stats` | `adminOrApiKey(mcp:read)` | Flag count, danger count and the worst title: the Pipeline sidebar badge (nav-meta slice `workers`) |
+| `POST /v1/admin/work/claims/:id/stop` | `jwtAuth`, the app's owner/admin or the machine's owner | "Stop this run": ends the claim as `stopped` (audited); the next heartbeat lists it as lost and the machine stops the agent and pushes nothing more |
+| `POST /v1/admin/work/hosts/:id/recheck` | `jwtAuth`, the machine's owner | "Re-check the account": the heartbeat answers `recheckAccount: true` until the machine ran `cursor-agent status` again |
+| `POST /v1/admin/work/hosts/:id/cursor-account`, `GET …/cursor-login` | `jwtAuth` console session, the machine's owner (API keys 403 `CONSOLE_ONLY`) | "Switch account" (ADR 0048 amendment 2026-10-28 b): names the Cursor account the lanes may spend (`work_hosts.cursor_account`, sent as `cursorAccount` in the heartbeat answer, overriding worker.json) and asks for a sign-in (`cursorLogin: { requestId }`); the daemon finishes its runs, runs `cursor-agent logout` + `login` with `NO_OPEN_BROWSER=1` and reports the approve link, which only the GET returns, only to the owner; it ends signed_in, wrong_account, failed or expired. 409 `CLI_TOO_OLD` without `host.can: ["cursor_login"]`, `IN_PROGRESS` unless `restart: true`. Migration `20261028150000_worker_cursor_account.sql` |
 | `PATCH /v1/admin/work/lanes/:id`, `PUT …/queue` | `jwtAuth`, non-viewers | Lane settings; the queue (replace or append) |
 | `PATCH` / `DELETE /v1/admin/work/hosts/:id` | `jwtAuth`, the host's owner | Host guards; revoke the host and its key |
 | `POST /v1/admin/work/key` | `adminOrApiKey(mcp:write)` | Mint a `worker:run` account key for apps the caller reaches as a non-viewer |
 
 | Object | Role |
 | --- | --- |
-| `work_hosts` / `work_lanes` / `work_queue` / `work_claims` | Machines (sha256 host id, as `ci_runner_hosts`), lanes (one app on one machine; clones stay local; `mode` fix, followups, conflicts, audit or skill; `repo` owner/name of the clone; `review_model` an audit's veto model), queues, and the 45-minute lease (`kind` fix: one active claim per report; conflict: one per `merge_queue_id`; audit: no target). RLS service role only. Migrations `20261027150000_local_workers.sql`, `20261027180000_worker_modes.sql` |
+| `work_hosts` / `work_lanes` / `work_queue` / `work_claims` | Machines (sha256 host id, as `ci_runner_hosts`; `takes`, migration `20261028090000_fresh_eyes_queue.sql`), lanes (one app on one machine; clones stay local; `mode` fix, followups, conflicts, audit or skill; `repo` owner/name of the clone; `review_model` an audit's veto model), queues, and the 45-minute lease (`kind` fix: one active claim per report; conflict: one per `merge_queue_id`; audit: no target; fresh_eyes: one per queued `ux_run_id`). RLS service role only. Migrations `20261027150000_local_workers.sql`, `20261027180000_worker_modes.sql` |
 | `code_audit_keys` | Code-read audit findings already filed (ADR 0050): one row per app and file + rule + evidence hash; the unique key makes filing race-proof. Service role only |
-| `worker:run` scope | Reaches `/v1/worker/*`, the local follow-up routes, report filing (`queue.laneId`, own lanes only) and `POST/PATCH /v1/admin/fixes` + `POST /v1/admin/fixes/:id/review` only on its own active claim (`workerClaimDenial`). Never merge, settings or keys; mcp:write does not imply it |
+| `worker:run` scope | Reaches `/v1/worker/*`, the local follow-up routes, report filing (`queue.laneId`, own lanes only), `POST/PATCH /v1/admin/fixes` + `POST /v1/admin/fixes/:id/review` only on its own active claim (`workerClaimDenial`), and the fresh-eyes PUT, uploads and findings only for the test its machine claimed. Never merge, settings, keys or minting test accounts; mcp:write does not imply it |
 | Lease checks | `dispatchFixForReport`, `POST /v1/admin/fixes/dispatch`, spend-down's candidates, `fix-worker` before an agent starts, `skill-runs` (waits). A claim counts while `status = 'active' AND lease_until > now()`; a failed read skips the report; a missing table (42P01 / PGRST205) means no claims |
+| Worker flags (ADR 0048 amendment 2026-10-28) | The heartbeat carries each run's stage (`prepare`/`agent`/`commit`/`push`/`pr`), ages in seconds, model and last 4 log lines (lane `status.inflight`), and per host the Cursor account check and `gh` sign-in as they answered (`status.checks`), who holds each agent space (`status.slots`), load, cores and why it waits; cleaned on the machine (`packages/cli/src/worker/telemetry.ts`) and again on the server (`_shared/work-telemetry.ts`: no keys, tokens, paths or source lines, e-mails masked). `_shared/work-flags.ts` derives `host_offline`, `machine_not_ready`, `run_stuck` (>45 min, with stage), `lanes_waiting` (>15 min, naming the holders), `account_check`, `gh_signed_out`, `machine_waiting`, `machine_busy`, `hook_failures`, `unmanaged_run` (a `fix_attempts.agent = 'mcp'` run with no claim) and `credits_idle`; routes in `api/routes/work-status.ts`. Console: the Workers tab (`WorkerFlags`), a strip above the Pipeline tabs, the Pipeline sidebar badge, Home Needs you, Spend credits. Migration `20261028120000_worker_recheck.sql` (`work_hosts.recheck_requested_at`) |
 
 ## Repo clean-up (Oct 2026)
 
@@ -979,6 +993,26 @@ Opening Home captures a new screenshot in the background only while the
 app's live-site watch is on, with its own Firecrawl key, and the last
 capture is over 7 days old (at most one try a day).
 
+## Health check (Oct 2026)
+
+One registry of every setup and health check (plan-simplicity-2026-10 Phase 1,
+ADR 0054, Proposed). `_shared/health-checks.ts` adapts setup gaps, SDK health,
+the SDK diagnostics launcher verdict and the server doctor into one shape:
+id, status (`ok` / `problem` / `unknown`; a check that cannot be read is never
+`problem`), plain-English detail, fix (`auto`, `one_click`, `guided`), the
+automations it `blocks` and its part. Route in `api/routes/health-checks.ts`
+(served by `api-ext`).
+
+| Route | Auth | Role |
+| --- | --- | --- |
+| `GET /v1/admin/health-checks` | `adminOrApiKey(mcp:read)`, members; a project key only its own app | `?projectId=` one app, else every app the caller opens (≤10); `refresh=1` re-checks setup gaps; `audience=platform` adds the doctor's platform lines. Per app: `checks` (problems first), `fixFirst` (≤3 root causes with `affects`, the items of /pipeline groups each explains), `counts`, `gate.today` (shadow counts); top level `gate.mode`. Read by `mushi doctor` (warnings only) and MCP `diagnose_setup`; Home's "Fix these first" uses the same registry from the stored setup gaps only (`homeHealthChecks`, never a live probe) |
+
+| Object | Role |
+| --- | --- |
+| `_shared/health-gate.ts` | Stop the line: `fix-worker` (automatic dispatches), `review-followup`, `merge-queue` (train tick, a PR's turn, a conflict agent) and `spend-down-worker` ask it before starting work for an app. Switch `mushi_runtime_config.health_gate_mode`: `off` (default; missing row, failed read or any other value), `observe` (records, runs as before), `enforce` (withholds; the work stays where it was and resumes on its own). Reads the stored `setup_gap_results` (over an hour old = `unknown`) and the follow-up key live; `unknown` never pauses. Only withholds: never around `gatedMergePullRequest` / `gatedTrainMerge`, the Opus hold, verified merge or draft → ready |
+| `health_gate_shadow` | Per app, automation, check, UTC day and mode: how often the gate would pause (observe) or paused (enforce); `health_gate_record()` RPC. Service role only. Migration `20261029150000_health_gate_shadow.sql` |
+| `pipeline-view.ts` `tagRootCauses` | A stuck /pipeline group gets `rootCause: { checkId, count }` when that check is a problem for every item's app; Home then shows the cause once instead of the group |
+
 ---
 
 ## HTTP API surfaces — operator reference
@@ -999,6 +1033,29 @@ Generated manifest: [`docs/API_ROUTE_MANIFEST.generated.md`](docs/API_ROUTE_MANI
 | `GET /v1/sdk/config` | Runtime SDK config pull |
 | `GET /v1/reports/:id/status` | Report status poll |
 | `/v1/sdk/me/*` | Cross-app reporter rewards surface (`rewards.ts`) |
+
+Every `apiKeyAuth` request (except `/ingest-setup` and `/ingest/runner`) also
+writes a heartbeat in the background (`_shared/auth.ts`): `project_api_keys.last_seen_*`
+(latest only, 30 s throttle), and `project_api_key_origins` through
+`record_api_key_origin()` (one row per key and origin kind: `localhost`,
+`live_web`, `native`, `server`, `unknown`, from `_shared/sdk-origin.ts`; first
+and last seen; a scheme + host sample only; 5-minute throttle, 2 s timeout,
+failures logged, never on the request path; migration
+`20261029120000_project_api_key_origins.sql`). A project's first check-in of a
+kind emits `sdk_seen_localhost` or `sdk_seen_live`.
+
+**New-user path events** (plan-simplicity Phase 0, `_shared/funnel-steps.ts`):
+server product events written once per project into the company funnel, each
+with an actor (the person, else the project owner), never onto an app that
+already had the step (for `sdk_seen_*` best effort: before this, each key kept
+only its latest origin, which the migration backfilled): `sdk_seen_localhost`, `sdk_seen_live` (heartbeat),
+`first_real_report` (ingest; a deployed app's end-user report, `activation.ts`
+rules; `first_report_received` is unchanged and also counts a localhost test
+bug), `first_diagnosis_viewed` (the setup-funnel diagnosis route),
+`first_fix_dispatched` (`_shared/dispatch.ts` and `POST /v1/admin/fixes/dispatch`;
+not fix-worker's own insert), `first_fix_merged` (`finalizeFixMerge`).
+`company_funnel_weekly` reports them per week for outside projects only
+(no operators, synthetic accounts or complimentary organizations).
 
 ### Host-backend erasure (erase token, no API key)
 
@@ -1026,6 +1083,23 @@ Plan 017 (`docs/execplans/dead-code-voice-agent-loop.md`, ADRs 0007–0013).
 - **A2A 1.0 wire format** (`taskPushNotificationConfig`, StreamResponse callbacks, `/.well-known/agent-card.json`) with 0.3 aliases.
 - **Web Push**: `_shared/web-push.ts` (`@pushforge/builder`, host allowlist), `api/routes/push.ts`; secrets `VAPID_*`.
 - **Dead-code gate**: knip@6 baselines in `docs/execplans/knip-baseline/`, ratchets in the `build` job (`check:residue`; `check:env-source-parity` fails the build when a source read is missing from every `.env.example`).
+
+## Fresh-eyes runs (Oct 27 2026)
+
+ADR 0053 (amended 2026-10-28). In the console it is the **First-time user test**. `mushi ux fresh-eyes --url <landing> --goal "<text>"` (`packages/ux/src/fresh-eyes.ts`, `fresh-eyes-terminal.ts`, `fresh-eyes-report.ts`, `fresh-eyes-request.ts`): a model that has never seen the product tries one goal, signed out; code times app wait plus reading (never model think time) to a code-defined goal check and files measured stalls after a model-free replay, opinions only when 2 sessions agree.
+
+| Object | Role |
+| --- | --- |
+| Guard `writes: 'same-origin'` | `guard.ts`: writes only to the app's origins; payments, third-party sign-in and the public `auth/v1` sign-up, OTP and recovery calls refused in every mode |
+| `POST /v1/admin/fresh-eyes/test-account` | api-ext, operator only (`MUSHI_OPERATOR_USER_IDS`, account-level key or session): confirmed synthetic Mushi account, password returned once (`_shared/synthetic-accounts.ts`, shared with the worker claim) |
+| `POST /v1/admin/projects/:pid/fresh-eyes` | Run now (non-viewers): `{ url, goal, sessions?, successText?, dryRun?, withAccount? }` queues `ux_runs` status `queued` only when a computer can take it (409 `NO_WORKER` in plain words otherwise), ≤2 open and 6 an hour per app; `withAccount` only for an operator's console session on Mushi (a 2-hour single-use grant, no password stored). `…/:runId/cancel` stops a test no computer took yet. The GET adds `defaults` (start page from the app's last test, site watch, site audit or crawler address; Mushi's landing only for Mushi), `canUseTestAccount` and `runner` (ready, busy, paused, outdated, offline, none), and stops queued tests older than a day |
+| `synthetic_accounts` | service role only; also listed in `operator_users`; `emitProductEvent` skips them (`is_synthetic_subject`); `retention-sweep` deletes them after 24 h |
+| `ux_runs.kind = 'fresh_eyes'` | timeline, `ttfv_seconds`, steps, `stalled_at`; `PUT/GET /v1/admin/projects/:pid/fresh-eyes[/:runId]`, `…/uploads`, `…/findings` (`reports.source = 'fresh_eyes'`) |
+| `metric_series` | `fresh_eyes.ttfv_seconds`, `fresh_eyes.steps`, one row each per finished run |
+| Console | **First-time user test** page (`/first-user-test`; ⌘K finds it as fresh eyes, onboarding test, new user test; `/ux-runs?tab=fresh-eyes` redirects there): Run now, live status on `ux_runs`, timeline; Home "First-time setup" light once a run exists |
+| Run now on a local worker (amendment 2026-10-28) | Claim kind `fresh_eyes` (`api/routes/work-fresh-eyes.ts`, rules in `_shared/fresh-eyes-queue.ts`): any claiming lane of the app whose daemon sends `takes: ['fresh_eyes']` takes it first; the daemon runs `mushi-ux fresh-eyes --request-stdin --sync [--file \| --dry-run]` with Node, no shell, the run on stdin (`packages/cli/src/worker/fresh-eyes.ts`); test accounts minted at claim time only on the granting operator's own machine, sent once in the claim answer (`no-store`), never stored or logged |
+
+Operator guide: [`docs/operators/fresh-eyes.md`](docs/operators/fresh-eyes.md). A charter-driven `ux` lane mode for other UX runs is still BL-138.
 
 ## ExecPlans
 

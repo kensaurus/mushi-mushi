@@ -15,7 +15,7 @@ import { useMemo } from 'react'
 import { usePageData } from './usePageData'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 
-type PlanId = 'hobby' | 'starter' | 'pro' | 'enterprise' | (string & {})
+type PlanId = 'free_cloud' | 'indie' | 'pro' | 'enterprise' | 'hobby' | 'starter' | (string & {})
 
 interface PlanFeatureFlags {
   sso?: boolean
@@ -98,7 +98,11 @@ interface BillingResponse {
   projects: BillingProject[]
 }
 
-const PAID_PLAN_IDS = new Set(['starter', 'pro', 'enterprise'])
+/**
+ * @internal Exported for tests only. Plans someone pays for. Indie (Builder
+ * since 2026-10-28) was missing, so its subscribers read as unpaid.
+ */
+export const PAID_PLAN_IDS: ReadonlySet<string> = new Set(['indie', 'starter', 'pro', 'enterprise'])
 
 export interface UseActivePlanResult {
   plan: ActivePlanSummary | null

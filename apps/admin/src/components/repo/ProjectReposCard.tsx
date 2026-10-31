@@ -13,7 +13,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { Badge, Btn, Card, CodeValue, ErrorAlert, Tooltip } from '../ui'
 import { ContainedBlock, SignalChip, ActionPill, ActionPillRow } from '../report-detail/ReportSurface'
-import { githubAppInstallUrl } from '../integrations/GitHubAppInstallButton'
+import { githubAppConnectPath } from '../integrations/GitHubAppInstallButton'
 import { IconGit, IconPencil, IconTrash } from '../icons'
 import { REPO_ROLES, repoRoleMeta, type RepoRole } from '../../lib/repoRoles'
 import { RepoIndexStatus } from './RepoIndexStatus'
@@ -236,9 +236,9 @@ export function ProjectReposCard({ projectId }: Props) {
               <RepoIndexStatus repo={repo} variant="chip" />
               <ActionPillRow className="ml-auto">
                 {/* Only when the App slug is configured: a hard-coded slug 404s on GitHub. */}
-                {!repo.github_app_installation_id && githubAppInstallUrl(projectId) && (
-                  <ActionPill href={githubAppInstallUrl(projectId)!} tone="brand">
-                    Install Mushi on GitHub ↗
+                {!repo.github_app_installation_id && githubAppConnectPath(projectId) && (
+                  <ActionPill to={githubAppConnectPath(projectId)!} tone="brand">
+                    Connect GitHub
                   </ActionPill>
                 )}
                 <ActionPill href={repo.repo_url} tone="neutral">Open on GitHub ↗</ActionPill>

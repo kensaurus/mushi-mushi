@@ -1,6 +1,6 @@
 ---
 title: 'Native iOS / Android → Hybrid'
-description: Should you wrap a native iOS or Android app in Capacitor or React Native? When it pays off, how to do it, and where Mushi's SDKs fit either way.
+description: Should you wrap a native iOS or Android app in Capacitor or React Native? When it pays off, how to do it, and where the Mushi Mushi SDKs fit either way.
 ---
 
 # Native iOS / Android → Hybrid
@@ -8,11 +8,11 @@ description: Should you wrap a native iOS or Android app in Capacitor or React N
 <EffortBadge level="Weeks" /> <RiskBadge level="High" />
 
 When (and how) to wrap an existing pure-native iOS / Android app with
-**Capacitor** or **React Native**, keeping the platform Mushi SDKs in place.
+**Capacitor** or **React Native**, keeping the platform Mushi Mushi SDKs in
+place.
 
-This is a strategic guide more than a tactical one — most apps that get
-this far DON'T need to migrate. Read the "Should you migrate" section
-first.
+This is a strategic guide more than a tactical one. Many apps that get
+this far don't need to migrate, so read "Should you migrate?" first.
 
 ## Should you migrate?
 
@@ -32,7 +32,7 @@ DON'T migrate if:
 - Your team is happy and ships steadily on native.
 - You can't afford a 6–12 month parallel-track migration.
 
-If you proceed, the realistic outcome is **hybrid** — most of your screens
+If you proceed, the realistic outcome is **hybrid**: most of your screens
 in JS, a handful of performance-critical surfaces left in Swift / Kotlin,
 bridged to JS via TurboModules (RN) or Capacitor plugins.
 
@@ -55,30 +55,33 @@ JS and you don't have a meaningful web app.
 <MigrationChecklist
   id="native-to-hybrid"
   steps={[
-    { id: 'audit', label: 'Audit native surfaces — what stays native?', content: <>List every screen, native module, and platform integration. Mark each as: <strong>port to JS</strong>, <strong>keep native + bridge</strong>, or <strong>delete</strong>. Anything performance-critical (camera, AR, audio) usually stays native.</> },
+    { id: 'audit', label: 'Audit native surfaces: what stays native?', content: <>List every screen, native module, and platform integration. Mark each as: <strong>port to JS</strong>, <strong>keep native + bridge</strong>, or <strong>delete</strong>. Anything performance-critical (camera, AR, audio) usually stays native.</> },
     { id: 'spike', label: 'Run a 2-week spike on the most complex screen', content: <>Don't commit to a 12-month migration based on the easy screens. Pick the worst one (most native code, most edge cases) and port it first. If it takes &gt; 2 weeks, recalibrate the timeline upward.</> },
-    { id: 'shell', label: 'Pick the shell — Capacitor or React Native', content: <>Use the table above. The earlier you commit, the better; switching mid-migration costs 2-3x.</> },
+    { id: 'shell', label: 'Pick the shell: Capacitor or React Native', content: <>Use the table above. The earlier you commit, the better; switching mid-migration costs 2-3x.</> },
     { id: 'design-system', label: 'Port the design system', content: <>Tokens (colors, type scale, spacing) come over first. Components follow. Aim for visual parity within ± 2 px before porting any screens.</> },
     { id: 'pilot', label: 'Pilot one user-facing flow end-to-end', content: <>Pick a low-risk flow (e.g., Settings). Ship it as a hybrid screen embedded in the existing native app — your shell can host both worlds during the migration.</> },
-    { id: 'mushi', label: 'Wire Mushi: keep the native SDK AND add the JS one', content: <>If you're wrapping the native app with Capacitor, you can keep your native iOS / Android Mushi SDKs <em>and</em> add <code>@mushi-mushi/web</code> for the WebView surfaces. Both report to the same project — distinguishable on the dashboard via the SDK tag.</> },
+    { id: 'mushi', label: 'Wire Mushi: keep the native SDK AND add the JS one', content: <>If you're wrapping the native app with Capacitor, you can keep your native iOS / Android Mushi SDKs <em>and</em> add <code>@mushi-mushi/capacitor</code> (or <code>@mushi-mushi/web</code> for WebView-only surfaces). Both report to the same project; filter Reports by SDK to tell them apart.</> },
     { id: 'screen-rollout', label: 'Roll out screen-by-screen behind a feature flag', content: <>Each screen flips from native to hybrid behind a flag. Monitor crash + complaint rate per flag, roll back individual screens when needed.</> },
     { id: 'sunset', label: 'Sunset native screens once their hybrid versions are stable', content: <>Delete the Swift / Kotlin code only after the hybrid version has been at 100 % rollout for ≥ 30 days.</> },
   ]}
 />
 
-## Mushi during the migration
+## Mushi Mushi during the migration
 
 You'll have **two** Mushi SDKs running side by side for the migration window:
 
-- The existing **iOS** ([`@mushi-mushi/ios`](/sdks/ios)) and / or **Android**
-  ([`@mushi-mushi/android`](/sdks/android)) SDKs, mounted in the native shell.
+- The existing native [**iOS**](/sdks/ios) (`MushiMushi`, Swift) and / or
+  [**Android**](/sdks/android) (`dev.mushimushi:mushi-android`, Kotlin)
+  SDKs, mounted in the native shell. Both are 0.4.0 previews: they are not
+  on CocoaPods trunk, SwiftPM tags or Maven Central yet, so they are built
+  from source as their SDK pages describe.
 - The **shell-specific JS SDK** —
   [`@mushi-mushi/capacitor`](/sdks/capacitor) (for Capacitor shells) or
   [`@mushi-mushi/react-native`](/sdks/react-native) (for RN shells).
 
-Both **must use the same `projectId` and `apiKey`**. Reports from each
-land in the same inbox; the SDK tag on the report (`ios`, `android`,
-`capacitor`, `react-native`) lets you tell them apart on the dashboard.
+Both **must use the same `projectId`**. Reports from each land in the same
+inbox, and each report records which SDK sent it, so you can filter
+Reports by SDK.
 
 ```swift
 // Native iOS — stays as-is during the migration
@@ -103,15 +106,14 @@ also remove the native Mushi SDK; the JS one carries on alone.
 ## Verification
 
 - Both SDKs land reports under the same project.
-- The dashboard SDK-tag filter shows reports from both surfaces during
-  the migration window.
-- Crash rate on the hybrid surfaces ≤ 1.2 × the native surface's rate
-  (perfect parity is unrealistic in week 1; should approach 1.0 ×
-  within 4 weeks).
+- Filtering Reports by SDK shows reports from both surfaces during the
+  migration window.
+- The crash rate on the hybrid surfaces moves toward the native surface's
+  rate over the first weeks. Set your own threshold before you start.
 
 ## References
 
 - [Capacitor docs](https://capacitorjs.com/)
 - [React Native docs](https://reactnative.dev/)
-- [`@mushi-mushi/ios`](/sdks/ios) and [`@mushi-mushi/android`](/sdks/android) reference
+- [Mushi iOS SDK](/sdks/ios) and [Mushi Android SDK](/sdks/android) reference
 - [`@mushi-mushi/capacitor`](/sdks/capacitor) and [`@mushi-mushi/react-native`](/sdks/react-native) reference

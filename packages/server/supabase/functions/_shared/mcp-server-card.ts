@@ -93,7 +93,7 @@ export function buildMcpServerCard(oauth?: ServerCardOAuth): Record<string, unkn
       name: 'Mushi Mushi',
       version: mcpPackageVersion(),
       description:
-        'Your AI shipped it. Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key.',
+        'Your AI shipped it. Mushi Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key.',
       homepage: PRODUCT_HOMEPAGE,
       repository: REPOSITORY,
       license: 'MIT',

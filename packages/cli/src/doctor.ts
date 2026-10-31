@@ -1288,6 +1288,77 @@ export async function checkPipelineDoctor(
   }
 }
 
+// ── Health check registry (GET /v1/admin/health-checks) ─────────────────────
+
+/** SDK health rows the ingest block's heartbeat line already covers. */
+const HEARTBEAT_ROWS = new Set(['never_seen', 'sdk_stale']);
+
+interface HealthRow {
+  id: string;
+  key: string;
+  status: 'ok' | 'problem' | 'unknown';
+  severity: 'critical' | 'warn' | 'info';
+  title: string;
+  detail: string;
+  source: string;
+  affects: number | null;
+  fix: { kind: 'auto' | 'one_click' | 'guided'; label: string; to?: string; steps?: string[] } | null;
+}
+
+/**
+ * The app's Health check (setup gaps, SDK health, the report button), the
+ * same rows the console's Health check route serves. Problems and checks
+ * that could not be read are listed; passing checks are one summary line.
+ * Every row is ⚠ and never counts against `ready` (Phase 1: `ready` keeps
+ * its meaning for scripts that gate on it). Left out because another block
+ * already prints them: the server doctor's lines (checkPipelineDoctor) and
+ * the SDK check-in rows (the `[ingest] Last SDK heartbeat` line).
+ * Skipped quietly for ingest-only keys and servers without the route.
+ * @internal Exported for tests only.
+ */
+export async function checkHealthRegistry(
+  config: DoctorCliConfig,
+  doFetch: typeof fetch,
+): Promise<DoctorCheck[]> {
+  if (!config.endpoint || !config.apiKey || !config.projectId) return [];
+  let creds: ReturnType<typeof sanitizeCliCredentials>;
+  try {
+    creds = sanitizeCliCredentials(config);
+  } catch {
+    return []; // The config checks above already name a malformed key or project.
+  }
+  try {
+    const { endpoint, apiKey, projectId } = creds;
+    const res = await doFetch(`${endpoint}/v1/admin/health-checks?projectId=${encodeURIComponent(projectId)}`, {
+      headers: apiKeyHeaders(apiKey, projectId),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (res.status === 401 || res.status === 403 || res.status === 404) return [];
+    if (!res.ok) {
+      return [{ name: '[health] Health check', ok: true, warn: true, detail: `GET /v1/admin/health-checks returned HTTP ${res.status}; health unknown.` }];
+    }
+    const body = (await res.json()) as { data?: { projects?: Array<{ checks?: HealthRow[] }> } };
+    const rows = (body.data?.projects?.[0]?.checks ?? []).filter((r) => r.source !== 'doctor' && !HEARTBEAT_ROWS.has(r.id));
+    const out: DoctorCheck[] = [];
+    for (const r of rows) {
+      if (r.status === 'ok') continue;
+      const waiting = r.affects && r.affects > 0 ? ` ${r.affects} waiting on this.` : '';
+      const fix = r.fix ? ` → Fix: ${r.fix.label}${r.fix.to ? ` (console ${r.fix.to})` : ''}${r.fix.steps?.length ? `: ${r.fix.steps.join(' ')}` : ''}` : '';
+      out.push({
+        name: `[health] ${r.title}`,
+        ok: true,
+        warn: true,
+        detail: r.status === 'unknown' ? `Not checked: ${r.detail}` : `${r.detail}${waiting}${fix}`,
+      });
+    }
+    const passing = rows.filter((r) => r.status === 'ok').length;
+    if (passing > 0) out.push({ name: '[health] Other checks', ok: true, detail: `${passing} passed.` });
+    return out;
+  } catch {
+    return [{ name: '[health] Health check', ok: true, warn: true, detail: 'Could not reach /v1/admin/health-checks (timeout); health unknown.' }];
+  }
+}
+
 // ── Main doctor runner ───────────────────────────────────────────────────────
 
 export async function runDoctor(
@@ -1359,6 +1430,8 @@ export async function runDoctor(
     // Backend self-diagnostics: recovery cron, stranded reports, codebase
     // index health — the silent-failure modes only the server can see.
     checks.push(...(await checkPipelineDoctor(config, doFetch)));
+    // The app's Health check: the same list as the console's "Fix these first".
+    checks.push(...(await checkHealthRegistry(config, doFetch)));
   }
 
   // Advisory version drift (never blocks ready).

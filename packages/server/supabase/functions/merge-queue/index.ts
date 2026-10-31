@@ -20,7 +20,13 @@
  *     key and model, only while follow-ups are on); the row waits for its
  *     push, then carries on.
  *
- * Auth: `requireServiceRoleAuth`. `POST { projectId }` runs that app's rows now.
+ * "Decide for me" (ADR 0055) runs first, for apps that turned it on: it
+ * queues Opus-approved PRs and closes the ones Opus will not merge
+ * (`./auto-decide.ts`).
+ *
+ * Auth: `requireServiceRoleAuth`. `POST { projectId }` runs that app's rows now;
+ * `POST { projectId, autoDecide: 'dry_run' }` only lists what "Decide for me"
+ * would do to that app's PRs, and changes nothing.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
@@ -43,6 +49,9 @@ import { validateCursorModel } from '../_shared/review-followup.ts'
 import { createCursorAgentV1, getCursorAgent, getCursorRun } from '../_shared/cursor-cloud.ts'
 import { checksView, type ChecksView } from '../_shared/merge-queue.ts'
 import { runMergeQueue, type MergeQueueDeps } from './worker.ts'
+import { createHealthGate } from '../_shared/health-gate.ts'
+import { runAutoDecide } from './auto-decide.ts'
+import { log } from '../_shared/logger.ts'
 
 const GH_HEADERS = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }
 
@@ -197,9 +206,25 @@ export async function handler(req: Request): Promise<Response> {
   }
   const unauthorized = requireServiceRoleAuth(req)
   if (unauthorized) return unauthorized
-  const body = (await req.json().catch(() => ({}))) as { projectId?: unknown }
-  const tally = await runMergeQueue(getServiceClient(), liveDeps, typeof body.projectId === 'string' ? body.projectId : undefined)
-  return new Response(JSON.stringify({ ok: true, data: tally }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  const body = (await req.json().catch(() => ({}))) as { projectId?: unknown; autoDecide?: unknown; limit?: unknown }
+  const db = getServiceClient()
+  const projectId = typeof body.projectId === 'string' ? body.projectId : undefined
+  const decideDeps = { token: liveDeps.token, pull: liveDeps.pull, checks: liveDeps.checks, closePr: trainDeps.closePr, baseSha: trainDeps.branchSha, requeueReview: liveDeps.requeueReview }
+  if (body.autoDecide === 'dry_run') {
+    if (!projectId) return new Response(JSON.stringify({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'A dry run needs projectId.' } }), { status: 400 })
+    const limit = Math.min(200, Math.max(1, Number(body.limit) || 50))
+    const out = await runAutoDecide(db, decideDeps, { projectId, dryRun: true, limit })
+    return new Response(JSON.stringify({ ok: true, data: out }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }
+  // A failure here never stops the queue tick.
+  const decided = await runAutoDecide(db, decideDeps, { projectId }).catch((err) => {
+    log.child('merge-queue').warn('auto-decide failed', { err: err instanceof Error ? err.message : String(err) })
+    return { tally: { error: 1 } as Record<string, number> }
+  })
+  // The health gate reads its switch once per tick (off unless mushi_runtime_config says otherwise).
+  const healthGate = await createHealthGate(db, 'merge-queue')
+  const tally = await runMergeQueue(db, { ...liveDeps, healthGate }, projectId)
+  return new Response(JSON.stringify({ ok: true, data: { ...tally, autoDecide: decided.tally } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
 }
 
 if (typeof Deno !== 'undefined') {

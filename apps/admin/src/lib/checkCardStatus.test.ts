@@ -214,7 +214,8 @@ describe('buildCheckCardViews', () => {
     const quietContent = buildCheckCardViews(input({
       content: { topPriority: 'healthy', needsAttentionCount: 0, openCount: 0, failedRegenCount: 0 },
     }), NOW)['/content']
-    expect(quietContent).toMatchObject({ state: 'not_checked', chip: 'Not run yet', detail: null })
+    // Watching, not "Not run yet": nothing to run by hand (owner, 2026-10-30), and never a Pass.
+    expect(quietContent).toMatchObject({ state: 'watching', chip: 'No issues', detail: 'Checks new content every 15 minutes' })
     expect(quietContent?.chip).not.toBe('Pass')
 
     const openContent = buildCheckCardViews(input({
@@ -226,7 +227,7 @@ describe('buildCheckCardViews', () => {
     const quietLessons = buildCheckCardViews(input({
       lessons: { topPriority: 'healthy', criticalLessons: 0, readyToPromote: 0 },
     }), NOW)['/lessons']
-    expect(quietLessons).toMatchObject({ state: 'not_checked', chip: 'Not run yet', detail: null })
+    expect(quietLessons).toMatchObject({ state: 'watching', chip: 'Learning', detail: 'Applied to every new diagnosis' })
     expect(quietLessons?.chip).not.toBe('Pass')
 
     const criticalLessons = buildCheckCardViews(input({
@@ -278,5 +279,39 @@ describe('buildCheckCardViews', () => {
     for (const path of ['/ci', '/design', '/recipe']) {
       expect(views[path], path).toMatchObject({ state: 'not_set_up', chip: 'Not set up', setupTo: '/projects' })
     }
+  })
+})
+
+describe('first-time user test card', () => {
+  const run = (over: Partial<NonNullable<CheckCardsInput['firstUserTest']>['runs'][number]> = {}) => ({
+    status: 'done' as const,
+    finished_at: RECENT,
+    started_at: RECENT,
+    findings: [] as unknown[],
+    stalled_at: null,
+    ...over,
+  })
+  const view = (firstUserTest: CheckCardsInput['firstUserTest']) => buildCheckCardViews(input({ firstUserTest }), NOW)['/first-user-test']
+
+  it('stays blank while loading and says why when it cannot read', () => {
+    expect(view(undefined)).toBeNull()
+    expect(view({ phase: 'loading', runs: [] })).toBeNull()
+    expect(view({ phase: 'error', runs: [] })?.state).toBe('unavailable')
+    expect(view({ phase: 'no_project', runs: [] })).toMatchObject({ state: 'not_set_up', setupTo: '/projects' })
+  })
+
+  it('is not a pass until a test finished; a queued, running or stopped test is not a result', () => {
+    expect(view({ phase: 'ready', runs: [] })?.state).toBe('not_checked')
+    expect(view({ phase: 'ready', runs: [run({ status: 'queued', finished_at: null }), run({ status: 'stopped' })] })?.state).toBe('not_checked')
+  })
+
+  it('reads the newest finished test: clean is Pass, findings or a stall count, a failure says why', () => {
+    expect(view({ phase: 'ready', runs: [run()] })).toMatchObject({ state: 'pass', chip: 'Pass' })
+    expect(view({ phase: 'ready', runs: [run({ findings: [{}, {}] })] })).toMatchObject({ state: 'findings', chip: '2 findings' })
+    expect(view({ phase: 'ready', runs: [run({ stalled_at: { screen: 'Sign up' } })] })).toMatchObject({ state: 'findings', chip: '1 finding' })
+    expect(view({ phase: 'ready', runs: [run({ status: 'running', finished_at: null }), run({ status: 'failed', detail: 'The sign-up page did not load.' }), run()] })).toMatchObject({
+      state: 'failed',
+      detail: 'The sign-up page did not load.',
+    })
   })
 })

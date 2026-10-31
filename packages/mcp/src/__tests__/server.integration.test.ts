@@ -774,6 +774,32 @@ describe('diagnose_setup connection probes (mode=full)', () => {
     expect(parsed.connection.issues).toHaveLength(0)
   })
 
+  it("names the Health check's first root cause as the next action when everything else passes", async () => {
+    const fetchStub = createStubFetch()
+    ;({ client } = await connectClient(fetchStub.stub))
+    fetchStub.enqueue({ status: 200 }) // /health
+    fetchStub.enqueue({ ok: true, data: { ready: true, required_complete: 3, required_total: 3, steps: [], project_name: 'Acme' } }) // ingest-setup
+    fetchStub.enqueue({ ok: true, data: { ready: true, checks: [], repoUrl: null } }) // preflight
+    fetchStub.enqueue({
+      ok: true,
+      data: {
+        projects: [
+          {
+            projectId: PROJECT_ID,
+            fixFirst: [{ title: 'Review follow-up key', detail: 'Mushi turned review follow-ups off.', affects: 24, fix: { label: 'Pick a Cursor key', to: '/settings?tab=byok#review-followups' } }],
+            counts: { problem: 1, unknown: 0, ok: 9 },
+          },
+        ],
+      },
+    })
+    const result = await client.callTool({ name: 'diagnose_setup', arguments: { mode: 'full' } })
+    expect(result.isError).toBeFalsy()
+    expect(fetchStub.calls.some((c) => c.url.includes(`/v1/admin/health-checks?projectId=${PROJECT_ID}`))).toBe(true)
+    const parsed = JSON.parse((result.content as Array<{ type: string; text: string }>)[0].text)
+    expect(parsed.nextAction).toBe('Fix first: Review follow-up key. Mushi turned review follow-ups off. 24 waiting on this. (Pick a Cursor key in the console at /settings?tab=byok#review-followups)')
+    expect(parsed.health.fixFirst).toHaveLength(1)
+  })
+
   it('reports API-key format issue when key does not start with mushi_', async () => {
     const stubFetch = createStubFetch()
     const server = createMushiServer({

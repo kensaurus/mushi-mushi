@@ -308,7 +308,9 @@ export function ContentQualityPage() {
           aria-label="Search content key"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="w-full sm:w-64"
+          // The toolbar sizes the label, not the input. w-64 fits about 21
+          // characters of this field, so the phrase ended mid-word.
+          containerClassName="w-full shrink-0 sm:w-80"
         />
         <FilterSelect
           label="statuses"
@@ -359,7 +361,7 @@ export function ContentQualityPage() {
               needle
                 ? 'No content key on this page contains that text. Clear the search or change page.'
                 : status === 'open'
-                ? 'No open issues. The bridge job syncs every 15 minutes — check back soon, or check that the source project is running.'
+                ? 'No open issues. Mushi looks for new ones every 15 minutes.'
                 : `No issues with status "${status}".`
             }
             action={

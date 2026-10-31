@@ -18,6 +18,7 @@ import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import { extractAnthropicCacheUsage, logLlmInvocation } from '../_shared/telemetry.ts'
 import { reportError, withSentry } from '../_shared/sentry.ts'
 import { isStage1LlmUnavailable, sanitizeLlmError, withAnthropicOrOpenAi } from '../_shared/llm-failover.ts'
+import { isLlmAccountState } from '../_shared/llm-account-state.ts'
 import { HEURISTIC_STAGE1_MODEL, heuristicStage1Classification } from '../_shared/stage1-heuristic.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { parseBody, FastFilterBodySchema } from '../_shared/validate.ts'
@@ -27,6 +28,7 @@ import { resolveStage1Model } from '../_shared/project-models.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { isEarlyRealReport, type OldestReportRow } from '../_shared/first-report.ts'
+import { isFirstActivationCandidate, type ActivationCandidateRow } from '../_shared/activation.ts'
 import { clipAtWord } from '../_shared/text-clip.ts'
 import { isFeatureRequest, reporterCategoryHint, respectReporterCategory } from '../_shared/report-category.ts'
 
@@ -320,10 +322,16 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
         err: fallbackReason,
         sentry: false,
       })
-      reportError(llmErr instanceof Error ? llmErr : new Error(fallbackReason), {
-        tags: { function: 'fast-filter', llm_fallback: 'heuristic' },
-        extra: { reportId, projectId },
-      })
+      // Over budget, or every key out of provider quota, is the account's
+      // state: the console already shows it (llmBudgetGap, key status), and
+      // reporting it paged once per report (MUSHI-MUSHI-SERVER-3J, 84
+      // events, 2026-10-31). A key that fails auth is still reported.
+      if (!isLlmAccountState(llmErr)) {
+        reportError(llmErr instanceof Error ? llmErr : new Error(fallbackReason), {
+          tags: { function: 'fast-filter', llm_fallback: 'heuristic' },
+          extra: { reportId, projectId },
+        })
+      }
       await logLlmInvocation(db, {
         projectId, reportId, functionName: 'fast-filter', stage: 'stage1',
         primaryModel: PRIMARY_MODEL, usedModel,
@@ -433,14 +441,17 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
 
     // A project's first real report always gets the full Stage-2 diagnosis.
     // Stopping at Stage 1 here leaves a new user with no root cause and no
-    // fix on the report they judge the product by. The quota gate in
-    // classify-report stays authoritative. A failed lookup keeps the normal
-    // path, loudly: a silent fallback here would hide the feature being off.
+    // fix on the report they judge the product by. So does its first report
+    // from the deployed app (_shared/activation.ts): the first real report is
+    // usually the dev-server test, and only a diagnosed report from the live
+    // site activates the organization. The quota gate in classify-report
+    // stays authoritative. A failed lookup keeps the normal path, loudly: a
+    // silent fallback here would hide the feature being off.
     let forceStage2 = false
     if (classification.confidence > confidenceThreshold && !usedHeuristic) {
       const { data: oldest, error: oldestErr } = await db
         .from('reports')
-        .select('id, custom_metadata')
+        .select('id, custom_metadata, source, url:environment->>url')
         .eq('project_id', projectId)
         .order('created_at', { ascending: true })
         .order('id', { ascending: true })
@@ -448,11 +459,17 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       if (oldestErr) {
         log.error('First-report lookup failed; keeping the Stage 1 result', { err: oldestErr.message })
       } else {
-        forceStage2 = isEarlyRealReport((oldest ?? []) as OldestReportRow[], reportId)
+        const rows = (oldest ?? []) as Array<OldestReportRow & ActivationCandidateRow>
+        const firstReal = isEarlyRealReport(rows, reportId)
+        const firstDeployed = isFirstActivationCandidate(rows, reportId)
+        forceStage2 = firstReal || firstDeployed
         if (forceStage2) {
-          log.info('First real report: forwarding to Stage 2 despite high confidence', {
-            confidence: classification.confidence,
-          })
+          log.info(
+            firstReal
+              ? 'First real report: forwarding to Stage 2 despite high confidence'
+              : 'First report from the deployed app: forwarding to Stage 2 despite high confidence',
+            { confidence: classification.confidence },
+          )
         }
       }
     }

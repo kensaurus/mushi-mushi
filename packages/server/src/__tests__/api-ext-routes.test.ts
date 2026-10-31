@@ -22,6 +22,9 @@ const MOVED: Array<{ file: string; register: string; count: number }> = [
   { file: 'fullstack-audit', register: 'registerFullstackAuditRoutes', count: 2 },
   { file: 'ux-runs', register: 'registerUxRunsRoutes', count: 6 },
   { file: 'pipeline', register: 'registerPipelineRoutes', count: 3 },
+  { file: 'fresh-eyes', register: 'registerFreshEyesRoutes', count: 6 },
+  { file: 'landing-visits', register: 'registerLandingVisitRoutes', count: 2 },
+  { file: 'health-checks', register: 'registerHealthCheckRoutes', count: 1 },
 ]
 
 describe('route groups that run in api-ext', () => {

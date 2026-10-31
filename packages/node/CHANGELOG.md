@@ -1,5 +1,13 @@
 # @mushi-mushi/node
 
+## 1.3.5
+
+### Patch Changes
+
+- 6a24a35: - **Hono and Fastify reports drop URL query values**: the error handlers scrub query values (tokens, emails) from the request URL before putting it into the report description, as the Express handler already did.
+- Updated dependencies [545f106]
+  - @mushi-mushi/core@1.33.5
+
 ## 1.3.4
 
 ### Patch Changes
