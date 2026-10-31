@@ -56,6 +56,7 @@ import {
   hostOnline,
   inLocalCooldown,
   laneInfraBackoff,
+  laneWriteNeeded,
   recentlySkipped,
   SKIPPED_COOLDOWN_MS,
   laneClaimBlock,
@@ -525,8 +526,12 @@ async function heartbeat(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   const known = new Map(((laneRows ?? []) as LaneRow[]).map((l) => [l.name, l]))
   const lanes: Array<{ id: string; name: string; projectId: string; config: LaneConfig }> = []
   const refused: Array<{ name: string; reason: string }> = []
+  // One access check per app, not per lane: a machine runs many lanes on a
+  // few apps, and each check is several membership reads.
+  const accessByProject = new Map<string, ReturnType<typeof deps.access>>()
   for (const l of hb.lanes) {
-    const access = await deps.access(c, db, userId, l.projectId)
+    if (!accessByProject.has(l.projectId)) accessByProject.set(l.projectId, deps.access(c, db, userId, l.projectId))
+    const access = await accessByProject.get(l.projectId)!
     if (!access.allowed || access.role === 'viewer') {
       refused.push({ name: l.name, reason: access.allowed ? 'A viewer cannot run fixes for this app.' : 'This key cannot reach that app.' })
       continue
@@ -537,7 +542,10 @@ async function heartbeat(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
       continue
     }
     let row: LaneRow | null = prev ?? null
-    if (prev) {
+    if (prev && !laneWriteNeeded(prev, { status: l.status as Record<string, unknown> | null, repo: l.repo ?? null }, now)) {
+      // Idle and unchanged: the stored row is still true.
+      row = prev
+    } else if (prev) {
       const { data } = await db
         .from('work_lanes')
         .update({ status: l.status, last_seen_at: now.toISOString(), ...(l.repo ? { repo: l.repo } : {}) })
