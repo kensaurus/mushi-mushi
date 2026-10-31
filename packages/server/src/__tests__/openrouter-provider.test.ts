@@ -26,6 +26,7 @@ import {
   isOpenRouterBaseUrl,
   openAiCompatibleModelId,
   openAiProvider,
+  clearRefusedOpenAiParams,
   jsonObjectMode,
   withMaxCompletionTokens,
 } from '../../supabase/functions/_shared/openai-compat.ts'
@@ -96,6 +97,42 @@ describe('max_completion_tokens on api.openai.com (2026-10-31)', () => {
     openAiProvider({ apiKey: 'k', baseURL: 'https://openrouter.ai/api/v1' })('gpt-6.1-sol')
     openAiProvider({ apiKey: 'k', baseURL: 'https://api.together.xyz/v1' })('gpt-6.1-sol')
     expect(seen.map((x) => x.wrappedFetch)).toEqual([true, true, false, false])
+  })
+})
+
+describe('a refused sampling setting is dropped and remembered per model (2026-10-31)', () => {
+  const refusal = (param: string) =>
+    new Response(JSON.stringify({ error: { message: `Unsupported value: '${param}' does not support 0 with this model.`, param, code: 'unsupported_value' } }), { status: 400 })
+
+  function scripted(answers: Response[]) {
+    const bodies: Array<Record<string, unknown>> = []
+    const fetch = withMaxCompletionTokens((async (_input: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)))
+      return answers.shift() ?? new Response('{}')
+    }) as typeof globalThis.fetch)
+    return { bodies, fetch }
+  }
+
+  it('retries once without the refused setting, then skips it for that model from the start', async () => {
+    clearRefusedOpenAiParams()
+    const { bodies, fetch } = scripted([refusal('temperature'), new Response('{"ok":1}'), new Response('{}'), new Response('{}')])
+    const url = 'https://api.openai.com/v1/chat/completions'
+    const res = await fetch(url, { body: JSON.stringify({ model: 'gpt-6.1-sol', temperature: 0, messages: [] }) })
+    expect(res.status).toBe(200)
+    expect(bodies.map((b) => 'temperature' in b)).toEqual([true, false])
+    await fetch(url, { body: JSON.stringify({ model: 'gpt-6.1-sol', temperature: 0 }) })
+    expect('temperature' in bodies[2]).toBe(false)
+    // Another model still gets its temperature.
+    await fetch(url, { body: JSON.stringify({ model: 'gpt-6-luna', temperature: 0 }) })
+    expect(bodies[3].temperature).toBe(0)
+  })
+
+  it('never drops a setting outside the list, and returns other 400s as they are', async () => {
+    clearRefusedOpenAiParams()
+    const { bodies, fetch } = scripted([refusal('messages')])
+    const res = await fetch('https://api.openai.com/v1/chat/completions', { body: JSON.stringify({ model: 'm', messages: [] }) })
+    expect(res.status).toBe(400)
+    expect(bodies).toHaveLength(1)
   })
 })
 
