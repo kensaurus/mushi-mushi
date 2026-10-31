@@ -51,7 +51,6 @@ import { registerCostsRoutes } from './routes/costs.ts';
 import { registerEvolutionRoutes } from './routes/evolution.ts';
 import { registerCommunityRoutes } from './routes/community.ts';
 import { registerPublishedAppsRoutes } from './routes/published-apps.ts';
-import { registerDbAdvisorsRoutes } from './routes/db-advisors.ts';
 import { registerContentQualityRoutes } from './routes/content-quality.ts';
 import { registerFeatureBoardRoutes } from './routes/feature-board.ts';
 import { registerBackendRoutes } from './routes/backend.ts';
@@ -746,7 +745,8 @@ forwardToApiExt([
 ]);
 registerCommunityRoutes(app);
 registerPublishedAppsRoutes(app);
-registerDbAdvisorsRoutes(app);
+// Database health (advisors + stats, _shared/db-health.ts): served by api-ext (api size budget).
+forwardToApiExt(['/v1/admin/projects/:id/db-advisors']);
 registerContentQualityRoutes(app);
 registerFeatureBoardRoutes(app);
 registerBackendRoutes(app);
