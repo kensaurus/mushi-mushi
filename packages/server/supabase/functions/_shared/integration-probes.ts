@@ -666,6 +666,26 @@ export async function probeIntegration(
 }
 
 /**
+ * What to do about a channel the bot cannot post to, in Slack's own words.
+ * A private channel the bot was never added to answers channel_not_found, the
+ * same as a deleted one; "invite the bot" alone left the owner guessing how
+ * (2026-10-31: three apps pointed at a private #mushi-mushi). The error code
+ * stays in the text: setup-gaps.ts matches on it.
+ *
+ * @internal Exported for tests only.
+ */
+export function slackChannelAdvice(channel: string, error: string): string {
+  if (error === 'is_archived') {
+    return `Slack channel ${channel} is archived (${error}). Pick another channel under Change notification channel.`
+  }
+  return (
+    `Mushi cannot post to Slack channel ${channel} (${error}). If it is a private channel, add the app: ` +
+    `in Slack open the channel, then channel details, Agents & apps (or Integrations), Add an app, mushi-mushi. ` +
+    `Then press Send test. Or pick another channel under Change notification channel.`
+  )
+}
+
+/**
  * Why the configured channel cannot take posts, or null when it can or the
  * bot may not ask (`missing_scope` without channels:read, a network error):
  * then the token check alone decides. Uses conversations.info, which needs
@@ -681,7 +701,7 @@ async function slackChannelProblem(token: string, channel: string): Promise<stri
     const data = (await res.json()) as { ok: boolean; error?: string; channel?: { is_archived?: boolean } }
     const error = data.ok ? (data.channel?.is_archived ? 'is_archived' : null) : (data.error ?? null)
     if (!isSlackChannelUnusable(error)) return null
-    return `Slack channel ${channel} cannot take posts (${error}). Invite the Mushi bot to it, or pick another channel in Integrations.`
+    return slackChannelAdvice(channel, error!)
   } catch {
     return null
   }
