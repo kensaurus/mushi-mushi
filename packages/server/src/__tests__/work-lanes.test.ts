@@ -28,6 +28,8 @@ import {
   parseLaneVerbs,
   rankWorkCandidates,
   laneInfraBackoff,
+  laneWriteNeeded,
+  IDLE_LANE_REFRESH_MS,
   recentlySkipped,
   SKIPPED_COOLDOWN_MS,
   WORK_INFRA_PREFIX,
@@ -258,5 +260,24 @@ describe('laneInfraBackoff', () => {
     expect(laneInfraBackoff([noChange, { ...noChange, finished_at: at(20_000) }], NOW)).not.toBeNull()
     expect(laneInfraBackoff([{ failure_kind: 'code', detail: 'tests failed', finished_at: at(10_000) }, { failure_kind: 'infra', detail: quota, finished_at: at(20_000) }], NOW)).toBeNull()
     expect(laneInfraBackoff([], NOW)).toBeNull()
+  })
+})
+
+describe('laneWriteNeeded (2026-10-31: every heartbeat rewrote ~20 lanes)', () => {
+  const at = (msAgo: number) => new Date(NOW.getTime() - msAgo).toISOString()
+  const idle = { state: 'idle', runs: 3, prs: 1, last: 'skipped: x', stateSec: 120, inflight: [] }
+  it('skips an idle lane whose state is unchanged and whose row is fresh, even as stateSec ticks', () => {
+    expect(laneWriteNeeded({ status: idle, repo: 'a/b', last_seen_at: at(60_000) }, { status: { ...idle, stateSec: 180 }, repo: 'a/b' }, NOW)).toBe(false)
+  })
+  it('writes when the state, a counter, the last line or the repo changed, or the row is stale', () => {
+    const prev = { status: idle, repo: 'a/b', last_seen_at: at(60_000) }
+    expect(laneWriteNeeded(prev, { status: { ...idle, state: 'backoff' }, repo: 'a/b' }, NOW)).toBe(true)
+    expect(laneWriteNeeded(prev, { status: { ...idle, runs: 4 }, repo: 'a/b' }, NOW)).toBe(true)
+    expect(laneWriteNeeded(prev, { status: idle, repo: 'a/c' }, NOW)).toBe(true)
+    expect(laneWriteNeeded({ ...prev, last_seen_at: at(IDLE_LANE_REFRESH_MS) }, { status: idle, repo: 'a/b' }, NOW)).toBe(true)
+  })
+  it('always writes a lane with runs in flight, so the Workers tab stays live', () => {
+    const busy = { ...idle, state: 'working', inflight: [{ claimId: 'c1', stage: 'agent', ageSec: 30 }] }
+    expect(laneWriteNeeded({ status: busy, repo: 'a/b', last_seen_at: at(1_000) }, { status: busy, repo: 'a/b' }, NOW)).toBe(true)
   })
 })
