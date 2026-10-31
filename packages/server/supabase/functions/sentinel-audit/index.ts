@@ -42,6 +42,7 @@ import { logLlmInvocation } from '../_shared/telemetry.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { ANTHROPIC_HAIKU } from '../_shared/models.ts'
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
+import { platformAnthropicKey } from '../_shared/ai-provider.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -132,7 +133,7 @@ suggested_assertions. Otherwise verdict=approved with a one-sentence reason.`
 
   const start = Date.now()
   const resolved = await resolveLlmKey(db, projectId, 'anthropic')
-  const apiKey = resolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY')
+  const apiKey = resolved?.key ?? (await platformAnthropicKey(db, projectId))
   if (!apiKey) {
     rlog.warn('no anthropic key — degrading to unknown', { project: projectId })
     await db.from('sentinel_verdicts').insert({

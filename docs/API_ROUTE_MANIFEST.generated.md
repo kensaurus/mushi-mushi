@@ -2,17 +2,17 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-28 · **800** routes.
+> Generated: 2026-10-30 · **809** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 218 |
+| `adminOrApiKey` | 219 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 405 |
+| `jwtAuth` | 412 |
 | `jwtOrApiKey` | 2 |
-| `public` | 65 |
+| `public` | 66 |
 | `unknown` | 51 |
 
 ## Routes by path
@@ -63,6 +63,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | DELETE | `/v1/admin/byok/:provider` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | PUT | `/v1/admin/byok/:provider` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/byok/:provider/test` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
+| GET | `/v1/admin/byok/ai-provider` | `jwtAuth` | `packages/server/supabase/functions/api/routes/byok-review-followups.ts` |
+| PATCH | `/v1/admin/byok/ai-provider` | `jwtAuth` | `packages/server/supabase/functions/api/routes/byok-review-followups.ts` |
 | GET | `/v1/admin/byok/anthropic/models` | `jwtAuth` | `packages/server/supabase/functions/api/routes/anthropic-models.ts` |
 | DELETE | `/v1/admin/byok/browserbase` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/byok/browserbase` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
@@ -189,6 +191,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/groups/:id/merge` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | GET | `/v1/admin/growth/daily` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/landing-visits.ts` |
 | GET | `/v1/admin/growth/funnel` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/growth.ts` |
+| GET | `/v1/admin/health-checks` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/health-checks.ts` |
 | GET | `/v1/admin/health/cron` | `jwtAuth` | `packages/server/supabase/functions/api/routes/health.ts` |
 | POST | `/v1/admin/health/cron/:job/trigger` | `jwtAuth` | `packages/server/supabase/functions/api/routes/health.ts` |
 | GET | `/v1/admin/health/history` | `jwtAuth` | `packages/server/supabase/functions/api/routes/modernization-health-super.ts` |
@@ -382,6 +385,10 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/projects/:id/design/tokens` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe.ts` |
 | GET | `/v1/admin/projects/:id/evolution-history` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/evolution.ts` |
 | POST | `/v1/admin/projects/:id/fixes/dry-run` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
+| POST | `/v1/admin/projects/:id/github/connect` | `jwtAuth` | `packages/server/supabase/functions/api/routes/github-connect.ts` |
+| POST | `/v1/admin/projects/:id/github/repo` | `jwtAuth` | `packages/server/supabase/functions/api/routes/github-connect.ts` |
+| POST | `/v1/admin/projects/:id/github/repos` | `jwtAuth` | `packages/server/supabase/functions/api/routes/github-connect.ts` |
+| GET | `/v1/admin/projects/:id/github/stack` | `jwtAuth` | `packages/server/supabase/functions/api/routes/github-connect.ts` |
 | GET | `/v1/admin/projects/:id/home` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-home.ts` |
 | POST | `/v1/admin/projects/:id/home/thumbnail` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-home.ts` |
 | DELETE | `/v1/admin/projects/:id/identity-secret` | `jwtAuth` | `packages/server/supabase/functions/api/routes/identity-secret.ts` |
@@ -558,6 +565,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/reports/:id/reply` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | GET | `/v1/admin/reports/:id/reporter-view` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reporter-admin.ts` |
 | POST | `/v1/admin/reports/:id/request-info` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reporter-admin.ts` |
+| POST | `/v1/admin/reports/:id/sentry/close` | `jwtAuth` | `packages/server/supabase/functions/api/routes/report-sentry.ts` |
 | GET | `/v1/admin/reports/:id/timeline` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | POST | `/v1/admin/reports/bulk` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | POST | `/v1/admin/reports/bulk/:mutationId/undo` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reports.ts` |
@@ -806,6 +814,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/tester/wallet/redeem` | `jwtAuth` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | POST | `/v1/webhooks/fine-tuning/openai` | `public` | `packages/server/supabase/functions/api/routes/fine-tuning.ts` |
 | POST | `/v1/webhooks/github` | `public` | `packages/server/supabase/functions/api/routes/public.ts` |
+| GET | `/v1/webhooks/github/app-authorize` | `public` | `packages/server/supabase/functions/api/routes/github-connect.ts` |
 | GET | `/v1/webhooks/github/app-installation` | `public` | `packages/server/supabase/functions/api/routes/public.ts` |
 | POST | `/v1/webhooks/sentry` | `public` | `packages/server/supabase/functions/api/routes/public.ts` |
 | POST | `/v1/webhooks/sentry/seer` | `public` | `packages/server/supabase/functions/api/routes/public.ts` |

@@ -37,6 +37,7 @@ import {
   type KeyScope,
 } from './byok-scope.ts';
 import { assertLlmBudget, isBudgetedProvider, LlmBudgetUnavailableError } from './llm-budget.ts';
+import { aiProviderForProject } from './ai-provider.ts';
 import { anthropicUsageLimitCooldownUntil } from './claude-request.ts';
 
 const log = rootLog.child('byok');
@@ -202,6 +203,9 @@ export async function resolveLlmKeys(
   provider: LlmProvider,
   opts: { openAiOnly?: boolean } = {},
 ): Promise<ResolvedKey[]> {
+  // An organization that runs AI on OpenAI (ADR 0039 amendment, 2026-10-31)
+  // gets no Claude key at all: not its pool, legacy field or the platform's.
+  if (provider === 'anthropic' && (await aiProviderForProject(db, projectId)) === 'openai') return [];
   // The app's own keys always come first (ADR 0023): its pool keys (OpenAI,
   // then OpenRouter), else its legacy credential; then its organization's
   // shared keys; then the universal keys of its organization's owners (ADR
@@ -304,7 +308,9 @@ export async function resolveLlmKeySources(
     projectId,
     providers.filter((provider) => !merged(provider).project),
   );
+  const claudeOff = providers.includes('anthropic') && (await aiProviderForProject(db, projectId)) === 'openai';
   return providers.map((provider) => {
+    if (provider === 'anthropic' && claudeOff) return null;
     const sourceFlags = merged(provider);
     if (sourceFlags.project) return 'project';
     if (legacy.get(provider)) return 'project';

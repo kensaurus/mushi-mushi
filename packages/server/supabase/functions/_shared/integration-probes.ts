@@ -14,10 +14,13 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 
 import { HEALTH_PROBE_ANTHROPIC_MODEL, HEALTH_PROBE_OPENAI_MODEL } from './models.ts'
 import { isOperatorProject } from './operator-gate.ts'
+import { platformGithubTokenFor } from './github.ts'
 import { resolveRoutingSecrets } from './routing-secrets.ts'
 import { safeFetch } from './inventory-guards.ts'
 import { isCodebaseIndexFailing } from './sweep-error-classifier.ts'
 import { dereferenceMaybeVault } from './settings-secrets.ts'
+import { resolveLlmKey } from './byok.ts'
+import { isSlackChannelUnusable } from './slack.ts'
 
 // Deno global — declared only where consumed (edge functions).
 declare const Deno: { env: { get(name: string): string | undefined } }
@@ -96,6 +99,8 @@ export interface PlatformSettings {
   claude_api_key_ref?: string | null
   /** UUID of vault secret containing the per-project Slack bot token (xoxb-*). */
   slack_bot_token_ref?: string | null
+  /** Channel Mushi posts report cards to; the probe checks it still takes posts. */
+  slack_channel_id?: string | null
   // ── Linear (vault-backed, replaces project_integrations.config for 'linear') ──
   /** Vault ref for a static Linear Personal API key (lin_api_*). */
   linear_api_key_ref?: string | null
@@ -133,6 +138,16 @@ export { dereferenceMaybeVault }
  * @param settings        - Row from project_settings (platform integrations).
  * @param routingConfig   - Row from project_integrations.config (routing providers).
  */
+/** The pooled key a fix would use for `provider`; null when none or unreadable. Never spends the budget. */
+async function pooledKey(db: SupabaseClient, projectId: string | undefined, provider: 'cursor' | 'anthropic'): Promise<string | null> {
+  if (!projectId) return null
+  try {
+    return (await resolveLlmKey(db, projectId, provider, { purpose: 'probe' }))?.key ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function probeIntegration(
   kind: IntegrationKind,
   db: SupabaseClient,
@@ -261,7 +276,7 @@ export async function probeIntegration(
     } else if (kind === 'github') {
       const token =
         (await dereferenceMaybeVault(db, settings.github_installation_token_ref ?? null)) ||
-        Deno.env.get('GITHUB_TOKEN') ||
+        (await platformGithubTokenFor(db, projectId)) ||
         ''
       const url = settings.github_repo_url ?? ''
       // Repo names can contain dots (e.g. glot.it). Strip optional trailing `.git`.
@@ -520,7 +535,11 @@ export async function probeIntegration(
 
   // ── cursor_cloud ──────────────────────────────────────────────────────────
   if (kind === 'cursor_cloud') {
+    // The key a fix would use (the key pool first, cursorKeyForNewWork), then
+    // the old per-app field. Probing only the old field said "invalid or
+    // revoked" while every fix ran on a working pooled key (2026-10-30).
     const apiKey =
+      (await pooledKey(db, projectId, 'cursor')) ||
       (await dereferenceMaybeVault(db, settings.cursor_api_key_ref ?? null)) ||
       Deno.env.get('CURSOR_API_KEY') ||
       ''
@@ -557,7 +576,9 @@ export async function probeIntegration(
 
   // ── claude_code_agent ─────────────────────────────────────────────────────
   if (kind === 'claude_code_agent') {
+    // claude_code fixes run on the Anthropic key pool (withAnthropicOrOpenAi); probe that key first.
     const apiKey =
+      (await pooledKey(db, projectId, 'anthropic')) ||
       (await dereferenceMaybeVault(db, settings.claude_api_key_ref ?? null)) ||
       Deno.env.get('ANTHROPIC_API_KEY') ||
       ''
@@ -620,6 +641,16 @@ export async function probeIntegration(
         if (data.ok) {
           status = 'ok'
           detail = `Connected to workspace "${data.team ?? '?'}" as bot ${data.bot_id ?? '?'} (${Date.now() - t0}ms)`
+          // auth.test only proves the token. A stored channel that is gone
+          // failed every send while this card said "ok"
+          // (MUSHI-MUSHI-SERVER-3A, 2026-10-31).
+          const channelProblem = settings.slack_channel_id
+            ? await slackChannelProblem(botToken, settings.slack_channel_id)
+            : null
+          if (channelProblem) {
+            status = 'down'
+            detail = channelProblem
+          }
         } else {
           status = 'down'
           detail = `Slack auth.test error: ${data.error ?? 'unknown'}`
@@ -632,6 +663,28 @@ export async function probeIntegration(
   }
 
   return { status, detail, httpStatus, latencyMs: Date.now() - start }
+}
+
+/**
+ * Why the configured channel cannot take posts, or null when it can or the
+ * bot may not ask (`missing_scope` without channels:read, a network error):
+ * then the token check alone decides. Uses conversations.info, which needs
+ * channels:read (groups:read for private channels), both in the install
+ * scopes (settings-research.ts).
+ */
+async function slackChannelProblem(token: string, channel: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://slack.com/api/conversations.info?channel=${encodeURIComponent(channel)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(8_000),
+    })
+    const data = (await res.json()) as { ok: boolean; error?: string; channel?: { is_archived?: boolean } }
+    const error = data.ok ? (data.channel?.is_archived ? 'is_archived' : null) : (data.error ?? null)
+    if (!isSlackChannelUnusable(error)) return null
+    return `Slack channel ${channel} cannot take posts (${error}). Invite the Mushi bot to it, or pick another channel in Integrations.`
+  } catch {
+    return null
+  }
 }
 
 // ── Linear probe ──────────────────────────────────────────────────────────────

@@ -11,6 +11,8 @@
  *
  * Kept small on purpose: it ships inside `api`, which is held under
  * Supabase's deployment size limit (scripts/deploy-edge-function.test.mjs).
+ * The cron passes `persist` and retries only that write. The retry loop
+ * stays in sdk-release-sync/persist.ts so it is not part of the `api` upload.
  */
 
 import type { getServiceClient } from './db.ts'
@@ -106,18 +108,18 @@ export function deriveSdkReleaseUpdate(job: SdkReleaseJob, github: SdkReleaseGit
 /**
  * Read the PR, its checks and its deployment from GitHub and store the
  * result. Any of the three reads failing stores nothing (GITHUB_UNAVAILABLE).
+ * The return is `{ ok: true, releaseStatus, prState, deployState, github }`
+ * or `{ ok: false, code, message }`. That annotation is omitted on purpose:
+ * writing it out again pushes `api` over its upload budget.
  */
 export async function syncSdkReleaseJob(
   db: ReturnType<typeof getServiceClient>,
   token: string,
   job: SdkReleaseJob,
-  opts: { workflow?: boolean } = {},
-): Promise<
-  | { ok: true; releaseStatus: string; prState: string | null; deployState: DeployState; github: SdkReleaseGithubState }
-  | { ok: false; code: 'INVALID_PR_URL' | 'GITHUB_UNAVAILABLE' | 'SYNC_PERSIST_FAILED'; message: string }
-> {
+  opts: { workflow?: boolean; persist?: (row: object) => Promise<string | null> } = {},
+) {
   const m = job.pr_url?.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/)
-  if (!m) return { ok: false, code: 'INVALID_PR_URL', message: 'Could not parse PR URL' }
+  if (!m) return { ok: false as const, code: 'INVALID_PR_URL', message: 'Could not parse PR URL' }
   const ref = { owner: m[1], repo: m[2] }
 
   let github: SdkReleaseGithubState
@@ -133,11 +135,19 @@ export async function syncSdkReleaseJob(
       : [null, null, null]
     github = { pr, commitSha, checks, deploy, workflow }
   } catch (err) {
-    return { ok: false, code: 'GITHUB_UNAVAILABLE', message: `GitHub did not answer (${describeGithubReadFailure(err)})` }
+    return { ok: false as const, code: 'GITHUB_UNAVAILABLE', message: `GitHub did not answer (${describeGithubReadFailure(err)})` }
   }
 
   const { update, ...derived } = deriveSdkReleaseUpdate(job, github, new Date().toISOString())
-  const { error } = await db.from('sdk_upgrade_jobs').update(update).eq('id', job.id)
-  if (error) return { ok: false, code: 'SYNC_PERSIST_FAILED', message: error.message }
-  return { ok: true, ...derived, github }
+  // One update of this job row. The cron's `persist` retries only this write
+  // (sdk-release-sync/persist.ts). The loop stays out of this file because it
+  // ships inside `api`, which is at its upload-size budget.
+  let failed: string | null = null
+  if (opts.persist) failed = await opts.persist(update)
+  else {
+    const { error } = await db.from('sdk_upgrade_jobs').update(update).eq('id', job.id)
+    if (error) failed = error.message ?? ''
+  }
+  if (failed != null) return { ok: false as const, code: 'SYNC_PERSIST_FAILED', message: failed }
+  return { ok: true as const, ...derived, github }
 }

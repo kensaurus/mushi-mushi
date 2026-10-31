@@ -48,6 +48,7 @@ export const FIX_HREFS = {
   cursorKeys: '/credits#cursor-fix-bugs',
   deploys: '/recipe',
   slack: '/integrations/config',
+  budget: '/settings#spend-limits',
 } as const
 
 const DAY = 24 * 3600_000
@@ -292,9 +293,19 @@ export function autofixKeyGap(input: DispatchInput): SetupGap {
  * means that message is not going out (report 9f64a77b).
  * `lastDeployAt` undefined: the read failed.
  */
-export function deployGap(projectId: string, lastDeployAt: string | null | undefined, now: Date): SetupGap {
+export function deployGap(
+  projectId: string,
+  lastDeployAt: string | null | undefined,
+  now: Date,
+  /** False: no fix merged yet, so there is no "your fix is live" to send. Unknown counts as true. */
+  hasMergedFix = true,
+): SetupGap {
   const base = { id: 'deploy_events', projectId, audience: 'app_owner' as const, title: 'Deploy events', fixHref: FIX_HREFS.deploys }
   if (lastDeployAt === undefined) return { ...base, status: 'unknown', summary: 'Mushi could not read the deploy events.' }
+  if (lastDeployAt === null && !hasMergedFix) {
+    // A new app: nothing has shipped, so nothing is missing yet.
+    return { ...base, status: 'ok', summary: 'No fix has shipped yet. Once one does, send deploy events so reporters hear their fix is live.' }
+  }
   if (lastDeployAt === null) {
     return { ...base, status: 'gap', summary: 'Mushi has never seen a deploy of this app, so reporters are not told when their fix goes live.' }
   }
@@ -317,11 +328,22 @@ export interface SlackInput {
   latest: { status: string; message: string | null; checked_at: string } | null
 }
 
+/** The probe's detail when the stored channel cannot take posts (integration-probes.ts). */
+const SLACK_CHANNEL_DEAD = /\b(channel_not_found|is_archived|not_in_channel)\b/
+
 export function slackGap(input: SlackInput, now: Date): SetupGap {
   const base = { id: 'slack_bot_token', projectId: input.projectId, audience: 'app_owner' as const, title: 'Slack bot token', fixHref: FIX_HREFS.slack }
   if (input.connected === null) return { ...base, status: 'unknown', summary: 'Mushi could not read whether Slack is connected.' }
-  if (!input.connected) return { ...base, status: 'ok', summary: 'Slack is not connected (optional).' }
   const row = input.latest
+  // Checked before `connected`: an operator-owned app posts with the env
+  // bot token and has no slack_bot_token_ref, so it reads as "not
+  // connected" while its stored channel fails every send
+  // (MUSHI-MUSHI-SERVER-3A, glot.it / the-wanting-mind / yen-yen, 2026-10-31).
+  const channelDead = row && row.status === 'down' ? SLACK_CHANNEL_DEAD.exec(row.message ?? '') : null
+  if (row && channelDead && now.getTime() - Date.parse(row.checked_at) <= SLACK_PROBE_STALE_MS) {
+    return { ...base, status: 'gap', summary: `Slack cannot post to this app's channel (${channelDead[1]}), so Mushi's Slack messages are skipped. Invite the Mushi bot to the channel, or pick another one.` }
+  }
+  if (!input.connected) return { ...base, status: 'ok', summary: 'Slack is not connected (optional).' }
   if (!row || now.getTime() - Date.parse(row.checked_at) > SLACK_PROBE_STALE_MS) {
     return { ...base, status: 'unknown', summary: 'Slack is connected, but Mushi has not checked its token in the last day.' }
   }
@@ -331,6 +353,36 @@ export function slackGap(input: SlackInput, now: Date): SetupGap {
   }
   if (row.status === 'ok') return { ...base, status: 'ok', summary: 'Slack accepts the bot token.' }
   return { ...base, status: 'unknown', summary: `The last Slack check did not pass: ${(row.message ?? row.status).slice(0, 160)}` }
+}
+
+// ── Monthly AI budget ───────────────────────────────────────────────────────
+
+export interface LlmBudgetInput {
+  budgetUsd: number | null
+  spendUsd: number
+  over: boolean
+  /** When the budget starts over (the 1st, 00:00 UTC). */
+  resetsAt: string
+}
+
+/**
+ * Over its monthly AI budget, an app's bugs stop being triaged, reviewed and
+ * fixed (llm-budget.ts), and the only sign was an error in Sentry
+ * (MUSHI-MUSHI-SERVER-3J, 83 events, 2026-10-29). `state` undefined: the read failed.
+ */
+export function llmBudgetGap(projectId: string, state: LlmBudgetInput | undefined): SetupGap {
+  const base = { id: 'llm_budget', projectId, audience: 'app_owner' as const, title: 'Monthly AI budget', fixHref: FIX_HREFS.budget }
+  if (!state) return { ...base, status: 'unknown', summary: 'Mushi could not read this month\'s AI spend.' }
+  if (state.budgetUsd == null) return { ...base, status: 'ok', summary: 'No monthly AI budget is set.' }
+  const money = (n: number) => `$${n.toFixed(2)}`
+  if (state.over) {
+    return {
+      ...base,
+      status: 'gap',
+      summary: `This app spent ${money(state.spendUsd)} of its ${money(state.budgetUsd)} monthly AI budget, so Mushi stopped triaging and fixing its bugs until ${state.resetsAt.slice(0, 10)}. Raise the budget to start again now.`,
+    }
+  }
+  return { ...base, status: 'ok', summary: `${money(state.spendUsd)} of ${money(state.budgetUsd)} spent this month.` }
 }
 
 // ── Lists ───────────────────────────────────────────────────────────────────

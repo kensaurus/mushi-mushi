@@ -22,6 +22,7 @@ import {
   isPublicAddress,
   isPublicHostname,
   resolvesPublic,
+  sameAddressVariants,
   type DnsResolver,
 } from '../../supabase/functions/_shared/public-url-guard.ts'
 
@@ -177,5 +178,18 @@ describe('guardedFetch', () => {
     const fetchImpl = vi.fn(async () => new Response(null, { status: 302, headers: { location: `https://example.com/${++n}` } }))
     await expect(guardedFetch('https://example.com/', { fetchImpl: fetchImpl as unknown as typeof fetch })).rejects.toThrow('Too many redirects')
     expect(fetchImpl).toHaveBeenCalledTimes(6)
+  })
+})
+
+describe('sameAddressVariants (Production Check reuse key)', () => {
+  it('matches the same address with and without a trailing slash', () => {
+    expect(sameAddressVariants('https://kensaur.us/glot-it')).toEqual(['https://kensaur.us/glot-it', 'https://kensaur.us/glot-it/'])
+    expect(sameAddressVariants('https://kensaur.us/glot-it/')).toEqual(['https://kensaur.us/glot-it', 'https://kensaur.us/glot-it/'])
+    expect(sameAddressVariants('https://acme.app/')).toEqual(['https://acme.app', 'https://acme.app/'])
+  })
+
+  it('never matches another app under the same origin', () => {
+    expect(sameAddressVariants('https://kensaur.us/glot-it')).not.toContain('https://kensaur.us/yen-yen')
+    expect(sameAddressVariants('https://kensaur.us/glot-it')).not.toContain('https://kensaur.us/')
   })
 })

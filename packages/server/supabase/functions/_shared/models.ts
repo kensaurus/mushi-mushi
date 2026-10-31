@@ -7,7 +7,7 @@
 // wire (as of 2026-10-02):
 //   • Anthropic: `claude-{family}-{version}` (e.g. `claude-sonnet-5-5`), no
 //     dated suffix.
-//   • OpenAI: bare model IDs (`gpt-5.4`, `gpt-5.4-mini`).
+//   • OpenAI: bare model IDs (`gpt-6.1-sol`, `gpt-6-luna`).
 //
 // TWO CLAUDE CALL PATHS (2026-10-02). Sonnet 5.5 rejects non-default
 // `temperature` and forced `tool_choice`; AI SDK v4 sends both on every call.
@@ -61,12 +61,16 @@ export const ANTHROPIC_HAIKU_LATEST = 'claude-haiku-5-5'
 
 // --- OpenAI (cross-vendor fallback) -----------------------------------------
 
-/** Latest GPT-5 (released 2026-03-05). Fallback for Stage 2 + judge when
- *  Anthropic is degraded. */
-export const OPENAI_PRIMARY = 'gpt-5.4'
+/** GPT-6.1 Sol ($2/$10 per MTok, 1M context, structured outputs, reasoning
+ *  effort low…max; OpenAI pricing and model pages, read 2026-10-31). OpenAI's
+ *  pick for the hardest coding work below GPT-6 Astra, and the closest to
+ *  Claude Opus 5.5 ($4/$20) at half its price: the fallback for every stage,
+ *  and the PR review's model when an organization runs AI on OpenAI. */
+export const OPENAI_PRIMARY = 'gpt-6.1-sol'
 
-/** Mini fallback for fast-filter. Keeps cross-vendor parity cheap. */
-export const OPENAI_MINI = 'gpt-5.4-mini'
+/** GPT-6 Luna ($0.10/$0.50 per MTok): OpenAI's cost-efficient model, the
+ *  fast-filter and summary fallback (Haiku 5.5's counterpart). */
+export const OPENAI_MINI = 'gpt-6-luna'
 
 // --- Embeddings -------------------------------------------------------------
 

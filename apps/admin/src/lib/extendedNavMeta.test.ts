@@ -90,7 +90,7 @@ describe('integrationsNavBadge', () => {
     expect(partlySaved?.label).toBe('2 connections need attention')
   })
 
-  it('shows the not-configured count only when nothing needs attention', () => {
+  it('shows no badge when nothing is connected: integrations are optional', () => {
     const badge = integrationsNavBadge({
       platformDown: 0,
       platformConnected: 0,
@@ -98,8 +98,7 @@ describe('integrationsNavBadge', () => {
       routingPaused: 0,
       platformAttention: 0,
     })
-    expect(badge?.count).toBe(3)
-    expect(badge?.label).toMatch(/not configured/)
+    expect(badge).toBeNull()
   })
 })
 

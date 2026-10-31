@@ -12,6 +12,12 @@
  * endpoint with the query string reassembled, which validates and forwards to
  * the console consent page.
  *
+ * GET /github/app-authorize → 302 to the api function's GitHub App OAuth
+ * callback with the query string intact. The App's callback URL is this
+ * kensaur.us address (GITHUB_APP_OAUTH_REDIRECT_URL), so GitHub's sign-in page
+ * names kensaur.us, not the raw Supabase host; the code exchange sends the
+ * same URL, so GitHub accepts it.
+ *
  * POST/DELETE/OPTIONS/SSE GET → rewrite URI and forward to custom origin.
  */
 
@@ -19,6 +25,7 @@ var PREFIX = '/mushi-mushi/hosted-mcp'
 var SMITHERY_SERVER_URL = 'https://smithery.ai/servers/kensaurus/mushi-mushi'
 var SUPABASE_HOST = 'dxptnwrhwsqckaftyymj.supabase.co'
 var API_AUTHORIZE_URL = 'https://' + SUPABASE_HOST + '/functions/v1/api/v1/mcp-oauth/authorize'
+var GITHUB_APP_CALLBACK_URL = 'https://' + SUPABASE_HOST + '/functions/v1/api/v1/webhooks/github/app-authorize'
 
 function smitheryBacklinkHtml() {
   return (
@@ -146,6 +153,19 @@ function handler(event) {
         'cache-control': { value: 'public, max-age=3600' },
       },
       body: smitheryBacklinkHtml(),
+    }
+  }
+
+  if ((method === 'GET' || method === 'HEAD') && rest === '/github/app-authorize') {
+    var ghQs = rawQueryString(request.querystring)
+    return {
+      statusCode: 302,
+      statusDescription: 'Found',
+      headers: {
+        location: { value: GITHUB_APP_CALLBACK_URL + (ghQs ? '?' + ghQs : '') },
+        'cache-control': { value: 'no-store' },
+        'referrer-policy': { value: 'no-referrer' },
+      },
     }
   }
 

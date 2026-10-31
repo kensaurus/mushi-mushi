@@ -42,6 +42,15 @@ describe('isTransientDbConnectionError', () => {
     assertEquals(isTransientDbConnectionError(err), true)
   })
 
+  // MUSHI-MUSHI-SERVER-35 (2026-10-31): the gateway's plain-text 504 body
+  // reached Sentry as ProjectAccessReadError on /onboarding/stats.
+  it('SERVER-35: gateway "upstream request timeout" with no SQLSTATE is transient', () => {
+    assertEquals(isTransientDbConnectionError({ message: 'upstream request timeout', code: null }), true)
+    assertEquals(isTransientDbConnectionError({ message: 'upstream request timeout', code: '' }), true)
+    // A coded error that happens to mention it is still a real error.
+    assertEquals(isTransientDbConnectionError({ message: 'upstream request timeout', code: '42501' }), false)
+  })
+
   it('SERVER-1M: Cloudflare 522 origin-timeout HTML page is transient', () => {
     const err = {
       message:

@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 225 pages, generated from llms.txt. */
+/** 226 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -1526,6 +1526,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["quickstart", "svelte"],
     headings: [],
     excerpt: "Add Mushi Mushi bug reporting to a Svelte or SvelteKit app. Install @mushi-mushi/svelte and call initMushi from hooks.client.ts or a root layout's onMount.",
+  },
+  {
+    title: "Set up Mushi Mushi for a team",
+    url: docUrl("/quickstart/team-setup"),
+    route: "/quickstart/team-setup",
+    markdown: "quickstart/team-setup.md",
+    keywords: ["quickstart", "team-setup", "team", "setup", "set"],
+    headings: ["1. Accounts and team", "2. Connect your code (GitHub)", "3. Install the SDK in your app", "4. Connect each developer's editor (MCP)", "5. Alerts (optional)", "6. AI keys and cost", "7. Review gate and merging", "8. Test the whole loop"],
+    excerpt: "A checklist for a small dev team adopting Mushi Mushi, from sign-up to a weekly routine. Each step says what to do, where, and how to check it.",
   },
   {
     title: "Vue 3 quickstart",

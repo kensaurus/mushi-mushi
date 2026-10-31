@@ -8,6 +8,7 @@ import {
   findProjectTeam,
   knownProjectTeam,
   lastTeamProject,
+  listBelongsToTeam,
   pickRecoveryProject,
   rememberProjectTeams,
   rememberTeamProject,
@@ -114,6 +115,22 @@ describe('urlProjectNeedsTeamCheck', () => {
     rememberProjectTeams([{ id: PROJECT, organizationId: ORG_A }])
     expect(urlProjectNeedsTeamCheck(PROJECT, ORG_A)).toBe(false)
     expect(urlProjectNeedsTeamCheck(PROJECT, ORG_B)).toBe(true)
+  })
+})
+
+describe('listBelongsToTeam', () => {
+  beforeEach(() => window.localStorage.clear())
+
+  it('rejects a list holding a project known to belong to another team', () => {
+    rememberProjectTeams([{ id: PROJECT, organizationId: ORG_A }])
+    expect(listBelongsToTeam([PROJECT], ORG_B)).toBe(false)
+    expect(listBelongsToTeam([PROJECT], ORG_A)).toBe(true)
+  })
+
+  it('treats unknown projects and no team as current', () => {
+    expect(listBelongsToTeam([PROJECT], ORG_B)).toBe(true)
+    rememberProjectTeams([{ id: PROJECT, organizationId: ORG_A }])
+    expect(listBelongsToTeam([PROJECT], null)).toBe(true)
   })
 })
 

@@ -15,6 +15,7 @@ import {
   checkEndpointReachability,
   checkMcpConfig,
   checkPipelineDoctor,
+  checkHealthRegistry,
   checkServerPreflight,
   runDoctor,
   formatDoctorResult,
@@ -366,6 +367,63 @@ describe('formatDoctorResult', () => {
     expect(result).toContain('All checks passed');
     expect(result).toContain('advisory warning');
     expect(result).not.toContain('check failed');
+  });
+});
+
+describe('checkHealthRegistry', () => {
+  const config = makeConfig();
+  const row = (over: Record<string, unknown>) => ({
+    id: 'x', key: 'x', status: 'ok', severity: 'warn', title: 'X', detail: 'Fine.', source: 'setup_gaps', affects: null, fix: null, ...over,
+  });
+
+  it('lists each problem once with its fix and what waits on it, as warnings that never change ready', async () => {
+    const doFetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          ok: true,
+          data: {
+            projects: [
+              {
+                checks: [
+                  row({ id: 'review_followup_key', status: 'problem', severity: 'critical', title: 'Review follow-up key', detail: 'Mushi turned review follow-ups off.', affects: 24, fix: { kind: 'one_click', label: 'Pick a Cursor key', to: '/settings?tab=byok#review-followups' } }),
+                  row({ id: 'deploy_events', status: 'problem', severity: 'warn', title: 'Deploy events', detail: 'No deploy seen in 15 days.' }),
+                  row({ id: 'csp_blocks_api', status: 'unknown', title: 'Site security policy', detail: 'the site did not answer' }),
+                  row({ id: 'dead_letter', status: 'problem', source: 'doctor', title: 'dead letter' }),
+                  row({ id: 'never_seen', status: 'problem', severity: 'critical', title: 'SDK never checked in' }),
+                  row({ id: 'banner_disabled' }),
+                  row({ id: 'outdated_sdk' }),
+                ],
+              },
+            ],
+          },
+        }),
+        { status: 200 },
+      ),
+    ) as unknown as typeof fetch;
+    const checks = await checkHealthRegistry(config, doFetch);
+    expect(String((doFetch as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][0])).toContain('/v1/admin/health-checks?projectId=');
+    expect(checks.map((c) => c.name)).toEqual(['[health] Review follow-up key', '[health] Deploy events', '[health] Site security policy', '[health] Other checks']);
+    // A critical problem is still a warning: `ready` keeps its meaning in Phase 1.
+    expect(checks.every((c) => c.ok && c.warn !== false)).toBe(true);
+    // The heartbeat rows are the ingest block's, never printed twice.
+    expect(checks.some((c) => c.name.includes('never checked in'))).toBe(false);
+    expect(checks[0].detail).toContain('24 waiting on this.');
+    expect(checks[0].detail).toContain('Pick a Cursor key (console /settings?tab=byok#review-followups)');
+    expect(checks[1]).toMatchObject({ ok: true, warn: true });
+    expect(checks[2]).toMatchObject({ ok: true, warn: true, detail: 'Not checked: the site did not answer' });
+    expect(checks[3].detail).toBe('2 passed.');
+  });
+
+  it('skips quietly for an ingest-only key, a server without the route, or no project', async () => {
+    for (const status of [401, 403, 404]) {
+      expect(await checkHealthRegistry(config, vi.fn(async () => new Response('{}', { status })) as unknown as typeof fetch)).toEqual([]);
+    }
+    expect(await checkHealthRegistry({ ...config, projectId: undefined }, vi.fn() as unknown as typeof fetch)).toEqual([]);
+  });
+
+  it('an unreachable server is a warning, never a failure', async () => {
+    const [c] = await checkHealthRegistry(config, vi.fn(async () => { throw new Error('timeout'); }) as unknown as typeof fetch);
+    expect(c).toMatchObject({ ok: true, warn: true });
   });
 });
 

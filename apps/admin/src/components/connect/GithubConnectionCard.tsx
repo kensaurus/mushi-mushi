@@ -12,6 +12,8 @@ import { IconCheck, IconArrowRight, IconIntegrations } from '../icons'
 import { BrandIcon } from '../ui/BrandIcon'
 import { usePageData } from '../../lib/usePageData'
 import { repoRoleMeta } from '../../lib/repoRoles'
+import { GitHubConnectCard } from '../GitHubConnectCard'
+import { isReturningFromGithub } from '../../lib/githubConnect'
 
 /** The project_repos columns this card reads (GET /v1/admin/repo/repos). */
 interface LinkedRepo {
@@ -41,6 +43,12 @@ export function GithubConnectionCard({
   const hasGithub = Boolean(repoUrl) && (githubCheck?.ready ?? Boolean(repoUrl))
   const loading = preflight.loading && !repoUrl
 
+  // Not connected (or back from GitHub): the connect flow itself, not a link
+  // to another page that has it.
+  if (projectId && ((!loading && !hasGithub) || isReturningFromGithub(projectId))) {
+    return <GitHubConnectCard projectId={projectId} returnTo="connect" currentRepoUrl={hasGithub ? repoUrl : null} />
+  }
+
   return (
     <Card>
       <div className="flex flex-wrap items-center gap-3 p-4">
@@ -55,16 +63,19 @@ export function GithubConnectionCard({
             <ul className="mt-1 space-y-1">
               {linked.map((repo) => {
                 const { label, Icon, tone } = repoRoleMeta(repo.role)
+                // Roles tell several repos apart; one repo is just "the repository".
                 return (
                   <li key={repo.id} className="flex items-center gap-2 min-w-0">
-                    <Badge tone={tone} className="text-3xs gap-1 shrink-0">
-                      <Icon size={11} />
-                      {label}
-                    </Badge>
+                    {linked.length > 1 && (
+                      <Badge tone={tone} className="text-3xs gap-1 shrink-0">
+                        <Icon size={11} />
+                        {label}
+                      </Badge>
+                    )}
                     <span className="text-xs text-fg-muted font-mono truncate" title={repo.repo_url}>
                       {repo.repo_url.replace(/^https?:\/\/(www\.)?github\.com\//, '')}
                     </span>
-                    {repo.is_primary && <span className="text-3xs text-fg-faint shrink-0">primary</span>}
+                    {repo.is_primary && linked.length > 1 && <span className="text-3xs text-fg-faint shrink-0">primary</span>}
                   </li>
                 )
               })}
@@ -89,6 +100,9 @@ export function GithubConnectionCard({
             <Btn to="/repo" size="sm" variant="ghost" className="gap-1.5">
               {linked.length > 1 ? 'Manage repos' : 'Add a repo'}
               <IconArrowRight className="h-3.5 w-3.5" aria-hidden />
+            </Btn>
+            <Btn to={`/ci${projectId ? `?project=${encodeURIComponent(projectId)}` : ''}#ci-placement`} size="sm" variant="ghost" title="Where CI runs and how much of it fix pull requests run">
+              CI settings
             </Btn>
           </div>
         ) : (

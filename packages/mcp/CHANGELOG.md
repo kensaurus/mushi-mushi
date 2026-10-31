@@ -1,5 +1,20 @@
 # @mushi-mushi/mcp
 
+## 0.30.2
+
+### Patch Changes
+
+- 8e950fb: - **`request_ci_placement_change` takes CI_PROFILE and `revertAfterHours`**: CI_PROFILE (economy, the default, or thorough) is accepted where a workflow reads it, and a move to GitHub-hosted runners can carry `revertAfterHours` (1-168) so it switches back on its own.
+
+## 0.30.1
+
+### Patch Changes
+
+- 545f106: - **`diagnose_setup` names the root cause first**: in full mode it reads the app's Health check and returns its "Fix these first" list as `health`; when the connection, ingest and dispatch checks pass, `nextAction` is the first root cause and its fix.
+- 6a24a35: - **Docs answers match the product**: the docs index behind `search_mushi_docs` is rebuilt from the proofread docs.
+- Updated dependencies [545f106]
+  - @mushi-mushi/core@1.33.5
+
 ## 0.30.0
 
 ### Minor Changes

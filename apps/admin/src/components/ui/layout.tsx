@@ -516,8 +516,9 @@ export function FreshnessPill({ at, isValidating, channel, className = '' }: Fre
       {/* The box is sized for a settled "x minutes ago" from the first paint:
           the pill sits in a wrapping header actions row, so growing from "—"
           to the timestamp used to re-wrap the row and drop the page by a
-          line (layout shift). */}
-      <span className="inline-block text-right tabular-nums" style={{ minWidth: '4.5rem' }}>
+          line (layout shift). Left-aligned: right-aligned, a short "now" sat a
+          gap away from its dot and read as a broken pill (owner, 2026-10-30). */}
+      <span className="inline-block text-left tabular-nums" style={{ minWidth: '4.5rem' }}>
         {at ? (
           <RelativeTime value={at} className="cursor-default" />
         ) : (

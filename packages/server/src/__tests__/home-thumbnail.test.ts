@@ -11,7 +11,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
-import { captureThumbnail, claimCapture, THUMBNAIL_MAX_BYTES } from '../../supabase/functions/_shared/home-thumbnail.ts'
+import { captureThumbnail, claimCapture, errorPageReason, THUMBNAIL_MAX_BYTES } from '../../supabase/functions/_shared/home-thumbnail.ts'
 
 const P = '11111111-1111-4111-8111-111111111111'
 const NOW = new Date('2026-10-27T12:00:00Z')
@@ -120,3 +120,41 @@ describe('captureThumbnail', () => {
     await expect(captureThumbnail(db as never, P, 'https://glot.it', 'k', { fetchImpl: fakeFetch({ type: 'image/png', bytes: 1 }, { screenshot: 'http://x/y.png' }) })).rejects.toThrow(/no screenshot/)
   })
 })
+
+describe('errorPageReason', () => {
+  it('reads Firecrawl metadata: an error title at any page length, and a load error', () => {
+    const long = `# Docs\n\n${'x'.repeat(5000)}`
+    expect(errorPageReason(200, long, { title: "This page couldn't load" })).toMatch(/couldn't load/)
+    expect(errorPageReason(200, long, { title: '404: NOT_FOUND' })).toMatch(/error/)
+    expect(errorPageReason(200, long, { title: 'Page not found' })).toMatch(/error/)
+    expect(errorPageReason(200, long, { title: 'Something went wrong' })).toMatch(/error/)
+    expect(errorPageReason(200, long, { title: '502 Bad Gateway' })).toMatch(/error/)
+    expect(errorPageReason(200, '', { error: 'net::ERR_NAME_NOT_RESOLVED' })).toMatch(/failed to load/)
+  })
+
+  it('knows host and non-English error screens', () => {
+    expect(errorPageReason(200, 'DEPLOYMENT_NOT_FOUND\n\nThis deployment cannot be found.')).not.toBeNull()
+    expect(errorPageReason(200, 'Error 522\n\nConnection timed out')).not.toBeNull()
+    expect(errorPageReason(200, 'エラーが発生しました。もう一度お試しください。')).not.toBeNull()
+    expect(errorPageReason(200, 'ページが見つかりません')).not.toBeNull()
+    expect(errorPageReason(200, long2('出错了'))).toBeNull()
+    expect(errorPageReason(200, '页面加载失败')).not.toBeNull()
+    expect(errorPageReason(200, '오류가 발생했습니다')).not.toBeNull()
+  })
+
+  it('does not refuse a real page whose title or body only mentions errors', () => {
+    expect(errorPageReason(200, '# Home', { title: 'Error handling in Next.js — Guide' })).toBeNull()
+    expect(errorPageReason(200, '# Home', { title: 'Mushi Mushi — why it broke, in plain English' })).toBeNull()
+    expect(errorPageReason(200, '# Home', { title: 'Top 404 pages of 2026' })).toBeNull()
+    expect(errorPageReason(200, '# Home', { title: '404 Studio' })).toBeNull()
+    expect(errorPageReason(200, '# Home', { title: 'Something went wrong? Tell us' })).toBeNull()
+    expect(errorPageReason(200, '# Home', { title: '404 Not Found' })).not.toBeNull()
+    expect(errorPageReason(200, '# Home', { title: '500 - Server error' })).not.toBeNull()
+    expect(errorPageReason(200, '# Home', { error: '' })).toBeNull()
+    expect(errorPageReason(undefined, undefined)).toBeNull()
+  })
+})
+
+function long2(phrase: string): string {
+  return `${phrase} ${'正常的内容'.repeat(200)}`
+}

@@ -15,6 +15,7 @@
  */
 
 import type { PipelineStage } from './pipeline-view.ts'
+import { rootCauses, type HealthCheck, type HealthFix, type HealthPart, type HealthSeverity } from './health-checks.ts'
 
 // ── Section envelope ────────────────────────────────────────────────────────
 
@@ -340,6 +341,7 @@ const GROUP_IMPACT: Record<string, { impact: number; action: string }> = {
   agent_failed: { impact: 70, action: 'See why' },
   agent_failed_person: { impact: 68, action: 'Decide' },
   agent_failed_nothing: { impact: 45, action: 'Close' },
+  agent_said_fixed: { impact: 45, action: 'Check and close' },
   intake_rejected: { impact: 66, action: 'See rejects' },
   fix_first: { impact: 60, action: 'Send back' },
   after_red_train: { impact: 56, action: 'Review' },
@@ -356,6 +358,12 @@ export interface NeedsYouInput {
   sdk: { status: string; version: string | null; latest: string | null } | null
   /** Local worker flags for this app, worst first (work-flags.ts); null when the read failed. */
   workers?: ReadonlyArray<{ id: string; severity: 'danger' | 'warn'; title: string }> | null
+  /**
+   * The root causes Home shows in "Fix these first" (buildFixFirst). A
+   * pipeline group one of them explains (`rootCause`, tagRootCauses) is left
+   * out here, so one cause shows once. Absent: every group shows as before.
+   */
+  fixFirst?: ReadonlyArray<Pick<FixFirstItem, 'id'>> | null
 }
 
 /** Worker problems take at most this many Needs you rows; the rest are counted in the last one. */
@@ -376,14 +384,18 @@ export function buildNeedsYou(input: NeedsYouInput): NeedsYouItem[] {
   if (ci?.light === 'bad') items.push({ id: 'ci_red', impact: 72, text: `CI on your main branch is failing. ${ci.detail ?? ''}`.trim(), action: { label: 'Open CI', to: '/ci' } })
   const sdk = input.health.find((h) => h.id === 'sdk')
   if (sdk && (sdk.light === 'bad' || sdk.status === 'not_connected')) {
-    items.push({ id: 'sdk_silent', impact: 65, text: sdk.status === 'not_connected' ? 'Your app is not sending to Mushi yet, so users cannot report bugs.' : 'Your app stopped checking in over a week ago.', action: { label: 'Fix it', to: sdk.href } })
+    // Never set up is a step to take, not a fault to fix.
+    const neverSent = sdk.status === 'not_connected'
+    items.push({ id: 'sdk_silent', impact: 65, text: neverSent ? 'Your app is not sending to Mushi yet, so users cannot report bugs.' : 'Your app stopped checking in over a week ago.', action: { label: neverSent ? 'Set up the SDK' : 'Fix it', to: sdk.href } })
   }
   // Same groups, labels and counts the /pipeline page shows.
+  const shown = new Set((input.fixFirst ?? []).map((f) => f.id))
   for (const stage of input.pipeline ?? []) {
     for (const g of stage.groups) {
       if (g.tone !== 'stuck' || g.count === 0) continue
+      if (g.rootCause && shown.has(g.rootCause.checkId)) continue
       const meta = GROUP_IMPACT[g.id] ?? DEFAULT_GROUP
-      items.push({ id: `pipeline_${g.id}`, impact: meta.impact, text: `${g.label}.`, action: { label: meta.action, to: pipelineHref } })
+      items.push({ id: `pipeline_${g.id}`, impact: meta.impact, text: `${g.label}.`, action: { label: meta.action, to: `${pipelineHref}&group=${encodeURIComponent(g.id)}` } })
     }
   }
   // A local worker that stopped doing useful work (ADR 0048 amendment 2026-10-28): never hidden.
@@ -398,6 +410,27 @@ export function buildNeedsYou(input: NeedsYouInput): NeedsYouItem[] {
     items.push({ id: 'sdk_upgrade', impact: input.sdk.status === 'deprecated' ? 45 : 30, text: `Update the Mushi SDK${range}.`, action: { label: 'Update', to: '/connect' } })
   }
   return items.sort((a, b) => b.impact - a.impact).slice(0, NEEDS_YOU_MAX)
+}
+
+// ── Fix these first (Health checks, plan-simplicity-2026-10 Phase 1) ────────
+
+export interface FixFirstItem {
+  /** The check id (`review_followup_key`, `github_access`, …). */
+  id: string
+  /** The check's row key (`github_access:owner/repo` for one repo). */
+  key: string
+  part: HealthPart
+  severity: HealthSeverity
+  title: string
+  detail: string
+  /** "<N> are waiting on this", when counted. */
+  affects: number | null
+  fix: HealthFix | null
+}
+
+/** At most three root causes, worst and most waited-on first (health-checks.ts rootCauses). */
+export function buildFixFirst(checks: HealthCheck[]): FixFirstItem[] {
+  return rootCauses(checks).map((c) => ({ id: c.id, key: c.key, part: c.part, severity: c.severity, title: c.title, detail: c.detail, affects: c.affects, fix: c.fix }))
 }
 
 // ── Sitemap ─────────────────────────────────────────────────────────────────
@@ -450,6 +483,82 @@ export interface SitemapInput {
   bugUrls: string[]
   /** URLs of open broken pages. */
   brokenUrls: string[]
+  /** Where the app is served; report URLs elsewhere are left out (belongsToApp). */
+  addresses?: AppAddress[]
+}
+
+/** Where an app is served: a host (no `www.`, port kept unless default) and a base path ('' = the whole host). */
+export interface AppAddress {
+  host: string
+  basePath: string
+}
+
+function addressOf(raw: string): AppAddress | null {
+  try {
+    const u = new URL(raw.trim())
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null
+    const host = u.hostname.toLowerCase().replace(/^www\./, '') + (u.port ? `:${u.port}` : '')
+    // Only the first segment scopes: a base like /app/login still covers /app.
+    // A locale (/en, /ja-JP) is a language, not the app's place on the host.
+    const first = u.pathname.split('/').find(Boolean) ?? ''
+    return { host, basePath: !first || LOCALE_SEGMENT.test(first) ? '' : `/${first}` }
+  } catch {
+    return null
+  }
+}
+
+const LOCALE_SEGMENT = /^[a-z]{2}(?:[-_][a-z]{2,4})?$/i
+
+/** The app's addresses from every place it is known: site watch, site audit, crawler, SDK key origins. */
+export function appAddresses(urls: Array<string | null | undefined>): AppAddress[] {
+  const out = new Map<string, AppAddress>()
+  for (const raw of urls) {
+    const a = raw ? addressOf(raw) : null
+    if (a) out.set(`${a.host}${a.basePath}`, a)
+  }
+  return [...out.values()]
+}
+
+/** Schemes that are never one of the app's pages. */
+const FOREIGN_SCHEMES = new Set(['about:', 'data:', 'blob:', 'javascript:', 'chrome-extension:', 'moz-extension:', 'safari-web-extension:', 'view-source:'])
+
+/**
+ * Whether a report or broken-page URL is one of this app's own pages. A
+ * report imported from Sentry, GitHub or a code audit can carry a URL on
+ * another site (github.com/…/blob/…); it must not show up as an app page.
+ * Kept: paths without an origin, app schemes (capacitor:, ionic:, file:,
+ * tauri:…), local development hosts, and hosts the app is served from, under
+ * that address's base path when it has one (several apps can share a host:
+ * kensaur.us/glot-it, kensaur.us/mushi-mushi). With no known address
+ * everything is kept, as before.
+ */
+export function belongsToApp(raw: string, addresses: AppAddress[]): boolean {
+  const text = raw.trim()
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(text)) return true
+  let u: URL
+  try {
+    u = new URL(text)
+  } catch {
+    return false
+  }
+  if (FOREIGN_SCHEMES.has(u.protocol)) return false
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return true
+  if (isLocalOrigin(u.origin) || addresses.length === 0) return true
+  let path: string
+  let host: string
+  try {
+    host = u.hostname.toLowerCase().replace(/^www\./, '') + (u.port ? `:${u.port}` : '')
+    path = u.pathname.replace(/\/+$/, '')
+  } catch {
+    return false
+  }
+  // The app's host or one of its subdomains (an apex watch covers app.example.com).
+  const same = addresses.filter((a) => a.host === host || host.endsWith(`.${a.host}`))
+  // SDK origins carry no path; a watched or audited address with a base path
+  // says which part of a shared host is this app.
+  const scoped = same.filter((a) => a.basePath)
+  const pool = scoped.length > 0 ? scoped : same
+  return pool.some((a) => !a.basePath || path === a.basePath || path.startsWith(`${a.basePath}/`))
 }
 
 export function buildSitemap(input: SitemapInput): SitemapView {
@@ -463,8 +572,9 @@ export function buildSitemap(input: SitemapInput): SitemapView {
     stats.set(path, s)
   }
   for (const v of input.views) bump(v, 'views')
-  for (const u of input.bugUrls) bump(u, 'bugs')
-  for (const u of input.brokenUrls) bump(u, 'broken')
+  const own = (u: string) => belongsToApp(u, input.addresses ?? [])
+  for (const u of input.bugUrls) if (own(u)) bump(u, 'bugs')
+  for (const u of input.brokenUrls) if (own(u)) bump(u, 'broken')
 
   const score = (s: { views: number; bugs: number; broken: boolean }) => s.views + s.bugs * 5 + (s.broken ? 50 : 0)
   const top = [...stats.entries()].sort((a, b) => score(b[1]) - score(a[1]) || a[0].localeCompare(b[0])).slice(0, SITEMAP_MAX)

@@ -18,7 +18,7 @@ export interface ProjectsStats {
   projectsWithReports: number
   sdkConnectedCount: number
   /** Apps with no SDK-key heartbeat (first 5 by name); older servers omit it. */
-  sdkMissingProjects?: Array<{ id: string; name: string }>
+  sdkMissingProjects?: Array<{ id: string; name: string; createdAt?: string | null }>
   sdkMissingCount?: number
   neverIngestedCount: number
   reportsLast24h: number

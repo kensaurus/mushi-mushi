@@ -7,12 +7,14 @@
 
 import { useState, useEffect, useMemo, type FormEvent } from 'react'
 import { useAuth } from '../lib/auth'
-import { Navigate, useLocation, useSearchParams } from 'react-router-dom'
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { Input, SelectField, Btn, Tooltip, HelpBanner } from '../components/ui'
 import { isCloudMode, RESOLVED_SUPABASE_URL } from '../lib/env'
 import { nextPathFromLoginState } from '../lib/authRedirect'
+import { signupLandingPath } from '../lib/firstRun'
 import {
   classifyAuthError as classifyAuthErrorText,
+  emailFormatProblem,
   loginActionFor,
   NO_ACCOUNT_FOR_EMAIL_LINK,
   type LoginFormMode,
@@ -52,6 +54,7 @@ function classifyAuthError(raw: string): string {
 export function LoginPage() {
   const { session, signIn, signInWithMagicLink, signInAsTester, signInWithGitHub, signInWithGoogle, signInWithPasskey, signUp, resetPassword } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const initialRememberedEmail = readRememberedLoginEmail()
   const [rememberedEmail, setRememberedEmail] = useState<string | null>(initialRememberedEmail)
@@ -94,7 +97,10 @@ export function LoginPage() {
   // returning users go to the dashboard. An explicit `?next=` / router
   // state still wins for both.
   const defaultNextPath = track === 'tester' ? '/tester' : mode === 'signup' ? '/onboarding' : '/reports'
-  const nextPath = nextPathFromLoginState(location.state, searchParams.get('next'), defaultNextPath)
+  const requestedNextPath = nextPathFromLoginState(location.state, searchParams.get('next'), defaultNextPath)
+  // A sign-up confirms its email and returns here: a generic landing (Bugs,
+  // Home) becomes setup, an invite or deep link is kept (lib/firstRun.ts).
+  const nextPath = mode === 'signup' && track !== 'tester' ? signupLandingPath(requestedNextPath) : requestedNextPath
 
   useEffect(() => {
     if (cloud) return
@@ -121,6 +127,12 @@ export function LoginPage() {
 
   const switchMode = (next: FormMode) => {
     setMode(next)
+    // The address follows the form, so a sign-up link can be shared and a
+    // reload keeps the form the person was on. The query (next, src) stays.
+    const path = next === 'signup' ? '/signup' : '/login'
+    if (location.pathname !== path) {
+      navigate({ pathname: path, search: location.search }, { replace: true, state: location.state })
+    }
     setError('')
     setSuccess(null)
     if (next === 'signup') setRememberEmail(false)
@@ -149,6 +161,11 @@ export function LoginPage() {
     e.preventDefault()
     setError('')
     setSuccess(null)
+    const emailProblem = emailFormatProblem(email)
+    if (emailProblem) {
+      setError(emailProblem)
+      return
+    }
     setLoading(true)
 
     try {
@@ -505,6 +522,10 @@ export function LoginPage() {
               required
               placeholder="you@company.com"
               autoComplete="email"
+              validate={(value) => {
+                const message = emailFormatProblem(value)
+                return message ? { message } : null
+              }}
               autoFocus={!rememberedEmail}
             />
 
@@ -517,7 +538,7 @@ export function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={6}
-                placeholder="••••••••"
+                placeholder={mode === 'signup' ? 'At least 6 characters' : 'Your password'}
                 autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                 autoFocus={mode === 'login' && Boolean(rememberedEmail)}
               />

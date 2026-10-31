@@ -295,13 +295,31 @@ describe('buildPipeline', () => {
       actionFacts: { cloud: new Map(), prior: new Map(), roundHeads: new Map(), rerunRefused: new Set() },
     })
     expect(group(stages, 'agent_failed_person')?.group.label).toBe('1 report: the agent says a person must do it, no PR opened')
-    expect(group(stages, 'agent_failed_nothing')?.group.label).toBe('2 reports: the agent found nothing to change in the code')
+    expect(group(stages, 'agent_failed_nothing')?.group.label).toBe('1 report: the agent found nothing to change in the code')
+    expect(group(stages, 'agent_said_fixed')?.group.label).toBe('1 report: the agent says the bug is already fixed in the code')
+    expect(group(stages, 'agent_said_fixed')?.group.actions).toEqual(['mark_fixed', 'dismiss'])
     expect(group(stages, 'agent_failed')?.group.count).toBe(2)
     for (const id of ['agent_failed_person', 'agent_failed_nothing', 'agent_failed']) {
       const g = group(stages, id)!.group
       expect(g.actions).toEqual(['dismiss'])
       expect(g.items.every((i) => Object.keys(i.blocked).length === 0)).toBe(true)
     }
+  })
+
+  it('an agent verdict stays listed past 7 days while its report is open; an agent error does not', () => {
+    const old = (id: string, category: string | null, report_id: string) =>
+      attempt({ id, report_id, status: 'failed', pr_url: null, pr_number: null, pr_state: null, commit_sha: null, created_at: '2026-10-01T00:00:00Z', completed_at: '2026-10-01T00:00:00Z', failure_category: category })
+    const report = (id: string, status: string) => ({ id, project_id: P, status, title: id, summary: null, description: null, created_at: '2026-09-30T00:00:00Z', processing_error: null })
+    const stages = run({
+      // r-closed is not loaded: the route reads open reports only.
+      attempts: [old('a1', 'already_fixed', 'r-open'), old('a2', 'sandbox_error', 'r-open2'), old('a3', 'not_actionable', 'r-closed')],
+      reviews: [],
+      reports: [report('r-open', 'classified'), report('r-open2', 'classified')],
+      actionFacts: { cloud: new Map(), prior: new Map(), roundHeads: new Map(), rerunRefused: new Set() },
+    })
+    expect(group(stages, 'agent_said_fixed')?.group.items.map((i) => i.id)).toEqual(['a1'])
+    expect(group(stages, 'agent_failed')).toBeNull()
+    expect(group(stages, 'agent_failed_nothing')).toBeNull()
   })
 
   it('blocked: without the read facts nothing is blocked; with them, known refusals are named', () => {

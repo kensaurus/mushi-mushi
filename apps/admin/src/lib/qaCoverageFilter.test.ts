@@ -44,6 +44,13 @@ describe('matchesQaCoverageFilter', () => {
     expect(matchesQaCoverageFilter(idle, 'failing')).toBe(false)
   })
 
+  it('does not count a skipped-only story as failing', () => {
+    const skipped = { enabled: true, runs_24h: 6, pass_rate_pct: null }
+    expect(matchesQaCoverageFilter(skipped, 'failing')).toBe(false)
+    expect(matchesQaCoverageFilter(skipped, 'passing')).toBe(false)
+    expect(matchesQaCoverageFilter(skipped, 'all')).toBe(true)
+  })
+
   it('filters turned-off stories', () => {
     expect(matchesQaCoverageFilter(off, 'disabled')).toBe(true)
     expect(matchesQaCoverageFilter(failing, 'disabled')).toBe(false)

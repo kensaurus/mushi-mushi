@@ -13,6 +13,7 @@ import type * as MergeQueueLib from '../../lib/mergeQueue'
 
 const mocks = vi.hoisted(() => ({
   resolve: null as ((value: unknown) => void) | null,
+  saved: [] as unknown[],
 }))
 
 vi.mock('../../lib/toast', () => ({ useToast: () => ({ push: vi.fn() }) }))
@@ -21,6 +22,10 @@ vi.mock('../../lib/mergeQueue', async (importOriginal) => {
   return {
     ...actual,
     loadMergeQueue: () => new Promise((resolve) => { mocks.resolve = resolve }),
+    saveReleaseSettings: async (_projectId: string, patch: unknown) => {
+      mocks.saved.push(patch)
+      return { ok: true, data: {} }
+    },
   }
 })
 
@@ -49,9 +54,9 @@ async function render(projectId: string | null = 'p1') {
   })
 }
 
-async function answer(rows: unknown[]) {
+async function answer(rows: unknown[], release: unknown[] = []) {
   await act(async () => {
-    mocks.resolve?.({ ok: true, data: { rows, trains: [], release: [] } })
+    mocks.resolve?.({ ok: true, data: { rows, trains: [], release } })
   })
 }
 
@@ -99,6 +104,18 @@ describe('MergeQueuePanel', () => {
     const reason = [...host.querySelectorAll('ul.max-h-40 span')].find((s) => s.textContent?.includes('Approved'))!
     expect(reason.className).toContain('flex-auto')
     expect(reason.className).not.toContain('flex-1')
+  })
+
+  it('"Decide for me" is one switch, and says what it does once on (ADR 0055)', async () => {
+    mocks.saved = []
+    await render()
+    await answer([], [{ projectId: 'p1', mode: 'train', intervalMinutes: 360, maxMembers: 15, autoDecide: false }])
+    const sw = host.querySelector('button[role="switch"][aria-label="Let Mushi merge approved fixes and close held ones"]') as HTMLButtonElement
+    expect(sw.getAttribute('aria-checked')).toBe('false')
+    expect(host.querySelector('[data-testid="auto-decide-note"]')).toBeNull()
+    await act(async () => sw.click())
+    expect(mocks.saved).toEqual([{ autoDecide: true }])
+    expect(host.querySelector('[data-testid="auto-decide-note"]')?.textContent).toContain('up to 3 tries per bug')
   })
 
   it('renders nothing without an active app', async () => {

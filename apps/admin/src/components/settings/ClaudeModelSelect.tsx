@@ -11,7 +11,6 @@
  *          "Use recommended" and "Reset to default".
  */
 
-import type { ReactNode } from 'react'
 import { usePageData } from '../../lib/usePageData'
 import {
   ROLE_DEFAULTS,
@@ -42,7 +41,6 @@ export function ClaudeModelSelect({
   onChange,
   label = 'Model',
   helpId,
-  extraOptions,
 }: {
   role: ModelRole
   /** The saved or edited value; empty means the server default. */
@@ -50,8 +48,6 @@ export function ClaudeModelSelect({
   onChange: (id: string) => void
   label?: string
   helpId?: string
-  /** Extra non-Claude options (an OpenAI fallback group), rendered last. */
-  extraOptions?: ReactNode
 }) {
   const live = usePageData<LiveModels>('/v1/admin/byok/anthropic/models')
   const fallback = ROLE_DEFAULTS[role]
@@ -76,7 +72,6 @@ export function ClaudeModelSelect({
               ))}
           </optgroup>
         ))}
-        {extraOptions}
       </SelectField>
       <div className="rounded-md border border-edge-subtle bg-surface-overlay/40 px-2.5 py-2 text-2xs text-fg-secondary">
         <p>

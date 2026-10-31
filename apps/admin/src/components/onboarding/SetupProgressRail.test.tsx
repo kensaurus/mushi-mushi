@@ -11,10 +11,13 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SetupProject } from '../../lib/useSetupStatus'
 
-const state = vi.hoisted(() => ({ ttfd: null as unknown }))
+const state = vi.hoisted(() => ({ ttfd: null as unknown, stack: null as unknown }))
 
 vi.mock('../../lib/usePageData', () => ({
-  usePageData: () => ({ data: state.ttfd, loading: false, error: null, isValidating: false, reload: vi.fn(), lastFetchedAt: null }),
+  usePageData: (path: string | null) => ({
+    data: path?.endsWith('/github/stack') ? state.stack : state.ttfd,
+    loading: false, error: null, isValidating: false, reload: vi.fn(), lastFetchedAt: null,
+  }),
 }))
 
 import { SetupProgressRail } from './SetupProgressRail'
@@ -26,6 +29,7 @@ let root: Root
 
 beforeEach(() => {
   state.ttfd = null
+  state.stack = null
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
@@ -120,6 +124,14 @@ describe('SetupProgressRail', () => {
     expect(host.querySelector('[data-testid="setup-next-step"]')?.textContent).toContain('mushi_live_abc123')
     expect(button('Copy snippet')).toBeTruthy()
     expect(button('Make a key and fill it in')).toBeUndefined()
+  })
+
+  it('reads the key from .env.local when the connected repo is React on Vite, like Connect does', () => {
+    state.stack = { repo: 'kensaurus/kensaur.us', packageJson: JSON.stringify({ dependencies: { react: '19.0.0' }, devDependencies: { vite: '7.0.0' } }) }
+    render(project(true, false), {}, false, 'mushi_live_abc123')
+    const step = host.querySelector('[data-testid="setup-next-step"]')?.textContent ?? ''
+    expect(step).toContain('import.meta.env.VITE_MUSHI_API_KEY')
+    expect(step).toContain('Matched to kensaurus/kensaur.us')
   })
 
   it('after a heartbeat with no bug yet, offers a test bug', () => {

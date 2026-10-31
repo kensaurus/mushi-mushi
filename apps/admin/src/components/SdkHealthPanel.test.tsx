@@ -115,6 +115,14 @@ describe('SdkHealthPanel', () => {
     expect(document.body.textContent).toContain('5 problems found.')
   })
 
+  it('a never-seen app with only setup steps reads as steps left, not problems', async () => {
+    await mount([ALL[1]!, ALL[2]!])
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('2 steps left before this app sends bug reports.')
+    expect(text).not.toContain('problems found')
+    expect(document.body.querySelector('.bg-danger')).toBeNull()
+  })
+
   it('Fix all confirms once, then runs every fix in order and shows each result', async () => {
     await mount(ALL)
     act(() => button(/Fix all \(4\)/)!.click())

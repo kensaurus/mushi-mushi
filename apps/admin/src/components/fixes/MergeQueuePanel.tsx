@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { Badge, Btn, Card, FILTER_SELECT_CLASS, RelativeTime, SegmentedControl } from '../ui'
+import { Badge, Btn, Card, FILTER_SELECT_CLASS, RelativeTime, SegmentedControl, Toggle } from '../ui'
 import { useToast } from '../../lib/toast'
 import {
   MERGE_QUEUE_STATE_LABEL,
@@ -114,7 +114,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
     return () => window.clearInterval(t)
   }, [active.length, movingTrain, load])
 
-  const saveRelease = async (patch: { mode?: ReleaseMode; intervalMinutes?: number }) => {
+  const saveRelease = async (patch: { mode?: ReleaseMode; intervalMinutes?: number; autoDecide?: boolean }) => {
     if (!projectId || !release) return
     const before = release
     setRelease({ ...release, ...patch })
@@ -203,7 +203,20 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
               </select>
             </label>
           )}
+          <Toggle
+            label="Decide for me"
+            ariaLabel="Let Mushi merge approved fixes and close held ones"
+            checked={release.autoDecide === true}
+            disabled={saving}
+            onChange={(autoDecide) => void saveRelease({ autoDecide })}
+          />
         </div>
+      )}
+      {release?.autoDecide && (
+        <p className="text-2xs text-fg-muted" data-testid="auto-decide-note">
+          Mushi decides each fix with Opus’s review: approved ones go to the merge queue, ones Opus will not merge are closed and fixed
+          again with its findings, up to 3 tries per bug. Closed pull requests can be reopened.
+        </p>
       )}
       {active.length > 0 && (
         <p className="text-2xs text-fg-muted">

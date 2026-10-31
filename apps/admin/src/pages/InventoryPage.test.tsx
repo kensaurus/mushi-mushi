@@ -88,13 +88,13 @@ const FILLED = {
 }
 
 describe('InventoryPage', () => {
-  it('opens an empty app on one "Turn on discovery" step and nothing else', async () => {
+  it('opens an empty app on one "Map my live site" step and nothing else (no SDK change needed)', async () => {
     mocks.inventory = { snapshot: null, summary: null }
     mocks.findings = { runs: [], findings: [{ id: 'f1', message: 'x', severity: 'warn', node_id: null }] }
     await render()
     const step = host.querySelector('[data-testid="inventory-first-step"]')
-    expect(step?.textContent).toContain('Turn on discovery')
-    expect(step?.querySelector('a[href="/inventory?tab=discovery"]')).not.toBeNull()
+    expect(step?.textContent).toContain('Map my live site')
+    expect(step?.querySelector('a[href="/inventory?tab=discovery&map=1#map-live"]')).not.toBeNull()
     expect(host.querySelector('[data-testid="inventory-status"]')).toBeNull()
     expect(host.textContent).not.toContain('not tied to')
     expect(host.textContent).not.toContain('Check every action')

@@ -11,6 +11,7 @@ import { apiErrorMessage } from '../lib/humanizeApiError'
 import { PageLoadError } from '../components/PageLoadError'
 import { inventoryFindingsEnabled } from '../lib/inventoryReadout'
 import { useRealtimeReload } from '../lib/realtime'
+import { useScrollToHash } from '../lib/useScrollToHash'
 import { useAdminMode } from '../lib/mode'
 import {
   SegmentedControl,
@@ -175,6 +176,8 @@ export function InventoryPage() {
   // The tab lives in `?tab=` so links (Settings → Spend-down, Home's site
   // map, this page's own first step) open it, also while already here.
   const [params, setParams] = useSearchParams()
+  // "Map my live site" links to #map-live on the Discovery tab.
+  useScrollToHash(true)
   const tab = parseTab(params.get('tab'))
   const setTab = useCallback(
     (next: Tab) =>
@@ -517,8 +520,8 @@ export function InventoryPage() {
       ) : tab === 'stories' ? (
         <PageFirstStep
           title="No user stories yet"
-          sentence="Turn on discovery and Mushi watches which pages people open and what they click, then drafts your user stories for you to accept. Nothing to write by hand."
-          action={{ label: 'Turn on discovery', to: '/inventory?tab=discovery' }}
+          sentence="Mushi crawls your live site and drafts your user stories for you to accept. Nothing to write by hand, and no SDK change. Later, turn on discovery in the SDK to learn from real visits too."
+          action={{ label: 'Map my live site', to: '/inventory?tab=discovery&map=1#map-live' }}
           learnMore={{ label: 'Or write the map file yourself', to: '/inventory?tab=yaml' }}
           data-testid="inventory-first-step"
         />

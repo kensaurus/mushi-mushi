@@ -4,7 +4,8 @@
  * FixCiFeedback under ADR 0033: a test machine that stopped, a queue that
  * expired, and a job still waiting read as warnings ("your fix was not
  * tested") with Re-run and a link to /ci; a plain cancel is neutral; a code
- * failure stays danger. Re-run reports 409 / 403 in plain words.
+ * failure stays danger and names the failing checks, with Re-run and Send to
+ * CI repair. Re-run reports 409 / 403 in plain words.
  */
 
 import { act, createElement } from 'react'
@@ -58,6 +59,9 @@ async function render(props: Record<string, unknown>) {
       createElement(MemoryRouter, null, createElement(FixCiFeedback, { fixId: 'fix-1', prUrl: PR, prNumber: 143, ...props })),
     )
   })
+  await act(async () => {
+    for (let i = 0; i < 5; i++) await Promise.resolve()
+  })
 }
 
 const box = () => host.querySelector('[data-testid="fix-ci-feedback"]') as HTMLElement
@@ -73,6 +77,7 @@ describe('FixCiFeedback', () => {
     expect(chip().className).toContain('warn')
     expect(chip().className).not.toContain('danger')
     expect(button('Re-run tests')!.disabled).toBe(false)
+    expect(button('Send to CI repair')).toBeUndefined()
     expect(link('See CI runners')!.getAttribute('href')).toBe('/ci')
   })
 
@@ -99,11 +104,32 @@ describe('FixCiFeedback', () => {
     expect(link('See CI runners')).toBeUndefined()
   })
 
-  it('a code failure stays danger', async () => {
+  it('a code failure names the failing checks and offers re-run and CI repair', async () => {
+    mocks.apiFetch.mockImplementation(async (path: string, opts?: { method?: string; body?: string }) => {
+      if ((opts?.method ?? 'GET').toUpperCase() === 'POST') {
+        return { ok: true, data: { results: [{ id: 'fix-1', ok: true, message: 'Queued a cloud CI-repair agent; it starts within 10 minutes.' }] } }
+      }
+      if (String(path).includes('/pipeline/fix/')) {
+        return { ok: true, data: { item: { failingChecks: ['Lint, typecheck, build, doctor'] } } }
+      }
+      return { ok: true, data: ciOverviewFixture() }
+    })
     await render({ ciConclusion: 'failure' })
     expect(chip().textContent).toContain('CI failed')
+    expect(chip().textContent).toContain('Lint, typecheck, build, doctor')
     expect(chip().className).toContain('danger')
-    expect(button('Re-run tests')).toBeUndefined()
+    expect(button('Re-run tests')).toBeDefined()
+    expect(button('Send to CI repair')).toBeDefined()
+    await act(async () => button('Send to CI repair')!.click())
+    const confirm = Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'Send to CI repair' && b.hasAttribute('data-primary'))!
+    await act(async () => confirm.click())
+    await act(async () => {
+      for (let i = 0; i < 5; i++) await Promise.resolve()
+    })
+    const repairCall = mocks.apiFetch.mock.calls.find((c) => String(c[0]).includes('/pipeline/actions'))
+    expect(repairCall?.[1]).toEqual(expect.objectContaining({ method: 'POST' }))
+    expect(JSON.parse((repairCall?.[1] as { body: string }).body)).toEqual({ action: 'ci_repair', fixIds: ['fix-1'] })
+    expect(host.textContent).toContain('Queued a cloud CI-repair agent')
   })
 
   it('Re-run posts to the rerun route and says the tests started', async () => {

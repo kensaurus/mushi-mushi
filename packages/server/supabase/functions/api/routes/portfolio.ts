@@ -60,7 +60,9 @@ import { defaultRecipeDeps } from './recipe.ts'
 const plog = log.child('portfolio')
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export const PORTFOLIO_PAGE_SIZE = 25
-const COMPOSE_CONCURRENCY = 4
+// Every card of a page at once: each card waits mostly on its own reads, and
+// 4 at a time took three waves for 10 apps (13.9 s, 2026-10-31).
+const COMPOSE_CONCURRENCY = PORTFOLIO_PAGE_SIZE
 const RADAR_COLUMN_GATES = [RADAR_GATE, RADAR_CI_GATE, RADAR_VULN_GATE]
 
 type Db = ReturnType<typeof getServiceClient>

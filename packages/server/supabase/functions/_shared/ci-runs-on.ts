@@ -64,6 +64,8 @@ export interface ParsedWorkflow {
   jobs: RunsOnJob[]
   /** Set when the YAML could not be parsed. */
   error: string | null
+  /** Every `vars.NAME` the file reads anywhere (runs-on, if:, env), sorted. */
+  vars?: string[]
 }
 
 const HOSTED_LABEL_RE = /^(?:ubuntu|windows|macos)-[\w.-]+$/i
@@ -152,11 +154,11 @@ export function parseWorkflowRunsOn(path: string, text: string): ParsedWorkflow 
   try {
     doc = parseDocument(text, { prettyErrors: false })
   } catch (err) {
-    return { path, name: null, triggers: [], jobs: [], error: err instanceof Error ? err.message : String(err) }
+    return { path, name: null, triggers: [], jobs: [], error: err instanceof Error ? err.message : String(err), vars: varsRead(text) }
   }
-  if (doc.errors.length > 0) return { path, name: null, triggers: [], jobs: [], error: doc.errors[0].message }
+  if (doc.errors.length > 0) return { path, name: null, triggers: [], jobs: [], error: doc.errors[0].message, vars: varsRead(text) }
   const root = doc.contents
-  if (!isMap(root)) return { path, name: null, triggers: [], jobs: [], error: 'not a mapping' }
+  if (!isMap(root)) return { path, name: null, triggers: [], jobs: [], error: 'not a mapping', vars: varsRead(text) }
   const name = scalarString(root.get('name', true))
   // `on` may parse as the boolean true key in YAML 1.1 readers; yaml@2 keeps the string.
   const on = root.get('on', true) ?? root.get(true as unknown as string, true)
@@ -199,7 +201,7 @@ export function parseWorkflowRunsOn(path: string, text: string): ParsedWorkflow 
       })
     }
   }
-  return { path, name, triggers, jobs, error: null }
+  return { path, name, triggers, jobs, error: null, vars: varsRead(text) }
 }
 
 /** GitHub's display name for a workflow: its `name:`, else the file path. */
@@ -222,6 +224,18 @@ export function runsOnJobMatches(job: RunsOnJob, workflowName: string | null, jo
 }
 
 /** Every job of every workflow of one repo. */
+/** Every `vars.NAME` a workflow's text reads, sorted and distinct. */
+export function varsRead(text: string): string[] {
+  const out = new Set<string>()
+  for (const m of text.matchAll(new RegExp(VAR_RE.source, 'g'))) out.add(m[1])
+  return [...out].sort()
+}
+
+/** True when any parsed workflow reads `vars.<name>`. */
+export function workflowsRead(parsed: readonly ParsedWorkflow[], name: string): boolean {
+  return parsed.some((w) => (w.vars ?? []).includes(name))
+}
+
 export function parseRepoWorkflows(files: ReadonlyArray<{ path: string; text: string }>): ParsedWorkflow[] {
   return files.map((f) => parseWorkflowRunsOn(f.path, f.text))
 }

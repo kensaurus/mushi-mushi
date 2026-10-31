@@ -50,6 +50,7 @@ import { logAudit } from '../../_shared/audit.ts'
 import { log } from '../../_shared/logger.ts'
 import { dbError, callerCanAccessProject } from '../shared.ts'
 import { emitFunnelEvent } from '../../_shared/setup-funnel.ts'
+import { insertProjectWithFreeSlug } from '../../_shared/project-slug.ts'
 import {
   evaluateTokenDelivery,
   parseClientId,
@@ -671,18 +672,13 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       )
     }
 
-    let slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48)
-    if (!slug) slug = `project-${crypto.randomUUID().slice(0, 8)}`
+    // A name another account already used gets a short random tail on its slug.
+    const { data, error } = await insertProjectWithFreeSlug(db, { name, owner_id: userId, organization_id: organizationId })
 
-    const { data, error } = await db
-      .from('projects')
-      .insert({ name, slug, owner_id: userId, organization_id: organizationId })
-      .select('id')
-      .single()
-
-    if (error) {
-      return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    if (error || !data) {
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: error?.message ?? 'Project insert returned no row' } }, 500)
     }
+    const slug = data.slug
 
     await db.from('project_settings').insert({ project_id: data.id })
     await db.from('project_members').upsert(

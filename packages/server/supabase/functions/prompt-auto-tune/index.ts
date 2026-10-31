@@ -37,6 +37,7 @@ import { PROMPT_TUNE_EFFORT, PROMPT_TUNE_MODEL } from '../_shared/models.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { withLlmUsage } from '../_shared/llm-usage.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { platformAnthropicKey } from '../_shared/ai-provider.ts'
 
 ensureSentry('prompt-auto-tune')
 
@@ -277,7 +278,7 @@ async function proposeCandidate(
     if (err instanceof LlmBudgetExceededError) throw err
     return null
   })
-  const apiKey = resolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY')
+  const apiKey = resolved?.key ?? (await platformAnthropicKey(db, projectId))
   if (!apiKey) {
     log.info('skipping — no Anthropic key', { projectId, stage })
     await trace.end()

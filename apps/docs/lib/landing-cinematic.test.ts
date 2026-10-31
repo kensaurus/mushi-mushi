@@ -59,8 +59,8 @@ describe('landing cinematic copy SSOT', () => {
     expect(JSON.stringify(LANDING_FAQ)).not.toMatch(/\bIndie\b|50 diagnoses/)
   })
 
-  it('explains the one job in three steps: a user reports, Mushi explains, your AI fixes (ADR 0052)', () => {
-    expect(LANDING_PILLARS.map((p) => p.name)).toEqual(['A user reports it', 'Mushi explains it', 'Your AI fixes it'])
+  it('explains the one job in three steps: a user reports, Mushi Mushi explains, your AI fixes (ADR 0052)', () => {
+    expect(LANDING_PILLARS.map((p) => p.name)).toEqual(['A user reports it', 'Mushi Mushi explains it', 'Your AI fixes it'])
     expect(LANDING_PILLARS.map((p) => p.glyph)).toEqual(['report', 'diagnose', 'ship'])
   })
 
@@ -101,7 +101,7 @@ describe('landing cinematic copy SSOT', () => {
     // cannot answer prompts) and send a test report it can show.
     expect(LANDING_SETUP_PROMPT).toContain('npx mushi-mushi --yes')
     expect(LANDING_SETUP_PROMPT).toContain('npx mushi-mushi test')
-    expect(LANDING_FIX_PROMPT).toMatch(/latest Mushi report/)
+    expect(LANDING_FIX_PROMPT).toMatch(/latest Mushi Mushi report/)
     const hero = readFileSync(join(__dirname, '..', 'components', 'landing', 'CinematicEditorialHero.tsx'), 'utf8')
     expect(hero).toContain('<LandingInstallStrip />')
     // The install lives in the hero only.

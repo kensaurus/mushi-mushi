@@ -2,6 +2,7 @@ import { ConfigHelp } from '../ConfigHelp'
 import { MUSHI_COPY } from '@mushi-mushi/core'
 import { SELECTED_TONE, SELECTED_TONE_IDLE } from '../../lib/chipTone'
 import {
+  DEFAULT_SDK_CONFIG,
   isMobileFramework,
   type BannerPosition,
   type BannerVariant,
@@ -138,6 +139,11 @@ export function SdkInstallConfigurator({
                 </span>
                 <span className="font-medium">{label}</span>
                 {value === 'banner' && <span className="ml-auto text-2xs text-ok uppercase tracking-wider font-semibold">Recommended</span>}
+                {/* The SDK's own default is what is selected until you pick; say so,
+                    so "Recommended" elsewhere does not read as a contradiction. */}
+                {value === DEFAULT_SDK_CONFIG.trigger && value !== 'banner' && (
+                  <span className="ml-auto text-2xs text-fg-faint uppercase tracking-wider">Default</span>
+                )}
               </button>
             ))}
           </div>

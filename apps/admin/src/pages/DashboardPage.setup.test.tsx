@@ -153,12 +153,12 @@ describe('Home while a required setup step is open', () => {
     await flush()
   }
 
-  it('shows the setup checklist inline, with Fix it on the SDK step, and no dead "Show setup guide"', async () => {
+  it('shows the setup checklist inline, with Show me how on a never-seen SDK step, and no dead "Show setup guide"', async () => {
     await mount()
     const text = container.textContent ?? ''
     expect(text).toContain('Install the SDK in your app')
     expect(text).not.toContain('Show setup guide')
-    const fixIt = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Fix it')
+    const fixIt = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Show me how')
     expect(fixIt).toBeTruthy()
     act(() => fixIt!.click())
     await flush()

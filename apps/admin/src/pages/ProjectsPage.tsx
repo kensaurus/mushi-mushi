@@ -73,6 +73,7 @@ import { CHIP_TONE } from '../lib/chipTone'
 import { IconProjects } from '../components/icons'
 import { PageLoadError } from '../components/PageLoadError'
 import { useScrollToHash } from '../lib/useScrollToHash'
+import { projectsHeaderStatus } from '../lib/newApps'
 
 const UNDO_WINDOW_MS = 8000
 
@@ -588,29 +589,8 @@ export function ProjectsPage() {
     return <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading projects" />
   if (error) return <PageLoadError error={error} resource="projects" onRetry={reloadAll} />
 
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
-    stats.topPriority === 'never_ingested' || stats.topPriority === 'no_sdk_heartbeat'
-      ? 'warn'
-      : stats.topPriority === 'healthy'
-        ? 'ok'
-        : stats.topPriority === 'no_projects'
-          ? 'brand'
-          : stats.topPriority === 'partial_ingest'
-            ? 'info'
-            : 'neutral'
-
-  const headerBadge =
-    stats.topPriority === 'healthy'
-      ? 'INGESTING'
-      : stats.topPriority === 'never_ingested'
-        ? 'NO INGEST'
-        : stats.topPriority === 'no_sdk_heartbeat'
-          ? 'NO HEARTBEAT'
-        : stats.topPriority === 'partial_ingest'
-          ? `${stats.neverIngestedCount} STALE`
-          : stats.projectCount === 0
-            ? 'EMPTY'
-            : 'SETUP'
+  // A just-made app reads "Setting up", like the banner (lib/newApps.ts).
+  const { label: headerBadge, tone: bannerSeverity } = projectsHeaderStatus(stats)
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-projects">
@@ -671,6 +651,7 @@ export function ProjectsPage() {
                 activeTeamName={activeTeamName}
                 roleHint={roleHint}
                 onTab={setTab}
+                activeTab={activeTab}
                 onRefresh={reloadAll}
                 refreshing={validating}
               />
@@ -775,6 +756,7 @@ export function ProjectsPage() {
           orgDataLoaded={orgDataLoaded}
           canManageProjects={canManageProjects}
           activeOrgRole={activeOrgRole as OrgRole}
+          teamName={(orgData?.organizations?.length ?? 0) > 1 ? activeTeamName : null}
           onNavigateTeam={() => navigate('/organization/members')}
           newName={newName}
           onNewNameChange={setNewName}

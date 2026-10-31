@@ -398,7 +398,7 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
     const { data: settings } = await db
       .from('project_settings')
       .select(
-        'sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, cursor_api_key_ref, cursor_default_model, claude_api_key_ref, linear_access_token_ref, linear_api_key_ref, slack_bot_token_ref',
+        'sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, cursor_api_key_ref, cursor_default_model, claude_api_key_ref, linear_access_token_ref, linear_api_key_ref, slack_bot_token_ref, slack_channel_id',
       )
       .eq('project_id', projectId)
       .single();

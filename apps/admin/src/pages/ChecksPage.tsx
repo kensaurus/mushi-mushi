@@ -62,7 +62,8 @@ const STATE_RANK: Record<CheckCardState, number> = {
   unavailable: 2,
   not_checked: 3,
   not_set_up: 4,
-  pass: 5,
+  watching: 5,
+  pass: 6,
 }
 
 const DOT: Record<CheckCardState, string> = {
@@ -71,6 +72,7 @@ const DOT: Record<CheckCardState, string> = {
   unavailable: 'bg-fg-faint',
   not_checked: 'bg-fg-faint',
   not_set_up: 'bg-fg-faint',
+  watching: 'bg-ok/50',
   pass: 'bg-ok',
 }
 
@@ -85,8 +87,8 @@ export function sortCheckCards(cards: readonly CheckCard[]): CheckCard[] {
   return cards
     .map((card, index) => ({ card, index }))
     .sort((a, b) => {
-      const ra = a.card.view ? STATE_RANK[a.card.view.state] : 6
-      const rb = b.card.view ? STATE_RANK[b.card.view.state] : 6
+      const ra = a.card.view ? STATE_RANK[a.card.view.state] : 7
+      const rb = b.card.view ? STATE_RANK[b.card.view.state] : 7
       return ra - rb || a.index - b.index
     })
     .map((x) => x.card)
@@ -202,7 +204,7 @@ export function ChecksPage() {
         description="Every automatic check on this app, failing ones first."
         helpTitle="About Checks"
         helpWhatIsIt="Each card is one automatic check Mushi runs on your app or on its own triage: scheduled browser tests, app health, audits, user stories, the app blueprint, design tokens, content, a first-time user test, and how well the AI graded, learned from and prompted each fix."
-        helpHowToUse="Red means the check failed, amber that it found something to fix, green that its last run passed. Grey is not set up, not run yet, or could not be read: never a pass. Open a card to see that check. A Pro pill means the check needs a plan upgrade."
+        helpHowToUse="Red means the check failed, amber that it found something to fix, green that its last run passed. Pale green means it watches on its own and has nothing open. Grey is not set up, not run yet, or could not be read: never a pass. Open a card to see that check. A Pro pill means the check needs a plan upgrade."
       />
 
       <PagePosture
@@ -255,7 +257,13 @@ export function ChecksPage() {
                       <Badge tone={view.tone} title={view.detail ?? view.chip}>
                         {view.chip}
                       </Badge>
-                    ) : null}
+                    ) : (
+                      // App blueprint and Design system wait on a slow read (7–30 s,
+                      // 2026-10-30); a blank corner read as broken.
+                      <Badge tone="neutral" className="motion-safe:animate-pulse">
+                        Checking…
+                      </Badge>
+                    )}
                   </span>
                 </div>
                 <p className="text-xs leading-snug text-fg-muted">{item.description}</p>

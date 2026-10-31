@@ -1,5 +1,6 @@
 import { legacyHubRoutes } from './lib/pageHubs'
 import { ReportsHomeRedirect } from './lib/reportsHomeRedirect'
+import { FirstRunGate } from './components/FirstRunGate'
 import { HubRedirect } from './components/PageHubView'
 import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom'
@@ -7,6 +8,7 @@ import { AuthProvider, useAuth } from './lib/auth'
 import { Layout } from './components/Layout'
 import { TesterLayout } from './components/tester/TesterLayout'
 import { LoginPage } from './pages/LoginPage'
+import { AuthConfirmPage } from './pages/AuthConfirmPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { SetupGatePage } from './pages/SetupGatePage'
 import { checkEnv } from './lib/env'
@@ -317,6 +319,8 @@ export function App() {
             LoginPage's pathname-based initial mode). */}
         <Route path="/signup" element={<LoginPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        {/* Public: the confirmation email links here (token hash, own domain). */}
+        <Route path="/auth/confirm" element={<AuthConfirmPage />} />
         {/* Public: an app's end user confirms or stops report-update emails
             (Plan 018). The token in the link is the credential. */}
         <Route
@@ -379,9 +383,9 @@ export function App() {
                   {/* Stripe Checkout returns here (STRIPE_SUCCESS_URL / STRIPE_CANCEL_URL defaults); lib/billingFunnel.ts. */}
                   <Route path="/billing/success" element={<Navigate to="/team?view=billing&checkout=success" replace />} />
                   <Route path="/billing/cancel" element={<Navigate to="/team?view=billing&checkout=cancelled" replace />} />
-                  <Route path="/dashboard" element={<HomePage />} />
+                  <Route path="/dashboard" element={<FirstRunGate><HomePage /></FirstRunGate>} />
                   <Route path="/console" element={<Navigate to="/dashboard" replace />} />
-                  <Route path="/reports" element={<ReportsPage />} />
+                  <Route path="/reports" element={<FirstRunGate><ReportsPage /></FirstRunGate>} />
                   <Route path="/reports/:id" element={<ReportDetailPage />} />
                   <Route path="/content" element={<ContentQualityPage />} />
                   <Route path="/content/:id" element={<ContentQualityDetailPage />} />

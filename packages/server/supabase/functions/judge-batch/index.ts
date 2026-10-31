@@ -13,11 +13,13 @@ import { resolveLlmKey } from '../_shared/byok.ts'
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { mapWithConcurrency } from '../_shared/concurrency.ts'
+import { isLlmBudgetExceeded } from '../_shared/llm-account-state.ts'
 import { JUDGE_EFFORT, JUDGE_MODEL, JUDGE_FALLBACK } from '../_shared/models.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { resolveClaudeModel } from '../_shared/claude-request.ts'
 import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { JUDGE_ELIGIBLE_STATUSES, judgeEmptyResult, onlyJudgeable } from '../_shared/judge-eligibility.ts'
+import { platformAnthropicKey } from '../_shared/ai-provider.ts'
 
 /**
  * OpenRouter / Together / Fireworks expect `vendor/model` slugs. Operators
@@ -210,7 +212,13 @@ Deno.serve(withSentry('judge-batch', async (req) => {
       // 50-report batch completes in ~10× fewer wall-clock seconds. The
       // provider rate limit (~50 req/min) tolerates this; DB pool pressure
       // stays bounded because the per-report insert is a single round-trip.
+      // Over its monthly AI budget, every report in this project fails the
+      // same way. Stop judging it after the first and log one warning; it
+      // was one Sentry error per report (MUSHI-MUSHI-SERVER-3N, 2026-10-31).
+      // The console shows the budget as a setup gap (llmBudgetGap).
+      let budgetExceeded = false
       await mapWithConcurrency(reports, 5, async (report) => {
+        if (budgetExceeded) return
         const span = trace.span('judge.evaluate')
         const start = Date.now()
 
@@ -244,13 +252,15 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
 
           // C9: per-project BYOK resolution.
           const anthropicResolved = await resolveLlmKey(db!, project.id, 'anthropic')
+          // The platform key too follows the organization's AI provider (ADR 0039 amendment).
+          const claudeEnvKey = await platformAnthropicKey(db!, project.id)
           // V5.3 §2.7 + §2.18: BYOK-only deployments commonly run on a single
           // OpenAI-compatible gateway (OpenRouter, Together, …) instead of a
           // direct Anthropic key. If we have no Anthropic key at all, skip the
           // primary path entirely — calling the Anthropic API without a
           // key throws a noisy 401 that pollutes the judge log and wastes a
           // round-trip on every report.
-          const tryAnthropic = !!(anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY'))
+          const tryAnthropic = !!(anthropicResolved?.key ?? claudeEnvKey)
           let primaryErr: unknown = tryAnthropic ? null : new Error('No Anthropic key — skipping primary path')
 
           const judgeUsageCtx = {
@@ -278,7 +288,7 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
               // structured outputs, sends no thinking config, and keeps
               // `temperature: 0` only on models that still accept it.
               const result = await claudeGenerateObject({
-                apiKey: (anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY'))!,
+                apiKey: (anthropicResolved?.key ?? claudeEnvKey)!,
                 model: modelId,
                 schema: judgeSchema,
                 effort: JUDGE_EFFORT,
@@ -444,6 +454,17 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
           totalEvaluated++
           span.end({ model: usedJudgeModel, fallback: judgeFallbackUsed, latencyMs: Date.now() - start, score: compositeScore, inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens })
         } catch (err) {
+          if (isLlmBudgetExceeded(err)) {
+            if (!budgetExceeded) {
+              budgetExceeded = true
+              rootLog.child('judge').warn('judge skipped: project is over its monthly AI budget', {
+                projectId: project.id,
+                err: err instanceof Error ? err.message : String(err),
+              })
+            }
+            span.end({ error: 'llm_budget_exceeded' })
+            return
+          }
           // AI SDK wraps provider errors in AI_APICallError — pull the raw
           // response body / status when available so the operator can see
           // "model not found" vs "rate limit" vs "invalid key" at a glance.

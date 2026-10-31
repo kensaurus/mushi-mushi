@@ -68,13 +68,16 @@ vi.mock('../../supabase/functions/_shared/agent-adapters.ts', () => ({
 
 import {
   pickFairBatch,
+  pickOpenAiReviewModel,
   pickReviewModel,
   READY_AFTER_REVIEW_LABEL,
   READY_WITHOUT_REVIEW_LABEL,
   readiesOnVerdict,
   readReviewSettings,
+  resolveReviewKey,
   REVIEW_MAX_TRIES,
   REVIEW_RETRY_BACKOFF_MS,
+  reviewerName,
   runAgentPrReview,
   type ReviewDeps,
 } from '../../supabase/functions/agent-pr-review/index.ts'
@@ -730,6 +733,45 @@ describe('reviews a missing or spent key stopped resume on their own (2026-10-28
     expect((await runAgentPrReview(none.db, {}, deps({ resolveAnthropicKey: async () => null }))).resumed).toBe(0)
     const platform = scripted({ queue: [], stopped: [skippedNoKey], stillOpen: [{ id: 'fa-1' }] })
     expect((await runAgentPrReview(platform.db, {}, deps({ resolveAnthropicKey: async () => ({ key: 'sk-env', source: 'env', hint: 'env' }) }))).resumed).toBe(0)
+  })
+})
+
+describe('a review runs on OpenAI when the app has no Claude key (owner, 2026-10-31)', () => {
+  const openAi = { key: 'sk-openai', source: 'byok' as const, hint: 'oa' }
+
+  it('resolveReviewKey: the Claude key first, then the OpenAI key, never a platform key', async () => {
+    const claude = { key: 'sk-ant', source: 'byok' as const, hint: 'c' }
+    const pick = (a: unknown, o: unknown) => async (_d: unknown, _p: string, provider: 'anthropic' | 'openai') => (provider === 'anthropic' ? a : o) as never
+    expect(await resolveReviewKey({} as never, 'p1', pick(claude, openAi))).toMatchObject({ key: 'sk-ant', reviewProvider: 'anthropic' })
+    expect(await resolveReviewKey({} as never, 'p1', pick(null, openAi))).toMatchObject({ key: 'sk-openai', reviewProvider: 'openai' })
+    expect(await resolveReviewKey({} as never, 'p1', pick({ ...claude, source: 'env' }, { ...openAi, source: 'env' }))).toBeNull()
+  })
+
+  it('pickOpenAiReviewModel keeps a GPT id the project chose, else GPT-6.1 Sol', () => {
+    expect(pickOpenAiReviewModel('gpt-6-astra')).toBe('gpt-6-astra')
+    expect(pickOpenAiReviewModel('claude-opus-5-5')).toBe('gpt-6.1-sol')
+    expect(pickOpenAiReviewModel(null)).toBe('gpt-6.1-sol')
+    expect(reviewerName('gpt-6.1-sol')).toBe('GPT')
+    expect(reviewerName('openai/gpt-6.1-sol')).toBe('GPT')
+    expect(reviewerName('claude-opus-5-5')).toBe('Opus')
+  })
+
+  it('completes the review on gpt-6.1-sol and names GPT as the reviewer', async () => {
+    const { db, queries } = scripted()
+    let sent: { model: string; provider?: string } | null = null
+    const d = deps({
+      resolveAnthropicKey: async () => null,
+      resolveOpenAiKey: async () => openAi,
+      callModel: async (input) => {
+        sent = { model: input.model, provider: input.provider }
+        return { object: HOLD, usage: { promptTokens: 1, completionTokens: 1 } }
+      },
+    })
+    const summary = await runAgentPrReview(db, {}, d)
+    expect(summary.results[0]).toMatchObject({ outcome: 'completed' })
+    expect(sent).toEqual({ model: 'gpt-6.1-sol', provider: 'openai' })
+    const labels = findQueries(queries, 'fix_events', 'insert').map((q) => (q.payload as { label?: string }).label)
+    expect(labels).toContain('GPT review: hold')
   })
 })
 

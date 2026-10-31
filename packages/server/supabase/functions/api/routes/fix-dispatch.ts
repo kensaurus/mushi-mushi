@@ -17,6 +17,7 @@ import {
 } from '../../_shared/entitlements.ts';
 import { extractInboundTraceparent } from '../../_shared/trace.ts';
 import { reportHasActiveWorkClaim } from '../../_shared/work-claims.ts';
+import { emitFirstFixDispatched } from '../../_shared/funnel-steps.ts';
 import { requireSuperAdmin } from '../../_shared/super-admin.ts';
 import { checkIngestQuota } from '../../_shared/quota.ts';
 import { currentRegion, lookupProjectRegion, regionEndpoint } from '../../_shared/region.ts';
@@ -356,6 +357,14 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
           dispatchId: job.id,
           err: String(err),
         });
+      });
+
+      // New-user path step (funnel-steps.ts); the person who asked is the actor.
+      emitFirstFixDispatched(db, {
+        projectId: body.projectId,
+        reportId: body.reportId,
+        dispatchId: job.id,
+        actorUserId: userId ?? null,
       });
 
       // Show the person what auto-fix has spent: a manual dispatch runs past

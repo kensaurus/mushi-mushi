@@ -1,5 +1,25 @@
 # @mushi-mushi/cli
 
+## 0.35.3
+
+### Patch Changes
+
+- d7d0431: - **`mushi work --daemon` rides out a server blip**: a single 401 on its key no longer stops the worker for good. It stops when the key is refused on 3 heartbeats in a row, or at once on an explicit revoke (a 403 naming a revoke or a missing scope). On 2026-10-30 a one-second server error was read as "key revoked", and the worker stayed offline for 11 hours because its service does not restart after exit code 2.
+- d7d0431: - **`mushi work` no longer loops on a half-made worktree**: a run killed inside `git worktree add` left git's record locked as "initializing" with no folder, and every later run of that report failed with "already used by worktree" within seconds. The worker now unlocks and prunes that record (the path is its own cache) before it adds the worktree again.
+
+## 0.35.2
+
+### Patch Changes
+
+- 8e950fb: - **`mushi runner placement preview|request` takes CI_PROFILE and a time box**: `--variable CI_PROFILE --value economy|thorough` asks to switch a repo's checks on fix pull requests (only where a workflow reads `vars.CI_PROFILE`), and `--revert-after <hours>` (1-168) makes a move to GitHub-hosted runners switch back on its own when the time is up.
+
+## 0.35.1
+
+### Patch Changes
+
+- 6a24a35: - **`mushi connect` uses your saved key**: when you pass no key, it uses the one `npx mushi-mushi` or `mushi login` already saved, so the command the setup wizard prints works as it is. The wizard's last checklist names the console tab by its current label, "Test it".
+- 545f106: - **`mushi doctor` shows the app's Health check**: it reads the server's Health check (setup gaps, SDK health, the report button) and prints each problem once as a warning, with how many items wait on it and its fix. It does not change whether `mushi doctor` passes. A check the server could not read shows as not checked. Older servers without the route are skipped.
+
 ## 0.35.0
 
 ### Minor Changes

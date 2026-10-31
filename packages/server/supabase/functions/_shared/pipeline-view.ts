@@ -24,6 +24,7 @@ import { RESOLVED_REPORT_STATUSES } from './fix-report-truth.ts'
 import { ciHeadState, followupTrigger, FOLLOWUP_REASONS, type CiHeadState, type CiJobForRepair, type PriorFollowup } from './review-followup.ts'
 import { localHandoff } from './local-followup.ts'
 import { parseCheckNameList } from './merge-queue.ts'
+import { ROOT_CAUSE_OF_GROUP } from './health-checks.ts'
 
 export const PIPELINE_STAGES = [
   { id: 'reported', label: 'Reported' },
@@ -51,6 +52,8 @@ export type PipelineAction =
   | 'followup'
   /** Close the report with a reason (the console's report dismiss route). */
   | 'dismiss'
+  /** Close the report as fixed: the agent found the fix already in the code (same route, status fixed). */
+  | 'mark_fixed'
   /** Put a report a local worker could not run (the machine failed, ADR 0048) back in its lane. Item ids are work_claims ids. */
   | 'requeue'
 
@@ -95,6 +98,12 @@ export interface PipelineGroup {
   /** The setting that holds this group; `hint` says what it needs. */
   settings: { label: string; to: string; hint?: string } | null
   items: PipelineItem[]
+  /**
+   * The Health check that explains this stuck group while it is a problem
+   * for every item's app (`tagRootCauses`); `count` is how many wait on it.
+   * Absent when no check explains it.
+   */
+  rootCause?: { checkId: string; count: number }
 }
 
 export interface PipelineStage {
@@ -355,13 +364,14 @@ export function failedChecksFromDetail(detail: string | null): string[] {
 
 // ── Agent failures and action availability ──────────────────────────────────
 
-type AgentFailureKind = 'person' | 'nothing' | 'error'
+type AgentFailureKind = 'person' | 'fixed' | 'nothing' | 'error'
 
 /** The cloud agent's own no-PR verdicts (fix-report-truth.ts AGENT_VERDICT_CATEGORIES). */
 function agentFailureKind(category: string | null | undefined): AgentFailureKind {
   const c = (category ?? '').toLowerCase()
   if (c === 'needs_human') return 'person'
-  if (c === 'already_fixed' || c === 'not_actionable' || c === 'wrong_repo') return 'nothing'
+  if (c === 'already_fixed') return 'fixed'
+  if (c === 'not_actionable' || c === 'wrong_repo') return 'nothing'
   return 'error'
 }
 
@@ -372,6 +382,8 @@ function agentFailureKind(category: string | null | undefined): AgentFailureKind
  */
 const AGENT_FAILED_GROUPS: Record<AgentFailureKind, { id: string; text: string }> = {
   person: { id: 'agent_failed_person', text: 'the agent says a person must do it, no PR opened' },
+  // Already fixed is not "not a code bug": closing it that way told the reporter the wrong thing.
+  fixed: { id: 'agent_said_fixed', text: 'the agent says the bug is already fixed in the code' },
   nothing: { id: 'agent_failed_nothing', text: 'the agent found nothing to change in the code' },
   error: { id: 'agent_failed', text: 'the agent failed, no PR opened' },
 }
@@ -458,6 +470,7 @@ function blockedActions(actions: readonly PipelineAction[], ctx: BlockContext): 
         why = a.pr_url ? null : NO_PR
         break
       case 'dismiss':
+      case 'mark_fixed':
         why = a.report_id ? null : 'No report to close.'
         break
       default:
@@ -578,6 +591,12 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
     return !(status && RESOLVED_REPORT_STATUSES.has(status))
   }
 
+  // An agent's verdict waits for a person, not for time: it stays listed while
+  // its report is still open, past the 7-day window an agent error gets
+  // (console sweep 2026-10-30). Reports are only loaded while open.
+  const verdictStillOpen = (a: AttemptRow): boolean =>
+    agentFailureKind(a.failure_category) !== 'error' && !!a.report_id && reportsById.has(a.report_id)
+
   for (const a of input.attempts) {
     // Merged (last 7 days): Merged, or Deployed when a deploy was seen after it.
     if (a.merged_at || a.pr_state === 'merged') {
@@ -600,10 +619,10 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       if (a.status === 'running' || a.status === 'pending') {
         const stuck = age(now, a.created_at) > AGENT_STUCK_MS
         groups.add(stuck ? 'agent_slow' : 'agent_running', { stage: 'pr', tone: stuck ? 'stuck' : 'moving', noun: ['fix', 'fixes'], text: stuck ? 'agent still running after 6 hours' : 'agent writing the fix', actions: [] }, itemOf(a, a.created_at))
-      } else if (a.status === 'failed' && age(now, a.created_at) <= RECENT_MS && isAgentFailedReport(a)) {
+      } else if (a.status === 'failed' && (age(now, a.created_at) <= RECENT_MS || verdictStillOpen(a)) && isAgentFailedReport(a)) {
         // The agent's own verdict is an answer a re-run repeats; an error is not (fix-report-truth.ts).
         const kind = agentFailureKind(a.failure_category)
-        groups.add(AGENT_FAILED_GROUPS[kind].id, { stage: 'pr', tone: 'stuck', noun: REPORT, text: AGENT_FAILED_GROUPS[kind].text, actions: ['dismiss'] }, itemOf(a, a.completed_at ?? a.created_at, { lastError: clip(a.error) }))
+        groups.add(AGENT_FAILED_GROUPS[kind].id, { stage: 'pr', tone: 'stuck', noun: REPORT, text: AGENT_FAILED_GROUPS[kind].text, actions: kind === 'fixed' ? ['mark_fixed', 'dismiss'] : ['dismiss'] }, itemOf(a, a.completed_at ?? a.created_at, { lastError: clip(a.error) }))
       }
       continue
     }
@@ -1019,6 +1038,29 @@ export function withDispatcherGroup(stages: PipelineStage[], group: PipelineGrou
     const oldest = [s.oldestAt, group.oldestAt].filter((x): x is string => !!x).sort()[0] ?? null
     return { ...s, groups, count: s.count + group.count, stuck: s.stuck + group.count, oldestAt: oldest }
   })
+}
+
+// ── Root causes (Health checks, plan-simplicity-2026-10 Phase 1) ────────────
+
+/**
+ * Tag each stuck group with the Health check that explains it
+ * (ROOT_CAUSE_OF_GROUP), when that check is a problem for the app of every
+ * item in the group, so the console can show "<N> are waiting on this" once
+ * instead of the group as its own row. A post-pass like the `followupsOn`
+ * one in buildPipeline: additive, and a group no check explains is returned
+ * unchanged. `problems`: check ids that are a problem, by app.
+ */
+export function tagRootCauses(stages: PipelineStage[], problems: ReadonlyMap<string, ReadonlySet<string>>): PipelineStage[] {
+  if (problems.size === 0) return stages
+  return stages.map((s) => ({
+    ...s,
+    groups: s.groups.map((g) => {
+      const checkId = ROOT_CAUSE_OF_GROUP[g.id]
+      if (!checkId || g.tone !== 'stuck' || g.items.length === 0) return g
+      const explained = g.items.every((i) => problems.get(i.projectId)?.has(checkId))
+      return explained ? { ...g, rootCause: { checkId, count: g.count } } : g
+    }),
+  }))
 }
 
 // ── Intake rejects ──────────────────────────────────────────────────────────

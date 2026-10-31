@@ -93,3 +93,18 @@ describe('merge affordances for a closed PR', () => {
     expect(pickPrimaryFixAttempt([closed, retry])).toBe(retry)
   })
 })
+
+describe("a local agent's verdict in its error line", () => {
+  // 22 of mushi-mushi's 32 "Unrecognised error" reports (2026-10-29) were
+  // verdicts `mushi work` sent only as error text; "Retry" would stop the same way.
+  it('buckets by the verdict when no failure_category was stored', () => {
+    const failed = { status: 'failed', pr_url: null, failure_category: null }
+    expect(fixFailureBucket({ ...failed, error: 'Agent found nothing to change: already handled in PR 880' })).toBe('already_fixed')
+    expect(fixFailureBucket({ ...failed, error: 'Agent says this needs a person: pick a budget' })).toBe('needs_human')
+    expect(fixFailureBucket({ ...failed, error: 'Local agent finished without a change: nothing' })).toBe('unknown')
+  })
+
+  it('a stored category still wins', () => {
+    expect(fixFailureBucket({ status: 'failed', failure_category: 'sandbox_timeout', error: 'Agent found nothing to change: x' })).toBe('sandbox_timeout')
+  })
+})

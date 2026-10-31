@@ -29,7 +29,7 @@ import { ActivityCard } from './ActivityCard'
 import { AccessCard } from './AccessCard'
 import { AppCard } from './AppCard'
 import { HowThisWorks } from './HowThisWorks'
-import type { HealthSignal, HomeAccess, HomeApp, HomeRelease, HomeSection, HomeSitemap, NeedsYouItem, WeekRow } from '../../lib/projectHome'
+import type { FixFirstItem, HealthSignal, HomeAccess, HomeApp, HomeRelease, HomeSection, HomeSitemap, NeedsYouItem, WeekRow } from '../../lib/projectHome'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -126,6 +126,44 @@ describe('NeedsYouCard', () => {
     expect(byTestId('home-needs-you-clear')).toBeTruthy()
     expect(text()).toContain('may be missing an item')
   })
+
+  it('shows Fix these first above the list: each root cause once, how many wait on it, and its one fix (plan-simplicity Phase 1)', async () => {
+    const cause = (id: string, over: Partial<FixFirstItem> = {}): FixFirstItem => ({
+      id,
+      key: id,
+      part: 'ai_keys',
+      severity: 'critical',
+      title: `Cause ${id}`,
+      detail: `Detail ${id}.`,
+      affects: null,
+      fix: { kind: 'one_click', label: `Fix ${id}`, to: `/fix/${id}` },
+      ...over,
+    })
+    const causes = [
+      cause('review_followup_key', { affects: 24 }),
+      cause('autofix_agent_key', { affects: 1 }),
+      cause('deploy_events', { fix: { kind: 'guided', label: 'How to fix', steps: ['Connect GitHub deployments.'] } }),
+      cause('extra'),
+    ]
+    await render(createElement(NeedsYouCard, { section: ok([]), fixFirst: ok(causes) }))
+    const block = byTestId('home-fix-first')!
+    expect(block.textContent).toContain('Fix these first')
+    expect(block.querySelectorAll('[data-testid^="home-fix-first-"]')).toHaveLength(3)
+    expect(byTestId('home-fix-first-review_followup_key')!.textContent).toContain('24 items are waiting on this.')
+    expect(byTestId('home-fix-first-autofix_agent_key')!.textContent).toContain('1 item is waiting on this.')
+    expect(byTestId('home-fix-first-review_followup_key')!.querySelector('a')!.getAttribute('href')).toBe('/fix/review_followup_key')
+    expect(byTestId('home-fix-first-deploy_events')!.textContent).toContain('Connect GitHub deployments.')
+    expect(text()).not.toContain('Cause extra')
+    // The list below no longer claims nothing needs you.
+    expect(byTestId('home-needs-you-clear')!.textContent).toBe('Nothing else needs you right now.')
+  })
+
+  it('shows no Fix these first block without root causes (or from an older server)', async () => {
+    await render(createElement(NeedsYouCard, { section: ok([need('a', 80)]) }))
+    expect(byTestId('home-fix-first')).toBeNull()
+    await render(createElement(NeedsYouCard, { section: ok([]), fixFirst: ok([]) }))
+    expect(byTestId('home-fix-first')).toBeNull()
+  })
 })
 
 const release = (over: Partial<HomeRelease> = {}): HomeRelease => ({
@@ -148,8 +186,8 @@ describe('ReleaseCard', () => {
     await render(createElement(ReleaseCard, { section: ok(release()), projectId: P }))
     const stations = byTestId('home-release-stations')!
     const labels = Array.from(stations.querySelectorAll('a')).map((a) => a.getAttribute('aria-label'))
-    expect(labels).toEqual(['Fix ready: 5, 3 stuck', 'CI: 1', 'In train: 2', 'Merged: 4', 'Deployed: 0'])
-    expect(stations.textContent).toContain('3 stuck')
+    expect(labels).toEqual(['Fix ready: 5, 3 need you', 'CI: 1', 'In train: 2', 'Merged: 4', 'Deployed: 0'])
+    expect(stations.textContent).toContain('3 need you')
     expect(text()).toContain('Train #57 with 2 fixes is running CI')
     expect(text()).toContain('v1.103.0 seen live')
     expect(hrefs()).toContain(`/pipeline?project=${P}`)
