@@ -1,7 +1,7 @@
 # Bluesky (and X) — one short thread per day
 
 **Drafts. Nothing scheduled.** The account that posts is
-[@kensaurus.bsky.social](https://bsky.app/profile/kensaurus.bsky.social). The
+[@kensaur.us](https://bsky.app/profile/kensaur.us). The
 brand handles `mushimushi.dev` and `@mushimushi_dev` were never registered,
 so an X post goes out from the founder's personal account or not at all.
 

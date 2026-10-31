@@ -16791,7 +16791,7 @@ Friday's retro post will include: GitHub stars gained during the week, new signu
 
 ---
 
-*Follow along on [Bluesky →](https://bsky.app/profile/kensaurus.bsky.social)*
+*Follow along on [Bluesky →](https://bsky.app/profile/kensaur.us)*
 
 ---
 
@@ -16984,7 +16984,7 @@ if you read the Show HN and find one of these false, you can say so.
 
 [Watch releases on GitHub](https://github.com/kensaurus/mushi-mushi/releases),
 read [Announcements in Discussions](https://github.com/kensaurus/mushi-mushi/discussions),
-or follow [Bluesky](https://bsky.app/profile/kensaurus.bsky.social).
+or follow [Bluesky](https://bsky.app/profile/kensaur.us).
 The numbers from each release land on the [blog](/blog).
 
 ## Run your own
