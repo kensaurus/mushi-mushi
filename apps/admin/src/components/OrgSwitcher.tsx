@@ -20,6 +20,7 @@ import {
 import { useCreateOrganization } from '../lib/useCreateOrganization'
 import { headerDropdownPanelClass } from '../lib/appChrome'
 import { HeaderContextChip, HeaderContextChipSkeleton } from './ui/chrome'
+import { Btn } from './ui/forms'
 import { IconMembers } from './icons'
 
 export interface OrganizationSummary {
@@ -154,13 +155,9 @@ export function OrgSwitcher() {
               className="w-32 min-w-0 rounded-sm border border-edge bg-surface-root px-2 py-0.5 text-2xs text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
               aria-label="New team name"
             />
-            <button
-              type="submit"
-              disabled={!newName.trim() || submitting}
-              className="rounded-sm bg-brand px-2 py-0.5 text-2xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-opacity"
-            >
-              {submitting ? '…' : 'Create'}
-            </button>
+            <Btn type="submit" size="sm" disabled={!newName.trim()} loading={submitting}>
+              Create
+            </Btn>
           </form>
         ) : (
           <HeaderContextChip
@@ -288,13 +285,9 @@ export function OrgSwitcher() {
                   className="flex-1 min-w-0 rounded-sm border border-edge bg-surface-root px-2 py-1 text-xs text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
                   aria-label="New team name"
                 />
-                <button
-                  type="submit"
-                  disabled={!newName.trim() || submitting}
-                  className="rounded-sm bg-brand px-2 py-1 text-2xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-opacity"
-                >
-                  {submitting ? '…' : 'Create'}
-                </button>
+                <Btn type="submit" size="sm" disabled={!newName.trim()} loading={submitting}>
+                  Create
+                </Btn>
               </form>
             ) : (
               <button

@@ -462,9 +462,9 @@ function LanguageSparkline({ distribution }: { distribution: Record<string, numb
             key={lang}
             className="inline-flex items-center gap-1 rounded-full px-1.5 py-px text-2xs"
             style={{
-              backgroundColor: `color-mix(in oklch, ${langColor} 13%, transparent)`,
+              backgroundColor: `color-mix(in oklab, ${langColor} 13%, transparent)`,
               color: langColor,
-              border: `1px solid color-mix(in oklch, ${langColor} 27%, transparent)`,
+              border: `1px solid color-mix(in oklab, ${langColor} 27%, transparent)`,
             }}
             title={`${count} files`}
           >

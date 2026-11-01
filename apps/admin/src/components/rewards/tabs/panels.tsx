@@ -132,7 +132,7 @@ interface ProjectOption {
 const TIER_BADGE: Record<string, string> = {
   free:        'bg-surface-overlay text-fg-secondary',
   explorer:    CHIP_TONE.infoSubtle,
-  contributor: 'bg-brand/12 text-brand border border-brand/28',
+  contributor: 'bg-brand/12 text-brand-foreground border border-brand/28',
   champion:    CHIP_TONE.warnSubtle,
 }
 
@@ -733,7 +733,7 @@ export function ContributorDrawer({
   const ACTION_TONE: Record<string, string> = {
     report_submit:                 CHIP_TONE.okSubtle,
     screen_view_unique_per_day:    CHIP_TONE.infoSubtle,
-    session_minute:                'bg-brand/12 text-brand border border-brand/28',
+    session_minute:                'bg-brand/12 text-brand-foreground border border-brand/28',
     comment_posted:                CHIP_TONE.okSubtle,
     app_launch:                    'bg-surface-overlay text-fg-secondary',
     quest_completed:               CHIP_TONE.warnSubtle,

@@ -37,6 +37,6 @@ export function severityTrafficLabel(severity: string | null | undefined): strin
 export const SEVERITY_TRAFFIC_BADGE: Record<string, string> = {
   critical: 'bg-danger-muted/70 text-danger-foreground border border-danger/25',
   high: 'bg-warn-muted/70 text-warning-foreground border border-warn/25',
-  medium: 'bg-brand-subtle/85 text-brand border border-brand/25',
+  medium: 'bg-brand-subtle/85 text-brand-foreground border border-brand/25',
   low: 'bg-ok-muted/70 text-ok-foreground border border-ok/25',
 }

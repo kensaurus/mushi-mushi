@@ -19,7 +19,7 @@ const STAGE_TOKEN: Record<PdcaStageId, string> = {
 }
 
 function softMix(token: string): string {
-  return `color-mix(in oklch, ${readVizToken(token)} 28%, transparent)`
+  return `color-mix(in oklab, ${readVizToken(token)} 28%, transparent)`
 }
 
 export const STAGE_HEX: Record<PdcaStageId, string> = {

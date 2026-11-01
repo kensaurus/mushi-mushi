@@ -14,9 +14,18 @@ describe('guideSurfaces', () => {
     }
   })
 
-  it('default panel is raised; inset panel is page surface', () => {
-    expect(GUIDE_PANEL_SHELL_DEFAULT).toContain('bg-surface-raised')
-    expect(GUIDE_PANEL_SHELL_INSET).toContain('bg-surface')
-    expect(GUIDE_PANEL_SHELL_INSET).not.toContain('bg-surface-raised')
+  it('default panel is an opaque panel surface', () => {
+    expect(GUIDE_PANEL_SHELL_DEFAULT).toContain('bg-panel')
+  })
+
+  it('inset panel adds a hairline only — no second (grey) surface inside a card', () => {
+    expect(GUIDE_PANEL_SHELL_INSET).not.toMatch(/\bbg-/)
+    expect(GUIDE_STAGE_ROW_NEUTRAL).not.toMatch(/\bbg-/)
+  })
+
+  it('does not borrow the ok (success) hue for help chrome', () => {
+    for (const cls of [GUIDE_PANEL_SHELL_DEFAULT, GUIDE_PANEL_SHELL_INSET]) {
+      expect(cls).not.toMatch(/\b(border|bg)-ok\b/)
+    }
   })
 })

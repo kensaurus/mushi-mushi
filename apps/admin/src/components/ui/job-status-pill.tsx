@@ -66,7 +66,7 @@ export function JobStatusPill({
         rel="noopener noreferrer"
         role="status"
         aria-live="polite"
-        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium hover:opacity-90 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${CHIP_TONE.okSubtle}`}
+        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium hover:opacity-90 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${CHIP_TONE.okSubtle}`}
       >
         <IconCheck className="h-3.5 w-3.5" aria-hidden />
         PR opened

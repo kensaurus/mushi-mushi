@@ -84,7 +84,7 @@ export function ProjectBillingCard({
                     Admin"). The tier sits next to it as a secondary fact so
                     the user still knows which feature set they have. */}
                 <Badge
-                  className="bg-brand-subtle text-brand border border-brand/40 font-semibold"
+                  className="bg-brand-subtle text-brand-foreground border border-brand/40 font-semibold"
                   title={`Admin account — billed by Mushi Mushi at no cost. Feature set tracks the ${planLabel} tier (${tier?.included_reports_per_month?.toLocaleString() ?? '∞'} reports/mo, ${tier?.retention_days ?? 0}-day retention).`}
                 >
                   <span aria-hidden="true" className="mr-1 leading-none">◆</span>

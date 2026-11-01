@@ -82,7 +82,7 @@ export function ReportTagChips({ row, className = '' }: { row: ReportRow; classN
           <Link
             to={`/reports?area=${encodeURIComponent(area)}`}
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex shrink-0 items-center rounded-sm border border-brand/25 bg-brand-muted/30 px-1 py-0.5 text-2xs font-medium text-brand-foreground hover:bg-brand-muted/50 transition-opacity"
+            className="inline-flex shrink-0 items-center rounded-sm border border-brand/25 bg-brand-subtle/30 px-1 py-0.5 text-2xs font-medium text-brand-foreground hover:bg-brand-subtle/50 transition-opacity"
           >
             {area}
           </Link>

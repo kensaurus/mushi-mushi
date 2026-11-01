@@ -11,7 +11,7 @@ import {
   streamdownUrlTransform,
 } from '../../lib/streamdownSafety'
 
-export type ProseBlockMode = 'plain' | 'markdown' | 'excerpt' | 'auto'
+type ProseBlockMode = 'plain' | 'markdown' | 'excerpt' | 'auto'
 
 export interface ProseBlockProps {
   value: string

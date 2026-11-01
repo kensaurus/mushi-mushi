@@ -32,14 +32,16 @@ import {
   RelativeTime,
   SegmentedControl,
   FreshnessPill,
-  type DefinitionChipItem, } from '../components/ui'
+  TextButton,
+  type DefinitionChipItem,
+} from '../components/ui'
 import { usePageCopy } from '../lib/copy'
 import { useRepoUx, resolveQuickRepoTab } from '../lib/repoModeUx'
 import { FixGitGraph, type FixTimelineEvent } from '../components/FixGitGraph'
 import { useRealtimeReload } from '../lib/realtime'
 import { IconGit } from '../components/icons'
 import { pluralize, pluralizeWithCount } from '../lib/format'
-import { CHIP_TONE, LINK_ACCENT } from '../lib/chipTone'
+import { CHIP_TONE } from '../lib/chipTone'
 import { RepoStatusBanner } from '../components/repo/RepoStatusBanner'
 import { RepoSnapshotStrip } from '../components/repo/RepoSnapshotStrip'
 import { RepoProvenanceReadout } from '../components/repo/RepoProvenanceReadout'
@@ -431,15 +433,11 @@ export function RepoPage() {
         activity.length === 0 && activityError ? (
           <div className="space-y-2">
             <p className="text-2xs text-danger">{activityError}</p>
-            <Btn
+            <TextButton
               type="button"
-              variant="ghost"
-              size="sm"
-              onClick={reload}
-              className={`!px-0 !py-0 !border-0 !bg-transparent hover:!bg-transparent ${LINK_ACCENT}`}
-            >
+              onClick={reload}>
               Retry
-            </Btn>
+            </TextButton>
           </div>
         ) : (
           <LogBlock

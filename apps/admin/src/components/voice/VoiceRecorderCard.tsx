@@ -177,7 +177,7 @@ export function VoiceRecorderCard({ onFile, onTranscript, busyStage, disabled, i
           />
           <div className="flex justify-end">
             <Btn
-              variant="accent"
+              variant="primary"
               size="sm"
               onClick={submitTyped}
               disabled={disabled || busy || text.trim().length === 0}

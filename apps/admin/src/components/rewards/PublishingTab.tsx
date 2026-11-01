@@ -510,7 +510,7 @@ export function PublishingTab() {
                     onClick={() => togglePlatform(p)}
                     className={`rounded-full border px-3 py-1 text-xs font-medium transition-opacity ${
                       platforms.includes(p)
-                        ? 'border-brand bg-brand/12 text-brand border border-brand/28'
+                        ? 'border-brand bg-brand/12 text-brand-foreground border border-brand/28'
                         : 'border-edge-subtle bg-transparent text-fg-muted hover:border-fg-muted'
                     }`}
                   >

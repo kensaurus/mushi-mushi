@@ -46,7 +46,7 @@ const STATE_STYLE: Record<SetupGuideStepState, StateStyle> = {
   next: {
     Icon: IconBolt,
     chip: CHIP_TONE.brandSubtle,
-    marker: 'border-brand/45 bg-brand/12 text-brand',
+    marker: 'border-brand/45 bg-brand/12 text-brand-foreground',
   },
   blocked: {
     Icon: IconClock,

@@ -205,7 +205,7 @@ function ModeCard({ active, onClick, title, badge, description }: ModeCardProps)
         'flex-1 rounded-md border p-3 text-left transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface',
         active
           ? 'border-brand bg-brand/6'
-          : 'border-edge-subtle bg-surface-raised/40 hover:border-edge-strong hover:bg-surface-raised/70',
+          : 'border-edge-subtle bg-surface-raised/40 hover:border-fg-faint hover:bg-surface-raised/70',
       ].join(' ')}
     >
       <div className="flex items-center gap-2 mb-1">
@@ -215,7 +215,7 @@ function ModeCard({ active, onClick, title, badge, description }: ModeCardProps)
             'inline-flex items-center rounded-full px-1.5 py-0.5 text-2xs font-medium',
             badge === 'Free'
               ? CHIP_TONE.okSubtle
-              : 'bg-brand/12 text-brand border border-brand/28',
+              : 'bg-brand/12 text-brand-foreground border border-brand/28',
           ].join(' ')}
         >
           {badge}

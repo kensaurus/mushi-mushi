@@ -155,6 +155,23 @@ const ICON_MAP: Record<NavIconKey, ComponentType<{ className?: string }>> = {
   mic: IconMic,
 }
 
+/**
+ * The sidebar icon for a route, for any surface that links to a page (help
+ * "Related pages", palette…). One drawing per page everywhere — a separate
+ * hand-drawn set in pageNavIcons.ts used different glyphs and stroke weights
+ * for the same destinations.
+ */
+export function navIconForRoute(
+  to: string,
+): ComponentType<{ size?: number; className?: string }> | undefined {
+  const segment = to.split(/[?#]/)[0].replace(/^\/+|\/+$/g, '').split('/')[0]
+  if (!segment) return undefined
+  const entry = NAV_REGISTRY.find(
+    (e) => e.path.split(/[?#]/)[0].replace(/^\/+|\/+$/g, '').split('/')[0] === segment,
+  )
+  return entry ? (ICON_MAP[entry.iconKey] as ComponentType<{ size?: number; className?: string }>) : undefined
+}
+
 function entryToNavItem(entry: NavRegistryEntry): BuiltNavItem {
   return {
     label: entry.label,

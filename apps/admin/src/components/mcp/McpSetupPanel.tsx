@@ -514,7 +514,7 @@ export function McpSetupPanel({
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-medium text-fg truncate">{p.name}</span>
                       {isActive && (
-                        <Badge className="bg-brand/12 text-brand border border-brand/28 text-2xs">active</Badge>
+                        <Badge className="bg-brand/12 text-brand-foreground border border-brand/28 text-2xs">active</Badge>
                       )}
                     </div>
                     <p className="text-2xs text-fg-faint font-mono truncate mt-0.5">{serverSlug}</p>

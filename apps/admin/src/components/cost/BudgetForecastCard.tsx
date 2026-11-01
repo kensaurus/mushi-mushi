@@ -173,7 +173,7 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
           label="Linear forecast"
           value={fmtSpend(linearForecast)}
           hint={`$${avg14dDaily.toFixed(3)}/day · last ${series.days.length}d`}
-          accent={isOverBudget80 ? (isOverBudget100 ? 'text-critical' : 'text-warn') : undefined}
+          accent={isOverBudget80 ? (isOverBudget100 ? 'text-danger-foreground' : 'text-warn') : undefined}
         />
         <ForecastCell
           label="7d EMA forecast"
@@ -191,7 +191,7 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
         <div className="mt-3 h-1.5 rounded-full bg-surface-raised/30 overflow-hidden">
           <div
             className={`h-full rounded-full motion-safe:transition-[transform,opacity] ${
-              isOverBudget100 ? 'bg-critical' : isOverBudget80 ? 'bg-warn' : 'bg-ok'
+              isOverBudget100 ? 'bg-danger' : isOverBudget80 ? 'bg-warn' : 'bg-ok'
             }`}
             style={{ width: `${Math.min(pctOfBudget ?? 0, 100).toFixed(1)}%` }}
           />

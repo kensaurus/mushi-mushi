@@ -81,7 +81,7 @@ export function captureMode(trigger: string | null | undefined): CaptureMode {
   if (!trigger) {
     return {
       label: 'user',
-      tone: 'bg-brand/12 text-brand border border-brand/28',
+      tone: 'bg-brand/12 text-brand-foreground border border-brand/28',
       tooltip: 'User opened the widget and described what they felt.',
     }
   }

@@ -156,7 +156,7 @@ export function OnboardingActivationLanes({
           <Link
             key={lane.id}
             to={lane.to}
-            className="block rounded-lg border border-edge-subtle bg-surface-raised/40 p-3 transition-opacity hover:border-brand/30 hover:bg-surface-hover/30 focus-visible:outline focus-visible:ring-2 focus-visible:ring-focus"
+            className="block rounded-lg border border-edge-subtle bg-surface-raised/40 p-3 transition-opacity hover:border-brand/30 hover:bg-surface-hover/30 focus-visible:outline focus-visible:ring-2 focus-visible:ring-brand/50"
           >
             <div className="flex items-center justify-between gap-2">
               <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-fg">

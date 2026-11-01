@@ -35,8 +35,7 @@ import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
-import { Card, SurfacePanel, HelpBanner, SegmentedControl, FreshnessPill, Btn } from '../components/ui'
-import { LINK_ACCENT } from '../lib/chipTone'
+import { Card, SurfacePanel, HelpBanner, SegmentedControl, FreshnessPill, Btn, TextButton } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
@@ -852,7 +851,7 @@ function PipelinesTab({
               <p className="font-semibold text-fg text-2xs uppercase tracking-wide">How to start your first run</p>
               <ol className="list-decimal pl-4 space-y-1 text-fg-secondary">
                 <li>Open a report and copy its ID from the URL</li>
-                <li>Go to <Btn type="button" variant="ghost" size="sm" onClick={onGoToCatalog} className={`!px-0 !py-0 !border-0 !bg-transparent hover:!bg-transparent ${LINK_ACCENT}`}>Catalog</Btn> and pick a skill (try <em>workflow-fix-and-ship</em> to close a bug end-to-end)</li>
+                <li>Go to <TextButton type="button" onClick={onGoToCatalog}>Catalog</TextButton> and pick a skill (try <em>workflow-fix-and-ship</em> to close a bug end-to-end)</li>
                 <li>Paste the report ID in the "Apply to a report" field, click <strong>Start pipeline</strong></li>
                 <li>Copy the context packet into your Cursor agent — the skill walks you through each step</li>
               </ol>
@@ -1029,15 +1028,13 @@ function RunDetail({
       <div className="px-4 py-3 border-b border-edge-subtle flex items-center gap-2">
         <StatusDot status={run.status} />
         <div className="flex-1 min-w-0">
-          <Btn
+          <TextButton
             type="button"
-            variant="ghost"
-            size="sm"
             onClick={() => onOpenSkill(run.root_skill_slug)}
-            className={`!px-0 !py-0 !border-0 !bg-transparent hover:!bg-transparent truncate block text-left font-bold ${LINK_ACCENT}`}
+            className="truncate text-left font-bold"
           >
             {run.root_skill_slug}
-          </Btn>
+          </TextButton>
           <p className="text-2xs text-fg-muted">
             {run.id.slice(0, 8)} · {run.mode}
             {run.mode === 'cloud' && run.status === 'running' && ' · Cursor Cloud dispatching'}

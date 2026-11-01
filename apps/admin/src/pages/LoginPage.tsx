@@ -8,7 +8,7 @@
 import { useState, useEffect, useMemo, type FormEvent } from 'react'
 import { useAuth } from '../lib/auth'
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom'
-import { Input, SelectField, Btn, Tooltip, HelpBanner } from '../components/ui'
+import { Input, SelectField, Btn, Tooltip, HelpBanner, TextButton } from '../components/ui'
 import { isCloudMode, RESOLVED_SUPABASE_URL } from '../lib/env'
 import { nextPathFromLoginState } from '../lib/authRedirect'
 import {
@@ -19,7 +19,7 @@ import {
 import { LOGIN_HERO } from '../lib/public-copy-shared'
 import { canUsePasskeys } from '../lib/passkeys'
 import { useEnabledAuthProviders } from '../lib/authProviders'
-import { CHIP_TONE, LINK_ACCENT } from '../lib/chipTone'
+import { CHIP_TONE } from '../lib/chipTone'
 import {
   SIGNUP_SOURCE_OPTIONS,
   readSignupMetaFromSearch,
@@ -257,15 +257,13 @@ export function LoginPage() {
             </p>
             <p className="text-2xs text-fg-faint text-center">
               Didn't receive it? Check your spam folder or{' '}
-              <Btn
+              <TextButton
                 type="button"
-                variant="ghost"
-                size="sm"
                 onClick={() => { switchMode('signup'); setEmail(email) }}
-                className={`inline !px-0 !py-0 text-2xs ${LINK_ACCENT}`}
+                className="text-2xs"
               >
                 try again
-              </Btn>.
+              </TextButton>.
             </p>
             <div className="pt-1">
               <Btn
@@ -484,15 +482,13 @@ export function LoginPage() {
                     <p className="text-2xs uppercase tracking-wider text-fg-faint">Last used email</p>
                     <p className="truncate text-xs font-medium text-fg-secondary">{rememberedEmail}</p>
                   </div>
-                  <Btn
+                  <TextButton
                     type="button"
-                    variant="ghost"
-                    size="sm"
                     onClick={clearRememberedEmail}
-                    className={`shrink-0 !px-0 !py-0 text-2xs ${LINK_ACCENT}`}
+                    className="shrink-0 text-2xs"
                   >
                     Not you?
-                  </Btn>
+                  </TextButton>
                 </div>
               </div>
             )}
@@ -616,45 +612,43 @@ export function LoginPage() {
             )}
 
             {mode === 'login' && (
-              <Btn
+              <TextButton tone="muted"
                 type="button"
-                variant="ghost"
-                size="sm"
                 onClick={() => switchMode('forgot')}
-                className="block w-full justify-center !px-0 !py-0 text-xs text-fg-muted hover:text-brand"
+                className="block w-full text-center text-xs"
               >
                 Forgot your password?
-              </Btn>
+              </TextButton>
             )}
 
             <p className="text-center text-2xs text-fg-faint">
               {mode === 'forgot' ? (
                 <>
                   Remember your password?{' '}
-                  <Btn type="button" variant="ghost" size="sm" onClick={() => switchMode('login')} className={`inline !px-0 !py-0 text-2xs ${LINK_ACCENT}`}>
+                  <TextButton type="button" onClick={() => switchMode('login')} className="text-2xs">
                     Sign in
-                  </Btn>
+                  </TextButton>
                 </>
               ) : mode === 'magic' ? (
                 <>
                   Prefer a password?{' '}
-                  <Btn type="button" variant="ghost" size="sm" onClick={() => switchMode('login')} className={`inline !px-0 !py-0 text-2xs ${LINK_ACCENT}`}>
+                  <TextButton type="button" onClick={() => switchMode('login')} className="text-2xs">
                     Use password
-                  </Btn>
+                  </TextButton>
                 </>
               ) : mode === 'login' ? (
                 <>
                   Don't have an account?{' '}
-                  <Btn type="button" variant="ghost" size="sm" onClick={() => switchMode('signup')} className={`inline !px-0 !py-0 text-2xs ${LINK_ACCENT}`}>
+                  <TextButton type="button" onClick={() => switchMode('signup')} className="text-2xs">
                     Sign up
-                  </Btn>
+                  </TextButton>
                 </>
               ) : (
                 <>
                   Already have an account?{' '}
-                  <Btn type="button" variant="ghost" size="sm" onClick={() => switchMode('login')} className={`inline !px-0 !py-0 text-2xs ${LINK_ACCENT}`}>
+                  <TextButton type="button" onClick={() => switchMode('login')} className="text-2xs">
                     Sign in
-                  </Btn>
+                  </TextButton>
                 </>
               )}
             </p>

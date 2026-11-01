@@ -85,10 +85,10 @@ function PageRelatedLinks({ links }: { links: PageFlowLink[] }) {
           <li key={link.to}>
             <Link
               to={link.to}
-              className="group/link flex min-w-0 w-full items-start gap-2.5 rounded-md border border-edge-subtle bg-surface-overlay/60 px-3 py-2.5 motion-safe:transition-[transform,opacity] motion-safe:duration-150 hover:border-brand/45 hover:bg-brand-muted/25 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 motion-safe:active:translate-y-0 motion-safe:active:scale-[0.99]"
+              className="group/link flex min-w-0 w-full items-start gap-2.5 rounded-md border border-edge-subtle bg-surface-overlay/60 px-3 py-2.5 motion-safe:transition-[transform,opacity] motion-safe:duration-150 hover:border-brand/45 hover:bg-brand-subtle/25 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 motion-safe:active:translate-y-0 motion-safe:active:scale-[0.99]"
             >
               <span
-                className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand/12 text-brand motion-safe:transition-opacity group-hover/link:bg-brand/20"
+                className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand/12 text-brand-foreground motion-safe:transition-opacity group-hover/link:bg-brand/20"
                 aria-hidden="true"
               >
                 {Icon ? <Icon className="h-4 w-4" /> : null}

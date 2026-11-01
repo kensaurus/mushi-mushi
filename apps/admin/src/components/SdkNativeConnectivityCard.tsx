@@ -149,7 +149,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
                     href="https://docs.mushi-mushi.dev/sdks"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-focus"
+                    className="underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-brand/50"
                   >
                     Docs →
                   </a>
@@ -199,7 +199,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
           <div className="space-y-2">
             <button
               type="button"
-              className="flex w-full items-center gap-1.5 text-xs font-medium text-fg-secondary hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              className="flex w-full items-center gap-1.5 text-xs font-medium text-fg-secondary hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
               onClick={() => setShowPlaybook((v) => !v)}
               aria-expanded={showPlaybook}
             >
@@ -308,7 +308,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
           <div className="space-y-2">
             <button
               type="button"
-              className="flex w-full items-center gap-1.5 text-xs text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              className="flex w-full items-center gap-1.5 text-xs text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
               onClick={() => setShowFallback((v) => !v)}
               aria-expanded={showFallback}
             >

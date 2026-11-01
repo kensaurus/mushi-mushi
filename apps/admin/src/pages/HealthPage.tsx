@@ -514,7 +514,7 @@ function HealthPageContent() {
                 : bannerSeverity === 'warn'
                   ? CHIP_TONE.warnSubtle
                   : bannerSeverity === 'brand'
-                    ? 'bg-brand/12 text-brand border border-brand/28'
+                    ? 'bg-brand/12 text-brand-foreground border border-brand/28'
                     : 'bg-surface-overlay text-fg-muted'
           }
         >

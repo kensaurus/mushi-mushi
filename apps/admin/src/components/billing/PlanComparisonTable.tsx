@@ -271,7 +271,7 @@ export function PlanComparisonTable({
               <div className="flex flex-wrap items-center justify-center gap-1">
                 <span className="text-sm font-semibold text-fg">{p.display_name}</span>
                 {isPopular && (
-                  <Badge className="bg-brand-subtle text-brand text-3xs">
+                  <Badge className="bg-brand-subtle text-brand-foreground text-3xs">
                     Most popular
                   </Badge>
                 )}

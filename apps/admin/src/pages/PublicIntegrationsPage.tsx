@@ -589,7 +589,7 @@ export function PublicIntegrationsPage() {
               </Link>
               <Link
                 to="/dashboard"
-                className="ml-1 rounded-full bg-editorial-ink px-3 py-1.5 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--color-editorial-ink)_82%,var(--color-editorial-vermillion))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
+                className="ml-1 rounded-full bg-editorial-ink px-3 py-1.5 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklab,var(--color-editorial-ink)_82%,var(--color-editorial-vermillion))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
               >
                 Get started
               </Link>
@@ -760,7 +760,7 @@ export function PublicIntegrationsPage() {
             className="rounded-[1.5rem] border border-editorial-rule px-5 py-8 sm:px-8"
             style={{
               background:
-                'linear-gradient(135deg, var(--color-editorial-paper) 0%, color-mix(in oklch, var(--color-editorial-vermillion) 8%, var(--color-editorial-paper)) 100%)',
+                'linear-gradient(135deg, var(--color-editorial-paper) 0%, color-mix(in oklab, var(--color-editorial-vermillion) 8%, var(--color-editorial-paper)) 100%)',
             }}
           >
             <p className="font-mono text-2xs uppercase tracking-[0.32em] text-editorial-ink-muted">
@@ -784,7 +784,7 @@ export function PublicIntegrationsPage() {
                 href={`${DOCS_BASE}/integrations/plugin-sdk`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-full bg-editorial-ink px-4 py-2 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--color-editorial-ink)_82%,var(--color-editorial-vermillion))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
+                className="inline-flex items-center gap-2 rounded-full bg-editorial-ink px-4 py-2 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklab,var(--color-editorial-ink)_82%,var(--color-editorial-vermillion))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
               >
                 <IconExternalLink size={12} />
                 Read the SDK docs

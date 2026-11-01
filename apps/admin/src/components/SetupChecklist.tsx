@@ -15,7 +15,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { SetupProject, SetupStep } from '../lib/useSetupStatus'
 import { CHIP_TONE } from '../lib/chipTone'
-import { Card, RefreshIconButton } from './ui'
+import { Card, RefreshIconButton, btnClass } from './ui'
 
 interface SetupChecklistProps {
   project: SetupProject
@@ -343,7 +343,7 @@ function ChecklistRow({
             {step.label}
           </span>
           {current && (
-            <span className="rounded-sm px-1 py-0.5 text-2xs uppercase tracking-wider bg-brand/12 text-brand border border-brand/28">
+            <span className="rounded-sm px-1 py-0.5 text-2xs uppercase tracking-wider bg-brand/12 text-brand-foreground border border-brand/28">
               do this next
             </span>
           )}
@@ -417,7 +417,7 @@ function ChecklistCard({
         {!step.complete && (
           <Link
             to={step.cta_to}
-            className="shrink-0 inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity"
+            className={`shrink-0 ${btnClass('primary', 'sm')}`}
           >
             {step.cta_label}
           </Link>

@@ -37,8 +37,10 @@ export function CopyViewLinkButton() {
         type="button"
         onClick={copy}
         aria-label={copied ? 'View link copied' : 'Copy link to this filtered view'}
-        className={`inline-flex h-7 w-7 items-center justify-center rounded-md border border-edge-subtle bg-surface-raised/60 shadow-card motion-safe:transition-opacity hover:border-brand/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
-          copied ? 'text-ok hover:text-ok' : 'text-fg-muted hover:text-fg'
+        // Ghost icon button, like the header toolbar — a raised, shadowed
+        // square next to a page title read as a stray card.
+        className={`inline-flex h-8 w-8 items-center justify-center rounded-sm motion-safe:transition-opacity hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+          copied ? 'text-ok-foreground' : 'text-fg-muted hover:text-fg'
         }`}
       >
         <svg

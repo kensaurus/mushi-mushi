@@ -14,11 +14,15 @@ import { Link } from 'react-router-dom'
 import { useActivePlan } from '../lib/useActivePlan'
 import { CHIP_TONE } from '../lib/chipTone'
 
+// A plan is not a status, so it gets no status hue (pro was ok-green,
+// enterprise warn-amber — a paid plan read as a warning). One neutral pill;
+// the glyph and name differ per tier. Quota trouble keeps its own chips below.
+const PLAN_PILL = 'bg-surface-hover text-fg-secondary border-edge-subtle'
 const TONE: Record<string, string> = {
-  hobby: 'bg-surface-overlay text-fg-muted border-edge-subtle',
-  starter: 'bg-brand-subtle text-brand border-brand/30',
-  pro: CHIP_TONE.okSubtle,
-  enterprise: CHIP_TONE.warnSubtle,
+  hobby: PLAN_PILL,
+  starter: PLAN_PILL,
+  pro: PLAN_PILL,
+  enterprise: PLAN_PILL,
 }
 
 const GLYPH: Record<string, string> = {
@@ -29,8 +33,8 @@ const GLYPH: Record<string, string> = {
 }
 
 // Complimentary — ghost text row in sidebar; bordered pill in header only.
-const COMPLIMENTARY_TONE = 'text-fg-muted hover:text-brand border-0 bg-transparent'
-const COMPLIMENTARY_TONE_HEADER = 'bg-brand-subtle text-brand border-brand/40'
+const COMPLIMENTARY_TONE = 'text-fg-muted hover:text-fg border-0 bg-transparent'
+const COMPLIMENTARY_TONE_HEADER = PLAN_PILL
 
 function densityClasses(sidebar: boolean) {
   if (sidebar) {
@@ -94,7 +98,7 @@ export function PlanBadge({ density = 'header' }: PlanBadgeProps) {
           sidebar ? COMPLIMENTARY_TONE : `${COMPLIMENTARY_TONE_HEADER} border hover:brightness-110`
         } ${densityClasses(sidebar)}`}
       >
-        <span aria-hidden="true" className="leading-none shrink-0 text-brand/80 text-2xs">◆</span>
+        <span aria-hidden="true" className="leading-none shrink-0 text-fg-faint text-2xs">◆</span>
         <span className={sidebar ? 'truncate' : ''}>Admin</span>
         {sidebar ? (
           <span className="text-fg-faint font-mono uppercase tracking-wider text-2xs shrink-0">

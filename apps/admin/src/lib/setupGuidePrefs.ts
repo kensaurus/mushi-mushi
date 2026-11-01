@@ -98,6 +98,25 @@ export function resolveSetupGuideView(
   return opts.requiredComplete ? 'minimized' : 'expanded'
 }
 
+/**
+ * Where focus should go after a view change, or null to leave it alone.
+ *
+ * Only a transition the user caused moves focus. The view is also derived
+ * from live progress (see resolveSetupGuideView), so it changes by itself when
+ * setup data arrives; moving focus then stole it on page load and left the
+ * brand focus ring drawn around the launcher pill.
+ */
+export function setupGuideFocusTarget(
+  previous: SetupGuideView | null,
+  next: SetupGuideView,
+  userInitiated: boolean,
+): 'heading' | 'launcher' | null {
+  if (previous === null || !userInitiated) return null
+  if (previous !== 'expanded' && next === 'expanded') return 'heading'
+  if (previous === 'expanded' && next === 'minimized') return 'launcher'
+  return null
+}
+
 export function useSetupGuideView(): [
   StoredSetupGuideView,
   (next: SetupGuideView) => void,

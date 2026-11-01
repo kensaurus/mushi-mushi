@@ -10,6 +10,25 @@ Authoritative catalog for Design System v2 primitives used in the operator conso
 | **Semantic (`@theme`)** | [`apps/admin/src/index.css`](../index.css) → [`styles/theme-tokens.css`](../styles/theme-tokens.css) (+ modes / ask-mushi / components partials) — oklch color roots, spacing, type scale | Operator console Tailwind utilities (`bg-surface`, `text-fg-muted`, …) |
 | **Component recipes** | [`lib/chipTone.ts`](../lib/chipTone.ts), [`lib/tokens.ts`](../lib/tokens.ts), [`lib/motion-tokens.ts`](../lib/motion-tokens.ts) | Badges, banners, posture chips, viz runtime |
 
+### Rules from the 2026-09-23 consolidation pass (each one shipped a visible bug)
+
+| Rule | Canonical form | Why | Enforced by |
+|------|----------------|-----|-------------|
+| One filled CTA | `<Btn>` (`primary`) or `btnClass()` from [`lib/btnRecipe.ts`](../lib/btnRecipe.ts) for a `<Link>`/`<a>` | A violet `accent` Save sat next to a vermillion one; ~15 flat hand-rolled twins drifted in padding | `check:hand-rolled-cta`, `btn-gradient.test.ts` |
+| Disabled filled button = neutral well | `disabled:bg-surface-overlay` (in the recipe) | Brand fill at 40% opacity read as salmon / lavender | `btn-gradient.test.ts` |
+| Mix colours in **oklab** | `color-mix(in oklab, …)` / `color-mix(in_oklab,…)` | `in oklch` swings a brand tint toward the neutrals' hue 285 → lavender | `check:design-tokens` |
+| Class roots must exist exactly | e.g. `text-fg-muted`, never `text-fg-tertiary` | Unknown roots render nothing; the old check accepted any first-segment match | `check:design-tokens` |
+| Brand copy on a brand wash | `text-brand-foreground` | Light-mode vermillion is ~4:1 on white, lower on its own wash | `check:chip-contrast` |
+| One surface per nesting level | A card inside a `Panel`/grid that draws dividers has no border or fill of its own ([`integrations/cardChrome.ts`](../components/integrations/cardChrome.ts)) | `bg-surface` (0.965) inside a white panel read as grey "bleeding" + double outlines | review |
+| No grey wells inside cards | Rows sit on the card surface; a note is a divider or left rule | `bg-surface-overlay/NN` washes were the darkest grey in the light ramp | review |
+| Help / guide chrome is neutral | `bg-chrome` / `border-chrome-border` | The `ok` success green was used as decoration | `guideSurfaces.test.ts` |
+| One base display per class list | `hidden xl:inline-flex` **or** `inline-flex` | Both set `display`; `inline-flex` won and header badges never hid | `check:display-conflict` |
+| Panel-header "see all" = plain link | `PANEL_HEADER_LINK` in `lib/chipTone.ts` | Brand pills read as a second primary button | review |
+| Top-bar controls share one height | `HEADER_CONTROL_BASE` (h-8) in `ui/chrome.tsx` | Search, switchers, version pill and icons were 24–34px with four treatments | review |
+| Inline code follows the theme | `.mushi-code-inline`; multi-line code/logs keep the dark `.mushi-code-block` | Terminal-black URL chips inside white cards | review |
+
+Escape hatch for every script gate: `// mushi-mushi-allowlist: <reason>` on the line (or the line above), reviewed like any other change.
+
 **Rule of thumb:** never hand-roll `bg-*-muted text-*` or opacity chips (`bg-ok/15 text-ok`) — use `CHIP_TONE.*`, `statusChipTone()`, or `runStatusChipTone()`. For soft selected/pressed chips use `SELECTED_TONE` / `SELECTED_TONE_IDLE` (not `bg-brand/12 text-brand border border-brand/28`). Header PageHeaderBar severity Badge fallbacks use `HEADER_BADGE_TONE.brand` / `.neutral`. ESLint enforces muted pairings via `mushi-mushi/no-raw-semantic-on-muted` and redundant borders via `mushi-mushi/no-redundant-border-on-chip-tone`; CI also runs `scripts/audit-chip-contrast.mjs --strict` (muted + opacity). Prefer `editorial-*` utilities over raw `var(--mushi-*)` in operator TSX.
 
 ### Container-query responsive grids (Wave 2)

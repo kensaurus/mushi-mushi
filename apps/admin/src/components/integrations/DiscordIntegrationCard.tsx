@@ -31,6 +31,17 @@ import { useToast } from '../../lib/toast'
 import { discordWebhookUrl } from '../../lib/validators'
 import { HealthSparkline } from './HealthSparkline'
 import type { HealthRow } from './types'
+import { CHIP_TONE } from '../../lib/chipTone'
+import { IconCheck } from '../icons'
+import {
+  INTEGRATION_CARD,
+  INTEGRATION_CARD_HEADER,
+  INTEGRATION_CARD_IDENTITY,
+  INTEGRATION_CARD_NOTE,
+  INTEGRATION_CARD_STATUS_IDLE,
+  INTEGRATION_CARD_STATUS_OK,
+  INTEGRATION_CARD_TITLE,
+} from './cardChrome'
 
 // ─── Friendly error translation for test failures ─────────────────────────────
 
@@ -175,27 +186,26 @@ export function DiscordIntegrationCard({
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="rounded-xl border border-edge-subtle bg-surface p-5 space-y-4">
+    <div className={INTEGRATION_CARD}>
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          {/* mushi-mushi-allowlist: Discord brand blurple tint behind the trademark icon chip. */}
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-discord-blurple/10">
+      <div className={INTEGRATION_CARD_HEADER}>
+        <div className={INTEGRATION_CARD_IDENTITY}>
+          <div className="mt-0.5 shrink-0">
             <DiscordIcon size={20} />
           </div>
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-fg">Discord</h3>
+            <h3 className={INTEGRATION_CARD_TITLE}>Discord</h3>
             {connected ? (
-              <p className="text-xs text-ok truncate">Webhook connected — receiving report alerts</p>
+              <p className={INTEGRATION_CARD_STATUS_OK}>Webhook connected — receiving report alerts</p>
             ) : (
-              <p className="text-xs text-fg-muted truncate">
+              <p className={INTEGRATION_CARD_STATUS_IDLE}>
                 Not connected — paste an incoming webhook URL to enable alerts
               </p>
             )}
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {sparkline.length > 0 && (
             <span
               className="hidden sm:flex"
@@ -222,10 +232,10 @@ export function DiscordIntegrationCard({
 
       {/* Connected state — show clear control */}
       {connected && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-ok/30 bg-ok-muted/50 px-3 py-2">
+        <div className={`flex items-center justify-between gap-3 rounded-md px-3 py-2 ${CHIP_TONE.okSubtle}`}>
           <div className="flex items-center gap-2 min-w-0">
-            <span className="shrink-0 text-ok-foreground text-sm" aria-hidden>✓</span>
-            <p className="text-xs font-medium text-ok-foreground">Discord webhook active</p>
+            <IconCheck size={14} className="shrink-0" />
+            <p className="text-xs font-medium">Discord webhook active</p>
           </div>
           <Btn
             type="button"
@@ -249,7 +259,9 @@ export function DiscordIntegrationCard({
           <div className="flex-1 min-w-0">
             <Input
               id="discord-webhook-url"
+              name="discord_webhook_url"
               type="url"
+              autoComplete="off"
               placeholder="https://discord.com/api/webhooks/…"
               value={webhookUrl}
               onChange={(e) => handleUrlChange(e.target.value)}
@@ -260,7 +272,7 @@ export function DiscordIntegrationCard({
           </div>
           <Btn
             type="button"
-            variant="accent"
+            variant="primary"
             onClick={() => void handleSave()}
             disabled={!webhookUrl.trim() || Boolean(urlError) || !projectId}
             loading={saving}
@@ -276,7 +288,7 @@ export function DiscordIntegrationCard({
 
       {/* What you'll receive */}
       {!connected && (
-        <div className="rounded-lg border border-edge-subtle bg-surface-hover/40 px-3 py-2.5 text-xs text-fg-muted space-y-1">
+        <div className={INTEGRATION_CARD_NOTE}>
           <p className="font-medium text-fg">What you'll receive</p>
           <ul className="list-inside list-disc space-y-0.5">
             <li>New report triaged (severity + category)</li>

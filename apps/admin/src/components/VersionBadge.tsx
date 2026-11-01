@@ -26,7 +26,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { useWhatsNew } from './WhatsNew'
-import { Badge } from './ui'
+import { Badge, HEADER_CONTROL_BASE } from './ui'
 import {
   IconDashboard,
   IconGauge,
@@ -164,11 +164,13 @@ const TONE_LABEL: Record<'feature' | 'fix' | 'breaking' | 'note', string> = {
 // feeling sticky on accidental hover-outs.
 const CLOSE_DELAY_MS = 120
 
-/** Version pill label tones — SDK (info) vs Admin console (accent). */
-const SDK_LABEL = 'text-info-foreground font-semibold'
-const SDK_VER = 'text-info-foreground tabular-nums'
-const ADMIN_LABEL = 'text-accent-foreground font-semibold'
-const ADMIN_VER = 'text-accent-foreground tabular-nums'
+/** Header trigger tones — neutral like every other top-bar control. The old
+ *  info-blue SDK / violet Admin labels made a passive version readout the most
+ *  colourful thing in the bar. */
+const SDK_LABEL = 'text-fg-muted font-semibold'
+const SDK_VER = 'text-fg-secondary tabular-nums'
+const ADMIN_LABEL = 'text-fg-muted font-semibold'
+const ADMIN_VER = 'text-fg-secondary tabular-nums'
 
 /** Monospace version chip — scannable at a glance in dense package grids. */
 function VersionPill({
@@ -339,9 +341,9 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
         aria-haspopup="dialog"
         aria-label={`Versions — SDK (@mushi-mushi/web) ${__SDK_WEB_VERSION__}, Admin console ${__APP_VERSION__}${whatsNew.hasUnread ? ', new updates available' : ''}`}
         title={`npm @mushi-mushi/web ${__SDK_WEB_VERSION__} · Admin app ${__APP_VERSION__} · ${__BUILD_SHA__}`}
-        className={`group relative inline-flex min-w-0 max-w-full items-center gap-1.5 h-6 px-2 rounded-full border border-edge bg-surface-raised hover:bg-surface-overlay motion-safe:transition-[transform,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
-          open ? 'bg-surface-overlay border-edge-subtle' : ''
-        }`}
+        // min-w-0 max-w-full restated for check:chrome-budget (it reads this
+        // file); HEADER_CONTROL_BASE already carries both.
+        className={`group relative inline-flex min-w-0 max-w-full ${HEADER_CONTROL_BASE} ${open ? 'bg-surface-hover' : ''}`}
       >
         {/* Compact (md..lg): SDK version only — the figure embedders watch. */}
         <span

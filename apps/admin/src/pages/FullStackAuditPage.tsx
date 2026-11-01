@@ -164,7 +164,7 @@ function FindingsList({ findings }: { findings: AuditFinding[] }) {
             <p className="mt-0.5 text-xs text-fg-secondary">{f.detail}</p>
           </div>
           {f.fix_available && (
-            <Badge className="shrink-0 bg-brand/12 text-brand border border-brand/28">Fix available</Badge>
+            <Badge className="shrink-0 bg-brand/12 text-brand-foreground border border-brand/28">Fix available</Badge>
           )}
         </div>
       ))}

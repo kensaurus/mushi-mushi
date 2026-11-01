@@ -29,23 +29,12 @@ export const bannerEnterSpring: Transition = {
   mass: 0.75,
 }
 
-/** Alias — PagePosture rows, status banners, chrome enter. */
-export const chromeEnterSpring = bannerEnterSpring
-
 /** Sidebar category accordion — grid 0fr→1fr disclosure. */
 export const sectionExpandSpring: Transition = {
   type: 'spring',
   stiffness: 480,
   damping: 40,
   mass: 0.85,
-}
-
-/** Optional shell width rail ↔ expanded (Layout aside). */
-export const shellWidthSpring: Transition = {
-  type: 'spring',
-  stiffness: 400,
-  damping: 42,
-  mass: 0.9,
 }
 
 /** Modal / command palette scrim + panel — matches MUSHI_DURATION.base + stamp ease. */

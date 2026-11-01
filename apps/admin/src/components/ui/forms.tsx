@@ -1,7 +1,7 @@
 import React, { useState, useEffect, forwardRef } from 'react';
 import type { ReactNode, SelectHTMLAttributes, ButtonHTMLAttributes, TextareaHTMLAttributes } from 'react';
 import { Card, LabelHelp } from './layout';
-import { CHIP_TONE } from '../../lib/chipTone'
+import { btnClass, type BtnSize, type BtnVariant } from '../../lib/btnRecipe'
 
 
 /* ── FilterSelect ───────────────────────────────────────────────────────── */
@@ -130,23 +130,9 @@ export function SegmentedControl<T extends string>({
 /* ── Btn (primary / ghost / danger / success variants) ──────────────────── */
 
 interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  /**
-   * Visual intent.
-   *  - `primary`: default brand action.
-   *  - `accent`:  accent-hued filled CTA (integration connect, post comment) —
-   *               a deliberately different hue from the brand primary.
-   *  - `ghost`:   neutral secondary actions (Refresh, Back, View details).
-   *  - `cancel`:  dismiss / cancel / close — red affordance (not destructive-primary).
-   *  - `danger`:  destructive / irreversible (Delete, Reject, Revoke,
-   *               Disconnect, Uninstall, Flag, Dismiss report).
-   *  - `success`: forward / un-blocking action (Start triage, Complete,
-   *               Approve, Retry — anything that progresses the user
-   *               through their workflow). Mirrors the `ok` semantic
-   *               token so tone is consistent with PageHero severity
-   *               and SidebarHealthDot.
-   */
-  variant?: 'primary' | 'accent' | 'ghost' | 'cancel' | 'danger' | 'success'
-  size?: 'sm' | 'md'
+  /** Visual intent — see BtnVariant in lib/btnRecipe.ts. */
+  variant?: BtnVariant
+  size?: BtnSize
   children: ReactNode
   /** When true, swaps the leading area for a spinner and disables the
    *  button. Use this instead of toggling text manually so loading state
@@ -156,45 +142,44 @@ interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   leadingIcon?: ReactNode
 }
 
-const BTN_BASE =
-  'inline-flex items-center justify-center font-medium rounded-sm ' +
-  'disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none ' +
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface ' +
-  'motion-safe:transition-[transform,opacity] motion-safe:duration-150 motion-safe:active:scale-[0.97]'
+/** Re-exported so `import { btnClass } from './ui'` keeps working. */
+export { btnClass }
 
-const BTN_SIZES = {
-  sm: 'px-2 py-1 text-xs gap-1.5',
-  md: 'px-3 py-1.5 text-sm gap-2',
+/* ── TextButton (a button that reads as a link) ────────────────────────── */
+
+// No display or text-align utility: callers add `block` / `text-center` /
+// `text-left` themselves, and a base value for the same property would
+// silently win or lose depending on Tailwind's output order.
+const TEXT_BUTTON_BASE =
+  'cursor-pointer rounded-sm border-0 bg-transparent p-0 font-medium underline-offset-2 ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ' +
+  'disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-opacity'
+
+const TEXT_BUTTON_TONES = {
+  accent: 'text-accent-foreground underline hover:text-accent',
+  muted: 'text-fg-muted hover:text-fg hover:underline',
+  danger: 'text-danger-foreground underline hover:no-underline',
 } as const
 
-// Expressive control set (2026-07 expressive pass): the primary action is a
-// brand gradient with a hover glow ring; secondary variants keep their tonal
-// identity but gain a matching glow on hover. All effects route through
-// --gradient-*/--shadow-*-glow tokens (theme-tokens.css), which are derived
-// from the semantic brand/danger/ok oklch tokens — so white-label overrides
-// and light/dark theme swaps cascade through automatically.
-const BTN_VARIANTS = {
-  // `bg-(image:--var)`, NOT `bg-[var(--var)]`. In Tailwind v4 the square-
-  // bracket form is typed as a *color* and compiles to `background-color:
-  // var(--gradient-brand)` — an invalid color, so the declaration is dropped
-  // and the button paints nothing. That left the primary CTA (Sign in, Save,
-  // Dispatch fix) as near-white text on the bare page. The parenthesis form
-  // with an `image:` hint is the documented way to feed a gradient custom
-  // property to a background utility, and compiles to `background-image`.
-  // Keep `bg-brand` underneath so the button still has a solid, legible fill
-  // if the gradient token is ever missing.
-  primary:
-    'bg-brand bg-(image:--gradient-brand) text-brand-fg shadow-card hover:shadow-brand-glow hover:-translate-y-px',
-  accent:
-    'bg-accent bg-(image:--gradient-accent) text-fg-on-accent shadow-card hover:shadow-accent-glow hover:-translate-y-px',
-  ghost:
-    'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg hover:border-brand/40 hover:shadow-brand-glow-sm hover:-translate-y-px',
-  cancel:
-    `${CHIP_TONE.danger} border-danger/40 hover:bg-danger-muted hover:border-danger/50 hover:-translate-y-px`,
-  danger:
-    `${CHIP_TONE.dangerSubtle} hover:bg-danger-muted/80 hover:border-danger/40 hover:shadow-glow-danger hover:-translate-y-px`,
-  success:
-    `${CHIP_TONE.okSubtle} hover:bg-ok-muted/80 hover:border-ok/40 hover:shadow-glow-ok hover:-translate-y-px`,
+/**
+ * An in-copy action ("Sign up", "Retry", "Forgot your password?") that must be
+ * a <button> but should look like a link. Use this instead of a ghost <Btn>
+ * with `!px-0 !py-0`: the ghost variant keeps its border, so those rendered as
+ * a squeezed outlined box around the text (the login page, sidebar "Show in
+ * Beginner →", ~18 places).
+ */
+export function TextButton({
+  tone = 'accent',
+  className = '',
+  type = 'button',
+  children,
+  ...rest
+}: ButtonHTMLAttributes<HTMLButtonElement> & { tone?: keyof typeof TEXT_BUTTON_TONES; children: ReactNode }) {
+  return (
+    <button type={type} className={`${TEXT_BUTTON_BASE} ${TEXT_BUTTON_TONES[tone]} ${className}`.trim()} {...rest}>
+      {children}
+    </button>
+  )
 }
 
 export function Btn({
@@ -210,7 +195,7 @@ export function Btn({
   const isDisabled = disabled || loading
   return (
     <button
-      className={`${BTN_BASE} ${BTN_SIZES[size]} ${BTN_VARIANTS[variant]} ${className}`}
+      className={`${btnClass(variant, size)} ${className}`}
       disabled={isDisabled}
       aria-busy={loading || undefined}
       {...rest}
@@ -291,7 +276,9 @@ export function RefreshIconButton({
  *  default → hover → focus-visible → invalid → disabled, always with the
  *  brand ring at 60% opacity for AAA-friendly contrast on dark surfaces. */
 
-/** Shared focus ring for ad-hoc inputs that bypass `<Input />`. */
+/** Shared focus ring for ad-hoc inputs that bypass `<Input />`. The
+ *  check-design-tokens focus guard points authors here, so it stays exported.
+ *  @public */
 export const FIELD_FOCUS =
   'focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:shadow-brand-glow-sm'
 
@@ -378,6 +365,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           type={renderedType}
           aria-invalid={visibleError ? true : undefined}
           className={inputClassName}
+          // Console secret fields are API keys, never the operator's login.
+          // Chrome ignores autocomplete="off" on password inputs and fills the
+          // saved sign-in: the password into the key field and the email into
+          // the text input just before it (a Teams webhook URL showed
+          // "test@…"). "new-password" is the value Chrome honours. Callers
+          // can still override via props.
+          autoComplete={isPassword ? 'new-password' : undefined}
           {...rest}
           onBlur={(e) => {
             if (!touched) setTouched(true)
@@ -514,10 +508,13 @@ export function Toggle({ label, ariaLabel, checked, onChange, disabled, tooltip,
         aria-label={ariaLabel}
         onClick={() => onChange?.(!checked)}
         disabled={disabled}
-        className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border motion-safe:transition-[transform,opacity] motion-safe:duration-[var(--duration-fast)] motion-safe:ease-[var(--ease-stamp)] motion-safe:active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${checked ? 'bg-brand border-brand/60 shadow-brand-glow-sm' : 'bg-surface-raised border-edge hover:border-edge'}`}
+        // Track: brand when on, a solid edge-grey when off (the old off track
+        // was surface-raised — white on a white card in light mode). Thumb is
+        // `bg-switch-thumb`, light in both themes; `bg-fg` turned it black.
+        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full motion-safe:transition-[transform,opacity] motion-safe:duration-[var(--duration-fast)] motion-safe:ease-[var(--ease-stamp)] motion-safe:active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${checked ? 'bg-brand' : 'bg-edge hover:bg-fg-faint'}`}
       >
         <span
-          className={`pointer-events-none inline-flex items-center justify-center h-4 w-4 rounded-full bg-fg shadow-card motion-safe:transition-transform motion-safe:duration-[var(--duration-fast)] motion-safe:ease-[var(--ease-stamp)] ${checked ? 'translate-x-4' : 'translate-x-0.5'}`}
+          className={`pointer-events-none inline-flex items-center justify-center h-4 w-4 rounded-full bg-switch-thumb shadow-card motion-safe:transition-transform motion-safe:duration-[var(--duration-fast)] motion-safe:ease-[var(--ease-stamp)] ${checked ? 'translate-x-4.5' : 'translate-x-0.5'}`}
           aria-hidden="true"
         />
       </button>
@@ -616,13 +613,13 @@ interface EmptyStateProps {
  * cards, use the `EmptyState` wrapper below instead — it auto-falls back
  * to a minimal, icon-less, small-text variant when `icon` is omitted.
  */
-export function EditorialEmptyState({ title, description, action, hints, icon }: EmptyStateProps) {
+function EditorialEmptyState({ title, description, action, hints, icon }: EmptyStateProps) {
   return (
     <Card className="p-6 text-left border-dashed">
       {icon && (
         <div
           aria-hidden="true"
-          className="mb-3 grid h-11 w-11 place-items-center rounded-sm font-mono bg-brand/12 text-brand border border-brand/28 shadow-[inset_0_-3px_0_var(--color-brand)]"
+          className="mb-3 grid h-11 w-11 place-items-center rounded-sm font-mono bg-brand/12 text-brand-foreground border border-brand/28 shadow-[inset_0_-3px_0_var(--color-brand)]"
         >
           {icon}
         </div>
@@ -686,9 +683,7 @@ function CompactEmptyState({ title, description, action, hints }: EmptyStateProp
  * preserving the long-standing "no icon = no icon box" behavior that 20+
  * inline call sites (CompliancePage residency/DSAR/policy lists,
  * AntiGamingPage device/event lists, MarketplacePage filters, etc.) rely
- * on for density. Callers that want the editorial card without an icon
- * can still call `EditorialEmptyState` directly and pass an explicit
- * `icon` node.
+ * on for density. Passing an `icon` is the only way into the editorial card.
  */
 export function EmptyState(props: EmptyStateProps) {
   if (props.icon) {

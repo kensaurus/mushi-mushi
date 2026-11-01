@@ -138,6 +138,18 @@ const SEMANTIC_NAMESPACES = [
   'border',
   'background',
   'chrome',
+  // Namespaces a typo lands in without resembling an existing root
+  // (`ring-focus`, `text-critical`) — checked so they fail instead of
+  // silently rendering the fallback colour.
+  'focus',
+  'critical',
+  'panel',
+  'code',
+  'switch',
+  'rose',
+  'lime',
+  'editorial',
+  'err',
   'viz',
 ]
 
@@ -190,27 +202,26 @@ function extractSemanticColorHits(src, file, allow) {
     const leadingNs = root.split('-')[0]
     if (!SEMANTIC_NAMESPACES.includes(leadingNs)) continue
     if (allow.has(root)) continue
-    // `brand-hover/40` → `brand-hover` already stripped. Try progressively
-    // shorter prefixes so `bg-brand-hover` validates when only `brand-hover`
-    // is defined (it is) AND `bg-brand` validates when `--color-brand` is
-    // defined (it is). If no prefix matches, drift.
-    const parts = root.split('-')
-    let matched = false
-    for (let i = parts.length - 1; i >= 1; i -= 1) {
-      if (allow.has(parts.slice(0, i).join('-'))) {
-        matched = true
-        break
-      }
-    }
-    if (!matched) {
-      unknownHits.push({ token: `${match[1]}-${root}`, file, index })
-    }
+    // Exact match only. This used to accept any root whose leading segment
+    // was a token (`fg-tertiary` passed because `fg` exists), which is how
+    // `text-fg-tertiary`, `bg-brand-muted`, `border-edge-strong` and
+    // `text-warn-foreground` shipped rendering nothing. The legitimate reasons
+    // for a non-color root are a same-named token in another @theme namespace
+    // (`shadow-brand-glow`, `text-body`) or a custom @utility.
+    const prefix = match[1]
+    if (prefix === 'shadow' && shadowRoots.has(root)) continue
+    if (prefix === 'text' && textRoots.has(root)) continue
+    if (customUtilities.has(`${prefix}-${root}`)) continue
+    unknownHits.push({ token: `${prefix}-${root}`, file, index })
   }
   return { deniedHits, unknownHits }
 }
 
 const css = loadAdminTokenCss()
 const allow = parseColorRoots(css)
+const shadowRoots = new Set([...css.matchAll(/--shadow-([a-z0-9-]+):/g)].map((m) => m[1]))
+const textRoots = new Set([...css.matchAll(/--text-([a-z0-9-]+):/g)].map((m) => m[1]))
+const customUtilities = new Set([...css.matchAll(/@utility\s+([a-z0-9-]+)\s*\{/g)].map((m) => m[1]))
 const files = walk(ADMIN_SRC)
 
 const denied = []
@@ -696,7 +707,32 @@ if (ellipsisHits.length > 0) {
   console.error(`\nFix: "Loading…" not "Loading...". See Web Interface Guidelines typography.\n`)
 }
 
+// ── color-mix interpolation space ─────────────────────────────────────────
+// `color-mix(in oklch, <chromatic> N%, <near-neutral>)` interpolates HUE along
+// the short arc. The console's neutrals are near-achromatic but carry hue 285,
+// so a 14% vermillion tint mixed with a light surface resolved to
+// oklch(0.94 0.030 299.7) — lavender (measured 2026-09-23). `in oklab` mixes
+// the a/b axes and keeps the tint warm. Mixes with `transparent` are hue-safe
+// either way; one rule keeps it simple.
+const OKLCH_MIX_RE = /color-mix\(in[ _]oklch\b/g
+const oklchMixHits = []
+for (const file of [...files, TOKEN_CSS]) {
+  const src = readFileSync(file, 'utf8')
+  for (const m of src.matchAll(OKLCH_MIX_RE)) {
+    const index = m.index ?? 0
+    const lineStart = src.lastIndexOf('\n', index) + 1
+    if (/mushi-mushi-allowlist:/i.test(src.slice(lineStart, index))) continue
+    oklchMixHits.push({ file, line: extractLineNumber(src, index), token: m[0] })
+  }
+}
+if (oklchMixHits.length > 0) {
+  console.error(`\n[color-mix] Mix in oklab, not oklch (hue drifts toward the neutral's 285° — lavender tints):\n`)
+  for (const hit of oklchMixHits) console.error(fmt(hit))
+  console.error(`\nFix: color-mix(in oklab, …) / Tailwind color-mix(in_oklab,…).\n`)
+}
+
 const lintFailures =
+  oklchMixHits.length > 0 ||
   denied.length > 0 ||
   unknown.length > 0 ||
   subFloorHits.length > 0 ||

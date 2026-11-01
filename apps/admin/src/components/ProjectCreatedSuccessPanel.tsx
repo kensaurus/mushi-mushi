@@ -60,7 +60,7 @@ function ProjectIdCopyLarge({ projectId }: { projectId: string }) {
     <button
       type="button"
       onClick={copy}
-      className="inline-flex w-full min-w-0 items-center justify-between gap-2 rounded-md border border-edge bg-surface-overlay/60 px-3 py-2.5 text-left transition-opacity hover:border-edge-strong"
+      className="inline-flex w-full min-w-0 items-center justify-between gap-2 rounded-md border border-edge bg-surface-overlay/60 px-3 py-2.5 text-left transition-opacity hover:border-fg-faint"
       title="Copy project ID — paste as MUSHI_PROJECT_ID"
       data-testid={`project-created-id-${projectId}`}
       aria-label={`Copy project ID: ${projectId}`}

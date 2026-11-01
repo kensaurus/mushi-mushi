@@ -7,7 +7,6 @@ import { navIconForPath } from '../../lib/pageNavIcons';
 import { HelpBulletList, HelpRichText } from '../HelpRichText';
 import { HelpSection } from '../HelpSection';
 import { CopyViewLinkButton } from '../CopyViewLinkButton';
-import { usePageHelpRegister } from '../../lib/pageHelpContext';
 import { isPageHelpRead, markPageHelpRead, PAGEHELP_READ_EVENT } from '../../lib/pageHelpRead';
 import { isDevFacingHint } from '../../lib/devHintCopy';
 import {
@@ -16,6 +15,7 @@ import {
   PAGE_HELP_BANNER_SUMMARY_HOVER,
 } from '../../lib/pageHelpSurfaces';
 import { Tooltip } from './misc';
+import { IconInfo } from '../icons';
 import { CHIP_TONE } from '../../lib/chipTone'
 
 
@@ -107,7 +107,7 @@ function AutoPdcaChip() {
   )
 }
 
-/* ── PageHelp (collapsible "About this page") ──────────────────────────── */
+/* ── PageHelpBanner (collapsible "About this page") ────────────────────── */
 
 export interface PageHelpBannerProps {
   title: string
@@ -123,12 +123,9 @@ export interface PageHelpBannerProps {
   flowPath?: string
 }
 
-/** @deprecated Use PageHelpBannerProps — kept for call-site ergonomics. */
-type PageHelpProps = PageHelpBannerProps
-
 /* ── PageRelatedLinks — "where to go next" chips ───────────────────────── */
 
-export function PageRelatedLinks({ links, className = '' }: { links: PageFlowLink[]; className?: string }) {
+function PageRelatedLinks({ links, className = '' }: { links: PageFlowLink[]; className?: string }) {
   if (links.length === 0) return null
   return (
     <nav
@@ -248,13 +245,9 @@ export function PageHelpBanner({
     }
   }
 
-  // Moss-green guide surface — calm, readable, distinct from warn/danger chrome.
+  // Neutral chrome; the only colour is the unread "New" tag. A "Read" tag on
+  // every visited page was noise, so it is simply absent once read.
   const surfaceClass = PAGE_HELP_BANNER_SHELL
-  const iconClass = CHIP_TONE.okSubtle
-  const statusLabel = isRead ? 'Read' : 'New'
-  const statusBadgeClass = isRead
-    ? CHIP_TONE.ok
-    : CHIP_TONE.okSubtle
 
   return (
     <details
@@ -262,7 +255,7 @@ export function PageHelpBanner({
       onToggle={handleToggle}
       className={`group mb-3 w-full min-w-0 rounded-md border motion-safe:transition-opacity motion-safe:duration-150 ${surfaceClass}`}
     >
-      <summary className={`flex w-full cursor-pointer list-none items-center gap-2 rounded-md px-3 py-2 text-xs text-fg-muted motion-safe:transition-[transform,opacity] motion-safe:duration-150 motion-safe:active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ok/40 ${PAGE_HELP_BANNER_SUMMARY_HOVER}`}>
+      <summary className={`flex w-full cursor-pointer list-none items-center gap-2 rounded-md px-3 py-2 text-xs text-fg-muted motion-safe:transition-[transform,opacity] motion-safe:duration-150 motion-safe:active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${PAGE_HELP_BANNER_SUMMARY_HOVER}`}>
         <svg
           className="h-3 w-3 shrink-0 text-fg-faint motion-safe:transition-transform group-open:rotate-90"
           viewBox="0 0 24 24"
@@ -273,22 +266,13 @@ export function PageHelpBanner({
         >
           <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        <span
-          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-sm ${iconClass}`}
-          aria-hidden="true"
-        >
-          <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M3 2.5h7l3 3v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z" />
-            <path d="M10 2.5V5.5h3" />
-            <path d="M5 8h6M5 10.5h4" strokeLinecap="round" />
-          </svg>
-        </span>
+        <IconInfo size={14} className="shrink-0 text-fg-muted" aria-hidden />
         <span className="font-medium text-fg-secondary group-open:text-fg">{title}</span>
-        <span
-          className={`rounded-full border px-1.5 py-0.5 text-3xs font-semibold ${statusBadgeClass}`}
-        >
-          {statusLabel}
-        </span>
+        {!isRead && (
+          <span className={`rounded-full px-1.5 py-0.5 text-3xs font-semibold ${CHIP_TONE.infoSubtle}`}>
+            New
+          </span>
+        )}
         <span className="ml-auto hidden text-3xs text-fg-faint sm:inline">{open ? 'Click to collapse' : 'Click to expand'}</span>
       </summary>
       <div className={`w-full min-w-0 border-t px-3 py-3 sm:px-4 ${PAGE_HELP_BANNER_INNER_BORDER}`}>
@@ -315,17 +299,4 @@ export function PageHelpBanner({
       </div>
     </details>
   )
-}
-
-/** Registers page help with Layout; banner renders at the top via `<RoutePageHelp />`. */
-export function PageHelp(props: PageHelpProps) {
-  const register = usePageHelpRegister()
-  const { title, whatIsIt, useCases, howToUse, defaultOpen, relatedLinks, flowPath } = props
-
-  useEffect(() => {
-    register({ title, whatIsIt, useCases, howToUse, defaultOpen, relatedLinks, flowPath })
-    return () => register(null)
-  }, [register, title, whatIsIt, useCases, howToUse, defaultOpen, relatedLinks, flowPath])
-
-  return null
 }

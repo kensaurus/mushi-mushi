@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { useAdminMode } from '../lib/mode'
 import { CHIP_TONE } from '../lib/chipTone'
-import { Btn } from './ui'
+import { Btn, btnClass } from './ui'
 
 export type PageActionTone = 'plan' | 'do' | 'check' | 'act' | 'idle'
 
@@ -121,7 +121,7 @@ function Cta({
       return (
         <Link
           to={cta.to}
-          className="inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity"
+          className={btnClass('primary', 'sm')}
         >
           {cta.label} <span aria-hidden="true">→</span>
         </Link>

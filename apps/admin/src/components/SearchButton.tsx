@@ -31,7 +31,7 @@ export function SearchButton() {
       type="button"
       onClick={open}
       aria-label="Open command palette"
-      className="inline-flex items-center justify-center gap-1.5 h-7 w-8 xl:w-auto xl:min-w-36 rounded-sm border border-edge-subtle bg-surface-raised/50 px-0 xl:px-2 text-xs text-fg-muted hover:text-fg hover:border-edge motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 shrink-0"
+      className="inline-flex items-center justify-center gap-1.5 h-8 w-8 xl:w-auto xl:min-w-36 xl:justify-start rounded-sm border border-edge-subtle px-0 xl:px-2 text-xs text-fg-muted hover:bg-surface-hover hover:text-fg motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 shrink-0"
     >
       <svg
         viewBox="0 0 24 24"
@@ -45,7 +45,7 @@ export function SearchButton() {
         <path d="m20 20-3-3" strokeLinecap="round" />
       </svg>
       <span className="hidden xl:inline">Search</span>
-      <span className="hidden xl:flex items-center gap-0.5 text-2xs text-fg-muted">
+      <span className="hidden xl:flex ml-auto items-center gap-0.5 text-2xs text-fg-muted">
         <Kbd>{isMac ? '⌘' : 'Ctrl'}</Kbd>
         <Kbd>K</Kbd>
       </span>

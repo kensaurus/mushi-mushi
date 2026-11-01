@@ -7,8 +7,7 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { Section, Card, Btn } from '../components/ui'
-import { LINK_ACCENT } from '../lib/chipTone'
+import { Section, Card, Btn, TextButton } from '../components/ui'
 import { VerifySetupPanel } from '../components/VerifySetupPanel'
 import { SdkHealthSummary } from '../components/SdkHealthSummary'
 import { SdkUpgradeCTA } from '../components/SdkUpgradeCTA'
@@ -150,15 +149,13 @@ export function SetupCopilotPage() {
       {projectId && !projectRow && !projectsPayload && projectsError && (
         <Card className="p-5">
           <p className="text-sm text-fg-muted">Could not load projects: {projectsError}</p>
-          <Btn
+          <TextButton
             type="button"
-            variant="ghost"
-            size="sm"
             onClick={() => void reload()}
-            className={`mt-2 inline-block !px-0 !py-0 !border-0 !bg-transparent hover:!bg-transparent ${LINK_ACCENT}`}
+            className="mt-2"
           >
             Retry
-          </Btn>
+          </TextButton>
         </Card>
       )}
 

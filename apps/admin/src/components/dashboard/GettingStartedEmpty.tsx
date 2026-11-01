@@ -22,7 +22,7 @@ import { useToast } from '../../lib/toast'
 import { useSetupStatus, type SetupProject } from '../../lib/useSetupStatus'
 import { pluralize } from '../../lib/format'
 import { PDCA_STAGES, PDCA_ORDER, PDCA_STAGE_OUTCOMES, type PdcaStageId } from '../../lib/pdca'
-import { PageHeader, Card, Btn, Skeleton } from '../ui'
+import { PageHeader, Card, Btn, Skeleton, btnClass } from '../ui'
 import { ConnectionStatus } from '../ConnectionStatus'
 import { SetupChecklist } from '../SetupChecklist'
 import { startFirstRunTour } from '../FirstRunTour'
@@ -274,15 +274,17 @@ function LoopStageCard({ stage, step, isLast }: { stage: LoopStage; step: number
   )
 }
 
-const CTA_BASE_PRIMARY = 'inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg'
-const CTA_BASE_GHOST = 'inline-flex items-center gap-1 text-xs text-brand'
+const CTA_BASE_GHOST = 'inline-flex items-center gap-1 text-xs text-brand-foreground'
 
 function ctaClass(primary: boolean | undefined, locked: boolean): string {
-  const base = primary ? CTA_BASE_PRIMARY : CTA_BASE_GHOST
-  if (locked) return `${base} cursor-not-allowed`
-  return primary
-    ? `${base} hover:bg-brand-hover motion-safe:transition-opacity`
-    : `${base} hover:underline`
+  if (primary) {
+    // A locked stage is a faded outline, not a live brand fill (a <span>
+    // cannot take Btn's `disabled:` styles).
+    return locked
+      ? `${btnClass('ghost', 'sm')} opacity-50 cursor-not-allowed`
+      : btnClass('primary', 'sm')
+  }
+  return locked ? `${CTA_BASE_GHOST} cursor-not-allowed` : `${CTA_BASE_GHOST} hover:underline`
 }
 
 function StageCta({ cta, isLocked }: { cta: LoopStage['cta']; isLocked: boolean }) {

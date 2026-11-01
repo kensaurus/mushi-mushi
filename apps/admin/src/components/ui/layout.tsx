@@ -153,7 +153,7 @@ export function Card({
  */
 
 export const PANEL_HEADER_SEPARATOR = 'border-b border-edge-subtle/80'
-export const PANEL_SUBHEADER_SEPARATOR = 'border-b border-edge-subtle/60'
+const PANEL_SUBHEADER_SEPARATOR = 'border-b border-edge-subtle/60'
 
 interface PanelHeaderProps {
   title: ReactNode
@@ -257,7 +257,10 @@ interface PanelRowProps {
   onClick?: () => void
 }
 
-/** Single row inside a `Panel` — hairline divider handled by CSS. */
+/** Single row inside a `Panel` — hairline divider handled by CSS. The
+ *  check-design-tokens elevated-card guard and the eslint
+ *  no-card-elevated-outside-allowlist rule both point authors here.
+ *  @public */
 export function PanelRow({
   children,
   className = '',
@@ -309,7 +312,7 @@ export function CardPanel({ title, children, className = '', action }: CardPanel
  * in flight and turns red when realtime drops — gives users a constant
  * trust signal that the page isn't lying about its data.
  */
-export interface SectionFreshness {
+interface SectionFreshness {
   /** ISO timestamp of the last successful data fetch, or null until first
    *  load resolves. */
   at: string | null

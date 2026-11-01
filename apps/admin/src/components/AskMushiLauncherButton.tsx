@@ -41,12 +41,14 @@ export function AskMushiLauncherButton({ onClick, panelOpen = false }: AskMushiL
         aria-label="Open Ask Mushi"
         className={[
           'relative inline-flex items-center justify-center h-8 w-8 rounded-sm',
-          showPulse ? 'text-brand' : 'text-fg-muted hover:text-fg hover:bg-surface-overlay',
+          // Same resting colour as the sibling icon buttons; the unseen-intro
+          // cue is the dot alone (a red glyph read as an error state).
+          'text-fg-secondary hover:text-fg hover:bg-surface-hover',
           'motion-safe:transition-opacity',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50',
         ].join(' ')}
       >
-        <IconChat className="h-3.5 w-3.5" aria-hidden />
+        <IconChat className="h-4 w-4" />
         {showPulse ? (
           <span
             aria-hidden

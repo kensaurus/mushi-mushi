@@ -1,13 +1,10 @@
 /**
  * FILE: apps/admin/src/components/HelpSection.tsx
- * PURPOSE: Tonal section wrapper used inside PageHelp to group related
- *          help content with a small left-rail accent.
+ * PURPOSE: Section wrapper used inside PageHelp to group related help
+ *          content with a small neutral left rail.
  *
- * Tones:
- *   info  — blue-tinted rail, default for "What it is"
- *   tip   — amber-tinted rail, for "When to use it"
- *   steps — brand-tinted rail, for "How to use it" (sequential steps)
- *   nav   — neutral rail, for "Related pages" (houses PageRelatedLinks)
+ * `tone` names the section's role (info / tip / steps / nav) for callers;
+ * all tones render the same neutral rail — see TONE_RAIL below.
  */
 
 import React from 'react'
@@ -16,18 +13,22 @@ import { PAGE_HELP_SECTION_SHELL } from '../lib/pageHelpSurfaces'
 
 type HelpTone = 'info' | 'tip' | 'steps' | 'nav'
 
+// One neutral rail and AA title colour for every tone. Four hues on four help
+// sections (blue / amber / vermillion / grey) read as four different status
+// levels, and raw `text-warn` titles were ~2.3:1 on white. The section titles
+// ("What it is", "When to use it", …) already carry the distinction.
 const TONE_RAIL: Record<HelpTone, string> = {
-  info:  'bg-info/50',
-  tip:   'bg-warn/50',
-  steps: 'bg-brand/50',
-  nav:   'bg-fg-muted/30',
+  info:  'bg-edge',
+  tip:   'bg-edge',
+  steps: 'bg-edge',
+  nav:   'bg-edge',
 }
 
 const TONE_TITLE: Record<HelpTone, string> = {
-  info:  'text-info',
-  tip:   'text-warn',
-  steps: 'text-brand',
-  nav:   'text-fg-muted',
+  info:  'text-fg-secondary',
+  tip:   'text-fg-secondary',
+  steps: 'text-fg-secondary',
+  nav:   'text-fg-secondary',
 }
 
 interface HelpSectionProps {

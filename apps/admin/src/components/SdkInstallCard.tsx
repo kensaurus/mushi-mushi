@@ -31,7 +31,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ConnectionStatus } from './ConnectionStatus'
-import { Card } from './ui'
+import { Btn, Card } from './ui'
 import { apiFetch, invalidateApiCache } from '../lib/supabase'
 import {
   DEFAULT_SDK_CONFIG,
@@ -288,18 +288,15 @@ export function SdkInstallCard({
             <p className="text-2xs text-fg-faint">
               {loadingConfig ? 'Loading saved config…' : saveMessage ?? 'Saved config is served to SDKs at startup.'}
             </p>
-            <button
+            <Btn
               type="button"
+              size="sm"
               onClick={saveConfig}
-              disabled={!isDirty || savingConfig || loadingConfig}
-              className={`px-2.5 py-1 rounded-sm text-2xs font-medium transition-opacity ${
-                isDirty && !savingConfig && !loadingConfig
-                  ? 'bg-brand text-brand-fg hover:bg-brand-hover'
-                  : 'bg-surface-raised text-fg-faint cursor-not-allowed'
-              }`}
+              disabled={!isDirty || loadingConfig}
+              loading={savingConfig}
             >
               {savingConfig ? 'Saving…' : isDirty ? 'Save config' : 'Saved'}
-            </button>
+            </Btn>
           </div>
         </div>
         )}

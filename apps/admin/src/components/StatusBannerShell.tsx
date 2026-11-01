@@ -3,17 +3,18 @@
  */
 
 import type { ReactNode } from 'react'
-import { InlineProof } from './report-detail/ReportSurface'
 import { SpringChromeEnter } from './motion/SpringChromeEnter'
 
 export type StatusBannerTone = 'info' | 'brand' | 'danger' | 'warn' | 'ok'
 
+// Titles use the *-foreground tokens: raw `text-warn` is L=0.68 amber in light
+// mode (~2.3:1 on the white banner), `text-danger` ~4:1.
 const BANNER_SHELL: Record<StatusBannerTone, { border: string; bg: string; dot: string; title: string }> = {
-  info: { border: 'border-info/30', bg: 'bg-surface-raised', dot: 'bg-info', title: 'text-info' },
-  brand: { border: 'border-brand/30', bg: 'bg-surface-raised', dot: 'bg-brand', title: 'text-brand' },
-  danger: { border: 'border-danger/30', bg: 'bg-surface-raised', dot: 'bg-danger', title: 'text-danger' },
-  warn: { border: 'border-warn/30', bg: 'bg-surface-raised', dot: 'bg-warn', title: 'text-warn' },
-  ok: { border: 'border-ok/30', bg: 'bg-surface-raised', dot: 'bg-ok', title: 'text-ok' },
+  info: { border: 'border-info/30', bg: 'bg-surface-raised', dot: 'bg-info', title: 'text-info-foreground' },
+  brand: { border: 'border-brand/30', bg: 'bg-surface-raised', dot: 'bg-brand', title: 'text-brand-foreground' },
+  danger: { border: 'border-danger/30', bg: 'bg-surface-raised', dot: 'bg-danger', title: 'text-danger-foreground' },
+  warn: { border: 'border-warn/30', bg: 'bg-surface-raised', dot: 'bg-warn', title: 'text-warning-foreground' },
+  ok: { border: 'border-ok/30', bg: 'bg-surface-raised', dot: 'bg-ok', title: 'text-ok-foreground' },
 }
 
 export function StatusBannerShell({
@@ -42,7 +43,9 @@ export function StatusBannerShell({
         />
         <div className="min-w-0 space-y-1">
           <p className={`text-xs font-medium ${shell.title}`}>{title}</p>
-          {subtitle ? <InlineProof>{subtitle}</InlineProof> : null}
+          {/* Plain supporting copy. It was an InlineProof label chip, which
+              wrapped a whole sentence in a grey pill inside the banner. */}
+          {subtitle ? <p className="text-2xs leading-snug text-fg-muted">{subtitle}</p> : null}
         </div>
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}

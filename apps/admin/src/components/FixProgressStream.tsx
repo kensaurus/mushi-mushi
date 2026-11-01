@@ -195,7 +195,7 @@ export function FixProgressStream({ reportId, dispatchState }: Props) {
               </span>
             )}
             {latest.lines_changed != null && (
-              <span className="inline-flex items-center rounded-sm px-1.5 py-0.5 text-3xs font-mono tabular-nums bg-brand/12 text-brand border border-brand/28">
+              <span className="inline-flex items-center rounded-sm px-1.5 py-0.5 text-3xs font-mono tabular-nums bg-brand/12 text-brand-foreground border border-brand/28">
                 {latest.lines_changed} lines
               </span>
             )}

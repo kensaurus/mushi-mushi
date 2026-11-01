@@ -388,12 +388,10 @@ export function GeneralPanel() {
         </SettingEffectCallout>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <label className="block">
-            <ContainedBlock tone="muted" className="mb-1">
-              <span className="text-2xs text-fg-muted">
+            <span className="mb-1 block text-xs font-medium text-fg-muted">
                 Crawl pages / day:{' '}
                 <span className="font-mono text-fg-secondary">{settings.crawl_max_pages_per_day ?? 150}</span>
               </span>
-            </ContainedBlock>
             <input
               type="range"
               min="10"
@@ -411,12 +409,10 @@ export function GeneralPanel() {
           </label>
 
           <label className="block">
-            <ContainedBlock tone="muted" className="mb-1">
-              <span className="text-2xs text-fg-muted">
+            <span className="mb-1 block text-xs font-medium text-fg-muted">
                 Crawl runs / day:{' '}
                 <span className="font-mono text-fg-secondary">{settings.crawl_max_runs_per_day ?? 8}</span>
               </span>
-            </ContainedBlock>
             <input
               type="range"
               min="1"
@@ -434,12 +430,10 @@ export function GeneralPanel() {
           </label>
 
           <label className="block">
-            <ContainedBlock tone="muted" className="mb-1">
-              <span className="text-2xs text-fg-muted">
+            <span className="mb-1 block text-xs font-medium text-fg-muted">
                 TDD generations / day:{' '}
                 <span className="font-mono text-fg-secondary">{settings.tdd_max_gens_per_day ?? 20}</span>
               </span>
-            </ContainedBlock>
             <input
               type="range"
               min="1"
@@ -502,14 +496,14 @@ interface SliderProps {
 function Slider({ label, value, onChange, helpId }: SliderProps) {
   return (
     <label className="block">
-      <ContainedBlock tone="muted" className="mb-1">
-        <span className="text-xs text-fg-muted flex items-center gap-1">
-          <span>
-            {label}: <span className="font-mono text-fg-secondary">{value.toFixed(2)}</span>
-          </span>
-          {helpId && <ConfigHelp helpId={helpId} />}
+      {/* Same label treatment as every other field — the grey ContainedBlock
+          box made two slider labels look like disabled inputs. */}
+      <span className="mb-1 flex items-center gap-1 text-xs font-medium text-fg-muted">
+        <span>
+          {label}: <span className="font-mono text-fg-secondary">{value.toFixed(2)}</span>
         </span>
-      </ContainedBlock>
+        {helpId && <ConfigHelp helpId={helpId} />}
+      </span>
       <input
         type="range"
         min="0.5"
