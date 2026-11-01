@@ -12,12 +12,16 @@
  *          context_assembly_failed, unknown) MUST still log at `error` →
  *          Sentry. We mirror the decision predicate here so CI enforces it
  *          without booting Deno + Supabase, plus a source-level snapshot so
- *          the gate can't silently disappear.
+ *          the gate can't silently disappear. `categorizeFailure` lives in
+ *          `_shared/fix-failure.ts` so this file does not import the worker.
  */
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+import { ClaudeQuotaExceededError } from '../../supabase/functions/_shared/claude-request.ts';
+import { categorizeFailure } from '../../supabase/functions/_shared/fix-failure.ts';
 
 // Mirror of EXPECTED_FAILURE_CATEGORIES in
 // supabase/functions/fix-worker/index.ts. Kept in sync by the source-snapshot
@@ -71,6 +75,16 @@ describe('fix-worker failure logging (MUSHI-MUSHI-SERVER-8)', () => {
     });
   });
 
+  describe('categorizeFailure', () => {
+    it('classifies an Anthropic workspace usage cap as llm_rate_limit, not a malformed request', () => {
+      const err = new ClaudeQuotaExceededError(
+        'You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.',
+      );
+      expect(categorizeFailure(err, err.message)).toBe('llm_rate_limit');
+      expect(categorizeFailure(new Error('temperature is deprecated'), 'temperature is deprecated')).toBe('unknown');
+    });
+  })
+
   describe('source snapshot — gate is wired in the edge function', () => {
     const src = readFileSync(FIX_WORKER_SRC, 'utf8');
 
@@ -95,7 +109,9 @@ describe('fix-worker failure logging (MUSHI-MUSHI-SERVER-8)', () => {
       );
       // A pinned key that was already unusable is the same kind of stop: warn,
       // stored as cursor_api_error, and retried on the next spend-down tick.
-      expect(src).toContain("if (isSpendDownPinnedKeyUnavailable(msg)) return 'cursor_api_error'");
+      expect(readFileSync(resolve(__dirname, '../../supabase/functions/_shared/fix-failure.ts'), 'utf8')).toContain(
+        "if (isSpendDownPinnedKeyUnavailable(msg)) return 'cursor_api_error'",
+      );
       expect(src).toContain("log.warn('Fix worker stopped: spend-down key is not usable'");
     });
   });

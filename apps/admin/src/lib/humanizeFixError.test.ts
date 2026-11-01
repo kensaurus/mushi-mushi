@@ -21,6 +21,27 @@ describe('humanizeFixError: no relevant code', () => {
   })
 })
 
+describe('humanizeFixError: Anthropic workspace usage cap', () => {
+  it('explains the spend cap instead of calling it a malformed request', () => {
+    const h = humanizeFixError(
+      'Claude quota exceeded: You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.',
+    )
+    expect(h?.title).toBe('The Anthropic workspace has reached its usage limit.')
+    expect(h?.hint).toContain('until the limit resets')
+    expect(h?.severity).toBe('soft')
+    expect(h?.action?.target).toEqual({ kind: 'route', to: '/settings?tab=byok' })
+  })
+
+  it('names an exhausted key pool when the code is uppercase in a lowercased message', () => {
+    const h = humanizeFixError(
+      'LLM failover: ALL_KEYS_EXHAUSTED for provider anthropic after 1 attempt(s). Last error: billing hard stop',
+    )
+    expect(h?.title).toBe('All configured API keys have hit their quota.')
+    expect(h?.hint).toContain('Add a backup key')
+    expect(h?.action?.label).toBe('Add backup key')
+  })
+})
+
 describe('humanizeFixError: review gate', () => {
   // Real error from a 2026-10-16 dispatch on a Sentry web-vital report.
   const COMMENTS_ONLY =
