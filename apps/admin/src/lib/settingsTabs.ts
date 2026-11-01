@@ -9,6 +9,7 @@
  *          (settings-research.ts still sends `?tab=firecrawl`, radar.ts sends
  *          `?tab=keys`) and saved localStorage keep using the old ids, so each
  *          one has an entry here with the section it should scroll to.
+ *          `egress` is a short link to Security → Data egress.
  */
 
 import { SETTINGS_TAB_IDS, type SettingsTabId } from '../components/settings/types'
@@ -24,6 +25,7 @@ export const SETTINGS_SECTION_IDS = {
   ciCost: 'ci-cost',
   ciPolicy: 'ci-policy',
   sidebarPages: 'sidebar-pages',
+  dataEgress: 'data-egress',
 } as const
 
 /** Where "Search the web for known fixes" lives (KnownIssuesSearchCard). */
@@ -51,6 +53,7 @@ const SETTINGS_TAB_ALIASES: Readonly<Record<string, SettingsTabTarget>> = {
   'ci-policy': { tab: 'general', anchor: SETTINGS_SECTION_IDS.ciPolicy },
   // Settings › Labs became the sidebar half of Display & sidebar (2026-10-27).
   labs: { tab: 'display', anchor: SETTINGS_SECTION_IDS.sidebarPages },
+  egress: { tab: 'security', anchor: SETTINGS_SECTION_IDS.dataEgress },
 }
 
 function isSettingsTabId(value: unknown): value is SettingsTabId {

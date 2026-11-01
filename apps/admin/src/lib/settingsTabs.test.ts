@@ -9,12 +9,12 @@ import { describe, expect, it } from 'vitest'
 import { SETTINGS_TAB_IDS } from '../components/settings/types'
 import { isStoredSettingsTab, normalizeSettingsLocation, resolveSettingsTab } from './settingsTabs'
 
-const OLD_IDS = ['firecrawl', 'browserbase', 'health', 'dev', 'keys']
+const OLD_IDS = ['firecrawl', 'browserbase', 'health', 'dev', 'keys', 'egress']
 import { SETTINGS_TAB_DESCRIPTIONS, SETTINGS_TAB_LABELS } from './settingsTabExplainer'
 
 describe('SETTINGS_TAB_IDS', () => {
-  it('is the six tabs, in strip order', () => {
-    expect(SETTINGS_TAB_IDS).toEqual(['general', 'byok', 'tools', 'voice', 'sdk', 'display'])
+  it('is the seven tabs, in strip order', () => {
+    expect(SETTINGS_TAB_IDS).toEqual(['general', 'byok', 'tools', 'voice', 'sdk', 'security', 'display'])
   })
 })
 
@@ -32,6 +32,7 @@ describe('resolveSettingsTab', () => {
     ['dev', 'sdk', 'debug-logging'],
     ['keys', 'byok', null],
     ['fixes', 'general', 'verified-merge'],
+    ['egress', 'security', 'data-egress'],
   ])('maps the old id %s to %s (section %s)', (alias, tab, anchor) => {
     expect(resolveSettingsTab(alias)).toEqual({ tab, anchor })
   })
@@ -109,6 +110,7 @@ describe('Settings tab labels', () => {
       tools: 'Web tools',
       voice: 'Voice reports',
       sdk: 'SDK & connection',
+      security: 'Security',
       display: 'Display & sidebar',
     })
   })

@@ -40,6 +40,7 @@ import { DevToolsPanel } from '../components/settings/DevToolsPanel';
 import { LabsPanel } from '../components/settings/LabsPanel';
 import { DisplayPreferences } from '../components/DisplayPreferences';
 import { useFocusMode } from '../lib/focusMode';
+import { DataEgressCard } from '../components/settings/DataEgressCard';
 import { SettingsIntegrationsReadout } from '../components/settings/SettingsIntegrationsReadout';
 import { SettingsStatusBanner } from '../components/settings/SettingsStatusBanner';
 import { DeveloperDetails } from '../components/settings/SettingsRow';
@@ -409,6 +410,9 @@ function SettingsPageBody({
               <DevToolsPanel />
             </div>
           </>
+        )}
+        {active === 'security' && (
+          <DataEgressCard projectId={activeProjectId} id={SETTINGS_SECTION_IDS.dataEgress} />
         )}
         {active === 'display' && (
           <>
