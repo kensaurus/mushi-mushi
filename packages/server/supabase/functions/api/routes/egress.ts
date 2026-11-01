@@ -272,11 +272,11 @@ export async function loadEgressSettings(db: Db, projectIds: string[], userId: s
   const filters = [`project_id.in.(${projectIds.join(',')})`]
   if (orgIds.size) filters.push(`organization_id.in.(${[...orgIds].join(',')})`)
   if (UUID_RE.test(userId)) filters.push(`owner_user_id.eq.${userId}`)
-  const keys = await db.from('byok_keys').select('provider, base_url, status').or(filters.join(','))
+  const keys = await db.from('byok_keys').select('provider_slug, base_url, status').or(filters.join(','))
   if (!keys.error) {
-    for (const k of (keys.data ?? []) as Array<{ provider: string; base_url: string | null; status: string }>) {
+    for (const k of (keys.data ?? []) as Array<{ provider_slug: string; base_url: string | null; status: string }>) {
       if (k.status === 'disabled') continue
-      out.byok.push({ provider: k.provider, baseUrl: k.base_url })
+      out.byok.push({ provider: k.provider_slug, baseUrl: k.base_url })
     }
   }
   const settings = await db
