@@ -54,7 +54,9 @@ export interface DocsAuthSession {
   apiUrl: string
 }
 
-const SESSION_KEY = 'mushi:docs:auth'
+/** sessionStorage key for the docs-bridge access token. The navbar's pre-paint probe reads this same key. */
+export const DOCS_AUTH_SESSION_KEY = 'mushi:docs:auth'
+const SESSION_KEY = DOCS_AUTH_SESSION_KEY
 const NONCE_KEY = 'mushi:docs:bridge-nonce'
 
 const DEFAULT_ADMIN_ORIGIN =
