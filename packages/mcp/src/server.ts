@@ -310,6 +310,7 @@ const DISPATCH_AGENTS = [
   'rest_fix_worker',
   'llm',
   'mcp',
+  'local',
 ] as const;
 
 const nullableString = () => z.string().nullable().optional();
@@ -1754,6 +1755,50 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         await apiCall(`/v1/admin/ci/overview?${qs}`, undefined, args.refresh ? { minTimeoutMs: 60_000 } : undefined),
       );
     },
+  );
+
+  // Verifiably local (Plan 023, ADR 0034). Stack-wide, not per project.
+  server.registerTool(
+    'get_egress_status',
+    {
+      title: titleOf('get_egress_status'),
+      description: descOf('get_egress_status'),
+      annotations: annotationsFor('get_egress_status'),
+      inputSchema: z.object({}),
+      outputSchema: z.looseObject({
+        localOnly: z.boolean().optional().describe('MUSHI_LOCAL_ONLY is on: outbound requests go through the allowlist'),
+        allowlist: z.array(z.string()).optional().describe('Hosts requests may still reach'),
+        denials: z
+          .array(z.looseObject({ host: z.string(), caller: z.string().nullable().optional(), day: z.string(), count: z.number(), lastAt: z.string().nullable().optional() }))
+          .optional()
+          .describe('Blocked requests per host and day'),
+        integrations: z
+          .array(z.looseObject({ id: z.string(), label: z.string(), destination: z.string().nullable().optional(), enabled: z.boolean(), allowed: z.boolean(), note: z.string().nullable().optional() }))
+          .optional()
+          .describe('What each integration would reach, and whether local-only lets it'),
+      }),
+    },
+    async () => jsonResult(await apiCall('/v1/admin/egress/status')),
+  );
+
+  server.registerTool(
+    'run_egress_selftest',
+    {
+      title: titleOf('run_egress_selftest'),
+      description: descOf('run_egress_selftest'),
+      annotations: annotationsFor('run_egress_selftest'),
+      inputSchema: z.object({}),
+      outputSchema: z.looseObject({
+        localOnly: z.boolean().optional(),
+        results: z
+          .array(z.looseObject({ host: z.string(), outcome: z.string().describe('blocked_by_mushi | network_unreachable | reachable'), ms: z.number().nullable().optional() }))
+          .optional()
+          .describe('One outbound attempt per known cloud host'),
+        passed: z.boolean().optional().describe('Local-only is on and no host was reachable'),
+      }),
+    },
+    // Each host gets a few seconds; give the whole run room.
+    async () => jsonResult(await apiCall('/v1/admin/egress/selftest', { method: 'POST' }, { minTimeoutMs: 60_000 })),
   );
 
   server.registerTool(
@@ -3341,7 +3386,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         agent: z
           .enum(DISPATCH_AGENTS)
           .optional()
-          .describe('Which agent runs the fix. Omit for the project default (auto); cursor_cloud and github_cloud_agent dispatch a cloud agent.'),
+          .describe('Which agent runs the fix. Omit for the project default (auto); cursor_cloud and github_cloud_agent dispatch a cloud agent; local queues it for `mushi agent serve` on your own machine.'),
         projectId: z
           .string()
           .optional()

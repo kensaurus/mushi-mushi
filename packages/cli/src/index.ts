@@ -53,6 +53,8 @@ import { registerRunnerCommands } from './commands/runner.js'
 import { registerVerifyCommands } from './commands/verify.js'
 import { registerWorkCommands } from './commands/work.js'
 import { registerWorkerCommands } from './commands/worker.js'
+import { registerLocalCommands } from './commands/local.js'
+import { registerAgentCommands } from './commands/agent.js'
 import { setGlobalOutputFormat } from './cli-shared.js'
 import { printAndExit } from './errors.js'
 
@@ -151,6 +153,8 @@ registerRunnerCommands(program)
 registerVerifyCommands(program)
 registerWorkCommands(program)
 registerWorkerCommands(program)
+registerLocalCommands(program)
+registerAgentCommands(program)
 // Registered last so buildCommandTree() sees every command above when the
 // action runs (Commander builds the tree during these synchronous calls;
 // the action itself only executes later, at parseAsync() time).

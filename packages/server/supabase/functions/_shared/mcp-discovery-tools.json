@@ -605,7 +605,7 @@
     },
     "dispatch_fix": {
       "title": "Dispatch Mushi fix agent",
-      "description": "Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent=\"cursor_cloud\" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). For a project with several linked repos, set targetRepoId (a project_repos.id) to choose the repo the PR opens against; omit it for the primary repo. Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns { fixId, status } (fixId is the dispatch id; get_fix_timeline accepts it immediately); poll get_fix_timeline for progress and merge_fix when CI is green. Write; pass the same idempotencyKey to retry safely — without it each call starts a new attempt. Report must be classified — run triage_issue if not.",
+      "description": "Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent=\"cursor_cloud\" to dispatch a Cursor Cloud Agent, or agent=\"local\" to queue it for `mushi agent serve` on your own machine, which opens the PR with your own credentials (default uses the in-repo worker). For a project with several linked repos, set targetRepoId (a project_repos.id) to choose the repo the PR opens against; omit it for the primary repo. Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns { fixId, status } (fixId is the dispatch id; get_fix_timeline accepts it immediately); poll get_fix_timeline for progress and merge_fix when CI is green. Write; pass the same idempotencyKey to retry safely — without it each call starts a new attempt. Report must be classified — run triage_issue if not.",
       "scope": "mcp:write",
       "annotations": {
         "title": "Dispatch Mushi fix agent",
@@ -624,7 +624,7 @@
             "description": "Report UUID to fix (`report_id` is accepted too.)"
           },
           "agent": {
-            "description": "Which agent runs the fix. Omit for the project default (auto); cursor_cloud and github_cloud_agent dispatch a cloud agent.",
+            "description": "Which agent runs the fix. Omit for the project default (auto); cursor_cloud and github_cloud_agent dispatch a cloud agent; local queues it for `mushi agent serve` on your own machine.",
             "type": "string",
             "enum": [
               "auto",
@@ -635,7 +635,8 @@
               "rest_worker",
               "rest_fix_worker",
               "llm",
-              "mcp"
+              "mcp",
+              "local"
             ]
           },
           "projectId": {
@@ -1678,6 +1679,130 @@
         }
       },
       "returnsUntrusted": true
+    },
+    "get_egress_status": {
+      "title": "What leaves this Mushi stack",
+      "description": "Return whether this Mushi stack runs local-only (ADR 0034: MUSHI_LOCAL_ONLY=1 sends every outbound request through an allowlist that fails closed) and what that means: localOnly (true | false), allowlist (the hosts requests may still reach: the Supabase host, loopback, private networks, *.internal / *.local and MUSHI_EGRESS_ALLOW), denials [{ host, caller, day, count, lastAt }] (blocked requests per host and day, newest first), and integrations [{ id, label, destination, enabled, allowed, note }] (for each integration, the host it would reach, whether it is turned on and whether local-only lets it through). Applies to the whole stack, not one project. Read-only. Use run_egress_selftest to prove nothing gets out.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "What leaves this Mushi stack",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "localOnly": {
+            "description": "MUSHI_LOCAL_ONLY is on: outbound requests go through the allowlist",
+            "type": "boolean"
+          },
+          "allowlist": {
+            "description": "Hosts requests may still reach",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "denials": {
+            "description": "Blocked requests per host and day",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "caller": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "day": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "number"
+                },
+                "lastAt": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "host",
+                "day",
+                "count"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "integrations": {
+            "description": "What each integration would reach, and whether local-only lets it",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "destination": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "allowed": {
+                  "type": "boolean"
+                },
+                "note": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "label",
+                "enabled",
+                "allowed"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "additionalProperties": {}
+      }
     },
     "get_file_summary": {
       "title": "Plain-English file summary",
@@ -5015,6 +5140,66 @@
         }
       },
       "returnsUntrusted": true
+    },
+    "run_egress_selftest": {
+      "title": "Prove nothing leaves this stack",
+      "description": "Try to reach known cloud hosts (api.anthropic.com, api.openai.com, ollama.com, sentry.io, api.github.com, registry.npmjs.org) from the Mushi edge runtime and report what happened to each: results [{ host, outcome (blocked_by_mushi | network_unreachable | reachable), ms }], localOnly and passed (true only when local-only is on and no host was reachable). Each attempt is an outbound connection try from your server, so it shows up in the denial log; nothing is sent to any host that answers beyond the connection attempt. Write; idempotent. Confirm with the user before calling. From a terminal, `mushi local verify --host-check` also tries the same hosts from that machine.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Prove nothing leaves this stack",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "localOnly": {
+            "type": "boolean"
+          },
+          "results": {
+            "description": "One outbound attempt per known cloud host",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "outcome": {
+                  "type": "string",
+                  "description": "blocked_by_mushi | network_unreachable | reachable"
+                },
+                "ms": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "host",
+                "outcome"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "passed": {
+            "description": "Local-only is on and no host was reachable",
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": {}
+      }
     },
     "run_fullstack_audit": {
       "title": "Run a full-stack health audit",

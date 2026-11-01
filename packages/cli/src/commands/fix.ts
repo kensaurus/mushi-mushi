@@ -114,7 +114,7 @@ fixCmd
   .argument('<reportId>', 'Report UUID to fix')
   .option(
     '--agent <name>',
-    'Agent adapter: claude_code (default), cursor_cloud, codex, mcp',
+    'Agent adapter: claude_code (default), cursor_cloud, codex, mcp, local (run by `mushi agent serve` on your machine)',
     'claude_code',
   )
   .option(
@@ -141,6 +141,7 @@ Examples:
   mushi fix abc123 --agent cursor_cloud --wait
   mushi fix abc123 --agent cursor_cloud --model composer-latest --no-auto-pr
   mushi fix abc123 --agent claude_code
+  mushi fix abc123 --agent local      # then: mushi agent serve --repo-dir .
 
   # A project with a frontend and a backend repo: send the fix to the backend
   mushi fix abc123 --repo acme/app-backend
