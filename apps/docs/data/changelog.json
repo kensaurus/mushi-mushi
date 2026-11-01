@@ -1206,6 +1206,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.35.4",
       "0.35.3",
       "0.35.2",
       "0.35.1",
@@ -1228,7 +1229,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/cli",
-        "version": "0.35.3"
+        "version": "0.35.4"
       }
     ]
   },

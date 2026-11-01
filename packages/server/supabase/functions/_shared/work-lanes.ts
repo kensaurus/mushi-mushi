@@ -379,6 +379,95 @@ export function inLocalCooldown(attempts: readonly AttemptLite[], now: Date): bo
 }
 
 /**
+ * An idle lane whose reported state did not change is rewritten at most this
+ * often. Every heartbeat (once a minute) used to rewrite every lane of the
+ * machine, about 20 of them: 1,240 PATCHes an hour on 2026-10-31, each one a
+ * logged API request.
+ */
+export const IDLE_LANE_REFRESH_MS = 5 * 60_000
+
+/** The parts of a lane's reported status that tick by themselves and say nothing new. */
+const TICKING_STATUS_KEYS = new Set(['stateSec'])
+
+function stableStatus(status: Record<string, unknown> | null | undefined): string {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(status ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
+    if (!TICKING_STATUS_KEYS.has(k)) out[k] = v
+  }
+  return JSON.stringify(out)
+}
+
+/**
+ * Whether a heartbeat must write the lane row. A lane with runs in flight is
+ * always written (the Workers tab shows their stages live); an idle lane only
+ * when its state, counters, last line or repo changed, or its row is older
+ * than IDLE_LANE_REFRESH_MS.
+ */
+export function laneWriteNeeded(
+  prev: { status: Record<string, unknown> | null; repo: string | null; last_seen_at: string | null },
+  next: { status: Record<string, unknown> | null; repo?: string | null },
+  now: Date,
+): boolean {
+  const inflight = (next.status as { inflight?: unknown } | null)?.inflight
+  if (Array.isArray(inflight) && inflight.length > 0) return true
+  if (next.repo && next.repo !== prev.repo) return true
+  const seen = prev.last_seen_at ? Date.parse(prev.last_seen_at) : NaN
+  if (!Number.isFinite(seen) || now.getTime() - seen >= IDLE_LANE_REFRESH_MS) return true
+  return stableStatus(prev.status) !== stableStatus(next.status)
+}
+
+/**
+ * A claim that ended 'skipped' holds its report back this long. A skip means
+ * the worker found the report already handled elsewhere (its branch has an
+ * open or merged PR) or unusable; offering it again at once only repeats the
+ * skip. 2026-10-31: two reports were re-claimed and skipped 401 times in an
+ * hour, about every 15 s.
+ */
+export const SKIPPED_COOLDOWN_MS = 6 * 3_600_000
+
+/** Reports with a claim that ended 'skipped' inside the cooldown. */
+export function recentlySkipped(rows: ReadonlyArray<{ report_id: string | null; outcome: string | null; finished_at: string | null }>, now: Date): Set<string> {
+  const out = new Set<string>()
+  for (const r of rows) {
+    if (!r.report_id || r.outcome !== 'skipped' || !r.finished_at) continue
+    const at = Date.parse(r.finished_at)
+    if (Number.isFinite(at) && now.getTime() - at < SKIPPED_COOLDOWN_MS) out.add(r.report_id)
+  }
+  return out
+}
+
+/** The agent account would not run at all (spent usage, a model its plan lacks). Mirrors the CLI daemon's AGENT_UNAVAILABLE. */
+const AGENT_UNAVAILABLE = /ActionRequiredError|Increase limits|usage limit|out of (?:usage|credits)|Cannot use this model/i
+const INFRA_BACKOFF_MS = 60_000
+const INFRA_BACKOFF_MAX_MS = 30 * 60_000
+
+/**
+ * Why a lane gets nothing right now because its latest runs all failed on the
+ * machine or the agent account, or null. One such failure still retries at
+ * once (it is requeued at the front, once); from the second in a row the lane
+ * waits 1, 2, 4 … 30 min after the newest. The worker backs off on its
+ * own too; this holds older workers back (2026-10-31: three lanes on a spent
+ * Cursor plan claimed and failed an audit every 14 s, 251 in an hour).
+ * `recent` is the lane's finished claims, newest first.
+ */
+export function laneInfraBackoff(
+  recent: ReadonlyArray<{ failure_kind: string | null; detail: string | null; finished_at: string | null }>,
+  now: Date,
+): string | null {
+  let streak = 0
+  for (const r of recent) {
+    if (r.failure_kind === 'infra' || AGENT_UNAVAILABLE.test(r.detail ?? '')) streak++
+    else break
+  }
+  const newest = recent[0]?.finished_at ? Date.parse(recent[0].finished_at) : NaN
+  if (streak < 2 || !Number.isFinite(newest)) return null
+  const until = newest + Math.min(INFRA_BACKOFF_MS * 2 ** (streak - 2), INFRA_BACKOFF_MAX_MS)
+  if (now.getTime() >= until) return null
+  const unavailable = AGENT_UNAVAILABLE.test(recent[0]?.detail ?? '')
+  return `The last ${streak} run${streak === 1 ? '' : 's'} failed on ${unavailable ? 'the agent account (its plan refused to run)' : 'the machine'}; the lane waits until ${new Date(until).toISOString().slice(11, 16)} UTC before it takes more.`
+}
+
+/**
  * Try candidates in order until one insert wins. `tryClaim` inserts the claim
  * and answers 'won', 'taken' (23505: another claimer holds the report) or
  * throws on any other error. Two claimers racing over one list each end with

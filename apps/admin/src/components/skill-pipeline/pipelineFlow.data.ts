@@ -14,15 +14,17 @@ import { MarkerType, type Edge, type Node } from '@xyflow/react'
 import { readVizToken, stepStatusColor } from '../../lib/vizTokens'
 
 // ── Step status colours ───────────────────────────────────────────────────────
+// Getters: this module is evaluated before index.css, so a top-level read
+// would freeze the stand-in instead of the stylesheet colour.
 const STEP_STATUS_HEX: Record<string, string> = {
-  pending: readVizToken('viz-step-pending'),
-  running: readVizToken('viz-step-running'),
-  passed: readVizToken('viz-step-passed'),
-  failed: readVizToken('viz-step-failed'),
-  skipped: readVizToken('viz-step-skipped'),
+  get pending() { return readVizToken('viz-step-pending') },
+  get running() { return readVizToken('viz-step-running') },
+  get passed() { return readVizToken('viz-step-passed') },
+  get failed() { return readVizToken('viz-step-failed') },
+  get skipped() { return readVizToken('viz-step-skipped') },
 }
 
-/** Runtime reader — prefers live CSS token over module-init fallback. */
+/** Runtime reader — live CSS token. */
 export function resolveStepStatusColor(status: string): string {
   return stepStatusColor(status)
 }

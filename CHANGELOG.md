@@ -490,7 +490,7 @@ Latest tag: `v1.0.4`
 
 ## v0.35.x
 
-Latest tag: `v0.35.3`
+Latest tag: `v0.35.4`
 
 ### Highlights
 
@@ -500,7 +500,7 @@ Latest tag: `v0.35.3`
 
 ### Packages bumped
 
-- `@mushi-mushi/cli` → 0.35.3
+- `@mushi-mushi/cli` → 0.35.4
 
 ## v0.34.x
 

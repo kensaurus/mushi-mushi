@@ -264,3 +264,12 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Sentry alternative for AI-built apps](https://kensaur.us/mushi-mushi/docs/use-cases/sentry-alternative): Mushi Mushi, an open-source Sentry alternative for AI-built apps. Plain-English diagnoses and ready fixes, not raw stack traces. Works with or without Sentry.
 - [What else Mushi Mushi does](https://kensaur.us/mushi-mushi/docs/what-it-does): Bugs nobody reports: a first-time user test, live-site watch, site audit, security holes, a second AI on every fix, your CI bill, playbooks in rounds.
 - [Who Mushi Mushi is for](https://kensaur.us/mushi-mushi/docs/who-its-for): Solo builders who make apps with AI, developers who own their code, and teams: the pains each has and what Mushi Mushi does about them.
+
+## More from kensaurus
+
+- [kenji skills](https://github.com/kensaurus/skills): Step-by-step playbooks that keep AI coding assistants on track
+- [Solo Boss](https://solo-boss.kensaur.us/): Bookkeeping through to tax filing, for one-person companies
+- [ProjectFlow](https://kensaur.us/project-flow/): Projects, estimates, invoices and delivery in one place
+- [Tsumagoi Work&Camp](https://tsumagoi.kensaur.us/): A 24-hour mountain lounge, run by us
+- [All apps as JSON](https://kensaur.us/apps.json)
+- [kensaurus](https://kensaur.us/)

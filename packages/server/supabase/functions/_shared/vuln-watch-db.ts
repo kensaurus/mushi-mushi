@@ -345,11 +345,16 @@ async function importSites(db: Db, projectId: string, pkgs: Array<{ ecosystem: s
   const out = new Map<string, string>()
   for (const p of pkgs.slice(0, IMPORT_CHECK_PACKAGES)) {
     const module = p.ecosystem === 'PyPI' ? p.name.replace(/-/g, '_') : p.name
+    // File rows only (symbol_name IS NULL): their preview is the head of the
+    // file, where imports live, and they are ~8% of a project's rows. Scanning
+    // symbol chunks too took 0.5-1.1 s per package on the largest project,
+    // 32-81 ms without them (2026-10-31).
     const { data, error } = await db
       .from('project_codebase_files')
       .select('file_path, content_preview')
       .eq('project_id', projectId)
       .is('tombstoned_at', null)
+      .is('symbol_name', null)
       .ilike('content_preview', `%${escapeLike(module)}%`)
       .limit(20)
     if (error) return out
