@@ -397,23 +397,19 @@ jobs:
         run: node scripts/aws-attach-apex-redirect.mjs
 
       - name: Invalidate CloudFront cache
-        # Invalidate /mushi-mushi/* (spa-router) and apex docs prefixes (apex-redirect).
+        # Invalidates /mushi-mushi/* (spa-router), the apex docs prefixes
+        # (apex-redirect) and the hosted-MCP /.well-known paths.
+        # One path, not a list (2026-11-01): CloudFront bills $0.005 per invalidation
+        # PATH after the first 1,000 a month, and a wildcard counts as one path.
+        # This deploy's 12-path list made the shared kensaur.us distribution
+        # ~$10/month over the free 1,000 (AWS Cost Explorer, October 2026: 3,166
+        # paths). "/*" covers /mushi-mushi/*, the apex docs prefixes and the
+        # /.well-known OAuth paths in one path; the other apps on this
+        # distribution serve hashed assets, so a refetch costs only S3 GETs.
         run: |
           aws cloudfront create-invalidation \
             --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
-            --paths \
-              "/mushi-mushi/*" \
-              "/mushi-mushi/hosted-mcp*" \
-              "/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp*" \
-              "/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp*" \
-              "/quickstart/*" \
-              "/concepts/*" \
-              "/sdks/*" \
-              "/migrations/*" \
-              "/integrations/*" \
-              "/operating/*" \
-              "/admin/*" \
-              "/connect/*" \
+            --paths "/*" \
             --region us-east-1
 
       - name: Verify hosted MCP (Smithery / RFC 9728)

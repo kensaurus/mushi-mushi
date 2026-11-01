@@ -55,6 +55,10 @@ import {
   hostGuardsFrom,
   hostOnline,
   inLocalCooldown,
+  laneInfraBackoff,
+  laneWriteNeeded,
+  recentlySkipped,
+  SKIPPED_COOLDOWN_MS,
   laneClaimBlock,
   laneConfigFromRow,
   mayAutoRequeue,
@@ -394,17 +398,25 @@ export async function claimCandidates(db: Db, lane: LaneRow, now: Date): Promise
   if ('error' in elsewhere) throw new Error(`work queues read failed: ${elsewhere.error}`)
   const inflight = new Set<string>()
   const attempts = new Map<string, AttemptLite[]>()
+  const skipRows: Array<{ report_id: string | null; outcome: string | null; finished_at: string | null }> = []
+  const skippedSince = new Date(now.getTime() - SKIPPED_COOLDOWN_MS).toISOString()
   for (const part of chunks(ids)) {
-    const [jobs, att] = await Promise.all([
+    const [jobs, att, skips] = await Promise.all([
       db.from('fix_dispatch_jobs').select('report_id').in('report_id', part).in('status', ['queued', 'running']),
       db.from('fix_attempts').select(ATTEMPT_COLUMNS).in('report_id', part),
+      db.from('work_claims').select('report_id, outcome, finished_at').in('report_id', part).eq('outcome', 'skipped').gte('finished_at', skippedSince),
     ])
     if (jobs.error) throw new Error(`dispatch jobs read failed: ${jobs.error.message}`)
     if (att.error) throw new Error(`fix attempts read failed: ${att.error.message}`)
+    if (skips.error) throw new Error(`skipped claims read failed: ${skips.error.message}`)
     for (const j of (jobs.data ?? []) as Array<{ report_id: string }>) inflight.add(j.report_id)
     for (const a of (att.data ?? []) as AttemptLite[]) attempts.set(a.report_id, [...(attempts.get(a.report_id) ?? []), a])
+    skipRows.push(...((skips.data ?? []) as typeof skipRows))
   }
-  const free = (id: string) => !claimed.ids.has(id) && !inflight.has(id)
+  // A report the worker just skipped waits SKIPPED_COOLDOWN_MS, queued or not:
+  // the same skip would come straight back.
+  const skipped = recentlySkipped(skipRows, now)
+  const free = (id: string) => !claimed.ids.has(id) && !inflight.has(id) && !skipped.has(id)
   // A queued report waits (it stays queued) while anything else works on it:
   // a claim, a cloud dispatch, or a live run or open PR. The 7-day cooldown
   // does not apply to it: a person put it there.
@@ -514,8 +526,12 @@ async function heartbeat(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   const known = new Map(((laneRows ?? []) as LaneRow[]).map((l) => [l.name, l]))
   const lanes: Array<{ id: string; name: string; projectId: string; config: LaneConfig }> = []
   const refused: Array<{ name: string; reason: string }> = []
+  // One access check per app, not per lane: a machine runs many lanes on a
+  // few apps, and each check is several membership reads.
+  const accessByProject = new Map<string, ReturnType<typeof deps.access>>()
   for (const l of hb.lanes) {
-    const access = await deps.access(c, db, userId, l.projectId)
+    if (!accessByProject.has(l.projectId)) accessByProject.set(l.projectId, deps.access(c, db, userId, l.projectId))
+    const access = await accessByProject.get(l.projectId)!
     if (!access.allowed || access.role === 'viewer') {
       refused.push({ name: l.name, reason: access.allowed ? 'A viewer cannot run fixes for this app.' : 'This key cannot reach that app.' })
       continue
@@ -526,7 +542,10 @@ async function heartbeat(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
       continue
     }
     let row: LaneRow | null = prev ?? null
-    if (prev) {
+    if (prev && !laneWriteNeeded(prev, { status: l.status as Record<string, unknown> | null, repo: l.repo ?? null }, now)) {
+      // Idle and unchanged: the stored row is still true.
+      row = prev
+    } else if (prev) {
       const { data } = await db
         .from('work_lanes')
         .update({ status: l.status, last_seen_at: now.toISOString(), ...(l.repo ? { repo: l.repo } : {}) })
@@ -639,6 +658,15 @@ async function claim(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   if (activeErr) return err(c, 'DB_ERROR', 'Could not read the lane\'s claims.', 500)
   const block = laneClaimBlock(cfg, ((active ?? []) as unknown[]).length, now)
   if (block) return c.json({ ok: true, data: { claim: null, reason: block } })
+  const { data: recentRuns } = await db
+    .from('work_claims')
+    .select('failure_kind, detail, finished_at')
+    .eq('lane_id', lane.id)
+    .not('finished_at', 'is', null)
+    .order('claimed_at', { ascending: false })
+    .limit(6)
+  const backoff = laneInfraBackoff((recentRuns ?? []) as Array<{ failure_kind: string | null; detail: string | null; finished_at: string | null }>, now)
+  if (backoff) return c.json({ ok: true, data: { claim: null, reason: backoff } })
   const leaseUntil = new Date(now.getTime() + WORK_LEASE_MS).toISOString()
   // A first-time user test someone pressed Run now on goes before the lane's own work.
   if ((host.takes ?? []).includes('fresh_eyes')) {

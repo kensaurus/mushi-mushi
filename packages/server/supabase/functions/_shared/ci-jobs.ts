@@ -434,24 +434,18 @@ export async function noteRunnersFromJobs(db: Db, rows: CiJobRow[], now: Date): 
     })),
     { onConflict: 'project_id,repo,runner_name', ignoreDuplicates: true },
   )
+  // One write per runner (2026-10-31: two PATCHes per runner per job batch were
+  // ~740 logged requests an hour). A runner first stored as unknown (before the
+  // runner-group rule) learns its kind in the same write.
   for (const x of fresh) {
+    const known = x.kind !== 'unknown'
     await db
       .from('ci_runners')
-      .update({ last_job_at: x.at, last_seen_at: nowIso, updated_at: nowIso })
+      .update({ last_job_at: x.at, last_seen_at: nowIso, updated_at: nowIso, ...(known ? { kind: x.kind } : {}) })
       .eq('project_id', x.project_id)
       .eq('repo', x.repo)
       .eq('runner_name', x.runner_name)
-      .or(`last_job_at.is.null,last_job_at.lt.${x.at}`)
-    // A runner first stored as unknown (before the runner-group rule) learns its kind.
-    if (x.kind !== 'unknown') {
-      await db
-        .from('ci_runners')
-        .update({ kind: x.kind, updated_at: nowIso })
-        .eq('project_id', x.project_id)
-        .eq('repo', x.repo)
-        .eq('runner_name', x.runner_name)
-        .eq('kind', 'unknown')
-    }
+      .or(known ? `last_job_at.is.null,last_job_at.lt.${x.at},kind.eq.unknown` : `last_job_at.is.null,last_job_at.lt.${x.at}`)
   }
 }
 

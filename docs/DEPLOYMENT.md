@@ -210,8 +210,17 @@ any edge function or SDK release that depends on the new schema, so the live
 backend is never behind the code that calls it:
 
 ```bash
+SUPABASE_ACCESS_TOKEN=… pnpm check:migration-ledger   # must exit 0 before the push
 supabase db push
 ```
+
+Apply repo migrations with `supabase db push` only. The Supabase MCP
+`apply_migration` tool records the apply time as the version, not the file's
+(supabase/mcp#241), so the ledger stops matching the files and the next push
+refuses or offers a repair that can re-run SQL. If SQL was applied any other
+way, run `pnpm check:migration-ledger`: it prints the
+`supabase migration repair` commands that put the ledger back on the files'
+versions. The ledger was last reconciled on 2026-11-01 (546 files, 546 rows).
 
 Verify the change landed (e.g. via the Supabase MCP `list_tables` / `pg_proc`
 lookups or a `SET ROLE` smoke test) and check `get_advisors` for new ERROR-level

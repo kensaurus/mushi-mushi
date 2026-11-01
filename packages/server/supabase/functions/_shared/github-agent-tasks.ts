@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
+// Copyright (c) 2024–2026 kensaurus LLC — Mushi Mushi
 /**
  * FILE: packages/server/supabase/functions/_shared/github-agent-tasks.ts
  * PURPOSE: GitHub Copilot cloud agent — "Agent Tasks" REST client.

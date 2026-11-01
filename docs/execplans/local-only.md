@@ -1,6 +1,6 @@
 # Plan 023 — Verifiably local: run all of Mushi on your own machines, and prove nothing leaves
 
-Status: `PLANNED` (2026-10-21). Decision record: [ADR 0034](../adr/0034-verifiably-local-mode.md).
+Status: `IN PROGRESS` (draft) — [PR #990](https://github.com/kensaurus/mushi-mushi/pull/990), branch `feat/local-mode-plan-023`: phases 0, 1, 3 and 5 partly built and unit-tested, nothing run live yet; phase 3 overlaps ADR 0048 (local workers). Planned 2026-10-21. Decision record: [ADR 0034](../adr/0034-verifiably-local-mode.md).
 
 ## Why
 

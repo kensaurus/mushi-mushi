@@ -142,6 +142,8 @@ function bucketFor(at: string, now: Date): Bucket {
 
 /** How long a closed drawer waits before reading the feed for its badge. */
 const CLOSED_FEED_DELAY_MS = 6_000
+/** Closed drawer: realtime reloads of the feed, at most one per this window. */
+const CLOSED_FEED_RELOAD_MS = 60_000
 
 export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
   const activeProjectId = useActiveProjectId()
@@ -233,7 +235,11 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
   // legacy fixes that pre-date the events table. Either change triggers
   // a full reload rather than diff-merging — the response is small
   // (≤50 rows) and the API server-side-derives events for legacy rows.
-  useRealtimeReload(['fix_events', 'fix_attempts'], load, { debounceMs: 400 })
+  // Closed, the feed only feeds the unread badge: at most one reload a
+  // minute. Every fix_events write reloaded it within 400 ms, open or not;
+  // with agents running that was /repo/activity about 7 times a minute per
+  // open console (715 calls in 100 minutes, 2026-10-31). Open stays live.
+  useRealtimeReload(['fix_events', 'fix_attempts'], load, open ? { debounceMs: 400 } : { debounceMs: CLOSED_FEED_RELOAD_MS, maxWaitMs: CLOSED_FEED_RELOAD_MS })
 
   // Notify the trigger + mark everything seen when the drawer opens.
   //

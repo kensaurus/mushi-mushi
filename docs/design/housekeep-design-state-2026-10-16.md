@@ -130,6 +130,12 @@ Found while doing item 3: Tailwind drops `@theme` colours that no utility uses, 
 colour. Item 3 changed both. Moving the viz tokens to `@theme static`, or into a plain
 `:root` block, would make the stylesheet the one source.
 
+Fixed 2026-10-31 (report `801de3ea-8182-4c31-9d45-bc9666f8f7f0`, BL-079): the viz tokens
+are in `@theme static`, `readVizToken()` no longer keeps a palette, and the colour maps
+read the stylesheet on access because those modules load before `index.css`.
+`scripts/check-design-tokens.mjs` compiles the theme with no utilities and fails if a
+token those calls read is missing.
+
 ### Original owner list (2026-10-16, before the decisions above)
 
 1. **Z-index scale is unused and disagrees with the code.** `--z-*` (0/20/40/50/60/70/80) has 0 usages; 59 literal z values exist. Toasts sit at `z-[60]` while `--z-toast` is 70; four overlays (`BetaBanner`, `ConfigHelp`, `FirstRunTour`, `ui/misc` tooltip) use `z-[100]`, above `--z-overlay-max` (80). Pick one stacking model, then migrate.

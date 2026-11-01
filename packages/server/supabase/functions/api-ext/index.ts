@@ -62,6 +62,7 @@ import { registerSetupGapsRoutes } from '../api/routes/setup-gaps.ts'
 import { registerHealthCheckRoutes } from '../api/routes/health-checks.ts'
 import { registerDoctorRoutes } from '../api/routes/doctor.ts'
 import { registerByokReviewFollowupRoutes } from '../api/routes/byok-review-followups.ts'
+import { registerDbAdvisorsRoutes } from '../api/routes/db-advisors.ts'
 import { registerByokSpendDownRoutes } from '../api/routes/byok-spend-down.ts'
 import { registerGithubConnectRoutes } from '../api/routes/github-connect.ts'
 import { registerReleaseBatchRoutes } from '../api/routes/release-batch.ts'
@@ -110,6 +111,7 @@ registerSetupGapsRoutes(app)
 registerHealthCheckRoutes(app)
 registerDoctorRoutes(app)
 registerByokReviewFollowupRoutes(app)
+registerDbAdvisorsRoutes(app)
 registerByokSpendDownRoutes(app)
 registerGithubConnectRoutes(app)
 registerReleaseBatchRoutes(app)

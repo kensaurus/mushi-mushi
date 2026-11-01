@@ -67,13 +67,13 @@ loadEnv()
 const args = parseArgs()
 announceDryRun(args)
 
-// Bluesky uses handle (e.g. kensaurus.bsky.social) + app password (4 dash-grouped
+// Bluesky uses handle (e.g. kensaur.us) + app password (4 dash-grouped
 // blocks, generated at bsky.app → Settings → App passwords). We accept
 // either BLUESKY_APP_PASSWORD (canonical) or BSKY_API_KEY (the alias the
 // user dropped into .env) so the script works with either name.
 const HANDLE = need(
   'BLUESKY_HANDLE',
-  'Set BLUESKY_HANDLE=kensaurus.bsky.social (the full handle; mushimushi.dev is not reserved) in .env.local.',
+  'Set BLUESKY_HANDLE=kensaur.us (the full handle; mushimushi.dev is not reserved) in .env.local.',
 )
 const APP_PASSWORD =
   maybe('BLUESKY_APP_PASSWORD') ??

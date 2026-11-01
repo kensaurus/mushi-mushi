@@ -175,10 +175,11 @@ export const KENSAURUS_MANIFEST = {
       },
       web: 'https://talk.kensaur.us',
       icon: 'https://talk.kensaur.us/pwa-192.png',
+      ios: 'https://apps.apple.com/app/lets-talk-conversation-coach/id6799392790',
       iosAppId: '6799392790',
       android: 'https://play.google.com/store/apps/details?id=us.kensaur.howtotalktogirls',
       androidPackage: 'us.kensaur.howtotalktogirls',
-      platforms: ['android', 'web'],
+      platforms: ['ios', 'android', 'web'],
       pricing: 'free',
     },
     {

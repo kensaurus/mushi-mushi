@@ -52,4 +52,16 @@ describe('QueueKpiRow', () => {
     expect(tileText('pending')).not.toContain('%')
     expect(tileText('completed')).toContain('%')
   })
+
+  it('names each stat help icon on a role that allows aria-label', async () => {
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(QueueKpiRow, { stats: EMPTY_QUEUE_STATS, throughput })))
+    })
+    const icons = [...container.querySelectorAll('[role="img"]')].filter((el) => el.textContent?.trim() === 'i')
+    expect(icons).toHaveLength(5)
+    for (const icon of icons) {
+      expect(icon.tagName).toBe('SPAN')
+      expect(icon.getAttribute('aria-label')?.length).toBeGreaterThan(0)
+    }
+  })
 })
