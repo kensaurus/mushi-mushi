@@ -30,6 +30,8 @@ import {
   type LegacyMessage,
 } from './claude-request.ts'
 import { log as rootLog } from './logger.ts'
+import { anthropicBaseUrlFor } from './llm-endpoints.ts'
+import { effectiveModelId } from './llm-model-env.ts'
 
 const log = rootLog.child('claude-messages')
 
@@ -43,6 +45,8 @@ const DEFAULT_TIMEOUT_MS = 120_000
 
 export interface ClaudeCallOptions {
   apiKey: string
+  /** API root (no `/v1`). Defaults to the key's remembered base URL, then ANTHROPIC_BASE_URL (llm-endpoints.ts). */
+  baseUrl?: string
   model: string
   system?: string
   prompt?: string
@@ -67,7 +71,44 @@ interface FinalMessageLike {
 
 async function client(opts: ClaudeCallOptions): Promise<InstanceType<AiSdk['Anthropic']>> {
   const { Anthropic } = await loadAiSdk()
-  return new Anthropic({ apiKey: opts.apiKey, maxRetries: 0, timeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS })
+  // baseURL is always explicit: the SDK would otherwise read ANTHROPIC_BASE_URL itself, unvalidated.
+  return new Anthropic({
+    apiKey: opts.apiKey,
+    baseURL: anthropicBaseUrlFor(opts.apiKey, opts.baseUrl),
+    maxRetries: 0,
+    timeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+  })
+}
+
+/** The operator's model override (MUSHI_LLM_MODEL_*) applied, and Ollama cloud tags refused in local-only mode. */
+function localized(opts: ClaudeCallOptions): ClaudeCallOptions {
+  const model = effectiveModelId(opts.model)
+  return model === opts.model ? opts : { ...opts, model }
+}
+
+/** A model a local or self-hosted server serves (not a Claude id). */
+function isLocalModel(model: string): boolean {
+  const id = model.trim().toLowerCase()
+  return !/^claude-/.test(id.includes('/') ? id.split('/').slice(-1)[0]! : id)
+}
+
+/**
+ * Local servers (llama.cpp, some Ollama builds) ignore `output_config.format`
+ * or parts of a JSON Schema, so the schema also goes into the system prompt.
+ * `strict` is the retry after a miss.
+ */
+function withJsonInstruction(opts: ClaudeCallOptions, schema: Record<string, unknown>, strict: boolean): ClaudeCallOptions {
+  const rule = strict
+    ? 'Your previous reply did not match the required JSON Schema. Reply again with ONLY one JSON object that matches this schema exactly: every required field present, no extra fields, enum values copied exactly, no markdown fences, no prose.'
+    : 'Reply with only one JSON object that matches this JSON Schema. No markdown fences, no prose.'
+  const instruction = `${rule}\n\nJSON Schema:\n${JSON.stringify(schema)}`
+  return { ...opts, system: opts.system ? `${opts.system}\n\n${instruction}` : instruction }
+}
+
+/** Strip a ```json fence a local model wrapped its object in. */
+function unfence(text: string): string {
+  const m = /^\s*```(?:json)?\s*([\s\S]*?)\s*```\s*$/i.exec(text)
+  return m ? m[1]! : text
 }
 
 /** Per-request SDK options: only the caller's abort signal, when it has one. */
@@ -133,7 +174,7 @@ function parseObject<T>(ai: AiSdk, schema: ZodType<T>, message: FinalMessageLike
   if (message.stop_reason === 'max_tokens') fail('the response hit max_tokens before the object was complete')
   let json: unknown
   try {
-    json = JSON.parse(text)
+    json = JSON.parse(isLocalModel(message.model) ? unfence(text) : text)
   } catch (err) {
     fail('the response was not valid JSON', err as Error)
   }
@@ -147,16 +188,33 @@ function outputSchemaFor<T>(ai: AiSdk, schema: ZodType<T>): Record<string, unkno
 }
 
 /** Structured output (`generateObject` replacement). */
-export async function claudeGenerateObject<T>(opts: ClaudeCallOptions & { schema: ZodType<T> }) {
+export async function claudeGenerateObject<T>(rawOpts: ClaudeCallOptions & { schema: ZodType<T> }) {
   const ai = await loadAiSdk()
-  const body = requestFor(opts, outputSchemaFor(ai, opts.schema))
-  const message = (await (await client(opts)).beta.messages.create(body as never, requestOptions(opts))) as unknown as FinalMessageLike
-  assertNotRefused(message, opts.model)
-  return { object: parseObject(ai, opts.schema, message), ...legacyResult(message) }
+  const opts = localized(rawOpts) as ClaudeCallOptions & { schema: ZodType<T> }
+  const schema = outputSchemaFor(ai, opts.schema)
+  const local = isLocalModel(opts.model)
+  const send = async (call: ClaudeCallOptions) => {
+    const message = (await (await client(call)).beta.messages.create(requestFor(call, schema) as never, requestOptions(call))) as unknown as FinalMessageLike
+    assertNotRefused(message, call.model)
+    return message
+  }
+  const message = await send(local ? withJsonInstruction(opts, schema, false) : opts)
+  try {
+    return { object: parseObject(ai, opts.schema, message), ...legacyResult(message) }
+  } catch (err) {
+    // Local servers can ignore schema keywords: one retry with a stricter
+    // instruction. A truncated reply would only be truncated again, and
+    // Claude keeps its old path (the failover hands a miss to OpenAI).
+    if (!local || message.stop_reason === 'max_tokens') throw err
+    log.warn('Local model reply missed the schema; retrying once', { model: opts.model })
+    const retry = await send(withJsonInstruction(opts, schema, true))
+    return { object: parseObject(ai, opts.schema, retry), ...legacyResult(retry) }
+  }
 }
 
 /** Plain text (`generateText` replacement). */
-export async function claudeGenerateText(opts: ClaudeCallOptions) {
+export async function claudeGenerateText(rawOpts: ClaudeCallOptions) {
+  const opts = localized(rawOpts)
   const body = requestFor(opts)
   const message = (await (await client(opts)).beta.messages.create(body as never, requestOptions(opts))) as unknown as FinalMessageLike
   assertNotRefused(message, opts.model)
@@ -191,14 +249,18 @@ function deferred<T>() {
  * deltas already yielded) on an HTTP error or a refusal.
  */
 function streamDeltas(
-  opts: ClaudeCallOptions,
+  rawOpts: ClaudeCallOptions,
   outputSchema: ((ai: AiSdk) => Record<string, unknown>) | undefined,
 ) {
   const final = deferred<FinalMessageLike>()
+  let opts = rawOpts
   async function* deltas(): AsyncGenerator<string> {
     try {
+      opts = localized(rawOpts)
       const ai = await loadAiSdk()
-      const body = requestFor(opts, outputSchema?.(ai))
+      const schema = outputSchema?.(ai)
+      if (schema && isLocalModel(opts.model)) opts = withJsonInstruction(opts, schema, false)
+      const body = requestFor(opts, schema)
       const stream = (await client(opts)).beta.messages.stream(body as never, requestOptions(opts))
       for await (const event of stream as AsyncIterable<{ type: string; delta?: { type: string; text?: string } }>) {
         if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta' && event.delta.text) {

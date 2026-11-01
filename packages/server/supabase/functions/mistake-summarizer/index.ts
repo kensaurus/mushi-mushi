@@ -26,6 +26,7 @@ import { claudeGenerateText } from '../_shared/claude-messages.ts'
 import { UsageByModel } from '../_shared/pricing.ts'
 import { recordLlmUsage } from '../_shared/llm-usage.ts'
 import { projectLlmKey } from '../_shared/project-llm-key.ts'
+import { localAnthropic } from '../_shared/llm-endpoints.ts'
 
 Deno.serve(
   withSentry(async (req: Request) => {
@@ -78,7 +79,7 @@ ${reportContext || '(none available)'}`
     const anthropicKey = anthropicResolved?.key
     // Haiku 4.5 still takes the AI SDK v4 call shape; Sonnet goes through
     // claude-messages.ts (Sonnet 5.5 rejects temperature and forced tools).
-    const anthropicFast = createAnthropic({ apiKey: anthropicKey })
+    const anthropicFast = localAnthropic(createAnthropic, anthropicKey)
     const openaiMini = openAiProvider({
       apiKey: openaiResolved?.key,
       ...(openaiResolved?.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),

@@ -31,6 +31,8 @@ import { isEarlyRealReport, type OldestReportRow } from '../_shared/first-report
 import { isFirstActivationCandidate, type ActivationCandidateRow } from '../_shared/activation.ts'
 import { clipAtWord } from '../_shared/text-clip.ts'
 import { isFeatureRequest, reporterCategoryHint, respectReporterCategory } from '../_shared/report-category.ts'
+import { localAnthropic } from '../_shared/llm-endpoints.ts'
+import { retryOnSchemaMiss, withStrictJsonInstruction } from '../_shared/structured-retry.ts'
 
 const stage1Schema = z.object({
   symptom: z.string().describe('What the user observed'),
@@ -271,12 +273,17 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
             // schema's input side (emotion has a .catch).
             return { ...r, object: r.object as Stage1Result }
           }
-          const anthropic = createAnthropic({ apiKey: key.key })
-          return generateObject({
-            model: anthropic(PRIMARY_MODEL),
-            schema: stage1Schema,
-            messages,
-          })
+          const anthropic = localAnthropic(createAnthropic, key.key, key.baseUrl)
+          // A local model behind ANTHROPIC_BASE_URL may miss the schema: one
+          // stricter retry (Plan 023).
+          return retryOnSchemaMiss((strict) =>
+            generateObject({
+              model: anthropic(PRIMARY_MODEL),
+              schema: stage1Schema,
+              messages,
+              ...(strict ? { system: strict } : {}),
+            }),
+          )
         },
         async (key) => {
           keySource = key.source
@@ -284,12 +291,14 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
             apiKey: key.key,
             ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
           })
-          return generateObject({
-            model: openai(FALLBACK_MODEL, { structuredOutputs: false }),
-            schema: stage1Schema,
-            system: activeSystemPrompt,
-            prompt: userPrompt,
-          })
+          return retryOnSchemaMiss((strict) =>
+            generateObject({
+              model: openai(FALLBACK_MODEL, { structuredOutputs: false }),
+              schema: stage1Schema,
+              system: strict ? withStrictJsonInstruction(activeSystemPrompt) : activeSystemPrompt,
+              prompt: userPrompt,
+            }),
+          )
         },
       )
       classification = result.object

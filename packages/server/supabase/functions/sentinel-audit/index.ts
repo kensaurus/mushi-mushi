@@ -43,6 +43,7 @@ import { createTrace } from '../_shared/observability.ts'
 import { ANTHROPIC_HAIKU } from '../_shared/models.ts'
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import { platformAnthropicKey } from '../_shared/ai-provider.ts'
+import { localAnthropic } from '../_shared/llm-endpoints.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -146,7 +147,7 @@ suggested_assertions. Otherwise verdict=approved with a one-sentence reason.`
     })
     return { verdict: 'rejected', reasoning: 'no LLM key configured', cached: false }
   }
-  const anthropic = createAnthropic({ apiKey })
+  const anthropic = localAnthropic(createAnthropic, apiKey)
 
   // Resolve the managed system prompt from prompt_versions (stage 'sentinel').
   // Falls back to the hardcoded SENTINEL_SYSTEM_PROMPT constant when no row exists.

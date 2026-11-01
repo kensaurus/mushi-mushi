@@ -12,6 +12,7 @@ import { getPromptForStage } from '../_shared/prompt-ab.ts';
 import { recordLlmUsage } from '../_shared/llm-usage.ts';
 import { resolveLlmKey } from '../_shared/byok.ts';
 import { LlmBudgetExceededError } from '../_shared/llm-budget.ts';
+import { localAnthropic } from '../_shared/llm-endpoints.ts';
 
 // Wave T (2026-04-23): fallback template used when `prompt_versions` has no
 // `synthetic` row for this project (migration 20260422110000 seeded a global
@@ -109,7 +110,7 @@ Deno.serve(
     const keySource = resolvedKey.source;
     // The Sonnet generator goes through claude-messages.ts; the Haiku eval
     // pass stays on the AI SDK (Haiku 4.5 still accepts its call shape).
-    const anthropic = createAnthropic({ apiKey: anthropicKey });
+    const anthropic = localAnthropic(createAnthropic, anthropicKey);
     const trace = createTrace('generate-synthetic', { projectId, count });
     const generated: unknown[] = [];
 

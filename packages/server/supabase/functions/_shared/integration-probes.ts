@@ -21,6 +21,9 @@ import { isCodebaseIndexFailing } from './sweep-error-classifier.ts'
 import { dereferenceMaybeVault } from './settings-secrets.ts'
 import { resolveLlmKey } from './byok.ts'
 import { isSlackChannelUnusable } from './slack.ts'
+import { anthropicBaseUrlFor } from './llm-endpoints.ts'
+import { effectiveModelId } from './llm-model-env.ts'
+import { validateOpenAiBaseUrl } from './byok-validation.ts'
 
 // Deno global — declared only where consumed (edge functions).
 declare const Deno: { env: { get(name: string): string | undefined } }
@@ -223,7 +226,9 @@ export async function probeIntegration(
       if (!key) {
         detail = 'ANTHROPIC_API_KEY is not set on the server.'
       } else {
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
+        // ANTHROPIC_BASE_URL and MUSHI_LLM_MODEL_FAST apply here too, so a
+        // local Ollama probes as the server the pipeline really calls (Plan 023).
+        const res = await fetch(`${anthropicBaseUrlFor(key)}/v1/messages`, {
           method: 'POST',
           headers: {
             'x-api-key': key,
@@ -231,7 +236,7 @@ export async function probeIntegration(
             'content-type': 'application/json',
           },
           body: JSON.stringify({
-            model: HEALTH_PROBE_ANTHROPIC_MODEL,
+            model: effectiveModelId(HEALTH_PROBE_ANTHROPIC_MODEL),
             max_tokens: 1,
             messages: [{ role: 'user', content: 'ping' }],
           }),
@@ -257,7 +262,14 @@ export async function probeIntegration(
       if (!key) {
         detail = 'OPENAI_API_KEY is not set on the server.'
       } else {
-        const res = await fetch(`https://api.openai.com/v1/models/${encodeURIComponent(HEALTH_PROBE_OPENAI_MODEL)}`, {
+        // OPENAI_BASE_URL (validated) so a local OpenAI-compatible server is
+        // the one probed (Plan 023).
+        const base = validateOpenAiBaseUrl(
+          Deno.env.get('OPENAI_BASE_URL') ?? undefined,
+          (Deno.env.get('MUSHI_OPENAI_BASE_URL_ALLOWLIST') ?? '').split(',').map((h) => h.trim()).filter(Boolean),
+        )
+        const root = base.ok ? base.value : 'https://api.openai.com/v1'
+        const res = await fetch(`${root}/models/${encodeURIComponent(effectiveModelId(HEALTH_PROBE_OPENAI_MODEL))}`, {
           headers: { Authorization: `Bearer ${key}` },
           signal: AbortSignal.timeout(5_000),
         })
@@ -588,7 +600,7 @@ export async function probeIntegration(
     } else {
       try {
         // Minimal models list call — cheapest probe with no tokens consumed
-        const res = await fetch('https://api.anthropic.com/v1/models', {
+        const res = await fetch(`${anthropicBaseUrlFor(apiKey)}/v1/models`, {
           headers: {
             'x-api-key': apiKey,
             'anthropic-version': '2023-06-01',
