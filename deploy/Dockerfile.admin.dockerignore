@@ -1,0 +1,13 @@
+# Build context for deploy/Dockerfile.admin (context: repo root; BuildKit reads
+# this file because it sits beside the Dockerfile). Keep host installs, build
+# output and secrets out of the image layers.
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/coverage
+.git
+.claude
+**/.env
+**/.env.*
+!**/.env.example

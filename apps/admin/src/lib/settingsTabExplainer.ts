@@ -13,6 +13,7 @@ export const SETTINGS_TAB_LABELS: Record<SettingsTabId, string> = {
   tools: 'Web tools',
   voice: 'Voice reports',
   sdk: 'SDK & connection',
+  security: 'Security',
   display: 'Display & sidebar',
 }
 
@@ -23,5 +24,6 @@ export const SETTINGS_TAB_DESCRIPTIONS: Record<SettingsTabId, string> = {
     'Firecrawl reads public web pages while diagnosing; Browserbase runs scheduled tests in a cloud browser',
   voice: 'Report bugs by voice from your phone, Telegram or Slack',
   sdk: 'Install the bug widget, check it can reach Mushi, send a test bug, and turn on debug logging',
+  security: 'Where your bug data can go: local-only mode, allowed hosts, refused requests and a self-test',
   display: 'Theme, density and focus mode in this browser, and which extra pages your sidebar keeps',
 }

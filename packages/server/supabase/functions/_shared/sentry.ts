@@ -18,17 +18,46 @@
 import * as Sentry from 'npm:@sentry/deno@^9'
 import type { Context } from 'npm:hono@4'
 import { dbDiagnosticMessage, isHtmlGatewayDbMessage, SAFE_DB_MESSAGE } from './error-codes.ts'
+import { checkEgress, activeEgressPolicy, installEgressGuard, setEgressCaller } from './egress.ts'
+
+// Every edge function reaches this module (directly, or through logger.ts),
+// so this is where the local-only egress guard goes in (Plan 023 Phase 0).
+// It runs before any function body, so code that creates a client at module
+// scope already gets the wrapped fetch. A no-op unless MUSHI_LOCAL_ONLY=1.
+installEgressGuard()
 
 const TOKEN_QUERY_RX = /([?&](?:api_key|apiKey|token|key|access_token|session)=)[^&]+/gi
 
 let inited = false
+let warnedDsnBlocked = false
 
 export function ensureSentry(functionName?: string): void {
+  setEgressCaller(functionName)
   if (inited) return
   // Accept both SENTRY_DSN_SERVER (preferred, server-specific) and SENTRY_DSN
   // (fallback, useful for self-hosters who only set one DSN env var).
   const dsn = Deno.env.get('SENTRY_DSN_SERVER') ?? Deno.env.get('SENTRY_DSN')
   if (!dsn) return
+  // Local-only mode: a DSN outside the egress allowlist means Sentry stays
+  // off. Its transport would only throw on every event, and a self-hosted
+  // Sentry on the allowlist keeps working.
+  const dsnCheck = checkEgress(dsnUrl(dsn), activeEgressPolicy())
+  if (!dsnCheck.allowed) {
+    if (!warnedDsnBlocked) {
+      warnedDsnBlocked = true
+      console.warn(
+        JSON.stringify({
+          ts: new Date().toISOString(),
+          level: 'warn',
+          scope: 'mushi:sentry',
+          event: 'sentry_disabled_local_only',
+          msg: 'Sentry is off: local-only mode is on and the DSN host is not on the egress allowlist',
+          host: dsnCheck.host,
+        }),
+      )
+    }
+    return
+  }
   Sentry.init({
     dsn,
     environment: Deno.env.get('SUPABASE_ENV') ?? Deno.env.get('DENO_ENV') ?? 'production',
@@ -53,6 +82,16 @@ export function ensureSentry(functionName?: string): void {
     },
   })
   inited = true
+}
+
+/** A DSN is `https://key@host/project`; an unparseable one is judged as-is (and blocked). */
+function dsnUrl(dsn: string): string {
+  try {
+    const u = new URL(dsn)
+    return `${u.protocol}//${u.host}/`
+  } catch {
+    return dsn
+  }
 }
 
 export function reportError(

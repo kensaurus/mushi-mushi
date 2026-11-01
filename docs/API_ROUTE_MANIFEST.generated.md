@@ -2,13 +2,13 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-30 · **809** routes.
+> Generated: 2026-11-01 · **813** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 219 |
+| `adminOrApiKey` | 223 |
 | `apiKeyAuth` | 59 |
 | `jwtAuth` | 412 |
 | `jwtOrApiKey` | 2 |
@@ -31,6 +31,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/a2a/tasks/:id{[^:]+}:subscribe` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/a2a-tasks.ts` |
 | GET | `/v1/admin/activation` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/activation.ts` |
 | GET | `/v1/admin/activity` | `jwtAuth` | `packages/server/supabase/functions/api/routes/dashboard.ts` |
+| POST | `/v1/admin/agent/attempts/:id/report` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/local-agent.ts` |
+| POST | `/v1/admin/agent/claim` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/local-agent.ts` |
 | GET | `/v1/admin/anti-gaming/devices` | `jwtAuth` | `packages/server/supabase/functions/api/routes/admin-ops.ts` |
 | POST | `/v1/admin/anti-gaming/devices/:id/flag` | `jwtAuth` | `packages/server/supabase/functions/api/routes/admin-ops.ts` |
 | POST | `/v1/admin/anti-gaming/devices/:id/unflag` | `jwtAuth` | `packages/server/supabase/functions/api/routes/admin-ops.ts` |
@@ -138,6 +140,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/doctor` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/doctor.ts` |
 | GET | `/v1/admin/drift/stats` | `public` | `packages/server/supabase/functions/api/routes/workspace-nav-meta.test.ts` |
 | GET | `/v1/admin/drift/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/workspace-nav-meta.test.ts` |
+| POST | `/v1/admin/egress/selftest` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/egress.ts` |
+| GET | `/v1/admin/egress/status` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/egress.ts` |
 | GET | `/v1/admin/entitlements` | `jwtAuth` | `packages/server/supabase/functions/api/routes/modernization-health-super.ts` |
 | GET | `/v1/admin/events/funnel` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/events-admin.ts` |
 | GET | `/v1/admin/events/paths` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/events-admin.ts` |

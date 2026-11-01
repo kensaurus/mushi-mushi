@@ -53,6 +53,10 @@
     <meta name="twitter:description" content="Your AI shipped it. Mushi Mushi tells you why it broke — a plain-English diagnosis and a ready-to-apply fix, right in your editor. Standalone, open source, Sentry optional." />
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Runtime backend settings (window.__MUSHI_ENV__). A classic script so it
+         runs before the module bundle; the admin container rewrites it at start
+         (deploy/admin/40-mushi-env.sh). See src/lib/env.ts. -->
+    <script src="/env.js"></script>
   </head>
   <body>
     <div id="root"></div>

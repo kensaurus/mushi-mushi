@@ -44,7 +44,7 @@ type Db = ReturnType<typeof getServiceClient>;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const FIX_CONTEXT_COLUMNS =
+export const FIX_CONTEXT_COLUMNS =
   'id, project_id, status, severity, category, component, summary, confidence, stage2_analysis, reproduction_steps, bug_ontology_tags, screenshot_url';
 
 /** Lessons shipped in .mushi/lessons.json; `mushi sync-lessons` uses the same default. */
@@ -92,6 +92,38 @@ async function loadInventoryAnchor(db: Db, reportId: string): Promise<InventoryA
   return inventoryAnchorOf(data);
 }
 
+/**
+ * The fix context of one report (GET /v1/admin/reports/:id/fix-context and
+ * the local fix agent's claim, Plan 023): the paste-ready fix packet plus the
+ * fields behind it. `row` is the report read with FIX_CONTEXT_COLUMNS; the
+ * caller has already checked access.
+ */
+export async function reportFixContextOf(
+  db: Db,
+  reportId: string,
+  row: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const anchor = await loadInventoryAnchor(db, reportId);
+  const { fixPacket, ragFiles } = await buildReportFixPacket(db, row, anchor);
+  const s2 = (row.stage2_analysis as Record<string, unknown> | null) ?? {};
+  return {
+    report_id: reportId,
+    project_id: row.project_id,
+    status: row.status ?? null,
+    severity: row.severity ?? null,
+    category: row.category ?? null,
+    component: row.component ?? null,
+    summary: row.summary ?? null,
+    fix_prompt: fixPacket,
+    root_cause: s2.rootCause ?? null,
+    suggested_fix: s2.suggestedFix ?? null,
+    reproduction_steps: s2.reproductionSteps ?? row.reproduction_steps ?? [],
+    bug_ontology_tags: row.bug_ontology_tags ?? [],
+    inventory_action: anchor ? { node_id: anchor.nodeId, label: anchor.label } : null,
+    relevant_files: ragFiles,
+  };
+}
+
 async function findGraphNode(
   db: Db,
   projectId: string,
@@ -137,29 +169,7 @@ export function registerReportAgentContextRoutes(app: Hono<{ Variables: Variable
       return c.json(notFound('Report not found'), 404);
     }
 
-    const anchor = await loadInventoryAnchor(db, reportId);
-    const { fixPacket, ragFiles } = await buildReportFixPacket(db, row, anchor);
-    const s2 = (row.stage2_analysis as Record<string, unknown> | null) ?? {};
-
-    return c.json({
-      ok: true,
-      data: {
-        report_id: reportId,
-        project_id: row.project_id,
-        status: row.status ?? null,
-        severity: row.severity ?? null,
-        category: row.category ?? null,
-        component: row.component ?? null,
-        summary: row.summary ?? null,
-        fix_prompt: fixPacket,
-        root_cause: s2.rootCause ?? null,
-        suggested_fix: s2.suggestedFix ?? null,
-        reproduction_steps: s2.reproductionSteps ?? row.reproduction_steps ?? [],
-        bug_ontology_tags: row.bug_ontology_tags ?? [],
-        inventory_action: anchor ? { node_id: anchor.nodeId, label: anchor.label } : null,
-        relevant_files: ragFiles,
-      },
-    });
+    return c.json({ ok: true, data: await reportFixContextOf(db, reportId, row) });
   });
 
   // Blast radius for one report. A report is a set of graph anchors (its

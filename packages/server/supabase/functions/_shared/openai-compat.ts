@@ -13,6 +13,7 @@
  */
 import { createOpenAI } from 'npm:@ai-sdk/openai@1'
 import { isOpenRouterBaseUrl, openAiCompatibleModelId } from './openai-model-id.ts'
+import { withModelOverrides } from './llm-model-env.ts'
 
 // The id rule lives in an npm-free module so raw-fetch callers can use it
 // without loading the AI SDK. Inside the api function, import this module
@@ -33,7 +34,9 @@ export function openAiProvider(options: OpenAiOptions): OpenAiProvider {
   const make = ((modelId: string, settings?: unknown) =>
     jsonObjectMode((base as unknown as (id: string, s?: unknown) => unknown)(openAiCompatibleModelId(modelId, options.baseURL), settings))
   ) as unknown as OpenAiProvider
-  return Object.assign(make, base)
+  // MUSHI_LLM_MODEL_* (Plan 023): a local OpenAI-compatible server gets its
+  // own model ids, mapped before any OpenRouter prefix.
+  return withModelOverrides(Object.assign(make, base))
 }
 
 /**

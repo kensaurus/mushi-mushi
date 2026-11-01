@@ -1,24 +1,41 @@
 # FILE: Caddyfile
 # PURPOSE: Reverse proxy for self-hosted Mushi Mushi
+#
+# The same paths as a Supabase project, so the console and SDKs use the
+# public address as their Supabase URL: /auth/v1 (GoTrue), /rest/v1
+# (PostgREST), /storage/v1 (Storage) and /functions/v1/api (the api edge
+# function, which serves under /api). handle_path strips the prefix before
+# proxying, as Supabase's own gateway does.
+# deploy/local/Caddyfile is the local-only twin (no automatic HTTPS).
 
-{$DOMAIN:localhost} {
-    handle /functions/v1/* {
+(mushi_routes) {
+    handle_path /functions/v1/* {
         reverse_proxy edge-functions:8000
     }
 
-    handle /auth/* {
+    handle_path /auth/v1/* {
         reverse_proxy supabase-auth:9999
     }
 
-    handle /rest/* {
+    handle_path /rest/v1/* {
         reverse_proxy supabase-rest:3000
     }
 
-    handle /storage/* {
+    handle_path /storage/v1/* {
         reverse_proxy supabase-storage:5000
     }
 
     handle {
         reverse_proxy admin:3000
     }
+}
+
+{$DOMAIN:localhost} {
+    import mushi_routes
+}
+
+# Containers reach the stack by service name (edge-functions uses
+# SUPABASE_URL=http://caddy).
+http://caddy {
+    import mushi_routes
 }

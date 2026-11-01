@@ -16,6 +16,8 @@
 //   the Messages API — so they are unit-testable from vitest without the SDK.
 // =============================================================================
 
+import { modelOverridesActive } from './llm-model-env.ts'
+
 export type ClaudeEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 /** Beta header for `fallbacks: "default"` (server-side refusal fallback). */
@@ -62,6 +64,12 @@ export function claudeModelTraits(model: string): ClaudeModelTraits {
   if (/^claude-(haiku|sonnet|opus)-[34]\b|^claude-3/.test(id)) {
     return { acceptsSampling: true, effortLevels: [], serverSideFallback: false }
   }
+  // Not a Claude id: a local or self-hosted model behind an Anthropic-compatible
+  // API (Ollama, Plan 023). Temperature 0 for steady classification; no
+  // Claude-only `effort` or `fallbacks` fields, which such servers may reject.
+  if (!/^claude-/.test(id)) {
+    return { acceptsSampling: true, effortLevels: [], serverSideFallback: false }
+  }
   return { acceptsSampling: false, effortLevels: ALL_EFFORT, serverSideFallback: false }
 }
 
@@ -79,6 +87,9 @@ export function resolveClaudeModel(stored: string | null | undefined, platformDe
   const raw = (stored ?? '').trim()
   if (!raw) return platformDefault
   const id = bareModelId(raw)
+  // MUSHI_LLM_MODEL_* set: the operator points the pipeline at its own model
+  // server, where a stored Claude id would not exist (Plan 023).
+  if (/^claude-/.test(id) && modelOverridesActive()) return platformDefault
   if (/^claude-haiku-4-5-\d{8}$/.test(id)) return 'claude-haiku-4-5'
   if (/^claude-3/.test(id)) return platformDefault
   if (/^claude-(sonnet|opus)-4(-[0-5])?(-\d{8})?$/.test(id)) return platformDefault

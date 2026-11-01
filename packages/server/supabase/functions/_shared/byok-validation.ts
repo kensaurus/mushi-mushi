@@ -1,4 +1,5 @@
 import { z } from 'npm:zod@3';
+import { isLocalOnly, localHostReason, parseHost } from './egress.ts';
 import { isSupabaseProjectRef } from './supabase-project-ref.ts';
 
 export const BYOK_PROVIDERS = [
@@ -87,6 +88,8 @@ export const byokProjectSchema = z
 export const byokKeyIdSchema = z.string().uuid();
 
 const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1';
+/** The Anthropic API root. The SDK appends `/v1/messages`; the AI SDK wants `<root>/v1`. */
+export const DEFAULT_ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
 const DEFAULT_OPENAI_COMPATIBLE_HOSTS = new Set([
   'api.openai.com',
   'openrouter.ai',
@@ -95,27 +98,71 @@ const DEFAULT_OPENAI_COMPATIBLE_HOSTS = new Set([
   'api.groq.com',
   'api.deepseek.com',
 ]);
+const DEFAULT_ANTHROPIC_HOSTS = new Set(['api.anthropic.com']);
 
-function isAllowedCompatibleHost(hostname: string, extraAllowedHosts: readonly string[]): boolean {
+function isAllowedHost(hostname: string, defaults: Set<string>, extraAllowedHosts: readonly string[]): boolean {
   const host = hostname.toLowerCase();
-  if (DEFAULT_OPENAI_COMPATIBLE_HOSTS.has(host)) return true;
+  if (defaults.has(host)) return true;
   return extraAllowedHosts.some((allowed) => host === allowed.trim().toLowerCase());
 }
 
-export function validateOpenAiBaseUrl(
-  raw: string | undefined,
-  extraAllowedHosts: readonly string[] = [],
-): { ok: true; value: string } | { ok: false; message: string } {
-  const candidate = raw?.trim() || DEFAULT_OPENAI_BASE_URL;
+/**
+ * A model server on this machine or this network: loopback, RFC 1918, CGNAT,
+ * unique-local IPv6, `localhost`, `*.internal` / `*.local` / `*.lan`, or a
+ * single-label name such as a compose service (`ollama`). Link-local
+ * addresses and cloud metadata names are never one: they are where SSRF goes.
+ */
+export function isPrivateLlmHost(hostname: string): boolean {
+  const host = parseHost(hostname);
+  if (host.kind === 'name') {
+    if (host.text === 'metadata' || host.text === 'metadata.google.internal') return false;
+    if (host.text && !host.text.includes('.')) return true;
+  }
+  const reason = localHostReason(host);
+  return reason !== null && reason !== 'link-local';
+}
+
+function envFlag(name: string): string | undefined {
+  const deno = (globalThis as { Deno?: { env?: { get(n: string): string | undefined } } }).Deno;
+  try {
+    return deno?.env?.get(name);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Local model servers are allowed as base URLs (http, any port, private
+ * hosts) only in local-only mode or with MUSHI_ALLOW_PRIVATE_LLM_ENDPOINT=1.
+ * On Mushi Cloud neither is set, so a tenant cannot point Mushi's server at
+ * an address inside its network.
+ */
+export function privateLlmEndpointsAllowed(env: (name: string) => string | undefined = envFlag): boolean {
+  return (
+    isLocalOnly({ MUSHI_LOCAL_ONLY: env('MUSHI_LOCAL_ONLY') }) ||
+    /^(1|true|yes|on)$/i.test((env('MUSHI_ALLOW_PRIVATE_LLM_ENDPOINT') ?? '').trim())
+  );
+}
+
+export interface BaseUrlRules {
+  /** Accept http and any port for private hosts. Defaults to privateLlmEndpointsAllowed(). */
+  allowPrivate?: boolean;
+}
+
+type BaseUrlResult = { ok: true; value: string } | { ok: false; message: string };
+
+function validateLlmBaseUrl(
+  candidate: string,
+  defaults: Set<string>,
+  extraAllowedHosts: readonly string[],
+  rules: BaseUrlRules,
+  label: string,
+): { ok: true; url: URL } | { ok: false; message: string } {
   let url: URL;
   try {
     url = new URL(candidate);
   } catch {
     return { ok: false, message: 'baseUrl must be a valid HTTPS URL' };
-  }
-
-  if (url.protocol !== 'https:') {
-    return { ok: false, message: 'baseUrl must use https://' };
   }
   if (url.username || url.password) {
     return { ok: false, message: 'baseUrl must not contain credentials' };
@@ -126,17 +173,52 @@ export function validateOpenAiBaseUrl(
       message: 'baseUrl must not contain a query string or fragment',
     };
   }
+  const allowPrivate = rules.allowPrivate ?? privateLlmEndpointsAllowed();
+  if (allowPrivate && (url.protocol === 'http:' || url.protocol === 'https:') && isPrivateLlmHost(url.hostname)) {
+    // A local model server (Ollama, vLLM, LM Studio): plain http on its own port is normal.
+    return { ok: true, url };
+  }
+  if (url.protocol !== 'https:') {
+    return { ok: false, message: 'baseUrl must use https://' };
+  }
   if (url.port && url.port !== '443') {
     return { ok: false, message: 'baseUrl must use the default HTTPS port' };
   }
-  if (!isAllowedCompatibleHost(url.hostname, extraAllowedHosts)) {
+  if (!isAllowedHost(url.hostname, defaults, extraAllowedHosts)) {
     return {
       ok: false,
-      message: 'baseUrl host is not an approved OpenAI-compatible provider',
+      message: `baseUrl host is not an approved ${label} provider`,
     };
   }
+  return { ok: true, url };
+}
 
-  return { ok: true, value: url.toString().replace(/\/$/, '') };
+export function validateOpenAiBaseUrl(
+  raw: string | undefined,
+  extraAllowedHosts: readonly string[] = [],
+  rules: BaseUrlRules = {},
+): BaseUrlResult {
+  const candidate = raw?.trim() || DEFAULT_OPENAI_BASE_URL;
+  const checked = validateLlmBaseUrl(candidate, DEFAULT_OPENAI_COMPATIBLE_HOSTS, extraAllowedHosts, rules, 'OpenAI-compatible');
+  if (!checked.ok) return checked;
+  return { ok: true, value: checked.url.toString().replace(/\/$/, '') };
+}
+
+/**
+ * An Anthropic-compatible API root (api.anthropic.com, Ollama's Messages API,
+ * a gateway on MUSHI_ANTHROPIC_BASE_URL_ALLOWLIST). Returned without a
+ * trailing slash or `/v1`, the form the Anthropic SDK and ANTHROPIC_BASE_URL use.
+ */
+export function validateAnthropicBaseUrl(
+  raw: string | undefined,
+  extraAllowedHosts: readonly string[] = [],
+  rules: BaseUrlRules = {},
+): BaseUrlResult {
+  const candidate = raw?.trim() || DEFAULT_ANTHROPIC_BASE_URL;
+  const checked = validateLlmBaseUrl(candidate, DEFAULT_ANTHROPIC_HOSTS, extraAllowedHosts, rules, 'Anthropic-compatible');
+  if (!checked.ok) return checked;
+  const value = checked.url.toString().replace(/\/+$/, '').replace(/\/v1$/, '');
+  return { ok: true, value };
 }
 
 export interface ByokProbeOptions {
@@ -173,7 +255,7 @@ function probeRequest(
       };
     case 'anthropic':
       return {
-        url: 'https://api.anthropic.com/v1/models',
+        url: `${baseUrl ?? DEFAULT_ANTHROPIC_BASE_URL}/v1/models`,
         init: {
           headers: {
             'x-api-key': apiKey,
@@ -263,6 +345,33 @@ function mapGenericProbeStatus(
   };
 }
 
+/**
+ * A local model server (Ollama, vLLM) often has no models list on the path
+ * the probe reads, and checks no key. Any answer that is not an auth,
+ * quota or server error means it is up, which is all a probe can learn.
+ */
+function localServerAnswered(
+  provider: ByokProvider,
+  baseUrl: string | undefined,
+  status: number,
+): Pick<ByokProbeResult, 'status' | 'keyStatus' | 'detail'> | null {
+  if (provider !== 'anthropic' && provider !== 'openai') return null;
+  if (!baseUrl || status === 401 || status === 403 || status === 429 || status >= 500) return null;
+  if (status >= 200 && status < 300) return null;
+  let host = '';
+  try {
+    host = new URL(baseUrl).hostname;
+  } catch {
+    return null;
+  }
+  if (!isPrivateLlmHost(host)) return null;
+  return {
+    status: 'ok',
+    keyStatus: 'active',
+    detail: `Local endpoint answered (HTTP ${status}); local servers do not check keys`,
+  };
+}
+
 export async function probeByokKey(
   provider: ByokProvider,
   apiKey: string,
@@ -292,7 +401,7 @@ export async function probeByokKey(
       signal: AbortSignal.timeout(8_000),
     });
     return {
-      ...mapProbeStatus(response.status, provider),
+      ...(localServerAnswered(provider, baseUrl, response.status) ?? mapProbeStatus(response.status, provider)),
       httpStatus: response.status,
       latencyMs: Date.now() - startedAt,
     };

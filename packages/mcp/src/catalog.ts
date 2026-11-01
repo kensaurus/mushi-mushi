@@ -474,6 +474,24 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Did the CI fix PR for glot.it open, which fixes were refused, and what did it save after the merge?',
   },
   {
+    name: 'get_egress_status',
+    title: 'What leaves this Mushi stack',
+    description:
+      'Return whether this Mushi stack runs local-only (ADR 0034: MUSHI_LOCAL_ONLY=1 sends every outbound request through an allowlist that fails closed) and what that means: localOnly (true | false), allowlist (the hosts requests may still reach: the Supabase host, loopback, private networks, *.internal / *.local and MUSHI_EGRESS_ALLOW), denials [{ host, caller, day, count, lastAt }] (blocked requests per host and day, newest first), and integrations [{ id, label, destination, enabled, allowed, note }] (for each integration, the host it would reach, whether it is turned on and whether local-only lets it through). Applies to the whole stack, not one project. Read-only. Use run_egress_selftest to prove nothing gets out.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: false },
+    useCase: 'Does my bug data stay on my machines? Which integrations still reach the internet?',
+  },
+  {
+    name: 'run_egress_selftest',
+    title: 'Prove nothing leaves this stack',
+    description:
+      'Try to reach known cloud hosts (api.anthropic.com, api.openai.com, ollama.com, sentry.io, api.github.com, registry.npmjs.org) from the Mushi edge runtime and report what happened to each: results [{ host, outcome (blocked_by_mushi | network_unreachable | reachable), ms }], localOnly and passed (true only when local-only is on and no host was reachable). Each attempt is an outbound connection try from your server, so it shows up in the denial log; nothing is sent to any host that answers beyond the connection attempt. Write; idempotent. Confirm with the user before calling. From a terminal, `mushi local verify --host-check` also tries the same hosts from that machine.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
+    useCase: 'Prove that local-only mode really blocks the cloud before I put real user data in.',
+  },
+  {
     name: 'explain_finding',
     title: 'Explain one finding',
     description:
@@ -713,7 +731,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'dispatch_fix',
     title: 'Dispatch Mushi fix agent',
     description:
-      'Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent="cursor_cloud" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). For a project with several linked repos, set targetRepoId (a project_repos.id) to choose the repo the PR opens against; omit it for the primary repo. Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns { fixId, status } (fixId is the dispatch id; get_fix_timeline accepts it immediately); poll get_fix_timeline for progress and merge_fix when CI is green. Write; pass the same idempotencyKey to retry safely — without it each call starts a new attempt. Report must be classified — run triage_issue if not.',
+      'Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent="cursor_cloud" to dispatch a Cursor Cloud Agent, or agent="local" to queue it for `mushi agent serve` on your own machine, which opens the PR with your own credentials (default uses the in-repo worker). For a project with several linked repos, set targetRepoId (a project_repos.id) to choose the repo the PR opens against; omit it for the primary repo. Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns { fixId, status } (fixId is the dispatch id; get_fix_timeline accepts it immediately); poll get_fix_timeline for progress and merge_fix when CI is green. Write; pass the same idempotencyKey to retry safely — without it each call starts a new attempt. Report must be classified — run triage_issue if not.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     useCase: 'Let the in-repo agent attempt this fix for me (or: dispatch a Cursor Cloud Agent).',

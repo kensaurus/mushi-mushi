@@ -24,6 +24,19 @@
 // migration) in sync when adding a new model here.
 // =============================================================================
 
+import { modelOverride } from './llm-model-env.ts'
+
+// --- Operator overrides (Plan 023) ------------------------------------------
+//
+// MUSHI_LLM_MODEL_FAST / _SMART / _REVIEW name the model a local or
+// self-hosted server serves. They replace the stage defaults below for every
+// provider; any other Claude or GPT id is mapped by class at the call
+// (`effectiveModelId` in llm-model-env.ts).
+
+const FAST_OVERRIDE = modelOverride('fast')
+const SMART_OVERRIDE = modelOverride('smart')
+const REVIEW_OVERRIDE = modelOverride('review')
+
 // --- Anthropic ---------------------------------------------------------------
 
 /** Current Sonnet ($2/$10 per MTok). Every caller of this constant goes
@@ -85,15 +98,15 @@ export const OPENAI_EMBEDDING_LARGE = 'text-embedding-3-large'
 // is degraded.
 
 /** fast-filter primary. */
-export const STAGE1_MODEL = ANTHROPIC_HAIKU
+export const STAGE1_MODEL = FAST_OVERRIDE ?? ANTHROPIC_HAIKU
 /** fast-filter cross-vendor fallback. */
-export const STAGE1_FALLBACK = OPENAI_MINI
+export const STAGE1_FALLBACK = FAST_OVERRIDE ?? OPENAI_MINI
 
 /** classify-report primary (`project_settings.stage2_model` overrides, via
  *  `resolveClaudeModel`). */
-export const STAGE2_MODEL = ANTHROPIC_SONNET_LATEST
+export const STAGE2_MODEL = SMART_OVERRIDE ?? ANTHROPIC_SONNET_LATEST
 /** classify-report cross-vendor fallback. */
-export const STAGE2_FALLBACK = OPENAI_PRIMARY
+export const STAGE2_FALLBACK = SMART_OVERRIDE ?? OPENAI_PRIMARY
 
 /** judge-batch primary (`project_settings.judge_model` overrides).
  *
@@ -103,9 +116,9 @@ export const STAGE2_FALLBACK = OPENAI_PRIMARY
  * (vercel/ai#7220, #9351). judge-batch now calls Claude through
  * `claude-messages.ts` (native structured outputs, no sampling knobs), which
  * lifts that constraint for every model. */
-export const JUDGE_MODEL = ANTHROPIC_SONNET_LATEST
+export const JUDGE_MODEL = REVIEW_OVERRIDE ?? ANTHROPIC_SONNET_LATEST
 /** judge-batch cross-vendor fallback (`project_settings.judge_fallback_model` overrides). */
-export const JUDGE_FALLBACK = OPENAI_PRIMARY
+export const JUDGE_FALLBACK = REVIEW_OVERRIDE ?? OPENAI_PRIMARY
 
 /** fix-worker primary (Anthropic path). */
 export const FIX_MODEL = ANTHROPIC_SONNET_LATEST
@@ -160,7 +173,7 @@ export const TEST_GEN_MODEL = ANTHROPIC_SONNET_LATEST
 
 /** agent-pr-review: the independent review of a cloud agent's pull request
  *  (ADR 0030). Opus, because it grades another model's code. */
-export const AGENT_PR_REVIEW_MODEL = ANTHROPIC_OPUS_LATEST
+export const AGENT_PR_REVIEW_MODEL = REVIEW_OVERRIDE ?? ANTHROPIC_OPUS_LATEST
 
 // --- Effort per route (`output_config.effort`) ------------------------------
 //

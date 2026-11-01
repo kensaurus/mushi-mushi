@@ -20,8 +20,9 @@
  * drive it with a fixture.
  */
 
-import { BYOK_PROVIDERS, probeByokKey, type ByokProbeResult, type ByokProvider } from './byok-validation.ts'
+import { BYOK_PROVIDERS, probeByokKey, validateAnthropicBaseUrl, type ByokProbeResult, type ByokProvider } from './byok-validation.ts'
 import { isSupabaseProjectRef } from './supabase-project-ref.ts'
+import { anthropicHostAllowlist, platformAnthropicBaseUrl } from './llm-endpoints.ts'
 
 export const BYOK_PROBE_INTERVAL_MS = 24 * 60 * 60 * 1000
 
@@ -138,6 +139,13 @@ export function outcomeForUnreadableKey(key: ByokKeyRow, nowIso: string): ByokPr
   }
 }
 
+/** Where an Anthropic key is probed: its own validated base URL, else the platform one (Plan 023). */
+function anthropicProbeBaseUrl(raw: string | null | undefined): string | undefined {
+  if (!raw) return platformAnthropicBaseUrl()
+  const v = validateAnthropicBaseUrl(raw, anthropicHostAllowlist())
+  return v.ok ? v.value : undefined
+}
+
 export async function probeByokRow(
   key: ByokKeyRow,
   secret: string | null,
@@ -148,7 +156,11 @@ export async function probeByokRow(
   const probe = await probeByokKey(
     key.provider_slug as ByokProvider,
     secret,
-    key.provider_slug === 'openai' ? (key.base_url ?? undefined) : undefined,
+    key.provider_slug === 'openai'
+      ? (key.base_url ?? undefined)
+      : key.provider_slug === 'anthropic'
+        ? anthropicProbeBaseUrl(key.base_url)
+        : undefined,
     fetcher,
     { supabaseProjectRef: key.supabase_project_ref ?? null },
   )

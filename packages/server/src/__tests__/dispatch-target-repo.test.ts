@@ -49,6 +49,14 @@ vi.mock('../../supabase/functions/_shared/autofix-budget.ts', () => ({
 vi.mock('../../supabase/functions/_shared/agent-adapters.ts', () => ({
   validateAgentOverride: (raw: string | null) => ({ ok: true, agent: raw }),
   cancelCloudAgentAttempt: async () => {},
+  LOCAL_AGENT: 'local',
+}))
+// agent 'local' (Plan 023) is covered by local-agent-routes.test.ts.
+vi.mock('../../supabase/functions/api/routes/local-agent.ts', () => ({
+  queueLocalFixAttempt: async () => {
+    throw new Error('not used here')
+  },
+  resolveLocalRepo: async () => null,
 }))
 vi.mock('../../supabase/functions/api/helpers.ts', () => ({
   canManageProjectSdkConfig: () => true,
