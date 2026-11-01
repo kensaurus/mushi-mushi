@@ -1,5 +1,6 @@
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 import path from 'node:path'
+import { pgIntegrationExclude } from './src/__tests__/scoped-rate-limit-pg.ts'
 
 const STUB = path.resolve(__dirname, 'src/__tests__/__stubs__/npm-stub.ts')
 
@@ -37,6 +38,9 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    // *.integration.test.ts needs Podman or Docker. test:integration sets
+    // MUSHI_SERVER_PG_INTEGRATION=1. PGlite regressions stay in this run.
+    exclude: [...configDefaults.exclude, ...pgIntegrationExclude(process.env)],
     // Vitest defaults to 5s per test. Every test in this package is a pure
     // unit test against stubs — 45 of them run in 3.7s when the package runs
     // alone, about 80ms each. But `turbo run test` starts a vitest instance
