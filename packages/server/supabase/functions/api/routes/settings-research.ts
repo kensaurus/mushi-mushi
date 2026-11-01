@@ -288,8 +288,10 @@ import {
   isRunnableByokPoolState,
   patchByokKeySchema,
   probeByokKey,
+  validateAnthropicBaseUrl,
   validateOpenAiBaseUrl,
 } from '../../_shared/byok-validation.ts';
+import { anthropicHostAllowlist, platformAnthropicBaseUrl } from '../../_shared/llm-endpoints.ts';
 
 /**
  * The ref a Supabase BYOK token is probed against. Only loaded for the
@@ -3651,11 +3653,23 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           );
         }
         baseUrl = validation.value;
+      } else if (provider === 'anthropic' && parsed.data.baseUrl) {
+        // An Anthropic-compatible server (Ollama's Messages API, a gateway on
+        // MUSHI_ANTHROPIC_BASE_URL_ALLOWLIST). Private hosts only in local-only
+        // mode or with MUSHI_ALLOW_PRIVATE_LLM_ENDPOINT=1 (Plan 023).
+        const validation = validateAnthropicBaseUrl(parsed.data.baseUrl, anthropicHostAllowlist());
+        if (!validation.ok) {
+          return c.json(
+            { ok: false, error: { code: 'INVALID_BASE_URL', message: validation.message } },
+            400,
+          );
+        }
+        baseUrl = validation.value;
       } else if (parsed.data.baseUrl) {
         return c.json(
           {
             ok: false,
-            error: { code: 'INVALID_BASE_URL', message: 'baseUrl is supported only for OpenAI.' },
+            error: { code: 'INVALID_BASE_URL', message: 'baseUrl is supported only for OpenAI and Anthropic.' },
           },
           400,
         );
@@ -3712,7 +3726,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           priority: priority ?? 100,
           status: 'pending_validation',
           test_status: null,
-          base_url: provider === 'openai' ? baseUrl : null,
+          base_url: provider === 'openai' || provider === 'anthropic' ? (baseUrl ?? null) : null,
           created_by: userId,
         })
         .select(
@@ -3732,7 +3746,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       const probe = await probeByokKey(
         provider,
         keyVal,
-        baseUrl,
+        provider === 'anthropic' ? (baseUrl ?? platformAnthropicBaseUrl()) : baseUrl,
         fetch,
         await supabaseProbeOptions(db, project.id, provider),
       );
@@ -4061,11 +4075,24 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           );
         }
         validatedBaseUrl = validation.value;
+      } else if (keyRow.provider_slug === 'anthropic') {
+        if (keyRow.base_url) {
+          const validation = validateAnthropicBaseUrl(keyRow.base_url as string, anthropicHostAllowlist());
+          if (!validation.ok) {
+            return c.json(
+              { ok: false, error: { code: 'INVALID_BASE_URL', message: validation.message } },
+              400,
+            );
+          }
+          validatedBaseUrl = validation.value;
+        } else {
+          validatedBaseUrl = platformAnthropicBaseUrl();
+        }
       } else if (keyRow.base_url) {
         return c.json(
           {
             ok: false,
-            error: { code: 'INVALID_BASE_URL', message: 'baseUrl is supported only for OpenAI.' },
+            error: { code: 'INVALID_BASE_URL', message: 'baseUrl is supported only for OpenAI and Anthropic.' },
           },
           400,
         );

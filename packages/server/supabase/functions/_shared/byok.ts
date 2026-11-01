@@ -25,7 +25,13 @@
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { log as rootLog } from './logger.ts';
-import { isRunnableByokPoolState, validateOpenAiBaseUrl, type ByokPoolLifecycleState } from './byok-validation.ts';
+import {
+  isRunnableByokPoolState,
+  validateAnthropicBaseUrl,
+  validateOpenAiBaseUrl,
+  type ByokPoolLifecycleState,
+} from './byok-validation.ts';
+import { anthropicHostAllowlist, platformAnthropicBaseUrl, rememberAnthropicBaseUrl } from './llm-endpoints.ts';
 import {
   isMissingOwnerUserColumn,
   keyOwnerFilter,
@@ -220,12 +226,27 @@ export async function resolveLlmKeys(
     shared.push(...router.shared.map((c) => ({ ...c, provider: 'openrouter' as const })));
     universal.push(...router.universal.map((c) => ({ ...c, provider: 'openrouter' as const })));
   }
-  return orderCandidates({
+  const ordered = orderCandidates({
     own,
     legacy: own.length > 0 ? [] : await legacyCandidates(db, projectId, provider),
     shared,
     universal,
     env: () => envCandidates(projectId, provider),
+  });
+  return provider === 'anthropic' ? withAnthropicBaseUrls(ordered) : ordered;
+}
+
+/**
+ * Anthropic keys without a base URL of their own follow the platform
+ * ANTHROPIC_BASE_URL (Plan 023). Each key's base URL is remembered so the
+ * Claude helpers, which receive only the key, send it to the right server.
+ */
+function withAnthropicBaseUrls(candidates: ResolvedKey[]): ResolvedKey[] {
+  const platform = platformAnthropicBaseUrl();
+  return candidates.map((c) => {
+    const baseUrl = c.baseUrl ?? platform;
+    rememberAnthropicBaseUrl(c.key, baseUrl);
+    return baseUrl === c.baseUrl ? c : { ...c, baseUrl };
   });
 }
 
@@ -476,6 +497,18 @@ async function byokPoolCandidates(
             : validatedPlatformOpenAiBaseUrl(projectId);
         } else if (provider === 'openrouter') {
           baseUrl = OPENROUTER_BASE_URL;
+        } else if (provider === 'anthropic' && row.base_url) {
+          // An Anthropic-compatible server of the key's own (Plan 023): a
+          // local Ollama, or a gateway on MUSHI_ANTHROPIC_BASE_URL_ALLOWLIST.
+          const validation = validateAnthropicBaseUrl(row.base_url, anthropicHostAllowlist());
+          if (!validation.ok) {
+            log.warn('Skipping BYOK key with unsafe Anthropic base URL', {
+              projectId: owner.projectId,
+              keyId: row.id,
+            });
+            continue;
+          }
+          baseUrl = validation.value;
         }
         (scope === 'project' ? own : scope === 'organization' ? shared : universal).push({
           keyId: row.id,

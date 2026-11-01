@@ -66,6 +66,7 @@ import {
   STAGE2_SUMMARY_MAX,
   STAGE2_TITLE_MAX,
 } from '../_shared/classify-stage2-schema.ts';
+import { retryOnSchemaMiss, withStrictJsonInstruction } from '../_shared/structured-retry.ts';
 
 // Stage 2's output shape lives in _shared/classify-stage2-schema.ts. Its
 // length-capped fields CLAMP instead of throwing: a single over-long string
@@ -682,12 +683,18 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
           // be supplied … Missing 'area'", MUSHI-MUSHI-SERVER-1V/1W). Same fix
           // as fast-filter/pdca-runner/test-gen-from-story; tool-mode JSON is
           // still schema-validated by the AI SDK on return.
-          const { object, usage } = await generateObject({
-            model: openai(FALLBACK_MODEL, { structuredOutputs: false }),
-            schema: stage2Schema,
-            system: activeSystemPrompt,
-            prompt,
-          });
+          // A local OpenAI-compatible server may ignore schema keywords:
+          // one stricter retry on a schema miss (Plan 023).
+          const { object, usage } = await retryOnSchemaMiss(
+            (strict) =>
+              generateObject({
+                model: openai(FALLBACK_MODEL, { structuredOutputs: false }),
+                schema: stage2Schema,
+                system: strict ? withStrictJsonInstruction(activeSystemPrompt) : activeSystemPrompt,
+                prompt,
+              }),
+            () => log.warn('Stage 2 fallback reply missed the schema; retrying once', { reportId }),
+          );
           classification = object;
           tokenUsage = usage ?? {};
         } catch (fallbackErr) {

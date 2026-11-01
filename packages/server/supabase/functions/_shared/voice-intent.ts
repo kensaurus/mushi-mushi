@@ -23,6 +23,7 @@ import { ANTHROPIC_HAIKU, OPENAI_MINI } from './models.ts'
 import { createTrace } from './observability.ts'
 import { logLlmInvocation } from './telemetry.ts'
 import { log as rootLog } from './logger.ts'
+import { localAnthropic } from './llm-endpoints.ts'
 
 const log = rootLog.child('voice-intent')
 
@@ -144,7 +145,7 @@ export async function classifyVoiceIntent(
       async (key) => {
         keySource = key.source
         const { createAnthropic, generateObject } = await import('./ai-sdk.ts')
-        const anthropic = createAnthropic({ apiKey: key.key })
+        const anthropic = localAnthropic(createAnthropic, key.key, key.baseUrl)
         const { object, usage } = await generateObject({
           model: anthropic(ANTHROPIC_HAIKU),
           schema: voiceIntentSchema,

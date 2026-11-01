@@ -9,6 +9,7 @@ import { claudeGenerateObject } from './claude-messages.ts'
 import { withLlmUsage } from './llm-usage.ts'
 import { getPromptForStage } from './prompt-ab.ts'
 import { platformAnthropicKey } from './ai-provider.ts'
+import { localAnthropic } from './llm-endpoints.ts'
 
 // These text checks are defence in depth, not the tenant boundary. The boundary
 // is in the database (migration 20260923000003_nl_query_role_containment):
@@ -275,7 +276,7 @@ export async function executeNaturalLanguageQuery(
   // AI SDK v4 call shape); the Haiku summariser stays on the AI SDK, which
   // loads here rather than at boot (ai-sdk.ts).
   const { createAnthropic, generateText } = await import('./ai-sdk.ts')
-  const anthropic = createAnthropic({ apiKey })
+  const anthropic = localAnthropic(createAnthropic, apiKey)
   const trace = createTrace('nl-query', {
     question: question.slice(0, 100),
     keySource: resolved?.source ?? 'env',
