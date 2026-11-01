@@ -20239,7 +20239,7 @@ While a dispatch runs, the console follows it over a server-sent event stream
 (`GET /v1/admin/fixes/dispatch/:id/stream`) and falls back to polling if the stream
 drops. The stream carries run status events (started, status, completed, failed) in
 the AG-UI envelope format. The server JSON-encodes every payload
-([CVE-2026-29085](https://nvd.nist.gov/vuln/detail/CVE-2026-29085)) so an untrusted
+([CVE-2026-29085](https://github.com/advisories/GHSA-p6xx-57qc-3wxr)) so an untrusted
 string can't inject extra event frames.
 
 ---
