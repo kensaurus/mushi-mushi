@@ -278,6 +278,9 @@ importers:
       eslint-plugin-mushi-mushi:
         specifier: workspace:*
         version: link:../../packages/eslint-plugin-mushi-mushi
+      jsdom:
+        specifier: ^30.1.3
+        version: 30.1.3(@noble/hashes@2.2.0)
       pagefind:
         specifier: ^1.5.2
         version: 1.5.2

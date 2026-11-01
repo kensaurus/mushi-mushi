@@ -39,6 +39,7 @@
     "@types/three": "^0.185.0",
     "eslint": "^10.6.0",
     "eslint-plugin-mushi-mushi": "workspace:*",
+    "jsdom": "^30.1.3",
     "pagefind": "^1.5.2",
     "postcss": "^8.5.15",
     "tailwindcss": "^4.3.1",
