@@ -858,6 +858,8 @@ forwardToApiExt(['/v1/worker/*', '/v1/admin/work/*']);
 forwardToApiExt(['/v1/admin/projects/:id/repo-cleanup', '/v1/admin/projects/:id/repo-cleanup/*']);
 // Verifiably local (Plan 023): egress status and the self-test.
 forwardToApiExt(['/v1/admin/egress/status', '/v1/admin/egress/selftest']);
+// Local fix agent (Plan 023 Phase 3): claim and report.
+forwardToApiExt(['/v1/admin/agent/claim', '/v1/admin/agent/attempts/:id/report']);
 
 registerA2ATaskRoutes(app);
 

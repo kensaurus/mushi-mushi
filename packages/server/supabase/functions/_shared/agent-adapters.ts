@@ -93,6 +93,9 @@ export function isDispatchableCloudAgent(agent: string | null | undefined): agen
  * github_cloud_agent. Orchestrator-only (codex, mcp) are accepted so the
  * worker can stamp an actionable `skipped_unsupported_agent` receipt instead
  * of the route silently swapping the choice. 'auto' = project default.
+ * 'local' (Plan 023, ADR 0034) never reaches the fix-worker or any cloud
+ * API: the route queues a fix_attempts row that the developer's own machine
+ * claims with `mushi agent serve` (api/routes/local-agent.ts).
  */
 export const ALLOWED_AGENT_OVERRIDES = [
   'claude_code',
@@ -104,6 +107,7 @@ export const ALLOWED_AGENT_OVERRIDES = [
   'mcp',
   'cursor_cloud',
   'github_cloud_agent',
+  'local',
 ] as const
 
 export type AllowedAgentOverride = (typeof ALLOWED_AGENT_OVERRIDES)[number]
@@ -130,6 +134,20 @@ export function validateAgentOverride(raw: unknown): AgentOverrideValidation {
     code: 'UNSUPPORTED_AGENT',
     message: `agent "${raw}" is not supported. Allowed: ${ALLOWED_AGENT_OVERRIDES.join(', ')}.`,
   }
+}
+
+/** The fix agent run by the developer's own machine (`mushi agent serve`, Plan 023). */
+export const LOCAL_AGENT = 'local'
+
+/**
+ * Branch a local fix agent pushes to: `bugfix/MUSHI-<reportId>-local-<8 hex>`
+ * (FIX_BRANCH_MUSHI_ID_REGEX). The attempt suffix keeps a re-dispatch of the
+ * same report off the previous attempt's branch.
+ */
+export function localFixBranchName(reportId: string, attemptId: string): string {
+  const name = `bugfix/MUSHI-${reportId.toLowerCase()}-local-${attemptId.replace(/-/g, '').slice(0, 8).toLowerCase()}`
+  validateFixBranchName(name)
+  return name
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -823,6 +841,7 @@ const OPEN_ATTEMPT_STATUSES = ['running', 'queued', 'dispatched', 'pending']
 
 function failureCategoryFor(agent: string, explicit?: string | null): string {
   if (explicit) return explicit
+  if (agent === LOCAL_AGENT) return 'local_agent_error'
   return agent === 'github_cloud_agent' ? 'github_other_error' : 'cursor_api_error'
 }
 

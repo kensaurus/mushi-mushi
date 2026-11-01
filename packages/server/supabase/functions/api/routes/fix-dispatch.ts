@@ -31,7 +31,8 @@ import { getBlastRadius } from '../../_shared/knowledge-graph.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
 import { getActivePlugins, dispatchPluginEvent } from '../../_shared/plugins.ts';
-import { cancelCloudAgentAttempt, validateAgentOverride } from '../../_shared/agent-adapters.ts';
+import { cancelCloudAgentAttempt, LOCAL_AGENT, validateAgentOverride } from '../../_shared/agent-adapters.ts';
+import { queueLocalFixAttempt, resolveLocalRepo, type LocalRepo } from './local-agent.ts';
 import { checkAutofixBudget } from '../../_shared/autofix-budget.ts';
 import { getAvailableTags } from '../../_shared/ontology.ts';
 import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
@@ -308,13 +309,36 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
         targetRepo = repoRow as { id: string; repo_url: string };
       }
 
+      // agent 'local' (Plan 023): the developer's own machine runs the fix
+      // (`mushi agent serve`), so it needs a repo to open the PR on. The job
+      // is 'running' from the start so fix_dispatch_sweeper never sends it
+      // to the edge fix-worker; the attempt waits 'queued' for a claim.
+      const isLocal = agentOverride === LOCAL_AGENT;
+      let localRepo: LocalRepo | null = null;
+      if (isLocal) {
+        localRepo = await resolveLocalRepo(db, body.projectId, targetRepo?.id ?? null);
+        if (!localRepo) {
+          return c.json(
+            {
+              ok: false,
+              error: {
+                code: 'NO_REPO',
+                message: 'A local fix needs a GitHub repo linked to this project (Connect page) to open its PR on.',
+              },
+            },
+            400,
+          );
+        }
+      }
+
       const { data: job, error: insertErr } = await db
         .from('fix_dispatch_jobs')
         .insert({
           project_id: body.projectId,
           report_id: body.reportId,
           requested_by: userId,
-          status: 'queued',
+          status: isLocal ? 'running' : 'queued',
+          ...(isLocal ? { started_at: new Date().toISOString() } : {}),
           // Spec-traceability: persist the caller's anchor when supplied,
           // so the worker doesn't need to walk the graph for it. NULL =>
           // worker derives from `reports_against`.
@@ -345,19 +369,38 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
         );
       }
 
-      // Fire-and-forget invoke of the fix-worker Edge Function. We deliberately
-      // do not await — the SSE stream above is the channel the UI uses to track
-      // progress. EdgeRuntime.waitUntil keeps the worker alive after the
-      // dispatch response returns. If the worker invocation fails, the dispatch
-      // row sits in 'queued' until fix_dispatch_sweeper() (pg_cron, every
-      // minute) re-invokes it after a 2-minute grace window — see migration
-      // 20260724000001_fix_dispatch_sweeper_requeue_primaries.
-      invokeFixWorker(job.id, c.get('requestId') as string | undefined).catch((err) => {
-        log.warn('fix-dispatch worker invocation failed', {
-          dispatchId: job.id,
-          err: String(err),
+      let localAttempt: { attemptId: string; branchName: string } | null = null;
+      if (isLocal) {
+        try {
+          localAttempt = await queueLocalFixAttempt(db, {
+            projectId: body.projectId,
+            reportId: body.reportId,
+            dispatchId: job.id,
+            repo: localRepo!,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          await db
+            .from('fix_dispatch_jobs')
+            .update({ status: 'failed', error: message.slice(0, 500), finished_at: new Date().toISOString() })
+            .eq('id', job.id);
+          return c.json({ ok: false, error: { code: 'DISPATCH_FAILED', message } }, 500);
+        }
+      } else {
+        // Fire-and-forget invoke of the fix-worker Edge Function. We deliberately
+        // do not await — the SSE stream above is the channel the UI uses to track
+        // progress. EdgeRuntime.waitUntil keeps the worker alive after the
+        // dispatch response returns. If the worker invocation fails, the dispatch
+        // row sits in 'queued' until fix_dispatch_sweeper() (pg_cron, every
+        // minute) re-invokes it after a 2-minute grace window — see migration
+        // 20260724000001_fix_dispatch_sweeper_requeue_primaries.
+        invokeFixWorker(job.id, c.get('requestId') as string | undefined).catch((err) => {
+          log.warn('fix-dispatch worker invocation failed', {
+            dispatchId: job.id,
+            err: String(err),
+          });
         });
-      });
+      }
 
       // New-user path step (funnel-steps.ts); the person who asked is the actor.
       emitFirstFixDispatched(db, {
@@ -408,6 +451,14 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
           status: job.status,
           createdAt: job.created_at,
           targetRepoId: targetRepo?.id ?? null,
+          ...(localAttempt
+            ? {
+                agent: LOCAL_AGENT,
+                fixId: localAttempt.attemptId,
+                branchName: localAttempt.branchName,
+                next: 'Run `mushi agent serve --repo-dir <your checkout>` on your machine to pick it up.',
+              }
+            : {}),
           budget,
         },
       });
