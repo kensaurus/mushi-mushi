@@ -385,8 +385,8 @@ describe('POST /v1/admin/agent/attempts/:id/report', () => {
   })
 })
 
-describe('migration 20261022000100_local_agent_claim', () => {
-  const sql = readFileSync(resolve(__dirname, '../../supabase/migrations/20261022000100_local_agent_claim.sql'), 'utf8')
+describe('migration 20261101010000_local_agent_claim', () => {
+  const sql = readFileSync(resolve(__dirname, '../../supabase/migrations/20261101010000_local_agent_claim.sql'), 'utf8')
 
   it('claims in one statement with SKIP LOCKED, queued or lapsed lease, local only', () => {
     const fn = sql.slice(sql.indexOf('CREATE OR REPLACE FUNCTION public.claim_local_fix_attempt'), sql.indexOf("COMMENT ON FUNCTION public.claim_local_fix_attempt"))
@@ -403,6 +403,6 @@ describe('migration 20261022000100_local_agent_claim', () => {
     expect(sql).toMatch(/GRANT\s+EXECUTE ON FUNCTION public\.claim_local_fix_attempt\(uuid\[\], uuid, uuid, integer\) TO service_role/)
     expect(sql).toMatch(/REVOKE ALL\s+ON FUNCTION public\.local_fix_attempts_expire\(\) FROM PUBLIC, anon, authenticated/)
     expect(sql).toMatch(/'local_agent_error'\n/)
-    expect(readFileSync(resolve(__dirname, '../../../../deploy/helm/migrations/20261022000100_local_agent_claim.sql'), 'utf8')).toBe(sql)
+    expect(readFileSync(resolve(__dirname, '../../../../deploy/helm/migrations/20261101010000_local_agent_claim.sql'), 'utf8')).toBe(sql)
   })
 })
