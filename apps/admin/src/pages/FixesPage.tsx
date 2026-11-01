@@ -64,7 +64,13 @@ import { statsWithProjectPresence } from '../lib/projectPresence'
 import { trackSelf } from '../lib/track'
 import { FixesFirstView } from '../components/fixes/FixesFirstView'
 import type { PipelineData } from '../lib/pipeline'
-import { isReadyToMerge, pipelineApprovedGreen } from '../lib/countDefinitions'
+import {
+  collectInFlightReportIds,
+  inFlightHeadline,
+  isLiveFixAttempt,
+  isReadyToMerge,
+  pipelineApprovedGreen,
+} from '../lib/countDefinitions'
 interface InventoryActionNode {
   actionNodeId?: string
   id?: string
@@ -112,8 +118,10 @@ function bucketFromUrl(status: string | null, tab: string | null): StatusBucket 
 
 /** The one exclusive bucket of an attempt; PR open is matched separately. */
 function bucketize(fix: FixAttempt): StatusBucket {
-  const status = fix.status?.toLowerCase()
-  if (status === 'queued' || status === 'running') return 'inflight'
+  // Same live statuses as the server In flight card (queued, running,
+  // pending and dispatched). A live attempt whose report is already
+  // resolved stays here: the row is still queued or running.
+  if (isLiveFixAttempt(fix.status)) return 'inflight'
   // "Failed / skipped" holds the latest attempt of each report that is
   // still unfixed after it failed, was skipped (2026-08-16 audit P1-4), or
   // its PR went red / closed unmerged (2026-10-02). Earlier attempts on a
@@ -745,16 +753,39 @@ export function FixesPage() {
     void loadFixes()
   }, [selectedFailed, activeProjectId, pushOptimistic, settleOptimistic, clearSelection, loadFixes, toast])
 
+  // Merge optimistic rows with server rows — server wins if the same
+  // report_id + status appears in both, keeping the list non-duplicative
+  // once the real dispatch record lands via realtime.
+  const mergedDispatches = useMemo(() => {
+    if (optimisticDispatches.length === 0) return dispatches
+    const realReportIds = new Set(dispatches.map((d) => d.report_id))
+    const keptOptimistic = optimisticDispatches.filter((d) => !realReportIds.has(d.report_id))
+    return [...keptOptimistic, ...dispatches]
+  }, [dispatches, optimisticDispatches])
+
+  // One report, once. The tab title used to count only queued/running rows,
+  // so it read 0 while the In flight card (server inProgress, which includes
+  // pending and dispatched, plus a dispatch that has no attempt yet) read 1.
+  const inFlightReportIds = useMemo(
+    () => collectInFlightReportIds(fixes, mergedDispatches),
+    [fixes, mergedDispatches],
+  )
+  const inFlightCount = inFlightHeadline(
+    inFlightReportIds.size,
+    summary?.inProgress,
+    fixesStats.inProgress + fixesStats.inflightDispatches,
+  )
+
   // Publish page context so Ask Mushi and command palette can react
   // to the current bucket + counts (e.g. "Retry all failed fixes" only
-  // makes sense when `failedFixes.length > 0`).
+  // makes sense when `failedFixes.length > 0`). The summary is the browser
+  // tab title. Failed matches the banner (B3); in flight matches the card.
   usePublishPageContext({
     route: '/fixes',
     title: projectName ? `Fixes · ${projectName}` : 'Fixes',
     summary: loading
       ? 'Loading fix pipeline…'
-      // Same number as the banner and the stopped-dispatch cards (B3).
-      : `${pluralizeWithCount(fixes.length, 'fix', 'fixes')} · ${bucketCounts.inflight} in flight · ${Math.max(bucketCounts.failed, fixesStats.failed)} failed`,
+      : `${pluralizeWithCount(fixes.length, 'fix', 'fixes')} · ${inFlightCount} in flight · ${Math.max(bucketCounts.failed, fixesStats.failed)} failed`,
     filters: {
       bucket: statusBucket,
     },
@@ -765,8 +796,8 @@ export function FixesPage() {
       bucketCounts.failed > 0
         ? `Why did the ${pluralizeWithCount(bucketCounts.failed, 'failed fix', 'failed fixes')} fail?`
         : 'Is the auto-fix pipeline healthy right now?',
-      bucketCounts.inflight > 0
-        ? `What is taking the longest among the ${bucketCounts.inflight} in-flight fixes?`
+      inFlightCount > 0
+        ? `What is taking the longest among the ${inFlightCount} in-flight fixes?`
         : 'Which report should I dispatch next?',
       'Which fixes are waiting on a human review?',
     ],
@@ -803,29 +834,6 @@ export function FixesPage() {
       sublabel: `status: ${f.status ?? 'unknown'}`,
     })),
   })
-
-  // Merge optimistic rows with server rows — server wins if the same
-  // report_id + status appears in both, keeping the list non-duplicative
-  // once the real dispatch record lands via realtime.
-  const mergedDispatches = useMemo(() => {
-    if (optimisticDispatches.length === 0) return dispatches
-    const realReportIds = new Set(dispatches.map((d) => d.report_id))
-    const keptOptimistic = optimisticDispatches.filter((d) => !realReportIds.has(d.report_id))
-    return [...keptOptimistic, ...dispatches]
-  }, [dispatches, optimisticDispatches])
-
-  const inFlightReportIds = useMemo(() => {
-    const ids = new Set<string>()
-    for (const f of fixes) {
-      const s = f.status?.toLowerCase()
-      if (s === 'queued' || s === 'running' || s === 'dispatched') ids.add(f.report_id)
-    }
-    for (const d of mergedDispatches) {
-      const s = d.status?.toLowerCase()
-      if (s === 'queued' || s === 'running') ids.add(d.report_id)
-    }
-    return ids
-  }, [fixes, mergedDispatches])
 
   const reloadAll = useCallback(() => {
     reloadStats()
@@ -878,7 +886,7 @@ export function FixesPage() {
             show: setupBlocked && !emptyAsksForGithub,
             children: (
               <FixesStatusBanner
-                stats={fixesStats}
+                stats={{ ...fixesStats, inProgress: inFlightCount }}
                 causeSummary={causeSummary}
                 onRefresh={reloadAll}
                 refreshing={isValidating || statsValidating}
@@ -893,6 +901,7 @@ export function FixesPage() {
               <FixesSnapshotStrip
                 stats={snapshotStats}
                 ready={readyCount}
+                inFlight={inFlightCount}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
               />
@@ -906,7 +915,7 @@ export function FixesPage() {
             children: (
               <FixesPipelineGuide
                 topPriority={fixesStats.topPriority}
-                stats={fixesStats}
+                stats={{ ...fixesStats, inProgress: inFlightCount }}
               />
             ),
           },
@@ -933,7 +942,7 @@ export function FixesPage() {
 
       {/* Quick mode has no snapshot strip, so the KPI row stands in for it. */}
       {summary && ux.hideFixesSnapshot && (
-        <FixSummaryRow summary={{ ...summary, prsOpen: prCounts.open }} successRate={successRate} />
+        <FixSummaryRow summary={{ ...summary, inProgress: inFlightCount, prsOpen: prCounts.open }} successRate={successRate} />
       )}
 
       {fixes.length > 0 && (

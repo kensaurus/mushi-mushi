@@ -43,10 +43,10 @@ const DOT_RADIUS = 6
  * keeps the on-brand "stamp + paper notification pip" visual metaphor.
  *
  * If the favicon is ever recoloured back to a neutral surface, swap these
- * back to a warning red — there's nothing in the API that needs to change.
+ * token names back to a warning red — there's nothing in the API that
+ * needs to change. Read at paint time: a top-level read runs before
+ * index.css and would freeze the stand-in.
  */
-const DOT_COLOR = readVizToken('viz-lang-javascript')
-const DOT_RING_COLOR = readVizToken('viz-terminal-bg')
 const BASE_SRC = '/favicon.svg'
 
 let baseImage: HTMLImageElement | null = null
@@ -149,13 +149,15 @@ async function updateFaviconBadge(count: number): Promise<void> {
     // tiny canvas resolution.
     const cx = FAVICON_SIZE - DOT_RADIUS - 1
     const cy = DOT_RADIUS + 1
+    const dotColor = readVizToken('viz-lang-javascript')
+    const dotRingColor = readVizToken('viz-terminal-bg')
     ctx.beginPath()
     ctx.arc(cx, cy, DOT_RADIUS + 1, 0, Math.PI * 2)
-    ctx.fillStyle = DOT_RING_COLOR
+    ctx.fillStyle = dotRingColor
     ctx.fill()
     ctx.beginPath()
     ctx.arc(cx, cy, DOT_RADIUS, 0, Math.PI * 2)
-    ctx.fillStyle = DOT_COLOR
+    ctx.fillStyle = dotColor
     ctx.fill()
 
     link.type = 'image/png'

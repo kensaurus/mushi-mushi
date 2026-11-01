@@ -46,13 +46,14 @@ export function FixSummaryRow({ summary, successRate }: Props) {
   const specWarnings = summary.specWarnings ?? 0;
   const showSpec = specWarnings > 0;
 
-  // Loop-closure: when there are *any* failures with a categorised reason
-  // in the trailing 30d, show a "Why fixes failed" tile that names the
-  // dominant cause. Without this, a project with 16 failures has no clue
-  // whether it's a model issue (llm_no_object), an infra issue
-  // (sandbox_timeout), or a config issue (scope_blocked).
+  // When any failure has a categorised reason, show why auto-fix stopped.
+  // One cause is named on the tile. Several causes must not borrow the most
+  // common label ("PR closed without merge") for the whole pile: the number
+  // is then the full unfixed total, the same as "Auto-fix stopped", and the
+  // per-cause counts stay in the tile's explanation.
   const breakdown = summary.failureBreakdown ?? [];
   const showBreakdown = breakdown.length > 0;
+  const mixedCauses = breakdown.length > 1;
   const cols = (5 + (showSpec ? 1 : 0) + (showBreakdown ? 1 : 0)) as 5 | 6 | 7;
   const topFailure = breakdown[0];
   const breakdownTitle = breakdown
@@ -118,9 +119,9 @@ export function FixSummaryRow({ summary, successRate }: Props) {
       {showBreakdown && topFailure && (
         <KpiTile
           label="Why auto-fix stopped"
-          value={topFailure.count}
+          value={mixedCauses ? summary.failed : topFailure.count}
           accent="danger"
-          sublabel={fixCauseLabel(topFailure.category)}
+          sublabel={mixedCauses ? 'several causes' : fixCauseLabel(topFailure.category)}
           meaning={`Why the last attempt stopped on each still-unfixed report, most common first.
 ${breakdownTitle}
 
