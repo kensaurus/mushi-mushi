@@ -112,7 +112,7 @@ export function ConnectProvenanceBand({
           type="button"
           onClick={() => setTechOpen((v) => !v)}
           aria-expanded={techOpen}
-          className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-2xs font-medium text-fg-secondary hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
+          className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-2xs font-medium text-fg-secondary hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-inset"
         >
           <IconGlobe size={14} className="shrink-0 text-fg-faint" aria-hidden />
           <span className="flex-1">URLs & project ID</span>

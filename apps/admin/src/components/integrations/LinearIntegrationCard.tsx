@@ -19,6 +19,14 @@ import { useToast } from '../../lib/toast'
 import { HealthSparkline } from './HealthSparkline'
 import type { HealthRow } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
+import {
+  INTEGRATION_CARD,
+  INTEGRATION_CARD_HEADER,
+  INTEGRATION_CARD_IDENTITY,
+  INTEGRATION_CARD_STATUS_IDLE,
+  INTEGRATION_CARD_STATUS_OK,
+  INTEGRATION_CARD_TITLE,
+} from './cardChrome'
 
 // ── Linear wordmark SVG (brand color, see allowlist below) ───────────────────
 function LinearLogo({ size = 20 }: { size?: number }) {
@@ -141,28 +149,28 @@ export function LinearIntegrationCard({
   }
 
   return (
-    <div className="rounded-xl border border-edge-subtle bg-surface p-5 space-y-4">
+    <div className={INTEGRATION_CARD}>
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-lg bg-accent-muted flex items-center justify-center flex-shrink-0">
+      <div className={INTEGRATION_CARD_HEADER}>
+        <div className={INTEGRATION_CARD_IDENTITY}>
+          <div className="mt-0.5 shrink-0">
             <LinearLogo size={20} />
           </div>
           <div className="min-w-0">
-            <h3 className="font-semibold text-sm text-fg truncate">Linear</h3>
+            <h3 className={INTEGRATION_CARD_TITLE}>Linear</h3>
             {linearConnected ? (
-              <p className="text-xs text-ok truncate">
+              <p className={INTEGRATION_CARD_STATUS_OK}>
                 {workspaceName ? `Connected to ${workspaceName}` : 'Connected'}
               </p>
             ) : (
-              <p className="text-xs text-fg-secondary truncate">
+              <p className={INTEGRATION_CARD_STATUS_IDLE}>
                 Not connected — link your workspace to create issues and sync status
               </p>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+        <div className="flex flex-wrap items-center gap-2">
           {sparkline.length > 0 && (
             <span
               className="hidden sm:flex"
@@ -185,7 +193,7 @@ export function LinearIntegrationCard({
 
           {confirmDisconnect && (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-warn">Disconnect Linear?</span>
+              <span className="text-xs text-warning-foreground">Disconnect Linear?</span>
               <Btn
                 type="button"
                 variant="ghost"
@@ -208,7 +216,7 @@ export function LinearIntegrationCard({
 
           <Btn
             type="button"
-            variant={linearConnected ? 'ghost' : 'accent'}
+            variant={linearConnected ? 'ghost' : 'primary'}
             size="sm"
             onClick={() => void handleOAuthConnect()}
             disabled={!projectId || connecting}
@@ -222,7 +230,7 @@ export function LinearIntegrationCard({
 
       {/* Connected features summary */}
       {linearConnected && (
-        <div className={`rounded-lg px-3 py-2 text-xs space-y-1 ${CHIP_TONE.okSubtle}`}>
+        <div className={`rounded-md px-3 py-2 text-xs space-y-1 ${CHIP_TONE.okSubtle}`}>
           <p className="font-medium">Active features</p>
           <ul className="text-fg-secondary leading-relaxed space-y-0.5 ml-2">
             <li>✓ Auto-create issues for triaged bugs</li>
@@ -235,7 +243,7 @@ export function LinearIntegrationCard({
 
       {/* API-key fallback */}
       <details className="group">
-        <summary className="cursor-pointer text-xs text-fg-tertiary hover:text-fg-secondary transition-opacity list-none flex items-center gap-1">
+        <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg-secondary transition-opacity list-none flex items-center gap-1">
           <span className="group-open:rotate-90 transition-transform inline-block">›</span>
           Use a Linear API key instead (no OAuth required)
         </summary>
@@ -261,7 +269,9 @@ export function LinearIntegrationCard({
                 className="font-mono text-xs"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                autoComplete="off"
+                // Not "off": Chrome ignores it on password inputs and fills the
+                // saved console login (email lands in the field before this one).
+                autoComplete="new-password"
               />
             </div>
             <div className="w-32 shrink-0">

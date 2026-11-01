@@ -1,4 +1,4 @@
-import { Btn, Card, RecommendedAction, RelativeTime } from '../ui'
+import { Card, RecommendedAction, RelativeTime, TextButton } from '../ui'
 import { McpEndpointReadout } from './McpEndpointReadout'
 import {
   ActionPill,
@@ -48,15 +48,13 @@ export function McpOverviewPanel({
             </Card>
           ))}
         </div>
-        <Btn
+        <TextButton
           type="button"
-          size="sm"
-          variant="ghost"
           onClick={onOpenExamples}
-          className="mt-2 !px-0 !py-0 text-2xs"
+          className="mt-2 text-2xs"
         >
           See all {MCP_USE_CASES.length} examples →
-        </Btn>
+        </TextButton>
       </Card>
 
       {stats.topPriority === 'healthy' && (

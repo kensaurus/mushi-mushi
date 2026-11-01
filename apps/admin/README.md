@@ -261,9 +261,9 @@ New pages and any refactor should follow these defaults — every admin page alr
 Layout & content:
 
 - **`PageHeaderBar`** (`src/components/PageHeaderBar.tsx`) — **v2 standard page chrome**. Single compact row: stage chip · title · optional project scope · optional description · embedded `PageHelpBanner` (collapsed by default for Advanced users). Replaces the old `PageHeader` + `PageHelp` two-component combo. See [Design System v2](#design-system-v2-2026-06--compact-console-grade-uiux) for usage rules.
-- `PageHeader`, `PageHelp` — **legacy**, kept for backward compatibility. New pages must use `PageHeaderBar`. `PageHelp` defaults open only on the user's first ever visit (single `mushi:visited` flag in `localStorage`) and persists dismissal per-page in `localStorage[mushi:pagehelp:dismissed:${title}]`.
+- `PageHeader` — **legacy**, kept for compact titles inside nested panels. New pages must use `PageHeaderBar` and pass help through its `help*` props (the standalone `<PageHelp>` registrar is gone). `PageHelpBanner` persists dismissal per-page in `localStorage[mushi:pagehelp:dismissed:${title}]`.
 - `Section` — titled section with optional leading `icon` (e.g. `IconUser`, `IconSparkle`, `IconCamera` from `icons.tsx`)
-- `Card`, `Divider`, `Loading`, `Skeleton`, `ErrorAlert`, `StatCard`. Layout-shaped skeletons live in `src/components/skeletons/` (`DashboardSkeleton`, `TableSkeleton`, `DetailSkeleton`, `PanelSkeleton`) and replace 22 page-level `<Loading />` spinners — first paint matches the loaded layout instead of a tiny spinner over an empty page. Each accepts a `label` for `aria-label` and sets `role="status" aria-busy="true"`. `TableSkeleton` accepts `rows / columns / showFilters / showKpiStrip` so callers can shape it for their layout; `PanelSkeleton` accepts `inCard` so settings sub-panels (which already live inside a `<Section>`) don't double-wrap
+- `Card`, `Loading`, `Skeleton`, `ErrorAlert`, `StatCard`. Layout-shaped skeletons live in `src/components/skeletons/` (`DashboardSkeleton`, `TableSkeleton`, `DetailSkeleton`, `PanelSkeleton`) and replace 22 page-level `<Loading />` spinners — first paint matches the loaded layout instead of a tiny spinner over an empty page. Each accepts a `label` for `aria-label` and sets `role="status" aria-busy="true"`. `TableSkeleton` accepts `rows / columns / showFilters / showKpiStrip` so callers can shape it for their layout; `PanelSkeleton` accepts `inCard` so settings sub-panels (which already live inside a `<Section>`) don't double-wrap
 - `EmptyState` — NN/G-compliant empty: `title` (status line) + `description` (learning cue) + optional `hints` bullet list + optional `action` (direct path) + optional `icon`. Use this everywhere instead of bespoke "no results" cards so the three legs of empty-state design are always present
 
 Field rendering:
@@ -303,7 +303,6 @@ Dense data:
 Progressive disclosure & abbreviation:
 
 - **`Pct`** (`ui.tsx`) — single-line color-graded percentage. Accepts `value` in either `0–100` (default) or `0–1` (set `fraction`), a `direction` (`higher-better` for success/coverage, `lower-better` for error/drift), `precision`, and an optional `hint` rendered as a native `title`. Tone swap runs through **`pctToneClass`** in `lib/tokens.ts` (≥90% green / ≥70% amber / else red for higher-better; inverted thresholds for lower-better), so every "% number" across Dashboard / Health / Judge / Prompt Lab reads green-amber-red at a glance instead of requiring the user to translate `86.4%` into "good or bad?". Used on Health (fallback / error / success rates), Judge (score pills), Prompt Lab (traffic + judge score columns), Intelligence (completion rate)
-- **`Abbr`** (`ui.tsx`) — semantic `<abbr>` wrapper with a dotted underline + `cursor-help`. Pair with a short inline label (`Crit` / `PDCA` / `p95`) and put the full explanation in `title` — the browser reveals it on hover and on iOS long-press so the short form stays legible in dense tables without losing the expanded meaning. Used where repeated long labels would otherwise choke a row (`severityLabelShort` in Reports, `PDCA loop` caption in `FixProgressStream`)
 
 Action receipts:
 
@@ -589,7 +588,7 @@ Async UX & reliability:
 | Sliding pill / layoutId indicator | `MicroSegmentedTrack` or `MotionSegmentedControl` | `MotionProvider` + hook |
 | Accordion / disclosure height | `AnimatedDisclosure` (grid `0fr→1fr`, not `height:auto` spring) | `useDisclosureVariants()` |
 | Modal / palette / drawer exit | `AnimatePresence` + `useOverlayVariants()` / `useDrawerVariants()` | `useMotionTransition(overlayTween)` |
-| Banner / posture row enter | `SpringChromeEnter` | `useMotionTransition(chromeEnterSpring)` |
+| Banner / posture row enter | `SpringChromeEnter` | `useMotionTransition(bannerEnterSpring)` |
 
 **Rules:** never import raw `motion.*` without `useMotionTransition` / variant helpers; never spring `height: auto`; prefer explicit property lists over `transition-all` (baseline grep: 0 hits in `apps/admin/src` as of 2026-06).
 - `SettingsPage` tablist uses an absolutely-positioned underline that translates between active tabs in 200ms via `useLayoutEffect` measurement, instead of jumping per-button border styles — full a11y preserved (`role="tab"`, `aria-selected`, `aria-controls`, focus-visible ring)

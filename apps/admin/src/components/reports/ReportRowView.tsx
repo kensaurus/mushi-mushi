@@ -306,6 +306,7 @@ function ReportRowViewInner({
               <Link
                 to={detailPath}
                 onClick={(e) => e.stopPropagation()}
+                // mushi-mushi-allowlist: 20px table-row CTA — Btn sm (28px) would break the dense row rhythm
                 className="inline-flex h-5 shrink-0 items-center justify-center truncate px-1.5 text-3xs font-medium leading-none rounded-sm bg-brand text-brand-fg hover:bg-brand-hover"
               >
                 Triage →

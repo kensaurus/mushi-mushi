@@ -9,7 +9,8 @@ import { Card, PanelHeader } from '../ui'
 import { StatusPill } from '../charts'
 import { SeveritySwatch } from '../charts/SeverityColorLegend'
 import { relTime, type FixSummary, type TriageItem } from './types'
-import { ActionPill, SignalChip } from '../report-detail/ReportSurface'
+import { SignalChip } from '../report-detail/ReportSurface'
+import { PANEL_HEADER_LINK } from '../../lib/chipTone'
 import { EmptySectionMessage } from '../report-detail/ReportClassification'
 import { FixPipelineMeter } from './FixPipelineMeter'
 import { useAdminMode } from '../../lib/mode'
@@ -37,10 +38,12 @@ export function TriageAndFixRow({ triageQueue, fixSummary }: Props) {
                 </SignalChip>
               )}
               {/* `open` matches the list previewed here; `new` alone lasts only
-                  the second classification takes, so it opened an empty list. */}
-              <ActionPill to="/reports?status=open" tone="brand">
+                  the second classification takes, so it opened an empty list.
+                  Plain panel link, same as the chart panels' "All reports →" —
+                  a brand pill here read as a second primary button. */}
+              <Link to="/reports?status=open" className={PANEL_HEADER_LINK}>
                 View backlog →
-              </ActionPill>
+              </Link>
             </div>
           }
         />
@@ -55,7 +58,7 @@ export function TriageAndFixRow({ triageQueue, fixSummary }: Props) {
               <Link
                 key={r.id}
                 to={`/reports/${r.id}`}
-                className="group block rounded-md border border-edge-subtle/70 bg-surface-overlay/25 px-2 py-1.5 motion-safe:transition-opacity hover:border-edge hover:bg-surface-overlay/45"
+                className="group block rounded-md border border-edge-subtle px-2 py-1.5 motion-safe:transition-opacity hover:border-edge hover:bg-surface-hover"
               >
                 <div className="flex items-center gap-2">
                   <StatusPill status={r.status} />
@@ -75,9 +78,9 @@ export function TriageAndFixRow({ triageQueue, fixSummary }: Props) {
         <PanelHeader
           title="Auto-fix"
           action={
-            <ActionPill to="/fixes" tone="brand">
-              All →
-            </ActionPill>
+            <Link to="/fixes" className={PANEL_HEADER_LINK}>
+              All fixes →
+            </Link>
           }
         />
         <FixPipelineMeter fixSummary={fixSummary} />

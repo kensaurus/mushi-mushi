@@ -4,11 +4,17 @@
 
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { Link, type LinkProps } from 'react-router-dom'
-import { CHIP_TONE } from '../../lib/chipTone'
 import type { BadgeTone } from './layout'
 
-const TRIGGER_BASE =
-  'inline-flex max-w-full items-center gap-1 rounded-sm border border-edge-subtle bg-surface-raised/60 px-1.5 py-1 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-opacity min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 xl:gap-1.5 xl:px-2'
+/**
+ * One control height for the whole top bar (h-8). Search, switchers, the
+ * version pill and the icon buttons used to be 24 / 26 / 28 / 34px tall with
+ * four different border and fill treatments.
+ */
+export const HEADER_CONTROL_BASE =
+  'inline-flex h-8 max-w-full min-w-0 items-center gap-1.5 rounded-sm border border-edge-subtle px-2 text-xs text-fg-secondary hover:bg-surface-hover hover:text-fg motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50'
+
+const TRIGGER_BASE = HEADER_CONTROL_BASE
 
 export interface HeaderContextChipProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Uppercase kicker label, e.g. "Team" or "Project". */
@@ -22,7 +28,7 @@ export interface HeaderContextChipProps extends ButtonHTMLAttributes<HTMLButtonE
   icon?: ReactNode
   /** Primary label (truncated). */
   label: ReactNode
-  /** Nested status pill text — uses CHIP_TONE when `badgeTone` is set. */
+  /** Trailing tag (plan / role). `badgeTone="brand"` tints it; anything else is muted. */
   badge?: ReactNode
   badgeTone?: BadgeTone
   /** Trailing affordance (chevron, skeleton, etc.). */
@@ -64,7 +70,7 @@ export function HeaderContextChip({
     title ?? (kicker && typeof label === 'string' ? `${kicker}: ${label}` : undefined)
   const variantClass =
     variant === 'accent'
-      ? 'bg-brand/12 text-brand border border-brand/28 hover:bg-brand-subtle'
+      ? 'bg-brand/12 text-brand-foreground border border-brand/28 hover:bg-brand-subtle'
       : ''
   return (
     <button
@@ -89,10 +95,14 @@ export function HeaderContextChip({
       <span className="max-w-[7rem] sm:max-w-[9rem] lg:max-w-[12rem] xl:max-w-[15rem] min-w-0 truncate font-medium inline-flex items-center gap-1">{label}</span>
       {badge != null && badge !== false ? (
         typeof badge === 'string' || typeof badge === 'number' ? (
+          // Plain tag text, not a filled pill: a coloured chip nested inside a
+          // bordered chip was the "ADMIN" orange-on-amber box in the header.
+          // One display utility per branch: `inline-flex` + `hidden` together
+          // both set `display`, and inline-flex won — the badge never hid.
           <span
-            className={`inline-flex h-5 max-w-[4.5rem] xl:max-w-[5.5rem] items-center truncate rounded-sm px-1 text-2xs font-medium uppercase shrink-0 ${
-              badgeHiddenBelowXl ? 'hidden xl:inline-flex' : ''
-            } ${badgeTone ? CHIP_TONE[badgeTone] : CHIP_TONE.neutral}`}
+            className={`max-w-[4.5rem] xl:max-w-[5.5rem] items-center truncate text-3xs font-semibold uppercase tracking-wider shrink-0 ${
+              badgeHiddenBelowXl ? 'hidden xl:inline-flex' : 'inline-flex'
+            } ${badgeTone === 'brand' ? 'text-brand-foreground' : 'text-fg-muted'}`}
           >
             {badge}
           </span>

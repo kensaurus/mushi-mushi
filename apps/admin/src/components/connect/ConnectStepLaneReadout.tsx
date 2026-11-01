@@ -78,7 +78,7 @@ export function ConnectStepLaneReadout({ lane, icon, className = '' }: ConnectSt
               </span>
             ) : null}
             {model.isNext ? (
-              <span className="rounded-full bg-brand-subtle/80 px-2 py-0.5 text-3xs font-medium text-brand whitespace-nowrap">
+              <span className="rounded-full bg-brand-subtle/80 px-2 py-0.5 text-3xs font-medium text-brand-foreground whitespace-nowrap">
                 Next step
               </span>
             ) : null}

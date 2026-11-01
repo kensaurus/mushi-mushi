@@ -58,11 +58,8 @@ export function FeatureExplainPanel({
         className={`cursor-pointer select-none list-none px-3 py-2 text-xs font-medium text-fg transition-opacity ${GUIDE_PANEL_SUMMARY_HOVER} [&::-webkit-details-marker]:hidden`}
       >
         <span className="inline-flex items-center gap-2 min-w-0">
-          <span
-            aria-hidden
-            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border border-edge-subtle text-fg-muted"
-          >
-            <Icon size={12} />
+          <span aria-hidden className="inline-flex shrink-0 text-fg-muted">
+            <Icon size={14} />
           </span>
           <span className="min-w-0 truncate">{title}</span>
           <span className="ml-auto flex items-center gap-1 text-fg-faint font-normal text-2xs shrink-0 group-open:hidden">
@@ -94,10 +91,12 @@ interface EffectCalloutProps {
  *  Deliberately borderless. Every call site sits directly inside a `Section`,
  *  which is itself a bordered Card — the old `ContainedBlock` drew a second
  *  outline immediately inside the first, so each settings group opened with a
- *  box in a box. A tinted background separates the copy without a second frame. */
+ *  box in a box. The grey `bg-surface-overlay` fill that replaced it was the
+ *  darkest grey in the light ramp (L=0.92) inside a white card, so it is now a
+ *  left rule: separated from the fields, no second surface. */
 export function SettingEffectCallout({ label = 'What this changes', children }: EffectCalloutProps) {
   return (
-    <div className="rounded-md bg-surface-overlay px-3 py-2">
+    <div className="border-l-2 border-edge-subtle pl-3 py-0.5">
       <p className="text-2xs leading-relaxed text-fg-muted">
         <span className="font-medium text-fg-secondary">{label}:</span> {children}
       </p>

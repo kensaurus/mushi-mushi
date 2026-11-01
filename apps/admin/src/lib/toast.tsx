@@ -22,6 +22,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { btnClass } from './btnRecipe'
 
 export type ToastTone = 'success' | 'error' | 'info' | 'warn'
 // `warning` is accepted as an alias for `warn` so existing call sites that
@@ -95,8 +96,8 @@ const TONE_DESC_CLS: Record<ToastTone, string> = {
   warn: 'text-warning-foreground',
 }
 
-const TOAST_ACTION_CLASS =
-  'mt-1.5 inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-2xs font-medium text-brand-fg hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-1 focus-visible:ring-offset-surface-raised motion-safe:transition-opacity'
+/** Toast CTA = the canonical small primary Btn. */
+const TOAST_ACTION_CLASS = `mt-1.5 ${btnClass('primary', 'sm')}`
 
 let counter = 0
 

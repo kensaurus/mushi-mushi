@@ -482,7 +482,7 @@ function TicketRow({
             </span>
             <p className="truncate text-xs font-medium text-fg">{t.subject}</p>
             {reply && (t.status === 'open' || t.status === 'in_progress') && (
-              <Badge className="shrink-0 text-3xs motion-safe:animate-pulse bg-brand/12 text-brand border border-brand/28">
+              <Badge className="shrink-0 text-3xs motion-safe:animate-pulse bg-brand/12 text-brand-foreground border border-brand/28">
                 New reply
               </Badge>
             )}

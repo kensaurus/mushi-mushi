@@ -23,7 +23,7 @@ import { StorageStatusBanner, isStorageStatusBannerCritical } from '../component
 import { StorageSnapshotStrip } from '../components/storage/StorageSnapshotStrip'
 import { StorageReadout } from '../components/storage/StorageReadout'
 import { EMPTY_STORAGE_STATS, type StorageStats, type StorageTabId } from '../components/storage/types'
-import { Card, Btn, Badge, ErrorAlert, Input, SelectField, SegmentedControl } from '../components/ui'
+import { Card, Btn, Badge, ErrorAlert, Input, SelectField, SegmentedControl, TextButton } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
@@ -545,17 +545,15 @@ export function StoragePage() {
 
             {existing && debugSteps && debugSteps.length > 0 && (
               <div className="mt-3">
-                <Btn
+                <TextButton tone="muted"
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-2xs text-fg-muted hover:text-fg flex items-center gap-1 !px-0 !py-0 !border-0 !bg-transparent hover:!bg-transparent shadow-none hover:-translate-y-0"
                   onClick={() => setDebugOpen((prev) => ({ ...prev, [s.project_id]: !prev[s.project_id] }))}
+                  className="text-2xs flex items-center gap-1"
                 >
                   <span className={`inline-block transition-transform duration-150 ${isDebugOpen ? 'rotate-90' : ''}`}>▶</span>
                   <span>{isDebugOpen ? 'Hide' : 'Show'} debug log</span>
                   <span className="opacity-50">({debugSteps.length} steps)</span>
-                </Btn>
+                </TextButton>
                 {isDebugOpen && (
                   <div className="mt-1 overflow-x-auto rounded border border-edge-subtle bg-surface-overlay">
                     <table className="w-full text-2xs font-mono">

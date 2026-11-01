@@ -28,7 +28,7 @@ import {
 } from '../lib/streamdownSafety'
 import { apiFetch } from '../lib/supabase'
 import { Drawer } from './Drawer'
-import { Btn, Loading, Tooltip } from './ui'
+import { Btn, Loading, Tooltip, TextButton } from './ui'
 import { usePageContext, contextFilterChips, type PageContext } from '../lib/pageContext'
 import { formatLlmCost } from '../lib/format'
 import { langfuseTraceUrl, RESOLVED_API_URL, RESOLVED_SUPABASE_ANON_KEY } from '../lib/env'
@@ -516,27 +516,23 @@ export function AskMushiSidebar({ open, onClose, route, seedMessage, seedThreadI
       }
       headerAction={
         <div className="flex items-center gap-2">
-          <Btn
+          <TextButton tone="muted"
             type="button"
-            variant="ghost"
-            size="sm"
             onClick={() => setHistoryOpen((v) => !v)}
-            className="text-2xs px-0 h-auto border-0 underline-offset-2 hover:underline"
             aria-expanded={historyOpen}
             aria-haspopup="menu"
+            className="text-2xs"
           >
             History ▾
-          </Btn>
+          </TextButton>
           {messages.length > 0 && (
-            <Btn
+            <TextButton tone="muted"
               type="button"
-              variant="ghost"
-              size="sm"
               onClick={startNewThread}
-              className="text-2xs px-0 h-auto border-0 underline-offset-2 hover:underline"
+              className="text-2xs"
             >
               New
-            </Btn>
+            </TextButton>
           )}
         </div>
       }
@@ -756,7 +752,7 @@ function EmptyPrompt({ route, ctx, onSuggest, onSend, onResumeThread, resuming }
           style={{
             borderColor: 'var(--am-accent-cyan)',
             color: 'var(--am-accent-cyan)',
-            background: 'color-mix(in oklch, var(--am-accent-cyan) 12%, transparent)',
+            background: 'color-mix(in oklab, var(--am-accent-cyan) 12%, transparent)',
           }}
         >
           &gt;
@@ -997,15 +993,13 @@ function MessageMetaStrip({ message }: { message: AskMushiMessage }) {
 function MessageActions({ message, onCopy }: { message: AskMushiMessage; onCopy: () => void }) {
   return (
     <div className="ask-mushi-msg-actions flex items-center gap-1.5">
-      <Btn
+      <TextButton tone="muted"
         type="button"
-        variant="ghost"
-        size="sm"
         onClick={onCopy}
-        className="text-2xs px-0 h-auto border-0 underline-offset-2 hover:underline"
+        className="text-2xs"
       >
         Copy
-      </Btn>
+      </TextButton>
       {message.citations?.map((c) => (
         <a
           key={`${c.kind}:${c.id}`}
@@ -1057,15 +1051,13 @@ function HistoryPopover({
         <span className="ask-mushi-section-label">
           Recent on {route}
         </span>
-        <Btn
+        <TextButton tone="muted"
           type="button"
-          variant="ghost"
-          size="sm"
           onClick={onClose}
-          className="text-2xs px-0 h-auto border-0"
+          className="text-2xs"
         >
           Close
-        </Btn>
+        </TextButton>
       </div>
       {loading ? (
         <EmptySectionMessage text="Loading…" />

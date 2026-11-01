@@ -65,7 +65,11 @@ export function ActiveProjectStatusChip({ snapshot, className = '' }: ActiveProj
     : null
 
   return (
-    <span className={`inline-flex items-center gap-0.5 shrink-0 min-w-0 ${className}`.trim()}>
+    // Visibility comes from the caller's `className` alone (e.g. "hidden
+    // xl:inline-flex"). A base `inline-flex` here fought the caller's `hidden`
+    // — both set `display` and `inline-flex` won in the built CSS — so the
+    // chip leaked below xl and was clipped at the header's right edge.
+    <span className={`items-center gap-0.5 shrink-0 min-w-0 ${className || 'inline-flex'}`.trim()}>
       {showHeartbeat && (
         <Tooltip
           content={

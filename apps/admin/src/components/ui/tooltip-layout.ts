@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 /** Plain-string tooltips longer than this wrap unless `nowrap` is forced. */
-export const TOOLTIP_NOWRAP_MAX_CHARS = 48
+const TOOLTIP_NOWRAP_MAX_CHARS = 48
 
 /**
  * Pick single-line vs wrapping layout for the shared Tooltip primitive.

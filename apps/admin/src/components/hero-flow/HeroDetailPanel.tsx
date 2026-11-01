@@ -25,7 +25,7 @@ import {
 } from 'react'
 import { Link } from 'react-router-dom'
 
-import { Btn, Card, DetailRows, type DetailRowItem } from '../ui'
+import { Btn, Card, DetailRows, btnClass, type DetailRowItem } from '../ui'
 import { getConfigDoc } from '../../lib/configDocs'
 import { getDavManifest, type DavEvidence } from '../../lib/davManifest'
 import type { PageHeroDecide, PageHeroVerify } from '../PageHero'
@@ -516,7 +516,7 @@ export function HeroDetailPanel({
               {verify.to && (
                 <Link
                   to={verify.to}
-                  className="inline-flex items-center gap-1 rounded-sm bg-brand/90 px-2.5 py-1 text-2xs font-semibold text-brand-fg hover:bg-brand motion-safe:transition-opacity shadow-sm"
+                  className={btnClass('primary', 'sm')}
                   data-dav-action="follow-cta"
                 >
                   Open evidence <span aria-hidden>→</span>
@@ -525,7 +525,7 @@ export function HeroDetailPanel({
               {verify.secondaryTo && verify.secondaryLabel && (
                 <Link
                   to={verify.secondaryTo}
-                  className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay/60 px-2 py-0.5 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-opacity"
+                  className={btnClass('ghost', 'sm')}
                   data-dav-action="follow-cta"
                 >
                   {verify.secondaryLabel}

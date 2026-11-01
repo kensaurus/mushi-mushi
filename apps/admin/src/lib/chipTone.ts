@@ -7,8 +7,10 @@
 export const CHIP_TONE = {
   accent: 'bg-accent-muted/70 text-accent-foreground border border-accent/35',
   accentSubtle: 'bg-accent-muted/55 text-accent-foreground border border-accent/30',
-  brand: 'bg-brand-subtle/85 text-brand border border-brand/30',
-  brandSubtle: 'bg-brand/12 text-brand border border-brand/28',
+  // text-brand-foreground, not text-brand: light-mode brand (vermillion) is
+  // ~4:1 on white and lower on its own wash — under AA for 12px chip copy.
+  brand: 'bg-brand-subtle/85 text-brand-foreground border border-brand/30',
+  brandSubtle: 'bg-brand/12 text-brand-foreground border border-brand/28',
   warn: 'bg-warn-muted/70 text-warning-foreground border border-warn/30',
   warnSubtle: 'bg-warn-muted/50 text-warning-foreground border border-warn/25',
   danger: 'bg-danger-muted/70 text-danger-foreground border border-danger/30',
@@ -46,8 +48,11 @@ export const HEADER_BADGE_TONE = {
 export const LINK_ACCENT =
   'text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity'
 
-export const LINK_BRAND =
-  'text-brand hover:text-brand-hover underline underline-offset-2 motion-safe:transition-opacity'
+/** "See all →" link in a panel header (PanelHeader `action`). A plain link,
+ *  never a pill: brand-tinted pills here read as a second primary button next
+ *  to the page's real CTA. Matches the chart panels' "All reports →". */
+export const PANEL_HEADER_LINK =
+  'shrink-0 text-2xs font-medium text-accent-foreground hover:text-accent motion-safe:transition-opacity'
 
 /** Inline meta chip tones for RecommendedAction / dashboards. */
 export const META_CHIP_TONE = {
@@ -116,7 +121,7 @@ export function runStatusChipTone(status: string | null | undefined): string {
 
 /**
  * Surface severity tokens for hero / insight cards (ring + muted bg + fg + dot).
- * Consolidates ad-hoc SEVERITY_STYLE / insightTone maps — prefer this helper.
+ * Consolidates ad-hoc SEVERITY_STYLE / insightTone maps — prefer this map.
  */
 export type SurfaceSeverity = 'ok' | 'info' | 'warn' | 'crit' | 'danger' | 'neutral'
 
@@ -135,8 +140,4 @@ export const SEVERITY_SURFACE: Record<
     text: 'text-fg',
     dot: 'bg-fg-muted',
   },
-}
-
-export function severitySurfaceTone(severity: SurfaceSeverity) {
-  return SEVERITY_SURFACE[severity] ?? SEVERITY_SURFACE.neutral
 }

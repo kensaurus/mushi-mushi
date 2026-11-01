@@ -293,7 +293,7 @@ export function UsersPage() {
                         <div className="flex items-center gap-2">
                           <span className="text-fg">{u.email ?? <em className="text-fg-faint">no email</em>}</span>
                           {u.role === 'super_admin' && (
-                            <Badge className="bg-brand/12 text-brand border border-brand/28 text-2xs">operator</Badge>
+                            <Badge className="bg-brand/12 text-brand-foreground border border-brand/28 text-2xs">operator</Badge>
                           )}
                         </div>
                       </td>

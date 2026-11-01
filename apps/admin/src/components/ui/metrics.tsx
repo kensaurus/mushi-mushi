@@ -8,6 +8,7 @@ import { InfoHint, MetricHelpTrigger } from './fields';
 import { Card } from './layout';
 import { Tooltip } from './misc';
 import { Modal } from '../Modal';
+import { btnClass } from '../../lib/btnRecipe';
 import { CHIP_TONE } from '../../lib/chipTone'
 
 
@@ -91,21 +92,6 @@ export function MiniInlineBar({
   )
 }
 
-/** Elapsed wall time between two ISO timestamps (e.g. fix dispatch → complete). */
-export function formatDurationBetween(start: string | Date, end: string | Date): string {
-  const a = typeof start === 'string' ? new Date(start) : start
-  const b = typeof end === 'string' ? new Date(end) : end
-  const ms = Math.max(0, b.getTime() - a.getTime())
-  const sec = Math.round(ms / 1000)
-  if (sec < 60) return `${sec}s`
-  const min = Math.round(sec / 60)
-  if (min < 60) return `${min}m`
-  const hr = Math.round(min / 60)
-  if (hr < 48) return `${hr}h`
-  const days = Math.round(hr / 24)
-  return `${days}d`
-}
-
 export type PipelineStageState = 'pending' | 'active' | 'done' | 'failed'
 
 export interface PipelineStripProps {
@@ -177,7 +163,7 @@ interface RecommendedActionCta {
 /** Compact key/value chip rendered under the recommendation title. Used by
  *  the "A fix is in progress" path to surface when/elapsed/model/files
  *  without forcing the user to scroll to FixProgressStream below. */
-export interface RecommendedActionMeta {
+interface RecommendedActionMeta {
   label: string
   value: string
   tone?: 'neutral' | 'info' | 'ok' | 'warn' | 'danger'
@@ -186,7 +172,7 @@ export interface RecommendedActionMeta {
 /** Inline recovery action — used by skipped/failed fix paths to deep-link
  *  the user to /integrations or /settings with a single click. Distinct
  *  from the primary `cta` so we can render multiple (Enable + Retry). */
-export interface RecommendedActionInlineAction {
+interface RecommendedActionInlineAction {
   label: string
   to?: string
   href?: string
@@ -217,8 +203,7 @@ const RECOMMENDED_ACCENTS = {
   neutral: 'text-fg-muted',
 } as const
 
-const CTA_BTN_CLASS =
-  'shrink-0 inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity disabled:opacity-50 disabled:cursor-not-allowed'
+const CTA_BTN_CLASS = `shrink-0 ${btnClass('primary', 'sm')}`
 
 function RecommendedActionCtaEl({ cta }: { cta: RecommendedActionCta }) {
   if (cta.to) {
@@ -249,14 +234,16 @@ function RecommendedActionCtaEl({ cta }: { cta: RecommendedActionCta }) {
 
 const META_CHIP_TONES: Record<NonNullable<RecommendedActionMeta['tone']>, string> = META_CHIP_TONE
 
-const INLINE_ACTION_TONES: Record<NonNullable<RecommendedActionInlineAction['tone']>, string> = {
-  primary: 'bg-brand text-brand-fg hover:bg-brand-hover',
-  ghost: 'bg-surface-overlay text-fg-secondary hover:text-fg hover:bg-surface-raised border border-edge',
-  danger: CHIP_TONE.dangerSubtle + ' hover:bg-danger-muted/70 border border-danger/30',
+// Same three looks as <Btn>, via btnClass — these were a flat twin set with
+// their own padding and a grey-filled "ghost".
+const INLINE_ACTION_VARIANT: Record<NonNullable<RecommendedActionInlineAction['tone']>, 'primary' | 'ghost' | 'danger'> = {
+  primary: 'primary',
+  ghost: 'ghost',
+  danger: 'danger',
 }
 
 function InlineActionEl({ action }: { action: RecommendedActionInlineAction }) {
-  const cls = `inline-flex items-center gap-1 px-2 py-1 text-2xs font-medium rounded-sm motion-safe:transition-opacity ${INLINE_ACTION_TONES[action.tone ?? 'ghost']}`
+  const cls = btnClass(INLINE_ACTION_VARIANT[action.tone ?? 'ghost'], 'sm')
   if (action.to) {
     return <Link to={action.to} className={cls}>{action.label}</Link>
   }
@@ -489,9 +476,9 @@ export function Sparkline({
 
 export type MetricTooltipCalloutTone = 'info' | 'warn' | 'ok'
 
-export type MetricTooltipSectionKind = 'shows' | 'counted' | 'takeaway'
+type MetricTooltipSectionKind = 'shows' | 'counted' | 'takeaway'
 
-export interface MetricTooltipSection {
+interface MetricTooltipSection {
   label: string
   body: string
   /** Visual grouping — defaults from label when omitted. */
@@ -517,15 +504,15 @@ const METRIC_SECTION_META: Record<
 > = {
   shows: {
     Icon: IconEye,
-    chipClass: `border-info/35 ${CHIP_TONE.infoSubtle}`,
+    chipClass: CHIP_TONE.infoSubtle,
   },
   counted: {
     Icon: IconTerminal,
-    chipClass: `border-brand/35 ${CHIP_TONE.brand}`,
+    chipClass: CHIP_TONE.brand,
   },
   takeaway: {
     Icon: IconCheck,
-    chipClass: `border-ok/35 ${CHIP_TONE.okSubtle}`,
+    chipClass: CHIP_TONE.okSubtle,
   },
 }
 

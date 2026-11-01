@@ -21,6 +21,7 @@ import { useAdminMode } from '../lib/mode'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from './ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
+import { btnClass } from './ui'
 
 interface NextReport {
   id: string
@@ -31,6 +32,16 @@ interface NextReport {
 }
 
 const SHOW_ON_PATHS = new Set(['/', '/reports', '/fixes'])
+
+/**
+ * Routes where the Quickstart CTA renders. Shared with GlobalStatusStrip (so
+ * it never draws an empty "QUICKSTART · Hide" frame elsewhere) and with
+ * NextBestAction (so the two never stack contradictory next steps — e.g.
+ * "You're caught up" directly above "Review the auto-drafted PR").
+ */
+export function isQuickstartCtaRoute(pathname: string): boolean {
+  return SHOW_ON_PATHS.has(pathname)
+}
 
 export function QuickstartMegaCta({ embedded = false }: { embedded?: boolean }) {
   const { isQuickstart } = useAdminMode()
@@ -108,7 +119,7 @@ export function QuickstartMegaCta({ embedded = false }: { embedded?: boolean }) 
   if (pathname.startsWith('/login') || pathname.startsWith('/recovery')) return null
   if (pathname.startsWith('/onboarding')) return null
   if (pathname.startsWith('/reports/')) return null
-  if (!SHOW_ON_PATHS.has(pathname)) return null
+  if (!isQuickstartCtaRoute(pathname)) return null
   if (setup.loading) return null
   if (!cta) return null
 
@@ -122,11 +133,6 @@ export function QuickstartMegaCta({ embedded = false }: { embedded?: boolean }) 
       : cta.tone === 'plan'
       ? 'border-edge bg-chrome'
       : 'border-edge bg-surface-raised/40'
-
-  const buttonTone =
-    cta.tone === 'idle'
-      ? 'bg-surface-raised text-fg border border-edge hover:bg-surface-overlay'
-      : 'bg-brand text-brand-fg hover:bg-brand-hover'
 
   const outerClass = embedded
     ? 'flex items-center gap-4 px-3 py-2.5'
@@ -160,10 +166,7 @@ export function QuickstartMegaCta({ embedded = false }: { embedded?: boolean }) 
         </p>
         <p className="mt-0.5 text-xs text-fg-muted leading-snug truncate">{cta.sub}</p>
       </div>
-      <Link
-        to={cta.to}
-        className={`shrink-0 inline-flex items-center gap-1.5 rounded-md px-3.5 py-2 text-sm font-medium motion-safe:transition-opacity motion-safe:active:scale-[0.97] motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-1 focus-visible:ring-offset-surface ${buttonTone}`}
-      >
+      <Link to={cta.to} className={`shrink-0 ${btnClass(cta.tone === 'idle' ? 'ghost' : 'primary', 'md')}`}>
         {cta.button} <span aria-hidden="true">→</span>
       </Link>
     </aside>

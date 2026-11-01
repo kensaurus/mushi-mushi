@@ -11,7 +11,8 @@
 
 import { Link } from 'react-router-dom'
 import { Card, PanelHeader } from '../ui'
-import { ActionPill, SignalChip } from '../report-detail/ReportSurface'
+import { SignalChip } from '../report-detail/ReportSurface'
+import { PANEL_HEADER_LINK } from '../../lib/chipTone'
 import { EmptySectionMessage } from '../report-detail/ReportClassification'
 import { relTime } from './types'
 import { usePageData } from '../../lib/usePageData'
@@ -82,15 +83,15 @@ export function TeamActivityTile({ projectId }: Props) {
       <PanelHeader
         title="Team activity"
         action={
-          <ActionPill to="/audit" tone="brand">
+          <Link to="/audit" className={PANEL_HEADER_LINK}>
             Audit log →
-          </ActionPill>
+          </Link>
         }
       />
       {loading && logs.length === 0 ? (
         <div className="space-y-1.5" aria-hidden>
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-8 rounded-md bg-surface-overlay/25 motion-safe:animate-pulse" />
+            <div key={i} className="h-8 rounded-md bg-surface-hover motion-safe:animate-pulse" />
           ))}
         </div>
       ) : logs.length === 0 ? (
@@ -107,7 +108,7 @@ export function TeamActivityTile({ projectId }: Props) {
               <li key={e.id}>
                 <Link
                   to={`/audit?actor=${encodeURIComponent(who)}`}
-                  className="group block rounded-md border border-edge-subtle/70 bg-surface-overlay/25 px-2 py-1.5 motion-safe:transition-opacity hover:border-edge hover:bg-surface-overlay/45"
+                  className="group block rounded-md border border-edge-subtle px-2 py-1.5 motion-safe:transition-opacity hover:border-edge hover:bg-surface-hover"
                 >
                   <div className="flex items-center gap-2">
                     <SignalChip tone={KIND_TONE[kind]}>{KIND_LABEL[kind]}</SignalChip>

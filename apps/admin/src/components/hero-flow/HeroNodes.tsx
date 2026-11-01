@@ -57,6 +57,7 @@ const NODE_KIND_ICON: Record<HeroTileId, typeof IconInfo> = {
 }
 
 const CTA_PRIMARY: Record<PageAction['tone'], string> = {
+  // mushi-mushi-allowlist: per-PDCA-stage canvas node CTA (tone-filled like its check/plan/act siblings), not a page Btn
   do: 'bg-brand text-brand-fg hover:bg-brand-hover shadow-md shadow-brand/35 border border-brand/50',
   check: 'bg-warn text-warn-fg hover:brightness-105 shadow-md shadow-warn/35 border border-warn/55',
   plan: 'bg-info text-info-fg hover:brightness-105 shadow-md shadow-info/30 border border-info/50',

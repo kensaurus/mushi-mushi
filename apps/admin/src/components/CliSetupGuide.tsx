@@ -66,7 +66,7 @@ export function CliSetupGuide({ projectId, sdkInstalled = false, className = '' 
           const to = step.n === 3 ? step3Link : step.to
           return (
             <li key={step.n} className="flex gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand/12 text-2xs font-bold text-brand border border-brand/28">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand/12 text-2xs font-bold text-brand-foreground border border-brand/28">
                 {step.n}
               </span>
               <div className="min-w-0">

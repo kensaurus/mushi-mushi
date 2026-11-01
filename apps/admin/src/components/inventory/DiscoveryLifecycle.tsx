@@ -58,7 +58,7 @@ const STATE_STYLES: Record<LifecycleStepState, {
   active: {
     ring: 'ring-1 ring-brand/30',
     bg: 'bg-brand/[0.06]',
-    iconWrap: 'bg-brand/12 text-brand border border-brand/28',
+    iconWrap: 'bg-brand/12 text-brand-foreground border border-brand/28',
     iconColor: 'text-brand',
     numberColor: 'text-fg',
     labelColor: 'text-fg',
@@ -133,7 +133,7 @@ function LifecycleTile({ step, index }: { step: LifecycleStep; index: number }) 
           className={`mt-1 ml-9 inline-flex items-center gap-1 text-2xs font-medium ${
             step.cta.disabled
               ? 'text-fg-faint cursor-not-allowed'
-              : 'text-brand hover:text-brand-strong'
+              : 'text-brand hover:text-brand-hover'
           }`}
         >
           {step.cta.label} <span aria-hidden>→</span>

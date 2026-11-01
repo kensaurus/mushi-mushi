@@ -183,7 +183,7 @@ function actionTone(action: string): string {
     return 'bg-ok-muted/50 text-ok-foreground border border-ok/25'
   }
   if (action.endsWith('.dispatched') || action.endsWith('.classified') || action.endsWith('.connected')) {
-    return 'bg-brand/12 text-brand border border-brand/28'
+    return 'bg-brand/12 text-brand-foreground border border-brand/28'
   }
   return 'bg-surface-overlay text-fg-secondary'
 }

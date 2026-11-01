@@ -25,6 +25,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from './ProjectSwitcher'
+import { Btn } from './ui'
 
 type StopId = 'reports' | 'dispatch' | 'askMushi' | 'report-diagnosis'
 
@@ -288,7 +289,7 @@ export function FirstRunTour() {
         }}
       >
         <div className="flex items-center gap-2 px-3 py-2 border-b border-edge/60">
-          <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-brand/12 text-brand border border-brand/28 text-2xs font-bold">
+          <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-brand/12 text-brand-foreground border border-brand/28 text-2xs font-bold">
             {stopIdx + 1}
           </span>
           <span className="text-2xs text-fg-muted font-medium uppercase tracking-wider">
@@ -317,21 +318,13 @@ export function FirstRunTour() {
           </button>
           <div className="flex items-center gap-1.5">
             {stopIdx > 0 && (
-              <button
-                type="button"
-                onClick={back}
-                className="px-2 py-1 text-2xs rounded-sm border border-edge text-fg-secondary hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/50"
-              >
+              <Btn type="button" variant="ghost" size="sm" onClick={back}>
                 Back
-              </button>
+              </Btn>
             )}
-            <button
-              type="button"
-              onClick={next}
-              className="px-2.5 py-1 text-2xs rounded-sm bg-brand text-brand-fg hover:bg-brand-hover motion-safe:active:scale-[0.97] motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
-            >
+            <Btn type="button" variant="primary" size="sm" onClick={next}>
               {isLast ? 'Got it' : 'Next →'}
-            </button>
+            </Btn>
           </div>
         </div>
       </div>

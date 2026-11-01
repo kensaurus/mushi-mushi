@@ -164,7 +164,7 @@ export function ReportComments({ reportId, projectId }: { reportId: string; proj
             Reply to reporter
             <InfoHint content="If checked, the reporter will receive a notification with this message in the SDK widget." />
           </label>
-          <Btn type="submit" variant="accent" size="sm" loading={submitting} disabled={!body.trim()}>
+          <Btn type="submit" variant="primary" size="sm" loading={submitting} disabled={!body.trim()}>
             Post
           </Btn>
         </div>

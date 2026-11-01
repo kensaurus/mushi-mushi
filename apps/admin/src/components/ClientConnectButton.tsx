@@ -27,8 +27,7 @@ import { useState } from 'react'
 import type { McpClientDef, McpBuildInput, McpBuildResult } from '@mushi-mushi/mcp/clients'
 import { apiFetch } from '../lib/supabase'
 import { useToast } from '../lib/toast'
-import { LINK_ACCENT } from '../lib/chipTone'
-import { Btn, CodeValue } from './ui'
+import { Btn, CodeValue, TextButton } from './ui'
 
 // ─── Key minting (project-scoped only) ───────────────────────────────────────
 
@@ -166,59 +165,51 @@ export function ClientConnectButton({
                 label={`Paste into ${result.filePath}`}
                 text={result.json}
               />
-              <Btn
+              <TextButton tone="muted"
                 type="button"
-                size="sm"
-                variant="ghost"
                 onClick={() => setShowBlock(false)}
-                className="mt-2 !px-0 !py-0 text-xs text-fg-muted hover:text-fg"
+                className="mt-2 text-xs"
               >
                 ← Back
-              </Btn>
+              </TextButton>
             </>
           )}
           {result.kind === 'command' && (
             <>
               <ConfigCopySection label="Run in your terminal" text={result.text} />
-              <Btn
+              <TextButton tone="muted"
                 type="button"
-                size="sm"
-                variant="ghost"
                 onClick={() => setShowBlock(false)}
-                className="mt-2 !px-0 !py-0 text-xs text-fg-muted hover:text-fg"
+                className="mt-2 text-xs"
               >
                 ← Back
-              </Btn>
+              </TextButton>
             </>
           )}
           {result.kind === 'remote-url' && (
             <>
               <ConfigCopySection label="MCP endpoint URL" text={result.url} />
               <ConfigCopySection label="Required headers" text={result.headerSnippet} />
-              <Btn
+              <TextButton tone="muted"
                 type="button"
-                size="sm"
-                variant="ghost"
                 onClick={() => setShowBlock(false)}
-                className="mt-2 !px-0 !py-0 text-xs text-fg-muted hover:text-fg"
+                className="mt-2 text-xs"
               >
                 ← Back
-              </Btn>
+              </TextButton>
             </>
           )}
           {result.kind === 'deeplink' && (
             // After deeplink was opened, offer a re-open
             <div className="mt-2 flex items-center gap-2">
               <span className="text-xs text-fg-muted">IDE dialog should have opened.</span>
-              <Btn
+              <TextButton
                 type="button"
-                size="sm"
-                variant="ghost"
                 onClick={() => { if (result.kind === 'deeplink') window.open(result.url, '_self') }}
-                className={`!px-0 !py-0 text-xs ${LINK_ACCENT}`}
+                className="text-xs"
               >
                 Open again
-              </Btn>
+              </TextButton>
             </div>
           )}
         </div>

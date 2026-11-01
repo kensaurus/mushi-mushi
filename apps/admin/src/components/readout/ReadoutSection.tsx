@@ -17,8 +17,10 @@ export function ReadoutSection({
 }) {
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2 border-b border-edge-subtle/60 pb-1.5">
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-sm border border-edge-subtle bg-surface-overlay text-fg-muted">
+      {/* Bare glyph, no bordered tile: a boxed icon beside a heading reads as
+          a second button and adds a third outline to an already-framed card. */}
+      <div className="flex items-center gap-2 border-b border-edge-subtle pb-1.5">
+        <span className="inline-flex shrink-0 text-fg-muted" aria-hidden="true">
           {icon}
         </span>
         <h3 className="text-2xs font-semibold uppercase tracking-wider text-fg-secondary">{title}</h3>

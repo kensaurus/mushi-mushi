@@ -47,7 +47,7 @@ export const SKILL_CATEGORY_META: Record<string, SkillCategoryMeta> = {
     label: 'Debug',
     hint: 'Reproduce, isolate, and fix errors with production context',
     Icon: IconTerminal,
-    badgeClass: 'bg-warn-muted text-warn-foreground',
+    badgeClass: 'bg-warn-muted text-warning-foreground',
     accentClass: 'border-l-warn/50',
   },
   test: {
@@ -89,7 +89,7 @@ export const SKILL_CATEGORY_META: Record<string, SkillCategoryMeta> = {
     label: 'Deploy',
     hint: 'Ship verification, npm releases, and launch readiness',
     Icon: IconExport,
-    badgeClass: 'bg-warn-muted text-warn-foreground',
+    badgeClass: 'bg-warn-muted text-warning-foreground',
     accentClass: 'border-l-warn/50',
   },
   data: {
@@ -131,7 +131,7 @@ export const SKILL_CATEGORY_META: Record<string, SkillCategoryMeta> = {
     label: 'Protocol',
     hint: 'Browser anti-stall and automation guardrails',
     Icon: IconShield,
-    badgeClass: 'bg-warn-muted text-warn-foreground',
+    badgeClass: 'bg-warn-muted text-warning-foreground',
     accentClass: 'border-l-warn/50',
   },
   other: {

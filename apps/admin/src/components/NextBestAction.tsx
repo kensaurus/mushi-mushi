@@ -21,7 +21,8 @@ import { useAdminMode } from '../lib/mode'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
 import { CHIP_TONE } from '../lib/chipTone'
-import { Btn, ResultChip } from './ui'
+import { Btn, ResultChip, btnClass } from './ui'
+import { isQuickstartCtaRoute } from './QuickstartMegaCta'
 
 type NbaTone = 'plan' | 'do' | 'check' | 'act' | 'idle'
 
@@ -38,12 +39,16 @@ interface NbaAction {
     | { kind: 'inline-test-report'; label: string }
 }
 
+// The strip is a neutral panel; only the stage chip carries the PDCA hue. A
+// tinted wash + tinted border + tinted chip + a vermillion button put four
+// competing colours in one 40px row.
+const NBA_SURFACE = { ring: 'border-panel-border', bg: 'bg-panel' }
 const NBA_TONES: Record<NbaTone, { ring: string; bg: string; chipClass: string }> = {
-  plan:  { ring: 'border-info/40',   bg: 'bg-info-muted/15',   chipClass: CHIP_TONE.infoSubtle },
-  do:    { ring: 'border-edge',        bg: 'bg-surface-raised/40', chipClass: CHIP_TONE.brandSubtle },
-  check: { ring: 'border-info/40',   bg: 'bg-info-muted/15',   chipClass: CHIP_TONE.infoSubtle },
-  act:   { ring: 'border-ok/40',     bg: 'bg-ok-muted/15',     chipClass: CHIP_TONE.okSubtle },
-  idle:  { ring: 'border-edge',      bg: 'bg-surface-raised/40', chipClass: CHIP_TONE.neutral },
+  plan:  { ...NBA_SURFACE, chipClass: CHIP_TONE.infoSubtle },
+  do:    { ...NBA_SURFACE, chipClass: CHIP_TONE.brandSubtle },
+  check: { ...NBA_SURFACE, chipClass: CHIP_TONE.infoSubtle },
+  act:   { ...NBA_SURFACE, chipClass: CHIP_TONE.okSubtle },
+  idle:  { ...NBA_SURFACE, chipClass: CHIP_TONE.neutral },
 }
 
 const NBA_LABELS: Record<NbaTone, string> = {
@@ -95,6 +100,8 @@ export function NextBestAction() {
   // users are missing there, so it renders in both Quick and Beginner.
   // Advanced stays opted out for a denser layout.
   if (!isBeginner && !isQuickstart) return null
+  // Quick mode's Quickstart CTA owns these routes — one next step, not two.
+  if (isQuickstart && isQuickstartCtaRoute(pathname)) return null
   // Status banner on PagePosture already carries the next step for this route.
   if (postureHasStatusBanner) return null
   // Login/recovery routes are unauthenticated — never render the strip.
@@ -108,7 +115,7 @@ export function NextBestAction() {
       <aside
         role="status"
         aria-live="polite"
-        className={`mb-3 -mt-1 flex items-center gap-2.5 rounded-md border ${fromTone.ring} ${fromTone.bg} px-3 py-1.5 motion-safe:animate-mushi-fade-in`}
+        className={`mb-3 flex items-center gap-2.5 rounded-md border ${fromTone.ring} ${fromTone.bg} px-3 py-2 motion-safe:animate-mushi-fade-in`}
       >
         <span className={`inline-flex items-center gap-1 shrink-0 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide ${fromTone.chipClass}`}>
           <span aria-hidden="true">✓</span>
@@ -142,10 +149,9 @@ export function NextBestAction() {
     <aside
       role="complementary"
       aria-label="Next best action"
-      className={`mb-3 -mt-1 flex items-center gap-2.5 rounded-md border ${tone.ring} ${tone.bg} px-3 py-1.5 motion-safe:animate-mushi-fade-in`}
+      className={`mb-3 flex items-center gap-2.5 rounded-md border ${tone.ring} ${tone.bg} px-3 py-2 motion-safe:animate-mushi-fade-in`}
     >
-      <span className={`inline-flex items-center gap-1 shrink-0 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide ${tone.chipClass}`}>
-        <span aria-hidden="true">→</span>
+      <span className={`inline-flex items-center shrink-0 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide ${tone.chipClass}`}>
         {NBA_LABELS[action.tone]}
       </span>
       <div className="flex-1 min-w-0">
@@ -177,10 +183,7 @@ function NbaCta({
 }) {
   if (cta.kind === 'link') {
     return (
-      <Link
-        to={cta.to}
-        className="inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity motion-safe:active:scale-[0.97] motion-safe:duration-150"
-      >
+      <Link to={cta.to} className={btnClass('primary', 'sm')}>
         {cta.label} <span aria-hidden="true">→</span>
       </Link>
     )

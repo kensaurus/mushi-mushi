@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAdminMode } from '../lib/mode'
 import { shouldShowPipelineRibbonChrome } from '../lib/chromePosture'
-import { QuickstartMegaCta } from './QuickstartMegaCta'
+import { QuickstartMegaCta, isQuickstartCtaRoute } from './QuickstartMegaCta'
 import { PipelineStatusRibbon } from './PipelineStatusRibbon'
 
 const COLLAPSE_KEY = 'mushi:globalStatusStrip:collapsed:v1'
@@ -28,7 +28,10 @@ export function GlobalStatusStrip() {
     window.localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0')
   }, [collapsed])
 
-  const showQuickstart = isQuickstart
+  // Only frame the slot on routes where its content renders. The Quickstart
+  // CTA is route-gated, so gating on the mode alone drew an empty
+  // "QUICKSTART · Hide" bar at the top of every other page.
+  const showQuickstart = isQuickstart && isQuickstartCtaRoute(pathname)
   const showPipeline = shouldShowPipelineRibbonChrome(isAdvanced, pathname)
 
   if (!showQuickstart && !showPipeline) return null

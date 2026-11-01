@@ -93,7 +93,7 @@ function renderCell(col: string, val: unknown): ReactNode {
   // Status
   if (colL === 'status') {
     const map: Record<string, string> = {
-      new:        'bg-brand/12 text-brand border border-brand/28',
+      new:        'bg-brand/12 text-brand-foreground border border-brand/28',
       pending:    CHIP_TONE.infoSubtle,
       submitted:  CHIP_TONE.infoSubtle,
       queued:     CHIP_TONE.infoSubtle,

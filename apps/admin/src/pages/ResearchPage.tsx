@@ -26,7 +26,9 @@ import { Btn,
   EmptyState,
   RelativeTime,
   FreshnessPill,
-  RecommendedAction, } from '../components/ui'
+  RecommendedAction,
+  TextButton,
+} from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -46,7 +48,7 @@ import {
 import { ResearchSnippetCard } from '../components/research/ResearchSnippetCard'
 import { ResearchSessionTable } from '../components/research/ResearchSessionTable'
 import type { SearchResponse, SessionRow } from '../components/research/types'
-import { CHIP_TONE, HEADER_BADGE_TONE, LINK_ACCENT } from '../lib/chipTone'
+import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
 
 type SessionMode = 'all' | 'search' | 'scrape'
 type SessionAge = 'all' | '24h' | '7d'
@@ -453,15 +455,11 @@ export function ResearchPage() {
                 <InlineProof>
                   Last search <RelativeTime value={stats.lastSessionAt} />
                   {' · '}
-                  <Btn
+                  <TextButton
                     type="button"
-                    variant="ghost"
-                    size="sm"
-                    className={`!px-0 !py-0 !border-0 !bg-transparent hover:!bg-transparent ${LINK_ACCENT}`}
-                    onClick={() => setActiveTab('history')}
-                  >
+                    onClick={() => setActiveTab('history')}>
                     View history
-                  </Btn>
+                  </TextButton>
                 </InlineProof>
               )}
             </div>

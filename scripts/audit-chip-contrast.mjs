@@ -7,7 +7,9 @@
  *  2. bg-{sem}/N opacity tints + raw text-{sem} (e.g. bg-ok/15 text-ok)
  *
  * Line-scoped scan of quoted / static template class strings.
- * Skips CHIP_TONE / chipTone lines and canonical brandSubtle.
+ * Skips lib/chipTone.ts (the recipes themselves). The brand pairing
+ * (bg-brand-subtle / bg-brand/N + text-brand) is NOT exempt — it failed AA in
+ * light mode and hid 62 hand-rolled copies until 2026-09-23.
  *
  * Usage: node scripts/audit-chip-contrast.mjs [--strict]
  */
@@ -28,9 +30,6 @@ const MUTED_BG_RE = new RegExp(
 const OPACITY_BG_RE = new RegExp(
   String.raw`\bbg-(?:${SEMANTIC.join('|')})\/[\d.]+\b`,
 )
-/** `--color-*-subtle` aliases to muted in index.css; brand chip is canonical in CHIP_TONE.brand / brandSubtle */
-const BRAND_CHIP_ALLOW_RE =
-  /\bbg-brand-subtle(?:\/[\d.]+)?\b.*\btext-brand\b|\btext-brand\b.*\bbg-brand-subtle(?:\/[\d.]+)?\b|\bbg-brand\/12\b.*\btext-brand\b|\btext-brand\b.*\bbg-brand\/12\b/
 const RAW_TEXT_RE = new RegExp(
   String.raw`\btext-(?:${SEMANTIC.join('|')})(?!-(?:foreground|fg)\b)\b`,
 )
@@ -69,7 +68,9 @@ function walk(dir) {
 }
 
 function isViolation(atRest) {
-  if (BRAND_CHIP_ALLOW_RE.test(atRest)) return false
+  // No brand exemption: in light mode `text-brand` (vermillion) is ~4:1 on
+  // white and lower on its own wash. CHIP_TONE.brand / brandSubtle use
+  // text-brand-foreground, and so must every hand-rolled copy.
   const hasMuted = MUTED_BG_RE.test(atRest)
   const hasOpacity = OPACITY_BG_RE.test(atRest)
   if (!hasMuted && !hasOpacity) return false

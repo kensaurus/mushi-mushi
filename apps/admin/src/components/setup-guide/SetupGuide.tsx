@@ -30,8 +30,10 @@ import { useActiveProjectId } from '../ProjectSwitcher'
 import { buildSetupGuideModel } from '../../lib/setupGuideSteps'
 import {
   resolveSetupGuideView,
+  setupGuideFocusTarget,
   shouldSuppressAutoExpand,
   useSetupGuideView,
+  type SetupGuideView,
 } from '../../lib/setupGuidePrefs'
 import { SetupGuidePanel } from './SetupGuidePanel'
 
@@ -47,7 +49,7 @@ export function SetupGuide() {
   const [storedView, setStoredView] = useSetupGuideView()
 
   const headingRef = useRef<HTMLHeadingElement | null>(null)
-  const previousView = useRef<string | null>(null)
+  const previousView = useRef<SetupGuideView | null>(null)
 
   const model = useMemo(
     () =>
@@ -66,8 +68,16 @@ export function SetupGuide() {
     suppressAutoExpand: shouldSuppressAutoExpand(pathname),
   })
 
-  const expand = useCallback(() => setStoredView('expanded'), [setStoredView])
-  const minimize = useCallback(() => setStoredView('minimized'), [setStoredView])
+  // Set only by the user's own open/close — see setupGuideFocusTarget.
+  const userToggled = useRef(false)
+  const expand = useCallback(() => {
+    userToggled.current = true
+    setStoredView('expanded')
+  }, [setStoredView])
+  const minimize = useCallback(() => {
+    userToggled.current = true
+    setStoredView('minimized')
+  }, [setStoredView])
   const dismiss = useCallback(() => setStoredView('dismissed'), [setStoredView])
 
   // Focus follows the disclosure: opening moves focus into the panel heading,
@@ -76,10 +86,11 @@ export function SetupGuide() {
   useEffect(() => {
     const previous = previousView.current
     previousView.current = view
-    if (previous === null) return
-    if (previous !== 'expanded' && view === 'expanded') {
+    const target = setupGuideFocusTarget(previous, view, userToggled.current)
+    userToggled.current = false
+    if (target === 'heading') {
       headingRef.current?.focus()
-    } else if (previous === 'expanded' && view === 'minimized') {
+    } else if (target === 'launcher') {
       // The dock is a single global affordance, so a document query is the
       // cheapest correct handle — no wrapper element in the shell's flex row.
       document

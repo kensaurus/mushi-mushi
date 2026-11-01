@@ -27,6 +27,10 @@ function wrap(props: IconProps, children: ReactNode) {
       strokeLinecap="round"
       strokeLinejoin="round"
       className={props.className}
+      // Constant 1.4px stroke at every rendered size (see `[data-mushi-icon]`
+      // in components.css): the rail draws these 16-unit icons at 20px and
+      // inline copy at 12–14px, so scaled strokes ranged 1.05–1.75px.
+      data-mushi-icon=""
       aria-hidden="true"
     >
       {children}
@@ -340,6 +344,18 @@ export function IconChat(p: IconProps) {
     <path d="M2.5 4a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H7l-3 2.5V11H3.5a1 1 0 0 1-1-1z" />
     <line x1="5" y1="6" x2="11" y2="6" />
     <line x1="5" y1="8.5" x2="9" y2="8.5" />
+  </>)
+}
+
+/** Keyboard — shortcut cheatsheet trigger (replaces a bare "?" glyph). */
+export function IconKeyboard(p: IconProps) {
+  return wrap(p, <>
+    <rect x="1.5" y="4" width="13" height="8" rx="1.25" />
+    <line x1="4" y1="6.5" x2="4.01" y2="6.5" />
+    <line x1="6.5" y1="6.5" x2="6.51" y2="6.5" />
+    <line x1="9" y1="6.5" x2="9.01" y2="6.5" />
+    <line x1="11.5" y1="6.5" x2="11.51" y2="6.5" />
+    <line x1="5" y1="9.5" x2="11" y2="9.5" />
   </>)
 }
 

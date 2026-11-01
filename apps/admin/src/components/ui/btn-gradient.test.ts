@@ -1,6 +1,6 @@
 /**
  * FILE: btn-gradient.test.ts
- * PURPOSE: Keep the primary/accent buttons visible.
+ * PURPOSE: Keep the primary button visible — and the only filled one.
  *
  *          `bg-[var(--gradient-brand)]` reads as correct and survives lint,
  *          typecheck, and every design-token check — but Tailwind v4 types the
@@ -16,46 +16,64 @@
  *          to `background-image`.
  *          https://tailwindcss.com/docs/background-image
  *
- *          The repo-wide sweep lives in scripts/check-gradient-utilities.mjs;
- *          this test pins the two variants that actually regressed.
+ *          2026-09-23: the violet `accent` variant was retired. The same Save
+ *          rendered vermillion in the Slack card and violet (dark text on
+ *          violet, lavender when disabled) in the Discord/Teams cards next to
+ *          it. One filled CTA; disabled is a neutral well, never the brand fill
+ *          faded to 40% (which read as salmon).
+ *
+ *          The repo-wide sweep lives in scripts/check-gradient-utilities.mjs.
  */
 
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const FORMS = readFileSync(join(__dirname, 'forms.tsx'), 'utf8')
+// The recipe moved to lib/btnRecipe.ts (shared by <Btn> and btnClass()).
+const FORMS = readFileSync(join(__dirname, '../../lib/btnRecipe.ts'), 'utf8')
 
-/** Pull one variant's class string out of the BTN_VARIANTS map. */
+/** Pull one variant's class string (all concatenated literals) out of BTN_VARIANTS. */
 function variantClasses(name: string): string {
-  const rx = new RegExp(`\\b${name}:\\s*\\n?\\s*'([^']*)'`)
+  const rx = new RegExp(`\\n\\s*${name}:\\s*\\n?((?:\\s*'[^']*'\\s*\\+?)+)`)
   const m = FORMS.match(rx)
   if (!m) throw new Error(`variant "${name}" not found in BTN_VARIANTS`)
-  return m[1]
+  return [...m[1].matchAll(/'([^']*)'/g)].map((x) => x[1]).join('')
 }
 
-describe('Btn gradient variants', () => {
-  for (const [variant, token] of [
-    ['primary', '--gradient-brand'],
-    ['accent', '--gradient-accent'],
-  ] as const) {
-    describe(variant, () => {
-      const classes = variantClasses(variant)
+describe('Btn primary variant', () => {
+  const classes = variantClasses('primary')
 
-      it('uses the image-typed custom-property form that actually renders', () => {
-        expect(classes).toContain(`bg-(image:${token})`)
-      })
+  it('uses the image-typed custom-property form that actually renders', () => {
+    expect(classes).toContain('bg-(image:--gradient-brand)')
+  })
 
-      it('never uses the square-bracket form (compiles to background-color, renders nothing)', () => {
-        expect(classes).not.toContain(`bg-[var(${token})]`)
-      })
+  it('never uses the square-bracket form (compiles to background-color, renders nothing)', () => {
+    expect(classes).not.toContain('bg-[var(--gradient-brand)]')
+  })
 
-      it('keeps a solid background underneath so the label stays legible without the gradient', () => {
-        // If the gradient token ever goes missing, `background-image` resolves
-        // to nothing and the button falls back to this flat fill rather than
-        // to the page background.
-        expect(classes).toMatch(/\bbg-(brand|accent)\b/)
-      })
-    })
-  }
+  it('keeps a solid background underneath so the label stays legible without the gradient', () => {
+    expect(classes).toMatch(/(^|\s)bg-brand(\s|$)/)
+  })
+
+  it('renders disabled as a neutral well instead of fading the brand fill', () => {
+    expect(classes).toContain('disabled:bg-surface-overlay')
+    expect(classes).toContain('disabled:bg-none')
+    expect(classes).not.toMatch(/disabled:opacity-\d/)
+    // Keeps its outline when disabled; the always-on transparent border
+    // means the disabled edge causes no layout shift.
+    expect(classes).toContain('border-transparent')
+    expect(classes).toContain('disabled:border-edge-subtle')
+  })
+})
+
+describe('Btn variant set', () => {
+  it('has exactly one filled CTA variant (no second filled hue)', () => {
+    expect(FORMS).not.toMatch(/\n\s*accent:\s*\n?\s*'/)
+    expect(FORMS).not.toMatch(/BtnVariant =[^\n]*'accent'/)
+  })
+
+  it('does not put a blanket disabled opacity on the shared base', () => {
+    const base = FORMS.match(/const BTN_BASE =([\s\S]*?)\n\n/)?.[1] ?? ''
+    expect(base).not.toMatch(/disabled:opacity-/)
+  })
 })

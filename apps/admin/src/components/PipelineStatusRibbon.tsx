@@ -117,7 +117,7 @@ const TONE_CLASS: Record<Tone, { dot: string; ring: string; label: string }> = {
 
 const STAGE_TONE: Record<RibbonTile['stage'], string> = {
   P: CHIP_TONE.infoSubtle,
-  D: 'bg-brand-subtle text-brand border border-brand/35',
+  D: 'bg-brand-subtle text-brand-foreground border border-brand/35',
   C: CHIP_TONE.warnSubtle,
   A: CHIP_TONE.okSubtle,
 }

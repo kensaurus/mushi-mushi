@@ -136,10 +136,17 @@ html[data-density="comfortable"] {
    at each foreground/background pairing.
 
    Surface lightness choices:
-     root    0.99   – sidebar, nav chrome (near-white with a whisper of blue)
-     surface 0.97   – main canvas
-     raised  0.995  – cards / wells (subtly brighter than canvas)
-     overlay 1.00   – hover & active states
+     root    0.98   – sidebar, nav chrome
+     surface 0.965  – main canvas
+     raised  0.995  – cards (subtly brighter than canvas)
+     overlay 0.95   – inset wells, neutral chips, disabled fills
+     hover   0.94   – row / icon-button hover
+
+   2026-09-23: overlay was 0.92 — darker than the canvas it sits on. It is
+   used ~180 times as a translucent wash (`bg-surface-overlay/25…/60`) inside
+   white cards, where 0.92 read as grey blotches "bleeding" through the card.
+   0.95 keeps wells and chips distinguishable from the card without a dark
+   band. (This comment used to claim 1.00, which was never the value.)
 
    Brand/accent chroma is nudged up slightly because light backgrounds
    desaturate colour perception relative to dark ones.
@@ -148,7 +155,7 @@ html[data-theme="light"] {
   --color-surface-root:    oklch(0.98 0.002 285);
   --color-surface:         oklch(0.965 0.002 285);
   --color-surface-raised:  oklch(0.995 0.002 285);
-  --color-surface-overlay: oklch(0.92 0.004 285);
+  --color-surface-overlay: oklch(0.95 0.003 285);
   --color-surface-hover:   oklch(0.94 0.003 285);
   --color-surface-2:       var(--color-surface-raised);
   --color-surface-3:       var(--color-surface-overlay);
@@ -166,10 +173,20 @@ html[data-theme="light"] {
   --color-fg-muted:     oklch(0.44 0.005 285);
   --color-fg-faint:     oklch(0.50 0.004 285);
 
-  --color-brand:        var(--mushi-vermillion);
-  --color-brand-hover:  color-mix(in oklch, var(--mushi-vermillion) 82%, black);
+  /* Light-mode brand is vermillion, so every brand-derived token must be
+     vermillion too. brand-subtle / brand-foreground / nav-active-border used
+     to keep the dark theme's amber (hue 80): brand chips painted an amber
+     wash under vermillion text, and "brand" copy rendered olive-brown. */
+  /* --color-brand is a FILL (primary buttons, switch track, active stub):
+     white text sits on it. Base vermillion #e03c2c is 4.1:1 under white, under
+     AA for 14px button labels, so light mode fills with a slightly deeper
+     vermillion (≥4.5:1, enforced by check:token-contrast). The brand
+     package's --mushi-vermillion-fill (#c2331f) is the same role; switch to
+     it once that token lands on master. */
+  --color-brand:        color-mix(in oklab, var(--mushi-vermillion) 90%, black);
+  --color-brand-hover:  color-mix(in oklab, var(--mushi-vermillion) 80%, black);
   --color-brand-fg:     oklch(0.985 0.01 80);
-  --color-brand-subtle: oklch(0.95 0.05 80);
+  --color-brand-subtle: color-mix(in oklab, var(--mushi-vermillion) 9%, white);
 
   --color-accent:        oklch(0.48 0.22 280);
   --color-accent-hover:  oklch(0.42 0.22 280);
@@ -179,7 +196,8 @@ html[data-theme="light"] {
   --color-danger-foreground: oklch(0.45 0.20 25);
   --color-ok-foreground: oklch(0.42 0.17 155);
   --color-info-foreground: oklch(0.42 0.16 240);
-  --color-brand-foreground: oklch(0.48 0.16 80);
+  /* AA text on white and on brand-subtle (vermillion #e03c2c itself is ~4:1). */
+  --color-brand-foreground: color-mix(in oklab, var(--mushi-vermillion) 78%, black);
   --color-lime-foreground: oklch(0.28 0.12 128);
 
   --color-ok:            oklch(0.48 0.19 155);
@@ -216,7 +234,7 @@ html[data-theme="light"] {
   --color-chrome-border: oklch(0.80 0.003 285);
 
   --color-nav-active-bg:     oklch(0.94 0.003 285);
-  --color-nav-active-border: oklch(0.48 0.16 80);
+  --color-nav-active-border: var(--color-brand);
   --color-nav-hover-bg:      oklch(0.94 0.004 285);
   --color-nav-section-label: oklch(0.50 0.005 285);
 
@@ -312,9 +330,9 @@ html[data-theme="high-contrast"] body {
   --portal-admin-brand-border: oklch(0.72 0.14 80);
 }
 html[data-theme="light"] {
-  --portal-admin-brand-subtle: oklch(0.95 0.05 80);
-  --portal-admin-brand-text: oklch(0.48 0.16 80);
-  --portal-admin-brand-border: oklch(0.62 0.16 80);
+  --portal-admin-brand-subtle: var(--color-brand-subtle);
+  --portal-admin-brand-text: var(--color-brand-foreground);
+  --portal-admin-brand-border: color-mix(in oklab, var(--mushi-vermillion) 55%, white);
 }
 
 /* Tester portal — remap brand/nav chrome to accent (purple) for a distinct but familiar shell */

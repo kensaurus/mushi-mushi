@@ -20,13 +20,16 @@ const POSTURE_CHIP: Record<WorkflowPosture, string> = {
   ok: 'bg-surface-raised text-ok-foreground border border-ok/30',
 }
 
+// Only rows that need action get a tinted fill; informational and healthy
+// rows stay neutral and let the chip carry the tone (a green-filled "OK" row
+// competed with the real warnings below it).
 const POSTURE_ROW: Record<WorkflowPosture, string> = {
   clear: GUIDE_STAGE_ROW_NEUTRAL,
   open: 'border-warn/35 bg-warn-muted',
   warn: 'border-warn/35 bg-warn-muted',
   danger: 'border-danger/30 bg-danger-muted',
-  info: 'border-info/30 bg-info-muted',
-  ok: 'border-ok/30 bg-ok-muted',
+  info: GUIDE_STAGE_ROW_NEUTRAL,
+  ok: GUIDE_STAGE_ROW_NEUTRAL,
 }
 
 const CHIP_LABEL: Record<WorkflowPosture, string> = {

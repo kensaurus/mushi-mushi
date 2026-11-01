@@ -75,7 +75,7 @@ export function PaletteAssistView({
         <button
           type="button"
           onClick={onBack}
-          className="text-xs text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus rounded-sm px-1"
+          className="text-xs text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm px-1"
         >
           ← Back
         </button>
@@ -119,7 +119,7 @@ export function PaletteAssistView({
                     <button
                       type="button"
                       onClick={() => onNavigate(step.path!)}
-                      className="ml-2 text-accent-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus rounded-sm"
+                      className="ml-2 text-accent-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm"
                     >
                       Go →
                     </button>
@@ -137,7 +137,7 @@ export function PaletteAssistView({
                 key={t.path + t.label}
                 type="button"
                 onClick={() => onNavigate(t.path)}
-                className="inline-flex items-center gap-1 rounded-md border border-edge bg-surface-hover/60 px-2.5 py-1.5 text-xs text-fg hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus min-h-8"
+                className="inline-flex items-center gap-1 rounded-md border border-edge bg-surface-hover/60 px-2.5 py-1.5 text-xs text-fg hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 min-h-8"
                 title={t.why}
               >
                 {t.label}
@@ -164,7 +164,7 @@ export function PaletteAssistView({
                   onClick={() => void handleFeedback(true)}
                   aria-label="Yes, helpful"
                   aria-pressed={feedback === 'up'}
-                  className="inline-flex items-center justify-center min-h-8 min-w-8 rounded-sm border border-edge-subtle text-xs hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50"
+                  className="inline-flex items-center justify-center min-h-8 min-w-8 rounded-sm border border-edge-subtle text-xs hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 disabled:opacity-50"
                 >
                   👍
                 </button>
@@ -174,7 +174,7 @@ export function PaletteAssistView({
                   onClick={() => void handleFeedback(false)}
                   aria-label="No, not helpful"
                   aria-pressed={feedback === 'down'}
-                  className="inline-flex items-center justify-center min-h-8 min-w-8 rounded-sm border border-edge-subtle text-xs hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50"
+                  className="inline-flex items-center justify-center min-h-8 min-w-8 rounded-sm border border-edge-subtle text-xs hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 disabled:opacity-50"
                 >
                   👎
                 </button>
@@ -191,7 +191,7 @@ export function PaletteAssistView({
         <button
           type="button"
           onClick={onContinueSidebar}
-          className="text-2xs text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus rounded-sm"
+          className="text-2xs text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm"
         >
           Continue in sidebar (⌘J)
         </button>

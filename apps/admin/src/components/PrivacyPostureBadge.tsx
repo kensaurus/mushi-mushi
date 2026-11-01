@@ -16,7 +16,6 @@ import { Link } from 'react-router-dom';
 import { usePageData } from '../lib/usePageData';
 import { Tooltip } from './ui';
 import { NavRailFlyout } from './sidebar/NavRailFlyout';
-import { CHIP_TONE } from '../lib/chipTone';
 
 interface PrivacyStatus {
   byok_configured: boolean;
@@ -49,11 +48,6 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
       ? 'All systems BYOK'
       : 'Platform key in use';
   const dotClass = error ? 'bg-danger' : isByok ? 'bg-ok' : 'bg-warn';
-  const textClass = error
-    ? CHIP_TONE.dangerSubtle
-    : isByok
-      ? CHIP_TONE.okSubtle
-      : CHIP_TONE.warnSubtle;
 
   // Base explanation, free of any click affordance — the two variants do
   // different things on click (the expanded badge opens a popover, the rail
@@ -113,10 +107,10 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
           title={labelLong}
           onClick={() => setPopoverOpen((v) => !v)}
         >
+          {/* The dot carries the status colour; the label stays neutral text.
+              Dot + tinted pill said the same thing twice in two greens. */}
           <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`} />
-          <span
-            className={`inline-flex min-w-0 truncate rounded-sm px-1 py-px text-2xs font-medium ${textClass}`}
-          >
+          <span className="min-w-0 truncate text-2xs font-medium text-fg-secondary">
             {label}
           </span>
         </button>
@@ -130,7 +124,7 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
         >
           <button
             type="button"
-            className="absolute top-1.5 right-1.5 rounded-sm px-1 text-danger hover:bg-danger-muted/50 text-xs leading-none"
+            className="absolute top-1.5 right-1.5 rounded-sm px-1 text-fg-faint hover:text-fg hover:bg-surface-hover text-xs leading-none"
             onClick={() => setPopoverOpen(false)}
             aria-label="Close"
           >

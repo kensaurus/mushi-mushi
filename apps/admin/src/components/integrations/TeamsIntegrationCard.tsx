@@ -26,6 +26,17 @@ import { useState, useEffect } from 'react'
 import { Btn, Input } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import { CHIP_TONE } from '../../lib/chipTone'
+import { IconCheck } from '../icons'
+import {
+  INTEGRATION_CARD,
+  INTEGRATION_CARD_HEADER,
+  INTEGRATION_CARD_IDENTITY,
+  INTEGRATION_CARD_NOTE,
+  INTEGRATION_CARD_STATUS_IDLE,
+  INTEGRATION_CARD_STATUS_OK,
+  INTEGRATION_CARD_TITLE,
+} from './cardChrome'
 
 // ─── Teams brand SVG ──────────────────────────────────────────────────────────
 // mushi-mushi-allowlist: Microsoft Teams trademark SVG uses exact brand purple hex.
@@ -183,27 +194,26 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="rounded-xl border border-edge-subtle bg-surface p-5 space-y-4">
+    <div className={INTEGRATION_CARD}>
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          {/* mushi-mushi-allowlist: Teams brand purple tint behind the trademark icon chip. */}
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-teams-accent/10">
+      <div className={INTEGRATION_CARD_HEADER}>
+        <div className={INTEGRATION_CARD_IDENTITY}>
+          <div className="mt-0.5 shrink-0">
             <TeamsIcon size={20} />
           </div>
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-fg">Microsoft Teams</h3>
+            <h3 className={INTEGRATION_CARD_TITLE}>Microsoft Teams</h3>
             {connected ? (
-              <p className="text-xs text-ok truncate">Webhook connected — receiving report alerts</p>
+              <p className={INTEGRATION_CARD_STATUS_OK}>Webhook connected — receiving report alerts</p>
             ) : (
-              <p className="text-xs text-fg-muted truncate">
+              <p className={INTEGRATION_CARD_STATUS_IDLE}>
                 Not connected — paste an incoming webhook URL to enable alerts
               </p>
             )}
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {connected && (
             <Btn
               type="button"
@@ -221,10 +231,10 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
 
       {/* Connected state — show clear control */}
       {connected && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-ok/30 bg-ok-muted/50 px-3 py-2">
+        <div className={`flex items-center justify-between gap-3 rounded-md px-3 py-2 ${CHIP_TONE.okSubtle}`}>
           <div className="flex items-center gap-2 min-w-0">
-            <span className="shrink-0 text-ok-foreground text-sm" aria-hidden>✓</span>
-            <p className="text-xs font-medium text-ok-foreground">Teams webhook active</p>
+            <IconCheck size={14} className="shrink-0" />
+            <p className="text-xs font-medium">Teams webhook active</p>
           </div>
           <Btn
             type="button"
@@ -248,7 +258,9 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
           <div className="flex-1 min-w-0">
             <Input
               id="teams-webhook-url"
+              name="teams_webhook_url"
               type="url"
+              autoComplete="off"
               placeholder="https://…webhook.office.com/webhookb2/…"
               value={webhookUrl}
               onChange={(e) => handleUrlChange(e.target.value)}
@@ -259,7 +271,7 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
           </div>
           <Btn
             type="button"
-            variant="accent"
+            variant="primary"
             onClick={() => void handleSave()}
             disabled={!webhookUrl.trim() || Boolean(urlError) || !projectId}
             loading={saving}
@@ -279,11 +291,11 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
         open={showGuide && !connected}
         onToggle={(e) => setShowGuide((e.target as HTMLDetailsElement).open)}
       >
-        <summary className="flex cursor-pointer list-none items-center gap-1 text-xs text-fg-muted hover:text-fg transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+        <summary className="flex cursor-pointer list-none items-center gap-1 text-xs text-fg-muted hover:text-fg transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50">
           <span className="transition-transform group-open:rotate-90" aria-hidden>›</span>
           {connected ? 'How to create a new webhook URL' : 'How to get a webhook URL'}
         </summary>
-        <div className="mt-3 space-y-3 rounded-lg border border-edge-subtle bg-surface-hover/40 px-4 py-3 text-xs text-fg-muted">
+        <div className="mt-3 space-y-3 border-l-2 border-edge-subtle pl-3 text-xs text-fg-muted">
           <div>
             <p className="font-semibold text-fg mb-1">Option A — Power Automate (recommended)</p>
             <ol className="list-decimal list-inside space-y-0.5 text-fg-muted">
@@ -307,7 +319,7 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
 
       {/* What you'll receive */}
       {!connected && (
-        <div className="rounded-lg border border-edge-subtle bg-surface-hover/40 px-3 py-2.5 text-xs text-fg-muted space-y-1">
+        <div className={INTEGRATION_CARD_NOTE}>
           <p className="font-medium text-fg">What you&apos;ll receive</p>
           <ul className="list-inside list-disc space-y-0.5">
             <li>New report triaged (severity + category + direct link)</li>

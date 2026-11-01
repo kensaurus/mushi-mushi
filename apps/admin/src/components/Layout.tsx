@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   IconMenu, IconClose,
-  IconSignOut, IconHealth, IconBell, IconEye, IconChevronRight,
+  IconSignOut, IconHealth, IconBell, IconEye, IconChevronRight, IconKeyboard,
 } from './icons'
 import { useNavCounts, toneForBacklog } from '../lib/useNavCounts'
 import { renderNavBadge, resolveNavBadge } from '../lib/navBadges'
@@ -29,7 +29,7 @@ import { buildOperatorNav, CHECK_SUB_GROUPS, type BuiltNavItem, type BuiltNavSec
 import { CHECK_HUB_PATH, QUICK_SUB_GROUPS } from '../lib/navRegistry'
 import { useAdminMode } from '../lib/mode'
 import { useSetupStatus } from '../lib/useSetupStatus'
-import { Tooltip, Btn } from './ui'
+import { Tooltip, Btn, TextButton } from './ui'
 import { RouteProgress } from './RouteProgress'
 import { NextBestAction } from './NextBestAction'
 import { DavChromeCoachmark } from './DavChromeCoachmark'
@@ -474,11 +474,21 @@ const SECTION_TO_STAGE: Record<string, PdcaStageId> = {
   act: 'act',
 }
 
+// Filled, borderless letter stamps. CHIP_TONE recipes carry a border, which
+// turned every P/D/C/A stamp into an outlined square inside the rail tile.
 const STAGE_TONE: Record<NonNullable<NavSection['stage']>, string> = {
-  P: CHIP_TONE.infoSubtle,
-  D: CHIP_TONE.brandSubtle,
-  C: CHIP_TONE.warnSubtle,
-  A: CHIP_TONE.okSubtle,
+  P: 'bg-info-muted text-info-foreground',
+  D: 'bg-brand-subtle text-brand-foreground',
+  C: 'bg-warn-muted text-warning-foreground',
+  A: 'bg-ok-muted text-ok-foreground',
+}
+
+/** Rail letters: the stage hue as text only (see SectionRailHeader). */
+const RAIL_STAGE_TEXT: Record<NonNullable<NavSection['stage']>, string> = {
+  P: 'text-info-foreground',
+  D: 'text-brand-foreground',
+  C: 'text-warning-foreground',
+  A: 'text-ok-foreground',
 }
 
 function isActive(currentPath: string, itemPath: string) {
@@ -904,25 +914,28 @@ export function Layout({ children }: { children: ReactNode }) {
             </h1>
           )}
         </div>
-        {compact ? (
-          <div className="px-2.5 pb-2.5">
-            <SidebarBrandToggles compact mode={mode} onSelectMode={setMode} />
-          </div>
-        ) : (
+        {/* The rail carries navigation only. The Admin/Tester portal switch
+            squeezed into 44px was a bordered well holding two 12px glyphs —
+            the "square box" under the logo. It lives in the full sidebar
+            (one `[` away), alongside the mode switch the rail already hid. */}
+        {compact ? null : (
           <div className="px-4 pb-2 space-y-1.5">
+            {/* Phone drawer only (the desktop sidebar is md+): the team
+                switcher does not fit the 390px header, so it moves here. */}
+            <div className="sm:hidden">
+              <OrgSwitcher />
+            </div>
             <SidebarBrandToggles mode={mode} onSelectMode={setMode} />
             {onHiddenRoute && (
               <div className="rounded-sm border border-chrome-border bg-chrome px-2 py-1.5 text-2xs text-fg-muted space-y-1 text-balance">
                 <p className="leading-snug">{hiddenRouteCopy}</p>
-                <Btn
+                <TextButton
                   type="button"
-                  variant="ghost"
-                  size="sm"
                   onClick={() => setMode(isQuickstart ? 'beginner' : 'advanced')}
-                  className="text-left underline hover:no-underline px-0 h-auto font-normal"
+                  className="text-left"
                 >
                   Show in {isQuickstart ? 'Beginner' : 'Advanced'} →
-                </Btn>
+                </TextButton>
               </div>
             )}
           </div>
@@ -935,7 +948,10 @@ export function Layout({ children }: { children: ReactNode }) {
         {visibleNav.map((section, sectionIdx) => {
           const stageId = SECTION_TO_STAGE[section.id]
           const isActiveStage = stageId !== undefined && stageId === activeStage
-          const isExpanded = expandedSectionId === section.id
+          // A lone section (Quick mode) is always open: the accordion follows
+          // the route, so on any page outside the Quick list it collapsed the
+          // only group and the sidebar showed a bare "QUICKSTART" heading.
+          const isExpanded = visibleNav.length === 1 || expandedSectionId === section.id
           // Per-stage staleness — surfaced on the collapsed section header
           // so advanced users can still see at a glance which PDCA stage
           // needs their attention without expanding.
@@ -946,11 +962,13 @@ export function Layout({ children }: { children: ReactNode }) {
               id={`nav-section-${section.id}`}
               className={compact ? 'nav-rail-group' : sectionIdx > 0 ? 'border-t border-edge/20 pt-1.5 mt-0.5' : ''}
             >
-              {compact ? (
+              {compact && visibleNav.length === 1 ? null : compact ? (
+                // (A lone section — Quick mode — gets no rail header: it is
+                // always open, so its tile was a permanent filled "Q" square
+                // that carried no information.)
                 <SectionRailHeader
                   section={section}
                   expanded={isExpanded}
-                  isActiveStage={isActiveStage}
                   staleness={staleness}
                   onSelect={() => selectRailSection(section.id)}
                 />
@@ -1217,16 +1235,22 @@ export function Layout({ children }: { children: ReactNode }) {
           >
             <IconMenu size={18} />
           </Btn>
-          <div className="min-w-0 flex-1">
-            <SearchButton />
-          </div>
+          {/* Wordmark, then a flexible gap, then fixed-size controls. The
+              search button used to sit in a `flex-1 min-w-0` slot that the
+              switchers squeezed to 0px at 390px, so the icon spilled over the
+              wordmark. The team switcher lives in the drawer on phones. */}
           <span className="shrink-0 text-sm font-bold tracking-tight">
             <span className="text-brand">mushi</span>
             <span className="text-fg-secondary">mushi</span>
           </span>
-          <div className="shrink-0 flex items-center gap-2">
-            <OrgSwitcher />
-            <ProjectSwitcher />
+          <div className="ml-auto flex min-w-0 items-center gap-1.5">
+            <SearchButton />
+            <div className="hidden sm:block">
+              <OrgSwitcher />
+            </div>
+            <div className="min-w-0">
+              <ProjectSwitcher />
+            </div>
           </div>
         </header>
 
@@ -1237,11 +1261,9 @@ export function Layout({ children }: { children: ReactNode }) {
             <SearchButton />
           </div>
           <div className="ml-auto flex min-w-0 max-w-full shrink items-center justify-end gap-1 xl:gap-1.5 flex-wrap">
-            <div
-              // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
-              className="flex shrink-0 items-center gap-0.5 rounded-md border border-edge/50 bg-surface-raised/35 p-0.5"
-              aria-label="Toolbar"
-            >
+            {/* Icon buttons are plain ghost controls — no framing box around
+                the group, so the bar reads as one row of h-8 controls. */}
+            <div className="flex shrink-0 items-center gap-0.5" aria-label="Toolbar">
               <Tooltip content={activityUnread > 0 ? `Live activity — ${activityUnread} new` : 'Live activity'} side="bottom">
                 <Btn
                   type="button"
@@ -1251,7 +1273,7 @@ export function Layout({ children }: { children: ReactNode }) {
                   aria-label={activityUnread > 0 ? `Live activity, ${activityUnread} unread` : 'Live activity'}
                   className="relative h-8 w-8 p-0 border-0"
                 >
-                  <IconBell className="h-3.5 w-3.5" />
+                  <IconBell className="h-4 w-4" />
                   {activityUnread > 0 && (
                     <span
                       aria-hidden
@@ -1271,7 +1293,7 @@ export function Layout({ children }: { children: ReactNode }) {
                   aria-label="Open keyboard shortcuts"
                   className="h-8 w-8 p-0 border-0"
                 >
-                  <span aria-hidden className="font-mono text-xs leading-none">?</span>
+                  <IconKeyboard className="h-4 w-4" />
                 </Btn>
               </Tooltip>
               <AskMushiLauncherButton
@@ -1536,7 +1558,6 @@ const STALENESS_TONE: Record<SectionStaleness['tone'], string> = {
 interface SectionRailHeaderProps {
   section: NavSection
   expanded: boolean
-  isActiveStage: boolean
   staleness: SectionStaleness | null
   onSelect: () => void
 }
@@ -1547,11 +1568,14 @@ interface SectionRailHeaderProps {
  * shares the flyout so a section explains itself in the same shape an item
  * does — the section `hint` copy already reads as plain English.
  */
-function SectionRailHeader({ section, expanded, isActiveStage, staleness, onSelect }: SectionRailHeaderProps) {
+function SectionRailHeader({ section, expanded, staleness, onSelect }: SectionRailHeaderProps) {
   const glyph = railSectionGlyph(section)
   const stageTone = section.stage
     ? STAGE_TONE[section.stage]
-    : 'bg-surface-overlay text-fg-secondary border border-edge-subtle'
+    : 'bg-surface-hover text-fg-secondary'
+  // In the rail the letter is plain coloured type: a filled square inside a
+  // 44px tile (which itself fills on hover / open) was a box in a box.
+  const railLetterTone = section.stage ? RAIL_STAGE_TEXT[section.stage] : 'text-fg-secondary'
   const descId = railDescriptionId(`section-${section.id}`)
   return (
     <Tooltip
@@ -1575,19 +1599,15 @@ function SectionRailHeader({ section, expanded, isActiveStage, staleness, onSele
         aria-current={expanded ? 'true' : undefined}
         aria-label={`${section.title}${expanded ? '' : ' — show navigation'}`}
         aria-describedby={descId}
-        className={`nav-rail-item ${
-          expanded
-            ? 'bg-surface-overlay text-fg ring-1 ring-brand/40'
-            : isActiveStage
-              ? 'ring-1 ring-brand/25'
-              : ''
-        }`}
+        // Open group = the same filled well as an active rail item. No ring:
+        // a brand outline around a glyph tile was the "weird outlined square".
+        className={`nav-rail-item ${expanded ? 'nav-rail-item--open' : ''}`}
       >
         {/* Badge anchors to the GLYPH, not the button: anchoring it to the
             button pushed it into the rail's border and over the glyph itself.
             The ring separates the count from the glyph underneath it. */}
         <span className="nav-rail-glyph">
-          <span className={`nav-rail-stamp ${stageTone}`} aria-hidden="true">
+          <span className={`nav-rail-stamp ${railLetterTone}`} aria-hidden="true">
             {glyph}
           </span>
           {staleness && (
@@ -1650,9 +1670,11 @@ function SectionHeader({ section, isExpanded, isActiveStage, staleness, onToggle
     <button
       type="button"
       onClick={onToggle}
-      className={`nav-section flex items-center gap-1.5 w-full hover:text-fg-secondary motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm ${
+      // Expanded state is the rotated chevron, not a ringed box around the
+      // heading row.
+      className={`nav-section flex items-center gap-1.5 w-full hover:text-fg-secondary motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm ${
         isExpanded
-          ? 'nav-section-expanded bg-surface-overlay/60 ring-1 ring-brand/30'
+          ? 'nav-section-expanded text-fg-secondary'
           : isActiveStage
             ? 'nav-section-stage-hint'
             : ''

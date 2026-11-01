@@ -697,7 +697,7 @@ export function JudgePage() {
                 : bannerSeverity === 'warn'
                   ? CHIP_TONE.warnSubtle
                   : bannerSeverity === 'brand'
-                    ? 'bg-brand/12 text-brand border border-brand/28'
+                    ? 'bg-brand/12 text-brand-foreground border border-brand/28'
                     : 'bg-surface-overlay text-fg-muted'
           }
         >
@@ -1027,7 +1027,7 @@ export function JudgePage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setPromptFilter(null)}
-                className="inline-flex items-center gap-1 px-2 py-0.5 text-2xs bg-brand/12 text-brand border border-brand/28 hover:bg-brand/20 focus-visible:ring-1 focus-visible:ring-brand/60"
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-2xs bg-brand/12 text-brand-foreground border border-brand/28 hover:bg-brand/20 focus-visible:ring-1 focus-visible:ring-brand/60"
                 aria-label={`Clear filter on prompt ${promptFilter.version}`}
                 title="Clear prompt filter"
               >

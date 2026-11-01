@@ -23,6 +23,7 @@ import { MetricStrip } from '../MetricStrip'
 import { EmptyState } from '../ui/forms'
 import type { REP_TIERS } from '../../lib/useTesterStatus'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { btnClass } from '../../lib/btnRecipe'
 
 /** Opaque raised panel — use instead of border-white/10 bg-white/5. */
 export const TESTER_PANEL =
@@ -284,7 +285,7 @@ export function TesterPrimaryCta({ to, children }: { to: string; children: React
   return (
     <Link
       to={to}
-      className="inline-flex items-center justify-center gap-1.5 rounded-sm bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg shadow-card motion-safe:transition-opacity hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+      className={btnClass('primary', 'md')}
     >
       {children}
     </Link>

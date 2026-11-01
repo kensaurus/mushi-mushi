@@ -291,12 +291,14 @@ interface DetailRowsProps {
   dense?: boolean
 }
 
+// *-foreground tokens: AA on the card surface in both themes (raw `text-warn`
+// is L=0.68 amber in light mode — ~2.3:1 on white).
 const DETAIL_ROW_TONE: Record<DetailRowTone, string> = {
   neutral: 'text-fg',
-  ok:      'text-ok',
-  warn:    'text-warn',
-  danger:  'text-danger',
-  info:    'text-info',
+  ok:      'text-ok-foreground',
+  warn:    'text-warning-foreground',
+  danger:  'text-danger-foreground',
+  info:    'text-info-foreground',
   muted:   'text-fg-secondary',
 }
 
@@ -304,8 +306,10 @@ export function DetailRows({ items, className = '', dense }: DetailRowsProps) {
   if (items.length === 0) return null
   const padCls = dense ? 'px-2 py-1' : 'px-2.5 py-1.5'
   return (
+    // Rows sit on the card's own surface — no translucent overlay wash, which
+    // rendered as a grey band inside white cards in light mode.
     <dl
-      className={`divide-y divide-edge-subtle/45 rounded-md border border-edge-subtle/55 bg-surface-overlay/25 overflow-hidden ${className}`}
+      className={`divide-y divide-edge-subtle rounded-md border border-edge-subtle overflow-hidden ${className}`}
     >
       {items.map((item) => {
         const valueToneCls = DETAIL_ROW_TONE[item.tone ?? 'neutral']
@@ -490,17 +494,31 @@ export function CopyButton(props: CopyButtonProps) {
 type CodeValueTone = 'neutral' | 'id' | 'url' | 'hash'
 
 /** Inverted terminal-style shell shared by CodeValue, LogBlock, and hand-rolled `<pre>`. */
-export const CODE_BLOCK_SHELL =
+const CODE_BLOCK_SHELL =
   'mushi-code-block border border-code-surface-border rounded-sm'
-export const CODE_BLOCK_BODY =
+const CODE_BLOCK_BODY =
   'mushi-code-body font-mono text-[0.8125rem] leading-relaxed wrap-anywhere'
 
+/** Tones on the terminal-dark shell (multi-line values). */
 const CODE_TONES: Record<CodeValueTone, string> = {
   neutral: 'text-code-surface-fg',
   id:      'text-brand',
   url:     'text-info',
   hash:    'text-accent-foreground',
 }
+
+/** Tones on the theme-aware chip (single-line and inline values). */
+const CODE_CHIP_TONES: Record<CodeValueTone, string> = {
+  neutral: 'text-fg',
+  id:      'text-brand-foreground',
+  url:     'text-info-foreground',
+  hash:    'text-accent-foreground',
+}
+
+/** Single-line value chip — follows the page theme. A lone URL or id is data,
+ *  not a terminal, so it no longer borrows the near-black code shell. */
+const CODE_VALUE_CHIP =
+  'mushi-code-inline font-mono text-xs leading-relaxed wrap-anywhere'
 
 interface CodeValueProps {
   value: string
@@ -520,9 +538,10 @@ interface CodeValueProps {
 
 export function CodeValue({ value, tone = 'neutral', copyable = true, className = '', inline, multiline }: CodeValueProps) {
   const toneClass = CODE_TONES[tone]
+  const chipToneClass = CODE_CHIP_TONES[tone]
   if (inline) {
     return (
-      <code className={`mushi-code-inline ${toneClass} wrap-anywhere ${className}`}>
+      <code className={`mushi-code-inline ${chipToneClass} wrap-anywhere ${className}`}>
         {value}
       </code>
     )
@@ -541,9 +560,7 @@ export function CodeValue({ value, tone = 'neutral', copyable = true, className 
   }
   return (
     <div className={`group/code inline-flex max-w-full items-start gap-1.5 ${className}`}>
-      <code
-        className={`${CODE_BLOCK_SHELL} ${CODE_BLOCK_BODY} block w-full px-2 py-1 ${toneClass}`}
-      >
+      <code className={`${CODE_VALUE_CHIP} block w-full px-2 py-1 ${chipToneClass}`}>
         {value}
       </code>
       {copyable && <CopyButton value={value} className="mt-0.5 shrink-0" />}
@@ -572,10 +589,10 @@ type LogBlockTone = 'neutral' | 'info' | 'ok' | 'warn' | 'danger'
 
 const LOG_TONES: Record<LogBlockTone, string> = {
   neutral: `${CODE_BLOCK_SHELL} text-code-surface-fg`,
-  info:    `${CODE_BLOCK_SHELL} border-info/40 text-code-surface-fg bg-[color-mix(in_oklch,var(--color-code-surface)_86%,var(--color-info-muted))]`,
-  ok:      `${CODE_BLOCK_SHELL} border-ok/40 text-code-surface-fg bg-[color-mix(in_oklch,var(--color-code-surface)_86%,var(--color-ok-muted))]`,
-  warn:    `${CODE_BLOCK_SHELL} border-warn/40 text-code-surface-fg bg-[color-mix(in_oklch,var(--color-code-surface)_86%,var(--color-warn-muted))]`,
-  danger:  `${CODE_BLOCK_SHELL} border-danger/40 text-code-surface-fg bg-[color-mix(in_oklch,var(--color-code-surface)_86%,var(--color-danger-muted))]`,
+  info:    `${CODE_BLOCK_SHELL} border-info/40 text-code-surface-fg bg-[color-mix(in_oklab,var(--color-code-surface)_86%,var(--color-info-muted))]`,
+  ok:      `${CODE_BLOCK_SHELL} border-ok/40 text-code-surface-fg bg-[color-mix(in_oklab,var(--color-code-surface)_86%,var(--color-ok-muted))]`,
+  warn:    `${CODE_BLOCK_SHELL} border-warn/40 text-code-surface-fg bg-[color-mix(in_oklab,var(--color-code-surface)_86%,var(--color-warn-muted))]`,
+  danger:  `${CODE_BLOCK_SHELL} border-danger/40 text-code-surface-fg bg-[color-mix(in_oklab,var(--color-code-surface)_86%,var(--color-danger-muted))]`,
 }
 
 interface LogBlockProps {

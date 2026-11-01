@@ -170,8 +170,8 @@ export function DispatchFixPreflight({
         className={[
           'inline-flex items-center justify-center gap-0.5 rounded-sm border font-medium disabled:cursor-wait disabled:opacity-50',
           isTable
-            ? 'h-5 min-h-0 shrink-0 truncate px-1.5 text-3xs leading-none bg-brand/12 text-brand border border-brand/28 hover:bg-brand/20'
-            : 'px-2 py-1 text-2xs bg-brand/12 text-brand border border-brand/28 hover:bg-brand/20',
+            ? 'h-5 min-h-0 shrink-0 truncate px-1.5 text-3xs leading-none bg-brand/12 text-brand-foreground border border-brand/28 hover:bg-brand/20'
+            : 'px-2 py-1 text-2xs bg-brand/12 text-brand-foreground border border-brand/28 hover:bg-brand/20',
         ].join(' ')}
       >
         <span className="truncate">{triggerLabel}</span>

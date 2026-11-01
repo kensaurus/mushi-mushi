@@ -30,7 +30,11 @@ import {
   setupGuideSummary,
   NO_PROJECT_MODEL,
 } from '../../lib/setupGuideSteps'
-import { resolveSetupGuideView, shouldSuppressAutoExpand } from '../../lib/setupGuidePrefs'
+import {
+  resolveSetupGuideView,
+  setupGuideFocusTarget,
+  shouldSuppressAutoExpand,
+} from '../../lib/setupGuidePrefs'
 import type { SetupProject, SetupStep, SetupStepId } from '../../lib/useSetupStatus'
 import type { ProjectSnapshot } from '../../lib/projectSnapshotTypes'
 
@@ -361,6 +365,26 @@ describe('resolveSetupGuideView', () => {
     expect(
       resolveSetupGuideView('minimized', { requiredComplete: false, suppressAutoExpand: false }),
     ).toBe('minimized')
+  })
+})
+
+describe('setupGuideFocusTarget', () => {
+  it('never moves focus when the view changes because setup data loaded', () => {
+    // Regression: the guide auto-expands while required setup is unknown and
+    // auto-minimizes once it resolves. That data-driven flip used to hand
+    // focus to the launcher on every page load, drawing the brand focus ring
+    // around the "Setup done" pill until the user clicked elsewhere.
+    expect(setupGuideFocusTarget('expanded', 'minimized', false)).toBeNull()
+    expect(setupGuideFocusTarget('minimized', 'expanded', false)).toBeNull()
+  })
+
+  it('does nothing on first render', () => {
+    expect(setupGuideFocusTarget(null, 'expanded', true)).toBeNull()
+  })
+
+  it('follows the disclosure when the user opens or closes it', () => {
+    expect(setupGuideFocusTarget('minimized', 'expanded', true)).toBe('heading')
+    expect(setupGuideFocusTarget('expanded', 'minimized', true)).toBe('launcher')
   })
 })
 

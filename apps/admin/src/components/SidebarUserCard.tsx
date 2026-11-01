@@ -29,7 +29,6 @@ import { useEffect, useRef, useState, type ReactElement } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { ConfirmDialog } from './ConfirmDialog'
 import { PlanBadge } from './PlanBadge'
-import { CHIP_TONE } from '../lib/chipTone'
 import { useAuth } from '../lib/auth'
 import {
   detectProvider,
@@ -54,12 +53,17 @@ const PROVIDER_LABELS: Record<AuthProvider, string> = {
   unknown: 'Signed in',
 }
 
+// Initials discs are neutral for every provider. Per-provider hues put a
+// vermillion-ringed disc (email) or a violet one (GitHub) in the footer, which
+// read as an alert; the initials and the provider glyph already tell two
+// accounts apart.
+const AVATAR_NEUTRAL = 'bg-surface-hover text-fg-secondary ring-edge-subtle'
 const AVATAR_TONE: Record<AuthProvider, string> = {
-  google:  CHIP_TONE.infoSubtle + ' ring-info/40',
-  apple:   'bg-surface-overlay text-fg ring-edge',
-  email:   CHIP_TONE.brandSubtle + ' ring-brand/40',
-  github:  CHIP_TONE.accentSubtle + ' ring-brand/40',
-  unknown: 'bg-surface-overlay text-fg-muted ring-edge-subtle',
+  google:  AVATAR_NEUTRAL,
+  apple:   AVATAR_NEUTRAL,
+  email:   AVATAR_NEUTRAL,
+  github:  AVATAR_NEUTRAL,
+  unknown: AVATAR_NEUTRAL,
 }
 
 interface AvatarProps {
@@ -138,11 +142,13 @@ const PROVIDER_GLYPH: Record<AuthProvider, ((p: { className?: string }) => React
   unknown: null,
 }
 
+// Metadata, not status: one muted tone. `email` was brand vermillion, so the
+// word "Email" under the address looked like a validation error.
 const PROVIDER_TINT: Record<AuthProvider, string> = {
-  google:  'text-info-foreground',
-  apple:   'text-fg',
-  email:   'text-brand',
-  github:  'text-accent-foreground',
+  google:  'text-fg-muted',
+  apple:   'text-fg-muted',
+  email:   'text-fg-muted',
+  github:  'text-fg-muted',
   unknown: 'text-fg-faint',
 }
 
@@ -220,7 +226,7 @@ function AccountRow({ account, isActive, busy, onSwitch, onRemove }: AccountRowP
             )}
           </span>
         </span>
-        {isActive && <span className="shrink-0 text-2xs font-semibold text-brand">✓</span>}
+        {isActive && <span className="shrink-0 text-2xs font-semibold text-brand-foreground">✓</span>}
       </button>
       {!isActive && (
         <button
@@ -344,7 +350,7 @@ export function SidebarUserCard({ user, signOut }: SidebarUserCardProps) {
               onClick={() => void handleAdd(signInWithGoogle)}
               className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-2xs font-medium text-fg-secondary hover:bg-surface-overlay/40 focus-visible:outline-none disabled:opacity-60"
             >
-              <span className="inline-flex h-6 w-6 items-center justify-center text-info-foreground"><GoogleGlyph /></span>
+              <span className="inline-flex h-6 w-6 items-center justify-center text-fg-muted"><GoogleGlyph /></span>
               Add Google account
             </button>
             <button
@@ -354,7 +360,7 @@ export function SidebarUserCard({ user, signOut }: SidebarUserCardProps) {
               onClick={() => void handleAdd(signInWithGitHub)}
               className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-2xs font-medium text-fg-secondary hover:bg-surface-overlay/40 focus-visible:outline-none disabled:opacity-60"
             >
-              <span className="inline-flex h-6 w-6 items-center justify-center text-accent-foreground"><GitHubGlyph /></span>
+              <span className="inline-flex h-6 w-6 items-center justify-center text-fg-muted"><GitHubGlyph /></span>
               Add GitHub account
             </button>
             <div className="my-1 border-t border-edge-subtle" />
@@ -365,7 +371,7 @@ export function SidebarUserCard({ user, signOut }: SidebarUserCardProps) {
                 setOpen(false)
                 setConfirmOpen(true)
               }}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-2xs font-medium text-rose hover:bg-rose-muted/50 focus-visible:outline-none"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-2xs font-medium text-danger-foreground hover:bg-danger-muted focus-visible:outline-none"
             >
               <span className="inline-flex h-6 w-6 items-center justify-center"><SignOutGlyph /></span>
               Sign out of all accounts
@@ -409,7 +415,8 @@ export function SidebarUserCard({ user, signOut }: SidebarUserCardProps) {
           <button
             type="button"
             onClick={() => setConfirmOpen(true)}
-            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-rose hover:bg-rose-muted/60 hover:text-rose motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose/50"
+            // Neutral at rest, danger on hover — same as the rail's sign-out.
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-fg-muted hover:bg-danger-muted hover:text-danger-foreground motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
             aria-label="Sign out"
             title="Sign out"
           >

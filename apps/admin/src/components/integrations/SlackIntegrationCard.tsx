@@ -16,6 +16,15 @@ import { useToast } from '../../lib/toast'
 import { HealthSparkline } from './HealthSparkline'
 import type { HealthRow } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { IconCheck } from '../icons'
+import {
+  INTEGRATION_CARD,
+  INTEGRATION_CARD_HEADER,
+  INTEGRATION_CARD_IDENTITY,
+  INTEGRATION_CARD_STATUS_IDLE,
+  INTEGRATION_CARD_STATUS_OK,
+  INTEGRATION_CARD_TITLE,
+} from './cardChrome'
 
 interface Props {
   projectId: string | null
@@ -174,13 +183,13 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
   }
 
   return (
-    <div className="rounded-xl border border-edge-subtle bg-surface p-5 space-y-4">
+    <div className={INTEGRATION_CARD}>
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-lg bg-accent-muted flex items-center justify-center flex-shrink-0">
+      <div className={INTEGRATION_CARD_HEADER}>
+        <div className={INTEGRATION_CARD_IDENTITY}>
+          <div className="mt-0.5 shrink-0">
             {/* mushi-mushi-allowlist: Slack trademark SVG requires exact brand hex fills */}
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z" fill="var(--color-brand-slack-pink)"/>
               <path d="M8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312z" fill="var(--color-brand-slack-blue)"/>
               <path d="M18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312z" fill="var(--color-brand-slack-green)"/>
@@ -188,15 +197,15 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
             </svg>
           </div>
           <div className="min-w-0">
-            <h3 className="font-semibold text-sm text-fg truncate">Slack</h3>
+            <h3 className={INTEGRATION_CARD_TITLE}>Slack</h3>
             {slackConfigured ? (
-              <p className="text-xs text-ok truncate">{teamName ? `Connected to ${teamName}` : 'Connected'}</p>
+              <p className={INTEGRATION_CARD_STATUS_OK}>{teamName ? `Connected to ${teamName}` : 'Connected'}</p>
             ) : (
-              <p className="text-xs text-fg-secondary truncate">Not connected — add to a workspace to receive notifications</p>
+              <p className={INTEGRATION_CARD_STATUS_IDLE}>Not connected — add to a workspace to receive notifications</p>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+        <div className="flex flex-wrap items-center gap-2">
           {sparkline.length > 0 && (
             <span
               className="hidden sm:flex"
@@ -219,7 +228,7 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
           {/* Always show the Add/Re-add button so the user can refresh scopes */}
           <Btn
             type="button"
-            variant={slackConfigured ? 'ghost' : 'accent'}
+            variant={slackConfigured ? 'ghost' : 'primary'}
             size="sm"
             onClick={() => void handleAddToSlack()}
             disabled={!projectId || connectingSlack}
@@ -240,12 +249,12 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
         <div className="pt-1 space-y-3">
           {/* Active channel status — shown prominently when a channel is configured */}
           {channelId ? (
-            <div className={`flex items-center gap-2 rounded-lg px-3 py-2 ${CHIP_TONE.okSubtle}`}>
-              <span className="shrink-0 text-sm" aria-hidden="true">✓</span>
+            <div className={`flex items-start gap-2 rounded-md px-3 py-2 ${CHIP_TONE.okSubtle}`}>
+              <IconCheck size={14} className="mt-px shrink-0" />
               <div className="min-w-0">
                 <p className="text-xs font-medium leading-tight">Notifications active</p>
                 <p className="text-2xs text-fg-secondary leading-snug mt-0.5">
-                  Sending to channel <code className="font-mono bg-surface-hover rounded px-1">{channelId}</code>
+                  Sending to channel <code className="mushi-code-inline">{channelId}</code>
                   {' — '}use "Send test" above to verify.
                 </p>
               </div>
@@ -317,7 +326,7 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
                 </div>
               </div>
             ) : channels.length > 0 ? (
-              <div className="flex gap-2 items-end">
+              <div className="flex gap-2 items-start">
                 <div className="flex-1 min-w-0">
                   <SelectField
                     className="text-sm"
@@ -335,7 +344,6 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
                 <Btn
                   type="button"
                   variant="primary"
-                  size="sm"
                   disabled={!selectedChannel}
                   loading={savingChannel}
                   onClick={handleSaveChannel}
@@ -355,7 +363,7 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
 
       {/* Legacy webhook fallback */}
       <details className="group">
-        <summary className="cursor-pointer text-xs text-fg-tertiary hover:text-fg-secondary transition-opacity list-none flex items-center gap-1">
+        <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg-secondary transition-opacity list-none flex items-center gap-1">
           <span className="group-open:rotate-90 transition-transform inline-block">›</span>
           Use incoming webhook URL instead (legacy)
         </summary>
@@ -380,7 +388,7 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
             Save
           </Btn>
         </div>
-        <p className="mt-2 text-xs text-fg-tertiary">
+        <p className="mt-2 text-xs text-fg-muted">
           Webhook URL sends to a fixed channel; it cannot be changed per-project or thread replies. Use "Add to Slack" for the full experience.
         </p>
       </details>

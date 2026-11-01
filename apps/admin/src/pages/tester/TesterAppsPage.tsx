@@ -10,10 +10,10 @@ import { usePageData } from '../../lib/usePageData'
 import { TESTER_API_OPTS } from '../../lib/tester-page-data'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
-import { Btn, Badge, SegmentedControl } from '../../components/ui'
+import { Btn, Badge, SegmentedControl, TextButton } from '../../components/ui'
 import { TableSkeleton } from '../../components/skeletons/TableSkeleton'
 import { TesterPageIntro } from '../../components/tester/tester-ui'
-import { CHIP_TONE, LINK_ACCENT } from '../../lib/chipTone'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface BountyTier {
   action: string
@@ -166,7 +166,7 @@ function AppCard({ app, onJoin, onLeave, acting }: {
             <>
               <Link
                 to={`/tester/submissions?appId=${encodeURIComponent(app.id)}&new=1`}
-                className="inline-flex items-center justify-center rounded-sm border border-brand/40 bg-brand-subtle px-2.5 py-1 text-2xs font-semibold text-brand motion-safe:transition-opacity hover:bg-brand/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                className="inline-flex items-center justify-center rounded-sm border border-brand/40 bg-brand-subtle px-2.5 py-1 text-2xs font-semibold text-brand-foreground motion-safe:transition-opacity hover:bg-brand/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
               >
                 Report bug
               </Link>
@@ -438,15 +438,13 @@ export function TesterAppsPage() {
                 : 'Check back soon — developers are publishing their apps.'}
             </p>
             {chip !== 'all' && (
-              <Btn
+              <TextButton
                 type="button"
-                variant="ghost"
-                size="sm"
                 onClick={() => { setChip('all'); setSearch('') }}
-                className={`mt-3 !px-0 !py-0 text-sm ${LINK_ACCENT}`}
+                className="mt-3 text-sm"
               >
                 Show all apps →
-              </Btn>
+              </TextButton>
             )}
             <div className="mt-4">
               <Link to="/tester/learn" className="text-xs text-fg-faint hover:text-fg-secondary motion-safe:transition-opacity">

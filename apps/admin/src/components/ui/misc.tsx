@@ -106,68 +106,6 @@ export function FilterChip({
   )
 }
 
-/* ── DisclosurePanel ────────────────────────────────────────────────────── */
-
-interface DisclosurePanelProps {
-  title: ReactNode
-  defaultOpen?: boolean
-  open?: boolean
-  onOpenChange?: (open: boolean) => void
-  children: ReactNode
-  /** Trailing affordance beside the title (status dots, badges). */
-  trailing?: ReactNode
-}
-
-/**
- * Collapsible chrome shell — rounded-md border, brand focus ring, chevron icons.
- * Used by Connect hub endpoint-mismatch detail and similar compact readouts.
- */
-export function DisclosurePanel({
-  title,
-  defaultOpen = false,
-  open: controlledOpen,
-  onOpenChange,
-  children,
-  trailing,
-}: DisclosurePanelProps) {
-  const [internalOpen, setInternalOpen] = useState(defaultOpen)
-  const open = controlledOpen ?? internalOpen
-  const setOpen = (next: boolean) => {
-    if (controlledOpen === undefined) setInternalOpen(next)
-    onOpenChange?.(next)
-  }
-
-  return (
-    <div className="rounded-md border border-edge-subtle bg-surface">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between gap-3 rounded-md px-4 py-3 text-sm font-medium text-fg hover:bg-surface-hover motion-safe:transition-opacity focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
-      >
-        <span className="flex min-w-0 items-center gap-2">
-          {title}
-          {trailing}
-        </span>
-        <span className="shrink-0 text-fg-muted" aria-hidden>
-          {open ? (
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M2.5 7.5L6 4l3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          ) : (
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M2.5 4.5L6 8l3.5-3.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          )}
-        </span>
-      </button>
-      {open && (
-        <div className="border-t border-edge-subtle px-4 pb-4 pt-3">{children}</div>
-      )}
-    </div>
-  )
-}
-
 /* ── Breadcrumbs ────────────────────────────────────────────────────────── */
 
 export interface BreadcrumbItem {
@@ -261,10 +199,10 @@ interface ResultChipProps {
 
 const RESULT_CHIP_CLS: Record<ResultChipTone, string> = {
   idle: 'border-edge-subtle bg-surface-overlay/60 text-fg-muted',
-  running: 'border-info/35 bg-info-muted/50 text-info-foreground border border-info/25 font-medium',
-  success: 'border-ok/35 bg-ok-muted/50 text-ok-foreground border border-ok/25 font-medium',
-  error: `border-danger/35 ${CHIP_TONE.dangerSubtle} font-medium`,
-  info: 'border-brand/35 bg-brand-subtle text-brand font-medium',
+  running: `${CHIP_TONE.infoSubtle} font-medium`,
+  success: `${CHIP_TONE.okSubtle} font-medium`,
+  error: `${CHIP_TONE.dangerSubtle} font-medium`,
+  info: 'border-brand/35 bg-brand-subtle text-brand-foreground font-medium',
 }
 
 const RESULT_CHIP_GLYPH: Record<ResultChipTone, string> = {
@@ -352,36 +290,6 @@ export function Pct({
     >
       {display}
     </span>
-  )
-}
-
-/* ── Abbr ─────────────────────────────────────────────────────────────── */
-
-interface AbbrProps {
-  /** Short form shown inline (e.g. "Crit", "BYOK", "p95"). */
-  children: ReactNode
-  /** Full form shown on hover/focus. Keep concise — this is a title, not a
-   *  doc page. Rendered by the browser so it also works on iOS long-press. */
-  title: string
-  className?: string
-}
-
-/**
- * Progressive-disclosure helper: render a short abbreviation and let the
- * browser's native `title` attribute reveal the full form on hover/long-
- * press. Uses the semantic `<abbr>` element so screen readers announce
- * the expansion, and adds a subtle dotted underline as the only reliable
- * "hint that hover does something" across browsers. Keep titles under
- * ~80 chars — longer strings get truncated on mobile.
- */
-export function Abbr({ children, title, className = '' }: AbbrProps) {
-  return (
-    <abbr
-      title={title}
-      className={`underline decoration-dotted decoration-fg-faint/50 underline-offset-2 cursor-help ${className}`}
-    >
-      {children}
-    </abbr>
   )
 }
 
@@ -644,58 +552,6 @@ export function CodeChip({
   )
 }
 
-export function TokenIn({
-  value,
-  className = '',
-}: {
-  value: number | null | undefined
-  className?: string
-}) {
-  const n = value ?? 0
-  return (
-    <span
-      className={`inline-flex min-w-[3rem] justify-end tabular-nums text-2xs font-medium text-ok ${className}`}
-      title="Input tokens"
-    >
-      {n.toLocaleString()}
-    </span>
-  )
-}
-
-export function TokenOut({
-  value,
-  className = '',
-}: {
-  value: number | null | undefined
-  className?: string
-}) {
-  const n = value ?? 0
-  return (
-    <span
-      className={`inline-flex min-w-[3rem] justify-end tabular-nums text-2xs font-medium text-danger ${className}`}
-      title="Output tokens"
-    >
-      {n.toLocaleString()}
-    </span>
-  )
-}
-
-export function UsdAmount({
-  value,
-  digits = 4,
-  className = '',
-}: {
-  value: number
-  digits?: number
-  className?: string
-}) {
-  return (
-    <span className={`tabular-nums text-2xs font-semibold text-fg ${className}`}>
-      ${Number(value).toFixed(digits)}
-    </span>
-  )
-}
-
 export function DataTableHead({
   children,
   align = 'left',
@@ -841,11 +697,5 @@ export function ErrorAlert({
     </Card>
     </div>
   )
-}
-
-/* ── Divider ───────────────────────────────────────────────────────────── */
-
-export function Divider({ className = '' }: { className?: string }) {
-  return <hr className={`border-edge-subtle ${className}`} />
 }
 

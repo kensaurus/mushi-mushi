@@ -462,7 +462,7 @@ export function CommandPalette() {
               <button
                 key={cmd.command}
                 type="button"
-                className="w-full text-left px-3 py-2 text-xs hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                className="w-full text-left px-3 py-2 text-xs hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
                 onMouseDown={(e) => {
                   e.preventDefault()
                   handleSlashPick(cmd)
@@ -476,7 +476,7 @@ export function CommandPalette() {
               <button
                 key={`${hit.kind}:${hit.id}`}
                 type="button"
-                className="w-full text-left px-3 py-2 text-xs hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                className="w-full text-left px-3 py-2 text-xs hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
                 onMouseDown={(e) => {
                   e.preventDefault()
                   handleMentionPick(hit)

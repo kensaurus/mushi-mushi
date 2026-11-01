@@ -739,7 +739,7 @@ function describeTriageUpdate(updates: Record<string, string>): string | null {
 const PLATFORM_BADGE: Record<string, string> = {
   ios:     CHIP_TONE.infoSubtle,
   android: CHIP_TONE.okSubtle,
-  web:     'bg-brand/12 text-brand border border-brand/28',
+  web:     'bg-brand/12 text-brand-foreground border border-brand/28',
   macos:   'bg-surface-overlay text-fg-secondary border-edge-subtle',
   windows: 'bg-surface-overlay text-fg-secondary border-edge-subtle',
 }

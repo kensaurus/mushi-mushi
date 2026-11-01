@@ -269,7 +269,7 @@ export function VoiceIntakePanel() {
               <Btn variant="ghost" size="sm" onClick={() => void generateBindCode()} loading={tgBusy === 'code'} disabled={!telegramConfigured || tgBusy !== null} title={telegramConfigured ? 'Mint a one-time /start code' : 'Save a bot token first'}>
                 Generate bind code
               </Btn>
-              <Btn variant="accent" size="sm" onClick={() => void connectWebhook()} loading={tgBusy === 'webhook'} disabled={!telegramConfigured || tgBusy !== null} title={telegramConfigured ? 'Register this project’s webhook with Telegram' : 'Save a bot token first'}>
+              <Btn variant="primary" size="sm" onClick={() => void connectWebhook()} loading={tgBusy === 'webhook'} disabled={!telegramConfigured || tgBusy !== null} title={telegramConfigured ? 'Register this project’s webhook with Telegram' : 'Save a bot token first'}>
                 Connect webhook
               </Btn>
             </div>

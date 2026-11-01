@@ -10,6 +10,7 @@ import { SeverityStackedBars, LineSparkline } from '../charts'
 import { ChartAnnotations } from '../charts/ChartAnnotations'
 import type { LlmDay, ReportDay } from './types'
 import type { ChartEvent } from '../../lib/apiSchemas'
+import { PANEL_HEADER_LINK } from '../../lib/chipTone'
 
 interface Props {
   reportsByDay: ReportDay[]
@@ -38,7 +39,7 @@ export function ChartsRow({ reportsByDay, llmByDay, chartEvents = [] }: Props) {
         <PanelHeader
           title="Report intake (14d)"
           action={
-            <Link to="/reports" className="shrink-0 text-2xs text-accent-foreground hover:text-accent">
+            <Link to="/reports" className={PANEL_HEADER_LINK}>
               All reports →
             </Link>
           }
@@ -50,7 +51,7 @@ export function ChartsRow({ reportsByDay, llmByDay, chartEvents = [] }: Props) {
         <PanelHeader
           title="LLM activity (14d)"
           action={
-            <Link to="/health" className="shrink-0 text-2xs text-accent-foreground hover:text-accent">
+            <Link to="/health" className={PANEL_HEADER_LINK}>
               Health →
             </Link>
           }

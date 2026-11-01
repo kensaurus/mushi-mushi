@@ -1,4 +1,5 @@
 import { CHIP_TONE } from './chipTone'
+import { btnClass } from './btnRecipe'
 
 export const SEVERITY: Record<string, string> = {
   critical: CHIP_TONE.danger,
@@ -192,7 +193,7 @@ export const SEVERITY_LABELS: Record<string, string> = {
   low:      'Low',
 }
 
-export const PIPELINE_STATUS_LABELS: Record<string, string> = {
+const PIPELINE_STATUS_LABELS: Record<string, string> = {
   pending:     'Pending',
   running:     'Running',
   exporting:   'Exporting',
@@ -239,7 +240,7 @@ export const FILTER_OPTIONS = {
 /** WCAG-safe copy on tinted semantic banner surfaces — use *-foreground, not raw hue tokens. */
 export type SemanticBannerTone = 'ok' | 'warn' | 'danger'
 
-export const SEMANTIC_BANNER_TONE: Record<SemanticBannerTone, string> = {
+const SEMANTIC_BANNER_TONE: Record<SemanticBannerTone, string> = {
   ok: 'border-ok/25 bg-ok-muted/40 text-ok-foreground',
   warn: 'border-warn/30 bg-warn-muted/40 text-warning-foreground',
   danger: 'border-danger/30 bg-danger-muted/40 text-danger-foreground',
@@ -257,12 +258,10 @@ export function betaBannerTone(): string {
   return BETA_BANNER_TONE
 }
 
-/** Primary billing upgrade CTA — `bg-brand text-brand-fg` (never `bg-fg text-bg`). */
-export const BILLING_CTA_LINK_CLASS =
-  'inline-flex items-center justify-center rounded-full bg-brand px-3 py-1 text-2xs font-semibold text-brand-fg shadow-sm hover:bg-brand-hover motion-safe:transition-opacity shrink-0'
+/** Billing upgrade CTAs — the canonical primary Btn, not a pill-shaped twin. */
+export const BILLING_CTA_LINK_CLASS = `shrink-0 ${btnClass('primary', 'sm')}`
 
-export const BILLING_CTA_LINK_CLASS_MD =
-  'inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-sm font-semibold text-brand-fg shadow-sm hover:bg-brand-hover motion-safe:transition-opacity'
+export const BILLING_CTA_LINK_CLASS_MD = btnClass('primary', 'md')
 
 export const NODE_COLORS: Record<string, string> = {
   report_group: 'oklch(0.65 0.22 25)',
@@ -287,4 +286,4 @@ export const SCORE_COLORS: Record<string, string> = {
   repro:     'oklch(0.80 0.15 80)',
 }
 
-export { CHIP_TONE, LINK_ACCENT, LINK_BRAND, META_CHIP_TONE } from './chipTone'
+export { META_CHIP_TONE } from './chipTone'

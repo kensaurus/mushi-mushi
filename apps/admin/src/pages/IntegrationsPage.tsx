@@ -507,7 +507,11 @@ export function IntegrationsPage() {
         <p className="px-4 pt-3 pb-2 text-xs text-fg-muted border-b border-panel-border">
           Connect one or more channels to receive real-time alerts when a report is triaged, a QA story fails, or a fix is merged.
         </p>
-        <div className="grid gap-0 sm:grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-panel-border">
+        {/* Columns follow the panel's own width, not the viewport: with the
+            full sidebar open, viewport `lg` left ~245px per card and the
+            header truncated to "S…". */}
+        <div className="@container/channels">
+        <div className="grid grid-cols-1 divide-y divide-panel-border @4xl/channels:grid-cols-3 @4xl/channels:divide-y-0 @4xl/channels:divide-x">
           <SlackIntegrationCard
             projectId={activeProjectId ?? null}
             slackConfigured={Boolean(settingsQuery.data?.slackConfigured)}
@@ -526,6 +530,7 @@ export function IntegrationsPage() {
             projectId={activeProjectId ?? null}
             teamsConfigured={Boolean(settingsQuery.data?.teamsConfigured)}
           />
+        </div>
         </div>
 
         {activeProjectId && (
@@ -647,7 +652,7 @@ export function IntegrationsPage() {
         <p className="px-4 pt-3 pb-2 text-2xs text-fg-secondary border-b border-panel-border leading-snug">
           Connect Linear to auto-create issues from triaged bug reports, sync status back when issues are resolved, and use Mushi as an AI agent directly within Linear.
         </p>
-        <div className="p-4">
+        <div>
           <LinearIntegrationCard
             projectId={activeProjectId ?? null}
             linearConnected={linearConnected}

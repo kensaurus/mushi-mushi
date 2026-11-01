@@ -8,7 +8,7 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { SetupGatePage } from './pages/SetupGatePage'
 import { checkEnv } from './lib/env'
 import type { ReactNode } from 'react'
-import { Loading } from './components/ui'
+import { Loading, btnClass } from './components/ui'
 import { ErrorBoundary, RouteErrorBoundary } from './components/ErrorBoundary'
 import { EditorialErrorState } from './components/EditorialErrorState'
 import { ToastProvider } from './lib/toast'
@@ -240,7 +240,7 @@ function TesterRoute({ children }: { children: ReactNode }) {
           </p>
           <a
             href="https://kensaur.us/mushi-mushi/pricing"
-            className="inline-block rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity"
+            className={btnClass('primary', 'md')}
           >
             Upgrade to Mushi Cloud →
           </a>
