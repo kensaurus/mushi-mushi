@@ -520,6 +520,20 @@
     "required": ["fixId"],
     "hints": { "destructive": false, "idempotent": true }
   },
+  "get_egress_status": {
+    "scope": "mcp:read",
+    "description": "Whether this stack runs local-only, the egress allowlist, blocked requests by host and day, and what each integration would reach.",
+    "method": "GET",
+    "path": "/v1/admin/egress/status",
+    "hints": { "destructive": false, "idempotent": true }
+  },
+  "run_egress_selftest": {
+    "scope": "mcp:write",
+    "description": "Try known cloud hosts from the edge runtime and report blocked, unreachable or reachable for each. Confirm with the user first.",
+    "method": "POST",
+    "path": "/v1/admin/egress/selftest",
+    "hints": { "destructive": false, "idempotent": true }
+  },
   "explain_finding": {
     "scope": "mcp:read",
     "description": "Explain one gate finding by id: the check, why it fired, file and line, the fix, and whether it is still open.",

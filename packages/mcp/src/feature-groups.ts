@@ -191,6 +191,8 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   test_byok_key: 'setup',
   remove_byok_key: 'setup',
   get_spend_down_status: 'setup',
+  get_egress_status: 'setup',
+  run_egress_selftest: 'setup',
   set_byok_spend_down: 'setup',
 
   // audit
