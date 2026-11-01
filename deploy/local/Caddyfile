@@ -1,0 +1,44 @@
+# FILE: deploy/local/Caddyfile
+# PURPOSE: Ingress for the local-only stack (docker-compose.local.yml).
+#
+# Plain HTTP on :80 for any host name. No automatic HTTPS, so Caddy never
+# asks an ACME server for a certificate and never fetches OCSP: it makes no
+# outbound requests at all. Put TLS in front of it on your own network if you
+# need it. Routes match deploy/Caddyfile.
+
+{
+    auto_https off
+    admin off
+}
+
+(mushi_routes) {
+    handle_path /functions/v1/* {
+        reverse_proxy edge-functions:8000
+    }
+
+    handle_path /auth/v1/* {
+        reverse_proxy supabase-auth:9999
+    }
+
+    handle_path /rest/v1/* {
+        reverse_proxy supabase-rest:3000
+    }
+
+    handle_path /storage/v1/* {
+        reverse_proxy supabase-storage:5000
+    }
+
+    handle {
+        reverse_proxy admin:3000
+    }
+}
+
+:80 {
+    import mushi_routes
+}
+
+# Supabase Studio (profile "studio"), published on the host's loopback only.
+# Studio has no login of its own: keep this port off your network.
+:3010 {
+    reverse_proxy studio:3000
+}

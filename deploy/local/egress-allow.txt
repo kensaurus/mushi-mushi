@@ -1,0 +1,25 @@
+# FILE: deploy/local/egress-allow.txt
+# PURPOSE: Hosts the proxy may forward to, one per line. Read by
+#          render-squid.sh when the squid container starts. Empty by default:
+#          nothing leaves your machines.
+#
+# Two lists, on purpose:
+#   - this file opens the proxy only, for containers such as ollama that
+#     download models. Mushi's edge functions still refuse these hosts.
+#   - MUSHI_EGRESS_ALLOW (a comma list in .env) opens the proxy AND the edge
+#     functions' own guard. Use it for a host Mushi itself must reach.
+#
+# `example.com` allows that host only; `.example.com` allows it and every
+# subdomain. After editing: docker compose ... restart squid
+#
+# Every host you add is a place your data can go. Remove a host when you are
+# done with it, and run `mushi local verify --host-check` again.
+
+# Model downloads for the optional ollama service. The registry hands blob
+# downloads to a storage host; if a pull still fails, find its name in
+# `docker compose logs squid` (TCP_DENIED) and add it for the pull only.
+# registry.ollama.ai
+
+# Model downloads from Hugging Face (vLLM, LM Studio's downloader).
+# huggingface.co
+# .hf.co
