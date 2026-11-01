@@ -7,9 +7,34 @@
  *          installs nor imports it.
  */
 
+/**
+ * SDK 11's stand-in for an unset `sendDefaultPii` (restrictive on v10).
+ * An unset `dataCollection` collects user info, cookies, and HTTP bodies.
+ * Same object literal as `apps/admin/src/lib/sentry.ts` (`sentryDataCollection`).
+ * Keep the two copies identical.
+ */
+export const sentryDataCollection = {
+  userInfo: false,
+  cookies: false,
+  httpHeaders: {
+    request: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+    response: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+  },
+  httpBodies: [],
+  urlQueryParams: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+  genAI: { inputs: false, outputs: false },
+  databaseQueryData: false,
+  graphQL: { document: false, variables: false },
+}
+
 /** The slice of `@sentry/node` this module uses. */
 interface SentryModule {
-  init(options: { dsn: string; environment: string; tracesSampleRate: number }): unknown
+  init(options: {
+    dsn: string
+    environment: string
+    tracesSampleRate: number
+    dataCollection: typeof sentryDataCollection
+  }): unknown
 }
 
 export type OptionalSentryStatus = 'disabled' | 'enabled' | 'unavailable'
@@ -51,6 +76,7 @@ export async function initOptionalSentry(
     dsn,
     environment: env.MUSHI_SENTRY_ENVIRONMENT ?? env.NODE_ENV ?? 'development',
     tracesSampleRate: 0,
+    dataCollection: sentryDataCollection,
   })
   return 'enabled'
 }
