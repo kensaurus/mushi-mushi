@@ -5,9 +5,18 @@
  *          Self-hosted mode: requires user-provided Supabase credentials.
  *
  * DETECTION PRIORITY:
+ *   0. env.js says MUSHI_LOCAL_ONLY=1 → self-hosted, pinned to the URL the
+ *      container wrote; the cloud fallback and saved browser choices are
+ *      never used (Plan 023, ADR 0034)
  *   1. VITE_INSTANCE_TYPE=self-hosted explicitly set → self-hosted
  *   2. VITE_SUPABASE_URL set and differs from CLOUD_SUPABASE_URL → self-hosted
  *   3. Otherwise → cloud (uses hardcoded cloud defaults)
+ *
+ * RUNTIME ENV: the admin container writes `env.js` at start
+ * (deploy/admin/40-mushi-env.sh) as `window.__MUSHI_ENV__ = {…}`, loaded by
+ * index.html before the bundle. Its VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
+ * and VITE_API_URL win over the values baked in at build time, so one image
+ * serves any backend. The default public/env.js sets nothing.
  */
 
 import { MUSHI_CANONICAL_URLS } from '@mushi-mushi/brand'
@@ -150,33 +159,167 @@ function sanitizeStoredInstanceConfig(): ReturnType<typeof getStoredInstanceConf
   return { ...stored, supabaseUrl: url, supabaseAnonKey: key }
 }
 
-// Stored config (runtime override) takes precedence over build-time env vars.
-const _storedAtLoad = sanitizeStoredInstanceConfig()
+/** Backend values from env.js (runtime) or from the build. Empty when unset. */
+interface BackendEnvValues {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  apiUrl: string
+}
 
-export const RESOLVED_SUPABASE_URL = stripTrailingSlash(
-  // User explicitly chose Mushi Cloud → skip env vars (they may point to a
-  // self-hosted instance) and go straight to the cloud constant.
-  (_storedAtLoad?.mode === 'cloud' && CLOUD_SUPABASE_URL) ||
-  (_storedAtLoad?.mode === 'self-hosted' && _storedAtLoad.supabaseUrl) ||
-  (() => {
-    const envUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').trim()
-    return envUrl && isValidBackendUrl(envUrl) ? envUrl : ''
-  })() ||
-  CLOUD_SUPABASE_URL,
-)
-export const RESOLVED_SUPABASE_ANON_KEY =
-  // Same short-circuit: cloud mode must not fall through to env-var overrides.
-  (_storedAtLoad?.mode === 'cloud' && CLOUD_SUPABASE_ANON_KEY) ||
-  (_storedAtLoad?.mode === 'self-hosted' && _storedAtLoad.supabaseAnonKey) ||
-  (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim() ||
-  CLOUD_SUPABASE_ANON_KEY
+/** What the admin container wrote into `window.__MUSHI_ENV__`. */
+interface RuntimeEnv extends BackendEnvValues {
+  /** MUSHI_LOCAL_ONLY was set: never reach Mushi Cloud. */
+  localOnly: boolean
+}
+
+const TRUTHY = new Set(['1', 'true', 'yes', 'on'])
+
+/**
+ * Parse the `window.__MUSHI_ENV__` object written by the admin container.
+ * Anything that is not a non-empty string reads as unset.
+ * @internal Exported for tests only.
+ */
+export function readRuntimeEnv(raw: unknown): RuntimeEnv {
+  const src = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  const str = (key: string) => (typeof src[key] === 'string' ? (src[key] as string).trim() : '')
+  return {
+    supabaseUrl: stripTrailingSlash(str('VITE_SUPABASE_URL')),
+    supabaseAnonKey: str('VITE_SUPABASE_ANON_KEY'),
+    apiUrl: stripTrailingSlash(str('VITE_API_URL')),
+    localOnly: TRUTHY.has(str('MUSHI_LOCAL_ONLY').toLowerCase()),
+  }
+}
+
+interface ResolvedBackend {
+  supabaseUrl: string
+  supabaseAnonKey: string
+  /** VITE_API_URL from env.js or the build; empty means "derive from the URL". */
+  explicitApiUrl: string
+  mode: InstanceMode
+  localOnly: boolean
+  /** Self-hosted only: env names with no value anywhere (shown by SetupGatePage). */
+  missing: string[]
+}
+
+/**
+ * Pick the backend the console talks to. Pure, so every precedence rule is
+ * tested (env.test.ts):
+ *
+ *   local-only  env.js URL → build URL → `sameOrigin` (the local stack's
+ *               gateway). Never the cloud constants, never a saved choice.
+ *   otherwise   saved browser choice → env.js → build → Mushi Cloud.
+ * @internal Exported for tests only.
+ */
+export function resolveBackend(input: {
+  stored: ReturnType<typeof getStoredInstanceConfig>
+  runtime: RuntimeEnv
+  build: BackendEnvValues & { instanceType: string }
+  cloud: { supabaseUrl: string; supabaseAnonKey: string }
+  sameOrigin: string
+}): ResolvedBackend {
+  const { stored, runtime, build, cloud } = input
+  const validUrl = (url: string) => (url && isValidBackendUrl(url) ? stripTrailingSlash(url) : '')
+  const envUrl = validUrl(runtime.supabaseUrl) || validUrl(build.supabaseUrl)
+  const envKey = runtime.supabaseAnonKey || build.supabaseAnonKey
+  const explicitApiUrl = runtime.apiUrl || build.apiUrl
+
+  if (runtime.localOnly) {
+    const missing: string[] = []
+    if (!envUrl) missing.push('VITE_SUPABASE_URL')
+    if (!envKey) missing.push('VITE_SUPABASE_ANON_KEY')
+    return {
+      supabaseUrl: envUrl || stripTrailingSlash(input.sameOrigin),
+      supabaseAnonKey: envKey,
+      explicitApiUrl,
+      mode: 'self-hosted',
+      localOnly: true,
+      missing,
+    }
+  }
+
+  const supabaseUrl =
+    // User explicitly chose Mushi Cloud → skip env vars (they may point to a
+    // self-hosted instance) and go straight to the cloud constant.
+    (stored?.mode === 'cloud' && cloud.supabaseUrl) ||
+    (stored?.mode === 'self-hosted' && stored.supabaseUrl) ||
+    envUrl ||
+    cloud.supabaseUrl
+  const supabaseAnonKey =
+    // Same short-circuit: cloud mode must not fall through to env-var overrides.
+    (stored?.mode === 'cloud' && cloud.supabaseAnonKey) ||
+    (stored?.mode === 'self-hosted' && stored.supabaseAnonKey) ||
+    envKey ||
+    cloud.supabaseAnonKey
+
+  // 1. Stored runtime preference (highest priority — user explicitly chose this)
+  // 2. Build-time explicit override
+  // 3. A configured URL that differs from cloud — infer self-hosted
+  const rawUrl = runtime.supabaseUrl || build.supabaseUrl
+  const mode: InstanceMode =
+    stored?.mode ??
+    (build.instanceType.toLowerCase() === 'self-hosted' || (rawUrl && rawUrl !== cloud.supabaseUrl)
+      ? 'self-hosted'
+      : 'cloud')
+
+  // Self-hosted: the operator may have configured credentials at runtime via
+  // BackendModePanel (stored in localStorage) or env.js rather than at build
+  // time — those must count as "present" (validating only the raw build-time
+  // vars was the original lockout bug). But we must validate the PRE-cloud-
+  // fallback chain: the resolved values always terminate in the cloud
+  // constants, so checking them makes `missing` permanently empty and
+  // silently routes a credential-less self-hosted instance to the cloud.
+  const missing: string[] = []
+  if (mode === 'self-hosted') {
+    if (!(stored?.supabaseUrl ?? '').trim() && !rawUrl) missing.push('VITE_SUPABASE_URL')
+    if (!(stored?.supabaseAnonKey ?? '').trim() && !envKey) missing.push('VITE_SUPABASE_ANON_KEY')
+  }
+  return {
+    supabaseUrl: stripTrailingSlash(supabaseUrl),
+    supabaseAnonKey,
+    explicitApiUrl,
+    mode,
+    localOnly: false,
+    missing,
+  }
+}
+
+const _runtimeEnv = readRuntimeEnv((globalThis as { __MUSHI_ENV__?: unknown }).__MUSHI_ENV__)
+
+// Under local-only the saved browser choice is ignored, so it is not read
+// (or cleaned) at all. Otherwise it takes precedence over env values.
+const _storedAtLoad = _runtimeEnv.localOnly ? null : sanitizeStoredInstanceConfig()
+
+const _backend = resolveBackend({
+  stored: _storedAtLoad,
+  runtime: _runtimeEnv,
+  build: {
+    supabaseUrl: (import.meta.env.VITE_SUPABASE_URL ?? '').trim(),
+    supabaseAnonKey: (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim(),
+    apiUrl: stripTrailingSlash((import.meta.env.VITE_API_URL ?? '').trim()),
+    instanceType: (import.meta.env.VITE_INSTANCE_TYPE ?? '').trim(),
+  },
+  cloud: { supabaseUrl: CLOUD_SUPABASE_URL, supabaseAnonKey: CLOUD_SUPABASE_ANON_KEY },
+  sameOrigin: typeof window === 'undefined' ? '' : window.location.origin,
+})
+
+export const RESOLVED_SUPABASE_URL = _backend.supabaseUrl
+export const RESOLVED_SUPABASE_ANON_KEY = _backend.supabaseAnonKey
 export const RESOLVED_API_URL = stripTrailingSlash(resolveApiUrl())
 export const RESOLVED_EXTERNAL_API_URL = stripTrailingSlash(
-  RESOLVED_API_URL.startsWith('/') ? CLOUD_API_URL : RESOLVED_API_URL,
+  RESOLVED_API_URL.startsWith('/')
+    ? _backend.localOnly
+      ? `${RESOLVED_SUPABASE_URL}/functions/v1/api`
+      : CLOUD_API_URL
+    : RESOLVED_API_URL,
 )
 
+/** True when the admin container set MUSHI_LOCAL_ONLY (env.js). */
+export function isLocalOnly(): boolean {
+  return _backend.localOnly
+}
+
 function resolveApiUrl(): string {
-  const explicit = (import.meta.env.VITE_API_URL ?? '').trim()
+  const explicit = _backend.explicitApiUrl
   // Dev: route API through the Vite `/functions` proxy (any localhost port).
   if (import.meta.env.DEV) {
     if (!explicit || explicit.includes('.supabase.co')) {
@@ -242,62 +385,17 @@ export interface EnvStatus {
   mode: InstanceMode
 }
 
-function detectMode(supabaseUrl: string): InstanceMode {
-  // 1. Stored runtime preference (highest priority — user explicitly chose this)
-  if (_storedAtLoad?.mode) return _storedAtLoad.mode
-  // 2. Build-time explicit override
-  const explicit = (import.meta.env.VITE_INSTANCE_TYPE ?? '').trim().toLowerCase()
-  if (explicit === 'self-hosted') return 'self-hosted'
-  // 3. URL differs from cloud — infer self-hosted
-  if (supabaseUrl && supabaseUrl !== CLOUD_SUPABASE_URL) return 'self-hosted'
-  return 'cloud'
-}
-
 export function checkEnv(): EnvStatus {
-  // detectMode needs the raw build-time URL only for the "URL differs from
-  // cloud → infer self-hosted" heuristic (priority 3). Priorities 1 and 2
-  // are independent of the URL value.
-  const rawUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').trim()
-
-  const mode = detectMode(rawUrl)
-
-  if (mode === 'cloud') {
-    return {
-      supabaseUrl: RESOLVED_SUPABASE_URL,
-      supabaseAnonKey: RESOLVED_SUPABASE_ANON_KEY,
-      apiUrl: RESOLVED_API_URL,
-      missing: [],
-      ready: true,
-      mode,
-    }
-  }
-
-  // Self-hosted: the operator may have configured credentials at runtime via
-  // BackendModePanel (stored in localStorage) rather than at build time via
-  // .env — stored credentials must count as "present" (validating only the
-  // raw build-time vars was the original lockout bug). But we must validate
-  // the PRE-cloud-fallback chain: RESOLVED_* always terminate in the cloud
-  // constants, so checking them directly makes `missing` permanently empty
-  // and silently routes a credential-less self-hosted instance to the
-  // production cloud project.
-  const storedUrl = (_storedAtLoad?.supabaseUrl ?? '').trim()
-  const storedKey = (_storedAtLoad?.supabaseAnonKey ?? '').trim()
-  const rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim()
-  const missing: string[] = []
-  if (!storedUrl && !rawUrl) missing.push('VITE_SUPABASE_URL')
-  if (!storedKey && !rawKey) missing.push('VITE_SUPABASE_ANON_KEY')
-
   return {
     supabaseUrl: RESOLVED_SUPABASE_URL,
     supabaseAnonKey: RESOLVED_SUPABASE_ANON_KEY,
     apiUrl: RESOLVED_API_URL,
-    missing,
-    ready: missing.length === 0,
-    mode,
+    missing: _backend.missing,
+    ready: _backend.missing.length === 0,
+    mode: _backend.mode,
   }
 }
 
 export function isCloudMode(): boolean {
-  const rawUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').trim()
-  return detectMode(rawUrl) === 'cloud'
+  return _backend.mode === 'cloud'
 }

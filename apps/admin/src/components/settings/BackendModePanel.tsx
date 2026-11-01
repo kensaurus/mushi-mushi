@@ -17,6 +17,7 @@ import { useState } from 'react'
 import { Btn, Input, Callout } from '../ui'
 import {
   checkEnv,
+  isLocalOnly,
   saveAndApplyInstanceConfig,
   clearStoredInstanceConfig,
   getStoredInstanceConfig,
@@ -26,6 +27,18 @@ import {
 import { CHIP_TONE } from '../../lib/chipTone'
 
 export function BackendModePanel() {
+  if (isLocalOnly()) {
+    return (
+      <Callout tone="info" label="Local-only">
+        This console runs in local-only mode. Its backend ({checkEnv().supabaseUrl}) is set by the server it
+        runs on, and it cannot switch to Mushi Cloud.
+      </Callout>
+    )
+  }
+  return <BackendModeChooser />
+}
+
+function BackendModeChooser() {
   const current = checkEnv()
   const stored = getStoredInstanceConfig()
   const isOverridden = stored !== null
