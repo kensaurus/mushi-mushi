@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261022000000_egress_denials
+-- 20261101005900_egress_denials
 --
 -- Verifiably local (Plan 023 Phase 0, ADR 0034). With MUSHI_LOCAL_ONLY=1 the
 -- edge functions refuse every outbound request to a host outside the egress

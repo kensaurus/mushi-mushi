@@ -1,6 +1,6 @@
 # Plan 023 — Verifiably local: run all of Mushi on your own machines, and prove nothing leaves
 
-Status: `PLANNED` (2026-10-21). Decision record: [ADR 0034](../adr/0034-verifiably-local-mode.md).
+Status: `IN PROGRESS` (draft, branch `feat/local-mode-plan-023`, consolidated 2026-11-01 from four 2026-10-21 agent worktrees). Decision record: [ADR 0034](../adr/0034-verifiably-local-mode.md).
 
 ## Why
 
@@ -96,20 +96,20 @@ check switches, `mushi ux` (fully local).
 
 ## Phases
 
-- [ ] **Phase 0 — enforce and prove.** `egress.ts` + `egress_denials` +
+- [~] **Phase 0 — enforce and prove.** _Built, unit-tested, not run live:_ `egress.ts` + `egress_denials`, guard installed from `_shared/sentry.ts`, status/selftest routes (in api-ext), `mushi local verify`, Settings → Security → Data egress card, MCP `get_egress_status` / `run_egress_selftest`. `egress.ts` + `egress_denials` +
   bootstrap install + selftest route + `mushi local verify` + console card.
-- [ ] **Phase 1 — local models.** Anthropic base URL; private
+- [~] **Phase 1 — local models.** _WIP, carried over uncommitted:_ Anthropic base URL, private OpenAI-compatible endpoints, `MUSHI_LLM_MODEL_*`, structured retry; tests exist. Anthropic base URL; private
   OpenAI-compatible endpoints under local-only; model id env overrides;
   probes follow the base URL; Zod validate + one retry on schema misses.
 - [ ] **Phase 2 — local embeddings.** Configurable model/base/dims with
   padding; `embedding_model` column; re-embed queue.
-- [ ] **Phase 3 — local fix agent.** `agent: 'local'` dispatch kind;
+- [~] **Phase 3 — local fix agent.** _Built before ADR 0048 (local workers, 2026-10-27), which now owns claims and leases:_ claim/report routes and `mushi agent serve`; rework onto `work_claims` or drop. `agent: 'local'` dispatch kind;
   `mushi agent serve` (claim, worktree, run, push, PR, report); offline env
   for Claude Code and Codex; refuses Ollama `:cloud` models.
 - [ ] **Phase 4 — git host + email + gated probes.** `GITHUB_API_URL`;
   SMTP; npm cron, radar public probes, store connectors, web push off
   under local-only unless allowlisted.
-- [ ] **Phase 5 — packaging.** `deploy/docker-compose.local.yml`: Supabase
+- [~] **Phase 5 — packaging.** _Built, not run:_ `deploy/docker-compose.local.yml` with a Squid allowlist sidecar, gateway paths, admin reads `env.js` at start. `mushi selfhost up --local` not built. `deploy/docker-compose.local.yml`: Supabase
   stack + Mushi functions + admin + optional Ollama, all on an internal
   network with a Squid allowlist sidecar as the only route out; admin
   image takes `VITE_*` at runtime; `mushi selfhost up --local`.
