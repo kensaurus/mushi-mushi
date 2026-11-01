@@ -71,7 +71,9 @@ services:
         condition: service_healthy
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      SUPABASE_URL: http://supabase-rest:3000
+      # Through the gateway, which serves /rest/v1, /auth/v1 and /storage/v1
+      # like a Supabase project (Caddyfile).
+      SUPABASE_URL: http://caddy
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
@@ -87,8 +89,12 @@ services:
     ports:
       - "3000:3000"
     environment:
-      VITE_SUPABASE_URL: http://localhost:3001
+      # Read when the container starts (admin/40-mushi-env.sh writes env.js),
+      # so the image needs no rebuild for a new address. The public address
+      # is Caddy's, which serves the Supabase paths and the console.
+      VITE_SUPABASE_URL: ${MUSHI_PUBLIC_URL:-https://localhost}
       VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      VITE_API_URL: ${MUSHI_PUBLIC_URL:-https://localhost}/functions/v1/api
 
   caddy:
     image: caddy:2-alpine
