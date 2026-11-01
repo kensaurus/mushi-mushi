@@ -119,6 +119,7 @@
     "bootstrap:new-package": "node scripts/bootstrap-new-package.mjs",
     "sync:helm-migrations": "node scripts/sync-helm-migrations.mjs",
     "check:helm-migrations": "node scripts/sync-helm-migrations.mjs --check",
+    "check:migration-ledger": "node scripts/check-migration-ledger.mjs",
     "docs-stats": "node scripts/docs-stats.mjs --print-markdown",
     "check:docs-stats": "node scripts/docs-stats.mjs --check",
     "check:tagline": "node scripts/check-tagline-consistency.mjs",
