@@ -1,0 +1,206 @@
+# FILE: docker-compose.local.yml
+# PURPOSE: Local-only profile (Plan 023, ADR 0034): the whole stack on your
+#          machines, with one way out that you control and can read.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml --profile ollama up -d
+#
+# How it holds:
+#   - Every Mushi and Supabase container sits on `mushi_local`, an internal
+#     network with no route to the internet.
+#   - `squid` is the only container on both `mushi_local` and `egress`. Every
+#     container has HTTP_PROXY / HTTPS_PROXY pointed at it; it forwards only
+#     to allowlisted hosts (local/egress-allow.txt + MUSHI_EGRESS_ALLOW,
+#     empty by default) and logs every request.
+#   - The edge functions run with MUSHI_LOCAL_ONLY=1, so they refuse a host
+#     off their own allowlist before a socket opens, and record it.
+#   - `caddy` is the way in: plain HTTP published on 127.0.0.1 only, through
+#     `ingress`, a bridge with NAT turned off, so it cannot be used to reach
+#     out. Caddy itself makes no outbound requests (local/Caddyfile).
+#   - The console reads its backend from env.js at start (MUSHI_LOCAL_ONLY=1)
+#     and never falls back to Mushi Cloud.
+#
+# Needs Docker Compose 2.24.4 or later (`!reset` / `!override`).
+# Prove it: `mushi local verify --host-check`. Steps: local/README.md.
+
+x-local-proxy-env: &local-proxy-env
+  HTTP_PROXY: http://squid:3128
+  HTTPS_PROXY: http://squid:3128
+  http_proxy: http://squid:3128
+  https_proxy: http://squid:3128
+  NO_PROXY: &no-proxy localhost,127.0.0.1,::1,postgres,supabase-auth,supabase-rest,supabase-storage,edge-functions,admin,caddy,squid,ollama,studio,meta,.internal,.local
+  no_proxy: *no-proxy
+
+services:
+  postgres:
+    networks: [mushi_local]
+    ports: !reset []
+    environment:
+      <<: *local-proxy-env
+
+  supabase-auth:
+    networks: [mushi_local]
+    ports: !reset []
+    environment:
+      <<: *local-proxy-env
+      GOTRUE_SITE_URL: ${MUSHI_PUBLIC_URL:-http://localhost:8080}
+      API_EXTERNAL_URL: ${MUSHI_PUBLIC_URL:-http://localhost:8080}/auth/v1
+      # No sign-in through GitHub, Google, …: those would leave the machine.
+      GOTRUE_EXTERNAL_GITHUB_ENABLED: "false"
+      GOTRUE_EXTERNAL_GOOGLE_ENABLED: "false"
+
+  supabase-rest:
+    networks: [mushi_local]
+    ports: !reset []
+    environment:
+      <<: *local-proxy-env
+
+  supabase-storage:
+    networks: [mushi_local]
+    ports: !reset []
+    environment:
+      <<: *local-proxy-env
+
+  edge-functions:
+    networks: [mushi_local]
+    ports: !reset []
+    environment:
+      <<: *local-proxy-env
+      MUSHI_LOCAL_ONLY: "1"
+      # The edge guard's own allowlist: the internal names Mushi calls, then
+      # your hosts. RFC 1918 addresses, loopback, *.internal and *.local are
+      # allowed without listing them.
+      MUSHI_EGRESS_ALLOW: caddy,ollama${MUSHI_EGRESS_ALLOW:+,}${MUSHI_EGRESS_ALLOW:-}
+      # Reach Postgres, Auth and Storage through the gateway, as on Supabase.
+      SUPABASE_URL: http://caddy
+      # Local models: Ollama 0.14+ speaks the Anthropic Messages API, e.g.
+      # ANTHROPIC_BASE_URL=http://ollama:11434 and ANTHROPIC_API_KEY=ollama.
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
+      MUSHI_ALLOW_PRIVATE_LLM_ENDPOINT: ${MUSHI_ALLOW_PRIVATE_LLM_ENDPOINT:-}
+      MUSHI_LLM_MODEL_FAST: ${MUSHI_LLM_MODEL_FAST:-}
+      MUSHI_LLM_MODEL_SMART: ${MUSHI_LLM_MODEL_SMART:-}
+      MUSHI_LLM_MODEL_REVIEW: ${MUSHI_LLM_MODEL_REVIEW:-}
+      MUSHI_EMBEDDING_MODEL: ${MUSHI_EMBEDDING_MODEL:-}
+      MUSHI_EMBEDDING_BASE_URL: ${MUSHI_EMBEDDING_BASE_URL:-}
+      MUSHI_EMBEDDING_DIMENSIONS: ${MUSHI_EMBEDDING_DIMENSIONS:-}
+      # GitHub Enterprise Server, e.g. https://github.example.com/api/v3
+      GITHUB_API_URL: ${GITHUB_API_URL:-}
+      # smtp(s)://user:pass@host:port, instead of Resend
+      SMTP_URL: ${SMTP_URL:-}
+
+  admin:
+    networks: [mushi_local]
+    ports: !reset []
+    environment:
+      <<: *local-proxy-env
+      # Read at container start (admin/40-mushi-env.sh → env.js), not baked in.
+      VITE_SUPABASE_URL: ${MUSHI_PUBLIC_URL:-http://localhost:8080}
+      VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      VITE_API_URL: ${MUSHI_PUBLIC_URL:-http://localhost:8080}/functions/v1/api
+      MUSHI_LOCAL_ONLY: "1"
+
+  caddy:
+    networks: [mushi_local, ingress]
+    ports: !override
+      - "127.0.0.1:${MUSHI_HTTP_PORT:-8080}:80"
+      - "127.0.0.1:${MUSHI_STUDIO_PORT:-3010}:3010"
+    volumes: !override
+      - ./local/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+    environment:
+      <<: *local-proxy-env
+
+  # The only container with a route out, and only to allowlisted hosts.
+  squid:
+    image: ubuntu/squid:6.6-24.04_edge
+    restart: unless-stopped
+    networks: [mushi_local, egress]
+    entrypoint: ["/bin/sh", "/etc/mushi/render-squid.sh"]
+    environment:
+      # Your hosts only; internal names never pass through the proxy.
+      MUSHI_EGRESS_ALLOW: ${MUSHI_EGRESS_ALLOW:-}
+    volumes:
+      - ./local/squid.conf:/etc/squid/squid.conf:ro
+      - ./local/render-squid.sh:/etc/mushi/render-squid.sh:ro
+      - ./local/egress-allow.txt:/etc/mushi/egress-allow.txt:ro
+
+  # Optional local model server: --profile ollama. Pulls go through squid,
+  # so they fail until you allowlist the registry (local/egress-allow.txt).
+  ollama:
+    image: ollama/ollama:0.35.1
+    profiles: [ollama]
+    restart: unless-stopped
+    networks: [mushi_local]
+    environment:
+      <<: *local-proxy-env
+      OLLAMA_HOST: 0.0.0.0:11434
+    volumes:
+      - ollama:/root/.ollama
+
+  # Optional Supabase Studio: --profile studio, at http://127.0.0.1:3010.
+  # Its AI assistant key stays empty and its log explorer (Logflare) off.
+  meta:
+    image: supabase/postgres-meta:v0.100.0
+    profiles: [studio]
+    restart: unless-stopped
+    networks: [mushi_local]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *local-proxy-env
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: postgres
+      PG_META_DB_PORT: 5432
+      PG_META_DB_NAME: mushimushi
+      PG_META_DB_USER: postgres
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD:-mushimushi}
+      CRYPTO_KEY: ${PG_META_CRYPTO_KEY:-}
+
+  studio:
+    image: supabase/studio:2026.10.12-sha-3699278
+    profiles: [studio]
+    restart: unless-stopped
+    networks: [mushi_local]
+    depends_on: [meta]
+    environment:
+      <<: *local-proxy-env
+      HOSTNAME: 0.0.0.0
+      STUDIO_PG_META_URL: http://meta:8080
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: mushimushi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mushimushi}
+      PG_META_CRYPTO_KEY: ${PG_META_CRYPTO_KEY:-}
+      DEFAULT_ORGANIZATION_NAME: Mushi (local)
+      DEFAULT_PROJECT_NAME: mushi-local
+      # Studio's AI assistant would send your schema and SQL to OpenAI.
+      OPENAI_API_KEY: ""
+      SUPABASE_URL: http://caddy
+      SUPABASE_PUBLIC_URL: ${MUSHI_PUBLIC_URL:-http://localhost:8080}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      AUTH_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
+      # Log explorer off: it needs Logflare, which this profile does not run.
+      ENABLED_FEATURES_LOGS_ALL: "false"
+      NEXT_PUBLIC_ENABLE_LOGS: "false"
+      NEXT_TELEMETRY_DISABLED: "1"
+
+networks:
+  # No route to the internet. Containers here reach each other, and squid.
+  mushi_local:
+    name: mushi_local
+    internal: true
+  # Squid's way out. Nothing else joins it.
+  egress:
+    name: mushi_egress
+  # The way in: published ports reach caddy, but with NAT off caddy cannot
+  # use this network to reach the internet.
+  ingress:
+    name: mushi_ingress
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+
+volumes:
+  ollama:
