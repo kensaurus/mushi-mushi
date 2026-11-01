@@ -2,13 +2,13 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-11-01 · **811** routes.
+> Generated: 2026-11-01 · **813** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 221 |
+| `adminOrApiKey` | 223 |
 | `apiKeyAuth` | 59 |
 | `jwtAuth` | 412 |
 | `jwtOrApiKey` | 2 |
@@ -31,6 +31,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/a2a/tasks/:id{[^:]+}:subscribe` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/a2a-tasks.ts` |
 | GET | `/v1/admin/activation` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/activation.ts` |
 | GET | `/v1/admin/activity` | `jwtAuth` | `packages/server/supabase/functions/api/routes/dashboard.ts` |
+| POST | `/v1/admin/agent/attempts/:id/report` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/local-agent.ts` |
+| POST | `/v1/admin/agent/claim` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/local-agent.ts` |
 | GET | `/v1/admin/anti-gaming/devices` | `jwtAuth` | `packages/server/supabase/functions/api/routes/admin-ops.ts` |
 | POST | `/v1/admin/anti-gaming/devices/:id/flag` | `jwtAuth` | `packages/server/supabase/functions/api/routes/admin-ops.ts` |
 | POST | `/v1/admin/anti-gaming/devices/:id/unflag` | `jwtAuth` | `packages/server/supabase/functions/api/routes/admin-ops.ts` |
