@@ -31,11 +31,16 @@
  *          Run locally:  node scripts/check-design-tokens.mjs
  *          In CI:        pnpm check:design-tokens
  *          Pre-commit:   wired via scripts/install-git-hooks.mjs
+ *
+ *          Chart colours (`--color-viz-*`) are also compiled with no utility
+ *          candidates (scripts/viz-token-emit.mjs). Tailwind drops `@theme`
+ *          colours nothing uses, and those tokens are read at runtime.
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve, join, relative } from 'node:path'
+import { findVizEmitProblems } from './viz-token-emit.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
@@ -835,11 +840,22 @@ const lintFailures =
   focusOutlineHits.length > 0 ||
   ellipsisHits.length > 0
 
-if (lintFailures) process.exit(1)
+const vizProblems = await findVizEmitProblems(ROOT, files)
+if (vizProblems.length > 0) {
+  console.error(`\n[viz-emit] Chart colours read with readVizToken() must be in the compiled CSS with no utilities:\n`)
+  for (const line of vizProblems) console.error(`  ${line}`)
+  console.error(
+    `\nFix: keep --color-viz-* in the @theme static block in apps/admin/src/styles/theme-tokens.css,\n` +
+      `and call readVizToken() from a function or getter so the colour is not frozen at import.\n`,
+  )
+}
+
+if (lintFailures || vizProblems.length > 0) process.exit(1)
 
 const totalTypeFloorFiles = typeFloorFiles.length
 console.log(
   `[ok] Admin design tokens are in sync with index.css (${allow.size} color roots, ${files.length} admin files scanned). ` +
     `Type floor: clean across ${totalTypeFloorFiles} files. Web interface guards: transition-all, focus-visible, ellipsis — clean. ` +
-    `Retired aliases: ${RETIRED_CUSTOM_PROPS.size} names, 0 uses.`,
+    `Retired aliases: ${RETIRED_CUSTOM_PROPS.size} names, 0 uses. ` +
+    `Viz tokens: emitted with no utilities.`,
 )

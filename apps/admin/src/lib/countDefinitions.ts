@@ -59,7 +59,12 @@
  *     (OpenPullRequests openPrGroup). /pipeline's "approved and green, not
  *     queued to merge" is the part of it not in the merge queue yet.
  *
- *   In flight — reports with a fix attempt queued or running.
+ *   In flight — one report, once: a fix attempt queued, running, pending or
+ *     dispatched (still counted when the report is already resolved), or a
+ *     dispatch queued before its attempt row exists. The tab title, the In
+ *     flight card and the snapshot use `inFlightHeadline` so they cannot
+ *     disagree. Server: fix-report-truth.ts `in_flight`, plus
+ *     /v1/admin/fixes/stats `inflightDispatches`.
  *   PR open   — reports whose fix PR is open and not blocked.
  *   Fixed     — reports a merged fix closed in the window.
  */
@@ -128,6 +133,56 @@ export function isReadyToMerge(fix: ReadyToMergeSignals & { id: string }, approv
   return readyToMerge(fix, approvedGreen.has(fix.id))
 }
 
+/**
+ * Attempt statuses the server counts as a live fix
+ * (`_shared/fix-report-truth.ts` `LIVE_ATTEMPT_STATUSES`).
+ */
+const LIVE_ATTEMPT_STATUSES: ReadonlySet<string> = new Set(['queued', 'running', 'pending', 'dispatched'])
+
+/** A fix attempt that is still going, including one queued, pending or dispatched. */
+export function isLiveFixAttempt(status: string | null | undefined): boolean {
+  return LIVE_ATTEMPT_STATUSES.has((status ?? '').toLowerCase())
+}
+
+function isLiveDispatch(status: string | null | undefined): boolean {
+  const s = (status ?? '').toLowerCase()
+  return s === 'queued' || s === 'running'
+}
+
+/**
+ * Reports with a fix still going. One report counts once, even when a live
+ * attempt and a queued dispatch both name it. A live attempt on a report the
+ * server already calls resolved stays in the set: that row is still queued
+ * or running.
+ */
+export function collectInFlightReportIds(
+  attempts: ReadonlyArray<{ report_id?: string | null; status?: string | null }>,
+  dispatches: ReadonlyArray<{ report_id?: string | null; status?: string | null }>,
+): Set<string> {
+  const ids = new Set<string>()
+  for (const attempt of attempts) {
+    if (attempt.report_id && isLiveFixAttempt(attempt.status)) ids.add(attempt.report_id)
+  }
+  for (const dispatch of dispatches) {
+    if (dispatch.report_id && isLiveDispatch(dispatch.status)) ids.add(dispatch.report_id)
+  }
+  return ids
+}
+
+/**
+ * The in-flight number the tab title, the In flight card and the snapshot
+ * share. `serverCounts` are the server's own totals (summary `inProgress`,
+ * stats `inProgress` + `inflightDispatches`). The loaded list can miss an
+ * attempt past the first page, so the headline is never smaller than those.
+ */
+export function inFlightHeadline(localReports: number, ...serverCounts: Array<number | null | undefined>): number {
+  let n = localReports
+  for (const count of serverCounts) {
+    if (typeof count === 'number' && Number.isFinite(count) && count > n) n = count
+  }
+  return n
+}
+
 /** One-line definitions, for a hint beside the number. */
 export const COUNT_HINTS = {
   readyToMerge: 'Open fix PRs whose Opus review says merge about their latest commit and whose CI passed.',
@@ -136,7 +191,8 @@ export const COUNT_HINTS = {
     'Reports whose latest auto-fix attempt failed, was skipped, or whose PR closed unmerged. Fixed and dismissed reports never count.',
   failingCi:
     'Open fix PRs whose own CI failed on the code. A stopped test machine and a draft PR do not count.',
-  inFlight: 'Reports with a fix attempt queued or running.',
+  inFlight:
+    'Reports with a fix queued, running, pending or dispatched, or a dispatch queued before its attempt exists. Each report counts once.',
   prOpen: 'Reports whose fix PR is open and waiting for review or merge.',
   fixed: 'Reports a merged fix closed in the last 30 days.',
 } as const
