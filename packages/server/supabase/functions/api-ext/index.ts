@@ -33,6 +33,7 @@ import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts'
 import { requestLoggingMiddleware } from '../_shared/request-logging.ts'
 import { stdioMcpUsage } from '../_shared/mcp-stdio-usage.ts'
 import { registerCiRoutes } from '../api/routes/ci.ts'
+import { registerEgressRoutes } from '../api/routes/egress.ts'
 import { registerCiPlacementRoutes } from '../api/routes/ci-placement.ts'
 import { registerCiBillRoutes } from '../api/routes/ci-bill.ts'
 import { registerCiCostFixRoutes } from '../api/routes/ci-cost-fix.ts'
@@ -84,6 +85,8 @@ app.use('/v1/*', stdioMcpUsage())
 registerAskMushiRoutes(app)
 registerInventoryRoutes(app)
 registerCiRoutes(app)
+// Verifiably local (Plan 023): egress status and the self-test.
+registerEgressRoutes(app)
 registerCiPlacementRoutes(app)
 registerCiBillRoutes(app)
 registerCiCostFixRoutes(app)
