@@ -1116,17 +1116,23 @@ export function OrganizationSettingsPage() {
             </label>
           )}
         </div>
-        <table className="w-full text-sm">
+        {/* A 390px card clips this table: Active was hidden below sm, and a
+            long email plus the role control pushed Remove outside overflow-hidden.
+            Role, Active and Actions keep a fixed share so the email wraps in
+            what is left and every column stays on screen. */}
+        <table className="w-full table-fixed text-sm">
           <thead className="border-b border-edge-subtle bg-surface-overlay/20 text-left text-2xs uppercase tracking-wider text-fg-faint">
             <tr>
-              <th className="px-3 py-2">Member</th>
-              <th className="px-3 py-2">
+              <th className="px-2 py-2 sm:px-3">Member</th>
+              <th className="w-24 px-1 py-2 sm:w-36 sm:px-3">
                 <Tooltip content="Owner, Admin, Member, or Viewer — controls invite rights, billing access, and whether someone can triage or only view.">
                   <span className="cursor-help">Role</span>
                 </Tooltip>
               </th>
-              <th className="hidden px-3 py-2 sm:table-cell">Active</th>
-              <th className="px-3 py-2 text-right">Actions</th>
+              <th className="w-24 px-1 py-2 sm:w-32 sm:px-3">Active</th>
+              <th className="w-14 px-0.5 py-2 text-right sm:w-24 sm:px-3">
+                <span className="sr-only sm:not-sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-edge-subtle">
@@ -1161,9 +1167,9 @@ export function OrganizationSettingsPage() {
               const memberLabel = member.email ?? 'this teammate'
               return (
                 <tr key={member.user_id}>
-                  <td className="px-3 py-2">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-medium text-fg">{member.email ?? 'Unknown email'}</span>
+                  <td className="min-w-0 px-2 py-2 sm:px-3">
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                      <span className="min-w-0 max-w-full font-medium wrap-break-word text-fg">{member.email ?? 'Unknown email'}</span>
                       {isSelf && <Badge className="bg-surface-overlay text-fg-muted text-2xs">you</Badge>}
                       {joinedMeta && (
                         <Tooltip content={joinedMeta.tooltip}>
@@ -1172,12 +1178,12 @@ export function OrganizationSettingsPage() {
                       )}
                     </div>
                     {!member.email && (
-                      <div className="font-mono text-3xs text-fg-faint" title="Internal user id">
+                      <div className="max-w-full font-mono text-3xs wrap-break-word text-fg-faint" title="Internal user id">
                         {member.user_id}
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-1 py-2 sm:px-3">
                     {perms.roleOptions.length > 0 ? (
                       <select
                         value={member.role}
@@ -1193,7 +1199,7 @@ export function OrganizationSettingsPage() {
                             toRole: next,
                           })
                         }}
-                        className="rounded border border-edge-subtle bg-surface-raised px-2 py-1 text-xs text-fg"
+                        className="w-full max-w-full rounded border border-edge-subtle bg-surface-raised px-2 py-1 text-xs text-fg"
                       >
                         {perms.roleOptions.map((r) => (
                           <option key={r} value={r} title={orgRoleDefinition(r).tagline}>
@@ -1207,7 +1213,7 @@ export function OrganizationSettingsPage() {
                       </Tooltip>
                     )}
                   </td>
-                  <td className="hidden px-3 py-2 text-xs sm:table-cell">
+                  <td className="px-1 py-2 text-xs whitespace-nowrap sm:px-3">
                     {isNeverActive ? (
                       <Tooltip content="This member has not made an authenticated request in this organization since activity tracking shipped.">
                         <span className="text-warn">Never seen</span>
@@ -1218,7 +1224,7 @@ export function OrganizationSettingsPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-0.5 py-2 text-right sm:px-3">
                     {perms.removeAction === 'leave' ? (
                       <Btn
                         size="sm"
