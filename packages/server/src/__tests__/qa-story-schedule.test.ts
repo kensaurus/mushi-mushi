@@ -39,7 +39,11 @@ const { eqCalls, resetEqCalls, MANUAL_STORY, query } = vi.hoisted(() => {
   function query(table: string) {
     const builder: Record<string, unknown> = {}
     const chain = () => builder
-    for (const method of ['select', 'insert', 'update', 'order', 'limit']) builder[method] = chain
+    // `lt` is the abandoned-manual-run sweep (master). The scheduled tick
+    // calls it before it loads stories; a missing method would throw inside
+    // that sweep and the tick would continue only because the sweep swallows
+    // the error.
+    for (const method of ['select', 'insert', 'update', 'order', 'limit', 'lt']) builder[method] = chain
     builder.eq = (column: string, value: unknown) => {
       eqCalls.push({ table, column, value })
       return builder
