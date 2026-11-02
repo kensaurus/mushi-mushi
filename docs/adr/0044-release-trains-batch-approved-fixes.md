@@ -126,5 +126,6 @@ Measured since the 2026-10-26 amendment: 131 trains, 63 merged, 64 red, 47 of th
 - **The own-CI rule stays.** Dropping it would bring back the 2026-10-26 loop: every red PR sinks a train, and each bisection is another full run. "Own CI" may be a lighter tier than the train's. solo-boss-cloud-documentation (`CI_PROFILE` economy) and tsumagoi (bot tier) already do this, and the full suite runs on `mushi/train/*`, `release/*` and main.
 - **Advisory checks hold nothing.** `ADVISORY_CHECKS` in `_shared/merge-queue.ts` lists checks about the repo, not the PR. They stay on GitHub but never wait or fail in the queue or a train.
 - **A gate must be able to pass on the PR's own code.** A check that fails because of another repo, or the base branch's unrelated state, does not belong in a PR's required set. See the matching fix in solo-boss-cloud-documentation `scripts/docs-stats.mjs`.
+- **A train merges only when GitHub says it can.** `trainMergeGate` reads GitHub's merge state as well as the check runs. A train GitHub blocks is held, and after 30 minutes it is abandoned so its repo's queue can move.
 - **Lanes test before they hand back.** `mushi work` tells the agent to run the unit tests and a typecheck for what it changed, and to leave full suites to the train.
 
