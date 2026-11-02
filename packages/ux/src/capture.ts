@@ -403,15 +403,18 @@ export async function openSession(opts: SessionOptions = {}): Promise<BrowserSes
   if (!profile) seed = await context.storageState({ indexedDB: true })
   const warmUp = async (baseUrl: string, paths: readonly string[]) => {
     const release = profile ? await lease.acquire() : null
-    const page = await context.newPage()
+    // newPage can reject. It stays inside this try so the lease is still
+    // released; otherwise session.close() waits on it forever.
+    let page: Page | null = null
     try {
+      page = await context.newPage()
       for (const p of paths) {
         await gotoPatiently(page, surfaceUrl(baseUrl, p)).catch(() => null)
         await settle(page).catch(() => undefined)
         if (profile) await commitProfileBaseline(page, runId)
       }
     } finally {
-      await page.close().catch(() => {})
+      if (page) await page.close().catch(() => {})
       release?.()
     }
     if (!profile) seed = await context.storageState({ indexedDB: true })
