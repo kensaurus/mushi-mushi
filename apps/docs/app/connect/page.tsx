@@ -369,18 +369,6 @@ export default function ConnectPage() {
           renderLane={renderLane}
           renderClientIcon={(id) => renderConnectClientIcon(id, 16)}
         />
-
-        <p className="mt-10 text-center text-xs text-[var(--mushi-ink-muted)]">
-          Also on{' '}
-          <a
-            href="https://smithery.ai/servers/kensaurus/mushi-mushi"
-            className="underline decoration-[var(--mushi-rule)] underline-offset-2 hover:text-[var(--mushi-ink)]"
-            rel="noopener noreferrer"
-          >
-            Smithery
-          </a>
-          {' '}for one-click MCP install.
-        </p>
       </div>
     </div>
   )
