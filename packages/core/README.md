@@ -1,10 +1,26 @@
 # @mushi-mushi/core
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 The shared types, API client and utilities under every [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) SDK.
 
 **You probably don't need to install this directly.** Run `npx mushi-mushi` and the wizard installs the SDK for your framework ([`react`](https://npmjs.com/package/@mushi-mushi/react), [`vue`](https://npmjs.com/package/@mushi-mushi/vue), [`svelte`](https://npmjs.com/package/@mushi-mushi/svelte), [`angular`](https://npmjs.com/package/@mushi-mushi/angular), [`react-native`](https://npmjs.com/package/@mushi-mushi/react-native), [`capacitor`](https://npmjs.com/package/@mushi-mushi/capacitor) or [`web`](https://npmjs.com/package/@mushi-mushi/web)), which depends on this one. Reach for `core` when you build your own adapter or need the types.
+
+```bash
+npm install @mushi-mushi/core
+```
+
+```ts
+import { createPreFilter, captureEnvironment } from '@mushi-mushi/core';
+
+const filter = createPreFilter();
+filter.check('asdf');      // { passed: false, reason: 'Too short (min 10 characters)' }
+const env = captureEnvironment(); // viewport, user agent, connection, page timing
+```
+
+Docs: [Core SDK reference](https://kensaur.us/mushi-mushi/docs/sdks/core)
+
+Mushi Mushi is built first for people who make apps with AI, mostly on their own. Developers who own their code and teams with bug reports in many places use it too: [who it's for](https://kensaur.us/mushi-mushi/docs/who-its-for).
 
 ```mermaid
 flowchart LR

@@ -25,6 +25,7 @@ import type { FixesStats } from '../components/fixes/FixesStatsTypes'
 import type { GraphStats } from '../components/graph/GraphStatsTypes'
 import type { HealthStats } from '../components/health/HealthStatsTypes'
 import type { InventoryStats } from '../components/inventory/InventoryStatsTypes'
+import type { JudgeStats } from '../components/judge/JudgeStatsTypes'
 import type { PromptLabStats } from '../components/prompt-lab/PromptLabStatsTypes'
 import type { RepoStats } from '../components/repo/RepoStatsTypes'
 import type { ResearchStats } from '../components/research/ResearchStatsTypes'
@@ -40,6 +41,7 @@ import type {
   SkillsNavSlice,
   SsoNavSlice,
   StorageNavSlice,
+  WorkersNavSlice,
 } from './remainingNavSliceTypes'
 
 interface AuditStatsResp {
@@ -72,6 +74,7 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
     graphStatsRes,
     inventoryStatsRes,
     healthStatsRes,
+    judgeStatsRes,
     fixesStatsRes,
     repoStatsRes,
     mcpStatsRes,
@@ -85,6 +88,7 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
     integrationsStatsRes,
     featureBoardStatsRes,
     skillsStatsRes,
+    workersStatsRes,
   ] = await Promise.all([
     apiFetch<LessonsStats>('/v1/admin/lessons/stats'),
     apiFetch<DriftStats>('/v1/admin/drift/stats'),
@@ -110,6 +114,7 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
     apiFetch<GraphStats>('/v1/admin/graph/stats'),
     apiFetch<InventoryStats>('/v1/admin/inventory/stats'),
     apiFetch<HealthStats>('/v1/admin/health/stats'),
+    apiFetch<JudgeStats>('/v1/admin/judge/stats'),
     apiFetch<FixesStats>('/v1/admin/fixes/stats'),
     apiFetch<RepoStats>('/v1/admin/repo/stats'),
     apiFetch<McpNavSlice>('/v1/admin/mcp/stats'),
@@ -125,6 +130,7 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
     apiFetch<IntegrationsNavSlice>('/v1/admin/integrations/stats'),
     apiFetch<FeatureBoardNavSlice>('/v1/admin/feature-board/stats'),
     apiFetch<SkillsNavSlice>('/v1/admin/skills/stats'),
+    apiFetch<WorkersNavSlice>('/v1/admin/work/stats'),
   ])
 
   const lessonsStats = lessonsStatsRes.ok ? lessonsStatsRes.data : null
@@ -149,6 +155,7 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
   const graphStats = graphStatsRes.ok ? graphStatsRes.data : null
   const inventoryStats = inventoryStatsRes.ok ? inventoryStatsRes.data : null
   const healthStats = healthStatsRes.ok ? healthStatsRes.data : null
+  const judgeStats = judgeStatsRes.ok ? judgeStatsRes.data : null
   const fixesStats = fixesStatsRes.ok ? fixesStatsRes.data : null
   const repoStats = repoStatsRes.ok ? repoStatsRes.data : null
   const mcpStats = mcpStatsRes.ok ? mcpStatsRes.data : null
@@ -162,6 +169,7 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
   const integrationsStats = integrationsStatsRes.ok ? integrationsStatsRes.data : null
   const featureBoardStats = featureBoardStatsRes.ok ? featureBoardStatsRes.data : null
   const skillsStats = skillsStatsRes.ok ? skillsStatsRes.data : null
+  const workersStats = workersStatsRes.ok ? workersStatsRes.data : null
 
   return normalizeNavSlices({
     contentQuality: contentQualityStats
@@ -189,6 +197,7 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
           totalStories: qaCoverageStats.totalStories,
           failingStories: qaCoverageStats.failingStories,
           pendingRuns: qaCoverageStats.pendingRuns,
+          lastRunAt: qaCoverageStats.lastRunAt,
           topPriority: qaCoverageStats.topPriority,
         }
       : null,
@@ -285,6 +294,7 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
           errorCount: fullstackStats.errorCount,
           warnCount: fullstackStats.warnCount,
           failedGateCount: fullstackStats.failedGateCount,
+          lastRunAt: fullstackStats.lastRunAt ?? null,
           topPriority: fullstackStats.topPriority,
         }
       : null,
@@ -336,6 +346,8 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
           openFindings: inventoryStats.openFindings,
           stub: inventoryStats.stub,
           total: inventoryStats.total,
+          hasInventory: inventoryStats.hasInventory,
+          lastGateRunAt: inventoryStats.lastGateRunAt,
           topPriority: inventoryStats.topPriority,
         }
       : null,
@@ -344,7 +356,17 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
           cronErrorCount: healthStats.cronErrorCount,
           redCount: healthStats.redCount,
           amberCount: healthStats.amberCount,
+          lastLlmCallAt: healthStats.lastLlmCallAt,
           topPriority: healthStats.topPriority,
+        }
+      : null,
+    judge: judgeStats
+      ? {
+          lastEvalAt: judgeStats.lastEvalAt,
+          disagreementCount: judgeStats.disagreementCount,
+          totalEvaluations: judgeStats.totalEvaluations,
+          staleHours: judgeStats.staleHours,
+          topPriority: judgeStats.topPriority,
         }
       : null,
     fixes: fixesStats
@@ -373,5 +395,6 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
     integrations: integrationsStats,
     featureBoard: featureBoardStats,
     skills: skillsStats,
+    workers: workersStats,
   })
 }

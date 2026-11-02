@@ -410,7 +410,7 @@ async function doFetch<T>(
       debugWarn('api', `${method} ${path} → ${res.status} (${ms}ms)`, { body: body.slice(0, 200) })
       // Entitlement gate (Phase 1d, 2026-04-27): the server's
       // `requireFeature` middleware returns 402 + `code: 'feature_not_in_plan'`
-      // when a Hobby user tries to hit a paid endpoint (SSO, BYOK, plugins,
+      // when a Free user tries to hit a paid endpoint (SSO, BYOK, plugins,
       // intelligence). We dispatch a window event so a single root-mounted
       // <UpgradePromptHost> can render the modal once, instead of every
       // calling site having to know the upgrade UX. The original error

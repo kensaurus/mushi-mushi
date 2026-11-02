@@ -22,6 +22,7 @@ import { resolveClaudeModel } from '../_shared/claude-request.ts'
 import { logAudit } from '../_shared/audit.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { tagLangfuseTrace } from '../_shared/sentry.ts'
+import { platformGithubTokenFor } from '../_shared/github.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -166,7 +167,7 @@ async function resolveGithubToken(
     }
   }
 
-  return Deno.env.get('GITHUB_TOKEN') ?? null
+  return platformGithubTokenFor(db, projectId)
 }
 
 function buildUserPrompt(report: Record<string, unknown>, repo: ResolvedRepo): string {

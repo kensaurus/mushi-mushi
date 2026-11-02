@@ -82,7 +82,6 @@
  * |-----------|-------------|--------|
  * | PageHeaderBar | Every operator list/detail worklist page title row | **Canonical** |
  * | PagePosture | Status banner + snapshot + guide slots | **Canonical** |
- * | PageHeader (ui/page-help) | Compact title inside nested panels only | Niche |
  * | PageHero | DAV/flow hero on triage surfaces that need the severity card | Optional advanced |
  * | PageActionBar | Sticky primary/secondary actions below header | Canonical when needed |
  * | PageSection | Grouped content blocks inside primary work UI | Canonical |

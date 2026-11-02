@@ -1,5 +1,22 @@
 # @mushi-mushi/node
 
+## 1.3.5
+
+### Patch Changes
+
+- 6a24a35: - **Hono and Fastify reports drop URL query values**: the error handlers scrub query values (tokens, emails) from the request URL before putting it into the report description, as the Express handler already did.
+- Updated dependencies [545f106]
+  - @mushi-mushi/core@1.33.5
+
+## 1.3.4
+
+### Patch Changes
+
+- 15ba9ce: `mushiHonoErrorHandler`'s fallback can now answer with `c.text()` or `c.json()`, as in Hono's docs and our README (`(err, c) => c.text('Server error', 500)`). The handler's context type lacked both methods, so that example failed to type-check.
+- 271abb8: The npm pages now open with what the package does, how to install it, a short example that matches the current API, and a link to its docs page. The examples that named options or functions the SDKs no longer have are corrected.
+- Updated dependencies [271abb8]
+  - @mushi-mushi/core@1.33.3
+
 ## 1.3.3
 
 ### Patch Changes

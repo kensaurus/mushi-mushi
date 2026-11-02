@@ -96,8 +96,8 @@ run AGPL plus a commercial license, which is the model Mushi already uses.
    privately and never written into the repository. A canary in public AGPL
    code proves derivation only; copying is allowed, so it matters when a
    modified server is run closed or when hosted tuning leaks.
-8. **One copyright holder string**: "Kenji Sakuramoto / Kensaurus 合同会社",
-   the form `packages/server/ee/LICENSE` already used, in every `LICENSE`,
+8. **One copyright holder string**: "kensaurus LLC" (the owner's choice on
+   2026-10-31; it was "Kenji Sakuramoto / Kensaurus 合同会社"), in every `LICENSE`,
    `NOTICE`, source header and in `TRADEMARK.md` as the trademark owner. The
    owner can change it; the consistency check then names every file to edit.
 9. **Trademark registration is an owner and lawyer action**, not code: file

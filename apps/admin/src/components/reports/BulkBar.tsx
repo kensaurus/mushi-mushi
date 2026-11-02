@@ -10,14 +10,17 @@ import { Btn } from '../ui'
 interface Props {
   count: number
   busy: boolean
+  /** When set, the actions stay disabled and this sentence says why. */
+  disabledReason?: string | null
   onClear: () => void
   onSetStatus: (v: string) => void
   onSetSeverity: (v: string) => void
   onDismiss: () => void
 }
 
-export function BulkBar({ count, busy, onClear, onSetStatus, onSetSeverity, onDismiss }: Props) {
+export function BulkBar({ count, busy, disabledReason = null, onClear, onSetStatus, onSetSeverity, onDismiss }: Props) {
   if (count === 0) return null
+  const locked = Boolean(disabledReason)
   return (
     <div
       className="sticky top-0 z-20 mb-2 flex flex-wrap items-center gap-2 rounded-md border border-brand/40 bg-brand/10 px-3 py-2 backdrop-blur"
@@ -26,19 +29,24 @@ export function BulkBar({ count, busy, onClear, onSetStatus, onSetSeverity, onDi
     >
       <span className="text-xs font-medium text-fg">{count} selected</span>
       <span className="text-2xs text-fg-muted">·</span>
+      {locked ? (
+        <span className="text-2xs text-fg-secondary" data-testid="bulk-other-apps">
+          {disabledReason}
+        </span>
+      ) : null}
       <BulkSelect
         label="Set status"
-        disabled={busy}
+        disabled={busy || locked}
         options={['new', 'classified', 'fixing', 'fixed', 'dismissed']}
         onPick={onSetStatus}
       />
       <BulkSelect
         label="Set severity"
-        disabled={busy}
+        disabled={busy || locked}
         options={['critical', 'high', 'medium', 'low']}
         onPick={onSetSeverity}
       />
-      <Btn size="sm" variant="danger" onClick={onDismiss} disabled={busy}>
+      <Btn size="sm" variant="danger" onClick={onDismiss} disabled={busy || locked}>
         Dismiss
       </Btn>
       <button

@@ -4,20 +4,48 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/mcp
 
 ---
 title: MCP server for bug fixing in Cursor & Claude Code
-description: Set up the Mushi MCP server with npx mushi-mushi setup — read bug reports, get fix context, and dispatch fixes from Cursor, Claude Code, or Codex.
+description: Set up the Mushi Mushi MCP server with npx mushi-mushi setup. Read bug reports, get fix context, and dispatch fixes from Cursor, Claude Code or any MCP client.
 ---
 
 # MCP server
 
-**Model Context Protocol (MCP)** is how your editor talks to Mushi tools — reports, fix briefs, and optional dispatch without leaving the chat.
+- MCP is how your AI editor (Cursor, Claude Code, VS Code) talks to Mushi.
+- Add the server in one click, sign in once in your browser. No key to paste.
+- Then ask your editor about bugs: it gets the report, the diagnosis and a fix brief.
 
-**[Add to Cursor](https://kensaur.us/mushi-mushi/docs/connect)** · **[Add to VS Code](https://kensaur.us/mushi-mushi/docs/connect)** · **[Try the demo, no signup](https://kensaur.us/mushi-mushi/docs/connect)**
+## Connect in three steps
 
-  [Connect page](https://kensaur.us/mushi-mushi/docs/connect) — pick your client
-  and install in one click, or try the read-only demo with no signup. Terminal
-  one-liner below if you prefer the CLI.
+### Add the Mushi server
 
-## OAuth login (recommended — no keys to copy)
+One click: pick your editor on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect).
+No signup needed for the read-only demo. Or run one command:
+
+```bash
+# Claude Code
+claude mcp add --transport http mushi "https://kensaur.us/mushi-mushi/hosted-mcp/"
+
+# Cursor (writes .cursor/mcp.json)
+npx mushi-mushi setup --ide cursor
+```
+
+### Sign in
+
+The first time your editor calls Mushi, your browser opens. Sign in, pick which
+projects it may see, and click **Approve**. In Claude Code, run `claude mcp login mushi`
+(or `/mcp`) to start it.
+
+**You'll see:** Mushi listed as connected in your editor's MCP settings.
+
+### Ask your editor
+
+Try *"list mushi tools"*, then *"Get the latest Mushi report and fix it."*
+
+**You'll see:** the Mushi tools in the list, then a fix brief: the cause, the files to change and how to check it.
+
+The rest of this page is detail: how sign-in works, manual config files,
+the hosted transport for headless agents, and the tool list.
+
+## How sign-in works (OAuth, no keys to copy)
 
 The hosted MCP endpoint speaks the standard MCP OAuth flow (authorization
 code + PKCE), so clients that support MCP login connect with **zero manual
@@ -34,21 +62,19 @@ connection reaches, and click **Approve**:
 
 | Choice | What the client gets | Revoke it from |
 | --- | --- | --- |
-| **All my projects** (default with several projects) | An account key that reaches every project you can reach, now and later | **MCP → Account keys** |
-| **Only the projects I pick** | An account key limited to the ticked projects | **MCP → Account keys** |
-| **One project** | A project key (label `mcp-oauth`); needs owner or admin | **Projects → Keys** |
+| **All my projects** (default with several projects) | An account key that reaches every project you can reach, now and later | **Editor agents → Account keys** |
+| **Only the projects I pick** | An account key limited to the ticked projects | **Editor agents → Account keys** |
+| **One project** | A project key (label `mcp-oauth`); needs owner or admin | **Manage apps** (the app's key list) |
 
-An account key does in each project only what your role there allows. The
-agent calls `list_projects` to see your projects and passes `projectId` to
-project tools. To keep one connection on a single project, add
-`?project=<project-id>` to the server URL, for example
-`https://kensaur.us/mushi-mushi/hosted-mcp/?project=<project-id>`. A pinned
-connection, or one limited to picked projects, leaves out the
-organization-wide tools (portfolio, connectors, spend, accounts register):
-they reach every project in the team. Cursor and VS Code follow the same flow when you add the
-hosted URL as a remote MCP server; do **not** configure an `Authorization`
-header if you want the login flow — a static header tells the client that
-OAuth isn't needed.
+- An account key does in each project only what your role there allows. The
+  agent calls `list_projects` and passes `projectId` to project tools.
+- To keep one connection on a single project, add `?project=<project-id>` to the
+  server URL, for example `https://kensaur.us/mushi-mushi/hosted-mcp/?project=<project-id>`.
+- A pinned connection, or one limited to picked projects, leaves out the
+  organization-wide tools (portfolio, connectors, spend, accounts register).
+- Cursor and VS Code follow the same flow when you add the hosted URL as a
+  remote MCP server. Do **not** set an `Authorization` header if you want the
+  login flow: a static header tells the client that OAuth isn't needed.
 
 Use the `kensaur.us/mushi-mushi/hosted-mcp/` URL for the login flow. Clients
 look for the OAuth metadata at the root of the server's host
@@ -58,7 +84,7 @@ header (below), either URL works.
 
 Self-hosted on your own `.supabase.co`? Point Claude Code at the
 function's own metadata document with its `authServerMetadataUrl` override
-(`mushi setup --ide claude` writes this for you):
+(`npx mushi-mushi setup --ide claude` writes this for you):
 
 ```json
 {
@@ -82,7 +108,7 @@ npx mushi-mushi setup --ide cursor
 ```
 
 For Cursor and Claude Code this writes the **hosted MCP URL with OAuth login**
-by default — no API key lands in your repo, the entry is safe to commit and
+by default. No API key lands in your repo, the entry is safe to commit and
 share with your team, and each teammate signs in from the IDE on first use.
 Pass `--stdio` (or `--ci` in headless environments) for the previous local
 subprocess entry with a key.
@@ -106,7 +132,8 @@ Then: `/mcp` → pick `mushi` → sign in via the browser. Ask Claude to
 
 Install from the [Smithery registry](https://smithery.ai/servers/kensaurus/mushi-mushi) with
 Streamable HTTP at `https://kensaur.us/mushi-mushi/hosted-mcp/`. The server card at
-`/.well-known/mcp/server-card.json` lists every tool for directory scanners.
+`https://kensaur.us/mushi-mushi/hosted-mcp/.well-known/mcp/server-card.json`
+lists every tool for directory scanners.
 
   Run `npx mushi-mushi project create` on a brand-new machine to sign up,
   mint a project, and write `.env.local` + `.cursor/mcp.json` in one flow.
@@ -120,7 +147,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.29.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.30.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -132,8 +159,9 @@ Add to `.cursor/mcp.json` in your repo root:
 ```
 
   
-    Mint a key on **Projects → Generate API key** or use **Connect & Update → Add to Cursor**.
-    The `RevealedKeyCard` includes a ready-made `.cursor/mcp.json` snippet.
+    Mint a key on **Manage apps → Generate API key** (preset **MCP read-only** or
+    **MCP read + write**), or use **Connect → Add to Cursor**. The card that shows
+    a new key once also offers a ready-made `.cursor/mcp.json` snippet.
   
 
 ## Manual setup: Claude Desktop
@@ -146,7 +174,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.29.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.30.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -159,7 +187,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
 
 ## Hosted Streamable HTTP transport (no subprocess)
 
-Skip the local subprocess — use the hosted MCP endpoint when you're
+Skip the local subprocess: use the hosted MCP endpoint when you're
 running OpenAI Agents SDK, ChatGPT Agent, CrewAI, or any remote orchestrator.
 Headless orchestrators can't drive the browser OAuth flow, so this is the
 one place a static API key header is the right tool:
@@ -171,7 +199,7 @@ one place a static API key header is the right tool:
       "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
       "headers": {
         "X-Mushi-Api-Key": "mushi_…",
-        "X-Mushi-Project-Id": "proj_…"
+        "X-Mushi-Project-Id": "YOUR_PROJECT_ID"
       }
     }
   }
@@ -184,17 +212,17 @@ one place a static API key header is the right tool:
 |-------------------------|----------------------------------------------|
 | `get_recent_reports`    | Filter by status, severity, component        |
 | `get_report_detail`     | Full detail incl. screenshot + classification |
-| `get_fix_context`       | One-shot fix brief — root cause + blast radius + repro |
+| `get_fix_context`       | One-shot fix brief: root cause, blast radius, repro and a paste-ready `fixPrompt` |
 | `search_reports`        | Semantic + keyword search across reports     |
-| `dispatch_fix`          | Start the Mushi fix agent for a report       |
-| `triage_next_steps`     | "What should I fix next?" — 5-item plan from the dashboard |
-| `query_knowledge_graph` | Ask "what other reports look like this?"     |
+| `dispatch_fix`          | Start the Mushi fix agent for a report (needs GitHub connected and Automatic fixes on) |
+| `triage_next_steps`     | "What should I fix next?": a prioritised list of next actions |
+| `get_similar_bugs`      | Ask "have we seen this before?" (similar reports) |
 | `run_nl_query`          | Natural-language → SQL questions about your data |
 
   The MCP server speaks JSON-RPC 2.0 with `tools/call` semantics, and the
   agent surface is also discoverable via the
   [A2A Agent Card](/concepts/architecture#a2a-agent-card) at
-  `/.well-known/agent-card`.
+  `/.well-known/agent-card.json` on the API.
 
 ## Cursor rules hook (optional)
 
@@ -205,7 +233,7 @@ npx mushi-mushi setup --ide cursor --with-rules
 ```
 
 This writes a `.cursorrules` file that tells Cursor to call `get_fix_context`
-before writing a fix and `submit_fix_result` after — closing the loop from
+before writing a fix and `submit_fix_result` after, closing the loop from
 inside the editor. Download the template:
 [cursor.cursorrules](/integrations/cursor.cursorrules)
 
@@ -214,6 +242,6 @@ inside the editor. Download the template:
 Hosted Streamable HTTP endpoint: `https://kensaur.us/mushi-mushi/hosted-mcp/`
 
 Install from the [Smithery server page](https://smithery.ai/servers/kensaurus/mushi-mushi).
-Tool metadata is also published at `/.well-known/mcp/server-card.json` for directory scanners.
+Tool metadata is also published at `https://kensaur.us/mushi-mushi/hosted-mcp/.well-known/mcp/server-card.json` for directory scanners.
 
 ## Troubleshooting

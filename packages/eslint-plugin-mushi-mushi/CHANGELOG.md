@@ -1,5 +1,12 @@
 # eslint-plugin-mushi-mushi
 
+## 0.3.6
+
+### Patch Changes
+
+- 15ba9ce: `recommended` (and `legacy` and the `/recommended` entry) now turn on only the agentic-failure rules: `no-dead-handler`, `no-mock-leak` and `no-allowlist-jsx-textnode`. They used to switch on all 19 rules, including the Mushi console's own design-system rules (tokens, `<Card>`, `<PageHeaderBar>`, the widget theme), which flag ordinary code in any other app. Those rules are still in the plugin; enable one by name if it fits. The Mushi monorepo keeps them through a new `internal` preset.
+- 271abb8: The npm pages link to each package's docs page, and their commands, flags and rule names match the current release. The eslint plugin and inventory packages describe what you get instead of internal pipeline names.
+
 ## 0.3.5
 
 ### Patch Changes

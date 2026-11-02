@@ -109,8 +109,6 @@ describe('NextStep', () => {
   const nextSteps = () => container.querySelectorAll('[data-next-step]')
 
   beforeEach(() => {
-    // The docked guide is closed, so only the surfaces under test speak.
-    window.localStorage.setItem('mushi:setupGuide:v1', 'dismissed')
     state.project = SET_UP
     state.work = { ...QUIET, urgentOpenReports: 2 }
     container = document.createElement('div')
@@ -161,13 +159,13 @@ describe('NextStep', () => {
     expect(banner()?.textContent).toContain('Create your first project')
   })
 
-  it('stands down while the docked setup guide is open, even with real work waiting', () => {
+  it('a stored state for the removed docked setup guide no longer silences it', () => {
+    // The dock is not mounted any more; standing down for it hid the one
+    // next step while setup was open (2026-10-26).
     window.localStorage.setItem('mushi:setupGuide:v1', 'expanded')
-    render(createElement(NextStep, { variant: 'banner', key: 'b' }), createElement(NextStep, { variant: 'card', key: 'c' }))
-    expect(nextSteps()).toHaveLength(0)
-    window.localStorage.setItem('mushi:setupGuide:v1', 'minimized')
-    render(createElement(NextStep, { variant: 'banner', key: 'b2' }))
+    render(createElement(NextStep, { variant: 'banner', key: 'b' }))
     expect(banner()?.textContent).toContain('2 critical or high reports are still unfixed')
+    window.localStorage.removeItem('mushi:setupGuide:v1')
   })
 
   it('stands down while the first-run tour is running', () => {

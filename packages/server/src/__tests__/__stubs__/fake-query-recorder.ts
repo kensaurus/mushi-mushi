@@ -15,6 +15,8 @@ export interface FakeQuery {
   columns?: string
   filters: Array<{ method: string; args: unknown[] }>
   modifiers: string[]
+  /** The second argument of `upsert` (onConflict, ignoreDuplicates). */
+  options?: unknown
 }
 
 export interface FakeResult {
@@ -57,9 +59,10 @@ export function createFakeDb(resolve: FakeResolver) {
       q.payload = payload
       return chain
     }
-    chain.upsert = (payload: unknown) => {
+    chain.upsert = (payload: unknown, options?: unknown) => {
       q.op = 'upsert'
       q.payload = payload
+      if (options !== undefined) q.options = options
       return chain
     }
     chain.delete = () => {

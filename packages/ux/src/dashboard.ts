@@ -61,7 +61,7 @@ export const LaunchInput = z
     steps: z.boolean().default(false),
     /** A second model that may roll a kept step back (ADR 0021); null = measurements alone. */
     checkerModel: z.string().max(120).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/).nullable().default(null),
-    checkerVia: z.enum(['claude-code', 'anthropic-api']).default('claude-code'),
+    checkerVia: z.enum(['claude-code', 'anthropic-api', 'cursor']).default('claude-code'),
     /** Keep edits with nothing visible, flagged for review. */
     keepInvisible: z.boolean().default(true),
     /** Selectors that are not the app's UI; added to DEFAULT_IGNORE. */

@@ -336,9 +336,12 @@ async function runLoad(ctx: LoadContext, fresh: boolean): Promise<void> {
  * nav-meta read costs the server seconds, and with background workers
  * writing fix_events and reports every few seconds the sidebar re-read it
  * about every 8 s on a page nobody touched (seen 2026-10-23: 14 reads in 2
- * minutes). Changes inside the window share one trailing read.
+ * minutes). Changes inside the window share one trailing read. 45 s since
+ * 2026-10-31: at 15 s, nav-meta was still 206 reads in 100 minutes at a 1.8 s
+ * median, all competing with the reads of the page being opened; sidebar
+ * badges do not need fresher than that, and a page's own data reloads itself.
  */
-const REALTIME_MIN_INTERVAL_MS = 15_000
+const REALTIME_MIN_INTERVAL_MS = 45_000
 let lastRealtimeLoadAt = 0
 let realtimeTimer: ReturnType<typeof setTimeout> | null = null
 

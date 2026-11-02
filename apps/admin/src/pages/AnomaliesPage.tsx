@@ -31,7 +31,6 @@ import {
   RelativeTime,
   SegmentedControl,
   FreshnessPill,
-  RecommendedAction,
   Tooltip,
 } from '../components/ui'
 import { IconCheck, IconClose } from '../components/icons'
@@ -47,6 +46,7 @@ import { AnomaliesStatusBanner, isAnomaliesStatusBannerCritical } from '../compo
 import { AnomaliesDetectionGuide } from '../components/anomalies/AnomaliesDetectionGuide'
 import { AnomaliesSnapshotStrip } from '../components/anomalies/AnomaliesSnapshotStrip'
 import { AnomaliesReadout } from '../components/anomalies/AnomaliesReadout'
+import { SpikesOverview } from '../components/anomalies/SpikesOverview'
 import {
   EMPTY_ANOMALIES_STATS,
   type AnomaliesStats,
@@ -98,14 +98,15 @@ function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
 }
 
 const TABS: Array<{ id: AnomaliesTabId; label: string; description: string }> = [
-  { id: 'overview', label: 'Overview', description: 'Posture banner and how metric ingestion feeds detection.' },
-  { id: 'anomalies', label: 'Anomalies', description: 'Open statistical findings — confirm, dismiss, or follow auto-reports.' },
-  { id: 'metrics', label: 'Metrics', description: 'Ingest data points and preview timeseries sparklines.' },
-  { id: 'detect', label: 'Detect', description: 'Trigger Page-Hinkley, Z-score, and release-regression analysis.' },
+  { id: 'overview', label: 'Overview', description: 'Status and how your metrics feed spike detection.' },
+  { id: 'anomalies', label: 'Spikes', description: 'Spikes to confirm or dismiss, and the reports filed for them.' },
+  { id: 'metrics', label: 'Metrics', description: 'Send metric values and see each metric over time.' },
 ]
 
+/** "Check now" was a tab of its own; it is an action on Spikes now, so old `?tab=detect` links land there. */
 function resolveAnomaliesTab(value: string | null): AnomaliesTabId {
-  if (value === 'anomalies' || value === 'metrics' || value === 'detect') return value
+  if (value === 'anomalies' || value === 'metrics') return value
+  if (value === 'detect') return 'anomalies'
   return 'overview'
 }
 
@@ -118,7 +119,6 @@ export function AnomaliesPage() {
   const projectName = setup.activeProject?.project_name ?? null
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = resolveAnomaliesTab(searchParams.get('tab'))
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const {
     data: statsData,
@@ -274,18 +274,18 @@ export function AnomaliesPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-anomalies">
       <PageHeaderBar
-        title={copy?.title ?? 'Anomalies'}
+        title={copy?.title ?? 'Unusual spikes'}
         projectScope={stats.projectName ?? projectName ?? undefined}
 
         contextChip={<PdcaContextHint stage="check" />}
         helpTitle={copy?.help?.title ?? 'Anomaly detection'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Ingest any numeric metric (error rate, latency, conversion rate) via the Metrics tab or SDK. The detector runs hourly and auto-creates bug reports for release regressions.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Send any number your app tracks (error rate, latency, sign-ups) from the Metrics tab or the SDK. Mushi checks them every hour, draws each one with your releases on it, and opens a bug report when a spike starts right after a release.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Detect crash-rate spikes after a release',
           'Flag latency regressions against rolling baseline',
           'Auto-open a bug report when a regression is confirmed',
         ]}
-        helpHowToUse={copy?.help?.howToUse ?? 'Ingest metric data in the Metrics tab, then run detection or wait for the hourly cron.'}
+        helpHowToUse={copy?.help?.howToUse ?? 'Send some values from the Metrics tab, then click Check now or wait for the hourly check. Confirm a real spike or dismiss noise under its chart.'}
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -314,8 +314,8 @@ export function AnomaliesPage() {
         <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || anomaliesValidating || metricsValidating}>
           Refresh
         </Btn>
-        <Btn size="sm" variant="ghost" onClick={() => setActiveTab('detect')}>
-          Run detection
+        <Btn size="sm" variant="ghost" onClick={() => setActiveTab('anomalies')}>
+          Check now
         </Btn>
           </>
         )}
@@ -325,7 +325,9 @@ export function AnomaliesPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
-            show: isAnomaliesStatusBannerCritical(stats),
+            // No metrics: the snapshot below is the page's one first step (P3).
+            // The status sentence below says the same thing; the banner stands in only when it is hidden.
+            show: isAnomaliesStatusBannerCritical(stats) && stats.topPriority !== 'no_metrics' && (ux.hideAnomaliesSnapshot || !stats.hasAnyProject),
             children: (
               <AnomaliesStatusBanner
                 stats={stats}
@@ -344,16 +346,19 @@ export function AnomaliesPage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'ANOMALIES SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
+                onAddMetrics={() => setActiveTab('metrics')}
+                onReview={() => setActiveTab('anomalies')}
               />
             ),
           },
           {
             priority: POSTURE_PRIORITY.guide,
+            // With no metrics the first-step card is the one thing to do; the
+            // guide would be a second, competing block (P3).
             show:
               activeTab === 'overview' &&
+              stats.metricPointCount > 0 &&
               !shouldHideGuideWhenBannerActive(
                 isAnomaliesStatusBannerCritical(stats),
                 COMMON_HEALTHY_PRIORITIES,
@@ -377,38 +382,27 @@ export function AnomaliesPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
+          {/* The metrics themselves, with releases and spikes on them: the
+              status sentence above already says how many spikes wait. */}
+          {projectId && stats.metricPointCount > 0 ? (
+            <SpikesOverview projectId={projectId} onConfirm={confirm} onDismiss={dismiss} />
+          ) : (
+            // Without metrics this tab held only the readout's links (console sweep).
+            <p className="text-sm text-fg-muted" data-testid="anomalies-summary-empty">
+              Each number you send gets a chart here, with your releases and any spikes on it.
+            </p>
+          )}
           <AnomaliesReadout
             stats={stats}
             fetchedAt={statsFetchedAt}
             isValidating={statsValidating}
           />
-          {stats.topPriority === 'healthy' && (
-            <RecommendedAction
-              tone="success"
-              title="No open anomalies"
-              description={`${stats.distinctMetrics} metric series · ${stats.metricPointCount} data points · detection can run on demand.`}
-            />
-          )}
-          {stats.topPriority === 'no_metrics' && (
-            <RecommendedAction
-              tone="info"
-              title="Seed metric data first"
-              description="Page-Hinkley and Z-score detectors need a timeseries baseline — ingest points before running detection."
-              cta={{ label: 'Open Metrics', to: '/anomalies?tab=metrics' }}
-            />
-          )}
-          {(stats.topPriority === 'open_anomalies' || stats.topPriority === 'open_critical') && (
-            <RecommendedAction
-              tone="info"
-              title="Triage open anomalies"
-              description={stats.topPriorityLabel ?? 'Confirm real regressions or dismiss false positives.'}
-              cta={{ label: 'Open Anomalies', to: '/anomalies?tab=anomalies' }}
-            />
-          )}
         </div>
       )}
 
       {activeTab === 'anomalies' && (
+        <div className="space-y-4">
+        <CheckNowCard projectId={projectId ?? ''} onDone={onDetectDone} hasMetrics={stats.metricPointCount > 0} />
         <AnomaliesTab
           anomalies={anomalies}
           loading={anomalyLoading}
@@ -420,8 +414,8 @@ export function AnomaliesPage() {
           projectId={projectId ?? ''}
           noMetrics={stats.metricPointCount === 0}
           onIngestMetrics={() => setActiveTab('metrics')}
-          onRunDetect={() => setActiveTab('detect')}
         />
+        </div>
       )}
 
       {activeTab === 'metrics' && (
@@ -436,15 +430,12 @@ export function AnomaliesPage() {
         />
       )}
 
-      {activeTab === 'detect' && (
-        <DetectTab projectId={projectId ?? ''} onDone={onDetectDone} hasMetrics={stats.metricPointCount > 0} />
-      )}
     </div>
   )
 }
 
 function AnomaliesTab({
-  anomalies, loading, error, errorCode, onRetry, onConfirm, onDismiss, projectId, noMetrics, onIngestMetrics, onRunDetect,
+  anomalies, loading, error, errorCode, onRetry, onConfirm, onDismiss, projectId, noMetrics, onIngestMetrics,
 }: {
   anomalies: AnomalyDetection[]
   loading: boolean
@@ -456,7 +447,6 @@ function AnomaliesTab({
   projectId: string
   noMetrics: boolean
   onIngestMetrics: () => void
-  onRunDetect: () => void
 }) {
   if (!projectId) return <EmptyState title="Select a project" description="Pick a project from the switcher to view anomalies." />
   if (loading) return <TableSkeleton rows={5} />
@@ -465,24 +455,21 @@ function AnomaliesTab({
     return (
       <div className="space-y-3">
         <EmptySectionMessage
-          text={noMetrics ? 'No metric data yet' : 'No open anomalies'}
+          text={noMetrics ? 'No numbers yet' : 'No spikes right now'}
           hint={
             noMetrics
-              ? 'Ingest metric data points before running Page-Hinkley or Z-score detection.'
-              : 'Run the detector or wait for the hourly cron — no open findings is good news.'
+              ? 'Send some numbers on the Metrics tab first.'
+              : 'Mushi checks every hour. No spikes is good news.'
           }
         />
-        <ActionPillRow>
-          {noMetrics ? (
+        {/* Check now is the card right above, so the only pill left is adding numbers. */}
+        {noMetrics ? (
+          <ActionPillRow>
             <ActionPill tone="brand" onClick={onIngestMetrics}>
-              Ingest metrics
+              Add metrics
             </ActionPill>
-          ) : (
-            <ActionPill tone="brand" onClick={onRunDetect}>
-              Run detection
-            </ActionPill>
-          )}
-        </ActionPillRow>
+          </ActionPillRow>
+        ) : null}
       </div>
     )
   }
@@ -688,7 +675,7 @@ function MetricsTab({ metrics, loading, error, errorCode, onRetry, projectId, on
   )
 }
 
-function DetectTab({ projectId, onDone, hasMetrics }: { projectId: string; onDone: () => void; hasMetrics: boolean }) {
+function CheckNowCard({ projectId, onDone, hasMetrics }: { projectId: string; onDone: () => void; hasMetrics: boolean }) {
   const toast = useToast()
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ anomalies: number; ids: string[] } | null>(null)
@@ -725,14 +712,11 @@ function DetectTab({ projectId, onDone, hasMetrics }: { projectId: string; onDon
   return (
     <Card className="max-w-lg space-y-4 p-6">
       <SignalChip tone="neutral" className="uppercase tracking-wider font-semibold">
-        Manual detection run
+        Check now
       </SignalChip>
-      <ContainedBlock tone="muted">
-        <InlineProof className="border-0 bg-transparent px-0 py-0 text-sm leading-relaxed">
-          Analyzes metric_series data using Page-Hinkley, Z-score, and release-boundary regression.
-          Leaves all findings in the Anomalies tab.
-        </InlineProof>
-      </ContainedBlock>
+      <p className="text-sm text-fg-secondary leading-relaxed">
+        Looks for spikes in your numbers now, including ones that started with a release. What it finds is listed below.
+      </p>
       {!projectId && (
         <ContainedBlock tone="warn">
           <p className="text-xs text-warn">Select a project from the switcher before running detection.</p>
@@ -740,7 +724,7 @@ function DetectTab({ projectId, onDone, hasMetrics }: { projectId: string; onDon
       )}
       {!hasMetrics && projectId && (
         <ContainedBlock tone="warn">
-          <p className="text-xs text-warn">No metric data yet — ingest points on the Metrics tab first.</p>
+          <p className="text-xs text-warn">No numbers yet. Send some on the Metrics tab first.</p>
         </ContainedBlock>
       )}
       <div className="grid grid-cols-2 gap-4">
@@ -754,7 +738,7 @@ function DetectTab({ projectId, onDone, hasMetrics }: { projectId: string; onDon
         </label>
       </div>
       {lookbackHours == null && <p className="text-xs text-danger">Enter a whole number of hours from 1 to 720.</p>}
-      <Btn variant="primary" onClick={run} loading={loading} disabled={!projectId}>Run detection</Btn>
+      <Btn variant="primary" onClick={run} loading={loading} disabled={!projectId}>Check now</Btn>
       {result && (
         <ContainedBlock tone="info">
           <SignalChip tone="ok" className="font-medium">

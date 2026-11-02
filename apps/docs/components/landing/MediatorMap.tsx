@@ -29,7 +29,7 @@ export function MediatorMap() {
     <div className="landing-mediator not-prose">
       <div className="landing-mediator__grid">
         <Column title="Bugs come in from" items={LANDING_MEDIATOR.inbound} />
-        <div className="landing-mediator__core" aria-label="The Mushi queue">
+        <div className="landing-mediator__core" aria-label="The Mushi Mushi queue">
           <span className="landing-mediator__stamp" aria-hidden="true">
             虫
           </span>

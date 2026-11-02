@@ -175,7 +175,7 @@ describe('full-stack audit stats', () => {
 
   it('counts open findings from the newest radar run only', async () => {
     const stats = await audit.readFullstackAuditStats(seed() as never, P)
-    expect(stats).toEqual({ errorCount: 1, warnCount: 1, failedGateCount: 1, topPriority: 'failures', readError: null })
+    expect(stats).toEqual({ errorCount: 1, warnCount: 1, failedGateCount: 1, topPriority: 'failures', readError: null, lastRunAt: '2026-10-02T00:00:00Z' })
   })
 
   it('counts the newest run of every gate once, as the findings list does: 1,500 failed runs of one gate are one failing check', async () => {
@@ -185,7 +185,7 @@ describe('full-stack audit stats', () => {
     }))
     const findings = runs.map((r, i) => ({ id: `f${i}`, gate_run_id: r.id, severity: 'warn', allowlisted: false }))
     const stats = await audit.readFullstackAuditStats(makeFakeDb({ gate_runs: runs, gate_findings: findings }) as never, P)
-    expect(stats).toEqual({ errorCount: 0, warnCount: 1, failedGateCount: 1, topPriority: 'failures', readError: null })
+    expect(stats).toEqual({ errorCount: 0, warnCount: 1, failedGateCount: 1, topPriority: 'failures', readError: null, lastRunAt: '2026-10-02T00:00:00Z' })
   })
 
   it('only a deviance scan is the latest design_drift result, and a running run is skipped', async () => {
@@ -202,7 +202,7 @@ describe('full-stack audit stats', () => {
       ],
     })
     const stats = await audit.readFullstackAuditStats(db as never, P)
-    expect(stats).toEqual({ errorCount: 0, warnCount: 2, failedGateCount: 0, topPriority: 'warnings', readError: null })
+    expect(stats).toEqual({ errorCount: 0, warnCount: 2, failedGateCount: 0, topPriority: 'warnings', readError: null, lastRunAt: '2026-10-01T00:01:00Z' })
   })
 
   it('a failed gate-run read is unknown, never healthy', async () => {

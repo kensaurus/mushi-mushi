@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
+// Copyright (c) 2024–2026 kensaurus LLC — Mushi Mushi
 /**
  * agent-pr-review — Supabase Edge Function (verify_jwt = false, internal)
  *
@@ -36,6 +36,15 @@
  *   A skipped or failed run keeps the last completed verdict, so a hold stays
  *   a hold. A model error retries after 10 min × tries.
  *
+ * Readying (host repos skip CI on drafts, ADR 0047): a draft PR is marked
+ * ready only on "merge", and only while the reviewed commit is still the PR's
+ * head. "fix_first" leaves it a draft: its follow-up (ADR 0032) pushes a new
+ * commit, so CI on this one would be spent on a head nobody merges.
+ * fix-worker opens every PR as a draft and queues this review; its PR is
+ * also never readied when the model's own check flagged the fix. When no review can run for it (review off, no
+ * Anthropic key, AI budget used up) and it has no verdict yet, the
+ * self-check alone decides, as before ADR 0047.
+ *
  * Nothing here merges. A "hold" verdict makes every Mushi merge path refuse
  * until a person overrides it from the console with a reason.
  *
@@ -57,6 +66,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { resolveLlmKey, type ResolvedKey } from '../_shared/byok.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { isClaudeRefusal, resolveClaudeModel } from '../_shared/claude-request.ts'
+import { isQuotaMessage } from '../_shared/llm-quota.ts'
 import { estimateCallCostUsd } from '../_shared/pricing.ts'
 import { recordLlmUsage, extractLlmUsage, servedModel } from '../_shared/llm-usage.ts'
 import { sanitizeForLLM } from '../_shared/sanitize.ts'
@@ -74,8 +84,8 @@ import {
   type PullRequestFile,
 } from '../_shared/github.ts'
 import { canonicalPrUrl, parsePullRequestUrl } from '../_shared/pr-substance.ts'
-import { DISPATCHABLE_CLOUD_AGENTS } from '../_shared/agent-adapters.ts'
-import { AGENT_PR_REVIEW_EFFORT, AGENT_PR_REVIEW_MODEL } from '../_shared/models.ts'
+import { DISPATCHABLE_CLOUD_AGENTS, FIX_WORKER_AGENTS } from '../_shared/agent-adapters.ts'
+import { AGENT_PR_REVIEW_EFFORT, AGENT_PR_REVIEW_MODEL, OPENAI_PRIMARY } from '../_shared/models.ts'
 import { enqueueFixReview } from '../_shared/fix-review-db.ts'
 import { enqueueReviewFollowup } from '../_shared/review-followup-db.ts'
 import {
@@ -130,7 +140,7 @@ export const BACKFILL_MAX_LIMIT = 200
 const BACKFILL_MAX_PAGES = 10
 
 const ATTEMPT_COLUMNS =
-  'id, project_id, report_id, agent, status, pr_url, pr_number, pr_state, merged_at, branch, branch_name, repo_id, check_run_status, check_run_conclusion, ci_infra'
+  'id, project_id, report_id, agent, status, pr_url, pr_number, pr_state, merged_at, branch, branch_name, repo_id, check_run_status, check_run_conclusion, ci_infra, review_passed'
 const REPORT_COLUMNS = 'id, summary, description, category, severity, component, reproduction_steps, stage2_analysis'
 const QUEUE_COLUMNS = 'id, fix_attempt_id, project_id, report_id, attempts, comment_id'
 
@@ -160,10 +170,16 @@ interface AttemptRow {
   check_run_conclusion: string | null
   /** The CI verdict for the PR head (Plan 022); an infra verdict never holds a merge. */
   ci_infra?: unknown
+  /** fix-worker's own check of its fix (false: flagged, the PR stays a draft). */
+  review_passed?: boolean | null
 }
 
 export interface ModelCallInput {
   apiKey: string
+  /** 'openai' when the review runs on an OpenAI key (ADR 0039 amendment, 2026-10-31). */
+  provider?: 'anthropic' | 'openai'
+  /** The key's own base URL (an OpenRouter key is never sent to api.openai.com). */
+  baseUrl?: string
   model: string
   system: string
   prompt: string
@@ -181,6 +197,8 @@ export interface ReviewDeps {
   /** The claim token for a run; injectable so tests can assert the guarded writes. */
   newRunId?: () => string
   resolveAnthropicKey?: (db: SupabaseClient, projectId: string) => Promise<ResolvedKey | null>
+  /** The OpenAI key a review falls back to; tests pin it (defaults to resolveLlmKey). */
+  resolveOpenAiKey?: (db: SupabaseClient, projectId: string) => Promise<ResolvedKey | null>
   resolveGithubToken?: (db: SupabaseClient, attempt: AttemptRow) => Promise<string | null>
   fetchPr?: (token: string, ref: GithubRepoRef, n: number) => Promise<PullRequestDetails | null>
   fetchFiles?: (token: string, ref: GithubRepoRef, n: number) => Promise<{ files: PullRequestFile[]; complete: boolean } | null>
@@ -211,6 +229,8 @@ export type ReviewOutcome =
 
 export interface ReviewRunSummary {
   requeued: number
+  /** Reviews a missing or spent key stopped, queued again once a newer working key exists. */
+  resumed: number
   gaveUp: number
   enqueued: number
   claimed: number
@@ -255,6 +275,48 @@ export function pickReviewModel(projectModel: string | null | undefined, platfor
 }
 
 /**
+ * The key a review runs on: the app's own (or its organization's) Claude key,
+ * else its OpenAI key (ADR 0039 amendment, 2026-10-31). An organization that
+ * runs AI on OpenAI gets no Claude key from the resolver, so its reviews move
+ * to OpenAI; one whose Claude key ran out moves too, instead of every review
+ * stopping as "no key" and Decide for me (ADR 0055) waiting forever. Never the
+ * platform key: a review the app did not pay for is not one Mushi absorbs.
+ *
+ * @internal Exported for tests only.
+ */
+export async function resolveReviewKey(
+  db: SupabaseClient,
+  projectId: string,
+  resolve: (db: SupabaseClient, projectId: string, provider: 'anthropic' | 'openai') => Promise<ResolvedKey | null> = (d, p, provider) => resolveLlmKey(d, p, provider),
+): Promise<(ResolvedKey & { reviewProvider: 'anthropic' | 'openai' }) | null> {
+  const claude = await resolve(db, projectId, 'anthropic')
+  if (claude && claude.source === 'byok') return { ...claude, reviewProvider: 'anthropic' }
+  const openai = await resolve(db, projectId, 'openai')
+  if (openai && openai.source === 'byok') return { ...openai, reviewProvider: 'openai' }
+  return null
+}
+
+/**
+ * How a verdict names its reviewer: "Opus" for Claude, "GPT" for an OpenAI model.
+ *
+ * @internal Exported for tests only.
+ */
+export function reviewerName(model: string): string {
+  return /(^|\/)gpt-/.test(model) ? 'GPT' : 'Opus'
+}
+
+/**
+ * The OpenAI reviewer model: the project's `agent_pr_review_model` when it is
+ * an OpenAI id (`gpt-…`), else GPT-6.1 Sol (`OPENAI_PRIMARY`).
+ *
+ * @internal Exported for tests only.
+ */
+export function pickOpenAiReviewModel(projectModel: string | null | undefined): string {
+  const chosen = (projectModel ?? '').trim()
+  return /^(openai\/)?gpt-[A-Za-z0-9._-]+$/.test(chosen) ? chosen : OPENAI_PRIMARY
+}
+
+/**
  * Whether reviews are on and which model the project chose. A failed read
  * reviews on the default (the switch defaults to true). Before migration
  * 20261022021555 adds `agent_pr_review_model`, naming it fails the read, so it
@@ -275,6 +337,23 @@ export async function readReviewSettings(
 }
 
 async function defaultCallModel(input: ModelCallInput): Promise<ModelCallResult> {
+  if (input.provider === 'openai') {
+    // The same call the second-family judge makes (fix-verifier, ADR 0035).
+    const [{ generateObject }, { openAiProvider }] = await Promise.all([
+      import('../_shared/ai-sdk.ts'),
+      import('../_shared/openai-compat.ts'),
+    ])
+    const openai = openAiProvider({ apiKey: input.apiKey, ...(input.baseUrl ? { baseURL: input.baseUrl } : {}) })
+    const result = await generateObject({
+      model: openai(input.model),
+      schema: agentPrReviewSchema,
+      system: input.system,
+      prompt: input.prompt,
+      maxTokens: REVIEW_MAX_TOKENS,
+      abortSignal: input.abortSignal,
+    })
+    return result as unknown as ModelCallResult
+  }
   const result = await claudeGenerateObject({
     apiKey: input.apiKey,
     model: input.model,
@@ -392,7 +471,83 @@ async function recoverStale(db: SupabaseClient, now: Date): Promise<{ requeued: 
   return { requeued: requeued?.length ?? 0, gaveUp: gaveUp?.length ?? 0 }
 }
 
-/** Queue a review for each open cloud-agent PR that has none. */
+const RESUME_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000
+const RESUME_SCAN = 300
+
+/** A review that stopped because its app had no working Claude key, or the key ran out. */
+export function stoppedForKey(row: { status: string; skip_reason: string | null; error: string | null }): boolean {
+  if (row.status === 'skipped') return row.skip_reason === 'no_anthropic_key'
+  return row.status === 'failed' && !!row.error && isQuotaMessage(row.error)
+}
+
+/**
+ * Reviews a missing or spent Claude key stopped are queued again once their
+ * app resolves a working key that was added or replaced after they stopped,
+ * and only while the PR is still open. On 2026-10-28 24 of them waited for a
+ * person to press Re-run after the owner had already added the new key; a
+ * key changed before the stop never resumes them, so a still-spent key does
+ * not loop.
+ */
+export async function resumeKeyBlocked(
+  db: SupabaseClient,
+  now: Date,
+  resolveKey: (db: SupabaseClient, projectId: string) => Promise<ResolvedKey | null> = (d, p) => resolveReviewKey(d, p),
+): Promise<number> {
+  const since = new Date(now.getTime() - RESUME_LOOKBACK_MS).toISOString()
+  const { data } = await db
+    .from('fix_reviews')
+    .select('id, project_id, fix_attempt_id, status, skip_reason, error, completed_at')
+    .in('status', ['skipped', 'failed'])
+    .gte('completed_at', since)
+    .order('completed_at', { ascending: false })
+    .limit(RESUME_SCAN)
+  type Row = { id: string; project_id: string; fix_attempt_id: string; status: string; skip_reason: string | null; error: string | null; completed_at: string | null }
+  const stopped = ((data ?? []) as Row[]).filter(stoppedForKey)
+  if (stopped.length === 0) return 0
+
+  const { data: open } = await db
+    .from('fix_attempts')
+    .select('id')
+    .in('id', [...new Set(stopped.map((r) => r.fix_attempt_id))])
+    .in('pr_state', ['open', 'draft'])
+  const openIds = new Set(((open ?? []) as Array<{ id: string }>).map((a) => a.id))
+
+  // When each app's working key last changed, or null when it has none.
+  const keyChangedAt = new Map<string, string | null>()
+  for (const projectId of new Set(stopped.map((r) => r.project_id))) {
+    let changed: string | null = null
+    try {
+      const key = await resolveKey(db, projectId)
+      if (key?.source === 'byok' && key.keyId) {
+        const { data: row } = await db.from('byok_keys').select('status, created_at, rotated_at').eq('id', key.keyId).maybeSingle()
+        const k = row as { status: string; created_at: string; rotated_at: string | null } | null
+        if (k && k.status === 'active') changed = k.rotated_at && k.rotated_at > k.created_at ? k.rotated_at : k.created_at
+      }
+    } catch {
+      changed = null
+    }
+    keyChangedAt.set(projectId, changed)
+  }
+
+  const ids = stopped
+    .filter((r) => openIds.has(r.fix_attempt_id))
+    .filter((r) => {
+      const changed = keyChangedAt.get(r.project_id)
+      return !!changed && !!r.completed_at && changed > r.completed_at
+    })
+    .map((r) => r.id)
+  if (ids.length === 0) return 0
+  const at = now.toISOString()
+  const { data: resumed } = await db
+    .from('fix_reviews')
+    .update({ status: 'queued', run_id: null, attempts: 0, error: null, skip_reason: null, completed_at: null, queued_at: at, updated_at: at })
+    .in('id', ids)
+    .in('status', ['skipped', 'failed'])
+    .select('id')
+  return resumed?.length ?? 0
+}
+
+/** Queue a review for each open cloud-agent or fix-worker PR that has none. */
 export async function enqueueBackfill(db: SupabaseClient, limit: number, now: Date): Promise<number> {
   // Page through open cloud-agent PRs newest first, skipping ones that already
   // have a review, until `limit` new reviews are queued. Reading only the
@@ -406,7 +561,7 @@ export async function enqueueBackfill(db: SupabaseClient, limit: number, now: Da
     const { data: open, error } = await db
       .from('fix_attempts')
       .select('id, project_id, report_id, pr_url')
-      .in('agent', [...DISPATCHABLE_CLOUD_AGENTS])
+      .in('agent', [...DISPATCHABLE_CLOUD_AGENTS, ...FIX_WORKER_AGENTS])
       .eq('status', 'completed')
       .not('pr_url', 'is', null)
       .in('pr_state', ['open', 'draft'])
@@ -459,6 +614,60 @@ export function pickFairBatch<T extends { project_id: string }>(rows: T[], batch
 
 const EVENT_STATUS: Record<ReviewVerdict, 'ok' | 'pending' | 'fail'> = { merge: 'ok', fix_first: 'pending', hold: 'fail' }
 
+export const READY_AFTER_REVIEW_LABEL = 'Marked ready after review; CI runs now'
+export const READY_WITHOUT_REVIEW_LABEL = 'Marked ready without an Opus review; CI runs now'
+
+/** Skips after which a never-reviewed fix-worker PR falls back to the model's own check (ADR 0047). */
+export const NO_REVIEW_FALLBACK_REASONS: ReadonlySet<ReviewSkipReason> = new Set(['review_off', 'no_anthropic_key', 'llm_budget_exceeded'])
+
+/**
+ * Whether a verdict readies the PR (ADR 0047): only "merge". A "fix_first"
+ * head is about to be replaced by its follow-up's push, and nothing reads CI
+ * on it (the findings follow-up sends findings, not CI; CI repair and
+ * fix-verifier start from a "merge" review). fix-worker: never a fix its
+ * model flagged either.
+ */
+export function readiesOnVerdict(attempt: { agent: string; review_passed?: boolean | null }, verdict: ReviewVerdict): boolean {
+  if (verdict !== 'merge') return false
+  return !FIX_WORKER_AGENTS.has(attempt.agent) || attempt.review_passed !== false
+}
+
+/**
+ * No review can run for this project. A fix-worker PR that was never
+ * reviewed is readied when its model's own check passed, as before ADR 0047,
+ * so it is not stranded as a draft; a PR with any verdict on record keeps it.
+ */
+async function readyWithoutReview(
+  db: SupabaseClient,
+  row: QueueRow,
+  attempt: AttemptRow,
+  reason: ReviewSkipReason,
+  deps: ReviewDeps,
+): Promise<void> {
+  if (!FIX_WORKER_AGENTS.has(attempt.agent) || attempt.review_passed !== true) return
+  const { data: last } = await db.from('fix_reviews').select('verdict').eq('id', row.id).maybeSingle()
+  if ((last as { verdict?: string | null } | null)?.verdict) return
+  const pr = attempt.pr_url ? parsePullRequestUrl(attempt.pr_url) : null
+  if (!pr) return
+  const token = await (deps.resolveGithubToken ?? defaultResolveGithubToken)(db, attempt)
+  if (!token) return
+  const ref: GithubRepoRef = { owner: pr.owner, repo: pr.repo }
+  const details = await (deps.fetchPr ?? fetchPullRequestDetails)(token, ref, pr.number)
+  if (!details || details.merged || details.state === 'closed' || details.draft !== true) return
+  const ready = await (deps.markReady ?? markPullRequestReady)(token, ref, pr.number)
+  if (ready.ok && !ready.alreadyReady) {
+    await insertReviewEvent(db, row, {
+      status: 'ok',
+      label: READY_WITHOUT_REVIEW_LABEL,
+      detail: `${REVIEW_SKIP_REASONS[reason]}. The fix passed its own check.`,
+      dedupe: `review-ready-noreview:${row.id}:${details.headSha ?? 'none'}`,
+      payload: { reviewId: row.id, skipReason: reason, headSha: details.headSha ?? null },
+    })
+  } else if (!ready.ok) {
+    log.warn('PR not marked ready (no review)', { reviewId: row.id, message: ready.message })
+  }
+}
+
 function reportContext(report: Record<string, unknown> | null) {
   const s2 = ((report?.stage2_analysis ?? null) as Record<string, unknown> | null) ?? {}
   const steps = (s2.reproductionSteps ?? report?.reproduction_steps ?? null) as unknown
@@ -506,6 +715,13 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
         payload: { reviewId: row.id, skipReason: reason },
       })
     }
+    if (attempt && NO_REVIEW_FALLBACK_REASONS.has(reason)) {
+      try {
+        await readyWithoutReview(db, row, attempt, reason, deps)
+      } catch (err) {
+        log.warn('PR not marked ready (no review)', { reviewId: row.id, err: err instanceof Error ? err.message : String(err) })
+      }
+    }
     return { outcome: 'skipped', reason }
   }
 
@@ -520,14 +736,13 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
   // Default on: a missing row or a failed read reviews (the column defaults to true).
   const settings = await readReviewSettings(db, attempt.project_id)
   if (!settings.enabled) return finishSkipped(attempt, 'review_off')
-  const reviewModel = pickReviewModel(
-    settings.model,
-    deps.platformModel !== undefined ? deps.platformModel : typeof Deno !== 'undefined' ? Deno.env.get('AGENT_PR_REVIEW_MODEL') : undefined,
-  )
-
-  let key: ResolvedKey | null
+  let key: (ResolvedKey & { reviewProvider: 'anthropic' | 'openai' }) | null
   try {
-    key = await (deps.resolveAnthropicKey ?? ((d, p) => resolveLlmKey(d, p, 'anthropic')))(db, attempt.project_id)
+    key = deps.resolveAnthropicKey
+      ? await resolveReviewKey(db, attempt.project_id, (d, p, provider) =>
+          provider === 'anthropic' ? deps.resolveAnthropicKey!(d, p) : (deps.resolveOpenAiKey ?? ((dd, pp) => resolveLlmKey(dd, pp, 'openai')))(d, p),
+        )
+      : await resolveReviewKey(db, attempt.project_id)
   } catch (err) {
     if ((err as { name?: string } | null)?.name === 'LlmBudgetExceededError') {
       return finishSkipped(attempt, 'llm_budget_exceeded')
@@ -535,8 +750,14 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
     throw err
   }
   // The project's own (or its organization's shared) key only: a review the
-  // project did not pay for would be an unbilled Opus call on the platform key.
-  if (!key || key.source !== 'byok') return finishSkipped(attempt, 'no_anthropic_key')
+  // project did not pay for would be an unbilled call on the platform key.
+  if (!key) return finishSkipped(attempt, 'no_anthropic_key')
+  const reviewModel = key.reviewProvider === 'openai'
+    ? pickOpenAiReviewModel(settings.model)
+    : pickReviewModel(
+        settings.model,
+        deps.platformModel !== undefined ? deps.platformModel : typeof Deno !== 'undefined' ? Deno.env.get('AGENT_PR_REVIEW_MODEL') : undefined,
+      )
 
   const pr = parsePullRequestUrl(attempt.pr_url)
   if (!pr) return finishSkipped(attempt, 'pr_not_found')
@@ -553,7 +774,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
   if (listed.files.length === 0) return finishSkipped(attempt, 'no_files')
 
   const diff = buildReviewDiff(listed.files, { complete: listed.complete })
-  const ci = describeCi(attempt.check_run_conclusion, attempt.check_run_status, attempt.ci_infra)
+  const ci = describeCi(attempt.check_run_conclusion, attempt.check_run_status, attempt.ci_infra, details.draft === true)
   let report: Record<string, unknown> | null = null
   if (attempt.report_id) {
     const { data } = await db.from('reports').select(REPORT_COLUMNS).eq('id', attempt.report_id).maybeSingle()
@@ -586,6 +807,8 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
   try {
     result = await (deps.callModel ?? defaultCallModel)({
       apiKey: key.key,
+      provider: key.reviewProvider,
+      ...(key.baseUrl ? { baseUrl: key.baseUrl } : {}),
       model: reviewModel,
       system: AGENT_PR_REVIEW_SYSTEM_PROMPT,
       prompt,
@@ -675,7 +898,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
 
   await insertReviewEvent(db, row, {
     status: EVENT_STATUS[review.verdict],
-    label: `Opus review: ${VERDICT_LABEL[review.verdict]}`,
+    label: `${reviewerName(reviewModel)} review: ${VERDICT_LABEL[review.verdict]}`,
     detail: review.summary,
     dedupe: `review:${row.id}:${details.headSha ?? nowIso}:${tries}`,
     payload: {
@@ -721,20 +944,28 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
 
   // Host repos skip CI on draft PRs and run it on ready_for_review (glot.it,
   // 2026-10-20: 131 queued runs on one runner). A PR the review would let
-  // through is marked ready so its CI runs; a hold stays a draft.
-  if (review.verdict === 'merge' || review.verdict === 'fix_first') {
+  // through is marked ready so its CI runs; fix_first and hold stay drafts
+  // (ADR 0047). A fix-worker PR the model flagged stays a draft even on merge.
+  if (readiesOnVerdict(attempt, review.verdict)) {
     try {
-      const ready = await (deps.markReady ?? markPullRequestReady)(token, ref, pr.number)
-      if (ready.ok && !ready.alreadyReady) {
-        await insertReviewEvent(db, row, {
-          status: 'ok',
-          label: 'Marked ready for review (CI runs)',
-          detail: `Opus review: ${VERDICT_LABEL[review.verdict]}`,
-          dedupe: `review-ready:${row.id}:${details.headSha ?? nowIso}`,
-          payload: { reviewId: row.id, verdict: review.verdict, headSha: details.headSha },
-        })
-      } else if (!ready.ok) {
-        log.warn('PR not marked ready', { reviewId: row.id, message: ready.message })
+      // Only the reviewed commit: a push during the review re-queued it, and
+      // the next review decides about the new head.
+      const current = await (deps.fetchPr ?? fetchPullRequestDetails)(token, ref, pr.number)
+      if (!current || current.headSha !== details.headSha || current.merged || current.state === 'closed') {
+        log.info('PR not marked ready: its head moved or it closed during the review', { reviewId: row.id })
+      } else if (current.draft === true) {
+        const ready = await (deps.markReady ?? markPullRequestReady)(token, ref, pr.number)
+        if (ready.ok && !ready.alreadyReady) {
+          await insertReviewEvent(db, row, {
+            status: 'ok',
+            label: READY_AFTER_REVIEW_LABEL,
+            detail: `${reviewerName(reviewModel)} review: ${VERDICT_LABEL[review.verdict]}`,
+            dedupe: `review-ready:${row.id}:${details.headSha ?? nowIso}`,
+            payload: { reviewId: row.id, verdict: review.verdict, headSha: details.headSha },
+          })
+        } else if (!ready.ok) {
+          log.warn('PR not marked ready', { reviewId: row.id, message: ready.message })
+        }
       }
     } catch (err) {
       // The verdict gates merges either way; readying the PR only starts CI.
@@ -758,6 +989,7 @@ export async function runAgentPrReview(
   const nowIso = now.toISOString()
   const summary: ReviewRunSummary = {
     requeued: 0,
+    resumed: 0,
     gaveUp: 0,
     enqueued: 0,
     claimed: 0,
@@ -773,6 +1005,7 @@ export async function runAgentPrReview(
   const stale = await recoverStale(db, now)
   summary.requeued = stale.requeued
   summary.gaveUp = stale.gaveUp
+  summary.resumed = await resumeKeyBlocked(db, now, deps.resolveAnthropicKey)
 
   let rows: QueueRow[]
   if (opts.fixAttemptId) {

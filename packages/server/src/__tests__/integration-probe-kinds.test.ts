@@ -107,3 +107,30 @@ describe('hourly probe cron', () => {
     expect(cron).not.toMatch(/allSettings\.find\(\(s\) => s\.project_id === /)
   })
 })
+
+describe('fix agent probes test the key a fix would use (2026-10-30)', () => {
+  it('Cursor and Claude Code probe the pooled key before the old per-app field', async () => {
+    vi.resetModules()
+    vi.stubGlobal('Deno', { env: { get: () => undefined } })
+    vi.doMock('../../supabase/functions/_shared/byok.ts', () => ({
+      resolveLlmKey: async (_db: unknown, _p: string, provider: string, opts: { purpose?: string }) => {
+        expect(opts.purpose).toBe('probe')
+        return { key: provider === 'cursor' ? 'pooled-cursor' : 'pooled-anthropic' }
+      },
+    }))
+    vi.doMock('../../supabase/functions/_shared/settings-secrets.ts', () => ({ dereferenceMaybeVault: async () => 'dead-legacy-key' }))
+    const { probeIntegration } = await import('../../supabase/functions/_shared/integration-probes.ts')
+    const seen: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { headers: Record<string, string> }) => {
+      seen.push(init.headers.Authorization ?? init.headers['x-api-key'])
+      return new Response('{"userEmail":"k@example.com"}', { status: 200 })
+    }))
+    const cursor = await probeIntegration('cursor_cloud', {} as never, { cursor_api_key_ref: 'vault://old' } as never, {}, 'p1')
+    const claude = await probeIntegration('claude_code_agent', {} as never, { claude_api_key_ref: 'vault://old' } as never, {}, 'p1')
+    expect(cursor.status).toBe('ok')
+    expect(claude.status).toBe('ok')
+    expect(seen).toEqual(['Bearer pooled-cursor', 'pooled-anthropic'])
+    vi.doUnmock('../../supabase/functions/_shared/byok.ts')
+    vi.doUnmock('../../supabase/functions/_shared/settings-secrets.ts')
+  })
+})

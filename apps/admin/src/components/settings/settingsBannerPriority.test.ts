@@ -15,6 +15,7 @@ const stats = (over: Partial<SettingsStats> = {}): SettingsStats => ({
 const summary = (over: Partial<KeySummary> = {}): KeySummary => ({
   working: 1,
   attention: 0,
+  replaced: 0,
   expiring: 0,
   checking: 0,
   off: 0,
@@ -48,5 +49,26 @@ describe('settingsBannerPriority', () => {
     expect(
       settingsBannerPriority(stats({ slackConfigured: false, sentryConfigured: false }), summary(), true),
     ).toBe('routing_optional')
+  })
+
+  it('does not treat a saved Slack setting that cannot post as ready', () => {
+    expect(settingsBannerPriority(stats({ slackCanPost: false }), summary(), true)).toBe('slack_incomplete')
+    expect(settingsBannerPriority(stats({ slackCanPost: true }), summary(), true)).toBe('healthy')
+  })
+
+  it('a Working Sentry verdict counts toward all-clear without a saved DSN', () => {
+    const open = stats({ slackConfigured: false, sentryConfigured: false })
+    expect(settingsBannerPriority(open, summary(), true, { state: 'working', detail: 'Last event received just now' })).toBe(
+      'healthy',
+    )
+    // Still loading, not connected, or not yet checked: do not claim all-clear.
+    expect(settingsBannerPriority(open, summary(), true, null)).toBe('routing_optional')
+    expect(settingsBannerPriority(open, summary(), true, { state: 'not_connected' })).toBe('routing_optional')
+    expect(settingsBannerPriority(open, summary(), true, { state: 'checking', detail: 'Connected, but never tested.' })).toBe(
+      'routing_optional',
+    )
+    expect(settingsBannerPriority(open, summary(), true, { state: 'attention', detail: 'Connected — waiting for the first event.' })).toBe(
+      'routing_optional',
+    )
   })
 })

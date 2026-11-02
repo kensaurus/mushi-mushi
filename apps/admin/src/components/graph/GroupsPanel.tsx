@@ -86,7 +86,7 @@ export function GroupsPanel() {
       ) : groups.length === 0 ? (
         <EmptyState
           title="No groups yet"
-          description="Stage 2 clusters reports with the same root cause into a group. They'll appear here once your project has a few classified reports."
+          description="Mushi groups reports with the same root cause. They'll appear here once your project has a few classified reports."
         />
       ) : (
         <div className="overflow-x-auto">

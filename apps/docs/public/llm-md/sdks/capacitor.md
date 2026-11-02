@@ -4,12 +4,12 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/capacitor
 
 ---
 title: '@mushi-mushi/capacitor'
-description: API reference for @mushi-mushi/capacitor — configure, report, listeners, setUser and widget options for Ionic and Capacitor apps on iOS, Android and web.
+description: Reference for @mushi-mushi/capacitor, Mushi Mushi for Ionic and Capacitor on iOS, Android and web. configure, report, listeners, setUser and widget options.
 ---
 
 # `@mushi-mushi/capacitor`
 
-Capacitor plugin for Ionic / Capacitor apps. The web fallback uses
+The Mushi Mushi Capacitor plugin for Ionic and Capacitor apps (`@capacitor/core` 6 or later). The web fallback uses
 `@mushi-mushi/core` so the plugin works in WebView previews; native iOS and
 Android delegate to the standalone Mushi SDKs so a hybrid app gets the same
 shake-to-report and screenshot UX as a pure-native app.
@@ -29,9 +29,12 @@ import { Mushi } from '@mushi-mushi/capacitor'
 await Mushi.configure({
   projectId: 'YOUR_PROJECT_ID',
   apiKey:    'YOUR_PUBLIC_API_KEY',
+  // Optional. iOS, Android and the web fallback all default to the hosted
+  // Mushi Mushi API; set it only for a self-hosted deployment.
+  endpoint:  'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
 
-  triggerMode: 'shake',         // 'shake' | 'button' | 'both' | 'none'
-  captureScreenshot: true,      // base64 PNG of the active webview
+  triggerMode: 'shake',         // default; 'shake' | 'button' | 'both' | 'none'
+  captureScreenshot: true,      // base64 JPEG of the screen, via the native bridge
   triggerInsetPreset: 'tabBarSafe',  // or 'dockSafe'
   // useNativeWidget: true       // present the native iOS/Android bottom sheet
 })
@@ -54,8 +57,8 @@ await Mushi.report({
 ```ts
 await Mushi.showWidget({ category: 'visual' })
 await Mushi.flushQueue()
-await Mushi.setUser({ id: 'u_42', email: 'me@example.com' })
-await Mushi.setMetadata({ build: '2026.4.29' })
+await Mushi.setUser({ user: { id: 'u_42', email: 'me@example.com' } }) // { user: null } on logout
+await Mushi.setMetadata({ key: 'build', value: '2026.4.29' })
 
 const sub = await Mushi.addListener('reportSubmitted', (e) => {
   console.log('Report accepted:', e)
@@ -65,12 +68,15 @@ const sub = await Mushi.addListener('reportSubmitted', (e) => {
 ## Position the trigger above your tab bar / dock
 
 Use a preset (`triggerInsetPreset: 'tabBarSafe'` for a 72 dp lift, or
-`'dockSafe'` for a 96 dp lift) or pass your own offsets:
+`'dockSafe'` for a 96 dp lift) or pass your own offsets. With neither, the
+button sits 96 from the bottom and 20 from the side. The side key is
+`trailing` / `leading` on iOS and `end` / `start` on Android, so set both
+for a cross-platform app:
 
 ```ts
 await Mushi.configure({
   /* ... */
-  triggerInset: { bottom: 88, trailing: 16 },
+  triggerInset: { bottom: 88, trailing: 16, end: 16 },
 })
 ```
 
@@ -78,7 +84,7 @@ await Mushi.configure({
   [Capacitor → React Native migration guide](/migrations/capacitor-to-react-native)
   covers the plugin map, the API mapping (`Mushi.configure` → ``,
   `Mushi.report` → `useMushiReport()`), CI/CD on GitHub Actions + Fastlane,
-  and how to keep the same Mushi project / API key across both clients during
+  and how to keep the same Mushi Mushi project / API key across both clients during
   the cutover.
 
 See [Quickstart → Capacitor](/quickstart/capacitor) for the end-to-end setup,

@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/operating/ci-runners
 
 ---
 title: CI runners
-description: See where your tests run and why a fix waits. Tell a broken fix from a stopped test machine, and add your own machine as a runner safely.
+description: See where your tests run and why a Mushi Mushi fix waits. Tell a broken fix from a stopped test machine, and add your own machine as a runner safely.
 ---
 
 # CI runners
@@ -59,7 +59,7 @@ mushi runner status --json
 | Actions: read | Jobs, their times, runner names and why a job was cancelled |
 | Administration: read (optional) | The runner list: online, offline, busy, labels |
 | Metadata: read | Whether a repo is public or private (read once a day): it decides what GitHub-hosted minutes cost |
-| Variables: read and write (optional) | Changing where CI runs: Mushi reads and writes only `LINUX_RUNNER` and `RUNNER_`, with the GitHub token stored in the project's settings (or, without one, the organization's). Never the Mushi GitHub App, which does not have this permission, and never Mushi's own token |
+| Variables: read and write (optional) | Changing where CI runs: Mushi reads and writes only `LINUX_RUNNER`, `RUNNER_` and `CI_PROFILE`, with the GitHub token stored in the project's settings (or, without one, the organization's), else the Mushi GitHub App installation for that repo once you approve its "Variables: Read and write" permission. Never Mushi's own token |
 
 Without Administration: read, Mushi shows the runners it saw in jobs and says
 so.
@@ -172,7 +172,39 @@ same approval.
 mushi runner placement show
 mushi runner placement preview --repo you/your-app --value my-runner-label
 mushi runner placement request --repo you/your-app --value my-runner-label --reason "save paid minutes"
-mushi runner placement preview --repo you/your-app --remove     # back to GitHub-hosted
+mushi runner placement preview --repo you/your-app --remove --revert-after 4     # GitHub-hosted for 4 hours
+mushi runner placement request --repo you/your-app --variable CI_PROFILE --value thorough
+```
+
+### Time-boxed GitHub-hosted runs
+
+A move to GitHub-hosted runners can switch back on its own. In the console,
+**Switch back after** defaults to 4 hours (`--revert-after `,
+1–168). The time box is part of the change you approve. When it is up, Mushi
+files the ordinary revert in the approver's name and runs it within 10
+minutes, with the same compare-and-set: if anyone changed the variable in the
+meantime, Mushi leaves it alone and records why. A move without a time box
+says so in its preview, because GitHub-hosted minutes on a private repo are
+billed until someone switches back.
+
+### Checks on fix pull requests (`CI_PROFILE`)
+
+If your workflows read `vars.CI_PROFILE`, the repo also shows **Checks on fix
+pull requests**:
+
+- **Economy** (recommended, and the default when the variable is unset): your
+  workflows may skip slow, billed checks on Mushi fix pull requests. Those
+  checks still run on the release train and on main before a deploy.
+- **Thorough**: every check on every pull request, fix pull requests
+  included. More GitHub-hosted minutes on a private repo.
+
+It moves no `runs-on`, so it goes through the same preview, request, approve
+and run steps without a runner target. A repo whose workflows do not read
+`vars.CI_PROFILE` shows no switch, because changing it would do nothing.
+
+```yaml
+# Skip the visual audit on Mushi fix PRs unless the repo asks for thorough.
+if: ${{ vars.CI_PROFILE == 'thorough' || !(startsWith(github.head_ref, 'bugfix/MUSHI-') || (startsWith(github.head_ref, 'mushi/') && !startsWith(github.head_ref, 'mushi/train/'))) }}
 ```
 
 ### Your CI agreement

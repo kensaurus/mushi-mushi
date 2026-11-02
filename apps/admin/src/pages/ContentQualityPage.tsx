@@ -227,6 +227,10 @@ export function ContentQualityPage() {
     return [...map.values()].sort((a, b) => b.rows.length - a.rows.length)
   }, [items])
   const showStatusColumn = status === 'all'
+  // Nothing open and nothing narrowed: the filters have nothing to filter, so
+  // the page is just its empty state (console journeys 2026-10-27).
+  const filtersNarrowed = status !== 'open' || !!reason || !!contentType || !!source || !!scoreBand || !!needle
+  const nothingOpen = !loading && !error && data != null && total === 0 && !filtersNarrowed
 
   // Any filter or page change starts a fresh selection, so "Dismiss
   // selected" never acts on rows the person can no longer see.
@@ -296,14 +300,17 @@ export function ContentQualityPage() {
         ]}
       />
 
+      {!nothingOpen && (
       <div role="toolbar" aria-label="Filter content issues" className="flex flex-wrap items-center gap-2">
         <Input
           type="search"
-          placeholder="Search content key on this page…"
+          placeholder="Search keys on this page"
           aria-label="Search content key"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="w-64"
+          // The toolbar sizes the label, not the input. w-64 fits about 21
+          // characters of this field, so the phrase ended mid-word.
+          containerClassName="w-full shrink-0 sm:w-80"
         />
         <FilterSelect
           label="statuses"
@@ -341,6 +348,7 @@ export function ContentQualityPage() {
           onChange={e => changeFilter(() => setScoreBand(e.currentTarget.value))}
         />
       </div>
+      )}
 
       <div>
         {error && <PageLoadError error={error} resource="content issues" />}
@@ -353,8 +361,15 @@ export function ContentQualityPage() {
               needle
                 ? 'No content key on this page contains that text. Clear the search or change page.'
                 : status === 'open'
-                ? 'No open issues. The bridge job syncs every 15 minutes — check back soon, or check that the source project is running.'
+                ? 'No open issues. Mushi looks for new ones every 15 minutes.'
                 : `No issues with status "${status}".`
+            }
+            action={
+              nothingOpen ? (
+                <Btn size="sm" variant="ghost" onClick={() => changeFilter(() => setStatus('all'))}>
+                  Show past issues
+                </Btn>
+              ) : undefined
             }
           />
         )}

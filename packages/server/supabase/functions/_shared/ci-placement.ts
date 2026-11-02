@@ -4,8 +4,13 @@
  *          Pure rules shared by the preview route, the request route and the
  *          GitHub connector's act() (which checks them again at execution):
  *
- *   allowlist   Mushi writes only LINUX_RUNNER and RUNNER_<WORKFLOW>; any
- *               other variable name is refused, whatever the token allows
+ *   allowlist   Mushi writes only LINUX_RUNNER, RUNNER_<WORKFLOW> and
+ *               CI_PROFILE (economy | thorough, offered only where a
+ *               workflow reads vars.CI_PROFILE); any other variable name is
+ *               refused, whatever the token allows
+ *   time-box    a move to GitHub-hosted runners may carry revertAfterHours
+ *               (approved with the change); the CI collector switches it
+ *               back when due, with the same compare-and-set
  *   policy      the organization's CI agreement (ci_runner_policies): no
  *               paid GitHub-hosted minutes on private repos unless allowed,
  *               external controllers own their repos (Mushi only shows
@@ -21,7 +26,7 @@
  * Pure: no I/O.
  */
 
-import { isHostedLabel, runsOnJobMatches, type ParsedWorkflow } from './ci-runs-on.ts'
+import { isHostedLabel, runsOnJobMatches, workflowsRead, type ParsedWorkflow } from './ci-runs-on.ts'
 import { runnerBaseName } from './ci-infra.ts'
 
 /** The only variables Mushi may write (ADR 0037). */
@@ -35,8 +40,29 @@ export const RECENT_CHANGE_MS = 24 * 60 * 60_000
 /** owner/repo; `.` and `..` are never a segment (they would rewrite the API path). */
 export const REPO_RE = /^(?!\.\.?\/)[A-Za-z0-9._-]+\/(?!\.\.?$)[A-Za-z0-9._-]+$/
 
+/**
+ * How much of a repo's CI runs on fix pull requests: `economy` (the default,
+ * also when unset) lets workflows skip the slow, billed checks on Mushi fix
+ * heads, which still run on the release train and on main; `thorough` runs
+ * everything on every pull request. Only a workflow that reads
+ * vars.CI_PROFILE changes with it.
+ */
+export const PROFILE_VARIABLE = 'CI_PROFILE'
+export const PROFILE_VALUES = ['economy', 'thorough'] as const
+/** The longest a move to GitHub-hosted runners may last before it switches back on its own. */
+export const MAX_REVERT_AFTER_HOURS = 168
+const ALLOWED_NAMES = 'LINUX_RUNNER, RUNNER_<WORKFLOW> and CI_PROFILE'
+
 export function isAllowedPlacementVariable(name: unknown): boolean {
-  return typeof name === 'string' && PLACEMENT_VARIABLE_RE.test(name)
+  return typeof name === 'string' && (PLACEMENT_VARIABLE_RE.test(name) || name === PROFILE_VARIABLE)
+}
+
+export function isProfileVariable(name: unknown): boolean {
+  return name === PROFILE_VARIABLE
+}
+
+function isProfileValue(v: unknown): boolean {
+  return typeof v === 'string' && (PROFILE_VALUES as readonly string[]).includes(v)
 }
 
 /** RUNNER_<WORKFLOW> for a workflow file name: `e2e.yml` → RUNNER_E2E. */
@@ -246,6 +272,30 @@ export function policyVerdictAll(
   return first ?? policyVerdict(policy, { repo: input.repo, visibility: input.visibility, target: targetOf(null, null), runners: input.runners })
 }
 
+/**
+ * The verdict for one change, as preview and act() both decide it. CI_PROFILE
+ * moves no job, so only the external-controller rule applies to it; a runner
+ * variable is checked against every target its jobs would land on.
+ */
+export function placementVerdict(
+  policy: CiRunnerPolicy | null,
+  input: { repo: string; visibility: 'public' | 'private' | 'unknown'; name: string; value: string | null; fallbacks: readonly string[]; runners: readonly RunnerSeen[] },
+): PolicyVerdict {
+  if (!isProfileVariable(input.name)) {
+    return policyVerdictAll(policy, { repo: input.repo, visibility: input.visibility, targets: targetsOf(input.value, input.fallbacks), runners: input.runners })
+  }
+  const controller = externalControllerFor(policy, input.repo)
+  if (policy && controller) {
+    return {
+      allowed: false,
+      code: 'EXTERNAL_CONTROLLER',
+      reason: `${input.repo} is managed by ${controller.name}${controller.owner ? ` (${controller.owner})` : ''}. Mushi shows it and does not change it.`,
+      controller,
+    }
+  }
+  return { allowed: true, code: null, reason: null, controller }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Jobs
 // ─────────────────────────────────────────────────────────────────────────────
@@ -313,6 +363,8 @@ export interface PlacementPayload {
   expectedLabels: string[]
   /** Every fallback label the moving jobs use (a delete sends each job to its own). */
   fallbackLabels?: string[]
+  /** A move to GitHub-hosted switches back to `expected` after this many hours (approved with the change). */
+  revertAfterHours?: number
 }
 
 export function actionFor(value: string | null): PlacementAction {
@@ -325,14 +377,31 @@ export function payloadProblem(p: unknown, action: string): string | null {
   const x = p as Record<string, unknown>
   if (!(PLACEMENT_ACTIONS as readonly string[]).includes(action)) return `Unknown action ${action}.`
   if (typeof x.repo !== 'string' || !REPO_RE.test(x.repo)) return 'The payload has no owner/repo.'
-  if (!isAllowedPlacementVariable(x.name)) return `Mushi only changes LINUX_RUNNER and RUNNER_<WORKFLOW> variables, not "${String(x.name).slice(0, 60)}".`
-  if (action === 'set_actions_variable' && (typeof x.value !== 'string' || !RUNNER_LABEL_RE.test(x.value))) return 'The new value must be one runner label.'
+  if (!isAllowedPlacementVariable(x.name)) return `Mushi only changes ${ALLOWED_NAMES} variables, not "${String(x.name).slice(0, 60)}".`
+  if (action === 'set_actions_variable' && isProfileVariable(x.name) && !isProfileValue(x.value)) return 'CI_PROFILE is economy or thorough.'
+  if (action === 'set_actions_variable' && !isProfileVariable(x.name) && (typeof x.value !== 'string' || !RUNNER_LABEL_RE.test(x.value))) return 'The new value must be one runner label.'
   if (action === 'delete_actions_variable' && x.value !== null) return 'A delete carries no value.'
   const e = x.expected as Record<string, unknown> | null | undefined
   if (!e || typeof e !== 'object' || typeof e.exists !== 'boolean') return 'The payload has no expected current state (compare-and-set).'
   if (e.exists && typeof e.value !== 'string') return 'The expected current value is missing.'
   if (x.fallbackLabels !== undefined && (!Array.isArray(x.fallbackLabels) || x.fallbackLabels.some((l) => typeof l !== 'string' || !RUNNER_LABEL_RE.test(l)))) return 'The fallback labels are not runner labels.'
+  if (x.revertAfterHours !== undefined) {
+    const h = x.revertAfterHours
+    if (typeof h !== 'number' || !Number.isInteger(h) || h < 1 || h > MAX_REVERT_AFTER_HOURS) return `revertAfterHours is a whole number from 1 to ${MAX_REVERT_AFTER_HOURS}.`
+    const toHosted = action === 'set_actions_variable'
+      ? typeof x.value === 'string' && isHostedLabel(x.value)
+      : e.exists === true && (!Array.isArray(x.fallbackLabels) || (x.fallbackLabels as unknown[]).every((l) => typeof l === 'string' && isHostedLabel(l)))
+    if (isProfileVariable(x.name) || !toHosted) return 'Only a move to GitHub-hosted runners switches back on its own.'
+  }
   return null
+}
+
+/** When a time-boxed change is due to switch back, or null when it has no time-box. */
+export function revertDueAt(payload: Pick<PlacementPayload, 'revertAfterHours'>, executedAt: string | null): Date | null {
+  const h = payload.revertAfterHours
+  if (!h || !executedAt) return null
+  const t = Date.parse(executedAt)
+  return Number.isFinite(t) ? new Date(t + h * 3_600_000) : null
 }
 
 /** True when the variable as read now is the one the person saw. */
@@ -378,6 +447,8 @@ export interface PreviewInput {
   waitP95ByLabel: Record<string, number | null>
   cost: PlacementPreview['cost']
   now: Date
+  /** A move to GitHub-hosted switches back after this many hours. */
+  revertAfterHours?: number | null
 }
 
 function ago(ms: number): string {
@@ -386,19 +457,23 @@ function ago(ms: number): string {
 }
 
 export function buildPlacementPreview(input: PreviewInput): PlacementPreview {
+  if (isProfileVariable(input.variable)) return buildProfilePreview(input)
   const warnings: string[] = []
   const jobs = input.parsed ? classifyPlacementJobs(input.parsed, input.variable) : { moves: [], stays: [] }
   const fallback = dominantFallback(jobs.moves)
   const fallbacks = [...new Set(jobs.moves.map((m) => m.fallback).filter((f): f is string => !!f))]
   const nextTarget = targetOf(input.value, fallback)
   const nowTarget = targetOf(input.current?.exists ? input.current.value : null, fallback)
-  const policy = policyVerdictAll(input.policy, { repo: input.repo, visibility: input.visibility, targets: targetsOf(input.value, fallbacks), runners: input.runners })
+  const policy = placementVerdict(input.policy, { repo: input.repo, visibility: input.visibility, name: input.variable, value: input.value, fallbacks, runners: input.runners })
   const action = actionFor(input.value)
   const block = (code: string, message: string) => ({ code, message })
   let blocked: PlacementPreview['blocked'] = null
+  const revertAfterHours = input.revertAfterHours ?? null
 
-  if (!isAllowedPlacementVariable(input.variable)) blocked = block('VARIABLE_NOT_ALLOWED', `Mushi only changes LINUX_RUNNER and RUNNER_<WORKFLOW> variables, not "${String(input.variable).slice(0, 60)}".`)
+  if (!isAllowedPlacementVariable(input.variable)) blocked = block('VARIABLE_NOT_ALLOWED', `Mushi only changes ${ALLOWED_NAMES} variables, not "${String(input.variable).slice(0, 60)}".`)
   else if (input.value !== null && !RUNNER_LABEL_RE.test(input.value)) blocked = block('VALIDATION_ERROR', 'Pick one runner label (letters, digits, dot, dash, underscore).')
+  else if (revertAfterHours !== null && (!Number.isInteger(revertAfterHours) || revertAfterHours < 1 || revertAfterHours > MAX_REVERT_AFTER_HOURS)) blocked = block('VALIDATION_ERROR', `Switch back after 1 to ${MAX_REVERT_AFTER_HOURS} hours.`)
+  else if (revertAfterHours !== null && nextTarget.kind !== 'github_hosted') blocked = block('VALIDATION_ERROR', 'Only a move to GitHub-hosted runners switches back on its own.')
   else if (!input.current) blocked = block('VARIABLE_UNREADABLE', 'Mushi could not read the variable, so it cannot check that nobody changed it in between. Give the stored GitHub token Variables: read (fine-grained) or repo (classic).')
   else if (!policy.allowed) blocked = block(policy.code ?? 'POLICY_REFUSED', policy.reason ?? 'Your CI agreement refuses this change.')
   else if ((input.current.exists ? input.current.value : null) === input.value) blocked = block('NO_CHANGE', 'The variable already has this value.')
@@ -430,6 +505,14 @@ export function buildPlacementPreview(input: PreviewInput): PlacementPreview {
     if (Number.isFinite(age) && age >= 0 && age < RECENT_CHANGE_MS) warnings.push(`This variable last changed ${ago(age)}. If another tool manages it, the two will fight.`)
   }
   if (jobs.moves.length > 0) warnings.push('Jobs already queued keep the runner they asked for; the change applies to new runs.')
+  if (nextTarget.kind === 'github_hosted' && nowTarget.kind !== 'github_hosted') {
+    const back = input.current?.exists ? `“${input.current.value}”` : 'its fallback'
+    warnings.push(
+      revertAfterHours !== null
+        ? `Switches back to ${back} ${revertAfterHours} hour${revertAfterHours === 1 ? '' : 's'} after it runs, unless someone changes the variable first.`
+        : 'No time limit: it stays on GitHub-hosted runners until someone switches it back.',
+    )
+  }
 
   const expectedLabels = input.value !== null ? [input.value] : fallbacks.length > 0 ? fallbacks : nextTarget.label ? [nextTarget.label] : []
   const payload: PlacementPayload | null =
@@ -443,6 +526,7 @@ export function buildPlacementPreview(input: PreviewInput): PlacementPreview {
           jobs: jobs.moves.map((m) => ({ workflow: m.workflow, job: m.job })).slice(0, 50),
           expectedLabels,
           fallbackLabels: fallbacks.slice(0, 20),
+          ...(revertAfterHours !== null ? { revertAfterHours } : {}),
         }
 
   return {
@@ -457,6 +541,60 @@ export function buildPlacementPreview(input: PreviewInput): PlacementPreview {
     jobs,
     target,
     cost: input.cost,
+    policy,
+    warnings,
+    payload,
+    blocked,
+  }
+}
+
+/** CI_PROFILE: no job moves and no runner is targeted; the workflows must read it. */
+function buildProfilePreview(input: PreviewInput): PlacementPreview {
+  const warnings: string[] = []
+  const block = (code: string, message: string) => ({ code, message })
+  const policy = placementVerdict(input.policy, { repo: input.repo, visibility: input.visibility, name: input.variable, value: input.value, fallbacks: [], runners: input.runners })
+  const reads = input.parsed ? workflowsRead(input.parsed, PROFILE_VARIABLE) : false
+  const was = input.current?.exists ? input.current.value : null
+  let blocked: PlacementPreview['blocked'] = null
+  if (input.value !== null && !isProfileValue(input.value)) blocked = block('VALIDATION_ERROR', 'CI_PROFILE is economy or thorough.')
+  else if (input.revertAfterHours != null) blocked = block('VALIDATION_ERROR', 'Only a move to GitHub-hosted runners switches back on its own.')
+  else if (!input.parsed) blocked = block('WORKFLOWS_UNREAD', "Mushi has not read this repo's workflow files yet, so it cannot tell whether CI_PROFILE does anything here.")
+  else if (!reads) blocked = block('PROFILE_NOT_READ', `No workflow in ${input.repo} reads vars.CI_PROFILE, so changing it would do nothing. Its workflows need an economy/thorough switch first.`)
+  else if (!input.current) blocked = block('VARIABLE_UNREADABLE', 'Mushi could not read the variable, so it cannot check that nobody changed it in between. Give the stored GitHub token Variables: read (fine-grained) or repo (classic).')
+  else if (!policy.allowed) blocked = block(policy.code ?? 'POLICY_REFUSED', policy.reason ?? 'Your CI agreement refuses this change.')
+  else if (was === input.value) blocked = block('NO_CHANGE', 'The variable already has this value.')
+  else if (input.value === null && !input.current.exists) blocked = block('NO_CHANGE', 'The variable is not set.')
+  if ((input.value ?? 'economy') === 'thorough') {
+    warnings.push(`Thorough runs every check on every pull request, Mushi fix pull requests included. On ${input.visibility === 'public' ? 'a public repo that is free on standard runners' : 'a private repo that means more billed GitHub-hosted minutes'}.`)
+  } else {
+    warnings.push('Economy (the default) lets fix pull requests skip the checks their workflows mark as skippable; those still run on the release train and on main before a deploy.')
+  }
+  // No runner is targeted: the console shows a profile row, not a target.
+  const none: PlacementTarget = { kind: 'github_hosted', label: null }
+  const payload: PlacementPayload | null =
+    blocked || !input.current
+      ? null
+      : {
+          repo: input.repo,
+          name: input.variable,
+          value: input.value,
+          expected: { exists: input.current.exists, value: was, updatedAt: input.current.exists ? input.current.updatedAt : null },
+          jobs: [],
+          expectedLabels: [],
+          fallbackLabels: [],
+        }
+  return {
+    repo: input.repo,
+    projectId: input.projectId,
+    visibility: input.visibility,
+    variable: input.variable,
+    action: actionFor(input.value),
+    current: input.current,
+    next: { value: input.value, target: none },
+    now: { target: none },
+    jobs: { moves: [], stays: [] },
+    target: null,
+    cost: null,
     policy,
     warnings,
     payload,

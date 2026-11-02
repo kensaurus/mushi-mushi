@@ -75,6 +75,26 @@ describe('keyStatusView', () => {
     expect(v.state).toBe('working')
   })
 
+  it('a used-up key names the next key only when one can take over', () => {
+    const used = pool({ provider_slug: 'cursor', exhausted_until: iso(H) })
+    const off = pool({ id: 'k2', provider_slug: 'cursor', status: 'disabled' })
+    const spare = pool({ id: 'k3', provider_slug: 'cursor' })
+    const alone = keyStatusView(used, { pool: [used, off], now: NOW, providerName: 'Cursor' })
+    expect(alone).toMatchObject({ state: 'attention', label: 'Used up', action: 'add_backup' })
+    expect(alone.detail).toMatch(/no other Cursor key is on, so new agents wait until/)
+    const covered = keyStatusView(used, { pool: [used, spare], now: NOW, providerName: 'Cursor' })
+    expect(covered.detail).toMatch(/New agents use your next key until/)
+    // A spare that is used up too cannot take over.
+    const spent = pool({ id: 'k3', provider_slug: 'cursor', exhausted_until: iso(H) })
+    expect(keyStatusView(used, { pool: [used, spent], now: NOW, providerName: 'Cursor' }).detail).toMatch(/new agents wait until/)
+  })
+
+  it('a key resting until its renewal names the date, not a clock time', () => {
+    const resting = pool({ provider_slug: 'cursor', exhausted_until: iso(19 * 24 * H) })
+    const detail = keyStatusView(resting, { pool: [resting], now: NOW, providerName: 'Cursor' }).detail
+    expect(detail).toContain(new Date(NOW + 19 * 24 * H).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' }))
+  })
+
   it('a saved but untested key is "not checked yet", never working', () => {
     expect(view(pool({ status: 'pending_validation', test_status: null, last_tested_at: null }))).toMatchObject({
       state: 'checking',
@@ -145,12 +165,23 @@ describe('summarizeKeys', () => {
     ]
     expect(summarizeKeys(keys, [legacy()], NOW)).toEqual({
       working: 1,
-      attention: 2, // rejected key + superseded legacy key
+      attention: 0,
+      replaced: 2, // rejected key + superseded legacy key, both replaced by the working key
       expiring: 1,
       checking: 1,
       off: 1,
       total: 6,
     })
+  })
+
+  it('a rejected key with nothing to replace it still needs attention', () => {
+    const keys = [pool({ id: 'k2', status: 'auth_failed', test_status: 'error_auth' })]
+    expect(summarizeKeys(keys, [], NOW)).toMatchObject({ attention: 1, replaced: 0 })
+  })
+
+  it('a key turned off by hand never needs attention, even once it has expired', () => {
+    const off = pool({ id: 'k9', status: 'disabled', expires_at: iso(-24 * H) })
+    expect(summarizeKeys([pool(), off], [], NOW)).toMatchObject({ attention: 0, replaced: 0, off: 1 })
   })
 })
 
@@ -165,10 +196,23 @@ describe('providerStatusView', () => {
     })
   })
 
-  it('a working provider with a broken spare key still asks for attention', () => {
+  it('a working provider with a rejected key it already replaced reads Working, with the key to remove', () => {
+    // The rejected key's row says "Another key is working, so remove this one";
+    // the banner and badge no longer count it, so the provider row agrees.
     const v = providerStatusView(
       'anthropic',
       [pool(), pool({ id: 'k2', status: 'auth_failed', test_status: 'error_auth' })],
+      [],
+      opts,
+    )
+    expect(v.state).toBe('working')
+    expect(v.detail).toMatch(/· 1 old key to remove below$/)
+  })
+
+  it('a working provider with a spare key out of quota still asks for attention', () => {
+    const v = providerStatusView(
+      'anthropic',
+      [pool(), pool({ id: 'k2', status: 'quota_exhausted', test_status: 'error_quota', cooldown_until: iso(H) })],
       [],
       opts,
     )

@@ -4,14 +4,14 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/inventory-auth-runner
 
 ---
 title: '@mushi-mushi/inventory-auth-runner'
-description: "@mushi-mushi/inventory-auth-runner logs in with Playwright from your inventory.yaml auth script so Mushi's crawler can reach pages behind a login."
+description: "@mushi-mushi/inventory-auth-runner logs in with Playwright from your inventory.yaml auth script so the Mushi Mushi crawler can reach pages behind a login."
 ---
 
 # `@mushi-mushi/inventory-auth-runner`
 
-A small Playwright runner that executes the `auth.scripted` block of your
-[`inventory.yaml`](/sdks/inventory-schema), captures the resulting cookies,
-and stores them in `project_settings` so the v2 crawler and synthetic
+A small Playwright runner that signs in to your app with the login script
+in your [`inventory.yaml`](/sdks/inventory-schema), picks the session
+cookie, and saves it to your Mushi Mushi project so the crawler and synthetic
 monitor can reach pages behind a login wall.
 
 ## When you need it
@@ -25,36 +25,59 @@ gives you the bootstrap step that hands them a session.
 
 ```bash
 pnpm add -D @mushi-mushi/inventory-auth-runner
+npx playwright install chromium   # once, if Playwright has no Chromium on this machine yet
 ```
 
 ## Usage
 
-Add an `auth.scripted` block to `inventory.yaml`:
+Add a scripted `auth` block under `app` in `inventory.yaml`. The script is
+the body of an async function that receives Playwright's `page`, an `env`
+object for your secrets, and `context`; the runner has already opened
+`base_url` + `login_path`:
 
 ```yaml filename="inventory.yaml"
-auth:
-  scripted:
-    steps:
-      - navigate: /login
-      - type: { selector: '[data-testid=email]',    value: '$E2E_EMAIL' }
-      - type: { selector: '[data-testid=password]', value: '$E2E_PASSWORD' }
-      - click:    { selector: '[data-testid=login]' }
-      - waitFor:  { url: /\/dashboard$/ }
+app:
+  id: acme-web
+  name: Acme web
+  base_url: https://app.acme.test
+  auth:
+    type: scripted
+    config:
+      login_path: /login
+      script: |
+        await page.fill('[data-testid=email]', env.TEST_USER_EMAIL)
+        await page.fill('[data-testid=password]', env.TEST_USER_PASSWORD)
+        await page.click('[data-testid=login]')
+        await page.waitForURL('**/dashboard')
 ```
+
+Inline scripts may not use `require(`, `import(`, `process.`, `eval(` and
+similar escapes, and are capped at 8 KB. For anything longer, set
+`script: 'js:./scripts/login.js'` to a module that default-exports an
+async `(page, env, context)` function. The path resolves against the folder
+of your local `inventory.yaml` (`--inventory ` or
+`MUSHI_INVENTORY_FILE`; default `./inventory.yaml`, so the working
+directory).
 
 Then run:
 
 ```bash
-E2E_EMAIL=user@acme.test \
-E2E_PASSWORD=… \
+TEST_USER_EMAIL=user@acme.test \
+TEST_USER_PASSWORD=… \
 MUSHI_API_KEY=mushi_… \
-MUSHI_PROJECT_ID=proj_… \
+MUSHI_PROJECT=<project-uuid> \
 npx mushi-mushi-auth refresh
 ```
 
-The runner walks the steps headlessly, captures every cookie set by the
-target origin, and POSTs them to `/v1/admin/projects/:id/settings`. The
-crawler and synthetic monitor read from the same row on every run.
+Without installing, use
+`npx --yes -p @mushi-mushi/inventory-auth-runner mushi-mushi-auth refresh`.
+`MUSHI_API_KEY` needs the `mcp:write` scope. `MUSHI_API_ENDPOINT` is only
+for self-hosting.
+
+The runner signs in in a fresh headless Chromium, picks the session cookie
+set for your app's domain, and saves it with
+`PATCH /v1/admin/inventory/:projectId/settings`. The crawler and synthetic
+monitor read it from there on every run.
 
 ## In CI
 
@@ -72,12 +95,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # The runner launches Chromium; a fresh runner has no Playwright browser.
+      - run: npx --yes -p @mushi-mushi/inventory-auth-runner playwright install --with-deps chromium
       - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
           api-key:    ${{ secrets.MUSHI_API_KEY }}
           project-id: ${{ secrets.MUSHI_PROJECT_ID }}
           command:    auth-bootstrap
+        env:
+          TEST_USER_EMAIL:    ${{ secrets.MUSHI_TEST_USER_EMAIL }}
+          TEST_USER_PASSWORD: ${{ secrets.MUSHI_TEST_USER_PASSWORD }}
 ```
 
 The `auth-bootstrap` command in [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci)
-is a convenience wrapper that calls this runner — use it from CI.
+is a convenience wrapper that calls this runner (with `MUSHI_PROJECT` set
+from `project-id`); use it from CI. It does not install a browser itself.

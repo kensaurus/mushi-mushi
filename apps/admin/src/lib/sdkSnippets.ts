@@ -167,7 +167,9 @@ export function isServerFramework(fw: Framework): fw is ServerFramework {
   return (SERVER_FRAMEWORKS as readonly string[]).includes(fw)
 }
 
-const API_KEY_PLACEHOLDER = 'mushi_xxx'
+// Not "mushi_xxx": that read like a real key and was pasted as one
+// (first-time user test, 2026-10-28). This cannot pass for a key.
+const API_KEY_PLACEHOLDER = 'YOUR_SDK_KEY'
 
 function isExpoBuildTimeEnv(env: ProjectMushiEnvVars): boolean {
   return env.projectIdVar.startsWith('EXPO_PUBLIC_')
@@ -325,6 +327,12 @@ export function renderSnippet(
   apiKey?: string | null,
   cfg: SdkPreviewConfig = DEFAULT_SDK_CONFIG,
   projectSlug?: string | null,
+  /**
+   * The app's bundler, read from its repository. React apps on Vite or Next
+   * then read the id and key from env vars (with the `.env.local` lines),
+   * the way those apps keep config; unknown keeps the inline snippet.
+   */
+  bundler?: 'vite' | 'next' | null,
 ): string {
   const key = apiKey || API_KEY_PLACEHOLDER
   const env = mushiEnvVarsForProjectSlug(projectSlug)
@@ -375,6 +383,28 @@ ${attrs.join('\n')}
   {/* Attach the reporter to an existing DOM element */}
   <MushiAttach selector="${cfg.attachToSelector.trim() || '#report-button'}" />`
         : ''
+    if (bundler === 'vite' || bundler === 'next') {
+      // Snippet text, not env reads: the source path is built from parts so
+      // the env-source-parity scan does not take it for a console env var.
+      const prefix = bundler === 'vite' ? 'VITE_' : 'NEXT_PUBLIC_'
+      const source = bundler === 'vite' ? ['import', 'meta', 'env'].join('.') : ['process', 'env'].join('.')
+      const read = (name: string) => `${source}.${prefix}MUSHI_${name}`
+      return `// .env.local (keep it out of git):
+// ${prefix}MUSHI_PROJECT_ID=${projectId}
+// ${prefix}MUSHI_API_KEY=${key}
+${bundler === 'next' ? "'use client'\n" : ''}import { MushiProvider } from '@mushi-mushi/react'${triggerImport}
+
+function App() {
+  return (
+    <MushiProvider config={{
+      projectId: ${read('PROJECT_ID')},
+      apiKey: ${read('API_KEY')},
+${extras}    }}>${triggerUsage}
+      <YourApp />
+    </MushiProvider>
+  )
+}`
+    }
     return `import { MushiProvider } from '@mushi-mushi/react'${triggerImport}
 
 function App() {

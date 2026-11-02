@@ -5,7 +5,6 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch, apiFetchMutate } from '../lib/supabase'
-import { useEntitlements } from '../lib/useEntitlements'
 import { Btn, Section } from './ui'
 
 interface Status {
@@ -14,10 +13,12 @@ interface Status {
   schemaPending?: boolean
 }
 
+/**
+ * The index is shared by every workspace and the rebuild spends platform
+ * embedding budget, so the server lets only super-admins start it; Settings
+ * renders this panel only for them.
+ */
 export function ConsoleHelpPanel() {
-  // The index is shared by every workspace and the rebuild spends platform
-  // embedding budget, so the server lets only super-admins start it.
-  const { isSuperAdmin } = useEntitlements()
   const [status, setStatus] = useState<Status | null>(null)
   const [loading, setLoading] = useState(true)
   const [rebuilding, setRebuilding] = useState(false)
@@ -66,15 +67,9 @@ export function ConsoleHelpPanel() {
             : `${status?.chunkCount ?? 0} chunks · last updated ${status?.lastUpdated ? new Date(status.lastUpdated).toLocaleString() : 'never'}`}
         </p>
       )}
-      {isSuperAdmin ? (
-        <Btn variant="ghost" size="sm" disabled={rebuilding || status?.schemaPending} onClick={() => void rebuild()}>
-          {rebuilding ? 'Rebuilding…' : 'Rebuild console help index'}
-        </Btn>
-      ) : (
-        <p className="text-2xs text-fg-muted">
-          Only Mushi staff can rebuild this shared index. Nothing to do here.
-        </p>
-      )}
+      <Btn variant="ghost" size="sm" disabled={rebuilding || status?.schemaPending} onClick={() => void rebuild()}>
+        {rebuilding ? 'Rebuilding…' : 'Rebuild console help index'}
+      </Btn>
       {message && <p className="text-2xs text-fg-muted mt-2">{message}</p>}
     </Section>
   )

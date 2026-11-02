@@ -16,16 +16,6 @@ ignoreUntil = 2026-12-31
 reason = "react-router RSC CSRF, fixed only in react-router >= 8.3.0; react-router-dom has no 8.x release yet. The admin console uses BrowserRouter, not React Server Components, so the vulnerable path is not reachable."
 
 [[IgnoredVulns]]
-id = "GHSA-w3rx-r6r6-pgpr"
-ignoreUntil = 2026-12-31
-reason = "image-size ICNS parser infinite loop; no fixed release exists. Only reachable through the docs site's build-time Metro bundler measuring images committed to this repository. No untrusted image reaches it and nothing in the server or published SDKs depends on it."
-
-[[IgnoredVulns]]
-id = "GHSA-5p2g-fcmc-qvqq"
-ignoreUntil = 2026-12-31
-reason = "image-size JXL/HEIF parser infinite loop; no fixed release exists. Same build-time-only path as GHSA-w3rx-r6r6-pgpr."
-
-[[IgnoredVulns]]
 id = "GHSA-86w9-cpqp-85rv"
 ignoreUntil = 2026-12-31
 reason = "node-forge, no fixed release exists. Only reachable through @expo/cli, pulled in by the React Native SDK's optional expo peers that pnpm auto-installs for development; nothing that ships imports it. Owner decision 2026-10-02."

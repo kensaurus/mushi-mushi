@@ -16,6 +16,7 @@ import type { FixAttempt } from './types'
 import { isFixMerged } from '../../lib/mergeFix'
 import { STAGE_HEX } from '../flow-primitives/flowTokens'
 import { readFixCi } from '../../lib/ciInfra'
+import { agentFlaggedFix } from '../../lib/pdcaAct'
 
 export type FixStageStatus = 'pending' | 'active' | 'done' | 'failed' | 'skipped'
 
@@ -106,7 +107,8 @@ export function buildFixAttemptEdges(fix: FixAttempt): Edge<FixEdgeData>[] {
 export function deriveStatuses(fix: FixAttempt): Record<string, FixStageStatus> {
   const status = fix.status?.toLowerCase()
   const ci = fix.check_run_conclusion?.toLowerCase()
-  const reviewPassed = fix.review_passed
+  // Only a real flag fails the judge stage; false is the column default (9831ade8).
+  const flagged = agentFlaggedFix(fix)
   const hasPr = !!fix.pr_url
   const failed = status === 'failed'
 
@@ -124,9 +126,9 @@ export function deriveStatuses(fix: FixAttempt): Record<string, FixStageStatus> 
             ? 'pending'
             : 'pending'
   const judge: FixStageStatus =
-    reviewPassed === true
+    fix.review_passed === true
       ? 'done'
-      : reviewPassed === false
+      : flagged
         ? 'failed'
         : pr === 'done'
           ? 'active'
@@ -159,7 +161,7 @@ function subLabelFor(key: string, fix: FixAttempt): string | undefined {
     case 'pr':
       return fix.pr_number ? `#${fix.pr_number}` : fix.branch ? truncate(fix.branch, 20) : undefined
     case 'judge':
-      return fix.review_passed === true ? 'passed' : fix.review_passed === false ? 'flagged' : undefined
+      return fix.review_passed === true ? 'passed' : agentFlaggedFix(fix) ? 'flagged' : undefined
     case 'act':
       if (isFixMerged(fix)) return 'merged'
       if (fix.ci_infra?.infra) {

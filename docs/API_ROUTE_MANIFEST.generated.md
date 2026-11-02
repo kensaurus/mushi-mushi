@@ -2,18 +2,18 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-23 · **743** routes.
+> Generated: 2026-10-30 · **809** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 192 |
+| `adminOrApiKey` | 219 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 383 |
-| `jwtOrApiKey` | 3 |
-| `public` | 61 |
-| `unknown` | 45 |
+| `jwtAuth` | 412 |
+| `jwtOrApiKey` | 2 |
+| `public` | 66 |
+| `unknown` | 51 |
 
 ## Routes by path
 
@@ -63,6 +63,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | DELETE | `/v1/admin/byok/:provider` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | PUT | `/v1/admin/byok/:provider` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/byok/:provider/test` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
+| GET | `/v1/admin/byok/ai-provider` | `jwtAuth` | `packages/server/supabase/functions/api/routes/byok-review-followups.ts` |
+| PATCH | `/v1/admin/byok/ai-provider` | `jwtAuth` | `packages/server/supabase/functions/api/routes/byok-review-followups.ts` |
 | GET | `/v1/admin/byok/anthropic/models` | `jwtAuth` | `packages/server/supabase/functions/api/routes/anthropic-models.ts` |
 | DELETE | `/v1/admin/byok/browserbase` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/byok/browserbase` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
@@ -89,7 +91,15 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/byok/spend-down` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/byok-spend-down.ts` |
 | POST | `/v1/admin/byok/spend-down/projects/:projectId/resume` | `jwtAuth` | `packages/server/supabase/functions/api/routes/byok-spend-down.ts` |
 | GET | `/v1/admin/chart-events` | `jwtAuth` | `packages/server/supabase/functions/api/routes/health.ts` |
+| GET | `/v1/admin/ci/bill` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-bill.ts` |
+| POST | `/v1/admin/ci/bill` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-bill.ts` |
 | GET | `/v1/admin/ci/compare` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci.ts` |
+| GET | `/v1/admin/ci/cost-fix-bundles/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-cost-fix-bundle.ts` |
+| GET | `/v1/admin/ci/cost-fix-rollout` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-cost-fix-bundle.ts` |
+| POST | `/v1/admin/ci/cost-fix-rollout` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-cost-fix-bundle.ts` |
+| GET | `/v1/admin/ci/cost-fixes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-cost-fix.ts` |
+| POST | `/v1/admin/ci/cost-fixes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-cost-fix.ts` |
+| GET | `/v1/admin/ci/cost-fixes/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-cost-fix.ts` |
 | GET | `/v1/admin/ci/cost-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci.ts` |
 | PUT | `/v1/admin/ci/cost-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci.ts` |
 | GET | `/v1/admin/ci/overview` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci.ts` |
@@ -151,6 +161,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/fixes/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | PATCH | `/v1/admin/fixes/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | POST | `/v1/admin/fixes/:id/ci/rerun` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci.ts` |
+| POST | `/v1/admin/fixes/:id/local-followup` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/local-followups.ts` |
+| POST | `/v1/admin/fixes/:id/local-followup/done` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/local-followups.ts` |
 | POST | `/v1/admin/fixes/:id/merge` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | POST | `/v1/admin/fixes/:id/refresh-ci` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | POST | `/v1/admin/fixes/:id/review` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
@@ -166,6 +178,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/fixes/stats` | `public` | `packages/server/supabase/functions/api/routes/workspace-nav-meta.test.ts` |
 | GET | `/v1/admin/fixes/summary` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | GET | `/v1/admin/fixes/summary` | `public` | `packages/server/supabase/functions/api/routes/workspace-nav-meta.test.ts` |
+| POST | `/v1/admin/fresh-eyes/test-account` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
 | POST | `/v1/admin/graph-backend/snapshot` | `jwtAuth` | `packages/server/supabase/functions/api/routes/intelligence-synthetic.ts` |
 | GET | `/v1/admin/graph-backend/status` | `jwtAuth` | `packages/server/supabase/functions/api/routes/intelligence-synthetic.ts` |
 | GET | `/v1/admin/graph/blast-radius/:nodeId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/graph-query.ts` |
@@ -176,7 +189,9 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/graph/traverse` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/graph-query.ts` |
 | GET | `/v1/admin/groups` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | POST | `/v1/admin/groups/:id/merge` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
+| GET | `/v1/admin/growth/daily` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/landing-visits.ts` |
 | GET | `/v1/admin/growth/funnel` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/growth.ts` |
+| GET | `/v1/admin/health-checks` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/health-checks.ts` |
 | GET | `/v1/admin/health/cron` | `jwtAuth` | `packages/server/supabase/functions/api/routes/health.ts` |
 | POST | `/v1/admin/health/cron/:job/trigger` | `jwtAuth` | `packages/server/supabase/functions/api/routes/health.ts` |
 | GET | `/v1/admin/health/history` | `jwtAuth` | `packages/server/supabase/functions/api/routes/modernization-health-super.ts` |
@@ -305,6 +320,9 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/orgs/:orgId/spend` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/spend-ledger.ts` |
 | POST | `/v1/admin/orgs/:orgId/spend/imports` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/spend-ledger.ts` |
 | DELETE | `/v1/admin/orgs/:orgId/spend/imports/:importId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/spend-ledger.ts` |
+| GET | `/v1/admin/pipeline` | `jwtAuth` | `packages/server/supabase/functions/api/routes/pipeline.ts` |
+| POST | `/v1/admin/pipeline/actions` | `jwtAuth` | `packages/server/supabase/functions/api/routes/pipeline.ts` |
+| GET | `/v1/admin/pipeline/fix/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/pipeline.ts` |
 | GET | `/v1/admin/plugins` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | POST | `/v1/admin/plugins` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | DELETE | `/v1/admin/plugins/:slug` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
@@ -367,12 +385,19 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/projects/:id/design/tokens` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe.ts` |
 | GET | `/v1/admin/projects/:id/evolution-history` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/evolution.ts` |
 | POST | `/v1/admin/projects/:id/fixes/dry-run` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
+| POST | `/v1/admin/projects/:id/github/connect` | `jwtAuth` | `packages/server/supabase/functions/api/routes/github-connect.ts` |
+| POST | `/v1/admin/projects/:id/github/repo` | `jwtAuth` | `packages/server/supabase/functions/api/routes/github-connect.ts` |
+| POST | `/v1/admin/projects/:id/github/repos` | `jwtAuth` | `packages/server/supabase/functions/api/routes/github-connect.ts` |
+| GET | `/v1/admin/projects/:id/github/stack` | `jwtAuth` | `packages/server/supabase/functions/api/routes/github-connect.ts` |
+| GET | `/v1/admin/projects/:id/home` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-home.ts` |
+| POST | `/v1/admin/projects/:id/home/thumbnail` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-home.ts` |
 | DELETE | `/v1/admin/projects/:id/identity-secret` | `jwtAuth` | `packages/server/supabase/functions/api/routes/identity-secret.ts` |
 | GET | `/v1/admin/projects/:id/identity-secret` | `jwtAuth` | `packages/server/supabase/functions/api/routes/identity-secret.ts` |
 | POST | `/v1/admin/projects/:id/identity-secret` | `jwtAuth` | `packages/server/supabase/functions/api/routes/identity-secret.ts` |
 | POST | `/v1/admin/projects/:id/keys` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-keys.ts` |
 | DELETE | `/v1/admin/projects/:id/keys/:keyId` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-keys.ts` |
 | POST | `/v1/admin/projects/:id/keys/rotate` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-keys.ts` |
+| GET | `/v1/admin/projects/:id/local-followups` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/local-followups.ts` |
 | GET | `/v1/admin/projects/:id/preflight` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
 | GET | `/v1/admin/projects/:id/privacy-status` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/evolution.ts` |
 | GET | `/v1/admin/projects/:id/radar` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/radar.ts` |
@@ -386,6 +411,13 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/projects/:id/recipe/history` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe.ts` |
 | POST | `/v1/admin/projects/:id/recipe/refresh` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe.ts` |
 | GET | `/v1/admin/projects/:id/recipe/sources` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe-changes.ts` |
+| PUT | `/v1/admin/projects/:id/release-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/merge-queue.ts` |
+| GET | `/v1/admin/projects/:id/repo-cleanup` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/repo-housekeeping.ts` |
+| POST | `/v1/admin/projects/:id/repo-cleanup/requests` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/repo-housekeeping.ts` |
+| POST | `/v1/admin/projects/:id/repo-cleanup/requests/:actionId/approve` | `jwtAuth` | `packages/server/supabase/functions/api/routes/repo-housekeeping.ts` |
+| POST | `/v1/admin/projects/:id/repo-cleanup/requests/:actionId/execute` | `jwtAuth` | `packages/server/supabase/functions/api/routes/repo-housekeeping.ts` |
+| POST | `/v1/admin/projects/:id/repo-cleanup/requests/:actionId/reject` | `jwtAuth` | `packages/server/supabase/functions/api/routes/repo-housekeeping.ts` |
+| POST | `/v1/admin/projects/:id/repo-cleanup/restore` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/repo-housekeeping.ts` |
 | POST | `/v1/admin/projects/:id/repo/bootstrap` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/report-agent-context.ts` |
 | GET | `/v1/admin/projects/:id/reporter-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reporter-admin.ts` |
 | PUT | `/v1/admin/projects/:id/reporter-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reporter-admin.ts` |
@@ -394,6 +426,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/projects/:id/sdk-config` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | PUT | `/v1/admin/projects/:id/sdk-config` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/projects/:id/sdk-diagnostics` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-ci-secrets.ts` |
+| GET | `/v1/admin/projects/:id/sdk-health` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sdk-health.ts` |
+| POST | `/v1/admin/projects/:id/sdk-health/tasks` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sdk-health.ts` |
 | GET | `/v1/admin/projects/:id/search-ranks` | `jwtAuth` | `packages/server/supabase/functions/api/routes/search-rank.ts` |
 | PUT | `/v1/admin/projects/:id/search-ranks` | `jwtAuth` | `packages/server/supabase/functions/api/routes/search-rank.ts` |
 | POST | `/v1/admin/projects/:id/search-ranks/run` | `jwtAuth` | `packages/server/supabase/functions/api/routes/search-rank.ts` |
@@ -424,6 +458,13 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/projects/:id/vulnerabilities/scan` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/vulnerabilities.ts` |
 | PUT | `/v1/admin/projects/:id/vulnerabilities/settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/vulnerabilities.ts` |
 | POST | `/v1/admin/projects/:pid/content-quality/dismiss` | `jwtAuth` | `packages/server/supabase/functions/api/routes/content-quality.ts` |
+| GET | `/v1/admin/projects/:pid/fresh-eyes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
+| POST | `/v1/admin/projects/:pid/fresh-eyes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
+| GET | `/v1/admin/projects/:pid/fresh-eyes/:runId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
+| PUT | `/v1/admin/projects/:pid/fresh-eyes/:runId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
+| POST | `/v1/admin/projects/:pid/fresh-eyes/:runId/cancel` | `jwtAuth` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
+| POST | `/v1/admin/projects/:pid/fresh-eyes/:runId/findings` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
+| POST | `/v1/admin/projects/:pid/fresh-eyes/:runId/uploads` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fresh-eyes.ts` |
 | POST | `/v1/admin/projects/:pid/gate-findings/:id/dismiss` | `jwtAuth` | `packages/server/supabase/functions/api/routes/gate-finding-dismiss.ts` |
 | GET | `/v1/admin/projects/:pid/integrations` | `public` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/projects/:pid/integrations/discord/test` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
@@ -441,7 +482,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/projects/:pid/qa-stories/:sid` | `jwtAuth` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
 | PATCH | `/v1/admin/projects/:pid/qa-stories/:sid` | `jwtAuth` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
 | POST | `/v1/admin/projects/:pid/qa-stories/:sid/run` | `jwtOrApiKey` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
-| GET | `/v1/admin/projects/:pid/qa-stories/:sid/runs` | `jwtOrApiKey` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
+| GET | `/v1/admin/projects/:pid/qa-stories/:sid/runs` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
 | GET | `/v1/admin/projects/:pid/qa-stories/:sid/runs/:rid/evidence` | `jwtAuth` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
 | POST | `/v1/admin/projects/:pid/sdk-upgrade` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/sdk-upgrade.ts` |
 | DELETE | `/v1/admin/projects/:pid/sdk-upgrade/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sdk-upgrade.ts` |
@@ -491,6 +532,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/queue/summary` | `jwtAuth` | `packages/server/supabase/functions/api/routes/queue.ts` |
 | GET | `/v1/admin/queue/summary` | `public` | `packages/server/supabase/functions/api/routes/workspace-nav-meta.test.ts` |
 | GET | `/v1/admin/queue/throughput` | `jwtAuth` | `packages/server/supabase/functions/api/routes/queue.ts` |
+| GET | `/v1/admin/release-batch` | `jwtAuth` | `packages/server/supabase/functions/api/routes/release-batch.ts` |
 | GET | `/v1/admin/releases` | `unknown` | `packages/server/supabase/functions/api/routes/releases.ts` |
 | DELETE | `/v1/admin/releases/:id` | `unknown` | `packages/server/supabase/functions/api/routes/releases.ts` |
 | GET | `/v1/admin/releases/:id` | `unknown` | `packages/server/supabase/functions/api/routes/releases.ts` |
@@ -523,6 +565,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/reports/:id/reply` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | GET | `/v1/admin/reports/:id/reporter-view` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reporter-admin.ts` |
 | POST | `/v1/admin/reports/:id/request-info` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reporter-admin.ts` |
+| POST | `/v1/admin/reports/:id/sentry/close` | `jwtAuth` | `packages/server/supabase/functions/api/routes/report-sentry.ts` |
 | GET | `/v1/admin/reports/:id/timeline` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | POST | `/v1/admin/reports/bulk` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | POST | `/v1/admin/reports/bulk/:mutationId/undo` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reports.ts` |
@@ -572,6 +615,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/settings/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/settings/test-slack` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/setup` | `jwtAuth` | `packages/server/supabase/functions/api/routes/onboarding-setup.ts` |
+| GET | `/v1/admin/setup-gaps` | `jwtAuth` | `packages/server/supabase/functions/api/routes/setup-gaps.ts` |
 | GET | `/v1/admin/skill-runs` | `jwtAuth` | `packages/server/supabase/functions/api/routes/skill-runs.ts` |
 | GET | `/v1/admin/sso` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sso-audit.ts` |
 | POST | `/v1/admin/sso` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sso-audit.ts` |
@@ -604,6 +648,17 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/tester-submissions/:id/spam` | `jwtAuth` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | GET | `/v1/admin/two-way-health` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | GET | `/v1/admin/verifications` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
+| POST | `/v1/admin/work/claims/:id/stop` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work-status.ts` |
+| DELETE | `/v1/admin/work/hosts/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work.ts` |
+| PATCH | `/v1/admin/work/hosts/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work.ts` |
+| POST | `/v1/admin/work/hosts/:id/cursor-account` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work-status.ts` |
+| GET | `/v1/admin/work/hosts/:id/cursor-login` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work-status.ts` |
+| POST | `/v1/admin/work/hosts/:id/recheck` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work-status.ts` |
+| POST | `/v1/admin/work/key` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/work.ts` |
+| GET | `/v1/admin/work/lanes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/work.ts` |
+| PATCH | `/v1/admin/work/lanes/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work.ts` |
+| PUT | `/v1/admin/work/lanes/:id/queue` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work.ts` |
+| GET | `/v1/admin/work/stats` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/work-status.ts` |
 | GET | `/v1/admin/workspace/projects` | `unknown` | `packages/server/supabase/functions/api/routes/workspace-nav-meta.ts` |
 | GET | `/v1/agent-card` | `public` | `packages/server/supabase/functions/api/routes/discovery.ts` |
 | POST | `/v1/cli/auth/device/approve` | `jwtAuth` | `packages/server/supabase/functions/api/routes/cli-auth.ts` |
@@ -663,12 +718,16 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/public/marketplace/apps` | `public` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | GET | `/v1/public/marketplace/apps/:slug` | `public` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | GET | `/v1/public/marketplace/leaderboard` | `public` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
+| POST | `/v1/public/page-view` | `public` | `packages/server/supabase/functions/api/routes/landing-visits.ts` |
+| POST | `/v1/public/production-check` | `public` | `packages/server/supabase/functions/api/routes/production-check.ts` |
+| GET | `/v1/public/production-check/:id` | `public` | `packages/server/supabase/functions/api/routes/production-check.ts` |
 | GET | `/v1/public/reporter/email/unsubscribe` | `public` | `packages/server/supabase/functions/api/routes/reporter-prefs.ts` |
 | POST | `/v1/public/reporter/email/unsubscribe` | `public` | `packages/server/supabase/functions/api/routes/reporter-prefs.ts` |
 | GET | `/v1/public/reporter/email/verify` | `public` | `packages/server/supabase/functions/api/routes/reporter-prefs.ts` |
 | POST | `/v1/public/reporter/email/verify` | `public` | `packages/server/supabase/functions/api/routes/reporter-prefs.ts` |
 | GET | `/v1/public/roadmap/:projectSlug` | `public` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | POST | `/v1/public/roadmap/:projectSlug/:id/vote` | `public` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
+| GET | `/v1/public/scoreboard` | `public` | `packages/server/supabase/functions/api/routes/public-scoreboard.ts` |
 | GET | `/v1/public/tester-leaderboard` | `public` | `packages/server/supabase/functions/api/routes/community.ts` |
 | DELETE | `/v1/push/subscriptions` | `jwtAuth` | `packages/server/supabase/functions/api/routes/push.ts` |
 | POST | `/v1/push/subscriptions` | `jwtAuth` | `packages/server/supabase/functions/api/routes/push.ts` |
@@ -755,6 +814,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/tester/wallet/redeem` | `jwtAuth` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | POST | `/v1/webhooks/fine-tuning/openai` | `public` | `packages/server/supabase/functions/api/routes/fine-tuning.ts` |
 | POST | `/v1/webhooks/github` | `public` | `packages/server/supabase/functions/api/routes/public.ts` |
+| GET | `/v1/webhooks/github/app-authorize` | `public` | `packages/server/supabase/functions/api/routes/github-connect.ts` |
 | GET | `/v1/webhooks/github/app-installation` | `public` | `packages/server/supabase/functions/api/routes/public.ts` |
 | POST | `/v1/webhooks/sentry` | `public` | `packages/server/supabase/functions/api/routes/public.ts` |
 | POST | `/v1/webhooks/sentry/seer` | `public` | `packages/server/supabase/functions/api/routes/public.ts` |
@@ -762,3 +822,9 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/webhooks/slack/events` | `public` | `packages/server/supabase/functions/api/routes/slack-events-core.ts` |
 | GET | `/v1/webhooks/slack/oauth-callback` | `public` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/webhooks/tremendous` | `public` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
+| POST | `/v1/worker/claim` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
+| POST | `/v1/worker/claims/:id/done` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
+| POST | `/v1/worker/claims/:id/findings` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
+| POST | `/v1/worker/claims/:id/renew` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
+| POST | `/v1/worker/heartbeat` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
+| POST | `/v1/worker/revoke` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |

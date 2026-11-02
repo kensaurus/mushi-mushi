@@ -1,8 +1,8 @@
 {
   "name": "@mushi-mushi/react-native",
-  "version": "0.24.3",
+  "version": "0.24.4",
   "license": "MIT",
-  "description": "Shake-to-report widget for React Native and Expo. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
+  "description": "Bug report widget for React Native and Expo. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",

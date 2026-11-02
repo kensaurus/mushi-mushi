@@ -25,8 +25,17 @@ export interface JudgeStats {
   latestWeekLabel?: string | null
   latestWeekEvalCount: number
   weekOverWeekDriftPct: number | null
+  /** All time, like totalEvaluations. */
   disagreementCount: number
   disagreementRatePct: number | null
+  /** Days "recent" covers below (14). Absent on an older server. */
+  recentWindowDays?: number
+  /** Grades and disagreements in the last recentWindowDays; null when that read failed. */
+  recentEvaluations?: number | null
+  recentDisagreements?: number | null
+  /** Grades per week and how many agreed with the diagnosis, oldest first (12 weeks). */
+  agreementWeeks?: Array<{ weekStart: string; graded: number; agreed: number }>
+  agreementCapped?: boolean
   classifiedReports: number
   /** Reports judge-batch would grade now (eligible status, never judged). */
   ungradedReports: number

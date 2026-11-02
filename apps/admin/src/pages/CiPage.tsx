@@ -22,6 +22,7 @@
  *       GET /v1/admin/ci/compare?project_id=&days=30 → CiCompare (Cost and speed)
  *       GET /v1/admin/ci/placement?project_id= → CiPlacement (Where CI runs, ADR 0037)
  *       GET /v1/admin/fixes?limit=100 (project scope) → "Mushi fix" links
+ *       GET/POST /v1/admin/ci/cost-fix-rollout → "Apply to every app" (CiCostFixRollout)
  */
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -40,6 +41,7 @@ import { CiNodeDrawer } from '../components/ci/CiNodeDrawer'
 import { CiAdviceList, CiInfraFailures, CiSlowJobs } from '../components/ci/CiSections'
 import { CiSummary } from '../components/ci/CiSummary'
 import { CiCostSection } from '../components/ci/CiCostSection'
+import { CiCostFixRollout } from '../components/ci/CiCostFixRollout'
 import { CiPlacementSection } from '../components/ci/CiPlacementSection'
 import { usePageData } from '../lib/usePageData'
 import { apiFetch } from '../lib/supabase'
@@ -50,6 +52,7 @@ import { useNow } from '../lib/useNow'
 import type { CiOverview } from '../lib/ciTypes'
 import type { FixAttempt } from '../components/fixes/types'
 import { buildFixLinks, formatSeconds, isCiOverviewEmpty, permissionsNotice } from '../lib/ciView'
+import { useScrollToHash } from '../lib/useScrollToHash'
 
 const CiRunnerMap = lazy(() => import('../components/ci/CiRunnerMap').then((m) => ({ default: m.CiRunnerMap })))
 
@@ -173,6 +176,8 @@ export function CiPage() {
 
   const notice = data ? permissionsNotice(data.permissions) : null
   const empty = data ? isCiOverviewEmpty(data) : false
+  // /ci#ci-placement (Connect's "CI settings" link) opens the settings.
+  useScrollToHash(!!data && !empty)
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-ci">
@@ -190,6 +195,18 @@ export function CiPage() {
         </Btn>
         {projectId && (
           <SegmentedControl<Scope> value={scope} options={SCOPE_OPTIONS} onChange={setScopeChoice} ariaLabel="Which apps" size="sm" />
+        )}
+        {/* The settings live low on the page (ADR 0037); one click gets there. */}
+        {data && !empty && (
+          <Btn
+            size="sm"
+            variant="ghost"
+            onClick={() => document.getElementById('ci-placement')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            title="Where CI runs, checks on fix pull requests, and GitHub-hosted time limits"
+            data-testid="ci-settings-jump"
+          >
+            CI settings
+          </Btn>
         )}
       </PageHeaderBar>
 
@@ -252,7 +269,12 @@ export function CiPage() {
             </PanelErrorBoundary>
           </Section>
 
-          <Section title="Speed it up" id="ci-advice" icon={<IconBolt />}>
+          <Section
+            title="Speed it up"
+            id="ci-advice"
+            icon={<IconBolt />}
+            action={<CiCostFixRollout />}
+          >
             <p className="mb-2 text-xs text-fg-muted">Changes that would land your fixes sooner, each with the evidence and a copy-ready fix.</p>
             <CiAdviceList advice={data.advice} />
           </Section>

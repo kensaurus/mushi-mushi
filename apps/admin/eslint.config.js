@@ -3,7 +3,8 @@ import mushiPlugin from 'eslint-plugin-mushi-mushi';
 
 export default [
   ...baseConfig,
-  mushiPlugin.configs.recommended,
+  // The monorepo's own preset: recommended plus the design-system rules.
+  mushiPlugin.configs.internal,
   {
     rules: {
       'no-console': 'off',
@@ -52,6 +53,7 @@ export default [
           pagePattern: 'Page\\.tsx$',
           skipBasenames: [
             'AcceptInvitePage.tsx',
+            'AuthConfirmPage.tsx',
             'CliAuthPage.tsx',
             'ContentQualityDetailPage.tsx',
             'DocsBridgePage.tsx',

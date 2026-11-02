@@ -180,7 +180,8 @@ export const AUTO_REVERT_CHOICES: ReadonlyArray<{ value: AutoRevertChoice; label
 
 /** The model the second review uses when none is set. */
 export function defaultSecondJudgeModel(choice: SecondJudgeChoice): string {
-  return choice === 'openrouter' ? 'openai/gpt-5.4' : 'gpt-5.4'
+  // Same defaults as the server's SECOND_JUDGE_DEFAULT_MODEL (_shared/fix-verify.ts).
+  return choice === 'openrouter' ? 'openai/gpt-6.1-sol' : 'gpt-6.1-sol'
 }
 
 /** The form: numbers stay text while typed; globs are one per line. */

@@ -14,6 +14,10 @@
  *   93   A "Common causes" chip narrows the failed list to that cause.
  *        PR open counts attempts with an open PR whatever CI says, as /repo does.
  *   91   The header counts every attempt, and older ones can be loaded.
+ *   Journeys 2026-10-27: the page opens on Ready to merge (Opus merge on the
+ *        current commit, CI green) with "Merge when ready", and on stopped
+ *        reports grouped by reason with Retry beside each reason; the header
+ *        has no bulk paid Retry.
  */
 
 import { act, createElement } from 'react'
@@ -39,12 +43,26 @@ function fix(over: Partial<FixAttempt>): FixAttempt {
   } as FixAttempt
 }
 
-const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), fixes: [] as unknown[], total: 0 }))
+const mocks = vi.hoisted(() => ({
+  apiFetch: vi.fn(),
+  fixes: [] as unknown[],
+  total: 0,
+  dispatches: [] as unknown[],
+  summary: null as Record<string, unknown> | null,
+  pageSummary: null as string | null,
+  hideTableChrome: false,
+  hideFixesSnapshot: true,
+  renderPosture: false,
+  stats: null as Record<string, unknown> | null,
+}))
 
 vi.mock('../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../lib/usePageData', () => ({
-  usePageData: () => ({
-    data: { ...EMPTY_FIXES_STATS, hasAnyProject: true },
+  usePageData: (path: string | null) => ({
+    // The stats read; the pipeline read (release stations) is not under test here.
+    data: path?.startsWith('/v1/admin/pipeline')
+      ? null
+      : { ...EMPTY_FIXES_STATS, hasAnyProject: true, ...(mocks.stats ?? {}) },
     loading: false,
     error: null,
     reload: vi.fn(),
@@ -53,7 +71,11 @@ vi.mock('../lib/usePageData', () => ({
   }),
 }))
 vi.mock('../lib/realtime', () => ({ useRealtimeReload: () => ({ channelState: 'idle' }) }))
-vi.mock('../lib/pageContext', () => ({ usePublishPageContext: () => undefined }))
+vi.mock('../lib/pageContext', () => ({
+  usePublishPageContext: (ctx: { summary?: string } | null) => {
+    mocks.pageSummary = ctx?.summary ?? null
+  },
+}))
 vi.mock('../lib/usePlatformIntegrations', () => ({ usePlatformIntegrations: () => ({ traceUrl: () => null }) }))
 vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => ({ activeProject: { project_name: 'App' } }) }))
 vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => 'p1' }))
@@ -63,16 +85,28 @@ vi.mock('../lib/fixesModeUx', () => ({
   useFixesUx: () => ({
     isQuickstart: false,
     isBeginner: false,
-    isAdvanced: true,
-    compactTable: false,
-    plainBanner: false,
-    hideTableChrome: false,
+    isAdvanced: !mocks.hideTableChrome,
+    compactTable: mocks.hideTableChrome,
+    plainBanner: mocks.hideTableChrome,
+    hideTableChrome: mocks.hideTableChrome,
     hideFailureCategories: false,
-    hideSnapshotLinks: false,
-    hideFixesSnapshot: true,
+    hideSnapshotLinks: mocks.hideTableChrome,
+    hideFixesSnapshot: mocks.hideFixesSnapshot,
   }),
 }))
-vi.mock('../components/PagePosture', () => ({ PagePosture: () => null, POSTURE_PRIORITY: {} }))
+vi.mock('../components/PagePosture', () => ({
+  PagePosture: ({ slots }: { slots: Array<{ show?: boolean; children?: unknown }> }) => {
+    if (!mocks.renderPosture) return null
+    return createElement(
+      'div',
+      { 'data-testid': 'posture' },
+      slots
+        .filter((slot) => slot.show !== false)
+        .map((slot, i) => createElement('div', { key: i }, slot.children as never)),
+    )
+  },
+  POSTURE_PRIORITY: { status: 0, recommended: 10, heroOrSnapshot: 20, guide: 30, nudge: 5 },
+}))
 vi.mock('../components/PageHeaderBar', () => ({
   PageHeaderBar: ({ children }: { children?: unknown }) => createElement('div', { 'data-testid': 'header' }, children as never),
 }))
@@ -91,6 +125,13 @@ function LocationProbe() {
 }
 
 beforeEach(() => {
+  mocks.dispatches = []
+  mocks.summary = null
+  mocks.pageSummary = null
+  mocks.hideTableChrome = false
+  mocks.hideFixesSnapshot = true
+  mocks.renderPosture = false
+  mocks.stats = null
   vi.stubGlobal('ResizeObserver', class {
     observe() {}
     unobserve() {}
@@ -103,7 +144,8 @@ beforeEach(() => {
       const offset = Number(new URLSearchParams(path.split('?')[1]).get('offset') ?? 0)
       return { ok: true, data: { fixes: offset === 0 ? mocks.fixes : [fix({ id: 'old1', report_id: 'r9', retryable: false })], total: mocks.total } }
     }
-    if (path === '/v1/admin/fixes/dispatches') return { ok: true, data: { dispatches: [] } }
+    if (path === '/v1/admin/fixes/dispatches') return { ok: true, data: { dispatches: mocks.dispatches } }
+    if (path === '/v1/admin/fixes/summary') return { ok: true, data: mocks.summary }
     if (path === '/v1/admin/fixes/dispatch') return { ok: true, data: { dispatchId: 'd1' } }
     return { ok: true, data: null }
   })
@@ -140,6 +182,25 @@ async function render(url: string) {
     )
   })
   await flush()
+}
+
+/** The numeral on the quick-mode "In flight" card. */
+function inFlightCardValue(): string | undefined {
+  const label = [...document.querySelectorAll('div')].find(
+    (el) => el.className.includes('uppercase') && el.textContent === 'In flight',
+  )
+  return label?.parentElement?.parentElement?.parentElement?.querySelector('.tabular-nums')?.textContent?.trim()
+}
+
+const EMPTY_SUMMARY = {
+  total: 1,
+  completed: 0,
+  failed: 0,
+  inProgress: 0,
+  prsOpen: 0,
+  prsCiPassing: 0,
+  days: [] as { day: string; total: number; completed: number; failed: number }[],
+  failureBreakdown: [] as { category: string; count: number }[],
 }
 
 function buttons(label: string): HTMLButtonElement[] {
@@ -198,13 +259,94 @@ describe('FixesPage', () => {
     await render('/fixes')
     const box = () => document.querySelector('input[aria-label="Select the fix for Login loops"]') as HTMLInputElement
     click(box())
-    click(buttons('Retry 1').find((b) => !b.closest('[role="dialog"]')))
+    click(buttons('Retry 1').find((b) => b.closest('[data-testid="fixes-bulk-action-bar"]')))
     click(buttons('Retry').find((b) => !b.closest('tr')))
     await flush()
     expect(box().disabled).toBe(true)
     await act(async () => { release(null) })
     await flush()
     expect(box().disabled).toBe(false)
+  })
+
+  it('a pending attempt is in flight in the tab title, the card and the filter', async () => {
+    mocks.fixes = [fix({ id: 'a', status: 'pending', report_fix_state: 'in_flight', retryable: false })]
+    mocks.total = 1
+    mocks.summary = { ...EMPTY_SUMMARY, inProgress: 1 }
+    await render('/fixes')
+    expect(mocks.pageSummary).toContain('1 in flight')
+    expect(inFlightCardValue()).toBe('1')
+    expect(document.body.textContent).toContain('queued or running')
+    const segments = [...document.querySelectorAll('[aria-label="Filter fix attempts by status"] [role="radio"]')]
+    expect(segments.find((b) => b.textContent?.startsWith('In flight'))?.textContent).toBe('In flight1')
+    click(segments.find((b) => b.textContent?.startsWith('In flight')))
+    const selected = document.querySelector('[aria-label="Filter fix attempts by status"] [aria-checked="true"]')
+    expect(selected?.textContent).toContain('In flight')
+    expect(document.body.textContent).toContain('Checkout button does nothing')
+  })
+
+  it('a live attempt on an already-resolved report stays in the In flight filter', async () => {
+    mocks.fixes = [fix({
+      id: 'a',
+      status: 'running',
+      report_fix_state: 'resolved',
+      report_status: 'fixed',
+      retryable: false,
+      report_title: 'Still running',
+    })]
+    mocks.total = 1
+    mocks.summary = { ...EMPTY_SUMMARY, inProgress: 0 }
+    await render('/fixes?status=inflight')
+    expect(mocks.pageSummary).toContain('1 in flight')
+    expect(inFlightCardValue()).toBe('1')
+    expect(document.body.textContent).toContain('Still running')
+  })
+
+  it('a queued dispatch with no attempt yet counts in the title and the card', async () => {
+    mocks.fixes = [fix({ id: 'a', status: 'failed' })]
+    mocks.total = 1
+    mocks.summary = { ...EMPTY_SUMMARY, inProgress: 0 }
+    mocks.dispatches = [{
+      id: 'd1',
+      project_id: 'p1',
+      report_id: 'r-queued',
+      status: 'queued',
+      created_at: '2026-10-31T00:00:00Z',
+    }]
+    await render('/fixes')
+    expect(mocks.pageSummary).toContain('1 in flight')
+    expect(inFlightCardValue()).toBe('1')
+    expect(document.body.textContent).toContain('queued or running')
+  })
+
+  it('the status line uses the same in-flight number as the tab title', async () => {
+    mocks.renderPosture = true
+    mocks.hideFixesSnapshot = false
+    mocks.fixes = [fix({ id: 'a', status: 'pending', report_fix_state: 'in_flight', retryable: false })]
+    mocks.total = 1
+    mocks.summary = { ...EMPTY_SUMMARY, inProgress: 0 }
+    await render('/fixes')
+    expect(mocks.pageSummary).toContain('1 in flight')
+    expect(document.querySelector('[aria-label="Fixes status"]')?.textContent).toContain('1 fix running.')
+  })
+
+  it('the All list does not call shipped or failed rows drafts', async () => {
+    mocks.hideTableChrome = true
+    mocks.fixes = [
+      fix({
+        id: 'a',
+        status: 'completed',
+        pr_state: 'merged',
+        merged_at: '2026-10-04T00:00:00Z',
+        report_fix_state: 'resolved',
+        retryable: false,
+        report_title: 'Shipped fix',
+      }),
+      fix({ id: 'b', report_id: 'r2', report_title: 'Still broken' }),
+    ]
+    mocks.total = 2
+    await render('/fixes')
+    expect(document.body.textContent).toContain('2 fixes — tap a row for details')
+    expect(document.body.textContent).not.toContain('draft fix')
   })
 
   it('QA 94: the old pipeline tab link opens the In flight filter', async () => {
@@ -273,5 +415,67 @@ describe('FixesPage', () => {
     await flush()
     expect(mocks.apiFetch.mock.calls.some(([p]) => String(p).includes('offset=1'))).toBe(true)
     expect(document.querySelector('[data-testid="header"]')?.textContent).toContain('2 attempts')
+  })
+
+  describe('what the page shows first (journeys 2026-10-27)', () => {
+    const open = (n: number, over: Partial<FixAttempt> = {}) =>
+      fix({
+        id: `pr${n}`,
+        report_id: `r${n}`,
+        report_title: `Fix ${n}`,
+        status: 'completed',
+        pr_url: `https://github.com/o/r/pull/${n}`,
+        pr_number: n,
+        pr_state: 'open',
+        report_fix_state: 'pr_open',
+        retryable: false,
+        commit_sha: `head${n}`,
+        check_run_conclusion: 'success',
+        review_verdict: 'merge',
+        review_head_sha: `head${n}`,
+        ...over,
+      })
+
+    it('lists Ready to merge only for an Opus merge on the current commit with CI green, and queues them', async () => {
+      mocks.fixes = [
+        open(1),
+        open(2, { review_head_sha: 'older' }),
+        open(3, { check_run_conclusion: 'failure' }),
+        open(4, { review_verdict: 'hold' }),
+      ]
+      mocks.total = 4
+      await render('/fixes')
+      const list = document.querySelector('[data-testid="fixes-ready-list"]')!
+      expect(list.textContent).toContain('Fix 1')
+      expect(list.textContent).not.toContain('Fix 2')
+      expect(list.textContent).not.toContain('Fix 3')
+      expect(list.textContent).not.toContain('Fix 4')
+      click(document.querySelector('[data-testid="fixes-ready-queue-all"]'))
+      await flush()
+      const call = mocks.apiFetch.mock.calls.find(([p]) => p === '/v1/admin/merge-queue')
+      expect(JSON.parse((call?.[1] as RequestInit).body as string)).toEqual({ fixIds: ['pr1'] })
+    })
+
+    it('groups stopped reports by reason, with Retry beside a reason a retry can clear', async () => {
+      mocks.fixes = [
+        fix({ id: 'a', report_id: 'r1', failure_category: 'sandbox_timeout' } as Partial<FixAttempt>),
+        fix({ id: 'b', report_id: 'r2', report_title: 'Ops task', failure_category: 'needs_human', retryable: false } as Partial<FixAttempt>),
+      ]
+      mocks.total = 2
+      await render('/fixes')
+      expect(buttons('Retry 1 unfixed')).toHaveLength(0)
+      const timeout = document.querySelector('[data-testid="fixes-stopped-sandbox_timeout"]')!
+      expect(timeout.textContent).toContain('Ran out of time')
+      expect(document.querySelector('[data-testid="fixes-stopped-needs_human-retry"]')).toBeNull()
+      expect(document.querySelector('[data-testid="fixes-stopped-needs_human-no-retry"]')!.textContent).toContain('would stop the same way')
+      click(document.querySelector('[data-testid="fixes-stopped-sandbox_timeout-retry"]'))
+      expect(document.body.textContent).toContain('stopped by "Ran out of time"')
+      expect(mocks.apiFetch.mock.calls.some(([p]) => p === '/v1/admin/fixes/dispatch')).toBe(false)
+      click(buttons('Retry').find((b) => b.closest('[role="dialog"]')))
+      await flush()
+      const calls = mocks.apiFetch.mock.calls.filter(([p]) => p === '/v1/admin/fixes/dispatch')
+      expect(calls).toHaveLength(1)
+      expect(JSON.parse((calls[0][1] as RequestInit).body as string)).toMatchObject({ reportId: 'r1' })
+    })
   })
 })

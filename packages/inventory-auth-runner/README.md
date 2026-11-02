@@ -1,41 +1,58 @@
 # @mushi-mushi/inventory-auth-runner
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
-Part of the Mushi Mushi monorepo — plain-English bug comprehension for vibe coders.
+Mushi Mushi's crawler and synthetic monitor can only check pages they can
+reach, and most app pages sit behind a login. This runner signs in to your app
+with Playwright, using the login script in your `inventory.yaml`, and hands
+Mushi Mushi only the session cookie, never your test password.
 
+```bash
+MUSHI_API_KEY=mushi_xxx MUSHI_PROJECT=<project-uuid> \
+TEST_USER_EMAIL=qa@example.com TEST_USER_PASSWORD=… \
+npx --yes -p @mushi-mushi/inventory-auth-runner mushi-mushi-auth refresh
+```
 
-Refresh the cookie that lets the Mushi Mushi v2.1 crawler + synthetic
-monitor + observed-route diffing reach **auth-gated routes** in your app.
+**What you need**
 
-> Part of the Mushi Mushi v2 bidirectional inventory pipeline. Pairs with
-> [`@mushi-mushi/inventory-schema`](../inventory-schema) (the
-> `auth.scripted` block in `inventory.yaml`) and the
-> `inventory-crawler` / `synthetic-monitor` Edge Functions in
-> [`@mushi-mushi/server`](../server).
+- A project on the Studio or Enterprise plan of Mushi Mushi Cloud. The
+  inventory routes this runner reads and writes answer 402 on other plans.
+  See [pricing](https://kensaur.us/mushi-mushi/docs/pricing).
+- An `inventory.yaml` for the project with a `scripted` login (below), already
+  uploaded to Mushi Mushi.
+- A project API key with the `mcp:write` scope.
+- Playwright's Chromium on the machine that runs it
+  (`npx playwright install --with-deps chromium`).
+
+Docs: [inventory-auth-runner](https://kensaur.us/mushi-mushi/docs/sdks/inventory-auth-runner).
+The `auth` block it runs is defined in
+[`@mushi-mushi/inventory-schema`](https://www.npmjs.com/package/@mushi-mushi/inventory-schema).
 
 ## What it does
 
 1. Reads the project's currently-ingested `inventory.yaml` from
    `GET /v1/admin/inventory/:projectId`.
-2. Finds the `auth.scripted` block and runs its `script` against
-   `app.base_url + auth.config.login_path` in a headless Chromium
+2. Finds the `app.auth` block of type `scripted` and runs its `script` against
+   `app.base_url + app.auth.config.login_path` in a headless Chromium
    instance via Playwright.
 3. Picks the resulting session cookie (prefers `*session*` / `*auth*` /
    `sb-*` / `next-auth*` names, then `HttpOnly` + `Secure`).
 4. PATCHes that cookie into `project_settings.crawler_auth_config` via
    `PATCH /v1/admin/inventory/:projectId/settings`.
 
-After a successful refresh, the crawler and synthetic monitor can
-authenticate to gated routes without ever seeing your test credentials —
-they only ever see the cookie.
+After a successful refresh, the crawler and synthetic monitor can open
+pages behind your login without seeing your test credentials. They only see
+the cookie.
 
-## What it deliberately does NOT do
+## What it does not do
 
-- It does **not** run user-supplied JS in a privileged context. The
-  `script` field executes inside Playwright's `page.*` API only — i.e.
-  anything the host app could already do via the browser.
-- It does **not** store credentials on the Mushi server. Creds are read
+- It does not sandbox your login script. An inline `script` runs in Node
+  through `new Function`, gets only `page`, `env` and `context`, and is
+  refused if it contains one of the blocked words listed under
+  [Inventory snippet](#inventory-snippet). That is a denylist, not a sandbox.
+  A `js:` file is a normal Node module, so review it like any code in your
+  repo.
+- It does **not** store credentials on the Mushi Mushi server. Creds are read
   from the local environment (`TEST_USER_EMAIL`, `TEST_USER_PASSWORD`,
   or whatever variables your `script` references) and only the
   *cookie* is shipped to the server.
@@ -46,7 +63,7 @@ they only ever see the cookie.
 
 ```bash
 # As a one-shot via npx (no install needed):
-npx --yes @mushi-mushi/inventory-auth-runner refresh
+npx --yes -p @mushi-mushi/inventory-auth-runner mushi-mushi-auth refresh
 
 # Or as a dev dependency in your repo:
 pnpm add -D @mushi-mushi/inventory-auth-runner
@@ -65,55 +82,75 @@ MUSHI_API_KEY=mushi_xxx \
 MUSHI_PROJECT=00000000-0000-0000-0000-000000000000 \
 TEST_USER_EMAIL=qa@example.com \
 TEST_USER_PASSWORD=… \
-npx --yes @mushi-mushi/inventory-auth-runner refresh
+npx --yes -p @mushi-mushi/inventory-auth-runner mushi-mushi-auth refresh
 ```
 
 | Var                  | Required | Description                                                                                                |
 | -------------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
 | `MUSHI_API_KEY`      | yes      | Project-scoped API key with the `mcp:write` scope. Mint one on the admin console's Connect page (`/connect`, read + write access) or under Projects → keys. |
-| `MUSHI_PROJECT`      | yes      | Mushi project UUID.                                                                                        |
+| `MUSHI_PROJECT`      | yes      | Mushi Mushi project UUID.                                                                                      |
 | `MUSHI_API_ENDPOINT` | no       | API base URL. Defaults to the hosted Supabase functions endpoint.                                          |
-| `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` | usually | Picked up by your `auth.scripted.script`; the runner itself doesn't read them. Add whatever your script needs. |
+| `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` | usually | Picked up by your login `script` (as `env.TEST_USER_EMAIL`); the runner itself doesn't read them. Add whatever your script needs. |
 
 `--debug` prints the captured cookie name + a 6-char prefix of the value
-to stdout. **Never use `--debug` in CI** — anything in stdout ends up in
-your build logs.
+to stderr. **Never use `--debug` in CI.** Anything the job prints ends up
+in your build logs.
 
 ## Inventory snippet
 
-Your `inventory.yaml` declares the script the runner will execute:
+Your `inventory.yaml` declares the script the runner will execute, as
+`auth` inside `app` (the schema has no top-level `auth`):
 
 ```yaml
 app:
-  id: glot-it
+  id: my-app
+  name: My app
   base_url: https://app.example.com
-
-auth:
-  type: scripted
-  config:
-    login_path: /login
-    script: |
-      await page.fill('[data-testid=email]', env.TEST_USER_EMAIL)
-      await page.fill('[data-testid=password]', env.TEST_USER_PASSWORD)
-      await page.click('[data-testid=submit]')
-      await page.waitForURL('**/dashboard')
+  auth:
+    type: scripted
+    config:
+      login_path: /login
+      script: |
+        await page.fill('[data-testid=email]', env.TEST_USER_EMAIL)
+        await page.fill('[data-testid=password]', env.TEST_USER_PASSWORD)
+        await page.click('[data-testid=submit]')
+        await page.waitForURL('**/dashboard')
 ```
+
+`auth` sits under `app`, where [`@mushi-mushi/inventory-schema`](https://www.npmjs.com/package/@mushi-mushi/inventory-schema) defines it. Inline scripts may not contain `require(`, `import(`, `process.`, `globalThis.`, `Function(`, `eval(`, `child_process`, `Deno.` or `Worker(`, and are capped at 8 KB; put anything else in a `js:` file.
 
 Two `script` shapes are accepted:
 
-1. **Inline** (above) — function body that receives `page`, `env`,
-   `context`. Runs via `new Function(...)` so it has no access to the
-   runner's local closure.
-2. **File reference** — `script: 'js:./scripts/login.js'`. The runner
-   `import()`s the path relative to CWD; the module must `default-export`
+1. **Inline** (above): a function body that receives `page`, `env` and
+   `context`. It runs via `new Function(...)`, so it cannot see the
+   runner's own variables.
+2. **File reference**: `script: 'js:./scripts/login.js'`. The runner
+   `import()`s the path relative to the folder of your local
+   `inventory.yaml` (`--inventory <path>` or `MUSHI_INVENTORY_FILE`;
+   default `./inventory.yaml`, so the working directory); the module must `default-export`
    an `(page, env, context) => Promise<void>` function. Use this when
    you'd rather commit the script to your repo without inline-escaping
    it into YAML.
 
 ## CI integration
 
-The [`mushi-mushi-gates`](../mcp-ci) GitHub Action exposes an
-`auth-bootstrap` command that shells out to this runner:
+The [`@mushi-mushi/mcp-ci`](https://www.npmjs.com/package/@mushi-mushi/mcp-ci) GitHub Action exposes an
+`auth-bootstrap` command that shells out to this runner. Its `uses:` path does
+not run today (the Action's built files are missing from the repository; see
+the mcp-ci README), so until that is fixed, run the `npx` command above as a
+plain `run:` step instead.
+
+```yaml
+- run: npx playwright install --with-deps chromium
+- run: npx --yes -p @mushi-mushi/inventory-auth-runner mushi-mushi-auth refresh
+  env:
+    MUSHI_API_KEY: ${{ secrets.MUSHI_API_KEY }}
+    MUSHI_PROJECT: ${{ secrets.MUSHI_PROJECT_ID }}
+    TEST_USER_EMAIL: ${{ secrets.MUSHI_TEST_USER_EMAIL }}
+    TEST_USER_PASSWORD: ${{ secrets.MUSHI_TEST_USER_PASSWORD }}
+```
+
+Once the Action works, the same step is:
 
 ```yaml
 - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
@@ -138,8 +175,8 @@ nightly schedule so the cookie stays fresh.
   server and the refresh fails.
 - Cookies have a soft TTL via `last_refreshed_at`; re-run on a daily
   cron or after every CI deploy.
-- The runner shells out to a fresh headless Chromium per invocation —
-  no persisted browser profile, no shared cookies between runs.
+- Each run starts a fresh headless Chromium: no saved browser profile and no
+  cookies shared between runs.
 
 ## Scripts
 
@@ -155,10 +192,10 @@ TypeScript source through `tsx` for local development.
 
 ## License
 
-See root [LICENSE](../../LICENSE).
+MIT. See [LICENSE](https://github.com/kensaurus/mushi-mushi/blob/master/packages/inventory-auth-runner/LICENSE).
 
 
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 76 edge functions · 503 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

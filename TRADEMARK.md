@@ -21,7 +21,7 @@ permission for the few cases where you might want to use the marks.
 
 ## What's covered
 
-The following are trademarks of Kenji Sakuramoto / Kensaurus 合同会社
+The following are trademarks of kensaurus LLC
 ("the Trademark Owner"). **They are not registered.** No registration has
 issued in any country; the Trademark Owner plans to apply in Japan first
 and then extend abroad. When an application or registration exists, this
@@ -34,7 +34,7 @@ only as far as the law protects unregistered marks where you are.
 | **Mushi**                                     | word mark  |
 | **虫** (the kanji used standalone)            | word mark  |
 | The Mushi Mushi bug logo (any color variant)  | logo mark  |
-| The tagline "Your AI wrote it. Mushi tells you why it broke." + adjacent visual identity | trade dress |
+| The tagline "Your AI wrote it. Mushi Mushi tells you why it broke." + adjacent visual identity | trade dress |
 | `mushi-mushi.dev`, `mushimushi.dev`,          | domain     |
 | `kensaur.us/mushi-mushi/*`                    | identity   |
 

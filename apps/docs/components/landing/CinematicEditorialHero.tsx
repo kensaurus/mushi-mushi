@@ -1,14 +1,15 @@
 'use client'
 
 /**
- * Cinematic landing hero — H1 + lead + primary CTAs, Motion stamp / line stagger, lazy R3F ink.
+ * Cinematic landing hero — H1, the one-job lead, the install box (pick Claude Code / Cursor / Lovable or Bolt / other, then three steps), one secondary link to the sample diagnosis, Motion stamp / line stagger, lazy R3F ink.
  * No scroll timelines (docs/MOTION.md).
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { motion } from 'motion/react'
-import { LANDING_HERO, LANDING_HERO_CTAS } from '@/lib/landing-copy'
+import { LANDING_CHECK_LINK, LANDING_HERO } from '@/lib/landing-copy'
+import { LandingInstallStrip } from './LandingInstallStrip'
 import { usePrefersReducedMotion } from './use-prefers-reduced-motion'
 import { landingStampVariants } from './landing-stagger'
 
@@ -102,48 +103,17 @@ export function CinematicEditorialHero({
             </motion.p>
           )
         ) : null}
-        <p className="landing-hero-proof">{LANDING_HERO.proofLine}</p>
-
-        <div className="landing-hero-ctas" role="group" aria-label="Get started">
-          {LANDING_HERO_CTAS.map((cta) => {
-            const className = `landing-hero-cta landing-hero-cta--${cta.kind}`
-            // `data-mushi-cta` is what <MushiSiteAnalytics /> listens for.
-            const tracking = { 'data-mushi-cta': cta.id, 'data-mushi-location': 'hero' } as const
-            if (cta.external) {
-              // Our own console (signup) keeps the tab; third-party links
-              // open a new one so the visitor never loses the landing page.
-              const newTab = cta.sameTab !== true
-              return (
-                <a
-                  key={cta.id}
-                  className={className}
-                  href={cta.href}
-                  {...(newTab ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                  {...tracking}
-                >
-                  {cta.label}
-                </a>
-              )
-            }
-            return (
-              <Link key={cta.id} className={className} href={cta.href} {...tracking}>
-                {cta.label}
-              </Link>
-            )
-          })}
-        </div>
-        <p className="landing-hero-reassure">
-          {LANDING_HERO.reassure}{' '}
-          <a
-            href={LANDING_HERO.star.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-mushi-cta={LANDING_HERO.star.ctaId}
-            data-mushi-location="hero"
-          >
-            {LANDING_HERO.star.label}
-          </a>
+        <LandingInstallStrip />
+        {/* The one secondary link (ADR 0052, amended 2026-10-28): the free
+            Production Check, value before trust. The sample is in How it works. */}
+        <p className="landing-hero-sample">
+          {LANDING_CHECK_LINK.lead}{' '}
+          <Link href={LANDING_CHECK_LINK.href} data-mushi-cta={LANDING_CHECK_LINK.id} data-mushi-location="hero">
+            {LANDING_CHECK_LINK.label} →
+          </Link>{' '}
+          <span className="landing-hero-note">({LANDING_CHECK_LINK.note})</span>
         </p>
+        <p className="landing-hero-reassure">{LANDING_HERO.reassure}</p>
       </div>
     </header>
   )

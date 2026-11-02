@@ -9,8 +9,20 @@ import {
   dbErrorFingerprint,
   dbFailureMessage,
   isTransientDbConnectionError,
+  isTransientGatewayStatus,
   logDbFailure,
 } from '../../supabase/functions/_shared/error-codes.ts'
+
+describe('isTransientGatewayStatus (MUSHI-MUSHI-SERVER-2R)', () => {
+  it('treats a failed fetch, gateway 502-504 and Cloudflare 520-527 as transient', () => {
+    expect([0, 502, 503, 504, 520, 522, 525, 527].every(isTransientGatewayStatus)).toBe(true)
+  })
+  it('keeps a PostgREST answer, a 500 and a client error reportable', () => {
+    expect([200, 201, 400, 401, 404, 409, 500, 501, 519, 528].some(isTransientGatewayStatus)).toBe(false)
+    expect(isTransientGatewayStatus(null)).toBe(false)
+    expect(isTransientGatewayStatus(undefined)).toBe(false)
+  })
+})
 
 const assertEquals = (actual: unknown, expected: unknown) => expect(actual).toBe(expected)
 
@@ -28,6 +40,15 @@ describe('isTransientDbConnectionError', () => {
       code: null,
     }
     assertEquals(isTransientDbConnectionError(err), true)
+  })
+
+  // MUSHI-MUSHI-SERVER-35 (2026-10-31): the gateway's plain-text 504 body
+  // reached Sentry as ProjectAccessReadError on /onboarding/stats.
+  it('SERVER-35: gateway "upstream request timeout" with no SQLSTATE is transient', () => {
+    assertEquals(isTransientDbConnectionError({ message: 'upstream request timeout', code: null }), true)
+    assertEquals(isTransientDbConnectionError({ message: 'upstream request timeout', code: '' }), true)
+    // A coded error that happens to mention it is still a real error.
+    assertEquals(isTransientDbConnectionError({ message: 'upstream request timeout', code: '42501' }), false)
   })
 
   it('SERVER-1M: Cloudflare 522 origin-timeout HTML page is transient', () => {

@@ -1,14 +1,19 @@
 /**
- * test-gen-from-story — User story → Playwright spec + qa_stories row + draft PR
+ * FILE: packages/server/supabase/functions/test-gen-from-story/index.ts
+ * PURPOSE: User story → Playwright spec + Firecrawl actions + qa_stories row + draft PR.
  *
  * Triggered via POST /v1/admin/inventory/:pid/stories/:storyId/generate-test
  *
  * Flow:
  *   1. Load the user story from the project's accepted inventory
- *   2. Ask Claude/GPT to write a Playwright TypeScript test for the story
- *   3. Open a draft GitHub PR (same transport as fix-worker)
- *   4. Insert a qa_stories row with source='test_gen_from_story'
- *      and approval_status driven by the story's automation_mode
+ *   2. Ask Claude/GPT to write a Playwright TypeScript test and the same flow
+ *      as Firecrawl actions
+ *   3. Open a draft GitHub PR with the Playwright spec (same transport as fix-worker)
+ *   4. Insert a qa_stories row with source='test_gen_from_story'.
+ *      Guest-reachable stories with usable actions and a public URL are stored
+ *      as browser_provider firecrawl_actions, with the Playwright spec kept on
+ *      that row (playwrightSource) so a missed PR does not drop it.
+ *      approval_status follows the story's automation_mode.
  */
 
 import { generateObject } from 'npm:ai@4'
@@ -26,6 +31,13 @@ import { withLlmUsage } from '../_shared/llm-usage.ts'
 import { logAudit } from '../_shared/audit.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { tagLangfuseTrace } from '../_shared/sentry.ts'
+import {
+  pagesForAuthAndTarget,
+  pagesForStory,
+  qaStoryInsertRow,
+  storedQaStoryScript,
+  type StoryPageRef,
+} from './story-script.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -37,7 +49,12 @@ const log = rootLog.child('test-gen-from-story')
 const testGenSchema = z.object({
   path: z.string().describe('Repo-relative path for the test file, e.g. tests/user-story-name.spec.ts'),
   contents: z.string().describe('Full TypeScript Playwright test source'),
-  firecrawl_actions: z.string().optional().describe('Equivalent Firecrawl Actions YAML for cloud execution'),
+  firecrawl_actions: z
+    .string()
+    .optional()
+    .describe(
+      'YAML the cloud runner can execute: actions[{type,selector?}] plus optional assertContains. Omit when the story needs a signed-in user.',
+    ),
   summary: z.string().max(200).describe('One-line PR title fragment'),
   rationale: z.string().describe('Why this test covers the user story'),
   needsHumanReview: z.boolean().describe('True when selectors or flow are uncertain'),
@@ -58,7 +75,13 @@ Rules:
 3. Use data-testid selectors where provided; fall back to role/text selectors.
 4. Structure as: setup → navigate → interact → assert (AAA pattern).
 5. Keep it executable: use process.env.BASE_URL or a configurable baseURL.
-6. ALSO produce firecrawl_actions YAML that runs the same flow in Firecrawl cloud.
+6. ALSO set firecrawl_actions to YAML the scheduled runner can execute, and omit it when the flow needs a signed-in user:
+   actions:
+     - { type: wait, milliseconds: 1000 }
+     - { type: click, selector: "a[href='/pricing']" }
+     - { type: screenshot }
+   assertContains: ["text that must be visible"]
+   Types: wait, click, write, press, scroll, screenshot, scrape. click needs a selector, write needs text, press needs a key.
 7. Set needsHumanReview=true when the page routes or selectors are unknown.
 8. Never hardcode passwords, tokens, or secrets.`
 
@@ -86,6 +109,7 @@ interface UserStory {
   persona?: string
   pages?: string[]
   actions?: string[]
+  auth_required?: boolean
 }
 
 async function openGithubPr(opts: {
@@ -229,19 +253,20 @@ Deno.serve(
       )
     }
 
-    const pages = parsed?.pages as { id: string; route: string; title?: string }[] | undefined
-    const storyPages = story.pages
-      ? pages?.filter((p) => story.pages!.includes(p.id)) ?? []
-      : []
-
-    const appBaseUrl = base_url ?? (parsed?.app as Record<string, string> | undefined)?.base_url ?? 'http://localhost:3000'
+    const pages = (Array.isArray(parsed?.pages) ? parsed.pages : []) as StoryPageRef[]
+    // Prompt routes are only the story's own page ids. A user_story tag is
+    // used for the sign-in check and the scheduled URL, not the prompt.
+    const promptPages = pagesForStory(story, pages)
+    const runPages = pagesForAuthAndTarget(story, pages)
+    const app = parsed?.app as { base_url?: string; preview_url?: string; staging_url?: string } | undefined
+    const appBaseUrl = base_url ?? app?.base_url ?? 'http://localhost:3000'
 
     const prompt = `User Story:
 id: ${story.id}
 title: ${story.title}
 goal: ${story.goal}
 persona: ${story.persona ?? 'end user'}
-routes: ${storyPages.map((p) => `${p.route} (${p.title ?? ''})`).join(', ') || 'see goal'}
+routes: ${promptPages.map((p) => `${p.path || p.route || ''} (${p.title ?? ''})`).join(', ') || 'see goal'}
 base_url: ${appBaseUrl}
 ${story.actions?.length ? `actions: ${story.actions.join(', ')}` : ''}
 
@@ -320,24 +345,32 @@ Write a comprehensive Playwright TDD test for this user story.`
       )
     }
 
-    // Insert qa_stories row
+    // Scheduled row is Firecrawl when the actions are runnable, the story is
+    // not behind a login wall, and a public URL is known. The Playwright spec
+    // is stored on that row as well (playwrightSource): the runner ignores it,
+    // and a missed PR no longer drops the spec. Otherwise the row stays local
+    // so the cron does not record no_target_url every tick.
     const approvalStatus = automation_mode === 'auto' ? 'approved' : 'pending_review'
+    const stored = storedQaStoryScript({
+      playwright: output.contents,
+      firecrawlActions: output.firecrawl_actions,
+      pages: runPages,
+      baseUrls: [base_url, app?.base_url, app?.staging_url, app?.preview_url],
+      story,
+    })
+    const row = qaStoryInsertRow({
+      projectId: project_id,
+      name: story.title,
+      prompt: story.goal,
+      stored,
+      approvalStatus,
+      automationMode: automation_mode,
+      storyId: story.id,
+      generationModel: TEST_GEN_MODEL,
+    })
     const { data: qaStory, error: qaErr } = await db
       .from('qa_stories')
-      .insert({
-        project_id,
-        name: story.title,
-        prompt: story.goal,
-        script: output.contents,
-        script_lang: 'playwright-ts',
-        browser_provider: 'local',
-        source: 'test_gen_from_story',
-        approval_status: approvalStatus,
-        automation_mode,
-        origin_story_node_id: story.id,
-        generation_model: TEST_GEN_MODEL,
-        enabled: automation_mode === 'auto',
-      })
+      .insert(row)
       .select('id')
       .single()
 
@@ -404,11 +437,24 @@ Write a comprehensive Playwright TDD test for this user story.`
       'inventory.test_gen',
       'qa_story',
       qaStoryId ?? story_node_id,
-      { story_node_id, automation_mode, approval_status: approvalStatus, pr_url: prUrl },
+      {
+        story_node_id,
+        automation_mode,
+        approval_status: approvalStatus,
+        pr_url: prUrl,
+        browser_provider: stored.browser_provider,
+      },
       { actorType: 'agent' },
     )
 
-    log.info('test-gen-from-story complete', { project_id, story_node_id, qaStoryId, prUrl, approvalStatus })
+    log.info('test-gen-from-story complete', {
+      project_id,
+      story_node_id,
+      qaStoryId,
+      prUrl,
+      approvalStatus,
+      browser_provider: stored.browser_provider,
+    })
 
     return new Response(
       JSON.stringify({

@@ -9,6 +9,7 @@ import { log } from '../../_shared/logger.ts';
 import { jwtAuth, adminOrApiKey, apiKeyAuth } from '../../_shared/auth.ts';
 import { requireFeature } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
+import { invalidateSetupGapsForKey, type KeyOwner as SetupGapKeyOwner } from '../../_shared/setup-gap-invalidate.ts';
 import { brandFooterDefaultForProject } from '../../_shared/brand-footer.ts';
 import {
   dbError,
@@ -528,6 +529,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       projectName: null as string | null,
       updatedAt: null as string | null,
       slackConfigured: false,
+      slackCanPost: false,
       sentryConfigured: false,
       reporterNotificationsEnabled: false,
       stage2Model: null as string | null,
@@ -598,6 +600,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       test_status: string | null;
       status: string;
       cooldown_until: string | null;
+      exhausted_until?: string | null;
       expires_at?: string | null;
     }>;
     const healthInputs: ByokKeyHealthInput[] = poolRows.map((k) => ({
@@ -605,6 +608,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       status: k.status,
       test_status: k.test_status,
       cooldown_until: k.cooldown_until,
+      exhausted_until: k.exhausted_until ?? null,
       expires_at: k.expires_at ?? null,
     }));
     for (const provider of ['anthropic', 'openai', 'firecrawl', 'browserbase'] as const) {
@@ -622,7 +626,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const byokKeysFailing = health.attention;
     const byokKeysUntested = health.checking;
     const byokKeysExpiring = health.expiring;
-    const byokKeysConfigured = health.working + health.attention + health.checking + health.expiring;
+    // A replaced key (another one took over) is saved but never "failing".
+    const byokKeysConfigured = health.working + health.attention + health.replaced + health.checking + health.expiring;
 
     // Per-provider configured flag: a key that is not turned off, pooled or legacy.
     const savedProviders = new Set(
@@ -1163,27 +1168,26 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
   // — a top-level GET here would 401 before Slack is ever reached.
   // The `state` encodes the project ID + a random nonce (HMAC-verified on callback).
   app.get('/v1/admin/integrations/slack/install', jwtAuth, async (c) => {
+    // A server without a Slack app is a setup state, not a crash: 503 with a
+    // sentence the console can show, never an env var name (report 2d5e2bd7).
+    // The operator-facing detail goes to the log.
     const clientId = Deno.env.get('SLACK_CLIENT_ID');
-    if (!clientId)
-      return c.json(
-        {
-          ok: false,
-          error: { code: 'NOT_CONFIGURED', message: 'SLACK_CLIENT_ID is not set on this server.' },
-        },
-        500,
-      );
     const stateSecret = slackStateSecret();
-    if (!stateSecret)
+    if (!clientId || !stateSecret) {
+      log.warn('Slack install requested but the Slack app is not configured', {
+        missing: !clientId ? 'SLACK_CLIENT_ID' : 'SLACK_STATE_SECRET or SLACK_CLIENT_SECRET',
+      });
       return c.json(
         {
           ok: false,
           error: {
             code: 'NOT_CONFIGURED',
-            message: 'Neither SLACK_STATE_SECRET nor SLACK_CLIENT_SECRET is set on this server.',
+            message: "One-click Slack install isn't set up on this server. Paste an incoming webhook URL instead.",
           },
         },
-        500,
+        503,
       );
+    }
 
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -3367,7 +3371,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .from('byok_keys')
         .select(
           withOwnerUserColumn(
-            'id, provider_slug, label, priority, status, cooldown_until, key_hint, base_url, last_tested_at, last_used_at, test_status, created_at, rotated_at, project_id, organization_id, created_by',
+            'id, provider_slug, label, priority, status, cooldown_until, exhausted_until, key_hint, base_url, last_tested_at, last_used_at, test_status, created_at, rotated_at, project_id, organization_id, created_by',
             await ownerUserColumnReady(db),
           ),
         )
@@ -3829,6 +3833,14 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         probe.status === 'ok' &&
         (await legacyByokRef(db, project.id, provider)) !== null;
 
+      // A new key can clear "auto-fix has no key" or the follow-up key gap:
+      // drop the stored Health answer so Home re-checks it.
+      await invalidateSetupGapsForKey(db, {
+        project_id: sharedOrgId || universalUserId ? null : project.id,
+        organization_id: sharedOrgId,
+        owner_user_id: universalUserId ?? null,
+      });
+
       return c.json({
         ok: true,
         data: {
@@ -4178,12 +4190,15 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       const sharedDenied = await sharedKeyWriteGuard(c, db, project, keyId, owner);
       if (sharedDenied) return sharedDenied;
 
-      const { data: keyRow } = await db
+      const { data: keyData } = await db
         .from('byok_keys')
-        .select('provider_slug, vault_secret_id')
+        .select(withOwnerUserColumn('provider_slug, vault_secret_id, project_id, organization_id', await ownerUserColumnReady(db)))
         .eq('id', keyId)
         .or(keyOwnerFilter(owner))
         .single();
+      const keyRow = keyData as unknown as
+        | ({ provider_slug: string; vault_secret_id: string | null } & SetupGapKeyOwner)
+        | null;
 
       if (!keyRow) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
@@ -4221,6 +4236,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       } catch {
         /* best-effort */
       }
+
+      // A removed key can leave auto-fix or follow-ups with nothing to run on:
+      // drop the stored Health answer so Home re-checks it.
+      await invalidateSetupGapsForKey(db, keyRow);
 
       return c.json({ ok: true, data: { removed: true, keyId } });
     },

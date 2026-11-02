@@ -101,18 +101,18 @@ feel alive in the first 10 seconds.
 Reserve and wire both so the first launch-week posts land on accounts that look
 cared-for.
 
-- [x] **Bluesky soft-launch** — wired to `kensaurus.bsky.social` and posting via
+- [x] **Bluesky soft-launch** — wired to `@kensaur.us` (the handle was `kensaurus.bsky.social` until 2026-10-31) and posting via
   [`scripts/marketing/post-bluesky.mjs`](../../scripts/marketing/post-bluesky.mjs)
   using the staggered queue in [`./social/queue.json`](./social/queue.json). The
   intro Mushi-chan post is live at
-  [bsky.app/profile/kensaurus.bsky.social](https://bsky.app/profile/kensaurus.bsky.social).
+  [bsky.app/profile/kensaur.us](https://bsky.app/profile/kensaur.us).
 - [ ] **Bluesky brand handle** — reserve `mushimushi.dev` (matches the domain →
   automatic verification checkmark). When done, set `BLUESKY_HANDLE=mushimushi.dev`
   in `.env.local`, delete `.cache/bluesky-session.json`, and the next script run
   will mint a fresh session under the brand identity.
   **Not reserved as of 2026-09-21**: the handle does not resolve and the domain
   is unregistered, so every public link (README, SUPPORT.md) points at
-  `kensaurus.bsky.social`. Do not link `mushimushi.dev` anywhere until it
+  `kensaur.us`. Do not link `mushimushi.dev` anywhere until it
   resolves.
 - [ ] **Self-label as a bot** — the script-posted account should mark itself in
   the bio (`bsky.app → Settings → Edit profile → Description`). E.g. *"Mushi
@@ -121,7 +121,7 @@ cared-for.
 - [ ] X / Twitter: `@mushimushi_dev` (the underscore because `@mushimushi` is
   probably taken; check both). **Not reserved as of 2026-09-21** (the profile
   404s) — do not reference it in metadata or copy until it exists.
-- [ ] Bio on both: *"Your AI wrote it. Mushi tells you why it broke — plain-English
+- [ ] Bio on both: *"Your AI wrote it. Mushi Mushi tells you why it broke — plain-English
   diagnosis + a paste-ready fix, in your editor. 🐛 OSS, self-hostable, MIT SDKs."*
 - [ ] Profile image: Mushi-chan's happy cameo
   ([`docs/mascot/mushi-happy.png`](../mascot/mushi-happy.png)).
@@ -168,7 +168,7 @@ See [`canonical-urls.md`](./canonical-urls.md). Do not use `api.mushimushi.dev` 
 | Homepage | `https://kensaur.us/mushi-mushi` |
 | Connect | `https://kensaur.us/mushi-mushi/docs/connect` |
 | License | MIT (SDK) · AGPLv3 (server) |
-| One-liner | *Your AI shipped it. Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key.* |
+| One-liner | *Your AI shipped it. Mushi Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key.* |
 
 > **Publish to the official registry FIRST.** Glama, PulseMCP, and VS Code's
 > gallery all auto-index from `registry.modelcontextprotocol.io`. Release CI

@@ -58,7 +58,7 @@ export function InflightDispatches({ dispatches }: Props) {
     <div className="space-y-3">
       {active.length > 0 && (
         <div className="space-y-1.5">
-          <h3 className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">In-flight dispatches</h3>
+          <h3 className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">Fix requests running</h3>
           {active.map((d) => (
             <DispatchCard key={d.id} d={d} />
           ))}
@@ -69,7 +69,8 @@ export function InflightDispatches({ dispatches }: Props) {
         // fold, and the reasons are only read when acting on one.
         <details className="group space-y-1.5">
           <summary className="cursor-pointer text-xs font-semibold text-fg-secondary uppercase tracking-wide">
-            {needsAttention.length} stopped {needsAttention.length === 1 ? 'dispatch needs' : 'dispatches need'} attention
+            {/* Plain words: "5 stopped dispatches need attention" (2026-10-28). */}
+            {needsAttention.length} fix {needsAttention.length === 1 ? 'request' : 'requests'} stopped without a pull request
             <span className="ml-1 font-normal normal-case tracking-normal text-fg-muted group-open:hidden">· show why</span>
           </summary>
           {needsAttention.map((d) => (

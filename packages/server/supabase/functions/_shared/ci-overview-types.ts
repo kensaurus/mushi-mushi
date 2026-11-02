@@ -70,6 +70,7 @@ export interface CiOverview {
     queued: number
     running: number
     jobs7d: number
+    /** Passed ÷ jobs that finished testing on this repo. Machine stops are not included. */
     passRate: number | null
     queueP95s: number | null
     durationP50s: number | null
@@ -107,7 +108,10 @@ export interface CiOverview {
   }>
   stats: {
     jobs: number
+    /** Passed ÷ jobs that finished testing (passed + code failures). Null when none finished. Machine stops are not included. */
     passRate: number | null
+    /** Jobs that finished testing and passed. */
+    passed: number
     queueP50s: number | null
     queueP95s: number | null
     durationP50s: number | null
@@ -128,7 +132,23 @@ export interface CiOverview {
     repo?: string | null
     runner?: string | null
     hostId?: string | null
+    /** Projected saving per 30 days if the fix is applied (USD, estimated); null when it cannot be priced. */
+    monthSavingUsd?: number | null
+    /** Mushi can open a PR that applies this fix to one workflow file (POST /v1/admin/ci/cost-fixes). */
+    autofix?: CiCostAutofix | null
   }>
+}
+
+/** The workflow edits Mushi can open as a reviewed PR (`_shared/ci-cost-fix.ts`). */
+export const CI_COST_FIX_KINDS = ['add_concurrency', 'skip_drafts', 'weekly_cron', 'ignore_docs_paths'] as const
+export type CiCostFixKind = (typeof CI_COST_FIX_KINDS)[number]
+
+export interface CiCostAutofix {
+  kind: CiCostFixKind
+  projectId: string
+  repo: string
+  /** Repo-relative path, e.g. `.github/workflows/ci.yml`. */
+  workflowPath: string
 }
 
 export type CiOverviewAdvice = CiOverview['advice'][number]

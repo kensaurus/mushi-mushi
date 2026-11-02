@@ -1,0 +1,198 @@
+/**
+ * FILE: apps/admin/src/lib/countDefinitions.ts
+ * PURPOSE: One unit and one definition per word for every "stuck / failed"
+ *          count the console shows (pattern P4, console journeys 2026-10-27).
+ *
+ * On yen-yen, at one moment, the same idea read five ways: Home "Auto-fix
+ * stopped on 39 reports", /pipeline "42 fixes: agent failed", /fixes
+ * "Failed 39", /repo "17 branches failing CI", /pipeline CI stage "13 stuck".
+ * Some counted reports, some fix attempts, some branches; one counted
+ * dismissed and fixed reports (report f5575c9e). Every page that says one of
+ * the words below takes its label from here, and its number from the server
+ * module named next to it.
+ *
+ * GLOSSARY
+ *
+ *   Unit: a REPORT, unless a word says otherwise. A report is counted once,
+ *   from its current state, however many attempts it had.
+ *
+ *   Stopped — "Auto-fix stopped on N reports".
+ *     Reports whose latest fix attempt failed, was skipped, or whose PR was
+ *     closed unmerged or went red, among reports with an attempt in the last
+ *     30 days. Fixed, verified, resolved and dismissed reports never count.
+ *     Server: _shared/fix-report-truth.ts (state `failed`). Read by
+ *     /v1/admin/fixes/stats `failed` (/fixes "Stopped", the active app), the
+ *     dashboard's fixSummary.failed (Home) and /v1/admin/fixes/summary
+ *     `failed` (the sidebar badge, via workspace-nav-meta; it covers every
+ *     app in scope, so it can be larger than one app's number).
+ *
+ *   Agent failed — "N reports: the agent failed, no PR opened".
+ *     Reports whose newest attempt in the last 7 days ended without a PR,
+ *     with no fix in flight. Fixed, verified, resolved and dismissed reports
+ *     never count. Server: _shared/pipeline-view.ts, groups `agent_failed`,
+ *     `agent_failed_person` (the agent says a person must decide),
+ *     `agent_said_fixed` (already fixed in the code) and
+ *     `agent_failed_nothing` (nothing to change in the code); together they
+ *     are the one count.
+ *     It is a part of Stopped, over a shorter window.
+ *
+ *   Failing CI — "N fix PRs failing CI". Unit: an open fix PULL REQUEST, as
+ *     the /repo list shows them (a report with two open PRs counts twice).
+ *     Open, non-draft fix PRs whose check summary (check_run_conclusion)
+ *     failed on the code. A test machine that stopped (ADR 0033) and a draft
+ *     do not count. The report's status is not read: an open PR on a
+ *     dismissed report still needs closing. Server:
+ *     _shared/repo-branch-counts.ts (/repo tiles, banner and list).
+ *
+ *   Stuck — /pipeline only: an item in a group the pipeline marks stuck,
+ *     counted at the one stage it sits in. A red-CI PR that is unreviewed or
+ *     that Opus held sits at the Reviewed stage, not at CI, and the CI stage
+ *     reads job-level results (ci_jobs) where /repo reads the PR's check
+ *     summary. So the CI stage's stuck count is not Failing CI and is
+ *     usually smaller; say "stuck at CI", never "failing CI", for it.
+ *
+ *   Ready to merge — Unit: an open fix PULL REQUEST. Not a draft, its
+ *     latest Opus review says "merge" about its current commit, and its own
+ *     CI passed on the code (a stopped test machine is not a pass).
+ *     isReadyToMerge picks /fixes "Ready to merge" from the fix list; /repo
+ *     "Mergeable now" applies the same rule to GitHub's live checks
+ *     (OpenPullRequests openPrGroup). /pipeline's "approved and green, not
+ *     queued to merge" is the part of it not in the merge queue yet.
+ *
+ *   In flight — one report, once: a fix attempt queued, running, pending or
+ *     dispatched (still counted when the report is already resolved), or a
+ *     dispatch queued before its attempt row exists. The tab title, the In
+ *     flight card and the snapshot use `inFlightHeadline` so they cannot
+ *     disagree. Server: fix-report-truth.ts `in_flight`, plus
+ *     /v1/admin/fixes/stats `inflightDispatches`.
+ *   PR open   — reports whose fix PR is open and not blocked.
+ *   Fixed     — reports a merged fix closed in the window.
+ */
+
+import { pluralize } from './format'
+
+/** Stopped: "Auto-fix stopped on 3 reports". */
+export function stoppedTitle(reports: number): string {
+  return `Auto-fix stopped on ${reports} ${pluralize(reports, 'report')}`
+}
+
+/** Failing CI: "2 fix PRs failing CI". */
+export function failingCiTitle(prs: number): string {
+  return `${prs} fix ${pluralize(prs, 'PR')} failing CI`
+}
+
+/** The fields "Ready to merge" reads; a fix attempt (GET /v1/admin/fixes) has them all. */
+export interface ReadyToMergeSignals {
+  pr_url?: string | null
+  pr_state?: string | null
+  merged_at?: string | null
+  commit_sha?: string | null
+  check_run_conclusion?: string | null
+  ci_infra?: { infra: boolean } | null
+  review_verdict?: string | null
+  /** The commit the latest Opus review is about; unknown on an older server. */
+  review_head_sha?: string | null
+}
+
+/**
+ * Ready to merge (see the glossary). A review about an older commit is stale,
+ * never "merge". `pipelineGreen` relaxes the CI condition only: the Opus
+ * verdict is still required, because /pipeline also files a PR whose review
+ * was skipped (no key) as approved and green.
+ */
+function readyToMerge(fix: ReadyToMergeSignals, pipelineGreen = false): boolean {
+  if (!fix.pr_url || fix.merged_at) return false
+  if ((fix.pr_state ?? 'open') !== 'open') return false
+  if (fix.review_verdict !== 'merge') return false
+  if (fix.review_head_sha && fix.commit_sha && fix.review_head_sha !== fix.commit_sha) return false
+  if (fix.ci_infra?.infra) return false
+  return pipelineGreen || (fix.check_run_conclusion ?? '').toLowerCase() === 'success'
+}
+
+/** The part of a /v1/admin/pipeline read "Ready to merge" needs. */
+interface PipelineGroupsRead {
+  stages: ReadonlyArray<{ groups: ReadonlyArray<{ id: string; items: ReadonlyArray<{ id: string }> }> }>
+}
+
+/**
+ * Fix attempts /pipeline files as "approved and green, not queued to merge".
+ * Its CI comes from the collected jobs; a PR whose checks passed with a few
+ * skipped reads "skipped" in check_run_conclusion, so /fixes said "Ready to
+ * merge 0" while Home and /pipeline said 6 (2026-10-28, mushi-mushi PRs 765 to 840).
+ */
+export function pipelineApprovedGreen(pipeline: PipelineGroupsRead | null): Set<string> {
+  const ids = new Set<string>()
+  for (const stage of pipeline?.stages ?? []) {
+    for (const group of stage.groups) if (group.id === 'not_queued') for (const item of group.items) ids.add(item.id)
+  }
+  return ids
+}
+
+/** Ready to merge, taking CI as green when its check summary says success or /pipeline's CI read does. */
+export function isReadyToMerge(fix: ReadyToMergeSignals & { id: string }, approvedGreen: ReadonlySet<string>): boolean {
+  return readyToMerge(fix, approvedGreen.has(fix.id))
+}
+
+/**
+ * Attempt statuses the server counts as a live fix
+ * (`_shared/fix-report-truth.ts` `LIVE_ATTEMPT_STATUSES`).
+ */
+const LIVE_ATTEMPT_STATUSES: ReadonlySet<string> = new Set(['queued', 'running', 'pending', 'dispatched'])
+
+/** A fix attempt that is still going, including one queued, pending or dispatched. */
+export function isLiveFixAttempt(status: string | null | undefined): boolean {
+  return LIVE_ATTEMPT_STATUSES.has((status ?? '').toLowerCase())
+}
+
+function isLiveDispatch(status: string | null | undefined): boolean {
+  const s = (status ?? '').toLowerCase()
+  return s === 'queued' || s === 'running'
+}
+
+/**
+ * Reports with a fix still going. One report counts once, even when a live
+ * attempt and a queued dispatch both name it. A live attempt on a report the
+ * server already calls resolved stays in the set: that row is still queued
+ * or running.
+ */
+export function collectInFlightReportIds(
+  attempts: ReadonlyArray<{ report_id?: string | null; status?: string | null }>,
+  dispatches: ReadonlyArray<{ report_id?: string | null; status?: string | null }>,
+): Set<string> {
+  const ids = new Set<string>()
+  for (const attempt of attempts) {
+    if (attempt.report_id && isLiveFixAttempt(attempt.status)) ids.add(attempt.report_id)
+  }
+  for (const dispatch of dispatches) {
+    if (dispatch.report_id && isLiveDispatch(dispatch.status)) ids.add(dispatch.report_id)
+  }
+  return ids
+}
+
+/**
+ * The in-flight number the tab title, the In flight card and the snapshot
+ * share. `serverCounts` are the server's own totals (summary `inProgress`,
+ * stats `inProgress` + `inflightDispatches`). The loaded list can miss an
+ * attempt past the first page, so the headline is never smaller than those.
+ */
+export function inFlightHeadline(localReports: number, ...serverCounts: Array<number | null | undefined>): number {
+  let n = localReports
+  for (const count of serverCounts) {
+    if (typeof count === 'number' && Number.isFinite(count) && count > n) n = count
+  }
+  return n
+}
+
+/** One-line definitions, for a hint beside the number. */
+export const COUNT_HINTS = {
+  readyToMerge: 'Open fix PRs whose Opus review says merge about their latest commit and whose CI passed.',
+  stuck: 'Items waiting longer than their step should take, or that need a person. Each counts once, at the step it sits in.',
+  stopped:
+    'Reports whose latest auto-fix attempt failed, was skipped, or whose PR closed unmerged. Fixed and dismissed reports never count.',
+  failingCi:
+    'Open fix PRs whose own CI failed on the code. A stopped test machine and a draft PR do not count.',
+  inFlight:
+    'Reports with a fix queued, running, pending or dispatched, or a dispatch queued before its attempt exists. Each report counts once.',
+  prOpen: 'Reports whose fix PR is open and waiting for review or merge.',
+  fixed: 'Reports a merged fix closed in the last 30 days.',
+} as const

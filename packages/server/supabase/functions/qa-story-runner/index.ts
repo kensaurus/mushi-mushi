@@ -51,6 +51,7 @@ import { resolveLlmKey } from '../_shared/byok.ts'
 import { sendBotMessage, sendSlackText, buildQaStoryRunBlocks, sendDiscordNotification } from '../_shared/slack.ts'
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
 import { safeFetch } from '../_shared/inventory-guards.ts'
+import { sweepAbandonedManualRuns } from './abandoned-runs.ts'
 import { SCHEDULED_APPROVAL_STATUS, selectStoriesForScheduledTick } from './schedule.ts'
 
 declare const Deno: {
@@ -355,6 +356,9 @@ async function runFirecrawl(story: QaStory, apiKey: string, targetUrl: string): 
             waitFor?: number
             htmlOnly?: boolean
           }
+          // Only these keys are copied. test-gen-from-story also stores
+          // `playwrightSource` here so the spec survives when no PR is opened.
+          // Do not spread unknown keys into the Firecrawl body.
           if (Array.isArray(spec.actions)) actions = spec.actions
           if (Array.isArray(spec.assertContains)) assertContains = spec.assertContains
           if (typeof spec.waitFor === 'number') waitFor = spec.waitFor
@@ -687,6 +691,15 @@ Deno.serve(
     if (body.trigger === 'manual' && body.story_id && body.run_id) {
       return await executeManualRun(db, body.story_id, body.run_id)
     }
+
+    // Manual runs are inserted pending, then this function is invoked in the
+    // background. A 503 BOOT_ERROR never reaches executeManualRun, so the row
+    // stays pending. Cron is every minute; sweep ones still pending after
+    // 10 minutes. A sweep failure must not skip the stories that are due.
+    const abandoned = await sweepAbandonedManualRuns(db, now, (message, fields) => {
+      rlog.warn(message, fields)
+    })
+    if (abandoned > 0) rlog.info('abandoned manual runs', { failed: abandoned })
 
     // 2026-05-24: previous code called `startCronRun('qa-story-runner')` —
     // missing the `db` first argument and destructuring `cronRunId` instead

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
+// Copyright (c) 2024–2026 kensaurus LLC — Mushi Mushi
 /**
  * review-followup — Supabase Edge Function (verify_jwt = false, internal)
  *
@@ -58,6 +58,7 @@ import { log as rootLog } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
+import { createHealthGate, OFF_GATE, pauseReason, type HealthGate } from '../_shared/health-gate.ts'
 import { sanitizeForLLM } from '../_shared/sanitize.ts'
 import { checkAutofixBudget, type AutofixBudgetCheck, type AutofixBudgetSettings } from '../_shared/autofix-budget.ts'
 import {
@@ -132,7 +133,8 @@ import {
   type FollowupKey,
   type FollowupSettings,
 } from '../_shared/review-followup-db.ts'
-import { resolveCursorApiKeyWithSource } from '../_shared/agent-adapters.ts'
+import { markCursorKeyExhausted, resolveCursorApiKeyWithSource } from '../_shared/agent-adapters.ts'
+import { isCursorKeyLimitError } from '../_shared/spend-down.ts'
 
 const log = rootLog.child('review-followup')
 
@@ -235,6 +237,8 @@ export interface FollowupRunSummary {
   noChange: number
   timedOut: number
   results: Array<{ followupId: string } & FollowupOutcome>
+  /** Rows left queued because a Health check stops follow-ups (health gate in enforce; absent otherwise). */
+  healthPaused?: number
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -709,6 +713,10 @@ export async function dispatchOne(db: SupabaseClient, row: FollowupRow, deps: Fo
     } else if (err instanceof CursorApiError && err.status === 409) {
       // agent_busy (one active run per agent): try again next tick.
       return wait('agent_busy', err.message.slice(0, 300))
+    } else if (err instanceof CursorApiError && isCursorKeyLimitError(err.message)) {
+      // The account reached its plan's limit: mark the key for every path and wait (it may come back, or another key may be chosen).
+      if (key.keyId) await markCursorKeyExhausted(db, key.keyId, err.message)
+      return wait('key_used_up', err.message.slice(0, 300))
     } else if (err instanceof CursorApiError && err.status >= 400 && err.status < 500 && err.status !== 429) {
       // Cursor refused the request itself (bad model, no repo access, …): the
       // same request would be refused again. Shown in the console as is.
@@ -1154,7 +1162,12 @@ export function pickFollowupBatch<T extends { project_id: string }>(rows: T[], b
 // A tick
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function runReviewFollowups(db: SupabaseClient, deps: FollowupDeps = {}): Promise<FollowupRunSummary> {
+/**
+ * `gate`: the health gate (ADR 0054, Proposed). It can only withhold a new
+ * dispatch, leaving the row queued for a later tick; polling running agents
+ * is never gated. The default is off, so callers that pass none run as before.
+ */
+export async function runReviewFollowups(db: SupabaseClient, deps: FollowupDeps = {}, gate: HealthGate = OFF_GATE): Promise<FollowupRunSummary> {
   const now = (deps.now ?? (() => new Date()))()
   const summary: FollowupRunSummary = {
     settled: 0,
@@ -1196,6 +1209,14 @@ export async function runReviewFollowups(db: SupabaseClient, deps: FollowupDeps 
   // One at a time: each dispatch reads today's count the next one must see.
   const startedNow = new Set<string>()
   for (const row of pickFollowupBatch((queued ?? []) as FollowupRow[])) {
+    // Stop the line: a Health check that stops follow-ups for this app (the
+    // follow-up key was deleted) leaves the row queued instead of failing it.
+    const health = await gate.check(row.project_id, 'followups')
+    if (health.withhold) {
+      summary.healthPaused = (summary.healthPaused ?? 0) + 1
+      log.info('review-followup.health_paused', { followupId: row.id, projectId: row.project_id, reason: pauseReason(health) })
+      continue
+    }
     try {
       const o = await dispatchOne(db, row, deps)
       if (o.outcome === 'dispatched') startedNow.add(row.id)
@@ -1242,7 +1263,7 @@ export async function handler(req: Request): Promise<Response> {
   const db = getServiceClient()
   const cronRun = await startCronRun(db, 'review-followup', raw?.trigger === 'cron' ? 'cron' : 'http')
   try {
-    const summary = await runReviewFollowups(db)
+    const summary = await runReviewFollowups(db, {}, await createHealthGate(db, 'review-followup'))
     await cronRun.finish({ rowsAffected: summary.dispatched, metadata: { ...summary, results: summary.results.slice(0, 20) } })
     return new Response(JSON.stringify({ ok: true, data: summary }), { status: 200, headers: { 'Content-Type': 'application/json' } })
   } catch (err) {

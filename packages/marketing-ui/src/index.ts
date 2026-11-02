@@ -26,6 +26,8 @@ export { Hero } from './Hero'
 export { ClosingCta } from './ClosingCta'
 export { MarketingFooter } from './MarketingFooter'
 export { KensaurusPortfolioTable } from './KensaurusPortfolioTable'
+export { KENSAURUS_FAMILY, familyPagesFor } from './kensaurus/family'
+export type { KensaurusFamily, KensaurusFamilyApp, KensaurusFamilyPage } from './kensaurus/family'
 export { StatusPill } from './StatusPill'
 export type { StatusPillProps } from './StatusPill'
 export { SwitchingFromStrip } from './SwitchingFromStrip'
@@ -42,6 +44,8 @@ export type { ConnectLane } from './connect/types'
 export { getConnectClientEmoji } from './connect/clientEmoji'
 export { ConnectClientIcon, renderConnectClientIcon } from './connect/clientIcons'
 export type { ConnectClientIconProps } from './connect/clientIcons'
+
+export { LoopPipeline } from './pipeline/LoopPipeline'
 
 export { MushiCanvas } from './canvas/MushiCanvas'
 export {

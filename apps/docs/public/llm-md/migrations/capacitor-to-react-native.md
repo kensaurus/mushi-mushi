@@ -4,20 +4,22 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/capacitor-to-react-native
 
 ---
 title: 'Migration: Capacitor → React Native'
-description: Port an Ionic or Capacitor app to React Native — a full plan with a Mushi API map and CI/CD recipes for Expo EAS or React Native CLI with Fastlane.
+description: Port an Ionic or Capacitor app to React Native. A full plan with a Mushi Mushi API map and CI/CD recipes for Expo EAS or React Native CLI with Fastlane.
 ---
 
 # Capacitor → React Native
 
-A complete porting plan for Ionic / Capacitor apps that want to move to
-React Native — with **two** end-to-end CI/CD options (Expo + EAS Build for
-the easy paid path, and React Native CLI + GitHub Actions + Fastlane for
-the cost-sensitive path).
+ 
 
-  The full plan — including ready-to-paste GitHub Actions YAML for Android and
-  iOS, the Fastlane match recipe, the Capacitor → RN plugin map, the
-  mushi-mushi SDK API mapping, the 6-week timeline, and the go/no-go
-  checklist — lives in the repo at
+A porting plan for Ionic / Capacitor apps that want to move to React
+Native, with **two** end-to-end CI/CD options: Expo + EAS Build (the
+easy, paid path) and React Native CLI + GitHub Actions + Fastlane (the
+cost-sensitive path). Mushi Mushi bug reporting keeps working throughout.
+
+  The full plan (ready-to-paste GitHub Actions YAML for Android and iOS,
+  the Fastlane match recipe, the Capacitor → RN plugin map, the Mushi SDK
+  API mapping, the 6-week timeline, and the go/no-go checklist) lives in
+  the repo at
   [`docs/migrations/capacitor-to-react-native.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/migrations/capacitor-to-react-native.md).
   This page is the public summary; the linked file is the contract.
 
@@ -25,24 +27,26 @@ the cost-sensitive path).
 
 | Path | Cost / month | Speed to first build | Maintenance | Recommended for |
 |------|--------------|----------------------|-------------|-----------------|
-| **A: Expo SDK 55 + EAS Build** | $19–$99 | Hours | Lowest | Teams that want zero CI ops |
+| **A: Expo + EAS Build** | EAS Starter $19 or Production $199, plus usage | Hours | Lowest | Teams that want zero CI ops |
 | **B: React Native CLI + GitHub Actions + Fastlane** | $0 + GH Actions minutes (or $0 on a self-hosted Mac mini) | 2–3 days | Medium | Cost-sensitive, GitHub-Actions-native teams |
 
-Both paths target React Native **0.83** with the New Architecture
-(Fabric / Bridgeless) on by default.
+The repo plan was written for Expo SDK 55 and React Native 0.83. Current
+releases are Expo SDK 58 and React Native 0.88 (npm, 2026-10-29); check
+each tool's upgrade notes before you start. Both paths use the New
+Architecture (Fabric / Bridgeless). EAS prices from
+[expo.dev/pricing](https://expo.dev/pricing), 2026-10-29.
 
 ## Web strategy
 
 You have three options for the **web** experience after porting the native app:
 
-1. **Keep Next.js, port only mobile** — recommended for SEO-sensitive marketing sites.
-2. **RN Web for the app shell + Next.js for marketing** — one app, two surfaces.
-3. **Full RN Web** — single codebase, accept SEO trade-offs.
+1. **Keep Next.js, port only mobile.** Suits SEO-sensitive marketing sites.
+2. **RN Web for the app shell + Next.js for marketing.** One app, two surfaces.
+3. **Full RN Web.** Single codebase, with SEO trade-offs.
 
-For most teams, **option 1** is the right answer. Mushi Mushi happily
-publishes both `@mushi-mushi/web` (to the marketing site) and
-`@mushi-mushi/react-native` (to the new app) against the same project ID and
-API key, in parallel.
+Option 1 is usually the simplest. You can run `@mushi-mushi/web` on the
+marketing site and `@mushi-mushi/react-native` in the new app against the
+same project ID and API key at the same time.
 
 ## Mushi Mushi during the migration
 
@@ -57,11 +61,11 @@ the Capacitor build and the React Native build land in the same inbox.
 | `Mushi.configure({ projectId, apiKey })` | `` | Provider replaces the imperative call |
 | `Mushi.report({ description, category })` | `useMushiReport().submitReport(...)` hook | Returns `{ submitReport }`, which takes `{ description, category }` |
 | `Mushi.showWidget()` | `useMushiWidget().open()` | Same effect |
-| `Mushi.setUser({ id, email })` | `useMushi().setUser(...)` | Same |
-| `Mushi.setMetadata({...})` | `useMushi().setMetadata(...)` | Same |
-| `Mushi.flushQueue()` | _Auto on provider mount_ | Manual via `useMushi().flush()` |
-| `triggerMode: 'shake'` | `config.widget.trigger: 'shake'` | Same vocabulary |
-| `captureScreenshot: boolean` | `config.capture.screenshot: 'on-report' \| 'auto' \| 'off'` | Three-way to match web |
+| `Mushi.setUser({ user: { id, email } })` | `useMushi().setUser({ id, email })` | RN takes the user object directly |
+| `Mushi.setMetadata({ key, value })` | `useMushi().setMetadata(key, value)` | Two arguments |
+| `Mushi.flushQueue()` | _Automatic_ | The provider flushes its offline queue on mount and when the network comes back; there is no manual flush |
+| `triggerMode: 'shake'` | `config.widget.trigger: 'shake'` | Same vocabulary; needs the `expo-sensors` peer |
+| `captureScreenshot: boolean` | `config.capture.screenshot: boolean` | Needs the `react-native-view-shot` peer |
 
 ### Before / after
 
@@ -70,7 +74,7 @@ the Capacitor build and the React Native build land in the same inbox.
 import { Mushi } from '@mushi-mushi/capacitor'
 
 await Mushi.configure({
-  projectId: 'glot-it-prod',
+  projectId: 'YOUR_PROJECT_ID',
   apiKey:    process.env.PUBLIC_MUSHI_KEY,
   triggerMode: 'shake',
   captureScreenshot: true,
@@ -84,11 +88,11 @@ import { MushiProvider } from '@mushi-mushi/react-native'
 export default function App() {
   return (
     <MushiProvider
-      projectId="glot-it-prod"
+      projectId="YOUR_PROJECT_ID"
       apiKey={process.env.EXPO_PUBLIC_MUSHI_KEY!}
       config={{
-        widget:  { trigger: 'shake' },
-        capture: { screenshot: 'on-report' },
+        widget:  { trigger: 'shake' },   // npx expo install expo-sensors
+        capture: { screenshot: true },   // npx expo install react-native-view-shot
       }}
     >
       <RootNavigator />
@@ -100,7 +104,7 @@ export default function App() {
 ### Get the snippet from the admin console
 
 The **Install SDK** card in the admin console (Onboarding, Projects → your
-project, Settings → SDK & connection) now exposes **React Native**, **Expo**, and
+project, Settings → SDK & connection) has **React Native**, **Expo**, and
 **Capacitor** tabs alongside React / Vue / Svelte / Vanilla. The snippets
 are populated with your real project ID and (right after a key mint) your
 real API key.
@@ -111,13 +115,13 @@ SDK config, so future builds pick them up without a redeploy.
 ### Or use the CLI
 
 ```bash
-cd glot-it-rn
+cd your-rn-app
 npx mushi-mushi init
 ```
 
 The CLI auto-detects `react-native`, `expo`, and `@capacitor/core` and
-writes the correct boilerplate. Capacitor users get
-`Mushi.configure(...)` (not the older buggy `Mushi.init(...)` call).
+writes the matching boilerplate. Capacitor users get `Mushi.configure(...)`
+(`Mushi.init(...)` is an alias for it).
 
 ## What's covered in the full guide
 
@@ -125,10 +129,10 @@ The full plan in
 [`docs/migrations/capacitor-to-react-native.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/migrations/capacitor-to-react-native.md)
 includes:
 
-1. Decision matrix — should you migrate at all?
-2. The web question — RN Web vs keep Next.js
+1. Decision matrix: should you migrate at all?
+2. The web question: RN Web vs keep Next.js
 3. Pre-migration audit checklist (plugins, components, web-only APIs)
-4. Path A: Expo SDK 55 + EAS Build (one-page recipe)
+4. Path A: Expo + EAS Build (one-page recipe, written for SDK 55)
 5. Path B (the chosen path): RN CLI + GitHub Actions + Fastlane
    - Project bootstrap with the New Architecture
    - Selectively pulling in Expo SDK packages without the Expo CLI
@@ -150,4 +154,4 @@ includes:
 - [`@mushi-mushi/capacitor` SDK reference](/sdks/capacitor)
 - [React Native quickstart](/quickstart/react-native)
 - [Capacitor quickstart](/quickstart/capacitor)
-- [Capacitor bottom-dock notes](/sdks/capacitor-bottom-dock) — for tuning the trigger position above bottom tab bars
+- [Capacitor bottom-dock notes](/sdks/capacitor-bottom-dock): tuning the trigger position above bottom tab bars

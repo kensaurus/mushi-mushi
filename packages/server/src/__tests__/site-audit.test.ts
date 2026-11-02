@@ -14,6 +14,7 @@ import {
   leakedStrings,
   linkFindings,
   linkTargets,
+  nextRunAfterCadenceChange,
   pageFindings,
   pathLocale,
   reportDrafts,
@@ -138,5 +139,18 @@ describe('reportDrafts', () => {
     expect(drafts[0].title).toBe("Site audit: 2 pages with localized pages that show another locale's UI text")
     expect(drafts[0].description).toContain('- https://t/th/a — 泊まる | 旅のプラン')
     expect(drafts[0].description).toContain('Done when:')
+  })
+})
+
+describe('a new cadence', () => {
+  const now = new Date('2026-10-24T00:00:00Z')
+  it('moves the next run to cadence days after the last one, never into the past', () => {
+    const base = { lastRunAt: '2026-10-23T05:29:00Z', nextRunAt: '2026-10-26T05:29:00Z', now }
+    expect(nextRunAfterCadenceChange({ ...base, cadenceDays: 1 })).toBe('2026-10-24T05:29:00.000Z')
+    expect(nextRunAfterCadenceChange({ ...base, cadenceDays: 7 })).toBe('2026-10-30T05:29:00.000Z')
+    expect(nextRunAfterCadenceChange({ ...base, lastRunAt: '2026-10-20T00:00:00Z', cadenceDays: 1 })).toBe(now.toISOString())
+  })
+  it('keeps the schedule of an audit that never ran', () => {
+    expect(nextRunAfterCadenceChange({ lastRunAt: null, nextRunAt: '2026-10-25T00:00:00Z', cadenceDays: 1, now })).toBe('2026-10-25T00:00:00Z')
   })
 })

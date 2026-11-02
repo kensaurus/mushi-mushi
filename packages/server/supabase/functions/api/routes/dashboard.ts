@@ -11,7 +11,8 @@ import {
   OPEN_REPORT_STATUSES,
   TRIAGE_BACKLOG_STATUSES,
 } from '../shared.ts';
-import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
+import { isTransientGatewayStatus } from '../../_shared/error-codes.ts';
+import { countFixesForArea, summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
 import { failedFixPreviews, loadRecentFixTruths } from '../../_shared/fix-report-truth-load.ts';
 import { JUDGE_ELIGIBLE_STATUSES, isJudgeStale, onlyJudgeable } from '../../_shared/judge-eligibility.ts';
 import { reportWindowStartIso } from '../../_shared/report-list-filters.ts';
@@ -22,6 +23,8 @@ import {
   summarizeHealthByKind,
 } from '../../_shared/integration-health-rollup.ts';
 import { DashboardChartReadError, loadDashboardCharts } from '../../_shared/dashboard-chart-rollup.ts';
+import { isSdkKey } from '../../_shared/setup-signals.ts';
+import { inboxBannerLabel } from '../../_shared/inbox-banner.ts';
 
 /** Activity-feed line for one fix attempt, read against its report's current state. */
 function fixActivityLabel(
@@ -54,22 +57,45 @@ class DashboardReadError extends Error {
   }
 }
 
+type ReadStatus = { status?: number; statusText?: string };
+
+/**
+ * The read error dbError reports, with the read named. postgrest-js turns a
+ * failed HEAD request (every exact count here) into `{ message: '' }` with
+ * no code, because the body is empty, and dbError titled it "Unknown DB
+ * error (unknown)" (MUSHI-MUSHI-SERVER-3Q, dashboard/stats, 2026-10-30 19:23
+ * UTC). The HTTP status is the only signal left: a gateway status reads as
+ * the gateway error it is ("Error code 520"), which dbError already treats
+ * as transient; any other status is named with the read. `details` carries
+ * which read failed into the Sentry pg_details extra.
+ */
+function namedReadError(what: string, error: ReadError, res: ReadStatus = {}): ReadError {
+  const named = { ...error, details: error.details ?? `dashboard read: ${what}` };
+  if (error.message?.trim() || error.code?.trim()) return named;
+  const status = typeof res.status === 'number' ? res.status : null;
+  const message =
+    status !== null && status !== 0 && isTransientGatewayStatus(status)
+      ? `Error code ${status} from the API gateway, no response body (${what})`
+      : `HTTP ${status ?? 'unknown'}${res.statusText ? ` ${res.statusText}` : ''}, no response body (${what})`;
+  return { ...named, message };
+}
+
 async function exactCount(
   what: string,
-  query: PromiseLike<{ count: number | null; error: ReadError | null }>,
+  query: PromiseLike<{ count: number | null; error: ReadError | null } & ReadStatus>,
 ): Promise<number> {
-  const { count, error } = await query;
-  if (error) throw new DashboardReadError(what, error);
-  return count ?? 0;
+  const res = await query;
+  if (res.error) throw new DashboardReadError(what, namedReadError(what, res.error, res));
+  return res.count ?? 0;
 }
 
 async function rowsOf<T>(
   what: string,
-  query: PromiseLike<{ data: T[] | null; error: ReadError | null }>,
+  query: PromiseLike<{ data: T[] | null; error: ReadError | null } & ReadStatus>,
 ): Promise<T[]> {
-  const { data, error } = await query;
-  if (error) throw new DashboardReadError(what, error);
-  return data ?? [];
+  const res = await query;
+  if (res.error) throw new DashboardReadError(what, namedReadError(what, res.error, res));
+  return res.data ?? [];
 }
 
 
@@ -355,11 +381,11 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
           'sdk heartbeat',
           db
             .from('project_api_keys')
-            .select('last_seen_at')
+            .select('scopes, last_seen_at')
             .eq('project_id', activeProject.id)
             .eq('is_active', true)
             .not('last_seen_at', 'is', null)
-            .limit(1),
+            .limit(50),
         ),
         exactCount(
           'report count',
@@ -400,7 +426,8 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         ungradedReports,
         lastEvalAt,
         hasKey: keyRows.length > 0,
-        hasSdk: heartbeatRows.length > 0,
+        // SDK keys only: a CLI or MCP key's calls are not the app's SDK.
+        hasSdk: (heartbeatRows as Array<{ scopes?: string[] | null }>).some((k) => isSdkKey(k.scopes)),
         reportCount,
         lastReport,
         lastFix,
@@ -526,7 +553,9 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       nextStepTo = scoped('/onboarding?tab=steps');
     } else if (openActions > 0 && top) {
       topPriority = 'actions';
-      topPriorityLabel = top.hint;
+      // The title counts every open stage. The first hint alone called failing
+      // connections code bugs to dispatch or close.
+      topPriorityLabel = inboxBannerLabel(openFlags);
       nextStepTo = top.to;
     } else {
       topPriority = 'clear';
@@ -682,11 +711,11 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
           'sdk heartbeat',
           db
             .from('project_api_keys')
-            .select('last_seen_at')
+            .select('scopes, last_seen_at')
             .eq('project_id', activeProject.id)
             .eq('is_active', true)
             .not('last_seen_at', 'is', null)
-            .limit(1),
+            .limit(50),
         ),
         exactCount(
           'report count',
@@ -724,7 +753,8 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         llmCalls14d,
         llmOk14d,
         hasKey: keyRows.length > 0,
-        hasSdk: heartbeatRows.length > 0,
+        // SDK keys only: a CLI or MCP key's calls are not the app's SDK.
+        hasSdk: (heartbeatRows as Array<{ scopes?: string[] | null }>).some((k) => isSdkKey(k.scopes)),
         reportCount,
         lastReport,
         lastFix,
@@ -1112,8 +1142,18 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     // True only when the fallback row read hit its cap; the KPI counts stay exact.
     const chartsSampled = loaded.charts.sampled;
 
-    // Top components by report count
-    const topComponents = loaded.charts.topComponents;
+    // Top components by report count. Drafted / merged are that area's open
+    // PRs and merged PRs — not the project's attempt total, which the reports
+    // banner used to print as "N more drafted" next to the inbox total.
+    const areaFixRows = [...dashTruths.truths.entries()].map(([id, truth]) => ({
+      component: dashTruths.reports.get(id)?.component,
+      state: truth.state,
+      mergedPrNumber: truth.mergedPrNumber,
+    }));
+    const topComponents = loaded.charts.topComponents.map((c) => {
+      const area = countFixesForArea(c.component, areaFixRows);
+      return { ...c, draftedFixes: area.drafted, mergedFixes: area.merged };
+    });
 
     // `total` is the number of reports with an attempt in the shared 30-day window.
     const dashTruth = summarizeFixTruths(dashTruths.truths.values());

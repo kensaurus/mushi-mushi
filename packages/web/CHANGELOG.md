@@ -1,5 +1,14 @@
 # @mushi-mushi/web
 
+## 1.33.3
+
+### Patch Changes
+
+- 271abb8: The npm pages now open with what the package does, how to install it, a short example that matches the current API, and a link to its docs page. The examples that named options or functions the SDKs no longer have are corrected.
+- 15ba9ce: The widget no longer says "Sent" when a report never left the device. When the pre-filter, an on-device classifier, `sampleRate`, the host's `beforeSend` or the SDK's own send limiter stops a report, the reporter stays on the report step with their text and attachments and sees a plain "Not sent" line saying why. The submit outcome carries `failureKind: 'blocked'` or `'throttled'` for these cases.
+- Updated dependencies [271abb8]
+  - @mushi-mushi/core@1.33.3
+
 ## 1.33.1
 
 ### Patch Changes

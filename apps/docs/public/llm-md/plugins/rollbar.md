@@ -4,18 +4,32 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/rollbar
 
 ---
 title: Rollbar
-description: Mirror Mushi bug reports into Rollbar items and resolve them when fixes ship — access token, environment name, and dedup key mapping.
+description: Copy triaged Mushi Mushi bug reports into Rollbar items and try to resolve them when fixes ship. A self-hosted plugin with an access token and project id.
 ---
 
 # Rollbar plugin
 
-Mirrors Mushi reports into Rollbar items and resolves them when fixes ship.
+Copies each bug Mushi Mushi triages into Rollbar as an item, and tries to
+resolve the item when the fix merges.
 
-## Setup
+**Not in the Mushi Cloud Marketplace yet.** The console has no Rollbar
+listing, so you can't install it from there. On a Mushi server you run
+yourself, add a `plugin_registry` row for it and install it like any listed
+plugin.
+To bring Rollbar errors *into* Mushi, use `@mushi-mushi/adapters` instead.
 
-1. In Mushi: **Marketplace → Rollbar → Install**.
-2. Paste Rollbar access token and environment name.
-3. Configure dedup key mapping (defaults to Mushi `report_id`).
+## Setup (self-hosted Mushi Mushi)
+
+```bash
+npm i @mushi-mushi/plugin-rollbar
+export MUSHI_PLUGIN_SECRET=...      # the signing secret set when the plugin is installed
+export ROLLBAR_ACCESS_TOKEN=...     # project access token with post_server_item (or write) scope
+export ROLLBAR_PROJECT_ID=...       # required by the server
+export ADMIN_BASE_URL=https://...   # optional: console URL for report links
+npx -p @mushi-mushi/plugin-rollbar mushi-plugin-rollbar
+```
+
+Point the plugin's webhook URL at `https://<your-host>/mushi/webhook`.
 
 ## Package
 
@@ -25,5 +39,12 @@ Mirrors Mushi reports into Rollbar items and resolves them when fixes ship.
 
 | Event | Action |
 | --- | --- |
-| `report.classified` | Create Rollbar item |
-| `fix.applied` | Resolve item |
+| `report.classified` | Create a Rollbar item (environment `production`, level from severity, fingerprint `mushi--`) |
+| `fix.applied` | Resolve the item (`PATCH /api/1/item/`, `status: resolved`) |
+
+To resolve, the plugin needs the item id from Rollbar's answer to the create
+call and keeps it in memory (pass your own cache to
+`createRollbarPlugin(cfg, cache)` to survive restarts). Rollbar documents
+that answer as returning an occurrence `uuid`; if it carries no `id`, nothing
+is stored and `fix.applied` does nothing. We have not confirmed this against
+a live Rollbar account.

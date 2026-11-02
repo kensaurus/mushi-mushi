@@ -22,7 +22,7 @@ import { ConfigHelp } from '../ConfigHelp';
 import { SettingsChangeHint } from './SettingsChangeHint';
 import { SettingsFormFooter } from './SettingsFormFooter';
 import { countChangedFields, valuesEqual } from './settingsDiff';
-import { useEntitlements } from '../../lib/useEntitlements';
+import { isByokLocked, useEntitlements } from '../../lib/useEntitlements';
 import { UpgradePrompt } from '../billing/UpgradePrompt';
 import { describeByokError } from '../../lib/byokErrors';
 import { providerPoolKeys, selectPrimaryProviderKey } from './byokPool';
@@ -47,7 +47,7 @@ const FIRECRAWL_KEY_HREF = '/settings?tab=byok#key-firecrawl';
 
 export function FirecrawlPanel() {
   const entitlements = useEntitlements();
-  const byokLocked = !entitlements.loading && !entitlements.has('byok');
+  const byokLocked = isByokLocked(entitlements);
   const {
     data,
     loading,
@@ -182,7 +182,7 @@ export function FirecrawlPanel() {
               className="w-full min-h-[88px] rounded-sm border border-edge bg-surface-raised px-2 py-1.5 font-mono text-sm outline-none focus:border-accent"
               value={domains}
               onChange={(e) => setDomainsDraft(e.target.value)}
-              placeholder={'github.com\nstackoverflow.com\nreact.dev'}
+              placeholder={'e.g. github.com\nstackoverflow.com\nreact.dev'}
             />
           </label>
           <SettingsChangeHint current={domains} saved={savedDomains} />

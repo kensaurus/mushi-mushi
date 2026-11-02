@@ -4,10 +4,11 @@
 
 import { Fragment } from 'react'
 import type { FixTimelineEvent } from '../FixGitGraph'
-import { ResponsiveTable, TableDensityToggle } from '../ResponsiveTable'
+import { ResponsiveTable } from '../ResponsiveTable'
 import { FixRowView } from './FixRowView'
 import { FixDetailPanel } from './FixDetailPanel'
 import type { FixAttempt } from './types'
+import { pluralizeWithCount } from '../../lib/format'
 import { FIXES_STICKY_LEAD, FIXES_TABLE_COL, TABLE_CELL } from './fixesTableLayout'
 
 interface InventoryActionNodeLike {
@@ -72,16 +73,15 @@ export function FixesTable({
   return (
     <div className="border border-edge-subtle rounded-md overflow-hidden bg-surface-raised/30">
       {!hideTableChrome ? (
-        <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-edge-subtle bg-surface-raised/50">
+        <div className="px-3 py-1.5 border-b border-edge-subtle bg-surface-raised/50">
           <span className="text-2xs text-fg-muted">
             {fixes.length} attempt{fixes.length === 1 ? '' : 's'} — expand a row for PDCA timeline & errors
           </span>
-          <TableDensityToggle />
         </div>
       ) : (
         <div className="px-3 py-1.5 border-b border-edge-subtle bg-surface-raised/50">
           <span className="text-2xs text-fg-muted">
-            {fixes.length} draft fix{fixes.length === 1 ? '' : 'es'} — tap a row for details
+            {pluralizeWithCount(fixes.length, 'fix', 'fixes')} — tap a row for details
           </span>
         </div>
       )}

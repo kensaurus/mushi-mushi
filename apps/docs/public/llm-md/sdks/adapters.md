@@ -4,12 +4,12 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/adapters
 
 ---
 title: '@mushi-mushi/adapters'
-description: Turn Sentry, Datadog, Bugsnag and other monitoring webhooks into Mushi reports with @mushi-mushi/adapters, deduped against the same queue as user reports.
+description: Turn Sentry, Datadog, Bugsnag and other monitoring webhooks into Mushi Mushi reports with @mushi-mushi/adapters, in the same queue as user reports.
 ---
 
 # `@mushi-mushi/adapters`
 
-Inbound webhook translators that turn third-party observability events into Mushi Mushi reports — so an alert that fires in your existing monitoring also lands in your bug queue, deduped against the same knowledge graph as your user-filed reports.
+Already send errors to Sentry, Crashlytics, Bugsnag or Rollbar? These webhook handlers forward them into Mushi Mushi, so a crash lands in the same queue as your users' bug reports and gets the same plain-English diagnosis and ready fix. You do not need any of these tools to use Mushi; this package is only for when you already have one.
 
 ## Install
 
@@ -33,9 +33,9 @@ pnpm add @mushi-mushi/adapters
 | AWS CloudWatch (via SNS)      | `translateCloudWatch`        | `createCloudWatchAdapter`         |
 | Opsgenie                      | `translateOpsGenie`          | `createOpsGenieAdapter`           |
 
-Every translator returns a `MushiCaptureEventInput` (from `@mushi-mushi/core`) so you can route the result to any sink — the hosted Mushi API, a queue, your own database, a fan-out of several. Subpath imports are supported, e.g. `@mushi-mushi/adapters/cloudwatch`.
+Every translator returns a `MushiCaptureEventInput` (from `@mushi-mushi/core`) so you can route the result to any sink: the hosted Mushi Mushi API, a queue, your own database, a fan-out of several. Subpath imports are supported, e.g. `@mushi-mushi/adapters/cloudwatch`.
 
-## Quick start — Datadog → Hono
+## Quick start: Datadog → Hono
 
 ```ts
 import { Hono } from 'hono';
@@ -66,7 +66,7 @@ app.post('/webhooks/datadog', async (c) => {
     rawBody: raw,
     headers: Object.fromEntries(c.req.raw.headers),
   });
-  return c.json(res.body ?? {}, res.status);
+  return Response.json(res.body ?? {}, { status: res.status });
 });
 ```
 
@@ -74,18 +74,18 @@ app.post('/webhooks/datadog', async (c) => {
 
 Each adapter normalises the source's native severity onto Mushi's four-level scale.
 
-| Mushi      | Datadog | New Relic | Honeycomb | Grafana / AM |
-| ---------- | ------- | --------- | --------- | ------------ |
-| `critical` | P1      | critical  | critical  | critical     |
-| `high`     | P2      | high      | warning   | high         |
-| `medium`   | P3      | medium    | info      | warning      |
-| `low`      | P4–P5   | low       | —         | info         |
+| Mushi      | Sentry (`level`) | Datadog | New Relic (`priority`) | Honeycomb (contains) | Grafana / AM   |
+| ---------- | ---------------- | ------- | ---------------------- | -------------------- | -------------- |
+| `critical` | fatal            | P1      | critical               | critical             | critical, page |
+| `high`     | error            | P2      | high                   | high, error          | high, error    |
+| `medium`   | warning          | P3      | warning, medium        | warn                 | warning, warn  |
+| `low`      | info, debug      | P4–P5   | low                    | info                 | info, low      |
 
-Crash-tracker adapters (Sentry / Bugsnag / Rollbar / Crashlytics) map their `level` / `severity` field directly; Opsgenie / CloudWatch / Firebase Analytics derive severity from the upstream alarm state.
+The other crash-tracker adapters (Bugsnag / Rollbar / Crashlytics) map their `level` / `severity` field directly; Opsgenie / CloudWatch / Firebase Analytics derive severity from the upstream alarm state.
 
 ## Authentication
 
-Every adapter uses the strongest auth its upstream supports — never a shared bearer where a real signature exists.
+Every adapter uses the strongest auth its upstream supports, never a shared bearer where a real signature exists.
 
 | Adapter             | Method                        | Header                    |
 | ------------------- | ----------------------------- | ------------------------- |
@@ -101,4 +101,4 @@ Every adapter uses the strongest auth its upstream supports — never a shared b
 | Honeycomb           | HMAC-SHA256 (`sha256=…`)      | `X-Honeycomb-Signature`   |
 | Grafana / Loki (AM) | shared token (timing-safe)    | `X-Grafana-Token`         |
 
-The package ships ~90 unit tests covering both the happy-path translation and the forged-signature rejection for every adapter — run with `pnpm --filter @mushi-mushi/adapters test`.
+Unit tests cover translation and rejection of a forged signature or missing secret for all eleven adapters. Run them with `pnpm --filter @mushi-mushi/adapters test`.

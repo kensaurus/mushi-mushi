@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { META_CHIP_TONE } from '../../lib/tokens';
 import { IconAlertTriangle, IconBell, IconCheck, IconEye, IconTerminal, IconArrowRight } from '../icons';
-import { statDestinationLabel } from '../../lib/statCardLinks';
+import { statLinkLabel } from '../../lib/statCardLinks';
 import { InfoHint, MetricHelpTrigger } from './fields';
 import { Card } from './layout';
 import { Tooltip } from './misc';
@@ -240,7 +240,7 @@ const META_CHIP_TONES: Record<NonNullable<RecommendedActionMeta['tone']>, string
 const INLINE_ACTION_TONES: Record<NonNullable<RecommendedActionInlineAction['tone']>, string> = {
   primary: 'bg-brand text-brand-fg hover:bg-brand-hover',
   ghost: 'bg-surface-overlay text-fg-secondary hover:text-fg hover:bg-surface-raised border border-edge',
-  danger: CHIP_TONE.dangerSubtle + ' hover:bg-danger-muted/70 border border-danger/30',
+  danger: CHIP_TONE.dangerSubtle + ' hover:bg-danger-muted/70',
 }
 
 function InlineActionEl({ action }: { action: RecommendedActionInlineAction }) {
@@ -517,15 +517,15 @@ const METRIC_SECTION_META: Record<
 > = {
   shows: {
     Icon: IconEye,
-    chipClass: `border-info/35 ${CHIP_TONE.infoSubtle}`,
+    chipClass: CHIP_TONE.infoSubtle,
   },
   counted: {
     Icon: IconTerminal,
-    chipClass: `border-brand/35 ${CHIP_TONE.brand}`,
+    chipClass: CHIP_TONE.brand,
   },
   takeaway: {
     Icon: IconCheck,
-    chipClass: `border-ok/35 ${CHIP_TONE.okSubtle}`,
+    chipClass: CHIP_TONE.okSubtle,
   },
 }
 
@@ -651,17 +651,45 @@ function StatCardHelp({ tooltip, hint }: { tooltip?: string | MetricTooltipData;
   return null
 }
 
-export function StatCard({ label, value, accent, delta, trend, detail, hint, tooltip, to, linkLabel }: StatCardProps) {
+export function StatCard(props: StatCardProps) {
+  if (props.to) return <LinkedStatCard {...props} to={props.to} />
+  return (
+    <Card elevated className="px-3 py-2.5">
+      <StatCardBody {...props} linkText={null} />
+    </Card>
+  )
+}
+
+/** A linked card says where it goes from where the user is: "Show Trend" on
+ *  the same page, "Go to Bugs" elsewhere (lib/statCardLinks.statLinkLabel). */
+function LinkedStatCard(props: StatCardProps & { to: string }) {
+  const { pathname, search } = useLocation()
+  const linkText = props.linkLabel ? `Go to ${props.linkLabel}` : statLinkLabel(props.to, `${pathname}${search}`)
+  return (
+    // The link fills the card: the card used to carry the padding and a
+    // pointer cursor, so a click on its edge looked live and did nothing.
+    <Card elevated className="stat-card-link">
+      <Link
+        to={props.to}
+        aria-label={`${props.label} — ${linkText}`}
+        className="group/stat relative z-1 block rounded-[inherit] px-3 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/60"
+      >
+        <StatCardBody {...props} linkText={linkText} />
+      </Link>
+    </Card>
+  )
+}
+
+function StatCardBody({ label, value, accent, delta, trend, detail, hint, tooltip, to, linkText }: StatCardProps & { linkText: string | null }) {
   const help = tooltip ?? hint
-  const destination = to ? (linkLabel ?? statDestinationLabel(to)) : null
-  const inner = (
+  return (
     <>
       <div className="text-2xs text-fg-muted mb-1 flex items-center gap-1 min-w-0">
-        {to && destination ? (
+        {to && linkText ? (
           <span className="flex-1 min-w-0 font-medium">
             <StatCardSwapLine
               primary={label}
-              secondary={`Go to ${destination}`}
+              secondary={linkText}
               secondaryClassName="text-brand font-semibold"
             />
           </span>
@@ -704,7 +732,7 @@ export function StatCard({ label, value, accent, delta, trend, detail, hint, too
             <StatCardSwapLine
               variant="detail"
               primary={detail}
-              secondary="Open page →"
+              secondary="Open →"
               primaryClassName="text-fg-faint"
               secondaryClassName="text-brand/80 font-medium"
             />
@@ -714,31 +742,9 @@ export function StatCard({ label, value, accent, delta, trend, detail, hint, too
         )
       ) : to ? (
         <p className="stat-card-cta-hint mt-1 text-3xs leading-snug">
-          <span className="text-brand/70 font-medium">Open page →</span>
+          <span className="text-brand/70 font-medium">Open →</span>
         </p>
       ) : null}
     </>
-  )
-
-  if (to) {
-    return (
-      // The link fills the card: the card used to carry the padding and a
-      // pointer cursor, so a click on its edge looked live and did nothing.
-      <Card elevated className="stat-card-link">
-        <Link
-          to={to}
-          aria-label={`${label} — go to ${destination}`}
-          className="group/stat relative z-1 block rounded-[inherit] px-3 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/60"
-        >
-          {inner}
-        </Link>
-      </Card>
-    )
-  }
-
-  return (
-    <Card elevated className="px-3 py-2.5">
-      {inner}
-    </Card>
   )
 }
