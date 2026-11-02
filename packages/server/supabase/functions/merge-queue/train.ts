@@ -23,6 +23,7 @@ import {
   DEFAULT_TRAIN_INTERVAL_MINUTES,
   DEFAULT_TRAIN_MAX_MEMBERS,
   RED_TRAIN_DETAIL_PREFIX,
+  TRAIN_BLOCKED_DETAIL_PREFIX,
   benchReason,
   bisectTrain,
   isApprovedAtHead,
@@ -31,6 +32,7 @@ import {
   pickTrainMembers,
   trainBranchName,
   trainDue,
+  trainMergeGate,
   trainPullRequest,
   type PastTrain,
   type TrainCandidate,
@@ -98,6 +100,8 @@ interface TrainRow {
   members: Array<TrainMember & { rowId: string }>
   attempt: number
   created_at: string
+  detail?: string | null
+  updated_at?: string | null
 }
 
 export interface TrainSettings {
@@ -112,7 +116,7 @@ export function trainSettingsFrom(row: { train_interval_minutes?: number | null;
   }
 }
 
-const TRAIN_COLUMNS = 'id, project_id, repo, branch, base_ref, pr_number, head_sha, state, members, attempt, created_at'
+const TRAIN_COLUMNS = 'id, project_id, repo, branch, base_ref, pr_number, head_sha, state, members, attempt, created_at, detail, updated_at'
 
 async function setRows(db: SupabaseClient, ids: string[], patch: Record<string, unknown>) {
   if (!ids.length) return
@@ -264,6 +268,19 @@ async function tickTrain(db: SupabaseClient, train: TrainRow, token: string, ref
     return 'testing'
   }
   if (checks.failed.length) return redTrain(db, train, token, ref, checks.failed, settings, deps)
+  const gate = trainMergeGate({ mergeableState: pr.mergeableState, detail: train.detail, updatedAt: train.updated_at, now: deps.now?.() ?? new Date() })
+  if (gate === 'hold') {
+    await db.from('release_trains').update({ updated_at: now, detail: `${TRAIN_BLOCKED_DETAIL_PREFIX} a required check did not pass (a cancelled run reads as no failure). Re-run CI on #${train.pr_number}, or it is rebuilt in 30 minutes.` }).eq('id', train.id)
+    return 'testing'
+  }
+  if (gate === 'wait') return 'testing'
+  if (gate === 'abandon') {
+    await deps.closePr(token, ref, train.pr_number!, 'Rebuilding this train: GitHub would not merge it, and its required checks were not re-run.')
+    await deps.deleteBranch(token, ref, train.branch)
+    await db.from('release_trains').update({ state: 'abandoned', updated_at: now, detail: 'GitHub blocked the merge; its required checks did not pass.' }).eq('id', train.id)
+    await setRows(db, train.members.map((m) => m.rowId), { state: 'queued', train_id: null, detail: null })
+    return 'rebuild'
+  }
   const method = await deps.mergeMethod(token, ref, train.base_ref)
   const outcome = await deps.trainMerge(db, {
     mergeMethod: method,

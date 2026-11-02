@@ -4,7 +4,29 @@
  *          leaves, how a red train is bisected, and what the train PR says.
  */
 import { describe, expect, it } from 'vitest'
-import { benchReason, bisectTrain, isExpress, isTrainReady, pickTrainMembers, trainBranchName, trainDue, trainPullRequest, type TrainCandidate } from '../../supabase/functions/_shared/merge-train.ts'
+import { TRAIN_BLOCKED_DETAIL_PREFIX, benchReason, bisectTrain, isExpress, isTrainReady, pickTrainMembers, trainBranchName, trainDue, trainMergeGate, trainPullRequest, type TrainCandidate } from '../../supabase/functions/_shared/merge-train.ts'
+
+describe('trainMergeGate', () => {
+  const now = new Date('2026-11-02T06:00:00Z')
+  const held = `${TRAIN_BLOCKED_DETAIL_PREFIX} a required check did not pass.`
+  const gate = (mergeableState: string | null, detail: string | null = null, updatedAt: string | null = null) =>
+    trainMergeGate({ mergeableState, detail, updatedAt, now })
+
+  it('merges only when GitHub says it can', () => {
+    for (const s of ['clean', 'unstable', 'has_hooks', 'CLEAN']) expect(gate(s)).toBe('merge')
+  })
+  it('never merges a train GitHub blocks, even when every check read as passed', () => {
+    expect(gate('blocked')).toBe('hold')
+    expect(gate('blocked', held, '2026-11-02T05:50:00Z')).toBe('wait')
+  })
+  it('gives the place back after the grace period, so the repo queue is not stuck', () => {
+    expect(gate('blocked', held, '2026-11-02T05:30:00Z')).toBe('abandon')
+    expect(gate('clean', held, '2026-11-02T05:00:00Z')).toBe('merge')
+  })
+  it('waits on anything else GitHub says', () => {
+    for (const s of ['unknown', 'dirty', 'draft', null]) expect(gate(s)).toBe('wait')
+  })
+})
 
 const c = (over: Partial<TrainCandidate> = {}): TrainCandidate => ({
   rowId: 'r1',
