@@ -62,8 +62,8 @@ export function DryRunPanel({ projectId }: { projectId: string }) {
 
   return (
     <Card className="p-3 mt-2 space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h4 className="text-xs font-semibold text-fg">Practice run</h4>
           <p className="text-2xs text-fg-muted mt-0.5">
             Walks a fix through every step without calling the AI or opening a pull request.
@@ -72,6 +72,7 @@ export function DryRunPanel({ projectId }: { projectId: string }) {
         <Btn
           variant="ghost"
           size="sm"
+          className="shrink-0 self-start whitespace-nowrap sm:self-auto"
           onClick={() => void run()}
           loading={running}
           disabled={running}
