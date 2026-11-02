@@ -65,3 +65,80 @@ describe('graphTotal', () => {
     expect(graph.GRAPH_CANVAS_EDGE_LIMIT).toBe(500)
   })
 })
+
+// Report 4659acc8: bug groups on the map read "6f6a3044-f1b6-…".
+describe('reportGroupDisplayLabel', () => {
+  it('names a group by its title, else its first report, with the report count', () => {
+    expect(graph.reportGroupDisplayLabel({ groupTitle: 'Login button does nothing', reportCount: 3 })).toBe('Login button does nothing (3 reports)')
+    expect(graph.reportGroupDisplayLabel({ groupTitle: null, report: { title: 'Crash on start' }, reportCount: 1 })).toBe('Crash on start')
+    expect(graph.reportGroupDisplayLabel({ report: { title: null, summary: '  The   receipt upload fails after a save  ' } })).toBe('The receipt upload fails after a save')
+  })
+
+  it('cuts a long name at 60 characters and gives null when there is nothing to show', () => {
+    const name = graph.reportGroupDisplayLabel({ report: { description: 'x'.repeat(200) }, reportCount: 2 })!
+    expect(name.startsWith(`${'x'.repeat(59)}…`)).toBe(true)
+    expect(name.endsWith('(2 reports)')).toBe(true)
+    expect(graph.reportGroupDisplayLabel({ report: { title: '', summary: null } })).toBeNull()
+  })
+})
+
+// linkReportToAction stores the report id as the node label and metadata.report_id.
+// buildReportGraph stores the group id as the label. Both must read as a title.
+const GROUP_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+const REPORT_ID = '6f6a3044-f1b6-4abc-8def-111111111111'
+const REPORT_NODE = 'cb7ca884-d2be-4abc-8def-222222222222'
+
+describe('reportGroupNames', () => {
+  it('names a group-id node from the group title and leaves the stored label alone', async () => {
+    const node = {
+      id: 'n-group',
+      node_type: 'report_group',
+      label: GROUP_ID,
+      metadata: { reportId: REPORT_ID },
+    }
+    const untitled = {
+      id: 'n-untitled',
+      node_type: 'report_group',
+      label: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      metadata: { reportId: REPORT_ID },
+    }
+    const db = makeFakeDb({
+      report_groups: [
+        { id: GROUP_ID, title: 'Login button does nothing', report_count: 3, canonical_report_id: REPORT_ID },
+        { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', title: null, report_count: 1, canonical_report_id: null },
+      ],
+      reports: [{ id: REPORT_ID, title: 'Crash on start', summary: 'unused', description: null, report_group_id: GROUP_ID }],
+    })
+    const names = await graph.reportGroupNames(db as never, [node, untitled])
+    expect(names.get('n-group')).toBe('Login button does nothing (3 reports)')
+    expect(names.get('n-untitled')).toBe('Crash on start')
+    expect(node.label).toBe(GROUP_ID)
+  })
+
+  it('names a report-id node (metadata.report_id) from its group, else the report', async () => {
+    const linked = {
+      id: 'n-report',
+      node_type: 'report_group',
+      label: REPORT_NODE,
+      metadata: { kind: 'report', report_id: REPORT_NODE },
+    }
+    const orphan = {
+      id: 'n-orphan',
+      node_type: 'report_group',
+      label: REPORT_ID,
+      metadata: { kind: 'report', report_id: REPORT_ID },
+    }
+    const db = makeFakeDb({
+      report_groups: [{ id: GROUP_ID, title: 'Checkout crashes', report_count: 4, canonical_report_id: REPORT_NODE }],
+      reports: [
+        { id: REPORT_NODE, title: null, summary: 'Receipt upload fails', description: null, report_group_id: GROUP_ID },
+        { id: REPORT_ID, title: null, summary: 'Crash on start', description: null, report_group_id: null },
+      ],
+    })
+    const names = await graph.reportGroupNames(db as never, [linked, orphan, { id: 'n-page', node_type: 'page', label: '/checkout', metadata: null }])
+    expect(names.get('n-report')).toBe('Checkout crashes (4 reports)')
+    expect(names.get('n-orphan')).toBe('Crash on start')
+    expect(names.has('n-page')).toBe(false)
+    expect(linked.label).toBe(REPORT_NODE)
+  })
+})

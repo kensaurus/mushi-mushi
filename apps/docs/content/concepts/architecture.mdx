@@ -1,12 +1,13 @@
 ---
 title: Architecture
-description: How Mushi is built — a Hono gateway in front of Supabase, the edge functions behind it, and the relational, vector and graph stores that hold each report.
+description: How Mushi Mushi is built. A Hono gateway in front of Supabase, the edge functions behind it, and the relational, vector and graph stores that hold each report.
 ---
 
 # Architecture
 
-The whole system is intentionally boring at the seams: a Hono gateway in
-front of Supabase, **51** specialised edge functions behind it, and three
+Mushi Mushi is intentionally boring at the seams: a Hono gateway in front of
+Supabase, more than 70 edge functions behind it (`pnpm docs-stats` prints the
+current count), and three
 data substrates (relational + vector + graph) that mirror each other for
 their respective query shapes. Everything an SDK does is one POST to the
 gateway; everything a contributor adds is either a route or a function.
@@ -53,34 +54,54 @@ device to a merged PR.
   to specialised functions. All admin routes live under `/v1/admin/*`.
 - **`fast-filter`** triages high-volume garbage (form spam, duplicate one-liners)
   with the cheapest model the project's BYOK plan permits.
-- **`classify-report`** runs the canonical two-stage classifier. Stage 1
-  tags category/severity/component from text. Stage 2, only if a screenshot
-  is present, runs an air-gapped vision pass that *cannot* see Stage 1's
-  prompt (defence against prompt injection via screenshots).
+- **`classify-report`** is stage 2 of the classifier. Stage 1 (`fast-filter`)
+  reads the scrubbed report and extracts structured symptoms; stage 2 sees only
+  that structured output (an air gap against prompt injection) and writes the
+  root cause, repro steps and fix direction. When a screenshot is present, a
+  separate image-only vision call runs afterwards and can annotate the report
+  but not change its diagnosis.
 - **`judge-batch`** is a nightly cron that scores classifier accuracy with a
-  separate judge model, feeding the prompt-A/B framework that promotes new
-  prompt versions automatically when they win statistically.
+  separate judge call, feeding the prompt-A/B framework that promotes a
+  candidate prompt after 30 evaluations when its mean score is more than 5%
+  higher.
 - **`fix-worker`** dispatches approved triage decisions to a sandboxed LLM agent
   (Anthropic / OpenAI BYOK) that generates code patches, validates them against
-  a Zod schema, and opens a draft PR via a scoped GitHub App. Validation failures
-  include Zod issue detail in `fix_attempts.error` for debugging.
+  a Zod schema, and opens a draft PR via the GitHub App, or dispatches a Cursor or
+  GitHub cloud agent that opens the PR itself. Validation failures include Zod
+  issue detail in `fix_attempts.error` for debugging.
+- **`agent-pr-review`** reviews each fix PR with Claude Opus on the project's own
+  Anthropic key and stores a merge / fix_first / hold verdict. A merge verdict
+  on the PR's current commit marks the draft ready so your CI runs; with no
+  review possible, a fix-worker draft falls back to its own self-check.
+- **`review-followup`** sends a "fix first" verdict's findings back to a new
+  cloud agent on the same PR (off by default), and asks it to repair CI when an
+  approved PR fails on its own code.
+- **`fix-verifier`** checks the merge gates for a PR's head (review, CI, the
+  Mushi verify check, no weakened tests, diff size, a second-model review) and,
+  only when the project turns on verified auto-merge, merges it.
+- **`merge-queue`** merges PRs a person queued with "Merge when ready", one per
+  repo at a time, or batches approved PRs into a release-train PR.
+- **Local workers** (`mushi work --daemon`) let your own machine claim reports,
+  follow-ups, merge conflicts or audits under a lease, so the cloud and your
+  machine never work on the same report at once.
 - **`pdca-runner`** orchestrates autonomous Plan → Do → Check → Act cycles:
   crawls a target URL, identifies issues, calls `fix-worker` for each, verifies
   the result, and writes per-run + per-iteration records to `pdca_runs`.
 - **`drift-walker`** fetches the live app (using `contract-graph-builder`) and
-  diffs the result against the stored `contract_snapshots` baseline. Structured
-  error codes (`BUILDER_FAILED`, `SNAPSHOT_MISSING`) flow through to the
-  [Drift scanner](/admin/drift) UI.
-- **`contract-graph-builder`** crawls a URL via Firecrawl and builds a contract
-  graph (routes, components, API endpoints). Called by `drift-walker` and also
-  when the SDK registers a new inventory snapshot.
+  diffs the result against the stored `contract_snapshots` baseline, writing
+  `drift_findings`. Errors (builder failed or unreachable, snapshot not found)
+  come back with a plain message and show in the [Drift scanner](/admin/drift) UI.
+- **`contract-graph-builder`** builds a contract snapshot from three sources: the
+  project's OpenAPI spec URL, the inventory's API dependencies, and the latest
+  Supabase schema snapshot from `backend-drift-scanner`. It stores the result in
+  `contract_snapshots` and is called by `drift-walker` before every walk.
 - **`qa-story-runner`** executes `qa_stories` records on schedule (pg_cron, every
   minute) using Firecrawl, Browserbase, or local Playwright. Writes results to
   `qa_story_runs` and `qa_story_evidence` with screenshots.
 - **`intelligence-report`** generates weekly bug-intelligence digests with
   optional cross-customer benchmarking (k-anonymity enforced via materialized view).
   Runs with `verify_jwt = false`; authenticated via service-role header internally.
-- **`soc2-evidence`** snapshots control state for SOC 2 Type 1 readiness.
+- **`soc2-evidence`** snapshots five controls nightly as evidence toward SOC 2 (not a certification).
 - **`sdk-upgrade-worker`** reads a linked GitHub repo's `package.json`(s), computes a
   semver-only bump plan (`computeBumpPlan`), opens a draft PR via shared
   `createPrFromFiles`, and writes status to `sdk_upgrade_jobs`. Triggered from
@@ -134,17 +155,14 @@ out-of-band config.
 
 ## Data residency
 
-Each project pins to a region (`us` / `eu` / `jp`). The gateway returns
-`307 Temporary Redirect` when a request reaches the wrong region, and the
-Core SDK transparently follows it (caching the resolved region in
-`localStorage`). The US cluster remains the **catalog of record** for
-plugin marketplace + project metadata.
+Each project pins to a region (`us` / `eu` / `jp`). The gateway has
+`307 Temporary Redirect` middleware (`regionRouter`) for requests that reach the
+wrong cluster, and the Core SDK can resolve and cache a project's endpoint in
+`localStorage`.
 
-The 307 routing itself is implemented and live today; dedicated EU/JP
-Supabase clusters are reserved but not yet provisioned, so an `eu` or `jp`
-project currently redirects to the same single production cluster — see
-[Data residency](/security/data-residency) for the exact regional rollout
-status.
+Today there is one production project, in Tokyo (`ap-northeast-1`). No other
+regional endpoint is configured, so the middleware never redirects and every
+region is served there. See [Data residency](/security/data-residency).
 
 ## Storage
 

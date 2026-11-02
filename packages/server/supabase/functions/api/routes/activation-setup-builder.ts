@@ -90,6 +90,7 @@ export async function buildSetupResponse(
           last_sdk_origin: heartbeat?.last_seen_origin ?? null,
           last_sdk_user_agent: heartbeat?.last_seen_user_agent ?? null,
           last_sdk_endpoint_host: heartbeat?.last_seen_endpoint_host ?? null,
+          last_sdk_key_label: heartbeat?.key_label ?? null,
         },
       },
       {
@@ -104,7 +105,7 @@ export async function buildSetupResponse(
       {
         id: 'github_connected',
         label: 'Connect GitHub',
-        description: 'Required for auto-fix PRs and code grounding.',
+        description: 'Lets Mushi read your code to explain bugs and open fixes as pull requests.',
         complete: hasGithub,
         required: false,
         cta_to: '/integrations/config#platform-card-github',

@@ -296,6 +296,14 @@ describe('fast-filter (Stage 1)', () => {
       expect(src).toContain("log.error('First-report lookup failed; keeping the Stage 1 result'")
     })
 
+    it("also forwards the project's first report from a deployed app, so it can activate the organization", () => {
+      // The first real report is usually the dev-server test; the first
+      // report from the live site would otherwise stop at Stage 1 with no
+      // diagnosis and `activated` (classify-report) would never fire.
+      expect(src).toContain('isFirstActivationCandidate(')
+      expect(src).toMatch(/select\('id, custom_metadata, source, url:environment->>url'\)/)
+    })
+
     it('finalizes heuristic classification so recovery cron cannot retry-storm', () => {
       expect(src).toContain('usedHeuristic')
       expect(src).toContain('stage1_llm_unavailable')

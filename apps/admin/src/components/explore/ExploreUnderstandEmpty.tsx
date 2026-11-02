@@ -45,7 +45,7 @@ export function ExploreUnderstandEmpty({ error, onRetry }: Props) {
         )}
         {isKey && (
           <Btn to="/settings?tab=byok" size="sm" variant="primary">
-              Settings → API Keys
+              Settings → AI keys
             </Btn>
         )}
         {onRetry && !isForbidden && (

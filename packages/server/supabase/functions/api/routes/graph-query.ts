@@ -17,6 +17,92 @@ export function graphTotal(count: number | null | undefined, returned: number): 
   return typeof count === 'number' ? Math.max(count, returned) : returned;
 }
 
+const UUID_LABEL = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * A bug group's name on the map (report 4659acc8): its title, else its first
+ * report's title or the start of its summary, with how many reports it holds.
+ * The node's stored `label` stays the id knowledge-graph.ts dedupes on.
+ * @internal Exported for tests.
+ */
+export function reportGroupDisplayLabel(input: {
+  groupTitle?: string | null;
+  report?: { title?: string | null; summary?: string | null; description?: string | null } | null;
+  reportCount?: number | null;
+}): string | null {
+  const raw = input.groupTitle?.trim() || input.report?.title?.trim() || input.report?.summary?.trim() || input.report?.description?.trim() || '';
+  const text = raw.replace(/\s+/g, ' ');
+  if (!text) return null;
+  const short = text.length > 60 ? `${text.slice(0, 59).trimEnd()}…` : text;
+  const n = input.reportCount ?? 0;
+  return n > 1 ? `${short} (${n} reports)` : short;
+}
+
+type ReportGroupRow = { id: string; title: string | null; report_count: number | null; canonical_report_id: string | null };
+type ReportNameRow = { id: string; title: string | null; summary: string | null; description: string | null; report_group_id: string | null };
+
+/**
+ * Report id carried on a graph node. `buildReportGraph` writes `reportId`;
+ * `linkReportToAction` writes `report_id` and uses the report id as `label`.
+ */
+function metaReportId(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  const meta = metadata as { reportId?: unknown; report_id?: unknown };
+  if (typeof meta.reportId === 'string' && meta.reportId) return meta.reportId;
+  if (typeof meta.report_id === 'string' && meta.report_id) return meta.report_id;
+  return null;
+}
+
+/** Names for the report_group nodes among `nodes`, keyed by node id. The stored label is not changed. @internal Exported for tests. */
+export async function reportGroupNames(
+  db: ReturnType<typeof getServiceClient>,
+  nodes: Array<{ id: string; node_type: string; label: string; metadata: unknown }>,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const groups = nodes.filter((n) => n.node_type === 'report_group' && UUID_LABEL.test(n.label));
+  if (groups.length === 0) return out;
+  const { data: groupRows, error } = await db
+    .from('report_groups')
+    .select('id, title, report_count, canonical_report_id')
+    .in('id', groups.map((g) => g.label));
+  if (error) {
+    log.warn('report group names read failed', { err: error.message });
+    return out;
+  }
+  const byId = new Map(((groupRows ?? []) as ReportGroupRow[]).map((g) => [g.id, g]));
+  // A label that is not a group id is the report id (`linkReportToAction`).
+  const reportIdOf = (n: (typeof groups)[number]) => {
+    const group = byId.get(n.label);
+    return group?.canonical_report_id ?? metaReportId(n.metadata) ?? (group ? null : n.label);
+  };
+  const reportIds = [...new Set(groups.map(reportIdOf).filter((id): id is string => !!id))];
+  const reports = new Map<string, ReportNameRow>();
+  if (reportIds.length > 0) {
+    const { data } = await db.from('reports').select('id, title, summary, description, report_group_id').in('id', reportIds);
+    for (const r of (data ?? []) as ReportNameRow[]) reports.set(r.id, r);
+  }
+  const missingGroupIds = [...new Set(
+    [...reports.values()].map((r) => r.report_group_id).filter((id): id is string => !!id && !byId.has(id)),
+  )];
+  if (missingGroupIds.length > 0) {
+    const { data: more, error: moreErr } = await db
+      .from('report_groups')
+      .select('id, title, report_count, canonical_report_id')
+      .in('id', missingGroupIds);
+    if (moreErr) log.warn('report group names read failed', { err: moreErr.message });
+    else for (const g of (more ?? []) as ReportGroupRow[]) byId.set(g.id, g);
+  }
+  for (const n of groups) {
+    const direct = byId.get(n.label);
+    const rid = reportIdOf(n);
+    const report = rid ? reports.get(rid) : null;
+    const g = direct ?? (report?.report_group_id ? byId.get(report.report_group_id) : undefined);
+    const name = reportGroupDisplayLabel({ groupTitle: g?.title, report, reportCount: g?.report_count });
+    if (name) out.set(n.id, name);
+  }
+  return out;
+}
+
 export function registerGraphQueryRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // PHASE 2: KNOWLEDGE GRAPH
@@ -257,13 +343,15 @@ export function registerGraphQueryRoutes(app: Hono<{ Variables: Variables }>): v
       }
     }
 
+    const groupNames = await reportGroupNames(db, nodes);
     const enriched = nodes.map((n) => {
       const occ = counts.get(`${n.node_type}:${n.label}`) ?? 0;
       const meta =
         n.metadata && typeof n.metadata === 'object' && !Array.isArray(n.metadata)
           ? { ...(n.metadata as Record<string, unknown>), occurrence_count: occ }
           : { occurrence_count: occ };
-      return { ...n, metadata: meta };
+      // Bug groups are labelled with their id; display_label is what a person reads (4659acc8).
+      return { ...n, metadata: meta, display_label: groupNames.get(n.id) ?? null };
     });
 
     return c.json({ ok: true, data: { nodes: enriched, total: graphTotal(nodeTotal, enriched.length) } });

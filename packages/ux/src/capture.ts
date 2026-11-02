@@ -9,7 +9,7 @@
  */
 
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
-import { installGuard, isGuardNoise, type AllowRule, type GuardLog } from './guard.js'
+import { installGuard, isGuardNoise, type AllowRule, type GuardLog, type GuardPolicy } from './guard.js'
 import { ignoreList, ignoreStyle } from './ignore.js'
 import { isFrameworkNoise, runProbes } from './probes.js'
 import type { ProbeResult, ReplayStep, Surface, Viewport } from './types.js'
@@ -40,12 +40,20 @@ export interface BrowserSession {
 }
 
 export interface SessionOptions {
-  /** Persistent profile directory from `mushi-ux login`; omit for a clean browser. */
+  /** Persistent profile directory from `mushi-ux login`, or `--profile-dir` (a cached, signed-in profile); omit for a clean browser. */
   profileDir?: string
+  /**
+   * Browser build to open it with. 'chrome' opens a profile Google Chrome
+   * created (playwright-cli's cached profiles) with the installed Chrome; the
+   * bundled Chromium is older and may refuse or rewrite such a profile.
+   */
+  channel?: 'chrome' | 'chromium'
   headless?: boolean
   allow?: readonly AllowRule[]
   /** Extra selectors to ignore on top of DEFAULT_IGNORE. */
   ignore?: readonly string[]
+  /** Write policy (guard.ts). Default read-only; fresh-eyes runs may write to the app's own origins (ADR 0053). */
+  policy?: GuardPolicy
 }
 
 /** Sums layout shifts not caused by input, from page start. */
@@ -66,20 +74,21 @@ export async function openSession(opts: SessionOptions = {}): Promise<BrowserSes
   // Playwright's docs say requests a Service Worker handles can bypass
   // context.route. Chromium on 1.61 routed them in a probe (Plan 021 §5), but
   // the guard must not depend on that: block Service Workers outright.
+  const channel = opts.channel === 'chrome' ? { channel: 'chrome' as const } : {}
   if (opts.profileDir) {
-    context = await chromium.launchPersistentContext(opts.profileDir, { headless, serviceWorkers: 'block' })
+    context = await chromium.launchPersistentContext(opts.profileDir, { headless, serviceWorkers: 'block', ...channel })
     // A persistent profile cannot spawn contexts: captures run in a second browser seeded from it.
-    browser = await chromium.launch({ headless })
+    browser = await chromium.launch({ headless, ...channel })
     closeBrowser = async () => {
       await context.close()
       await browser.close()
     }
   } else {
-    browser = await chromium.launch({ headless })
+    browser = await chromium.launch({ headless, ...channel })
     context = await browser.newContext({ serviceWorkers: 'block' })
     closeBrowser = () => browser.close()
   }
-  const guard = await installGuard(context, opts.allow ?? [])
+  const guard = await installGuard(context, opts.allow ?? [], { blocked: [] }, opts.policy)
   await context.addInitScript({ content: CLS_SCRIPT })
   // The state every capture starts from; warmUp replaces it with a visited app.
   let seed = await context.storageState({ indexedDB: true })
@@ -97,7 +106,7 @@ export async function openSession(opts: SessionOptions = {}): Promise<BrowserSes
   }
   const freshContext = async () => {
     const fresh = await browser.newContext({ serviceWorkers: 'block', storageState: seed })
-    await installGuard(fresh, opts.allow ?? [], guard)
+    await installGuard(fresh, opts.allow ?? [], guard, opts.policy)
     await fresh.addInitScript({ content: CLS_SCRIPT })
     return fresh
   }
@@ -136,42 +145,92 @@ export async function settle(page: Page, quietMs = 400, maxMs = 5000): Promise<v
   await waitForContent(page)
 }
 
+/** @internal Exported for tests only. What a page shows that may mean "still loading", measured in the page. */
+export interface LoadingMarks {
+  viewport: { width: number; height: number }
+  /** aria-busy, a progress bar or a spinner. */
+  busy: Array<{ width: number; height: number }>
+  /** Skeleton or shimmer classes, or a running animation named so. */
+  skeletons: Array<{ width: number; height: number }>
+  /** `.animate-pulse`, or a running animation named pulse, loading or placeholder: a skeleton block or a decorative dot. */
+  pulses: Array<{ width: number; height: number }>
+  textLength: number
+}
+
+/** An element both sides under this is a dot (a notification badge, a status light), never a loading placeholder. */
+const DOT_PX = 16
+/** A pulse on less of the screen than this is decoration: a pulsing skeleton block is bigger. */
+const PULSE_MIN_VIEWPORT_SHARE = 0.005
+
+/**
+ * @internal Exported for tests only. Pure: whether the page has its content.
+ * Spinners and progress bars always hold it. A skeleton holds it unless it is
+ * a dot; a pulse holds it only when it is bigger than decoration (the console's
+ * bell dot and brand dot pulse forever: every step waited the full cap,
+ * 2026-10-28). Little text means the content has not arrived yet.
+ */
+export function contentReady(m: LoadingMarks): boolean {
+  const dot = (e: { width: number; height: number }) => e.width < DOT_PX && e.height < DOT_PX
+  const smallShare = Math.max(1, m.viewport.width * m.viewport.height) * PULSE_MIN_VIEWPORT_SHARE
+  if (m.busy.length) return false
+  if (m.skeletons.some((e) => !dot(e))) return false
+  if (m.pulses.some((e) => !dot(e) && e.width * e.height >= smallShare)) return false
+  return m.textLength > 40
+}
+
+/** How many content waits on a page ran into their cap. A capped wait is not the app's real time. */
+const cappedWaits = new WeakMap<Page, number>()
+
+/** Content waits on this page that hit their cap so far (a step compares before and after). */
+export function contentWaitsCapped(page: Page): number {
+  return cappedWaits.get(page) ?? 0
+}
+
 /**
  * Wait (up to `maxMs`) while the page shows a loading state: aria-busy, a
  * progress bar, or a spinning element covering most of the screen. An app
  * that boots behind a splash spinner was screenshotted as an empty page with
- * a spinner and "measured" as fine (glot.it /practice, 2026-10-06).
- * @internal Exported for tests only.
+ * a spinner and "measured" as fine (glot.it /practice, 2026-10-06). Resolves
+ * true when the content is there, false when the wait hit its cap (counted
+ * in contentWaitsCapped).
  */
-export async function waitForContent(page: Page, maxMs = 20_000): Promise<void> {
-  await page
-    .waitForFunction(
-      () => {
-        const visible = (el: Element) => {
+export async function waitForContent(page: Page, maxMs = 20_000): Promise<boolean> {
+  const deadline = Date.now() + maxMs
+  for (;;) {
+    if (page.isClosed()) return false
+    const marks = await page
+      .evaluate((): LoadingMarks => {
+        const box = (el: Element) => {
           const r = (el as HTMLElement).getBoundingClientRect()
           const s = getComputedStyle(el)
-          return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'
+          return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none' ? { width: r.width, height: r.height } : null
         }
-        const busy = [...document.querySelectorAll('[aria-busy="true"], [role="progressbar"], .animate-spin, .spinner, [class*="spinner" i]')].some(visible)
+        const boxes = (sel: string) => [...document.querySelectorAll(sel)].map(box).filter((b): b is { width: number; height: number } => !!b)
+        const busy = boxes('[aria-busy="true"], [role="progressbar"], .animate-spin, .spinner, [class*="spinner" i]')
         // Loading placeholders: skeleton classes, or a running skeleton/shimmer
         // animation (glot.it's Skeleton is marked only by `skeleton-wave`;
         // a regression re-shot of /words caught it mid-load, 2026-10-06).
-        const skeleton =
-          [...document.querySelectorAll('[class*="skeleton" i], [class*="shimmer" i], .animate-pulse, [data-skeleton]')].some(visible) ||
-          (document.getAnimations?.() ?? []).some((a) => {
-            const name = (a as CSSAnimation).animationName ?? ''
-            const target = (a.effect as KeyframeEffect | null)?.target
-            return /skeleton|shimmer|pulse|loading|placeholder/i.test(name) && !!target && visible(target)
-          })
-        if (skeleton) return false
-        // Little text on the page means the real content has not arrived yet.
-        const text = (document.body?.innerText ?? '').replace(/\s+/g, ' ').trim()
-        return !busy && text.length > 40
-      },
-      undefined,
-      { timeout: maxMs, polling: 250 },
-    )
-    .catch(() => {})
+        const skeletons = boxes('[class*="skeleton" i], [class*="shimmer" i], [data-skeleton]')
+        const pulses = boxes('.animate-pulse')
+        for (const a of document.getAnimations?.() ?? []) {
+          const name = (a as CSSAnimation).animationName ?? ''
+          const target = (a.effect as KeyframeEffect | null)?.target
+          const b = target ? box(target) : null
+          if (!b) continue
+          if (/skeleton|shimmer/i.test(name)) skeletons.push(b)
+          else if (/pulse|loading|placeholder/i.test(name)) pulses.push(b)
+        }
+        const textLength = (document.body?.innerText ?? '').replace(/\s+/g, ' ').trim().length
+        return { viewport: { width: innerWidth, height: innerHeight }, busy, skeletons, pulses, textLength }
+      })
+      .catch(() => null)
+    if (marks && contentReady(marks)) return true
+    if (Date.now() >= deadline) {
+      cappedWaits.set(page, contentWaitsCapped(page) + 1)
+      return false
+    }
+    await new Promise((r) => setTimeout(r, 250))
+  }
 }
 
 export async function replay(page: Page, steps: readonly ReplayStep[]): Promise<void> {

@@ -10,11 +10,15 @@
  *          regardless of which SDK captured each crumb. We colour-code
  *          by source (Mushi = brand, Sentry = sentry-purple) so the
  *          eye still reads the trail as one fabric while showing
- *          provenance.
+ *          provenance. A crumb's JSON block is a keyboard scroll region
+ *          only while it overflows, and each one is named with its
+ *          place in the timeline so the landmarks are not identical.
  */
 
-import { useMemo } from 'react'
-import { Section, Badge, CodeValue } from '../ui'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Section, Badge, Btn, CodeValue } from '../ui'
+import { apiFetch } from '../../lib/supabase'
+import { useToast } from '../../lib/toast'
 import { formatRelative as formatAgo } from '../ui/metrics'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { IconBolt, IconExternalLink, IconClock, IconLink, IconAlertTriangle } from '../icons'
@@ -42,6 +46,24 @@ interface Props {
   sentryLinks?: ReportSentryLink[] | null
   /** Tags surface — also rendered as filter chips. */
   tags?: Record<string, string | number | boolean> | null
+  /** With the report's status, a closed report offers to close its Sentry issues here. */
+  reportId?: string
+  reportStatus?: string | null
+  /** Called after Sentry issues were closed, so the page reads the report again. */
+  onSentryClosed?: () => void
+}
+
+/** What closing a report's open Sentry issues does: mirrors sentryCloseKind in api/routes/report-sentry.ts. */
+function sentryCloseKind(status: string | null | undefined): 'resolve' | 'archive' | null {
+  if (status === 'fixed' || status === 'resolved') return 'resolve'
+  if (status === 'dismissed') return 'archive'
+  return null
+}
+
+interface SentryCloseReply {
+  kind: 'resolve' | 'archive'
+  done: string[]
+  failed: Array<{ issueId: string; error: string }>
 }
 
 interface UnifiedCrumb {
@@ -111,6 +133,69 @@ function unifyTimelines(
   return out.sort((a, b) => a.ts - b.ts)
 }
 
+function safeStringify(o: unknown): string {
+  try {
+    return JSON.stringify(o, null, 2)
+  } catch {
+    return String(o)
+  }
+}
+
+/** Same overflow check as CodePanel: a box that can scroll, not one merely styled overflow:auto. */
+function contentOverflows(el: HTMLElement): boolean {
+  return el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1
+}
+
+function breadcrumbDataLabel(index: number, message?: string): string {
+  const base = `Breadcrumb ${index + 1} data`
+  const trimmed = message?.trim()
+  return trimmed ? `${base}: ${trimmed}` : base
+}
+
+function BreadcrumbDataPre({
+  data,
+  index,
+  message,
+}: {
+  data: Record<string, unknown>
+  index: number
+  message?: string
+}) {
+  const text = safeStringify(data)
+  const ref = useRef<HTMLPreElement>(null)
+  const [overflows, setOverflows] = useState(false)
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const measure = () => setOverflows(contentOverflows(el))
+    measure()
+    const details = el.closest('details')
+    details?.addEventListener('toggle', measure)
+    if (typeof ResizeObserver === 'undefined') {
+      return () => details?.removeEventListener('toggle', measure)
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => {
+      details?.removeEventListener('toggle', measure)
+      observer.disconnect()
+    }
+  }, [text])
+
+  return (
+    <pre
+      ref={ref}
+      tabIndex={overflows ? 0 : undefined}
+      role={overflows ? 'region' : undefined}
+      aria-label={overflows ? breadcrumbDataLabel(index, message) : undefined}
+      className="mushi-code-block mushi-code-body mt-1 text-2xs font-mono rounded-sm p-1.5 overflow-x-auto whitespace-pre-wrap break-words focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+    >
+      {text}
+    </pre>
+  )
+}
+
 function formatRelative(ms: number, anchor: number): string {
   if (!ms || !anchor) return ''
   const delta = ms - anchor
@@ -132,7 +217,12 @@ export function SentryContextPanel({
   sentryIssueUrl,
   sentryLinks,
   tags,
+  reportId,
+  reportStatus,
+  onSentryClosed,
 }: Props) {
+  const toast = useToast()
+  const [closing, setClosing] = useState(false)
   const unified = useMemo(
     () => unifyTimelines(mushiBreadcrumbs, sentryContext?.breadcrumbs),
     [mushiBreadcrumbs, sentryContext?.breadcrumbs],
@@ -149,6 +239,28 @@ export function SentryContextPanel({
   const transactionName = sentryContext?.transactionName ?? null
   const sentryUser = sentryContext?.user ?? null
   const links = sentryLinks ?? []
+  const closeKind = sentryCloseKind(reportStatus)
+  const openLinks = links.filter((l) => !l.resolved_at && !l.archived_at)
+  const canClose = Boolean(reportId && closeKind && openLinks.length > 0)
+
+  async function closeInSentry() {
+    if (!reportId) return
+    setClosing(true)
+    try {
+      const res = await apiFetch<SentryCloseReply>(`/v1/admin/reports/${reportId}/sentry/close`, { method: 'POST' })
+      if (!res.ok) {
+        toast.error('Sentry was not changed', res.error?.message ?? 'Retry in a moment.')
+        return
+      }
+      const done = res.data?.done.length ?? 0
+      const failed = res.data?.failed.length ?? 0
+      if (failed > 0) toast.error(`${failed} Sentry issue${failed === 1 ? '' : 's'} not changed`, res.data?.failed[0]?.error ?? 'Check the Sentry token.')
+      else if (done > 0) toast.success(res.data?.kind === 'archive' ? 'Archived in Sentry' : 'Resolved in Sentry', 'Sentry reopens it if the error comes back.')
+      onSentryClosed?.()
+    } finally {
+      setClosing(false)
+    }
+  }
   const issueUrl = sentryIssueUrl ?? sentryContext?.issueUrl ?? links.find((l) => l.external_url)?.external_url ?? null
 
   const hasSentry =
@@ -208,12 +320,30 @@ export function SentryContextPanel({
                 <Badge className={CHIP_TONE.okSubtle} title={new Date(link.resolved_at).toLocaleString()}>
                   Resolved in Sentry {formatAgo(link.resolved_at)}
                 </Badge>
+              ) : link.archived_at ? (
+                <Badge className={CHIP_TONE.neutral} title={new Date(link.archived_at).toLocaleString()}>
+                  Archived in Sentry {formatAgo(link.archived_at)}
+                </Badge>
+              ) : closeKind ? (
+                <Badge className={CHIP_TONE.warnSubtle}>Still open in Sentry</Badge>
               ) : (
                 <Badge className={CHIP_TONE.neutral}>Resolves in Sentry when the fix merges</Badge>
               )}
             </li>
           ))}
         </ul>
+      )}
+      {canClose && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-2xs text-fg-muted">
+          <Btn size="sm" variant="primary" loading={closing} onClick={() => void closeInSentry()} data-testid="sentry-close">
+            {closeKind === 'archive' ? 'Archive in Sentry' : 'Resolve in Sentry'}
+          </Btn>
+          <span>
+            {closeKind === 'archive'
+              ? 'This report is closed, so Sentry can stop listing it. Sentry brings it back if it escalates.'
+              : 'This report is fixed, so Sentry can stop listing it. Sentry reopens it if the error comes back.'}
+          </span>
+        </div>
       )}
 
       {hasSentry && (
@@ -339,9 +469,7 @@ export function SentryContextPanel({
                       <span className="opacity-60 group-open:opacity-100">›</span>
                       data
                     </summary>
-                    <pre className="mushi-code-block mushi-code-body mt-1 text-2xs font-mono rounded-sm p-1.5 overflow-x-auto whitespace-pre-wrap break-words">
-                      {safeStringify(c.data)}
-                    </pre>
+                    <BreadcrumbDataPre data={c.data} index={i} message={c.message} />
                   </details>
                 )}
               </li>
@@ -388,12 +516,4 @@ function IdRow({
       />
     </div>
   )
-}
-
-function safeStringify(o: unknown): string {
-  try {
-    return JSON.stringify(o, null, 2)
-  } catch {
-    return String(o)
-  }
 }

@@ -131,7 +131,7 @@ export function ReporterOutboxPanel({ projectId }: { projectId: string }) {
       </Card>
 
       {error ? (
-        <ErrorAlert title="Outbox unavailable" message={error} onRetry={reload} />
+        <ErrorAlert title="Updates waiting for review are unavailable" message={error} onRetry={reload} />
       ) : loading && !data ? (
         <TableSkeleton rows={3} columns={3} showFilters={false} />
       ) : messages.length === 0 ? (

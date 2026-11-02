@@ -15,7 +15,7 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { NAV_REGISTRY } from './navRegistry'
 import { HEALTH_HUB, HOME_HUB, TEAM_HUB, type PageHub } from './pageHubs'
@@ -43,10 +43,13 @@ const PAGE_HUBS: Record<string, PageHub> = { HOME_HUB, HEALTH_HUB, TEAM_HUB }
 
 const appSource = read('App.tsx')
 
-/** `<Route path="/reports" element={<ReportsPage />} />` → { '/reports': 'ReportsPage' } */
+/**
+ * `<Route path="/reports" element={<ReportsPage />} />` → { '/reports': 'ReportsPage' }.
+ * A page wrapped in FirstRunGate (no-app accounts open setup) maps to the page.
+ */
 function parseRoutes(source: string): Map<string, string> {
   const routes = new Map<string, string>()
-  const re = /<Route\s+path="([^"]+)"\s+element=\{<(\w+)[^>]*\/?>\}/g
+  const re = /<Route\s+path="([^"]+)"\s+element=\{(?:<FirstRunGate>)?<(\w+)[^>]*\/?>(?:<\/FirstRunGate>)?\}/g
   for (const m of source.matchAll(re)) routes.set(m[1], m[2])
   return routes
 }
@@ -141,7 +144,7 @@ function hubFirstViewFile(pageFile: string, source: string): { file: string } | 
   if (!render) return { skip: `${pageFile}: could not find the "${first.id}" view in the PageHubView render map` }
   const modulePath = parseComponentImports(source).get(render[1])
   if (!modulePath) return { skip: `${pageFile} does not import <${render[1]}> for its "${first.id}" view` }
-  const dir = pageFile.slice(0, pageFile.lastIndexOf('/'))
+  const dir = dirname(pageFile)
   return { file: moduleToFile(dir, modulePath) }
 }
 

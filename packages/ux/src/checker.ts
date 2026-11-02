@@ -12,7 +12,9 @@
  *   reviewed from its diff and the step it was meant to make.
  *
  * Transports: Claude Code (`claude -p`, the person's own sign-in, read-only
- * tools) or the Anthropic API (ANTHROPIC_API_KEY).
+ * tools), the Anthropic API (ANTHROPIC_API_KEY), or the Cursor CLI
+ * (`cursor-agent -p --mode ask`, read-only, any model the Cursor account has,
+ * e.g. Grok: a cheaper allowance for screenshot reviews).
  */
 
 import Anthropic from '@anthropic-ai/sdk'
@@ -22,7 +24,7 @@ import { PNG } from 'pngjs'
 import type { ChangeRegion } from './image.js'
 import { run } from './proc.js'
 
-type CheckerVia = 'claude-code' | 'anthropic-api'
+type CheckerVia = 'claude-code' | 'anthropic-api' | 'cursor'
 
 export interface CheckerSpec {
   via: CheckerVia
@@ -75,7 +77,7 @@ function crop(png: Buffer, box: ChangeRegion): Buffer {
   return PNG.sync.write(out)
 }
 
-/** Pure: the first JSON object in a model's text answer, or null. @internal Exported for tests only. */
+/** Pure: the first JSON object in a model's text answer, or null. */
 export function firstJson(text: string): Record<string, unknown> | null {
   const start = text.indexOf('{')
   const end = text.lastIndexOf('}')
@@ -131,14 +133,14 @@ You may open at most 3 files from this repository (for example a class or compon
 Keep it when the diff makes that change (or a reasonable part of it) without breaking behaviour, accessibility or the design system. Revert it when it does nothing useful, does something else, or risks breaking the screen.
 Answer with ONLY this JSON: {"verdict":"keep"|"revert","confidence":"low"|"medium"|"high","reason":"..."}`
 
-interface Ask {
+export interface Ask {
   text: string | null
   costUsd: number | null
   error?: string
 }
 
 /** One question to Claude Code, headless and read-only, in `cwd`. */
-async function askClaudeCode(prompt: string, cwd: string, model: string, signal?: AbortSignal, maxTurns = 4): Promise<Ask> {
+export async function askClaudeCode(prompt: string, cwd: string, model: string, signal?: AbortSignal, maxTurns = 4): Promise<Ask> {
   const args = ['-p', '--model', model, '--tools', 'Read', '--disallowedTools', 'mcp__*', '--permission-mode', 'dontAsk', '--max-turns', String(maxTurns), '--no-session-persistence', '--output-format', 'json']
   let last: Ask = { text: null, costUsd: null, error: 'Claude Code did not run.' }
   // One retry: a call that failed in a second with no output (studio run on
@@ -162,8 +164,36 @@ async function askClaudeCode(prompt: string, cwd: string, model: string, signal?
   return last
 }
 
+/**
+ * Default model for the Cursor transport when none is given: cheap and
+ * vision-capable. Measured 2026-10-25 on audit screenshots: grok-4.7-high-fast
+ * answered in about 2.5 min with concrete defects; grok-4.7-xhigh ran past 4
+ * min on 3 pages of 4.
+ */
+export const DEFAULT_CURSOR_REVIEW_MODEL = 'grok-4.7-high-fast'
+
+/**
+ * One question to the Cursor CLI in read-only "ask" mode: it reads the images
+ * from `cwd` itself (verified with Grok 4.7 on an audit screenshot,
+ * 2026-10-25). One retry, as for Claude Code.
+ */
+export async function askCursor(prompt: string, cwd: string, model: string, signal?: AbortSignal): Promise<Ask> {
+  const args = ['-p', '--trust', '--mode', 'ask', '--output-format', 'text', '--workspace', cwd, '--model', model, prompt]
+  let last: Ask = { text: null, costUsd: null, error: 'The Cursor CLI did not run.' }
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    if (signal?.aborted) break
+    const res = await run('cursor-agent', args, { cwd, shell: process.platform === 'win32', timeoutMs: 360_000, signal })
+    if (res.timedOut) return { text: null, costUsd: null, error: 'The Cursor CLI did not answer within 6 minutes.' }
+    if (res.exitCode === 0 && res.stdout.trim()) return { text: res.stdout, costUsd: null }
+    const said = `${res.stdout.trim().slice(0, 200)} ${res.tail.trim().slice(-300)}`.trim()
+    last = { text: null, costUsd: null, error: `Cursor CLI exited ${res.exitCode}: ${said || 'no output'}` }
+    if (attempt === 1) await new Promise((r) => setTimeout(r, 5000))
+  }
+  return last
+}
+
 /** One question to the Anthropic API, with the images inline. */
-async function askApi(prompt: string, images: Buffer[], model: string, client: Anthropic): Promise<Ask> {
+export async function askApi(prompt: string, images: Buffer[], model: string, client: Anthropic, labels: readonly string[] = ['a.png', 'b.png']): Promise<Ask> {
   try {
     const msg = await client.messages.create({
       model,
@@ -173,7 +203,7 @@ async function askApi(prompt: string, images: Buffer[], model: string, client: A
           role: 'user',
           content: [
             ...images.flatMap((png, i) => [
-              { type: 'text' as const, text: i === 0 ? 'a.png:' : 'b.png:' },
+              { type: 'text' as const, text: `${labels[i] ?? `image ${i + 1}`}:` },
               { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/png' as const, data: png.toString('base64') } },
             ]),
             { type: 'text', text: prompt },
@@ -212,7 +242,12 @@ export async function checkStep(input: CheckStepInput): Promise<CheckerVerdict> 
   const fail = (mode: CheckerVerdict['mode'], error: string): CheckerVerdict => ({ model: spec.model, mode, verdict: 'unsure', summary: '', votes: [], costUsd: null, error })
   let cost = 0
   const ask = async (prompt: string, cwd: string, images: Buffer[], maxTurns?: number): Promise<Ask> => {
-    const a = spec.via === 'claude-code' ? await askClaudeCode(prompt, cwd, spec.model, input.signal, maxTurns) : await askApi(prompt, images, spec.model, input.client ?? new Anthropic())
+    const a =
+      spec.via === 'claude-code'
+        ? await askClaudeCode(prompt, cwd, spec.model, input.signal, maxTurns)
+        : spec.via === 'cursor'
+          ? await askCursor(prompt, cwd, spec.model, input.signal)
+          : await askApi(prompt, images, spec.model, input.client ?? new Anthropic())
     if (a.costUsd) cost += a.costUsd
     return a
   }

@@ -11,7 +11,7 @@ not ask anyone to upvote.
 - **Tagline (≤ 60 characters):** `Bug reports from your users, explained in plain English`
 - **Link:** `https://kensaur.us/mushi-mushi/?utm_source=producthunt&utm_medium=post&utm_campaign=launch-week-2026-10`
 - **Topics:** Developer Tools, Open Source, Artificial Intelligence
-- **Pricing:** Free (Free Cloud 50 diagnoses a month, no card; self-hosting free). Paid plans exist.
+- **Pricing:** Free (Free: 1 app, 100 diagnoses a month, no card; self-hosting free). Paid plans exist.
 
 ## Description (≤ 260 characters)
 

@@ -14,14 +14,93 @@ import {
   dashboardNavBadge,
   mcpNavBadge,
   costsNavBadge,
+  settingsNavBadge,
   doSectionAttention,
   startSectionAttention,
   planSectionAttention,
   actSectionAttention,
   workspaceSlicesAttention,
   usersNavBadge,
+  integrationsNavBadge,
+  workersNavBadge,
 } from './extendedNavMeta'
-import { EMPTY_NAV_STAT_SLICES } from './extendedNavMeta'
+import { EMPTY_NAV_STAT_SLICES, type NavStatSlices } from './extendedNavMeta'
+
+describe('integrationsNavBadge', () => {
+  it('uses the banner attention count, not how many integrations are saved', () => {
+    const badge = integrationsNavBadge({
+      platformDown: 0,
+      platformConnected: 3,
+      platformTotal: 3,
+      routingPaused: 0,
+      platformAttention: 2,
+    })
+    expect(badge?.mode).toBe('attention')
+    expect(badge?.count).toBe(2)
+  })
+
+  it('a failing connection still outranks attention', () => {
+    const badge = integrationsNavBadge({
+      platformDown: 1,
+      platformConnected: 3,
+      platformTotal: 3,
+      routingPaused: 0,
+      platformAttention: 2,
+    })
+    expect(badge?.count).toBe(1)
+    expect(badge?.tone).toBe('danger')
+  })
+
+  it('shows connected inventory when nothing needs attention', () => {
+    const badge = integrationsNavBadge({
+      platformDown: 0,
+      platformConnected: 3,
+      platformTotal: 3,
+      routingPaused: 0,
+      platformAttention: 0,
+    })
+    expect(badge?.mode).toBe('inventory')
+    expect(badge?.count).toBe(3)
+  })
+
+  it('uses the attention count when platform integrations are not all configured', () => {
+    // Nothing saved: the not-configured count is 3. The banner's number is
+    // platformAttention, and that is the badge.
+    const noneSaved = integrationsNavBadge({
+      platformDown: 0,
+      platformConnected: 0,
+      platformTotal: 3,
+      routingPaused: 0,
+      platformAttention: 2,
+    })
+    expect(noneSaved?.mode).toBe('attention')
+    expect(noneSaved?.count).toBe(2)
+    expect(noneSaved?.label).toBe('2 connections need attention')
+
+    // Some saved, some not (platformConnected < platformTotal): still attention,
+    // not (platformTotal - platformConnected).
+    const partlySaved = integrationsNavBadge({
+      platformDown: 0,
+      platformConnected: 1,
+      platformTotal: 3,
+      routingPaused: 0,
+      platformAttention: 2,
+    })
+    expect(partlySaved?.count).toBe(2)
+    expect(partlySaved?.label).toBe('2 connections need attention')
+  })
+
+  it('shows no badge when nothing is connected: integrations are optional', () => {
+    const badge = integrationsNavBadge({
+      platformDown: 0,
+      platformConnected: 0,
+      platformTotal: 3,
+      routingPaused: 0,
+      platformAttention: 0,
+    })
+    expect(badge).toBeNull()
+  })
+})
 
 describe('qaCoverageNavBadge', () => {
   it('prioritizes failing stories over inventory', () => {
@@ -202,15 +281,15 @@ describe('fullstackAuditNavBadge', () => {
 })
 
 describe('dashboardNavBadge', () => {
-  it('surfaces integration issues', () => {
-    const badge = dashboardNavBadge({
-      openBacklog: 0,
-      fixesFailed: 0,
-      fixesInProgress: 0,
-      integrationIssues: 3,
-      topPriority: 'integrations',
-    })
-    expect(badge?.count).toBe(3)
+  it('does not repeat the counts Fixes and Integrations already show', () => {
+    expect(dashboardNavBadge({ openBacklog: 0, fixesFailed: 48, fixesInProgress: 0, integrationIssues: 3, topPriority: 'integrations' })).toBeNull()
+    // Fixes in progress are the Fixes item's badge; Home showed the same number (console sweep #30).
+    expect(dashboardNavBadge({ openBacklog: 0, fixesFailed: 0, fixesInProgress: 48, integrationIssues: 0, topPriority: 'fixes' as never })).toBeNull()
+  })
+
+  it('shows the open backlog when that is the top priority', () => {
+    const badge = dashboardNavBadge({ openBacklog: 7, fixesFailed: 48, fixesInProgress: 0, integrationIssues: 0, topPriority: 'backlog' })
+    expect(badge?.count).toBe(7)
   })
 })
 
@@ -237,6 +316,44 @@ describe('costsNavBadge', () => {
     })
     expect(badge?.mode).toBe('attention')
     expect(badge?.tone).toBe('warn')
+  })
+})
+
+describe('settingsNavBadge', () => {
+  const slice = (over: Partial<NavStatSlices['settings']> = {}) => ({
+    byokKeysFailing: 0,
+    byokKeysUntested: 0,
+    byokKeysConfigured: 5,
+    slackConfigured: true,
+    githubRepoConfigured: true,
+    ...over,
+  })
+
+  // The page banner says "everything that is set up is working"; a sidebar
+  // number next to it was read as five problems to fix.
+  it('shows nothing when every saved key is healthy', () => {
+    expect(settingsNavBadge(slice())).toBeNull()
+  })
+
+  it('asks for attention when a key expires soon, like the Settings banner', () => {
+    const badge = settingsNavBadge(slice({ byokKeysExpiring: 1 }))
+    expect(badge?.mode).toBe('attention')
+    expect(badge?.tone).toBe('warn')
+    expect(badge?.count).toBe(1)
+    expect(badge?.label).toBe('1 BYOK key expiring soon')
+  })
+
+  it('still badges keys that need attention', () => {
+    expect(settingsNavBadge(slice({ byokKeysFailing: 2 }))).toMatchObject({
+      mode: 'attention',
+      tone: 'danger',
+      count: 2,
+    })
+    expect(settingsNavBadge(slice({ byokKeysUntested: 1 }))).toMatchObject({
+      mode: 'attention',
+      tone: 'warn',
+      count: 1,
+    })
   })
 })
 
@@ -279,7 +396,7 @@ describe('section rollups follow the cycle', () => {
   it('counts Home under 2 · Bugs and no longer under 1 · Connect', () => {
     const slices = {
       ...EMPTY_NAV_STAT_SLICES,
-      dashboard: { openBacklog: 0, fixesFailed: 0, fixesInProgress: 0, integrationIssues: 3, topPriority: 'integrations' as const },
+      dashboard: { openBacklog: 3, fixesFailed: 0, fixesInProgress: 0, integrationIssues: 0, topPriority: 'backlog' as const },
     }
     expect(planSectionAttention(slices)?.count).toBe(3)
     expect(startSectionAttention(slices)).toBeNull()
@@ -292,5 +409,19 @@ describe('section rollups follow the cycle', () => {
     }
     expect(workspaceSlicesAttention(slices)).toMatchObject({ count: 2, tone: 'danger' })
     expect(actSectionAttention(slices)).toBeNull()
+  })
+})
+
+describe('workersNavBadge (ADR 0048 amendment 2026-10-28)', () => {
+  it('is red with a danger flag, amber otherwise, and names the worst one', () => {
+    expect(workersNavBadge(null)).toBeNull()
+    expect(workersNavBadge({ flags: 0, danger: 0, top: null })).toBeNull()
+    expect(workersNavBadge({ flags: 3, danger: 1, top: 'glot: a run has held an agent space for 4 h' })).toEqual({
+      mode: 'attention',
+      count: 3,
+      tone: 'danger',
+      label: '3 local worker problems: glot: a run has held an agent space for 4 h',
+    })
+    expect(workersNavBadge({ flags: 1, danger: 0, top: null })).toMatchObject({ tone: 'warn', label: '1 local worker problem' })
   })
 })

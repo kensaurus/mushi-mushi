@@ -42,6 +42,7 @@ import { HeroSearch } from '../components/illustrations/HeroIllustrations'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { NotificationsStatusBanner } from '../components/notifications/NotificationsStatusBanner'
 import { NotificationsSnapshotStrip } from '../components/notifications/NotificationsSnapshotStrip'
+import { ReporterUpdateFunnel } from '../components/notifications/ReporterUpdateFunnel'
 import { NotificationsReadout } from '../components/notifications/NotificationsReadout'
 import { ReporterOutboxPanel } from '../components/notifications/ReporterOutboxPanel'
 import { ReporterChannelsCard } from '../components/notifications/ReporterChannelsCard'
@@ -65,13 +66,13 @@ const TABS: Array<{ id: NotificationTabId; label: string; description: string }>
   },
   {
     id: 'inbox',
-    label: 'Inbox',
-    description: 'Every outbound message keyed by reporter token — expand payloads to debug SDK polling.',
+    label: 'Sent',
+    description: 'Every update sent to a reporter, newest first; open one to see exactly what the widget received.',
   },
   {
     id: 'outbox',
-    label: 'Outbox',
-    description: 'How reporters hear back: email and push switches, message wording, and updates waiting for review.',
+    label: 'How they hear back',
+    description: 'Email and push switches, message wording, and updates waiting for your review.',
   },
   {
     id: 'setup',
@@ -188,8 +189,8 @@ export function NotificationsPage() {
   const tabOptions = useMemo(
     () => [
       { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
-      { id: 'inbox' as const, label: copy?.tabLabels?.inbox ?? 'Inbox', count: stats.unread > 0 ? stats.unread : undefined },
-      { id: 'outbox' as const, label: copy?.tabLabels?.outbox ?? 'Outbox' },
+      { id: 'inbox' as const, label: copy?.tabLabels?.inbox ?? 'Sent', count: stats.unread > 0 ? stats.unread : undefined },
+      { id: 'outbox' as const, label: copy?.tabLabels?.outbox ?? 'How they hear back' },
       { id: 'setup' as const, label: copy?.tabLabels?.setup ?? 'Setup' },
     ],
     [copy?.tabLabels, stats.unread],
@@ -378,14 +379,16 @@ export function NotificationsPage() {
                 stats={stats}
                 fetchedAt={fetchedAt}
                 isValidating={validating}
-                sectionTitle={copy?.sections?.snapshot ?? 'NOTIFICATIONS SNAPSHOT'}
-                hint={activeMeta.description}
                 statLabels={copy?.statLabels}
               />
             ),
           },
         ]}
       />
+
+      {stats.notificationsEnabled && stats.funnel && stats.funnel.told > 0 && activeTab === 'overview' ? (
+        <ReporterUpdateFunnel funnel={stats.funnel} />
+      ) : null}
 
       {!ux.hideTabs && (
       <SegmentedControl
@@ -522,7 +525,7 @@ export function NotificationsPage() {
       )}
 
       {activeTab === 'outbox' && activeProjectId && (
-        <Section title="Outbox">
+        <Section title="How reporters hear back">
           <div className="space-y-3">
             <ReporterChannelsCard projectId={activeProjectId} />
             <ReporterOutboxPanel projectId={activeProjectId} />

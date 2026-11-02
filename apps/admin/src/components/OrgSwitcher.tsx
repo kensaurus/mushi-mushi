@@ -48,8 +48,18 @@ export interface OrganizationSummary {
  * a user menu. Returned as a plain string so the caller stays in control of
  * layout / wrapping.
  */
+/** pricing_plans.display_name for the ids a team can be on (the raw id read "free_cloud"). */
+const PLAN_NAMES: Record<string, string> = {
+  free_cloud: 'Free',
+  hobby: 'Free',
+  starter: 'Starter',
+  indie: 'Builder',
+  pro: 'Studio',
+  enterprise: 'Enterprise',
+}
+
 function orgPillLabel(org: OrganizationSummary): string {
-  return org.billing_mode === 'complimentary' ? 'comp' : org.plan_id
+  return org.billing_mode === 'complimentary' ? 'comp' : PLAN_NAMES[org.plan_id] ?? org.plan_id
 }
 
 export function OrgSwitcher() {

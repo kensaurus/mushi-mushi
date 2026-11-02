@@ -26,7 +26,7 @@ export const COST_STAGE_DEFINITIONS: CostStageDefinition[] = [
   },
   {
     category: 'iterate',
-    label: 'PDCA & improve',
+    label: 'Improvement runs',
     plain: 'Critique loops that refine a fix before merge.',
     examples: 'pdca-iteration, qa_story_improve',
   },

@@ -4,19 +4,36 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/node
 
 ---
 title: Node.js server error reporting SDK
-description: Report server errors from Node with @mushi-mushi/node — Express, Fastify and Hono error handlers that tag each report with route, request ID and user.
+description: Send Node server errors to Mushi Mushi with @mushi-mushi/node. Express, Fastify and Hono handlers tag each report with request method, URL and trace context.
 ---
 
 # `@mushi-mushi/node`
 
-Server-side SDK for Node.js apps — forward unhandled exceptions, attach
-HTTP error-handler middleware to Express / Fastify / Hono, and tag
-every report with the route, request id, and user (when supplied).
+The Mushi Mushi server-side SDK for Node.js apps. It forwards unhandled
+exceptions, adds HTTP error handlers for Express, Fastify and Hono, and tags
+each handler report with the request method, URL and trace context (W3C
+`traceparent` and `sentry-trace` headers, when present). To attach a user, pass
+`userId` to `captureReport()`.
 
 ## Install
 
 ```bash
 pnpm add @mushi-mushi/node
+```
+
+## Create a client
+
+Every handler below takes the same client:
+
+```ts
+import { MushiNodeClient } from '@mushi-mushi/node'
+
+export const client = new MushiNodeClient({
+  apiKey: process.env.MUSHI_API_KEY!,
+  projectId: process.env.MUSHI_PROJECT_ID!,
+  environment: process.env.NODE_ENV, // optional
+  release: process.env.GIT_SHA,      // optional
+})
 ```
 
 ## Express
@@ -27,14 +44,7 @@ import { mushiExpressErrorHandler } from '@mushi-mushi/node/express'
 
 const app = express()
 // …all your routes…
-app.use(
-  mushiExpressErrorHandler({
-    apiKey: process.env.MUSHI_API_KEY!,
-    projectId: process.env.MUSHI_PROJECT_ID!,
-    environment: process.env.NODE_ENV,
-    release: process.env.GIT_SHA,
-  }),
-) // mount LAST so it sees every other route
+app.use(mushiExpressErrorHandler({ client })) // mount LAST so it sees every other route
 ```
 
 ## Fastify
@@ -44,25 +54,20 @@ import Fastify from 'fastify'
 import { mushiFastifyPlugin } from '@mushi-mushi/node/fastify'
 
 const app = Fastify()
-mushiFastifyPlugin(app, {
-  apiKey: process.env.MUSHI_API_KEY!,
-  projectId: process.env.MUSHI_PROJECT_ID!,
-})
+mushiFastifyPlugin(app, { client })
 ```
 
 ## Hono
+
+Hono's `onError` must return a Response, so pass your own handler as the
+second argument. Mushi reports the error, then calls it.
 
 ```ts
 import { Hono } from 'hono'
 import { mushiHonoErrorHandler } from '@mushi-mushi/node/hono'
 
 const app = new Hono()
-app.onError(
-  mushiHonoErrorHandler({
-    apiKey: process.env.MUSHI_API_KEY!,
-    projectId: process.env.MUSHI_PROJECT_ID!,
-  }),
-)
+app.onError(mushiHonoErrorHandler({ client }, () => new Response('Server error', { status: 500 })))
 ```
 
 ## Process-level fallbacks
@@ -72,10 +77,7 @@ Attach `uncaughtException` + `unhandledRejection` hooks so nothing escapes:
 ```ts
 import { attachUnhandledHook } from '@mushi-mushi/node'
 
-attachUnhandledHook({
-  apiKey: process.env.MUSHI_API_KEY!,
-  projectId: process.env.MUSHI_PROJECT_ID!,
-})
+attachUnhandledHook({ client })
 ```
 
 ## Programmatic submit
@@ -101,9 +103,8 @@ await mushi.captureReport({
 })
 ```
 
-The Node SDK speaks the same wire protocol as the web SDK and shares
-classification quotas — server-thrown bugs and user-side bugs land in
-the same queue.
+The Node SDK sends to the same API as the web SDK, so server-thrown bugs and
+user-side bugs land in the same queue.
 
 ## PII and credential scrubbing
 
@@ -118,10 +119,10 @@ core PII scrubber before it leaves the process:
   have their values replaced with `[Scrubbed]`.
 
 This applies to `captureReport`, `mushiExpressErrorHandler`, and
-`mushiTraceMiddleware` — no extra configuration required.
+`mushiTraceMiddleware`, with no extra configuration.
 
 If you use `Authorization: Token ` (Conduit / RealWorld spec), the JWT in
-that header is **never captured** — the SDK only reads response status codes and
+that header is **never captured**: the SDK only reads response status codes and
 timing from network spans, not request headers.
 
 The following fields are scrubbed **before the report leaves the Node process**:
@@ -134,6 +135,6 @@ The following fields are scrubbed **before the report leaves the Node process**:
 | `error.stack` | PII scrub |
 | `request.url` *(trace middleware)* | URL scrub |
 
-`userId` and host-supplied `metadata` are left unmodified — the SDK cannot know
+`userId` and host-supplied `metadata` are left unmodified. The SDK cannot know
 which IDs or metadata keys are safe to alter, so the host is responsible for any
 additional scrubbing at those sites.

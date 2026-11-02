@@ -49,12 +49,12 @@ const EVENTS: Array<{ key: keyof Omit<NotifPrefs, 'report_severity_min'>; label:
   },
   {
     key: 'report.classified',
-    label: 'Report classified',
-    description: 'Notify when a bug report is triaged by AI',
+    label: 'New bug sorted',
+    description: 'Notify when the AI has sorted a new bug',
   },
   {
     key: 'fix.dispatched',
-    label: 'Fix dispatched',
+    label: 'Fix started',
     description: 'Notify when an auto-fix attempt is started',
   },
   {
@@ -75,7 +75,7 @@ const EVENTS: Array<{ key: keyof Omit<NotifPrefs, 'report_severity_min'>; label:
   {
     key: 'intelligence.report',
     label: 'Weekly intelligence report',
-    description: 'Weekly LLM narrative of KPI trends',
+    description: 'A weekly summary of how your bugs and fixes are trending',
   },
 ]
 

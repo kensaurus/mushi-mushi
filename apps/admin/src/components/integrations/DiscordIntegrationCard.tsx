@@ -201,7 +201,8 @@ export function DiscordIntegrationCard({
     probed.state === 'checking' ? { ...probed, detail: 'Webhook saved, but no test message sent yet.' } : probed
   const connectionAction =
     connection.state === 'not_connected'
-      ? { label: 'Add webhook URL', onClick: () => document.getElementById('discord-webhook-url')?.focus() }
+      ? // The URL field and its Save sit right below; a second red button only moved focus there.
+        undefined
       : connection.state === 'working'
         ? undefined
         : probe?.status === 'down' || probe?.status === 'degraded'

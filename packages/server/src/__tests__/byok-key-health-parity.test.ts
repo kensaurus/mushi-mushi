@@ -53,9 +53,12 @@ function legacy(provider: string, testStatus: PoolTestStatus | null): LegacyKey 
   }
 }
 
-/** The client's five states mapped onto the server's counting buckets. */
-function clientBucket(state: string): string {
-  return state === 'not_connected' ? 'off' : state
+/** The client's row view mapped onto the server's counting buckets. */
+function clientBucket(view: { state: string; action: string | null }): string {
+  if (view.state === 'not_connected') return 'off'
+  // "Remove it, another key works" is the server's `replaced`.
+  if (view.state === 'attention' && view.action === 'remove') return 'replaced'
+  return view.state
 }
 
 const SCENARIOS: Array<{ name: string; pool: PoolKey[]; legacy: LegacyKey[] }> = [
@@ -74,6 +77,8 @@ const SCENARIOS: Array<{ name: string; pool: PoolKey[]; legacy: LegacyKey[] }> =
   { name: 'never tested', pool: [pool('a', { status: 'pending_validation', test_status: null })], legacy: [] },
   { name: 'unreachable', pool: [pool('a', { status: 'pending_validation', test_status: 'error_network' })], legacy: [] },
   { name: 'turned off', pool: [pool('a', { status: 'disabled' })], legacy: [] },
+  { name: 'turned off and since expired', pool: [pool('a', { status: 'disabled', expires_at: iso(-H) })], legacy: [] },
+  { name: 'expired beside a working one', pool: [pool('a'), pool('b', { expires_at: iso(-H) })], legacy: [] },
   { name: 'expired', pool: [pool('a', { expires_at: iso(-H) })], legacy: [] },
   { name: 'expiring soon', pool: [pool('a', { expires_at: iso(3 * 24 * H) })], legacy: [] },
   { name: 'expiry far away', pool: [pool('a', { expires_at: iso(60 * 24 * H) })], legacy: [] },
@@ -118,9 +123,19 @@ describe('key status parity: console rows ⇄ server counts', () => {
       })),
     ]
     const client = [...poolKeys, ...legacyKeys].map((k) =>
-      clientBucket(keyStatusView(k, { pool: poolKeys, now: NOW }).state),
+      clientBucket(keyStatusView(k, { pool: poolKeys, now: NOW })),
     )
     const server = serverInputs.map((k) => byokKeyHealth(k, serverInputs, NOW))
     expect(server).toEqual(client)
   })
 })
+
+it('a Cursor key used up for its plan reads as attention on both sides (2026-10-24)', () => {
+  const k = pool('c1', { provider_slug: 'cursor', exhausted_until: iso(6 * H) })
+  expect(byokKeyHealth({ ...k, exhausted_until: k.exhausted_until }, [k], NOW)).toBe('attention')
+  expect(keyStatusView(k, { pool: [k], now: NOW }).state).toBe('attention')
+  expect(keyStatusView(k, { pool: [k], now: NOW }).label).toBe('Used up')
+  const back = pool('c2', { provider_slug: 'cursor', exhausted_until: iso(-H) })
+  expect(byokKeyHealth(back, [back], NOW)).toBe('working')
+})
+

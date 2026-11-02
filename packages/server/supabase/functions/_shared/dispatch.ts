@@ -7,6 +7,8 @@
  *              - membership / permission gate
  *              - autofix_enabled gate
  *              - in-flight dedupe (project_id, report_id)
+ *              - the local-worker lease (ADR 0048): a report a
+ *                `mushi work --daemon` lane holds is not dispatched
  *              - inserting the fix_dispatch_jobs row
  *              - fire-and-forget invoke of the fix-worker
  *
@@ -21,6 +23,8 @@ import { notifyTeamFixEvent } from './team-notify.ts'
 import { featureRequestDispatchBlock } from './report-category.ts'
 import { fixDispatchResolvedBlock } from './fix-report-truth.ts'
 import type { DispatchTrigger } from './autofix-budget.ts'
+import { reportHasActiveWorkClaim } from './work-claims.ts'
+import { emitFirstFixDispatched } from './funnel-steps.ts'
 
 export interface DispatchResult {
   ok: boolean
@@ -158,6 +162,16 @@ export async function dispatchFixForReport(input: DispatchInput): Promise<Dispat
     }
   }
 
+  // A local worker's lease (ADR 0048): its agent is on this report now. An
+  // unreadable lease is not read as "free".
+  const held = await reportHasActiveWorkClaim(db, input.reportId)
+  if (held) {
+    return { ok: false, code: 'ALREADY_DISPATCHED', message: 'A local worker (mushi work) is working on this report right now' }
+  }
+  if (held === null) {
+    return { ok: false, code: 'DISPATCH_FAILED', message: 'Could not check whether a local worker holds this report. Try again in a minute.' }
+  }
+
   const { data: job, error: insertErr } = await db
     .from('fix_dispatch_jobs')
     .insert({
@@ -183,6 +197,14 @@ export async function dispatchFixForReport(input: DispatchInput): Promise<Dispat
       dispatchId: job.id,
       err: String(err),
     })
+  })
+
+  // New-user path step (funnel-steps.ts); actor = the requester, else the owner.
+  emitFirstFixDispatched(db, {
+    projectId: input.projectId,
+    reportId: input.reportId,
+    dispatchId: job.id,
+    actorUserId: input.requestedBy ?? null,
   })
 
   // Team channels: "auto-fix started" (gated by the 'fix.dispatched' pref).

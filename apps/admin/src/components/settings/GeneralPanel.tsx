@@ -8,7 +8,9 @@
  *            Daily limits     crawl pages / runs, test generations
  *            Feedback widget  "Bug reports by Mushi" line
  *          Loads + saves `/v1/admin/settings`; secrets come back masked with
- *          a `<column>_set` flag and are never sent back.
+ *          a `<column>_set` flag and are never sent back. The Slack row's
+ *          "can send" state also reads `slackCanPost` from settings stats
+ *          (passed in) plus the row's own channel, webhook, and bot flags.
  */
 
 import { useMemo, useState } from 'react'
@@ -44,6 +46,10 @@ import { LifecycleEmailsToggle } from './LifecycleEmailsToggle'
 import { useByokPool } from './ByokPoolContext'
 import { providerStatusView } from './keyStatus'
 import { SettingsList, SettingsRow, type RowStatusValue } from './SettingsRow'
+import { slackAlertStatus, slackCanOfferTest } from './slackAlertStatus'
+import { fixBranchFieldState } from './fixBranchField'
+import { sentryRowStatus, useSentryConnection } from '../../lib/useSentryConnection'
+import type { HealthRow } from '../integrations/types'
 
 /** Tri-state select values for `widget_brand_footer` (null = plan default). */
 type BrandFooterChoice = 'default' | 'on' | 'off'
@@ -69,6 +75,8 @@ interface ProjectSettings {
   /** Server flags beside masked secrets: the value itself never reaches the console. */
   sentry_webhook_secret_set?: boolean
   slack_webhook_url_set?: boolean
+  /** True when this project's Slack bot token is stored. The token itself never arrives. */
+  slack_bot_token_ref_set?: boolean
   sentry_consume_user_feedback?: boolean
   stage2_model?: string
   /** Quick check (Stage 1) model. Claude ids only; the server rejects others. */
@@ -86,7 +94,7 @@ interface ProjectSettings {
   /** Branch name template for fix-worker PRs: <type>/MUSHI-{reportId}-… plus {category}, {date}, {shortId}. */
   fix_branch_template?: string
   /** "Bug reports by Mushi" mark on the feedback widget. `null`/absent =
-   *  plan default (on for Free Cloud, off for paid and self-host). */
+   *  plan default (on for Free, off for paid and self-host). */
   widget_brand_footer?: boolean | null
   /** Linked Supabase project (20-char ref). The token is a key under AI keys. */
   supabase_project_ref?: string | null
@@ -98,15 +106,30 @@ const DEFAULT_BRANCH_TEMPLATE = 'bugfix/MUSHI-{reportId}-{category}'
 /** The model each job really runs: column defaults and retired ids resolve like the server does. */
 const eff = effectiveModelId
 
-export function GeneralPanel() {
+export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
   const toast = useToast()
   const entitlements = useEntitlements()
   const { data, loading, error, reload } = usePageData<ProjectSettings>('/v1/admin/settings')
   const pool = useByokPool(!entitlements.loading && entitlements.has('byok'))
+  // The same verdict the Integrations card shows, from the same inputs, so
+  // the two pages never disagree about Sentry.
+  const sentryShared = useSentryConnection()
+  // The Slack probe the Integrations card reads (same request, cached), so a
+  // test sent from either page shows on both.
+  const health = usePageData<{ history: HealthRow[] }>('/v1/admin/health/history')
+  const slackProbe = health.data?.history?.find((h) => h.kind === 'slack')
   const [draft, setDraft] = useState<ProjectSettings | null>(null)
   const [saving, setSaving] = useState(false)
   const [showLegacyWebhook, setShowLegacyWebhook] = usePersistentState(
     'settings:general:slack-webhook-open',
+    false,
+    { projectId: getActiveProjectIdSnapshot(), validate: (v): v is boolean => typeof v === 'boolean' },
+  )
+  // The four model pickers were about 340 words a new user scrolled past on
+  // a ~2,600-word tab; the defaults work, so they wait behind one row
+  // (integrator's new-user walk, 2026-10-28).
+  const [showModels, setShowModels] = usePersistentState(
+    'settings:general:models-open',
     false,
     { projectId: getActiveProjectIdSnapshot(), validate: (v): v is boolean => typeof v === 'boolean' },
   )
@@ -170,21 +193,32 @@ export function GeneralPanel() {
   if (error) return <ErrorAlert message={`Couldn't load your settings: ${error}`} onRetry={reload} />
 
   // ── Statuses: what is saved, and what Mushi has actually confirmed ──────────
-  const slackSaved = Boolean(saved.slack_channel_id) || saved.slack_webhook_url_set === true
-  const slackStatus: RowStatusValue = !slackSaved
-    ? { state: 'not_connected', detail: 'Add a channel ID below to get bug alerts in Slack.' }
-    : slackTest?.ok
-      ? { state: 'working', detail: 'Test message sent just now.' }
-      : slackTest
-        ? { state: 'attention', detail: "The test message didn't arrive. Check the channel ID and that the Mushi bot is in the channel." }
-        : { state: 'checking', detail: 'Saved. Send a test message to check it.' }
+  // A channel id alone cannot post. slackCanPost covers an org or operator
+  // bot that this project's settings row does not list.
+  const slackInput = {
+    channelId: saved.slack_channel_id,
+    webhookSet: saved.slack_webhook_url_set === true,
+    botSet: saved.slack_bot_token_ref_set === true,
+    canPost: slackCanPost,
+    tested: slackTest,
+    probe: slackProbe,
+  }
+  const slackStatus: RowStatusValue = slackAlertStatus(slackInput)
+  const canTestSlack = slackCanOfferTest(slackInput)
 
+  // What this page alone can see: a DSN and a webhook secret are saved, or
+  // they are not. It is never a verdict — Sentry can be connected and
+  // delivering with its org slug and auth token, which live on Integrations.
   const sentryDsnSaved = Boolean(saved.sentry_dsn)
-  const sentryStatus: RowStatusValue = !sentryDsnSaved
+  const sentrySavedHint: RowStatusValue = !sentryDsnSaved
     ? { state: 'not_connected', detail: 'Add your Sentry DSN to turn production errors into reports.' }
     : saved.sentry_webhook_secret_set !== true
       ? { state: 'attention', detail: "Add the webhook secret below, or Mushi can't accept Sentry's deliveries." }
       : { state: 'checking', detail: 'Saved. The Integrations page shows when Sentry sends its first error.' }
+  // The shared verdict wins once the credentials and probes have been read;
+  // the saved-value line fills in a detail the verdict leaves empty, and
+  // stands in while there is nothing to check (no Sentry credentials yet).
+  const sentryStatus: RowStatusValue = sentryRowStatus(sentryShared, sentrySavedHint)
 
   const supabaseRefSaved = Boolean(saved.supabase_project_ref)
   const supabaseKeyView = providerStatusView('supabase', pool.data?.keys ?? [], pool.data?.legacyKeys ?? [], {
@@ -196,8 +230,11 @@ export function GeneralPanel() {
     : supabaseKeyView
 
   const branchExample = fixBranchExample(settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE)
-  // The server refuses a pattern that breaks the rule; say so before Save.
-  const branchProblem = fixBranchTemplate()(settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE)
+  const branch = fixBranchFieldState({
+    current: settings.fix_branch_template,
+    saved: saved.fix_branch_template,
+    defaultValue: DEFAULT_BRANCH_TEMPLATE,
+  })
 
   return (
     <>
@@ -212,7 +249,7 @@ export function GeneralPanel() {
           purpose="Posts each new bug with Triage and Fix buttons. Fix progress replies in the same thread."
           status={slackStatus}
           action={
-            slackSaved ? (
+            canTestSlack ? (
               <Btn size="sm" variant="ghost" loading={testingSlack} onClick={() => void testSlack()}>
                 Send test message
               </Btn>
@@ -225,10 +262,13 @@ export function GeneralPanel() {
             type="text"
             value={settings.slack_channel_id ?? ''}
             onChange={(e) => update({ slack_channel_id: e.target.value.trim() })}
-            placeholder="C0B82A322RW"
+            // An empty field showing a real-looking ID read as already filled in (2026-10-28).
+            placeholder="e.g. C0123ABCDEF"
           />
           <p className="text-xs text-fg-muted">
-            In Slack, open the channel's details and copy the channel ID at the bottom. Then invite the Mushi bot to the channel.
+            {slackInput.botSet || slackCanPost
+              ? "In Slack, open the channel's details and copy the channel ID at the bottom. Then invite the Mushi bot to the channel."
+              : "Mushi's Slack bot isn't connected to this app, so a channel ID alone can't post. Connect it on Integrations, or use the webhook below."}
           </p>
           <SettingsChangeHint current={settings.slack_channel_id ?? ''} saved={saved.slack_channel_id ?? ''} kind="text" />
           {slackTest && (
@@ -298,7 +338,7 @@ export function GeneralPanel() {
             helpId="settings.general.sentry_dsn"
             value={settings.sentry_dsn ?? ''}
             onChange={(e) => update({ sentry_dsn: e.target.value })}
-            placeholder="https://abc@o0.ingest.sentry.io/4511023875"
+            placeholder="e.g. https://<key>@o0.ingest.sentry.io/<project-id>"
             validate={sentryDsn()}
           />
           <SettingsChangeHint current={settings.sentry_dsn ?? ''} saved={saved.sentry_dsn ?? ''} kind="secret" />
@@ -354,7 +394,7 @@ export function GeneralPanel() {
             type="text"
             value={settings.supabase_project_ref ?? ''}
             onChange={(e) => update({ supabase_project_ref: e.target.value.trim() })}
-            placeholder="abcdefghijklmnopqrst"
+            placeholder="e.g. abcdefghijklmnopqrst"
             autoComplete="off"
             spellCheck={false}
             validate={supabaseProjectRef()}
@@ -373,63 +413,72 @@ export function GeneralPanel() {
       <SettingsList title="Bug sorting" description="How the AI scores, groups and fixes incoming bugs.">
         <SettingsRow
           icon={<IconJudge size={16} />}
-          title="Triage model"
-          purpose="The AI model that decides each bug's severity and category."
-        >
-          <ClaudeModelSelect
-            role="diagnosis"
-            helpId="settings.general.stage2_model"
-            value={settings.stage2_model}
-            onChange={(id) => update({ stage2_model: id })}
-            extraOptions={
-              <optgroup label="OpenAI fallback">
-                <option value="gpt-5.4">GPT-5.4</option>
-                <option value="gpt-5.4-mini">GPT-5.4-mini</option>
-                <option value="gpt-4.1">GPT-4.1 (legacy)</option>
-              </optgroup>
-            }
-          />
-          <SettingsChangeHint current={eff(settings.stage2_model, 'diagnosis')} saved={eff(saved.stage2_model, 'diagnosis')} />
-        </SettingsRow>
-        <SettingsRow
-          icon={<IconCost size={16} />}
-          title="Quick check model"
-          purpose="The fast first pass that sorts easy bugs and filters noise before the triage model."
-        >
-          <ClaudeModelSelect
-            role="quick_check"
-            helpId="settings.general.stage1_model"
-            value={settings.stage1_model}
-            onChange={(id) => update({ stage1_model: id })}
-          />
-          <SettingsChangeHint current={eff(settings.stage1_model, 'quick_check')} saved={eff(saved.stage1_model, 'quick_check')} />
-        </SettingsRow>
-        <SettingsRow
-          icon={<IconJudge size={16} />}
-          title="Judge model"
-          purpose="The model that double-checks a sample of triage results on the Judge page."
-        >
-          <ClaudeModelSelect
-            role="judge"
-            helpId="settings.general.judge_model"
-            value={settings.judge_model}
-            onChange={(id) => update({ judge_model: id })}
-          />
-          <SettingsChangeHint current={eff(settings.judge_model, 'judge')} saved={eff(saved.judge_model, 'judge')} />
-        </SettingsRow>
-        <SettingsRow
-          icon={<IconGit size={16} />}
-          title="Fix model"
-          purpose="The model Mushi's own fix agent writes fixes with. Fixes cost the most of any AI call."
-        >
-          <ClaudeModelSelect
-            role="fix"
-            helpId="settings.general.fix_model"
-            value={settings.claude_default_model}
-            onChange={(id) => update({ claude_default_model: id })}
-          />
-          <SettingsChangeHint current={eff(settings.claude_default_model, 'fix')} saved={eff(saved.claude_default_model, 'fix')} />
-        </SettingsRow>
+          title="AI models"
+          purpose="Mushi picks a model for each job. Change one only to trade cost for quality."
+          action={
+            <Btn size="sm" variant="ghost" aria-expanded={showModels} onClick={() => setShowModels(!showModels)}>
+              {showModels ? 'Hide models' : 'Change models'}
+            </Btn>
+          }
+        />
+        {showModels ? (
+          <>
+            <SettingsRow
+              icon={<IconJudge size={16} />}
+              title="Triage model"
+              purpose="The AI model that decides each bug's severity and category. To run on OpenAI instead, switch Run AI on under AI keys."
+            >
+              {/* No OpenAI ids here: a GPT id went to the Claude call, failed, and the
+                  fallback ran on its own default. "Run AI on" is the real switch (ADR 0039). */}
+              <ClaudeModelSelect
+                role="diagnosis"
+                helpId="settings.general.stage2_model"
+                value={settings.stage2_model}
+                onChange={(id) => update({ stage2_model: id })}
+              />
+              <SettingsChangeHint current={eff(settings.stage2_model, 'diagnosis')} saved={eff(saved.stage2_model, 'diagnosis')} />
+            </SettingsRow>
+            <SettingsRow
+              icon={<IconCost size={16} />}
+              title="Quick check model"
+              purpose="The fast first pass that sorts easy bugs and filters noise before the triage model."
+            >
+              <ClaudeModelSelect
+                role="quick_check"
+                helpId="settings.general.stage1_model"
+                value={settings.stage1_model}
+                onChange={(id) => update({ stage1_model: id })}
+              />
+              <SettingsChangeHint current={eff(settings.stage1_model, 'quick_check')} saved={eff(saved.stage1_model, 'quick_check')} />
+            </SettingsRow>
+            <SettingsRow
+              icon={<IconJudge size={16} />}
+              title="Judge model"
+              purpose="The model that double-checks a sample of triage results on the Judge page."
+            >
+              <ClaudeModelSelect
+                role="judge"
+                helpId="settings.general.judge_model"
+                value={settings.judge_model}
+                onChange={(id) => update({ judge_model: id })}
+              />
+              <SettingsChangeHint current={eff(settings.judge_model, 'judge')} saved={eff(saved.judge_model, 'judge')} />
+            </SettingsRow>
+            <SettingsRow
+              icon={<IconGit size={16} />}
+              title="Fix model"
+              purpose="The model Mushi's own fix agent writes fixes with. Fixes cost the most of any AI call."
+            >
+              <ClaudeModelSelect
+                role="fix"
+                helpId="settings.general.fix_model"
+                value={settings.claude_default_model}
+                onChange={(id) => update({ claude_default_model: id })}
+              />
+              <SettingsChangeHint current={eff(settings.claude_default_model, 'fix')} saved={eff(saved.claude_default_model, 'fix')} />
+            </SettingsRow>
+          </>
+        ) : null}
         <SettingsRow
           icon={<IconGauge size={16} />}
           title="Quick check confidence"
@@ -492,6 +541,7 @@ export function GeneralPanel() {
             onChange={(e) => update({ fix_branch_template: e.target.value })}
             placeholder={DEFAULT_BRANCH_TEMPLATE}
             validate={fixBranchTemplate()}
+            error={branch.error ?? undefined}
           />
           <p className="text-xs text-fg-muted">
             Example: <code className="font-mono">{branchExample}</code>
@@ -571,7 +621,7 @@ export function GeneralPanel() {
         <SettingsRow
           icon={<IconChat size={16} />}
           title="“Bug reports by Mushi” line"
-          purpose="A small line at the foot of the widget that links to Mushi. On by default for Free Cloud, off for paid and self-hosted."
+          purpose="A small line at the foot of the widget that links to Mushi. On by default for Free, off for paid and self-hosted."
         >
           <SelectField
             label="Show the line"
@@ -579,7 +629,7 @@ export function GeneralPanel() {
             value={brandFooterToChoice(settings.widget_brand_footer)}
             onChange={(e) => update({ widget_brand_footer: choiceToBrandFooter(e.target.value as BrandFooterChoice) })}
           >
-            <option value="default">Plan default (on for Free Cloud, off for paid and self-host)</option>
+            <option value="default">Plan default (on for Free, off for paid and self-host)</option>
             <option value="on">Always show</option>
             <option value="off">Never show</option>
           </SelectField>
@@ -597,12 +647,14 @@ export function GeneralPanel() {
         changeCount={changeCount}
         onSave={() => void save()}
         onDiscard={() => setDraft(null)}
-        blockedReason={branchProblem ? `Fix the branch name pattern first. ${branchProblem.message}` : null}
+        blockedReason={branch.blocksSave ? `Fix the branch name pattern first. ${branch.error}` : null}
       />
 
       {/* Account-scoped; saves on toggle, independent of the project form above. */}
       <LifecycleEmailsToggle />
-      <ConsoleHelpPanel />
+      {/* Only Mushi staff can rebuild the shared help index; everyone else saw
+          a card ending "Nothing to do here" (first-time user test, 2026-10-28). */}
+      {entitlements.isSuperAdmin ? <ConsoleHelpPanel /> : null}
     </>
   )
 }
@@ -625,6 +677,7 @@ function Slider({ label, value, onChange, helpId }: SliderProps) {
       </span>
       <input
         type="range"
+        aria-label={label}
         min="0.5"
         max="0.99"
         step="0.01"
@@ -658,6 +711,7 @@ function RangeField({
       </span>
       <input
         type="range"
+        aria-label={label}
         min={min}
         max={max}
         step={step}

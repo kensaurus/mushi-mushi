@@ -24,7 +24,7 @@
  */
 
 import { useCallback, useSyncExternalStore } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { createSearchParams, useLocation, useNavigate, useSearchParams, type SetURLSearchParams } from 'react-router-dom'
 import {
   ACTIVE_PROJECT_QUERY_PARAM,
   getActiveProjectIdSnapshot,
@@ -50,12 +50,20 @@ type ProjectScopeMode = ProjectScope['mode']
  *
  *   /ci — GET /v1/admin/ci/overview without project_id reads every project
  *         the caller can open (routes/ci.ts, callerProjectIds).
+ *   /pipeline — GET /v1/admin/pipeline without projectId reads every
+ *         project the caller can open (routes/pipeline.ts).
+ *   /reports — the list, severity tiles, quick-filter counts and
+ *         /reports/stats?apps=all. The page omits the project pin; rows carry
+ *         the app name. Report detail (/reports/:id) stays one report.
+ *         Stats aggregate only when that query is sent.
  *
  * Not opted in (their list APIs drop to "all projects" without a project id,
  * but the pages assume one app: rows carry no app name, and actions, filters
- * and counts are per app): /reports, /fixes, /releases, /lessons.
+ * and counts are per app): /fixes, /releases, /lessons.
  */
-const ALL_APPS_ROUTES: readonly string[] = ['/ci']
+const ALL_APPS_ROUTES: readonly string[] = ['/ci', '/pipeline']
+/** Exact paths only — a prefix would also opt in /reports/:id. */
+const ALL_APPS_EXACT: readonly string[] = ['/reports']
 
 /**
  * Pages that never show one app's data, so the one-app notice would be wrong
@@ -74,6 +82,7 @@ function matchesRoute(pathname: string, route: string): boolean {
 export function allAppsSupportFor(pathname: string): AllAppsSupport {
   // `/projects/:pid/qa-coverage/:storyId` is one app's story (a redirect).
   if (/^\/projects\/[^/]+\//.test(pathname)) return 'single'
+  if (ALL_APPS_EXACT.includes(pathname)) return 'combined'
   if (ALL_APPS_ROUTES.some((r) => matchesRoute(pathname, r))) return 'combined'
   if (ACCOUNT_WIDE_ROUTE_PREFIXES.some((r) => matchesRoute(pathname, r))) return 'account'
   return 'single'
@@ -144,6 +153,15 @@ export function useProjectScopeMode(): ProjectScopeMode {
 }
 
 /**
+ * Header scope for a combined page's API calls. `enumeration` omits
+ * `X-Mushi-Project-Id`, so list endpoints count every app the caller can
+ * open. One-app pages must not use this — they keep the pin on purpose.
+ */
+export function combinedFetchScope(mode: ProjectScopeMode): 'enumeration' | 'project' {
+  return mode === 'all' ? 'enumeration' : 'project'
+}
+
+/**
  * The scope an opted-in page should show. Pages that are not in
  * ALL_APPS_ROUTES keep using `useActiveProjectId()`, which in all-apps mode
  * still returns the last concrete app.
@@ -158,9 +176,29 @@ export function useProjectScope(): ProjectScope {
   return { mode: 'project', projectId: isValidProjectId(fromUrl) ? fromUrl : getActiveProjectIdSnapshot() }
 }
 
+/**
+ * `useSearchParams`, but its setter keeps the `#hash`. React Router's setter
+ * navigates to a bare `?…`, which drops it, so `/settings?tab=ci-cost` lost
+ * its section the moment the switcher added `?project=` (console sweep,
+ * 2026-10-28). Use it for every write that only adds a scope param.
+ */
+export function useSearchParamsKeepingHash(): [URLSearchParams, SetURLSearchParams] {
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const { hash } = useLocation()
+  const setSearchParams = useCallback<SetURLSearchParams>(
+    (nextInit, navigateOpts) => {
+      const next = createSearchParams(typeof nextInit === 'function' ? nextInit(searchParams) : nextInit)
+      navigate({ search: `?${next}`, hash }, navigateOpts)
+    },
+    [navigate, searchParams, hash],
+  )
+  return [searchParams, setSearchParams]
+}
+
 /** Switch between one app and all apps, in storage and the URL together. */
 export function useSetProjectScopeMode(): (mode: ProjectScopeMode) => void {
-  const [, setSearchParams] = useSearchParams()
+  const [, setSearchParams] = useSearchParamsKeepingHash()
   return useCallback(
     (mode: ProjectScopeMode) => {
       setStoredProjectScopeMode(mode)

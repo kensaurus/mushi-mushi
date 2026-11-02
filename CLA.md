@@ -32,7 +32,7 @@ repository. Signatures are stored in `signatures/version1/cla.json` on the
 ## The agreement
 
 Thank you for your interest in Mushi Mushi. This agreement is between You and
-Kenji Sakuramoto / Kensaurus 合同会社 (the "Maintainer"), which owns and
+kensaurus LLC (the "Maintainer"), which owns and
 maintains the Mushi Mushi project at https://github.com/kensaurus/mushi-mushi.
 It clarifies the intellectual property license granted with Contributions from
 any person or entity. This license is for your protection as a Contributor as

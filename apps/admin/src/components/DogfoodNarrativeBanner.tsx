@@ -7,7 +7,9 @@
  *
  *          Renders something like:
  *            "Sing Along Completion is your most fragile area — 6 reports
- *             in the last 14 days. 3 fixes drafted. Open the worst →"
+ *             in the last 14 days. 1 fix already merged and 2 more drafted."
+ *          The drafted and merged counts are that component's open and
+ *          merged PRs, not the project's fix-attempt total.
  *
  *          The phrasing template lives in `lib/copy.ts` so future projects
  *          (not just the glot-it dogfood) inherit the same voice.
@@ -34,7 +36,13 @@ export function DogfoodNarrativeBanner() {
   const dashboardQuery = usePageData<DashboardData>('/v1/admin/dashboard')
 
   if (isAdvanced) return null
-  if (setup.loading || dashboardQuery.loading) return null
+  // Keep the banner's box while its data loads: inserting it after first
+  // paint pushed the filters and the list down (the largest layout shift on
+  // /reports, mushi-ux audit 2026-10-24). It still collapses in the rare
+  // case it turns out empty (no reports, no top component).
+  if (setup.loading || dashboardQuery.loading) {
+    return <div aria-hidden="true" data-testid="narrative-placeholder" className="mb-3 h-36 sm:h-12.5 rounded-md border border-chrome-border bg-chrome/50 motion-safe:animate-pulse" />
+  }
   if (!setup.activeProject) return null
   // No bugs yet → the rest of the inbox UI is already empty-state, no
   // need to also surface a narrative banner.
@@ -44,8 +52,10 @@ export function DogfoodNarrativeBanner() {
   if (!top) return null
 
   const projectName = setup.activeProject.project_name
-  const draftedFixes = setup.activeProject.fix_count ?? 0
-  const mergedFixes = setup.activeProject.merged_fix_count ?? 0
+  // Area-scoped. Project fix_count is every attempt in the app; subtracting
+  // merged attempts printed the inbox report total as "N more drafted".
+  const draftedFixes = top.draftedFixes ?? 0
+  const mergedFixes = top.mergedFixes ?? 0
 
   const sentence = renderDogfoodNarrative({
     projectName,
@@ -71,9 +81,11 @@ export function DogfoodNarrativeBanner() {
       <p className="flex-1 min-w-0 text-xs text-fg-secondary leading-snug">{sentence}</p>
       <Link
         to={`/reports?component=${encodeURIComponent(top.component)}&status=new&sort=severity&dir=desc`}
-        className="shrink-0 inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium bg-brand text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity motion-safe:active:scale-[0.97] motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+        // A quiet link: "Open the worst" on Fix first above is the page's one
+        // main button; two red buttons with one label went to different places.
+        className="shrink-0 text-xs font-medium text-fg-secondary underline decoration-edge underline-offset-2 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
       >
-        Open the worst <span aria-hidden="true">→</span>
+        See its bugs <span aria-hidden="true">→</span>
       </Link>
     </aside>
   )

@@ -1,6 +1,6 @@
 ---
 title: Bring-your-own-key
-description: Use your own Anthropic, OpenAI or OpenRouter key for a Mushi project, so every diagnosis, fix and grading run bills to your provider account.
+description: Use your own Anthropic, OpenAI or OpenRouter key for a Mushi Mushi project, so diagnosis, fix and grading runs bill to your provider account.
 ---
 
 import { Callout } from 'nextra/components'
@@ -9,7 +9,7 @@ import { Callout } from 'nextra/components'
 
 > **Scenario:** Your company policy requires that all LLM calls use an API key that belongs to your own Anthropic / OpenAI account so usage appears in your own billing dashboard and never routes through a third party.
 
-Mushi supports project-scoped BYOK. When set, every classifier, judge, fix orchestrator, and intelligence-report run for that project uses your key — usage shows up in your provider console, not Mushi's.
+Mushi Mushi supports project-scoped BYOK. When set, the classifier, judge, fix, review and intelligence-report runs for that project use your key, so usage shows up in your provider console, not Mushi's.
 
 ## Setup
 
@@ -42,7 +42,8 @@ A new key is used by **All my apps** by default: every app in every organization
 | `classify-report` (diagnosis) | Claude Sonnet 5.5, then GPT-5.4 |
 | `fix-worker` (fix drafts) | Claude Sonnet 5.5, then GPT-5.4 |
 | `judge-batch` (fix grading) | Claude Sonnet 5.5, then GPT-5.4 |
-| `intelligence-report` (weekly summary) | Claude Sonnet 5.5, then GPT-5.4 |
+| `intelligence-report` (weekly summary) | Claude Haiku 5.5, then GPT-5.4 |
+| `agent-pr-review` (review of each fix PR) | Claude Opus 5.5, on your own Anthropic key only (skipped without one) |
 | Search, similar bugs, codebase index | OpenAI `text-embedding-3-small` |
 | Voice reports | OpenAI `gpt-transcribe` |
 
@@ -54,24 +55,24 @@ OpenRouter has its own row. Calls that would go to OpenAI try your OpenAI keys f
 
 ## Audit trail
 
-Every set / rotate / clear operation writes a row to `byok_audit_log`:
+Key changes write a row to `byok_audit_log`:
 
 ```sql
-select actor_id, action, provider, occurred_at
+select actor_user_id, action, provider, ts
 from public.byok_audit_log
 where project_id = 'YOUR_PROJECT_ID'
-order by occurred_at desc;
+order by ts desc;
 ```
 
-`action` is one of `set`, `rotated`, `cleared`.
+`action` is one of `added`, `rotated`, `removed`, `used`, `tested`.
 
 ## Rotation
 
 1. Generate a new key in your provider dashboard.
-2. Paste it into **Settings → BYOK** and save.
-3. The old key is overwritten in Vault — the new key is active on the next LLM call.
+2. Paste it into **Settings → AI keys** and save.
+3. The new key is active on the next LLM call.
 4. Revoke the old key from your provider dashboard once you confirm calls are flowing.
 
-## Langfuse trace attribution
+## Which key a call used
 
-Langfuse traces include a `key_source` property (`'tenant'` or `'platform'`) so you can filter your Langfuse dashboard by BYOK vs platform usage.
+Every model call is recorded in `llm_invocations` with `key_source` set to `byok` (one of your keys) or `env` (Mushi's platform key). The console's cost views count BYOK calls from this column.

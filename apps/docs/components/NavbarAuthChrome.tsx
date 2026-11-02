@@ -11,9 +11,10 @@
  * client — holding a refresh token in docs would widen the attack surface
  * unnecessarily (see apps/docs/lib/migrationProgress.ts §SECURITY POSTURE).
  * Instead, auth flows through the existing postMessage bridge
- * (`openAdminAuthBridge`): clicking "Sign in" opens a minimal popup at
- * `/mushi-mushi/admin/docs-bridge`, the user authenticates in the admin SPA,
- * and the bridge posts a short-lived *access token* back. We store it in
+ * (`openAdminAuthBridge`, started from the migration checklist): a minimal
+ * popup at `/mushi-mushi/admin/docs-bridge` posts a short-lived *access
+ * token* back. Signed out, the navbar links straight to the console's
+ * sign-up and login (BL-173). We store it in
  * tab-scoped `sessionStorage` and listen to `mushi:docs:auth-change` events
  * so every component that needs the session stays in sync.
  *
@@ -31,8 +32,8 @@
  * ----------
  * NN/g #1 Visibility of System Status: show logged-in identity explicitly so
  *   the user knows their session is active without having to navigate away.
- * NN/g #6 Recognition over Recall: surface "Open console" and "Sign in"
- *   directly in the navbar so the user never has to remember the URL.
+ * NN/g #6 Recognition over Recall: surface "Start free", "Sign in" and
+ *   "Console" directly in the navbar so the user never has to remember the URL.
  * NN/g #4 Consistency: mirrors the identity pill from PublicHomePage.tsx in
  *   apps/admin so returning visitors get the same mental model across surfaces.
  *
@@ -48,7 +49,6 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   ADMIN_CONSOLE_URL as ADMIN_CONSOLE,
   getDocsAuthSession,
-  openAdminAuthBridge,
   signOutDocs,
   type DocsAuthSession,
 } from '../lib/migrationProgress'
@@ -73,8 +73,6 @@ export function NavbarAuthChrome() {
   // stale identity before the bridge session is read from sessionStorage.
   const [session, setSession] = useState<DocsAuthSession | null>(null)
   const [hydrated, setHydrated] = useState(false)
-  const [bridgeError, setBridgeError] = useState<string | null>(null)
-  const [signingIn, setSigningIn] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
 
   // Hydrate once on mount
@@ -88,20 +86,6 @@ export function NavbarAuthChrome() {
     const handleChange = () => setSession(getDocsAuthSession())
     window.addEventListener('mushi:docs:auth-change', handleChange)
     return () => window.removeEventListener('mushi:docs:auth-change', handleChange)
-  }, [])
-
-  const handleSignIn = useCallback(async () => {
-    setBridgeError(null)
-    setSigningIn(true)
-    try {
-      await openAdminAuthBridge()
-      // openAdminAuthBridge resolves after saveSession() is called,
-      // which fires mushi:docs:auth-change — our listener above re-reads.
-    } catch (err) {
-      setBridgeError(err instanceof Error ? err.message : 'Sign-in failed.')
-    } finally {
-      setSigningIn(false)
-    }
   }, [])
 
   const handleSignOut = useCallback(() => {
@@ -172,32 +156,24 @@ export function NavbarAuthChrome() {
     )
   }
 
-  // Signed-out state
+  // Signed-out state. A first-time visitor needs an account, not the
+  // checklist-sync consent the docs bridge asks for (BL-173): "Start free"
+  // opens the console's sign-up form and "Sign in" its login. Checklist sync
+  // keeps its own sign-in on the checklist (MigrationChecklist).
   return (
-    <div className="flex flex-col items-end gap-0.5">
-      <div className="flex items-center gap-1">
-        <ConsoleLink />
-
-        <button
-          type="button"
-          onClick={handleSignIn}
-          disabled={signingIn}
-          aria-label="Sign in to sync checklist progress and open the console"
-          className="whitespace-nowrap rounded-full border border-[var(--mushi-rule)] bg-[var(--mushi-paper)] px-2.5 py-1 font-mono text-2xs font-medium uppercase tracking-[0.16em] text-[var(--mushi-ink)] transition hover:border-[var(--mushi-ink-muted)] hover:bg-[var(--mushi-paper-wash)] disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
-        >
-          {signingIn ? 'Opening…' : 'Sign in'}
-        </button>
-      </div>
-
-      {/* Bridge error — surfaces inline so the user doesn't silently fail */}
-      {bridgeError && (
-        <p
-          role="alert"
-          className="max-w-48 text-right font-mono text-3xs leading-snug text-[var(--mushi-danger,#c0392b)]"
-        >
-          {bridgeError}
-        </p>
-      )}
+    <div className="flex items-center gap-1">
+      <a
+        href={`${ADMIN_CONSOLE}/login`}
+        className="hidden whitespace-nowrap rounded-full px-2.5 py-1 font-mono text-2xs uppercase sm:inline-block tracking-[0.16em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-paper-wash)] hover:text-[var(--mushi-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
+      >
+        Sign in
+      </a>
+      <a
+        href={`${ADMIN_CONSOLE}/signup?src=docs-nav`}
+        className="whitespace-nowrap rounded-full border border-[var(--mushi-ink)] bg-[var(--mushi-ink)] px-2.5 py-1 font-mono text-2xs font-medium uppercase tracking-[0.16em] text-[var(--mushi-paper)] transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
+      >
+        Start free
+      </a>
     </div>
   )
 }

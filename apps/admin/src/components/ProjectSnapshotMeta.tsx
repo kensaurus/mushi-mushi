@@ -2,14 +2,19 @@
  * FILE: apps/admin/src/components/ProjectSnapshotMeta.tsx
  * PURPOSE: Compact project snapshot row for the switcher dropdown — bottleneck,
  *          7-day trend, SDK freshness, critical severity — each with tooltips.
+ *
+ * NOTES:   Every chip carries its own words plus an `aria-label`/`title`. The
+ *          earlier glyph-only forms ("D", "↑ 86") were unreadable without
+ *          waiting out the hover tooltip, and "↑" meant both "more reports"
+ *          and "SDK update available".
  */
 
 import { Link } from 'react-router-dom'
 import type { ProjectSnapshot } from '../lib/projectSnapshotTypes'
+import { PDCA_STAGES } from '../lib/pdca'
 import {
   PDCA_BOTTLENECK_TONE,
   bottleneckDeepLink,
-  bottleneckStageLetter,
 } from '../lib/pdcaBottleneck'
 import {
   buildBottleneckTooltip,
@@ -51,10 +56,19 @@ export function ProjectSnapshotMeta({
   }
 
   const trendTooltip = showTrend && trend ? buildTrendTooltip(snapshot) : null
+  const stage = snapshot.pdca_bottleneck ? PDCA_STAGES[snapshot.pdca_bottleneck] : null
+  const bottleneckText = stage ? `Stuck: ${stage.label}` : ''
+  const bottleneckAria = stage
+    ? `PDCA bottleneck: ${stage.label} — ${snapshot.pdca_bottleneck_label}`
+    : ''
+  const criticalAria = `${critical} critical report${critical === 1 ? '' : 's'} in the last 30 days`
+  const trendAria = trend
+    ? `Reports ${trend.direction === 'up' ? 'up' : 'down'} ${Math.abs(trend.delta)} versus the previous 7 days`
+    : ''
 
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1">
-      {hasBottleneck && snapshot.pdca_bottleneck && snapshot.pdca_bottleneck_label && (
+      {hasBottleneck && snapshot.pdca_bottleneck && snapshot.pdca_bottleneck_label && stage && (
         <Tooltip
           content={
             <MetricTooltipContent
@@ -67,11 +81,11 @@ export function ProjectSnapshotMeta({
         >
           {linkless ? (
             <span
+              aria-label={bottleneckAria}
+              title={bottleneckAria}
               className={`inline-flex min-w-0 max-w-full cursor-help items-center gap-1 truncate rounded-sm px-1.5 py-0.5 text-3xs font-medium ${PDCA_BOTTLENECK_TONE[snapshot.pdca_bottleneck]}`}
             >
-              <span className="shrink-0 font-mono uppercase">
-                {bottleneckStageLetter(snapshot.pdca_bottleneck)}
-              </span>
+              <span className="min-w-0 truncate">{bottleneckText}</span>
             </span>
           ) : (
             <Link
@@ -81,11 +95,11 @@ export function ProjectSnapshotMeta({
                 snapshot.pdca_bottleneck_label,
               )}
               onClick={(e) => e.stopPropagation()}
+              aria-label={bottleneckAria}
+              title={bottleneckAria}
               className={`inline-flex min-w-0 max-w-full cursor-help items-center gap-1 truncate rounded-sm px-1.5 py-0.5 text-3xs font-medium hover:opacity-90 motion-safe:transition-opacity ${PDCA_BOTTLENECK_TONE[snapshot.pdca_bottleneck]}`}
             >
-              <span className="shrink-0 font-mono uppercase">
-                {bottleneckStageLetter(snapshot.pdca_bottleneck)}
-              </span>
+              <span className="min-w-0 truncate">{bottleneckText}</span>
             </Link>
           )}
         </Tooltip>
@@ -97,18 +111,18 @@ export function ProjectSnapshotMeta({
           nowrap={false}
           portal
         >
-          <span className="cursor-help">
+          <span className="cursor-help" aria-label={criticalAria} title={criticalAria}>
             <SignalChip tone="danger" className="text-3xs tabular-nums">
-              Crit {critical}
+              {critical} critical
             </SignalChip>
           </span>
         </Tooltip>
       )}
       {showTrend && trend && trendTooltip && (
         <Tooltip content={<MetricTooltipContent data={trendTooltip} />} side="left" nowrap={false} portal>
-          <span className="cursor-help">
-            <SignalChip tone={trend.direction === 'up' ? 'warn' : 'ok'} className="font-mono text-3xs tabular-nums">
-              {trend.direction === 'up' ? '↑' : '↓'} {Math.abs(trend.delta)}
+          <span className="cursor-help" aria-label={trendAria} title={trendAria}>
+            <SignalChip tone={trend.direction === 'up' ? 'warn' : 'ok'} className="text-3xs tabular-nums">
+              {trend.direction === 'up' ? '↑' : '↓'} {Math.abs(trend.delta)} reports
             </SignalChip>
           </span>
         </Tooltip>

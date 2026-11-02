@@ -16,7 +16,7 @@ import {
   IconCheck,
   IconClose,
 } from '../icons'
-import { STATUS_CHIP, pluginWebhookUrlError, type InstalledPlugin } from './types'
+import { STATUS_CHIP, pluginEventLabel, pluginWebhookUrlError, type InstalledPlugin } from './types'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { ADMIN_ONLY_HINT } from '../../lib/orgPermissions'
 
@@ -111,11 +111,11 @@ export function InstalledPluginRow({
           </p>
           <div className="flex flex-wrap gap-1 mt-1">
             {plugin.subscribed_events?.length === 0 ? (
-              <code className="text-3xs bg-surface-raised px-1.5 py-0.5 rounded">all events</code>
+              <code className="text-3xs bg-surface-raised px-1.5 py-0.5 rounded">All events</code>
             ) : (
               plugin.subscribed_events?.map((e) => (
                 <code key={e} className="text-3xs bg-surface-raised px-1.5 py-0.5 rounded">
-                  {e}
+                  {pluginEventLabel(e)}
                 </code>
               ))
             )}

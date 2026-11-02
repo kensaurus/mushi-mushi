@@ -1,24 +1,23 @@
 ---
-title: Iterate
-description: The Iterate page queues improvement runs on a user flow — an agent tests the screens, finds friction and proposes changes for you to review.
+title: Improvement runs
+description: The Improvement runs page in Mushi Mushi queues runs where one AI critiques a live URL against your goal and a second scores it, iteration by iteration.
 ---
 
 import { Callout, Steps } from 'nextra/components'
 
 <AdminDocHero page="iterate" />
 
-# Iterate
+# Improvement runs
 
-**Route:** `/iterate`
+**Route:** `/iterate` (sidebar: More pages → Fix → Improvement runs; formerly Iterate. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
 
 > **Scenario:** Your app's UX scores have been declining in session recordings. You
 > suspect the onboarding flow has friction but don't know where. Instead of spending
 > a day manually testing every screen, you queue an improvement run — point it at your live
-> URL, describe the goal, and let the autonomous agent crawl, critique, improve, and
-> score the result. You come back in 20 minutes with a scored report and a list of
-> what changed.
+> URL, describe the goal, and let the producer and judge models critique and
+> score it. You come back to a scored report for each iteration.
 
-The Iterate page runs **Plan → Do → Check → Act** scoring loops autonomously. The agent
+In Mushi Mushi, the Improvement runs page runs **Plan → Do → Check → Act** scoring loops. The agent
 crawls a URL, generates a quality critique across multiple dimensions (UX, performance,
 accessibility, etc.), attempts improvements, re-checks the score, and loops until either
 the target score is reached or the iteration limit is hit.
@@ -41,10 +40,10 @@ stronger model.
 ## Runs table
 
 The left panel lists all runs, newest first. At a glance:
-- **Status badge** — `queued`, `running`, `succeeded`, `failed`
+- **Status badge** — `queued`, `running`, `succeeded`, `aborted`, `failed`
 - **Progress** — current / target iterations (e.g. "3/5")
 - **Final score** — the bar fills as the score improves across iterations
-- **Trigger / Abort** buttons appear per row while the run is queued or running
+- **Trigger** appears on a queued row, **Abort** on a queued or running row (Abort asks first)
 
 An **auto-refresh banner** appears at the top when any run is active, polling every
 4 seconds so you don't need to manually refresh.
@@ -74,8 +73,8 @@ When the run succeeds, a **Copy critique to clipboard** button appears. Paste th
 a GitHub issue, Notion doc, or design brief as a structured improvement report.
 
 <Callout type="info">
-Use **↻ Refresh** in the drawer header to poll for the latest iteration data while a
-run is active. The drawer doesn't auto-poll to avoid hammering the API during a long run.
+While a run is queued or running, the drawer reloads itself every 3 seconds. **Refresh**
+in the drawer header reloads it at once.
 </Callout>
 
 ---
@@ -89,13 +88,13 @@ run is active. The drawer doesn't auto-poll to avoid hammering the API during a 
 |-------|---------|
 | **Target URL** | The live URL the agent will crawl — must be publicly reachable |
 | **Goal / instructions** | Be specific: *"Improve the onboarding flow for first-time mobile users — focus on step clarity and reducing friction"* is better than *"improve UX"* |
-| **Max iterations** | 3–5 is typical. More iterations = more cost, diminishing returns |
-| **Target score** | 0.8–0.9 is a good range. 1.0 is rarely achievable and will exhaust iterations |
-| **Producer model** | The model generating improvements. Default Claude Sonnet 5.5; Opus 5.5 for the hardest pages, Haiku 4.5 for speed. If Anthropic is down the runner falls back to OpenAI on its own |
-| **Judge model** | The model scoring results. Same choices; Haiku 4.5 is a cheaper judge. Only Claude ids are accepted (`claude-…`) |
-| **Critic persona** | The evaluation lens — "UX expert" vs "accessibility auditor" changes what the judge prioritises |
+| **Max iterations** | Default 5. More iterations cost more, with diminishing returns |
+| **Target score (0–1)** | Default 0.75. 1.0 is rarely reached and will use up every iteration |
+| **Producer model** | The model generating improvements: Claude Sonnet 5.5 (default), Claude Opus 5.5, Claude Fable 5.1 or Claude Haiku 5.5 (fastest, cheapest). If Anthropic is down the runner falls back to OpenAI on its own |
+| **Judge model** | The model scoring results. Same choices, Sonnet 5.5 by default. Only Claude ids are accepted (`claude-…`) |
+| **Critic persona** | The evaluation lens: Nielsen Norman (10 usability heuristics, default), WCAG 2.2 accessibility, Mobile first, Glanceable density, or Tufte data density |
 
-3. Click **Queue run**. The run starts immediately if no other run is active.
+3. Click **Queue run**. The run is saved as `queued`; click **Trigger** on its row in **Runs** to start it.
 
 ---
 
@@ -103,8 +102,8 @@ run is active. The drawer doesn't auto-poll to avoid hammering the API during a 
 
 ### Running a UX audit before a release
 1. Create a new run: target URL = your staging URL, goal = *"Identify UX friction in the checkout flow"*, max iterations = 3, target score = 0.8.
-2. Let it run (~10–15 min).
-3. Open the drawer → read the final critique → **Copy to clipboard**.
+2. Click **Trigger** and let it run.
+3. Open the drawer → read the final critique → **Copy critique to clipboard**.
 4. File as a GitHub issue or share with your design team.
 
 ### Comparing before and after a change
@@ -114,10 +113,11 @@ run is active. The drawer doesn't auto-poll to avoid hammering the API during a 
 4. A higher score on the "UX clarity" dimension confirms your change worked.
 
 ### Debugging a failed run
-1. Click the failed run row.
-2. In the **Summary** section, read the `error_detail` field — it contains the specific failure message from the runner.
-3. Common causes:
-   - **LLM key not configured** → go to [Settings](/admin/settings) → BYOK tab
+1. Click the failed run row and check which iterations finished and what they scored.
+   The console does not show the runner's error message for a failed run; the
+   **Last failure** line of the readout only names the URL.
+2. Common causes:
+   - **LLM key not configured** → go to [Settings](/admin/settings) → **AI keys**
    - **Target URL unreachable** → check the URL returns 200 without authentication
    - **Iteration limit hit with low score** → rewrite the goal to be more specific or increase the target score threshold
 
@@ -130,7 +130,7 @@ GET    /v1/admin/pdca?project_id=<pid>&limit=50
 GET    /v1/admin/pdca/<id>
 POST   /v1/admin/pdca   { "target_url": "...", "goal": "...", "iterations_target": 5,
                           "target_score": 0.85, "primary_model": "claude-sonnet-5-5",
-                          "judge_model": "claude-haiku-4-5", "project_id": "<pid>" }
+                          "judge_model": "claude-haiku-5-5", "project_id": "<pid>" }
 DELETE /v1/admin/pdca/<id>         (abort)
 POST   /v1/admin/pdca/<id>/trigger (manually trigger queued run)
 ```
@@ -139,6 +139,6 @@ POST   /v1/admin/pdca/<id>/trigger (manually trigger queued run)
 
 ## Related pages
 
-- [Drift scanner](/admin/drift) — check for regressions before starting an iteration loop
-- [Integration health](/admin/health) — verify LLM keys are working before queuing a run
-- [Fix drafts](/admin/fixes) — dispatch individual fixes outside the PDCA loop
+- [Schema changes](/admin/drift) — check for regressions before starting an iteration loop
+- [Mushi health](/admin/health) — verify LLM keys are working before queuing a run
+- [Fixes](/admin/fixes) — dispatch individual fixes outside the PDCA loop

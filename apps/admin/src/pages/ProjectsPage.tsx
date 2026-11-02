@@ -15,6 +15,7 @@ import { useSendTestReport } from '../lib/useSendTestReport'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { usePageCopy } from '../lib/copy'
+import { isDevFacingHint } from '../lib/devHintCopy'
 import { useRealtimeReload } from '../lib/realtime'
 import { pluralizeWithCount } from '../lib/format'
 import {
@@ -71,6 +72,8 @@ import { ProjectNextStepsPanel } from '../components/projects/ProjectNextStepsPa
 import { CHIP_TONE } from '../lib/chipTone'
 import { IconProjects } from '../components/icons'
 import { PageLoadError } from '../components/PageLoadError'
+import { useScrollToHash } from '../lib/useScrollToHash'
+import { projectsHeaderStatus } from '../lib/newApps'
 
 const UNDO_WINDOW_MS = 8000
 
@@ -203,6 +206,8 @@ export function ProjectsPage() {
     '/v1/admin/projects/stats',
     { scope: 'enumeration' },
   )
+  // Deep links such as the MCP banner's #mint-key-<id> land once the list is in.
+  useScrollToHash(!loading)
   const activeOrgId = useActiveOrgId()
   const { data: orgData, loading: orgLoading } = usePageData<{ organizations: OrganizationSummary[] }>('/v1/org', {
     scope: 'none',
@@ -245,7 +250,8 @@ export function ProjectsPage() {
   usePublishPageContext({
     route: '/projects',
     title: `${activeMeta.label} · Manage apps`,
-    summary: activeMeta.description,
+    // A tab description is a dev-facing hint (isDevFacingHint); the tab title shows a plain one.
+    summary: isDevFacingHint(activeMeta.description) ? 'Your apps, which ones send reports, and what to do next' : activeMeta.description,
     filters: { tab: activeTab, active_project_id: activeProjectId ?? undefined },
     criticalCount:
       stats.topPriority === 'healthy'
@@ -583,29 +589,8 @@ export function ProjectsPage() {
     return <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading projects" />
   if (error) return <PageLoadError error={error} resource="projects" onRetry={reloadAll} />
 
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
-    stats.topPriority === 'never_ingested' || stats.topPriority === 'no_sdk_heartbeat'
-      ? 'warn'
-      : stats.topPriority === 'healthy'
-        ? 'ok'
-        : stats.topPriority === 'no_projects'
-          ? 'brand'
-          : stats.topPriority === 'partial_ingest'
-            ? 'info'
-            : 'neutral'
-
-  const headerBadge =
-    stats.topPriority === 'healthy'
-      ? 'INGESTING'
-      : stats.topPriority === 'never_ingested'
-        ? 'NO INGEST'
-        : stats.topPriority === 'no_sdk_heartbeat'
-          ? 'NO HEARTBEAT'
-        : stats.topPriority === 'partial_ingest'
-          ? `${stats.neverIngestedCount} STALE`
-          : stats.projectCount === 0
-            ? 'EMPTY'
-            : 'SETUP'
+  // A just-made app reads "Setting up", like the banner (lib/newApps.ts).
+  const { label: headerBadge, tone: bannerSeverity } = projectsHeaderStatus(stats)
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-projects">
@@ -666,6 +651,7 @@ export function ProjectsPage() {
                 activeTeamName={activeTeamName}
                 roleHint={roleHint}
                 onTab={setTab}
+                activeTab={activeTab}
                 onRefresh={reloadAll}
                 refreshing={validating}
               />
@@ -734,7 +720,8 @@ export function ProjectsPage() {
           {stats.projectCount === 0 ? (
             <CliSetupGuide projectId={activeProjectId} />
           ) : null}
-          {stats.topPriority === 'healthy' && (
+          {/* Advanced mode's hero already says it. */}
+          {stats.topPriority === 'healthy' && !isAdvanced && (
             <RecommendedAction
               tone="success"
               title="All projects ingesting"
@@ -769,6 +756,7 @@ export function ProjectsPage() {
           orgDataLoaded={orgDataLoaded}
           canManageProjects={canManageProjects}
           activeOrgRole={activeOrgRole as OrgRole}
+          teamName={(orgData?.organizations?.length ?? 0) > 1 ? activeTeamName : null}
           onNavigateTeam={() => navigate('/organization/members')}
           newName={newName}
           onNewNameChange={setNewName}

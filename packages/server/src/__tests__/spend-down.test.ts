@@ -5,7 +5,8 @@
  *          for (ADR 0023), the window, the daily limit, the auto-fix caps,
  *          the 3-running bound, the 7-day re-dispatch cooldown, the 1.3
  *          boost for Sentry or stack evidence, and the dispatch metadata
- *          fix-worker reads (cursor_cloud, model, trigger); the stop-loss
+ *          fix-worker reads (cursor_cloud, model, trigger); a pinned-key
+ *          failure is eligible on the next tick; the stop-loss
  *          (Wilson-bound entry, 20-sample cold start, hysteresis, daily probe,
  *          probe recovery, 14-day aging, Resume, transition-only log lines,
  *          carry-forward) and the scoreboard rollup.
@@ -13,6 +14,9 @@
 
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb } from './__stubs__/fake-supabase.ts'
+import { createHealthGate } from '../../supabase/functions/_shared/health-gate.ts'
+import { fromSetupGap } from '../../supabase/functions/_shared/health-checks.ts'
+import { autofixKeyGap, followupKeyGap } from '../../supabase/functions/_shared/setup-gaps.ts'
 import {
   cachedYieldSamples,
   type SpendDownYieldCache,
@@ -45,6 +49,9 @@ import {
   reportHasCheapEvidence,
   reportsWithNoRetryVerdict,
   reportsToRetryAfterKeyLimit,
+  reportsToRetryAfterHold,
+  isCursorKeyLimitError,
+  isSpendDownPinnedKeyUnavailable,
   SPEND_DOWN_CANDIDATE_COLUMNS,
   spendDownCandidateFromReport,
   type CursorPoolKey,
@@ -52,6 +59,7 @@ import {
   SPEND_DOWN_STOP_NO_REPORT,
   spendDownDispatchMetadata,
   spendDownIdleReasons,
+  spendDownOutrankNote,
   spendDownProjectIds,
   spendDownWindow,
   type SpendDownKey,
@@ -147,6 +155,44 @@ describe('spendDownProjectIds: the apps where this key is the resolver\'s first 
     expect(firstCursorKeyFor(project(P1), [a, b])).toBe('a')
     expect(firstCursorKeyFor(project(P1), [{ ...a, test_status: 'auth_failed' }, b])).toBe('b')
     expect(firstCursorKeyFor(project(P1), [{ ...a, status: 'disabled' }, pool('k1')])).toBe('k1')
+  })
+
+  it('a quota hold is not a first pick, so the next org key pays', () => {
+    const ayako = pool('ayako', { priority: 10 })
+    const spare = pool('spare', { priority: 50 })
+    const held = [
+      { ...ayako, status: 'quota_exhausted', test_status: 'error_quota' },
+      { ...ayako, status: 'quota_exhausted', test_status: 'ok' },
+    ]
+    for (const row of held) {
+      expect(firstCursorKeyFor(project(P1), [row, spare])).toBe('spare')
+      expect(spendDownProjectIds({ id: 'spare' }, [project(P1)], [row, spare])).toEqual([P1])
+    }
+  })
+
+  it('a quota hold stays skipped after exhausted_until passes until a re-test sets status active', () => {
+    const now = Date.parse('2026-10-24T13:00:00Z')
+    const ayako = pool('ayako', {
+      priority: 10,
+      status: 'quota_exhausted',
+      test_status: 'error_quota',
+      exhausted_until: '2026-10-24T12:00:00Z',
+    })
+    const spare = pool('spare', { priority: 50 })
+    expect(firstCursorKeyFor(project(P1), [ayako, spare], now)).toBe('spare')
+    expect(spendDownWindow(key({ id: 'ayako', status: 'quota_exhausted' }), new Date(now)).state).toBe('key_unusable')
+    const restored = { ...ayako, status: 'active', test_status: 'ok' }
+    expect(firstCursorKeyFor(project(P1), [restored, spare], now)).toBe('ayako')
+  })
+
+  it('an active key whose last test was error_quota still pays; exhausted_until still hands the apps over', () => {
+    const ayako = pool('ayako', { priority: 10, test_status: 'error_quota' })
+    const spare = pool('spare', { priority: 50 })
+    const now = Date.parse('2026-10-24T00:00:00Z')
+    expect(firstCursorKeyFor(project(P1), [ayako, spare], now)).toBe('ayako')
+    expect(spendDownProjectIds({ id: 'ayako' }, [project(P1)], [ayako, spare])).toEqual([P1])
+    const usedUp = { ...ayako, exhausted_until: '2099-01-01T00:00:00Z' }
+    expect(firstCursorKeyFor(project(P1), [usedUp, spare], now)).toBe('spare')
   })
 })
 
@@ -265,12 +311,14 @@ describe('projectCapacity', () => {
   it('takes the tightest of the key, the 3-running bound and the auto-fix cap', () => {
     expect(projectCapacity({ remainingForKey: 10, openCloudAttempts: 1, autofixDispatchesToday: 0, autofixMaxPerDay: null })).toBe(2)
     expect(projectCapacity({ remainingForKey: 10, openCloudAttempts: 0, autofixDispatchesToday: 2, autofixMaxPerDay: 3 })).toBe(1)
+    expect(projectCapacity({ remainingForKey: 10, openCloudAttempts: 1, autofixDispatchesToday: 0, autofixMaxPerDay: null, maxConcurrent: 1 })).toBe(0)
+    expect(projectCapacity({ remainingForKey: 10, openCloudAttempts: 0, autofixDispatchesToday: 0, autofixMaxPerDay: null, maxConcurrent: 1 })).toBe(1)
     expect(projectCapacity({ remainingForKey: 1, openCloudAttempts: 0, autofixDispatchesToday: 0, autofixMaxPerDay: 30 })).toBe(1)
     expect(projectCapacity({ remainingForKey: 5, openCloudAttempts: 4, autofixDispatchesToday: 0, autofixMaxPerDay: null })).toBe(0)
   })
 })
 
-function seed(extra: Record<string, unknown[]> = {}) {
+function seed(extra: Record<string, unknown[]> = {}, opts: NonNullable<Parameters<typeof makeFakeDb>[1]> = {}) {
   return makeFakeDb(
     {
       projects: [
@@ -297,13 +345,48 @@ function seed(extra: Record<string, unknown[]> = {}) {
       fix_attempts: [],
       ...extra,
     },
-    { autoId: true },
+    { autoId: true, ...opts },
   )
 }
 
 const allowAll = async () => ({ allowed: true, dispatchesToday: 0, maxDispatchesPerDay: 30 }) as never
 
 describe('runSpendDownForKey', () => {
+  describe('health gate (ADR 0054, Proposed): observe changes nothing, enforce only withholds', () => {
+    const noAgent = fromSetupGap(autofixKeyGap({ projectId: P1, dispatcher: { autofixOn: true, server: { agentKeys: 0, offKeys: 0 } } }), NOW.toISOString())
+    const followupsOnly = fromSetupGap(followupKeyGap({ projectId: P1, settings: { enabled: true, offReason: null, keyId: 'x' }, keyStatus: null }), NOW.toISOString())
+    const unknown = fromSetupGap(followupKeyGap({ projectId: P1, settings: null }), NOW.toISOString())
+    const gate = (mode: 'observe' | 'enforce', checks: typeof noAgent[]) =>
+      createHealthGate(makeFakeDb() as never, 'spend-down', { readMode: async () => mode, loadChecks: async (_db, pid) => checks.filter((c) => c.projectId === pid), record: async () => {}, now: () => NOW })
+    const run = async (healthGate?: Awaited<ReturnType<typeof gate>>) => {
+      const calls: Array<Record<string, unknown>> = []
+      const summary = await worker.runSpendDownForKey(seed() as never, key(), {
+        now: NOW,
+        checkBudget: allowAll,
+        dispatch: async (input) => (calls.push(input as never), { ok: true }),
+        ...(healthGate ? { healthGate } : {}),
+      })
+      return { calls, summary }
+    }
+
+    it('observe: byte-for-byte the same dispatches and summary as with the gate off', async () => {
+      const off = await run()
+      const observe = await run(await gate('observe', [noAgent]))
+      expect(off.calls.length).toBeGreaterThan(0)
+      expect(JSON.stringify(observe.calls)).toBe(JSON.stringify(off.calls))
+      expect(JSON.stringify(observe.summary)).toBe(JSON.stringify(off.summary))
+    })
+
+    it('enforce: the paused app gets no dispatch and says why; unrelated or unknown checks change nothing', async () => {
+      const off = await run()
+      const enforce = await run(await gate('enforce', [noAgent]))
+      expect(enforce.calls).toEqual([])
+      expect(enforce.summary.projects.find((p) => p.projectId === P1)).toMatchObject({ dispatched: 0, healthPaused: true, stopped: expect.stringContaining('Paused until this is fixed: Auto-fix agent key') })
+      const other = await run(await gate('enforce', [followupsOnly, unknown]))
+      expect(JSON.stringify(other.calls)).toBe(JSON.stringify(off.calls))
+    })
+  })
+
   it('dispatches the best open reports of the apps the key serves, as automatic cursor_cloud fixes', async () => {
     const db = seed()
     const calls: Array<Record<string, unknown>> = []
@@ -371,6 +454,104 @@ describe('runSpendDownForKey', () => {
     expect(calls.map((c) => c.reportId)).toEqual(['stacked', 'sentry', 'newer'])
   })
 
+  it('picks a report again on the next tick when the pinned key could not run it', async () => {
+    const recent = new Date(NOW.getTime() - 5 * 60_000).toISOString()
+    const limit = 'Cursor API 400 usage_limit_exceeded: On-demand usage is required.'
+    const unusable = 'Spend-down Cursor key is not usable for this app.'
+    const row = (id: string, severity: string, createdAt: string) => ({
+      id, project_id: P1, status: 'classified', severity, judge_score: 0.8, component: `${id}.ts`, report_group_id: null, created_at: createdAt,
+    })
+    const db = seed({
+      reports: [
+        row('limited', 'high', '2026-10-19T00:00:00Z'),
+        row('unusable', 'medium', '2026-10-18T00:00:00Z'),
+        row('other', 'low', '2026-10-17T00:00:00Z'),
+      ],
+      fix_dispatch_jobs: [
+        { id: 'd-lim', project_id: P1, report_id: 'limited', status: 'failed', created_at: recent, dispatch_metadata: { spend_down_key_id: 'ayako' } },
+        { id: 'd-un', project_id: P1, report_id: 'unusable', status: 'failed', created_at: recent, dispatch_metadata: { spend_down_key_id: 'ayako' } },
+        { id: 'd-other', project_id: P1, report_id: 'other', status: 'failed', created_at: recent, dispatch_metadata: {} },
+      ],
+      fix_attempts: [
+        { id: 'a-lim', project_id: P1, report_id: 'limited', status: 'failed', failure_category: 'cursor_api_error', error: limit, created_at: recent },
+        { id: 'a-un', project_id: P1, report_id: 'unusable', status: 'failed', failure_category: 'cursor_api_error', error: unusable, created_at: recent },
+        { id: 'a-other', project_id: P1, report_id: 'other', status: 'failed', failure_category: 'unknown', error: 'boom', created_at: recent },
+      ],
+    })
+    const calls: Array<Record<string, unknown>> = []
+    await worker.runSpendDownForKey(db as never, key(), {
+      now: NOW,
+      checkBudget: allowAll,
+      dispatch: async (input) => {
+        calls.push(input as never)
+        return { ok: true }
+      },
+    })
+    expect(calls.map((c) => c.reportId)).toEqual(['limited', 'unusable'])
+    expect(calls[0].metadata).toMatchObject({ spend_down_key_id: 'k1' })
+  })
+
+  it('skips a report a local worker holds, until its lease runs out (ADR 0048)', async () => {
+    const claim = (id: string, leaseUntil: string) => ({ id, report_id: 'r1', project_id: P1, status: 'active', lease_until: leaseUntil })
+    const run = async (db: ReturnType<typeof seed>) => {
+      const calls: Array<Record<string, unknown>> = []
+      await worker.runSpendDownForKey(db as never, key(), { now: NOW, checkBudget: allowAll, dispatch: async (i) => (calls.push(i as never), { ok: true }) })
+      return calls.map((c) => c.reportId)
+    }
+    expect(await run(seed({ work_claims: [claim('held', '2026-10-20T09:30:00Z')] }))).toEqual(['r2'])
+    // A dead worker's lease that ran out blocks nobody, even before anything marks it expired.
+    expect(await run(seed({ work_claims: [claim('stale', '2026-10-20T08:00:00Z')] }))).toEqual(['r1', 'r2'])
+  })
+
+  describe('a report waiting in a local lane\'s queue (P3)', () => {
+    const run = async (db: ReturnType<typeof seed>) => {
+      const calls: Array<Record<string, unknown>> = []
+      await worker.runSpendDownForKey(db as never, key(), { now: NOW, checkBudget: allowAll, dispatch: async (i) => (calls.push(i as never), { ok: true }) })
+      return calls.map((c) => c.reportId)
+    }
+    const fresh = new Date(NOW.getTime() - 3_600_000).toISOString()
+    const queued = (over: { mode?: string; revoked_at?: string | null; last_heartbeat_at?: string; source?: string } = {}) => {
+      const db = seed({
+        work_queue: [{ id: 'w1', lane_id: 'lane-1', project_id: P1, report_id: 'r1', position: 0, source: 'console' }],
+        work_lanes: [{ id: 'lane-1', host_id: 'host-1', project_id: P1, mode: over.mode ?? 'fix' }],
+        work_hosts: [{ id: 'host-1', revoked_at: over.revoked_at ?? null, last_heartbeat_at: over.last_heartbeat_at ?? fresh }],
+      })
+      if (over.source) for (const r of db.table('reports')) if (r.id === 'r1') r.source = over.source
+      return db
+    }
+
+    it('is left to a live fix lane, and a skill-run round to a live skill lane', async () => {
+      expect(await run(queued())).toEqual(['r2'])
+      expect(await run(queued({ mode: 'skill', source: 'skill_run' }))).toEqual(['r2'])
+    })
+
+    it('is never stranded: a revoked or silent machine, a lane that reads no queue, or a bug report in a skill lane reserves nothing', async () => {
+      expect(await run(queued({ revoked_at: '2026-10-19T00:00:00Z' }))).toEqual(['r1', 'r2'])
+      expect(await run(queued({ last_heartbeat_at: new Date(NOW.getTime() - 25 * 3_600_000).toISOString() }))).toEqual(['r1', 'r2'])
+      for (const mode of ['conflicts', 'audit', 'followups']) expect(await run(queued({ mode })), mode).toEqual(['r1', 'r2'])
+      expect(await run(queued({ mode: 'skill' }))).toEqual(['r1', 'r2'])
+      // A queue row whose lane is gone reserves nothing either.
+      const orphan = seed({ work_queue: [{ id: 'w1', lane_id: 'gone', project_id: P1, report_id: 'r1', position: 0, source: 'console' }] })
+      expect(await run(orphan)).toEqual(['r1', 'r2'])
+    })
+
+    it('an unreadable queue skips the app this tick instead of dispatching blind', async () => {
+      const blind: Array<Record<string, unknown>> = []
+      await worker.runSpendDownForKey(seed({}, { failRead: (t: string) => (t === 'work_queue' ? 'connection reset' : null) }) as never, key(), { now: NOW, checkBudget: allowAll, dispatch: async (i) => (blind.push(i as never), { ok: true }) })
+      expect(blind).toEqual([])
+    })
+  })
+
+  it('skips the app for the tick when the leases cannot be read, and goes on when the table is not there yet', async () => {
+    const run = async (failRead: (t: string) => string | { code: string; message: string } | null) => {
+      const calls: Array<Record<string, unknown>> = []
+      await worker.runSpendDownForKey(seed({}, { failRead }) as never, key(), { now: NOW, checkBudget: allowAll, dispatch: async (i) => (calls.push(i as never), { ok: true }) })
+      return calls.map((c) => c.reportId)
+    }
+    expect(await run((t) => (t === 'work_claims' ? 'connection reset' : null))).toEqual([])
+    expect(await run((t) => (t === 'work_claims' ? { code: '42P01', message: 'relation "work_claims" does not exist' } : null))).toEqual(['r1', 'r2'])
+  })
+
   it('never picks a report whose last run the agent settled as already fixed or wrong repo', async () => {
     const db = seed({
       fix_attempts: [{ id: 'fa', project_id: P1, report_id: 'r1', agent: 'cursor_cloud', status: 'failed', failure_category: 'already_fixed', created_at: '2026-10-01T00:00:00Z' }],
@@ -416,7 +597,7 @@ describe('runSpendDownForKey', () => {
       dispatch: async () => ({ ok: true }),
     })
     expect(busy.dispatched).toBe(0)
-    expect(busy.projects[0].stopped).toBe('Three fixes already running')
+    expect(busy.projects[0].stopped).toBe('3 running already (the app\'s limit)')
   })
 
   it('does nothing outside the window', async () => {
@@ -459,7 +640,9 @@ describe('runSpendDown', () => {
 
 describe('spendDownDispatchMetadata', () => {
   it('leaves the model to the app default when the key has none', () => {
-    expect(spendDownDispatchMetadata({ id: 'k', spend_down_model: null })).toEqual({
+    const key = { id: 'k', spend_down_model: null }
+    expect(spendDownDispatchMetadata(key).spend_down_key_id).toBe(key.id)
+    expect(spendDownDispatchMetadata(key)).toEqual({
       source: 'spend_down',
       agent_override: 'cursor_cloud',
       spend_down_key_id: 'k',
@@ -1060,26 +1243,143 @@ describe('spendDownStopLoss: a fix that regressed after a Mushi merge counts as 
   })
 })
 
+describe('isCursorKeyLimitError', () => {
+  it('matches Cursor refusing a dispatch for the account usage limit, nothing else', () => {
+    expect(isCursorKeyLimitError('Cursor API 400 usage_limit_exceeded: On-demand usage is required.')).toBe(true)
+    expect(isCursorKeyLimitError("Cursor API 400 validation_error: Failed to verify existence of branch 'main'")).toBe(false)
+    expect(isCursorKeyLimitError(null)).toBe(false)
+    expect(isCursorKeyLimitError("Cursor run ERROR: You've hit your usage limit for this plan.")).toBe(true)
+    expect(isCursorKeyLimitError('Usage limit reached. Upgrade to continue.')).toBe(true)
+    expect(isCursorKeyLimitError('Cursor API 429 rate_limited: Too many requests')).toBe(false)
+  })
+})
+
 describe('reportsToRetryAfterKeyLimit', () => {
   const now = new Date('2026-10-23T13:00:00Z')
   const limit = 'Cursor API 400 usage_limit_exceeded: On-demand usage is required. Enable on-demand usage at https://www.cursor.com/dashboard?tab=settings to continue using Background Agents.'
-  it('lets a report Cursor refused for the usage limit go again after 30 minutes, at most twice', () => {
+  const unusable = 'Spend-down Cursor key is not usable for this app.'
+  it('lets a report the pinned key could not run go again on the next tick, at most twice', () => {
+    expect(isSpendDownPinnedKeyUnavailable(unusable)).toBe(true)
+    expect(isSpendDownPinnedKeyUnavailable(limit)).toBe(false)
     const out = reportsToRetryAfterKeyLimit(
       [
-        { report_id: 'a', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T12:08:00Z' },
-        { report_id: 'b', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T12:45:00Z' },
-        { report_id: 'c', failure_category: 'cursor_api_error', error: 'Cursor API 500 internal', created_at: '2026-10-23T11:00:00Z' },
+        // Five minutes ago: the next spend-down tick, not a 30-minute wait.
+        { report_id: 'a', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T12:55:00Z' },
+        { report_id: 'b', failure_category: 'cursor_api_error', error: unusable, created_at: '2026-10-23T12:50:00Z' },
+        { report_id: 'c', failure_category: 'cursor_api_error', error: 'Cursor API 500 internal', created_at: '2026-10-23T12:55:00Z' },
         { report_id: 'd', failure_category: 'needs_human', error: 'Agent says this needs a person', created_at: '2026-10-23T10:00:00Z' },
         { report_id: 'e', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T10:00:00Z' },
         { report_id: 'e', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T11:00:00Z' },
         { report_id: 'e', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T12:00:00Z' },
         { report_id: 'f', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T09:00:00Z' },
         { report_id: 'f', failure_category: null, error: null, created_at: '2026-10-23T12:00:00Z' },
+        { report_id: 'g', failure_category: 'unknown', error: unusable, created_at: '2026-10-23T12:50:00Z' },
+        { report_id: 'h', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T13:05:00Z' },
       ],
       now,
     )
-    // a: refused 52 min ago → retry. b: only 15 min ago. c: another API error. d: the agent's answer.
-    // e: refused three times already. f: a later attempt ran.
-    expect([...out]).toEqual(['a'])
+    // a: usage limit 5 min ago. b: pin already unusable 10 min ago.
+    // c: another API error. d: the agent's answer. e: refused three times already.
+    // f: a later attempt ran. g: the unusable message under another category. h: timestamp is in the future.
+    expect([...out].sort()).toEqual(['a', 'b'])
   })
 })
+
+describe('reportsToRetryAfterHold', () => {
+  it('retries a report whose newest PR was held 12 h ago, under three attempts', () => {
+    const now = new Date('2026-10-24T12:00:00Z')
+    const attempts = [
+      { id: 'a1', report_id: 'a', created_at: '2026-10-23T20:00:00Z' },
+      { id: 'b1', report_id: 'b', created_at: '2026-10-24T06:00:00Z' },
+      { id: 'c1', report_id: 'c', created_at: '2026-10-22T00:00:00Z' },
+      { id: 'c2', report_id: 'c', created_at: '2026-10-23T00:00:00Z' },
+      { id: 'd1', report_id: 'd', created_at: '2026-10-20T00:00:00Z' },
+      { id: 'd2', report_id: 'd', created_at: '2026-10-21T00:00:00Z' },
+      { id: 'd3', report_id: 'd', created_at: '2026-10-22T00:00:00Z' },
+      { id: 'e1', report_id: 'e', created_at: '2026-10-20T00:00:00Z' },
+      { id: 'e2', report_id: 'e', created_at: '2026-10-21T00:00:00Z' },
+    ]
+    const held = new Set(['a1', 'b1', 'c2', 'd3', 'e1'])
+    // a: held 16 h ago. b: held only 6 h ago. c: second attempt held. d: three attempts already.
+    // e: the held attempt is not the newest one (a later attempt is merge-approved or still open).
+    expect([...reportsToRetryAfterHold(attempts, held, now)].sort()).toEqual(['a', 'c'])
+  })
+})
+
+describe('spendDownOutrankNote', () => {
+  const project = {
+    id: P1, organization_id: ORG, autofix_enabled: true, has_repo: true, has_legacy_key: false,
+  }
+  const orgKey = (id: string, priority: number, label: string): CursorPoolKey & { label: string } => ({
+    id, label, project_id: null, organization_id: ORG, priority, status: 'active', test_status: 'ok',
+  })
+
+  it('names the org key that pays first', () => {
+    const keys = [orgKey('ayako', 10, 'ayako'), orgKey('spare', 50, 'spare-key')]
+    expect(spendDownOutrankNote('spare', [project], keys)).toBe(
+      'ayako pays for these apps first (priority 10); this key takes over when ayako runs out or is removed',
+    )
+    expect(spendDownOutrankNote('ayako', [project], keys)).toBeNull()
+  })
+
+  it('names a universal key of the same owner, and not another owner\'s', () => {
+    const project = {
+      id: P1, organization_id: ORG, autofix_enabled: true, has_repo: true, has_legacy_key: false,
+      org_owner_ids: ['kenji', 'other'],
+    }
+    const universal = (id: string, priority: number, owner: string | null, label: string) => ({
+      id, label, project_id: null, organization_id: null, owner_user_id: owner, priority, status: 'active', test_status: 'ok',
+    })
+    const same = [universal('ayako', 10, 'kenji', 'ayako'), universal('spare', 50, 'kenji', 'spare-key')]
+    expect(spendDownOutrankNote('spare', [project], same)).toBe(
+      'ayako pays for these apps first (priority 10); this key takes over when ayako runs out or is removed',
+    )
+    const otherOwner = [universal('ayako', 10, 'other', 'ayako'), universal('spare', 50, 'kenji', 'spare-key')]
+    expect(spendDownOutrankNote('spare', [project], otherOwner)).toBeNull()
+    // The winner is selectable, but this key has no owner id: do not borrow the winner's label.
+    const noOwnerOnMine = [universal('ayako', 10, 'kenji', 'ayako'), universal('spare', 50, null, 'spare-key')]
+    expect(spendDownOutrankNote('spare', [project], noOwnerOnMine)).toBeNull()
+  })
+
+  it('stays quiet when an app key, a missing repo, or auto-fix off explains the idle key', () => {
+    const keys = [
+      orgKey('ayako', 10, 'ayako'),
+      orgKey('spare', 50, 'spare-key'),
+      { id: 'own', label: 'hirose', project_id: P1, organization_id: null, priority: 10, status: 'active', test_status: 'ok' },
+    ]
+    expect(spendDownOutrankNote('spare', [project], keys)).toBeNull()
+    expect(spendDownOutrankNote('spare', [{ ...project, has_repo: false }], keys.slice(0, 2))).toBeNull()
+    expect(spendDownOutrankNote('spare', [{ ...project, autofix_enabled: false }], keys.slice(0, 2))).toBeNull()
+  })
+})
+
+describe('a used-up Cursor key hands its apps to the next one (2026-10-24)', () => {
+  it('skips a key whose exhausted_until is in the future, and takes it back after', () => {
+    const project = { id: 'p1', organization_id: 'o1', has_legacy_key: false, org_owner_ids: [] }
+    const keys = [
+      { id: 'ayako', project_id: null, organization_id: 'o1', priority: 10, status: 'active', test_status: 'ok', exhausted_until: '2026-10-24T12:00:00Z' },
+      { id: 'spare', project_id: null, organization_id: 'o1', priority: 50, status: 'active', test_status: 'ok', exhausted_until: null },
+    ]
+    expect(firstCursorKeyFor(project, keys, Date.parse('2026-10-24T08:00:00Z'))).toBe('spare')
+    expect(firstCursorKeyFor(project, keys, Date.parse('2026-10-24T13:00:00Z'))).toBe('ayako')
+  })
+})
+
+describe('an app whose own keys are used up goes to its organization, then universal keys, not its legacy key', () => {
+  it('skips the legacy Integrations key when the app has pool keys of its own', () => {
+    const now = Date.parse('2026-10-24T08:00:00Z')
+    const used = { status: 'active', test_status: 'ok', exhausted_until: '2026-10-29T00:00:00Z' }
+    const glot = { id: 'glot', organization_id: 'kenji', has_legacy_key: true, org_owner_ids: ['owner'] }
+    const keys = [
+      { id: 'hirose', project_id: 'glot', organization_id: null, priority: 100, ...used },
+      { id: 'ayako', project_id: null, organization_id: 'kenji', priority: 10, status: 'active', test_status: 'ok' },
+      { id: 'spare', project_id: null, organization_id: null, owner_user_id: 'owner', priority: 50, status: 'active', test_status: 'ok' },
+    ]
+    expect(firstCursorKeyFor(glot, keys, now)).toBe('ayako')
+    const mushi = { id: 'mushi', organization_id: 'mm', has_legacy_key: true, org_owner_ids: ['owner'] }
+    expect(firstCursorKeyFor(mushi, [{ id: 'hirose-shared', project_id: 'mushi', organization_id: null, priority: 100, ...used }, keys[2]], now)).toBe('spare')
+    // No pool key of its own: the legacy key still comes first (ADR 0023).
+    expect(firstCursorKeyFor({ ...mushi, id: 'other' }, [keys[2]], now)).toBe('legacy')
+  })
+})
+

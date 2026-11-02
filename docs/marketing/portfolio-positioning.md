@@ -15,7 +15,7 @@
 
 These strings are guarded by `scripts/check-positioning-consistency.mjs` and `scripts/check-tagline-consistency.mjs`. This document proposes no edit to any of them:
 
-- the north star: *"Your AI shipped it. Mushi tells you why it broke — in plain English, in your editor, with the fix ready to go — so a bug costs you five minutes instead of your whole afternoon."*;
+- the north star: *"Your AI shipped it. Mushi Mushi tells you why it broke — in plain English, in your editor, with the fix ready to go — so a bug costs you five minutes instead of your whole afternoon."*;
 - the category: *"The bug mediator for AI-built apps"*;
 - the buyer anchor: the solo / indie **vibe coder**;
 - the three will-nots;

@@ -52,6 +52,15 @@ export interface ProductEventPayload {
   /** Idempotency key — unique per (project_id, dedup_key). */
   dedupKey?: string | null
   ts?: string
+  /**
+   * With no `userId`, attribute the event to the owner of the project it is
+   * about (`properties.project_id`), so server milestones such as fix_merged
+   * have an actor (docs/plan-simplicity-2026-10.md Phase 0: 212 fix_merged
+   * rows had none). `properties.actor` records which one it was. Opt-in:
+   * events an anonymous visitor causes (production_check_*, public diagram
+   * views) must stay unattributed.
+   */
+  actorFallback?: 'project_owner'
 }
 
 const SELF_PROJECT_ID = Deno.env.get('MUSHI_SELF_PROJECT_ID') ?? null
@@ -145,6 +154,51 @@ async function isDemoProject(db: SupabaseClient, projectId: unknown): Promise<bo
   return _demoProjectId !== null && projectId === _demoProjectId
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** projects.owner_id per project id; owners rarely change and a stale hit only misattributes one event. */
+const ownerCache = new Map<string, string | null>()
+const OWNER_CACHE_MAX = 500
+
+/** The owner of a project, or null when unknown. Never throws. */
+export async function projectOwnerId(db: SupabaseClient, projectId: unknown): Promise<string | null> {
+  if (typeof projectId !== 'string' || !UUID_RE.test(projectId)) return null
+  if (ownerCache.has(projectId)) return ownerCache.get(projectId) ?? null
+  try {
+    const { data, error } = await db.from('projects').select('owner_id').eq('id', projectId).maybeSingle()
+    if (error) throw new Error(error.message)
+    const owner = ((data as { owner_id?: string | null } | null)?.owner_id) ?? null
+    if (ownerCache.size >= OWNER_CACHE_MAX) ownerCache.clear()
+    ownerCache.set(projectId, owner)
+    return owner
+  } catch (err) {
+    log.warn('product-events: project owner lookup failed, event recorded without an actor', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return null
+  }
+}
+
+/**
+ * True when the console user, or the owner of the project the event is
+ * about, is a synthetic fresh-eyes account (synthetic_accounts, ADR 0053).
+ * A failed check records the event (losing real funnel rows is worse) and
+ * says so; the retention sweep deletes a synthetic account's rows anyway.
+ */
+export async function isSyntheticSubject(db: SupabaseClient, userId: string | null | undefined, projectId: unknown): Promise<boolean> {
+  const user = typeof userId === 'string' && UUID_RE.test(userId) ? userId : null
+  const project = typeof projectId === 'string' && UUID_RE.test(projectId) ? projectId : null
+  if (!user && !project) return false
+  try {
+    const { data, error } = await db.rpc('is_synthetic_subject', { p_user_id: user, p_project_id: project })
+    if (error) throw new Error(error.message)
+    return data === true
+  } catch (err) {
+    log.warn('product-events: synthetic check failed, event recorded', { error: err instanceof Error ? err.message : String(err) })
+    return false
+  }
+}
+
 /** True when the mushi-self project is configured (company funnel enabled). */
 export function isSelfFunnelConfigured(): boolean {
   return Boolean(SELF_PROJECT_ID)
@@ -167,18 +221,25 @@ async function writeProductEvent(db: SupabaseClient, payload: ProductEventPayloa
       log.warn('product-events: invalid event name', { event: payload.eventName })
       return false
     }
-    const properties = payload.properties ?? {}
+    let properties = payload.properties ?? {}
+    let userId = payload.userId ?? null
+    if (payload.actorFallback === 'project_owner') {
+      if (!userId) userId = await projectOwnerId(db, properties.project_id)
+      properties = { ...properties, actor: payload.userId ? 'user' : userId ? 'project_owner' : null }
+    }
     if (JSON.stringify(properties).length > EVENT_PROPERTY_LIMITS.maxBytes) {
       log.warn('product-events: properties too large', { event: payload.eventName })
       return false
     }
+    // Fresh-eyes test accounts and their projects are not people (ADR 0053).
+    if (await isSyntheticSubject(db, userId, properties.project_id)) return false
     // The /connect demo runs on one shared read-only key, so a stranger's
     // tool call would otherwise land on the demo project owner's person row
     // and count as their habit. Tag it and attribute it to nobody.
     const onDemoProject = await isDemoProject(db, properties.project_id)
     let endUserId: string | null = null
-    if (payload.userId && !onDemoProject && projectId === SELF_PROJECT_ID) {
-      endUserId = await resolveSelfEndUser(db, payload.userId)
+    if (userId && !onDemoProject && projectId === SELF_PROJECT_ID) {
+      endUserId = await resolveSelfEndUser(db, userId)
     }
     const { error } = await db.from('product_events').insert({
       project_id: projectId,

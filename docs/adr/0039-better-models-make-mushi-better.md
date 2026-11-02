@@ -64,3 +64,31 @@ First application, in the same PR as this ADR:
   plus a default, not a bare constant.
 - Code review checks for a hard-coded model id outside `_shared/models.ts`
   defaults.
+
+## Amendment 2026-10-31: the organization chooses Claude or OpenAI
+
+The owner, 2026-10-31: "my Claude credits are running low on Claude api. try
+… switching to openai api key for now that is already stored on the
+settings. use latest model with similar model and pricing like opus 5.5."
+
+- `organizations.ai_provider` (`anthropic` default, or `openai`; migration
+  `20261030235848_org_ai_provider.sql`) is set in the console at Settings →
+  AI keys → **Run AI on**, by an organization owner or admin
+  (`PATCH /v1/admin/byok/ai-provider`). Choosing OpenAI with no OpenAI key
+  opens the add-key form instead of refusing.
+- On `openai`, no Claude key reaches any caller. `resolveLlmKeys` returns no
+  Claude keys, and `platformAnthropicKey` replaces every direct read of
+  `ANTHROPIC_API_KEY`. Only pausing the Claude key was not enough: the
+  resolver then fell to the legacy field and the platform key.
+- The pull request review (ADR 0030) runs on the app's OpenAI key when it has
+  no Claude key, never on a platform key. The model is the project's
+  `agent_pr_review_model` when it is a `gpt-…` id, else `OPENAI_PRIMARY`.
+  Verdicts name the reviewer that actually ran ("GPT review: merge").
+- `OPENAI_PRIMARY` is `gpt-6.1-sol` ($2 / $10 per 1M tokens) and `OPENAI_MINI`
+  is `gpt-6-luna` ($0.10 / $0.50), per OpenAI's pricing page as read on
+  2026-10-31. Opus 5.5 is $4 / $20.
+- ADR 0035's second judge is meant to come from a different model family.
+  While an organization runs on OpenAI, both the review and the second judge
+  are OpenAI models. This is accepted for the duration; switching back to
+  Claude restores the two families.
+- Screenshot vision runs on Claude only, and is skipped while on OpenAI.

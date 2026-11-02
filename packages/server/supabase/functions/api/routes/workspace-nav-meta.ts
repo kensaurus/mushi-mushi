@@ -174,6 +174,7 @@ const NAV_META_SLICE_KEYS = [
   'skills',
   'projects',
   'members',
+  'workers',
 ] as const
 
 type NavMetaSliceKey = (typeof NAV_META_SLICE_KEYS)[number]
@@ -391,6 +392,8 @@ export function registerWorkspaceNavMetaRoutes(
       ['costs', projectId ? `/v1/admin/costs/stats?project_id=${encodeURIComponent(projectId)}` : null],
       ['projects', '/v1/admin/projects/stats'],
       ['members', orgId ? `/v1/org/${encodeURIComponent(orgId)}/members/stats` : null],
+      // Local worker flags (ADR 0048 amendment 2026-10-28), served by api-ext.
+      ['workers', '/v1/admin/work/stats'],
     ]
     const paths: string[] = sliceRoutes
       .filter(([key, path]) => path !== null && (!wanted || wanted.has(key)))
@@ -473,6 +476,7 @@ export function registerWorkspaceNavMetaRoutes(
             'totalStories',
             'failingStories',
             'pendingRuns',
+            'lastRunAt',
             'topPriority',
           ])
         : null,
@@ -550,6 +554,7 @@ export function registerWorkspaceNavMetaRoutes(
         'errorCount',
         'warnCount',
         'failedGateCount',
+        'lastRunAt',
         'topPriority',
       ]),
       dashboard: pick(byPath['/v1/admin/dashboard/stats'], [
@@ -589,12 +594,24 @@ export function registerWorkspaceNavMetaRoutes(
         'openFindings',
         'stub',
         'total',
+        'hasInventory',
+        'lastGateRunAt',
         'topPriority',
       ]),
       health: pick(byPath['/v1/admin/health/stats'], [
         'cronErrorCount',
         'redCount',
         'amberCount',
+        'lastLlmCallAt',
+        'topPriority',
+      ]),
+      // Judge stats are already fetched for the disagreement counter
+      // (include=counts). The checks page reads the run, not only the count.
+      judge: pick(byPath['/v1/admin/judge/stats'], [
+        'lastEvalAt',
+        'disagreementCount',
+        'totalEvaluations',
+        'staleHours',
         'topPriority',
       ]),
       fixes: pick(byPath['/v1/admin/fixes/stats'], [
@@ -604,6 +621,7 @@ export function registerWorkspaceNavMetaRoutes(
         'topPriority',
       ]),
       repo: pick(byPath['/v1/admin/repo/stats'], ['prOpen', 'ciFailed', 'topPriority']),
+      workers: pick(byPath['/v1/admin/work/stats'], ['flags', 'danger', 'top']),
       mcp: pick(byPath['/v1/admin/mcp/stats'], [
         'mcpReadKeyCount',
         'neverConnectedCount',
@@ -621,6 +639,7 @@ export function registerWorkspaceNavMetaRoutes(
       settings: pick(byPath['/v1/admin/settings/stats'], [
         'byokKeysFailing',
         'byokKeysUntested',
+        'byokKeysExpiring',
         'byokKeysConfigured',
         'slackConfigured',
         'githubRepoConfigured',
@@ -663,6 +682,7 @@ export function registerWorkspaceNavMetaRoutes(
         'platformConnected',
         'platformTotal',
         'routingPaused',
+        'platformAttention',
       ]),
       featureBoard: pick(byPath['/v1/admin/feature-board/stats'], [
         'openCount',

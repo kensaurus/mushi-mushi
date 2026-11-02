@@ -6,6 +6,7 @@
 import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
+import { failingCiTitle } from '../../lib/countDefinitions'
 import type { RepoStats, RepoTabId } from './RepoStatsTypes'
 
 interface Props {
@@ -63,11 +64,11 @@ export function RepoStatusBanner({
     return (
       <StatusBannerShell
         tone="warn"
-        title={plainBanner ? 'Install the GitHub App' : 'GitHub App not installed'}
+        title={plainBanner ? 'Connect GitHub' : 'GitHub App not installed'}
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.install ?? 'Install app'}</Btn>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.install ?? 'Connect GitHub'}</Btn>
           ) : null
         }
       />
@@ -101,11 +102,7 @@ export function RepoStatusBanner({
     return (
       <StatusBannerShell
         tone="warn"
-        title={
-          plainBanner
-            ? `${stats.ciFailed} branch${stats.ciFailed === 1 ? '' : 'es'} failing CI`
-            : `${stats.ciFailed} branch${stats.ciFailed === 1 ? '' : 'es'} with failing CI`
-        }
+        title={failingCiTitle(stats.ciFailed)}
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (

@@ -15,7 +15,7 @@
  * `<a href="/legal/privacy">` resolves against the origin root and 404s on the
  * kensaur.us deploy (see the changelog-link note in app/layout.tsx).
  */
-import { KensaurusPortfolioTable } from '@mushi-mushi/marketing-ui'
+import { KENSAURUS_FAMILY, KensaurusPortfolioTable } from '@mushi-mushi/marketing-ui'
 import { Footer } from 'nextra-theme-docs'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -80,7 +80,18 @@ export function SiteFooter() {
         </nav>
         <p>
           MIT (SDKs) · AGPLv3 (server) · commercial (enterprise edition) — ©{' '}
-          {new Date().getFullYear()} Mushi Mushi. Built with Nextra.
+          {new Date().getFullYear()} Mushi Mushi. Built with Nextra.{' '}
+          {/* The maker credit shows on every route, including the ones that
+              hide the portfolio table: one small line, not a cross-promo. */}
+          <a
+            href={KENSAURUS_FAMILY.brand.href}
+            className="underline-offset-2 hover:underline"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {KENSAURUS_FAMILY.brand.credit.en}
+          </a>
+          .
         </p>
         {showPortfolio ? <KensaurusPortfolioTable utmSource="mushi-docs" /> : null}
       </div>

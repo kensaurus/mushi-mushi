@@ -29,6 +29,7 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { requireFeature } from '../../_shared/entitlements.ts'
 import { logAudit } from '../../_shared/audit.ts'
+import { invalidateSetupGapsForKey, type KeyOwner } from '../../_shared/setup-gap-invalidate.ts'
 import { dbError, resolveOwnedProject, userCanAccessProject } from '../shared.ts'
 import { byokKeyIdSchema } from '../../_shared/byok-validation.ts'
 import {
@@ -177,8 +178,11 @@ export function registerByokSpendDownRoutes(app: Hono<{ Variables: Variables }>)
       const inScope = (id: string) => !foreignUniversal || (sameOrg?.has(id) ?? false)
       let dispatchedToday = 0
       let served: string[] = []
+      let idleNote: string | null = null
       try {
-        served = (await keyProjects(db, row)).ids
+        const projectsForKey = await keyProjects(db, row)
+        served = projectsForKey.ids
+        idleNote = projectsForKey.idleNote
         dispatchedToday = await keyDispatchesToday(db, row.id, now, foreignUniversal ? [...(sameOrg ?? [])] : undefined)
       } catch (err) {
         return c.json({ ok: false, error: { code: 'DB_ERROR', message: err instanceof Error ? err.message : String(err) } }, 500)
@@ -260,6 +264,8 @@ export function registerByokSpendDownRoutes(app: Hono<{ Variables: Variables }>)
         projects,
         /** Apps this key pays for that the caller cannot open (in this organization, for someone else's universal key). */
         otherApps: served.filter(inScope).length - visible.size,
+        /** Why this key pays for no app, when another key of the same scope is first. */
+        idleNote,
         projectsNote,
         stopLossNote,
         scoreboard,
@@ -435,6 +441,8 @@ export function registerByokSpendDownRoutes(app: Hono<{ Variables: Variables }>)
         provider: 'cursor',
         spendDown: patch,
       }).catch(() => {})
+      // "Auto-fix has a key that can start an agent" reads spend-down: re-check it.
+      await invalidateSetupGapsForKey(db, keyData as unknown as KeyOwner)
       return c.json({
         ok: true,
         data: {

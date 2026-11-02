@@ -2,7 +2,9 @@
  * New-project tab body for Projects hub.
  */
 
+import { useNavigate } from 'react-router-dom'
 import { Btn, ErrorAlert, Input, Section } from '../ui'
+import { PLAN_APP_LIMIT_TITLE, PLANS_HREF } from '../../lib/useCreateProject'
 import { ContainedBlock } from '../report-detail/ReportSurface'
 import {
   ProjectCreatedSuccessPanel,
@@ -21,6 +23,8 @@ export interface ProjectsCreatePanelProps {
   orgDataLoaded: boolean
   canManageProjects: boolean
   activeOrgRole: OrgRole
+  /** The team the app goes into; set only when the person is in several. */
+  teamName?: string | null
   onNavigateTeam: () => void
   newName: string
   onNewNameChange: (value: string) => void
@@ -37,6 +41,7 @@ export function ProjectsCreatePanel({
   orgDataLoaded,
   canManageProjects,
   activeOrgRole,
+  teamName,
   onNavigateTeam,
   newName,
   onNewNameChange,
@@ -46,6 +51,7 @@ export function ProjectsCreatePanel({
   onRetryCreate,
   onClearCreateError,
 }: ProjectsCreatePanelProps) {
+  const navigate = useNavigate()
   return (
     <Section title="Create a project">
       {createdProject ? (
@@ -56,6 +62,12 @@ export function ProjectsCreatePanel({
             <p className="text-2xs leading-relaxed text-fg-muted">
               One project per app or environment — your API key and setup command appear on the next screen.
             </p>
+            {teamName && (
+              <p className="mt-1 text-2xs leading-relaxed text-fg-muted" data-testid="create-project-team">
+                It goes into team <strong className="text-fg-secondary">{teamName}</strong>, so everyone in that team sees it.
+                Switch team at the top to put it somewhere else.
+              </p>
+            )}
           </ContainedBlock>
           {orgDataLoaded && !canManageProjects && (
             <ContainedBlock tone="warn" className="mb-3">
@@ -120,7 +132,9 @@ export function ProjectsCreatePanel({
               <div id="projects-create-error">
                 <ErrorAlert
                   title={
-                    createError.code === 'NO_ORGANIZATION'
+                    createError.code === 'PLAN_APP_LIMIT'
+                      ? PLAN_APP_LIMIT_TITLE
+                      : createError.code === 'NO_ORGANIZATION'
                       ? 'No writable team found'
                       : createError.code === 'FORBIDDEN'
                         ? 'Not allowed in this team'
@@ -131,6 +145,12 @@ export function ProjectsCreatePanel({
                   message={createError.message}
                   code={createError.code}
                   actions={(() => {
+                    if (createError.code === 'PLAN_APP_LIMIT') {
+                      return [
+                        { label: 'See plans', onClick: () => navigate(PLANS_HREF) },
+                        { label: 'Dismiss', onClick: onClearCreateError },
+                      ]
+                    }
                     if (createError.code === 'NO_ORGANIZATION') {
                       return [
                         { label: 'Open team settings', onClick: onNavigateTeam },

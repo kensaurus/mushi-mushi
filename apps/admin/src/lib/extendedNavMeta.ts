@@ -18,6 +18,7 @@ import type { GraphStats } from '../components/graph/GraphStatsTypes'
 import type { HealthStats } from '../components/health/HealthStatsTypes'
 import type { IntelligenceStats } from '../components/intelligence/IntelligenceStatsTypes'
 import type { InventoryStats } from '../components/inventory/InventoryStatsTypes'
+import type { JudgeStats } from '../components/judge/JudgeStatsTypes'
 import type { IterateStats } from '../components/iterate/IterateStatsTypes'
 import type { LessonsStats } from '../components/lessons/LessonsStatsTypes'
 import type { OnboardingStats } from '../components/onboarding/types'
@@ -39,6 +40,7 @@ import type {
   SkillsNavSlice,
   SsoNavSlice,
   StorageNavSlice,
+  WorkersNavSlice,
 } from './remainingNavSliceTypes'
 import type { HealthTone } from './useNavCounts'
 import type { WorkspaceNavBadge } from './workspaceNavMeta'
@@ -64,10 +66,10 @@ export interface NavStatSlices {
     CodeHealthStats,
     'errorCount' | 'warnCount' | 'godFileCount' | 'hasRun' | 'topPriority'
   > | null
-  qaCoverage: Pick<
+  qaCoverage: (Pick<
     QaCoverageStats,
     'totalStories' | 'failingStories' | 'pendingRuns' | 'topPriority'
-  > | null
+  > & { lastRunAt?: string | null }) | null
   experiments: Pick<
     ExperimentsStats,
     'totalExperiments' | 'runningCount' | 'draftsReadyToLaunch' | 'winnersFound' | 'topPriority'
@@ -106,10 +108,10 @@ export interface NavStatSlices {
     ReleasesStats,
     'draftCount' | 'creditsPending' | 'totalReleases' | 'topPriority'
   > | null
-  fullstackAudit: Pick<
+  fullstackAudit: (Pick<
     FullstackAuditStats,
     'errorCount' | 'warnCount' | 'failedGateCount' | 'topPriority'
-  > | null
+  > & { lastRunAt?: string | null }) | null
   dashboard: Pick<
     DashboardStats,
     'openBacklog' | 'fixesFailed' | 'fixesInProgress' | 'integrationIssues' | 'topPriority'
@@ -135,14 +137,18 @@ export interface NavStatSlices {
     GraphStats,
     'regressionEdges' | 'fragileComponents' | 'nodeCount' | 'topPriority'
   > | null
-  inventory: Pick<
+  inventory: (Pick<
     InventoryStats,
     'regressed' | 'openFindings' | 'stub' | 'total' | 'topPriority'
-  > | null
-  health: Pick<
+  > & { hasInventory?: boolean; lastGateRunAt?: string | null }) | null
+  health: (Pick<
     HealthStats,
     'cronErrorCount' | 'redCount' | 'amberCount' | 'topPriority'
-  > | null
+  > & { lastLlmCallAt?: string | null }) | null
+  judge: (Pick<
+    JudgeStats,
+    'lastEvalAt' | 'disagreementCount' | 'totalEvaluations' | 'topPriority'
+  > & { staleHours?: number | null }) | null
   fixes: Pick<FixesStats, 'failed' | 'inProgress' | 'specWarnings' | 'topPriority'> | null
   repo: Pick<RepoStats, 'prOpen' | 'ciFailed' | 'topPriority'> | null
   mcp: McpNavSlice | null
@@ -156,6 +162,7 @@ export interface NavStatSlices {
   integrations: IntegrationsNavSlice | null
   featureBoard: FeatureBoardNavSlice | null
   skills: SkillsNavSlice | null
+  workers: WorkersNavSlice | null
 }
 
 export const EMPTY_NAV_STAT_SLICES: NavStatSlices = {
@@ -181,6 +188,7 @@ export const EMPTY_NAV_STAT_SLICES: NavStatSlices = {
   graph: null,
   inventory: null,
   health: null,
+  judge: null,
   fixes: null,
   repo: null,
   mcp: null,
@@ -194,6 +202,7 @@ export const EMPTY_NAV_STAT_SLICES: NavStatSlices = {
   integrations: null,
   featureBoard: null,
   skills: null,
+  workers: null,
 }
 
 function attentionBadge(
@@ -574,22 +583,13 @@ export function fullstackAuditNavBadge(
   return null
 }
 
+/**
+ * Home's own count. Failed fixes and integration issues are not repeated
+ * here: Fixes and Integrations sit right below Home in the sidebar and carry
+ * them (owner walk, 2026-10-28: "48" on both Home and Fixes).
+ */
 export function dashboardNavBadge(stats: NavStatSlices['dashboard']): WorkspaceNavBadge | null {
   if (!stats) return null
-  if (stats.fixesFailed > 0) {
-    return attentionBadge(
-      stats.fixesFailed,
-      'danger',
-      `${stats.fixesFailed} failed fix${stats.fixesFailed === 1 ? '' : 'es'} on dashboard`,
-    )
-  }
-  if (stats.integrationIssues > 0) {
-    return attentionBadge(
-      stats.integrationIssues,
-      'warn',
-      `${stats.integrationIssues} integration issue${stats.integrationIssues === 1 ? '' : 's'}`,
-    )
-  }
   if (stats.openBacklog > 0 && stats.topPriority === 'backlog') {
     return attentionBadge(
       stats.openBacklog,
@@ -597,13 +597,8 @@ export function dashboardNavBadge(stats: NavStatSlices['dashboard']): WorkspaceN
       `${stats.openBacklog} open report${stats.openBacklog === 1 ? '' : 's'} in backlog`,
     )
   }
-  if (stats.fixesInProgress > 0) {
-    return attentionBadge(
-      stats.fixesInProgress,
-      'ok',
-      `${stats.fixesInProgress} fix${stats.fixesInProgress === 1 ? '' : 'es'} in progress`,
-    )
-  }
+  // Fixes in progress are the Fixes item's own badge; Home repeating them showed
+  // one number twice in the sidebar (console sweep #30).
   return null
 }
 
@@ -786,6 +781,13 @@ export function repoStatsNavBadge(stats: NavStatSlices['repo']): WorkspaceNavBad
   return null
 }
 
+/** Pipeline: a local worker stopped doing useful work (stuck run, offline, account check…). Never hidden. */
+export function workersNavBadge(stats: NavStatSlices['workers']): WorkspaceNavBadge | null {
+  if (!stats || stats.flags <= 0) return null
+  const what = `${stats.flags} local worker problem${stats.flags === 1 ? '' : 's'}`
+  return attentionBadge(stats.flags, stats.danger > 0 ? 'danger' : 'warn', stats.top ? `${what}: ${stats.top}` : what)
+}
+
 export function mcpNavBadge(stats: NavStatSlices['mcp']): WorkspaceNavBadge | null {
   if (!stats) return null
   if (stats.endpointMismatch) {
@@ -851,6 +853,14 @@ export function settingsNavBadge(stats: NavStatSlices['settings']): WorkspaceNav
       `${stats.byokKeysFailing} BYOK key${stats.byokKeysFailing === 1 ? '' : 's'} failing probe`,
     )
   }
+  const expiring = stats.byokKeysExpiring ?? 0
+  if (expiring > 0) {
+    return attentionBadge(
+      expiring,
+      'warn',
+      `${expiring} BYOK key${expiring === 1 ? '' : 's'} expiring soon`,
+    )
+  }
   if (stats.byokKeysUntested > 0) {
     return attentionBadge(
       stats.byokKeysUntested,
@@ -858,12 +868,9 @@ export function settingsNavBadge(stats: NavStatSlices['settings']): WorkspaceNav
       `${stats.byokKeysUntested} BYOK key${stats.byokKeysUntested === 1 ? '' : 's'} untested`,
     )
   }
-  if (stats.byokKeysConfigured > 0) {
-    return inventoryBadge(
-      stats.byokKeysConfigured,
-      `${stats.byokKeysConfigured} BYOK key${stats.byokKeysConfigured === 1 ? '' : 's'} configured`,
-    )
-  }
+  // No inventory count here. A number next to Settings reads as "N things to
+  // fix", which contradicted the page's own "everything is working" banner
+  // when every saved key was healthy. Settings badges only real attention.
   return null
 }
 
@@ -1004,14 +1011,20 @@ export function integrationsNavBadge(
       `${stats.platformDown} integration${stats.platformDown === 1 ? '' : 's'} down`,
     )
   }
-  const disconnected = stats.platformTotal - stats.platformConnected
-  if (disconnected > 0 && stats.platformConnected === 0) {
+  // platformAttention from /v1/admin/integrations/stats ("N connections need
+  // attention"). Checked before the not-configured count: with nothing saved,
+  // that count is platformTotal, and the banner's number is platformAttention.
+  const attention = stats.platformAttention ?? 0
+  if (attention > 0) {
     return attentionBadge(
-      disconnected,
+      attention,
       'warn',
-      `${disconnected} platform integration${disconnected === 1 ? '' : 's'} not configured`,
+      `${attention} connection${attention === 1 ? '' : 's'} need${attention === 1 ? 's' : ''} attention`,
     )
   }
+  // Nothing connected is not a problem: every integration is optional
+  // (standalone-first). Setup and its GitHub step say what is worth adding,
+  // so a new account does not open on a warning count here.
   if (stats.routingPaused > 0) {
     return attentionBadge(
       stats.routingPaused,

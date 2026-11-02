@@ -20,7 +20,7 @@
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { join, relative, resolve } from 'node:path'
+import { join, relative, resolve, sep } from 'node:path'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
 import { makeFakeDb, type FakeDb, type Row } from './__stubs__/fake-supabase.ts'
@@ -468,7 +468,7 @@ describe('a hold cannot be unlinked, re-rolled or merged before the review (seco
         const full = join(dir, name)
         if (statSync(full).isDirectory()) walk(full)
         else if (name.endsWith('.ts') && /mergeGithubPullRequest\(/.test(readFileSync(full, 'utf8').replace(/export async function mergeGithubPullRequest\(/, ''))) {
-          callers.push(relative(root, full))
+          callers.push(relative(root, full).split(sep).join('/'))
         }
       }
     }
@@ -494,6 +494,23 @@ describe('cross-project and URL spelling (final review of #534)', () => {
       expect(res.status).toBe(400)
       expect(res.json.error.code).toBe('INVALID_PR_URL')
     }
+  })
+
+  it('a completed PATCH with a PR moves an open report to fixing, never a fixed one back (mushi work, 2026-10-24)', async () => {
+    db = makeDb({
+      fix_attempts: [attempt({ id: OTHER_FIX, agent: 'mcp', pr_url: null, pr_number: null, commit_sha: null })],
+      reports: [{ id: 'rep-1', project_id: P, status: 'classified' }],
+    })
+    const res = await call('PATCH', `/v1/admin/fixes/${OTHER_FIX}`, { status: 'completed', pr_url: 'https://github.com/o/r/pull/7', branch: 'bugfix/y' })
+    expect(res.status).toBe(200)
+    expect(db.tables.reports[0]).toMatchObject({ status: 'fixing', fix_pr_url: 'https://github.com/o/r/pull/7' })
+
+    db = makeDb({
+      fix_attempts: [attempt({ id: OTHER_FIX, agent: 'mcp', pr_url: null, pr_number: null, commit_sha: null })],
+      reports: [{ id: 'rep-1', project_id: P, status: 'fixed' }],
+    })
+    await call('PATCH', `/v1/admin/fixes/${OTHER_FIX}`, { status: 'completed', pr_url: 'https://github.com/o/r/pull/8' })
+    expect(db.tables.reports[0].status).toBe('fixed')
   })
 
   it('a fix attempt pointed at a repo the project does not have cannot merge it (403 REPO_NOT_IN_PROJECT)', async () => {

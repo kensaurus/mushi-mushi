@@ -238,6 +238,19 @@ export function knownProjectTeam(projectId: string): string | null {
 }
 
 /**
+ * False when the list holds a project this browser knows belongs to another
+ * team: on a team switch the old team's list can come back re-wrapped before
+ * the refetch lands, and resolving against it put the old team's project in
+ * the URL, which then pulled the team back (2026-10-30). Unknown projects
+ * count as this team's.
+ */
+export function listBelongsToTeam(projectIds: readonly string[], teamId: string | null): boolean {
+  if (!teamId) return true
+  const map = readMap(PROJECT_TEAM_KEY)
+  return projectIds.every((id) => !map[id] || map[id] === teamId)
+}
+
+/**
  * The project to show when a link names one the user cannot open: the one
  * last used in this team if it is still listed, else the team's first.
  * null when the team has no projects.

@@ -12,6 +12,9 @@
  *          The open error / warning totals lead (the same numbers the
  *          Full-stack audit stats count), checks with open findings follow,
  *          and checks with nothing open collapse into one disclosure.
+ *          A check's disclosure names that check's open count. When the list
+ *          is capped, it says how many of that count are shown, so it never
+ *          disagrees with the "N open" badge.
  *
  * Data: GET /v1/admin/inventory/:projectId/findings[?gate=]
  */
@@ -22,6 +25,7 @@ import { PageLoadError } from '../PageLoadError'
 import { GateFindingCard } from '../inventory/GateFindingCard'
 import { ApplySuggestedCapsButton } from './ApplySuggestedCapsButton'
 import { DismissFindingButton } from './DismissFindingButton'
+import { CopyFixPromptButton } from './CopyFixPromptButton'
 import { usePageData } from '../../lib/usePageData'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import {
@@ -46,9 +50,21 @@ interface Props {
   limit?: number
   /** Change it to read the findings again, e.g. after "Run audit". */
   refreshKey?: number
+  /**
+   * Exact open totals counted on the server (fullstack-audit/stats). The list
+   * route stops at 50 runs and 500 findings, so totals counted from it are a
+   * floor; when these are given they are shown instead, with no "at least".
+   */
+  totals?: { errors: number; warnings: number } | null
+  /**
+   * Checks whose findings another card on the same page lists in full (the
+   * audit's Known holes card): shown here as one line with the open count
+   * and a link, so the same findings are never listed twice.
+   */
+  shownElsewhere?: Partial<Record<string, { label: string; to: string }>>
 }
 
-export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50, refreshKey = 0 }: Props) {
+export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50, refreshKey = 0, totals = null, shownElsewhere = {} }: Props) {
   const path = `/v1/admin/inventory/${encodeURIComponent(projectId)}/findings${gate ? `?gate=${gate}` : ''}`
   const { data, loading, error, errorCode, reload } = usePageData<GateFindingsPayload>(path, { deps: [projectId, gate ?? '', refreshKey] })
 
@@ -77,8 +93,10 @@ export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50,
   const open = groups.filter((g) => !isQuiet(g))
   const quiet = groups.filter(isQuiet)
   const allPass = quiet.every((g) => g.status === 'pass')
-  const errors = findings.filter((f) => f.severity === 'error').length
-  const warnings = findings.filter((f) => f.severity === 'warn').length
+  const errors = totals?.errors ?? findings.filter((f) => f.severity === 'error').length
+  const warnings = totals?.warnings ?? findings.filter((f) => f.severity === 'warn').length
+  // Counted from a cut-short list only when no exact totals came in.
+  const floor = truncated && !totals
   const withFindings = groups.filter((g) => g.findings.some((f) => f.severity === 'error' || f.severity === 'warn')).length
 
   return (
@@ -95,17 +113,33 @@ export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50,
       {errors + warnings > 0 && (
         <p className="text-xs text-fg-secondary" data-testid="gate-findings-totals">
           {/* Past the route's caps the list is cut short, so its totals are a floor. */}
-          {truncated ? 'At least ' : ''}
+          {floor ? 'At least ' : ''}
           <span className={errors > 0 ? 'font-semibold text-danger' : ''}>{errors.toLocaleString()} error{errors === 1 ? '' : 's'}</span>
           {' · '}
           <span className={warnings > 0 ? 'font-semibold text-warn' : ''}>{warnings.toLocaleString()} warning{warnings === 1 ? '' : 's'}</span>
-          {' open in '}
-          {withFindings} check{withFindings === 1 ? '' : 's'}
+          {' open'}
+          {/* A cut-short list can miss a whole check, so the check count is only given when the read is complete. */}
+          {truncated ? '' : ` in ${withFindings} check${withFindings === 1 ? '' : 's'}`}
+          {floor ? ' (only the newest 500 findings were read, so there may be more)' : ''}
         </p>
       )}
-      {open.map((g) => (
-        <CheckGroupCard key={g.gate} projectId={projectId} group={g} limit={limit} onChanged={reload} />
-      ))}
+      {open.map((g) => {
+        const elsewhere = shownElsewhere[g.gate]
+        if (elsewhere) {
+          return (
+            <Card key={g.gate} className="flex flex-wrap items-center justify-between gap-2 p-3" data-check={g.gate} data-testid="gate-shown-elsewhere">
+              <span className="text-sm font-semibold text-fg">{gateLabel(g.gate)}</span>
+              <span className="text-xs text-fg-secondary">
+                {g.open.toLocaleString()} open ·{' '}
+                <Link to={elsewhere.to} className={LINK_ACCENT}>
+                  {elsewhere.label} →
+                </Link>
+              </span>
+            </Card>
+          )
+        }
+        return <CheckGroupCard key={g.gate} projectId={projectId} group={g} limit={limit} onChanged={reload} />
+      })}
       {quiet.length > 0 && (
         <details className="rounded-md border border-edge-subtle px-3 py-2" data-testid="gate-checks-passing">
           <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg">
@@ -127,6 +161,18 @@ const STATUS_TEXT: Record<string, { label: string; tone: string }> = {
   error: { label: 'Could not finish', tone: 'text-danger' },
   warn: { label: 'Needs a look', tone: 'text-warn' },
   pass: { label: 'Passing', tone: 'text-ok' },
+}
+
+/**
+ * Label for a check's findings disclosure. Small groups say "Findings".
+ * Larger ones name the open count. A capped list says how many of that
+ * count are on the page, so "230 open" is never paired with "Show the 50 findings".
+ */
+function findingsDisclosureLabel(open: number, shown: number): string {
+  if (open <= 3) return 'Findings'
+  const total = open.toLocaleString()
+  if (shown < open) return `Show ${shown.toLocaleString()} of ${total} findings`
+  return `Show the ${total} findings`
 }
 
 /**
@@ -173,7 +219,7 @@ function CheckGroupCard({ projectId, group: g, limit, onChanged }: { projectId: 
       {g.open > 0 && (
         <details open={g.open <= 3}>
           <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg">
-            {g.open <= 3 ? 'Findings' : `Show the ${Math.min(g.open, limit)} findings`}
+            {findingsDisclosureLabel(g.open, shown.length)}
           </summary>
           <div className="mt-2 flex flex-col gap-2">
             {shown.map((f) => {
@@ -184,6 +230,7 @@ function CheckGroupCard({ projectId, group: g, limit, onChanged }: { projectId: 
                   f={f}
                   action={
                     <>
+                      <CopyFixPromptButton finding={f} />
                       {caps && <ApplySuggestedCapsButton projectId={projectId} values={caps} />}
                       <DismissFindingButton projectId={projectId} findingId={f.id} onDismissed={onChanged} />
                     </>

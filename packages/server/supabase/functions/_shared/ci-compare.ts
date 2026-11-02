@@ -24,7 +24,8 @@
 
 import { runnerBaseName, runnerKindOf, runnerNameMatches, type CiRunnerKind } from './ci-infra.ts'
 import { billedMinutesOf, GITHUB_RUNNER_RATES, RUNNER_PRICE_RATIO, runnerOsOf, usdPerMinuteFor, type RunnerOs } from './ci-minutes.ts'
-import { adviseCiCost, percentile } from './ci-advisor.ts'
+import { adviseCiCost, percentile, type CostAdvisorInput } from './ci-advisor.ts'
+import type { CostFacts } from './ci-cost-facts.ts'
 import {
   accountMonthCost,
   allocate,
@@ -470,6 +471,10 @@ export interface CompareInput {
   variableNames: Record<string, string[] | null>
   /** How many what-ifs to return (default MAX_WHAT_IFS); the placement preview asks for all. */
   whatIfLimit?: number
+  /** Billed minutes per event, branch, PR and step for the cost rules (ci_cost_facts); null = those rules stay silent. */
+  costFacts?: CostFacts | null
+  /** ci_pull_requests rows; null when they could not be read. */
+  pullRequests?: CostAdvisorInput['pullRequests']
 }
 
 interface MachineInfo {
@@ -944,6 +949,8 @@ export function buildCiCompare(input: CompareInput): CiCompare {
     parsed: parsedByRepo,
     pinned: explain.pinned,
     tinyJobs: groupsPrivateHosted.map((g) => ({ repo: g.repo, jobs: g.tiny_jobs, rawSeconds: g.tiny_raw_seconds, billedMinutes: g.billed_minutes, allJobs: g.jobs })),
+    facts: input.costFacts ?? null,
+    pullRequests: input.pullRequests ?? null,
   })
 
   const settingsList = [...input.settingsByOrg.values()]

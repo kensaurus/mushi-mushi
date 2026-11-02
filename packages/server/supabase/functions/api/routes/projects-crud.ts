@@ -16,9 +16,12 @@ import { apiKeyAuth, jwtAuth } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { emitProductEvent } from '../../_shared/product-events.ts';
 import { dbError, enumerateAccessibleProjectIds } from '../shared.ts';
+import { resolvePlanForScope } from '../../_shared/entitlements.ts';
+import { appLimitDenial } from '../../_shared/plan-app-limit.ts';
+import { insertProjectWithFreeSlug } from '../../_shared/project-slug.ts';
 import { failedFixPreviews, loadRecentFixTruths } from '../../_shared/fix-report-truth-load.ts';
 import { projectCapabilities } from '../../_shared/project-capabilities.ts';
-import { loadProjectCounts } from '../../_shared/setup-signals.ts';
+import { freshestHeartbeat, isSdkKey, loadProjectCounts } from '../../_shared/setup-signals.ts';
 
 /**
  * Exact report count per project, one `head: true` count query each. Never
@@ -670,6 +673,9 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       activeKeyCount: 0,
       projectsWithReports: 0,
       sdkConnectedCount: 0,
+      /** Projects with no SDK-key heartbeat (first 5 by name), so a banner can name them. */
+      sdkMissingProjects: [] as Array<{ id: string; name: string; createdAt: string | null }>,
+      sdkMissingCount: 0,
       neverIngestedCount: 0,
       reportsLast24h: 0,
       reportsLast30d: 0,
@@ -682,6 +688,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         | 'no_projects'
         | 'never_ingested'
         | 'no_sdk_heartbeat'
+        | 'sdk_missing'
         | 'partial_ingest'
         | 'healthy',
       topPriorityLabel: null as string | null,
@@ -704,7 +711,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
     ] = await Promise.all([
       db
         .from('project_api_keys')
-        .select('project_id, is_active, last_seen_at')
+        .select('project_id, is_active, last_seen_at, scopes')
         .in('project_id', accessibleIds),
       // Which projects have at least one report: one exact head count per
       // project. Reading every report row stopped at PostgREST's row cap, so
@@ -734,16 +741,28 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
     if (r30Err) return dbError(c, r30Err);
 
     const activeKeyCount = (keyRows ?? []).filter((k) => k.is_active !== false).length;
-    const sdkConnectedProjects = new Set<string>();
+    // "SDK connected" means an SDK key (report:write, no MCP scope) has a
+    // heartbeat: a CLI or MCP key's calls are not the app's SDK.
+    const sdkKeysByProject = new Map<string, Array<{ last_seen_at?: string | null }>>();
     let staleKeyCount = 0;
     for (const k of keyRows ?? []) {
-      const lastSeen = (k as { last_seen_at?: string | null }).last_seen_at;
-      if (lastSeen) {
-        sdkConnectedProjects.add(k.project_id as string);
-      } else if (k.is_active !== false) {
-        staleKeyCount += 1;
-      }
+      const row = k as { project_id: string; is_active?: boolean; last_seen_at?: string | null; scopes?: string[] | null };
+      if (row.is_active !== false && !row.last_seen_at) staleKeyCount += 1;
+      if (row.is_active === false || !isSdkKey(row.scopes)) continue;
+      sdkKeysByProject.set(row.project_id, [...(sdkKeysByProject.get(row.project_id) ?? []), row]);
     }
+    const sdkConnectedProjects = new Set<string>(
+      accessibleIds.filter((id) => freshestHeartbeat(sdkKeysByProject.get(id) ?? []) !== null),
+    );
+    // The public demo app (sample data, never ships an SDK) is not "missing" one.
+    const { data: demoRow } = await db.from('mushi_runtime_config').select('value').eq('key', 'demo_project_id').maybeSingle();
+    const demoProjectId = (demoRow as { value?: unknown } | null)?.value;
+    const sdkMissingIds = accessibleIds.filter((id) => !sdkConnectedProjects.has(id) && id !== demoProjectId);
+    const { data: missingRows } = sdkMissingIds.length > 0
+      ? await db.from('projects').select('id, name, created_at').in('id', sdkMissingIds).order('name').limit(5)
+      : { data: [] };
+    // createdAt lets the console tell a just-made app (setup left) from a broken one.
+    const sdkMissingProjects = ((missingRows ?? []) as Array<{ id: string; name: string; created_at?: string }>).map((r) => ({ id: r.id, name: r.name, createdAt: r.created_at ?? null }));
     const projectsWithReportsSet = new Set<string>(reportProjectRows ?? []);
 
     const projectCount = accessibleIds.length;
@@ -777,6 +796,13 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       topPriority = 'no_sdk_heartbeat';
       topPriorityLabel = 'Reports are landing but no API key shows a SDK heartbeat — expand a project card and compare endpoint host vs this admin.';
       topPriorityTo = '/projects?tab=list';
+    } else if (sdkMissingIds.length > 0) {
+      // Not "all ingesting" while an app has never sent an SDK heartbeat: name it and open its fixes.
+      const names = sdkMissingProjects.map((p) => p.name);
+      const more = sdkMissingIds.length - names.length;
+      topPriority = 'sdk_missing';
+      topPriorityLabel = `${names.join(', ')}${more > 0 ? ` and ${more} more` : ''} ${sdkMissingIds.length === 1 ? 'has' : 'have'} no SDK heartbeat · ${sdkConnectedCount}/${projectCount} connected.`;
+      topPriorityTo = sdkMissingProjects[0] ? `/connect?project=${encodeURIComponent(sdkMissingProjects[0].id)}#connect-sdk-health` : '/projects?tab=list';
     } else if (neverIngestedCount > 0) {
       topPriority = 'partial_ingest';
       topPriorityLabel = `${neverIngestedCount} project${neverIngestedCount === 1 ? '' : 's'} never ingested · ${projectsWithReports}/${projectCount} receiving reports · ${sdkConnectedCount} with SDK heartbeat.`;
@@ -794,6 +820,8 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         activeKeyCount,
         projectsWithReports,
         sdkConnectedCount,
+        sdkMissingProjects,
+        sdkMissingCount: sdkMissingIds.length,
         neverIngestedCount,
         reportsLast24h: reports24h ?? 0,
         reportsLast30d: reports30d ?? 0,
@@ -943,40 +971,34 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       );
     }
 
-    // Slug derivation:
-    //   1. Lowercase, collapse non-alphanumerics to '-', trim leading /
-    //      trailing dashes — the historical shape.
-    //   2. If the user typed something like "!!!" or all-emoji that
-    //      reduces to an empty string, fall back to a short random tail
-    //      so we never write an empty slug. Empty slugs broke the slug
-    //      UNIQUE constraint as soon as a second emoji-named project
-    //      landed AND surfaced in the URL as `/projects//settings`,
-    //      which the React Router stopped resolving cleanly.
-    //   3. Cap the length at 48 chars so the slug fits in the URL bar
-    //      and in the audit log without truncation. Random suffixes
-    //      append AFTER the trim so a long-name + collision retry
-    //      below stays under the column cap.
-    let slug = name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 48);
-    if (!slug) {
-      slug = `project-${crypto.randomUUID().slice(0, 8)}`;
+    // The plan's app limit (docs/plan-pricing.md, 2026-10-28): apps watched
+    // is what a plan sells. Only a new app is refused; existing apps stay.
+    {
+      const [plan, { count, error: countErr }] = await Promise.all([
+        resolvePlanForScope(db, { organizationId }),
+        db.from('projects').select('id', { count: 'exact', head: true }).eq('organization_id', organizationId),
+      ]);
+      if (countErr) return dbError(c, countErr);
+      const denial = appLimitDenial(plan, count ?? 0);
+      if (denial) {
+        return c.json(
+          { ok: false, error: { code: denial.code, message: denial.message }, data: { limit: denial.limit, used: denial.used, upgradeTo: denial.upgradeTo } },
+          402,
+        );
+      }
     }
-    const { data, error } = await db
-      .from('projects')
-      .insert({
-        name: name.trim(),
-        slug,
-        owner_id: userId,
-        organization_id: organizationId,
-      })
-      .select('id')
-      .single();
 
-    if (error) return dbError(c, error);
+    // Slugs are unique across every account, so a name someone else already
+    // used ("My SaaS App", our own placeholder) gets a short random tail
+    // instead of a 500 (_shared/project-slug.ts). Empty or emoji-only names
+    // get `project-<random>`; slugs stay ≤48 chars.
+    const { data, error } = await insertProjectWithFreeSlug(db, {
+      name: name.trim(),
+      owner_id: userId,
+      organization_id: organizationId,
+    });
+
+    if (error || !data) return dbError(c, error);
 
     // Company funnel (mushi-self): fire-and-forget, never on the response path.
     void emitProductEvent(db, {
@@ -1050,7 +1072,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
 
     // apiKeyId lets the success panel rotate exactly this key (QA #31).
     return c.json(
-      { ok: true, data: { id: data.id, slug, apiKey: autoKey, keyPrefix: autoKeyPrefix, apiKeyId: autoKeyId } },
+      { ok: true, data: { id: data.id, slug: data.slug, apiKey: autoKey, keyPrefix: autoKeyPrefix, apiKeyId: autoKeyId } },
       201,
     );
   });

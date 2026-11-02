@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ACT_BLOCKER_COPY, ACT_BLOCKER_STAMP, actBlocker, fixFailureBucket } from './pdcaAct'
+import { ACT_BLOCKER_COPY, ACT_BLOCKER_STAMP, actBlocker, agentFlaggedFix, fixFailureBucket } from './pdcaAct'
 import { STAMP_VISUAL } from './pdcaStamp'
 import { getMergeBlockerReason, pickPrimaryFixAttempt } from './mergeFix'
 
@@ -27,8 +27,17 @@ describe('actBlocker', () => {
   })
 
   it('an agent review flag with green CI asks for review', () => {
-    expect(actBlocker({ ...PR_424, check_run_conclusion: 'success' })).toBe('needs_review')
+    const flagged = { ...PR_424, check_run_conclusion: 'success', review_reasoning: 'Touches the payment path; a person should read it.' }
+    expect(actBlocker(flagged)).toBe('needs_review')
+    expect(actBlocker({ ...PR_424, check_run_conclusion: 'success', error: 'review_failed: the fix model flagged its own change' })).toBe('needs_review')
     expect(ACT_BLOCKER_COPY.needs_review).toMatch(/^Needs review/)
+  })
+
+  it('review_passed false with no reason is the column default, not a flag (report 9831ade8)', () => {
+    const green = { ...PR_424, check_run_conclusion: 'success' }
+    expect(agentFlaggedFix(green)).toBe(false)
+    expect(actBlocker(green)).toBeNull()
+    expect(agentFlaggedFix({ review_passed: null, review_reasoning: 'x' })).toBe(false)
   })
 
   it('a clean open PR, a merged PR, or no PR has no blocker', () => {
@@ -82,5 +91,20 @@ describe('merge affordances for a closed PR', () => {
     const closed = { ...PR_424, pr_state: 'closed' }
     const retry = { status: 'running', pr_url: null, pr_state: null }
     expect(pickPrimaryFixAttempt([closed, retry])).toBe(retry)
+  })
+})
+
+describe("a local agent's verdict in its error line", () => {
+  // 22 of mushi-mushi's 32 "Unrecognised error" reports (2026-10-29) were
+  // verdicts `mushi work` sent only as error text; "Retry" would stop the same way.
+  it('buckets by the verdict when no failure_category was stored', () => {
+    const failed = { status: 'failed', pr_url: null, failure_category: null }
+    expect(fixFailureBucket({ ...failed, error: 'Agent found nothing to change: already handled in PR 880' })).toBe('already_fixed')
+    expect(fixFailureBucket({ ...failed, error: 'Agent says this needs a person: pick a budget' })).toBe('needs_human')
+    expect(fixFailureBucket({ ...failed, error: 'Local agent finished without a change: nothing' })).toBe('unknown')
+  })
+
+  it('a stored category still wins', () => {
+    expect(fixFailureBucket({ status: 'failed', failure_category: 'sandbox_timeout', error: 'Agent found nothing to change: x' })).toBe('sandbox_timeout')
   })
 })

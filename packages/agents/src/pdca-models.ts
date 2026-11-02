@@ -14,7 +14,7 @@
 export const PDCA_DEFAULT_MODEL = 'claude-sonnet-5-5'
 
 /** OpenAI model used only when the Claude call fails (same as the server's OPENAI_PRIMARY). */
-export const PDCA_OPENAI_FALLBACK_MODEL = 'gpt-5.4'
+export const PDCA_OPENAI_FALLBACK_MODEL = 'gpt-6.1-sol'
 
 /**
  * Room for adaptive thinking: the 5.x models think by default and the
@@ -26,13 +26,15 @@ export const PDCA_MAX_OUTPUT_TOKENS = 16_000
 /** Claude models a caller may pick for the producer or the critic. */
 export const PDCA_CLAUDE_MODELS = ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-4-5'] as const
 export type PdcaClaudeModel = (typeof PDCA_CLAUDE_MODELS)[number]
-export type PdcaPricedModel = PdcaClaudeModel | typeof PDCA_OPENAI_FALLBACK_MODEL
+/** gpt-5.4 was the fallback until 2026-10-31; kept so earlier runs still price. */
+export type PdcaPricedModel = PdcaClaudeModel | typeof PDCA_OPENAI_FALLBACK_MODEL | 'gpt-5.4'
 
 /** USD per 1M tokens, copied from packages/server/supabase/functions/_shared/pricing.ts. */
 export const PDCA_PRICING_PER_M_TOKENS: Readonly<Record<PdcaPricedModel, { in: number; out: number }>> = {
   'claude-sonnet-5-5': { in: 2.0, out: 10.0 },
   'claude-opus-5-5': { in: 4.0, out: 20.0 },
   'claude-haiku-4-5': { in: 1.0, out: 5.0 },
+  'gpt-6.1-sol': { in: 2.0, out: 10.0 },
   'gpt-5.4': { in: 5.0, out: 15.0 },
 }
 

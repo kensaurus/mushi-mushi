@@ -1,27 +1,29 @@
-# Reports & triage
+# Bugs
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/reports
 
 ---
-title: Reports & triage
-description: The Reports list is Mushi's bug inbox — filter by status, severity, category and component, and start with the recommended action at the top.
+title: Bugs
+description: The Bugs page is the Mushi Mushi bug list. Filter by status, severity, category and component, and start with the recommended action at the top.
 ---
 
-# Reports
+# Bugs
 
-The Reports list is your inbox — every user report, filterable by status, severity,
-category, component, and free text. A **Recommended action** card at the top tells you
-what needs attention first (for example, critical items waiting for a human look).
+**Route:** `/reports` (sidebar: **Bugs**)
+
+The **Bugs** page is your Mushi Mushi inbox: every report, filterable by status,
+severity, category, component and free text. A recommended-action card at the top tells
+you what needs attention first (for example, critical items waiting for a human look).
 
 ## Diagnosis + Fix hero
 
 The top of every report detail leads with the brand promise — *plain-English
 diagnosis + a paste-ready fix* — as a single block:
 
-1. **"Here's why it broke"** — a 1–3 sentence plain-English diagnosis (the
+1. **"Here's why it broke"**: a 1–3 sentence plain-English diagnosis (the
    Stage-2 `summary`) with severity, category, and a **confidence chip**
    (`NN% sure`), plus the likely component.
-2. **"Fix it with your coding agent"** — **Copy fix prompt** copies one
+2. **"Fix it with your coding agent"**: **Copy fix prompt** copies one
    self-contained prompt: what broke, why, the suggested fix, how to reproduce,
    the page, browser and OS, the most relevant console and network lines, the
    likely files, what "done" means, and a last step to open a PR that
@@ -30,8 +32,8 @@ diagnosis + a paste-ready fix* — as a single block:
    Cursor** (IDE deeplink or cloud agent) and **Use MCP** (the tool-driven
    prompt for agents with Mushi MCP connected) sit underneath.
 
-**Fail-graceful, by design.** Accuracy matters most for this audience — a
-confident-but-wrong diagnosis is worse than none — so when classifier
+**Fail-graceful, by design.** Accuracy matters most for this audience: a
+confident-but-wrong diagnosis is worse than none. So when classifier
 confidence is **below 0.7** (or the summary is missing), the header flips to
 **"Not sure yet — here's what I'd check first"** and lists the most concrete
 signals (component, reproduction hint, raw summary) instead of asserting a
@@ -40,33 +42,31 @@ lifts the answer to the top.
 
 ## Compact diagnosis preview
 
-Hovering a row in the list (or opening the **Action inbox**) shows a preview
-drawer with the same confidence-aware label and, when a fix brief is ready, a
-**Copy fix prompt** button — so you get the answer before the click.
+Press **Space** on the focused row in the list to open a preview drawer without
+leaving the list. It shows the same confidence-aware label and, when a fix brief is
+ready, a **Copy fix prompt** button, so you get the answer before you open the report.
 
 Selecting a report opens the full detail view:
 
-- **Recommended next action** — single-sentence guidance derived from the
-  report's status, severity, and elapsed time, with one CTA. Replaces the
-  "what should I do?" guesswork on a fresh page load.
+- **Recommended action**: single-sentence guidance derived from the
+  report's status, severity and elapsed time, with one button.
 - **Description + screenshot + breadcrumbs** captured by the SDK. The
   screenshot is click-to-zoom.
-- **Classification panel** — category, severity, component, confidence,
-  Bug-Ontology tags. Hover for the model + prompt version that produced
-  each field; click to see the raw judge score.
-- **Console / network / performance** — always rendered, with informative
+- **Classification panel**: category, severity, confidence, the LLM summary,
+  component, reproduction hint, and the model and latency of the triage call.
+- **Console / network / performance**: always rendered, with informative
   empty states when the SDK didn't capture data (so silence is visible).
-- **Comments + presence** — Supabase Realtime tracks who else is on the
-  same report (badge in the header). Comments stream live with relative
-  timestamps that expose the full ISO time on hover.
-- **Actions**: change status, dispatch a fix, close as "Not a code bug",
-  dedupe into a parent group, flag as anti-gaming. When the report has no
-  stack trace, source file or failed request, "Not a code bug" is the main
-  button and dispatch moves to "Dispatch anyway".
-- **Fix card + pipeline flow** — when a fix is dispatched, the detail page shows
+- **Comments + presence**: the header shows **Also viewing:** with anyone else on
+  the same report, and comments arrive live.
+- **Actions**: change status, dispatch a fix, close as "Not a code bug", and sync
+  the report to your tracker (Jira, Linear, GitHub Issues or PagerDuty, whichever
+  are connected in Integrations). When the report has no stack trace, source file
+  or failed request, "Not a code bug" is the main button and dispatch moves to
+  "Dispatch anyway".
+- **Fix card + pipeline flow**: when a fix is dispatched, the detail page shows
   the active attempt, CI badge, and merge controls.
-- **Related cross-links** — jump to other reports from the same component
-  or reporter, the knowledge-graph node, and the dispatched fix / PR.
+- **Related links**: other reports for this component, this reporter's history,
+  the knowledge graph, the dispatched PR and the auto-fix pipeline.
 
 ---
 
@@ -74,12 +74,16 @@ Selecting a report opens the full detail view:
 
 When a fix attempt completes with an open PR, the report detail page shows:
 
-1. **CI feedback** — check-run status with **Refresh CI status** and a link to
+1. **CI feedback**: check-run status with **Refresh CI status** and a link to
    GitHub Actions.
-2. **Merge PR** — confirm popover (squash by default). Disabled when the report
+2. **Merge PR**: confirm popover (squash by default). Disabled when the report
    is already **Fixed** or the PR is merged.
-3. **Primary attempt selection** — if a retry failed after a successful PR open,
+3. **Primary attempt selection**: if a retry failed after a successful PR open,
    the UI surfaces the mergeable attempt, not the failed retry.
+
+The merge goes through the review gate: while the PR's latest Opus review says
+**hold**, the merge is refused unless a team member (not a viewer) overrides it from
+the console with a reason. API keys (CLI, MCP) cannot override.
 
 After merge, the report status becomes **Fixed**, the reporter widget receives a
 resolution notification, and `fix.applied` webhooks fire.
@@ -91,5 +95,5 @@ mushi fixes refresh-ci <fixId>
 mushi fixes merge <fixId>
 ```
 
-See [Fix orchestrator → Merging from the console](/admin/fixes#merging-from-the-console)
+See [Fixes → Merging from the console](/admin/fixes#merging-from-the-console)
 for the full sequence diagram and prerequisites.

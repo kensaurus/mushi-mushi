@@ -582,6 +582,13 @@ describe('regression signals', () => {
     expect(ciFailedOnMerge([green('test')], { now: NOW }).failed).toBe(false)
   })
 
+  it('ci on the merge commit: a run the next push cancelled is not a failure', () => {
+    const cancelled = { name: 'Gitleaks', status: 'completed', conclusion: 'cancelled', started_at: '2026-10-21T11:00:00Z', completed_at: '2026-10-21T11:01:00Z' }
+    expect(ciFailedOnMerge([cancelled, green('test')], { now: NOW }).failed).toBe(false)
+    expect(ciFailedOnMerge([cancelled], { now: NOW }).failed).toBe(false)
+    expect(ciFailedOnMerge([cancelled, { name: 'test', status: 'completed', conclusion: 'failure', started_at: '2026-10-21T11:00:00Z' }], { now: NOW }).failed).toBe(true)
+  })
+
   it('a report reopened after the merge', () => {
     const mergedAt = '2026-10-21T10:00:00.000Z'
     expect(reportReopenedSince({ status: 'reopened', reopened_at: '2026-10-21T11:00:00.000Z' }, mergedAt)).toBe(true)

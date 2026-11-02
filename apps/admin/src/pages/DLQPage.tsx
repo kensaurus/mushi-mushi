@@ -267,12 +267,17 @@ export function DLQPage() {
             onChange={(e) => setStage(e.currentTarget.value)}
           />
         )}
+        {/* Refresh sat only in the green banner, which a healthy queue no longer shows. */}
+        <Btn size="sm" variant="ghost" onClick={() => void loadAll()} loading={loading} data-testid="dlq-refresh">
+          Refresh
+        </Btn>
         {retryableItems.length > 0 && canEditProject && (
           <Btn size="sm" variant="success" onClick={() => setConfirmRetryPage(true)}>
             Retry page ({retryableItems.length})
           </Btn>
         )}
-        {canEditProject ? (
+        {/* Only when reports are parked: on an empty queue the button could only say "nothing to flush". */}
+        {canEditProject && stats.reportsQueued > 0 ? (
         <Btn
           size="sm"
           variant="ghost"
@@ -281,7 +286,7 @@ export function DLQPage() {
           loading={flushingQueued}
           title="Replays reports parked because the circuit breaker tripped (rate limits, LLM outages)."
         >
-          Flush queued
+          Flush queued ({stats.reportsQueued})
         </Btn>
         ) : null}
         {stats.recoverable > 0 && canEditProject ? (

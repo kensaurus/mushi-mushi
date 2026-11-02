@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/use-cases
 
 ---
 title: Use cases & comparisons
-description: Where Mushi Mushi fits — as an open-source Sentry alternative, a debugger for Cursor and Claude Code apps, and an MCP bug-fixing server for your editor.
+description: Where Mushi Mushi fits. An open-source Sentry alternative, a debugger for Cursor and Claude Code apps, and an MCP bug-fixing server for your editor.
 ---
 
 # Use cases & comparisons

@@ -84,6 +84,8 @@ export interface FullstackAuditStats {
   errorCount: number
   warnCount: number
   failedGateCount: number
+  /** Newest finished gate run in the window. Null means no run was read. */
+  lastRunAt: string | null
   /** `unknown`: a read failed, so the counts are not known (see readError). */
   topPriority: 'no_project' | 'failures' | 'warnings' | 'healthy' | 'unknown'
   readError: string | null
@@ -115,10 +117,20 @@ const GATE_TITLES: Record<string, string> = {
 const AUDIT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 const MAX_AUDIT_RUNS = 2_000
 
-type StatsCounts = Pick<FullstackAuditStats, 'errorCount' | 'warnCount' | 'failedGateCount' | 'topPriority' | 'readError'>
+type StatsCounts = Pick<FullstackAuditStats, 'errorCount' | 'warnCount' | 'failedGateCount' | 'topPriority' | 'readError' | 'lastRunAt'>
 
-function unknownStats(readError: string): StatsCounts {
-  return { errorCount: 0, warnCount: 0, failedGateCount: 0, topPriority: 'unknown', readError }
+function newestRunAt(rows: Array<{ completed_at?: string | null; started_at?: string | null }>): string | null {
+  let best: string | null = null
+  for (const row of rows) {
+    const at = row.completed_at ?? row.started_at ?? null
+    if (!at) continue
+    if (best === null || at > best) best = at
+  }
+  return best
+}
+
+function unknownStats(readError: string, lastRunAt: string | null = null): StatsCounts {
+  return { errorCount: 0, warnCount: 0, failedGateCount: 0, topPriority: 'unknown', readError, lastRunAt }
 }
 
 /**
@@ -131,13 +143,14 @@ function unknownStats(readError: string): StatsCounts {
  * `unknown`, never `healthy`.
  */
 export async function readFullstackAuditStats(db: Db, projectId: string): Promise<StatsCounts> {
-  let latest: Array<{ id: string; status: string }>
+  let latest: Array<{ id: string; status: string; completed_at: string | null; started_at: string | null }>
   try {
     latest = await loadLatestGateRuns(db, projectId, GATE_IDS)
   } catch (err) {
     alog.warn('audit stats: gate_runs read failed', { projectId, err: err instanceof Error ? err.message : String(err) })
     return unknownStats('The recent check runs could not be read.')
   }
+  const lastRunAt = newestRunAt(latest)
   const failedGateCount = latest.filter((r) => r.status === 'fail').length
   const runIds = latest.map((r) => r.id)
 
@@ -156,14 +169,14 @@ export async function readFullstackAuditStats(db: Db, projectId: string): Promis
     const bad = errRes.error ?? warnRes.error
     if (bad || typeof errRes.count !== 'number' || typeof warnRes.count !== 'number') {
       alog.warn('audit stats: gate_findings count failed', { projectId, err: bad?.message ?? 'no count returned' })
-      return unknownStats('The open findings could not be counted.')
+      return unknownStats('The open findings could not be counted.', lastRunAt)
     }
     errorCount = errRes.count
     warnCount = warnRes.count
   }
 
   const topPriority: StatsCounts['topPriority'] = failedGateCount > 0 || errorCount > 0 ? 'failures' : warnCount > 0 ? 'warnings' : 'healthy'
-  return { errorCount, warnCount, failedGateCount, topPriority, readError: null }
+  return { errorCount, warnCount, failedGateCount, topPriority, readError: null, lastRunAt }
 }
 
 interface GateRunRow {
@@ -436,6 +449,7 @@ export function registerFullstackAuditRoutes(parent: Hono<{ Variables: Variables
       errorCount: 0,
       warnCount: 0,
       failedGateCount: 0,
+      lastRunAt: null,
       topPriority: 'no_project',
       readError: null,
     }

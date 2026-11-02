@@ -60,6 +60,8 @@ interface SegmentedControlProps<T extends string> {
   wrap?: boolean
   /** Horizontal scroll strip for many tabs — keeps one row on narrow viewports. */
   scrollable?: boolean
+  /** Segments cannot be chosen. Assistive tech and keyboard users hear the control as unavailable. */
+  disabled?: boolean
   className?: string
 }
 
@@ -79,13 +81,18 @@ export function SegmentedControl<T extends string>({
   size = 'md',
   wrap = false,
   scrollable = false,
+  disabled = false,
   className = '',
 }: SegmentedControlProps<T>) {
   const track = (
     <div
       role="radiogroup"
       aria-label={ariaLabel ?? label}
-      className={`${wrap ? 'flex flex-wrap' : scrollable ? 'inline-flex flex-nowrap' : 'inline-flex'} items-center gap-0.5 rounded-md border border-edge-subtle bg-surface-raised p-0.5 ${className}`}
+      aria-disabled={disabled || undefined}
+      // w-max: the scroll strip's track sizes to its segments, so the border
+      // and background wrap every tab instead of being clipped to the
+      // viewport while the tabs overflow it.
+      className={`${wrap ? 'flex flex-wrap' : scrollable ? 'inline-flex w-max flex-nowrap' : 'inline-flex'} items-center gap-0.5 rounded-md border border-edge-subtle bg-surface-raised p-0.5 ${disabled ? 'opacity-40 ' : ''}${className}`}
     >
       {options.map((opt) => {
         const active = opt.id === value
@@ -95,12 +102,20 @@ export function SegmentedControl<T extends string>({
             type="button"
             role="radio"
             aria-checked={active}
-            onClick={() => onChange(opt.id)}
+            disabled={disabled}
+            onClick={() => {
+              if (disabled) return
+              onChange(opt.id)
+            }}
             // Selected = the soft SELECTED_TONE wash, not the filled brand
             // action colour. A filled tab competed with the page's one
             // primary button (Connect: "Studio" tab vs "Add to Cursor").
             // Inset ring instead of a border so the segment doesn't grow.
-            className={`${SEGMENT_SIZE[size]} rounded-sm motion-safe:transition-[transform,opacity] motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:active:scale-[0.97] ${
+            // whitespace-nowrap keeps a two-word label (and its count) on one
+            // line; shrink-0 stops the scroll strip's flex items from being
+            // squeezed to the viewport width instead of scrolling (Settings
+            // tabs at 390px, 2026-10-25).
+            className={`${SEGMENT_SIZE[size]} ${scrollable ? 'shrink-0 ' : ''}whitespace-nowrap rounded-sm motion-safe:transition-[transform,opacity] motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:active:scale-[0.97] ${
               active
                 ? 'bg-brand-subtle text-brand-foreground font-medium ring-1 ring-inset ring-brand/40'
                 : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50 hover:-translate-y-px'
@@ -108,7 +123,8 @@ export function SegmentedControl<T extends string>({
           >
             {opt.label}
             {opt.count !== undefined && (
-              <span className={`ml-1 font-mono ${active ? 'text-brand-foreground/80' : 'text-fg-faint'}`}>
+              // Full token: brand-foreground/80 on brand-subtle is 3.8:1 in light mode.
+              <span className={`ml-1 font-mono ${active ? 'text-brand-foreground' : 'text-fg-faint'}`}>
                 {opt.count}
               </span>
             )}
@@ -154,7 +170,7 @@ interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
    *               token so tone is consistent with PageHero severity
    *               and SidebarHealthDot.
    */
-  variant?: 'primary' | 'accent' | 'ghost' | 'cancel' | 'danger' | 'success'
+  variant?: 'primary' | 'accent' | 'ghost' | 'cancel' | 'danger' | 'destructive' | 'success'
   size?: 'sm' | 'md'
   children: ReactNode
   /** When true, swaps the leading area for a spinner and disables the
@@ -212,11 +228,17 @@ const BTN_VARIANTS = {
   ghost:
     'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg hover:border-brand/40 hover:shadow-brand-glow-sm hover:-translate-y-px',
   cancel:
-    `${CHIP_TONE.danger} border-danger/40 hover:bg-danger-muted hover:border-danger/50 hover:-translate-y-px`,
+    // mushi-mushi-allowlist: hover border is the hover state; CHIP_TONE already owns the resting border
+    `${CHIP_TONE.danger} hover:bg-danger-muted hover:border-danger/50 hover:-translate-y-px`,
   danger:
+    // mushi-mushi-allowlist: hover border is the hover state; CHIP_TONE already owns the resting border
     `${CHIP_TONE.dangerSubtle} hover:bg-danger-muted/80 hover:border-danger/40 hover:shadow-glow-danger hover:-translate-y-px`,
   success:
+    // mushi-mushi-allowlist: hover border is the hover state; CHIP_TONE already owns the resting border
     `${CHIP_TONE.okSubtle} hover:bg-ok-muted/80 hover:border-ok/40 hover:shadow-glow-ok hover:-translate-y-px`,
+  // The confirm of a dialog that cannot be undone: a solid danger fill, so it never looks like Cancel.
+  destructive:
+    'bg-danger text-danger-fg border border-danger/55 font-semibold shadow-card hover:shadow-glow-danger hover:-translate-y-px',
 }
 
 export function Btn({
@@ -385,6 +407,10 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   validate?: (value: string) => { message: string; severity?: 'error' | 'warn' } | null
   /** Internal: render as a secret field. Use `<SecretInput>` instead. */
   secret?: boolean
+  /** Classes for the outer label, the element a flex row sizes. `className`
+   *  styles the <input> itself, so `className="flex-1"` never widened the
+   *  field (Research's query box stayed narrow at 1440, 2026-10-28). */
+  containerClassName?: string
 }
 
 /**
@@ -408,7 +434,7 @@ const SECRET_FIELD_ATTRS = {
 } as const
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, className = '', id, error, tooltip, helpId, validate, onBlur, onChange, type, secret, ...rest },
+  { label, className = '', containerClassName = '', id, error, tooltip, helpId, validate, onBlur, onChange, type, secret, ...rest },
   ref,
 ) {
   const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-')
@@ -443,7 +469,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   const inputClassName = `${FIELD_BASE} ${hasRevealToggle ? 'pr-9' : ''} ${secret ? 'font-mono' : ''} ${maskClass} ${className}`
 
   return (
-    <label className="block">
+    // htmlFor: a help button (helpId) inside the label is a labelable element,
+    // so without it the label named that button and the field read only as
+    // its placeholder to screen readers.
+    <label htmlFor={inputId} className={`block ${containerClassName}`}>
       {label && (
         <span className={`${FIELD_LABEL} flex items-center gap-1`}>
           {label}

@@ -13,12 +13,14 @@
  *          The banner and the AI keys tab badge are worked out from the same
  *          saved-keys list the key rows use (ByokPoolProvider + keyStatus.ts),
  *          so the banner can never say "all good" while a row says otherwise.
+ *          Sentry on that banner is the same verdict as Integrations
+ *          (useSentryConnectionQuery), not only the saved DSN.
  */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout';
-import { PageScopeHint, SegmentedControl, StatCard, ErrorAlert } from '../components/ui';
+import { Btn, Card, PageScopeHint, SegmentedControl, StatCard, ErrorAlert } from '../components/ui';
 import { PageHeaderBar } from '../components/PageHeaderBar';
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture';
 import { GeneralPanel } from '../components/settings/GeneralPanel';
@@ -36,6 +38,8 @@ import { VoiceIntakePanel } from '../components/settings/VoiceIntakePanel';
 import { HealthPanel } from '../components/settings/HealthPanel';
 import { DevToolsPanel } from '../components/settings/DevToolsPanel';
 import { LabsPanel } from '../components/settings/LabsPanel';
+import { DisplayPreferences } from '../components/DisplayPreferences';
+import { useFocusMode } from '../lib/focusMode';
 import { SettingsIntegrationsReadout } from '../components/settings/SettingsIntegrationsReadout';
 import { SettingsStatusBanner } from '../components/settings/SettingsStatusBanner';
 import { DeveloperDetails } from '../components/settings/SettingsRow';
@@ -77,10 +81,19 @@ import {
   sdkDetail,
   sdkTooltip,
 } from '../lib/statTooltips/settings';
+import { slackStatLabel } from '../components/settings/slackAlertStatus';
+import { useSentryConnectionQuery } from '../lib/useSentryConnection';
 import { settingsLinks } from '../lib/statCardLinks';
 import { useRealtimeReload } from '../lib/realtime';
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton';
 import { IconSettings } from '../components/icons';
+
+/** Sections behind the General tab's "Fixes and CI" toggle that links point at. */
+const FIXES_AND_CI_ANCHORS: readonly string[] = [
+  SETTINGS_SECTION_IDS.verifiedMerge,
+  SETTINGS_SECTION_IDS.ciCost,
+  SETTINGS_SECTION_IDS.ciPolicy,
+];
 
 export function SettingsPage() {
   const entitlements = useEntitlements();
@@ -105,6 +118,16 @@ function SettingsPageBody({
   const copy = usePageCopy('/settings');
   const ux = useSettingsUx();
   const activeProjectId = useActiveProjectId();
+  // Pull request review, verified merge, CI cost and CI policy are four long
+  // cards most people never change; on a ~2,600-word General tab they wait
+  // behind one toggle, and open by themselves when a link points at one of
+  // them (integrator's new-user walk, 2026-10-28).
+  const fixesAndCiLinked = FIXES_AND_CI_ANCHORS.includes(location.hash.slice(1));
+  const [showFixesAndCi, setShowFixesAndCi] = useState(fixesAndCiLinked);
+  useEffect(() => {
+    if (fixesAndCiLinked) setShowFixesAndCi(true);
+  }, [fixesAndCiLinked, location.key]);
+  const [focusMode, setFocusMode] = useFocusMode();
   const setup = useSetupStatus(activeProjectId);
   const projectName = setup.activeProject?.project_name ?? null;
   const projectSlug = setup.activeProject?.project_slug ?? null;
@@ -142,8 +165,16 @@ function SettingsPageBody({
     isValidating,
   } = usePageData<SettingsStats>(statsPath);
   const stats = { ...EMPTY_SETTINGS_STATS, ...statsData };
+  // The same read GeneralPanel makes (concurrent reads share one request):
+  // the cards below it wait for it, so its growth never pushes them.
+  const generalSettings = usePageData<unknown>(active === 'general' ? '/v1/admin/settings' : null);
+  const generalLoaded = !generalSettings.loading;
 
   const pool = useByokPool(byokEnabled);
+  // Same Sentry verdict as the Integrations card and the Error tracking row.
+  // Quick mode waits until it has settled so it does not lock the
+  // "connect Sentry" tab before a Working verdict arrives.
+  const sentryConn = useSentryConnectionQuery(Boolean(activeProjectId));
   const keySummary: KeySummary | null = useMemo(() => {
     if (!byokEnabled || !pool.data) return null;
     return summarizeKeys(pool.data.keys ?? [], pool.data.legacyKeys ?? []);
@@ -174,19 +205,21 @@ function SettingsPageBody({
   );
 
   // Quick mode picks a starting tab when no link says which one to show.
-  // It waits for the saved-keys list too, so it picks from the same counts
-  // the banner shows.
+  // It waits for the saved-keys list and the shared Sentry verdict, so it
+  // picks from the same facts the banner shows.
   // It picks once per visit: after that, a tab the user opens stays open.
   const poolPending = byokEnabled && pool.loading && !pool.data;
   // Scroll to a #section (#firecrawl, #key-supabase, …) once the panels that
   // hold those ids can render: the AI keys rows wait for the saved-keys list.
-  useScrollToHash(Boolean(statsData) && !entitlementsLoading && !poolPending);
+  // General's lower cards mount only once its settings land, so a link to one
+  // of them waits for that or it scrolls before the card exists.
+  useScrollToHash(Boolean(statsData) && !entitlementsLoading && !poolPending && (active !== 'general' || generalLoaded));
   const quickPicked = useRef(false);
   useEffect(() => {
-    if (!ux.isQuickstart || !activeProjectId || statsLoading || poolPending || quickPicked.current) return;
+    if (!ux.isQuickstart || !activeProjectId || statsLoading || poolPending || !sentryConn.settled || quickPicked.current) return;
     quickPicked.current = true;
     if (!shouldResolveQuickSettingsTab(param) || rememberedTab !== null) return;
-    const quickTab = resolveQuickSettingsTab(stats, keySummary, hasAnthropicKey, byokEnabled);
+    const quickTab = resolveQuickSettingsTab(stats, keySummary, hasAnthropicKey, byokEnabled, sentryConn.view);
     if (active !== quickTab) setActive(quickTab);
   }, [
     ux.isQuickstart,
@@ -197,6 +230,8 @@ function SettingsPageBody({
     keySummary,
     hasAnthropicKey,
     byokEnabled,
+    sentryConn.settled,
+    sentryConn.view,
     active,
     param,
     rememberedTab,
@@ -288,6 +323,7 @@ function SettingsPageBody({
                 stats={stats}
                 keySummary={keySummary}
                 hasAnthropicKey={hasAnthropicKey}
+                sentry={sentryConn.view}
                 onTab={setActive}
                 plainBanner={ux.plainBanner}
               />
@@ -314,12 +350,37 @@ function SettingsPageBody({
       >
         {active === 'general' && (
           <>
-            <GeneralPanel />
-            <SpendLimitsPanel />
-            <AgentPrReviewCard projectId={activeProjectId} />
-            <VerifiedMergeCard projectId={activeProjectId} />
-            <CiCostSettingsCard projectId={activeProjectId} />
-            <CiPolicyCard projectId={activeProjectId} />
+            <GeneralPanel slackCanPost={stats.slackCanPost} />
+            {/* The General panel grows from a ~320px skeleton to ~3,600px when
+                its settings land; cards rendered below it were pushed off
+                screen (layout shift 0.53, measured 2026-10-24). They mount once
+                it has loaded, below the fold, where growth moves nothing. */}
+            {generalLoaded && (
+              <>
+                <SpendLimitsPanel />
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-edge-subtle px-4 py-3">
+                  <p className="min-w-0 text-sm text-fg-secondary">
+                    Fixes and CI: pull request review, verified merge, CI cost and CI policy.
+                  </p>
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    aria-expanded={showFixesAndCi}
+                    onClick={() => setShowFixesAndCi(!showFixesAndCi)}
+                  >
+                    {showFixesAndCi ? 'Hide' : 'Show'}
+                  </Btn>
+                </div>
+                {showFixesAndCi && (
+                  <>
+                    <AgentPrReviewCard projectId={activeProjectId} />
+                    <VerifiedMergeCard projectId={activeProjectId} />
+                    <CiCostSettingsCard projectId={activeProjectId} />
+                    <CiPolicyCard projectId={activeProjectId} />
+                  </>
+                )}
+              </>
+            )}
           </>
         )}
         {active === 'byok' && <ByokPanel />}
@@ -349,7 +410,18 @@ function SettingsPageBody({
             </div>
           </>
         )}
-        {active === 'labs' && <LabsPanel />}
+        {active === 'display' && (
+          <>
+            <Card className="px-4 py-2" data-testid="settings-display">
+              <h2 className="pt-1 text-sm font-semibold text-fg">Display</h2>
+              <p className="text-xs text-fg-muted">Saved in this browser. The same controls are in the menu under your name at the foot of the sidebar.</p>
+              <DisplayPreferences layout="page" focusMode={focusMode} onFocusChange={setFocusMode} />
+            </Card>
+            <div id={SETTINGS_SECTION_IDS.sidebarPages} className="scroll-mt-6 space-y-4">
+              <LabsPanel />
+            </div>
+          </>
+        )}
       </div>
 
       {stats.projectId ? (
@@ -373,9 +445,7 @@ function SettingsPageBody({
               <StatCard
                 label={copy?.statLabels?.routing ?? 'Alerts'}
                 value={
-                  [stats.slackConfigured && 'Slack', stats.sentryConfigured && 'Sentry']
-                    .filter(Boolean)
-                    .join(' · ') || 'None'
+                  [slackStatLabel(stats), stats.sentryConfigured && 'Sentry'].filter(Boolean).join(' · ') || 'None'
                 }
                 tooltip={routingTooltip(stats)}
                 detail={routingDetail()}

@@ -12,7 +12,12 @@
  *            - a model error retries later (10 min × tries), a refusal fails
  *              for good, a run that dies three times fails with an event;
  *            - one review per project per tick;
- *            - backfill queues only open cloud-agent PRs with no review.
+ *            - backfill queues only open cloud-agent and fix-worker PRs with
+ *              no review;
+ *            - readying (ADR 0047): a draft only on merge at the reviewed
+ *              head (fix_first and hold stay drafts), never a fix-worker
+ *              draft its model flagged; with no review possible, a never-reviewed
+ *              fix-worker draft falls back to its model's own check.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -58,14 +63,21 @@ vi.mock('../../supabase/functions/_shared/github.ts', () => ({
 }))
 vi.mock('../../supabase/functions/_shared/agent-adapters.ts', () => ({
   DISPATCHABLE_CLOUD_AGENTS: new Set(['cursor_cloud', 'github_cloud_agent']),
+  FIX_WORKER_AGENTS: new Set(['claude_code', 'rest_fix_worker', 'llm']),
 }))
 
 import {
   pickFairBatch,
+  pickOpenAiReviewModel,
   pickReviewModel,
+  READY_AFTER_REVIEW_LABEL,
+  READY_WITHOUT_REVIEW_LABEL,
+  readiesOnVerdict,
   readReviewSettings,
+  resolveReviewKey,
   REVIEW_MAX_TRIES,
   REVIEW_RETRY_BACKOFF_MS,
+  reviewerName,
   runAgentPrReview,
   type ReviewDeps,
 } from '../../supabase/functions/agent-pr-review/index.ts'
@@ -122,6 +134,14 @@ interface Script {
   existingReviews?: unknown[]
   openAttempts?: unknown[]
   gaveUp?: unknown[]
+  /** The review row's last completed verdict (read by the no-review fallback). */
+  lastVerdict?: string | null
+  /** Skipped or failed reviews read by resumeKeyBlocked. */
+  stopped?: unknown[]
+  /** Fix attempts whose PR is still open, for resumeKeyBlocked. */
+  stillOpen?: unknown[]
+  /** The byok_keys row of the app's resolved key. */
+  keyRow?: unknown
 }
 
 function scripted(s: Script = {}) {
@@ -133,13 +153,21 @@ function scripted(s: Script = {}) {
       }
       if (q.op === 'update' && payload.status === 'running') return { data: s.claim === false ? [] : [{ id: 'rev-1' }] }
       if (q.op === 'update' && hasFilter(q, 'eq', 'run_id')) return { data: s.superseded ? [] : [{ id: 'rev-1' }] }
+      if (q.op === 'update' && hasFilter(q, 'in', 'id')) {
+        const ids = q.filters.find((f) => f.method === 'in' && f.args[0] === 'id')!.args[1] as string[]
+        return { data: ids.map((id) => ({ id })) }
+      }
       if (q.op === 'update') return { data: [] }
       if (q.op === 'select' && q.columns === 'fix_attempt_id') return { data: s.existingReviews ?? [] }
+      if (q.op === 'select' && q.columns === 'verdict') return { data: { verdict: s.lastVerdict ?? null } }
       if (q.op === 'select' && hasFilter(q, 'not', 'verdict')) return { data: s.rereviews ?? [] }
+      if (q.op === 'select' && hasFilter(q, 'in', 'status')) return { data: s.stopped ?? [] }
       if (q.op === 'select') return { data: s.queue ?? [QUEUE_ROW] }
       return { data: null }
     }
+    if (q.table === 'byok_keys') return { data: s.keyRow ?? null }
     if (q.table === 'fix_attempts' && q.op === 'select') {
+      if (hasFilter(q, 'in', 'pr_state') && !hasFilter(q, 'in', 'agent')) return { data: s.stillOpen ?? [] }
       if (hasFilter(q, 'in', 'agent')) {
         // Honour .range() like PostgREST, so backfill paging is exercised.
         const r = q.filters.find((f) => f.method === 'range')
@@ -322,7 +350,8 @@ describe('a completed review', () => {
     expect(ev.payload).toMatchObject({ verdict: 'hold', blockers: 1, model: 'claude-opus-5-5' })
 
     expect(d.calls.comment).toHaveLength(1)
-    expect(d.calls.comment[0]).toContain('### Mushi review (claude-opus-5-5): hold')
+    expect(d.calls.comment[0]).toContain("### Mushi review: Hold: don't merge this as it is")
+    expect(d.calls.comment[0]).toContain('Reviewed by Claude Opus 5.5')
     expect(d.calls.comment[0]).toContain('https://console.example/reports/' + REPORT)
     // The comment never quotes the report or the summary.
     expect(d.calls.comment[0]).not.toContain('Lesson page crashes')
@@ -378,29 +407,106 @@ describe('a completed review', () => {
 
 describe('readying the PR so host CI runs (drafts skip CI)', () => {
   const MERGE = { ...HOLD, findings: [], removes_behavior: [], scope_creep: false, risk: 'low', verdict: 'merge' }
+  const FIX_FIRST = {
+    ...MERGE,
+    findings: [{ severity: 'major', file: 'src/lesson/Resume.tsx', line: 12, issue: 'No test for the level.', suggested_fix: 'Add one.' }],
+    verdict: 'fix_first',
+  }
+  const PR = {
+    number: 194,
+    draft: true,
+    state: 'open',
+    merged: false,
+    title: 'fix: lesson crash',
+    body: 'Fixes the crash.',
+    htmlUrl: ATTEMPT.pr_url,
+    headRef: ATTEMPT.branch,
+    headSha: 'abcdef1234567',
+    baseRef: 'main',
+    baseRepoId: 4242,
+    baseRepoFullName: 'acme/app',
+    mergeable: true,
+    mergeableState: 'clean',
+  }
+  const FIX_WORKER = { ...ATTEMPT, agent: 'claude_code', review_passed: true }
+  const verdict = (object: unknown) => ({ callModel: async () => ({ object: object as AgentPrReviewRaw, usage: { promptTokens: 1, completionTokens: 1 } }) })
+  const eventLabels = (queries: FakeQuery[]) => findQueries(queries, 'fix_events', 'insert').map((q) => (q.payload as { label: string }).label)
 
-  it('marks a "merge" PR ready and records it on the timeline', async () => {
+  it('marks a cloud agent\'s "merge" draft ready and records it on the timeline', async () => {
     const { db, queries } = scripted()
-    const d = deps({ callModel: async () => ({ object: MERGE, usage: { promptTokens: 1, completionTokens: 1 } }) })
+    const d = deps({ ...verdict(MERGE), fetchPr: async () => PR })
     const summary = await runAgentPrReview(db, {}, d)
     expect(summary.results[0]).toMatchObject({ outcome: 'completed', verdict: 'merge' })
     expect(d.calls.ready).toEqual([194])
-    const labels = findQueries(queries, 'fix_events', 'insert').map((q) => (q.payload as { label: string }).label)
-    expect(labels).toContain('Marked ready for review (CI runs)')
+    expect(eventLabels(queries)).toContain(READY_AFTER_REVIEW_LABEL)
+  })
+
+  it('a cloud agent\'s "fix first" draft stays a draft: its follow-up replaces the head (ADR 0047)', async () => {
+    const { db, queries } = scripted()
+    const d = deps({ ...verdict(FIX_FIRST), fetchPr: async () => PR })
+    const summary = await runAgentPrReview(db, {}, d)
+    expect(summary.results[0]).toMatchObject({ outcome: 'completed', verdict: 'fix_first' })
+    expect(d.calls.ready).toEqual([])
+    expect(eventLabels(queries)).not.toContain(READY_AFTER_REVIEW_LABEL)
   })
 
   it('leaves a "hold" PR a draft', async () => {
     const { db } = scripted()
-    const d = deps()
+    const d = deps({ fetchPr: async () => PR })
     const summary = await runAgentPrReview(db, {}, d)
     expect(summary.results[0]).toMatchObject({ outcome: 'completed', verdict: 'hold' })
     expect(d.calls.ready).toEqual([])
   })
 
+  it('does not call GitHub to ready a PR that is already ready', async () => {
+    const { db, queries } = scripted()
+    const d = deps({ ...verdict(MERGE), fetchPr: async () => ({ ...PR, draft: false }) })
+    await runAgentPrReview(db, {}, d)
+    expect(d.calls.ready).toEqual([])
+    expect(eventLabels(queries)).not.toContain(READY_AFTER_REVIEW_LABEL)
+  })
+
+  it('fix-worker draft (ADR 0047): readied on "merge" at the reviewed head, with the timeline event', async () => {
+    const { db, queries } = scripted({ attempt: FIX_WORKER })
+    const d = deps({ ...verdict(MERGE), fetchPr: async () => PR })
+    await runAgentPrReview(db, {}, d)
+    expect(d.calls.ready).toEqual([194])
+    const ev = findQueries(queries, 'fix_events', 'insert').map((q) => q.payload as Record<string, unknown>).find((p) => p.label === READY_AFTER_REVIEW_LABEL)!
+    expect(ev).toMatchObject({ kind: 'reviewed', status: 'ok', detail: 'Opus review: merge', dedupe_key: 'review-ready:rev-1:abcdef1234567' })
+  })
+
+  it('fix-worker draft stays a draft on "fix first" and "hold"', async () => {
+    for (const object of [FIX_FIRST, HOLD]) {
+      const { db } = scripted({ attempt: FIX_WORKER })
+      const d = deps({ ...verdict(object), fetchPr: async () => PR })
+      await runAgentPrReview(db, {}, d)
+      expect(d.calls.ready).toEqual([])
+    }
+  })
+
+  it('fix-worker draft its model flagged stays a draft even on "merge"', async () => {
+    const { db } = scripted({ attempt: { ...FIX_WORKER, review_passed: false } })
+    const d = deps({ ...verdict(MERGE), fetchPr: async () => PR })
+    await runAgentPrReview(db, {}, d)
+    expect(d.calls.ready).toEqual([])
+  })
+
+  it('does not ready a PR whose head moved during the review', async () => {
+    const { db, queries } = scripted({ attempt: FIX_WORKER })
+    let reads = 0
+    const d = deps({ ...verdict(MERGE), fetchPr: async () => (++reads === 1 ? PR : { ...PR, headSha: 'f00dbeef99999' }) })
+    const summary = await runAgentPrReview(db, {}, d)
+    expect(summary.results[0]).toMatchObject({ outcome: 'completed', verdict: 'merge' })
+    expect(reads).toBe(2)
+    expect(d.calls.ready).toEqual([])
+    expect(eventLabels(queries)).not.toContain(READY_AFTER_REVIEW_LABEL)
+  })
+
   it('keeps the verdict when readying fails', async () => {
     const { db, queries } = scripted()
     const d = deps({
-      callModel: async () => ({ object: MERGE, usage: { promptTokens: 1, completionTokens: 1 } }),
+      ...verdict(MERGE),
+      fetchPr: async () => PR,
       markReady: async () => {
         throw new Error('GraphQL 403')
       },
@@ -408,6 +514,59 @@ describe('readying the PR so host CI runs (drafts skip CI)', () => {
     const summary = await runAgentPrReview(db, {}, d)
     expect(summary.results[0]).toMatchObject({ outcome: 'completed', verdict: 'merge' })
     expect(payloads(queries).some((u) => u.status === 'completed')).toBe(true)
+  })
+
+  it('readiesOnVerdict: the rule in one place', () => {
+    expect(readiesOnVerdict({ agent: 'cursor_cloud' }, 'merge')).toBe(true)
+    expect(readiesOnVerdict({ agent: 'cursor_cloud' }, 'fix_first')).toBe(false)
+    expect(readiesOnVerdict({ agent: 'github_cloud_agent' }, 'hold')).toBe(false)
+    expect(readiesOnVerdict({ agent: 'llm', review_passed: null }, 'merge')).toBe(true)
+    expect(readiesOnVerdict({ agent: 'rest_fix_worker', review_passed: true }, 'fix_first')).toBe(false)
+    expect(readiesOnVerdict({ agent: 'claude_code', review_passed: false }, 'merge')).toBe(false)
+  })
+})
+
+describe('no review possible: a fix-worker draft falls back to its model\'s own check (ADR 0047)', () => {
+  const PR = { number: 194, draft: true, state: 'open', merged: false, headSha: 'abcdef1234567' }
+  const FIX_WORKER = { ...ATTEMPT, agent: 'claude_code', review_passed: true }
+
+  it('readies a self-checked, never-reviewed fix-worker draft when there is no Anthropic key', async () => {
+    const { db, queries } = scripted({ attempt: FIX_WORKER })
+    const d = deps({ resolveAnthropicKey: async () => null, fetchPr: async () => PR as never })
+    const summary = await runAgentPrReview(db, {}, d)
+    expect(summary.results[0]).toMatchObject({ outcome: 'skipped', reason: 'no_anthropic_key' })
+    expect(d.calls.model).toBe(0)
+    expect(d.calls.ready).toEqual([194])
+    const ev = findQueries(queries, 'fix_events', 'insert').map((q) => q.payload as Record<string, unknown>).find((p) => p.label === READY_WITHOUT_REVIEW_LABEL)!
+    expect(ev).toMatchObject({ status: 'ok', dedupe_key: 'review-ready-noreview:rev-1:abcdef1234567' })
+  })
+
+  it('and when review is off or the AI budget is used up', async () => {
+    const off = scripted({ attempt: FIX_WORKER, settings: { agent_pr_review_enabled: false } })
+    const a = deps({ fetchPr: async () => PR as never })
+    await runAgentPrReview(off.db, {}, a)
+    expect(a.calls.ready).toEqual([194])
+    const budget = Object.assign(new Error('over budget'), { name: 'LlmBudgetExceededError' })
+    const over = scripted({ attempt: FIX_WORKER })
+    const b = deps({ resolveAnthropicKey: async () => { throw budget }, fetchPr: async () => PR as never })
+    await runAgentPrReview(over.db, {}, b)
+    expect(b.calls.ready).toEqual([194])
+  })
+
+  it('never readies a flagged fix, a cloud agent\'s PR, a PR with a verdict on record, or after other skips', async () => {
+    const cases: Array<[Parameters<typeof scripted>[0], Partial<ReviewDeps>]> = [
+      [{ attempt: { ...FIX_WORKER, review_passed: false } }, { resolveAnthropicKey: async () => null }],
+      [{ attempt: { ...FIX_WORKER, review_passed: null } }, { resolveAnthropicKey: async () => null }],
+      [{ attempt: ATTEMPT }, { resolveAnthropicKey: async () => null }],
+      [{ attempt: FIX_WORKER, lastVerdict: 'hold' }, { resolveAnthropicKey: async () => null }],
+      [{ attempt: FIX_WORKER }, { resolveGithubToken: async () => null }],
+    ]
+    for (const [script, over] of cases) {
+      const { db } = scripted(script)
+      const d = deps({ fetchPr: async () => PR as never, ...over })
+      await runAgentPrReview(db, {}, d)
+      expect(d.calls.ready).toEqual([])
+    }
   })
 })
 
@@ -502,7 +661,7 @@ describe('backfill', () => {
     const read = findQueries(queries, 'fix_attempts', 'select').find((q) => hasFilter(q, 'in', 'agent'))!
     expect(read.filters).toEqual(
       expect.arrayContaining([
-        { method: 'in', args: ['agent', ['cursor_cloud', 'github_cloud_agent']] },
+        { method: 'in', args: ['agent', ['cursor_cloud', 'github_cloud_agent', 'claude_code', 'rest_fix_worker', 'llm']] },
         { method: 'in', args: ['pr_state', ['open', 'draft']] },
         { method: 'range', args: [0, 49] },
       ]),
@@ -528,6 +687,91 @@ describe('backfill', () => {
     expect(queuedIds).toEqual(['fa-50', 'fa-51', 'fa-52', 'fa-53', 'fa-54'])
     const pages = findQueries(queries, 'fix_attempts', 'select').filter((q) => hasFilter(q, 'in', 'agent'))
     expect(pages).toHaveLength(2)
+  })
+})
+
+describe('reviews a missing or spent key stopped resume on their own (2026-10-28)', () => {
+  const STOPPED_AT = '2026-10-28T05:36:00Z'
+  const skippedNoKey = { id: 'rv-skip', project_id: PROJECT, fix_attempt_id: 'fa-1', status: 'skipped', skip_reason: 'no_anthropic_key', error: null, completed_at: STOPPED_AT }
+  const failedSpent = {
+    id: 'rv-spent',
+    project_id: PROJECT,
+    fix_attempt_id: 'fa-2',
+    status: 'failed',
+    skip_reason: null,
+    error: '400 {"type":"error","error":{"type":"invalid_request_error","message":"You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC."}}',
+    completed_at: STOPPED_AT,
+  }
+  const ordinaryFailure = { ...failedSpent, id: 'rv-other', fix_attempt_id: 'fa-3', error: 'Claude declined to review this pull request.' }
+  const withKey = (over: Partial<ReviewDeps> = {}) =>
+    deps({ resolveAnthropicKey: async () => ({ key: 'sk-ant-new', source: 'byok', hint: 'new', keyId: 'key-new' }), ...over })
+  const resumedIds = (queries: FakeQuery[]) =>
+    findQueries(queries, 'fix_reviews', 'update')
+      .filter((q) => (q.payload as { status?: string }).status === 'queued' && hasFilter(q, 'in', 'id'))
+      .flatMap((q) => q.filters.find((f) => f.method === 'in' && f.args[0] === 'id')!.args[1] as string[])
+
+  it('queues a no-key skip and a usage-limit failure again once a key added after they stopped works', async () => {
+    const { db, queries } = scripted({
+      queue: [],
+      stopped: [skippedNoKey, failedSpent, ordinaryFailure],
+      stillOpen: [{ id: 'fa-1' }, { id: 'fa-2' }, { id: 'fa-3' }],
+      keyRow: { status: 'active', created_at: '2026-10-28T06:58:37Z', rotated_at: null },
+    })
+    const summary = await runAgentPrReview(db, {}, withKey())
+    expect(summary.resumed).toBe(2)
+    expect(resumedIds(queries)).toEqual(['rv-skip', 'rv-spent'])
+    const write = findQueries(queries, 'fix_reviews', 'update').find((q) => hasFilter(q, 'in', 'id'))!
+    expect(write.payload).toMatchObject({ status: 'queued', attempts: 0, error: null, skip_reason: null, completed_at: null })
+  })
+
+  it('leaves them alone when the key is the one that ran out, the PR closed, or the app has no key', async () => {
+    const older = scripted({ queue: [], stopped: [skippedNoKey], stillOpen: [{ id: 'fa-1' }], keyRow: { status: 'active', created_at: '2026-08-16T08:29:54Z', rotated_at: null } })
+    expect((await runAgentPrReview(older.db, {}, withKey())).resumed).toBe(0)
+    const closed = scripted({ queue: [], stopped: [skippedNoKey], stillOpen: [], keyRow: { status: 'active', created_at: '2026-10-28T06:58:37Z', rotated_at: null } })
+    expect((await runAgentPrReview(closed.db, {}, withKey())).resumed).toBe(0)
+    const none = scripted({ queue: [], stopped: [skippedNoKey], stillOpen: [{ id: 'fa-1' }] })
+    expect((await runAgentPrReview(none.db, {}, deps({ resolveAnthropicKey: async () => null }))).resumed).toBe(0)
+    const platform = scripted({ queue: [], stopped: [skippedNoKey], stillOpen: [{ id: 'fa-1' }] })
+    expect((await runAgentPrReview(platform.db, {}, deps({ resolveAnthropicKey: async () => ({ key: 'sk-env', source: 'env', hint: 'env' }) }))).resumed).toBe(0)
+  })
+})
+
+describe('a review runs on OpenAI when the app has no Claude key (owner, 2026-10-31)', () => {
+  const openAi = { key: 'sk-openai', source: 'byok' as const, hint: 'oa' }
+
+  it('resolveReviewKey: the Claude key first, then the OpenAI key, never a platform key', async () => {
+    const claude = { key: 'sk-ant', source: 'byok' as const, hint: 'c' }
+    const pick = (a: unknown, o: unknown) => async (_d: unknown, _p: string, provider: 'anthropic' | 'openai') => (provider === 'anthropic' ? a : o) as never
+    expect(await resolveReviewKey({} as never, 'p1', pick(claude, openAi))).toMatchObject({ key: 'sk-ant', reviewProvider: 'anthropic' })
+    expect(await resolveReviewKey({} as never, 'p1', pick(null, openAi))).toMatchObject({ key: 'sk-openai', reviewProvider: 'openai' })
+    expect(await resolveReviewKey({} as never, 'p1', pick({ ...claude, source: 'env' }, { ...openAi, source: 'env' }))).toBeNull()
+  })
+
+  it('pickOpenAiReviewModel keeps a GPT id the project chose, else GPT-6.1 Sol', () => {
+    expect(pickOpenAiReviewModel('gpt-6-astra')).toBe('gpt-6-astra')
+    expect(pickOpenAiReviewModel('claude-opus-5-5')).toBe('gpt-6.1-sol')
+    expect(pickOpenAiReviewModel(null)).toBe('gpt-6.1-sol')
+    expect(reviewerName('gpt-6.1-sol')).toBe('GPT')
+    expect(reviewerName('openai/gpt-6.1-sol')).toBe('GPT')
+    expect(reviewerName('claude-opus-5-5')).toBe('Opus')
+  })
+
+  it('completes the review on gpt-6.1-sol and names GPT as the reviewer', async () => {
+    const { db, queries } = scripted()
+    let sent: { model: string; provider?: string } | null = null
+    const d = deps({
+      resolveAnthropicKey: async () => null,
+      resolveOpenAiKey: async () => openAi,
+      callModel: async (input) => {
+        sent = { model: input.model, provider: input.provider }
+        return { object: HOLD, usage: { promptTokens: 1, completionTokens: 1 } }
+      },
+    })
+    const summary = await runAgentPrReview(db, {}, d)
+    expect(summary.results[0]).toMatchObject({ outcome: 'completed' })
+    expect(sent).toEqual({ model: 'gpt-6.1-sol', provider: 'openai' })
+    const labels = findQueries(queries, 'fix_events', 'insert').map((q) => (q.payload as { label?: string }).label)
+    expect(labels).toContain('GPT review: hold')
   })
 })
 

@@ -219,7 +219,7 @@ export function CostPage() {
     return (
       <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-cost">
         <PageHeaderBar
-          title={copy?.title ?? 'LLM Cost'}
+          title={copy?.title ?? 'AI spend'}
 
           helpTitle={copy?.help?.title ?? 'About AI cost tracking'}
           helpWhatIsIt={
@@ -258,7 +258,7 @@ export function CostPage() {
   return (
     <div className="space-y-4" data-testid="mushi-page-cost">
       <PageHeaderBar
-        title={copy?.title ?? 'LLM Cost'}
+        title={copy?.title ?? 'AI spend'}
         projectScope={stats.projectName ?? undefined}
 
         helpTitle={copy?.help?.title ?? 'About AI cost tracking'}

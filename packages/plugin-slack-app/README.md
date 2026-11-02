@@ -1,30 +1,35 @@
 # `@mushi-mushi/plugin-slack-app`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
-Part of the Mushi Mushi monorepo — plain-English bug comprehension for vibe coders.
+For people who run their own Mushi Mushi backend and want bug reports and the
+`/mushi` command in Slack. It has the building blocks for a Slack app: the
+`/mushi` slash command router, Slack request verification, the OAuth install
+helpers, and a Slack app manifest.
 
-
-First-class Slack app for Mushi Mushi. Ships a `/mushi` slash command,
-signing-secret verification, OAuth install flow, and a Slack App Manifest
-you can drop into the Slack API console to provision the app in seconds.
-
-> Slack's built-in **incoming webhook** path is still available via
-> [`@mushi-mushi/plugin-zapier`](../plugin-zapier) for one-way
-> notifications. This package adds the two-way pieces: slash commands,
-> report cards with buttons, and OAuth scopes for user-scoped actions.
-> Button clicks are handled by the hosted backend's `slack-interactions`
-> function. Run standalone, `createSlackPlugin(...).handleSlackInteraction`
-> only verifies and acknowledges a click; acting on it (dispatching a fix,
-> say) is up to your server.
-
-## Install
+**Do you need this package?** Not on Mushi Mushi Cloud: open the **Integrations**
+page of the console and click **Add to Slack**. Report cards with buttons,
+threaded replies and `/mushi` then work with no code. This package is for
+people who run the Mushi backend themselves, or who want to host the Slack
+endpoints on their own server.
 
 ```bash
 npm i @mushi-mushi/plugin-slack-app
 ```
 
-## One-time Slack app setup
+```ts
+import { verifySlackRequest, buildSlashRouter } from '@mushi-mushi/plugin-slack-app'
+```
+
+Docs: https://kensaur.us/mushi-mushi/docs/plugins/slack
+
+Run standalone, `createSlackPlugin(...)` posts report and fix events to a
+Slack incoming webhook, and its `handleSlackInteraction` only verifies and
+acknowledges a button click; acting on it (dispatching a fix, say) is up to
+your server. On Mushi's own backend, clicks are handled by the
+`slack-interactions` function.
+
+## One-time Slack app setup (self-hosted Mushi backend)
 
 1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create from
    manifest**.
@@ -44,9 +49,9 @@ npm i @mushi-mushi/plugin-slack-app
    `/slack/oauth/callback`.)
 3. Copy the signing secret + client ID / secret into the backend secrets
    (`SLACK_SIGNING_SECRET`, `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`).
-4. Install to the workspace from the Mushi console (**Integrations → Slack →
-   Add to Slack**) so the bot token is vaulted per project, then invite the
-   bot to the channels where clips will be dropped.
+4. Install to the workspace from the Mushi console (**Integrations** page →
+   Slack → **Add to Slack**) so the bot token is vaulted per project, then
+   invite the bot to the channels where clips will be dropped.
 
 ### Scopes and events (why each one is in the manifest)
 
@@ -68,7 +73,7 @@ the backend downloads the audio and runs its own speech-to-text, then posts
 the verbatim transcript with **Confirm / Cancel** buttons before anything is
 dispatched.
 
-## Quick start — Hono server
+## Quick start: Hono server
 
 ```ts
 import { Hono } from 'hono'
@@ -126,6 +131,7 @@ app.get('/slack/install', (c) => {
 | `/mushi list`        | Most recent open reports (5 standalone, 10 on the hosted backend). |
 | `/mushi open <id>`   | Show classification + summary for one report.          |
 | `/mushi resolve <id>`| Transition a report to `fixed`.                        |
+| `/mushi reply <id> <message>` | Reply to the person who sent the report (hosted backend only). |
 | `/mushi help`        | Print the command reference.                           |
 
 All responses are ephemeral (visible only to the invoking user) unless you
@@ -136,8 +142,9 @@ override `response_type` in a custom handler.
 - `verifySlackRequest` runs HMAC-SHA256 over `v0:<timestamp>:<rawBody>` and
   compares in **constant time**. Reject requests older than 5 minutes to
   block replay.
-- OAuth token rotation is enabled in the manifest — persist both
-  `access_token` and `refresh_token`.
+- The manifest leaves Slack token rotation off (`token_rotation_enabled:
+  false`), so the bot token from the install does not expire. If you turn
+  rotation on, store both `access_token` and `refresh_token`.
 - Never log the raw `payload` from interactive actions; Slack embeds the
   invoking user's email there.
 
@@ -149,4 +156,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 76 edge functions · 503 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

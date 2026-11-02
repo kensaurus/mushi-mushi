@@ -1,11 +1,20 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
+// Copyright (c) 2024–2026 kensaurus LLC — Mushi Mushi
+import { scrubUrl } from '@mushi-mushi/core'
 import type { MushiNodeClient } from './client'
 import { parseTraceContext } from './trace'
 
+/**
+ * The part of Hono's `Context` this handler and its fallback use. `text()`
+ * and `json()` let the fallback answer the way Hono's docs show,
+ * `(err, c) => c.text('Server error', 500)`; without them that example did
+ * not type-check (Mushi report 8aa2c40a).
+ */
 type HonoContext = {
   req: { raw: { headers: Headers; method: string; url: string } }
   res: Response
+  text(text: string, status?: number, headers?: Record<string, string>): Response
+  json(object: unknown, status?: number, headers?: Record<string, string>): Response
 }
 type HonoHandler = (err: Error, c: HonoContext) => Response | Promise<Response>
 
@@ -36,12 +45,15 @@ export function mushiHonoErrorHandler(
       c.req.raw.headers.forEach((v, k) => { headers[k] = v })
       const traceContext = parseTraceContext(headers)
       const rawTraceparent = headers['traceparent'] ?? undefined
+      // Scrub query values before the URL goes into free text: the client can
+      // key-redact `url`, not a `?token=` inside a sentence (as express.ts).
+      const safeUrl = scrubUrl(c.req.raw.url)
       void opts.client.captureReport({
-        description: `[${c.req.raw.method} ${c.req.raw.url}] ${err.message}`,
+        description: `[${c.req.raw.method} ${safeUrl}] ${err.message}`,
         userCategory: 'bug',
         severity: 'high',
         component: opts.component ?? 'node:hono',
-        url: c.req.raw.url,
+        url: safeUrl,
         traceContext,
         error: { name: err.name, message: err.message, stack: err.stack },
         ...(rawTraceparent ? { metadata: { traceparent: rawTraceparent } } : {}),

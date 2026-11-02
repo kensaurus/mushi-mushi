@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-23T03:17:21.481Z",
+  "generatedAt": "2026-10-28T05:51:32.849Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -105,10 +105,10 @@
       "doc_path": "pages/dashboard.md",
       "section": "main",
       "title": "Home",
-      "body": "# Home\n\nSummary for the selected app: open bugs, fixes in progress, setup and recent activity.\n\nRoute: /dashboard\nSection: Plan\n\nKeywords: dashboard, home, overview, kpi, metrics, loop, landing, summary\n\nUse this page when the user asks about: dashboard, home, overview, kpi, metrics, loop",
+      "body": "# Home\n\nSummary for the selected app: open bugs, fixes in progress, setup and recent activity.\n\nRoute: /dashboard\nSection: Plan\n\nKeywords: dashboard, home, overview, kpi, metrics, loop, landing, summary, uptime, is my app up, app status, availability, monitoring, incidents\n\nUse this page when the user asks about: dashboard, home, overview, kpi, metrics, loop",
       "route_path": "/dashboard",
       "kind": "page",
-      "content_hash": "025fd212fe9df356c41fcb8877e79165be2b00375e0f175d96f14c1377f76fd7"
+      "content_hash": "3c957bdbae90500d40497f59d8f8035ce7bc273e8cfc21a87dd567b9269768fc"
     },
     {
       "doc_path": "pages/inbox.md",
@@ -165,13 +165,22 @@
       "content_hash": "84ac51ce36cd397d4b9240f3e57f95eb468a052b2cb0b8a779ecf336d6a32046"
     },
     {
+      "doc_path": "pages/pipeline.md",
+      "section": "main",
+      "title": "Pipeline",
+      "body": "# Pipeline\n\nEvery bug from report to deploy as one picture: what is stuck where, why, and one-click fixes.\n\nRoute: /pipeline\nSection: Do\n\nKeywords: pipeline, stuck, funnel, release train, merge queue, ci red, conflict, triage, retry, blocked, workers, local worker, lanes, mushi work\n\nUse this page when the user asks about: pipeline, stuck, funnel, release train, merge queue, ci red",
+      "route_path": "/pipeline",
+      "kind": "page",
+      "content_hash": "130fbb8c39a5af641e037161825554fd80944015614bc2a9add5cba75328011f"
+    },
+    {
       "doc_path": "pages/repo.md",
       "section": "main",
       "title": "Pull requests",
-      "body": "# Pull requests\n\nEvery fix branch and pull request in your connected GitHub repo, with CI status.\n\nRoute: /repo\nSection: Do\n\nKeywords: repo, repository, branch, branches, git, github, pr, pull request, ci, checks, merge, activity\n\nUse this page when the user asks about: repo, repository, branch, branches, git, github",
+      "body": "# Pull requests\n\nEvery fix branch and pull request in your connected GitHub repo, with CI status.\n\nRoute: /repo\nSection: Do\n\nKeywords: repo, repository, branch, branches, git, github, pr, prs, pull request, pull requests, mergeable, ci, checks, merge, activity\n\nUse this page when the user asks about: repo, repository, branch, branches, git, github",
       "route_path": "/repo",
       "kind": "page",
-      "content_hash": "6314f30b16c35f442daf206857d286df87ba1bd34ca95a75d7f495927d6cca90"
+      "content_hash": "99e4a1165a7ee130684acb4d176a8ef6f663c832f99a614d26774a61d419b173"
     },
     {
       "doc_path": "pages/explore.md",
@@ -210,6 +219,15 @@
       "content_hash": "c70185fe13ec3b658ed619e390391ea66a3a1c8e4954df58b10be7cae27552fe"
     },
     {
+      "doc_path": "pages/first-user-test.md",
+      "section": "main",
+      "title": "First-time user test",
+      "body": "# First-time user test\n\nAn AI that has never seen your app tries to sign up and use it; see where a new user gets stuck and how long it takes.\n\nRoute: /first-user-test\nSection: Check\n\nKeywords: fresh eyes, first-time user, first time user, first-time user test, onboarding test, new user test, new user, first run, sign up test, signup test, time to first value, ttfv, first impression\n\nUse this page when the user asks about: fresh eyes, first-time user, first time user, first-time user test, onboarding test, new user test",
+      "route_path": "/first-user-test",
+      "kind": "page",
+      "content_hash": "1ca9fa773b9f3a2251152952172ebdddafcecbefa4604c5582e2d24f34242d8f"
+    },
+    {
       "doc_path": "pages/inventory.md",
       "section": "main",
       "title": "User stories",
@@ -222,10 +240,10 @@
       "doc_path": "pages/checks.md",
       "section": "main",
       "title": "Checks",
-      "body": "# Checks\n\nEvery automatic check on this app in one place: scheduled tests, app health, audits, user stories, design, content and AI triage quality.\n\nRoute: /checks\nSection: Check\n\nKeywords: checks, verify, quality, health, audit, tests, qa\n\nUse this page when the user asks about: checks, verify, quality, health, audit, tests",
+      "body": "# Checks\n\nEvery automatic check on this app in one place: scheduled tests, audits, user stories, design, content, AI triage quality and Mushi’s own health.\n\nRoute: /checks\nSection: Check\n\nKeywords: checks, verify, quality, health, audit, tests, qa\n\nUse this page when the user asks about: checks, verify, quality, health, audit, tests",
       "route_path": "/checks",
       "kind": "page",
-      "content_hash": "7645befc57a0e7cb0720677e82fff54cee2651bc138c5af8b565d9292a40e5bf"
+      "content_hash": "a1ba31267dab23965943097b86efb4c3734ab725d14a74bfe7a497fd708496b2"
     },
     {
       "doc_path": "pages/fullstack-audit.md",
@@ -257,11 +275,11 @@
     {
       "doc_path": "pages/health.md",
       "section": "main",
-      "title": "App health",
-      "body": "# App health\n\nAre your integrations and background jobs working: uptime, errors and failed checks.\n\nRoute: /health\nSection: Check\n\nKeywords: health, status, uptime, availability, sentry, slo, monitoring, incidents, verification hub\n\nUse this page when the user asks about: health, status, uptime, availability, sentry, slo",
+      "title": "Mushi health",
+      "body": "# Mushi health\n\nIs Mushi itself working: its AI calls and background jobs. Also your code size, schema changes and unusual spikes.\n\nRoute: /health\nSection: Check\n\nKeywords: app health, health, mushi health, status, ai calls, llm, cron, background jobs, verification hub\n\nUse this page when the user asks about: app health, health, mushi health, status, ai calls, llm",
       "route_path": "/health",
       "kind": "page",
-      "content_hash": "c452db277a3118ed7c4b67710774cf3db930dfd86406918ec90fd23c16864db6"
+      "content_hash": "f64618045404f58ea950471c1678cbb8fbff5890846182797b09e95c364452ee"
     },
     {
       "doc_path": "pages/design.md",
@@ -384,10 +402,10 @@
       "doc_path": "pages/projects.md",
       "section": "main",
       "title": "Manage apps",
-      "body": "# Manage apps\n\nCreate, rename and archive apps (projects), and see their keys and setup.\n\nRoute: /projects\nSection: Workspace\n\nKeywords: projects, apps, create project, new app, team, members, organisation, workspace\n\nUse this page when the user asks about: projects, apps, create project, new app, team, members",
+      "body": "# Manage apps\n\nCreate, rename and archive apps (projects), and see their keys and setup.\n\nRoute: /projects\nSection: Workspace\n\nKeywords: projects, apps, create project, new app, delete project, delete app, archive, rename, sdk key, ingest key, team, members, organisation, workspace\n\nUse this page when the user asks about: projects, apps, create project, new app, delete project, delete app",
       "route_path": "/projects",
       "kind": "page",
-      "content_hash": "be55bfedc0b374a86559a4949296836c4b869c4f48728d7c864978330ad0d52c"
+      "content_hash": "e655a50824c10d1d7ddaea6272d83e9998c831f9e69920694771c4db50f2c845"
     },
     {
       "doc_path": "pages/marketplace.md",
@@ -411,10 +429,10 @@
       "doc_path": "pages/rewards.md",
       "section": "main",
       "title": "Tester rewards",
-      "body": "# Tester rewards\n\nPoints, tiers and payouts for the people who report bugs.\n\nRoute: /rewards\nSection: Workspace\n\nKeywords: rewards, tester, bounty, wallet, points\n\nUse this page when the user asks about: rewards, tester, bounty, wallet, points",
+      "body": "# Tester rewards\n\nPoints, tiers and payouts for the people who report bugs.\n\nRoute: /rewards\nSection: Workspace\n\nKeywords: rewards, tester, testers, tester rewards, bounty, wallet, points\n\nUse this page when the user asks about: rewards, tester, testers, tester rewards, bounty, wallet",
       "route_path": "/rewards",
       "kind": "page",
-      "content_hash": "77c171c659b7d11ea7634c68ad4663420d690db0ed70b173c310e465c464a45b"
+      "content_hash": "42081dfdbd934bb3c9140d8bd3f33582f2e0fe7dd368457794fc31ca5a9e01f4"
     },
     {
       "doc_path": "pages/query.md",

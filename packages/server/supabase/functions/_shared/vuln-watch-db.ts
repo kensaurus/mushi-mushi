@@ -345,11 +345,16 @@ async function importSites(db: Db, projectId: string, pkgs: Array<{ ecosystem: s
   const out = new Map<string, string>()
   for (const p of pkgs.slice(0, IMPORT_CHECK_PACKAGES)) {
     const module = p.ecosystem === 'PyPI' ? p.name.replace(/-/g, '_') : p.name
+    // File rows only (symbol_name IS NULL): their preview is the head of the
+    // file, where imports live, and they are ~8% of a project's rows. Scanning
+    // symbol chunks too took 0.5-1.1 s per package on the largest project,
+    // 32-81 ms without them (2026-10-31).
     const { data, error } = await db
       .from('project_codebase_files')
       .select('file_path, content_preview')
       .eq('project_id', projectId)
       .is('tombstoned_at', null)
+      .is('symbol_name', null)
       .ilike('content_preview', `%${escapeLike(module)}%`)
       .limit(20)
     if (error) return out
@@ -709,7 +714,7 @@ async function checkProject(db: Db, projectId: string, deps: VulnWatchDeps, trig
       // Every open row of the upgrade points at the new report, including rows that carried a closed one.
       await db.from('dependency_vulns').update({ report_id: (report as { id: string }).id }).eq('repo_id', repoId).eq('group_key', g.key).eq('status', 'open')
     }
-    if (capped > 0) warnings.push(`${capped} more report${capped === 1 ? '' : 's'} wait for tomorrow (limit ${limit} a day; Settings or App health → Known holes).`)
+    if (capped > 0) warnings.push(`${capped} more report${capped === 1 ? '' : 's'} wait for tomorrow (limit ${limit} a day; Settings or Mushi health → Code size → Known holes).`)
   }
 
   const run = await record(sha, {

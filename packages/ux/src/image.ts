@@ -3,6 +3,9 @@
  * PNG helpers: decode, pad two captures to one size, pixel diff, and a
  * difference hash (dHash) for "is this the same screen" checks. No native
  * image library, so the package installs anywhere Node does.
+ *
+ * Diffs go through pixelmatch 8 (OKLab HyAB). Threshold 0.1 is still a tenth
+ * of black versus white, the same scale as v7, so it is not retuned.
  */
 
 import pixelmatch from 'pixelmatch'
@@ -108,6 +111,7 @@ export function changeRegions(diff: { width: number; height: number; data: Uint8
     .map(({ x, y, w, h }) => ({ x, y, w, h }))
 }
 
+/** `threshold` is the per-pixel OKLab distance, 0..1 (1 = black vs white). Default 0.1. */
 export function pixelDiff(before: Buffer, after: Buffer, threshold = 0.1): PixelDiff {
   const a = decodePng(before)
   const b = decodePng(after)
@@ -140,6 +144,13 @@ export function cropTop(buf: Buffer, maxHeight: number): Buffer {
   const out = new PNG({ width: src.width, height: maxHeight })
   PNG.bitblt(src, out, 0, 0, src.width, maxHeight, 0, 0)
   return encodePng(out)
+}
+
+/** Share of pixels that differ visibly from the background colour: near 0 is a blank screen. */
+export function contentShare(buf: Buffer): number {
+  const png = decodePng(buf)
+  const total = png.width * png.height
+  return total > 0 ? contentPixels(png) / total : 0
 }
 
 /** Pixels that differ visibly from the image's top-left (background) colour. */

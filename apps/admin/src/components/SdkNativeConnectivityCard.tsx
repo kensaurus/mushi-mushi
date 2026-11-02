@@ -373,7 +373,12 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
                       Add to your CI workflow <code className="font-mono">env:</code> block:
                     </p>
                     <div className="flex items-start gap-2">
-                      <pre className="mushi-code-block mushi-code-body flex-1 min-w-0 overflow-x-auto rounded px-2 py-1.5 font-mono text-2xs text-fg leading-relaxed whitespace-pre">
+                      <pre
+                        tabIndex={0}
+                        role="region"
+                        aria-label="CI env block"
+                        className="mushi-code-block mushi-code-body flex-1 min-w-0 overflow-x-auto rounded px-2 py-1.5 font-mono text-2xs text-fg leading-relaxed whitespace-pre focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                      >
                         {fallback.envBlock}
                       </pre>
                       <CopyButton value={fallback.envBlock} label="Copy env block" copiedLabel="Copied" size="sm" />

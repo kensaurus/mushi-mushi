@@ -35,7 +35,14 @@ export function AgentTracePanel({ report }: Props) {
         <h3 className="text-sm font-semibold text-fg">Agent trace</h3>
         <Badge className="bg-surface-overlay text-fg-muted text-3xs">${totalCost.toFixed(4)} total</Badge>
       </div>
-      <div className="overflow-x-auto">
+      {/* Wide on a phone: the table has no links or buttons, so the scroller
+          itself has to take keyboard focus (axe scrollable-region-focusable). */}
+      <div
+        tabIndex={0}
+        role="region"
+        aria-label="Agent trace"
+        className="overflow-x-auto focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+      >
         <table className="w-full text-2xs">
           <thead>
             <tr className="text-left text-fg-muted border-b border-edge-subtle">

@@ -1,42 +1,41 @@
 # `@mushi-mushi/plugin-discord`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
-Part of the Mushi Mushi monorepo — plain-English bug comprehension for vibe coders.
+For small teams and communities that talk in Discord. This posts a message to
+a Discord channel when Mushi Mushi triages a bug, proposes a fix, applies it,
+or changes a report's status.
 
-
-Mushi Mushi plugin: post Discord embeds to an Incoming Webhook for key
-report lifecycle events.
-
-## Install
+**Do you need this package?** Not on Mushi Mushi Cloud: paste a Discord webhook
+URL on the **Integrations** page of the console and Mushi posts to the
+channel itself, on any plan. The console's Marketplace has no Discord listing
+(checked 2026-10-29), so this package only receives events from a Mushi server you
+run yourself, once you add a `plugin_registry` row for it.
 
 ```bash
 npm i @mushi-mushi/plugin-discord
+export MUSHI_PLUGIN_SECRET=...                       # the signing secret set when the plugin is installed
+export DISCORD_WEBHOOK_URL=https://discord.com/...   # channel webhook URL
+export ADMIN_BASE_URL=https://...                    # optional: Mushi console URL, for report links
+npx -p @mushi-mushi/plugin-discord mushi-plugin-discord   # POST /mushi/webhook on PORT (default 3000)
 ```
 
-## Run as a stand-alone server
-
-```bash
-MUSHI_PLUGIN_SECRET=...                       # set when the plugin is installed in Mushi admin
-DISCORD_WEBHOOK_URL=https://discord.com/...   # Incoming Webhook URL
-ADMIN_BASE_URL=https://...                    # Mushi admin base URL (deep-links)
-PORT=3000                                     # optional
-npx mushi-plugin-discord
-```
-
-Install **Discord Notifier** in the Mushi admin Marketplace and point its
-`webhook_url` at `https://your-host/mushi/webhook`.
+Docs: https://kensaur.us/mushi-mushi/docs/plugins/discord
 
 ## Programmatic usage
+
+```bash
+npm i @mushi-mushi/plugin-discord @mushi-mushi/plugin-sdk express
+```
 
 ```ts
 import { createDiscordPlugin } from '@mushi-mushi/plugin-discord'
 import express from 'express'
-import { expressMiddleware } from '@mushi-mushi/plugin-sdk'
+import { expressMiddleware } from '@mushi-mushi/plugin-sdk/express'
 
 const handler = createDiscordPlugin({
   webhookUrl: process.env.DISCORD_WEBHOOK_URL!,
-  adminBaseUrl: process.env.ADMIN_BASE_URL!,
+  adminBaseUrl: process.env.ADMIN_BASE_URL ?? '',
   mushiSecret: process.env.MUSHI_PLUGIN_SECRET!,
 })
 
@@ -45,18 +44,24 @@ express().post('/mushi/webhook', expressMiddleware(handler)).listen(3000)
 
 ## Subscribed events
 
-- `report.classified` — embed coloured by severity (`critical` red, `high`
+- `report.classified`: embed coloured by severity (`critical` red, `high`
   orange, `medium` yellow, `low` green).
-- `fix.proposed` — blue embed.
-- `fix.applied` — green embed.
-- `report.status_changed` — grey embed with the new status.
+- `fix.proposed`: blue embed, with the pull request link when there is one.
+- `fix.applied`: green embed, with the pull request link when there is one.
+- `report.status_changed`: grey embed with the old and new status.
+
+## Known gaps
+
+- The fix embeds include a "Fix status" field: proposed, applied or failed,
+  taken from the event.
+- The built-in Discord integration on the Integrations page does not use this
+  package and is not affected.
 
 ## Notes
 
 - All webhook calls retry transient `5xx` via `withRetry` from
   `@mushi-mushi/plugin-sdk`.
-- Embed colour palette mirrors `_shared/discord.ts` server-side so
-  notifications look consistent regardless of which path fires them.
+- The embed colours match the ones the built-in Discord integration uses.
 
 ## License
 
@@ -66,4 +71,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 76 edge functions · 503 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

@@ -1,10 +1,11 @@
 /**
  * FILE: apps/admin/src/components/settings/LabsPanel.tsx
- * PURPOSE: Settings › Labs. One switch per page outside the core
+ * PURPOSE: Settings › Display & sidebar, sidebar half. One switch per page outside the core
  *          bug → diagnosis → fix loop (lib/labs.ts), grouped the way the
  *          registry groups them. On adds the page to the sidebar; off only
  *          hides it there — every page stays reachable from ⌘K and by link.
- *          State lives in this browser (localStorage), so there is no Save.
+ *          Saved to your account as you switch (lib/labs.ts), so there is no
+ *          Save and other browsers get the same pages.
  */
 
 import { Btn, Toggle } from '../ui'
@@ -19,8 +20,8 @@ export function LabsPanel() {
   return (
     <div className="space-y-4" data-testid="settings-labs">
       <p className="text-sm text-fg-muted">
-        Labs are pages outside the core bug → diagnosis → fix loop. Switch one on to add it to your
-        sidebar. Every page stays reachable from ⌘K and by link.
+        Pages to keep in your sidebar under Labs. Every other page is one click away under More pages
+        in the sidebar, and in ⌘K.
       </p>
       {GROUPS.map((group) => {
         const features = LAB_FEATURES.filter((f) => f.group === group)
@@ -37,9 +38,12 @@ export function LabsPanel() {
                   purpose={f.description}
                   action={
                     <>
+                      {/* The switch only decides the sidebar: "Off" read as "this page
+                          is turned off" while it kept working (console journeys
+                          2026-10-27). */}
                       <Toggle
-                        ariaLabel={f.label}
-                        label={on ? 'On' : 'Off'}
+                        ariaLabel={`${f.label} in the sidebar`}
+                        label={on ? 'In sidebar' : 'Not in sidebar'}
                         checked={on}
                         onChange={(next) => setEnabled(f.id, next)}
                       />
@@ -47,7 +51,6 @@ export function LabsPanel() {
                         size="sm"
                         variant="ghost"
                         to={f.paths[0]}
-                        disabled={!on}
                         aria-label={`Open ${f.label}`}
                         data-testid={`lab-open-${f.id}`}
                       >

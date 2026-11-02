@@ -132,7 +132,7 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
           {
             priority: POSTURE_PRIORITY.status,
             show: data != null,
-            children: data ? <RecipeHeaderSummary recipe={data} elements={elements} /> : null,
+            children: data ? <RecipeHeaderSummary recipe={data} elements={elements} onSelect={(key) => setSelectedKey(key)} /> : null,
           },
         ]}
       />

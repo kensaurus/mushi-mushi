@@ -124,10 +124,44 @@ describe('CiPlacementSection', () => {
     expect(preview).toContain('Visual — Pinned to GitHub: pixel baselines')
     expect(preview).toContain('−$4.20')
     expect(preview).toContain('(estimated)')
-    await click(button('Ask for this change', card))
-    expect(state.apiFetch.mock.calls[1]![0]).toBe('/v1/admin/ci/placement/requests')
+    // An owner applies in one click: request, approve that exact payload, run.
+    state.apiFetch.mockImplementation(async (path: string) =>
+      path.endsWith('/requests')
+        ? { ok: true, data: { id: 'r9', payloadSha256: 'f'.repeat(64) } }
+        : path.endsWith('/execute')
+          ? { ok: true, data: { detail: 'Set LINUX_RUNNER to “kensaurus-local” on kensaurus/yen-yen.' } }
+          : { ok: true, data: {} },
+    )
+    expect(button('Ask for this change', card)).toBeUndefined()
+    await click(button('Apply now', card))
+    const calls = state.apiFetch.mock.calls.slice(1).map(([p, init]) => [p, (init as RequestInit).body ?? null])
+    expect(calls).toEqual([
+      ['/v1/admin/ci/placement/requests', JSON.stringify({ projectId: PROJECT, repo: 'kensaurus/yen-yen', variable: 'LINUX_RUNNER', value: 'kensaurus-local' })],
+      ['/v1/admin/ci/placement/requests/r9/approve', JSON.stringify({ payloadSha256: 'f'.repeat(64) })],
+      ['/v1/admin/ci/placement/requests/r9/execute', null],
+    ])
     expect(state.reload).toHaveBeenCalled()
-    expect(card.textContent).toContain('Requested. Approve it below, then run it.')
+    expect(card.textContent).toContain('Set LINUX_RUNNER to “kensaurus-local” on kensaurus/yen-yen. Mushi watches the next jobs.')
+  })
+
+  it('Apply now that GitHub refuses for the App permission says where to approve it, and keeps the request', async () => {
+    state.apiFetch.mockImplementation(async (path: string) =>
+      path.endsWith('/preview')
+        ? { ok: true, data: previewFixture() }
+        : path.endsWith('/requests')
+          ? { ok: true, data: { id: 'r9', payloadSha256: 'f'.repeat(64) } }
+          : path.endsWith('/execute')
+            ? { ok: false, error: { code: 'GITHUB_VARIABLES_PERMISSION', message: 'The GitHub token cannot change Actions variables.' } }
+            : { ok: true, data: {} },
+    )
+    await render()
+    const card = q('ci-placement-repo-kensaurus/yen-yen')
+    await click(radio('Self-hosted: kensaurus-local', card))
+    await click(button('Preview', card))
+    await click(button('Apply now', card))
+    expect(card.textContent).toContain('The GitHub token cannot change Actions variables. It is approved below; run it there once fixed.')
+    const link = Array.from(card.querySelectorAll('a')).find((a) => /Review request/.test(a.textContent ?? ''))
+    expect(link?.getAttribute('href')).toBe('https://github.com/settings/installations')
   })
 
   it('a blocked preview shows why and offers no request', async () => {
@@ -193,7 +227,42 @@ describe('CiPlacementSection', () => {
     await render()
     const link = Array.from(host.querySelectorAll('a')).find((a) => a.textContent?.includes('Import from your CI agreement'))!
     expect(link.getAttribute('href')).toBe('/settings?tab=ci-policy')
-    expect(host.textContent).toContain('No GitHub token is stored')
+    expect(host.textContent).toContain('Mushi has no GitHub access for this app’s repositories')
     expect(radio('GitHub-hosted', q('ci-placement-repo-kensaurus/yen-yen')).disabled).toBe(false)
+  })
+
+  it('a move to GitHub-hosted switches back after 4 hours unless told otherwise', async () => {
+    const data = placementFixture()
+    state.data = { ...data, policy: null }
+    state.apiFetch.mockResolvedValue({ ok: true, data: previewFixture() })
+    await render()
+    const card = q('ci-placement-repo-kensaurus/yen-yen')
+    await click(radio('GitHub-hosted', card))
+    expect(card.textContent).toContain('Switch back after')
+    await click(button('Preview', card))
+    expect(JSON.parse(String((state.apiFetch.mock.calls[0]![1] as RequestInit).body))).toMatchObject({ variable: 'LINUX_RUNNER', value: null, revertAfterHours: 4 })
+    const select = card.querySelector('select') as HTMLSelectElement
+    await act(async () => {
+      select.value = '0'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await click(button('Preview', card))
+    expect(JSON.parse(String((state.apiFetch.mock.calls[1]![1] as RequestInit).body)).revertAfterHours).toBeUndefined()
+  })
+
+  it('offers economy or thorough where a workflow reads CI_PROFILE, economy being current when unset', async () => {
+    const data = placementFixture()
+    state.data = { ...data, repos: data.repos.map((r) => (r.repo === 'kensaurus/yen-yen' ? { ...r, profile: { current: { exists: false, value: null, updatedAt: null } } } : r)) }
+    state.apiFetch.mockResolvedValue({ ok: true, data: previewFixture({ variable: 'CI_PROFILE', warnings: ['Thorough runs every check'] }) })
+    await render()
+    const block = q('ci-profile-kensaurus/yen-yen')
+    expect(block.textContent).toContain('Now: Economy')
+    expect(radio('Economy (recommended, default)', block).disabled).toBe(true)
+    await click(radio('Thorough (more expensive)', block))
+    await click(button('Preview', block))
+    expect(JSON.parse(String((state.apiFetch.mock.calls[0]![1] as RequestInit).body))).toEqual({ projectId: PROJECT, repo: 'kensaurus/yen-yen', variable: 'CI_PROFILE', value: 'thorough' })
+    expect(q('ci-profile-preview').textContent).toContain('Thorough runs every check')
+    // A repo whose workflows do not read it shows no switch.
+    expect(host.querySelector('[data-testid="ci-profile-kensaurus/tsumagoi"]')).toBeNull()
   })
 })

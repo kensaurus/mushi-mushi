@@ -80,6 +80,7 @@ interface CiRepo {
   queued: number
   running: number
   jobs7d: number
+  /** Passed ÷ jobs that finished testing on this repo. Machine stops are not included. */
   passRate: number | null
   queueP95s: number | null
   durationP50s: number | null
@@ -123,11 +124,28 @@ export interface CiAdvice {
   repo?: string | null
   runner?: string | null
   hostId?: string | null
+  /** Projected saving per 30 days if applied (USD, estimated); null when it cannot be priced. */
+  monthSavingUsd?: number | null
+  /** Mushi can open a PR that applies this fix (POST /v1/admin/ci/cost-fixes). */
+  autofix?: CiCostAutofix | null
+}
+
+/** Copy of `CI_COST_FIX_KINDS` in `_shared/ci-overview-types.ts`; change it there first. */
+export type CiCostFixKind = 'add_concurrency' | 'skip_drafts' | 'weekly_cron' | 'ignore_docs_paths'
+
+export interface CiCostAutofix {
+  kind: CiCostFixKind
+  projectId: string
+  repo: string
+  workflowPath: string
 }
 
 interface CiStats {
   jobs: number
+  /** Passed ÷ jobs that finished testing (passed + code failures). Null when none finished. Machine stops are not included. */
   passRate: number | null
+  /** Jobs that finished testing and passed. */
+  passed: number
   queueP50s: number | null
   queueP95s: number | null
   durationP50s: number | null

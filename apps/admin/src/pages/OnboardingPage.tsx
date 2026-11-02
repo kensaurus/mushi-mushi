@@ -16,44 +16,31 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { testReportHref, useSendTestReport } from '../lib/useSendTestReport'
 import { usePageData } from '../lib/usePageData'
+import type { TimeToFirstDiagnosis } from '../lib/setupRail'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { Card, Btn, Input, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, SegmentedControl, HelpBanner, Loading } from '../components/ui'
+import { SetupProgressRail } from '../components/onboarding/SetupProgressRail'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { SnapshotSectionHint,Card, Btn, Input, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, Section, StatCard, SegmentedControl, Badge, HelpBanner, Loading } from '../components/ui'
-import { OnboardingStatusBanner } from '../components/onboarding/OnboardingStatusBanner'
-import { OnboardingStepsGuide } from '../components/onboarding/OnboardingStepsGuide'
 import { OnboardingSetupReadout } from '../components/onboarding/OnboardingSetupReadout'
+import { SetupGapsSection } from '../components/onboarding/SetupGapsSection'
 import { EMPTY_ONBOARDING_STATS, type OnboardingStats, type OnboardingTabId } from '../components/onboarding/types'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
-import { PageHero } from '../components/PageHero'
 import { ContainedBlock } from '../components/report-detail/ReportSurface'
 import { OnboardingSkeleton } from '../components/skeletons/OnboardingSkeleton'
 import { ConnectionStatus } from '../components/ConnectionStatus'
 import { SetupChecklist } from '../components/SetupChecklist'
-import { CHIP_TONE, SELECTED_TONE } from '../lib/chipTone'
-import { ProjectNarrativeStrip } from '../components/dashboard/ProjectNarrativeStrip'
 import { PdcaFlow } from '../components/pdca-flow/PdcaFlow'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { useSetupStatus } from '../lib/useSetupStatus'
+import { withSetupRequiredCounts } from '../lib/setupProgress'
 import { isActivationCockpitV2Enabled, useActivationStatus } from '../lib/useActivationStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
-import { useCreateProject } from '../lib/useCreateProject'
+import { PLAN_APP_LIMIT_TITLE, PLANS_HREF, useCreateProject } from '../lib/useCreateProject'
 import { usePageCopy } from '../lib/copy'
 import { useOnboardingUx, resolveQuickOnboardingTab } from '../lib/onboardingModeUx'
-import {
-  optionalDetail,
-  optionalTooltip,
-  reportsDetail,
-  reportsTooltip,
-  requiredDetail,
-  requiredTooltip,
-  sdkDetail,
-  sdkTooltip,
-} from '../lib/statTooltips/onboarding'
-import { onboardingLinks } from '../lib/statCardLinks'
 import { restartFirstRunTour } from '../components/FirstRunTour'
-import { openSetupGuide } from '../lib/setupGuidePrefs'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { FirstDiagnosisScreen } from '../components/onboarding/FirstDiagnosisScreen'
 import { MigrationsInProgressCard } from '../components/migrations/MigrationsInProgressCard'
@@ -83,28 +70,33 @@ const ONBOARDING_TABS: Array<{ id: OnboardingTabId; label: string; description: 
   },
   {
     id: 'steps',
-    label: 'Steps',
-    description: 'Checklist with required + optional milestones — synced from live DB state.',
+    label: 'More to connect',
+    description: 'Optional tools to connect once the app is set up.',
   },
   {
     id: 'verify',
-    label: 'Verify',
+    label: 'Test it',
     description: 'API key mint, connection probe, and admin test-report submission.',
   },
   {
     id: 'sdk',
-    label: 'SDK',
+    label: 'Install',
     description: 'Install snippet and init copy — bookmark this tab after setup completes.',
   },
   {
-    id: 'copilot',
-    label: 'Diagnose',
+    id: 'diagnose',
+    label: 'Fix a problem',
     description: 'Something not working? Check the SDK heartbeat, version and fix dispatch for one project, with copy-paste commands.',
   },
 ]
 
 function isOnboardingTab(value: string | null): value is OnboardingTabId {
   return ONBOARDING_TABS.some((t) => t.id === value)
+}
+
+/** `?tab=copilot` was the Diagnose tab's id until 2026-10-27; old links still open it. */
+function resolveTabParam(value: string | null): string | null {
+  return value === 'copilot' ? 'diagnose' : value
 }
 
 export function OnboardingPage() {
@@ -133,7 +125,7 @@ export function OnboardingPage() {
   const ux = useOnboardingUx()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  const tabParam = searchParams.get('tab')
+  const tabParam = resolveTabParam(searchParams.get('tab'))
   const setupCliMode = isCliSetupMode(searchParams)
   const activeTab: OnboardingTabId = isOnboardingTab(tabParam) ? tabParam : 'overview'
 
@@ -154,7 +146,8 @@ export function OnboardingPage() {
   const statsFetchedAt = activationEnabled ? activation.lastFetchedAt : legacyStatsFetchedAt
   const statsValidating = activationEnabled ? activation.isValidating : legacyStatsValidating
   const reloadStats = activationEnabled ? activation.reload : legacyReloadStats
-  const stats = statsData ?? EMPTY_ONBOARDING_STATS
+  // Required counts and "ready" follow GET /v1/admin/setup (see withSetupRequiredCounts).
+  const stats = withSetupRequiredCounts(statsData ?? EMPTY_ONBOARDING_STATS, legacySetup.activeProject)
 
   // In Quickstart mode the overview tab is hidden and the segmented control
   // shows "Create / Verify / Install" labels. Previously effectiveTab was hard-
@@ -230,7 +223,12 @@ export function OnboardingPage() {
     },
   })
 
-  const project = setup.activeProject
+  // The steps come from /v1/admin/setup, like the rail, the sidebar and Home.
+  // The activation payload marks the SDK step optional, so this page said
+  // "You're set up, 3 of 3" under a rail saying 3 of 4 (first-time user
+  // test, 2026-10-28). Step checks read the same source, and the page waits
+  // for it, so the old count never flashes while it loads.
+  const project = legacySetup.activeProject
 
   // What's the next required step? We use it to highlight the right card.
   const nextRequired = useMemo(
@@ -254,7 +252,7 @@ export function OnboardingPage() {
   const firstRunEligible =
     !setupCliMode &&
     setup.resolved &&
-    (!setup.hasAnyProject || (project != null && setup.isStepIncomplete('first_report_received')))
+    (!setup.hasAnyProject || (project != null && legacySetup.isStepIncomplete('first_report_received')))
   const [firstRunHeld, setFirstRunHeld] = useState(false)
   useEffect(() => {
     if (firstRunEligible && viewParam !== 'all') setFirstRunHeld(true)
@@ -298,6 +296,11 @@ export function OnboardingPage() {
   const createErrorActions = (() => {
     if (!createError) return undefined
     switch (createError.code) {
+      case 'PLAN_APP_LIMIT':
+        return [
+          { label: 'See plans', onClick: () => navigate(PLANS_HREF) },
+          { label: 'Dismiss', onClick: clearCreateError },
+        ]
       case 'NO_ORGANIZATION':
         return [
           {
@@ -330,6 +333,8 @@ export function OnboardingPage() {
   const createErrorTitle = (() => {
     if (!createError) return undefined
     switch (createError.code) {
+      case 'PLAN_APP_LIMIT':
+        return PLAN_APP_LIMIT_TITLE
       case 'NO_ORGANIZATION':
         return 'No writable team found'
       case 'FORBIDDEN':
@@ -403,17 +408,10 @@ export function OnboardingPage() {
     )
   }
 
-  const sdkInstalled = !setup.isStepIncomplete('sdk_installed')
-  const hasReports = (project?.report_count ?? 0) > 0
-  const hasFix = (project?.fix_count ?? 0) > 0
-  const hasMerged = (project?.merged_fix_count ?? 0) > 0
   // Render a "Setup complete" hero (instead of bouncing) when there's nothing
   // left for this project to do. Keeps the page useful as a permanent SDK
   // reference for fully onboarded users.
   const setupComplete = Boolean(project?.done && project.complete >= project.total)
-
-  const setupSeverity: 'ok' | 'warn' | 'neutral' | 'info' =
-    stats.setupDone ? 'ok' : stats.sdkHostMismatch ? 'warn' : !stats.hasAnyProject ? 'neutral' : 'info'
 
   usePublishPageContext({
     route: '/onboarding',
@@ -429,14 +427,9 @@ export function OnboardingPage() {
       : ONBOARDING_TABS
     return visibleTabs.map((t) => {
       let count: number | undefined
-      if (t.id === 'steps') {
-        count =
-          stats.requiredTotal - stats.requiredComplete > 0
-            ? stats.requiredTotal - stats.requiredComplete
-            : stats.stepsComplete > 0
-              ? stats.stepsComplete
-              : undefined
-      } else if (t.id === 'verify') {
+      // No count on the extras tab: the rail above is the one place that
+      // says how far setup is.
+      if (t.id === 'verify') {
         count = stats.hasApiKey && stats.reportCount === 0 ? 1 : undefined
       }
       return {
@@ -447,7 +440,7 @@ export function OnboardingPage() {
     })
   }, [ux.hideOverviewTab, copy?.tabLabels, stats])
 
-  if (setup.loading || (statsLoading && !statsData)) return <OnboardingSkeleton />
+  if (setup.loading || legacySetup.loading || (statsLoading && !statsData)) return <OnboardingSkeleton />
   if (setup.error) {
     const isNetwork =
       setup.error.includes('Failed to fetch') ||
@@ -488,7 +481,7 @@ export function OnboardingPage() {
         </h3>
         <ContainedBlock tone="muted" className="mt-2">
           <p className="text-xs text-fg-muted">
-            A project groups all bug reports from one application. Name it after your app.
+            A project is one app: its bug reports, its key and its fixes (the sidebar lists them under Apps). Name it after your app.
           </p>
         </ContainedBlock>
       </div>
@@ -589,7 +582,7 @@ export function OnboardingPage() {
         icon={<IconBolt />}
         projectScope={stats.projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
-        description={copy?.description ?? 'Create a project, generate a report key, install the SDK, and watch your first bug get a plain-English read — target: under 2 minutes.'}
+        description={copy?.description ?? 'Create a project, make a key, install the SDK, and watch your first bug get a plain-English read — target: under 2 minutes.'}
         helpTitle={copy?.help?.title ?? 'About this wizard'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'A guided checklist that creates your first project, generates an API key, sends a test report, and shows the SDK snippet. Progress saves across devices.'}
         helpUseCases={copy?.help?.useCases ?? [
@@ -598,11 +591,7 @@ export function OnboardingPage() {
           'Confirm reports arrive before shipping any code',
         ]}
         helpHowToUse={copy?.help?.howToUse ?? 'Complete the required steps in order. The API key is only shown once — copy it before continuing. You can rerun the test report any time from Settings.'}
-      >
-        <Badge className={stats.setupDone ? CHIP_TONE.okSubtle : stats.hasAnyProject ? CHIP_TONE.warnSubtle : CHIP_TONE.infoSubtle}>
-          {stats.setupDone ? 'READY' : stats.hasAnyProject ? `${stats.requiredComplete}/${stats.requiredTotal}` : 'START'}
-        </Badge>
-      </PageHeaderBar>
+      />
 
       {firstRun ? firstRunWizard : (
       <>
@@ -619,149 +608,31 @@ export function OnboardingPage() {
         </p>
       )}
 
-      {/* Mode intro card — renders only on first visit; dismissed via localStorage */}
-
+      {/* The four steps to a wired-up app, with the next one's button (Set up page intent). */}
       <PagePosture
-        maxRows={3}
         slots={[
           {
-            id: 'onboarding-status',
+            id: 'setup-rail',
             priority: POSTURE_PRIORITY.status,
+            show: stats.hasAnyProject,
             children: (
-              <OnboardingStatusBanner
-                stats={stats}
+              <SetupProgressRail
+                project={project}
+                apiKey={createdProject?.apiKey ?? apiKey?.key ?? null}
                 onTab={setActiveTab}
-                onRunTest={project ? () => void submitTestReport() : undefined}
+                onMintKey={() => void generateKey()}
+                minting={generatingKey}
+                onSendTest={() => void submitTestReport()}
                 testing={testStatus === 'running'}
-                plainLanguage={ux.plainBanner}
-              />
-            ),
-          },
-          {
-            id: 'onboarding-snapshot',
-            priority: POSTURE_PRIORITY.heroOrSnapshot,
-            children: (
-              <Section
-                title={copy?.sections?.snapshot ?? 'Setup snapshot'}
-                freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
-              >
-                {!ux.hideOverviewTab ? (
-                  <SnapshotSectionHint text={activeTabMeta.description} />
-                ) : null}
-                <div className={`grid grid-cols-2 gap-2 ${ux.hideOptionalStat ? 'sm:grid-cols-3' : 'sm:grid-cols-4'}`}>
-                  <StatCard
-                    label={copy?.statLabels?.required ?? 'Required'}
-                    value={`${stats.requiredComplete}/${stats.requiredTotal}`}
-                    accent={stats.setupDone ? 'text-ok' : 'text-warn'}
-                    tooltip={requiredTooltip(stats)}
-                    detail={requiredDetail(stats)}
-                    to={onboardingLinks.required}
-                  />
-                  <StatCard
-                    label={copy?.statLabels?.sdk ?? 'SDK'}
-                    value={stats.sdkInstalled ? 'Live' : stats.hasApiKey ? 'Pending' : '—'}
-                    accent={stats.sdkInstalled ? 'text-ok' : stats.sdkHostMismatch ? 'text-danger' : 'text-info'}
-                    tooltip={sdkTooltip(stats)}
-                    detail={sdkDetail(stats)}
-                    to={onboardingLinks.sdk}
-                  />
-                  <StatCard
-                    label={copy?.statLabels?.reports ?? 'Reports'}
-                    value={stats.reportCount}
-                    accent={stats.reportCount > 0 ? 'text-brand' : undefined}
-                    tooltip={reportsTooltip(stats)}
-                    detail={reportsDetail(stats)}
-                    to={onboardingLinks.reports}
-                  />
-                  {!ux.hideOptionalStat ? (
-                    <StatCard
-                      label={copy?.statLabels?.optional ?? 'Optional'}
-                      value={`${stats.optionalComplete}/${stats.optionalTotal}`}
-                      accent="text-fg-secondary"
-                      tooltip={optionalTooltip(stats)}
-                      detail={optionalDetail(stats)}
-                      to={onboardingLinks.optional}
-                    />
-                  ) : null}
-                </div>
-              </Section>
-            ),
-          },
-          {
-            id: 'onboarding-guide',
-            priority: POSTURE_PRIORITY.guide,
-            children: (
-              <OnboardingStepsGuide
-                stats={{
-                  setupDone: stats.setupDone,
-                  hasAnyProject: stats.hasAnyProject,
-                  requiredComplete: stats.requiredComplete,
-                  requiredTotal: stats.requiredTotal,
-                  nextStepId: stats.nextStepId,
-                  sdkInstalled: stats.sdkInstalled,
-                  reportCount: stats.reportCount,
-                }}
+                compact={effectiveTab !== 'overview'}
               />
             ),
           },
         ]}
       />
 
-      <OnboardingSetupReadout
-        stats={stats}
-        statsFetchedAt={statsFetchedAt}
-        statsValidating={statsValidating}
-      />
-
-      {/* Linear step rail — always visible when there is at least one project */}
-      {stats.hasAnyProject && (
-        <nav aria-label="Setup steps" className="flex flex-wrap items-center gap-2">
-          {([
-            { tab: 'steps',  label: 'Create',       stepId: 'project_created' },
-            { tab: 'verify', label: 'API key',       stepId: 'api_key_generated' },
-            { tab: 'sdk',    label: 'Install SDK',   stepId: 'sdk_installed' },
-            { tab: 'verify', label: 'First report',  stepId: 'first_report_received' },
-          ] as const).map(({ tab, label, stepId }, i) => {
-            const isDone = setup.getStep(stepId)?.complete ?? false
-            const isActive = !isDone && effectiveTab === tab
-            return (
-              <span key={`${tab}-${stepId}`} className="flex items-center gap-2">
-                {i > 0 && <span className="text-fg-faint text-xs" aria-hidden="true">›</span>}
-                <Btn
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setActiveTab(tab)}
-                  className={`flex items-center gap-1.5 rounded px-2 py-0.5 text-2xs font-medium border-0 shadow-none ${
-                    isDone
-                      ? 'text-ok bg-transparent hover:bg-transparent'
-                      : isActive
-                        ? `${SELECTED_TONE} ring-1 ring-inset ring-brand/20`
-                        : 'text-fg-muted hover:text-fg bg-transparent'
-                  }`}
-                  aria-current={isActive ? 'step' : undefined}
-                >
-                  {isDone
-                    ? <span aria-hidden="true">✓</span>
-                    : <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-current text-3xs">{i + 1}</span>
-                  }
-                  {label}
-                </Btn>
-              </span>
-            )
-          })}
-          {stats.setupDone && (
-            <span className="flex items-center gap-2">
-              <span className="text-fg-faint text-xs" aria-hidden="true">›</span>
-              <Link
-                to="/connect"
-                className="flex items-center gap-1 rounded px-2 py-0.5 text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
-              >
-                Continue to Connect hub →
-              </Link>
-            </span>
-          )}
-        </nav>
-      )}
+      {/* Configuration that is missing or broken, before a button fails (console ops plan P1). */}
+      {stats.hasAnyProject ? <SetupGapsSection projectId={activeProjectId ?? stats.projectId ?? null} /> : null}
 
       {/* CLI-waiting callout when wizard was opened from the terminal */}
       {setupCliMode && !stats.setupDone && (
@@ -793,92 +664,15 @@ export function OnboardingPage() {
         <CliSetupGuide projectId={stats.projectId} className="mb-4" />
       ) : null}
 
-      {!ux.hideOverviewChrome ? (
-      <PageHero
-        scope="onboarding"
-        title="Get started"
-        kicker="Start here"
-        decide={{
-          label: stats.setupDone ? 'Pipeline wired' : stats.nextStepLabel ?? 'Begin setup',
-          metric: `${stats.requiredComplete}/${stats.requiredTotal} required`,
-          summary: stats.setupDone
-            ? `${stats.projectName ?? 'Project'} ingests reports — optional integrations remain on the Steps tab.`
-            : stats.hasAnyProject
-              ? `Finish ${stats.nextStepLabel ?? 'the next step'} so Dashboard and Reports stop showing empty shells.`
-              : 'Create a project first — everything else (keys, SDK, test report) hangs off that row.',
-          severity: setupSeverity,
-          anchor: 'onboarding:decide',
-          evidence: {
-            kind: 'metric-breakdown',
-            items: [
-              { label: 'Required', value: `${stats.requiredComplete}/${stats.requiredTotal}`, tone: stats.setupDone ? 'ok' : 'warn' },
-              { label: 'Reports', value: stats.reportCount, tone: stats.reportCount > 0 ? 'ok' : 'neutral' },
-              { label: 'Fixes', value: stats.fixCount, tone: stats.fixCount > 0 ? 'info' : 'neutral' },
-              { label: 'SDK', value: stats.sdkInstalled ? '✓' : '—', tone: stats.sdkInstalled ? 'ok' : 'neutral' },
-            ],
-          },
-        }}
-        verify={{
-          label: stats.reportCount > 0 ? 'Pipeline verified' : 'Awaiting first report',
-          detail: stats.reportCount > 0
-            ? `${stats.reportCount} report${stats.reportCount === 1 ? '' : 's'} on ${stats.projectName ?? 'project'}`
-            : 'Verify tab sends an admin test report without copying the key',
-          to: '/reports',
-          secondaryTo: '/dashboard',
-          secondaryLabel: 'Dashboard',
-          anchor: 'onboarding:verify',
-        }}
-      />
-      ) : null}
+      {/* An "all steps done" card used to sit here, between the rail ("Your
+          app is wired up") and the steps strip below: the third progress
+          block on the page, under setup gaps saying no fix would start
+          (2026-10-28). The rail and the gaps say it once. */}
+      {setupComplete && <MigrationsInProgressCard />}
 
-      {setupComplete && (
-        <>
-          <Card className="p-4 border-ok/30 bg-ok/5">
-            <div className="flex items-start gap-3">
-              <div
-                aria-hidden="true"
-                className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-ok-muted/50 text-ok-foreground border border-ok/25 text-xs font-bold"
-              >
-                ✓
-              </div>
-              <div className="min-w-0 flex-1">
-                <h3 className="text-sm font-semibold text-fg">
-                  Pipeline live &middot; {project?.complete ?? 0} of {project?.total ?? 8} steps
-                </h3>
-                <p className="text-xs text-fg-muted mt-0.5">
-                  Required steps done — reports flow in and the loop runs automatically.
-                  {(project?.complete ?? 0) < (project?.total ?? 8) && (
-                    <span> Optional integrations (fix agents, routing) are on the Steps tab.</span>
-                  )}
-                </p>
-                <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <Btn size="sm" variant="primary" onClick={() => navigate('/integrations/config')}>
-                    Connect fix agents →
-                  </Btn>
-                  <Btn size="sm" variant="ghost" onClick={() => navigate('/dashboard')}>Open dashboard</Btn>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Migration Hub progress — only renders when the user has rows;
-              the card returns null otherwise so the post-setup hero stays
-              focused. Account-scoped here (no project_id) because a user
-              browsing the docs without an active project is the common
-              path for upgrade rails like @mushi-mushi/* 0.x → 1.0. */}
-          <MigrationsInProgressCard />
-        </>
-      )}
-
-      {project && (
-        <ProjectNarrativeStrip
-          projectName={project.project_name}
-          sdkInstalled={sdkInstalled}
-          hasReports={hasReports}
-          hasFix={hasFix}
-          hasMerged={hasMerged}
-        />
-      )}
+      {/* The "How a bug gets fixed … You are here" stage strip sat here: a
+          fourth progress tracker under the rail, setup gaps and the tabs
+          (integrator's new-user walk, 2026-10-28). The rail says it once. */}
 
       {/* Explainer diagram: shows first-run users the four stages of the
           loop they're about to enter, with outcome copy instead of empty
@@ -1004,6 +798,7 @@ export function OnboardingPage() {
         <SetupChecklist
           project={project}
           mode="wizard"
+          extrasOnly
           adminEndpointHost={setup.data?.admin_endpoint_host ?? null}
         />
       )}
@@ -1018,7 +813,7 @@ export function OnboardingPage() {
 
       {effectiveTab === 'verify' && (
         <>
-      {project && <TimeToFirstDiagnosisCard hasApiKey={stats.hasApiKey} />}
+      {project && <TimeToFirstDiagnosisCard hasApiKey={stats.hasApiKey} onOpenSdk={() => setActiveTab('sdk')} />}
 
       {project && nextRequired?.id === 'api_key_generated' && (
         <Card className="p-5 space-y-4">
@@ -1046,20 +841,20 @@ export function OnboardingPage() {
         </Card>
       )}
 
-      {project && !setup.isStepIncomplete('api_key_generated') && setup.isStepIncomplete('first_report_received') && (
+      {project && !legacySetup.isStepIncomplete('api_key_generated') && legacySetup.isStepIncomplete('first_report_received') && (
         <Card className="p-5 space-y-4">
           <div>
             <h3 className="text-sm font-semibold text-fg">Test your connection</h3>
             <ContainedBlock tone="muted" className="mt-2">
               <p className="text-xs text-fg-muted">
-                Verify that the backend is reachable and the pipeline can accept reports.
+                Check that Mushi is reachable, then send a test bug and watch it get a plain-English read.
               </p>
             </ContainedBlock>
           </div>
           <ConnectionStatus />
           <div className="border-t border-edge-subtle pt-3">
             <ContainedBlock tone="muted" className="mb-2">
-              <p className="text-xs text-fg-muted">Submit a test report to verify the full pipeline:</p>
+              <p className="text-xs text-fg-muted">Send a test bug:</p>
             </ContainedBlock>
             <div className="flex items-center gap-3 flex-wrap">
               <Btn
@@ -1076,7 +871,7 @@ export function OnboardingPage() {
                   at={testStatus === 'pass' || testStatus === 'fail' ? testRanAt : null}
                 >
                   {testStatus === 'running' && 'Submitting test report…'}
-                  {testStatus === 'pass' && 'Pipeline is working — open /reports to see the row'}
+                  {testStatus === 'pass' && 'Mushi got it. It is on the Bugs page.'}
                   {testStatus === 'fail' && (error || 'Submission failed')}
                 </ResultChip>
               )}
@@ -1085,26 +880,17 @@ export function OnboardingPage() {
         </Card>
       )}
 
-      {project && setup.isStepIncomplete('api_key_generated') && (
+      {project && legacySetup.isStepIncomplete('api_key_generated') && (
         <Card className="p-4 border border-edge-subtle">
-          <p className="text-xs text-fg-muted">Generate an API key on the Steps tab first — verification needs an active ingest key.</p>
-          <Btn size="sm" variant="ghost" className="mt-2" onClick={() => setActiveTab('steps')}>Go to Steps</Btn>
+          <p className="text-xs text-fg-muted">Make a key first, with the second step at the top of this page.</p>
         </Card>
       )}
 
-      {/* Pipeline already verified — both steps complete but no in-session test ran yet.
-          Prevents the tab from looking completely empty for returning users. */}
-      {project && !setup.isStepIncomplete('api_key_generated') && !setup.isStepIncomplete('first_report_received') && testStatus !== 'pass' && (
+      {/* A test bug already arrived: the card above says so, this one only
+          offers another test, so the tab is never empty for a returning user. */}
+      {project && !legacySetup.isStepIncomplete('api_key_generated') && !legacySetup.isStepIncomplete('first_report_received') && testStatus !== 'pass' && (
         <Card className="p-5 space-y-4 border border-ok/20 bg-ok/5">
-          <div className="flex items-start gap-3">
-            <span className="text-ok text-base mt-0.5" aria-hidden="true">✓</span>
-            <div>
-              <h3 className="text-sm font-semibold text-fg">Pipeline verified</h3>
-              <p className="text-xs text-fg-muted mt-0.5">
-                Your ingest key is active and at least one report has arrived. The pipeline is working.
-              </p>
-            </div>
-          </div>
+          <h3 className="text-sm font-semibold text-fg">Send another test bug</h3>
           <ConnectionStatus />
           <div className="border-t border-edge-subtle pt-3 flex items-center gap-3 flex-wrap">
             <Btn
@@ -1125,22 +911,21 @@ export function OnboardingPage() {
         </Card>
       )}
 
-      {/* "Show me one loop running" — demo the full 5-stage evolution loop.
+      {/* Follow the test bug from report to fix once it has gone through.
           Available once the pipeline is verified (test report passes). */}
       {project && testStatus === 'pass' && (
         <Card className="p-5 space-y-3 border border-ok/30 bg-ok/4">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-fg">See the evolution loop close</span>
+              <span className="text-sm font-semibold text-fg">Follow your test bug to a fix</span>
               <span className="inline-flex items-center gap-1 text-2xs font-medium text-ok">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-ok" />
-                pipeline live
+                working
               </span>
             </div>
             <p className="text-xs text-fg-muted mt-1">
-              Your test report is in the pipeline. Follow it through all 5 stages
-              — capture → classify → fix → verify → remember — to see exactly what
-              happens to a real user's bug.
+              Mushi is working on your test bug. Follow it from report to diagnosis
+              to fix to see what happens to a real user's bug.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1151,7 +936,7 @@ export function OnboardingPage() {
               size="sm"
               variant="primary"
             >
-              Watch the loop →
+              Follow the test bug →
             </Btn>
             <Link to="/judge" className="text-xs text-fg-muted underline hover:no-underline">
               See judge scores
@@ -1182,7 +967,7 @@ export function OnboardingPage() {
         </>
       )}
 
-      {effectiveTab === 'copilot' && (
+      {effectiveTab === 'diagnose' && (
         <Suspense fallback={<Loading text="Loading…" />}>
           <SetupCopilotPage embedded />
         </Suspense>
@@ -1202,7 +987,7 @@ export function OnboardingPage() {
               the install code immediately. When the key step is still
               incomplete we offer minting inline here instead of bouncing them
               to the Verify tab (the old ping-pong friction). */}
-          {setup.isStepIncomplete('api_key_generated') && (
+          {legacySetup.isStepIncomplete('api_key_generated') && (
             <Card className="p-4 border border-info/30 bg-info/5 space-y-3">
               <div>
                 <h3 className="text-sm font-semibold text-fg">Mint your API key</h3>
@@ -1227,7 +1012,7 @@ export function OnboardingPage() {
               )}
             </Card>
           )}
-          <SdkInstallCard projectId={project.project_id} projectSlug={project.project_slug} apiKey={apiKey?.key} showConnectionStatus />
+          <SdkInstallCard projectId={project.project_id} projectSlug={project.project_slug} apiKey={createdProject?.apiKey ?? apiKey?.key} showConnectionStatus />
           <div className="flex gap-2">
             <Btn variant="ghost" onClick={() => navigate('/dashboard')}>Go to Dashboard</Btn>
           </div>
@@ -1237,6 +1022,11 @@ export function OnboardingPage() {
       )}
       </>
       )}
+
+      {/* Where reports go: endpoint and host provenance, at the foot. */}
+      {!firstRun ? (
+        <OnboardingSetupReadout stats={stats} statsFetchedAt={statsFetchedAt} statsValidating={statsValidating} />
+      ) : null}
 
       {!ux.hideFooterLinks ? (
       <p className="text-center flex items-center justify-center gap-3">
@@ -1260,18 +1050,6 @@ export function OnboardingPage() {
         >
           Restart tour
         </Btn>
-        <span className="text-2xs text-fg-faint" aria-hidden="true">·</span>
-        {/* Re-entry point for a setup guide the user dismissed. The dock is
-            the only setup surface that follows you off this page, so hiding
-            it has to be reversible from somewhere stable. */}
-        <Btn
-          variant="ghost"
-          size="sm"
-          onClick={() => openSetupGuide()}
-          className="border-0 bg-transparent shadow-none hover:bg-transparent px-0 py-0 text-2xs text-fg-faint hover:text-fg-muted"
-        >
-          Show setup guide
-        </Btn>
       </p>
       ) : null}
     </div>
@@ -1290,18 +1068,12 @@ function formatDiagnosisDuration(ms: number): string {
   return rem ? `${h}h ${rem}m` : `${h}h`
 }
 
-interface TimeToFirstDiagnosis {
-  keyMintedAt: string | null
-  firstDiagnosisAt: string | null
-  ms: number | null
-}
-
 /**
- * Surfaces the phase-1 north-star: time from minting an ingest key to the
+ * Surfaces the phase-1 north-star: time from making a key to the
  * first plain-English diagnosis. Target is "under 2 minutes" for a fresh
  * install — the one number to protect before spending on reach.
  */
-function TimeToFirstDiagnosisCard({ hasApiKey }: { hasApiKey: boolean }) {
+function TimeToFirstDiagnosisCard({ hasApiKey, onOpenSdk }: { hasApiKey: boolean; onOpenSdk: () => void }) {
   const { data, loading } = usePageData<TimeToFirstDiagnosis>(
     '/v1/admin/onboarding/time-to-first-diagnosis',
   )
@@ -1326,20 +1098,38 @@ function TimeToFirstDiagnosisCard({ hasApiKey }: { hasApiKey: boolean }) {
           </span>
         </div>
         <p className="mt-2 text-xs text-fg-muted leading-relaxed">
-          From generating your report key to your first plain-English read. This is the one number worth
-          protecting — the faster a fresh install gets an answer, the more the loop earns its place.
+          From making your key to your first plain-English read of a bug from your app.
         </p>
+      </Card>
+    )
+  }
+
+  // Only test or seed reports so far: the pipeline works, and the clock is
+  // still waiting on the app (report 9b7624e6). Sending another test report
+  // never clears this card, so it points at the SDK instead.
+  if (data?.testDiagnosisAt) {
+    return (
+      <Card className="p-5 border border-ok/25 bg-ok/5" data-testid="ttfd-test-only">
+        <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report from your app</p>
+        <p className="mt-0.5 text-sm text-fg-secondary">Your test bug got its plain-English read, so Mushi works for this app.</p>
+        <p className="mt-1 text-xs text-fg-muted leading-relaxed">
+          The 2-minute clock starts with the first report from your app. Install the SDK, then report a bug from your
+          app with its bug button.
+        </p>
+        <Btn size="sm" variant="ghost" className="mt-2" onClick={onOpenSdk}>
+          Install the SDK
+        </Btn>
       </Card>
     )
   }
 
   return (
     <Card className="p-5 border border-edge-subtle">
-      <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report in your queue</p>
-      <p className="mt-0.5 text-sm text-fg-secondary">Waiting on your first classified report.</p>
+      <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report from your app</p>
+      <p className="mt-0.5 text-sm text-fg-secondary">Waiting on the first report from your app.</p>
       <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-        Send a test report below (or trigger one from your app). Target: a plain-English diagnosis in under
-        2 minutes from key mint.
+        Send a test bug below, then report a bug from your app. Target: a plain-English read in under 2 minutes
+        from making the key.
       </p>
     </Card>
   )

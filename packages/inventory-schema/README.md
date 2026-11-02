@@ -1,45 +1,26 @@
 # @mushi-mushi/inventory-schema
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
-JSON Schema for inventory.yaml user-story maps.
+AI-built apps often ship a button that looks finished but is wired to
+nothing. An `inventory.yaml` lists your app's pages, the buttons and forms on
+each one, what each should do, and the test that proves it, so Mushi Mushi can
+check those claims. This package validates that file: Zod schema, JSON Schema
+and TypeScript types in one place.
 
-
-Single source of truth for the Mushi Mushi v2 `inventory.yaml` shape.
-
-## What this is
-
-The Zod schema (and a hand-authored JSON Schema companion) for the **positive side** of the Mushi Mushi bidirectional knowledge graph:
-
-- `App` — your product
-- `UserStory` — the human-readable goal a user is trying to achieve
-- `Page` — a route / screen
-- `Element` — an interactive UI element (`button`, `link`, `form`, …)
-- `Action` — what an element does (`triggers payroll calculation and persists payslips`)
-- `ApiDep` — backend route the action calls
-- `DbDep` — table the action writes to / reads from
-- `Test` — the Playwright spec that verifies the action
-- **`expected_outcome`** — machine-readable success contract on every Action. Threaded into the fix-worker LLM prompt by [`@mushi-mushi/agents`](../agents/) and asserted by the synthetic monitor after every probe (whitepaper §2.10)
-
-## Why it exists
-
-Sentry catches what crashes. Mabl catches what is tested. User-feedback tools catch what users notice. **None of them catch code that ships claiming to work but isn't wired** — the dominant agentic-coding failure mode of 2025–2026.
-
-The inventory makes that failure mode addressable. Every `Action` declares an `ApiDep` and a `verified_by` test; the Mushi Mushi v2 status reconciler then derives whether the action is `🔴 stub`, `🟠 mocked`, `🟡 wired`, `🟢 verified`, or `⚫ regressed` from observable signals (lint, contract diff, CI test results, synthetic monitor, user reports). The customer's `inventory.yaml` is the contract that makes all of this comparable.
-
-## Install
+The package is MIT and works offline. Uploading an inventory to Mushi Mushi
+and running its checks needs the Studio or Enterprise plan on Mushi Mushi
+Cloud ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)).
 
 ```bash
 npm install @mushi-mushi/inventory-schema
 ```
 
-## Use
-
 ```ts
 import { parseInventory, computeStats } from '@mushi-mushi/inventory-schema'
 
 const result = parseInventory(yamlString)
-if (!result.ok) {
+if (!result.ok || !result.inventory) {
   for (const issue of result.issues) {
     console.error(`${issue.path}: ${issue.message}`)
   }
@@ -49,6 +30,34 @@ if (!result.ok) {
 const stats = computeStats(result.inventory)
 console.log(`${stats.actions} actions across ${stats.pages} pages.`)
 ```
+
+Docs: [inventory-schema](https://kensaur.us/mushi-mushi/docs/sdks/inventory-schema)
+
+## What this is
+
+The Zod schema (and a hand-written JSON Schema copy) for what your app says it does:
+
+- `App` (`app`): your product: `id`, `name`, `base_url`, optional `auth`
+- `UserStory` (`user_stories`): the goal a user is trying to reach, in plain words
+- `Page` (`pages`): a route or screen
+- `Element` (`pages[].elements`): a button, link, form or other control (`type`) and its `action`, what it does in plain words (`triggers payroll calculation and persists payslips`)
+- `ApiDep` (`backend`): a backend route the element calls
+- `DbDep` (`db_writes` / `db_reads`): a table the element writes to or reads from
+- `TestRef` (`verified_by`): the test that proves the element works
+- **`expected_outcome`**: an optional success check on each element. The fix worker puts it into the agent's prompt and the synthetic monitor checks it after each probe
+
+`parseInventory(yamlString)` parses and validates YAML. `validateInventory(value)` does the same for an object you already parsed. Both return `{ ok, inventory, issues }`.
+
+## Why it exists
+
+Error tools catch what crashes, and tests catch what someone tested. Neither
+catches a handler that ships wired to nothing, because nothing throws.
+
+Each element declares its `backend` routes and `verified_by` tests. Mushi
+Mushi's status reconciler then marks each action `stub`, `mocked`, `wired`,
+`verified` or `regressed` from what it can observe: lint results, the API
+contract diff, CI test results, the synthetic monitor and user reports. Your
+`inventory.yaml` is what those signals are compared against.
 
 ## Editor autocomplete
 
@@ -70,46 +79,47 @@ import { inventoryJsonSchema } from '@mushi-mushi/inventory-schema/json-schema'
 
 ## Schema reference
 
-The Zod schema in [`src/index.ts`](./src/index.ts) is the single source of
+The Zod schema in [`src/index.ts`](https://github.com/kensaurus/mushi-mushi/blob/master/packages/inventory-schema/src/index.ts) is the single source of
 truth. The hand-authored JSON Schema companion lives in
-[`src/json-schema.ts`](./src/json-schema.ts) and is published to
+[`src/json-schema.ts`](https://github.com/kensaurus/mushi-mushi/blob/master/packages/inventory-schema/src/json-schema.ts) and is published to
 `https://kensaur.us/mushi-mushi/schemas/inventory-2.0.json` for editor
 autocomplete (see above).
 
-## `expected_outcome` — machine-readable success contract
+## `expected_outcome`: what success looks like
 
-Every `Action` accepts an optional `expected_outcome` block. It's the
-contract that closes the spec-traceability loop on the **write** side:
-the fix-worker injects it verbatim into the LLM prompt, the
-deterministic `validateAgainstSpec` gate refuses to open a PR that
-removes a `json_path` field the contract asserts on, and the synthetic
-monitor probes the live action against it after every PR merge.
+Every element accepts an optional `expected_outcome` block. The fix worker
+puts it word for word into the agent's prompt, the `validateAgainstSpec`
+check refuses to open a PR that removes a `json_path` field it asserts on,
+and the synthetic monitor checks the live action against it after a PR
+merges.
 
 ```yaml
-- id: submit
-  selector: '[data-testid="signup-submit"]'
-  actions:
-    - id: submit
-      trigger: click
-      expected_outcome:
-        summary: 'POST /signup returns 200 and creates a user row'
-        response:
-          status_in: [200, 201]
-          json_path:
-            - { path: '$.user.id', op: 'exists' }
-        database:
-          table: 'users'
-          expect: 'row_exists'
-        ui:
-          route_change_to: '/dashboard'
-          visible_text: 'Welcome'
+# one entry in pages[].elements
+- id: signup-submit
+  type: button
+  action: 'Creates the account and opens the dashboard'
+  testid: signup-submit
+  backend:
+    - { method: POST, path: /signup }
+  db_writes:
+    - { table: users, operation: insert }
+  expected_outcome:
+    summary: 'POST /signup returns 200 and creates a user row'
+    response:
+      status_in: [200, 201]
+      json_path:
+        - { path: 'user.id', op: 'exists' }
+    database:
+      table: 'users'
+      expect: 'row_exists'
+    ui:
+      route_change_to: '/dashboard'
+      visible_text: 'Welcome'
 ```
 
 Supported `op` values for `response.json_path` entries: `exists`, `equals`, `not_equals`, `contains`, `gt`, `gte`, `lt`, `lte`, `matches`. Supported `database.expect` values: `row_exists`, `row_absent`, `row_count_at_least` (with `min_count`).
 
-The full TypeScript shape is exported as `ExpectedOutcome` and mirrored
-in [`@mushi-mushi/agents`](../agents/) so the agents package stays
-buildable from the Edge runtime without pulling the YAML loader.
+The TypeScript type is exported as `ExpectedOutcome`.
 
 ## License
 
@@ -119,4 +129,4 @@ MIT.
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 76 edge functions · 503 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

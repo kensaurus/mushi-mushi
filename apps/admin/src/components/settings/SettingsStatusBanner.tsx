@@ -4,8 +4,12 @@
  *          do, with its button. Key problems are counted from the same
  *          saved-keys list the AI keys rows use (`keySummary`), so the banner
  *          and the rows always agree; the server's counts are only used when
- *          that list could not be read. Quick mode lands on the tab this
- *          banner's button opens (settingsModeUx.resolveQuickSettingsTab).
+ *          that list could not be read. Sentry counts as set up when a DSN
+ *          is saved, or when the shared Integrations verdict is Working
+ *          (auth token + org slug, issues coming in) — a DSN-only flag left
+ *          the banner on "connect Sentry" while that row said Working.
+ *          Quick mode lands on the tab this banner's button opens
+ *          (settingsModeUx.resolveQuickSettingsTab).
  */
 
 import { Btn } from '../ui'
@@ -13,6 +17,8 @@ import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { KeySummary } from './keyStatus'
 import type { SettingsStats, SettingsTabId } from './types'
+import { slackAlertsReady } from './slackAlertStatus'
+import type { ConnectionView } from '../../lib/integrationConnection'
 
 interface Props {
   stats: SettingsStats
@@ -20,6 +26,12 @@ interface Props {
   keySummary?: KeySummary | null
   /** A usable Anthropic key exists (pooled or legacy). */
   hasAnthropicKey?: boolean
+  /**
+   * The shared Integrations Sentry verdict (`useSentryConnection`). Null
+   * while that read is still unknown. A Working verdict counts like a
+   * saved DSN.
+   */
+  sentry?: ConnectionView | null
   onTab?: (tab: SettingsTabId) => void
   plainBanner?: boolean
 }
@@ -31,6 +43,7 @@ type BannerPriority =
   | 'sdk_off'
   | 'keys_unchecked'
   | 'routing_optional'
+  | 'slack_incomplete'
   | 'healthy'
 
 function plural(n: number, word: string): string {
@@ -42,6 +55,7 @@ export function settingsBannerPriority(
   stats: SettingsStats,
   keySummary: KeySummary | null | undefined,
   hasAnthropicKey: boolean,
+  sentry?: ConnectionView | null,
 ): BannerPriority {
   const attention = keySummary ? keySummary.attention : stats.byokKeysFailing
   const unchecked = keySummary ? keySummary.checking : stats.byokKeysUntested
@@ -50,7 +64,15 @@ export function settingsBannerPriority(
   if (!hasAnthropicKey) return 'no_anthropic'
   if (!stats.sdkConfigEnabled) return 'sdk_off'
   if (unchecked > 0) return 'keys_unchecked'
-  if (!stats.slackConfigured && !stats.sentryConfigured) return 'routing_optional'
+  // slackConfigured is "any Slack field is saved". That includes a channel
+  // id with no bot, which cannot send. slackCanPost is the send check.
+  if (stats.slackConfigured && stats.slackCanPost === false) return 'slack_incomplete'
+  // A saved DSN counts. So does the same Working verdict the Integrations
+  // card shows (token + org slug, issues imported) — otherwise this banner
+  // stays on the connect-Sentry nudge while that row says Working. Null
+  // (still loading, or the read failed) and any other state do not count.
+  const sentryReady = stats.sentryConfigured || sentry?.state === 'working'
+  if (!slackAlertsReady(stats) && !sentryReady) return 'routing_optional'
   return 'healthy'
 }
 
@@ -58,12 +80,13 @@ export function SettingsStatusBanner({
   stats,
   keySummary = null,
   hasAnthropicKey = stats.byokAnthropicConfigured,
+  sentry = null,
   onTab,
 }: Props) {
   const copy = usePageCopy('/settings')
   const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'this project'
-  const priority = settingsBannerPriority(stats, keySummary, hasAnthropicKey)
+  const priority = settingsBannerPriority(stats, keySummary, hasAnthropicKey, sentry)
   const go = (tab: SettingsTabId, label: string) =>
     onTab ? (
       <Btn size="sm" variant="primary" onClick={() => onTab(tab)}>
@@ -123,6 +146,15 @@ export function SettingsStatusBanner({
         />
       )
     }
+    case 'slack_incomplete':
+      return (
+        <StatusBannerShell
+          tone="warn"
+          title="Slack alerts cannot be sent yet"
+          subtitle="A Slack setting is saved, but nothing can post. Add Mushi to Slack and pick a channel, or paste a webhook."
+          action={go('general', 'Finish Slack setup')}
+        />
+      )
     case 'routing_optional':
       return (
         <StatusBannerShell

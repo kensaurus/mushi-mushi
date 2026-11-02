@@ -46,9 +46,9 @@ export function ProjectBillingCard({
 }: ProjectBillingCardProps) {
   const subscribed = !!project.subscription && ['active', 'trialing', 'past_due'].includes(project.subscription.status ?? '')
   const tier = project.tier
-  const tierId = tier?.id ?? 'hobby'
+  const tierId = tier?.id ?? 'free_cloud'
   const planLabel = tier?.display_name
-    ?? (subscribed ? `Plan ${project.subscription?.plan_id ?? '—'}` : 'Hobby (free)')
+    ?? (subscribed ? `Plan ${project.subscription?.plan_id ?? '—'}` : 'Free')
   const statusLabel = subscribed ? (project.subscription?.status ?? 'active') : 'free'
   // Org-level posture: complimentary orgs (Mushi staff / sponsored / beta) have
   // a synthesised subscription server-side and intentionally no Stripe customer.
@@ -71,7 +71,7 @@ export function ProjectBillingCard({
   const overageRate = tier?.overage_unit_amount_decimal
   const currentInterval = project.subscription?.billing_interval ?? 'monthly'
   const isAnnual = subscribed && currentInterval === 'annual'
-  // A paying project switches in-app between Indie and Pro, monthly and
+  // A paying project switches in-app between Builder and Studio, monthly and
   // annual (Change plan). The picker keeps the current plan so the other
   // interval of it stays selectable; the exact current choice is disabled.
   const purchasable = subscribed && !project.subscription?.synthetic
@@ -87,7 +87,7 @@ export function ProjectBillingCard({
             {isComplimentary ? (
               <>
                 {/* Complimentary orgs lead with the *account class* (Admin),
-                    not the entitlement tier. Showing "Pro $99/mo" on a comp
+                    not the entitlement tier. Showing "Studio $79/mo" on a comp
                     account misrepresents the relationship and was the user's
                     direct complaint ("still being shown as Pro instead of
                     Admin"). The tier sits next to it as a secondary fact so

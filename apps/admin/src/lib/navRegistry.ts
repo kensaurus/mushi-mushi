@@ -118,7 +118,7 @@ export const CHECK_SUB_GROUPS: Record<
 > = {
   'system-health': {
     title: 'App checks',
-    hint: 'Is the app itself sound: scheduled tests, user stories, audits, its blueprint, app health, design tokens and content.',
+    hint: 'Is the app itself sound: scheduled tests, user stories, audits, its blueprint, design tokens and content, a first-time user test, plus Mushi’s own health.',
   },
   'quality-gates': {
     title: 'AI quality',
@@ -165,7 +165,7 @@ export const NAV_SECTION_META: Record<
     title: 'Verify',
     step: 4,
     stage: 'C',
-    hint: 'Prove the app works before you ship: scheduled tests, audits, app health, and how good the AI’s triage is.',
+    hint: 'Prove the app works before you ship: scheduled tests, audits, Mushi’s own health, and how good the AI’s triage is.',
   },
   act: {
     title: 'Ship & watch',
@@ -241,7 +241,9 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     sectionId: 'plan',
     iconKey: 'dashboard',
     paletteDescription: 'Summary for the selected app: open bugs, fixes in progress, setup and recent activity.',
-    paletteKeywords: ['dashboard', 'home', 'overview', 'kpi', 'metrics', 'loop', 'landing', 'summary'],
+    // "Is my app healthy?" lands here: Home carries the app's health strip;
+    // Mushi health (/health) is Mushi's own AI calls and jobs (P6).
+    paletteKeywords: ['dashboard', 'home', 'overview', 'kpi', 'metrics', 'loop', 'landing', 'summary', 'uptime', 'is my app up', 'app status', 'availability', 'monitoring', 'incidents'],
     paletteGroup: 'Plan',
   },
   {
@@ -312,6 +314,17 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Do',
   },
   {
+    id: 'nav:pipeline',
+    path: '/pipeline',
+    label: 'Pipeline',
+    sectionId: 'do',
+    pdcaStage: 'do',
+    iconKey: 'pipeline',
+    paletteDescription: 'Every bug from report to deploy as one picture: what is stuck where, why, and one-click fixes.',
+    paletteKeywords: ['pipeline', 'stuck', 'funnel', 'release train', 'merge queue', 'ci red', 'conflict', 'triage', 'retry', 'blocked', 'workers', 'local worker', 'lanes', 'mushi work'],
+    paletteGroup: 'Do',
+  },
+  {
     id: 'nav:repo',
     path: '/repo',
     label: 'Pull requests',
@@ -319,7 +332,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     pdcaStage: 'do',
     iconKey: 'git',
     paletteDescription: 'Every fix branch and pull request in your connected GitHub repo, with CI status.',
-    paletteKeywords: ['repo', 'repository', 'branch', 'branches', 'git', 'github', 'pr', 'pull request', 'ci', 'checks', 'merge', 'activity'],
+    paletteKeywords: ['repo', 'repository', 'branch', 'branches', 'git', 'github', 'pr', 'prs', 'pull request', 'pull requests', 'mergeable', 'ci', 'checks', 'merge', 'activity'],
     paletteGroup: 'Do',
   },
   {
@@ -369,6 +382,19 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Check',
   },
   {
+    // Fresh-eyes runs (ADR 0053): a tab of UX runs called "Fresh eyes" until 2026-10-28.
+    id: 'nav:first-user-test',
+    path: '/first-user-test',
+    label: 'First-time user test',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'system-health',
+    iconKey: 'user',
+    paletteDescription: 'An AI that has never seen your app tries to sign up and use it; see where a new user gets stuck and how long it takes.',
+    paletteKeywords: ['fresh eyes', 'first-time user', 'first time user', 'first-time user test', 'onboarding test', 'new user test', 'new user', 'first run', 'sign up test', 'signup test', 'time to first value', 'ttfv', 'first impression'],
+    paletteGroup: 'Check',
+  },
+  {
     id: 'nav:inventory',
     path: '/inventory',
     label: 'User stories',
@@ -390,7 +416,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     pdcaStage: 'check',
     checkSubGroup: 'system-health',
     iconKey: 'shield-check',
-    paletteDescription: 'Every automatic check on this app in one place: scheduled tests, app health, audits, user stories, design, content and AI triage quality.',
+    paletteDescription: 'Every automatic check on this app in one place: scheduled tests, audits, user stories, design, content, AI triage quality and Mushi’s own health.',
     paletteKeywords: ['checks', 'verify', 'quality', 'health', 'audit', 'tests', 'qa'],
     paletteGroup: 'Check',
   },
@@ -433,13 +459,16 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:health',
     path: '/health',
-    label: 'App health',
+    // Mushi's own AI calls and background jobs, not the user's app (pattern
+    // P6, console journeys 2026-10-27). The app's uptime and errors are on
+    // Home. "app health" stays a keyword: every former label must.
+    label: 'Mushi health',
     sectionId: 'check',
     pdcaStage: 'check',
     checkSubGroup: 'system-health',
     iconKey: 'health',
-    paletteDescription: 'Are your integrations and background jobs working: uptime, errors and failed checks.',
-    paletteKeywords: ['health', 'status', 'uptime', 'availability', 'sentry', 'slo', 'monitoring', 'incidents', 'verification hub'],
+    paletteDescription: 'Is Mushi itself working: its AI calls and background jobs. Also your code size, schema changes and unusual spikes.',
+    paletteKeywords: ['app health', 'health', 'mushi health', 'status', 'ai calls', 'llm', 'cron', 'background jobs', 'verification hub'],
     paletteGroup: 'Check',
   },
   {
@@ -596,7 +625,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     sectionId: 'workspace',
     iconKey: 'projects',
     paletteDescription: 'Create, rename and archive apps (projects), and see their keys and setup.',
-    paletteKeywords: ['projects', 'apps', 'create project', 'new app', 'team', 'members', 'organisation', 'workspace'],
+    paletteKeywords: ['projects', 'apps', 'create project', 'new app', 'delete project', 'delete app', 'archive', 'rename', 'sdk key', 'ingest key', 'team', 'members', 'organisation', 'workspace'],
     paletteGroup: 'Workspace',
   },
   {
@@ -626,7 +655,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     sectionId: 'workspace',
     iconKey: 'rewards',
     paletteDescription: 'Points, tiers and payouts for the people who report bugs.',
-    paletteKeywords: ['rewards', 'tester', 'bounty', 'wallet', 'points'],
+    paletteKeywords: ['rewards', 'tester', 'testers', 'tester rewards', 'bounty', 'wallet', 'points'],
     paletteGroup: 'Workspace',
   },
   {
@@ -877,7 +906,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     label: 'Setup copilot',
     sectionId: 'start',
     iconKey: 'terminal',
-    // The Diagnose tab of /onboarding now (Plan 021): opens /onboarding?tab=copilot.
+    // The Diagnose tab of /onboarding now (Plan 021): opens /onboarding?tab=diagnose.
     inSidebar: false,
     paletteDescription: 'Diagnose setup: SDK heartbeat, version and fix dispatch for one project, with copy-paste commands.',
     paletteKeywords: ['setup', 'copilot', 'verify', 'dispatch', 'guided', 'diagnose'],
@@ -1090,7 +1119,7 @@ export function routeFallbackTitle(pathname: string): string | null {
  *   (/reports) vs Processing jobs (/queue); All apps (/portfolio, setup and
  *   holes) vs Overview (/dashboard?view=apps, 7-day usage).
  * - Plan 021 (owner, 2026-10-06) supersedes the "stay separate" part for three
- *   families: Home (/dashboard), App health (/health) and Team (/team) each
+ *   families: Home (/dashboard), Mushi health (/health) and Team (/team) each
  *   host their former pages as `?view=` views (lib/pageHubs.ts); the old
  *   routes redirect. Palette entries stay so every former label still finds
  *   its page.
@@ -1101,13 +1130,16 @@ export function routeFallbackTitle(pathname: string): string | null {
  */
 
 /**
- * The nine sidebar pages every account has, in order (console audit
- * 2026-10-20). Everything else is a Lab (lib/labs.ts) or palette-only.
+ * The sidebar pages every account has, in order (console audit 2026-10-20;
+ * Pipeline added 2026-10-27, ADR 0027 amendment). A page with sub-pages lists
+ * them under itself while you are in it (lib/sidebarTree.ts); every other page
+ * is under "More pages", and a Lab (lib/labs.ts) can be kept in the sidebar.
  */
 export const CORE_NAV_PATHS: readonly string[] = [
   '/dashboard',
   '/reports',
   '/fixes',
+  '/pipeline',
   '/portfolio',
   '/connect',
   '/integrations/config',
@@ -1115,3 +1147,38 @@ export const CORE_NAV_PATHS: readonly string[] = [
   '/team',
   '/settings',
 ]
+
+/** Every check on the Checks page, in order within its group. Every path must exist in NAV_REGISTRY. */
+export const CHECK_GROUPS: ReadonlyArray<{ id: CheckSubGroupId; paths: readonly string[] }> = [
+  {
+    id: 'system-health',
+    paths: ['/qa-coverage', '/health', '/ci', '/fullstack-audit', '/inventory', '/recipe', '/design', '/content', '/first-user-test'],
+  },
+  { id: 'quality-gates', paths: ['/judge', '/lessons', '/prompt-lab'] },
+]
+
+const SECTION_BY_STAGE: Record<PdcaStageId, NavSectionId> = {
+  plan: 'plan',
+  do: 'do',
+  check: 'check',
+  act: 'act',
+}
+
+/**
+ * A stage chip in the user's words: the cycle step it belongs to (ADR 0027),
+ * e.g. "Verify", "step 4", never "PDCA stage: Check".
+ */
+function cycleStepForStage(stage: PdcaStageId): { step: number; title: string; hint: string } {
+  const meta = NAV_SECTION_META[SECTION_BY_STAGE[stage]]
+  return { step: meta.step ?? 0, title: meta.title, hint: meta.hint }
+}
+
+/** Words for the header's stage chip: cycle step number, title and hint. */
+export function stageChipCopy(chip: 'overview' | PdcaStageId): { glyph: string; label: string; hint: string; ariaLabel: string } {
+  if (chip === 'overview') {
+    const hint = 'Everything that needs you across your bugs, fixes and releases.'
+    return { glyph: '∞', label: 'Overview', hint, ariaLabel: `Overview: ${hint}` }
+  }
+  const { step, title, hint } = cycleStepForStage(chip)
+  return { glyph: String(step), label: title, hint, ariaLabel: `Step ${step}: ${title}. ${hint}` }
+}

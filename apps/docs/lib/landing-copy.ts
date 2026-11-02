@@ -8,116 +8,144 @@ import { ADMIN_DEMO_BASE } from '../data/admin-screenshots'
 /** EditorialHero — category eyebrow + lead (title stays JSX in index.mdx for <em>). */
 export const LANDING_HERO = {
   eyebrow: MUSHI_TAGLINE_V2.category,
+  /**
+   * The one job the public surface leads with (ADR 0052, owner 2026-10-27):
+   * one sentence, no paragraph before the first action.
+   */
   lead:
-    'For solo builders who make apps with AI coding assistants such as Cursor or Claude Code. When a real user runs into a bug, they report it from inside your app. Mushi explains the cause in plain English and hands your AI assistant a fix to start from. It works on its own: you do not need Sentry or any other error-tracking service.',
-  proofLine: 'Every bug in one list, whether a user reported it or an error tracker caught it. Open source: the code is public on GitHub.',
+    'A user says your app is broken. Mushi Mushi tells you why in plain English and hands the fix to Cursor, Claude Code or Lovable. No Sentry or monitoring needed.',
   /**
-   * Stage-fit proof under the CTAs: what it costs to try and what you can
-   * read. No star count — at this stage a small number is anti-proof.
+   * Stage-fit proof under the actions: what it costs to try. No star count —
+   * at this stage a small number is anti-proof. Plain text, no links: the hero
+   * has one action (the install box) and one secondary link (the sample).
    */
-  reassure: 'Free to start: 50 diagnoses a month, no credit card. Running it on your own server is free too.',
-  star: {
-    label: 'Star on GitHub',
-    href: MUSHI_CANONICAL_URLS.repo,
-    ctaId: 'landing-star',
-  },
+  reassure: 'Free for one app: 100 diagnoses a month, no card. Open source.',
 } as const
 
-export interface LandingHeroCta {
-  /** Stable id — becomes `cta_click.cta_id` and the `?src=` on signup links. */
-  id: string
-  label: string
-  href: string
-  kind: 'primary' | 'secondary' | 'ghost'
-  /** Absolute URL to another app / site (rendered as a plain `<a>`, not next/link). */
-  external: boolean
-  /**
-   * External links open in a new tab by default. The console signup is our
-   * own product — the visitor should stay in this tab and land there.
-   */
-  sameTab?: boolean
-}
+/**
+ * The hero's one secondary link: a sample diagnosis anyone can read without
+ * signing up or installing. It says "sample" because the page is one.
+ */
+export const LANDING_SAMPLE_LINK = {
+  id: 'landing-sample',
+  label: 'See a sample diagnosis',
+  href: '/demo/diagnosis',
+} as const
 
-export const LANDING_HERO_CTAS: readonly LandingHeroCta[] = [
-  {
+/**
+ * The hero's one secondary link since ADR 0052's 2026-10-28 amendment (owner
+ * decision): value before trust. A stranger checks their own live site with
+ * nothing to install and no sign-up; the sample diagnosis moves one scroll down
+ * to "How it works".
+ */
+export const LANDING_CHECK_LINK = {
+  id: 'landing-check',
+  lead: 'Not ready to install?',
+  label: 'Check your live site free',
+  note: 'nothing to install, no sign-up',
+  href: '/check?src=landing-hero',
+} as const
+
+/**
+ * The actions inside the hero's install box, one per tab, so no two share an
+ * intent. `id` becomes `cta_click.cta_id` (and `?src=` on the signup link);
+ * `landing-hero` stays on signup so the funnel keeps its history — it is the
+ * Lovable/Bolt tab's first step, the one path that needs the console first.
+ * The Cursor deeplink is built in the component from the shared MCP client
+ * registry (`buildOAuthInstall`), the same way /connect builds it.
+ */
+export const LANDING_HERO_START = {
+  console: {
     id: 'landing-hero',
-    label: 'Start free — first diagnosis in 60 seconds',
+    label: 'Sign up free',
     href: `${ADMIN_DEMO_BASE}/signup?src=landing-hero`,
-    kind: 'primary',
-    external: true,
-    sameTab: true,
   },
-  {
-    // Was "Try the live demo — no signup" (id landing-demo), but /connect is
-    // the editor picker, not a demo. New id so the funnel counts the new
-    // button on its own.
+  cursor: {
+    id: 'landing-hero-cursor',
+    label: 'Add to Cursor',
+  },
+  npx: {
+    id: 'landing-hero-npx',
+    label: 'Add the report button to your app',
+    cmd: 'npx mushi-mushi',
+  },
+  more: {
+    // Was the hero's secondary button; the editor picker for every client.
     id: 'landing-connect',
-    label: 'Connect your code editor',
+    label: 'Other editors',
     href: '/connect',
-    kind: 'secondary',
-    external: false,
   },
-  {
-    id: 'landing-terminal',
-    label: 'Prefer the terminal? npx mushi-mushi',
-    href: '/quickstart/incident-loop',
-    kind: 'ghost',
-    external: false,
-  },
-] as const
-
-export const LANDING_SIXTY_SECOND = {
-  intro:
-    'Run one command in your project. A setup wizard works out which framework your app is built with, installs the Mushi SDK (the small library that adds the report button), saves your settings and prints the one snippet to paste.',
-  afterBreak:
-    'When something breaks for a real user, the report lands in your Mushi list with a plain-English read on the cause and what to change. Your AI editor can read it directly over MCP, the standard way AI editors connect to outside tools.',
-  pricing:
-    '50 diagnoses a month on the free plan, no card needed. You can also run it on your own server in under five minutes.',
-} as const
-
-/** "Get started in 60 seconds" terminal section (ProofPinSection). The steps moved under the hero. */
-export const LANDING_SIXTY_SECOND_STEPS = {
-  heading: 'Get started in 60 seconds',
-  cmd: 'npx mushi-mushi',
 } as const
 
 /**
- * "How it works" strip right under the hero. Three steps, the same cycle the
- * console sidebar follows (ADR 0027): connect, bugs come in, fix and review.
+ * The prompt a newcomer pastes into their AI editor after connecting it. The
+ * AI runs the wizard itself: `--yes` takes the defaults, which an agent's
+ * shell needs (no prompts to answer), and the sign-in opens in the person's
+ * browser. `npx mushi-mushi test` sends a synthetic report through ingest.
  */
-export const LANDING_HOW_IT_WORKS = {
-  heading: 'How it works',
-  steps: [
-    {
-      title: 'Install in one click',
-      desc: 'Connect Mushi to your AI code editor with one of the buttons below, and add a small report button to your app with one command (npx mushi-mushi). You sign in through your browser; there is no key to copy and paste.',
-    },
-    {
-      title: 'Your users report bugs',
-      desc: 'When something looks wrong, a user taps the report button and writes a sentence or two. Mushi attaches a screenshot and the technical trail behind it (recent browser errors and network calls), so the user never has to explain the tech. Alerts from error trackers such as Sentry can come in too.',
-    },
-    {
-      title: 'Mushi diagnoses it and opens a fix you review',
-      desc: 'You get the likely cause in plain English and a suggested fix in your editor. If you like, an AI coding agent writes the change as a pull request (a proposed code change that waits for your approval). A second AI reviews it first; you decide whether to merge it.',
-    },
+export const LANDING_SETUP_PROMPT =
+  'Add Mushi Mushi to this app. In the project folder run `npx mushi-mushi --yes` and wait while I finish the sign-in in my browser. Then run `npx mushi-mushi test` and use the Mushi Mushi tools to show me that test report and its plain-English diagnosis.'
+
+/** What to ask once a real user reports a bug. */
+export const LANDING_FIX_PROMPT = 'Get the latest Mushi Mushi report and fix it.'
+
+/**
+ * The hero's install box (owner, 2026-10-27: "how to install with Claude or
+ * Cursor, and give the user a simple prompt"). Pick your editor, then the same
+ * three steps for each: the cycle of ADR 0027 (connect, bugs come in, a fix
+ * you review), each step ending in what you should see. Every editor install
+ * is URL-only (`buildOAuthInstall`), so the editor runs the Mushi sign-in on
+ * first use and the page needs no key.
+ */
+export const LANDING_INSTALL = {
+  label: 'Install with',
+  tabs: [
+    { id: 'claude-code', label: 'Claude Code', connect: 'Run this in your terminal. It adds Mushi Mushi to Claude Code.' },
+    { id: 'cursor', label: 'Cursor', connect: 'Click to add Mushi Mushi to Cursor, then open a chat.' },
+    { id: 'lovable', label: 'Lovable or Bolt', connect: 'Sign up free, then copy your script tag from the Script tag tab on the setup page.' },
+    { id: 'other', label: 'Other editors', connect: 'Pick yours: VS Code, Windsurf, Zed, Claude Desktop and more.' },
   ],
+  steps: {
+    connect: 'Connect your editor',
+    setup: 'Paste this prompt',
+    fix: 'Fix a real bug',
+  },
+  setupCheck: 'A report button in your app, and its first report with a plain-English diagnosis.',
+  fixLead: 'When someone reports a bug, ask your AI:',
+  fixCheck: 'The cause, the files to change and how to check it. You review the change before it ships.',
+  cursorAlt: 'Add Mushi Mushi to Cursor',
+  otherLabel: 'Choose your editor',
+  otherHref: '/connect',
+  /** For someone without an AI editor: the same wizard, by hand. */
+  noEditor: 'No AI editor? Run it yourself:',
 } as const
 
 /**
- * One-click install row under the steps. Every editor button installs the
- * hosted server URL only (`buildOAuthInstall`), so the editor runs the Mushi
- * sign-in on first use; a static key header would switch that sign-in off.
+ * The no-build loader `@mushi-mushi/web` publishes, pinned to major 1. Same URL
+ * as quickstart/web.mdx, packages/web/src/loader.ts and the console's
+ * LOADER_CDN_URL (docs-meta.test.ts and check:loader-cdn-url hold them equal).
  */
-export const LANDING_ONE_CLICK = {
-  heading: 'Add Mushi to your AI code editor',
-  note: 'No key to paste. The first time your editor calls Mushi, your browser opens so you can sign in (or sign up free). Then you choose which of your apps it may see.',
-  cursorAlt: 'Add Mushi to Cursor',
-  vscodeLabel: 'Install in VS Code',
-  claudeLabel: 'Claude Code',
-  npxLabel: 'Add the report button to your app',
-  npxCmd: 'npx mushi-mushi',
-  moreLabel: 'Windsurf, Zed and more editors',
-  moreHref: '/connect',
+const LANDING_LOADER_URL = 'https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js'
+
+/**
+ * The Lovable / Bolt tab. Their builders have no terminal, so there is no
+ * `npx`: the person signs up, copies the script tag the console prints with
+ * their project ID and key filled in, and asks the builder to add it. The SDK
+ * key in the tag can only send reports (`report:write`), like any browser key.
+ */
+export const LANDING_INSTALL_LOVABLE = {
+  steps: {
+    connect: 'Get your script tag',
+    setup: 'Paste this into Lovable or Bolt',
+    fix: 'See why it broke',
+  },
+  setupLead: 'Put your project ID and key from step 1 in place of the capitals.',
+  prompt: `Add this script tag inside the <head> of index.html exactly as written, and change nothing else:
+<script async src="${LANDING_LOADER_URL}" data-project="YOUR_PROJECT_ID" data-key="YOUR_API_KEY"></script>`,
+  setupCheck: 'A report button on your published app. Tap it and send yourself a first report.',
+  fixLead: 'Each report gets a plain-English diagnosis and a fix prompt in your Mushi Mushi console. Copy the prompt into Lovable or Bolt.',
+  connector: { label: 'Or read reports inside Lovable with the Mushi Mushi connector →', href: '/quickstart/lovable-mcp' },
+  guide: { label: 'Step-by-step guide →', href: '/quickstart/lovable-bolt' },
 } as const
 
 /** Landing FAQ — visible Q&A doubles as FAQPage JSON-LD (answers stay plain text). */
@@ -129,7 +157,15 @@ export interface LandingFaqItem {
 export const LANDING_FAQ: readonly LandingFaqItem[] = [
   {
     q: 'What is Mushi Mushi, in plain terms?',
-    a: 'A bug-report inbox with an AI that explains each bug. People who use your app can report a problem with one tap. Mushi turns each report into a short, plain-English explanation of what went wrong and how to fix it, and sends that to the AI assistant in your code editor so the fix can start right away. The name comes from 虫 (mushi), the Japanese word for "bug" or "insect".',
+    a: 'A bug-report inbox with an AI that explains each bug. People who use your app can report a problem with one tap. Mushi Mushi turns each report into a short, plain-English explanation of what went wrong and how to fix it, and sends that to the AI assistant in your code editor so the fix can start right away. The name comes from 虫 (mushi), the Japanese word for "bug" or "insect".',
+  },
+  {
+    q: 'I build in Lovable or Bolt and have no terminal. Can I use it?',
+    a: 'Yes. Sign up free, copy the script tag your setup page shows (your project ID and key are already in it), and ask Lovable or Bolt to add it to the <head> of index.html. Your published app gets a report button. Each report gets a plain-English diagnosis and a fix prompt you paste back into Lovable or Bolt.',
+  },
+  {
+    q: 'Do I need my own AI key?',
+    a: "No. Mushi Mushi writes the diagnosis with its own AI, and the free plan watches one app with 100 diagnoses a month, no card. Your editor's AI (Cursor, Claude Code, Lovable) does the fix, with the prompt Mushi Mushi hands it.",
   },
   {
     q: 'Who makes it, and can I use it today?',
@@ -137,23 +173,27 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
   },
   {
     q: 'Is Mushi Mushi a Sentry alternative?',
-    a: "It can be, or it can run alongside Sentry. Sentry is built around what the code threw, with a User Feedback widget and replay alongside. Mushi starts from what the user reported, ingests Sentry's errors too, explains each one in plain English, and hands your agent a fix prompt to start from. One queue, with or without Sentry.",
+    a: "It can be, or it can run alongside Sentry. Sentry is built around what the code threw, with a User Feedback widget and replay alongside. Mushi Mushi starts from what the user reported, ingests Sentry's errors too, explains each one in plain English, and hands your agent a fix prompt to start from. One queue, with or without Sentry.",
   },
   {
     q: 'Do I need Sentry to use it?',
-    a: 'No. Mushi works on its own. If you already use Sentry (a popular service that records errors when code crashes), you can point its alerts at Mushi. Those errors then land in the same list as user reports, with duplicates merged, each one explained in plain English and marked resolved in Sentry when the fix is merged.',
+    a: 'No. Mushi Mushi works on its own. If you already use Sentry (a popular service that records errors when code crashes), you can point its alerts at Mushi. Those errors then land in the same list as user reports, with duplicates merged, each one explained in plain English and marked resolved in Sentry when the fix is merged.',
   },
   {
     q: 'What does npx mushi-mushi do?',
-    a: 'It runs a setup wizard. The wizard works out which framework your app uses (React, Next.js, Vue, Nuxt, Svelte, Angular, React Native, Expo, Capacitor or Node), installs the matching Mushi library, saves your settings (environment variables) and prints the snippet to paste.',
+    a: 'It runs a setup wizard on your computer. The wizard works out which framework your app uses (React, Next.js, Vue, Nuxt, Svelte, Angular, React Native, Expo, Capacitor or Node), installs the matching Mushi Mushi library, saves your settings in your env file (and warns you if that file is not in .gitignore), and asks before it adds the setup snippet to your code. It never commits, pushes or touches your Git history, and its source is public on GitHub.',
   },
   {
     q: 'How do I debug an app that Cursor or Claude Code wrote?',
-    a: 'Connect your editor to Mushi with the command npx mushi-mushi setup --ide cursor (it uses MCP, the standard way AI editors connect to outside tools). Bug reports then arrive as plain-English diagnoses your AI assistant can read, with a fix prompt ready to apply without leaving the editor.',
+    a: 'Connect your editor to Mushi Mushi with the install box at the top of this page: one command for Claude Code, one click for Cursor. It uses MCP, the standard way AI editors connect to outside tools. Bug reports then arrive as plain-English diagnoses your AI assistant can read, with a fix prompt ready to apply without leaving the editor.',
   },
   {
     q: 'Is it open source? Can I self-host?',
-    a: 'Yes. The libraries you add to your app (SDKs) are MIT-licensed and the server is AGPLv3. You can run the whole thing on your own server with one command, or use the hosted free plan: 50 diagnoses a month, no card.',
+    a: 'Yes. The libraries you add to your app (SDKs) are MIT-licensed and the server is AGPLv3. You can run the whole thing on your own server with one command, or use the hosted free plan: one app, 100 diagnoses a month, no card.',
+  },
+  {
+    q: 'Can an AI agent write the fix for me?',
+    a: 'Yes, if you want it to. Connect your GitHub repo and turn on automatic fixes, and an agent opens a pull request for a diagnosed bug. The built-in fixer needs no key of your own; to use Cursor agents, add your Cursor key, or run them on your own computer with mushi work. With your own Anthropic key, a second AI then reads that pull request next to the original report and says merge, fix first, or do not merge, so a fix that only hides the symptom is caught. Nothing merges unless you merge it or turn on automatic merging.',
   },
   {
     q: 'Which frameworks are supported?',
@@ -162,7 +202,7 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
 ] as const
 
 export const LANDING_MEDIA_INTRO =
-  'The Mushi dashboard, the report button on a real app (glot.it), and light and dark screenshots. Click a picture to open the live page.'
+  'The Mushi Mushi dashboard, the report button on a real app (glot.it), and light and dark screenshots. Click a picture to open the live page.'
 
 const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
 
@@ -193,7 +233,7 @@ export interface LandingPathCard {
 export const LANDING_WHERE_TO_START: readonly LandingPathCard[] = [
   {
     title: 'I build with Cursor or Claude Code',
-    desc: 'Connect Mushi to your editor first, so your AI assistant can read bug reports and fix prompts without leaving the window.',
+    desc: 'Connect Mushi Mushi to your editor first, so your AI assistant can read bug reports and fix prompts without leaving the window.',
     href: '/quickstart/incident-loop',
     cmd: 'npx mushi-mushi setup --ide cursor',
   },
@@ -326,7 +366,7 @@ export const LANDING_COMPARISON_ROWS: readonly LandingComparisonRow[] = [
   {
     label: 'Closing the loop',
     foil: 'Resolve by hand, from a commit that references the issue, or in a release; Seer, the paid AI debugging add-on, is on Team and above',
-    mushi: 'A draft PR from your agent; merging it resolves the linked Linear issue, and the linked Sentry issue once the Sentry plugin is on (Indie and above, or self-hosted)',
+    mushi: 'A draft PR from your agent; merging it resolves the linked Linear issue, and the linked Sentry issue once the Sentry plugin is on (Builder and above, or self-hosted)',
   },
   {
     label: 'Reporter attribution',
@@ -358,32 +398,32 @@ export interface LandingPillar {
   glyph: 'report' | 'diagnose' | 'group' | 'ship'
 }
 
+/** The landing's "How it works": the one job in three steps (ADR 0052). */
 export const LANDING_PILLARS: readonly LandingPillar[] = [
   {
     step: 'Step 1',
-    name: 'User reports',
+    name: 'A user reports it',
     glyph: 'report',
-    role: 'On glot.it, a Thai-learning app we run, a learner shakes the phone instead of emailing support. Mushi keeps a picture of the screen and what they were doing.',
+    role: 'They tap the report button and write one line. Mushi Mushi adds a picture of the screen, the page and what they tapped.',
   },
   {
     step: 'Step 2',
-    name: 'Plain read',
+    name: 'Mushi Mushi explains it',
     glyph: 'diagnose',
-    role: 'How serious it is and what probably caused it, in everyday English instead of a wall of error code.',
+    role: 'The likely cause in plain English, the file it points to and how sure it is. Repeat reports of one bug become one item.',
   },
   {
     step: 'Step 3',
-    name: 'One row',
-    glyph: 'group',
-    role: 'Twenty people reporting the same broken checkout button become one item, not twenty.',
-  },
-  {
-    step: 'Step 4',
-    name: 'Draft PR',
+    name: 'Your AI fixes it',
     glyph: 'ship',
-    role: 'Optional: an AI coding agent proposes the fix as a pull request, and a second AI reviews it. You merge it, edit it or ignore it.',
+    role: 'Paste the fix prompt into Cursor, Claude Code or Lovable, or let your editor pull it. You review the change.',
   },
 ] as const
+
+export const LANDING_HOW_IT_WORKS = {
+  heading: 'How it works',
+  sampleLead: 'See all of it on one bug: the complaint, what was captured, the cause and the fix prompt.',
+} as const
 
 /**
  * "This is what a diagnosis looks like" — one real classifier output, so the
@@ -441,7 +481,7 @@ export const LANDING_MEDIATOR = {
   ],
   core: 'One list: duplicates merged, each bug explained in plain English, past fixes remembered as lessons',
   gating:
-    'The SDK, the report button, the diagnosis and the editor connection (MCP server) all work on the free plan. Plugins for other tools need the Indie plan or above on Mushi Cloud, or your own server.',
+    'The SDK, the report button, the diagnosis and the editor connection (MCP server) all work on the free plan. Plugins for other tools need the Builder plan or above on Mushi Cloud, or your own server.',
 } as const satisfies {
   inbound: readonly LandingMediatorLink[]
   outbound: readonly LandingMediatorLink[]
@@ -452,8 +492,9 @@ export const LANDING_MEDIATOR = {
 /** Landing pricing strip — tier rows come from PRICING_TIERS (lib/public-copy.ts). */
 export const LANDING_PRICING_STRIP = {
   heading: 'What it costs',
-  lead: 'You pay per diagnosis (one bug that Mushi explains), not for every error it sees. Duplicate reports and noise are filtered out for free. Every paid plan has a spending cap, so the bill cannot run away.',
-  tierIds: ['free', 'indie', 'pro', 'self-host'] as const,
+  lead: 'A plan is the number of apps Mushi Mushi watches for you. Each includes plain-English diagnoses (one bug that Mushi Mushi explains), not a charge for every error: duplicates and noise are filtered out for free, and every paid plan has a spending cap you set.',
+  // The solo builder's tiers only (ADR 0052); self-hosting is one click away on /pricing.
+  tierIds: ['free', 'indie', 'pro'] as const,
   cta: 'Full pricing and the estimator →',
   href: '/pricing',
   ctaId: 'landing-pricing',
@@ -471,25 +512,21 @@ export const LANDING_OPERATOR = {
   soloCta: 'Start free →',
   soloHref: `${ADMIN_DEMO_BASE}/signup?src=landing-closing`,
   soloCtaId: 'landing-closing',
-  teamLead:
-    'Setting it up for a team, with single sign-on (SSO) or audit logs? The operator notes on GitHub cover that.',
-  teamCta: 'Operators docs →',
-  teamHref: `${MUSHI_CANONICAL_URLS.repo}/tree/master/docs/operators`,
 } as const
 
 export const LANDING_MEDIA_CAPTIONS = {
   adminTour: {
-    alt: 'Animated guided tour through the Mushi admin console — reports, fixes, and integrations',
+    alt: 'Animated guided tour through the Mushi Mushi admin console — reports, fixes, and integrations',
     captionStrong: 'Bug list',
     captionRest: '· the web dashboard, for when you want the whole list of bugs in front of you',
   },
   glotit: {
-    alt: 'glot.it dogfood — user taps the Mushi feedback widget, submits a bug report',
+    alt: 'glot.it dogfood — user taps the Mushi Mushi feedback widget, submits a bug report',
     captionStrong: 'Real users',
     captionRest: '· a shake or tap sends a report on glot.it, a Thai-learning app we run',
   },
   dashboard: {
-    alt: 'Mushi admin dashboard — an overview of reports and fixes',
+    alt: 'Mushi Mushi admin dashboard — an overview of reports and fixes',
     captionStrong: 'Dashboard',
     captionRest: '· the same overview in light and dark mode',
   },
@@ -526,9 +563,9 @@ export const LANDING_TRUST_LINKS = [
     href: MUSHI_CANONICAL_URLS.repo,
   },
   {
-    label: 'Dogfood',
-    text: 'Runs on glot.it',
-    href: 'https://kensaur.us/glot-it',
+    label: 'Proof',
+    text: 'Runs on my own live apps · numbers public',
+    href: '/proof',
   },
   {
     label: 'Security',

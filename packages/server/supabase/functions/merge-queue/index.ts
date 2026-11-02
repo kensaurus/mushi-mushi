@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
+// Copyright (c) 2024–2026 kensaurus LLC — Mushi Mushi
 /**
  * merge-queue — Supabase Edge Function (verify_jwt = false, internal)
  *
@@ -20,7 +20,13 @@
  *     key and model, only while follow-ups are on); the row waits for its
  *     push, then carries on.
  *
- * Auth: `requireServiceRoleAuth`. `POST { projectId }` runs that app's rows now.
+ * "Decide for me" (ADR 0055) runs first, for apps that turned it on: it
+ * queues Opus-approved PRs and closes the ones Opus will not merge
+ * (`./auto-decide.ts`).
+ *
+ * Auth: `requireServiceRoleAuth`. `POST { projectId }` runs that app's rows now;
+ * `POST { projectId, autoDecide: 'dry_run' }` only lists what "Decide for me"
+ * would do to that app's PRs, and changes nothing.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
@@ -34,15 +40,18 @@ import {
   resolveProjectGithubToken,
   type GithubRepoRef,
 } from '../_shared/github.ts'
-import { gatedMergePullRequest } from '../_shared/gated-merge.ts'
+import { gatedMergePullRequest, gatedTrainMerge } from '../_shared/gated-merge.ts'
 import { finalizeFixMerge } from '../_shared/fix-merge.ts'
 import { requeueReviewForNewHead } from '../_shared/fix-review-db.ts'
-import { resolveCursorApiKeyWithSource } from '../_shared/agent-adapters.ts'
+import { cursorKeyForNewWork, markCursorKeyExhausted } from '../_shared/agent-adapters.ts'
 import { cursorKeyById, cursorModelsCached, loadFollowupSettings } from '../_shared/review-followup-db.ts'
 import { validateCursorModel } from '../_shared/review-followup.ts'
 import { createCursorAgentV1, getCursorAgent, getCursorRun } from '../_shared/cursor-cloud.ts'
 import { checksView, type ChecksView } from '../_shared/merge-queue.ts'
 import { runMergeQueue, type MergeQueueDeps } from './worker.ts'
+import { createHealthGate } from '../_shared/health-gate.ts'
+import { runAutoDecide } from './auto-decide.ts'
+import { log } from '../_shared/logger.ts'
 
 const GH_HEADERS = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }
 
@@ -51,7 +60,7 @@ async function githubChecks(token: string, ref: GithubRepoRef, sha: string): Pro
     headers: { ...GH_HEADERS, Authorization: `Bearer ${token}` },
   })
   if (!res.ok) throw new Error(`GitHub check runs answered ${res.status}`)
-  const body = (await res.json()) as { check_runs?: Array<{ name?: string; status?: string; conclusion?: string | null }> }
+  const body = (await res.json()) as { check_runs?: Array<{ id?: number; name?: string; status?: string; conclusion?: string | null; started_at?: string | null }> }
   return checksView(body.check_runs ?? [])
 }
 
@@ -83,16 +92,20 @@ async function followupCursorKey(db: SupabaseClient, projectId: string) {
   }
   let apiKey: string
   let cacheKey: string
+  let keyId: string | null = null
   if (settings.keyId) {
     const k = await cursorKeyById(db, settings.keyId, org, { projectId })
     if (!k.ok) return { ok: false as const, reason: `The follow-up Cursor key cannot be used here (${k.reason}).` }
     apiKey = k.apiKey
     cacheKey = k.cacheKey
+    keyId = k.keyId
   } else {
-    const r = await resolveCursorApiKeyWithSource(db, projectId)
+    // Skips a key whose account is used up (byok_keys.exhausted_until), like every new agent.
+    const r = await cursorKeyForNewWork(db, projectId)
     if (!r || r.source === 'env') return { ok: false as const, reason: 'No Cursor key of yours serves this app.' }
     apiKey = r.key
     cacheKey = r.keyId ? `key:${r.keyId}` : `${r.source}:${projectId}`
+    keyId = r.keyId
   }
   let model: string | null = null
   if (settings.model) {
@@ -100,7 +113,7 @@ async function followupCursorKey(db: SupabaseClient, projectId: string) {
     if (!check.ok) return { ok: false as const, reason: `The follow-up model cannot run (${check.detail ?? check.reason}).` }
     model = check.model
   }
-  return { ok: true as const, apiKey, model }
+  return { ok: true as const, apiKey, model, keyId }
 }
 
 async function githubBehindBy(token: string, ref: GithubRepoRef, base: string, head: string): Promise<number> {
@@ -110,6 +123,59 @@ async function githubBehindBy(token: string, ref: GithubRepoRef, base: string, h
   if (!res.ok) return 0
   const body = (await res.json()) as { behind_by?: number }
   return body.behind_by ?? 0
+}
+
+async function gh(token: string, method: string, path: string, body?: unknown): Promise<Response> {
+  return await fetch(`https://api.github.com${path}`, {
+    method,
+    headers: { ...GH_HEADERS, Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  })
+}
+
+/** Live GitHub calls for release trains (ADR 0044). */
+const trainDeps: NonNullable<MergeQueueDeps['train']> = {
+  branchSha: async (token, ref, branch) => {
+    const res = await gh(token, 'GET', `/repos/${ref.owner}/${ref.repo}/git/ref/heads/${branch.split('/').map(encodeURIComponent).join('/')}`)
+    if (!res.ok) return null
+    return ((await res.json()) as { object?: { sha?: string } }).object?.sha ?? null
+  },
+  createBranch: async (token, ref, branch, sha) => (await gh(token, 'POST', `/repos/${ref.owner}/${ref.repo}/git/refs`, { ref: `refs/heads/${branch}`, sha })).status === 201,
+  mergeInto: async (token, ref, branch, head, message) => {
+    // GitHub's merge endpoint merges a commit into a branch server-side.
+    const res = await gh(token, 'POST', `/repos/${ref.owner}/${ref.repo}/merges`, { base: branch, head, commit_message: message })
+    if (res.status === 201) return { outcome: 'merged', sha: ((await res.json()) as { sha?: string }).sha }
+    if (res.status === 204) return { outcome: 'noop' }
+    if (res.status === 409) return { outcome: 'conflict' }
+    return { outcome: 'error', message: `GitHub answered ${res.status}` }
+  },
+  openPr: async (token, ref, pr) => {
+    const res = await gh(token, 'POST', `/repos/${ref.owner}/${ref.repo}/pulls`, { head: pr.head, base: pr.base, title: pr.title, body: pr.body, draft: false })
+    if (res.status !== 201) return null
+    return { number: ((await res.json()) as { number: number }).number }
+  },
+  closePr: async (token, ref, n, comment) => {
+    await gh(token, 'POST', `/repos/${ref.owner}/${ref.repo}/issues/${n}/comments`, { body: comment })
+    await gh(token, 'PATCH', `/repos/${ref.owner}/${ref.repo}/pulls/${n}`, { state: 'closed' })
+  },
+  deleteBranch: async (token, ref, branch) => {
+    // Only Mushi's own train branches are ever deleted.
+    if (!branch.startsWith('mushi/train/')) return
+    await gh(token, 'DELETE', `/repos/${ref.owner}/${ref.repo}/git/refs/heads/${branch.split('/').map(encodeURIComponent).join('/')}`)
+  },
+  mergeMethod: async (token, ref, base) => {
+    // Merge commits need allow_merge_commit and no linear-history rule (ruleset or classic protection).
+    const repo = await gh(token, 'GET', `/repos/${ref.owner}/${ref.repo}`)
+    const allowMerge = repo.ok ? ((await repo.json()) as { allow_merge_commit?: boolean }).allow_merge_commit !== false : true
+    if (!allowMerge) return 'squash'
+    const enc = base.split('/').map(encodeURIComponent).join('/')
+    const rules = await gh(token, 'GET', `/repos/${ref.owner}/${ref.repo}/rules/branches/${enc}`)
+    if (rules.ok && ((await rules.json()) as Array<{ type?: string }>).some((r) => r.type === 'required_linear_history')) return 'squash'
+    const prot = await gh(token, 'GET', `/repos/${ref.owner}/${ref.repo}/branches/${enc}/protection`)
+    if (prot.ok && ((await prot.json()) as { required_linear_history?: { enabled?: boolean } }).required_linear_history?.enabled) return 'squash'
+    return 'merge'
+  },
+  trainMerge: gatedTrainMerge,
 }
 
 const liveDeps: MergeQueueDeps = {
@@ -122,6 +188,8 @@ const liveDeps: MergeQueueDeps = {
   merge: gatedMergePullRequest,
   finalize: finalizeFixMerge,
   requeueReview: requeueReviewForNewHead,
+  markKeyUsedUp: markCursorKeyExhausted,
+  train: trainDeps,
   cursorKey: followupCursorKey,
   createAgent: async (apiKey, input) => ({ agentId: (await createCursorAgentV1({ apiKey }, input)).agent.id }),
   agentDone: async (apiKey, agentId) => {
@@ -138,9 +206,25 @@ export async function handler(req: Request): Promise<Response> {
   }
   const unauthorized = requireServiceRoleAuth(req)
   if (unauthorized) return unauthorized
-  const body = (await req.json().catch(() => ({}))) as { projectId?: unknown }
-  const tally = await runMergeQueue(getServiceClient(), liveDeps, typeof body.projectId === 'string' ? body.projectId : undefined)
-  return new Response(JSON.stringify({ ok: true, data: tally }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  const body = (await req.json().catch(() => ({}))) as { projectId?: unknown; autoDecide?: unknown; limit?: unknown }
+  const db = getServiceClient()
+  const projectId = typeof body.projectId === 'string' ? body.projectId : undefined
+  const decideDeps = { token: liveDeps.token, pull: liveDeps.pull, checks: liveDeps.checks, closePr: trainDeps.closePr, baseSha: trainDeps.branchSha, requeueReview: liveDeps.requeueReview }
+  if (body.autoDecide === 'dry_run') {
+    if (!projectId) return new Response(JSON.stringify({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'A dry run needs projectId.' } }), { status: 400 })
+    const limit = Math.min(200, Math.max(1, Number(body.limit) || 50))
+    const out = await runAutoDecide(db, decideDeps, { projectId, dryRun: true, limit })
+    return new Response(JSON.stringify({ ok: true, data: out }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }
+  // A failure here never stops the queue tick.
+  const decided = await runAutoDecide(db, decideDeps, { projectId }).catch((err) => {
+    log.child('merge-queue').warn('auto-decide failed', { err: err instanceof Error ? err.message : String(err) })
+    return { tally: { error: 1 } as Record<string, number> }
+  })
+  // The health gate reads its switch once per tick (off unless mushi_runtime_config says otherwise).
+  const healthGate = await createHealthGate(db, 'merge-queue')
+  const tally = await runMergeQueue(db, { ...liveDeps, healthGate }, projectId)
+  return new Response(JSON.stringify({ ok: true, data: { ...tally, autoDecide: decided.tally } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
 }
 
 if (typeof Deno !== 'undefined') {

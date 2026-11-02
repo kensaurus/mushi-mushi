@@ -1,19 +1,28 @@
 # `@mushi-mushi/plugin-jira`
 
-> **Your AI wrote it. Mushi tells you why it broke.**
+> **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
-Part of the Mushi Mushi monorepo — plain-English bug comprehension for vibe coders.
+For teams that track bugs in Jira Cloud. This opens a Jira issue for each new
+Mushi Mushi bug report, moves it through your Jira workflow as the report
+changes status, and comments when the fix lands. It is a library: you write
+the small server around it.
 
-
-Bidirectional sync between Mushi Mushi reports and Jira Cloud issues.
-Creates issues on `report.created`, transitions status on
-`report.status_changed`, and comments fix summaries on `fix.applied`.
-
-## Install
+**Do you need this package?** Not on Mushi Mushi Cloud: add Jira on the
+**Integrations** page of the console (base URL, email, API token, project
+key) and Mushi opens and resolves Jira issues itself, on any plan. The
+console's Marketplace has no Jira listing (checked 2026-10-29), so this package only
+receives events from a Mushi server you run yourself, once you add a
+`plugin_registry` row for it.
 
 ```bash
-npm i @mushi-mushi/plugin-jira
+npm i @mushi-mushi/plugin-jira @mushi-mushi/plugin-sdk express
 ```
+
+You need Jira OAuth tokens first (below), then mount
+`createJiraPluginHandler` on `POST /mushi/webhook`
+([example](#wire-up-the-webhook-handler)).
+
+Docs: https://kensaur.us/mushi-mushi/docs/plugins/jira
 
 ## OAuth setup (one-time per tenant)
 
@@ -40,7 +49,7 @@ const { url, state, codeVerifier } = buildAuthorizeUrl(config, projectId)
 const tokens = await exchangeCode(config, code, codeVerifier)
 ```
 
-Tokens are short-lived — call `refreshTokens(config, tokens.refreshToken)`
+Tokens are short-lived. Call `refreshTokens(config, tokens.refreshToken)`
 before expiry, or persist the mapping and refresh lazily on 401. The refresh
 result leaves `cloudId` and `cloudUrl` empty (they never change), so merge it
 onto the stored record instead of replacing it:
@@ -55,7 +64,7 @@ const tokens = { ...stored, ...refreshed, cloudId: stored.cloudId, cloudUrl: sto
 ```ts
 import express from 'express'
 import { createJiraPluginHandler } from '@mushi-mushi/plugin-jira'
-import { expressMiddleware } from '@mushi-mushi/plugin-sdk'
+import { expressMiddleware } from '@mushi-mushi/plugin-sdk/express'
 
 const handler = createJiraPluginHandler({
   secret: process.env.MUSHI_PLUGIN_SECRET!,
@@ -76,11 +85,16 @@ app.post('/mushi/webhook', expressMiddleware(handler))
 
 | Event                     | Effect on Jira                                                     |
 | ------------------------- | ------------------------------------------------------------------ |
-| `report.created`          | Creates a Jira issue under `jiraProjectKey` with mushi labels.     |
-| `report.status_changed`   | Transitions the issue via `statusToTransition` map.                |
-| `fix.applied`             | Adds a comment linking the GitHub PR (or fix summary).             |
+| `report.created`          | Creates a Jira issue under `jiraProjectKey`, labelled with the report's category and severity (`unknown` until triage). |
+| `report.status_changed`   | Moves the issue with the transition named in `statusToTransition`. |
+| `fix.applied`             | Adds a comment with the fix's pull request link, when there is one. |
 
-Other Mushi events are ignored — add them to the `on` map to customize.
+Other Mushi events are ignored.
+
+The report → issue key map lives in memory. After a restart,
+`report.status_changed` and `fix.applied` for reports created before it do
+nothing. Jira → Mushi sync (closing the Mushi report from Jira) is not part
+of this package's exports.
 
 ## Status mapping defaults
 
@@ -103,4 +117,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 76 edge functions · 503 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

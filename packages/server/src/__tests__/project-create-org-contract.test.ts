@@ -54,11 +54,9 @@ describe('POST /v1/admin/projects org-id contract (Sentry MUSHI-MUSHI-SERVER-M)'
   });
 
   it('passes organization_id to the projects insert', () => {
-    // Regex tolerates whitespace, comments, and other fields between the
-    // `from('projects').insert({` open brace and the `organization_id` key.
-    const insertsOrg = /from\('projects'\)[\s\S]*?\.insert\(\{[\s\S]*?organization_id\s*:/.test(
-      handler,
-    );
+    // The insert goes through insertProjectWithFreeSlug (_shared/project-slug.ts,
+    // 2026-10-29: a name another account used no longer 500s on the slug).
+    const insertsOrg = /insertProjectWithFreeSlug\(db,\s*\{[\s\S]*?organization_id\s*:/.test(handler);
     expect(insertsOrg).toBe(true);
   });
 
@@ -67,7 +65,7 @@ describe('POST /v1/admin/projects org-id contract (Sentry MUSHI-MUSHI-SERVER-M)'
     // The early-return must happen BEFORE the projects insert so we never
     // round-trip a null organization_id to Postgres again.
     const earlyReturnIdx = handler.indexOf('NO_ORGANIZATION');
-    const insertIdx = handler.indexOf("from('projects')");
+    const insertIdx = handler.indexOf('insertProjectWithFreeSlug(');
     expect(earlyReturnIdx).toBeGreaterThan(0);
     expect(insertIdx).toBeGreaterThan(earlyReturnIdx);
   });
@@ -103,5 +101,14 @@ describe('POST /v1/admin/projects org-id contract (Sentry MUSHI-MUSHI-SERVER-M)'
     expect(bootstrapIdx).toBeGreaterThan(0);
     expect(earlyReturnIdx).toBeGreaterThan(0);
     expect(bootstrapIdx).toBeLessThan(earlyReturnIdx);
+  });
+
+  it('checks the plan app limit (402 PLAN_APP_LIMIT) after the team is known and before the insert', () => {
+    const limitIdx = handler.indexOf('appLimitDenial(');
+    const noOrgIdx = handler.indexOf('NO_ORGANIZATION');
+    const insertIdx = handler.indexOf('insertProjectWithFreeSlug(');
+    expect(limitIdx).toBeGreaterThan(noOrgIdx);
+    expect(limitIdx).toBeLessThan(insertIdx);
+    expect(handler).toContain('402');
   });
 });

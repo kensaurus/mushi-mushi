@@ -4,15 +4,16 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/launcher
 
 ---
 title: 'mushi-mushi (launcher)'
-description: npx mushi-mushi detects your framework, installs the matching @mushi-mushi SDK, writes your project ID and API key to .env.local, and prints the snippet.
+description: npx mushi-mushi detects your framework, installs the matching Mushi Mushi SDK, writes your project ID and API key to .env.local, and prints the snippet.
 ---
 
-# `mushi-mushi` — the one-command launcher
+# `mushi-mushi`: the one-command launcher
 
-`npx mushi-mushi` is the single entry point on npm: it auto-detects your
-framework, picks the right `@mushi-mushi/*` SDK, writes
-`MUSHI_PROJECT_ID` and `MUSHI_API_KEY` into `.env.local`, and prints the
-snippet to paste into your app.
+`npx mushi-mushi` is the single Mushi Mushi entry point on npm: it auto-detects
+your framework, picks the right `@mushi-mushi/*` SDK, writes your project ID
+and API key into `.env.local` (or an existing `.env`) as `MUSHI_PROJECT_ID` and
+`MUSHI_API_KEY` with your framework's env prefix, and prints the snippet to
+paste into your app.
 
 ## Try it
 
@@ -20,7 +21,7 @@ snippet to paste into your app.
 npx mushi-mushi
 ```
 
-Equivalent commands — all three run the same wizard from
+Equivalent commands. All three run the same wizard from
 [`@mushi-mushi/cli`](/sdks/cli):
 
 ```bash
@@ -31,40 +32,61 @@ npx @mushi-mushi/cli init    # the scoped name
 
 ## What it detects
 
-| Framework      | Detected from                                       |
-| -------------- | --------------------------------------------------- |
-| Next.js        | `next.config.*`, `app/` directory                   |
-| Nuxt           | `nuxt.config.*`                                     |
-| SvelteKit      | `svelte.config.*` + `@sveltejs/kit` dep             |
-| Angular        | `angular.json`                                      |
-| React (Vite)   | `vite.config.*` + `react` dep                       |
-| Vue 3 (Vite)   | `vite.config.*` + `vue@^3` dep                      |
-| Svelte (Vite)  | `vite.config.*` + `svelte` dep                      |
-| Expo           | `app.json` + `expo` dep                             |
-| React Native CLI | `react-native` dep without Expo                   |
-| Capacitor      | `capacitor.config.*`                                |
-| Vanilla        | fallback                                            |
+The wizard reads the dependencies in your `package.json` first, in this
+order, and takes the first match:
 
-The package manager is detected from the lockfile (`pnpm-lock.yaml`,
-`yarn.lock`, `bun.lockb`, `package-lock.json`). Env-var prefixes are
-chosen by framework: `NEXT_PUBLIC_…`, `NUXT_PUBLIC_…`, `VITE_…`,
-`EXPO_PUBLIC_…`.
+| Framework (`--framework` id) | Detected from |
+| --- | --- |
+| Next.js (`next`) | `next` dependency |
+| Nuxt (`nuxt`) | `nuxt` dependency |
+| SvelteKit (`sveltekit`) | `@sveltejs/kit` dependency |
+| Angular (`angular`) | `@angular/core` dependency |
+| Expo (`expo`) | `expo` dependency |
+| React Native (`react-native`) | `react-native` dependency without Expo |
+| Remix (`remix`) | `@remix-run/react`, `@remix-run/node` or `@remix-run/serve` |
+| Astro (`astro`) | `astro` dependency |
+| Solid (`solid`) | `solid-js` or `@solidjs/start` |
+| Capacitor (`capacitor`) | `@capacitor/core` (with `react` it is treated as React) |
+| Svelte (`svelte`) | `svelte` dependency |
+| Vue (`vue`) | `vue` dependency |
+| Create React App (`cra`) | `react-scripts` dependency |
+| React (`react`) | `react` dependency |
+| Express, Fastify, Hono (`express`, `fastify`, `hono`) | the server framework's dependency (`hono` or `@hono/hono` for Hono) |
+| Vanilla (`vanilla`) | fallback |
 
-## Idempotent
+With no matching dependency it falls back to config files
+(`next.config.*`, `nuxt.config.*`, `svelte.config.js`, `angular.json`,
+`remix.config.*`, `astro.config.*`). Pass `--framework ` to skip
+detection.
+
+The package manager is detected from the lockfile (`bun.lockb` or
+`bun.lock`, `pnpm-lock.yaml`, `yarn.lock`, `package-lock.json`). Env-var
+prefixes are chosen by framework: `NEXT_PUBLIC_…`, `NUXT_PUBLIC_…`,
+`EXPO_PUBLIC_…`, `REACT_APP_…` (Create React App), `PUBLIC_…` (Astro) and
+`VITE_…` for the other browser frameworks. Server frameworks, bare React
+Native and Remix get plain `MUSHI_…` names.
+
+## Running it again
 
 Running the wizard a second time is safe:
 
-- Existing `MUSHI_*` env vars are never overwritten.
-- The snippet is reprinted, but no extra dependency installs run if the
-  SDK is already present.
-- A pre-flight check warns if `.env.local` isn't gitignored, so secrets
-  don't accidentally end up in source control.
+- If `MUSHI_*` vars already exist in the env file, the wizard asks before
+  replacing them. With `--yes` (and in non-interactive shells) it replaces them.
+- The install step runs again; pass `--skip-install` to print the install
+  command instead. When an `@mushi-mushi/*` package is already a dependency,
+  the wizard suggests `npx mushi-mushi --audit`, which runs health checks
+  instead of the setup.
+- After writing the env file it warns if that file isn't gitignored, so
+  secrets don't accidentally end up in source control.
 
 ## When to use the launcher vs the CLI directly
 
-Use **the launcher** when you want one URL to give a teammate
-("`npx mushi-mushi` and you're done").
+Use **the launcher** when you want one command to give a teammate
+("`npx mushi-mushi` and you're done"). Any other command is forwarded to
+`@mushi-mushi/cli`, so `npx mushi-mushi setup --ide cursor` or
+`npx mushi-mushi reports list` works without a global install.
 
-Use **`@mushi-mushi/cli`** directly if you want to run subcommands
-beyond `init` — e.g. `mushi report list`, `mushi triage`, or the
-`mushi migrate` migration helper.
+Install **`@mushi-mushi/cli`** globally (`npm install -g @mushi-mushi/cli`)
+when you use it every day and want the short `mushi` command, for example
+`mushi reports list`, `mushi reports triage `, or the `mushi migrate`
+migration helper.
