@@ -26,6 +26,7 @@
 
 import { z } from 'npm:zod@3'
 import { classifyCiJob, describeCiInfra, readFixCiInfra, summarizeCiJobs, type CiJobVerdict } from './ci-infra.ts'
+import { isAdvisoryCiCheck } from './merge-queue.ts'
 import { isLockFile, type ReviewFinding, type ReviewVerdict } from './fix-review.ts'
 import { matchFramePathsToTree } from './sentry-frames.ts'
 
@@ -792,10 +793,11 @@ export function failToPassGate(checks: readonly VerifyCheckRunLike[], headSha: s
 /** Review bots that post a check run instead of testing (github.ts isAdvisoryCheckRun). */
 const ADVISORY_CHECKS = new Set(['copilot-pull-request-reviewer'])
 
-/** Checks the CI gate ignores: review bots, and the verify check and its own job (gate 4 reads those). */
+/** Checks the CI gate ignores: review bots, the SDK freshness check, and the verify check and its own job (gate 4 reads those). */
 export function isCiGateCheck(check: { name?: string | null }): boolean {
-  const name = (check.name ?? '').trim().toLowerCase()
-  if (ADVISORY_CHECKS.has(name)) return false
+  const raw = (check.name ?? '').trim()
+  const name = raw.toLowerCase()
+  if (ADVISORY_CHECKS.has(name) || isAdvisoryCiCheck(raw)) return false
   return !name.startsWith(VERIFY_CHECK_NAME.toLowerCase())
 }
 

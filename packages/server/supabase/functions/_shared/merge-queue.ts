@@ -42,12 +42,19 @@ export interface ChecksView {
 }
 
 /**
- * Checks that report on a repo and never on a PR. They stay visible on GitHub
- * but do not hold a PR or a train: "Compare @mushi-mushi/* to npm latest" stays
- * red until the host's SDK upgrade lands, whatever the PR changes, so on
- * 2026-11-01 it held fix PRs in the queue on a check none of them could pass.
+ * Checks that report on a repo and never on a PR's code. They stay visible
+ * on GitHub but must not turn Mushi's CI red, hold a merge, or start a
+ * CI-repair agent. "Compare @mushi-mushi/* to npm latest" goes red on every
+ * host app the moment a new SDK version is published, whatever that app's
+ * other checks (or the pull request) contain, so on 2026-11-01 it held fix
+ * PRs in the queue on a check none of them could pass.
  */
 export const ADVISORY_CHECKS: ReadonlySet<string> = new Set(['Compare @mushi-mushi/* to npm latest'])
+
+/** Exact job or check-run name. A required check that merely contains this text still counts. */
+export function isAdvisoryCiCheck(name: string | null | undefined): boolean {
+  return ADVISORY_CHECKS.has(name ?? '')
+}
 
 /**
  * Whether a head's failed checks are the base branch's, not its own: at
@@ -149,7 +156,7 @@ export function checksView(runs: Array<{ id?: number; name?: string; status?: st
   const failed: string[] = []
   const ran: string[] = []
   for (const r of newest.values()) {
-    const advisory = ADVISORY_CHECKS.has(r.name ?? '')
+    const advisory = isAdvisoryCiCheck(r.name)
     if (r.status !== 'completed') {
       if (!advisory) pending++
     } else {

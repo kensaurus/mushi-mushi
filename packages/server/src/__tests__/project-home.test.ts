@@ -131,6 +131,20 @@ describe('ciSignal', () => {
     expect(s.label).toBe('CI on main')
   })
 
+  it('a newer SDK freshness failure does not paint a green main build red', () => {
+    const s = ciSignal({
+      repo: 'o/r',
+      branch: 'main',
+      jobs: [
+        job({ run_id: 9, job_name: 'build', conclusion: 'success' }),
+        job({ run_id: 10, job_name: 'Compare @mushi-mushi/* to npm latest', conclusion: 'failure' }),
+      ],
+    })
+    expect(s.light).toBe('good')
+    expect(s.headline).toBe('Passing')
+    expect(s.detail).not.toContain('Compare @mushi-mushi')
+  })
+
   it('a code failure is red; a test machine stop is amber (ADR 0033)', () => {
     expect(ciSignal({ repo: 'o/r', branch: 'main', jobs: [job({ conclusion: 'failure' })] }).light).toBe('bad')
     const infra = ciSignal({ repo: 'o/r', branch: 'main', jobs: [job({ conclusion: 'failure', infra: true })] })

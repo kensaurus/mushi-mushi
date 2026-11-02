@@ -12,6 +12,7 @@
 
 import { fetchWithTimeout } from './http.ts'
 import type { getServiceClient } from './db.ts'
+import { isAdvisoryCiCheck } from './merge-queue.ts'
 import { isOperatorProject } from './operator-gate.ts'
 
 async function importPkcs8(pem: string): Promise<CryptoKey> {
@@ -848,16 +849,19 @@ function currentCheckRuns<T extends CheckRunLike>(all: T[]): T[] {
 }
 
 /**
- * Check runs that review a PR instead of testing it. Copilot code review
- * posts a `copilot-pull-request-reviewer` run that concludes `failure`
- * whenever it leaves comments or runs out of quota; counting it made
+ * Check runs that review a PR instead of testing it, plus repo-level
+ * advisory checks (`isAdvisoryCiCheck`). Copilot code review posts a
+ * `copilot-pull-request-reviewer` run that concludes `failure` whenever it
+ * leaves comments or runs out of quota; counting it made
  * help-her-take-photo#65 read "CI failed" with its only CI job green, and
- * the console hid the merge button.
+ * the console hid the merge button. The SDK freshness check does the same
+ * to every host app when a new `@mushi-mushi/*` version is published.
  */
 const ADVISORY_CHECK_RUN_NAMES = new Set(['copilot-pull-request-reviewer'])
 
 export function isAdvisoryCheckRun(run: { name?: string | null }): boolean {
-  return ADVISORY_CHECK_RUN_NAMES.has((run.name ?? '').toLowerCase())
+  const name = run.name ?? ''
+  return ADVISORY_CHECK_RUN_NAMES.has(name.toLowerCase()) || isAdvisoryCiCheck(name)
 }
 
 /** Conclusions GitHub counts as passing for required checks and the merge box. */

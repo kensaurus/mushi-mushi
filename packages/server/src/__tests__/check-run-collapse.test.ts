@@ -18,6 +18,20 @@ describe('collapseCheckRuns', () => {
     ])).toEqual({ status: 'completed', conclusion: 'success' })
   })
 
+  it('a red SDK freshness check does not turn a green build red, and does not hold it while running', () => {
+    const name = 'Compare @mushi-mushi/* to npm latest'
+    expect(collapseCheckRuns([
+      { name, status: 'completed', conclusion: 'failure' },
+      { name: 'gate', status: 'completed', conclusion: 'success' },
+    ])).toEqual({ status: 'completed', conclusion: 'success' })
+    expect(collapseCheckRuns([
+      { name, status: 'in_progress', conclusion: null },
+      { name: 'gate', status: 'completed', conclusion: 'success' },
+    ])).toEqual({ status: 'completed', conclusion: 'success' })
+    // Only that check: nothing else reported, same as a review-only head.
+    expect(collapseCheckRuns([{ name, status: 'completed', conclusion: 'failure' }])).toEqual({ status: null, conclusion: null })
+  })
+
   it('keeps a real CI failure red', () => {
     expect(collapseCheckRuns([
       { name: 'lint', status: 'completed', conclusion: 'success' },
@@ -207,8 +221,10 @@ describe('collapseCheckRuns', () => {
 })
 
 describe('isAdvisoryCheckRun', () => {
-  it('matches only review runs', () => {
+  it('matches review runs and the SDK freshness check, and nothing that merely contains the name', () => {
     expect(isAdvisoryCheckRun({ name: 'copilot-pull-request-reviewer' })).toBe(true)
+    expect(isAdvisoryCheckRun({ name: 'Compare @mushi-mushi/* to npm latest' })).toBe(true)
+    expect(isAdvisoryCheckRun({ name: 'Compare @mushi-mushi/* to npm latest (required)' })).toBe(false)
     expect(isAdvisoryCheckRun({ name: 'gate' })).toBe(false)
     expect(isAdvisoryCheckRun({})).toBe(false)
   })
