@@ -2,7 +2,7 @@
   "name": "@mushi-mushi/e2e-dogfood",
   "version": "0.0.0",
   "private": true,
-  "description": "End-to-end Playwright suite that drives the full Mushi Mushi PDCA loop (Plan → Do → Check → Act) against a local Supabase + admin dev stack. Mocks GitHub by default (msw); set E2E_LIVE_GITHUB=1 to hit real GitHub.",
+  "description": "End-to-end Playwright suite that drives the full Mushi Mushi PDCA loop (Plan → Do → Check → Act) against a local Supabase + admin dev stack. With E2E_LIVE_GITHUB unset, GitHub is not intercepted and Act only checks that the attempt leaves pending; set E2E_LIVE_GITHUB=1 to hit real GitHub.",
   "type": "module",
   "scripts": {
     "test": "echo 'e2e-dogfood is driven by pnpm e2e, not pnpm test (requires a live Supabase + admin stack)' && exit 0",
