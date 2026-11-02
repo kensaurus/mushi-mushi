@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 import vm from 'node:vm'
-import { describe, expect, it } from 'vitest'
-import type { BrowserContext } from 'playwright'
-import { PROFILE_LS_PREFIX, createLease, profileCaptureContext, profileStorageAfterClose, profileStorageInitScript } from './capture.js'
+import { chromium, type BrowserContext } from 'playwright'
+import { describe, expect, it, vi } from 'vitest'
+import { PROFILE_LS_PREFIX, createLease, openSession, profileCaptureContext, profileStorageAfterClose, profileStorageInitScript } from './capture.js'
 
 class MemStorage {
   private map = new Map<string, string>()
@@ -121,6 +121,33 @@ describe('profile capture lease', () => {
     await pending
     expect(order).toEqual(['first', 'second'])
     expect(joined).toBe(true)
+  })
+
+  it('releases the lease when warm-up cannot open a page, so the session can close', async () => {
+    let closed = false
+    const context = {
+      pages: () => [],
+      on() {},
+      async addInitScript() {},
+      async route() {},
+      async newPage(): Promise<never> {
+        throw new Error('page failed')
+      },
+      async close() {
+        closed = true
+      },
+    }
+    const spy = vi.spyOn(chromium, 'launchPersistentContext').mockResolvedValue(context as unknown as BrowserContext)
+    try {
+      const session = await openSession({ profileDir: '/tmp/mushi-profile' })
+      await expect(session.warmUp('http://127.0.0.1:9', ['/'])).rejects.toThrow('page failed')
+      const capture = await session.freshContext()
+      await capture.close()
+      await session.close()
+      expect(closed).toBe(true)
+    } finally {
+      spy.mockRestore()
+    }
   })
 })
 
