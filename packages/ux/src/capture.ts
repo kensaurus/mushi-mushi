@@ -8,7 +8,8 @@
  * never named to the coding agent (ADR 0006).
  */
 
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
+import { randomUUID } from 'node:crypto'
+import { chromium, type Browser, type BrowserContext, type CDPSession, type Page } from 'playwright'
 import { installGuard, isGuardNoise, type AllowRule, type GuardLog, type GuardPolicy } from './guard.js'
 import { ignoreList, ignoreStyle } from './ignore.js'
 import { isFrameworkNoise, runProbes } from './probes.js'
@@ -23,6 +24,8 @@ export interface BrowserSession {
    * Captures share no client state, so a screen looks the same however many
    * other screens were visited before it (glot.it /words lost its empty
    * state after other screens wrote to localStorage, 2026-10-07).
+   * A cached profile opens the page in that profile. Copying the profile
+   * into a second browser with storageState signs the capture out.
    */
   freshContext(): Promise<BrowserContext>
   /**
@@ -66,49 +69,368 @@ const CLS_SCRIPT = `(() => {
   } catch {}
 })()`
 
+/**
+ * Key prefix for the per-origin localStorage snapshot a profile session
+ * keeps in the page. The run id makes a crashed run's key stale: the next
+ * run deletes it instead of treating it as the profile.
+ * @internal Exported for tests only.
+ */
+export const PROFILE_LS_PREFIX = '__mushiLsBaseline:'
+
+/**
+ * @internal Exported for tests only. Runs in every top-level document of a
+ * profile session, before the app. The first document on an origin snapshots
+ * the profile's localStorage; a later tab restores that snapshot so captures
+ * do not share client state. The same tab keeps what it writes.
+ */
+export function profileStorageInitScript(runId: string): string {
+  return `(() => {
+  try {
+    if (window.top !== window) return
+    if (location.protocol !== 'http:' && location.protocol !== 'https:') return
+    const PREFIX = ${JSON.stringify(PROFILE_LS_PREFIX)}
+    const KEY = ${JSON.stringify(PROFILE_LS_PREFIX + runId)}
+    const READY = ${JSON.stringify(`${PROFILE_LS_PREFIX}ready:${runId}`)}
+    const namesOf = () => {
+      const names = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const name = localStorage.key(i)
+        if (name) names.push(name)
+      }
+      return names
+    }
+    for (const name of namesOf()) if (name.startsWith(PREFIX) && name !== KEY) localStorage.removeItem(name)
+    if (sessionStorage.getItem(READY) === '1') return
+    let raw = localStorage.getItem(KEY)
+    if (raw === null) {
+      raw = JSON.stringify(namesOf().map((name) => [name, localStorage.getItem(name)]))
+      localStorage.setItem(KEY, raw)
+    }
+    let parsed
+    try { parsed = JSON.parse(raw) } catch { return }
+    if (!Array.isArray(parsed)) return
+    const keep = new Set(parsed.map((pair) => (pair && typeof pair[0] === 'string' ? pair[0] : '')))
+    for (const name of namesOf()) if (name !== KEY && !keep.has(name)) localStorage.removeItem(name)
+    for (const pair of parsed) {
+      if (!pair || typeof pair[0] !== 'string' || pair[0] === KEY) continue
+      localStorage.setItem(pair[0], pair[1] == null ? '' : String(pair[1]))
+    }
+    sessionStorage.setItem(READY, '1')
+  } catch { /* storage disabled on this page */ }
+})()`
+}
+
+/**
+ * @internal Exported for tests only. localStorage to write back when a
+ * profile session closes: the in-page baseline (what captures restore),
+ * never the baseline key and never keys a later capture added.
+ */
+export function profileStorageAfterClose(entries: readonly (readonly [string, string])[], prefix: string): [string, string][] {
+  const baseline = entries.find(([key]) => key.startsWith(prefix))?.[1] ?? null
+  const plain = entries.filter(([key]) => !key.startsWith(prefix)).map(([key, value]) => [key, value] as [string, string])
+  if (baseline === null) return plain
+  try {
+    const parsed = JSON.parse(baseline) as unknown
+    if (!Array.isArray(parsed)) return plain
+    const items: [string, string][] = []
+    for (const pair of parsed) {
+      if (!Array.isArray(pair) || typeof pair[0] !== 'string' || pair[0].startsWith(prefix)) continue
+      items.push([pair[0], pair[1] == null ? '' : String(pair[1])])
+    }
+    return items
+  } catch {
+    return plain
+  }
+}
+
+/** One capture at a time. Profile pages share an origin's localStorage, so two viewports cannot write it at once. */
+export function createLease(): { acquire(): Promise<() => void>; join(): Promise<void> } {
+  let tail: Promise<void> = Promise.resolve()
+  return {
+    acquire() {
+      let release!: () => void
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const ready = tail.then(() => release)
+      tail = gate
+      return ready
+    },
+    join() {
+      return tail
+    },
+  }
+}
+
+interface LooseEvents {
+  on(event: string, listener: (...args: unknown[]) => void): void
+  off(event: string, listener: (...args: unknown[]) => void): void
+  route(url: unknown, handler: (...args: unknown[]) => unknown, options?: unknown): Promise<void>
+  unroute(url: unknown, handler?: (...args: unknown[]) => unknown): Promise<void>
+}
+
+/**
+ * @internal Exported for tests only. A capture's view of a persistent profile.
+ * `close` closes only the pages this capture opened (closing the last window
+ * quits Chrome) and drops listeners and routes it added. Every other call
+ * goes to the profile, and a method that throws does so at the call.
+ */
+export function profileCaptureContext(context: BrowserContext, release: () => void): BrowserContext {
+  const before = new Set(context.pages())
+  const events = context as unknown as LooseEvents
+  const listeners: { event: string; fn: (...args: unknown[]) => void }[] = []
+  const routes: { url: unknown; handler: (...args: unknown[]) => unknown }[] = []
+  let released = false
+  const finish = () => {
+    if (released) return
+    released = true
+    release()
+  }
+  const proxy = new Proxy(context, {
+    get(target, prop) {
+      if (prop === 'close') {
+        return async () => {
+          try {
+            for (const route of routes.splice(0)) await events.unroute(route.url, route.handler).catch(() => {})
+            for (const listener of listeners.splice(0)) events.off(listener.event, listener.fn)
+            for (const page of target.pages()) {
+              if (!before.has(page)) await page.close().catch(() => {})
+            }
+          } finally {
+            finish()
+          }
+        }
+      }
+      if (prop === 'newPage') return (...args: Parameters<BrowserContext['newPage']>) => target.newPage(...args)
+      if (prop === 'on' || prop === 'addListener') {
+        return (event: string, fn: (...args: unknown[]) => void) => {
+          events.on(event, fn)
+          listeners.push({ event, fn })
+          return proxy
+        }
+      }
+      if (prop === 'once') {
+        return (event: string, fn: (...args: unknown[]) => void) => {
+          const wrapped = (...args: unknown[]) => {
+            events.off(event, wrapped)
+            const i = listeners.findIndex((listener) => listener.fn === wrapped)
+            if (i >= 0) listeners.splice(i, 1)
+            fn(...args)
+          }
+          events.on(event, wrapped)
+          listeners.push({ event, fn: wrapped })
+          return proxy
+        }
+      }
+      if (prop === 'off' || prop === 'removeListener') {
+        return (event: string, fn: (...args: unknown[]) => void) => {
+          events.off(event, fn)
+          const i = listeners.findIndex((listener) => listener.event === event && listener.fn === fn)
+          if (i >= 0) listeners.splice(i, 1)
+          return proxy
+        }
+      }
+      if (prop === 'route') {
+        return (url: unknown, handler: (...args: unknown[]) => unknown, options?: unknown) => {
+          routes.push({ url, handler })
+          return events.route(url, handler, options)
+        }
+      }
+      if (prop === 'unroute') {
+        return (url: unknown, handler?: (...args: unknown[]) => unknown) => {
+          for (let i = routes.length - 1; i >= 0; i--) {
+            const route = routes[i]
+            if (route && route.url === url && (handler === undefined || route.handler === handler)) routes.splice(i, 1)
+          }
+          return events.unroute(url, handler)
+        }
+      }
+      const value = Reflect.get(target, prop, target)
+      return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(target) : value
+    },
+  })
+  return proxy
+}
+
+/** After warm-up, captures start from the visited app: replace the pre-script snapshot with the localStorage the visit left. */
+async function commitProfileBaseline(page: Page, runId: string): Promise<void> {
+  try {
+    const url = new URL(page.url())
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return
+  } catch {
+    return
+  }
+  const key = PROFILE_LS_PREFIX + runId
+  await page
+    .evaluate(
+      ({ k, prefix }) => {
+        const items: [string, string][] = []
+        for (let i = 0; i < localStorage.length; i++) {
+          const name = localStorage.key(i)
+          if (name && !name.startsWith(prefix)) items.push([name, localStorage.getItem(name) ?? ''])
+        }
+        localStorage.setItem(k, JSON.stringify(items))
+      },
+      { k: key, prefix: PROFILE_LS_PREFIX },
+    )
+    .catch(() => {})
+}
+
+async function writeOriginStorage(client: CDPSession, origin: string, items: readonly (readonly [string, string])[]): Promise<void> {
+  const storageId = { securityOrigin: origin, isLocalStorage: true as const }
+  await client.send('DOMStorage.clear', { storageId })
+  for (const [key, value] of items) await client.send('DOMStorage.setDOMStorageItem', { storageId, key, value })
+}
+
+/** CDP sometimes reports an origin it has not loaded as empty. A missing baseline key means the read is not the profile. */
+async function readOriginEntries(client: CDPSession, origin: string): Promise<[string, string][] | null> {
+  try {
+    const { entries } = await client.send('DOMStorage.getDOMStorageItems', { storageId: { securityOrigin: origin, isLocalStorage: true } })
+    const pairs = entries.map((entry) => [entry[0] ?? '', entry[1] ?? ''] as [string, string])
+    return pairs.some(([key]) => key.startsWith(PROFILE_LS_PREFIX)) ? pairs : null
+  } catch {
+    return null
+  }
+}
+
+/** Put one origin back without running the app: a blank document still has that origin's localStorage. */
+async function restoreOriginViaPage(context: BrowserContext, origin: string): Promise<void> {
+  const page = await context.newPage()
+  try {
+    // A blank document, so the app cannot write storage again after we put it back.
+    await page.route('**/*', (route) => {
+      if (!route.request().isNavigationRequest()) return route.abort()
+      return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>.</title>' })
+    })
+    await page.goto(`${origin}/`, { waitUntil: 'domcontentloaded', timeout: 10_000 })
+    const entries = await page.evaluate(() => {
+      const out: [string, string][] = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const name = localStorage.key(i)
+        if (name) out.push([name, localStorage.getItem(name) ?? ''])
+      }
+      return out
+    })
+    const wanted = profileStorageAfterClose(entries, PROFILE_LS_PREFIX)
+    await page.evaluate((items) => {
+      const names: string[] = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const name = localStorage.key(i)
+        if (name) names.push(name)
+      }
+      for (const name of names) localStorage.removeItem(name)
+      for (const [key, value] of items) localStorage.setItem(key, value)
+    }, wanted)
+  } finally {
+    await page.close().catch(() => {})
+  }
+}
+
+/** Drop the baseline key and any localStorage a capture wrote on top of it. */
+async function restoreProfileStorage(context: BrowserContext, origins: Iterable<string>): Promise<void> {
+  const list = [...origins]
+  if (!list.length) return
+  let page: Page | null = null
+  try {
+    page = await context.newPage()
+    const client = await context.newCDPSession(page)
+    await client.send('DOMStorage.enable')
+    for (const origin of list) {
+      const entries = await readOriginEntries(client, origin)
+      if (!entries) {
+        await restoreOriginViaPage(context, origin).catch(() => {})
+        continue
+      }
+      try {
+        await writeOriginStorage(client, origin, profileStorageAfterClose(entries, PROFILE_LS_PREFIX))
+      } catch {
+        await restoreOriginViaPage(context, origin).catch(() => {})
+      }
+    }
+  } catch {
+    for (const origin of list) await restoreOriginViaPage(context, origin).catch(() => {})
+  } finally {
+    await page?.close().catch(() => {})
+  }
+}
+
 export async function openSession(opts: SessionOptions = {}): Promise<BrowserSession> {
   const headless = opts.headless ?? true
   let context: BrowserContext
   let closeBrowser: () => Promise<void>
-  let browser: Browser
+  let launched: Browser | null = null
   // Playwright's docs say requests a Service Worker handles can bypass
   // context.route. Chromium on 1.61 routed them in a probe (Plan 021 §5), but
   // the guard must not depend on that: block Service Workers outright.
   const channel = opts.channel === 'chrome' ? { channel: 'chrome' as const } : {}
+  const profile = Boolean(opts.profileDir)
+  const lease = createLease()
+  const seen = new Set<string>()
+  const runId = profile ? randomUUID() : ''
   if (opts.profileDir) {
     context = await chromium.launchPersistentContext(opts.profileDir, { headless, serviceWorkers: 'block', ...channel })
-    // A persistent profile cannot spawn contexts: captures run in a second browser seeded from it.
-    browser = await chromium.launch({ headless, ...channel })
+    // One profile, one browser. storageState does not carry the cookies and
+    // IndexedDB Chrome keeps in the profile, so a second browser is signed out.
+    context.on('framenavigated', (frame) => {
+      if (frame.parentFrame()) return
+      try {
+        const url = new URL(frame.url())
+        if (url.protocol === 'http:' || url.protocol === 'https:') seen.add(url.origin)
+      } catch {
+        /* not a url */
+      }
+    })
     closeBrowser = async () => {
-      await context.close()
-      await browser.close()
+      await lease.join()
+      try {
+        await restoreProfileStorage(context, seen)
+      } finally {
+        await context.close()
+      }
     }
   } else {
-    browser = await chromium.launch({ headless, ...channel })
+    const browser = await chromium.launch({ headless, ...channel })
+    launched = browser
     context = await browser.newContext({ serviceWorkers: 'block' })
     closeBrowser = () => browser.close()
   }
   const guard = await installGuard(context, opts.allow ?? [], { blocked: [] }, opts.policy)
   await context.addInitScript({ content: CLS_SCRIPT })
+  if (profile) await context.addInitScript({ content: profileStorageInitScript(runId) })
   // The state every capture starts from; warmUp replaces it with a visited app.
-  let seed = await context.storageState({ indexedDB: true })
+  // A profile does not use it: the capture page is that profile.
+  let seed: Awaited<ReturnType<BrowserContext['storageState']>> | undefined
+  if (!profile) seed = await context.storageState({ indexedDB: true })
   const warmUp = async (baseUrl: string, paths: readonly string[]) => {
+    const release = profile ? await lease.acquire() : null
     const page = await context.newPage()
     try {
       for (const p of paths) {
         await gotoPatiently(page, surfaceUrl(baseUrl, p)).catch(() => null)
         await settle(page).catch(() => undefined)
+        if (profile) await commitProfileBaseline(page, runId)
       }
     } finally {
-      await page.close()
+      await page.close().catch(() => {})
+      release?.()
     }
-    seed = await context.storageState({ indexedDB: true })
+    if (!profile) seed = await context.storageState({ indexedDB: true })
   }
   const freshContext = async () => {
-    const fresh = await browser.newContext({ serviceWorkers: 'block', storageState: seed })
-    await installGuard(fresh, opts.allow ?? [], guard, opts.policy)
-    await fresh.addInitScript({ content: CLS_SCRIPT })
-    return fresh
+    if (!profile) {
+      if (!launched || !seed) throw new Error('Browser session failed to open.')
+      const fresh = await launched.newContext({ serviceWorkers: 'block', storageState: seed })
+      await installGuard(fresh, opts.allow ?? [], guard, opts.policy)
+      await fresh.addInitScript({ content: CLS_SCRIPT })
+      return fresh
+    }
+    const release = await lease.acquire()
+    try {
+      return profileCaptureContext(context, release)
+    } catch (err) {
+      release()
+      throw err
+    }
   }
   return { context, freshContext, warmUp, guard, ignore: ignoreList(opts.ignore), close: closeBrowser }
 }
