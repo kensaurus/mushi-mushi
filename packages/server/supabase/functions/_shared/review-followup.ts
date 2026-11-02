@@ -30,6 +30,7 @@
  */
 
 import { parseCursorModelSpec, type CreateCursorAgentV1Input, type CursorModelInfo } from './cursor-cloud.ts'
+import { isAdvisoryCiCheck } from './merge-queue.ts'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -314,6 +315,11 @@ const INFRA_KINDS = new Set(['waiting_for_runner', 'runner_lost', 'queue_expired
  * is not this PR's to fix, and must not buy a paid "change nothing" run on
  * every merge-verdict PR. When every failing check is also red on the base,
  * the state is `base_failing`.
+ *
+ * Advisory checks (`isAdvisoryCiCheck`) are left out entirely. The SDK
+ * freshness job fails on every host after an npm publish, including when
+ * the base branch's copy never re-ran, so it must not read as this PR's
+ * code failure or as CI still running.
  */
 export function ciHeadState(rows: readonly CiJobForRepair[], baseFailing: ReadonlySet<string> | null = null): CiHeadState {
   const latest = new Map<string, CiJobForRepair>()
@@ -326,8 +332,9 @@ export function ciHeadState(rows: readonly CiJobForRepair[], baseFailing: Readon
       ((r.run_attempt ?? 1) === (prev.run_attempt ?? 1) && Date.parse(r.gh_created_at ?? '') > Date.parse(prev.gh_created_at ?? ''))
     if (newer) latest.set(key, r)
   }
-  const jobs = [...latest.values()]
-  if (jobs.length === 0) return { state: 'none', failing: [] }
+  if (rows.length === 0) return { state: 'none', failing: [] }
+  const jobs = [...latest.values()].filter((j) => !isAdvisoryCiCheck(j.job_name))
+  if (jobs.length === 0) return { state: 'green', failing: [] }
   // The draft run's intentional stop is not a test result: CI runs once the
   // PR is marked ready, so it counts as pending until that run is collected.
   const draftStopped = jobs.some(isDraftGuardStop)

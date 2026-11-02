@@ -357,9 +357,12 @@ describe('ciGate', () => {
     expect(g).toMatchObject({ status: 'pass', label: 'CI passed (2 checks)' })
   })
 
-  it('leaves out review bots', () => {
+  it('leaves out review bots and the SDK freshness check', () => {
     const bot = { name: 'copilot-pull-request-reviewer', status: 'completed', conclusion: 'failure' }
+    const freshness = { name: 'Compare @mushi-mushi/* to npm latest', status: 'completed', conclusion: 'failure' }
     expect(ciGate([green('build'), bot], { now: NOW }).status).toBe('pass')
+    expect(ciGate([green('build'), freshness], { now: NOW }).status).toBe('pass')
+    expect(ciGate([freshness], { now: NOW })).toMatchObject({ status: 'pending', label: 'Waiting for CI' })
   })
 
   it('fails a code failure and a plain cancel', () => {

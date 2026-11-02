@@ -1288,16 +1288,28 @@ describe('CI repair: rules', () => {
   })
 
   it('a check that also fails on the base branch is not counted; all of them on the base means no repair', () => {
-    const two = [ciJob(), ciJob({ job_id: 7002, job_name: 'Compare @mushi-mushi/* to npm latest' })] as never
-    const partly = ciHeadState(two, new Set(['Compare @mushi-mushi/* to npm latest', 'unrelated']))
-    expect(partly).toMatchObject({ state: 'code_failure', onBase: ['Compare @mushi-mushi/* to npm latest'] })
+    const two = [ciJob(), ciJob({ job_id: 7002, job_name: 'Paired migration' })] as never
+    const partly = ciHeadState(two, new Set(['Paired migration', 'unrelated']))
+    expect(partly).toMatchObject({ state: 'code_failure', onBase: ['Paired migration'] })
     expect(partly.failing.map((f) => f.name)).toEqual(['Lint & Build'])
-    const all = ciHeadState(two, new Set(['Lint & Build', 'Compare @mushi-mushi/* to npm latest']))
-    expect(all).toEqual({ state: 'base_failing', failing: [], onBase: ['Lint & Build', 'Compare @mushi-mushi/* to npm latest'] })
+    const all = ciHeadState(two, new Set(['Lint & Build', 'Paired migration']))
+    expect(all).toEqual({ state: 'base_failing', failing: [], onBase: ['Lint & Build', 'Paired migration'] })
     expect(followupTrigger({ review, attempt, prior: [], ci: all })).toEqual({ queue: false, reason: 'ci_fails_on_base' })
     // No base information, or an empty set, changes nothing.
     expect(ciHeadState(two, null).failing).toHaveLength(2)
     expect(ciHeadState(two, new Set()).failing).toHaveLength(2)
+  })
+
+  it('the SDK freshness check is not a code failure and does not buy a repair, even when main is green', () => {
+    const name = 'Compare @mushi-mushi/* to npm latest'
+    const only = ciHeadState([ciJob({ job_name: name })] as never, new Set())
+    expect(only).toEqual({ state: 'green', failing: [] })
+    expect(followupTrigger({ review, attempt, prior: [], ci: only })).toEqual({ queue: false, reason: 'ci_not_failing' })
+    // A running freshness job does not hold the head, and a real failure beside it still does.
+    expect(ciHeadState([ciJob({ job_name: name, ci_kind: 'running', conclusion: null }), ciJob({ job_id: 7008, job_name: 'test', conclusion: 'success', ci_kind: 'passed' })] as never).state).toBe('green')
+    const mixed = ciHeadState([ciJob(), ciJob({ job_id: 7002, job_name: name })] as never, null)
+    expect(mixed.state).toBe('code_failure')
+    expect(mixed.failing.map((f) => f.name)).toEqual(['Lint & Build'])
   })
 
   it('the dispatch gate waits while CI runs and skips once CI is green', () => {

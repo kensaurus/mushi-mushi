@@ -16,6 +16,7 @@
 
 import type { PipelineStage } from './pipeline-view.ts'
 import { rootCauses, type HealthCheck, type HealthFix, type HealthPart, type HealthSeverity } from './health-checks.ts'
+import { isAdvisoryCiCheck } from './merge-queue.ts'
 
 // ── Section envelope ────────────────────────────────────────────────────────
 
@@ -207,13 +208,17 @@ export function ciSignal(input: CiInput): HealthSignal {
   if (!input.repo) {
     return { ...base, status: 'not_connected', light: 'off', headline: 'No repo', detail: 'Connect your GitHub repo to see CI.', at: null, connect: { label: 'Connect GitHub', to: '/connect' } }
   }
-  if (input.jobs.length === 0) {
+  // The SDK freshness check fails on its own schedule after an npm publish.
+  // It is often the newest run id, and reading only that run painted every
+  // host app red whatever the build on main did.
+  const counted = input.jobs.filter((j) => !isAdvisoryCiCheck(j.job_name))
+  if (counted.length === 0) {
     return { ...base, status: 'not_connected', light: 'off', headline: 'No runs seen', detail: `No CI run on ${input.branch ?? 'main'} in the last 30 days.`, at: null, connect: { label: 'Open CI', to: '/ci' } }
   }
-  const newest = Math.max(...input.jobs.map((j) => j.run_id))
+  const newest = Math.max(...counted.map((j) => j.run_id))
   // The latest attempt of each job in the newest run (a re-run replaces it).
   const latest = new Map<string, CiJobRow>()
-  for (const j of input.jobs.filter((x) => x.run_id === newest)) {
+  for (const j of counted.filter((x) => x.run_id === newest)) {
     const prev = latest.get(j.job_name)
     if (!prev || j.run_attempt > prev.run_attempt) latest.set(j.job_name, j)
   }
