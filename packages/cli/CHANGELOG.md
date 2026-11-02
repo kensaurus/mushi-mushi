@@ -1,5 +1,11 @@
 # @mushi-mushi/cli
 
+## 0.35.5
+
+### Patch Changes
+
+- dd883e9: `mushi work` now tells the agent to run the unit tests and a typecheck for what it changed before it finishes, and leaves full suites to the release train.
+
 ## 0.35.4
 
 ### Patch Changes
