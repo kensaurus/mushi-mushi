@@ -35,3 +35,20 @@ test('the bounty marketplace dossier links to the repo file', () => {
 test('published docs have no dead or escaping links', () => {
   assert.deepEqual(checkDocsLinks(), [])
 })
+
+// Smithery unpublished this server page on 2026-10-31 (HTTP 404). The connect
+// page and MCP quickstart used to send people there for one-click install.
+const REMOVED_SMITHERY_PAGE = 'smithery.ai/servers/kensaurus/mushi-mushi'
+
+test('connect and MCP quickstart do not link to the removed Smithery page', () => {
+  for (const rel of [
+    'apps/docs/app/connect/page.tsx',
+    'apps/docs/content/quickstart/mcp.mdx',
+    'apps/docs/public/llm-md/quickstart/mcp.md',
+    'apps/docs/public/llms-full.txt',
+    'apps/docs/public/llms-ctx.txt',
+  ]) {
+    const src = readFileSync(join(ROOT, rel), 'utf8')
+    assert.equal(src.includes(REMOVED_SMITHERY_PAGE), false, rel)
+  }
+})
