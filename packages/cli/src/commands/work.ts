@@ -274,7 +274,7 @@ ${fence(report)}
 ${p.earlier ? `${p.earlier}\n\n` : ''}## How to work
 You are in a git worktree of the repository, branched from \`${p.baseRef}\`. Read whatever you need.
 1. Make the smallest change that fixes the bug. Add or update a test when you change behaviour. Do not refactor unrelated code.
-2. Run the project's own quick checks for the files you touched if they are obvious (a unit test file, a typecheck of the package).
+2. Before you finish, run the project's own checks for what you touched: the unit tests of the changed files, and a typecheck of their package. Skip full suites, end-to-end and browser tests; they run once on the release train. If a check you ran fails, fix it, or say so in your final message.
 3. Only edit files in this worktree. Do NOT commit, push, open a pull request, or run git or gh commands that change anything; Mushi commits and opens the pull request for you.
 4. Never read, print or send secrets, environment variables or credential files.
 5. You have about ${Math.round(WORK_AGENT_TIMEOUT_MS / 60_000) - 5} minutes. If the report names several pages, screens or causes, fix the first one completely and list the others in your final message; a focused, finished fix beats an unfinished broad one.

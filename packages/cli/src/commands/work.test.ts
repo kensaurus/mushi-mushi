@@ -112,6 +112,8 @@ describe('mushi work: branch, prompt and PR', () => {
     expect(prompt).not.toContain('Nit.')
     expect(prompt).toContain('Do NOT commit, push, open a pull request')
     expect(prompt).toContain('Mushi verdict: <verdict>')
+    expect(prompt).toContain("run the project's own checks for what you touched")
+    expect(prompt).toContain('they run once on the release train')
   })
 
   it('falls back to the report fields when Mushi has no fix packet', () => {
