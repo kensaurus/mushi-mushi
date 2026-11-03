@@ -39,7 +39,7 @@ import {
 } from '../_shared/sentry-import.ts'
 import { resolveAndDereferencePlatformSettings } from '../_shared/integration-settings.ts'
 import { isTransientSentryFailure, thrownMessage } from '../_shared/sentry-api.ts'
-import { reconcileSentryLinks } from '../_shared/sentry-reconcile.ts'
+import { pullSentryResolves, reconcileSentryLinks } from '../_shared/sentry-reconcile.ts'
 
 ensureSentry('sentry-seer-poll')
 
@@ -287,7 +287,17 @@ app.post('/sentry-seer-poll', async (c) => {
     reconcile = { error: msg.slice(0, 120) }
   }
 
-  return c.json({ ok: true, polled: summary.length, results: summary, autoImport: imported, reconcile })
+  // The other direction: issues resolved in Sentry close their open reports.
+  let pull: unknown
+  try {
+    pull = await pullSentryResolves(db)
+  } catch (err) {
+    const msg = thrownMessage(err)
+    log.warn(`sentry pull failed: ${msg.slice(0, 200)}`, { err: msg })
+    pull = { error: msg.slice(0, 120) }
+  }
+
+  return c.json({ ok: true, polled: summary.length, results: summary, autoImport: imported, reconcile, pull })
 })
 
 Deno.serve(app.fetch)
