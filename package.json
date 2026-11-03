@@ -142,6 +142,7 @@
     "check:bundle-docs": "node scripts/check-bundle-docs.mjs",
     "gen:llms-txt": "node scripts/gen-llms-txt.mjs",
     "gen:llms-docs": "node scripts/generate-llms-full.mjs",
+    "gen:walkthroughs": "node scripts/record-docs-walkthroughs.mjs",
     "check:llms-docs": "node scripts/generate-llms-full.mjs --check",
     "gen:og-card": "node scripts/gen-og-card.mjs",
     "sync:public-schemas": "node scripts/sync-public-schemas.mjs",

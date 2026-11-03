@@ -18,6 +18,7 @@
         "scripts/*.mjs!",
         "scripts/cloudflare/*.mjs!",
         "scripts/marketing/*.mjs!",
+        "scripts/docs-walkthroughs/overlay.js!",
         "scripts/cloudfront-*.js!",
         "scripts/vendor/*.js!",
         ".github/actions/*/*.mjs!"

@@ -13,6 +13,8 @@ description: Install Mushi Mushi with npx mushi-mushi, connect Cursor or Claude 
 - When a user reports a bug, Mushi Mushi writes a plain-English diagnosis.
 - Your AI editor reads it and writes the fix.
 
+Want the whole loop first? [How it works, on video](/how-it-works).
+
 ### Install
 
 Run this in your app's folder. It finds your framework, signs you in through
