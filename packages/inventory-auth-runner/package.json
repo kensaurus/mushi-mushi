@@ -2,7 +2,7 @@
   "name": "@mushi-mushi/inventory-auth-runner",
   "version": "0.1.6",
   "license": "MIT",
-  "description": "Signs in to your app with Playwright using the login script in inventory.yaml, so Mushi's crawler and synthetic monitor can check the pages behind your login.",
+  "description": "Signs in to your app with Playwright using the login script in inventory.yaml, so Mushi Mushi's crawler and synthetic monitor can check the pages behind your login.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

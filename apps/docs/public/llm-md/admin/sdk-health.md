@@ -21,11 +21,11 @@ ship the deploy".
 | --- | --- | --- |
 | No GitHub repo is connected | error (warn once the SDK has checked in) | none: connect a repo |
 | The SDK isn't in your app yet | error | **File install task** for your fix agent |
-| GitHub Actions is missing the Mushi keys | error (warn once seen) | **Write CI secrets** to the repo |
+| GitHub Actions is missing the Mushi Mushi keys | error (warn once seen) | **Write CI secrets** to the repo |
 | This app has no working SDK key | error | **Write CI secrets** (mints a key and writes it) |
 | The SDK has never checked in | error | none |
 | An SDK update is out | warn | **Open upgrade PR**, or a link to the upgrade PR already open with its CI state |
-| Your site's security policy blocks Mushi | error | **File CSP task** |
+| Your site's security policy blocks Mushi Mushi | error | **File CSP task** |
 | Cold: no check-in for N days | warn (after 7 days) | none |
 
 A check that could not run (no live site address known, the SDK versions could not be

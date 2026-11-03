@@ -21,28 +21,6 @@ import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { JUDGE_ELIGIBLE_STATUSES, judgeEmptyResult, onlyJudgeable } from '../_shared/judge-eligibility.ts'
 import { platformAnthropicKey } from '../_shared/ai-provider.ts'
 
-/**
- * OpenRouter / Together / Fireworks expect `vendor/model` slugs. Operators
- * commonly type bare names (`gpt-4.1`, `claude-opus-4-6`) inherited from the
- * direct-API config. This helper prefixes the most common families so the
- * call doesn't 400 with "model not found" the first time someone enables a
- * gateway. If the model already contains a `/`, we leave it alone.
- */
-function normalizeGatewayModel(model: string): string {
-  if (!model || model.includes('/')) return model
-  const m = model.toLowerCase()
-  if (m.startsWith('gpt') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4')) {
-    return `openai/${model}`
-  }
-  if (m.startsWith('claude')) return `anthropic/${model}`
-  if (m.startsWith('gemini')) return `google/${model}`
-  if (m.startsWith('llama')) return `meta-llama/${model}`
-  if (m.startsWith('mistral') || m.startsWith('mixtral')) return `mistralai/${model}`
-  if (m.startsWith('qwen')) return `qwen/${model}`
-  if (m.startsWith('deepseek')) return `deepseek/${model}`
-  return model
-}
-
 // OpenAI's "strict" structured-outputs mode rejects optional fields — every
 // property must appear in `required` and use `nullable` instead of `optional`.
 // Use `.nullable()` everywhere so the schema is portable across:
@@ -335,17 +313,16 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
             if (fallbackProvider !== 'openai' || !openaiKey) {
               throw primaryErr
             }
-            // OpenRouter (and most OpenAI-compatible gateways) require a
-            // `vendor/model` slug. If the operator wrote `gpt-4.1` we map it
-            // to `openai/gpt-4.1`; `claude-opus-4-6` -> `anthropic/claude-…`.
-            // Only applied when a baseURL is set (i.e., not direct OpenAI).
-            const isGateway = !!openaiResolved?.baseUrl
-            const normalizedModel = isGateway
-              ? normalizeGatewayModel(fallbackModelId)
-              : fallbackModelId
+            // The model id goes through openAiProvider, which prefixes it only
+            // for OpenRouter (openAiCompatibleModelId). This function used to
+            // prefix it whenever the key had a base URL, and every saved
+            // OpenAI key stores api.openai.com as one: OpenAI answered
+            // "invalid model ID" to `openai/gpt-5.4`, and no judge call
+            // succeeded from 2026-10-30 to 11-03 (MUSHI-MUSHI-SERVER-3N).
+            const normalizedModel = fallbackModelId
             rootLog.child('judge').info('Using OpenAI fallback judge', {
               reportId: report.id,
-              gateway: isGateway ? openaiResolved!.baseUrl : null,
+              gateway: openaiResolved?.baseUrl ?? null,
               model: normalizedModel,
               skippedPrimary: !tryAnthropic,
             })

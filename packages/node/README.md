@@ -6,7 +6,7 @@ The server-side SDK for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi).
 
 ```mermaid
 flowchart LR
-    A["Your server throws"] --> B["Mushi diagnoses the bug"] --> C["Fix lands in your editor"]
+    A["Your server throws"] --> B["Mushi Mushi diagnoses the bug"] --> C["Fix lands in your editor"]
 ```
 
 ## Quick start
@@ -69,7 +69,7 @@ await client.captureReport({
 
 ## Reward webhooks
 
-When a reporter earns points or reaches a new tier, Mushi sends your app a signed webhook. This is where you grant a role, turn on Pro, or apply a coupon. The handler checks the `X-Mushi-Signature` HMAC before any callback runs and answers `401` on a bad signature.
+When a reporter earns points or reaches a new tier, Mushi Mushi sends your app a signed webhook. This is where you grant a role, turn on Pro, or apply a coupon. The handler checks the `X-Mushi-Signature` HMAC before any callback runs and answers `401` on a bad signature.
 
 ```ts
 import { createMushiRewardsHandler } from '@mushi-mushi/node'

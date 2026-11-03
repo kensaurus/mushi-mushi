@@ -336,7 +336,7 @@ export function MigrationChecklist({ id, steps, defaultOpen = false }: Migration
 /* ── Cloud-sync hook ────────────────────────────────────────────────────
  * Quiet by design. Reasoning per NN/g #1 (visibility of system status):
  *  - Idle / signed-out → footer reads "Saved in this browser. Sign in to
- *    sync to your Mushi account."
+ *    sync to your Mushi Mushi account."
  *  - Syncing → footer reads "Syncing…" and the action is disabled.
  *  - Synced → footer reads "Synced just now / 2m ago" with a discreet
  *    Sign out link.
@@ -666,7 +666,7 @@ function SyncCta({
     case 'signing-in':
       return (
         <footer className={baseRow}>
-          <span>Opening Mushi sign-in…</span>
+          <span>Opening Mushi Mushi sign-in…</span>
           <button type="button" disabled className={linkClass}>
             Sign in to sync
           </button>
@@ -676,7 +676,7 @@ function SyncCta({
       return (
         <footer className={baseRow}>
           <span>Syncing…</span>
-          <span className="opacity-60">{sync.state.session.email ?? 'Mushi account'}</span>
+          <span className="opacity-60">{sync.state.session.email ?? 'Mushi Mushi account'}</span>
         </footer>
       )
     case 'synced': {

@@ -62,9 +62,9 @@ import mushi from 'eslint-plugin-mushi-mushi'
 export default [mushi.configs.recommended]
 ```
 
-The plugin's other 16 rules check the Mushi console's own design system
+The plugin's other 16 rules check the Mushi Mushi console's own design system
 (tokens, ``, ``, page posture, the widget theme) and
-are only in the Mushi monorepo's `internal` preset. Turn one on by name if
+are only in the Mushi Mushi monorepo's `internal` preset. Turn one on by name if
 it fits your app.
 
 ## Rules

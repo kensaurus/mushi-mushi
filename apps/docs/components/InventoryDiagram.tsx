@@ -108,7 +108,7 @@ export function GatesStrip() {
         ))}
       </div>
       <p style={{ margin: '10px 0 0', fontSize: 11, opacity: 0.5, textAlign: 'center', fontFamily: 'var(--mushi-font-mono, monospace)' }}>
-        Gates 1–2 are static (no network). Gates 3–5 talk to the Mushi gateway. All five roll up into <code>mushi-mushi/gates</code>.
+        Gates 1–2 are static (no network). Gates 3–5 talk to the Mushi Mushi gateway. All five roll up into <code>mushi-mushi/gates</code>.
       </p>
     </div>
   )

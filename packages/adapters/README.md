@@ -81,9 +81,9 @@ local database, or several of these at once. Subpath imports are supported, e.g.
 
 ## Severity mapping
 
-Each adapter maps the source's native severity onto Mushi's four-level scale:
+Each adapter maps the source's native severity onto Mushi Mushi's four-level scale:
 
-| Mushi      | Sentry (`level`) | Datadog | New Relic (`priority`) | Honeycomb (contains) | Grafana/AM       |
+| Mushi Mushi      | Sentry (`level`) | Datadog | New Relic (`priority`) | Honeycomb (contains) | Grafana/AM       |
 | ---------- | ---------------- | ------- | ---------------------- | -------------------- | ---------------- |
 | `critical` | fatal            | P1      | critical               | critical             | critical, page   |
 | `high`     | error            | P2      | high                   | high, error          | high, error      |

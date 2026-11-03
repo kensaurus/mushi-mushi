@@ -138,5 +138,5 @@ POST   /v1/admin/pdca/<id>/trigger (manually trigger queued run)
 ## Related pages
 
 - [Schema changes](/admin/drift) — check for regressions before starting an iteration loop
-- [Mushi health](/admin/health) — verify LLM keys are working before queuing a run
+- [Mushi Mushi health](/admin/health) — verify LLM keys are working before queuing a run
 - [Fixes](/admin/fixes) — dispatch individual fixes outside the PDCA loop

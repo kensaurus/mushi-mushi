@@ -19,7 +19,7 @@ Both now use AI on bugs. PostHog puts a "Fix with AI" prompt on every
 error-tracking issue, and its Self-driving beta opens a draft pull request
 for recurring high-impact errors, with a small free allowance each month and
 a price per PR after that (both in the table below). That path starts from
-the exceptions PostHog captured. Mushi starts from what a user reported and
+the exceptions PostHog captured. Mushi Mushi starts from what a user reported and
 the screen they were on, writes a plain-English diagnosis on every plan, and
 hands the fix context to Cursor or Claude Code over MCP.
 
@@ -29,13 +29,13 @@ hands the fix context to Cursor or Claude Code over MCP.
 
 ## They work alongside each other
 
-Nothing here conflicts in the browser: the PostHog snippet and the Mushi SDK
-run side by side. There is no PostHog plugin for Mushi today, so a Mushi
+Nothing here conflicts in the browser: the PostHog snippet and the Mushi Mushi SDK
+run side by side. There is no PostHog plugin for Mushi Mushi today, so a Mushi Mushi
 report will not deep-link to the matching replay. If you want that, add the
-PostHog session id to Mushi's metadata when you initialise the SDK and the
+PostHog session id to Mushi Mushi's metadata when you initialise the SDK and the
 report will carry it.
 
-Mushi also ships a basic product-analytics surface of its own, `Mushi.track()`
+Mushi Mushi also ships a basic product-analytics surface of its own, `Mushi.track()`
 with funnels, paths, people and retention in the same console. It exists so a
 solo builder does not need a second tool to see a signup funnel; it is not a
 PostHog replacement and does not try to be. See the
@@ -49,7 +49,7 @@ PostHog replacement and does not try to be. See the
 - You want AI fix prompts, and beta draft pull requests, on the exceptions
   PostHog already captures.
 
-## Pick Mushi if
+## Pick Mushi Mushi if [#pick-mushi-if]
 
 - You want the bug to start from what the user said and saw, and to arrive
   explained, with the screenshot and a fix prompt.
@@ -59,6 +59,6 @@ PostHog replacement and does not try to be. See the
 
 ## Frequently asked questions
 
-**Related:** [Sentry vs Mushi](/compare/sentry-vs-mushi) ·
+**Related:** [Sentry vs Mushi Mushi](/compare/sentry-vs-mushi) ·
 [Sentry Replay coexistence](/sdks/sentry-replay-coexistence) ·
-[LogRocket Feedback to Mushi](/migrations/logrocket-feedback-to-mushi)
+[LogRocket Feedback to Mushi Mushi](/migrations/logrocket-feedback-to-mushi)

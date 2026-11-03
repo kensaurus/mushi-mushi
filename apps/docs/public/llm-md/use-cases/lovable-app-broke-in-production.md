@@ -78,7 +78,7 @@ In Lovable or Bolt there is no terminal, so you install it with a prompt:
 sign up, copy your script tag from the console, and ask the builder to add
 it to the `` of `index.html`. The
 [Lovable or Bolt quickstart](/quickstart/lovable-bolt) walks through it, and
-[Mushi as a Lovable connector](/quickstart/lovable-mcp) lets you read reports
+[Mushi Mushi as a Lovable connector](/quickstart/lovable-mcp) lets you read reports
 from Lovable's chat. With a terminal (Cursor, Claude Code), one command does
 it:
 

@@ -21,7 +21,7 @@ Keys are scoped at mint time. Use separate keys for SDK ingest vs IDE/MCP — ne
 | **`mcp:read`** | Cursor MCP (read-only) | List reports, `get_fix_context`, lessons, docs search |
 | **`mcp:write`** | Cursor MCP (full), CLI fix dispatch | Everything in read + `dispatch_fix`, `merge_fix`, QA triggers |
 
-  MCP brings its own intelligence — you do **not** need a separate OpenAI or Anthropic key for Mushi MCP tools. You still need a Mushi project + MCP-scoped API key.
+  MCP brings its own intelligence — you do **not** need a separate OpenAI or Anthropic key for Mushi Mushi MCP tools. You still need a Mushi Mushi project + MCP-scoped API key.
 
 ## Project ID
 

@@ -2,7 +2,7 @@
   "name": "@mushi-mushi/cli",
   "version": "0.35.5",
   "license": "MIT",
-  "description": "Mushi CLI: SDK setup, MCP wiring, bug triage. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
+  "description": "Mushi Mushi CLI: SDK setup, MCP wiring, triage. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
   "bin": {
     "mushi": "./dist/index.js"
   },

@@ -77,7 +77,7 @@ export async function OpenMetrics() {
 
       <h2 className="docs-open__heading">npm downloads, last 7 days</h2>
       <p className="docs-open__caption">
-        Raw counts from the npm downloads API. They include our own CI runs and the apps we run Mushi
+        Raw counts from the npm downloads API. They include our own CI runs and the apps we run Mushi Mushi
         on ourselves, so they are an upper bound on outside use, not a count of users.
       </p>
       {m.npm ? (

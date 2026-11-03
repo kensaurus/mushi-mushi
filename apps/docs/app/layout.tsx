@@ -150,7 +150,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         >
           {children}
         </Layout>
-        {/* Mushi measuring its own funnel with its own SDK — client-only,
+        {/* Mushi Mushi measuring its own funnel with its own SDK — client-only,
             consent-gated, no-op unless NEXT_PUBLIC_MUSHI_SELF_* are set. */}
         <MushiSiteAnalytics />
       </body>

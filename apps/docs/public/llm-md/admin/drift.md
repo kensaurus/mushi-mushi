@@ -9,7 +9,7 @@ description: The Schema changes view in Mushi Mushi compares API routes, app map
 
 # Schema changes
 
-**Route:** `/health?view=schema` (**Mushi health → Schema changes**). The old `/drift` link
+**Route:** `/health?view=schema` (**Mushi Mushi health → Schema changes**). The old `/drift` link
 redirects there. Until October 2026 this was its own page, called Drift scanner.
 
 **First on the page:** one sentence on what changed since the baseline, with
@@ -79,7 +79,7 @@ Click a row to open the detail drawer with:
 - The **Expected** and **Actual** values
 - **→ Lesson** (shown on findings marked critical only): turns the finding into a candidate
   lesson, reviewed under [Lessons](/admin/lessons)
-- **Dismiss**: marks a known or intentional change. Mushi then checks that route less often.
+- **Dismiss**: marks a known or intentional change. Mushi Mushi then checks that route less often.
 
 ### What to do with a finding
 

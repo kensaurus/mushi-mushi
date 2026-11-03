@@ -64,4 +64,4 @@ export default {
 }
 ```
 
-Run `await Mushi.diagnose()` in the browser console if reports are not reaching Mushi. It checks endpoint reachability, CSP, widget mount state, capture modules, and SDK version.
+Run `await Mushi.diagnose()` in the browser console if reports are not reaching Mushi Mushi. It checks endpoint reachability, CSP, widget mount state, capture modules, and SDK version.

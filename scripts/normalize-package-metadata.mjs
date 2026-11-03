@@ -78,9 +78,9 @@ export const NPM_PITCH = MUSHI_TAGLINE_V2.pitch
  */
 export const PRIMARY_ROLES = {
   'mushi-mushi': 'One command adds a bug report widget to any app.',
-  '@mushi-mushi/cli': 'Mushi CLI: SDK setup, MCP wiring, bug triage.',
+  '@mushi-mushi/cli': 'Mushi Mushi CLI: SDK setup, MCP wiring, triage.',
   '@mushi-mushi/mcp': 'MCP server for Cursor, Claude Code and Copilot.',
-  '@mushi-mushi/core': 'Types, API client and pre-filter for Mushi SDKs.',
+  '@mushi-mushi/core': 'Mushi Mushi SDK types, API client, pre-filter.',
   '@mushi-mushi/web': 'Bug report and user feedback widget for the web.',
   '@mushi-mushi/react': 'React and Next.js bug report widget and hooks.',
   '@mushi-mushi/react-native': 'Bug report widget for React Native and Expo.',

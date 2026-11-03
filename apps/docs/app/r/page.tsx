@@ -15,7 +15,7 @@ import { PublicDiagramClient } from './PublicDiagramClient'
 export const metadata: Metadata = {
   title: 'Architecture diagram',
   description:
-    'An AI architecture diagram of an open-source repo, published by its owner with Mushi. Every file path is checked against the repo.',
+    'An AI architecture diagram of an open-source repo, published by its owner with Mushi Mushi. Every file path is checked against the repo.',
   robots: { index: false, follow: true },
 }
 

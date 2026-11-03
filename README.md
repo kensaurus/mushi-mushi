@@ -22,7 +22,7 @@ npx mushi-mushi
 [Quick start](#quick-start) · [How it works](#how-it-works) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Sample diagnosis](https://kensaur.us/mushi-mushi/docs/demo/diagnosis) · [Why not Sentry?](#why-not-just-sentry) · [Self-host](#self-host) · [Vision](./VISION.md)
 
 <a href="https://kensaur.us/mushi-mushi/docs/demo/diagnosis" title="See a sample diagnosis: no signup">
-  <img alt="The Mushi console's report list: each user report with a plain-English summary, how serious it is and how sure Mushi is." src="./docs/screenshots/report-detail-dark.png" width="100%" />
+  <img alt="The Mushi Mushi console's report list: each user report with a plain-English summary, how serious it is and how sure Mushi Mushi is." src="./docs/screenshots/report-detail-dark.png" width="100%" />
 </a>
 
 <sub>↑ reports in the Mushi Mushi console, each with a plain-English summary. Click for one full sample diagnosis you can read without signing up.</sub>
@@ -31,18 +31,24 @@ npx mushi-mushi
 
 ## How it works
 
+<a href="https://kensaur.us/mushi-mushi/docs/how-it-works" title="Watch the walkthroughs">
+  <img alt="Walkthrough video: a real bug report in the Mushi Mushi console, its plain-English diagnosis, the fix prompt for your editor and the pull request that fixed it." src="./apps/docs/public/walkthroughs/bug-to-fix.jpg" width="100%" />
+</a>
+
+<sub>↑ Short videos that show every click: a user reporting a bug, the diagnosis, connecting your editor, and the fix shipping. [Watch them on How it works](https://kensaur.us/mushi-mushi/docs/how-it-works).</sub>
+
 ```mermaid
 flowchart LR
     U["Your users<br/>tap the bug widget"] --> M
     S["Your monitoring<br/>Sentry, Crashlytics… (optional)"] -.-> M
-    M["Mushi<br/>one queue · diagnosis · fix"] --> E["Your editor or agent<br/>Cursor, Claude Code (MCP)"]
+    M["Mushi Mushi<br/>one queue · diagnosis · fix"] --> E["Your editor or agent<br/>Cursor, Claude Code (MCP)"]
     E --> P["Draft PR<br/>you review it"]
     P --> R["Release<br/>report closes, user is told"]
 ```
 
 1. **Capture.** A user taps the widget. Mushi Mushi records a screenshot, the route, their note, and the last console and network events.
 2. **Diagnose.** Mushi Mushi writes the root cause in plain English with a fix prompt. Twenty reports of the same broken button become one row.
-3. **Fix.** Your editor reads the diagnosis over MCP and makes the fix with its own model. If you prefer, an agent opens a **draft** PR that you review like any other. On hosted Mushi Mushi the built-in fixer needs no key of your own; Cursor's agents need your Cursor key; or run fixes on your own computer with the Mushi Mushi worker. With your own Anthropic key, a second AI (Claude Opus) reviews each agent PR first. Mushi Mushi will not merge a PR it says to hold unless you override it in the console and give a reason.
+3. **Fix.** Your editor reads the diagnosis over MCP and makes the fix with its own model. If you prefer, an agent opens a **draft** PR that you review like any other. On hosted Mushi Mushi the built-in fixer needs no key of your own; Cursor's agents need your Cursor key; or run fixes on your own computer with the Mushi Mushi worker. With your own Anthropic or OpenAI key, a second AI (Claude Opus, or GPT on an OpenAI key) reviews each agent PR first. Mushi Mushi will not merge a PR it says to hold unless you override it in the console and give a reason.
 
 It catches the bugs that never throw an error: the pay button hidden under the keyboard, the Save button tapped twice because nothing happened, the dashboard that takes 12 seconds.
 
@@ -52,7 +58,7 @@ It catches the bugs that never throw an error: the pay button hidden under the k
 npx mushi-mushi                      # detects your framework, installs the SDK, writes env vars, sends a test report
 ```
 
-Then connect your editor so it can read diagnoses: one click on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect), or `npx mushi-mushi setup --ide cursor` (or `--ide claude`). Ask it: *"Get the latest Mushi report and fix it."*
+Then connect your editor so it can read diagnoses: one click on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect), or `npx mushi-mushi setup --ide cursor` (or `--ide claude`). Ask it: *"Get the latest Mushi Mushi report and fix it."*
 
 Building in Lovable or Bolt, with no terminal? Paste one script tag through your prompt instead: [Mushi Mushi in Lovable or Bolt](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt).
 
@@ -197,7 +203,7 @@ Open core. Each package directory's own `LICENSE` governs that package; the [roo
 | Enterprise features (`packages/server/ee/`) | [EE license](./packages/server/ee/LICENSE) | SSO, audit ingest, retention, region pinning. Paid for production use |
 | Name, logo, icons, mascot | [Trademark policy](./TRADEMARK.md) | All rights reserved. Link to Mushi Mushi with the unmodified logo; forks must rename |
 
-Self-hosting is free and complete: the repo has every feature and working default prompts. Mushi Cloud runs the same code and keeps its own tuning data (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. Contributions come in under a [CLA](./CLA.md). Why it is set up this way: [ADR 0036](./docs/adr/0036-licensing-posture.md). Third-party notices: [NOTICE](./NOTICE).
+Self-hosting is free and complete: the repo has every feature and working default prompts. Mushi Mushi Cloud runs the same code and keeps its own tuning data (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. Contributions come in under a [CLA](./CLA.md). Why it is set up this way: [ADR 0036](./docs/adr/0036-licensing-posture.md). Third-party notices: [NOTICE](./NOTICE).
 
 ## More apps from the same maker
 

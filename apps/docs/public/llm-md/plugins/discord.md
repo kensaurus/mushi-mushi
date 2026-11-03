@@ -12,18 +12,18 @@ description: Post Mushi Mushi report and fix events to a Discord channel. Paste 
 Posts a message to a Discord channel when Mushi Mushi triages a bug or a fix
 lands.
 
-## Setup (Mushi Cloud, no code)
+## Setup (Mushi Mushi Cloud, no code) [#setup-mushi-cloud-no-code]
 
 1. In Discord: **Channel settings → Integrations → Webhooks → New Webhook**, then copy its URL.
-2. In the Mushi console: open the **Integrations** page and paste the URL on the Discord card.
+2. In the Mushi Mushi console: open the **Integrations** page and paste the URL on the Discord card.
 
-Mushi posts to the channel itself; you do not need the npm package.
+Mushi Mushi posts to the channel itself; you do not need the npm package.
 
 ## Self-hosted plugin
 
 [`@mushi-mushi/plugin-discord`](https://www.npmjs.com/package/@mushi-mushi/plugin-discord)
 does the same from your own server. The console's Marketplace has no Discord
-listing, so you can't install it from the console. On a Mushi server you run
+listing, so you can't install it from the console. On a Mushi Mushi server you run
 yourself, add a `plugin_registry` row for it and install it like any listed
 plugin.
 

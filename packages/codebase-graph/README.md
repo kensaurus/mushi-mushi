@@ -8,7 +8,7 @@ the server has already indexed.
 
 ## Attribution
 
-Graph schema and analysis concepts are inspired by [Understand-Anything](https://github.com/Egonex-AI/Understand-Anything) (`@understand-anything/core`, **MIT License**). This package implements a compatible JSON graph shape for Mushi's server-side analyze worker without vendoring the full UA tree-sitter pipeline (see `packages/server/supabase/functions/_shared/codebase-graph-build.ts` for the Deno runtime mirror).
+Graph schema and analysis concepts are inspired by [Understand-Anything](https://github.com/Egonex-AI/Understand-Anything) (`@understand-anything/core`, **MIT License**). This package implements a compatible JSON graph shape for Mushi Mushi's server-side analyze worker without vendoring the full UA tree-sitter pipeline (see `packages/server/supabase/functions/_shared/codebase-graph-build.ts` for the Deno runtime mirror).
 
 ## Exports
 

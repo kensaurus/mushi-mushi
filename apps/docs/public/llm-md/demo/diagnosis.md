@@ -15,14 +15,14 @@ can fix it from.
 
 ## Get this for your own app
 
-When a real user reports a bug, Mushi writes a diagnosis like this one. It
+When a real user reports a bug, Mushi Mushi writes a diagnosis like this one. It
 needs no Sentry and no AI key of yours: the free plan covers one app and 100 diagnoses a
 month.
 
 - **Claude Code or Cursor:** [install in three steps](/#install), then ask your AI
-  "Get the latest Mushi report and fix it."
+  "Get the latest Mushi Mushi report and fix it."
 - **Lovable or Bolt:** paste one script tag through your prompt.
-  [Mushi in Lovable or Bolt](/quickstart/lovable-bolt).
+  [Mushi Mushi in Lovable or Bolt](/quickstart/lovable-bolt).
 
 ## One the model wrote
 

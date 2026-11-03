@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/security/byo-storage
 
 ---
 title: BYO storage
-description: Keep Mushi Mushi screenshots and crash dumps in your own storage bucket instead of Mushi's, with credentials in Vault and signed URLs.
+description: Keep Mushi Mushi screenshots and crash dumps in your own storage bucket instead of Mushi Mushi's, with credentials in Vault and signed URLs.
 ---
 
 # Bring-your-own storage
@@ -34,7 +34,7 @@ In the admin console: **BYO storage** (`/storage`).
    - **MinIO:** `endpoint` (a public `https` URL, e.g. `https://minio.example.com`) + `bucket` + `region` + credentials
 3. Click **Save**. Raw credentials are written to Supabase Vault; the settings row keeps only the Vault references, and the keys are never echoed back.
 
-The bucket must already exist. Mushi never creates buckets.
+The bucket must already exist. Mushi Mushi never creates buckets.
 
 ## What moves (and what doesn't)
 

@@ -43,7 +43,7 @@ Words you will see on this page
 
 - **Diagnosis**: Mushi Mushi's written explanation of one bug, with how serious it is, the likely cause and a suggested fix.
 - **Fix prompt**: the diagnosis plus the evidence, written as instructions you paste into your AI editor.
-- **SDK** or **script tag**: the small piece of code you add to your app. It shows the report button and sends reports to Mushi.
+- **SDK** or **script tag**: the small piece of code you add to your app. It shows the report button and sends reports to Mushi Mushi.
 - **MCP**: the standard way AI code editors such as Cursor and Claude Code connect to outside tools. It is how your editor reads Mushi Mushi's reports.
 
 More: [How it works, on video](/how-it-works) · [Who it’s for](/who-its-for) · [What else it does](/what-it-does) · [How a bug moves, step by step](/concepts/closed-loop) ·

@@ -17,13 +17,13 @@ flowchart LR
     subgraph local["Your computer"]
         S["Studio on 127.0.0.1<br/>mushi ux ui"] --> R["Run: map screens,<br/>agent edits, measure"] --> B["Branch mushi-ux/run-id<br/>kept changes only"]
     end
-    R -. "--sync mirrors the run" .-> C["Mushi console<br/>review every screen"]
+    R -. "--sync mirrors the run" .-> C["Mushi Mushi console<br/>review every screen"]
     B --> P["Draft PR"] --> C
     C --> M["Merge"]
 ```
 
 1. **Studio (your computer).** `mushi ux ui` opens a page on 127.0.0.1. Pick the agent, model, skill and pages, then watch each attempt live.
-2. **Console (mirror and review).** With sync on, the run is mirrored to the [console](https://kensaur.us/mushi-mushi/admin) as it goes. The studio offers sync when you are signed in with the Mushi CLI; from the terminal, add `--sync`. **Review in console** on a run opens it there, screen by screen.
+2. **Console (mirror and review).** With sync on, the run is mirrored to the [console](https://kensaur.us/mushi-mushi/admin) as it goes. The studio offers sync when you are signed in with the Mushi Mushi CLI; from the terminal, add `--sync`. **Review in console** on a run opens it there, screen by screen.
 3. **Merge.** Open the kept changes as a draft PR from the studio, then merge it from the console (after a confirmation) or on GitHub. Nothing is merged for you.
 
 ## Quick start
@@ -73,7 +73,7 @@ With `--steps` (on by default in the studio) the agent first plans 2–5 small c
 | `mushi-ux ui` | The studio: start runs and watch them |
 | `mushi-ux run --dev "<cmd with {port}>"` | Run the loop from the terminal |
 | `mushi-ux discover --url <url>` | List the screens, change nothing |
-| `mushi-ux audit --url <live url> --profile-dir <dir>` | Find UX bugs on signed-in screens and file them as Mushi reports (below) |
+| `mushi-ux audit --url <live url> --profile-dir <dir>` | Find UX bugs on signed-in screens and file them as Mushi Mushi reports (below) |
 | `mushi-ux explore --url <live url> --profile-dir <dir>` | Let a model use the signed-in app like a careless user; file the errors a replay confirms (below) |
 | `mushi-ux fresh-eyes --url <landing> --goal "<text>"` | Try one goal as a first-time visitor; time the path and file what stops them (below) |
 | `mushi-ux login --url <url>` | Sign in once, in a visible browser |
@@ -90,11 +90,11 @@ With `--steps` (on by default in the studio) the agent first plans 2–5 small c
 | `--sync` | off | Mirror the run to the console (`mushi ux` passes your login) |
 | `--no-judge` / `--no-preflight` / `--no-dashboard` | — | Skip the review, the agent check, or the local dashboard |
 
-Run state and screenshots live in `.mushi/ux/<runId>/`. The run adds its folders to `.git/info/exclude`, so `git status` stays clean. `--sync` refuses a run whose app reports to a different Mushi project than your login.
+Run state and screenshots live in `.mushi/ux/<runId>/`. The run adds its folders to `.git/info/exclude`, so `git status` stays clean. `--sync` refuses a run whose app reports to a different Mushi Mushi project than your login.
 
 ## Audit signed-in screens
 
-`mushi-ux audit` checks the live app the way a signed-in user sees it and files what is wrong as Mushi reports, so the fix loop picks them up. It never edits code and never opens a fresh browser: point it at a cached, signed-in profile.
+`mushi-ux audit` checks the live app the way a signed-in user sees it and files what is wrong as Mushi Mushi reports, so the fix loop picks them up. It never edits code and never opens a fresh browser: point it at a cached, signed-in profile.
 
 ```bash
 mushi-ux audit --url https://example.com/admin \
@@ -136,7 +136,7 @@ mushi-ux fresh-eyes --url https://example.com --goal "get my first report" \
 - **Time to first value** is the app's wait (each action, navigation and settle) plus reading time for each new screen (238 words a minute, at most a minute a screen), until the goal check passes: `--success-url`, `--success-text`, `--success-selector` or `--success-api` (all given must hold). The model's think time is recorded but never counted.
 - **Measured findings**, filed once a replay of the steps without the model shows them again: console and page errors, a 5xx, a blank page, a dead end, a sign-in it cannot pass, a captcha (never solved), a step that needs an inbox, an API key, a terminal or another account. **Opinions** ("confusing", "unclear copy", "too many choices", giving up) are filed only when 2 of the sessions (`--sessions`, default 3) name the same screen.
 - **Writes** reach only the start URL's origin and `--app-host` hosts. Payments, third-party sign-in, public sign-up endpoints (`/auth/v1/signup`, OTP, recovery) and anything labelled delete, revoke, upgrade or sign out are refused in every mode. `--dry-run` writes nothing, uses no account and files nothing.
-- **Accounts:** the model types `{{email}}` and `{{password}}`; code fills in `MUSHI_FRESH_EYES_EMAIL` / `MUSHI_FRESH_EYES_PASSWORD` (your app's test account) or, for Mushi itself, `--mint-account` (an operator key; the account is flagged synthetic and deleted after a day). The real values never reach the prompt, the timeline or the console.
+- **Accounts:** the model types `{{email}}` and `{{password}}`; code fills in `MUSHI_FRESH_EYES_EMAIL` / `MUSHI_FRESH_EYES_PASSWORD` (your app's test account) or, for Mushi Mushi itself, `--mint-account` (an operator key; the account is flagged synthetic and deleted after a day). The real values never reach the prompt, the timeline or the console.
 - **Terminal setup:** `--terminal` runs a CLI setup step itself when a screen asks for a terminal: a sample app in a temp folder, the setup command (`--setup-command`, `{projectId}` and `{apiKey}` filled from the screen), one report through the widget, each phase timed.
 - What the model reads: the page's main content first, then its navigation, never a control a mouse user cannot see. A window a click opens on the app (a sign-in popup) is followed. A wait that hits its 20 s cap is marked on its step and never counted as the app's time. `--steps` defaults to 30, or 60 with a test account; the minted account's user id is in the log and timeline (never its password).
 - Output: `timeline.md` (each step, its screenshot, app wait and reading time, where it stalled), `result.json` and `shots/`. `--out <dir>` chooses the folder. `--sync` mirrors the run to the console's First-time user test page (a `--dry-run` too, marked "look around only"). `--request-stdin` reads the run (its id, start page, goal, visitors and test accounts) as JSON on stdin: how a local worker runs a test the console queued, so nothing it was given sits in argv.

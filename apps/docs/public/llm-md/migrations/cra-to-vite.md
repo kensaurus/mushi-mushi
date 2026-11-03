@@ -33,7 +33,7 @@ This guide walks the rest.
 - A working CRA app (`react-scripts` ≥ 5).
 - A Node version the current Vite supports (check the
   [Vite guide](https://vite.dev/guide/)).
-- Mushi web SDK or React adapter already installed.
+- Mushi Mushi web SDK or React adapter already installed.
 
 ## Migration checklist
 
@@ -56,7 +56,7 @@ The codemod rewrites package.json, the entry HTML, and config files. Branch firs
 // Vite — install vite-plugin-svgr, then:
 + import Logo from './logo.svg?react'`} },
     { id: 'jest', label: 'Decide on testing framework', content: <>CRA ran Jest through react-scripts test, which goes away. Vitest (a separate package from the Vite team) has a Jest-compatible API and is the usual replacement. To keep Jest instead, configure babel-jest or ts-jest yourself.</> },
-    { id: 'mushi-import', label: 'Re-verify Mushi mounts correctly', content: {`// src/main.tsx
+    { id: 'mushi-import', label: 'Re-verify Mushi Mushi mounts correctly', content: {`// src/main.tsx
 
 createRoot(document.getElementById('root')!).render(
   
@@ -71,7 +71,7 @@ createRoot(document.getElementById('root')!).render(
     { id: 'verify', label: 'Smoke-test dev + prod builds', content: {`npm run dev    # Vite dev server on :5173 by default
 npm run build  # Production build into dist/
 npm run preview`} },
-    { id: 'test-report', label: 'Submit a test Mushi report', content: <>Open the dev server, open the floating widget (or your own button), submit a report, and confirm it appears on the Reports page.</> },
+    { id: 'test-report', label: 'Submit a test Mushi Mushi report', content: <>Open the dev server, open the floating widget (or your own button), submit a report, and confirm it appears on the Reports page.</> },
 
 />
 
@@ -98,7 +98,7 @@ still builds; it is deprecated, not removed.
 
 ## Mushi Mushi compatibility
 
-The Mushi web SDK and React adapter work the same on CRA and Vite. With
+The Mushi Mushi web SDK and React adapter work the same on CRA and Vite. With
 Vite, `MushiProvider` can also read `VITE_MUSHI_PROJECT_ID` and
 `VITE_MUSHI_API_KEY` by itself when you don't pass `config`.
 

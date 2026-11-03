@@ -42,7 +42,7 @@ The product enforces this in three places:
 
 1. An owner or admin opens **Team → Members** in the admin console.
 2. They invite an email with a role.
-3. Mushi creates an `invitations` row with a one-time token and sends a Supabase Auth invite email when possible.
+3. Mushi Mushi creates an `invitations` row with a one-time token and sends a Supabase Auth invite email when possible.
 4. The invitee signs in and opens `/invite/accept?token=...`.
 5. The `accept_invitation(token)` RPC verifies the email, locks the invite row, inserts the membership, and marks the invite accepted.
 

@@ -7,9 +7,9 @@ a Discord channel when Mushi Mushi triages a bug, proposes a fix, applies it,
 or changes a report's status.
 
 **Do you need this package?** Not on Mushi Mushi Cloud: paste a Discord webhook
-URL on the **Integrations** page of the console and Mushi posts to the
+URL on the **Integrations** page of the console and Mushi Mushi posts to the
 channel itself, on any plan. The console's Marketplace has no Discord listing
-(checked 2026-10-29), so this package only receives events from a Mushi server you
+(checked 2026-10-29), so this package only receives events from a Mushi Mushi server you
 run yourself, once you add a `plugin_registry` row for it.
 
 ```bash

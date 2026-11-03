@@ -19,7 +19,7 @@ Stripe Connect.
 
 The page has these tabs: **Overview**, **Bounties**, **Activity rules**, **Tier ladder**,
 **Contributors**, **Quests**, **Retention**, **Simulator** and **Settings**. **Bounties**
-publishes the app to the Mushi Bounties marketplace so outside testers can find bugs for
+publishes the app to the Mushi Mushi Bounties marketplace so outside testers can find bugs for
 a reward; this page does not cover it in detail.
 
   Configuring rules, tiers and webhooks needs **Builder**, **Studio** or **Enterprise**.
@@ -33,7 +33,7 @@ a reward; this page does not cover it in detail.
 ```mermaid
 sequenceDiagram
   participant App as Your app
-  participant SDK as Mushi SDK
+  participant SDK as Mushi Mushi SDK
   participant API as POST /v1/sdk/activity
   participant DB as Postgres
   participant Admin as Admin console
@@ -174,7 +174,7 @@ not console buttons.
 
   The Contributors tab shows email addresses and display names collected via
   `identify()` traits. Make sure your privacy policy discloses that you collect
-  this data through the Mushi SDK before enabling rewards. See the
+  this data through the Mushi Mushi SDK before enabling rewards. See the
   [Privacy & GDPR](#gdpr--consent) section below.
 
 ---

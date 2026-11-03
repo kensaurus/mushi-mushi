@@ -17,7 +17,7 @@ Cursor and Firecrawl credits that lapse at the end of a period are worth more sp
 
 Each Cursor key shows its hint, label and expiry ("expires Oct 28 (6 days)").
 
-- **Fix open bugs before the credits expire** turns [spend-down](../concepts/agent-pr-review#spend-down-and-its-safety-stop) on or off for that key. While it is on, Mushi sends your best open reports to Cursor on its own, inside each app's auto-fix limits, and every fix opens a draft pull request. The switch is off until the key has an expiry date; set it in Settings → AI keys. A key your organization shares can be changed by an owner or admin, and someone else's universal key only by its owner.
+- **Fix open bugs before the credits expire** turns [spend-down](../concepts/agent-pr-review#spend-down-and-its-safety-stop) on or off for that key. While it is on, Mushi Mushi sends your best open reports to Cursor on its own, inside each app's auto-fix limits, and every fix opens a draft pull request. The switch is off until the key has an expiry date; set it in Settings → AI keys. A key your organization shares can be changed by an owner or admin, and someone else's universal key only by its owner.
 - When every app has nothing left to send, the row says so. Watching more of your live sites (below) is the way to find more.
 - **Review follow-ups** sends a pull request the Opus review marked "fix first" back to a new Cursor agent with the review's findings, at most twice per pull request and never on a "hold". The line names the model each round uses; when a **Last round model** is set in Settings → AI keys, the second round, which only happens after the first did not satisfy the reviewer, runs on it (for example Opus while the first stays on Grok).
 
@@ -46,7 +46,7 @@ A broken page becomes a bug report only after a second check confirms it, and sp
 
 ### Site audit
 
-Under each app's watch, **Audit links, accessibility and translations** turns its [site audit](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0040-site-audit-deterministic-live-site-checks.md) on or off. It starts weekly and reads up to 200 pages. While it is on, **Daily**, **Every 3 days** or **Weekly** sets how often it runs (a schedule outside those three stays shown), and the page menu sets how many pages a run reads: 50, 100, 200, 500, or the limit already saved. One Firecrawl credit a page; the row shows that cost. The first run starts within the hour. Mushi maps the live site, reads every page under its address up to that limit, and checks:
+Under each app's watch, **Audit links, accessibility and translations** turns its [site audit](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0040-site-audit-deterministic-live-site-checks.md) on or off. It starts weekly and reads up to 200 pages. While it is on, **Daily**, **Every 3 days** or **Weekly** sets how often it runs (a schedule outside those three stays shown), and the page menu sets how many pages a run reads: 50, 100, 200, 500, or the limit already saved. One Firecrawl credit a page; the row shows that cost. The first run starts within the hour. Mushi Mushi maps the live site, reads every page under its address up to that limit, and checks:
 
 - links to the site's own pages, to other sites and to images that are 404, 410, 5xx or unreachable (a 401, 403 or 429 is often a bot wall and does not count; Facebook, Instagram, LinkedIn, X and calendar links are skipped);
 - pages with no title, meta description or ``;
@@ -57,7 +57,7 @@ Each failing rule files one report listing the pages and evidence, with how to c
 
 ### Search rank
 
-Each app can also track where it ranks in web search for the words its users would type. **Add keywords** opens a box: one query per line, at most 10, with `@JP`, `@TH` … at the end for another country (US by default). Mushi looks for the app's watched or audited address in the top 20 results, once a week per keyword (about 4 Firecrawl credits each), and **Check now** reads them straight away (3 an hour). Each keyword shows its position, the change since the last check ("#2 (was #5)"), or "not in the top 20"; hover it to see the leading sites. It is a visibility number for you and files no reports.
+Each app can also track where it ranks in web search for the words its users would type. **Add keywords** opens a box: one query per line, at most 10, with `@JP`, `@TH` … at the end for another country (US by default). Mushi Mushi looks for the app's watched or audited address in the top 20 results, once a week per keyword (about 4 Firecrawl credits each), and **Check now** reads them straight away (3 an hour). Each keyword shows its position, the change since the last check ("#2 (was #5)"), or "not in the top 20"; hover it to see the leading sites. It is a visibility number for you and files no reports.
 
 ## Where the fixes go
 

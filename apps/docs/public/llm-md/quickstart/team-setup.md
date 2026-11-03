@@ -172,8 +172,8 @@ overage. Reports are always kept, even when diagnoses pause. See
 2. Set spend limits under **Settings → General → Spend limits**:
    - **Monthly AI budget**: all AI calls for the app stop at this amount until
      the 1st of next month.
-   - **Auto-fix spend limit** and **Automatic fixes per day**: cap fixes Mushi
-     Mushi starts on its own. New projects start at $2 per 30 days and 3
+   - **Auto-fix spend limit** and **Automatic fixes per day**: cap fixes Mushi Mushi
+     Mushi Mushi starts on its own. New projects start at $2 per 30 days and 3
      automatic fixes a day.
    - **Ask me before fixes that may cost more than**: expensive fixes wait for
      approval.
