@@ -14,6 +14,7 @@
  */
 
 import { humanizeFixError } from './humanizeFixError'
+import { stripTerminalCodes } from './terminalText'
 import { isFixMerged } from './mergeFix'
 import { fixFailureBucket } from './pdcaAct'
 import type { FixAttempt } from '../components/fixes/types'
@@ -132,7 +133,8 @@ export interface FailureHeadline {
 
 /** The real reason a fix attempt stopped, for the row itself (not hidden behind an expand). */
 export function failureHeadline(fix: FixAttempt): FailureHeadline | null {
-  const firstLine = fix.error ? fix.error.split('\n')[0].trim().slice(0, 240) : null
+  const cleaned = fix.error ? stripTerminalCodes(fix.error) : ''
+  const firstLine = cleaned ? cleaned.split('\n')[0]!.trim().slice(0, 240) : null
   if (!fix.error) return null
   const h = humanizeFixError(fix.error, { agent: fix.agent, category: fix.failure_category })
   if (!h) return null

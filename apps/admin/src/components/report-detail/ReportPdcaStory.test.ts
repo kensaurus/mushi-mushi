@@ -50,3 +50,25 @@ describe('ReportPdcaStory plan stage', () => {
     expect(buildStoryNodes(report({ processing_error: 'schema mismatch' }), idle).plan.state).toBe('failed')
   })
 })
+
+describe('ReportPdcaStory when a pre-push hook refused the push', () => {
+  it('does not paste the coloured hook log into the story', () => {
+    const nodes = buildStoryNodes(
+      report({
+        status: 'classified',
+        fix_attempts: [{
+          id: 'a',
+          status: 'failed',
+          agent: 'mcp',
+          pr_url: null,
+          error: 'git push failed: \u001b[38;2;56;56;56m🥊 test\u001b[0m',
+          created_at: '2026-10-04T00:00:00Z',
+        } as ReportDetail['fix_attempts'] extends (infer T)[] | undefined ? T : never],
+      }),
+      idle,
+    )
+    expect(nodes.act.headline).toBe("Loop blocked — Your repo's own checks failed at push.")
+    expect(nodes.act.headline).not.toMatch(/\u001b/)
+    expect(nodes.do.headline).toContain("Your repo's own checks failed at push")
+  })
+})

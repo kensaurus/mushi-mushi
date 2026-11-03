@@ -16,6 +16,8 @@ import type { DispatchState } from '../lib/dispatchFix'
 import { CHIP_TONE } from '../lib/chipTone'
 import { readFixCi } from '../lib/ciInfra'
 import { agentFlaggedFix } from '../lib/pdcaAct'
+import { humanizeFixError } from '../lib/humanizeFixError'
+import { stripTerminalCodes } from '../lib/terminalText'
 import type { CiInfraVerdict } from '../lib/ciTypes'
 
 interface FixAttempt {
@@ -59,6 +61,13 @@ const STAGE_TONE: Record<string, string> = {
   running: `${CHIP_TONE.infoSubtle} animate-pulse`,
   completed: CHIP_TONE.okSubtle,
   failed: CHIP_TONE.dangerSubtle,
+}
+
+/** Plain text for a stored attempt error. Hook logs lose their colour codes. */
+function attemptErrorText(error: string): string {
+  const human = humanizeFixError(error)
+  if (human && human.known !== false) return `${human.title} ${human.hint}`
+  return stripTerminalCodes(error)
 }
 
 function totalTokens(a: FixAttempt | null): string | null {
@@ -250,7 +259,9 @@ export function FixProgressStream({ reportId, dispatchState, hasFixHistory = tru
 
       {latest?.error && stage !== 'failed' && (
         <ContainedBlock tone="warn" label="Attempt error" className="mt-1.5">
-          <p className="font-mono text-2xs text-danger">{latest.error}</p>
+          <p className="text-2xs text-fg-secondary whitespace-pre-wrap break-all">
+            {attemptErrorText(latest.error)}
+          </p>
         </ContainedBlock>
       )}
     </Card>
