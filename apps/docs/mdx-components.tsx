@@ -25,6 +25,8 @@ import { LoopComparison } from './components/LoopComparison'
 import { PricingEstimator } from './components/PricingEstimator'
 import { OpenMetrics } from './components/OpenMetrics'
 import { InThirtySeconds, YouWillSee } from './components/OnboardingBoxes'
+import { Walkthrough } from './components/Walkthrough'
+import { HowItWorksFlow } from './components/HowItWorksFlow'
 import { FrameworkPicker } from './components/FrameworkPicker'
 import {
   CinematicEditorialHero,
@@ -62,6 +64,8 @@ export const useMDXComponents = (components?: Record<string, unknown>) => ({
   FineTunePipeline,
   MultiRepoFlowDiagram,
   DocScreenshot,
+  Walkthrough,
+  HowItWorksFlow,
   AdminDocHero,
   DocsMediaShowcase,
   OssTrustStrip,

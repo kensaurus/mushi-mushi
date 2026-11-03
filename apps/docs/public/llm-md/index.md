@@ -11,6 +11,10 @@ Your AI wrote it. Mushi Mushi tells you why it broke.</>}
   lead={LANDING_HERO.lead}
 />
 
+## See it work, on a real bug
+
+A real bug from Mushi Mushi's own app, from the report to the merged fix.
+
 ## What it takes
 
 - **No monitoring stack.** No Sentry, no logging service, no AI key of your own. Mushi Mushi's AI writes the diagnosis.
@@ -42,7 +46,7 @@ Words you will see on this page
 - **SDK** or **script tag**: the small piece of code you add to your app. It shows the report button and sends reports to Mushi.
 - **MCP**: the standard way AI code editors such as Cursor and Claude Code connect to outside tools. It is how your editor reads Mushi Mushi's reports.
 
-More: [Who it’s for](/who-its-for) · [What else it does](/what-it-does) · [How a bug moves, step by step](/concepts/closed-loop) ·
+More: [How it works, on video](/how-it-works) · [Who it’s for](/who-its-for) · [What else it does](/what-it-does) · [How a bug moves, step by step](/concepts/closed-loop) ·
 [Sentry, Linear, Slack and other tools](/plugins) ·
 [Compared with Sentry](/compare/sentry-vs-mushi) ·
 [More ways to install](/quickstart) ·
