@@ -41,6 +41,7 @@ import type {
   RecipeResponse,
 } from '../../_shared/recipe-types.ts'
 import { RECIPE_ELEMENT_KEYS } from '../../_shared/recipe-types.ts'
+import { CONSOLE_ROUTES } from '../../_shared/console-routes.generated.ts'
 import { readAllPages } from '../../_shared/paged-read.ts'
 import { GATE_IDS } from '../../_shared/gate-ids.ts'
 import { mapWithConcurrency } from '../../_shared/concurrency.ts'
@@ -345,6 +346,14 @@ export interface ComposedRecipe {
   details: Record<RecipeElementKey, Record<string, unknown>>
 }
 
+/** Sidebar name for a console path. A renamed page is renamed on the card too. */
+function consolePageLabel(path: string): string {
+  const bare = path.split(/[?#]/)[0]
+  const label = CONSOLE_ROUTES.find((r) => r.path === bare)?.label
+  if (!label) throw new Error(`console route missing for ${path}`)
+  return label
+}
+
 /**
  * One element card. `lastCheckedAt` must be the time of the read its state
  * was judged from (never a release date or "now"), and an `ok` with no such
@@ -588,12 +597,12 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
       manifest: snapshot ? (snapshot.manifest ? 'present' : 'missing') : 'never read',
     }, design.openFindings, [{ label: 'Design system', to: '/design' }]),
     routes: summary('routes', routesState, invLast, { graphNodes, inventory: invRow ? 'present' : 'none', validationErrors: Array.isArray(invRow?.validation_errors) ? invRow!.validation_errors!.length : 0 }, invOpen,
-      [{ label: 'Inventory', to: '/inventory' }]),
+      [{ label: consolePageLabel('/inventory'), to: '/inventory' }]),
     gates: summary('gates', gatesState, latest.map((r) => r.completed_at).filter(Boolean).sort().pop() ?? null,
       { gates: latest.length, cadenceDays: cadence, bundleKb: latestMetrics.get('bundle.web.gzip_kb')?.value ?? null },
       // Only checks that ran within their cadence count; older results are named in the reason.
       gateInputs.filter((g) => !isStale(g.completedAt, now, cadence)).reduce((n, g) => n + g.openFindings, 0),
-      [{ label: 'Full-stack audit (every check result)', to: '/fullstack-audit' }, { label: 'Code health', to: '/code-health' }]),
+      [{ label: 'Full-stack audit (every check result)', to: '/fullstack-audit' }, { label: 'Code health', to: '/code-health' }, { label: 'Risk checks', to: '/recipe#risk-checks' }]),
     ci: summary('ci', ciState, ciInput.key === 'ci' && !ciInput.fetchError ? ciReadAt : null,
       { branch: (ciDetail.branch as string | undefined) ?? null, conclusion: ciInput.key === 'ci' ? ciInput.run?.conclusion ?? null : null }, 0,
       ciInput.key === 'ci' && (ciDetail.run as WorkflowRunSnapshot | null)?.htmlUrl ? [{ label: 'Workflow run', to: (ciDetail.run as WorkflowRunSnapshot).htmlUrl! }] : []),

@@ -41,7 +41,7 @@ const SETUP_CHORE = {
   element: 'gates' as const,
   label: 'Automated checks',
   state: 'drift' as const,
-  reason: '2 problems to fix: Mushi setup check (2). They and their fixes are under Risk checks on the Recipe page.',
+  reason: '2 problems to fix: Mushi setup check (2). They and their fixes are under Risk checks at the end of the App blueprint page.',
 }
 
 describe('portfolioView', () => {
@@ -174,7 +174,7 @@ describe('cardStatusChips (chips instead of prose)', () => {
     const chips = cardStatusChips(card({ openReports: 3, latestRelease: { version: '1.4.0', publishedAt: null } }))
     expect(chips.map((c) => [c.key, c.text, c.to])).toEqual([
       ['bugs', '3 bugs', '/reports'],
-      ['checks', 'Checks: not run yet', '/recipe'],
+      ['checks', 'Checks: not run yet', '/recipe#risk-checks'],
       ['sdk', 'SDK unknown', '/connect'],
       ['release', 'v1.4.0', '/releases'],
     ])
@@ -219,6 +219,13 @@ describe('appUrgency', () => {
     expect(appUrgency(card({ needsLook: [] }))).toMatchObject({ chip: { text: 'Not checked yet' }, next: null })
     const checked = { checkedAt: '2026-10-02T00:00:00Z', status: 'pass' as const, open: { error: 0, warn: 0, info: 0 }, unchecked: 0, errored: 0 }
     expect(appUrgency(card({ needsLook: [], radar: checked }))).toMatchObject({ level: 'clear', chip: { text: 'All clear' }, next: null })
+  })
+
+  it('sends a Mushi setup chore to Risk checks on the App blueprint page', () => {
+    const u = appUrgency(card({ needsLook: [SETUP_CHORE], radar: { checkedAt: '2026-10-02T00:00:00Z', status: 'pass', open: { error: 0, warn: 0, info: 0 }, unchecked: 0, errored: 0 } }))
+    expect(u.next).toMatchObject({ to: '/recipe#risk-checks' })
+    expect(u.next?.text).toContain('App blueprint page')
+    expect(u.next?.text).not.toContain('Recipe page')
   })
 
   it('an older server without the problem list still flags a drifting app', () => {

@@ -116,6 +116,19 @@ describe('routes', () => {
     expect(state({ ...base, openFindings: 1 })).toBe('drift')
     expect(state(base)).toBe('ok')
   })
+  it('sends the reader to User stories, the page those checks live on', () => {
+    const reasons = [
+      deriveElementState({ ...base, validationErrors: 2 }, NOW).reason,
+      deriveElementState({ ...base, lastGateRunAt: null }, NOW).reason,
+      deriveElementState({ ...base, lastGateRunAt: '2026-09-01T00:00:00Z' }, NOW).reason,
+      deriveElementState({ ...base, openFindings: 1 }, NOW).reason,
+    ]
+    for (const reason of reasons) {
+      expect(reason).toContain('User stories page')
+      expect(reason).not.toContain('Inventory page')
+      expect(reason).not.toContain('Recipe page')
+    }
+  })
 })
 
 describe('gates', () => {

@@ -173,7 +173,7 @@ describe('GET /v1/admin/orgs/:orgId/portfolio', () => {
     expect(res.status).toBe(200)
     const bad = res.body.data.cards.find((c: { projectId: string }) => c.projectId === pid(2))
     expect(bad).toMatchObject({ worst: 'error', elements: {} })
-    expect(bad.error).toMatch(/could not be composed/)
+    expect(bad.error).toBe('The recipe for this project could not be composed. Open its App blueprint page for detail.')
     expect(res.body.data.cards.filter((c: { error: string | null }) => c.error === null)).toHaveLength(6)
   })
 

@@ -159,6 +159,18 @@ describe('invariant: a reason that says "Not checked" never comes with a check t
   })
 })
 
+describe('element links use the current page names', () => {
+  it('calls the routes page User stories and links gates to Risk checks on the App blueprint', async () => {
+    const pid = '20000001-0000-4000-8000-000000000099'
+    const { response } = await compose.composeRecipe(seed(pid) as never, deps(NOW) as never, pid)
+    expect(response.elements.routes.links).toEqual([{ label: 'User stories', to: '/inventory' }])
+    expect(response.elements.gates.links).toContainEqual({ label: 'Risk checks', to: '/recipe#risk-checks' })
+    for (const el of [response.elements.routes, response.elements.gates]) {
+      expect(el.reason).not.toMatch(/Recipe page|Inventory page/)
+    }
+  })
+})
+
 describe('summary(): never ok without a check', () => {
   it('downgrades ok with no check time to "Not checked yet"', () => {
     const s = compose.summary('gates', { state: 'ok', reason: 'Every automated check passed on its latest run.' }, null, {}, 0, [])

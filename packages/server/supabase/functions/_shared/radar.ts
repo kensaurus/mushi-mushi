@@ -82,7 +82,7 @@ export function detectByokKeyInvalid(
       severity: 'error' as const,
       message:
         `Your ${k.provider_slug} key "${k.label || k.key_hint || 'unnamed'}" is rejected by ${k.provider_slug}. ` +
-        'Mushi skips it, so calls fall back to another key or fail. Replace it in Settings → API Keys.',
+        'Mushi skips it, so calls fall back to another key or fail. Replace it in Settings → AI keys.',
       suggested_fix: {
         kind: 'console',
         path: '/settings?tab=byok',

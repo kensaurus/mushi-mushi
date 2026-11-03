@@ -1,6 +1,6 @@
 /**
  * RadarPanel — the risk checks ("radar") for one project (Plan 020 Phase 1), shown on
- * the Recipe page. Every check is listed; one that never ran says "Not
+ * the App blueprint page. Every check is listed; one that never ran says "Not
  * checked yet" and is never shown as passing.
  *
  * Problems lead (Found, then Check failed); checks that never ran and passing
@@ -48,6 +48,7 @@ export function RadarPanel({ projectId }: { projectId: string }) {
 
   return (
     <Section
+      id="risk-checks"
       title="Risk checks"
       action={
         <Btn size="sm" variant="ghost" onClick={run} loading={running} disabled={running} title="Run every risk check for this app now">
