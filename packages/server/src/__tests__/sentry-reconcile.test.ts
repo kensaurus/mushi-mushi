@@ -169,6 +169,71 @@ describe('an issue Sentry no longer has', () => {
   })
 })
 
+describe('pullSentryResolves (Sentry → Mushi for orgs that poll)', () => {
+  const creds = async () => ({ token: 't', orgSlug: 'o' })
+
+  it('closes an open report only when its Sentry issue is resolved, never a reopened one', async () => {
+    const calls: Array<[string, unknown]> = []
+    const closed: string[] = []
+    const rows = [
+      linkRow('r1', 'classified', null, '11'),
+      linkRow('r2', 'fixing', null, '12'),
+      linkRow('r3', 'classified', null, '13'),
+      linkRow('r4', 'classified', null, 'MUSHI-9'),
+    ]
+    const status: Record<string, string> = { '11': 'resolved', '12': 'unresolved', '13': 'ignored' }
+    const summary = await rc.pullSentryResolves(makeDb(rows, calls), {
+      credentials: creds,
+      getIssue: async (_t, _o, id) => ({ status: status[id] }),
+      resolveReport: async (_db, _p, id) => (closed.push(id), { outcome: 'resolved' }),
+      now: () => 0,
+    })
+    expect(closed).toEqual(['11'])
+    expect(summary).toMatchObject({ pending: 3, checked: 3, resolved: 1, failed: 0 })
+    const statuses = calls.find(([k]) => k === 'in:reports.status')?.[1] as string[]
+    expect(statuses).toContain('fixing')
+    // A report someone reopened in Mushi stays open; closed ones are the other job's.
+    for (const s of ['reopened', 'fixed', 'resolved', 'dismissed']) expect(statuses).not.toContain(s)
+  })
+
+  it('caps the reads per run, rotates, and counts a failing issue without stopping', async () => {
+    const rows = Array.from({ length: 30 }, (_, i) => linkRow(`r${i}`, 'classified', null, String(100 + i)))
+    const read: string[] = []
+    const summary = await rc.pullSentryResolves(makeDb(rows), {
+      batch: 5,
+      credentials: creds,
+      getIssue: async (_t, _o, id) => {
+        read.push(id)
+        if (id === '101') throw new Error('Sentry GET → 404')
+        return { status: 'unresolved' }
+      },
+      resolveReport: async () => ({ outcome: 'resolved' }),
+      now: () => 0,
+    })
+    expect(read).toEqual(['100', '101', '102', '103', '104'])
+    expect(summary).toMatchObject({ checked: 5, resolved: 0, failed: 1 })
+    const next: string[] = []
+    await rc.pullSentryResolves(makeDb(rows), {
+      batch: 5,
+      credentials: creds,
+      getIssue: async (_t, _o, id) => (next.push(id), { status: 'unresolved' }),
+      resolveReport: async () => ({ outcome: 'resolved' }),
+      now: () => rc.RECONCILE_INTERVAL_MS,
+    })
+    expect(next[0]).toBe('105')
+  })
+
+  it('skips a project with no Sentry credentials without calling Sentry', async () => {
+    let calls = 0
+    const summary = await rc.pullSentryResolves(makeDb([linkRow('r1', 'classified', null, '11')]), {
+      credentials: async () => null,
+      getIssue: async () => (calls++, { status: 'resolved' }),
+    })
+    expect(calls).toBe(0)
+    expect(summary).toMatchObject({ pending: 1, checked: 0, resolved: 0 })
+  })
+})
+
 describe('wiring (source shape)', () => {
   it('every detached side effect of a status change is kept alive with EdgeRuntime.waitUntil', () => {
     const src = readFileSync(resolve(fnDir, '_shared/report-transition.ts'), 'utf8')
@@ -186,5 +251,7 @@ describe('wiring (source shape)', () => {
     const src = readFileSync(resolve(fnDir, 'sentry-seer-poll/index.ts'), 'utf8')
     expect(src).toContain('reconcileSentryLinks(')
     expect(src.indexOf('reconcileSentryLinks(')).toBeGreaterThan(src.indexOf('autoImportProject(db, r)'))
+    // Then the other direction, so an import that reopened a report is seen first.
+    expect(src.indexOf('pullSentryResolves(')).toBeGreaterThan(src.indexOf('reconcileSentryLinks(db)'))
   })
 })

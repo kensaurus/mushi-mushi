@@ -15,6 +15,9 @@
  * refusing cannot starve the others. Failures log as warnings (`quiet`).
  * Only the Sentry poll imports this module, which keeps the `api` bundle the
  * same size.
+ *
+ * `pullSentryResolves` does the reverse for organizations with no Sentry
+ * webhook: an issue resolved in Sentry closes its open Mushi report.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
@@ -29,6 +32,8 @@ import {
   type SentryCredentials,
   type SentryResolveBackResult,
 } from './sentry-resolve-back.ts';
+import { getSentryIssue } from './sentry-api.ts';
+import { resolveReportFromSentry } from './sentry-ingest.ts';
 
 const log = rootLog.child('sentry-reconcile');
 
@@ -146,5 +151,94 @@ export async function reconcileSentryLinks(
   }
   if (summary.failed > 0) log.warn('Sentry reconcile left some issues open', { ...summary });
   else log.info('Sentry reconcile', { ...summary });
+  return summary;
+}
+
+/** Sentry issues read per run when pulling resolves the other way. */
+export const PULL_BATCH = 20;
+
+/**
+ * Report statuses a Sentry-side resolve may close. `reopened` is left out on
+ * purpose: someone reopened it in Mushi, and an issue still marked resolved in
+ * Sentry must not undo that.
+ */
+const PULL_STATUSES = ['new', 'pending', 'submitted', 'queued', 'classified', 'grouped', 'triaged', 'in_progress', 'fixing'];
+
+export interface PullSummary {
+  /** Open reports with a still-open Sentry link. */
+  pending: number;
+  checked: number;
+  resolved: number;
+  failed: number;
+}
+
+/**
+ * The other direction: an issue someone resolved in Sentry closes its open
+ * Mushi report. The Sentry webhook does this on the spot
+ * (`api/routes/public.ts`, action `resolved`), but an organization that
+ * imports by polling has no webhook, so a resolve made in Sentry never
+ * reached Mushi (2026-11-03: MUSHI-MUSHI-SERVER-3N/3J/3C were resolved in
+ * Sentry and their reports stayed open). Reads one issue per call, at most
+ * `batch` per run, rotating like `reconcileSentryLinks`. Only `resolved`
+ * counts: an issue archived ("ignored") in Sentry is muted noise, not a fix.
+ */
+export async function pullSentryResolves(
+  db: SupabaseClient,
+  deps: {
+    batch?: number;
+    now?: () => number;
+    credentials?: (db: SupabaseClient, projectId: string) => Promise<SentryCredentials | null>;
+    getIssue?: (token: string, org: string, issueId: string) => Promise<{ status?: string }>;
+    resolveReport?: (db: SupabaseClient, projectId: string, issueId: string) => Promise<{ outcome: string }>;
+  } = {},
+): Promise<PullSummary> {
+  const batch = Math.max(1, deps.batch ?? PULL_BATCH);
+  const getIssue = deps.getIssue ?? ((token, org, id) => getSentryIssue(token, org, id));
+  const resolveReport = deps.resolveReport ?? ((d, projectId, id) => resolveReportFromSentry(d, projectId, id, 'sentry-poll'));
+
+  const { data, error } = await db
+    .from('report_external_issues')
+    .select('report_id, project_id, external_id, reports!inner(status, closed_reason)')
+    .eq('system', 'sentry')
+    .is('resolved_at', null)
+    .is('archived_at', null)
+    .in('reports.status', PULL_STATUSES)
+    .order('created_at', { ascending: true })
+    .limit(RECONCILE_SCAN);
+  if (error) throw new Error(`Sentry pull lookup failed: ${error.message}`);
+
+  const seen = new Set<string>();
+  const pending: Array<{ projectId: string; issueId: string }> = [];
+  for (const row of (data ?? []) as unknown as LinkRow[]) {
+    const key = `${row.project_id}:${row.external_id}`;
+    if (!/^\d+$/.test(row.external_id) || seen.has(key)) continue;
+    seen.add(key);
+    pending.push({ projectId: row.project_id, issueId: row.external_id });
+  }
+  const summary: PullSummary = { pending: pending.length, checked: 0, resolved: 0, failed: 0 };
+  if (pending.length === 0) return summary;
+
+  const run = Math.floor((deps.now ?? Date.now)() / RECONCILE_INTERVAL_MS);
+  const start = (run * batch) % pending.length;
+  const picked = [...pending.slice(start), ...pending.slice(0, start)].slice(0, batch);
+
+  const credCache = new Map<string, Promise<SentryCredentials | null>>();
+  for (const item of picked) {
+    if (!credCache.has(item.projectId)) credCache.set(item.projectId, (deps.credentials ?? loadSentryCredentials)(db, item.projectId));
+    const creds = await credCache.get(item.projectId)!;
+    if (!creds) continue;
+    summary.checked++;
+    try {
+      const issue = await getIssue(creds.token, creds.orgSlug, item.issueId);
+      if (issue.status !== 'resolved') continue;
+      const r = await resolveReport(db, item.projectId, item.issueId);
+      if (r.outcome === 'resolved') summary.resolved++;
+    } catch (err) {
+      // A deleted issue (404) or a Sentry outage: try again on a later run.
+      summary.failed++;
+      log.warn('Sentry pull failed for an issue', { issueId: item.issueId, err: String(err).slice(0, 200) });
+    }
+  }
+  log.info('Sentry pull', { ...summary });
   return summary;
 }

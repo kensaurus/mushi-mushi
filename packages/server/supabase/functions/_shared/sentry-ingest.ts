@@ -418,6 +418,7 @@ export async function resolveReportFromSentry(
   db: SupabaseClient,
   projectId: string,
   sentryIssueId: string,
+  actorId: 'sentry-webhook' | 'sentry-poll' = 'sentry-webhook',
 ): Promise<SentryIngestResult> {
   const linked = await findLinkedReport(db, projectId, sentryIssueId);
   if (!linked) return { outcome: 'ignored' };
@@ -425,7 +426,7 @@ export async function resolveReportFromSentry(
   const result = await applyReportStatusTransition(db, {
     reportId: linked.reportId,
     requestedStatus: 'resolved',
-    actor: { kind: 'system', id: 'sentry-webhook' },
+    actor: { kind: 'system', id: actorId },
   });
   if (!result.ok) {
     log.warn('Sentry-side resolve failed', { reportId: linked.reportId, err: result.message });
