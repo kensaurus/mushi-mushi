@@ -288,7 +288,7 @@ export async function ingestSentryError(
           .eq('id', linked.reportId);
         // The issue is open in Sentry again: so is the link, so marking the
         // report fixed later resolves it instead of skipping it.
-        await reopenSentryLinks(db, projectId, linked.reportId).catch((e: unknown) =>
+        await reopenSentryLinks(db, projectId, linked.reportId, { inSentry: false }).catch((e: unknown) =>
           log.error('Reopening Sentry links failed', { reportId: linked.reportId, err: String(e) }),
         );
         log.info('Sentry alert reopened a fixed report', {
@@ -418,6 +418,7 @@ export async function resolveReportFromSentry(
   db: SupabaseClient,
   projectId: string,
   sentryIssueId: string,
+  actorId: 'sentry-webhook' | 'sentry-poll' = 'sentry-webhook',
 ): Promise<SentryIngestResult> {
   const linked = await findLinkedReport(db, projectId, sentryIssueId);
   if (!linked) return { outcome: 'ignored' };
@@ -425,7 +426,7 @@ export async function resolveReportFromSentry(
   const result = await applyReportStatusTransition(db, {
     reportId: linked.reportId,
     requestedStatus: 'resolved',
-    actor: { kind: 'system', id: 'sentry-webhook' },
+    actor: { kind: 'system', id: actorId },
   });
   if (!result.ok) {
     log.warn('Sentry-side resolve failed', { reportId: linked.reportId, err: result.message });
