@@ -1,0 +1,145 @@
+{
+  "report-a-bug": {
+    "id": "report-a-bug",
+    "title": "Your user reports a bug",
+    "summary": "What the person using your app sees: one button, one sentence, and the screen goes with it.",
+    "video": "/walkthroughs/report-a-bug.mp4?v=88b04ac669",
+    "poster": "/walkthroughs/report-a-bug.jpg?v=01df884f0e",
+    "width": 1600,
+    "height": 1000,
+    "duration": 34.51,
+    "chapters": [
+      {
+        "t": 3.12,
+        "title": "Your user taps + in the cart",
+        "detail": "The total turns into $NaN. Most people would close the tab and never tell you."
+      },
+      {
+        "t": 10.19,
+        "title": "They tap the bug button in the corner",
+        "detail": "That is the Mushi Mushi widget: one script tag or one npm package in your app."
+      },
+      {
+        "t": 14.13,
+        "title": "They say what went wrong, in their own words",
+        "detail": "Pick a kind and type one sentence. No account, no form to learn."
+      },
+      {
+        "t": 21.96,
+        "title": "They tap Screenshot to attach the screen",
+        "detail": "The page and what they tapped go with every report. Only you, the developer, see them."
+      },
+      {
+        "t": 27.21,
+        "title": "They press Send. That is the whole job for them",
+        "detail": "The report lands in your Mushi Mushi console, where it is explained in plain English."
+      }
+    ]
+  },
+  "bug-to-fix": {
+    "id": "bug-to-fix",
+    "title": "From a bug report to a merged fix",
+    "summary": "A real bug from Mushi Mushi’s own console: the plain-English diagnosis, the fix prompt for your editor, and the pull request that fixed it.",
+    "video": "/walkthroughs/bug-to-fix.mp4?v=1c2fdd5465",
+    "poster": "/walkthroughs/bug-to-fix.jpg?v=0a2fb3f979",
+    "width": 1600,
+    "height": 1000,
+    "duration": 58.9,
+    "chapters": [
+      {
+        "t": 3.13,
+        "title": "Every bug lands in one list",
+        "detail": "Reports from your users, Sentry errors and Mushi Mushi’s own checks, ranked by how bad they are."
+      },
+      {
+        "t": 7.55,
+        "title": "Search for a bug and open it",
+        "detail": "Or start from the top of “Fix first”."
+      },
+      {
+        "t": 20.1,
+        "title": "Read the bug in plain English",
+        "detail": "Mushi Mushi rewrites the report so anyone can tell what is wrong, and rates how bad it is."
+      },
+      {
+        "t": 24.58,
+        "title": "See why it broke and how to fix it",
+        "detail": "The diagnosis names the cause, the fix and the steps to see it happen. It read 5 files of the repo to get there."
+      },
+      {
+        "t": 35.25,
+        "title": "Hand the fix to your AI editor",
+        "detail": "Copy one prompt into Claude Code, Cursor, Windsurf or Lovable, or let your editor fetch it over MCP."
+      },
+      {
+        "t": 43.73,
+        "title": "Or let an agent open the pull request",
+        "detail": "A fix agent writes the change, CI runs, and a second AI reviews it against the report before it merges."
+      },
+      {
+        "t": 50,
+        "title": "Check how it reached the diagnosis",
+        "detail": "Every step from the report to the merged fix, with how sure Mushi Mushi was at each one."
+      }
+    ]
+  },
+  "connect-editor": {
+    "id": "connect-editor",
+    "title": "Connect your AI editor",
+    "summary": "Pick your editor, add Mushi Mushi in one click or one command, then ask it to fix the latest bug.",
+    "video": "/walkthroughs/connect-editor.mp4?v=70c1291d1d",
+    "poster": "/walkthroughs/connect-editor.jpg?v=9a09dfc357",
+    "width": 1600,
+    "height": 1000,
+    "duration": 32.68,
+    "chapters": [
+      {
+        "t": 3.12,
+        "title": "Pick the editor you use",
+        "detail": "Cursor, VS Code, Windsurf, Cline, Claude Code, Claude Desktop, Zed, or any MCP client."
+      },
+      {
+        "t": 10.67,
+        "title": "Add Mushi Mushi in one step",
+        "detail": "Claude Code gets one command to paste. Cursor and VS Code get a button that opens the install dialog."
+      },
+      {
+        "t": 21.54,
+        "title": "Then ask your editor for the fix",
+        "detail": "“Get the latest Mushi Mushi bug and fix it.” Your editor reads the diagnosis and the fix prompt for you."
+      },
+      {
+        "t": 25.61,
+        "title": "Prefer the terminal? Use the CLI",
+        "detail": "mushi reports, mushi fix, and the same data as the console."
+      }
+    ]
+  },
+  "ship-fixes": {
+    "id": "ship-fixes",
+    "title": "Watch every fix ship",
+    "summary": "The Pipeline page follows every bug from the report to the deploy, and shows the ones that need you.",
+    "video": "/walkthroughs/ship-fixes.mp4?v=0c88e5c242",
+    "poster": "/walkthroughs/ship-fixes.jpg?v=8f2510d457",
+    "width": 1600,
+    "height": 1000,
+    "duration": 29.84,
+    "chapters": [
+      {
+        "t": 3.11,
+        "title": "Follow each bug through eight stages",
+        "detail": "Reported, triaged, fix PR, reviewed, CI, release train, merged, deployed."
+      },
+      {
+        "t": 17.31,
+        "title": "Approved fixes ship together in a release train",
+        "detail": "One branch, one CI run, one merge and one deploy, instead of one per fix."
+      },
+      {
+        "t": 21.87,
+        "title": "Anything stuck says why, with the button to move it",
+        "detail": "Close it, send it back to an agent, or re-run CI, right from the list."
+      }
+    ]
+  }
+}

@@ -2926,3 +2926,345 @@ main details > summary > h3 {
   font-size: 1rem;
   font-weight: 600;
 }
+
+/* ---------------------------------------------------------------------------
+ * Walkthrough videos (components/Walkthrough.tsx): a recorded console clip
+ * with a clickable step list. Steps sit beside the video when the column is
+ * wide enough, below it otherwise.
+ * ------------------------------------------------------------------------- */
+.docs-walkthrough {
+  container-type: inline-size;
+  margin: 1.5rem 0 2.25rem;
+  scroll-margin-top: 5rem;
+}
+
+.docs-walkthrough__head {
+  display: grid;
+  gap: 0.2rem;
+  margin-bottom: 0.85rem;
+}
+
+.docs-walkthrough__kicker {
+  font-family: var(--mushi-font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--mushi-ink-muted);
+}
+
+.docs-walkthrough__title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--mushi-ink);
+}
+
+.docs-walkthrough__summary {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--mushi-ink-muted);
+  max-width: 62ch;
+}
+
+.docs-walkthrough__body {
+  display: grid;
+  gap: 1rem;
+}
+
+@container (min-width: 60rem) {
+  .docs-walkthrough:not(.docs-walkthrough--compact) .docs-walkthrough__body {
+    grid-template-columns: minmax(0, 1fr) 19rem;
+    align-items: start;
+  }
+}
+
+.docs-walkthrough__frame {
+  overflow: hidden;
+  border-radius: 0.85rem;
+  border: 1px solid var(--mushi-rule);
+  background: #0e0d0b;
+  box-shadow: 0 18px 50px -36px rgba(14, 13, 11, 0.45);
+  aspect-ratio: 16 / 10;
+}
+
+.docs-walkthrough__video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.docs-walkthrough__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.55rem;
+}
+
+.docs-walkthrough__btn {
+  flex: none;
+  min-height: 2rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--mushi-rule);
+  background: var(--mushi-paper);
+  color: var(--mushi-ink);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.docs-walkthrough__btn:hover,
+.docs-walkthrough__btn:focus-visible {
+  border-color: var(--mushi-vermillion);
+}
+
+.docs-walkthrough__track {
+  position: relative;
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--mushi-rule);
+  overflow: visible;
+}
+
+.docs-walkthrough__fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--mushi-vermillion);
+  transform-origin: left center;
+  transition: transform 250ms linear;
+}
+
+.docs-walkthrough__tick {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 999px;
+  background: var(--mushi-paper);
+  border: 2px solid var(--mushi-ink-muted);
+}
+
+.docs-walkthrough__tick[data-on] {
+  border-color: var(--mushi-vermillion);
+}
+
+.docs-walkthrough__now {
+  margin: 0.6rem 0 0;
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-size: 0.98rem;
+  font-weight: 600;
+  color: var(--mushi-ink);
+  min-height: 1.6em;
+}
+
+.docs-walkthrough__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.docs-walkthrough__step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.7rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--mushi-ink);
+  text-align: left;
+  cursor: pointer;
+  transition: background 200ms ease, border-color 200ms ease;
+}
+
+.docs-walkthrough__step:hover,
+.docs-walkthrough__step:focus-visible {
+  background: var(--mushi-paper-wash, rgba(0, 0, 0, 0.03));
+  border-color: var(--mushi-rule);
+}
+
+.docs-walkthrough__steps li[data-active] .docs-walkthrough__step {
+  border-color: color-mix(in oklch, var(--mushi-vermillion) 55%, var(--mushi-rule));
+  background: color-mix(in oklch, var(--mushi-vermillion) 7%, transparent);
+}
+
+.docs-walkthrough__num {
+  display: inline-grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  background: var(--mushi-ink);
+  color: var(--mushi-paper);
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex: none;
+}
+
+.docs-walkthrough__steps li[data-active] .docs-walkthrough__num {
+  background: var(--mushi-vermillion);
+  color: #fff;
+}
+
+.docs-walkthrough__step-text {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.docs-walkthrough__step-title {
+  font-size: 0.93rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.docs-walkthrough__step-detail {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--mushi-ink-muted);
+}
+
+.docs-walkthrough__time {
+  font-family: var(--mushi-font-mono);
+  font-size: 0.72rem;
+  color: var(--mushi-ink-muted);
+  padding-top: 0.15rem;
+}
+
+/* ---------------------------------------------------------------------------
+ * How-it-works timeline (components/HowItWorksFlow.tsx). A dot travels down
+ * the line and each station lights as it passes; still with reduced motion.
+ * ------------------------------------------------------------------------- */
+.docs-flow {
+  /* The dot covers the line in 86% of the cycle, so it passes a station
+   * every 11s * 0.86 / 5 = 1.89s; each node lights as it arrives. */
+  --flow-cycle: 11s;
+  --flow-step: 1.89s;
+  position: relative;
+  margin: 1.5rem 0 2rem;
+}
+
+.docs-flow__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+  position: relative;
+}
+
+.docs-flow__list::before {
+  content: '';
+  position: absolute;
+  left: 1.05rem;
+  top: 1.2rem;
+  bottom: 1.2rem;
+  width: 2px;
+  background: var(--mushi-rule);
+}
+
+.docs-flow__station {
+  position: relative;
+  display: grid;
+  grid-template-columns: 2.1rem minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: start;
+}
+
+.docs-flow__node {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  margin-top: 0.55rem;
+  border-radius: 999px;
+  border: 2px solid var(--mushi-rule);
+  background: var(--mushi-paper);
+  color: var(--mushi-ink);
+  font-weight: 700;
+  font-size: 0.85rem;
+  animation: docs-flow-light var(--flow-cycle) ease-in-out infinite;
+  animation-delay: calc(var(--i) * var(--flow-step) - 0.55s);
+}
+
+.docs-flow__card {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.8rem 1rem;
+  border-radius: 0.85rem;
+  border: 1px solid var(--mushi-rule);
+  background: color-mix(in oklch, var(--mushi-paper) 92%, white);
+}
+
+.dark .docs-flow__card {
+  background: var(--mushi-paper-wash);
+}
+
+.docs-flow__actor {
+  font-family: var(--mushi-font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mushi-ink-muted);
+}
+
+.docs-flow__title {
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--mushi-ink);
+}
+
+.docs-flow__detail {
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--mushi-ink-muted);
+}
+
+.docs-flow__see {
+  justify-self: start;
+  margin-top: 0.2rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--mushi-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--mushi-vermillion);
+  text-underline-offset: 3px;
+}
+
+.docs-flow__packet {
+  position: absolute;
+  left: calc(1.05rem - 5px);
+  top: 1.2rem;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--mushi-vermillion);
+  box-shadow: 0 0 0 5px color-mix(in oklch, var(--mushi-vermillion) 22%, transparent);
+  animation: docs-flow-packet var(--flow-cycle) linear infinite;
+}
+
+@keyframes docs-flow-packet {
+  0% { top: 1.2rem; opacity: 0; }
+  4% { opacity: 1; }
+  86% { top: calc(100% - 1.6rem); opacity: 1; }
+  92%, 100% { top: calc(100% - 1.6rem); opacity: 0; }
+}
+
+@keyframes docs-flow-light {
+  0%, 14%, 100% { border-color: var(--mushi-rule); color: var(--mushi-ink); background: var(--mushi-paper); }
+  4%, 10% { border-color: var(--mushi-vermillion); color: #fff; background: var(--mushi-vermillion); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docs-flow__packet { display: none; }
+  .docs-flow__node { animation: none; }
+}

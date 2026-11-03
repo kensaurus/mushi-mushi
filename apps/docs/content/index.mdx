@@ -22,6 +22,17 @@ import { LANDING_HERO, LANDING_WHAT_THIS_IS } from '@/lib/landing-copy'
 
 <DiagnosisScrollStage />
 
+{/* ADR 0052's "how it works" block, shown on a real bug instead of described.
+    It stays on the one job (report → diagnosis → fix prompt → fix); the
+    operator pages (pipeline, release trains) stay on /how-it-works, which
+    the More line links. */}
+
+## See it work, on a real bug
+
+<Walkthrough id="bug-to-fix" compact title={null} />
+
+A real bug from Mushi Mushi's own app, from the report to the merged fix.
+
 <LandingAudience />
 
 <LandingFeatures />
@@ -72,7 +83,7 @@ Mushi Mushi is the bug mediator for AI-built apps, an open-source tool that give
 
 <div className="landing-more">
 
-More: [Who it’s for](/who-its-for) · [What else it does](/what-it-does) · [How a bug moves, step by step](/concepts/closed-loop) ·
+More: [How it works, on video](/how-it-works) · [Who it’s for](/who-its-for) · [What else it does](/what-it-does) · [How a bug moves, step by step](/concepts/closed-loop) ·
 [Sentry, Linear, Slack and other tools](/plugins) ·
 [Compared with Sentry](/compare/sentry-vs-mushi) ·
 [More ways to install](/quickstart) ·
