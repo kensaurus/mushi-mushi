@@ -50,6 +50,17 @@ describe('fixNodes: the next step', () => {
     expect(step?.title).toBe('A person decides this one')
   })
 
+  it('a push the repo hook refused does not say to check the weak spots', () => {
+    const step = nextStep(report('classified', failedAttempt({
+      agent: 'mcp',
+      failure_category: null,
+      error: 'mushi work: git push failed: hook steps failed: test. test: FAIL a.test.ts',
+    })))
+    expect(step?.title).toBe("Your repo's own checks failed at push")
+    expect(step?.why).toContain('nothing was pushed')
+    expect(step?.why).not.toMatch(/\u001b/)
+  })
+
   it('an agent error on an open report still points at the weak spots', () => {
     const step = nextStep(report('classified', failedAttempt({ failure_category: 'sandbox_timeout', error: 'timed out' })))
     expect(step?.title).toBe('Check the weak spots, then retry')

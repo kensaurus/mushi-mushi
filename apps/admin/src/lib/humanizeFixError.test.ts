@@ -86,6 +86,16 @@ describe('humanizeFixError: the agent explained why it opened no PR', () => {
     }
   })
 
+  it('a pre-push hook log is the repo\'s checks, not a rate limit, and the colour codes are gone', () => {
+    const raw = 'mushi work: git push failed: \\u001b[38;2;56;56;56m🥊 test\\u001b[0m\nFAIL a.test.ts expected 429'
+    const h = humanizeFixError(raw)
+    expect(h?.title).toBe("Your repo's own checks failed at push.")
+    expect(h?.hint).toContain('Failed checks: test.')
+    expect(h?.raw).not.toContain('\\u001b')
+    expect(h?.severity).toBe('hard')
+    expect(h?.action).toBeUndefined()
+  })
+
   it('wrong repo: points at the repos page', () => {
     const h = humanizeFixError('Agent says the code is in another repo: The payout check is not in this repository.')
     expect(h?.title).toBe('The fix belongs in another repo.')

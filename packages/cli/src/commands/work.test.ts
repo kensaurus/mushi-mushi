@@ -200,6 +200,13 @@ describe('failureTail', () => {
     expect(out.length).toBeLessThanOrEqual(210)
   })
 
+  it('strips ANSI colour codes so a refused push is readable', () => {
+    const stderr = '\u001b[38;2;56;56;56m┃ lint failed: unused export\u001b[0m'
+    const out = failureTail({ stdout: '', stderr })
+    expect(out).toBe('┃ lint failed: unused export')
+    expect(out).not.toMatch(/\u001b/)
+  })
+
   it('returns short output whole and an over-long last line cut from its start', () => {
     expect(failureTail({ stdout: '', stderr: 'fatal: not a git repository' })).toBe('fatal: not a git repository')
     expect(failureTail({ stdout: 'x'.repeat(50), stderr: '' }, 10)).toBe(`[…] ${'x'.repeat(10)}`)
@@ -539,6 +546,13 @@ describe('hookFailureDetail', () => {
     expect(d).toContain('test: FAIL lib/powersync/queries.test.ts > closed accounts > hides a closed account | AssertionError: expected [ 2 ] to deeply equal [ 1 ]')
     expect(d).toContain('knip: Unused exports (1)')
     expect(d).not.toContain('apps/web lint')
+  })
+
+  it('still names the steps when lefthook paints the summary line', () => {
+    const colored = LEFTHOOK_FAIL.replace(/^🥊/gm, '\u001b[38;2;56;56;56m┃\u001b[0m 🥊')
+    const d = hookFailureDetail({ stdout: colored, stderr: '' })!
+    expect(d).toMatch(/^hook steps failed: test, knip\./)
+    expect(d).not.toMatch(/\u001b/)
   })
 
   it('is null for output that is not a lefthook run', () => {

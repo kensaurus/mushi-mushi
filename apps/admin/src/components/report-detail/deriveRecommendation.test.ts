@@ -54,6 +54,8 @@ function makeFixAttempt(
     llm_model?: string | null
     agent?: string | null
     files_changed?: string[]
+    branch?: string | null
+    commit_sha?: string | null
   } = {},
 ) {
   return {
@@ -366,6 +368,26 @@ describe('deriveRecommendation', () => {
       })
       const rec = deriveRecommendation(report, makeDispatchState(), 0, noOp)
       expect(rec.description).toContain('OOM in sandbox')
+    })
+
+    it('a lefthook pre-push refusal is plain text, with the checks, branch and commit', () => {
+      const report = makeReport({
+        fix_attempts: [makeFixAttempt({
+          status: 'failed',
+          failure_category: null,
+          error: 'mushi work: git push failed: \\u001b[38;2;56;56;56m🥊 test\\u001b[0m\nFAIL a.test.ts',
+          branch: 'bugfix/MUSHI-71500346-local-cursor',
+          commit_sha: 'abc1234def5678',
+        })],
+      })
+      const rec = deriveRecommendation(report, makeDispatchState(), 0, noOp)
+      expect(rec.title).toBe("Your repo's own checks failed at push")
+      expect(rec.description).toContain('Failed checks: test.')
+      expect(rec.description).not.toContain('\\u001b')
+      expect(rec.meta?.find((m) => m.label === 'Checks')?.value).toBe('test')
+      expect(rec.meta?.find((m) => m.label === 'Branch')?.value).toBe('bugfix/MUSHI-71500346-local-cursor')
+      expect(rec.meta?.find((m) => m.label === 'Commit')?.value).toBe('abc1234')
+      expect(rec.actions?.some((a) => a.label === 'Retry dispatch')).toBe(false)
     })
   })
 

@@ -32,12 +32,54 @@ type Context = {
   category?: string | null;
 };
 
+// Keep in sync with apps/admin/src/lib/terminalText.ts (the report page).
+const HOOK_MARK = /hook steps failed:|pre-push hook|\blefthook\b|husky - pre-push|🥊/;
+
+function stripTerminalCodes(text: string): string {
+  return text
+    .replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, '')
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/\\u001b\[[0-9;?]*[A-Za-z]/gi, '')
+    .replace(/\\x1b\[[0-9;?]*[A-Za-z]/gi, '');
+}
+
+function failedHookChecks(text: string): string[] {
+  const plain = stripTerminalCodes(text);
+  const named = /hook steps failed:\s*([^.\n]+)/i.exec(plain)?.[1];
+  const fromSummary = named
+    ? named.split(',').map((s) => s.trim()).filter((s) => /^[\w:.-]+$/.test(s))
+    : [];
+  const fromIcons = [...plain.matchAll(/🥊\s+([\w:.-]+)/g)].map((m) => m[1]!);
+  return [...new Set([...fromSummary, ...fromIcons])].slice(0, 6);
+}
+
+function pushHookAdvice(text: string): { hint: string } | null {
+  const plain = stripTerminalCodes(text);
+  if (!HOOK_MARK.test(plain)) return null;
+  const checks = failedHookChecks(plain);
+  const which = checks.length ? ` Failed checks: ${checks.join(', ')}.` : '';
+  return {
+    hint: `The fix is committed on its branch; nothing was pushed.${which} Fix that check and push the branch, or send the report to your local worker again. A cloud dispatch hits the same checks.`,
+  };
+}
+
 export function humanizeFixError(
   rawError: string | null | undefined,
   context: Context = {},
 ): HumanizedFixError | null {
   if (!rawError) return null;
-  const raw = rawError;
+  const raw = stripTerminalCodes(rawError);
+  const hook = pushHookAdvice(raw);
+  // Before the substring rules: a lefthook log can contain "429" or "403"
+  // from the failing check, and those used to read as a provider rate limit.
+  if (hook) {
+    return {
+      title: "Your repo's own checks failed at push.",
+      hint: hook.hint,
+      severity: 'hard',
+      raw,
+    };
+  }
   const m = raw.toLowerCase();
   const { category } = context;
 

@@ -144,6 +144,15 @@ describe('failureHeadline', () => {
     expect(h.firstLine).toBe('review_failed: the fix model flagged its own change for human review.')
   })
 
+  it('a coloured pre-push log is the repo\'s checks, and the details have no colour codes', () => {
+    const h = failureHeadline(fix({
+      error: 'mushi work: git push failed: \u001b[38;2;56;56;56m🥊 lint\u001b[0m\nunused export',
+    }))!
+    expect(h.title).toBe("Your repo's own checks failed at push.")
+    expect(h.hint).toContain('Failed checks: lint.')
+    expect(h.firstLine).not.toMatch(/\u001b/)
+  })
+
   it('shows the error itself when the code is unknown, not "The fix attempt failed."', () => {
     const h = failureHeadline(fix({ error: 'Worker exploded: ENOSPC on /tmp\nstack…' }))!
     expect(h.title).toBe('Worker exploded: ENOSPC on /tmp')
