@@ -30,11 +30,11 @@ measured in different units (errors, events, occurrences, spans, replays,
 diagnoses), so compare them against your own volume rather than each other.
 A side project with a few hundred users rarely reaches any of these limits.
 
-**Self-hosting.** Sentry, PostHog and Mushi publish a free self-hosted path,
+**Self-hosting.** Sentry, PostHog and Mushi Mushi publish a free self-hosted path,
 and highlight.io's [open-source repo](https://github.com/highlight/highlight)
 still documents a one-line Docker hobby install sized for small projects
 (the limits are in the table). Sentry's needs a real machine (4 cores, 16 GB
-RAM per its docs) and leaves out Seer. Mushi's deploys with one command onto
+RAM per its docs) and leaves out Seer. Mushi Mushi's deploys with one command onto
 your own Supabase project (the free tier works) and includes the diagnosis
 when you bring your own Anthropic key. Bugsnag includes an
 [on-premise deployment](https://docs.bugsnag.com/on-premise/) in its
@@ -53,28 +53,28 @@ small free allowance each month and
 [a price per PR after that](https://posthog.com/docs/self-driving/pricing).
 Bugsnag's pricing page lists no AI feature; SmartBear's MCP server offers
 AI fix suggestions in the IDE. highlight.io's README lists none.
-Mushi's diagnosis and fix prompt run on every plan, including free and
+Mushi Mushi's diagnosis and fix prompt run on every plan, including free and
 self-hosted with your own key, and they start from what a user reported
 and the screen they were on.
 
 **Who it is for.** Sentry, Bugsnag and Rollbar were built around error
 monitoring, and each has a free plan a solo developer can use. PostHog was
 built around product analytics, with replay and error tracking alongside;
-highlight.io was built around replay. Mushi
+highlight.io was built around replay. Mushi Mushi
 was built for a builder who did not write most of the code and hears about
 bugs from users; the output is the diagnosis and the fix, in the editor.
 
 ## What this page does not claim
 
-It does not claim Mushi is cheaper at scale, and it does not claim feature
+It does not claim Mushi Mushi is cheaper at scale, and it does not claim feature
 parity with Sentry on tracing, profiling or platform coverage. If you need
-those, Sentry is the right answer and Mushi runs alongside it: a Sentry
-issue-alert webhook sends errors into Mushi's queue, and with the outbound
+those, Sentry is the right answer and Mushi Mushi runs alongside it: a Sentry
+issue-alert webhook sends errors into Mushi Mushi's queue, and with the outbound
 Sentry plugin (Builder and above, or self-hosted) merging the fix resolves the
-Sentry issue. See [Sentry vs Mushi](/compare/sentry-vs-mushi).
+Sentry issue. See [Sentry vs Mushi Mushi](/compare/sentry-vs-mushi).
 
 ## Frequently asked questions
 
 **Related:** [Sentry alternative for AI-built apps](/use-cases/sentry-alternative) ·
-[PostHog session replay vs Mushi](/compare/posthog-session-replay-vs-mushi) ·
+[PostHog session replay vs Mushi Mushi](/compare/posthog-session-replay-vs-mushi) ·
 [Self-hosting](/self-hosting)

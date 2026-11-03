@@ -3,7 +3,7 @@
 /**
  * The hero's install box: pick your editor (Claude Code, Cursor, other), then
  * three numbered steps — connect the editor, paste one prompt that has the AI
- * set Mushi up and send a test report, ask it to fix a real bug. The steps are
+ * set Mushi Mushi up and send a test report, ask it to fix a real bug. The steps are
  * the cycle of ADR 0027 (connect, bugs come in, a fix you review), and each one
  * ends in what you should see.
  *
@@ -12,7 +12,7 @@
  * read the diagnosis (LANDING_INSTALL_LOVABLE).
  *
  * Every editor install is URL-only (`buildOAuthInstall`): the editor runs the
- * Mushi OAuth sign-in on first use, so the page needs no key. The Cursor
+ * Mushi Mushi OAuth sign-in on first use, so the page needs no key. The Cursor
  * badges are Cursor's official artwork, bundled under public/badges because
  * the docs CSP does not allow images from cursor.com.
  */

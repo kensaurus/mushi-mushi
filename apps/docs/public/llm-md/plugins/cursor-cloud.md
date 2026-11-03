@@ -15,7 +15,7 @@ The **Cursor Cloud Agent** plugin is a first-party plugin (slug: `cursor-cloud-a
 
 You do not need the npm package
 [`@mushi-mushi/plugin-cursor-cloud`](https://www.npmjs.com/package/@mushi-mushi/plugin-cursor-cloud)
-for any of this. Mushi calls Cursor itself; the package is only for running
+for any of this. Mushi Mushi calls Cursor itself; the package is only for running
 the same dispatch from your own server.
 
 ## Prerequisites
@@ -100,7 +100,7 @@ For a fix attempt: open **Fixes**, find the `cursor_cloud` row and expand it. Th
 - **Deliveries show an error**: the HTTP code is Cursor's answer. A `401` means the API key is wrong or expired.
 - **Agent runs but no PR**: check that PR creation is on in the **Cursor Cloud** card on the Integrations page, and that your Cursor account can reach the repo on GitHub. An agent that changes nothing opens no PR.
 - **A fix attempt stays open**: Mushi Mushi checks Cursor runs every 5 minutes and marks an attempt failed when it is still open after 24 hours. Check the run's status in Cursor.
-- **Self-hosted Node orchestrator can't read the key from Vault**: set `MUSHI_CURSOR_API_KEY_OVERRIDE` in the orchestrator's environment. Mushi Cloud reads the key from Vault and does not need this.
+- **Self-hosted Node orchestrator can't read the key from Vault**: set `MUSHI_CURSOR_API_KEY_OVERRIDE` in the orchestrator's environment. Mushi Mushi Cloud reads the key from Vault and does not need this.
 
 ## Related pages
 

@@ -81,7 +81,7 @@
         "mushiMushi.endpoint": {
           "type": "string",
           "default": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api",
-          "markdownDescription": "Mushi API base URL (`MUSHI_API_ENDPOINT`) used by the stdio transport. Point this at your self-hosted Supabase edge functions if you are not on Mushi Cloud."
+          "markdownDescription": "Mushi Mushi API base URL (`MUSHI_API_ENDPOINT`) used by the stdio transport. Point this at your self-hosted Supabase edge functions if you are not on Mushi Mushi Cloud."
         },
         "mushiMushi.mcpHttpUrl": {
           "type": "string",
@@ -91,12 +91,12 @@
         "mushiMushi.projectId": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Optional Mushi project UUID. Sent as `MUSHI_PROJECT_ID` (stdio) or `X-Mushi-Project-Id` (http)."
+          "markdownDescription": "Optional Mushi Mushi project UUID. Sent as `MUSHI_PROJECT_ID` (stdio) or `X-Mushi-Project-Id` (http)."
         },
         "mushiMushi.features": {
           "type": "string",
           "default": "triage,fixes,inventory,setup,docs",
-          "markdownDescription": "Comma-separated MCP feature groups to expose (lean default mirrors the Mushi CLI). Use `all` for every tool."
+          "markdownDescription": "Comma-separated MCP feature groups to expose (lean default mirrors the Mushi Mushi CLI). Use `all` for every tool."
         },
         "mushiMushi.useDemo": {
           "type": "boolean",

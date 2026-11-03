@@ -2,11 +2,11 @@
 
 > **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
-A bug widget for any website. When a user reports a problem, it sends a screenshot, the route, their note and the last console and network events to [Mushi Mushi](https://github.com/kensaurus/mushi-mushi). Mushi explains the cause in plain English and hands your editor a fix. It renders in a Shadow DOM, so your CSS and the widget's never mix.
+A bug widget for any website. When a user reports a problem, it sends a screenshot, the route, their note and the last console and network events to [Mushi Mushi](https://github.com/kensaurus/mushi-mushi). Mushi Mushi explains the cause in plain English and hands your editor a fix. It renders in a Shadow DOM, so your CSS and the widget's never mix.
 
 ```mermaid
 flowchart LR
-    A["User taps the widget"] --> B["Mushi diagnoses the bug"] --> C["Fix lands in your editor"]
+    A["User taps the widget"] --> B["Mushi Mushi diagnoses the bug"] --> C["Fix lands in your editor"]
 ```
 
 ## Quick start

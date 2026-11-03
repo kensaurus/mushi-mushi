@@ -12,7 +12,7 @@ description: Add the Mushi Mushi React SDK in one command. npx mushi-mushi insta
 Add the Mushi Mushi bug-report widget to a React app.
 
   **Coming from Create React App?** Migrate to Vite first: see
-  the [CRA → Vite migration guide](/migrations/cra-to-vite). All Mushi React
+  the [CRA → Vite migration guide](/migrations/cra-to-vite). All Mushi Mushi React
   examples below assume Vite + React 19.
 
 ## Try it live

@@ -87,6 +87,6 @@ do { try riskyOperation() } catch { Mushi.shared.captureError(error) }
 ## Sentry
 
 The Swift package has no Sentry bridge. Keep initialising Sentry in your app
-and attach context to Mushi reports with `Mushi.shared.setMetadata(_:value:)`.
+and attach context to Mushi Mushi reports with `Mushi.shared.setMetadata(_:value:)`.
 
 Full API: [`MushiMushi` (iOS)](/sdks/ios).

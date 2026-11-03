@@ -25,8 +25,8 @@ this page is the Mushi-aware companion to it.
   most common ones have an official Capacitor counterpart (table below).
 - Capacitor's native projects are first-class (`ios/`, `android/`): you
   commit them and edit them like any other Xcode / Android Studio project.
-- Mushi has a Capacitor plugin ([`@mushi-mushi/capacitor`](/sdks/capacitor))
-  with native shake-to-report and screenshot capture. There is no Mushi
+- Mushi Mushi has a Capacitor plugin ([`@mushi-mushi/capacitor`](/sdks/capacitor))
+  with native shake-to-report and screenshot capture. There is no Mushi Mushi
   Cordova plugin; in a Cordova app you would have run `@mushi-mushi/web`
   inside the WebView.
 
@@ -35,7 +35,7 @@ this page is the Mushi-aware companion to it.
 - Working Cordova app that builds for at least one platform.
 - For Capacitor 8: Node 22+, Xcode 26+ for iOS, Android Studio 2025.2.1+
   for Android ([environment setup](https://capacitorjs.com/docs/getting-started/environment-setup)).
-- A Mushi project. If you already use `@mushi-mushi/web` in the Cordova
+- A Mushi Mushi project. If you already use `@mushi-mushi/web` in the Cordova
   app, keep the same `projectId` and `apiKey`.
 
 ## API mapping (Cordova plugins → Capacitor)
@@ -126,9 +126,9 @@ npm uninstall cordova cordova-android cordova-ios
 rm -rf platforms plugins config.xml`},
 
       id: 'verify',
-      label: 'Smoke-test on a device, including a Mushi report',
+      label: 'Smoke-test on a device, including a Mushi Mushi report',
       optional: false,
-      content: <>Open the app, trigger the Mushi widget (shake or tap), submit a test report, and confirm it appears on the Reports page of the Mushi admin console. Filter by SDK to see only the Capacitor build.</>,
+      content: <>Open the app, trigger the Mushi Mushi widget (shake or tap), submit a test report, and confirm it appears on the Reports page of the Mushi Mushi admin console. Filter by SDK to see only the Capacitor build.</>,
 
 />
 
@@ -145,7 +145,7 @@ rm -rf platforms plugins config.xml`},
   `SplashScreen.hide()` once your app is mounted.
 - **`whitelist` plugin gone.** Capacitor uses native ATS (iOS) and
   `usesCleartextTraffic` (Android) instead of Cordova's whitelist. Add your
-  Mushi endpoint and any other API hosts to those if you allow non-HTTPS.
+  Mushi Mushi endpoint and any other API hosts to those if you allow non-HTTPS.
 
 ## Rollback
 
@@ -164,7 +164,7 @@ merge commit; Cordova builds will start working again immediately.
 
 - [Capacitor → React Native](/migrations/capacitor-to-react-native), if you later want to move on from Capacitor.
 - [`@mushi-mushi/capacitor` SDK reference](/sdks/capacitor)
-- [Capacitor bottom-dock notes](/sdks/capacitor-bottom-dock): keep the Mushi widget above your tab bar.
+- [Capacitor bottom-dock notes](/sdks/capacitor-bottom-dock): keep the Mushi Mushi widget above your tab bar.
 
 ## References
 

@@ -9,7 +9,7 @@ description: Run npx mushi-mushi, ship, and let Mushi Mushi turn your first user
 
 # Incident loop
 
-- A user reports a bug in your live app. Mushi explains it in plain English.
+- A user reports a bug in your live app. Mushi Mushi explains it in plain English.
 - Your editor pulls the diagnosis and a ready fix prompt over MCP.
 - Your AI applies the fix; you review and ship. No extra AI key needed.
 
@@ -27,7 +27,7 @@ agent fetch the details and close the report itself.
 
 ## Before you start
 
-- A Mushi project and API key ([credentials](/concepts/credentials)).
+- A Mushi Mushi project and API key ([credentials](/concepts/credentials)).
 - At least one report: from the SDK, the test report `npx mushi-mushi` offers, or a Sentry alert.
 - MCP connected to your editor ([MCP quickstart](/quickstart/mcp)). The agent needs write access to mark the report fixed. Signing in through the hosted MCP (the default for Cursor and Claude Code) gives it; a key with only `mcp:read` does not.
 
@@ -53,7 +53,7 @@ Existing report: open **Bugs** in the console and copy its ID, or ask the agent 
 
 In Cursor, ask:
 
-> Use Mushi MCP: call `get_fix_context` for report `` and summarize the root cause in plain English.
+> Use Mushi Mushi MCP: call `get_fix_context` for report `` and summarize the root cause in plain English.
 
 `get_fix_context` returns the classification, repro steps, blast radius and a
 **`fixPrompt`**: a paste-ready fix brief built on the server. For most bugs you
@@ -65,7 +65,7 @@ can paste `fixPrompt` straight into Cursor and skip to the last step.
 
 Run the MCP prompt **`summarize_report_for_fix`** with the same report ID, or ask:
 
-> Run the Mushi prompt `summarize_report_for_fix` for report ``. Give me a paste-ready Cursor prompt to fix it.
+> Run the Mushi Mushi prompt `summarize_report_for_fix` for report ``. Give me a paste-ready Cursor prompt to fix it.
 
 It combines `get_fix_context`, `get_blast_radius` and `get_similar_bugs` into one plan.
 

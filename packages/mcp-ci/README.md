@@ -194,7 +194,7 @@ jobs:
 
 | Output              | Description                                                                            |
 | ------------------- | -------------------------------------------------------------------------------------- |
-| `result`            | Raw JSON envelope returned by the Mushi API.                                           |
+| `result`            | Raw JSON envelope returned by the Mushi Mushi API.                                           |
 | `coverage`          | For `check-coverage`: observed classified ratio (0–1).                                 |
 | `findings`          | For `spec-drift`: JSON array of the oasdiff findings.                                  |
 | `ready_to_propose`  | For `discovery-status`: `'true'` once the project has a defensible-sized SDK sample.   |

@@ -9,8 +9,8 @@ Crashlytics issues.
 
 **Status on Mushi Mushi Cloud:** the console's **Marketplace** has no Crashlytics
 listing yet (checked 2026-10-29), so you can't install it from the console.
-On a Mushi server you run yourself, add a `plugin_registry` row for it and
-install it like any listed plugin. Getting Crashlytics crashes *into* Mushi is the
+On a Mushi Mushi server you run yourself, add a `plugin_registry` row for it and
+install it like any listed plugin. Getting Crashlytics crashes *into* Mushi Mushi is the
 separate `@mushi-mushi/adapters` package.
 
 ```bash
@@ -58,12 +58,12 @@ express().post('/mushi/webhook', expressMiddleware(handler)).listen(3000)
     underscores) to `"true"`, using the template ETag to avoid overwriting a
     concurrent change.
   - Crashlytics v1alpha: PATCHes the issue to `state: CLOSED`, but only when
-    the event carries a `crashlyticsIssueId`. Mushi does not send that field
+    the event carries a `crashlyticsIssueId`. Mushi Mushi does not send that field
     today, so in practice only the Remote Config flag is written.
 
 ## Notes
 
-- The plugin is **outbound-only**; for inbound Crashlytics → Mushi
+- The plugin is **outbound-only**; for inbound Crashlytics → Mushi Mushi
   ingestion use the Crashlytics adapter in `@mushi-mushi/adapters`.
 - Token refresh is the caller's responsibility: run the process behind a
   service-account refresher (Google ADC, IAM Workload Identity) or restart it

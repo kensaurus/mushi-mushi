@@ -141,5 +141,170 @@
         "detail": "Close it, send it back to an agent, or re-run CI, right from the list."
       }
     ]
+  },
+  "home-today": {
+    "id": "home-today",
+    "title": "Your app on one page",
+    "summary": "Home shows what needs you, what is shipping, which pages have bugs and who can reach the app.",
+    "video": "/walkthroughs/home-today.mp4?v=3c75b0ed4b",
+    "poster": "/walkthroughs/home-today.jpg?v=1b532cac8a",
+    "width": 1600,
+    "height": 1000,
+    "duration": 33.95,
+    "chapters": [
+      {
+        "t": 3.13,
+        "title": "Needs you lists what is waiting on you",
+        "detail": "Each line says how many and why, and its button opens that list."
+      },
+      {
+        "t": 10.78,
+        "title": "Release shows what is shipping",
+        "detail": "Fix ready, CI, the release train, merged and deployed, and the last train that went out."
+      },
+      {
+        "t": 15.55,
+        "title": "Pages shows where the bugs are",
+        "detail": "Each page of your app with its visits and bug reports, so the busiest broken page comes first."
+      },
+      {
+        "t": 21.22,
+        "title": "Check who and what can reach the app",
+        "detail": "The repo, the people on the app, the SDK version, and every key with when it was last used."
+      },
+      {
+        "t": 26,
+        "title": "Compare this week with last week",
+        "detail": "Bug reports, critical bugs, fixes merged and visits, side by side."
+      }
+    ]
+  },
+  "fixes-queue": {
+    "id": "fixes-queue",
+    "title": "Every fix, from the first try to the merge",
+    "summary": "The Fixes page shows what is ready to merge, why fixes stopped, and what waits in the merge queue.",
+    "video": "/walkthroughs/fixes-queue.mp4?v=3f6ecaa23b",
+    "poster": "/walkthroughs/fixes-queue.jpg?v=c595a96240",
+    "width": 1600,
+    "height": 1000,
+    "duration": 37.79,
+    "chapters": [
+      {
+        "t": 3.14,
+        "title": "The top line says where things stand",
+        "detail": "Ready to merge, stopped, and fixed in the last 30 days. Each number opens its list."
+      },
+      {
+        "t": 8.04,
+        "title": "See why fixes stopped",
+        "detail": "Stopped reports are grouped by reason. Retry the ones a retry can fix; the others say why not."
+      },
+      {
+        "t": 17.03,
+        "title": "Approved fixes wait in the merge queue",
+        "detail": "A second AI reviews every pull request. Approved ones ride the next release train; held ones say what they need."
+      },
+      {
+        "t": 26.56,
+        "title": "Filter the list and open any fix",
+        "detail": "Each row has the pull request, its CI and what the AI review said."
+      }
+    ]
+  },
+  "connect-tools": {
+    "id": "connect-tools",
+    "title": "Connect the tools you already use",
+    "summary": "GitHub for fix pull requests, Slack or Discord for alerts, Sentry for errors: one Integrations page.",
+    "video": "/walkthroughs/connect-tools.mp4?v=e3cfc8e964",
+    "poster": "/walkthroughs/connect-tools.jpg?v=a20cacb514",
+    "width": 1600,
+    "height": 1000,
+    "duration": 33.93,
+    "chapters": [
+      {
+        "t": 3.12,
+        "title": "See every connection at a glance",
+        "detail": "Green is working, orange needs you, grey is not set up yet."
+      },
+      {
+        "t": 8.08,
+        "title": "GitHub is the one Mushi Mushi needs",
+        "detail": "Fixes arrive as draft pull requests on the repository you pick."
+      },
+      {
+        "t": 12.86,
+        "title": "Get bug alerts in Slack",
+        "detail": "Add Mushi Mushi to Slack, then pick which events post: new bugs, fixes opened, fixes merged."
+      },
+      {
+        "t": 22.69,
+        "title": "Bring Sentry errors into the same list",
+        "detail": "New Sentry issues are imported on their own, and closed in Sentry when the fix ships."
+      }
+    ]
+  },
+  "settings-limits": {
+    "id": "settings-limits",
+    "title": "Set it up once in Settings",
+    "summary": "Where bug alerts go, how bugs are sorted, and how much Mushi Mushi may spend.",
+    "video": "/walkthroughs/settings-limits.mp4?v=d5b781555e",
+    "poster": "/walkthroughs/settings-limits.jpg?v=3b14ce838e",
+    "width": 1600,
+    "height": 1000,
+    "duration": 29.31,
+    "chapters": [
+      {
+        "t": 3.12,
+        "title": "Send a test bug any time",
+        "detail": "It checks the whole path, from the widget to the diagnosis."
+      },
+      {
+        "t": 7.48,
+        "title": "Choose where bug alerts go",
+        "detail": "A Slack channel with Triage and Fix buttons, or a simple webhook."
+      },
+      {
+        "t": 12.27,
+        "title": "Tune how bugs are sorted",
+        "detail": "Which AI models run, and how alike two reports must be to become one row."
+      },
+      {
+        "t": 18.11,
+        "title": "Cap what Mushi Mushi can spend",
+        "detail": "A monthly AI budget, an auto-fix limit, fixes per day, and a price above which it asks you first."
+      }
+    ]
+  },
+  "todo-list": {
+    "id": "todo-list",
+    "title": "Start your day in To-do",
+    "summary": "Everything in Mushi Mushi that needs a person, in the order to do it, with the button that does it.",
+    "video": "/walkthroughs/todo-list.mp4?v=e0d8535d39",
+    "poster": "/walkthroughs/todo-list.jpg?v=902e8285ca",
+    "width": 1600,
+    "height": 1000,
+    "duration": 27.15,
+    "chapters": [
+      {
+        "t": 3.12,
+        "title": "One line says how much is waiting",
+        "detail": "And what kind, so you know whether it is bugs to fix or a connection to repair."
+      },
+      {
+        "t": 7.91,
+        "title": "Work from the top down",
+        "detail": "Each card says what is wrong and what to do, with a button to the page where you do it."
+      },
+      {
+        "t": 15.51,
+        "title": "Broken connections show up here too",
+        "detail": "An expired key stops bugs and fixes moving. Reconnect it from its card."
+      },
+      {
+        "t": 20.08,
+        "title": "Filter by stage",
+        "detail": "Plan, Do, Check, Act and Ops: see which part of the loop is stuck."
+      }
+    ]
   }
 }

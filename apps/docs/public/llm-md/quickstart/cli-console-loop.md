@@ -47,7 +47,7 @@ framework's prefix: for example `VITE_MUSHI_PROJECT_ID` and
 on Expo. It adds `MUSHI_API_ENDPOINT` only when you point it at a self-hosted
 server.
 
-**You'll see:** a next-steps checklist in the terminal, and the Mushi settings in `.env.local`.
+**You'll see:** a next-steps checklist in the terminal, and the Mushi Mushi settings in `.env.local`.
 
 ### 5. Wire Cursor MCP (optional but recommended)
 
@@ -88,7 +88,7 @@ Without it, run the same command as `npx mushi-mushi …`, for example
 
   **SDK ingest keys** (`report:write` scope) come from **Set up → Test it** or
   **Manage apps** in the console. **Settings → AI keys** is for your own
-  LLM and Firecrawl keys, not Mushi project credentials.
+  LLM and Firecrawl keys, not Mushi Mushi project credentials.
 
 ## Browser sign-in flow (recommended)
 

@@ -9,7 +9,7 @@ description: Turn Sentry, Datadog, Bugsnag and other monitoring webhooks into Mu
 
 # `@mushi-mushi/adapters`
 
-Already send errors to Sentry, Crashlytics, Bugsnag or Rollbar? These webhook handlers forward them into Mushi Mushi, so a crash lands in the same queue as your users' bug reports and gets the same plain-English diagnosis and ready fix. You do not need any of these tools to use Mushi; this package is only for when you already have one.
+Already send errors to Sentry, Crashlytics, Bugsnag or Rollbar? These webhook handlers forward them into Mushi Mushi, so a crash lands in the same queue as your users' bug reports and gets the same plain-English diagnosis and ready fix. You do not need any of these tools to use Mushi Mushi; this package is only for when you already have one.
 
 ## Install
 
@@ -72,9 +72,9 @@ app.post('/webhooks/datadog', async (c) => {
 
 ## Severity mapping
 
-Each adapter normalises the source's native severity onto Mushi's four-level scale.
+Each adapter normalises the source's native severity onto Mushi Mushi's four-level scale.
 
-| Mushi      | Sentry (`level`) | Datadog | New Relic (`priority`) | Honeycomb (contains) | Grafana / AM   |
+| Mushi Mushi      | Sentry (`level`) | Datadog | New Relic (`priority`) | Honeycomb (contains) | Grafana / AM   |
 | ---------- | ---------------- | ------- | ---------------------- | -------------------- | -------------- |
 | `critical` | fatal            | P1      | critical               | critical             | critical, page |
 | `high`     | error            | P2      | high                   | high, error          | high, error    |

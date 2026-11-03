@@ -27,7 +27,7 @@ The `soc2-evidence` edge function runs daily at 04:30 UTC and writes one row per
 | CC8.1 DSAR handling | Pending data-subject requests older than 30 days | Daily |
 | A1.2 Availability | 7-day uptime ratio from the health probes | Daily |
 
-Other controls rely on the platform rather than on Mushi code:
+Other controls rely on the platform rather than on Mushi Mushi code:
 
 | Control | Mechanism |
 | --- | --- |
@@ -67,7 +67,7 @@ Retention is set per project in **Compliance → Retention** and stored in `proj
 | `byok_audit_retention_days` | 365 | Must be greater than 0 |
 | `legal_hold` | off | When on, nothing in the project is deleted |
 
-On Mushi Cloud the daily `retention-sweep` job also applies your plan's window (Free 14 days, Builder 90, Studio 180) when the project has no explicit policy. It hard-deletes expired reports and writes one `audit_logs` row per project with the count.
+On Mushi Mushi Cloud the daily `retention-sweep` job also applies your plan's window (Free 14 days, Builder 90, Studio 180) when the project has no explicit policy. It hard-deletes expired reports and writes one `audit_logs` row per project with the count.
 
 ## DSAR (Data Subject Access Request)
 

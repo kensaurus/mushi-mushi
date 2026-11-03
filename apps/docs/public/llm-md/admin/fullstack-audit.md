@@ -21,7 +21,7 @@ prompt**. The list says "at least" only when it could not get an exact count, an
 then says why (only the newest 500 findings were read).
 
 **Known holes in your dependencies** (vuln-watch, [known holes](/concepts/known-holes))
-are listed and managed at the end of this page (`#dependency-holes`). Mushi health →
+are listed and managed at the end of this page (`#dependency-holes`). Mushi Mushi health →
 Code size links here instead of repeating them.
 
 > **Scenario:** It's Monday standup. You need a PM-readable health scorecard —
@@ -41,11 +41,11 @@ returns a severity-ranked scorecard.
 | **DB advisors** | Security + performance findings from Supabase MCP |
 | **RLS gaps** | Tables without row-level security |
 | **Error log** | Recent backend ERROR-level log count |
-| **Gate runs** | The newest run of every check in the last 7 days, by name: the eight inventory gates, schema drift, code health, the recipe drift checks (design, CI, deploy, env vars), Mushi setup checks, the app hole checks and the store review checklist |
+| **Gate runs** | The newest run of every check in the last 7 days, by name: the eight inventory gates, schema drift, code health, the recipe drift checks (design, CI, deploy, env vars), Mushi Mushi setup checks, the app hole checks and the store review checklist |
 
 If a part of the audit could not be read (the settings, the advisors, the logs,
 the table list or the gate runs), the page lists it and the verdict reads
-**Incomplete**, never **All clear**. A count Mushi could not read is shown as
+**Incomplete**, never **All clear**. A count Mushi Mushi could not read is shown as
 `—`, not `0`.
 
 ---
@@ -58,9 +58,9 @@ reads `GET /v1/admin/inventory/:projectId/findings`, the same data as the MCP
 tool `list_gate_findings`. Running gates, crawls and test generation still need
 a plan with the inventory features.
 
-### Mushi setup checks and "Apply suggested caps"
+### Mushi Mushi setup checks and "Apply suggested caps" [#mushi-setup-checks-and-apply-suggested-caps]
 
-Once a day Mushi checks its own setup for each app (gate `radar`): a provider
+Once a day Mushi Mushi checks its own setup for each app (gate `radar`): a provider
 key the provider now rejects, a webhook that never delivered, a stale code
 index, and **missing spend caps**. The spend-cap check flags a project with no
 monthly AI budget, and auto-fix limits that are not set (a warning while
@@ -106,7 +106,7 @@ mushi audit --project-id <uuid>
 
 ## Related pages
 
-- [Code size](/admin/code-health) — bundle + god-file trends from CI ingest (Mushi health → Code size)
-- [Schema changes](/admin/drift) — scheduled schema drift findings (Mushi health → Schema changes)
-- [Mushi health](/admin/health) — Slack / Sentry / GitHub probe status
+- [Code size](/admin/code-health) — bundle + god-file trends from CI ingest (Mushi Mushi health → Code size)
+- [Schema changes](/admin/drift) — scheduled schema drift findings (Mushi Mushi health → Schema changes)
+- [Mushi Mushi health](/admin/health) — Slack / Sentry / GitHub probe status
 - [User stories](/admin/inventory) — the same findings next to the inventory graph (inventory plans)

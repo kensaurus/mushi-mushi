@@ -107,7 +107,7 @@ See the admin **Catalog** tab for the full list. Names below match `tools/call` 
 | `get_similar_bugs` | pgvector nearest-neighbour duplicates |
 | `search_reports` | Semantic + keyword search |
 | `diagnose_setup` | Unified ingest + MCP + dispatch diagnosis |
-| `search_mushi_docs` | Keyword search over Mushi documentation |
+| `search_mushi_docs` | Keyword search over Mushi Mushi documentation |
 | `query_lessons` / `list_lessons` | Evolution-loop learning rules |
 | `get_inventory` / `diff_inventory` | Inventory v2 snapshot and gate diff |
 

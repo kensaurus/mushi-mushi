@@ -15,7 +15,7 @@ The Design system page in Mushi Mushi reads the token files `mushi.recipe.json` 
 
 **App blueprint** in the header opens `/recipe`. **Tokens** and **Directions** switch the view. Directions is `?view=directions`.
 
-With no token files read yet, the page is one step: point Mushi at the files where your colours, spacing and fonts live (**Show me how** opens the recipe-file guide).
+With no token files read yet, the page is one step: point Mushi Mushi at the files where your colours, spacing and fonts live (**Show me how** opens the recipe-file guide).
 
 ## Tokens
 
@@ -34,7 +34,7 @@ When the project has more than one token set, a switch lists them and marks the 
 | **Token catalogue** | Closed until the edit queue has an edit. Swatches, Latin and Thai type samples, spacing bars, radius boxes, motion values, and other tokens. Filter by name. The first 12 tokens in a section, then **View all**. **Edit** queues a new value. |
 | **CSS variables by scope** | One column per `:root`, `@theme`, or declared selector, when the API sends scopes. |
 | **Components** | Name and file for each primitive matched from the recipe's component globs. |
-| **Drift rules** | Enabled, severity (`info`, `warn`, `error`), allowed values, skipped-file globs, and whether the rule is from `mushi.recipe.json` or a Mushi default. |
+| **Drift rules** | Enabled, severity (`info`, `warn`, `error`), allowed values, skipped-file globs, and whether the rule is from `mushi.recipe.json` or a Mushi Mushi default. |
 
 If editing is off, the page says so and gives the reason. The two switches under **When the score is too high** are **Fail mushi recipe check --push above the threshold** and **Dispatch a fix for new drift above the threshold**. When dispatch is on and Autofix is off for the project, a warning says nothing will be dispatched until Autofix is on. Its spend and per-day caps apply.
 

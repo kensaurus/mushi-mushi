@@ -11,7 +11,7 @@ description: Agent skills in Mushi Mushi recommend skills from the kenji skills 
 
 **Route:** `/skills` (sidebar: **Agent skills**, under Connect; the page was called Skill Pipelines before)
 
-Agent skills bring the [kenji skills / skills.sh](https://github.com/kensaurus/skills) agent-skill ecosystem into Mushi Mushi bug review. When a bug report is classified, Mushi recommends the most relevant Cursor agent skills — and you can attach a skill chain to any report, visualize it as a live React Flow pipeline, and execute it either as a handoff to your local Cursor agent or automatically via Cursor Cloud.
+Agent skills bring the [kenji skills / skills.sh](https://github.com/kensaurus/skills) agent-skill ecosystem into Mushi Mushi bug review. When a bug report is classified, Mushi Mushi recommends the most relevant Cursor agent skills — and you can attach a skill chain to any report, visualize it as a live React Flow pipeline, and execute it either as a handoff to your local Cursor agent or automatically via Cursor Cloud.
 
 ---
 
@@ -49,7 +49,7 @@ Manage the GitHub repos whose SKILL.md files are synced into your project's cata
 
 | Mode | Description | When to use |
 |------|-------------|-------------|
-| **Handoff** (default) | Mushi composes a run packet you paste into Cursor | Local development, free, full Cursor IDE experience |
+| **Handoff** (default) | Mushi Mushi composes a run packet you paste into Cursor | Local development, free, full Cursor IDE experience |
 | **Cloud** (opt-in) | Each step dispatches a Cursor Cloud agent run automatically | CI pipelines, async execution, PM-driven automation |
 
 ---

@@ -121,10 +121,10 @@ Plain text messages work the same way. Voice notes are capped at 120 seconds and
 
 ## Slack
 
-Two ways in, both need the Mushi Slack app installed with `files:read`, `commands` and `chat:write`:
+Two ways in, both need the Mushi Mushi Slack app installed with `files:read`, `commands` and `chat:write`:
 
 - **Slash command**: `/mushi voice fix the footer alignment on checkout`. The reply is ephemeral and the confirmation uses the same buttons as fix dispatch.
-- **Audio clip**: record a Slack audio clip (or share an audio file) in a channel the app is in. Mushi downloads the clip with the bot token, transcribes it, and replies in a thread. Slack's own transcript is ignored.
+- **Audio clip**: record a Slack audio clip (or share an audio file) in a channel the app is in. Mushi Mushi downloads the clip with the bot token, transcribes it, and replies in a thread. Slack's own transcript is ignored.
 
 ## Installed console (PWA)
 

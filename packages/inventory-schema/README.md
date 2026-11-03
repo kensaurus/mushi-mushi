@@ -53,8 +53,8 @@ The Zod schema (and a hand-written JSON Schema copy) for what your app says it d
 Error tools catch what crashes, and tests catch what someone tested. Neither
 catches a handler that ships wired to nothing, because nothing throws.
 
-Each element declares its `backend` routes and `verified_by` tests. Mushi
-Mushi's status reconciler then marks each action `stub`, `mocked`, `wired`,
+Each element declares its `backend` routes and `verified_by` tests. Mushi Mushi
+Mushi Mushi's status reconciler then marks each action `stub`, `mocked`, `wired`,
 `verified` or `regressed` from what it can observe: lint results, the API
 contract diff, CI test results, the synthetic monitor and user reports. Your
 `inventory.yaml` is what those signals are compared against.

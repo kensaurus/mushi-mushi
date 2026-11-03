@@ -77,7 +77,7 @@ same project, same `apiKey`, dual-ship Cordova/Capacitor and RN at the
 same time, sunset the legacy build only after the RN one has been stable for
 a week in beta.
 
-You'll touch the Mushi SDK exactly once per hop:
+You'll touch the Mushi Mushi SDK exactly once per hop:
 
 - **Hop 1 (Cordova → Capacitor):** replace `@mushi-mushi/web` in the
   WebView (if you used it) with [`@mushi-mushi/capacitor`](/sdks/capacitor)
@@ -93,7 +93,7 @@ You'll touch the Mushi SDK exactly once per hop:
   steps={[
     { id: 'audit', label: 'Audit Cordova plugins (per the Cap→RN plugin map)', content: <>Walk the plugin list once at the start. Anything without a Capacitor or RN equivalent is the long pole — budget time for a TurboModule wrapper.</> },
     { id: 'hop1-cap', label: 'Hop 1: complete Cordova → Capacitor', content: <>Follow the <a href="/migrations/cordova-to-capacitor">Cordova → Capacitor checklist</a> end-to-end. Ship to production. <strong>Stop here for at least a week</strong> to let real users hit the new build before starting hop 2.</> },
-    { id: 'hop1-mushi', label: 'Verify Mushi reports flow on the Capacitor build', content: <>Open the Mushi admin console; filter Reports by SDK and confirm reports from <code>@mushi-mushi/capacitor</code> are landing. Don't proceed to hop 2 until you have ≥ 1 day of clean Capacitor reports in production.</> },
+    { id: 'hop1-mushi', label: 'Verify Mushi Mushi reports flow on the Capacitor build', content: <>Open the Mushi Mushi admin console; filter Reports by SDK and confirm reports from <code>@mushi-mushi/capacitor</code> are landing. Don't proceed to hop 2 until you have ≥ 1 day of clean Capacitor reports in production.</> },
     { id: 'hop2-bootstrap', label: 'Hop 2: bootstrap the RN project (current RN, New Architecture)', content: <>Create a sibling RN project per <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/migrations/capacitor-to-react-native.md#51-project-bootstrap-with-the-new-architecture">§ 5.1 of the plan</a>. Don't try to port in place — keep the Capacitor app shippable.</> },
     { id: 'hop2-screens', label: 'Port screens one at a time', content: <>Lift the screen's React/JSX, swap web components for RN primitives (View, Text, ScrollView, FlashList). Keep the same fetcher / state layer where possible.</> },
     { id: 'hop2-mushi', label: 'Mount @mushi-mushi/react-native + smoke-test', content: <pre className="text-xs">{`import { MushiProvider } from '@mushi-mushi/react-native'
@@ -109,7 +109,7 @@ export default function App() {
     </MushiProvider>
   )
 }`}</pre> },
-    { id: 'dual-ship', label: 'Dual-ship Capacitor + RN for ≥ 2 weeks', content: <>Both builds report to the same Mushi project. Filter Reports by SDK to compare the two builds before sunsetting Capacitor.</> },
+    { id: 'dual-ship', label: 'Dual-ship Capacitor + RN for ≥ 2 weeks', content: <>Both builds report to the same Mushi Mushi project. Filter Reports by SDK to compare the two builds before sunsetting Capacitor.</> },
     { id: 'sunset', label: 'Sunset the Cordova/Capacitor build', content: <>Once the RN build has been live for 2 weeks with no P0 reports, push the legacy build to deprecation in App Store Connect / Play Console.</> },
   ]}
 />
@@ -124,14 +124,14 @@ export default function App() {
     { id: 'design-system', label: 'Port your design system to RN primitives or a kit (NativeWind / Tamagui)', content: <>Plan for ~1 week of token / theme work before any screens move.</> },
     { id: 'screen-port', label: 'Port screens and feature-freeze the Cordova build', content: <>Keep a list of in-progress screens. Mark each as it lands.</> },
     { id: 'mushi-rn', label: 'Mount @mushi-mushi/react-native (same projectId / apiKey)', content: <>Same code as Path A.</> },
-    { id: 'beta', label: 'Closed beta on TestFlight / Play Internal', content: <>Run for ≥ 1 week. Watch the Mushi inbox daily.</> },
+    { id: 'beta', label: 'Closed beta on TestFlight / Play Internal', content: <>Run for ≥ 1 week. Watch the Mushi Mushi inbox daily.</> },
     { id: 'cutover', label: 'Cutover and sunset Cordova', content: <>Push to production once the beta is clean. Archive the Cordova repo.</> },
   ]}
 />
 
 ## Verification
 
-- The Mushi Reports page shows reports from `@mushi-mushi/react-native`
+- The Mushi Mushi Reports page shows reports from `@mushi-mushi/react-native`
   sent from a real device.
 - Cold start on a mid-range Android device is no slower than the Cordova
   baseline (measure both; results vary by app).

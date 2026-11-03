@@ -15,11 +15,11 @@ Send every Mushi Mushi event to Zapier and on to the thousands of apps Zapier co
 
 1. In Zapier, create a **Zap** with the **Webhooks by Zapier → Catch Hook** trigger.
 2. Copy the webhook URL (e.g. `https://hooks.zapier.com/hooks/catch/…`).
-3. In Mushi: **Marketplace → Zapier Bridge → Install**.
-4. Paste the Catch Hook URL as the webhook URL and keep the signing secret Mushi generates.
+3. In Mushi Mushi: **Marketplace → Zapier Bridge → Install**.
+4. Paste the Catch Hook URL as the webhook URL and keep the signing secret Mushi Mushi generates.
 5. Optionally narrow the subscribed events (e.g. only `report.classified`, `fix.applied`).
 
-Zapier then receives Mushi's envelope as is: `{ event, deliveryId,
+Zapier then receives Mushi Mushi's envelope as is: `{ event, deliveryId,
 occurredAt, projectId, pluginSlug, data }`, with the report under
 `data.report` for report and fix events (see [Webhook events](/plugins/events)
 for each payload). The listing subscribes to every event (`*`), including the
@@ -29,7 +29,7 @@ signature, so anyone who learns the Catch Hook URL can post to it.
 ## Setup (with the relay package)
 
 [`@mushi-mushi/plugin-zapier`](https://www.npmjs.com/package/@mushi-mushi/plugin-zapier)
-runs between Mushi and Zapier. It checks Mushi's signature and forwards a
+runs between Mushi Mushi and Zapier. It checks Mushi Mushi's signature and forwards a
 flat payload (`event`, `report_id`, `report_status`, `report_severity`,
 `report_title`, …, plus the full envelope under `raw`).
 

@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi
 
 ---
 title: Sentry vs Mushi Mushi
-description: Sentry vs Mushi Mushi in 2026. What each captures, Sentry's free tier and Seer pricing next to Mushi's free plan (1 app, 100 diagnoses), and running both.
+description: Sentry vs Mushi Mushi in 2026. What each captures, Sentry's free tier and Seer pricing next to Mushi Mushi's free plan (1 app, 100 diagnoses), and running both.
 ---
 
 # Sentry vs Mushi Mushi
@@ -30,17 +30,17 @@ source-map symbolication across many platforms, and a mature alerting model.
 If your app is instrumented to the hilt and a team reads the dashboards,
 Sentry alone is a fine choice.
 
-Mushi starts from the other end. The signal is a person saying "this is
+Mushi Mushi starts from the other end. The signal is a person saying "this is
 broken" inside your app, and the output is a diagnosis you can read without
 opening a stack trace, plus a fix prompt scoped to the files involved. It
 matters most when you did not write most of the code, which is the normal
 case for an app built with Cursor, Claude Code or Lovable.
 
-## Running Mushi alongside Sentry
+## Running Mushi Mushi alongside Sentry [#running-mushi-alongside-sentry]
 
-Keep Sentry where it is. Point a Sentry issue-alert webhook at Mushi and every
+Keep Sentry where it is. Point a Sentry issue-alert webhook at Mushi Mushi and every
 error lands in the same queue as user reports, deduped and diagnosed; with the
-outbound Sentry plugin (Builder and above, or self-hosted), Mushi resolves the
+outbound Sentry plugin (Builder and above, or self-hosted), Mushi Mushi resolves the
 linked Sentry issue when the fix merges. The setup is three steps
 on the [Sentry plugin page](/plugins/sentry), and there is a
 [migration guide](/migrations/sentry-to-mushi) for the enrich-or-standalone
@@ -52,16 +52,16 @@ as its own monthly charge, separate from pay-as-you-go; the price and what
 counts as an active contributor are in the Sentry table above, from
 [Sentry's pricing docs](https://docs.sentry.io/pricing/). Seer is not
 available in Sentry self-hosted, so the AI layer is cloud-only on their
-side. And Mushi's diagnosis runs on every plan, including self-hosted with
+side. And Mushi Mushi's diagnosis runs on every plan, including self-hosted with
 your own LLM key.
 
 ## Pick Sentry if
 
-- You need tracing, profiling, release health or platform coverage Mushi does
+- You need tracing, profiling, release health or platform coverage Mushi Mushi does
   not have (native iOS symbolication, for example).
 - A team already reads Sentry every day and the workflow works.
 
-## Pick Mushi if
+## Pick Mushi Mushi if [#pick-mushi-if]
 
 - Users tell you about bugs and you want the report to arrive already
   explained, with the screenshot they were looking at.

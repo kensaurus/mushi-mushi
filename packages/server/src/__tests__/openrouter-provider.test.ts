@@ -179,6 +179,17 @@ describe('call sites', () => {
     }
   })
 
+  it('the judge leaves the vendor prefix to openAiProvider', () => {
+    // Every saved OpenAI key stores api.openai.com as its base URL. judge-batch
+    // prefixed the model whenever a base URL was set, so OpenAI got
+    // `openai/gpt-5.4` and answered "invalid model ID" on every judge call
+    // (MUSHI-MUSHI-SERVER-3N, 2026-10-30..11-03).
+    const src = read('judge-batch/index.ts')
+    expect(src).not.toMatch(/normalizeGatewayModel|`openai\/\$\{/)
+    expect(openAiCompatibleModelId('gpt-5.4', 'https://api.openai.com/v1')).toBe('gpt-5.4')
+    expect(openAiCompatibleModelId('gpt-5.4', 'https://openrouter.ai/api/v1')).toBe('openai/gpt-5.4')
+  })
+
   it('a resolved key always brings its base URL, so an OpenRouter key never reaches api.openai.com', () => {
     for (const f of ['pdca-runner/index.ts', 'test-gen-from-story/index.ts']) {
       expect(read(f), f).not.toMatch(/openAiProvider\(\{ apiKey: [A-Za-z.]+\.key \}\)/)

@@ -158,4 +158,4 @@ DELETE /v1/admin/prompt-lab/prompts/:id
 
 - [Triage grading](/admin/judge) — nightly judge scores
 - [Fine-tuning](/admin/fine-tuning) — train a small model from your classified reports
-- [Mushi health](/admin/health) — check Mushi's AI calls before testing prompt changes
+- [Mushi Mushi health](/admin/health) — check Mushi Mushi's AI calls before testing prompt changes

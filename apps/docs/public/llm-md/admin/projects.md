@@ -72,7 +72,7 @@ Each project card lists its API keys:
 3. Copy the key immediately. It is only shown once in plaintext.
 
 SDK ingest keys are for use in your frontend/mobile SDK. MCP read + write keys grant
-write access to Mushi via MCP tools: treat them like a service-role key and store them
+write access to Mushi Mushi via MCP tools: treat them like a service-role key and store them
 only in server-side environments.
 
 ---

@@ -9,7 +9,7 @@ description: How Mushi Mushi's maintainers ship the SDKs, edge functions, consol
 
 # Deployment & releases
 
-A public summary of how Mushi ships. The full maintainer runbook lives in the
+A public summary of how Mushi Mushi ships. The full maintainer runbook lives in the
 repo at [`docs/DEPLOYMENT.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/DEPLOYMENT.md).
 
   Maintainers only. App developers integrating the SDK never need to run any of
