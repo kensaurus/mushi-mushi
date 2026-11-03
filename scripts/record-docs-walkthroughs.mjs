@@ -34,7 +34,7 @@
 import { createRequire } from 'node:module'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -321,8 +321,8 @@ async function record(journey) {
     colorScheme: journey.colorScheme ?? 'dark',
     args: ['--hide-scrollbars'],
   })
-  const workDir = join(tmpdir(), `mushi-walkthrough-${journey.id}-${Date.now()}`)
-  mkdirSync(workDir, { recursive: true })
+  // mkdtemp: an unguessable, private directory for the frames.
+  const workDir = mkdtempSync(join(tmpdir(), `mushi-walkthrough-${journey.id}-`))
   try {
     await guard(ctx)
     await ctx.addInitScript({ content: `window.__WT_PRIVACY__ = ${JSON.stringify(PRIVACY)};\n${OVERLAY}` })
@@ -340,7 +340,7 @@ async function record(journey) {
         await d.run(step)
         await d.checkPrivacy(step)
       } catch (e) {
-        const shot = join(tmpdir(), `walkthrough-${journey.id}-failed.png`)
+        const shot = join(mkdtempSync(join(tmpdir(), 'mushi-walkthrough-failed-')), `${journey.id}.png`)
         await page.screenshot({ path: shot }).catch(() => {})
         throw new Error(`${e.message}\n  screen at failure: ${shot}`)
       }
@@ -376,7 +376,12 @@ const wanted = process.argv.slice(2)
 const list = wanted.length ? JOURNEYS.filter((j) => wanted.includes(j.id)) : JOURNEYS
 if (wanted.length && list.length !== wanted.length) fail(`unknown journey in: ${wanted.join(', ')}`)
 mkdirSync(OUT_DIR, { recursive: true })
-const data = existsSync(DATA_FILE) ? JSON.parse(readFileSync(DATA_FILE, 'utf8')) : {}
+let data = {}
+try {
+  data = JSON.parse(readFileSync(DATA_FILE, 'utf8'))
+} catch (e) {
+  if (e.code !== 'ENOENT') throw e
+}
 for (const j of list) {
   data[j.id] = await record(j)
   writeFileSync(DATA_FILE, `${JSON.stringify(data, null, 2)}\n`)

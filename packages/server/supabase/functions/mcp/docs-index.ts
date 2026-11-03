@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 226 pages, generated from llms.txt. */
+/** 227 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -39,7 +39,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/",
     markdown: "index.md",
     keywords: ["know", "ai-built", "app", "broke", "fix", "ready"],
-    headings: ["What it takes", "Why I built it", "What this is (and is not)"],
+    headings: ["See it work, on a real bug", "What it takes", "Why I built it", "What this is (and is not)"],
     excerpt: "Your AI shipped it. Mushi Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional.",
   },
   {
@@ -986,6 +986,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["demo", "diagnosis", "sample", "pay", "now", "does", "nothing", "phone"],
     headings: ["Get this for your own app", "One the model wrote"],
     excerpt: "A sample Mushi Mushi diagnosis you can read without signing up. A user's complaint, what the widget captured, the plain-English cause and the fix prompt.",
+  },
+  {
+    title: "How Mushi Mushi works, shown on real screens",
+    url: docUrl("/how-it-works"),
+    route: "/how-it-works",
+    markdown: "how-it-works.md",
+    keywords: ["how-it-works", "works", "shown", "real", "screens"],
+    headings: ["How a bug moves", "What it fixes about bug tracking today", "1. Your user reports a bug", "2. From the report to a merged fix", "3. Connect your AI editor", "4. Watch every fix ship", "Where to go next"],
+    excerpt: "Watch a bug go from a user's report to a merged fix: the report button, the plain-English diagnosis, the fix prompt for your editor, and the pipeline.",
   },
   {
     title: "Cursor integration",
