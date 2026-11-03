@@ -11,21 +11,21 @@ description: Use your own Anthropic, OpenAI or OpenRouter key for a Mushi Mushi 
 
 > **Scenario:** Your company policy requires that all LLM calls use an API key that belongs to your own Anthropic / OpenAI account so usage appears in your own billing dashboard and never routes through a third party.
 
-Mushi Mushi supports project-scoped BYOK. When set, the classifier, judge, fix, review and intelligence-report runs for that project use your key, so usage shows up in your provider console, not Mushi's.
+Mushi Mushi supports project-scoped BYOK. When set, the classifier, judge, fix, review and intelligence-report runs for that project use your key, so usage shows up in your provider console, not Mushi Mushi's.
 
 ## Setup
 
 In the admin console: **Settings → AI keys**.
 
-1. Find the service's row (Anthropic, OpenAI, OpenRouter, Cursor, Firecrawl, Browserbase or Supabase) and click **Add key**. You can paste `OPENAI_API_KEY=sk-…` or a quoted value; Mushi strips the name and quotes.
-2. Click **Save & validate**. Mushi checks the key with the provider first (a free call), then stores it in **Supabase Vault**. The database row keeps only the secret's ID, and the key is never returned to the browser.
-3. Add more than one key for a service and Mushi moves to the next one when a key is rejected or runs out of quota.
+1. Find the service's row (Anthropic, OpenAI, OpenRouter, Cursor, Firecrawl, Browserbase or Supabase) and click **Add key**. You can paste `OPENAI_API_KEY=sk-…` or a quoted value; Mushi Mushi strips the name and quotes.
+2. Click **Save & validate**. Mushi Mushi checks the key with the provider first (a free call), then stores it in **Supabase Vault**. The database row keeps only the secret's ID, and the key is never returned to the browser.
+3. Add more than one key for a service and Mushi Mushi moves to the next one when a key is rejected or runs out of quota.
 
 ## One key for every app
 
 A new key is used by **All my apps** by default: every app in every organization you own, so you add it once even when your apps live in several organizations. The add form's **Use this key for** picker also offers **This organization** (every app in it) and **This app only**.
 
-- Each app tries its keys in this order: its own key, its old single key from before key pools, its organization's key, the all-apps keys of its organization's owners, then Mushi's own key. A shared key is a fallback or backup, never a replacement for an app's own key.
+- Each app tries its keys in this order: its own key, its old single key from before key pools, its organization's key, the all-apps keys of its organization's owners, then Mushi Mushi's own key. A shared key is a fallback or backup, never a replacement for an app's own key.
 - An all-apps key reaches only organizations where you are an **owner**, never one you only administer or belong to. Only you can test, turn off, change or remove it; other members see it read-only on the apps it serves.
 - A key's row shows where it is used (**All my apps**, **All apps in …**, **This app only**). Change it with the row's **Used by** picker; the move is confirmed first and recorded in the key audit log.
 - An organization key is managed by the organization's owners and admins. Turning off or removing an organization or all-apps key affects every app that uses it, so the confirmation says so.
@@ -47,7 +47,7 @@ A new key is used by **All my apps** by default: every app in every organization
 | Search, similar bugs, codebase index | OpenAI `text-embedding-3-small` |
 | Voice reports | OpenAI `gpt-transcribe` |
 
-Your own keys are used first (the app's, then your organization's shared keys, then its owners' all-apps keys); when there are none for a provider, Mushi's platform key is used where the server has one. Set both Anthropic and OpenAI keys to keep every call on your accounts.
+Your own keys are used first (the app's, then your organization's shared keys, then its owners' all-apps keys); when there are none for a provider, Mushi Mushi's platform key is used where the server has one. Set both Anthropic and OpenAI keys to keep every call on your accounts.
 
 ## OpenRouter
 
@@ -75,4 +75,4 @@ order by ts desc;
 
 ## Which key a call used
 
-Every model call is recorded in `llm_invocations` with `key_source` set to `byok` (one of your keys) or `env` (Mushi's platform key). The console's cost views count BYOK calls from this column.
+Every model call is recorded in `llm_invocations` with `key_source` set to `byok` (one of your keys) or `env` (Mushi Mushi's platform key). The console's cost views count BYOK calls from this column.

@@ -9,7 +9,7 @@ interface QuickstartGridProps {
 }
 
 /**
- * Real product logo for a quickstart card, falling back to the Mushi mark.
+ * Real product logo for a quickstart card, falling back to the Mushi Mushi mark.
  *
  * Every card used to render the same brand mark, so the React, MCP and mobile
  * tiles were visually identical — the page asserted "we support your stack"

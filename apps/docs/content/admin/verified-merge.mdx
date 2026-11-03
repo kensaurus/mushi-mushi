@@ -27,7 +27,7 @@ from zero. The fix card in the console shows the list, and so does
 | --- | --- | --- |
 | **Opus review** | The [Opus review](/concepts/agent-pr-review) of this commit says `merge` | Read the findings. `fix_first` and `hold` block. |
 | **CI** | Every check on the commit is green | A stopped test machine counts as waiting, never as a pass ([CI runners](/operating/ci-runners)). |
-| **Test proves the fix** | The **Mushi verify** check says `fail_to_pass` | Add the workflow below, or ask the agent for a test that reproduces the bug. |
+| **Test proves the fix** | The **Mushi Mushi verify** check says `fail_to_pass` | Add the workflow below, or ask the agent for a test that reproduces the bug. |
 | **No tests weakened** | No test file deleted, no assertions removed, no `.skip`, `.only`, `@ts-ignore` or `eslint-disable` added, no CI config changed, no big snapshot update. A lockfile may change only for a dependency report, beside the manifest it comes from (`package.json` for `package-lock.json`…); for a [known-hole](../concepts/known-holes) report that manifest change must name the package | Undo the change to the test, or merge it yourself. |
 | **Small change** | At most 3 source files and 150 changed lines (you can raise both) | A big change needs a person. |
 | **Second review** | A model from another family (OpenAI or OpenRouter, on your own key) says `merge` | It runs only after the other five pass. Without a key it reads **unavailable** and blocks automatic merge. |
@@ -44,7 +44,7 @@ The **Test proves the fix** gate needs one workflow in your repo. Get it with
 your runner labels and test command already filled in, in any of three ways:
 
 - Console: **Settings → General → Fixes and CI** (click **Show**) **→ Verified merge →
-  Mushi verify workflow → Open a PR that adds it**, or **Copy workflow**.
+  Mushi Mushi verify workflow → Open a PR that adds it**, or **Copy workflow**.
 - Terminal: `mushi verify workflow --out .github/workflows/mushi-verify.yml`,
   then commit it to your default branch.
 - By hand: save the file below as `.github/workflows/mushi-verify.yml` and
@@ -121,18 +121,18 @@ It runs only on PRs from `cursor/…`, `mushi/…` and `copilot/…` branches in
 your own repo, needs only `contents: read` and `checks: write`, and stops after
 20 minutes. It spends no Actions minutes on:
 
-- a **draft** PR: it runs when the PR is marked ready for review. Mushi opens
+- a **draft** PR: it runs when the PR is marked ready for review. Mushi Mushi opens
   its own fix PRs as drafts and marks them ready once its review says `merge`;
-- a Mushi **release train** (`mushi/train/…`): each fix in it was proven on
+- a Mushi Mushi **release train** (`mushi/train/…`): each fix in it was proven on
   its own PR first;
-- a Mushi **revert** PR (`mushi/revert-…`): it puts back code that was already
+- a Mushi Mushi **revert** PR (`mushi/revert-…`): it puts back code that was already
   on your default branch. It never uses `pull_request_target`, so a fork's code never runs
-with your secrets. Mushi needs no secret in your repo: it reads the check with
+with your secrets. Mushi Mushi needs no secret in your repo: it reads the check with
 the GitHub access it already has.
 
 <Callout type="info">
-  Mushi does not write the file into your repo on its own. Writing under
-  `.github/workflows` needs a GitHub permission Mushi does not ask for. The
+  Mushi Mushi does not write the file into your repo on its own. Writing under
+  `.github/workflows` needs a GitHub permission Mushi Mushi does not ask for. The
   **Open a PR that adds it** button opens a pull request for you to merge.
 </Callout>
 
@@ -143,7 +143,7 @@ the GitHub access it already has.
 2. It runs them with your test command on the PR's commit. They must **pass**.
 3. It puts every other file the PR changed back the way it was on your base
    branch, keeps the PR's tests, and runs them again. They must **fail**.
-4. It puts the PR's files back and posts the **Mushi verify** check.
+4. It puts the PR's files back and posts the **Mushi Mushi verify** check.
 
 | Verdict | Meaning | Check |
 | --- | --- | --- |
@@ -207,7 +207,7 @@ for the safe defaults.
 
 Automatic merge is **off** until you turn on **Merge proven fixes automatically**
 in **Settings → General → Fixes and CI → Verified merge**. When it is on and every
-gate passes, Mushi squash-merges the cloud agent's PR at its exact commit, up to a daily limit per app (5 by default). It never turns
+gate passes, Mushi Mushi squash-merges the cloud agent's PR at its exact commit, up to a daily limit per app (5 by default). It never turns
 on GitHub's own auto-merge, which merges on green CI alone.
 
 You can still merge any PR yourself, from the console, GitHub or
@@ -215,17 +215,17 @@ You can still merge any PR yourself, from the console, GitHub or
 
 ## After the merge
 
-For 72 hours after Mushi merges a fix, it watches for three signs that the fix
+For 72 hours after Mushi Mushi merges a fix, it watches for three signs that the fix
 broke something:
 
-| Sign | What Mushi does |
+| Sign | What Mushi Mushi does |
 | --- | --- |
 | CI fails on the merge commit (not a stopped test machine) | Marks the fix **regressed** and opens a revert PR |
 | The report is reopened | Marks the fix **regressed** and opens a revert PR |
 | A new report's stack trace names a file the fix changed | Flags the fix for you to look at |
 
-Mushi never merges a revert PR by itself: a person does. If later commits
-changed the same files, Mushi opens no revert PR and tells you to revert by
+Mushi Mushi never merges a revert PR by itself: a person does. If later commits
+changed the same files, Mushi Mushi opens no revert PR and tells you to revert by
 hand. Turn revert PRs off with **If a merged fix breaks something → When it breaks → Off**. A regressed fix also
 counts against that app in the spend-down stop-loss, which pauses automatic
 fixes for an app whose fixes keep failing.

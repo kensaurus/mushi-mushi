@@ -22,10 +22,10 @@ npx mushi-mushi
 [![Node](https://img.shields.io/node/v/mushi-mushi?color=339933&logo=node.js)](https://nodejs.org)
 
 <a href="https://kensaur.us/mushi-mushi/docs/demo/diagnosis" title="See a sample diagnosis: no signup">
-  <img src="https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/docs/screenshots/report-detail-dark.png" alt="The Mushi console's report list: each user report with a plain-English summary, how serious it is and how sure Mushi is." width="860" />
+  <img src="https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/docs/screenshots/report-detail-dark.png" alt="The Mushi Mushi console's report list: each user report with a plain-English summary, how serious it is and how sure Mushi Mushi is." width="860" />
 </a>
 
-<sub>↑ reports in the Mushi console, each with a plain-English summary. Click for one full sample diagnosis you can read without signing up.</sub>
+<sub>↑ reports in the Mushi Mushi console, each with a plain-English summary. Click for one full sample diagnosis you can read without signing up.</sub>
 
 </div>
 
@@ -67,7 +67,7 @@ Building in Lovable or Bolt, with no terminal? Paste one script tag through your
 
 Your users now have a report button. Reports land in [the console](https://kensaur.us/mushi-mushi/admin), each with a plain-English diagnosis. The free plan covers one app and 100 diagnoses a month, with no card and no AI key of your own ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)).
 
-Then connect your editor so it can read diagnoses, and ask it: *"Get the latest Mushi report and fix it."*
+Then connect your editor so it can read diagnoses, and ask it: *"Get the latest Mushi Mushi report and fix it."*
 
 ```bash
 npx mushi-mushi setup --ide cursor   # or: claude, continue, zed
@@ -117,11 +117,11 @@ What each one solves and needs: [what else it does](https://kensaur.us/mushi-mus
 ## Why not just Sentry?
 
 > **Sentry is built around what the code threw, with a User Feedback widget and
-> replay alongside. Mushi starts from what the user reported, ingests Sentry's
+> replay alongside. Mushi Mushi starts from what the user reported, ingests Sentry's
 > errors too, explains each one in plain English, and hands your agent a fix
 > prompt to start from. One queue, with or without Sentry.**
 
-Mushi Mushi catches the bugs that never throw: a button that looks clickable but isn't, a 12-second page load, a layout broken on one phone. It works without Sentry. If you run Sentry, point its alert webhook at Mushi Mushi and the errors land in the same list; merging a Mushi fix resolves the Sentry issue. Details: [Sentry vs Mushi](https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi).
+Mushi Mushi catches the bugs that never throw: a button that looks clickable but isn't, a 12-second page load, a layout broken on one phone. It works without Sentry. If you run Sentry, point its alert webhook at Mushi Mushi and the errors land in the same list; merging a Mushi Mushi fix resolves the Sentry issue. Details: [Sentry vs Mushi Mushi](https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi).
 
 ---
 
@@ -311,4 +311,4 @@ All apps live under [kensaur.us](https://kensaur.us).
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (October 2026): 77 edge functions · 529 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (October 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

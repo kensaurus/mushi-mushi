@@ -305,6 +305,7 @@ export function PipelinePage() {
                 results={results}
                 onAction={(action, key) => setPending({ action, key })}
                 workerLanes={workerLanes}
+                focusGroupId={stage ? null : searchParams.get('group')}
               />
             )}
           </Section>

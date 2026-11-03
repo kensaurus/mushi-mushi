@@ -5,7 +5,7 @@
  *          a conflict, CI running or failed on the head, a closed PR.
  */
 import { describe, expect, it } from 'vitest'
-import { checksView, conflictPrompt, failuresOnBase, nextQueueStep, queueLine, reviewRefusal } from '../../supabase/functions/_shared/merge-queue.ts'
+import { ADVISORY_CHECKS, checksView, conflictPrompt, failuresOnBase, nextQueueStep, queueLine, reviewRefusal } from '../../supabase/functions/_shared/merge-queue.ts'
 
 const pr = (over: Partial<Parameters<typeof nextQueueStep>[0]> = {}) => ({
   state: 'open',
@@ -65,6 +65,19 @@ describe('checksView / conflictPrompt / queueLine', () => {
         { name: 'e2e', status: 'completed', conclusion: 'skipped' },
       ]),
     ).toEqual({ pending: 1, failed: ['required'], ran: ['required', 'lighthouse'] })
+  })
+  it('never waits for or fails on an advisory check, but still counts it as run', () => {
+    const name = 'Compare @mushi-mushi/* to npm latest'
+    expect(ADVISORY_CHECKS.has(name)).toBe(true)
+    expect(
+      checksView([
+        { name, status: 'completed', conclusion: 'failure' },
+        { name: 'gate', status: 'completed', conclusion: 'success' },
+      ]),
+    ).toEqual({ pending: 0, failed: [], ran: [name, 'gate'] })
+    expect(checksView([{ name, status: 'queued' }]).pending).toBe(0)
+    // Only the exact name: a required check that fails still fails.
+    expect(checksView([{ name: `${name} (required)`, status: 'completed', conclusion: 'failure' }]).failed).toEqual([`${name} (required)`])
   })
   it('counts a check by its newest run, so a draft guard stop is gone once CI ran after mark-ready', () => {
     expect(

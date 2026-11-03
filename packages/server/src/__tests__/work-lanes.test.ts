@@ -27,6 +27,11 @@ import {
   parseLaneSettings,
   parseLaneVerbs,
   rankWorkCandidates,
+  laneInfraBackoff,
+  laneWriteNeeded,
+  IDLE_LANE_REFRESH_MS,
+  recentlySkipped,
+  SKIPPED_COOLDOWN_MS,
   WORK_INFRA_PREFIX,
   type AttemptLite,
 } from '../../supabase/functions/_shared/work-lanes.ts'
@@ -218,5 +223,61 @@ describe('how a claim ends', () => {
     expect(mayAutoRequeue({ failureKind: 'code' }, [], NOW)).toBe(false)
     expect(mayAutoRequeue({ failureKind: 'infra' }, [{ claimed_at: '2026-10-26T12:00:00Z' }], NOW)).toBe(false)
     expect(mayAutoRequeue({ failureKind: 'infra' }, [{ claimed_at: new Date(NOW.getTime() - AUTO_REQUEUE_WINDOW_MS - 1).toISOString() }], NOW)).toBe(true)
+  })
+})
+
+describe('recentlySkipped (2026-10-31: 401 skip re-claims of two reports in an hour)', () => {
+  const at = (msAgo: number) => new Date(NOW.getTime() - msAgo).toISOString()
+  it('holds back a report whose claim ended skipped inside the cooldown, and nothing else', () => {
+    const held = recentlySkipped(
+      [
+        { report_id: 'r-just-skipped', outcome: 'skipped', finished_at: at(15_000) },
+        { report_id: 'r-old-skip', outcome: 'skipped', finished_at: at(SKIPPED_COOLDOWN_MS + 1) },
+        { report_id: 'r-failed', outcome: 'failed', finished_at: at(1_000) },
+        { report_id: 'r-running', outcome: 'skipped', finished_at: null },
+        { report_id: null, outcome: 'skipped', finished_at: at(1_000) },
+      ],
+      NOW,
+    )
+    expect([...held]).toEqual(['r-just-skipped'])
+  })
+})
+
+describe('laneInfraBackoff', () => {
+  const at = (msAgo: number) => new Date(NOW.getTime() - msAgo).toISOString()
+  const quota = "cursor-agent exited 1: ActionRequiredError: Increase limits for faster responses You're out of usage"
+  it('holds a lane after machine-side failures in a row, longer each time, and says why', () => {
+    const three = [0, 1, 2].map((i) => ({ failure_kind: 'infra', detail: quota, finished_at: at(30_000 + i * 20_000) }))
+    // 3 in a row → 2 min after the newest (11:59:30).
+    expect(laneInfraBackoff(three, NOW)).toMatch(/^The last 3 runs failed on the agent account \(its plan refused to run\); the lane waits until 12:01 UTC/)
+    expect(laneInfraBackoff(three, new Date(NOW.getTime() + 2 * 60_000))).toBeNull()
+    // One failure alone retries at once (requeued at the front, once).
+    expect(laneInfraBackoff(three.slice(0, 1), NOW)).toBeNull()
+  })
+
+  it('a no_change that only says the plan refused counts too; a code failure or a success ends the streak', () => {
+    const noChange = { failure_kind: null, detail: `no change (no verdict): ${quota}`, finished_at: at(10_000) }
+    expect(laneInfraBackoff([noChange, { ...noChange, finished_at: at(20_000) }], NOW)).not.toBeNull()
+    expect(laneInfraBackoff([{ failure_kind: 'code', detail: 'tests failed', finished_at: at(10_000) }, { failure_kind: 'infra', detail: quota, finished_at: at(20_000) }], NOW)).toBeNull()
+    expect(laneInfraBackoff([], NOW)).toBeNull()
+  })
+})
+
+describe('laneWriteNeeded (2026-10-31: every heartbeat rewrote ~20 lanes)', () => {
+  const at = (msAgo: number) => new Date(NOW.getTime() - msAgo).toISOString()
+  const idle = { state: 'idle', runs: 3, prs: 1, last: 'skipped: x', stateSec: 120, inflight: [] }
+  it('skips an idle lane whose state is unchanged and whose row is fresh, even as stateSec ticks', () => {
+    expect(laneWriteNeeded({ status: idle, repo: 'a/b', last_seen_at: at(60_000) }, { status: { ...idle, stateSec: 180 }, repo: 'a/b' }, NOW)).toBe(false)
+  })
+  it('writes when the state, a counter, the last line or the repo changed, or the row is stale', () => {
+    const prev = { status: idle, repo: 'a/b', last_seen_at: at(60_000) }
+    expect(laneWriteNeeded(prev, { status: { ...idle, state: 'backoff' }, repo: 'a/b' }, NOW)).toBe(true)
+    expect(laneWriteNeeded(prev, { status: { ...idle, runs: 4 }, repo: 'a/b' }, NOW)).toBe(true)
+    expect(laneWriteNeeded(prev, { status: idle, repo: 'a/c' }, NOW)).toBe(true)
+    expect(laneWriteNeeded({ ...prev, last_seen_at: at(IDLE_LANE_REFRESH_MS) }, { status: idle, repo: 'a/b' }, NOW)).toBe(true)
+  })
+  it('always writes a lane with runs in flight, so the Workers tab stays live', () => {
+    const busy = { ...idle, state: 'working', inflight: [{ claimId: 'c1', stage: 'agent', ageSec: 30 }] }
+    expect(laneWriteNeeded({ status: busy, repo: 'a/b', last_seen_at: at(1_000) }, { status: busy, repo: 'a/b' }, NOW)).toBe(true)
   })
 })

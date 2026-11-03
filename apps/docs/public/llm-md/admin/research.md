@@ -59,7 +59,7 @@ and click **Attach to this bug**. The card then reads **Saved on bug** with a li
 
 ## Automatic results on error reports
 
-When a report carries a real error (a Sentry exception or an error-level console line), Mushi searches for it once after diagnosis and shows the results on the report under **Others who hit this**.
+When a report carries a real error (a Sentry exception or an error-level console line), Mushi Mushi searches for it once after diagnosis and shows the results on the report under **Others who hit this**.
 
 - **Where it looks:** Firecrawl's developer index first (GitHub issues, merged pull requests, READMEs and docs), then GitHub and Stack Overflow web results for any remaining slots. The developer index often finds the pull request that fixed the same error.
 - **Search again / Search now:** runs the search from the report page. Only results not already on the report are added. Pressing it twice within 10 minutes searches once.

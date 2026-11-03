@@ -26,6 +26,7 @@ export default {
   },
 
   '-- Get started': { type: 'separator', title: 'Get started' },
+  'how-it-works': 'How it works (video)',
   connect: { title: 'Connect your client', href: '/connect' },
   // Readable without signup or install (owner, 2026-10-27; ADR 0052).
   demo: 'Sample diagnosis',

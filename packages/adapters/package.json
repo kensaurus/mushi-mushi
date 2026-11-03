@@ -2,7 +2,7 @@
   "name": "@mushi-mushi/adapters",
   "version": "0.2.10",
   "license": "MIT",
-  "description": "Already send errors to Sentry, Crashlytics, Bugsnag or Rollbar? Forward their webhooks into Mushi for a plain-English diagnosis and a ready fix. One subpath import per source.",
+  "description": "Already send errors to Sentry, Crashlytics, Bugsnag or Rollbar? Forward their webhooks into Mushi Mushi for a plain-English diagnosis and a ready fix. One subpath import per source.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

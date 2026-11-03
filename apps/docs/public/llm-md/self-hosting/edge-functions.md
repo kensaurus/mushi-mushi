@@ -9,7 +9,7 @@ description: Deploy the Mushi Mushi Supabase Edge Functions for a self-hosted in
 
 # Edge Functions deploy
 
-Mushi ships Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count). For a working self-host you only need the **minimal ingest + classification** set below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. Include **`healthz`** for unauthenticated monitoring probes. The repo root guide [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md) remains the authoritative step-by-step.
+Mushi Mushi ships Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count). For a working self-host you only need the **minimal ingest + classification** set below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. Include **`healthz`** for unauthenticated monitoring probes. The repo root guide [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md) remains the authoritative step-by-step.
 
 ## Minimal required (ingest + classify)
 
@@ -98,7 +98,7 @@ For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `r
 | `telegram-webhook` | Telegram Bot API | Voice-note inbox: secret-token auth, `/start ` project binding, transcript + inline-keyboard confirmation |
 | `cursor-webhook` | Cursor Cloud Agent (v0 callback) | Receives `statusChange` callbacks, writes `fix_attempts.pr_url`, notifies |
 | `agent-status-poll` | cron (`5-55/5`) | Polls open Cursor / GitHub cloud-agent runs and closes them (PR URL, failure) |
-| `agent-pr-review` | cron (`3-53/10`) + re-run route | Reviews each fix PR with Claude Opus 5.5 on the project's Anthropic key; a merge verdict readies the draft (with no review possible, a fix-worker draft falls back to its own self-check), and a "hold" blocks merging from Mushi without an override |
+| `agent-pr-review` | cron (`3-53/10`) + re-run route | Reviews each fix PR with Claude Opus 5.5 on the project's Anthropic key; a merge verdict readies the draft (with no review possible, a fix-worker draft falls back to its own self-check), and a "hold" blocks merging from Mushi Mushi without an override |
 | `review-followup` | cron (`6-56/10`) | Sends "fix first" findings back to a cloud agent on the same PR (off by default) |
 | `fix-verifier` | cron (`4-54/10`) + verify route | Checks the merge gates for a PR's head; merges only when verified auto-merge is on |
 | `merge-queue` | cron (`1-56/5`) + queue route | "Merge when ready" and release trains |
@@ -124,7 +124,9 @@ npx supabase secrets set FIRECRAWL_API_KEY=…
 npx supabase secrets set ADMIN_BASE_URL=https://your-domain.example.com/admin
 ```
 
-Tenants can override `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` per project via [BYOK](/security/byok). `E2B_API_KEY` is read by the Node fix orchestrator in `@mushi-mushi/agents`, not by the edge functions; set it where that runs if you use the E2B sandbox.
+Tenants can override `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` per project via [BYOK](/security/byok).
+
+The server-wide `GITHUB_TOKEN`, `SLACK_BOT_TOKEN` and `LANGFUSE_*` keys belong to the operator's own accounts, so they count as an app's own GitHub, Slack or Langfuse connection only for apps owned by a user listed in `MUSHI_OPERATOR_USER_IDS` (comma-separated user ids). The pipeline's own Langfuse tracing still uses the keys for every app. Every other app connects its own GitHub (the GitHub App, or a token on its Integrations page) and its own Slack. On a single-team self-host, put your own user id there, or the server-wide token serves no app. `E2B_API_KEY` is read by the Node fix orchestrator in `@mushi-mushi/agents`, not by the edge functions; set it where that runs if you use the E2B sandbox.
 
 ## JWT verification
 

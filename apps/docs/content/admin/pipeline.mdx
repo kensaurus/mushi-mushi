@@ -7,6 +7,8 @@ description: The Pipeline page in the Mushi Mushi console shows every bug from r
 
 **Route:** `/pipeline` (sidebar: Pipeline)
 
+<Walkthrough id="ship-fixes" />
+
 In Mushi Mushi, every bug moves from a report to a fix PR, an Opus review, CI, a release train, a merge and a deploy. This page shows how many items are in each step now, which are stuck, and why. **This app** follows the app you have open. **All apps** reads every project you can see.
 
 ## Stages
@@ -40,7 +42,7 @@ Each group says its reason in plain words, for example "12 PRs: their own CI is 
 
 | Action | What it does |
 | --- | --- |
-| **Send to CI repair** | Sends the PR to an agent that makes its CI green without weakening tests: Mushi's cloud agent when review follow-ups can run (they need a Cursor key on your team), otherwise your local `mushi work --followups` lanes on their next run. Says why when neither can. |
+| **Send to CI repair** | Sends the PR to an agent that makes its CI green without weakening tests: Mushi Mushi's cloud agent when review follow-ups can run (they need a Cursor key on your team), otherwise your local `mushi work --followups` lanes on their next run. Says why when neither can. |
 | **Send to follow-up** | The same for an Opus "fix first": an agent fixes the review's findings on the PR's branch. |
 | **Re-run CI** | Re-runs the failed CI jobs on the PR's latest commit. |
 | **Re-run review** | Asks Opus to review the PR again. |
@@ -50,7 +52,7 @@ Each group says its reason in plain words, for example "12 PRs: their own CI is 
 | **Queue to merge** | Puts an approved, green PR in the merge queue. |
 | **Remove from queue** / **Close PR** | Takes it out of the queue, or closes it without merging. The reason is kept as a team note on the report. |
 | **Not a code bug** | Closes the report with a reason and tells its reporter. Nothing runs on it again unless someone reopens it. Offered on groups of reports, such as agents that failed without a PR. |
-| **Requeue** | Puts a report back at the front of the local lane that ran it, when that lane's machine stopped the run (not the code). Mushi does this once on its own; after that the report waits here for you. It never counts against the report. |
+| **Requeue** | Puts a report back at the front of the local lane that ran it, when that lane's machine stopped the run (not the code). Mushi Mushi does this once on its own; after that the report waits here for you. It never counts against the report. |
 
 Every action asks first, works on one PR or the whole group, shows each PR's result, and then the page reads again.
 
@@ -83,7 +85,7 @@ A lane's **mode** says what it does:
 | Audit the code, screen by screen | A model proposes bugs; the machine files only those its own check reproduces, at most 12 an hour per app, into a fix lane for the same app on that machine |
 | Run skill runs | Only the rounds of skill runs started on Spend credits with **Run on** set to this lane |
 
-A lane change reaches the machine at its next heartbeat, within a minute. The machine opens no port: it asks Mushi for its settings, and the settings are values (a model id, a number, a date), never a command or a path. Viewers can read this tab but cannot change it.
+A lane change reaches the machine at its next heartbeat, within a minute. The machine opens no port: it asks Mushi Mushi for its settings, and the settings are values (a model id, a number, a date), never a command or a path. Viewers can read this tab but cannot change it.
 
 ### When a worker stops doing useful work
 
@@ -106,7 +108,7 @@ The same problems show above the Pipeline tabs, as a count on the **Pipeline** i
 
 **Stop this run** (the app's owner or an admin, or the machine's owner; asks first, and is recorded in the audit log) ends the run's claim at once, so the report is free again: the next lane or a cloud agent can take it (it is not put back in a queue). The machine stops the agent at its next heartbeat, within a minute, and commits or pushes nothing more. A git hook that is already running keeps its agent space until git's own time limit (25 minutes); the flag stays up as "a run that was stopped still holds an agent space" until it ends, with the command to end it on the machine. A review follow-up is not a claim: pause its lane and end it on the machine.
 
-Log lines are cleaned on the machine and again by Mushi before they are stored: no keys, tokens or paths, e-mail addresses masked, and no lines a compiler quotes from your code. A machine whose Mushi CLI is older than these checks says so on its card instead of showing a problem.
+Log lines are cleaned on the machine and again by Mushi Mushi before they are stored: no keys, tokens or paths, e-mail addresses masked, and no lines a compiler quotes from your code. A machine whose Mushi Mushi CLI is older than these checks says so on its card instead of showing a problem.
 
 ### Send to my local worker
 

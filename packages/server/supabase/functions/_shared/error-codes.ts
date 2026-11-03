@@ -25,6 +25,7 @@ export const API_ERROR_CODES = [
   'INVALID_TOKEN',
   'MISSING_API_KEY',
   'INVALID_API_KEY',
+  'AUTH_UNAVAILABLE',
   'INSUFFICIENT_SCOPE',
   'KEY_NOT_MIGRATED',
   'ORG_KEY_NOT_ALLOWED',
@@ -275,6 +276,10 @@ export function isTransientDbConnectionError(
   if (isHtmlGatewayDbMessage(err.message)) return true
   return (
     msg.includes('upstream connect error') ||
+    // The API gateway's plain-text 504 body when PostgREST did not answer in
+    // time. No SQLSTATE: the query never reported back
+    // (MUSHI-MUSHI-SERVER-35, project_members read, 2026-10-31).
+    msg.includes('upstream request timeout') ||
     msg.includes('delayed connect error') ||
     msg.includes('remote connection failure') ||
     msg.includes('transport failure reason') ||

@@ -20,7 +20,7 @@ description: Run npx mushi-mushi, ship, and let Mushi Mushi turn your first user
 
 # Incident loop
 
-- A user reports a bug in your live app. Mushi explains it in plain English.
+- A user reports a bug in your live app. Mushi Mushi explains it in plain English.
 - Your editor pulls the diagnosis and a ready fix prompt over MCP.
 - Your AI applies the fix; you review and ship. No extra AI key needed.
 
@@ -38,7 +38,7 @@ agent fetch the details and close the report itself.
 
 ## Before you start
 
-- A Mushi project and API key ([credentials](/concepts/credentials)).
+- A Mushi Mushi project and API key ([credentials](/concepts/credentials)).
 - At least one report: from the SDK, the test report `npx mushi-mushi` offers, or a Sentry alert.
 - MCP connected to your editor ([MCP quickstart](/quickstart/mcp)). The agent needs write access to mark the report fixed. Signing in through the hosted MCP (the default for Cursor and Claude Code) gives it; a key with only `mcp:read` does not.
 
@@ -64,7 +64,7 @@ Existing report: open **Bugs** in the console and copy its ID, or ask the agent 
 
 In Cursor, ask:
 
-> Use Mushi MCP: call `get_fix_context` for report `` and summarize the root cause in plain English.
+> Use Mushi Mushi MCP: call `get_fix_context` for report `` and summarize the root cause in plain English.
 
 `get_fix_context` returns the classification, repro steps, blast radius and a
 **`fixPrompt`**: a paste-ready fix brief built on the server. For most bugs you
@@ -76,7 +76,7 @@ can paste `fixPrompt` straight into Cursor and skip to the last step.
 
 Run the MCP prompt **`summarize_report_for_fix`** with the same report ID, or ask:
 
-> Run the Mushi prompt `summarize_report_for_fix` for report ``. Give me a paste-ready Cursor prompt to fix it.
+> Run the Mushi Mushi prompt `summarize_report_for_fix` for report ``. Give me a paste-ready Cursor prompt to fix it.
 
 It combines `get_fix_context`, `get_blast_radius` and `get_similar_bugs` into one plan.
 
@@ -110,13 +110,13 @@ description: Set up the Mushi Mushi MCP server with npx mushi-mushi setup. Read 
 
 # MCP server
 
-- MCP is how your AI editor (Cursor, Claude Code, VS Code) talks to Mushi.
+- MCP is how your AI editor (Cursor, Claude Code, VS Code) talks to Mushi Mushi.
 - Add the server in one click, sign in once in your browser. No key to paste.
 - Then ask your editor about bugs: it gets the report, the diagnosis and a fix brief.
 
 ## Connect in three steps
 
-### Add the Mushi server
+### Add the Mushi Mushi server [#add-the-mushi-server]
 
 One click: pick your editor on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect).
 No signup needed for the read-only demo. Or run one command:
@@ -131,17 +131,17 @@ npx mushi-mushi setup --ide cursor
 
 ### Sign in
 
-The first time your editor calls Mushi, your browser opens. Sign in, pick which
+The first time your editor calls Mushi Mushi, your browser opens. Sign in, pick which
 projects it may see, and click **Approve**. In Claude Code, run `claude mcp login mushi`
 (or `/mcp`) to start it.
 
-**You'll see:** Mushi listed as connected in your editor's MCP settings.
+**You'll see:** Mushi Mushi listed as connected in your editor's MCP settings.
 
 ### Ask your editor
 
-Try *"list mushi tools"*, then *"Get the latest Mushi report and fix it."*
+Try *"list mushi tools"*, then *"Get the latest Mushi Mushi report and fix it."*
 
-**You'll see:** the Mushi tools in the list, then a fix brief: the cause, the files to change and how to check it.
+**You'll see:** the Mushi Mushi tools in the list, then a fix brief: the cause, the files to change and how to check it.
 
 The rest of this page is detail: how sign-in works, manual config files,
 the hosted transport for headless agents, and the tool list.
@@ -248,7 +248,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.30.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.30.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -275,7 +275,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.30.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.30.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -315,7 +315,7 @@ one place a static API key header is the right tool:
 | `get_report_detail`     | Full detail incl. screenshot + classification |
 | `get_fix_context`       | One-shot fix brief: root cause, blast radius, repro and a paste-ready `fixPrompt` |
 | `search_reports`        | Semantic + keyword search across reports     |
-| `dispatch_fix`          | Start the Mushi fix agent for a report (needs GitHub connected and Automatic fixes on) |
+| `dispatch_fix`          | Start the Mushi Mushi fix agent for a report (needs GitHub connected and Automatic fixes on) |
 | `triage_next_steps`     | "What should I fix next?": a prioritised list of next actions |
 | `get_similar_bugs`      | Ask "have we seen this before?" (similar reports) |
 | `run_nl_query`          | Natural-language → SQL questions about your data |
@@ -364,6 +364,8 @@ description: Install Mushi Mushi with npx mushi-mushi, connect Cursor or Claude 
 - When a user reports a bug, Mushi Mushi writes a plain-English diagnosis.
 - Your AI editor reads it and writes the fix.
 
+Want the whole loop first? [How it works, on video](/how-it-works).
+
 ### Install
 
 Run this in your app's folder. It finds your framework, signs you in through
@@ -390,7 +392,7 @@ Connect your AI editor. One click on the [Connect page](https://kensaur.us/mushi
 npx mushi-mushi setup --ide cursor
 ```
 
-Then ask your editor: *"Get the latest Mushi report and fix it."*
+Then ask your editor: *"Get the latest Mushi Mushi report and fix it."*
 
 **You'll see:** a fix brief in your editor: the cause, the files to change and how to check it. You review the change before it ships.
 
@@ -399,18 +401,18 @@ Then ask your editor: *"Get the latest Mushi report and fix it."*
 The wizard detects your framework for you. Pick yours to see what it installs
 and the one line it adds to your code.
 
-- **No terminal (Lovable, Bolt):** [Mushi in Lovable or Bolt](/quickstart/lovable-bolt), one script tag pasted through your prompt.
+- **No terminal (Lovable, Bolt):** [Mushi Mushi in Lovable or Bolt](/quickstart/lovable-bolt), one script tag pasted through your prompt.
 - **Mobile previews:** [iOS](/quickstart/ios) · [Android](/quickstart/android) · [Flutter](/quickstart/flutter), installed from the GitHub repo.
 - **Go deeper:** [Incident loop](/quickstart/incident-loop) · [MCP server](/quickstart/mcp) · [CLI console loop](/quickstart/cli-console-loop)
 
 What you need first
 
 - An app you are building, for the web or for phones.
-- A Mushi account. The free plan is enough, and the wizard signs you in through your browser.
+- A Mushi Mushi account. The free plan is enough, and the wizard signs you in through your browser.
 - Optional: an AI code editor such as Cursor or Claude Code.
 
 `npx` runs a tool from npm (the public library of JavaScript packages) without
-installing it for good. Here it runs the Mushi setup wizard.
+installing it for good. Here it runs the Mushi Mushi setup wizard.
 
 ## Where to start
 
@@ -421,7 +423,7 @@ Setting it up yourself? See [Project ID & API keys](/concepts/credentials) for t
   The SDK needs only two settings: your project ID and API key, named with the
   prefix your framework expects (see
   [`examples/sdk.env.example`](https://github.com/kensaurus/mushi-mushi/blob/master/examples/sdk.env.example)).
-  The repo's root `.env.example` is only for **running the Mushi server
+  The repo's root `.env.example` is only for **running the Mushi Mushi server
   yourself**. You do not need Supabase or an AI (LLM) key to use the SDK.
 
 ## Troubleshooting
@@ -451,7 +453,7 @@ Keys are scoped at mint time. Use separate keys for SDK ingest vs IDE/MCP — ne
 | **`mcp:read`** | Cursor MCP (read-only) | List reports, `get_fix_context`, lessons, docs search |
 | **`mcp:write`** | Cursor MCP (full), CLI fix dispatch | Everything in read + `dispatch_fix`, `merge_fix`, QA triggers |
 
-  MCP brings its own intelligence — you do **not** need a separate OpenAI or Anthropic key for Mushi MCP tools. You still need a Mushi project + MCP-scoped API key.
+  MCP brings its own intelligence — you do **not** need a separate OpenAI or Anthropic key for Mushi Mushi MCP tools. You still need a Mushi Mushi project + MCP-scoped API key.
 
 ## Project ID
 
@@ -522,7 +524,7 @@ description: Add the Mushi Mushi React SDK in one command. npx mushi-mushi insta
 Add the Mushi Mushi bug-report widget to a React app.
 
   **Coming from Create React App?** Migrate to Vite first: see
-  the [CRA → Vite migration guide](/migrations/cra-to-vite). All Mushi React
+  the [CRA → Vite migration guide](/migrations/cra-to-vite). All Mushi Mushi React
   examples below assume Vite + React 19.
 
 ## Try it live
@@ -756,9 +758,9 @@ Installing plugins from the Marketplace (PagerDuty, Zapier, the Cursor and Claud
 
   **Annual billing saves two months.** Pay for 10 months, get 12: Builder is $290 a year, Studio $790. Annual plans have no pay-as-you-go overage: they include the plan's diagnoses each month and pause new diagnoses at that limit. Pick annual at checkout, or switch an existing plan with **Change plan** on the Billing page. For Enterprise commits, contact us.
 
-  **Overage is capped.** Builder and Studio include a default cap on overage spend ($50 and $200 a month, on top of the base fee). You can lower or raise it in the console. At the cap, Mushi pauses new diagnoses and says so, instead of sending a bigger invoice. Email alerts fire at **50%, 80%, and 100%** of your included diagnoses.
+  **Overage is capped.** Builder and Studio include a default cap on overage spend ($50 and $200 a month, on top of the base fee). You can lower or raise it in the console. At the cap, Mushi Mushi pauses new diagnoses and says so, instead of sending a bigger invoice. Email alerts fire at **50%, 80%, and 100%** of your included diagnoses.
 
-  **Free has a hard stop**, not a soft limit. At 100 diagnoses Mushi stops diagnosing new reports until the next calendar month. No card, no charge, no bill shock.
+  **Free has a hard stop**, not a soft limit. At 100 diagnoses Mushi Mushi stops diagnosing new reports until the next calendar month. No card, no charge, no bill shock.
 
 ## What counts as a diagnosis
 
@@ -805,7 +807,7 @@ The cap is checked per calendar month (UTC) of usage: at the cap, new diagnoses 
 
 ## Why apps, not reports?
 
-Reports are noisy: one broken button can send fifty, and a busy week is hard to predict. The number of apps you ship is something you already know, and it grows with what you get out of Mushi. So a plan is sized by apps watched, diagnoses are a generous allowance under it, and reports are never billed at all.
+Reports are noisy: one broken button can send fifty, and a busy week is hard to predict. The number of apps you ship is something you already know, and it grows with what you get out of Mushi Mushi. So a plan is sized by apps watched, diagnoses are a generous allowance under it, and reports are never billed at all.
 
 ## Why diagnoses, not events
 
@@ -813,25 +815,25 @@ Sentry meters errors. We meter diagnoses: one per plain-English root cause and p
 
 ## Your own AI key and the self-host path
 
-On every Cloud plan, Free included, you can add your own Anthropic, OpenAI or Cursor key under **Settings → API keys**. Mushi then uses it for fix PRs and agent work; you pay those vendors directly at list rate, and we never mark up tokens.
+On every Cloud plan, Free included, you can add your own Anthropic, OpenAI or Cursor key under **Settings → API keys**. Mushi Mushi then uses it for fix PRs and agent work; you pay those vendors directly at list rate, and we never mark up tokens.
 
-When self-hosting, Mushi uses **your** keys for everything. For a sense of scale: on Mushi's own key, a diagnosis cost about $0.017–0.022 in LLM tokens over the 30 days to 2026-10-28, so 1,000 diagnoses is roughly $20. Fix PRs and reviews are extra and depend on the model you pick.
+When self-hosting, Mushi Mushi uses **your** keys for everything. For a sense of scale: on Mushi Mushi's own key, a diagnosis cost about $0.017–0.022 in LLM tokens over the 30 days to 2026-10-28, so 1,000 diagnoses is roughly $20. Fix PRs and reviews are extra and depend on the model you pick.
 
 The self-host path is free, and always will be: [see the guide](/self-hosting).
 
 ## Compared to Sentry + Seer
 
-| | Sentry Team + Seer | Mushi Builder |
+| | Sentry Team + Seer | Mushi Mushi Builder |
 |---|---|---|
 | Base plan | Team: $26 / mo billed annually, $29 monthly | $29 / mo for 3 apps ($290 a year) |
 | AI diagnosis | Seer add-on: + $40 / active contributor / mo | Included |
 | Solo dev total | **$66–69 / mo** plus any pay-as-you-go | **$29 / mo** |
 | Catches non-crash friction | Via its User Feedback widget and Session Replay | Yes: a report widget (shake on mobile) with screenshot and console/network tail, then a diagnosis |
-| Bugs in your editor | Sentry MCP server: issues and Seer analysis in Cursor / Claude Code | Mushi MCP server: diagnosis, fix prompt and lessons; no second LLM key |
+| Bugs in your editor | Sentry MCP server: issues and Seer analysis in Cursor / Claude Code | Mushi Mushi MCP server: diagnosis, fix prompt and lessons; no second LLM key |
 
 Sentry prices from [sentry.io/pricing](https://sentry.io/pricing/) and [Sentry's pricing docs](https://docs.sentry.io/pricing/), checked 2026-10-29. Seer is an add-on to the Team or Business plan, billed as its own monthly charge. An active contributor is anyone who opens two or more pull requests in a month to a Seer-enabled repo; the $66–69 total assumes one of them. Seer is not available in self-hosted Sentry ([self-hosted docs](https://develop.sentry.dev/self-hosted/)).
 
-Sentry + Seer is strong at code-thrown errors, tracing, breadcrumbs and session replay, and Seer is an AI debugging agent for those issues. Mushi starts from user-felt friction that never triggers an error, ingests Sentry's errors too, and turns each into a plain-English diagnosis and a paste-ready fix prompt in your editor. A diagnosis is an LLM's reading and can be wrong; check it before you merge.
+Sentry + Seer is strong at code-thrown errors, tracing, breadcrumbs and session replay, and Seer is an AI debugging agent for those issues. Mushi Mushi starts from user-felt friction that never triggers an error, ingests Sentry's errors too, and turns each into a plain-English diagnosis and a paste-ready fix prompt in your editor. A diagnosis is an LLM's reading and can be wrong; check it before you merge.
 
 ## Frequently asked questions
 
@@ -849,7 +851,7 @@ The console says how many apps your plan watches and how many your team has, and
 
 ### Can I use my own AI key on Free?
 
-Yes. Bring-your-own-key works on every plan, Free included. Add an Anthropic, OpenAI or Cursor key under **Settings → API keys** and Mushi can open fix PRs with it, so you see the whole loop on your first app before paying anything.
+Yes. Bring-your-own-key works on every plan, Free included. Add an Anthropic, OpenAI or Cursor key under **Settings → API keys** and Mushi Mushi can open fix PRs with it, so you see the whole loop on your first app before paying anything.
 
 ### When does my quota reset?
 
@@ -877,7 +879,7 @@ No. Annual plans include the plan's diagnoses every month (1,000 on Builder, 3,0
 
 ### What does Enterprise cost?
 
-From $499 a month, billed annually: unlimited apps, SAML SSO, the SOC 2 readiness pack, self-host support and up to 365 days of history. [Contact us](mailto:kensaurus@gmail.com?subject=Mushi%20Enterprise%20inquiry) for a quote.
+From $499 a month, billed annually: unlimited apps, SAML SSO, the SOC 2 readiness pack, self-host support and up to 365 days of history. [Contact us](mailto:kensaurus@gmail.com?subject=Mushi Mushi%20Enterprise%20inquiry) for a quote.
 
 ### How do I estimate before signing up?
 
@@ -924,7 +926,7 @@ entry.
 
 ## Two transports
 
-- **stdio (local)**: `npx -y @mushi-mushi/mcp@0.30.0`. This is what
+- **stdio (local)**: `npx -y @mushi-mushi/mcp@0.30.2`. This is what
   `mushi setup --stdio` writes, and what `setup` always writes for Continue and
   Zed. Use it for any client that only runs local servers. Your client launches
   the server as a subprocess and pipes JSON-RPC over stdio.

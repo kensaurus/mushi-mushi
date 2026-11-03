@@ -109,17 +109,17 @@ patch for these (`__require` errors in Metro); releases with this fix need none.
 ## 3. Verify
 
 Run your app on a simulator or a device, tap the bug button, type a
-description, and submit. The report should appear in the Mushi admin console
+description, and submit. The report should appear in the Mushi Mushi admin console
 within a couple of seconds, showing the SDK that sent it
 (`@mushi-mushi/react-native` and its version).
 
 If nothing arrives:
 
-- Confirm `apiKey` is a Mushi project key (it starts with `mushi_`, like every
-  Mushi key) with the `report:write` scope, not the Supabase service-role key.
+- Confirm `apiKey` is a Mushi Mushi project key (it starts with `mushi_`, like every
+  Mushi Mushi key) with the `report:write` scope, not the Supabase service-role key.
 - Confirm `` is at the **root** of the component tree, above
   any `NavigationContainer`.
-- iOS release builds must use HTTPS for the Mushi endpoint (the default).
+- iOS release builds must use HTTPS for the Mushi Mushi endpoint (the default).
 
   Pure-native shells should use the [iOS](/quickstart/ios) or
   [Android](/quickstart/android) SDKs directly. Capacitor / Ionic apps have

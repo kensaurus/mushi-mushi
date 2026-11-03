@@ -11,7 +11,7 @@ description: When one bug spans a frontend and a backend repo, Mushi Mushi plans
 
 A bug like *"checkout returns 400 with 'invalid currency'"* often spans two repos:
 the FE sends a malformed shape, the BE accepts a wider range than it should.
-Mushi's `MultiRepoFixOrchestrator` plans and opens **one PR per repo** for these,
+Mushi Mushi's `MultiRepoFixOrchestrator` plans and opens **one PR per repo** for these,
 keeping the change set coherent and cross-linked.
 
 ---

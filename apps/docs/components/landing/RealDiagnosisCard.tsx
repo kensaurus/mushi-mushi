@@ -16,7 +16,7 @@ export function RealDiagnosisCard() {
       </div>
 
       <div className="landing-real-diagnosis__read">
-        <span className="landing-real-diagnosis__label">Mushi’s diagnosis</span>
+        <span className="landing-real-diagnosis__label">Mushi Mushi’s diagnosis</span>
         <p id="landing-real-diagnosis-title" className="landing-real-diagnosis__title">
           {D.title}
         </p>
@@ -38,7 +38,7 @@ export function RealDiagnosisCard() {
           <dd>{D.suggestedFix}</dd>
           <dt>In your editor</dt>
           <dd>
-            Your AI assistant asks Mushi for the report (the <code>{D.editorCmd}</code> tool) and
+            Your AI assistant asks Mushi Mushi for the report (the <code>{D.editorCmd}</code> tool) and
             gets one fix prompt, ready to paste: this diagnosis, the steps to reproduce the bug, the
             suggested fix and the relevant code. You do not need an AI key of your own for this.
           </dd>

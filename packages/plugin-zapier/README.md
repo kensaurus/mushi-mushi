@@ -11,7 +11,7 @@ writing code.
 install **Zapier Bridge** from the console's **Marketplace** page and paste
 the Catch Hook URL straight in. Installing from the Marketplace needs a paid
 plan (Builder or above, see [pricing](https://kensaur.us/mushi-mushi/docs/pricing)).
-Run this package between Mushi and Zapier when you want the signature checked
+Run this package between Mushi Mushi and Zapier when you want the signature checked
 and a flat payload that is easier to map in Zapier.
 
 ```bash
@@ -54,4 +54,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 529 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

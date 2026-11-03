@@ -157,6 +157,33 @@ export function bisectTrain<T>(members: T[]): { retry: T[]; deferred: T[]; faile
   return { retry: members.slice(0, half), deferred: members.slice(half), failedAlone: null }
 }
 
+/** `release_trains.detail` while GitHub refuses a train whose checks read clean. */
+export const TRAIN_BLOCKED_DETAIL_PREFIX = 'GitHub blocks this train:'
+/** How long GitHub may keep refusing before the train gives its place back. */
+export const TRAIN_BLOCKED_GRACE_MS = 30 * 60_000
+
+/**
+ * Whether a train whose checks read clean may merge. Mushi's read of the checks
+ * is not enough: a cancelled check is not a failed one, so a train whose CI was
+ * cancelled looks green, and a token with admin rights merges past the required
+ * checks where the repo does not enforce them for admins (2026-11-02). GitHub's
+ * own merge state knows, so a train merges only when GitHub says it can.
+ * A refused train waits for a re-run, then is abandoned, because a repo's queue
+ * does nothing else while it has an active train.
+ */
+export function trainMergeGate(args: {
+  mergeableState: string | null | undefined
+  detail: string | null | undefined
+  updatedAt: string | null | undefined
+  now: Date
+}): 'merge' | 'hold' | 'wait' | 'abandon' {
+  const s = (args.mergeableState ?? 'unknown').toLowerCase()
+  if (s === 'clean' || s === 'unstable' || s === 'has_hooks') return 'merge'
+  if (s !== 'blocked') return 'wait'
+  if (!(args.detail ?? '').startsWith(TRAIN_BLOCKED_DETAIL_PREFIX)) return 'hold'
+  return args.now.getTime() - Date.parse(args.updatedAt ?? '') >= TRAIN_BLOCKED_GRACE_MS ? 'abandon' : 'wait'
+}
+
 /** `mushi/train/20261024-0130`, UTC. */
 export function trainBranchName(now: Date): string {
   const p = (n: number) => String(n).padStart(2, '0')

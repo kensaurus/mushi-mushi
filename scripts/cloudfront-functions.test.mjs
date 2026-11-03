@@ -367,6 +367,16 @@ describe('cloudfront-mushi-hosted-mcp', () => {
   const router = loadHandler('cloudfront-mushi-hosted-mcp-router.js');
   const wellknown = loadHandler('cloudfront-mushi-hosted-mcp-wellknown.js');
 
+  it('sends the GitHub App OAuth callback on to the api function with its query', () => {
+    const out = router(reqWithQs('/mushi-mushi/hosted-mcp/github/app-authorize', { code: 'abc', state: 'x.y' }));
+    assert.equal(out.statusCode, 302);
+    assert.equal(
+      out.headers.location.value,
+      'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/webhooks/github/app-authorize?code=abc&state=x.y',
+    );
+    assert.equal(out.headers['cache-control'].value, 'no-store');
+  });
+
   it('forwards resource PRM GET to Supabase origin', () => {
     const out = router(req('/mushi-mushi/hosted-mcp/', '', 'GET'));
     assert.equal(out.uri, '/');

@@ -15,7 +15,7 @@ Bug-report platforms attract two failure modes:
 2. **Fatigue** — legitimate users overwhelmed by a "Report a bug" prompt
    that follows them everywhere.
 
-Mushi defends against both.
+Mushi Mushi defends against both.
 
 ## Reporter reputation
 
@@ -57,5 +57,5 @@ The widget enforces:
 - Maximum **1 prompt every 24h** per user, per project.
 - Minimum description length (default 10 chars; configurable per project)
   to discourage low-effort drive-by reports.
-- A *quiet mode* the user can flip from the widget itself — Mushi remembers
+- A *quiet mode* the user can flip from the widget itself — Mushi Mushi remembers
   it for 30 days via `localStorage`.

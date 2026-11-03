@@ -101,18 +101,18 @@ feel alive in the first 10 seconds.
 Reserve and wire both so the first launch-week posts land on accounts that look
 cared-for.
 
-- [x] **Bluesky soft-launch** — wired to `kensaurus.bsky.social` and posting via
+- [x] **Bluesky soft-launch** — wired to `@kensaur.us` (the handle was `kensaurus.bsky.social` until 2026-10-31) and posting via
   [`scripts/marketing/post-bluesky.mjs`](../../scripts/marketing/post-bluesky.mjs)
   using the staggered queue in [`./social/queue.json`](./social/queue.json). The
   intro Mushi-chan post is live at
-  [bsky.app/profile/kensaurus.bsky.social](https://bsky.app/profile/kensaurus.bsky.social).
+  [bsky.app/profile/kensaur.us](https://bsky.app/profile/kensaur.us).
 - [ ] **Bluesky brand handle** — reserve `mushimushi.dev` (matches the domain →
   automatic verification checkmark). When done, set `BLUESKY_HANDLE=mushimushi.dev`
   in `.env.local`, delete `.cache/bluesky-session.json`, and the next script run
   will mint a fresh session under the brand identity.
   **Not reserved as of 2026-09-21**: the handle does not resolve and the domain
   is unregistered, so every public link (README, SUPPORT.md) points at
-  `kensaurus.bsky.social`. Do not link `mushimushi.dev` anywhere until it
+  `kensaur.us`. Do not link `mushimushi.dev` anywhere until it
   resolves.
 - [ ] **Self-label as a bot** — the script-posted account should mark itself in
   the bio (`bsky.app → Settings → Edit profile → Description`). E.g. *"Mushi

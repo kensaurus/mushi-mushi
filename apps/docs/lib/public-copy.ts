@@ -12,7 +12,7 @@ export interface PublicFaqItem {
 export const PUBLIC_FAQ: readonly PublicFaqItem[] = [
   {
     q: 'The lime banner never appears in my store build',
-    a: 'Native builds bake Mushi env vars at compile time. Open Admin → Connect → Native app CI secrets and sync the missing vars, or run scripts/check-mushi-env.mjs in your prebuild.',
+    a: 'Native builds bake Mushi Mushi env vars at compile time. Open Admin → Connect → Native app CI secrets and sync the missing vars, or run scripts/check-mushi-env.mjs in your prebuild.',
   },
   {
     q: 'Reports return 401 or never show up',
@@ -31,18 +31,18 @@ export const PUBLIC_FAQ: readonly PublicFaqItem[] = [
 export const PUBLIC_FAQ_MCP: readonly PublicFaqItem[] = [
   ...PUBLIC_FAQ,
   {
-    q: 'Cursor says it cannot reach the Mushi server',
+    q: 'Cursor says it cannot reach the Mushi Mushi server',
     a: 'Check the MCP endpoint URL and that your API key is active. Run npx mushi-mushi setup --ide cursor again to rewrite the config.',
   },
   {
-    q: 'Claude Code says "HTTP 404 dialing" the Mushi server',
+    q: 'Claude Code says "HTTP 404 dialing" the Mushi Mushi server',
     a: 'Your editor saved an old sign-in for the server and keeps reusing it. Clear it: in Claude Code run /mcp, pick mushi, and choose to clear authentication (or remove the server and add it again). Then sign in once more.',
   },
 ] as const
 
 /** Plain-English definition — no model names (those belong in depth sections). */
 export const DIAGNOSIS_PLAIN =
-  'A diagnosis is one completed plain-English root cause — the moment Mushi finishes reading a report and can hand your editor a paste-ready fix prompt. Noise filtered out or duplicate reports collapsed to one row do not count. You pay for comprehension, not volume.'
+  'A diagnosis is one completed plain-English root cause — the moment Mushi Mushi finishes reading a report and can hand your editor a paste-ready fix prompt. Noise filtered out or duplicate reports collapsed to one row do not count. You pay for comprehension, not volume.'
 
 export const PRICING_LEDE = DIAGNOSIS_PLAIN
 
@@ -105,7 +105,7 @@ export const CONNECT_SKILLS = {
     'Skills are playbooks your editor can read on demand — bug triage, fix-and-ship, QA, security audit, and more.',
   whatAreSkillsTitle: 'What are skills?',
   whatAreSkillsBody:
-    'SKILL.md playbooks live in GitHub repos and sync into Mushi so the right playbook surfaces when a report lands. Your agent reads them — nothing runs automatically.',
+    'SKILL.md playbooks live in GitHub repos and sync into Mushi Mushi so the right playbook surfaces when a report lands. Your agent reads them — nothing runs automatically.',
   learnMoreHref: 'https://kensaur.us/mushi-mushi/docs/sdks/skills',
   learnMoreLabel: 'Learn about skills →',
 } as const
@@ -117,16 +117,16 @@ export const QUICKSTART_ONE_KEY_CALLOUT =
   'The wizard makes two keys (passwords your tools use to talk to Mushi Mushi): an SDK key that can only send reports, which goes in your app, and a CLI key that can also read them, which stays on your computer and also works for the MCP tools in your editor.'
 
 export const CONCEPTS_INDEX_LEDE =
-  'When a user runs into something broken, Mushi records it, explains it in plain English and can hand your editor a fix, without another dashboard to babysit.'
+  'When a user runs into something broken, Mushi Mushi records it, explains it in plain English and can hand your editor a fix, without another dashboard to babysit.'
 
 export const ADMIN_INDEX_LEDE =
   'See what users reported, what broke, and what got fixed — the console mirror of the loop on your landing page.'
 
 export const INCIDENT_LOOP_LEDE =
-  'The incident loop takes you from "a user hit a bug in my live app" to "my AI assistant is fixing it". The bug arrives in your Mushi list with a plain-English read, and you paste a ready-made fix prompt into Cursor. It is the default path for vibe coders.'
+  'The incident loop takes you from "a user hit a bug in my live app" to "my AI assistant is fixing it". The bug arrives in your Mushi Mushi list with a plain-English read, and you paste a ready-made fix prompt into Cursor. It is the default path for vibe coders.'
 
 export const MCP_QUICKSTART_LEDE =
-  'Ask your editor what broke. Over MCP (the standard way AI editors connect to outside tools), Mushi sends back the report, the plain-English read and a fix brief, without you leaving the window.'
+  'Ask your editor what broke. Over MCP (the standard way AI editors connect to outside tools), Mushi Mushi sends back the report, the plain-English read and a fix brief, without you leaving the window.'
 
 export const CURSOR_INTEGRATION_LEDE =
   'Your AI wrote the code. When prod breaks, pull the report and fix context into Cursor — plain English first, diff second.'

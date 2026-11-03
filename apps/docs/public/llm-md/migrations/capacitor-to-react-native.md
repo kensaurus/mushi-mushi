@@ -17,7 +17,7 @@ easy, paid path) and React Native CLI + GitHub Actions + Fastlane (the
 cost-sensitive path). Mushi Mushi bug reporting keeps working throughout.
 
   The full plan (ready-to-paste GitHub Actions YAML for Android and iOS,
-  the Fastlane match recipe, the Capacitor → RN plugin map, the Mushi SDK
+  the Fastlane match recipe, the Capacitor → RN plugin map, the Mushi Mushi SDK
   API mapping, the 6-week timeline, and the go/no-go checklist) lives in
   the repo at
   [`docs/migrations/capacitor-to-react-native.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/migrations/capacitor-to-react-native.md).
@@ -51,7 +51,7 @@ same project ID and API key at the same time.
 ## Mushi Mushi during the migration
 
 The single most important property: **you do not change anything on the
-Mushi side.** Same project, same API key, same admin console. Reports from
+Mushi Mushi side.** Same project, same API key, same admin console. Reports from
 the Capacitor build and the React Native build land in the same inbox.
 
 ### API mapping at a glance

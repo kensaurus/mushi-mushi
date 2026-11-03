@@ -9,13 +9,13 @@ description: Set up the Mushi Mushi MCP server with npx mushi-mushi setup. Read 
 
 # MCP server
 
-- MCP is how your AI editor (Cursor, Claude Code, VS Code) talks to Mushi.
+- MCP is how your AI editor (Cursor, Claude Code, VS Code) talks to Mushi Mushi.
 - Add the server in one click, sign in once in your browser. No key to paste.
 - Then ask your editor about bugs: it gets the report, the diagnosis and a fix brief.
 
 ## Connect in three steps
 
-### Add the Mushi server
+### Add the Mushi Mushi server [#add-the-mushi-server]
 
 One click: pick your editor on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect).
 No signup needed for the read-only demo. Or run one command:
@@ -30,17 +30,17 @@ npx mushi-mushi setup --ide cursor
 
 ### Sign in
 
-The first time your editor calls Mushi, your browser opens. Sign in, pick which
+The first time your editor calls Mushi Mushi, your browser opens. Sign in, pick which
 projects it may see, and click **Approve**. In Claude Code, run `claude mcp login mushi`
 (or `/mcp`) to start it.
 
-**You'll see:** Mushi listed as connected in your editor's MCP settings.
+**You'll see:** Mushi Mushi listed as connected in your editor's MCP settings.
 
 ### Ask your editor
 
-Try *"list mushi tools"*, then *"Get the latest Mushi report and fix it."*
+Try *"list mushi tools"*, then *"Get the latest Mushi Mushi report and fix it."*
 
-**You'll see:** the Mushi tools in the list, then a fix brief: the cause, the files to change and how to check it.
+**You'll see:** the Mushi Mushi tools in the list, then a fix brief: the cause, the files to change and how to check it.
 
 The rest of this page is detail: how sign-in works, manual config files,
 the hosted transport for headless agents, and the tool list.
@@ -147,7 +147,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.30.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.30.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -174,7 +174,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.30.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.30.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -214,7 +214,7 @@ one place a static API key header is the right tool:
 | `get_report_detail`     | Full detail incl. screenshot + classification |
 | `get_fix_context`       | One-shot fix brief: root cause, blast radius, repro and a paste-ready `fixPrompt` |
 | `search_reports`        | Semantic + keyword search across reports     |
-| `dispatch_fix`          | Start the Mushi fix agent for a report (needs GitHub connected and Automatic fixes on) |
+| `dispatch_fix`          | Start the Mushi Mushi fix agent for a report (needs GitHub connected and Automatic fixes on) |
 | `triage_next_steps`     | "What should I fix next?": a prioritised list of next actions |
 | `get_similar_bugs`      | Ask "have we seen this before?" (similar reports) |
 | `run_nl_query`          | Natural-language → SQL questions about your data |

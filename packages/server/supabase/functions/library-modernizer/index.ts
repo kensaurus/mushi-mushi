@@ -39,6 +39,7 @@ import { MODERNIZER_EFFORT, MODERNIZER_MODEL, THINKING_HEADROOM_TOKENS } from '.
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { withLlmUsage } from '../_shared/llm-usage.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { platformGithubTokenFor } from '../_shared/github.ts'
 import {
   bindFindingsToRegistry,
   npmLatestStableInfo,
@@ -212,14 +213,15 @@ async function processRepo(
   const parsed = parseRepoUrl(row.repo_url)
   if (!parsed) return { scanned: 0, created: 0, skipped: 'bad_repo_url' }
 
-  // GitHub token for the repo (vault-stored or env fallback). We tolerate
+  // GitHub token for the repo (vault-stored, or the platform token on the
+  // operator's own apps). We tolerate
   // a missing token for public repos — the contents API still works.
   const { data: settings } = await db
     .from('project_settings')
     .select('github_installation_token_ref')
     .eq('project_id', row.project_id)
     .maybeSingle()
-  const ghToken = await readVaultSecret(db, settings?.github_installation_token_ref as string | null) ?? Deno.env.get('GITHUB_TOKEN') ?? null
+  const ghToken = await readVaultSecret(db, settings?.github_installation_token_ref as string | null) ?? await platformGithubTokenFor(db, row.project_id)
 
   let manifestPath: string | null = null
   let manifestKind: ManifestKind | null = null

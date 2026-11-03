@@ -233,7 +233,7 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
       )}
 
       <div className="flex flex-col gap-1">
-        <SegmentedControl<Mode> size="sm" ariaLabel="What the test may do" value={mode} options={modes} onChange={setMode} />
+        <SegmentedControl<Mode> size="sm" wrap ariaLabel="What the test may do" value={mode} options={modes} onChange={setMode} />
         <span className="text-2xs text-fg-muted">
           {mode === 'look' && 'The visitor reads and clicks but never sends a form, and nothing becomes a report. It stops at the sign-up page.'}
           {mode === 'file' && 'Same visit; what stops the visitor (errors, dead ends, a step that needs a terminal or an inbox) is filed as a bug report.'}
@@ -384,7 +384,7 @@ function SessionTimeline({ session, shots }: { session: FreshEyesSession; shots:
               ) : (
                 <span className="h-20 w-32 shrink-0 rounded-sm border border-dashed border-edge-subtle" aria-hidden />
               )}
-              <div className="min-w-0 flex-1 text-xs">
+              <div className="min-w-0 flex-1 text-xs wrap-anywhere">
                 <p className="font-medium text-fg">
                   {st.n}. {st.action}
                 </p>

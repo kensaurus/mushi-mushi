@@ -1022,14 +1022,9 @@ export function integrationsNavBadge(
       `${attention} connection${attention === 1 ? '' : 's'} need${attention === 1 ? 's' : ''} attention`,
     )
   }
-  const disconnected = stats.platformTotal - stats.platformConnected
-  if (disconnected > 0 && stats.platformConnected === 0) {
-    return attentionBadge(
-      disconnected,
-      'warn',
-      `${disconnected} platform integration${disconnected === 1 ? '' : 's'} not configured`,
-    )
-  }
+  // Nothing connected is not a problem: every integration is optional
+  // (standalone-first). Setup and its GitHub step say what is worth adding,
+  // so a new account does not open on a warning count here.
   if (stats.routingPaused > 0) {
     return attentionBadge(
       stats.routingPaused,

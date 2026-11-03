@@ -24,14 +24,14 @@ through one identify function.
 
 ## Why switch (the feedback piece)
 
-- **AI triage built in.** Mushi's two-stage classifier categorises and
+- **AI triage built in.** Mushi Mushi's two-stage classifier categorises and
   prioritises each report.
-- **Reproduction context.** Mushi captures console, network, a screenshot
+- **Reproduction context.** Mushi Mushi captures console, network, a screenshot
   and a DOM summary with each report, so you aren't relying on the user's
   description alone.
-- **Self-host and open source.** Mushi SDKs are MIT and the server is
+- **Self-host and open source.** Mushi Mushi SDKs are MIT and the server is
   AGPLv3.
-- **Built for developers.** Mushi's console is for triaging and fixing
+- **Built for developers.** Mushi Mushi's console is for triaging and fixing
   bugs; it also has a feature board where reporters vote on ideas.
 
 ## API mapping
@@ -43,8 +43,8 @@ through one identify function.
 | `pendo.initialize({ visitor: { id, email } })` | `const mushi = Mushi.init({ projectId, apiKey })` + `mushi.setUser({ id, email })` |
 | `pendo.identify(visitor, account)` | `mushi.setUser({ id, email, name })` + `mushi.setMetadata('accountId', account.id)` |
 | `pendo.track('event', props)` | For repro context on the next report: `mushi.addBreadcrumb({ category: 'custom', level: 'info', message: 'event' })`. For product analytics: `mushi.track('event_name', props)` (names must be `snake_case`; not attached to reports) |
-| A button that opened classic Feedback | `mushi.open()`, or the Mushi launcher (a floating button on desktop, an edge tab on phones) |
-| Feedback ideas board | Mushi [feature board](/admin/feature-board) (reporters vote), or Reports filtered to feature requests |
+| A button that opened classic Feedback | `mushi.open()`, or the Mushi Mushi launcher (a floating button on desktop, an edge tab on phones) |
+| Feedback ideas board | Mushi Mushi [feature board](/admin/feature-board) (reporters vote), or Reports filtered to feature requests |
 
 ## Recipe: keep Pendo for analytics + guides; use Mushi Mushi for feedback
 
@@ -67,7 +67,7 @@ mushi.setUser({ id: 'user-42', email: 'jane@example.com' })
 mushi.setMetadata('accountId', 'acme-corp')
 ```
 
-Now Pendo handles analytics and product guides; Mushi handles feedback
+Now Pendo handles analytics and product guides; Mushi Mushi handles feedback
 intake and triage.
 
 ## Migration checklist
@@ -75,10 +75,10 @@ intake and triage.
 <MigrationChecklist
   id="pendo-feedback-to-mushi"
   steps={[
-    { id: 'create-project', label: 'Create a Mushi project', content: <>Sign in to the Mushi admin console; copy <code>projectId</code> + <code>apiKey</code>.</> },
-    { id: 'install', label: 'Install Mushi alongside Pendo', content: <pre className="text-xs">{`npm install @mushi-mushi/web
+    { id: 'create-project', label: 'Create a Mushi Mushi project', content: <>Sign in to the Mushi Mushi admin console; copy <code>projectId</code> + <code>apiKey</code>.</> },
+    { id: 'install', label: 'Install Mushi Mushi alongside Pendo', content: <pre className="text-xs">{`npm install @mushi-mushi/web
 # Or @mushi-mushi/react if you're on React`}</pre> },
-    { id: 'mount-mushi', label: 'Initialise Mushi in your app entry', content: <pre className="text-xs">{`import { Mushi } from '@mushi-mushi/web'
+    { id: 'mount-mushi', label: 'Initialise Mushi Mushi in your app entry', content: <pre className="text-xs">{`import { Mushi Mushi } from '@mushi-mushi/web'
 const mushi = Mushi.init({ projectId: '...', apiKey: '...' })`}</pre> },
     { id: 'mirror-identity', label: 'Mirror pendo.identify into mushi.setUser', content: <pre className="text-xs">{`function identifyEverywhere(visitor, account) {
   window.pendo.identify(visitor, account)
@@ -86,11 +86,11 @@ const mushi = Mushi.init({ projectId: '...', apiKey: '...' })`}</pre> },
   mushi.setMetadata('accountId', account.id)
   mushi.setMetadata('plan', account.plan)
 }`}</pre> },
-    { id: 'mirror-track', label: 'Mirror critical pendo.track calls as Mushi breadcrumbs', content: <>You don&apos;t need to mirror every event, only the few &quot;what was the user doing&quot; steps that help reproduction: <code>{`mushi.addBreadcrumb({ category: 'custom', level: 'info', message: 'checkout_started' })`}</code>. Mushi&apos;s auto-capture covers most of the rest.</> },
+    { id: 'mirror-track', label: 'Mirror critical pendo.track calls as Mushi Mushi breadcrumbs', content: <>You don&apos;t need to mirror every event, only the few &quot;what was the user doing&quot; steps that help reproduction: <code>{`mushi.addBreadcrumb({ category: 'custom', level: 'info', message: 'checkout_started' })`}</code>. Mushi Mushi&apos;s auto-capture covers most of the rest.</> },
     { id: 'disable-pendo-feedback', label: 'Remove links and buttons that opened classic Feedback', content: <>Pendo says entry points to the old Feedback portal break once it is retired. Point them at <code>mushi.open()</code> instead.</> },
     { id: 'export-old', label: 'Export historical classic Feedback data (if it is still available)', content: <>Pendo&apos;s notice says classic Feedback data could be retrieved until November 1, 2026 and is deleted after that. If you still can, request the export from Pendo settings.</> },
-    { id: 'update-runbooks', label: 'Update internal runbooks', content: <>"Where do feedback requests live?" → Mushi admin console. Send a one-line note to PMs, CS and engineering.</> },
-    { id: 'verify', label: 'Submit a test report and verify pipeline', content: <>Click the Mushi widget, submit a report, verify it appears in the admin console with the right user identity attached.</> },
+    { id: 'update-runbooks', label: 'Update internal runbooks', content: <>"Where do feedback requests live?" → Mushi Mushi admin console. Send a one-line note to PMs, CS and engineering.</> },
+    { id: 'verify', label: 'Submit a test report and verify pipeline', content: <>Click the Mushi Mushi widget, submit a report, verify it appears in the admin console with the right user identity attached.</> },
   ]}
 />
 
@@ -108,10 +108,10 @@ const mushi = Mushi.init({ projectId: '...', apiKey: '...' })`}</pre> },
 | Self-host | not checked | ✅ |
 
 The takeaway: **keep Pendo for analytics, guides and NPS; send feedback
-and bug reports to Mushi**.
+and bug reports to Mushi Mushi**.
 
 ## References
 
-- [Mushi web SDK](/sdks/web)
+- [Mushi Mushi web SDK](/sdks/web)
 - [Pendo identify API](https://support.pendo.io/hc/en-us/articles/360031862272-Install-Pendo-on-a-single-page-web-application)
 - [Pendo: classic Feedback retirement](https://support.pendo.io/hc/en-us/articles/5092218184475-Overview-of-Pendo-classic-Feedback)

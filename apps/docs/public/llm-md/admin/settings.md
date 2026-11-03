@@ -31,7 +31,7 @@ Bug alerts (Slack channel), error tracking (Sentry), an optional read-only link 
 Supabase database, and **Bug sorting**: the AI models for triage, the quick check, the
 judge and fixes, the quick-check confidence, grouping of similar bugs and fix branch
 names. It also holds daily limits for Firecrawl and test writing, the feedback widget's
-"Bug reports by Mushi" line, and, behind **Fixes and CI → Show**, the pull request
+"Bug reports by Mushi Mushi" line, and, behind **Fixes and CI → Show**, the pull request
 review, verified merge, CI cost and CI policy settings.
 
 **Spend limits** (project admins) cap what the project spends. Leave a field
@@ -40,13 +40,13 @@ empty for no limit.
 | Limit | What happens when it is reached |
 |---|---|
 | **Monthly AI budget** | Every AI call for the project (triage, fixes, chat) stops until the 1st of next month (UTC). New reports get a short explanation instead of a diagnosis. Calls on your own API keys count too. |
-| **Auto-fix spend limit, last 30 days** | Mushi stops starting fixes on its own. Fixes you start yourself still run, and show the 30-day spend. |
+| **Auto-fix spend limit, last 30 days** | Mushi Mushi stops starting fixes on its own. Fixes you start yourself still run, and show the 30-day spend. |
 | **Automatic fixes per day** | Same, counted per UTC day. A limit of 3 allows 3 automatic fixes. |
 | **Ask me before fixes that may cost more than** | A high or critical fix estimated above this waits for your approval, including fixes you start. |
 
 New projects start with $2 per 30 days and 3 automatic fixes a day.
 
-If Mushi cannot read this month's spend (a database error), the AI call goes
+If Mushi Mushi cannot read this month's spend (a database error), the AI call goes
 ahead and the failure is reported to the operator's error monitoring. A
 temporary read failure never stops triage, and it never passes unnoticed.
 
@@ -61,7 +61,7 @@ apps; an app's own key is tried first. The Cursor row also holds spend-down mode
 ### Web tools
 
 - **Firecrawl (web pages)**: your Firecrawl key, the websites it may read, and the pages
-  per lookup. Firecrawl reads public web pages while Mushi diagnoses a bug.
+  per lookup. Firecrawl reads public web pages while Mushi Mushi diagnoses a bug.
 - **Known fixes on the web**: the **Search the web for known fixes** switch.
 - **Browserbase (cloud browser)**: runs [scheduled tests](/admin/qa-coverage) in a cloud
   browser when a story's provider is `browserbase`. Keys go through
@@ -73,7 +73,7 @@ Report bugs by voice from your phone, Telegram or Slack. See [Voice intake](/adm
 
 ### SDK & connection
 
-**Check the connection** (whether this browser reaches Mushi and where your data
+**Check the connection** (whether this browser reaches Mushi Mushi and where your data
 lives), **Install the bug widget** (a link to [Connect](/admin/connect), where the
 install snippet lives, and the API address to copy), **Send a test bug**, and **Debug
 logging (this browser)**, which logs to the browser console. Debug logging is stored in
@@ -93,7 +93,7 @@ open this tab.
 
 1. Open the **AI keys** tab.
 2. Add the new key on the provider's row and save it.
-3. Open [Mushi health](/admin/health) → **Probe now** to verify the new key works.
+3. Open [Mushi Mushi health](/admin/health) → **Probe now** to verify the new key works.
 
 Do not paste a Supabase `service_role` key here. That key bypasses all row-level
 security and must only be used server-side. The Supabase row asks for a scoped,
@@ -103,7 +103,7 @@ read-only access token, as its instructions describe.
 
 ## Related pages
 
-- [Mushi health](/admin/health): verify keys with live round-trip tests
+- [Mushi Mushi health](/admin/health): verify keys with live round-trip tests
 - [Storage](/admin/storage): configure your own object storage
 - [SSO](/admin/sso): SAML/OIDC identity provider registration
 - [Organization members](/admin/teams): manage access and roles

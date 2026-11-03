@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ApiResult } from '../cli-shared.js'
-import { assertWorkerKey, createDaemon, createHostReadings, cursorStateFor, workerHostId, type DaemonDeps } from './daemon.js'
+import { assertWorkerKey, createDaemon, createHostReadings, cursorStateFor, infraBackoffMs, machineFailed, workerHostId, type DaemonDeps } from './daemon.js'
 import type { WorkerConfig } from './protocol.js'
 import type { HostIO } from '../runner/host.js'
 
@@ -130,6 +130,26 @@ describe('mushi work --daemon', () => {
     expect(calls.some((c) => c.path === '/v1/worker/claim')).toBe(false)
   })
 
+  it('rides out a stray 401 (the server could not check the key) and stops only when it repeats (2026-10-30)', async () => {
+    const refused = { ok: false, httpStatus: 401, error: { code: 'INVALID_API_KEY', message: 'Invalid or revoked API key' } } as const
+    // Refused once, then fine: keeps working.
+    const blip = harness({ heartbeat: (n) => (n === 1 ? refused : undefined) })
+    await blip.daemon.tick()
+    expect(blip.daemon.stopped).toBeNull()
+    expect(blip.daemon.hostState).toBe('backoff')
+    await blip.daemon.tick()
+    expect(blip.daemon.stopped).toBeNull()
+
+    // Refused on every heartbeat: stops on the third.
+    const gone = harness({ heartbeat: refused, claim: [claimReply] })
+    await gone.daemon.tick()
+    await gone.daemon.tick()
+    expect(gone.daemon.stopped).toBeNull()
+    await gone.daemon.tick()
+    expect(gone.daemon.stopped).toMatch(/INVALID_API_KEY.*3 times in a row/)
+    expect(gone.calls.some((c) => c.path === '/v1/worker/claim')).toBe(false)
+  })
+
   it('backs off after a network error instead of stopping', async () => {
     const { daemon } = harness({ heartbeat: { ok: false, error: { code: 'NETWORK_ERROR', message: 'ECONNRESET' } } })
     await daemon.tick()
@@ -195,6 +215,21 @@ describe('lane modes (P3)', () => {
     await daemon.tick()
     await daemon.settle()
     expect(runs).toHaveLength(1)
+  })
+})
+
+describe('backing off after machine-side failures (2026-10-31)', () => {
+  it('retries the first failure at once, then waits 1, 2, 4 … minutes, capped at 30', () => {
+    expect([0, 1, 2, 3, 4, 5, 6, 7, 10].map((n) => infraBackoffMs(n) / 60_000)).toEqual([0, 0, 1, 2, 4, 8, 16, 30, 30])
+  })
+
+  it('counts infra failures and a refused agent account, never a code failure or a skip', () => {
+    expect(machineFailed('failed', 'infra', 'cursor-agent exited 1: something')).toBe(true)
+    expect(machineFailed('no_change', undefined, "no change (no verdict): ActionRequiredError: Increase limits for faster responses You're out of usage")).toBe(true)
+    expect(machineFailed('failed', 'infra', 'cursor-agent exited 1: Cannot use this model: grok-4.7-xhigh-fast.')).toBe(true)
+    expect(machineFailed('failed', 'code', 'tests failed')).toBe(false)
+    expect(machineFailed('skipped', undefined, 'skipped: branch already exists on origin')).toBe(false)
+    expect(machineFailed('pr_opened', undefined, 'pr opened')).toBe(false)
   })
 })
 

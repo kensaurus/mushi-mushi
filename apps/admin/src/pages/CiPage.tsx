@@ -52,6 +52,7 @@ import { useNow } from '../lib/useNow'
 import type { CiOverview } from '../lib/ciTypes'
 import type { FixAttempt } from '../components/fixes/types'
 import { buildFixLinks, formatSeconds, isCiOverviewEmpty, permissionsNotice } from '../lib/ciView'
+import { useScrollToHash } from '../lib/useScrollToHash'
 
 const CiRunnerMap = lazy(() => import('../components/ci/CiRunnerMap').then((m) => ({ default: m.CiRunnerMap })))
 
@@ -175,6 +176,8 @@ export function CiPage() {
 
   const notice = data ? permissionsNotice(data.permissions) : null
   const empty = data ? isCiOverviewEmpty(data) : false
+  // /ci#ci-placement (Connect's "CI settings" link) opens the settings.
+  useScrollToHash(!!data && !empty)
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-ci">
@@ -192,6 +195,18 @@ export function CiPage() {
         </Btn>
         {projectId && (
           <SegmentedControl<Scope> value={scope} options={SCOPE_OPTIONS} onChange={setScopeChoice} ariaLabel="Which apps" size="sm" />
+        )}
+        {/* The settings live low on the page (ADR 0037); one click gets there. */}
+        {data && !empty && (
+          <Btn
+            size="sm"
+            variant="ghost"
+            onClick={() => document.getElementById('ci-placement')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            title="Where CI runs, checks on fix pull requests, and GitHub-hosted time limits"
+            data-testid="ci-settings-jump"
+          >
+            CI settings
+          </Btn>
         )}
       </PageHeaderBar>
 

@@ -8,7 +8,7 @@
 </head>
 <body style="margin:0;padding:0;background:#f6f7f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0b1220;">
 <!-- Preheader (shown in inbox preview, hidden in body) -->
-<div style="display:none;font-size:1px;color:#f6f7f9;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">One tap to confirm your email. Welcome aboard.</div>
+<div style="display:none;font-size:1px;color:#f6f7f9;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">One tap to confirm your email, then two short steps to your first diagnosis.</div>
 
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f6f7f9;">
 <tr><td align="center" style="padding:40px 20px;">
@@ -18,26 +18,26 @@
 <!-- Header: wordmark + tagline -->
 <tr><td style="padding:32px 32px 0 32px;">
 <p style="margin:0;font-family:'JetBrains Mono', 'SF Mono', ui-monospace, monospace;font-size:20px;font-weight:600;letter-spacing:-0.3px;color:#0b1220;" aria-label="Mushi Mushi">Mushi Mushi</p>
-<p style="margin:6px 0 0 0;font-size:12px;color:#6b7585;letter-spacing:0.04em;text-transform:uppercase;">The bug your monitoring can't see</p>
+<p style="margin:6px 0 0 0;font-size:12px;color:#6b7585;letter-spacing:0.04em;text-transform:uppercase;">Know why your AI-built app broke</p>
 </td></tr>
 
 <!-- Heading + body copy -->
 <tr><td style="padding:28px 32px 0 32px;">
 <h1 style="margin:0;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-0.4px;color:#0b1220;">Welcome to Mushi Mushi.</h1>
-<p style="margin:8px 0 0 0;font-size:15px;line-height:22px;color:#3b4659;">Tap the button below to confirm this email belongs to you. Once you're in, onboarding will walk you through creating a project and (optionally) wiring up Sentry, GitHub, and your team.</p>
+<p style="margin:8px 0 0 0;font-size:15px;line-height:22px;color:#3b4659;">Tap the button to confirm this email is yours. Setup is two steps: name your app, then see a plain-English diagnosis of a sample bug. Connecting GitHub, Slack or your team can come later.</p>
 </td></tr>
 
 <!-- Primary CTA -->
 <tr><td style="padding:24px 32px 0 32px;">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="#0ea5e9" style="border-radius:10px;">
-<a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 24px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">Confirm your email</a>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="#b3261e" style="border-radius:10px;">
+<a href="{{ .SiteURL }}admin/auth/confirm?token_hash={{ .TokenHash }}&amp;type=email&amp;redirect_to={{ .RedirectTo }}" style="display:inline-block;padding:14px 24px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">Confirm your email</a>
 </td></tr></table>
 </td></tr>
 
 <!-- Plain-text fallback URL -->
 <tr><td style="padding:20px 32px 0 32px;">
 <p style="margin:0 0 6px 0;font-size:13px;line-height:20px;color:#6b7585;">If the button does not open, paste this address into your browser:</p>
-<p style="margin:0;font-size:12px;line-height:18px;color:#3b4659;word-break:break-all;"><a href="{{ .ConfirmationURL }}" style="color:#3b4659;text-decoration:underline;">{{ .ConfirmationURL }}</a></p>
+<p style="margin:0;font-size:12px;line-height:18px;color:#3b4659;word-break:break-all;"><a href="{{ .SiteURL }}admin/auth/confirm?token_hash={{ .TokenHash }}&amp;type=email&amp;redirect_to={{ .RedirectTo }}" style="color:#3b4659;text-decoration:underline;">{{ .SiteURL }}admin/auth/confirm?token_hash={{ .TokenHash }}&amp;type=email&amp;redirect_to={{ .RedirectTo }}</a></p>
 </td></tr>
 
 <!-- Footer: why + support + origin -->

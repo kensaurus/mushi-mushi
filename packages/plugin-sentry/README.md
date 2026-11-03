@@ -4,11 +4,11 @@
 
 For teams who already watch Sentry and want user reports there too. This
 copies the bugs your users report through Mushi Mushi into Sentry, next to your
-Sentry errors, and marks them resolved when Mushi applies a fix.
+Sentry errors, and marks them resolved when Mushi Mushi applies a fix.
 
 **Do you need this package?** Only for that copy into Sentry. On Mushi Mushi
-Cloud, Sentry errors flowing *into* Mushi, and resolving the linked Sentry
-issue when a Mushi fix merges, are built in: connect Sentry on the
+Cloud, Sentry errors flowing *into* Mushi Mushi, and resolving the linked Sentry
+issue when a Mushi Mushi fix merges, are built in: connect Sentry on the
 **Integrations** page of the console, on any plan. Installing **Sentry Mirror**
 from the Marketplace needs a paid plan (Builder or above, see
 [pricing](https://kensaur.us/mushi-mushi/docs/pricing)).
@@ -65,7 +65,7 @@ express().post('/mushi/webhook', expressMiddleware(handler)).listen(3000)
   captures a Sentry event through the Store endpoint, with the fingerprint
   below. The code can instead send the report as **User Feedback** on an
   existing Sentry event when the payload carries `report.sentry_event_id` and
-  an auth token is set, but Mushi does not send `sentry_event_id` today, so
+  an auth token is set, but Mushi Mushi does not send `sentry_event_id` today, so
   every report takes the Store path.
 - `fix.proposed`: sends an event to Sentry only if `markInProgress: true`.
 - `fix.applied`: captures an `info` event with `mushi.fixed=true`, and (when
@@ -87,4 +87,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 529 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

@@ -125,20 +125,20 @@ function McpLane({ client, input, isDemo }: { client: McpClientDef; input: McpBu
       {isDemo ? (
         <div className="mushi-connect-callout">
           <strong>Live demo — no signup.</strong> Installs <strong>read-only</strong> access to a
-          seeded Mushi project so you can try the tools right now.{' '}
+          seeded Mushi Mushi project so you can try the tools right now.{' '}
           <a href={CONSOLE_CONNECT_URL} className="font-medium underline [@media(hover:hover)]:hover:opacity-80">
             Connect your own project →
           </a>
         </div>
       ) : oauth ? (
         <div className="mushi-connect-callout">
-          <strong>No keys to paste.</strong> This installs only the Mushi URL. The first time{' '}
-          {client.label} uses it, your browser opens the Mushi sign-in; approve all your apps or pick
+          <strong>No keys to paste.</strong> This installs only the Mushi Mushi URL. The first time{' '}
+          {client.label} uses it, your browser opens the Mushi Mushi sign-in; approve all your apps or pick
           some, and a revocable key is made for you. Revoke it any time under Editor agents in the console.
         </div>
       ) : (
         <div className="mushi-connect-callout">
-          <strong>{client.label} needs a key.</strong> It runs Mushi as a local process, which has no
+          <strong>{client.label} needs a key.</strong> It runs Mushi Mushi as a local process, which has no
           browser sign-in. Replace{' '}
           <code className="rounded bg-[var(--mushi-paper)] px-1 font-mono text-xs">{PLACEHOLDER_KEY}</code>{' '}
           with your real key, or{' '}
@@ -166,7 +166,7 @@ function McpLane({ client, input, isDemo }: { client: McpClientDef; input: McpBu
             {isDemo
               ? 'Installs the read-only demo — no signup. Connect your own project to use your data and write tools.'
               : oauth
-                ? 'Installs the hosted Mushi URL. Sign-in runs in your browser the first time the editor calls it.'
+                ? 'Installs the hosted Mushi Mushi URL. Sign-in runs in your browser the first time the editor calls it.'
                 : 'This deeplink uses a placeholder key. Sign in to inject your real key automatically.'}
           </p>
           <details className="group">
@@ -212,7 +212,7 @@ function CliLane({ client }: { client: McpClientDef }) {
   return (
     <div className="space-y-5">
       <p className="text-sm text-[var(--mushi-ink-muted)]">
-        Install the Mushi CLI once, log in, and wire any supported IDE in seconds.
+        Install the Mushi Mushi CLI once, log in, and wire any supported IDE in seconds.
       </p>
       <ol className="space-y-4">
         {[
@@ -245,9 +245,9 @@ function SkillsLane({ client }: { client: McpClientDef }) {
   // zero-typing path is a prompt the agent executes, not a command the human
   // runs.
   const agentPrompt =
-    'Install the Mushi skills from github.com/kensaurus/mushi-mushi ' +
+    'Install the Mushi Mushi skills from github.com/kensaurus/mushi-mushi ' +
     '(`npx skills add kensaurus/mushi-mushi`), then run the mushi-setup skill to wire the ' +
-    'Mushi SDK and MCP server into this app and send a test report to verify the connection.'
+    'Mushi Mushi SDK and MCP server into this app and send a test report to verify the connection.'
 
   return (
     <div className="space-y-4">

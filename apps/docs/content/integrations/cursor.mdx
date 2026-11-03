@@ -29,7 +29,7 @@ npx mushi-mushi setup --ide cursor
 
 This writes `.cursor/mcp.json` with a `mushi` entry that points at the hosted
 Mushi Mushi MCP URL. No key is written to the file: Cursor opens a browser
-sign-in the first time the agent calls Mushi. If the CLI has no saved login
+sign-in the first time the agent calls Mushi Mushi. If the CLI has no saved login
 yet, the command signs you in through your browser first. If the file already
 exists, the command merges the block without overwriting other entries.
 
@@ -46,7 +46,7 @@ npx mushi-mushi setup --ide cursor --stdio
 
 Make that key in the console on **Manage apps → Generate API key** with the
 **MCP read-only** preset, or **MCP read + write** if the agent should dispatch
-fixes. (**Settings → AI keys** is for your own LLM keys, not Mushi keys.)
+fixes. (**Settings → AI keys** is for your own LLM keys, not Mushi Mushi keys.)
 
 ### (Optional) Add the evolution-loop coding rules
 
@@ -65,11 +65,11 @@ Download the template to inspect it first:
 ### Restart Cursor
 
 Reload the window (`Ctrl+Shift+P` → "Developer: Reload Window") or quit
-and reopen. The Mushi tools appear in the MCP tools picker.
+and reopen. The Mushi Mushi tools appear in the MCP tools picker.
 
 ### Verify
 
-In Cursor chat, ask: **"Use the Mushi MCP to list my recent reports"**.
+In Cursor chat, ask: **"Use the Mushi Mushi MCP to list my recent reports"**.
 You should see your most recent bug reports from the dashboard.
 
 </Steps>
@@ -98,14 +98,16 @@ up-to-date anti-patterns from your project's fix history.
 
 ## Connecting GitHub for auto-PR
 
-For Cursor to open draft PRs via `dispatch_fix`, install the Mushi GitHub
-App on your repo. In the admin console, open **Integrations** and click
-**Install GitHub App**. Turn on **Automatic fixes** on the same page:
+For Cursor to open draft PRs via `dispatch_fix`, install the Mushi Mushi GitHub
+App on your repo. In the admin console, open **Integrations**, click
+**Connect GitHub**, sign in to GitHub and pick the repository (GitHub offers
+the install step if the App is not on your account yet). Turn on
+**Automatic fixes** on the same page:
 `dispatch_fix` is refused while it is off.
 
 ## Troubleshooting
 
-**Cursor shows no Mushi tools:** Reload the window and check that
+**Cursor shows no Mushi Mushi tools:** Reload the window and check that
 `.cursor/mcp.json` exists. Run `npx mushi-mushi whoami` to verify credentials.
 
 **`[INSUFFICIENT_SCOPE]` error:** Your key needs the `mcp:write` scope to

@@ -7,9 +7,9 @@ a Discord channel when Mushi Mushi triages a bug, proposes a fix, applies it,
 or changes a report's status.
 
 **Do you need this package?** Not on Mushi Mushi Cloud: paste a Discord webhook
-URL on the **Integrations** page of the console and Mushi posts to the
+URL on the **Integrations** page of the console and Mushi Mushi posts to the
 channel itself, on any plan. The console's Marketplace has no Discord listing
-(checked 2026-10-29), so this package only receives events from a Mushi server you
+(checked 2026-10-29), so this package only receives events from a Mushi Mushi server you
 run yourself, once you add a `plugin_registry` row for it.
 
 ```bash
@@ -71,4 +71,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 529 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

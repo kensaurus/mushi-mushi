@@ -89,6 +89,17 @@ const HEARTBEAT_MS = 60_000
 const IDLE_MS = 15 * 60_000
 /** After a transient error (network, a 5xx). */
 const BACKOFF_MS = 2 * 60_000
+/**
+ * After runs the machine failed (infra), or the agent account refused, the
+ * lane waits before it claims again: the first such failure retries at once
+ * (the server requeues it at the front, once), then 1, 2, 4 … 30 min. Without it a spent
+ * Cursor plan turned every lane into a 14-second claim-fail loop (2026-10-31:
+ * 251 audit claims in an hour, all "Increase limits").
+ */
+const INFRA_BACKOFF_MS = 60_000
+const INFRA_BACKOFF_MAX_MS = 30 * 60_000
+/** The agent account would not run at all (spent usage, a model its plan lacks): the run says nothing about the report. */
+const AGENT_UNAVAILABLE = /ActionRequiredError|Increase limits|usage limit|out of (?:usage|credits)|Cannot use this model/i
 const GH_CHECK_MS = 5 * 60_000
 const CURSOR_CHECK_MS = 20 * 60_000
 
@@ -159,6 +170,8 @@ interface LaneRuntime {
   followup: boolean
   nextClaimAt: number
   nextFollowupAt: number
+  /** Machine-side failures in a row; any other ending resets it. */
+  infraStreak: number
   state: string
   /** The state the last heartbeat sent, and since when (for "waited 3 h for an agent space"). */
   seenState: string
@@ -168,6 +181,19 @@ interface LaneRuntime {
   counters: { runs: number; prs: number; pushes: number; timeouts: number; errors: number; idle: number; agentMs: number }
   last: string
 }
+
+/** @internal Exported for tests only. How long a lane waits after `streak` machine-side failures in a row. */
+export function infraBackoffMs(streak: number): number {
+  return streak <= 1 ? 0 : Math.min(INFRA_BACKOFF_MS * 2 ** (streak - 2), INFRA_BACKOFF_MAX_MS)
+}
+
+/** @internal Exported for tests only. A run the machine or the agent account failed, not the code. */
+export function machineFailed(result: string, failureKind: 'infra' | 'code' | undefined, detail: string): boolean {
+  return (result === 'failed' && failureKind === 'infra') || AGENT_UNAVAILABLE.test(detail)
+}
+
+/** Heartbeats in a row on which the server must refuse the key before the worker stops for good. */
+const KEY_REFUSALS_TO_STOP = 3
 
 /** @internal Exported for tests only. The local worker's state machine; `tick()` is one heartbeat and one pass over the lanes. */
 export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
@@ -179,6 +205,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     followup: false,
     nextClaimAt: 0,
     nextFollowupAt: 0,
+    infraStreak: 0,
     state: deps.notReady?.has(local.name) ? 'not-ready' : 'starting',
     seenState: '',
     stateAt: deps.now(),
@@ -211,6 +238,13 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     return r.data
   }
   const refusedByKey = (r: ApiResult<unknown>) => !r.ok && (r.httpStatus === 401 || (r.httpStatus === 403 && /REVOKED|INVALID_API_KEY|WORKER_KEY_REQUIRED|INSUFFICIENT_SCOPE/.test(r.error.code)))
+  /** A 403 that names a revoke or a missing scope is a decision someone made in the console: stop at once. */
+  const revokedForSure = (r: ApiResult<unknown>) => !r.ok && r.httpStatus === 403 && /REVOKED|WORKER_KEY_REQUIRED|INSUFFICIENT_SCOPE/.test(r.error.code)
+  // A bare 401 can be the server failing to look the key up: on 2026-10-30 a
+  // one-second gateway error answered INVALID_API_KEY, this worker stopped
+  // for good and stayed offline 11 hours. It now stops only after the key is
+  // refused on KEY_REFUSALS_TO_STOP heartbeats in a row.
+  let keyRefusals = 0
 
   function stopAll(why: string): void {
     stopped = why
@@ -282,6 +316,19 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     }
   }
 
+  /** Count machine-side failures in a row and hold the lane's next claim back accordingly. */
+  function afterRun(lane: LaneRuntime, failedOnMachine: boolean): void {
+    if (!failedOnMachine) {
+      lane.infraStreak = 0
+      return
+    }
+    lane.infraStreak++
+    const wait = infraBackoffMs(lane.infraStreak)
+    if (wait === 0) return
+    lane.nextClaimAt = Math.max(lane.nextClaimAt, deps.now() + wait)
+    say(lane, `  the machine or the agent account failed ${lane.infraStreak} time${lane.infraStreak === 1 ? '' : 's'} in a row: next claim in ${Math.round(wait / 60_000)} min`)
+  }
+
   function startRun(lane: LaneRuntime, claim: ClaimFromServer): void {
     const ac = new AbortController()
     lane.running.set(claim.id, ac)
@@ -317,6 +364,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
       if (out.result === 'failed') lane.counters.errors++
       lane.last = `${claim.report.id.slice(0, 8)} → ${out.outcome}`.slice(0, 160)
       say(lane, `  → ${out.outcome}${out.prUrl ? ` ${out.prUrl}` : ''}`)
+      afterRun(lane, machineFailed(out.result, out.failureKind, out.outcome))
       const done = await deps.call<{ requeued: boolean }>(`/v1/worker/claims/${claim.id}/done`, {
         method: 'POST',
         body: JSON.stringify({
@@ -367,6 +415,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
       if (out.result === 'failed') lane.counters.errors++
       lane.last = `${out.result}: ${out.detail}`.slice(0, 160)
       say(lane, `  → ${out.result}: ${out.detail}`)
+      afterRun(lane, machineFailed(out.result, out.failureKind, out.detail))
       const done = await deps.call<{ requeued: boolean }>(`/v1/worker/claims/${claimId}/done`, {
         method: 'POST',
         body: JSON.stringify({
@@ -477,7 +526,13 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     while (!stopped && lane.running.size < c.concurrency && agents() < g.max_agents && now >= lane.nextClaimAt) {
       const r = await deps.call<{ claim: unknown; reason?: string }>('/v1/worker/claim', { method: 'POST', body: JSON.stringify({ laneId: lane.serverId }) })
       if (refusedByKey(r)) {
-        stopAll(`the server refused this worker's key (${(r as { error: { code: string } }).error.code}); it was revoked or lost access`)
+        if (revokedForSure(r)) stopAll(`the server refused this worker's key (${(r as { error: { code: string } }).error.code}); it was revoked or lost access`)
+        else {
+          // The heartbeat decides whether the key is really gone; this lane waits.
+          lane.nextClaimAt = now + BACKOFF_MS
+          lane.state = 'backoff'
+          say(lane, `claim refused (${(r as { error: { code: string } }).error.code}); the next heartbeat checks the key again`)
+        }
         return
       }
       if (!r.ok) {
@@ -533,9 +588,17 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     if (stopped) return
     const hb = await deps.call<unknown>('/v1/worker/heartbeat', { method: 'POST', body: JSON.stringify(heartbeatBody()) })
     if (refusedByKey(hb)) {
-      stopAll(`the server refused this worker's key (${(hb as { error: { code: string } }).error.code}); it was revoked or lost access`)
+      const code = (hb as { error: { code: string } }).error.code
+      keyRefusals++
+      if (revokedForSure(hb) || keyRefusals >= KEY_REFUSALS_TO_STOP) {
+        stopAll(`the server refused this worker's key (${code}) ${keyRefusals > 1 ? `${keyRefusals} times in a row` : ''}; it was revoked or lost access`.replace(/\s+;/, ';'))
+        return
+      }
+      hostState = 'backoff'
+      say(null, `the server refused this worker's key (${code}); checking again before stopping (${keyRefusals} of ${KEY_REFUSALS_TO_STOP})`)
       return
     }
+    if (hb.ok) keyRefusals = 0
     if (!hb.ok) {
       hostState = 'backoff'
       say(null, `heartbeat failed: ${hb.error.code} ${hb.error.message}`)

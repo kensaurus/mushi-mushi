@@ -21,14 +21,14 @@ tab.
 
 ## Setup
 
-On Mushi Cloud there is nothing to install or host:
+On Mushi Mushi Cloud there is nothing to install or host:
 
-1. In the Mushi console, open the **Integrations** page and click **Add to
+1. In the Mushi Mushi console, open the **Integrations** page and click **Add to
    Slack** on the Slack card. Approve the install in Slack.
 2. Pick the channel for report notifications.
-3. Invite the Mushi bot to that channel.
+3. Invite the Mushi Mushi bot to that channel.
 
-Running the Mushi backend yourself? Create the Slack app from the manifest
+Running the Mushi Mushi backend yourself? Create the Slack app from the manifest
 in [`@mushi-mushi/plugin-slack-app`](https://www.npmjs.com/package/@mushi-mushi/plugin-slack-app),
 point its Interactivity Request URL at `<functions-url>/slack-interactions`,
 and set `SLACK_SIGNING_SECRET`, `SLACK_CLIENT_ID` and `SLACK_CLIENT_SECRET`
@@ -94,7 +94,7 @@ the channel) it came from.
 
 [`@mushi-mushi/plugin-slack-app`](https://www.npmjs.com/package/@mushi-mushi/plugin-slack-app)
 
-You don't need the package on Mushi Cloud. It holds the pieces for hosting
+You don't need the package on Mushi Mushi Cloud. It holds the pieces for hosting
 the Slack side yourself: the slash command router (`list`, `open `,
 `resolve `, `help`), `verifySlackRequest`, the OAuth helpers
 (`buildInstallUrl`, `exchangeCode`), the app manifest, and

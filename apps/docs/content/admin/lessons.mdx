@@ -28,7 +28,7 @@ the MCP tools `query_lessons` and `list_lessons`, or from `.mushi/lessons.json` 
 1. **Reports arrive** — users submit feedback via the SDK.
 2. **Embeddings cluster** — reports with similar semantics are grouped into a
    **mistake cluster** automatically.
-3. **Ready to promote** — once at least 3 reports share one cause and Mushi has
+3. **Ready to promote** — once at least 3 reports share one cause and Mushi Mushi has
    suggested a rule, the pattern is ready. (Behind the scenes a pattern whose reports
    read very alike, coherence 0.75 or more, is promoted for you every 6 hours.)
 4. **You promote** — open **Recurring patterns**, read the suggested rule, and click

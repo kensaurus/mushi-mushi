@@ -138,4 +138,31 @@ describe('1d625b63 skipped runs are not failures', () => {
     expect(d.failingStories).toBe(1)
     expect(d.topFailingStoryName).toBe('Login')
   })
+
+  it('does not send a 0% pass rate for a story whose runs only skipped', async () => {
+    db = makeFakeDb(
+      {
+        projects: [{ id: P, name: 'App' }],
+        qa_stories: [
+          { id: 's1', project_id: P, name: 'Checkout', enabled: true, last_run_status: 'skipped', browser_provider: 'local', created_at: '2026-01-01', updated_at: '2026-10-28T00:00:00.000Z', script: null },
+          { id: 's2', project_id: P, name: 'Login', enabled: true, last_run_status: 'failed', browser_provider: 'local', created_at: '2026-01-02', updated_at: '2026-10-28T00:00:00.000Z', script: null },
+        ],
+        qa_story_coverage_24h: [
+          { story_id: 's1', project_id: P, name: 'Checkout', runs_24h: 6, passed_24h: 0, failed_24h: 0, error_24h: 0, pass_rate_pct: 0 },
+          { story_id: 's2', project_id: P, name: 'Login', runs_24h: 4, passed_24h: 1, failed_24h: 3, error_24h: 0, pass_rate_pct: 25 },
+        ],
+        qa_story_runs: [],
+      },
+      { maxRows: 1000, rpcError: () => ({ code: 'PGRST202', message: 'missing' }) },
+    )
+    const res = await app.request(`/v1/admin/projects/${P}/qa-coverage`)
+    const coverage = ((await res.json()) as { data: { coverage: Array<{ story_id: string; pass_rate_pct: number | null; last_run_status: string | null }> } }).data.coverage
+    expect(coverage.find((c) => c.story_id === 's1')).toMatchObject({ pass_rate_pct: null, last_run_status: 'skipped' })
+    expect(coverage.find((c) => c.story_id === 's2')?.pass_rate_pct).toBe(25)
+
+    const summary = await app.request(`/v1/admin/projects/${P}/qa-coverage-summary`)
+    const tile = ((await summary.json()) as { data: { failing: number; top_failing: Array<{ name: string }> } }).data
+    expect(tile.failing).toBe(1)
+    expect(tile.top_failing.map((r) => r.name)).toEqual(['Login'])
+  })
 })

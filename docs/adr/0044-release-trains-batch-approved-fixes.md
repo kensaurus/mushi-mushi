@@ -114,3 +114,18 @@ blamed on the members.
   not only when the repo is otherwise idle. Before this, they were never
   worked on, because the train tick held the repo on every tick. At most 2
   conflict agents run per repo at a time. The rest show how many are ahead.
+
+## Amendment 2026-11-02: one full run per train, and no false reds
+
+Status: Accepted 2026-11-02 by team-lead (Claude) under the owner's delegation ("please proceed thoroughly for me").
+
+The owner asked to test locally and release through a single CI run, because the Alienware that runs CI is unstable and is not being repaired for now.
+
+Measured since the 2026-10-26 amendment: 131 trains, 63 merged, 64 red, 47 of them bisection retries. Every member had green CI on its own head, so about half the full train runs were wasted, and a bisection spends up to four more. In 8 sampled red trains on the three busiest repos, no failure was a crash. They were real gate failures, and three solo-boss-cloud-documentation trains failed on a count in the backend repo that no fix PR could change. kci already re-runs crashed jobs (96 of 124 from 2026-10-29).
+
+- **The own-CI rule stays.** Dropping it would bring back the 2026-10-26 loop: every red PR sinks a train, and each bisection is another full run. "Own CI" may be a lighter tier than the train's. solo-boss-cloud-documentation (`CI_PROFILE` economy) and tsumagoi (bot tier) already do this, and the full suite runs on `mushi/train/*`, `release/*` and main.
+- **Advisory checks hold nothing.** `ADVISORY_CHECKS` in `_shared/merge-queue.ts` lists checks about the repo, not the PR. They stay on GitHub but never wait or fail in the queue or a train.
+- **A gate must be able to pass on the PR's own code.** A check that fails because of another repo, or the base branch's unrelated state, does not belong in a PR's required set. See the matching fix in solo-boss-cloud-documentation `scripts/docs-stats.mjs`.
+- **A train merges only when GitHub says it can.** `trainMergeGate` reads GitHub's merge state as well as the check runs. A train GitHub blocks is held, and after 30 minutes it is abandoned so its repo's queue can move.
+- **Lanes test before they hand back.** `mushi work` tells the agent to run the unit tests and a typecheck for what it changed, and to leave full suites to the train.
+

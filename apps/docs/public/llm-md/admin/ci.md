@@ -21,9 +21,9 @@ AI agents open a lot of pull requests, and every one runs your tests on GitHub A
 
 - **See what you really pay.** Your GitHub Actions bill per repo and per day, with public repos and free minutes shown as $0.
 - **Find the waste.** Tests that run on drafts, schedules that run every hour, docs-only changes that run every test.
-- **Fix it in one pull request.** Mushi opens a small workflow change for you to review, then shows the minutes saved after it merges.
+- **Fix it in one pull request.** Mushi Mushi opens a small workflow change for you to review, then shows the minutes saved after it merges.
 
-Mushi's own fix pull requests run your tests only after a review says they are worth merging.
+Mushi Mushi's own fix pull requests run your tests only after a review says they are worth merging.
 
 ## How it reads your runs
 
@@ -53,7 +53,7 @@ Above the queue: how many are waiting now, how many are running, the typical wai
 
 **Runner map** is your machines, the runners on them, the repositories they serve, and the jobs waiting or running now. Click a card for its health and recent jobs.
 
-Runners that live for a single job, named as a label plus a number of seconds, are folded into that label. With **Administration: read** on the GitHub token, Mushi reads the repository runner list, including idle and offline runners. Without it, the page says it only sees runners through jobs. Without **Actions: read**, it cannot see the jobs at all.
+Runners that live for a single job, named as a label plus a number of seconds, are folded into that label. With **Administration: read** on the GitHub token, Mushi Mushi reads the repository runner list, including idle and offline runners. Without it, the page says it only sees runners through jobs. Without **Actions: read**, it cannot see the jobs at all.
 
 ## What would make fixes land sooner
 
@@ -70,10 +70,10 @@ The rest of the cost section estimates money from job times. **Your real bill**,
 - this month's net charge so far, in large type;
 - the gross price beside it, because public repos and your plan's included minutes are free and show up as a discount;
 - the net per repository over the last 30 days, and the net per day;
-- the change against the 30 days before, shown only when Mushi holds the whole earlier period;
-- how much of your paid GitHub-hosted minutes ran on Mushi's own agent branches. This share is estimated from the jobs Mushi recorded.
+- the change against the 30 days before, shown only when Mushi Mushi holds the whole earlier period;
+- how much of your paid GitHub-hosted minutes ran on Mushi Mushi's own agent branches. This share is estimated from the jobs Mushi Mushi recorded.
 
-Mushi reads the bill once a day for each GitHub account or organization your repositories belong to. It uses only the GitHub token saved in the project's settings, never the GitHub App. The token needs billing access:
+Mushi Mushi reads the bill once a day for each GitHub account or organization your repositories belong to. It uses only the GitHub token saved in the project's settings, never the GitHub App. The token needs billing access:
 
 | Account | Fine-grained token permission |
 | --- | --- |
@@ -93,7 +93,7 @@ A classic token, which is what `gh auth login` makes, reads a personal account's
 
 ### Cost advice that reads your workflows
 
-Each item of **Cost advice** gives its evidence and a saving per month. The saving is the billed minutes Mushi recorded over the window, at GitHub's list price. It is zero for public repos and self-hosted runners, which GitHub doesn't charge for. An item with an **Open fix PR** button can open a pull request that makes the change.
+Each item of **Cost advice** gives its evidence and a saving per month. The saving is the billed minutes Mushi Mushi recorded over the window, at GitHub's list price. It is zero for public repos and self-hosted runners, which GitHub doesn't charge for. An item with an **Open fix PR** button can open a pull request that makes the change.
 
 | Advice | When it appears | One-click fix |
 | --- | --- | --- |
@@ -107,7 +107,7 @@ Each item of **Cost advice** gives its evidence and a saving per month. The savi
 | Old runs keep going | A push or pull request workflow doesn't cancel the run it replaces | Yes, when it has no concurrency group yet |
 | Draft pull requests run the full CI | A pull request workflow doesn't skip drafts | Yes: skip drafts |
 
-Advice that needs data Mushi doesn't have yet stays hidden. It never guesses.
+Advice that needs data Mushi Mushi doesn't have yet stays hidden. It never guesses.
 
 ## Fix it in one PR
 
@@ -115,16 +115,16 @@ Some advice is one edit to one workflow file. Those cards have an **Open fix PR*
 
 | Fix | What changes in the workflow |
 | --- | --- |
-| Cancel superseded runs | A `concurrency` group. A new push to a pull request cancels the run it replaces. Pushes, manual and scheduled runs always finish. Mushi refuses on a workflow that deploys or releases. |
+| Cancel superseded runs | A `concurrency` group. A new push to a pull request cancels the run it replaces. Pushes, manual and scheduled runs always finish. Mushi Mushi refuses on a workflow that deploys or releases. |
 | Skip drafts | `ready_for_review` is added to the `pull_request` types, and every job skips draft pull requests. A job whose check your branch requires keeps running and fails at a first step named "Draft PRs run no CI": a skipped required check reads as passing, and a draft must never merge untested. |
-| Run the schedule weekly | A schedule that runs more than once a week runs once a week, at the same hour. Mushi refuses on a workflow that deploys or releases, because some daily schedules roll out releases on purpose. |
-| Skip docs-only changes | `paths-ignore` for Markdown files, `docs/`, the license and issue templates on `pull_request` and `push`. Mushi refuses when the workflow produces a required check, or a job looks like one: a skipped workflow never reports, so the pull request could not merge. It also refuses when a trigger already lists `paths`. |
+| Run the schedule weekly | A schedule that runs more than once a week runs once a week, at the same hour. Mushi Mushi refuses on a workflow that deploys or releases, because some daily schedules roll out releases on purpose. |
+| Skip docs-only changes | `paths-ignore` for Markdown files, `docs/`, the license and issue templates on `pull_request` and `push`. Mushi Mushi refuses when the workflow produces a required check, or a job looks like one: a skipped workflow never reports, so the pull request could not merge. It also refuses when a trigger already lists `paths`. |
 
-Mushi reads which checks your default branch requires (branch protection and rulesets). When it cannot, it refuses the draft and docs fixes rather than guess.
+Mushi Mushi reads which checks your default branch requires (branch protection and rulesets). When it cannot, it refuses the draft and docs fixes rather than guess.
 
-Mushi asks you to confirm first. It then edits only that file, keeps your comments, and opens a **draft** pull request titled `ci: …`. Nothing changes until you review it, mark it ready and merge it. The card shows the job's progress and the link. If the workflow already has the fix, it says so and opens nothing.
+Mushi Mushi asks you to confirm first. It then edits only that file, keeps your comments, and opens a **draft** pull request titled `ci: …`. Nothing changes until you review it, mark it ready and merge it. The card shows the job's progress and the link. If the workflow already has the fix, it says so and opens nothing.
 
-After the merge, the card shows the saving Mushi measured. That is the workflow's billed minutes per day after the merge, against the 14 days before. Like every number on this page, it is estimated from job times.
+After the merge, the card shows the saving Mushi Mushi measured. That is the workflow's billed minutes per day after the merge, against the 14 days before. Like every number on this page, it is estimated from job times.
 
 Writing a workflow file needs the GitHub App's **Workflows: Read and write** permission, or a token with the `workflow` scope. Without it, the card says so. You can still copy the fix and commit it yourself.
 
@@ -134,13 +134,13 @@ From the terminal, run `mushi runner fix --repo <owner/repo> --workflow .github/
 
 Every pull request runs CI once, and each run costs minutes. So when a repo has several fixes, it's cheaper to open them as **one** pull request. **Apply to every app**, next to the advice list, does that for all your apps at once:
 
-1. **Preview.** Mushi lists every fix it can open in the apps you may change, grouped by repo, with the estimated saving per fix and per repo. A fix whose pull request is still open, or is being opened, can't be picked again. Mushi can't price every fix: those say "not priced", never $0. A repo where Mushi already knows its GitHub access can't edit workflow files starts unticked, with the reason. Mushi knows this from the setup check or the last attempt.
-2. **Pick and confirm.** Tick the fixes you want, then confirm once. Mushi opens at most 10 repos at a time and 20 fixes per repo. Each repo counts once against its app's 10 CI fix pull requests an hour.
-3. **Results.** Each repo gets **one draft pull request** with a `ci:` title. The body lists every change with what it changed and why, plus the workflow's minutes over the last 14 days. Each fix keeps the refusals above. A fix Mushi refused is listed in the pull request and in the result, never dropped. When Mushi refuses every fix in a repo, it opens no pull request there and says why.
+1. **Preview.** Mushi Mushi lists every fix it can open in the apps you may change, grouped by repo, with the estimated saving per fix and per repo. A fix whose pull request is still open, or is being opened, can't be picked again. Mushi Mushi can't price every fix: those say "not priced", never $0. A repo where Mushi Mushi already knows its GitHub access can't edit workflow files starts unticked, with the reason. Mushi Mushi knows this from the setup check or the last attempt.
+2. **Pick and confirm.** Tick the fixes you want, then confirm once. Mushi Mushi opens at most 10 repos at a time and 20 fixes per repo. Each repo counts once against its app's 10 CI fix pull requests an hour.
+3. **Results.** Each repo gets **one draft pull request** with a `ci:` title. The body lists every change with what it changed and why, plus the workflow's minutes over the last 14 days. Each fix keeps the refusals above. A fix Mushi Mushi refused is listed in the pull request and in the result, never dropped. When Mushi Mushi refuses every fix in a repo, it opens no pull request there and says why.
 
-Before opening anything, Mushi rebuilds the advice. It opens only fixes it still advises, so a stale preview can't open something the advice no longer says.
+Before opening anything, Mushi Mushi rebuilds the advice. It opens only fixes it still advises, so a stale preview can't open something the advice no longer says.
 
-After the merge, Mushi measures each changed workflow once, even when two fixes changed the same file. The saving isn't counted twice.
+After the merge, Mushi Mushi measures each changed workflow once, even when two fixes changed the same file. The saving isn't counted twice.
 
 From the terminal, run `mushi runner fix --all` to preview and `mushi runner fix --all --apply` to open. Follow each repo with `mushi runner fix-status --bundle `. In your editor, use the MCP tools `preview_ci_cost_fix_rollout`, `apply_ci_cost_fix_rollout` and `get_ci_cost_fix_bundle`.
 

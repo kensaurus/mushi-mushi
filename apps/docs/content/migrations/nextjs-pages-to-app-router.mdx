@@ -19,7 +19,7 @@ For the framework-level migration mechanics see the
 import { Callout } from 'nextra/components'
 
 <Callout type="info">
-  **Same Mushi project, same API key.** App routes get the provider from
+  **Same Mushi Mushi project, same API key.** App routes get the provider from
   `app/providers.tsx`; routes still in `pages/` keep getting it from
   `pages/_app.tsx` until you move them. Everything downstream works the
   same.
@@ -58,7 +58,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   )
 }`}</pre> },
-    { id: 'mushi-provider', label: 'Create app/providers.tsx with the Mushi provider', content: <pre className="text-xs">{`// app/providers.tsx
+    { id: 'mushi-provider', label: 'Create app/providers.tsx with the Mushi Mushi provider', content: <pre className="text-xs">{`// app/providers.tsx
 'use client'   // <-- REQUIRED — MushiProvider uses React state
 
 import { MushiProvider } from '@mushi-mushi/react'
@@ -75,10 +75,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
 }`}</pre> },
     { id: 'remove-old-app', label: 'Keep pages/_app.tsx until the last pages/ route is moved', content: <><code>app/layout.tsx</code> applies only to routes in <code>app/</code>. Routes still in <code>pages/</code> need <code>pages/_app.tsx</code> (and its <code>MushiProvider</code>); Next.js says to keep <code>_app</code> and <code>_document</code> while migrating and delete them once fully migrated.</> },
     { id: 'port-routes', label: 'Port routes one at a time', content: <>For each route under <code>pages/</code>, create the equivalent under <code>app/</code> (e.g. <code>pages/about.tsx</code> → <code>app/about/page.tsx</code>) and delete the <code>pages/</code> file in the same change, since the same URL can't exist in both. Check it on a preview deploy.</> },
-    { id: 'data-fetching', label: 'Convert data fetching to Server Components', content: <>Most <code>getServerSideProps</code> calls become <code>async function Page()</code>. Mushi's web SDK still runs client-side, so <code>useMushi()</code> only works inside <code>'use client'</code> components — read user info on the server, pass via props, then call Mushi from the client child.</> },
+    { id: 'data-fetching', label: 'Convert data fetching to Server Components', content: <>Most <code>getServerSideProps</code> calls become <code>async function Page()</code>. Mushi Mushi's web SDK still runs client-side, so <code>useMushi()</code> only works inside <code>'use client'</code> components — read user info on the server, pass via props, then call Mushi Mushi from the client child.</> },
     { id: 'csp', label: 'Update CSP for App Router', content: <>If you ship a strict CSP, App Router uses different chunk URLs than Pages. See the <a href="/sdks/nextjs-app-router-csp">Next.js App Router CSP integration</a> for the Mushi-specific connect-src and script-src rules.</> },
     { id: 'static-export', label: 'Re-test static export (if applicable)', content: <>App Router supports <code>output: 'export'</code>, with constraints (no Server Actions, no dynamic routes without <code>generateStaticParams</code>). See <a href="/sdks/nextjs-static-export">Next.js static export</a>.</> },
-    { id: 'verify', label: 'Smoke-test on every primary route', content: <>Open the floating Mushi widget, submit a test report from each major page, and confirm the report shows the correct page URL.</> },
+    { id: 'verify', label: 'Smoke-test on every primary route', content: <>Open the floating Mushi Mushi widget, submit a test report from each major page, and confirm the report shows the correct page URL.</> },
   ]}
 />
 
@@ -99,13 +99,13 @@ are placed.
 ## Server Components and `useMushi()`
 
 `useMushi()`, `useMushiReport()`, and the visual widget all require a
-client component. That's expected: Mushi captures user-side context
+client component. That's expected: Mushi Mushi captures user-side context
 (console, network, screenshot) which only exists in the browser.
 
 If you need user-facing context inside a Server Component (e.g. to
 pre-render a "Report a problem with this article" button with a
 contextual route), pass the data down as props and let the client child
-call Mushi:
+call Mushi Mushi:
 
 ```tsx
 // app/articles/[slug]/page.tsx (Server Component)
@@ -127,9 +127,9 @@ export function ArticleReportButton({ articleId }: { articleId: string }) {
 ## Common gotchas
 
 - **Deleting `pages/_app.tsx` too early.** Routes still in `pages/` lose
-  their providers, including Mushi's. Delete `_app` only after the last
+  their providers, including Mushi Mushi's. Delete `_app` only after the last
   `pages/` route has moved.
-- **Navigating between the two routers is a full page load.** The Mushi
+- **Navigating between the two routers is a full page load.** The Mushi Mushi
   SDK starts again on the other side; nothing else to do.
 - **`useMushi()` in a Server Component.** Build error. Add `'use client'`
   to the file or move the hook into a child client component.

@@ -194,7 +194,7 @@ jobs:
 
 | Output              | Description                                                                            |
 | ------------------- | -------------------------------------------------------------------------------------- |
-| `result`            | Raw JSON envelope returned by the Mushi API.                                           |
+| `result`            | Raw JSON envelope returned by the Mushi Mushi API.                                           |
 | `coverage`          | For `check-coverage`: observed classified ratio (0–1).                                 |
 | `findings`          | For `spec-drift`: JSON array of the oasdiff findings.                                  |
 | `ready_to_propose`  | For `discovery-status`: `'true'` once the project has a defensible-sized SDK sample.   |
@@ -210,4 +210,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 529 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

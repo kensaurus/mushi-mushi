@@ -28,7 +28,8 @@ describe('report detail: sentry_links', () => {
     const at = route.indexOf(".from('report_external_issues')")
     expect(at).toBeGreaterThan(0)
     const query = route.slice(at, at + 400)
-    expect(query).toContain("'external_id, external_url, resolved_at'")
+    // archived_at (2026-10-30): an issue archived from Mushi reads "Archived in Sentry", not open.
+    expect(query).toContain("'external_id, external_url, resolved_at, archived_at'")
     expect(query).toContain(".eq('report_id', reportId)")
     expect(query).toContain(".eq('project_id', data.project_id as string)")
     expect(query).toContain(".eq('system', 'sentry')")

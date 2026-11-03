@@ -8,7 +8,7 @@ lands.
 
 **Do you need this package?** Usually not. On Mushi Mushi Cloud you add
 PagerDuty on the **Integrations** page of the console (paste the Events API v2
-routing key, on any plan) and Mushi pages and resolves for you. Run this
+routing key, on any plan) and Mushi Mushi pages and resolves for you. Run this
 package only if you want the PagerDuty calls to come from your own server.
 Installing **PagerDuty Escalation** from the Marketplace needs a paid plan
 (Builder or above, see [pricing](https://kensaur.us/mushi-mushi/docs/pricing)).
@@ -52,7 +52,7 @@ express().post('/mushi/webhook', expressMiddleware(handler)).listen(3000)
 
 - `report.classified`: pages when the severity is at or above the threshold.
 - `sla.breached`: pages with the breach severity, whatever the threshold.
-  Mushi does not send this event yet.
+  Mushi Mushi does not send this event yet.
 - `fix.applied`: resolves the page.
 - `report.status_changed`: resolves the page when the new status is
   `fixed` or `resolved`.
@@ -74,4 +74,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 529 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

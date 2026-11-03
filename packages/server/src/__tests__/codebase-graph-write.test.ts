@@ -207,6 +207,20 @@ describe('writeCodebaseGraph', () => {
     expect(await writeCodebaseGraph(db as never, args)).toMatchObject({ ok: false, busy: true })
     expect(calls).toBe(1)
   })
+
+  // MUSHI-MUSHI-SERVER-2Q (2026-10-31): a Cloudflare 520 page became the job's
+  // `error` column and the Sentry `err` extra, 5 KB of HTML each.
+  it('reports a gateway HTML page by its title, not the page', async () => {
+    const page =
+      '<!DOCTYPE html>\n<head><title>supabase.co | 520: Web server is returning an unknown error</title></head>' +
+      `<body>${'x'.repeat(5000)}</body>`
+    const db = { rpc: async () => ({ data: null, error: { code: '', message: page } }) }
+    const out = await writeCodebaseGraph(db as never, args)
+    expect(out).toMatchObject({ ok: false, busy: false })
+    const message = (out as { message: string }).message
+    expect(message).toContain('520: Web server is returning an unknown error')
+    expect(message).not.toContain('<!DOCTYPE')
+  })
 })
 
 describe('runCodebaseAnalyzeJob graph write', () => {

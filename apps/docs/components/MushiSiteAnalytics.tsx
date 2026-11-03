@@ -2,7 +2,7 @@
 
 /**
  * FILE: apps/docs/components/MushiSiteAnalytics.tsx
- * PURPOSE: Mushi measuring its own funnel with its own SDK on the landing +
+ * PURPOSE: Mushi Mushi measuring its own funnel with its own SDK on the landing +
  *          docs site. First-party, consent-gated, no ads, no cross-site.
  *
  * Consent model
@@ -95,7 +95,7 @@ type Tracker = { track: (name: string, props: EventProps, reserved?: ReservedPro
 const QUEUE_MAX = 50
 
 const SITE_ANALYTICS_CONSENT_COPY =
-  'Mushi measures its own funnel with its own SDK — first-party, no ads, no cross-site tracking.'
+  'Mushi Mushi measures its own funnel with its own SDK — first-party, no ads, no cross-site tracking.'
 
 /**
  * Module singleton: survives React StrictMode double-mount and client
@@ -114,7 +114,7 @@ export interface LoadedMushi {
 let loadedMushi: LoadedMushi | null = null
 
 /**
- * The Mushi SDK instance, or null when it is not loaded (no consent yet, no
+ * The Mushi Mushi SDK instance, or null when it is not loaded (no consent yet, no
  * config, or init failed). Never triggers a load: callers fall back instead.
  */
 export function getLoadedMushi(): LoadedMushi | null {

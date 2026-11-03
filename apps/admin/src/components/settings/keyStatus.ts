@@ -69,6 +69,11 @@ function formatClock(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
+/** A time today ("11:37 AM"), or the date when it is later ("Nov 19, 2026"). */
+function formatUntil(iso: string, now: number): string {
+  return new Date(iso).toDateString() === new Date(now).toDateString() ? formatClock(iso) : formatDay(iso)
+}
+
 function formatDay(iso: string): string {
   return new Date(iso).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
 }
@@ -165,10 +170,23 @@ export function keyStatusView(
 
   const exhaustedUntil = 'exhausted_until' in key ? key.exhausted_until : null
   if (exhaustedUntil && Date.parse(exhaustedUntil) > now) {
+    // "Your next key" only when one can take over: on, checked, and not used
+    // up itself. With none, say that new work waits (2026-10-31: the only
+    // other Cursor key was turned off, and the row promised a next key).
+    const backup = context.pool.some(
+      (k) =>
+        k.id !== key.id &&
+        k.provider_slug === key.provider_slug &&
+        isRuntimeEligiblePoolKey(k, now) &&
+        !(k.exhausted_until && Date.parse(k.exhausted_until) > now),
+    )
+    const until = formatUntil(exhaustedUntil, now)
     return {
       state: 'attention',
       label: 'Used up',
-      detail: `The account reached its plan's usage limit. New agents use your next key until ${formatClock(exhaustedUntil)}; agents it already started keep running.`,
+      detail: backup
+        ? `The account reached its plan's usage limit. New agents use your next key until ${until}; agents it already started keep running.`
+        : `The account reached its plan's usage limit and no other ${provider} key is on, so new agents wait until ${until}. Agents already running keep going. Add a backup key to keep fixing now.`,
       action: 'add_backup',
     }
   }

@@ -1,4 +1,4 @@
-Copyright (c) 2026 Kenji Sakuramoto / Kensaurus 合同会社
+Copyright (c) 2026 kensaurus LLC
 
 This repository is open core. Not all of it is MIT. Portions are licensed as
 follows:
@@ -19,7 +19,7 @@ follows:
 
 * Brand assets are not licensed under any license in this repository. The
   Mushi Mushi logo, bug mark, app icons and mascot artwork are copyright
-  Kenji Sakuramoto / Kensaurus 合同会社, all rights reserved. They include
+  kensaurus LLC, all rights reserved. They include
   packages/brand/src/logo*.svg, packages/brand/src/logo-mark-512.png,
   apps/docs/public/brand/logo-mark.svg,
   apps/docs/public/integrations/mushi-mark-512.png, docs/mascot/,
@@ -46,7 +46,7 @@ License Agreement in CLA.md.
 
 MIT License
 
-Copyright (c) 2026 Kenji Sakuramoto / Kensaurus 合同会社
+Copyright (c) 2026 kensaurus LLC
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

@@ -10,7 +10,7 @@ description: Add Mushi Mushi to a Lovable or Bolt app without a terminal. Paste 
 # Mushi Mushi in Lovable or Bolt
 
 Lovable and Bolt build your app from a chat, with no terminal, so `npx` is
-not an option. You add Mushi the way you change anything else there: with a
+not an option. You add Mushi Mushi the way you change anything else there: with a
 prompt. It takes about five minutes.
 
 - Sign up free and copy your script tag.
@@ -48,9 +48,9 @@ add the same tag to the page `` of the root layout instead.
 ### Publish and send a test report
 
 Publish the app, open the live site, tap the report button and write one
-sentence, for example "Testing Mushi".
+sentence, for example "Testing Mushi Mushi".
 
-**You'll see:** the report in your [Mushi console](https://kensaur.us/mushi-mushi/admin/reports) within seconds, with a title, how serious it is and the likely cause.
+**You'll see:** the report in your [Mushi Mushi console](https://kensaur.us/mushi-mushi/admin/reports) within seconds, with a title, how serious it is and the likely cause.
 
 ### Fix a real bug
 
@@ -65,9 +65,9 @@ user's complaint, what the widget captured, the cause and the fix prompt.
 
 ## Read reports inside Lovable
 
-You can also connect Mushi to Lovable's chat, so you can ask "what did users
+You can also connect Mushi Mushi to Lovable's chat, so you can ask "what did users
 report today?" and get the diagnosis without opening the console. See
-[Mushi as a Lovable connector](/quickstart/lovable-mcp).
+[Mushi Mushi as a Lovable connector](/quickstart/lovable-mcp).
 
 ## Where the key goes, and is it safe?
 
@@ -76,7 +76,7 @@ The key in the tag is an SDK key. It can only send reports to your project
 projects. That is why it can sit in your page's HTML, like any analytics or
 chat-widget key.
 
-  Paste only the tag from the **Script tag** tab. Every Mushi key starts with
+  Paste only the tag from the **Script tag** tab. Every Mushi Mushi key starts with
   `mushi_`, so the prefix does not tell them apart: never put a key you made
   for an editor or the MCP server into your app, because those keys can read
   your reports.

@@ -24,7 +24,7 @@ Mushi Mushi is built first for people who make apps with AI, mostly on their own
 
 ```mermaid
 flowchart LR
-    A["Framework SDK<br/>react, vue, web…"] --> B["@mushi-mushi/core<br/>types · API client · queue"] --> C["Mushi API"]
+    A["Framework SDK<br/>react, vue, web…"] --> B["@mushi-mushi/core<br/>types · API client · queue"] --> C["Mushi Mushi API"]
 ```
 
 ## What's inside
@@ -32,7 +32,7 @@ flowchart LR
 | Piece | What it does |
 | --- | --- |
 | Types | `MushiConfig`, `MushiReport`, `MushiEnvironment` and every shared interface |
-| API client (`createApiClient`) | Fetch with retry and backoff. Tags its own requests with `X-Mushi-Internal` so SDKs never report on Mushi |
+| API client (`createApiClient`) | Fetch with retry and backoff. Tags its own requests with `X-Mushi-Internal` so SDKs never report on Mushi Mushi |
 | Pre-filter (`createPreFilter`) | On-device spam and gibberish filter, before anything is sent |
 | Offline queue (`createOfflineQueue`) | IndexedDB queue that syncs on reconnect |
 | Environment (`captureEnvironment`) | Viewport, user agent and client hints, connection, accessibility preferences, page-load timing |

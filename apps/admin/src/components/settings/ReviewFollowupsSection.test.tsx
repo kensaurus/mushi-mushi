@@ -176,6 +176,20 @@ describe('ReviewFollowupsSection', () => {
     expect(document.body.textContent).toContain('Review follow-ups saved and on.')
   })
 
+  it('switching the key keeps the chosen models (2026-10-31: they were cleared without a word)', async () => {
+    mocks.data = { ...BASE, settings: { ...BASE.settings, model: 'grok-4.7?reasoning_effort=xhigh', escalationModel: 'claude-opus-5-5' } }
+    await render()
+    await act(async () => button('Change review follow-ups').click())
+    await act(async () => change(selectByLabel('Cursor key'), HIROSE))
+    await act(async () => button('Save').click())
+    const call = mocks.apiFetch.mock.calls.find(([url]) => url === '/v1/admin/byok/review-followups')!
+    expect(JSON.parse(String((call[1] as RequestInit).body))).toMatchObject({
+      keyId: HIROSE,
+      model: 'grok-4.7?reasoning_effort=xhigh',
+      escalationModel: 'claude-opus-5-5',
+    })
+  })
+
   it('says why Mushi turned it off, and shows a refused Cursor request', async () => {
     mocks.data = {
       ...BASE,

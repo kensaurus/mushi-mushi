@@ -29,7 +29,7 @@ The top of the page shows which tools are connected, what is broken, and the nex
 | **Alerts** | Slack, Discord, Microsoft Teams |
 | **Fix agent** | Cursor Cloud, Claude Code Agent, plus the codebase index, a dry-run panel and **Deployment readiness** |
 | **Issue trackers** | Linear, Jira, GitHub Issues, PagerDuty |
-| **Errors you already catch (optional)** | Sentry; Langfuse under **Advanced: trace Mushi's AI calls in your own Langfuse** |
+| **Errors you already catch (optional)** | Sentry; Langfuse under **Advanced: trace Mushi Mushi's AI calls in your own Langfuse** |
 
 At the foot of the page are links to [Editor agents](/admin/mcp), [Agent skills](/admin/skill-pipelines),
 [Reporter updates](/admin/notifications) and [Plugins](/admin/marketplace).
@@ -131,12 +131,16 @@ For more event routing (Discord, Teams, Zapier and more, or your own webhooks), 
 ## Common tasks
 
 ### Connecting GitHub so the fix agent can open PRs
-1. Install the Mushi Mushi GitHub App on your repo, or create a fine-grained PAT with
-   Contents: write and Pull requests: write.
-2. On the **GitHub (code repo)** card, click **Configure integration**.
-3. Enter the repo URL, default branch and the installation token.
-4. Click **Save**, then **Test connection**, and confirm the probe returns green.
-5. Open [Pull requests](/admin/repo): the header should show your connected repo.
+1. On the **Your code on GitHub** card, press **Connect GitHub**.
+2. Sign in to GitHub. If the Mushi Mushi GitHub App is not on your account or
+   organization yet, GitHub asks you to install it and choose its repositories.
+3. Pick the repository. Mushi Mushi lists only repositories you can open, with
+   the one named like your app first, and saves it with its default branch.
+4. Open [Pull requests](/admin/repo): the header shows your connected repo.
+
+Self-hosted, or no GitHub App? Open **Use a GitHub token instead** under the
+card and paste a fine-grained token with Contents: write and Pull requests:
+write.
 
 ### Bringing Sentry errors into Mushi Mushi
 1. On the **Sentry** card, click **Configure integration**.
@@ -174,6 +178,6 @@ DELETE /v1/admin/integrations/:type
 ## Related pages
 
 - [Pull requests](/admin/repo): powered by the GitHub integration
-- [Mushi health](/admin/health): Mushi's own AI calls and jobs
+- [Mushi Mushi health](/admin/health): Mushi Mushi's own AI calls and jobs
 - [Plugins](/admin/marketplace): more routing and custom webhooks
 - [Fixes](/admin/fixes): Cursor agent badge, artifact gallery, and live streaming view

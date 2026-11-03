@@ -9,7 +9,7 @@ export const dynamic = 'force-static'
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'Mushi Mushi',
-    short_name: 'Mushi',
+    short_name: 'Mushi Mushi',
     description: MUSHI_TAGLINE_V2.oneLiner,
     start_url: '/mushi-mushi/',
     display: 'browser',

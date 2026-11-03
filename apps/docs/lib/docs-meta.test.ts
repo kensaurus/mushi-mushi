@@ -25,6 +25,7 @@ import {
   LANDING_META,
   OG_CARD_HEIGHT,
   OG_CARD_WIDTH,
+  ORGANIZATION_JSONLD,
   SOFTWARE_APPLICATION_JSONLD,
   WEBSITE_JSONLD,
 } from './structured-data'
@@ -137,6 +138,16 @@ describe('structured data describes Mushi only', () => {
     expect(MUSHI_TAGLINE_V2.pitch).toBe(
       'The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.',
     )
+  })
+
+  it('names the shared kensaurus org as parent and emits that node once', () => {
+    const nodes = ORGANIZATION_JSONLD['@graph'] as ReadonlyArray<Record<string, unknown>>
+    const mushi = nodes.find((n) => n['@id'] === 'https://kensaur.us/mushi-mushi/#organization')
+    expect(mushi?.parentOrganization).toEqual({ '@id': 'https://kensaur.us/#org' })
+    const shared = nodes.filter((n) => n['@id'] === 'https://kensaur.us/#org')
+    expect(shared).toHaveLength(1)
+    expect(shared[0]?.name).toBe('kensaurus合同会社')
+    expect(shared[0]?.url).toBe('https://kensaur.us/')
   })
 
   it('the portfolio footer table emits no JSON-LD of unrelated apps', () => {

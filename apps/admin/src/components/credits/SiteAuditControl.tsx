@@ -60,9 +60,19 @@ function pageChoices(current: number): number[] {
   return [...new Set([...PAGE_PRESETS, current])].filter((n) => n >= 1 && n <= 500).sort((a, b) => a - b)
 }
 
+/**
+ * Due and not yet claimed: Run now (or the schedule) set next_run_at, and the
+ * worker claims it within a minute. Without this the card kept "Last run 3h
+ * ago" and offered Run now again right after a click (2026-10-31).
+ */
+function startingSoon(a: AuditRow, now = Date.now()): boolean {
+  return a.enabled && !a.batch_id && !!a.next_run_at && Date.parse(a.next_run_at) <= now
+}
+
 /** "Last run 2 days ago: 139 pages, 4 rules failing, 4 reports filed." */
 function auditLine(a: AuditRow, openFindings: number): string {
   if (a.batch_id) return 'Running now: Firecrawl is reading the pages.'
+  if (startingSoon(a)) return 'Starting: Firecrawl begins reading the pages within a minute.'
   if (!a.last_run_at) return a.enabled ? 'First run starts within the hour.' : 'Never run.'
   const s = a.last_summary ?? {}
   const parts = [`Last run ${relativeTime(a.last_run_at) ?? 'recently'}: ${s.pages ?? '?'} pages`]
@@ -129,7 +139,7 @@ export function SiteAuditControl({ projectId, name, audit, openFindings, url, fi
             />
           )}
         </div>
-        {on && !audit?.batch_id && (
+        {on && audit && !audit.batch_id && !startingSoon(audit) && (
           <Btn size="sm" variant="ghost" type="button" loading={busy} onClick={() => void send(() => apiFetch(`/v1/admin/projects/${projectId}/site-audit/run`, { method: 'POST' }), `${name}: site audit started.`)}>
             Run now
           </Btn>
@@ -161,7 +171,7 @@ export function SiteAuditControl({ projectId, name, audit, openFindings, url, fi
       {audit?.last_error && <p className="text-xs text-warn">{audit.last_error}</p>}
       {on && openFindings > 0 && (
         <p className="text-xs text-fg-muted">
-          Its reports are on <Link className="text-brand hover:underline" to="/reports">Reports</Link>; spend-down sends them to Cursor.
+          Its reports are on <Link className="text-brand underline underline-offset-2" to="/reports">Reports</Link>; spend-down sends them to Cursor.
         </p>
       )}
     </div>

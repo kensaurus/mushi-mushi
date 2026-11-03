@@ -3,13 +3,13 @@
 > **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
 For developers who want Mushi Mushi to drive a tool it does not connect to
-yet. Write a small HTTPS server that reacts when Mushi files, triages or fixes
-a bug; the SDK checks Mushi's signature on each request, drops repeat
+yet. Write a small HTTPS server that reacts when Mushi Mushi files, triages or fixes
+a bug; the SDK checks Mushi Mushi's signature on each request, drops repeat
 deliveries and calls your handler for the event.
 
-You only need this to connect a tool Mushi does not cover. Slack, Discord,
+You only need this to connect a tool Mushi Mushi does not cover. Slack, Discord,
 Teams, Linear, Jira, GitHub Issues, PagerDuty and Sentry are connected on the
-**Integrations** page of the Mushi console with no code, on any plan.
+**Integrations** page of the Mushi Mushi console with no code, on any plan.
 
 ```bash
 npm i @mushi-mushi/plugin-sdk express
@@ -33,24 +33,24 @@ Docs: https://kensaur.us/mushi-mushi/docs/sdks/plugin-sdk
 ## Why a webhook model?
 
 A webhook server is a stronger isolation boundary than running plugin code
-inside the Mushi platform itself:
+inside the Mushi Mushi platform itself:
 
 - Plugin failures, timeouts, or memory leaks can't take down the host.
 - Plugin authors keep control of their language, deployment, and persistence.
-- The Mushi backend does not need to vet/audit plugin code at install time.
-- A plugin can be migrated, scaled, or rolled back independently of Mushi.
+- The Mushi Mushi backend does not need to vet/audit plugin code at install time.
+- A plugin can be migrated, scaled, or rolled back independently of Mushi Mushi.
 
-The trade-off is latency: the Mushi pipeline doesn't wait for plugins
-(deliveries are async), so a plugin that needs to change something in Mushi
+The trade-off is latency: the Mushi Mushi pipeline doesn't wait for plugins
+(deliveries are async), so a plugin that needs to change something in Mushi Mushi
 calls the REST API back from its handler.
 
-Mushi waits 8 seconds for your server's answer and retries on a timeout or a
+Mushi Mushi waits 8 seconds for your server's answer and retries on a timeout or a
 non-2xx answer. `createPluginHandler` answers only after your handler
 finishes, and it remembers a delivery only after success, so keep handlers
 under 8 seconds (or hand slow work to a queue) and make them safe to run
 twice.
 
-## Express, with a call back into Mushi
+## Express, with a call back into Mushi Mushi
 
 `expressMiddleware` reads the raw body itself, so mount it before
 `express.json()` or the signature check fails.
@@ -158,7 +158,7 @@ use at I/O boundaries.
 
 ## Marketplace
 
-The console's **Marketplace** page lists only reviewed plugins. Mushi sends
+The console's **Marketplace** page lists only reviewed plugins. Mushi Mushi sends
 events to a plugin once it is installed there with your server's public
 HTTPS URL and a signing secret. On Mushi Mushi Cloud, installing a plugin
 needs a paid plan (Builder or above, see
@@ -168,7 +168,7 @@ callback URL and the requested permissions.
 
 ## Reference plugins
 
-The Mushi monorepo ships open-source reference plugins built on this SDK;
+The Mushi Mushi monorepo ships open-source reference plugins built on this SDK;
 copy and adapt them as a starting point:
 
 **Project management / on-call**
@@ -207,4 +207,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 529 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

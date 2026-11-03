@@ -8,13 +8,13 @@ description: Mushi Mushi checks the exact versions in your lockfiles and runtime
 Your AI agent installed whatever packages it needed, and your app runs on
 whatever PHP, Node.js, Python or Go version the template picked. When one of
 those versions has a published security hole, that is a bug your users have not
-hit yet. Mushi checks for these every day and files each one like any other
+hit yet. Mushi Mushi checks for these every day and files each one like any other
 bug: in plain English, with the upgrade that fixes it.
 
-## What Mushi checks
+## What Mushi Mushi checks [#what-mushi-checks]
 
-Once a day (05:25 UTC), and when you press **Check now** on **Mushi health →
-Code size**, Mushi reads your primary repo at the head of the default branch:
+Once a day (05:25 UTC), and when you press **Check now** on **Mushi Mushi health →
+Code size**, Mushi Mushi reads your primary repo at the head of the default branch:
 
 | What | Files | Matched against |
 | --- | --- | --- |
@@ -42,11 +42,11 @@ A hole becomes a report only when all of these are true:
 - the advisory is not withdrawn or disputed.
 
 Everything else stays on the card and on the radar, so it does not fill your
-queue. Mushi files one report per upgrade: three advisories on `lodash 4.17.15`
+queue. Mushi Mushi files one report per upgrade: three advisories on `lodash 4.17.15`
 that `4.17.21` fixes are one report, not three. At most 10 reports are filed
 per app per day (change it on the card; **Off** keeps the list without filing).
 
-These reports do **not** count as diagnoses. Mushi writes them from the
+These reports do **not** count as diagnoses. Mushi Mushi writes them from the
 advisory data with no AI call. Sending one to an agent goes through the normal
 dispatch, caps and [agent PR review](./agent-pr-review).
 
@@ -60,8 +60,8 @@ dispatch, caps and [agent PR review](./agent-pr-review).
 | Low | The advisory rates it low |
 | Dev only | Installed for development only: listed, never filed |
 
-If your code imports the package (seen in Mushi's code index), it goes up one
-level. Mushi never lowers a level because it could not find an import: the index
+If your code imports the package (seen in Mushi Mushi's code index), it goes up one
+level. Mushi Mushi never lowers a level because it could not find an import: the index
 is not enough to prove a package unused.
 
 ## The fix
@@ -83,23 +83,23 @@ PR change a lockfile only when the same PR changes the manifest that lockfile
 comes from, and, for a security report, that manifest change names the
 package. A lockfile-only change waits for a person.
 
-Mushi never writes or stores exploit code. The report says so, and the PR review
+Mushi Mushi never writes or stores exploit code. The report says so, and the PR review
 holds a fix that adds an attack script or payload.
 
-## What leaves Mushi
+## What leaves Mushi Mushi [#what-leaves-mushi]
 
-Only package names and versions, sent to `api.osv.dev`. Mushi stores package
+Only package names and versions, sent to `api.osv.dev`. Mushi Mushi stores package
 coordinates (ecosystem, name, version, whether it is for development), never a
 lockfile: a lockfile can hold private registry URLs with tokens in them. Per-app
 findings never appear on a public page.
 
 For a locked-down install, allow these hosts: `api.osv.dev`, `www.cisa.gov`,
-`api.first.org`, `endoflife.date` (and `api.github.com`, which Mushi already
+`api.first.org`, `endoflife.date` (and `api.github.com`, which Mushi Mushi already
 uses to read the repo).
 
 ## Where to see it
 
-- **Console:** Full-stack audit → *Known holes in your dependencies* (Mushi health → Code
+- **Console:** Full-stack audit → *Known holes in your dependencies* (Mushi Mushi health → Code
   size links there), and the filed reports in the normal queue.
 - **Editor (MCP):** `get_radar` (rules `known_vulnerable_dependency` and
   `runtime_end_of_life`), `list_gate_findings` with gate
@@ -116,5 +116,5 @@ flags come from CISA's Known Exploited Vulnerabilities catalog (CC0), exploit
 likelihood from FIRST's EPSS, and release lines from endoflife.date.
 
 Feeds lag. On 21 October 2026 PHP fixed two remote-code-execution bugs
-("php2shell"); OSV had no record of them until the next morning. Mushi keeps a
+("php2shell"); OSV had no record of them until the next morning. Mushi Mushi keeps a
 short hand-kept list of runtime holes for those first days.

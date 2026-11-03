@@ -20,13 +20,13 @@ The Mushi Mushi web, React, React Native and Node SDKs (and the Vue, Svelte
 and Angular wrappers, through the web SDK) can record named product events
 alongside bug reports and sessions, so a solo builder can see a signup funnel, a user's path, and
 retention in the same console that holds the bug reports, without a second
-analytics tool. Mushi's own funnel (landing → signup → first report) runs on
+analytics tool. Mushi Mushi's own funnel (landing → signup → first report) runs on
 the same API.
 
 It is deliberately small: named events with flat properties, a funnel, a
 paths view, a people list and retention. If you need replay, feature flags
 or experiments, run PostHog beside it; see
-[PostHog session replay vs Mushi](/compare/posthog-session-replay-vs-mushi).
+[PostHog session replay vs Mushi Mushi](/compare/posthog-session-replay-vs-mushi).
 
 ## Quick start
 
@@ -165,7 +165,7 @@ retry.
 
 ## MCP tools
 
-The Mushi MCP server exposes the same data to Cursor, Claude Code and any
+The Mushi Mushi MCP server exposes the same data to Cursor, Claude Code and any
 MCP client, scoped to the project of the MCP key:
 
 | Tool | Answers |
@@ -231,7 +231,7 @@ keys are dropped, and any event whose properties exceed 8 KB is counted in
 
 ## Mushi Mushi's own events
 
-The SDK's vocabulary for Mushi's own funnel lives in
+The SDK's vocabulary for Mushi Mushi's own funnel lives in
 [`packages/core/src/analytics-taxonomy.ts`](https://github.com/kensaurus/mushi-mushi/blob/master/packages/core/src/analytics-taxonomy.ts):
 `landing_view`, `cta_click`, `signup_completed`, `project_created`,
 `key_minted`, `first_report_received` (the activation event),

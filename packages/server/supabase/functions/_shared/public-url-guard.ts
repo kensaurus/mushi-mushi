@@ -253,3 +253,15 @@ export async function guardedFetch(start: string, opts: GuardedFetchOptions = {}
   }
   throw new Error('Too many redirects.')
 }
+
+/**
+ * The stored spellings of one checked address: with and without a trailing
+ * slash (`checkPublicUrl` keeps the path and query, drops the fragment). A
+ * same-day Production Check report is reused only for the same address, never
+ * for another app under the same origin (production_check_begin applies the
+ * same rule in SQL).
+ */
+export function sameAddressVariants(href: string): string[] {
+  const bare = href.replace(/\/+$/, '')
+  return bare === href ? [href, `${href}/`] : [bare, href]
+}

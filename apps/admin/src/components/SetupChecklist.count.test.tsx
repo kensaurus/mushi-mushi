@@ -88,6 +88,38 @@ describe('setup count', () => {
     expect(container.textContent).not.toMatch(/4\/10|75%|% required/)
   })
 
+  // A new app's SDK step said "Fix it" as if something broke (live journey,
+  // 2026-10-30): never checked in is "Show me how"; seen then silent is "Fix it".
+  it('labels the SDK step by whether the app ever checked in', () => {
+    act(() => {
+      root.render(createElement(MemoryRouter, null, createElement(SetupChecklist, { project: DEMO, mode: 'banner' })))
+    })
+    const labels = () => Array.from(container.querySelectorAll('button')).map((b) => b.textContent?.trim())
+    expect(labels()).toContain('Show me how')
+    expect(labels()).not.toContain('Fix it')
+    const seen: SetupProject = {
+      ...DEMO,
+      steps: DEMO.steps.map((st) =>
+        st.id === 'sdk_installed'
+          ? { ...st, diagnostic: { last_sdk_seen_at: '2026-10-01T00:00:00Z', last_sdk_origin: null, last_sdk_user_agent: null, last_sdk_endpoint_host: null } }
+          : st,
+      ),
+    }
+    act(() => {
+      root.render(createElement(MemoryRouter, null, createElement(SetupChecklist, { project: seen, mode: 'banner' })))
+    })
+    expect(labels()).toContain('Fix it')
+  })
+
+  it('says optional once: the chip, not "(optional)" in the name too', () => {
+    const named: SetupProject = { ...DEMO, steps: DEMO.steps.map((st) => (st.id === 'slack_connected' ? { ...st, label: 'Connect Slack (optional)' } : st)) }
+    act(() => {
+      root.render(createElement(MemoryRouter, null, createElement(SetupChecklist, { project: named, mode: 'banner' })))
+    })
+    expect(container.textContent).toContain('Connect Slack')
+    expect(container.textContent).not.toContain('(optional)')
+  })
+
   // Set up showed the rail, this checklist's count and progress bar, and the
   // same four steps again (first-time user test, 2026-10-28).
   it('lists only the optional steps under Set up, with no second count', () => {

@@ -1,22 +1,23 @@
 ---
 title: Agent PR review
-description: In Mushi Mushi, Claude Opus 5.5 reviews every fix pull request a coding agent opens, and a "hold" stops Mushi from merging it until you choose to.
+description: A second AI reviews every fix pull request a coding agent opens, and a "hold" stops Mushi Mushi from merging it until you choose to.
 ---
 
 # Agent PR review
 
 Cloud coding agents (Cursor, GitHub's coding agent) open a pull request for
-each bug Mushi sends them, and spend-down mode can send dozens a day. Most of
+each bug Mushi Mushi sends them, and spend-down mode can send dozens a day. Most of
 those pull requests are fine. Some quietly delete a feature, ignore part of the
 bug, rely on a framework's private internals, or make a product decision
-nobody asked for. Before you merge one, Mushi has Claude Opus 5.5 read it the
+nobody asked for. Before you merge one, Mushi Mushi has a second AI (Claude Opus 5.5, or
+GPT-6.1 Sol when the app runs AI on OpenAI) read it the
 way a careful reviewer would.
 
 ## What you see
 
 Each cloud-agent fix gets a verdict a few minutes after its pull request opens:
 
-| Verdict | Meaning | Merging from Mushi |
+| Verdict | Meaning | Merging from Mushi Mushi |
 | --- | --- | --- |
 | **merge** | Fixes the bug, nothing else to worry about | Works as usual |
 | **fix first** | Fixes or nearly fixes it; read the findings | Works; the merge dialog lists the findings |
@@ -28,15 +29,15 @@ finding names a file and line, what is wrong, and the smallest fix. The review
 also lists any behaviour the change removes, and any decision it took that you
 should make yourself.
 
-When the verdict is **merge** or **fix first**, Mushi also marks the pull request ready for review. Repos that skip CI on drafts then run their checks; a **hold** stays a draft.
+When the verdict is **merge** or **fix first**, Mushi Mushi also marks the pull request ready for review. Repos that skip CI on drafts then run their checks; a **hold** stays a draft.
 
 A pull request with no review merges as it always has. The dialog says
 **Not reviewed** so you know to read the diff yourself.
 
-When the agent pushes new commits, Mushi reviews the new version a few
+When the agent pushes new commits, Mushi Mushi reviews the new version a few
 minutes later. Until that review finishes, the old verdict still applies: a
 hold keeps blocking, and a "merge" about an older commit reads **older
-commit** and counts as not reviewed. Mushi always merges exactly the commit it
+commit** and counts as not reviewed. Mushi Mushi always merges exactly the commit it
 checked; if the pull request changes in between, nothing is merged.
 
 Overriding a hold is a person's decision: it works only from the console, by
@@ -77,14 +78,14 @@ on the same commit needs a person in the console.
 
 ## When the review says "fix first"
 
-A **fix first** verdict means the change is close but has findings. Mushi can
+A **fix first** verdict means the change is close but has findings. Mushi Mushi can
 send the pull request back to a cloud agent once, with those findings, so you
 don't have to copy them over yourself.
 
 - Turn it on under **Settings → AI keys → Cursor → Review follow-ups**. It is
   off until an owner or admin turns it on, and it applies to every app in the
   organization.
-- Mushi starts a new Cursor agent on the same pull request. The agent gets the
+- Mushi Mushi starts a new Cursor agent on the same pull request. The agent gets the
   bug's summary and diagnosis and every finding. It is told to fix exactly
   those, add tests, and push to the same branch.
 - Each pull request is sent back at most twice, and only once per commit. A
@@ -94,11 +95,11 @@ don't have to copy them over yourself.
   change, a finding that reads like an instruction to the agent, and a
   suggested fix that carries an outside link or a shell command are all left
   out.
-- When the agent pushes, Mushi reviews the new commit. The settings card shows
+- When the agent pushes, Mushi Mushi reviews the new commit. The settings card shows
   the latest follow-ups and the verdict each one got after.
 - Each follow-up counts toward the app's daily auto-fix limit. The organization
   limit defaults to 30 a day. Pick which Cursor key and model to use, or let
-  each app use the key its fixes already use. Mushi's own platform key is never
+  each app use the key its fixes already use. Mushi Mushi's own platform key is never
   used.
 
 ## Spend-down and its safety stop
@@ -107,7 +108,7 @@ Spend-down mode (**Settings → AI keys → Cursor**, or `mushi keys spend-down`
 uses a Cursor key's credits before they expire, by sending the best open bugs
 to cloud agents. It watches the review verdicts as it goes. When an app's
 recent spend-down pull requests are clearly poor (too few **merge** verdicts,
-too many **hold** verdicts, or too many runs with no pull request), Mushi
+too many **hold** verdicts, or too many runs with no pull request), Mushi Mushi
 pauses spend-down for that app and sends one test fix a day until the results
 recover. Press **Resume** in the console to restart it sooner. The settings
 card shows a 7-day scoreboard per key: runs, pull requests, verdicts, merges,
@@ -116,8 +117,10 @@ and what the reviews cost.
 ## Cost and keys
 
 The review runs on your own Anthropic key (Settings → AI keys), your
-organization's shared one, or an owner's all-apps key. It never runs on
-Mushi's platform key. Without a
+organization's shared one, or an owner's all-apps key. With no Claude key, or
+when your organization runs AI on OpenAI, it runs on the app's own OpenAI key
+instead. It never runs on
+Mushi Mushi's platform key. Without a
 key it is skipped, and the fix shows **Review skipped** with the reason. A
 review usually costs $0.05 to $0.20, depending on the size of the diff; the
 most one review can cost, including retries, is about $0.90. It counts toward

@@ -81,9 +81,9 @@ local database, or several of these at once. Subpath imports are supported, e.g.
 
 ## Severity mapping
 
-Each adapter maps the source's native severity onto Mushi's four-level scale:
+Each adapter maps the source's native severity onto Mushi Mushi's four-level scale:
 
-| Mushi      | Sentry (`level`) | Datadog | New Relic (`priority`) | Honeycomb (contains) | Grafana/AM       |
+| Mushi Mushi      | Sentry (`level`) | Datadog | New Relic (`priority`) | Honeycomb (contains) | Grafana/AM       |
 | ---------- | ---------------- | ------- | ---------------------- | -------------------- | ---------------- |
 | `critical` | fatal            | P1      | critical               | critical             | critical, page   |
 | `high`     | error            | P2      | high                   | high, error          | high, error      |
@@ -121,4 +121,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 529 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

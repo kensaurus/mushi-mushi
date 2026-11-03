@@ -392,16 +392,17 @@ jobs:
         run: bash scripts/associate-cloudfront-docs-functions.sh
 
       - name: Invalidate CloudFront cache
+        # One path, not a list (2026-11-01): CloudFront bills $0.005 per invalidation
+        # PATH after the first 1,000 a month, and a wildcard counts as one path.
+        # This deploy's 12-path list made the shared kensaur.us distribution
+        # ~$10/month over the free 1,000 (AWS Cost Explorer, October 2026: 3,166
+        # paths). "/*" covers /mushi-mushi/*, the apex docs prefixes and the
+        # /.well-known OAuth paths in one path; the other apps on this
+        # distribution serve hashed assets, so a refetch costs only S3 GETs.
         run: |
           aws cloudfront create-invalidation \
             --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
-            --paths \
-              "/mushi-mushi/docs/*" \
-              "/mushi-mushi/*" \
-              "/quickstart/*" \
-              "/concepts/*" \
-              "/sdks/*" \
-              "/migrations/*" \
+            --paths "/*" \
             --region us-east-1
 
       - name: Post-deploy health check

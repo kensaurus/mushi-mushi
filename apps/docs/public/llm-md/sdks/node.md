@@ -60,7 +60,7 @@ mushiFastifyPlugin(app, { client })
 ## Hono
 
 Hono's `onError` must return a Response, so pass your own handler as the
-second argument. Mushi reports the error, then calls it.
+second argument. Mushi Mushi reports the error, then calls it.
 
 ```ts
 import { Hono } from 'hono'

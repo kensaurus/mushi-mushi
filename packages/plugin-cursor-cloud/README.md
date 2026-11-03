@@ -12,15 +12,15 @@ serious breaks. When Mushi Mushi triages a critical bug, this starts a
 your repo; the agent investigates and opens a draft PR for you to review. You
 need your own Cursor API key, and each run spends your Cursor credit.
 
-**Do you need this package?** No, if you use Mushi Mushi Cloud. Mushi starts
+**Do you need this package?** No, if you use Mushi Mushi Cloud. Mushi Mushi starts
 Cursor agents itself: add your Cursor API key on the **Integrations** page
 (Cursor Cloud card) and send any report to Cursor, or install **Cursor Cloud
 Agent** from the Marketplace page to start agents automatically (Marketplace
 installs need a paid plan, Builder or above, see
-[pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Either way Mushi calls
+[pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Either way Mushi Mushi calls
 Cursor's API directly and never sends events to this package. It is only for
 running the dispatch from your own server, for example next to a self-hosted
-Mushi.
+Mushi Mushi.
 
 ```bash
 npm i @mushi-mushi/plugin-cursor-cloud @mushi-mushi/plugin-sdk
@@ -66,9 +66,9 @@ This plugin spends real Cursor API credit. Four guards are built in:
    honours `Retry-After` and treats 4xx (other than 429) as non-retryable
    so a bad config never burns money in a tight loop. On top of that every
    dispatch sends a deterministic `agentId` (`bc-<uuid>` derived from the
-   event + report id), so a redelivered Mushi event gets Cursor's
+   event + report id), so a redelivered Mushi Mushi event gets Cursor's
    `409 agent_id_conflict` instead of a second agent.
-4. **No double dispatch:** when Mushi's own fix-worker already handed the
+4. **No double dispatch:** when Mushi Mushi's own fix-worker already handed the
    report to Cursor, the `fix.requested` payload carries
    `data.fix.externalAgentId` and this plugin logs and skips.
 
@@ -97,7 +97,7 @@ export default handler
 ```
 
 For `skill_pipeline.step.dispatched`, set `MUSHI_API_KEY` and
-`MUSHI_API_URL` (your Mushi API base, e.g.
+`MUSHI_API_URL` (your Mushi Mushi API base, e.g.
 `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`) so the plugin
 can check the step back in. Without `MUSHI_API_KEY` the step stays `running`.
 
@@ -106,7 +106,7 @@ can check the step back in. Without `MUSHI_API_KEY` the step stays `running`.
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `apiKey` | string | yes | — | Your Cursor API key (`crsr_…`). |
-| `webhookSecret` | string | yes* | `MUSHI_PLUGIN_WEBHOOK_SECRET` | Standard Webhooks HMAC secret for inbound Mushi events. *Required for self-hosted installs. |
+| `webhookSecret` | string | yes* | `MUSHI_PLUGIN_WEBHOOK_SECRET` | Standard Webhooks HMAC secret for inbound Mushi Mushi events. *Required for self-hosted installs. |
 | `repoUrl` | string | recommended | — | Target repo URL (`https://github.com/org/repo`, sent as `repos[].url`). If omitted, the plugin does nothing. |
 | `startingRef` | string | no | repo default branch | Branch/ref the agent starts from (`repos[].startingRef`). |
 | `severityThreshold` | `'low' \| 'medium' \| 'high' \| 'critical'` | no | `'critical'` | Minimum severity that triggers a run. |
@@ -122,15 +122,15 @@ can check the step back in. Without `MUSHI_API_KEY` the step stays `running`.
 | Event | Action |
 |---|---|
 | `report.classified` | Dispatch a run when `data.classification.severity` ≥ `severityThreshold`. |
-| `fix.requested` | Dispatch a run regardless of severity, unless `data.fix.externalAgentId` is set. Mushi only sends this event after its own fix-worker has handed the fix to a cloud agent, and then it always sets `externalAgentId`, so today this event is always skipped. |
-| `qa_story.failed` | Dispatch a run for each failure event. Requires `repoUrl`. Mushi sends this event on every failed or errored QA story run, so a story that keeps failing starts a new agent on each run; leave this event out of the subscription unless you want that spend. The prompt reads `storyId`, `title` and `failureReason`, while Mushi sends `story_id`, `story_name` and `summary`, so the agent gets "Story ID: unknown" and no failure text today. |
+| `fix.requested` | Dispatch a run regardless of severity, unless `data.fix.externalAgentId` is set. Mushi Mushi only sends this event after its own fix-worker has handed the fix to a cloud agent, and then it always sets `externalAgentId`, so today this event is always skipped. |
+| `qa_story.failed` | Dispatch a run for each failure event. Requires `repoUrl`. Mushi Mushi sends this event on every failed or errored QA story run, so a story that keeps failing starts a new agent on each run; leave this event out of the subscription unless you want that spend. The prompt reads `storyId`, `title` and `failureReason`, while Mushi Mushi sends `story_id`, `story_name` and `summary`, so the agent gets "Story ID: unknown" and no failure text today. |
 | `skill_pipeline.step.dispatched` | Run one skill-pipeline step and check the `agentId` back in via `/v1/admin/skills/pipelines/:run/steps/:idx/checkin`. |
 
 Other events are ignored.
 
 ## v0 vs v1
 
-Cursor serves two Cloud Agents APIs. This plugin (since 0.6.0) and Mushi's
+Cursor serves two Cloud Agents APIs. This plugin (since 0.6.0) and Mushi Mushi's
 fix-worker speak **v1** (`POST /v1/agents`):
 
 | | v0 (legacy, still served) | v1 (current) |
@@ -141,7 +141,7 @@ fix-worker speak **v1** (`POST /v1/agents`):
 | Branch name | `target.branchName` | not settable; ask for it in the prompt |
 | Completion | `webhook` (`X-Webhook-Signature: sha256=<hex>`) on FINISHED/ERROR | poll `GET /v1/agents/{id}/runs/{runId}` (webhooks "coming soon") |
 
-Mushi's server keeps a v0 code path behind `CURSOR_USE_V0_WEBHOOK=1` purely
+Mushi Mushi's server keeps a v0 code path behind `CURSOR_USE_V0_WEBHOOK=1` purely
 for the push webhook (its `cursor-webhook` edge function verifies the
 signature); this npm plugin has no completion tracking of its own and uses
 v1 only.
@@ -172,7 +172,7 @@ Every dispatch writes one line to your server's log:
 [cursor-cloud] dispatched {"agentId":"agent_…","reportId":"…","model":"composer-2.5"}
 ```
 
-Mushi does not see these dispatches; check spend on your Cursor dashboard.
+Mushi Mushi does not see these dispatches; check spend on your Cursor dashboard.
 
 ## Tests
 
@@ -197,4 +197,4 @@ MIT. See [LICENSE](./LICENSE).
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 529 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

@@ -15,7 +15,7 @@ on that. Every row links to the page with the mechanism and the evidence.
   **Short version.** Your data is scoped to your project by row-level security,
   you can run diagnoses on your own model keys and keep
   screenshots in your own bucket, old reports are hard-deleted on your plan's
-  schedule, and the controls are checked by cron, not by promise. Mushi is
+  schedule, and the controls are checked by cron, not by promise. Mushi Mushi is
   **not SOC 2 certified**. It collects evidence toward SOC 2; see the last row.
 </Callout>
 
@@ -24,7 +24,7 @@ on that. Every row links to the page with the mechanism and the evidence.
 | Control | What it means for you | Status | Details |
 | --- | --- | --- | --- |
 | **Data residency** | Pick a region (US, EU or JP) at project creation | All hosted data is in one Tokyo (`ap-northeast-1`) project today, whatever region you pick. Dedicated US and EU clusters are planned, not live | [Data residency](/security/data-residency) |
-| **Bring-your-own-key (BYOK)** | Diagnoses run against *your* Anthropic / OpenAI / OpenRouter account. Keys are stored in Vault, never shown back in plaintext, and nothing is billed to Mushi's provider account | Live | [BYOK](/security/byok) |
+| **Bring-your-own-key (BYOK)** | Diagnoses run against *your* Anthropic / OpenAI / OpenRouter account. Keys are stored in Vault, never shown back in plaintext, and nothing is billed to Mushi Mushi's provider account | Live | [BYOK](/security/byok) |
 | **BYO storage** | Screenshots and crash dumps pinned to your own S3 / R2 / GCS / MinIO bucket; URLs signed server-side | Live | [BYO storage](/security/byo-storage) |
 | **Retention sweep** | Reports older than your plan window (Free 14 d · Builder 90 d · Studio 180 d · Enterprise custom) or your per-project policy are hard-deleted daily; legal holds are skipped | Live, daily | [SOC 2 → retention](/security/soc2#data-retention-policies) |
 | **Tenant isolation** | Row-level security is enabled on the public tables, and policies scope rows to the projects you own or belong to (`(SELECT auth.uid())`) | Live | [No client data leakage](/security/no-leakage-claim) |

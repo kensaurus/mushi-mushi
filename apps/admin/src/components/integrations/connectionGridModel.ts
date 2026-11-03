@@ -1,5 +1,5 @@
 /**
- * FILE: apps/admin/src/components/integrations/connectionGrid.ts
+ * FILE: apps/admin/src/components/integrations/connectionGridModel.ts
  * PURPOSE: The connection grid at the top of Integrations (console journeys
  *          2026-10-27): "Which tools are connected? What's broken?"
  *
@@ -41,7 +41,7 @@ export interface ConnectionGridInput {
   history: readonly HealthRow[]
   sentryDeliveries: InboundDeliveryLike[] | null
   sentryDeliveriesFailed?: boolean
-  slack: { configured: boolean; canPost: boolean; channelId: string | null }
+  slack: { configured: boolean | null; canPost: boolean; channelId: string | null }
   /** Alert channels the page offers beside Slack; the sentence counts them too. */
   discordConfigured?: boolean
   teamsConfigured?: boolean

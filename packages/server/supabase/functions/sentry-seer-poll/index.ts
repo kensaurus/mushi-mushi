@@ -39,6 +39,7 @@ import {
 } from '../_shared/sentry-import.ts'
 import { resolveAndDereferencePlatformSettings } from '../_shared/integration-settings.ts'
 import { isTransientSentryFailure, thrownMessage } from '../_shared/sentry-api.ts'
+import { reconcileSentryLinks } from '../_shared/sentry-reconcile.ts'
 
 ensureSentry('sentry-seer-poll')
 
@@ -275,7 +276,18 @@ app.post('/sentry-seer-poll', async (c) => {
     }
   })
 
-  return c.json({ ok: true, polled: summary.length, results: summary, autoImport: imported })
+  // After the import, so a report it just reopened reads as open here: close
+  // Sentry issues whose report Mushi already closed (sentry-reconcile.ts).
+  let reconcile: unknown
+  try {
+    reconcile = await reconcileSentryLinks(db)
+  } catch (err) {
+    const msg = thrownMessage(err)
+    log.warn(`sentry reconcile failed: ${msg.slice(0, 200)}`, { err: msg })
+    reconcile = { error: msg.slice(0, 120) }
+  }
+
+  return c.json({ ok: true, polled: summary.length, results: summary, autoImport: imported, reconcile })
 })
 
 Deno.serve(app.fetch)
