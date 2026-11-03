@@ -31,11 +31,11 @@ Docs: [the setup wizard](https://kensaur.us/mushi-mushi/docs/sdks/launcher) (sam
 6. **Prints the setup code** for your framework, ready to paste.
 7. **Offers to send a test report** at the end, so you see your first diagnosed bug right away.
 
-By default it wires Mushi into an **existing** project, so run it from that project's root. To start from nothing, use a starter template instead.
+By default it wires Mushi Mushi into an **existing** project, so run it from that project's root. To start from nothing, use a starter template instead.
 
 ## Starter templates
 
-`--template` scaffolds a minimal starter app with Mushi already wired, instead of running the wizard:
+`--template` scaffolds a minimal starter app with Mushi Mushi already wired, instead of running the wizard:
 
 ```bash
 npm create mushi-mushi -- --template vue           # into ./mushi-vue-app
@@ -80,7 +80,7 @@ npx @mushi-mushi/cli init     # scoped name
 ## Troubleshooting
 
 - **Wrong framework detected?** Pass `--framework <id>` explicitly. Valid IDs: `next, react, cra, remix, astro, solid, vue, nuxt, svelte, sveltekit, angular, expo, react-native, capacitor, express, fastify, hono, vanilla`.
-- **Running in a monorepo?** `cd` into the package you want Mushi in first, or pass `--cwd apps/web`.
+- **Running in a monorepo?** `cd` into the package you want Mushi Mushi in first, or pass `--cwd apps/web`.
 - **`npx` cache serving an old version?** Run `npm cache clean --force` or `npx mushi-mushi@latest`.
 - **Non-interactive shell (CI, or an AI agent's terminal)?** Pass `--yes`. The wizard then prints the sign-in URL (no browser opens) and picks the project by your app's name. On CI with no one to sign in, also pass `--project-id` and `--api-key`.
 - **Key pasted with quotes/whitespace?** The wizard strips them, then checks the format: the API key starts with `mushi_` or `mush_pk_` followed by 10 or more characters, and the project ID is a UUID (or `proj_` followed by 10 or more characters).

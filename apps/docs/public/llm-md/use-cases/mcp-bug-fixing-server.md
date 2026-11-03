@@ -16,7 +16,7 @@ diagnosis and code context for each one, and dispatches fixes — all from
 inside Cursor, Claude Code, or Codex.
 
 Mushi Mushi ships one. No second LLM key required — your editor's model does
-the reasoning; Mushi supplies the tools and the data.
+the reasoning; Mushi Mushi supplies the tools and the data.
 
 ## What the agent can do with it
 
@@ -24,7 +24,7 @@ the reasoning; Mushi supplies the tools and the data.
   queue with severity and plain-English causes.
 - **Get fix context** — the files, the diagnosis, similar past bugs, and the
   blast radius of a change.
-- **Dispatch and submit fixes** — hand a fix back to Mushi, which can open a
+- **Dispatch and submit fixes** — hand a fix back to Mushi Mushi, which can open a
   draft PR once GitHub is connected.
 - **Query lessons** — past fixes become rules the agent checks before
   repeating a mistake.
@@ -37,13 +37,13 @@ One command registers the server in your editor's MCP config:
 npx mushi-mushi setup --ide cursor   # or --ide claude
 ```
 
-Then ask your agent something like *"check Mushi for open bugs and fix the
+Then ask your agent something like *"check Mushi Mushi for open bugs and fix the
 worst one."* The full tool list and configuration options live in the
 [MCP server quickstart](/quickstart/mcp).
 
 ## Hosted or self-hosted
 
-Point the server at Mushi Cloud (one app and 100 diagnoses a month free) or at your own
+Point the server at Mushi Mushi Cloud (one app and 100 diagnoses a month free) or at your own
 self-hosted stack — the MCP surface is identical. Reports come from the
 [SDKs](/sdks) your users already trigger; install those with:
 

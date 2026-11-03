@@ -12,16 +12,16 @@ reads Mushi Mushi's diagnosis of each report, gets the fix prompt and fixes the 
 The same connection works in Claude Code and Cursor.
 
 <InThirtySeconds>
-- Add Mushi to Lovable as a custom MCP server: one URL, sign in, approve.
+- Add Mushi Mushi to Lovable as a custom MCP server: one URL, sign in, approve.
 - Ask in the Lovable chat: "what did my users report?"
 - Lovable gets the report, the plain-English cause and a fix prompt, then fixes it.
 </InThirtySeconds>
 
-You need a Mushi project that receives reports. A Lovable app gets the
+You need a Mushi Mushi project that receives reports. A Lovable app gets the
 reporting widget from one [script tag](/quickstart/web#no-bundler-script-tag).
 No real report yet? Step 4 files a test one.
 
-## Add Mushi to Lovable
+## Add Mushi Mushi to Lovable [#add-mushi-to-lovable]
 
 Custom MCP servers are available on every Lovable plan
 ([Lovable docs](https://docs.lovable.dev/integrations/custom-mcp)).
@@ -49,11 +49,11 @@ Click **Add & authorize**.
 
 ### Sign in and approve
 
-A Mushi page opens. Sign in, choose which projects Lovable may see, and click
+A Mushi Mushi page opens. Sign in, choose which projects Lovable may see, and click
 **Approve**. You never copy a key: the sign-in creates one for this connection,
-and you can revoke it from the Mushi console at any time.
+and you can revoke it from the Mushi Mushi console at any time.
 
-<YouWillSee>**You'll see:** Mushi in your list of chat connectors in Lovable.</YouWillSee>
+<YouWillSee>**You'll see:** Mushi Mushi in your list of chat connectors in Lovable.</YouWillSee>
 
 ### Ask Lovable
 
@@ -71,7 +71,7 @@ Get the Mushi fix context for the checkout report and fix it.
 That's deployed. Mark the report fixed in Mushi and tell the reporter.
 ```
 
-No reports yet? Ask for a test one. Mushi diagnoses it like a real user report:
+No reports yet? Ask for a test one. Mushi Mushi diagnoses it like a real user report:
 
 ```text
 Using Mushi, file a test report: "The Save button on the settings page does nothing."
@@ -92,11 +92,11 @@ claude mcp add --transport http mushi "https://kensaur.us/mushi-mushi/hosted-mcp
 ```
 
 Then run `/mcp` in a session, pick `mushi` and sign in in your browser. Ask:
-*"What did my users report in Mushi? Fix the top one."*
+*"What did my users report in Mushi Mushi? Fix the top one."*
 
 ## Cursor: one click
 
-[Add Mushi to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=mushi&config=eyJ1cmwiOiJodHRwczovL2tlbnNhdXIudXMvbXVzaGktbXVzaGkvaG9zdGVkLW1jcC8%2FZmVhdHVyZXM9dmliZSJ9)
+[Add Mushi Mushi to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=mushi&config=eyJ1cmwiOiJodHRwczovL2tlbnNhdXIudXMvbXVzaGktbXVzaGkvaG9zdGVkLW1jcC8%2FZmVhdHVyZXM9dmliZSJ9)
 (opens Cursor), or paste this into `.cursor/mcp.json`:
 
 ```json filename=".cursor/mcp.json"
@@ -109,14 +109,14 @@ Then run `/mcp` in a session, pick `mushi` and sign in in your browser. Ask:
 }
 ```
 
-Cursor asks you to sign in the first time the agent calls Mushi. Leave out any
+Cursor asks you to sign in the first time the agent calls Mushi Mushi. Leave out any
 `headers` block: a static `Authorization` header turns the sign-in off.
 
 ## Bolt
 
 Bolt also accepts a custom MCP server under **Connectors (MCP) → Custom MCP
 server** ([Bolt docs](https://support.bolt.new/integrations/mcp)). Use the same
-URL. We have not tested Mushi in Bolt yet.
+URL. We have not tested Mushi Mushi in Bolt yet.
 
 ## What `?features=vibe` gives you
 
@@ -153,8 +153,8 @@ combine them, for example `?features=vibe,qa`.
 | Sign-in fails with "404" | Use the `kensaur.us` URL above. Sign-in does not work on a `supabase.co` URL. |
 | "tool … is not enabled for this connection" | The tool is outside `vibe`. Ask `use_mushi` which group it needs and add that group to `?features=`, or use `?features=all`. |
 | Answers mix up your apps | Pin the connection to one app: add `&project=<project-id>` to the URL. |
-| You can't use OAuth | Choose **Bearer token or API key** in Lovable and paste a Mushi API key with MCP access, minted on **Manage apps** in the Mushi console (preset **MCP read + write**). Sign-in is safer: its key is made for this one connection. |
-| You want to disconnect | Remove the connector in Lovable, and revoke its key under **Editor agents → Account keys** in the Mushi console. |
+| You can't use OAuth | Choose **Bearer token or API key** in Lovable and paste a Mushi Mushi API key with MCP access, minted on **Manage apps** in the Mushi Mushi console (preset **MCP read + write**). Sign-in is safer: its key is made for this one connection. |
+| You want to disconnect | Remove the connector in Lovable, and revoke its key under **Editor agents → Account keys** in the Mushi Mushi console. |
 
 <Callout type="info">
   More on the sign-in, project scopes and other clients: [MCP server](/quickstart/mcp).

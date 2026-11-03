@@ -21,7 +21,7 @@ pnpm add @mushi-mushi/inventory-schema
 ```
 
 Add it when you write a tool that produces or checks `inventory.yaml`
-files, or to validate the file in your own CI. Mushi's CLI, ESLint plugin
+files, or to validate the file in your own CI. Mushi Mushi's CLI, ESLint plugin
 and GitHub Action do not depend on it.
 
 ## What `inventory.yaml` looks like

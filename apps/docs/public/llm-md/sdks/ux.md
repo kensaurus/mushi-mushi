@@ -24,7 +24,7 @@ mushi ux run --dev "pnpm dev --port {port}" --agent cursor --model <id> --skill 
 
 The package installs a `mushi-ux` command; `mushi ux …` in
 [`@mushi-mushi/cli`](/sdks/cli#ux-pass-over-every-screen) runs the same
-thing and passes your Mushi login along. Your app must run locally, inside
+thing and passes your Mushi Mushi login along. Your app must run locally, inside
 a git repository. In `--dev`, `{port}` is replaced with a spare port.
 
 Signed-in app? Run `mushi-ux login --url http://localhost:5173` once and
@@ -37,7 +37,7 @@ with `--login-url`.
    Pick the agent, model, skill and pages, then watch each attempt live.
 2. **Console (mirror and review).** With sync on, the run is mirrored to
    the console's [UX runs](/admin/ux-runs) page as it goes. The studio
-   offers sync when you are signed in with the Mushi CLI; from the
+   offers sync when you are signed in with the Mushi Mushi CLI; from the
    terminal, add `--sync`.
 3. **Merge.** Open the kept changes as a draft PR from the studio, then
    merge it from the console (after a confirmation) or on GitHub. Nothing
@@ -111,7 +111,7 @@ start-up check says so.
 | `mushi-ux ui` | The studio: start runs and watch them |
 | `mushi-ux run --dev ""` | Run the loop from the terminal |
 | `mushi-ux discover --url ` | List the screens, change nothing |
-| `mushi-ux audit --url  --profile-dir ` | Find UX bugs on signed-in screens and file them as Mushi reports |
+| `mushi-ux audit --url  --profile-dir ` | Find UX bugs on signed-in screens and file them as Mushi Mushi reports |
 | `mushi-ux explore --url  --profile-dir ` | Let a model use the signed-in app like a careless user; file the errors a replay confirms |
 | `mushi-ux login --url ` | Sign in once, in a visible browser |
 | `mushi-ux models` / `mushi-ux skills` | What `--model` and `--skill` accept |
@@ -132,12 +132,12 @@ Common `run` options:
 `mushi-ux run --help` lists the rest. Run state and screenshots live in
 `.mushi/ux//`. The run adds its folders to `.git/info/exclude`, so
 `git status` stays clean. `--sync` refuses a run whose app reports to a
-different Mushi project than your login.
+different Mushi Mushi project than your login.
 
 ## Audit and explore signed-in screens
 
 `mushi-ux audit` checks the live app the way a signed-in user sees it and
-files what is wrong as Mushi reports, so the fix loop picks them up. It
+files what is wrong as Mushi Mushi reports, so the fix loop picks them up. It
 never edits code and never opens a fresh browser: point it at a cached,
 signed-in browser profile.
 

@@ -9,7 +9,7 @@ description: The Mushi Mushi inventory.yaml lists every page, story and action i
 
 # Inventory and gates
 
-Mushi v1 was the **negative side** of the loop: catch what your users *felt* break,
+Mushi Mushi v1 was the **negative side** of the loop: catch what your users *felt* break,
 classify it, dedupe it, optionally draft a fix. v2 adds the **positive side**: a
 declarative `inventory.yaml` that names every user-facing story, page, and action —
 and five composite gates that fail the build when the agent's drafts diverge from
@@ -35,7 +35,7 @@ through every stage of the agent pipeline — see
 The composite GitHub status `mushi-mushi/gates` rolls up five checks:
 
 Gates 1 and 2 run statically in CI — no network call. Gates 3, 4, and 5 reach the
-Mushi gateway. **Branch protection should require the composite check**, not the
+Mushi Mushi gateway. **Branch protection should require the composite check**, not the
 individual gates, so a transient monitor hiccup doesn't block merges permanently.
 
 ---

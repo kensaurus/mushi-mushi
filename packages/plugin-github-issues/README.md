@@ -4,13 +4,13 @@
 
 For people who track work in GitHub Issues. This opens a GitHub issue
 (labelled `mushi-bug`) for each bug Mushi Mushi triages and closes it when
-Mushi applies the fix.
+Mushi Mushi applies the fix.
 
 **Do you need this package?** Not on Mushi Mushi Cloud: add GitHub Issues on the
 **Integrations** page of the console (owner, repo and a token with Issues:
-write) and Mushi opens and closes the issues itself, on any plan. The console's
+write) and Mushi Mushi opens and closes the issues itself, on any plan. The console's
 Marketplace has no GitHub Issues listing (checked 2026-10-29), so this
-package only receives events from a Mushi server you run yourself, once you
+package only receives events from a Mushi Mushi server you run yourself, once you
 add a `plugin_registry` row for it.
 
 ```bash

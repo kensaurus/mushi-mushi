@@ -1,8 +1,10 @@
-# Launch kit — Mushi Launch Week — drafted 2026-10-02
+# Launch kit — Mushi Mushi Launch Week — drafted 2026-10-02
 
-Nothing in this folder has been posted. Every post is a draft for the founder
-to rewrite in their own words: HN removes posts that read as AI-written, and
-every channel here expects the maker to speak as the maker.
+The drafts in this top folder (2026-10-02) were never posted. What did go out,
+and where, is in [`2026-11/log/README.md`](./2026-11/log/README.md) (posts of
+2026-10-29 on X, LinkedIn, Zenn, note and Reddit). Every post is a draft for
+the founder to rewrite in their own words: HN removes posts that read as
+AI-written, and every channel here expects the maker to speak as the maker.
 
 | File | What it holds |
 |---|---|

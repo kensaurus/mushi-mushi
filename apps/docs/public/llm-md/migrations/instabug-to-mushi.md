@@ -19,13 +19,13 @@ description: Replace Instabug (now Luciq) with Mushi Mushi for in-app bug report
 
 ## Why switch
 
-- **Open source and price.** Mushi SDKs are MIT and the server is AGPLv3.
+- **Open source and price.** Mushi Mushi SDKs are MIT and the server is AGPLv3.
   Self-hosting is free; the cloud is free for one app and 100 diagnoses a
   month. Compare with your Luciq contract.
-- **AI triage.** Mushi ships a built-in two-stage classifier
+- **AI triage.** Mushi Mushi ships a built-in two-stage classifier
   (fast-filter + classify-report) that turns raw user reports into
   triaged tickets without manual review.
-- **Self-host.** Mushi can run on your own Supabase / Postgres.
+- **Self-host.** Mushi Mushi can run on your own Supabase / Postgres.
 
 ## API mapping
 
@@ -43,7 +43,7 @@ The calls on the right are on the instance from `useMushi()`
 | `invocationEvents: [InvocationEvent.floatingButton]` | `config.widget.trigger: 'button'` (the default) |
 | `invocationEvents: [shake, floatingButton]` | `config.widget.trigger: 'both'` |
 | Repro steps | Captured automatically (console + network + navigation) |
-| Crash reporting | **Stays where it is.** Mushi works next to Sentry / Crashlytics; it doesn't replace them. |
+| Crash reporting | **Stays where it is.** Mushi Mushi works next to Sentry / Crashlytics; it doesn't replace them. |
 
 ## Before / After (React Native)
 
@@ -87,17 +87,17 @@ function ProfileScreen() {
 
 ## Migration checklist
 
-Sign in to the Mushi admin console, create a project, mint an API key. Copy projectId + apiKey.</> },
-    { id: 'install', label: 'Install the Mushi React Native SDK', content: {`npm install @mushi-mushi/react-native
+Sign in to the Mushi Mushi admin console, create a project, mint an API key. Copy projectId + apiKey.</> },
+    { id: 'install', label: 'Install the Mushi Mushi React Native SDK', content: {`npm install @mushi-mushi/react-native
 
 # Optional peers: shake-to-report and screenshots
 npx expo install expo-sensors react-native-view-shot
 # (bare React Native: npm install expo-sensors react-native-view-shot)`} },
-    { id: 'init-mushi', label: 'Mount Mushi alongside Instabug/Luciq (do NOT remove yet)', content: <>Run both SDKs in parallel for at least 2-3 days. Reports will land in both products. Use this window to compare what Mushi captures vs Luciq and surface any gaps.</> },
+    { id: 'init-mushi', label: 'Mount Mushi Mushi alongside Instabug/Luciq (do NOT remove yet)', content: <>Run both SDKs in parallel for at least 2-3 days. Reports will land in both products. Use this window to compare what Mushi Mushi captures vs Luciq and surface any gaps.</> },
     { id: 'identify-user', label: 'Wire setUser / setMetadata for parity', content: <>Anywhere you called identifyUser or setUserAttribute, mirror with mushi.setUser(...) / mushi.setMetadata(key, value) on the instance from useMushi().</> },
-    { id: 'verify-capture', label: 'Verify console + network + screenshot capture', content: <>Trigger the Mushi widget on a real device, submit a test report, and confirm console logs, network requests, and the screenshot are attached. Console and network capture are on by default; the screenshot needs react-native-view-shot.</> },
-    { id: 'parallel-test', label: 'Run dual-SDK in beta for ≥ 3 days', content: <>This is the riskiest step to skip. Compare incident counts, attached metadata richness, and reporter-resolution time between the two surfaces. Make the call to switch only when Mushi reports look at least as useful.</> },
-    { id: 'update-docs', label: 'Update internal docs / runbooks', content: <>Anywhere your team's runbooks reference "open Luciq dashboard" or "check Instabug for repro steps", swap to the Mushi admin console URL.</> },
+    { id: 'verify-capture', label: 'Verify console + network + screenshot capture', content: <>Trigger the Mushi Mushi widget on a real device, submit a test report, and confirm console logs, network requests, and the screenshot are attached. Console and network capture are on by default; the screenshot needs react-native-view-shot.</> },
+    { id: 'parallel-test', label: 'Run dual-SDK in beta for ≥ 3 days', content: <>This is the riskiest step to skip. Compare incident counts, attached metadata richness, and reporter-resolution time between the two surfaces. Make the call to switch only when Mushi Mushi reports look at least as useful.</> },
+    { id: 'update-docs', label: 'Update internal docs / runbooks', content: <>Anywhere your team's runbooks reference "open Luciq dashboard" or "check Instabug for repro steps", swap to the Mushi Mushi admin console URL.</> },
     { id: 'remove-luciq', label: 'Remove Instabug / Luciq SDK', content: {`npm uninstall instabug-reactnative @luciq/react-native
 # (whichever one you had)
 cd ios && pod install`} },
@@ -107,7 +107,7 @@ cd ios && pod install`} },
 
 ## Feature parity at a glance
 
-| Capability | Instabug / Luciq | Mushi |
+| Capability | Instabug / Luciq | Mushi Mushi |
 |------------|------------------|-------|
 | Shake to report | ✅ | ✅ (`widget.trigger: 'shake'`, needs `expo-sensors`) |
 | Floating button | ✅ | ✅ (`widget.trigger: 'button'`) |
@@ -117,15 +117,15 @@ cd ios && pod install`} },
 | Crash reporting | ✅ | ❌ (keep Sentry / Crashlytics for crashes) |
 | Surveys / NPS | ✅ | ❌ (out of scope) |
 
-Mushi can also be self-hosted, its SDKs and server are open source, and it
+Mushi Mushi can also be self-hosted, its SDKs and server are open source, and it
 runs AI triage on every report by default.
 
 If you use Luciq's surveys, keep them on Luciq after moving bug capture
-to Mushi.
+to Mushi Mushi.
 
 ## Rollback
 
-If Mushi doesn't fit, remove the Mushi package and re-add the Luciq SDK.
+If Mushi Mushi doesn't fit, remove the Mushi Mushi package and re-add the Luciq SDK.
 Because this guide has you dual-ship for at least 3 days before removing
 Luciq, you have both sets of reports to compare.
 

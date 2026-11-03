@@ -11,9 +11,9 @@ description: Runbooks for maintainers running Mushi Mushi Cloud or publishing th
 
 This section is for **maintainers** running Mushi Mushi Cloud or shipping the
 open-source SDK packages, not for app developers integrating the SDK. If you are
-integrating Mushi into your app, start at [Quickstart](/quickstart) instead.
+integrating Mushi Mushi into your app, start at [Quickstart](/quickstart) instead.
 
-  Mushi is **OSS-first**: the hosted product runs the same code as this repo, plus its own
+  Mushi Mushi is **OSS-first**: the hosted product runs the same code as this repo, plus its own
   tuning data (prompts and scoring weights kept as configuration).
   Self-hosters can reuse every deploy path described here. See [Self-hosting](/self-hosting).
 
@@ -34,7 +34,7 @@ to one never blocks the others:
 2. **Supabase Edge Functions**: `deploy-edge-functions.yml` (path-filtered push to `master`, plus a nightly full deploy).
 3. **Admin console SPA**: `deploy-admin.yml` (S3 + CloudFront).
 4. **Docs site**: `deploy-docs.yml` (S3 + CloudFront).
-5. **Mushi Bounties marketplace**: `deploy-testers.yml` (S3 + CloudFront at `/testers`).
+5. **Mushi Mushi Bounties marketplace**: `deploy-testers.yml` (S3 + CloudFront at `/testers`).
 6. **Hosted MCP proxy**: `deploy-hosted-mcp.yml` (CloudFront route and OAuth discovery documents for `/hosted-mcp`).
 
 **Database migrations are manual** (`supabase db push`) and are never run by CI.

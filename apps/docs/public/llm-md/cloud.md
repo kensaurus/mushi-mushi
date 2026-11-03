@@ -24,11 +24,11 @@ description: Hosted Mushi Mushi. Bug reports, plain-English diagnoses, and fix d
 
 ## Spend controls
 
-Every monthly paid plan has a **hard cap on overage spend** ($50 Builder, $200 Studio by default), set in the console under Billing → Spending Cap. When the cap is reached, Mushi pauses new diagnoses for the rest of the calendar month with an upgrade prompt. Annual plans have no overage and stop at the included diagnoses. You also receive email alerts at 50%, 80% and 100% of your included diagnoses.
+Every monthly paid plan has a **hard cap on overage spend** ($50 Builder, $200 Studio by default), set in the console under Billing → Spending Cap. When the cap is reached, Mushi Mushi pauses new diagnoses for the rest of the calendar month with an upgrade prompt. Annual plans have no overage and stop at the included diagnoses. You also receive email alerts at 50%, 80% and 100% of your included diagnoses.
 
 ## Self-hosting
 
-If you'd rather run Mushi on your own Supabase project, see
+If you'd rather run Mushi Mushi on your own Supabase project, see
 [Self-hosting](/self-hosting). The Cloud code is in the public repo: the
 server is AGPLv3, and the enterprise features in `packages/server/ee`
 (SSO, audit export, retention policies) are source-available and need a

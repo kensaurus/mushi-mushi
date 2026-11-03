@@ -15,7 +15,7 @@ reproduce, read the stack, remember why that module exists — starts from
 zero every time.
 
 Mushi Mushi closes that gap. Users report bugs from inside your app (a widget
-click or a shake on mobile), and Mushi turns each report into a plain-English
+click or a shake on mobile), and Mushi Mushi turns each report into a plain-English
 read on what broke and why, with a fix prompt scoped to the right files. Your
 Cursor agent picks it up over MCP and applies the fix without you leaving the
 editor.
@@ -25,10 +25,10 @@ editor.
 1. **Install the SDK** — `npx mushi-mushi` detects your framework and wires
    everything up.
 2. **Connect Cursor** — `npx mushi-mushi setup --ide cursor` registers the
-   Mushi MCP server, so Cursor can list open reports, pull fix context, and
+   Mushi Mushi MCP server, so Cursor can list open reports, pull fix context, and
    dispatch fixes.
 3. **A user hits a bug** — the report lands with a screenshot, the user's own
-   words, and Mushi's diagnosis of the cause.
+   words, and Mushi Mushi's diagnosis of the cause.
 4. **Ask Cursor "what's broken in prod?"** — it reads the queue, proposes the
    fix, and you merge. Repeat reports about the same bug collapse into one
    row, and each fix becomes a lesson Cursor sees on future PRs
@@ -37,7 +37,7 @@ editor.
 ## Why not just paste the bug into chat?
 
 You can — but a user's "it's broken" message has no repro, no console output,
-and no file pointers. Mushi's report carries the screenshot, session context,
+and no file pointers. Mushi Mushi's report carries the screenshot, session context,
 and a diagnosis grounded in your actual repo, so the agent starts from the
 answer instead of the question.
 

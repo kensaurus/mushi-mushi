@@ -9,14 +9,14 @@ Opens a Linear issue for each new Mushi Mushi report and updates it once the
 report is triaged.
 
 **Most people don't need the plugin.** Connect Linear on the console's
-**Integrations** page (OAuth or a pasted API key) and Mushi files Linear
+**Integrations** page (OAuth or a pasted API key) and Mushi Mushi files Linear
 issues and closes them for you. The plugin below is for running the Linear
 calls from your own server.
 
 ## Setup (self-run plugin)
 
 1. Create a Linear API key: **Settings → Security & access → Personal API keys** → **New key**.
-2. Start the server where Mushi can reach it over public HTTPS:
+2. Start the server where Mushi Mushi can reach it over public HTTPS:
 
    ```bash
    npm i @mushi-mushi/plugin-linear
@@ -27,7 +27,7 @@ calls from your own server.
    ```
 
 3. In the console: **Marketplace → Linear Sync → Install**. Set the webhook
-   URL to `https://<your-host>/mushi/webhook`. Keep the signing secret Mushi
+   URL to `https://<your-host>/mushi/webhook`. Keep the signing secret Mushi Mushi
    generates (or paste your own) and use the same value for
    `MUSHI_PLUGIN_SECRET`.
 

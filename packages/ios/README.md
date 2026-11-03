@@ -126,7 +126,7 @@ web SDK's `ui.click`. The `data` map is `[String: String]`
 on iOS; non-string values are coerced to strings on the Capacitor bridge.
 
 If your app already uses Sentry, keep initializing Sentry in the host app and
-attach Mushi report metadata through `setMetadata` or `report(..., metadata:)`.
+attach Mushi Mushi report metadata through `setMetadata` or `report(..., metadata:)`.
 The standalone Swift package no longer ships a separate `MushiMushiSentry`
 target, which keeps the native SDK dependency-free by default.
 

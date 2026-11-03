@@ -19,10 +19,10 @@ when the endpoint answers and its TLS certificate is valid.
 
 | Check | What it covers |
 |-------|---------------|
-| **Mushi API (ingest edge function)** | The Supabase edge function that receives reports |
-| **Mushi hosted MCP** | The hosted MCP endpoint your editor connects to |
-| **Mushi console** | The admin console at `kensaur.us/mushi-mushi/admin` |
-| **Mushi docs** | This docs site |
+| **Mushi Mushi API (ingest edge function)** | The Supabase edge function that receives reports |
+| **Mushi Mushi hosted MCP** | The hosted MCP endpoint your editor connects to |
+| **Mushi Mushi console** | The admin console at `kensaur.us/mushi-mushi/admin` |
+| **Mushi Mushi docs** | This docs site |
 
 The status page does not measure queue depth, latency percentiles, the
 diagnosis pipeline or CLI sign-in. Those show up in the console, not here.

@@ -41,7 +41,7 @@ Connect your AI editor. One click on the [Connect page](https://kensaur.us/mushi
 npx mushi-mushi setup --ide cursor
 ```
 
-Then ask your editor: *"Get the latest Mushi report and fix it."*
+Then ask your editor: *"Get the latest Mushi Mushi report and fix it."*
 
 **You'll see:** a fix brief in your editor: the cause, the files to change and how to check it. You review the change before it ships.
 
@@ -50,18 +50,18 @@ Then ask your editor: *"Get the latest Mushi report and fix it."*
 The wizard detects your framework for you. Pick yours to see what it installs
 and the one line it adds to your code.
 
-- **No terminal (Lovable, Bolt):** [Mushi in Lovable or Bolt](/quickstart/lovable-bolt), one script tag pasted through your prompt.
+- **No terminal (Lovable, Bolt):** [Mushi Mushi in Lovable or Bolt](/quickstart/lovable-bolt), one script tag pasted through your prompt.
 - **Mobile previews:** [iOS](/quickstart/ios) · [Android](/quickstart/android) · [Flutter](/quickstart/flutter), installed from the GitHub repo.
 - **Go deeper:** [Incident loop](/quickstart/incident-loop) · [MCP server](/quickstart/mcp) · [CLI console loop](/quickstart/cli-console-loop)
 
 What you need first
 
 - An app you are building, for the web or for phones.
-- A Mushi account. The free plan is enough, and the wizard signs you in through your browser.
+- A Mushi Mushi account. The free plan is enough, and the wizard signs you in through your browser.
 - Optional: an AI code editor such as Cursor or Claude Code.
 
 `npx` runs a tool from npm (the public library of JavaScript packages) without
-installing it for good. Here it runs the Mushi setup wizard.
+installing it for good. Here it runs the Mushi Mushi setup wizard.
 
 ## Where to start
 
@@ -72,7 +72,7 @@ Setting it up yourself? See [Project ID & API keys](/concepts/credentials) for t
   The SDK needs only two settings: your project ID and API key, named with the
   prefix your framework expects (see
   [`examples/sdk.env.example`](https://github.com/kensaurus/mushi-mushi/blob/master/examples/sdk.env.example)).
-  The repo's root `.env.example` is only for **running the Mushi server
+  The repo's root `.env.example` is only for **running the Mushi Mushi server
   yourself**. You do not need Supabase or an AI (LLM) key to use the SDK.
 
 ## Troubleshooting

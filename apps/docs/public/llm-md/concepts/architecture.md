@@ -81,7 +81,7 @@ device to a merged PR.
   cloud agent on the same PR (off by default), and asks it to repair CI when an
   approved PR fails on its own code.
 - **`fix-verifier`** checks the merge gates for a PR's head (review, CI, the
-  Mushi verify check, no weakened tests, diff size, a second-model review) and,
+  Mushi Mushi verify check, no weakened tests, diff size, a second-model review) and,
   only when the project turns on verified auto-merge, merges it.
 - **`merge-queue`** merges PRs a person queued with "Merge when ready", one per
   repo at a time, or batches approved PRs into a release-train PR.
@@ -154,7 +154,7 @@ window") get true Cypher.
 
 Public discovery endpoints at `/.well-known/agent-card` and `/v1/agent-card`
 expose the agent's identity, skills, supported A2A version, MCP transport,
-and auth requirements. Other agents can negotiate with Mushi without
+and auth requirements. Other agents can negotiate with Mushi Mushi without
 out-of-band config.
 
 ## Data residency
