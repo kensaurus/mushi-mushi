@@ -180,6 +180,8 @@ interface RecommendedActionInlineAction {
   onClick?: () => void
   tone?: 'primary' | 'ghost' | 'danger'
   disabled?: boolean
+  /** Shown as text the person can run. Not a link. */
+  command?: string
 }
 
 interface RecommendedActionProps {
@@ -245,6 +247,16 @@ const INLINE_ACTION_TONES: Record<NonNullable<RecommendedActionInlineAction['ton
 
 function InlineActionEl({ action }: { action: RecommendedActionInlineAction }) {
   const cls = `inline-flex items-center gap-1 px-2 py-1 text-2xs font-medium rounded-sm motion-safe:transition-opacity ${INLINE_ACTION_TONES[action.tone ?? 'ghost']}`
+  if (action.command) {
+    return (
+      <span className="inline-flex max-w-full flex-col items-start gap-1">
+        <span className={cls}>{action.label}</span>
+        <code className="max-w-full whitespace-pre-wrap break-all font-mono text-2xs text-fg-secondary" data-testid="push-recovery-command">
+          {action.command}
+        </code>
+      </span>
+    )
+  }
   if (action.to) {
     return <Link to={action.to} className={cls}>{action.label}</Link>
   }

@@ -875,7 +875,7 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
  * Agents that only the server dispatches. Everything else that opens a PR is
  * a person's own lane (`mcp`: `mushi work`, the CLI and the editor).
  */
-export const LOCAL_AGENTS: ReadonlySet<string> = new Set(['mcp', 'local'])
+export const LOCAL_AGENTS: ReadonlySet<string> = new Set(['mcp', 'local', 'local_cursor'])
 
 export interface AgentKeyRow {
   project_id: string | null

@@ -17,6 +17,7 @@ import {
 } from './ReportSurface'
 import type { ReportFixAttempt } from './types'
 import { CHIP_TONE, prStateChipTone } from '../../lib/chipTone'
+import { attemptRunnerLabel } from '../../lib/reportDiagnosisNodes'
 
 interface Props {
   fix: ReportFixAttempt
@@ -227,7 +228,7 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
           label: 'Agent',
           value: (
             <code className="font-mono text-2xs text-fg-secondary">
-              {fix.llm_model ?? fix.agent}
+              {attemptRunnerLabel(fix.agent, fix.llm_model)}
             </code>
           ),
         }
@@ -310,7 +311,7 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
                   branchName={fix.branch}
                   baseBranch={baseBranch}
                   commitSha={fix.commit_sha}
-                  agentModel={fix.llm_model ?? fix.agent}
+                  agentModel={attemptRunnerLabel(fix.agent, fix.llm_model)}
                   filesChanged={fix.files_changed}
                   linesChanged={fix.lines_changed}
                 />

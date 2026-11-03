@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   checkCursorSignIn,
@@ -28,6 +28,8 @@ import {
   rankCandidates,
   stableKey,
   submitPayload,
+  registerFixBody,
+  failedPushPayload,
   WORK_AGENT_KIND,
   WORK_STOPPED_PREFIX,
   missingWriteScope,
@@ -145,7 +147,7 @@ describe('mushi work: branch, prompt and PR', () => {
 describe('mushi work: submitting to Mushi', () => {
   it('sends submit_fix_result’s shape for a PR, and a failed row with the verdict otherwise', () => {
     const now = new Date('2026-10-24T03:00:00Z')
-    expect(WORK_AGENT_KIND).toBe('mcp')
+    expect(WORK_AGENT_KIND).toBe('local_cursor')
     expect(submitPayload({ branch: 'b', prUrl: 'https://github.com/o/r/pull/5', commitSha: 'abc', filesChanged: ['x.ts'], linesChanged: 4, summary: 'Rounded ticks.' }, now)).toEqual({
       status: 'completed',
       branch: 'b',
@@ -159,6 +161,31 @@ describe('mushi work: submitting to Mushi', () => {
     expect(
       submitPayload({ branch: 'b', prUrl: null, commitSha: null, filesChanged: [], linesChanged: 0, summary: '', noPr: { verdict: 'already_fixed', reason: 'ticks are integers' } }, now),
     ).toEqual({ status: 'failed', branch: 'b', error: 'Agent found nothing to change: ticks are integers', completed_at: now.toISOString() })
+  })
+
+  it('registers a local Cursor run with its model, not mcp', () => {
+    expect(registerFixBody(R1, 'composer-2.5')).toEqual({ reportId: R1, agent: 'local_cursor', llm_model: 'composer-2.5' })
+    expect(registerFixBody(R1)).toEqual({ reportId: R1, agent: 'local_cursor' })
+    expect(JSON.stringify(registerFixBody(R1, 'composer-2.5'))).not.toContain('mcp')
+  })
+
+  it('a refused push stores the checks, a readable error, the branch and the commit', () => {
+    const now = new Date('2026-11-04T03:00:00Z')
+    const reason = 'git push failed: \\u001b[38;2;56;56;56mhook steps failed: test.unit, mobile-test.\\u001b[0m test.unit: FAIL a.test.ts'
+    const saved = failedPushPayload({ branch: 'bugfix/MUSHI-1-local-cursor', commitSha: 'abc1234def5678', reason }, now)
+    expect(saved).toMatchObject({
+      status: 'failed',
+      branch: 'bugfix/MUSHI-1-local-cursor',
+      commit_sha: 'abc1234def5678',
+      completed_at: now.toISOString(),
+    })
+    const error = String(saved.error)
+    expect(error).toContain('hook steps failed: test.unit, mobile-test')
+    expect(error).toContain("Your repo's own checks failed at push")
+    expect(error).toContain('Failed checks: test.unit, mobile-test.')
+    expect(error).toContain('Fix test.unit, mobile-test and push the saved branch')
+    expect(error).not.toContain('\\u001b')
+    expect(error).not.toMatch(/\u001b/)
   })
 
   it('derives one idempotency key per submission', () => {
@@ -219,6 +246,7 @@ describe('inLocalCooldown', () => {
 
   it('skips a report whose local run ended without a PR this week', () => {
     expect(inLocalCooldown([failed], now)).toBe(true)
+    expect(inLocalCooldown([{ ...failed, agent: 'local_cursor' }], now)).toBe(true)
   })
 
   it('retries after 7 days, after a cloud failure, or when the run opened a PR', () => {
@@ -516,6 +544,71 @@ describe('a run stopped from the console (ADR 0048 amendment 2026-10-28)', () =>
     } finally {
       process.env['PATH'] = saved.PATH
       process.env['HOME'] = saved.HOME
+      rmSync(root, { recursive: true, force: true })
+    }
+  }, 30_000)
+})
+
+describe('a pre-push hook that refuses the push', () => {
+  it.skipIf(process.platform === 'win32')('saves the checks, a readable error, the branch and the commit for a local Cursor run', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mushi-work-push-fail-'))
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    writeFileSync(join(bin, 'gh'), '#!/bin/sh\nexit 1\n', { mode: 0o755 })
+    writeFileSync(join(bin, 'cursor-agent'), '#!/bin/sh\necho "fixed it" > fix.txt\necho done\n', { mode: 0o755 })
+    const sh = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, stdio: 'pipe' }).toString()
+    const origin = join(root, 'origin.git')
+    sh(root, 'init', '-q', '--bare', '-b', 'main', origin)
+    const repoName = `repo-${process.pid}`
+    const clone = join(root, repoName)
+    sh(root, 'clone', '-q', origin, clone)
+    sh(clone, 'config', 'user.email', 'w@example.com')
+    sh(clone, 'config', 'user.name', 'worker')
+    sh(clone, 'commit', '-q', '--allow-empty', '-m', 'first')
+    sh(clone, 'push', '-q', 'origin', 'HEAD:main')
+    sh(clone, 'remote', 'set-head', 'origin', 'main')
+    writeFileSync(
+      join(clone, '.git', 'hooks', 'pre-push'),
+      '#!/bin/sh\necho "┃  test.unit ❯ "\necho " FAIL  a.test.ts > breaks"\nprintf "\\033[38;2;56;56;56m🥊 test.unit\\033[0m\\n"\nexit 1\n',
+      { mode: 0o755 },
+    )
+    const saved = { PATH: process.env['PATH'], HOME: process.env['HOME'] }
+    process.env['PATH'] = `${bin}:${saved.PATH}`
+    process.env['HOME'] = root
+    const posts: unknown[] = []
+    const patches: Array<Record<string, unknown>> = []
+    const api = (async (path: string, init?: RequestInit) => {
+      if (init?.method === 'POST' && path === '/v1/admin/fixes') {
+        posts.push(JSON.parse(String(init.body)))
+        return { fixId: 'f1' }
+      }
+      if (init?.method === 'PATCH') patches.push(JSON.parse(String(init.body)))
+      return {}
+    }) as never
+    const cache = join(homedir(), '.cache', 'mushi', 'work', repoName)
+    try {
+      const out = await workOne(api, { id: R1, summary: 'Total is wrong', category: 'bug' } as never, {
+        repoDir: clone,
+        agent: 'cursor',
+        model: 'composer-2.5',
+        log: () => {},
+        earlier: [],
+      })
+      expect(out.result).toBe('failed')
+      expect(posts[0]).toEqual({ reportId: R1, agent: 'local_cursor', llm_model: 'composer-2.5' })
+      const closed = patches.at(-1)!
+      expect(closed.status).toBe('failed')
+      expect(closed.branch).toBe(`bugfix/MUSHI-${R1}-local-cursor`)
+      expect(closed.commit_sha).toMatch(/^[0-9a-f]{40}$/)
+      const error = String(closed.error)
+      expect(error).toContain('hook steps failed: test.unit')
+      expect(error).toContain("Your repo's own checks failed at push")
+      expect(error).toContain('Failed checks: test.unit.')
+      expect(error).not.toMatch(/\u001b/)
+    } finally {
+      process.env['PATH'] = saved.PATH
+      process.env['HOME'] = saved.HOME
+      rmSync(cache, { recursive: true, force: true })
       rmSync(root, { recursive: true, force: true })
     }
   }, 30_000)

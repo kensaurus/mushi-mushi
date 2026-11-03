@@ -4,6 +4,7 @@
 import { Card, Badge } from '../ui'
 import type { ReportDetail } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { attemptRunnerLabel } from '../../lib/reportDiagnosisNodes'
 
 interface LlmInvocationRow {
   id: string
@@ -74,7 +75,7 @@ export function AgentTracePanel({ report }: Props) {
       </div>
       {(report.fix_attempts?.length ?? 0) > 0 && (
         <p className="text-2xs text-fg-muted">
-          {report.fix_attempts!.length} fix attempt(s) · latest agent {report.fix_attempts![0]?.agent ?? '—'}
+          {report.fix_attempts!.length} fix attempt(s) · latest agent {attemptRunnerLabel(report.fix_attempts![0]?.agent, report.fix_attempts![0]?.llm_model)}
         </p>
       )}
     </Card>

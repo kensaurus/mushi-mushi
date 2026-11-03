@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { ReportDetail, ReportFixAttempt } from '../components/report-detail/types'
-import { fixNodes } from './reportDiagnosisNodes'
+import { attemptRunnerLabel, fixNodes } from './reportDiagnosisNodes'
 
 const failedAttempt = (over: Partial<ReportFixAttempt> = {}) =>
   ({
@@ -48,6 +48,19 @@ describe('fixNodes: the next step', () => {
     // 87 `mushi work` runs in 30 days (2026-10-29) had no failure_category.
     const step = nextStep(report('classified', failedAttempt({ agent: 'mcp', failure_category: null, error: 'Agent says this needs a person: Mushi verdict: needs_human. Pick a query budget.' })))
     expect(step?.title).toBe('A person decides this one')
+  })
+
+  it('a local Cursor run is labeled with the runner and model, not mcp', () => {
+    expect(attemptRunnerLabel('local_cursor', 'composer-2.5')).toBe('Local Cursor · composer-2.5')
+    expect(attemptRunnerLabel('mcp', null)).toBe('Local agent')
+    const nodes = fixNodes(report('classified', failedAttempt({
+      agent: 'local_cursor',
+      llm_model: 'composer-2.5',
+      error: 'mushi work: git push failed: hook steps failed: test.unit. test.unit: FAIL',
+    })), true)
+    const attempt = nodes.find((n) => n.id === 'attempt')
+    expect(attempt?.detail).toBe('Local Cursor · composer-2.5')
+    expect(attempt?.detail).not.toContain('mcp')
   })
 
   it('a push the repo hook refused does not say to check the weak spots', () => {

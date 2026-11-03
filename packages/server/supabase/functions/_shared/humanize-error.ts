@@ -34,6 +34,12 @@ type Context = {
 
 // Keep in sync with apps/admin/src/lib/terminalText.ts (the report page).
 const HOOK_MARK = /hook steps failed:|pre-push hook|\blefthook\b|husky - pre-push|🥊/;
+/** The push itself failed. A lefthook mention in some other error is not this. */
+const PUSH_FAILED = /\bgit push failed\b|\bfailed to push some refs\b/i;
+const NOT_HOOK_PUSH = /non-fast-forward|\[rejected\]|Authentication failed|permission denied/i;
+/** Check names may contain dots (`test.unit`). The summary sentence ends after the list. */
+const SUMMARY_CHECKS = /hook steps failed:\s*((?:[\w:-]+(?:\.[\w:-]+)*)(?:\s*,\s*(?:[\w:-]+(?:\.[\w:-]+)*))*)/i;
+const CHECK_NAME = /^[\w:-]+(?:\.[\w:-]+)*$/;
 
 function stripTerminalCodes(text: string): string {
   return text
@@ -45,21 +51,22 @@ function stripTerminalCodes(text: string): string {
 
 function failedHookChecks(text: string): string[] {
   const plain = stripTerminalCodes(text);
-  const named = /hook steps failed:\s*([^.\n]+)/i.exec(plain)?.[1];
+  const named = SUMMARY_CHECKS.exec(plain)?.[1];
   const fromSummary = named
-    ? named.split(',').map((s) => s.trim()).filter((s) => /^[\w:.-]+$/.test(s))
+    ? named.split(',').map((s) => s.trim()).filter((s) => CHECK_NAME.test(s))
     : [];
-  const fromIcons = [...plain.matchAll(/🥊\s+([\w:.-]+)/g)].map((m) => m[1]!);
-  return [...new Set([...fromSummary, ...fromIcons])].slice(0, 6);
+  const fromIcons = [...plain.matchAll(/🥊\s+([\w:.-]+)/g)].map((m) => m[1]!.replace(/\.+$/, ''));
+  return [...new Set([...fromSummary, ...fromIcons])].filter(Boolean).slice(0, 6);
 }
 
 function pushHookAdvice(text: string): { hint: string } | null {
   const plain = stripTerminalCodes(text);
-  if (!HOOK_MARK.test(plain)) return null;
+  if (NOT_HOOK_PUSH.test(plain) || !PUSH_FAILED.test(plain) || !HOOK_MARK.test(plain)) return null;
   const checks = failedHookChecks(plain);
   const which = checks.length ? ` Failed checks: ${checks.join(', ')}.` : '';
+  const fix = checks.length ? `Fix ${checks.join(', ')} and push the saved branch` : 'Fix that check and push the saved branch';
   return {
-    hint: `The fix is committed on its branch; nothing was pushed.${which} Fix that check and push the branch, or send the report to your local worker again. A cloud dispatch hits the same checks.`,
+    hint: `The fix is committed on its branch; nothing was pushed.${which} ${fix}, or send the report to your local worker again. A cloud dispatch hits the same checks.`,
   };
 }
 

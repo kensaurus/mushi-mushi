@@ -30,8 +30,14 @@ import { MushiCliError } from '../errors.js'
 import type { WhoamiData } from '../cli-types.js'
 import { interruptedBy, onInterrupt } from '../signals.js'
 
-/** @internal Exported for tests only. The fix_attempts.agent value for a fix made outside Mushi's cloud agents (as submit_fix_result). */
-export const WORK_AGENT_KIND = 'mcp'
+/**
+ * @internal Exported for tests only. fix_attempts.agent for a fix `mushi work`
+ * made with the local Cursor CLI. Older rows and MCP submit_fix_result used
+ * `mcp`; the cooldown still counts those.
+ */
+export const WORK_AGENT_KIND = 'local_cursor'
+/** Historical `mcp` rows and this command's `local_cursor`. Keep in sync with server LOCAL_WORK_AGENTS. */
+const LOCAL_WORK_AGENTS = new Set<string>(['mcp', 'local_cursor'])
 const WORK_AGENT_TIMEOUT_MS = 30 * 60_000
 const PROMPT_MAX_CHARS = 40_000
 const SEVERITY_WEIGHT: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 }
@@ -91,7 +97,7 @@ export const WORK_INFRA_PREFIX = 'mushi work infra:'
  */
 export function inLocalCooldown(attempts: readonly AttemptSummary[], nowMs = Date.now()): boolean {
   return attempts.some((a) => {
-    if (a.agent !== WORK_AGENT_KIND || a.status !== 'failed' || a.pr_url || !a.created_at) return false
+    if (!a.agent || !LOCAL_WORK_AGENTS.has(a.agent) || a.status !== 'failed' || a.pr_url || !a.created_at) return false
     if (a.error?.startsWith(WORK_STOPPED_PREFIX) || a.error?.startsWith(REAPED_PREFIX) || a.error?.startsWith(WORK_INFRA_PREFIX)) return false
     const at = Date.parse(a.created_at)
     return Number.isFinite(at) && nowMs - at < LOCAL_RETRY_COOLDOWN_MS
@@ -307,6 +313,39 @@ interface SubmitInput {
   linesChanged: number
   summary: string
   noPr?: { verdict: string | null; reason: string }
+}
+
+/** @internal Exported for tests only. POST /v1/admin/fixes body: the local Cursor runner and, when chosen, its model. */
+export function registerFixBody(reportId: string, model?: string): Record<string, unknown> {
+  const body: Record<string, unknown> = { reportId, agent: WORK_AGENT_KIND }
+  if (model) body.llm_model = model
+  return body
+}
+
+/** Check names may contain dots. Same summary rule as the report page (`terminalText.ts`). */
+const HOOK_SUMMARY = /hook steps failed:\s*((?:[\w:-]+(?:\.[\w:-]+)*)(?:\s*,\s*(?:[\w:-]+(?:\.[\w:-]+)*))*)/i
+
+/**
+ * @internal Exported for tests only. The PATCH that closes a push the repo's
+ * pre-push hook refused: plain-English error, the failed checks, the branch
+ * and the commit that was not pushed.
+ */
+export function failedPushPayload(input: { branch: string; commitSha: string; reason: string }, now = new Date()): Record<string, unknown> {
+  const plain = stripVTControlCharacters(input.reason).replace(/\\u001b\[[0-9;?]*[A-Za-z]/gi, '').replace(/\\x1b\[[0-9;?]*[A-Za-z]/gi, '')
+  const named = HOOK_SUMMARY.exec(plain)?.[1] ?? ''
+  const checks = [...new Set(named.split(',').map((s) => s.trim()).filter((s) => /^[\w:-]+(?:\.[\w:-]+)*$/.test(s)))].slice(0, 6)
+  const list = checks.join(', ')
+  const summary = list ? `hook steps failed: ${list}` : 'pre-push hook declined'
+  const which = list ? ` Failed checks: ${list}.` : ''
+  const fix = list ? `Fix ${list} and push the saved branch` : 'Fix that check and push the saved branch'
+  const error = `mushi work: git push failed: ${summary}. Your repo's own checks failed at push. The fix is committed on its branch; nothing was pushed.${which} ${fix}.`.slice(0, 1000)
+  return {
+    status: 'failed',
+    branch: input.branch,
+    commit_sha: input.commitSha,
+    error,
+    completed_at: now.toISOString(),
+  }
 }
 
 /** @internal Exported for tests only. The PATCH /v1/admin/fixes/:id body (submit_fix_result's shape; a no-PR run is closed as failed with its verdict). */
@@ -743,6 +782,8 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
   let keep = o.keep ?? false
   let fixId: string | null = null
   let stage: WorkStage = 'prepare'
+  /** Set once the commit exists, so a refused push can store it. */
+  let commitSha: string | null = null
   // The fix row is closed exactly once: by the run's own outcome, or by a stop.
   let closed = false
   const close = async (payload: Record<string, unknown>): Promise<void> => {
@@ -775,7 +816,7 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
     const created = await api<{ fixId: string }>('/v1/admin/fixes', {
       method: 'POST',
       headers: { 'Idempotency-Key': stableKey(detail.id, branch, new Date().toISOString()) },
-      body: JSON.stringify({ reportId: detail.id, agent: WORK_AGENT_KIND }),
+      body: JSON.stringify(registerFixBody(detail.id, o.model)),
     })
     fixId = created.fixId
     // The row reads as in flight already while 'pending'; 'running' says the
@@ -824,6 +865,7 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
     const last = run.stdout.trim().split('\n').filter((l) => l.trim()).slice(-6).join(' ')
     await commitWithHooks(wt, ['--quiet', '-m', prTitle(detail.summary, detail.id), '-m', commitBody(`Mushi report: ${detail.id}`, 'Made by a local Cursor agent through `mushi work`.')], o.log)
     const sha = await git(wt, ['rev-parse', 'HEAD'])
+    commitSha = sha
     const numstat = await git(wt, ['diff', '--numstat', `origin/${base}`, 'HEAD'])
     const files: string[] = []
     let lines = 0
@@ -859,7 +901,10 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
     const reason = err instanceof Error ? err.message : String(err)
     const failureKind = classifyFailure(reason, stage)
     keep = true
-    await close({ status: 'failed', branch, error: `${failureKind === 'infra' ? WORK_INFRA_PREFIX : 'mushi work:'} ${reason}`.slice(0, 1000), completed_at: new Date().toISOString() }).catch((patchErr: unknown) =>
+    const payload = stage === 'push' && commitSha && isHookRejection(reason)
+      ? failedPushPayload({ branch, commitSha, reason })
+      : { status: 'failed', branch, error: `${failureKind === 'infra' ? WORK_INFRA_PREFIX : 'mushi work:'} ${reason}`.slice(0, 1000), completed_at: new Date().toISOString() }
+    await close(payload).catch((patchErr: unknown) =>
       o.log(`  fix ${fixId}: not marked failed (${patchErr instanceof Error ? patchErr.message : String(patchErr)})`),
     )
     return { reportId: detail.id, result: 'failed', failureKind, outcome: `failed (${failureKind}): ${reason} (the change is kept in ${wt})`, ...(fixId ? { fixId } : {}) }

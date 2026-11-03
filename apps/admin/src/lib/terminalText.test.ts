@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { failedHookChecks, pushHookAdvice, stripTerminalCodes } from './terminalText'
+import { failedHookChecks, pushHookAdvice, pushRecoveryCommand, stripTerminalCodes } from './terminalText'
 
 const GRAY = '\u001b[38;2;56;56;56m'
 const RESET = '\u001b[0m'
@@ -39,8 +39,34 @@ describe('pushHookAdvice', () => {
     expect(advice?.checks).toEqual(['test', 'knip'])
   })
 
+  it('keeps dots that are part of a check name', () => {
+    const raw = 'git push failed: hook steps failed: test.unit, mobile-test. test.unit: FAIL a.test.ts'
+    expect(failedHookChecks(raw)).toEqual(['test.unit', 'mobile-test'])
+    expect(pushHookAdvice(raw)?.checks).toEqual(['test.unit', 'mobile-test'])
+    expect(pushHookAdvice(raw)?.hint).toContain('Fix test.unit, mobile-test')
+  })
+
+  it('does not treat a non-push error that mentions lefthook as a failed push', () => {
+    expect(pushHookAdvice('cursor-agent failed: lefthook config is missing')).toBeNull()
+    expect(pushHookAdvice('git commit failed: hook steps failed: lint. lefthook')).toBeNull()
+    expect(pushHookAdvice('The report mentions a pre-push hook and 🥊')).toBeNull()
+  })
+
   it('leaves a remote rejection alone', () => {
     expect(pushHookAdvice('git push failed: ! [rejected] HEAD -> main (non-fast-forward)')).toBeNull()
     expect(pushHookAdvice('git push failed: remote: Permission denied. fatal: Authentication failed')).toBeNull()
+  })
+})
+
+describe('pushRecoveryCommand', () => {
+  it('names the saved branch and commit', () => {
+    expect(pushRecoveryCommand('bugfix/MUSHI-1-local-cursor', 'abc1234def5678')).toBe(
+      'git rev-parse --verify abc1234def5678 && git checkout bugfix/MUSHI-1-local-cursor && git push -u origin bugfix/MUSHI-1-local-cursor',
+    )
+  })
+
+  it('refuses a branch that is not a plain git ref', () => {
+    expect(pushRecoveryCommand('bugfix/$(rm -rf /)', 'abc1234')).toBeNull()
+    expect(pushRecoveryCommand('--force', 'abc1234')).toBeNull()
   })
 })
