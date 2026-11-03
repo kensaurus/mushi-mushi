@@ -175,7 +175,7 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
             ? 'Anthropic API key set'
             : 'Anthropic API key set',
         hint: anthropicSource === 'env'
-          ? 'Using the platform Anthropic key — add your own in Settings → API Keys to isolate usage.'
+          ? 'Using the platform Anthropic key — add your own in Settings → AI keys to isolate usage.'
           : 'Add your Anthropic API key (BYOK) to power the fix-generation model.',
         fixHref: '/settings?tab=byok',
       },

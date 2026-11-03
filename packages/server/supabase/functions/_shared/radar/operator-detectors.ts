@@ -109,7 +109,7 @@ export function evaluateDeadApp(input: DeadAppInput, now: Date): DetectorResult 
       severity: 'warn',
       message: `Nobody has used this app for ${idle} days (no SDK heartbeat, report or page view since ${lastSeen.slice(0, 10)}), but it still has ${live.join(', ')}. If the app is retired, that is money and exposure for nothing.`,
       target: null,
-      fix: 'If the app is retired: 1) pause its Supabase project (Dashboard → Project settings → General → Pause project); 2) delete its edge functions (`supabase functions delete <name>`) and unschedule its cron jobs; 3) revoke its provider keys at each provider and remove them in Mushi (Settings → API Keys). If it is still meant to be live, check that the Mushi SDK still loads in it.',
+      fix: 'If the app is retired: 1) pause its Supabase project (Dashboard → Project settings → General → Pause project); 2) delete its edge functions (`supabase functions delete <name>`) and unschedule its cron jobs; 3) revoke its provider keys at each provider and remove them in Mushi (Settings → AI keys). If it is still meant to be live, check that the Mushi SDK still loads in it.',
       evidence: { lastSeen, idleDays: idle, providerSpendUsd30d: input.providerSpendUsd30d, liveFunctions: input.liveFunctions, liveProviderKeys: input.liveProviderKeys },
     }],
   }
@@ -254,7 +254,7 @@ const BYOK_VENDORS: Record<string, ByokVendor> = {
 export function credentialHelp(kind: string, provider: string | null): CredentialHelp {
   switch (kind) {
     case 'github': return { vendor: 'GitHub', where: 'Create a new token at https://github.com/settings/tokens (or reinstall the Mushi GitHub App), then save it in Mushi under Settings → Integrations → GitHub.' }
-    case 'supabase': return { vendor: 'Supabase', where: 'Create a new access token at https://supabase.com/dashboard/account/tokens, then save it in Mushi under Settings → API Keys → Supabase.' }
+    case 'supabase': return { vendor: 'Supabase', where: 'Create a new access token at https://supabase.com/dashboard/account/tokens, then save it in Mushi under Settings → AI keys → Supabase.' }
     case 'sentry': return { vendor: 'Sentry', where: 'Create a new auth token at https://sentry.io/settings/account/api/auth-tokens/, then save it in Mushi under Settings → Integrations → Sentry.' }
     case 'llm_usage': return provider === 'anthropic'
       ? { vendor: 'Anthropic', where: 'Create a new admin key at https://console.anthropic.com/settings/admin-keys, then rotate it on the connector in Mushi (Portfolio → Connected sources).' }
@@ -264,7 +264,7 @@ export function credentialHelp(kind: string, provider: string | null): Credentia
     case 'app_store_connect': return { vendor: 'App Store Connect', where: 'Create a new team API key in App Store Connect (Users and Access → Integrations), then rotate it on the connector in Mushi (Portfolio → Connected sources).' }
     case 'byok': {
       const v: ByokVendor = (provider ? BYOK_VENDORS[provider] : undefined) ?? { vendor: provider ?? 'the provider', keysAt: 'the provider dashboard' }
-      return { vendor: v.vendor, where: `Create a new key at ${v.keysAt}, add it in Mushi under Settings → API Keys, then remove the old one there.`, impact: v.impact ?? `Mushi's ${v.vendor} calls for this app can no longer use it (they fail, or fall back to another key).` }
+      return { vendor: v.vendor, where: `Create a new key at ${v.keysAt}, add it in Mushi under Settings → AI keys, then remove the old one there.`, impact: v.impact ?? `Mushi's ${v.vendor} calls for this app can no longer use it (they fail, or fall back to another key).` }
     }
     case 'langfuse': return { vendor: 'Langfuse', where: 'Create new API keys in your Langfuse project settings, then save them in Mushi under Settings → Integrations → Langfuse.', impact: "Mushi's Langfuse traces for this app have stopped." }
     case 'linear': return { vendor: 'Linear', where: 'Reconnect Linear in Mushi under Settings → Integrations → Linear, or paste a new key from https://linear.app/settings/api.', impact: 'Mushi can no longer create or sync Linear issues for this app.' }
@@ -295,7 +295,7 @@ export function evaluateProviderKeys(obs: readonly CredentialObservation[], now:
   // A check older than a week no longer says whether the key works, except a standing rejection (it holds until a test passes).
   const judged = latest.filter((o) => isFresh(o.at, now, CREDENTIAL_FRESH_DAYS) || o.standing === true)
   const stale = latest.length - judged.length
-  if (judged.length === 0) return { ruleId, state: 'unknown', reason: `The newest check of each credential is over ${CREDENTIAL_FRESH_DAYS} days old. Press Probe on the connector or Test on the key (Settings → API Keys), or wait for the next scheduled check.`, findings: [] }
+  if (judged.length === 0) return { ruleId, state: 'unknown', reason: `The newest check of each credential is over ${CREDENTIAL_FRESH_DAYS} days old. Press Probe on the connector or Test on the key (Settings → AI keys), or wait for the next scheduled check.`, findings: [] }
   const isStore = (k: string) => (STORE_CONNECTOR_KINDS as readonly string[]).includes(k)
   const findings: RadarFinding[] = []
   for (const o of judged) {
@@ -434,7 +434,7 @@ export function evaluateUnusedKeys(keys: readonly StoredKey[], untracked: number
       target: k.label,
       fix: k.kind === 'mushi_sdk'
         ? 'If no build ships this key any more, revoke it in the console (Projects → API keys → Revoke). Keys that a live app still ships stay; their next use resets this.'
-        : `Remove it in Mushi (Settings → API Keys) and revoke it at ${k.provider ?? 'the provider'} too, so a copy elsewhere stops working.`,
+        : `Remove it in Mushi (Settings → AI keys) and revoke it at ${k.provider ?? 'the provider'} too, so a copy elsewhere stops working.`,
       evidence: { kind: k.kind, idleDays: idle, lastUsedAt: k.lastUsedAt, createdAt: k.createdAt },
     })
   }

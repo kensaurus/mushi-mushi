@@ -122,7 +122,7 @@ export function radarStateMeta(state: string): { label: string; tone: BadgeTone 
 const RADAR_STATE_ORDER: Record<string, number> = { finding: 0, error: 1 }
 
 /**
- * The risk checks split for the Recipe page: problems first (Found, then
+ * The risk checks split for the App blueprint page: problems first (Found, then
  * Check failed), then the checks that never ran and the passing ones, which
  * the panel collapses. An unknown state counts as not checked, never passing.
  */
@@ -173,7 +173,7 @@ export function cardStatusChips(card: PortfolioCard): CardStatusChip[] {
       hint: card.openReports > 0 ? `${bugs} open bug ${card.openReports === 1 ? 'report' : 'reports'}. Open Bugs to triage them.` : 'No open bug reports.',
       to: '/reports',
     },
-    { key: 'checks', text: radar.text.replace(/^Risk checks: /, 'Checks: '), tone: radar.tone, hint: radar.hint, to: '/recipe' },
+    { key: 'checks', text: radar.text.replace(/^Risk checks: /, 'Checks: '), tone: radar.tone, hint: radar.hint, to: '/recipe#risk-checks' },
     { key: 'sdk', text: sdk.text, tone: sdk.tone, hint: sdk.hint, to: '/connect' },
     {
       key: 'release',
@@ -189,7 +189,7 @@ export function cardStatusChips(card: PortfolioCard): CardStatusChip[] {
 // ── urgency (console journeys 2026-10-27) ────────────────────────────────────
 //
 // Every card used to say "Needs attention" with the same next step, "Mushi
-// setup check (no spend cap)… on the Recipe page", so the chip carried no
+// setup check (no spend cap)… on the App blueprint page", so the chip carried no
 // signal and the step was a chore on Mushi's side, not the app's problem.
 // Now each card names its own top problem, and the cards sort by it.
 
@@ -298,7 +298,7 @@ export function appUrgency(card: PortfolioCard): AppUrgency {
       level: 'chores',
       chip: { text: stale ? 'Re-run checks' : 'Mushi setup', tone: 'neutral' },
       short: stale ? 'checks to re-run' : 'Mushi setup to finish',
-      next: { text: stale ? `${stale.label}: ${stale.reason}` : `Mushi setup: ${plural(chores.length, 'small fix', 'small fixes')} on the App blueprint page`, to: stale ? pageFor(first) : '/recipe', more: others(1) },
+      next: { text: stale ? `${stale.label}: ${stale.reason}` : `Mushi setup: ${plural(chores.length, 'small fix', 'small fixes')} on the App blueprint page`, to: stale ? pageFor(first) : '/recipe#risk-checks', more: others(1) },
     }
   }
   if (!card.radar.checkedAt) {

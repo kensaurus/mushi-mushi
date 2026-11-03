@@ -584,7 +584,7 @@ export async function probeIntegration(
       ''
     if (!apiKey) {
       status = 'unknown'
-      detail = 'No Anthropic API key configured. Add ANTHROPIC_API_KEY to your environment or under Settings → API Keys.'
+      detail = 'No Anthropic API key configured. Add ANTHROPIC_API_KEY to your environment or under Settings → AI keys.'
     } else {
       try {
         // Minimal models list call — cheapest probe with no tokens consumed

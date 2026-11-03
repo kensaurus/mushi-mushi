@@ -180,7 +180,7 @@ async function resolveStoryApiKey(
   try {
     const result = await resolveLlmKey(db, projectId, slug)
     if (result) return result.key
-    rlog.warn('no_byok_key_configured — story will fail; add key via Settings → API Keys', {
+    rlog.warn('no_byok_key_configured — story will fail; add key via Settings → AI keys', {
       provider: slug,
       storyId: story.id,
     })
@@ -580,7 +580,7 @@ async function executeManualRun(
       result = {
         status: 'error',
         latency_ms: 0,
-        summary: 'Firecrawl API key not configured. Add one via Settings → API Keys → Firecrawl, or run `mushi keys add --provider firecrawl` in the CLI.',
+        summary: 'Firecrawl API key not configured. Add one via Settings → AI keys → Firecrawl, or run `mushi keys add --provider firecrawl` in the CLI.',
         assertion_failures: [],
         provider_session_url: null,
         error_message: 'No Firecrawl key. Run: mushi keys add --provider firecrawl',
@@ -595,10 +595,10 @@ async function executeManualRun(
       result = {
         status: 'error',
         latency_ms: 0,
-        summary: 'Browserbase API key not configured. Add one via Settings → API Keys → Browserbase.',
+        summary: 'Browserbase API key not configured. Add one via Settings → AI keys → Browserbase.',
         assertion_failures: [],
         provider_session_url: null,
-        error_message: 'No Browserbase key. Add via Settings → API Keys → Browserbase.',
+        error_message: 'No Browserbase key. Add via Settings → AI keys → Browserbase.',
         evidence: [],
       }
     } else {
@@ -825,10 +825,10 @@ Deno.serve(
             result = {
               status: 'error',
               latency_ms: 0,
-              summary: 'Firecrawl API key not configured. Add one via Settings → API Keys → Firecrawl, or run `mushi keys add --provider firecrawl` in the CLI.',
+              summary: 'Firecrawl API key not configured. Add one via Settings → AI keys → Firecrawl, or run `mushi keys add --provider firecrawl` in the CLI.',
               assertion_failures: [],
               provider_session_url: null,
-              error_message: 'firecrawl_key_missing: Add a Firecrawl API key via Settings → API Keys in the Mushi console, or run: mushi keys add --provider firecrawl',
+              error_message: 'firecrawl_key_missing: Add a Firecrawl API key via Settings → AI keys in the Mushi console, or run: mushi keys add --provider firecrawl',
               evidence: [],
             }
           } else {
@@ -840,10 +840,10 @@ Deno.serve(
             result = {
               status: 'error',
               latency_ms: 0,
-              summary: 'Browserbase API key not configured. Add one via Settings → API Keys → Browserbase.',
+              summary: 'Browserbase API key not configured. Add one via Settings → AI keys → Browserbase.',
               assertion_failures: [],
               provider_session_url: null,
-              error_message: 'browserbase_key_missing: Add a Browserbase API key via Settings → API Keys in the Mushi console.',
+              error_message: 'browserbase_key_missing: Add a Browserbase API key via Settings → AI keys in the Mushi console.',
               evidence: [],
             }
           } else {
