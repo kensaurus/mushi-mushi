@@ -28,6 +28,7 @@ import {
   getSentryIssue,
   resolveSentryIssue,
   SentryApiError,
+  unresolveSentryIssue,
   type FetchLike,
 } from './sentry-api.ts';
 
@@ -312,8 +313,25 @@ export async function resolveLinkedSentryIssues(
  * MUSHI-MUSHI-SERVER-2D regressed in Sentry, its report was reopened, and
  * marking it fixed again skipped the link, so Sentry stayed unresolved
  * (2026-10-09). Call this on every move from a done status back to open.
+ *
+ * The issue is reopened in Sentry too (`inSentry`, default on): the bug is
+ * back, and an issue left resolved in Sentry would let pullSentryResolves
+ * close the report again on its next run. Pass `inSentry: false` when Sentry
+ * itself reported the regression, so the issue is already open there.
  */
-export async function reopenSentryLinks(db: SupabaseClient, projectId: string, reportId: string): Promise<void> {
+export async function reopenSentryLinks(
+  db: SupabaseClient,
+  projectId: string,
+  reportId: string,
+  opts: SentryBackDeps & { inSentry?: boolean } = {},
+): Promise<void> {
+  const { data: closed } = await db
+    .from('report_external_issues')
+    .select('external_id')
+    .eq('report_id', reportId)
+    .eq('project_id', projectId)
+    .eq('system', 'sentry')
+    .or('resolved_at.not.is.null,archived_at.not.is.null');
   const { error } = await db
     .from('report_external_issues')
     .update({ resolved_at: null, archived_at: null })
@@ -322,6 +340,20 @@ export async function reopenSentryLinks(db: SupabaseClient, projectId: string, r
     .eq('system', 'sentry')
     .or('resolved_at.not.is.null,archived_at.not.is.null');
   if (error) throw new Error(`report_external_issues reopen failed: ${error.message}`);
+  if (opts.inSentry === false) return;
+
+  const ids = ((closed ?? []) as Array<{ external_id: string }>).map((l) => l.external_id).filter((id) => /^\d+$/.test(id));
+  if (ids.length === 0) return;
+  const creds = await (opts.credentials ?? loadSentryCredentials)(db, projectId);
+  if (!creds) return;
+  for (const id of ids) {
+    try {
+      await unresolveSentryIssue(creds.token, creds.orgSlug, id, opts.fetchImpl);
+    } catch (err) {
+      if (isGoneInSentry(err)) continue;
+      log.warn('Reopening the Sentry issue failed', { reportId, issueId: id, err: String(err).slice(0, 200) });
+    }
+  }
 }
 
 /** Close reasons that mean "not a bug to fix", so Sentry should stop listing

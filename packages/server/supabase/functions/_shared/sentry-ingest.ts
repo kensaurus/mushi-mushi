@@ -288,7 +288,7 @@ export async function ingestSentryError(
           .eq('id', linked.reportId);
         // The issue is open in Sentry again: so is the link, so marking the
         // report fixed later resolves it instead of skipping it.
-        await reopenSentryLinks(db, projectId, linked.reportId).catch((e: unknown) =>
+        await reopenSentryLinks(db, projectId, linked.reportId, { inSentry: false }).catch((e: unknown) =>
           log.error('Reopening Sentry links failed', { reportId: linked.reportId, err: String(e) }),
         );
         log.info('Sentry alert reopened a fixed report', {

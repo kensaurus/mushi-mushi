@@ -14,9 +14,12 @@ and fixes flow **back**. Merging a fix resolves the linked Sentry issue, and
 resolving in Sentry resolves the linked report. With the webhook below that
 happens at once; with only the automatic import set up (no webhook), Mushi Mushi
 checks open reports' Sentry issues every 15 minutes and closes the ones you
-resolved. An issue you archive (ignore) in Sentry leaves the report open, and so
-does a report someone reopened in Mushi Mushi. The outbound plugin below also
-copies triaged Mushi Mushi reports into Sentry.
+resolved (by hand, or with a commit, pull request or release). Sentry's own
+resolves leave the report open: auto-resolve by age and a metric alert that
+cleared mean the bug went quiet, not that it was fixed. So does an issue you
+archive (ignore). Reopening a report in Mushi Mushi reopens its Sentry issue
+too. The outbound plugin below also copies triaged Mushi Mushi reports into
+Sentry.
 
 ## Route Sentry errors into Mushi Mushi (inbound)
 

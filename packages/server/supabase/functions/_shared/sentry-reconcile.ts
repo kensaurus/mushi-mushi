@@ -32,7 +32,7 @@ import {
   type SentryCredentials,
   type SentryResolveBackResult,
 } from './sentry-resolve-back.ts';
-import { getSentryIssue } from './sentry-api.ts';
+import { getSentryIssue, SentryApiError } from './sentry-api.ts';
 import { resolveReportFromSentry } from './sentry-ingest.ts';
 
 const log = rootLog.child('sentry-reconcile');
@@ -164,6 +164,37 @@ export const PULL_BATCH = 20;
  */
 const PULL_STATUSES = ['new', 'pending', 'submitted', 'queued', 'classified', 'grouped', 'triaged', 'in_progress', 'fixing'];
 
+/** Resolves that say "this is fixed": a commit, a pull request or a release. */
+const FIX_RESOLVES = new Set(['set_resolved_in_commit', 'set_resolved_in_pull_request', 'set_resolved_in_release']);
+
+/**
+ * Whether the issue's latest resolve is one a Mushi report should follow:
+ * made by a person (or a commit, pull request or release) and after `since`.
+ * Left out: Sentry's own resolves. A metric alert resolves itself when the
+ * rate drops back (SBC-BE-7E, 2026-10-21), and auto-resolve by age
+ * (`set_resolved_by_age`) closes bugs that only went quiet. Also left out: a
+ * resolve older than the report's last reopen or regression, which the reopen
+ * was meant to undo. No activity in the response means no proof, so no close.
+ */
+export function followsSentryResolve(
+  issue: { status?: string; activity?: Array<{ type?: string; user?: unknown; dateCreated?: string }> | null },
+  since: string | null,
+): boolean {
+  if (issue.status !== 'resolved') return false;
+  const latest = (issue.activity ?? []).find((a) => typeof a.type === 'string' && a.type.startsWith('set_resolved'));
+  if (!latest?.type) return false;
+  if (latest.type === 'set_resolved_by_age') return false;
+  if (!FIX_RESOLVES.has(latest.type) && !latest.user) return false;
+  if (since && latest.dateCreated && Date.parse(latest.dateCreated) <= Date.parse(since)) return false;
+  return true;
+}
+
+interface PullRow {
+  project_id: string;
+  external_id: string;
+  reports: { reopened_at: string | null; regressed_at: string | null } | Array<{ reopened_at: string | null; regressed_at: string | null }> | null;
+}
+
 export interface PullSummary {
   /** Open reports with a still-open Sentry link. */
   pending: number;
@@ -179,8 +210,9 @@ export interface PullSummary {
  * imports by polling has no webhook, so a resolve made in Sentry never
  * reached Mushi (2026-11-03: MUSHI-MUSHI-SERVER-3N/3J/3C were resolved in
  * Sentry and their reports stayed open). Reads one issue per call, at most
- * `batch` per run, rotating like `reconcileSentryLinks`. Only `resolved`
- * counts: an issue archived ("ignored") in Sentry is muted noise, not a fix.
+ * `batch` per run, rotating like `reconcileSentryLinks`. Only a resolve that
+ * `followsSentryResolve` accepts counts: an issue archived ("ignored") in
+ * Sentry is muted noise, and Sentry's own resolves are not fixes.
  */
 export async function pullSentryResolves(
   db: SupabaseClient,
@@ -188,7 +220,7 @@ export async function pullSentryResolves(
     batch?: number;
     now?: () => number;
     credentials?: (db: SupabaseClient, projectId: string) => Promise<SentryCredentials | null>;
-    getIssue?: (token: string, org: string, issueId: string) => Promise<{ status?: string }>;
+    getIssue?: (token: string, org: string, issueId: string) => Promise<Parameters<typeof followsSentryResolve>[0]>;
     resolveReport?: (db: SupabaseClient, projectId: string, issueId: string) => Promise<{ outcome: string }>;
   } = {},
 ): Promise<PullSummary> {
@@ -198,7 +230,7 @@ export async function pullSentryResolves(
 
   const { data, error } = await db
     .from('report_external_issues')
-    .select('report_id, project_id, external_id, reports!inner(status, closed_reason)')
+    .select('report_id, project_id, external_id, reports!inner(status, reopened_at, regressed_at)')
     .eq('system', 'sentry')
     .is('resolved_at', null)
     .is('archived_at', null)
@@ -208,12 +240,14 @@ export async function pullSentryResolves(
   if (error) throw new Error(`Sentry pull lookup failed: ${error.message}`);
 
   const seen = new Set<string>();
-  const pending: Array<{ projectId: string; issueId: string }> = [];
-  for (const row of (data ?? []) as unknown as LinkRow[]) {
+  const pending: Array<{ projectId: string; issueId: string; since: string | null }> = [];
+  for (const row of (data ?? []) as unknown as PullRow[]) {
     const key = `${row.project_id}:${row.external_id}`;
     if (!/^\d+$/.test(row.external_id) || seen.has(key)) continue;
     seen.add(key);
-    pending.push({ projectId: row.project_id, issueId: row.external_id });
+    const report = Array.isArray(row.reports) ? row.reports[0] : row.reports;
+    const times = [report?.reopened_at, report?.regressed_at].filter((t): t is string => !!t).sort();
+    pending.push({ projectId: row.project_id, issueId: row.external_id, since: times.at(-1) ?? null });
   }
   const summary: PullSummary = { pending: pending.length, checked: 0, resolved: 0, failed: 0 };
   if (pending.length === 0) return summary;
@@ -230,11 +264,12 @@ export async function pullSentryResolves(
     summary.checked++;
     try {
       const issue = await getIssue(creds.token, creds.orgSlug, item.issueId);
-      if (issue.status !== 'resolved') continue;
+      if (!followsSentryResolve(issue, item.since)) continue;
       const r = await resolveReport(db, item.projectId, item.issueId);
       if (r.outcome === 'resolved') summary.resolved++;
     } catch (err) {
-      // A deleted issue (404) or a Sentry outage: try again on a later run.
+      // A deleted issue has nothing to follow. A Sentry outage: try again later.
+      if (err instanceof SentryApiError && err.status === 404) continue;
       summary.failed++;
       log.warn('Sentry pull failed for an issue', { issueId: item.issueId, err: String(err).slice(0, 200) });
     }
