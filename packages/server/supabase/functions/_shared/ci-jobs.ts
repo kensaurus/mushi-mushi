@@ -35,9 +35,18 @@ const API = 'https://api.github.com'
 /**
  * fix_events.dedupe_key prefix of a CI re-run GitHub refused because the
  * token lacks Actions write (api/routes/ci.ts writes it; the /pipeline read
- * stops offering Re-run CI for that app until its settings change).
+ * stops offering Re-run CI for that app while the stored GitHub token is
+ * still the one GitHub refused). The event stores a hash of the token
+ * reference, never the token.
  */
 export const RERUN_REFUSED_DEDUPE_PREFIX = 'ci_rerun_refused:'
+
+/** SHA-256 of the stored GitHub token reference. Null when the app has none. Never the token itself. */
+export async function githubConnectionFingerprint(ref: string | null | undefined): Promise<string | null> {
+  if (!ref) return null
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ref)))
+  return Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('')
+}
 /** Runs read per PR head in the fix loop. */
 export const MAX_RUNS_PER_SHA = 5
 /** Annotation reads per PR head (one per cancelled / failed job). */
