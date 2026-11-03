@@ -1,5 +1,14 @@
 # @mushi-mushi/mcp
 
+## 0.30.3
+
+### Patch Changes
+
+- 82fa4f8: `search_mushi_docs` and `get_mushi_doc` now find the new "How Mushi Mushi works" page, which walks through reporting a bug, the diagnosis, connecting an editor and the pipeline on recorded screens.
+- 184d4ea: The README and the npm description now use the full product name, Mushi Mushi, everywhere instead of a shortened "Mushi". In `@mushi-mushi/mcp`, `search_mushi_docs` and `get_mushi_doc` also return the updated docs pages and the corrected auto-fix-loop blog post.
+- Updated dependencies [184d4ea]
+  - @mushi-mushi/core@1.33.6
+
 ## 0.30.2
 
 ### Patch Changes
