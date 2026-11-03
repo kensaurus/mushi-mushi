@@ -338,8 +338,11 @@ describe('archive on close (not-a-bug reasons)', () => {
 describe('reopening a report reopens its Sentry links (2D, 2026-10-09)', () => {
   it('clears resolved_at and archived_at only on closed sentry links of that report and project', async () => {
     const calls: Array<{ table: string; row: Row; filters: Array<[string, string, unknown]> }> = []
+    // The read of which links were closed (to reopen them in Sentry) finds none here.
+    const read = { eq: () => read, or: () => Promise.resolve({ data: [], error: null }) }
     const db = {
       from: (table: string) => ({
+        select: () => read,
         update: (row: Row) => {
           const filters: Array<[string, string, unknown]> = []
           const q = {
@@ -376,7 +379,8 @@ describe('reopening a report reopens its Sentry links (2D, 2026-10-09)', () => {
     q.not = () => q
     q.or = () => q
     q.then = (resolve: (v: unknown) => void) => resolve({ error: { message: 'boom' } })
-    const db = { from: () => ({ update: () => q }) } as never
+    const read = { eq: () => read, or: () => Promise.resolve({ data: [], error: null }) }
+    const db = { from: () => ({ select: () => read, update: () => q }) } as never
     await expect(rb.reopenSentryLinks(db, 'p1', 'r1')).rejects.toThrow('boom')
   })
 
@@ -394,6 +398,7 @@ describe('reopening a report reopens its Sentry links (2D, 2026-10-09)', () => {
   it('a Sentry alert that reopens a fixed report also reopens its links', () => {
     const ingest = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../supabase/functions/_shared/sentry-ingest.ts'), 'utf-8')
     const reopenBlock = ingest.slice(ingest.indexOf("status: 'reopened'"), ingest.indexOf("outcome: 'reopened'"))
-    expect(reopenBlock).toContain('reopenSentryLinks(db, projectId, linked.reportId)')
+    // Sentry reported the regression, so the issue is already open there.
+    expect(reopenBlock).toContain('reopenSentryLinks(db, projectId, linked.reportId, { inSentry: false })')
   })
 })
