@@ -61,7 +61,7 @@ import { localCiRepairRequestDedupe, localHandoff, type LocalFollowupKind } from
 import { roundHeadsFor } from './local-followups.ts';
 import { ciHeadState, FOLLOWUP_REASONS, type CiJobForRepair, type PriorFollowup } from '../../_shared/review-followup.ts';
 import { postTeamNote } from '../../_shared/reporter-comms.ts';
-import { RERUN_REFUSED_DEDUPE_PREFIX } from '../../_shared/ci-jobs.ts';
+import { githubConnectionFingerprint, RERUN_REFUSED_DEDUPE_PREFIX } from '../../_shared/ci-jobs.ts';
 import { closeFixPullRequest, closePullRequest } from '../../_shared/fix-close.ts';
 import {
   buildDispatchers,
@@ -327,11 +327,26 @@ const ACTIVE_FOLLOWUP_STATUSES = new Set(['queued', 'dispatched', 'running']);
 const RERUN_REFUSED_TTL_MS = 7 * DAY;
 
 /**
+ * A remembered re-run refusal still applies. Events that name a fingerprint
+ * apply only while the stored GitHub token reference still hashes to it, so
+ * saving a new token offers Re-run CI again. Events from before the
+ * fingerprint (and a fingerprint read that failed) keep applying for the
+ * window: `project_settings.updated_at` moves on every settings write, so it
+ * is not "the GitHub token changed" (69fcafcb).
+ */
+function refusalStillApplies(payload: unknown, currentFingerprint: string | null): boolean {
+  if (!payload || typeof payload !== 'object' || !('githubTokenFingerprint' in payload)) return true;
+  const recorded = (payload as { githubTokenFingerprint: unknown }).githubTokenFingerprint;
+  const fp = typeof recorded === 'string' && recorded.length > 0 ? recorded : null;
+  return fp === currentFingerprint;
+}
+
+/**
  * What the action routes check before they act (pipeline-view ActionFacts),
  * read once: cloud follow-up readiness per app, earlier follow-up rounds per
- * PR, and apps whose GitHub token GitHub refused a re-run since the app's
- * settings last changed. null when any read fails: then every action stays
- * offered, as before.
+ * PR, and apps whose stored GitHub token GitHub refused a re-run and that
+ * token has not been replaced. null when any read fails: then every action
+ * stays offered, as before.
  */
 async function readActionFacts(db: Db, projectIds: string[], attempts: AttemptRow[], followups: FollowupRow[], now: Date): Promise<ActionFacts | null> {
   try {
@@ -344,22 +359,27 @@ async function readActionFacts(db: Db, projectIds: string[], attempts: AttemptRo
       roundHeadsFor(db, prIds),
       db
         .from('fix_events')
-        .select('project_id, at')
+        .select('project_id, payload')
         .in('project_id', projectIds)
         .eq('kind', 'ci_started')
         .eq('status', 'fail')
         .like('dedupe_key', `${RERUN_REFUSED_DEDUPE_PREFIX}%`)
         .gte('at', since)
         .limit(500),
-      db.from('project_settings').select('project_id, updated_at').in('project_id', projectIds),
+      db.from('project_settings').select('project_id, github_installation_token_ref').in('project_id', projectIds),
     ]);
     if ('error' in heads) throw new Error(heads.error);
     if (refusals.error) throw new Error(refusals.error.message);
     if (settings.error) throw new Error(settings.error.message);
-    const changedAt = new Map(((settings.data ?? []) as Array<{ project_id: string; updated_at: string | null }>).map((r) => [r.project_id, r.updated_at ?? '']));
+    const fingerprints = new Map<string, string | null>();
+    await Promise.all(
+      ((settings.data ?? []) as Array<{ project_id: string; github_installation_token_ref?: string | null }>).map(async (r) => {
+        fingerprints.set(r.project_id, await githubConnectionFingerprint(r.github_installation_token_ref));
+      }),
+    );
     const rerunRefused = new Set<string>();
-    for (const r of (refusals.data ?? []) as Array<{ project_id: string; at: string }>) {
-      if (Date.parse(r.at) > Date.parse(changedAt.get(r.project_id) || '1970-01-01T00:00:00Z')) rerunRefused.add(r.project_id);
+    for (const r of (refusals.data ?? []) as Array<{ project_id: string; payload: unknown }>) {
+      if (refusalStillApplies(r.payload, fingerprints.get(r.project_id) ?? null)) rerunRefused.add(r.project_id);
     }
     const prior = new Map<string, PriorFollowup[]>();
     for (const f of followups) {

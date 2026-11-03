@@ -58,7 +58,7 @@ import {
 } from '../../_shared/github.ts'
 import { liveSyncProjects, type CollectorDeps } from '../../_shared/ci-collector.ts'
 import { buildCiOverview, loadCiOverviewRows } from '../../_shared/ci-overview.ts'
-import { ciGithub, listRunsForHeadSha, rerunFailedJobs, RERUN_REFUSED_DEDUPE_PREFIX, type CiGithub } from '../../_shared/ci-jobs.ts'
+import { ciGithub, githubConnectionFingerprint, listRunsForHeadSha, rerunFailedJobs, RERUN_REFUSED_DEDUPE_PREFIX, type CiGithub } from '../../_shared/ci-jobs.ts'
 import { callerCanAccessProject, callerProjectIds, jsonError } from '../shared.ts'
 import { denyViewerWrite } from '../viewer-gate.ts'
 import type { Variables } from '../types.ts'
@@ -532,8 +532,24 @@ async function rerunFixCi(c: Context, deps: CiRouteDeps): Promise<Response> {
     }
     if (status === 403) {
       if (rerun.length > 0) break
-      // Remembered so /pipeline stops offering Re-run CI for this app until its GitHub settings change (69fcafcb).
+      // Remembered so /pipeline stops offering Re-run CI while this stored token is the one GitHub refused (69fcafcb).
+      // Other project_settings writes bump updated_at and must not clear it. The payload is a hash of the
+      // token reference, never the token.
       const at = deps.now().toISOString()
+      let githubTokenFingerprint: string | null | undefined
+      try {
+        const { data: tokenRow, error: tokenReadErr } = await db
+          .from('project_settings')
+          .select('github_installation_token_ref')
+          .eq('project_id', a.project_id)
+          .maybeSingle()
+        if (!tokenReadErr) {
+          const ref = (tokenRow as { github_installation_token_ref?: unknown } | null)?.github_installation_token_ref
+          githubTokenFingerprint = await githubConnectionFingerprint(typeof ref === 'string' ? ref : null)
+        }
+      } catch (err) {
+        clog.warn('ci rerun refusal token fingerprint failed (non-fatal)', { fixId: a.id, err: err instanceof Error ? err.message : String(err) })
+      }
       const { error: refusedErr } = await db.from('fix_events').insert({
         fix_attempt_id: a.id,
         project_id: a.project_id,
@@ -543,7 +559,11 @@ async function rerunFixCi(c: Context, deps: CiRouteDeps): Promise<Response> {
         detail: 'Give the token Actions: Read and write (fine-grained token) or the workflow scope.',
         at,
         dedupe_key: `${RERUN_REFUSED_DEDUPE_PREFIX}${a.id}:${at}`,
-        payload: { rerunRefused: 'actions_write', by: userId },
+        payload: {
+          rerunRefused: 'actions_write',
+          by: userId,
+          ...(githubTokenFingerprint !== undefined ? { githubTokenFingerprint } : {}),
+        },
       })
       if (refusedErr) clog.warn('ci rerun refusal fix_event insert failed (non-fatal)', { fixId: a.id, err: refusedErr.message })
       return jsonError(c, 'GITHUB_ACTIONS_WRITE_MISSING', 'The GitHub token Mushi uses cannot re-run workflows. Give it Actions: Read and write (fine-grained token) or the workflow scope.', 403)

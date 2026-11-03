@@ -161,4 +161,23 @@ describe('FixCiFeedback', () => {
     await act(async () => button('Re-run tests')!.click())
     expect(host.querySelector('[role="alert"]')!.textContent).toMatch(/Actions: write/)
   })
+
+  it('disables Re-run and Send to CI repair when the server would refuse them (69fcafcb)', async () => {
+    const rerunOff = 'The GitHub token cannot re-run workflows: give it Actions: Read and write (fine-grained token) or the workflow scope, in the GitHub connection.'
+    const roundsUsed = 'Both follow-up rounds were used on this pull request; a person decides what happens next.'
+    mocks.apiFetch.mockImplementation(async (path: string) => {
+      if (String(path).includes('/pipeline/fix/')) {
+        return { ok: true, data: { item: { failingChecks: ['Build'], blocked: { rerun_ci: rerunOff, ci_repair: roundsUsed } } } }
+      }
+      return { ok: true, data: ciOverviewFixture() }
+    })
+    await render({ ciConclusion: 'failure' })
+    expect(button('Re-run tests')!.disabled).toBe(true)
+    expect(button('Send to CI repair')!.disabled).toBe(true)
+    const why = host.querySelector('[data-testid="fix-ci-blocked"]')!
+    expect(why.textContent).toContain(`Re-run is off: ${rerunOff}`)
+    expect(why.textContent).toContain(`Send to CI repair is off: ${roundsUsed}`)
+    await act(async () => button('Send to CI repair')!.click())
+    expect(Array.from(document.querySelectorAll('button')).some((b) => b.hasAttribute('data-primary'))).toBe(false)
+  })
 })

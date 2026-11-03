@@ -9,8 +9,9 @@
  *
  * A genuinely red head (the code failed) names those checks and offers
  * Re-run and Send to CI repair, the same actions /pipeline offers
- * (report 9e2ec6f0). The names are the live GitHub list from
- * GET /v1/admin/pipeline/fix/:id.
+ * (report 9e2ec6f0). Each is disabled with the server's reason when that
+ * route would refuse it (report 69fcafcb). The names are the live GitHub
+ * list from GET /v1/admin/pipeline/fix/:id.
  */
 
 import { useEffect, useState } from 'react'
@@ -72,6 +73,7 @@ export function FixCiFeedback({
   const [notice, setNotice] = useState<string | null>(null)
   const [queue, setQueue] = useState<CiQueuePosition | null>(null)
   const [failingChecks, setFailingChecks] = useState<string[]>([])
+  const [actionBlocked, setActionBlocked] = useState<{ rerun_ci?: string; ci_repair?: string }>({})
   const [repairing, setRepairing] = useState(false)
   const [confirmRepair, setConfirmRepair] = useState(false)
 
@@ -79,6 +81,8 @@ export function FixCiFeedback({
   const repo = repoFromPrUrl(prUrl)
   const waiting = reading.state === 'waiting_for_runner' || status?.toLowerCase() === 'queued'
   const ciRed = reading.state === 'code_failure' || reading.state === 'timed_out'
+  const showRerun = reading.canRerun || reading.infra || ciRed
+  const showRepair = ciRed
 
   // Place in the queue, read once from the CI overview while the PR waits.
   useEffect(() => {
@@ -93,24 +97,35 @@ export function FixCiFeedback({
     }
   }, [waiting, projectId, prNumber, repo])
 
-  // Live failing-check names for a red head. The report page's chip is
-  // compact, so the names have to sit on the chip itself.
+  // Live failing-check names for a red head, and the refusals /pipeline
+  // already computed, so this chip does not offer a re-run or a CI repair
+  // the server would refuse (69fcafcb). The report page's chip is compact,
+  // so the names have to sit on the chip itself.
   useEffect(() => {
-    if (!ciRed) {
+    if (!showRerun && !showRepair) {
       setFailingChecks([])
+      setActionBlocked({})
       return
     }
     let cancelled = false
     void loadPipelineFix(fixId).then((view) => {
       if (cancelled) return
-      setFailingChecks(view?.item?.failingChecks ?? [])
+      setFailingChecks(ciRed ? (view?.item?.failingChecks ?? []) : [])
+      const blocked = view?.item?.blocked
+      setActionBlocked({
+        rerun_ci: blocked?.rerun_ci,
+        ci_repair: blocked?.ci_repair,
+      })
     }).catch(() => {
-      if (!cancelled) setFailingChecks([])
+      if (!cancelled) {
+        setFailingChecks([])
+        setActionBlocked({})
+      }
     })
     return () => {
       cancelled = true
     }
-  }, [ciRed, fixId, updatedAt])
+  }, [ciRed, showRerun, showRepair, fixId, updatedAt])
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -174,9 +189,9 @@ export function FixCiFeedback({
 
   const ghChecks = checksUrl(prUrl)
   const ciLink = queue ? `/ci?job=${encodeURIComponent(queue.jobId)}` : '/ci'
-  const showRerun = reading.canRerun || reading.infra || ciRed
-  const showRepair = ciRed
-  const rerunBlocked = reading.state === 'waiting_for_runner' || reading.state === 'running'
+  const rerunWhy = actionBlocked.rerun_ci
+  const repairWhy = actionBlocked.ci_repair
+  const rerunBlocked = reading.state === 'waiting_for_runner' || reading.state === 'running' || !!rerunWhy
   const failingLabel = failingChecks.length > 0 ? ` · ${failingChecks.slice(0, 8).join(', ')}` : ''
 
   return (
@@ -221,7 +236,7 @@ export function FixCiFeedback({
               type="button"
               onClick={() => void handleRerun()}
               disabled={rerunning || rerunBlocked}
-              title={rerunBlocked ? 'Tests are still waiting or running; re-run once they stop.' : undefined}
+              title={rerunWhy ?? (rerunBlocked ? 'Tests are still waiting or running; re-run once they stop.' : undefined)}
               className="font-medium text-accent hover:underline disabled:opacity-50"
             >
               {rerunning ? 'Re-running tests…' : 'Re-run tests'}
@@ -234,7 +249,8 @@ export function FixCiFeedback({
             <button
               type="button"
               onClick={() => setConfirmRepair(true)}
-              disabled={repairing}
+              disabled={repairing || !!repairWhy}
+              title={repairWhy}
               className="font-medium text-accent hover:underline disabled:opacity-50"
             >
               {repairing ? 'Sending to CI repair…' : 'Send to CI repair'}
@@ -269,6 +285,13 @@ export function FixCiFeedback({
         )}
       </div>
 
+      {(rerunWhy || repairWhy) && (
+        <p className="text-2xs text-fg-muted" data-testid="fix-ci-blocked">
+          {rerunWhy ? `Re-run is off: ${rerunWhy}` : ''}
+          {rerunWhy && repairWhy ? ' ' : ''}
+          {repairWhy ? `Send to CI repair is off: ${repairWhy}` : ''}
+        </p>
+      )}
       {notice && <p className="text-2xs text-fg-secondary" role="status">{notice}</p>}
       {error && <p className="text-2xs text-danger" role="alert">{error}</p>}
       {confirmRepair && (

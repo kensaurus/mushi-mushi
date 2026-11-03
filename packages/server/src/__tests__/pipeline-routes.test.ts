@@ -17,6 +17,7 @@
 
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
+import { githubConnectionFingerprint } from '../../supabase/functions/_shared/ci-jobs.ts'
 import { fetchFailingCheckNames } from '../../supabase/functions/_shared/github.ts'
 
 const state = vi.hoisted(() => ({
@@ -455,19 +456,34 @@ describe('what /pipeline offers is what the action routes do', () => {
     )
   })
 
-  it('Re-run CI is blocked for an app whose token GitHub refused, until its settings change', async () => {
-    const read = async (settingsAt: string) => {
+  it('Re-run CI stays blocked after other settings change, and is offered again when the GitHub token changes', async () => {
+    const read = async (tokenRef: string | null, eventFingerprint: string | null | undefined) => {
       const { app, db } = setup()
-      db.table('fix_events').push({ fix_attempt_id: F1, project_id: P1, kind: 'ci_started', status: 'fail', at: '2026-10-26T10:00:00Z', label: 'Re-run refused', dedupe_key: `ci_rerun_refused:${F1}:2026-10-26T10:00:00Z` })
-      db.table('project_settings').find((r) => r.project_id === P1)!.updated_at = settingsAt
+      db.table('fix_events').push({
+        fix_attempt_id: F1,
+        project_id: P1,
+        kind: 'ci_started',
+        status: 'fail',
+        at: '2026-10-26T10:00:00Z',
+        label: 'Re-run refused',
+        dedupe_key: `ci_rerun_refused:${F1}:2026-10-26T10:00:00Z`,
+        // Older events have no fingerprint. A later settings write must not clear them.
+        ...(eventFingerprint === undefined ? {} : { payload: { githubTokenFingerprint: eventFingerprint } }),
+      })
+      const settings = db.table('project_settings').find((r) => r.project_id === P1)!
+      settings.updated_at = '2026-10-26T11:00:00Z'
+      settings.github_installation_token_ref = tokenRef
       state.query = { projectId: P1 }
       const res = await app.call('GET', '/v1/admin/pipeline')
       const ci = (res.body.data as { stages: Array<{ id: string; groups: Group[] }> }).stages.find((s) => s.id === 'ci')!
       return ci.groups.find((g) => g.id === 'ci_red_queued')!.items[0].blocked.rerun_ci
     }
-    expect(await read('2026-10-01T00:00:00Z')).toMatch(/^The GitHub token cannot re-run workflows: give it Actions: Read and write/)
-    // A settings save after the refusal (a new token) offers it again.
-    expect(await read('2026-10-26T11:00:00Z')).toBeUndefined()
+    const same = await githubConnectionFingerprint('vault://tok')
+    expect(await read('vault://tok', same)).toMatch(/^The GitHub token cannot re-run workflows: give it Actions: Read and write/)
+    // A settings save after the refusal is not a new token: the block stays.
+    expect(await read('vault://tok', undefined)).toMatch(/^The GitHub token cannot re-run workflows: give it Actions: Read and write/)
+    // Saving a different token offers Re-run CI again.
+    expect(await read('vault://new', same)).toBeUndefined()
   })
 })
 
