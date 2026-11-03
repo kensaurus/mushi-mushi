@@ -388,6 +388,43 @@ describe('deriveRecommendation', () => {
       expect(rec.meta?.find((m) => m.label === 'Branch')?.value).toBe('bugfix/MUSHI-71500346-local-cursor')
       expect(rec.meta?.find((m) => m.label === 'Commit')?.value).toBe('abc1234')
       expect(rec.actions?.some((a) => a.label === 'Retry dispatch')).toBe(false)
+      expect(rec.actions?.[0]?.label).toBe('Push the saved branch')
+      expect(rec.actions?.[0]?.tone).toBe('primary')
+      expect(rec.actions?.[0]?.command).toContain('bugfix/MUSHI-71500346-local-cursor')
+      expect(rec.actions?.[0]?.command).toContain('abc1234def5678')
+      expect(rec.actions?.find((a) => a.label === 'Cloud dispatch anyway')?.tone).toBe('ghost')
+    })
+
+    it('a failure that only mentions lefthook is not a refused push', () => {
+      const report = makeReport({
+        fix_attempts: [makeFixAttempt({
+          status: 'failed',
+          failure_category: null,
+          error: 'cursor-agent failed: lefthook config is missing',
+        })],
+      })
+      const rec = deriveRecommendation(report, makeDispatchState(), 0, noOp)
+      expect(rec.title).not.toContain('checks failed at push')
+      expect(rec.description).toContain('lefthook')
+    })
+
+    it('names the local Cursor runner and its model', () => {
+      const report = makeReport({
+        fix_attempts: [makeFixAttempt({
+          status: 'failed',
+          failure_category: null,
+          agent: 'local_cursor',
+          llm_model: 'composer-2.5',
+          error: 'mushi work: git push failed: hook steps failed: test.unit, mobile-test. test.unit: FAIL',
+          branch: 'bugfix/MUSHI-1-local-cursor',
+          commit_sha: 'abc1234def5678',
+        })],
+      })
+      const rec = deriveRecommendation(report, makeDispatchState(), 0, noOp)
+      expect(rec.meta?.find((m) => m.label === 'Checks')?.value).toBe('test.unit, mobile-test')
+      expect(rec.description).toContain('Fix test.unit, mobile-test')
+      expect(rec.meta?.find((m) => m.label === 'Agent')?.value).toBe('Local Cursor · composer-2.5')
+      expect(JSON.stringify(rec)).not.toContain('"mcp"')
     })
   })
 

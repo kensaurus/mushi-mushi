@@ -28,6 +28,7 @@ import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
 import { getActivePlugins, dispatchPluginEventDetached } from '../../_shared/plugins.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
+import { cleanLlmModel } from '../../_shared/pending-fix.ts';
 import { getAvailableTags } from '../../_shared/ontology.ts';
 import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
@@ -763,6 +764,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const unclaimed = await workerClaimDenial(c, db, report.id);
     if (unclaimed) return unclaimed;
 
+    const llmModel = cleanLlmModel(body.llm_model);
     const { data: fix, error } = await db
       .from('fix_attempts')
       .insert({
@@ -770,6 +772,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         project_id: report.project_id,
         agent: body.agent ?? 'claude_code',
         status: 'pending',
+        ...(llmModel ? { llm_model: llmModel } : {}),
       })
       .select('id')
       .single();

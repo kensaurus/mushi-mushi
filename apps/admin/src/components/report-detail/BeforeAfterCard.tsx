@@ -16,6 +16,7 @@ import { RelativeTime } from '../ui'
 import { ActionPill, InlineProof } from './ReportSurface'
 import type { ReportDetail, ReportFixAttempt } from './types'
 import { CHIP_TONE, prStateChipTone } from '../../lib/chipTone'
+import { attemptRunnerLabel } from '../../lib/reportDiagnosisNodes'
 
 interface Props {
   report: ReportDetail
@@ -132,9 +133,9 @@ export function BeforeAfterCard({ report, className = '' }: Props) {
               {fix.files_changed?.length
                 ? `${fix.files_changed.length} file${fix.files_changed.length === 1 ? '' : 's'} changed${
                     fix.lines_changed != null ? `, ${fix.lines_changed} lines` : ''
-                  }${fix.agent ? ` — via ${fix.agent}` : ''}`
-                : fix.agent
-                  ? `Fix drafted via ${fix.agent}`
+                  }${fix.agent || fix.llm_model ? ` — via ${attemptRunnerLabel(fix.agent, fix.llm_model)}` : ''}`
+                : fix.agent || fix.llm_model
+                  ? `Fix drafted via ${attemptRunnerLabel(fix.agent, fix.llm_model)}`
                   : 'Fix attempt recorded'}
             </InlineProof>
           </div>

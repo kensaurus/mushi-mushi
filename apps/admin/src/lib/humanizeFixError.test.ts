@@ -86,6 +86,13 @@ describe('humanizeFixError: the agent explained why it opened no PR', () => {
     }
   })
 
+  it('a non-push error that mentions lefthook is not a refused push', () => {
+    const mentioned = humanizeFixError('cursor-agent failed: lefthook config is missing')
+    expect(mentioned?.title).not.toBe("Your repo's own checks failed at push.")
+    const limited = humanizeFixError('LLM 429 while reading lefthook.yml')
+    expect(limited?.title).toBe('The LLM provider rate-limited this request.')
+  })
+
   it('a pre-push hook log is the repo\'s checks, not a rate limit, and the colour codes are gone', () => {
     const raw = 'mushi work: git push failed: \\u001b[38;2;56;56;56m🥊 test\\u001b[0m\nFAIL a.test.ts expected 429'
     const h = humanizeFixError(raw)

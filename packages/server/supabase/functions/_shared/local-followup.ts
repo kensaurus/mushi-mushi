@@ -16,8 +16,8 @@
 
 import { FOLLOWUP_MAX_PER_PR } from './review-followup.ts'
 
-/** fix_attempts.agent for a fix made outside Mushi's cloud agents (`mushi work`, `submit_fix_result`). */
-export const LOCAL_FIX_AGENT = 'mcp'
+/** `mushi work` records `local_cursor`. Older rows and MCP submit_fix_result stay `mcp`. */
+export const LOCAL_FIX_AGENTS = ['mcp', 'local_cursor'] as const
 
 /**
  * Cloud-agent PRs a local agent may also follow up, but only while the
@@ -28,7 +28,7 @@ export const CLOUD_FIX_AGENTS: readonly string[] = ['cursor_cloud', 'github_clou
 
 /** Pure: whether a local follow-up may work on a fix this agent made. */
 export function localFollowupAllowedFor(agent: string | null, cloudFollowupsOn: boolean): boolean {
-  if (agent === LOCAL_FIX_AGENT) return true
+  if (agent != null && (LOCAL_FIX_AGENTS as readonly string[]).includes(agent)) return true
   return !cloudFollowupsOn && agent != null && CLOUD_FIX_AGENTS.includes(agent)
 }
 

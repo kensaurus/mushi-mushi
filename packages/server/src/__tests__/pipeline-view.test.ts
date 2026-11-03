@@ -424,6 +424,16 @@ describe('who opens fixes', () => {
     ],
   }
 
+  it('a local Cursor run counts as a local lane', () => {
+    const [lets] = buildDispatchers({
+      ...base,
+      attempts: [{ project_id: P, agent: 'local_cursor', status: 'running', created_at: '2026-10-26T09:00:00Z' }],
+    })
+    expect(lets.opener).toBe('local')
+    expect(lets.local.running).toBe(1)
+    expect(lets.server.lastAt).toBeNull()
+  })
+
   it('auto-fix on with only a disabled universal key: no agent key, 0 dispatches, local lane still runs', () => {
     const [lets, glot, quiet] = buildDispatchers(base)
     expect(lets).toMatchObject({

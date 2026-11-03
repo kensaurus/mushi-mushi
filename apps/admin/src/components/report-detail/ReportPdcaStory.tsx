@@ -32,6 +32,7 @@ import { ActionPill, InlineProof } from './ReportSurface'
 import type { DispatchState } from '../../lib/dispatchFix'
 import { isReportClassified } from '../../lib/reportDiagnosis'
 import { humanizeFixError } from '../../lib/humanizeFixError'
+import { attemptRunnerLabel } from '../../lib/reportDiagnosisNodes'
 import { stripTerminalCodes } from '../../lib/terminalText'
 import { reportHasCodeLocation } from '../../lib/reportCodeLocation'
 import type { ReportDetail, ReportFixAttempt } from './types'
@@ -264,7 +265,7 @@ export function buildStoryNodes(
     headline: doHeadline,
     at: fix?.completed_at ?? fix?.started_at ?? fix?.created_at ?? null,
     details: [
-      fix?.agent ? `via ${fix.agent}` : null,
+      fix?.agent || fix?.llm_model ? `via ${attemptRunnerLabel(fix.agent, fix.llm_model)}` : null,
       fix?.branch || null,
       fix?.lines_changed != null ? `${fix.lines_changed} loc` : null,
     ],

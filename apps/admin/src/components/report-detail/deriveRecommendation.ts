@@ -6,7 +6,8 @@ import { isReportClassified } from '../../lib/reportDiagnosis'
 import { KNOWN_ISSUES_SEARCH_HREF } from '../../lib/settingsTabs'
 import { NO_CODE_LOCATION_REASON } from '../../lib/reportCodeLocation'
 import { verdictFromError } from '../../lib/pdcaAct'
-import { pushHookAdvice, stripTerminalCodes } from '../../lib/terminalText'
+import { attemptRunnerLabel } from '../../lib/reportDiagnosisNodes'
+import { pushHookAdvice, pushRecoveryCommand, stripTerminalCodes } from '../../lib/terminalText'
 
 /** The opt-in's name as the fix worker quotes it in a skip reason. */
 const WEB_SEARCH_SETTING_NAME = 'Search the web for known fixes'
@@ -26,6 +27,8 @@ interface RecommendationAction {
   tone?: 'primary' | 'ghost' | 'danger'
   /** Set on "Retry dispatch" while the dispatch gate blocks it. */
   disabled?: boolean
+  /** A command the person can run, shown as text. Used for a saved local branch. */
+  command?: string
 }
 
 export interface Recommendation {
@@ -78,7 +81,7 @@ function buildFixingMeta(
     })
   }
   if (latest?.llm_model) meta.push({ label: 'Model', value: latest.llm_model, tone: 'neutral' })
-  if (latest?.agent) meta.push({ label: 'Agent', value: latest.agent, tone: 'neutral' })
+  if (latest?.agent || latest?.llm_model) meta.push({ label: 'Agent', value: attemptRunnerLabel(latest.agent, latest.llm_model), tone: 'neutral' })
   if (latest?.files_changed && latest.files_changed.length > 0) {
     const shown = latest.files_changed.slice(0, 1).join(', ')
     const more = latest.files_changed.length - 1
@@ -493,14 +496,19 @@ function recommendationFor(
         if (hook.checks.length) meta.push({ label: 'Checks', value: hook.checks.join(', '), tone: 'danger' })
         if (latest.branch) meta.push({ label: 'Branch', value: latest.branch, tone: 'neutral' })
         if (latest.commit_sha) meta.push({ label: 'Commit', value: latest.commit_sha.slice(0, 7), tone: 'neutral' })
+        if (latest.agent || latest.llm_model) meta.push({ label: 'Agent', value: attemptRunnerLabel(latest.agent, latest.llm_model), tone: 'neutral' })
+        const command = latest.branch ? pushRecoveryCommand(latest.branch, latest.commit_sha) : null
         return {
           title: "Your repo's own checks failed at push",
           description: hook.hint,
           tone: 'urgent',
           meta,
           actions: [
-            { label: 'View pipeline log \u2192', to: '/fixes', tone: 'ghost' },
-            { label: 'Cloud dispatch anyway', onClick: onDispatch, tone: 'ghost' },
+            ...(command
+              ? [{ label: 'Push the saved branch', command, tone: 'primary' as const }]
+              : [{ label: 'Open local workers', to: '/pipeline?tab=workers', tone: 'primary' as const }]),
+            { label: 'View pipeline log \u2192', to: '/fixes', tone: 'ghost' as const },
+            { label: 'Cloud dispatch anyway', onClick: onDispatch, tone: 'ghost' as const },
           ],
         }
       }

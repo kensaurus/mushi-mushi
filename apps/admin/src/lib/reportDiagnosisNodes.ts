@@ -44,6 +44,17 @@ function modelName(model: string | null | undefined): string | null {
 }
 
 /**
+ * How a fix attempt is named on the report. A local Cursor run (`mushi work`)
+ * is stored as `local_cursor` plus its model; older rows say `mcp`.
+ */
+export function attemptRunnerLabel(agent: string | null | undefined, model: string | null | undefined): string {
+  const modelBit = modelName(model)
+  if (agent === 'local_cursor') return modelBit ? `Local Cursor · ${modelBit}` : 'Local Cursor'
+  if (agent === 'mcp') return modelBit ? `Local agent · ${modelBit}` : 'Local agent'
+  return [agent, modelBit].filter(Boolean).join(' · ') || 'fix agent'
+}
+
+/**
  * Every `reports.source` the database allows. Anything not listed fell
  * through to "Reported by a user · bug widget", so a site-audit finding read as
  * a user's widget report (2026-10-31). 'widget' and an unset source keep that.
@@ -369,7 +380,7 @@ export function checkNodes(report: ReportDetail): DiagnosisNode[] {
 
 function attemptNode(attempts: ReportFixAttempt[]): DiagnosisNode {
   const latest = attempts[0]
-  const who = [latest.agent, modelName(latest.llm_model)].filter(Boolean).join(' · ') || 'fix agent'
+  const who = attemptRunnerLabel(latest.agent, latest.llm_model)
   const more = attempts.length > 1 ? ` · ${plural(attempts.length, 'attempt', 'attempts')}` : ''
   const base = { id: 'attempt', lane: 'fix' as const, confidence: null, source: 'fix_attempts', detail: `${who}${more}` }
   if (latest.pr_state === 'merged' || latest.merged_at) {

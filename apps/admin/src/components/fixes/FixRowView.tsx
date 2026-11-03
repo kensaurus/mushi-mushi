@@ -25,6 +25,7 @@ const AGENT_LABEL: Record<string, string> = {
   // An agent on someone's machine: `mushi work` (local Cursor CLI) or one
   // reporting through MCP's submit_fix_result.
   mcp: 'Local agent',
+  local_cursor: 'Local Cursor',
 }
 
 interface Props {
@@ -64,7 +65,9 @@ function FixRowViewInner({
   const ci = ciBadge(fix)
   const stages = buildFixPipelineStages(fix)
   const stripe = fixStatusStripeClass(fix)
-  const agentShort = AGENT_LABEL[fix.agent] ?? fix.agent
+  const agentShort = fix.agent === 'local_cursor'
+    ? (fix.llm_model ? `Local Cursor · ${fix.llm_model}` : 'Local Cursor')
+    : (AGENT_LABEL[fix.agent] ?? fix.agent)
   // Read against the report's current state: an attempt whose report a later
   // PR fixed is neutral history, the latest stopped attempt shows its real
   // reason inline (A12, glot.it 2026-10-04).
