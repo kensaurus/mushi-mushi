@@ -48,11 +48,17 @@ export function reconcileAction(status: string, closedReason: string | null | un
   return null;
 }
 
+interface ReportRef {
+  status: string;
+  closed_reason: string | null;
+}
+
 interface LinkRow {
   report_id: string;
   project_id: string;
   external_id: string;
-  reports: { status: string; closed_reason: string | null } | null;
+  /** A many-to-one embed is one object at runtime; supabase-js types it as an array. */
+  reports: ReportRef | ReportRef[] | null;
 }
 
 export interface ReconcileSummary {
@@ -92,10 +98,11 @@ export async function reconcileSentryLinks(
 
   // One entry per report: resolve and archive handle all of a report's links.
   const byReport = new Map<string, { reportId: string; projectId: string; action: 'resolve' | 'archive'; closedReason: string | null }>();
-  for (const row of (data ?? []) as LinkRow[]) {
-    if (!/^\d+$/.test(row.external_id) || !row.reports || byReport.has(row.report_id)) continue;
-    const action = reconcileAction(row.reports.status, row.reports.closed_reason);
-    if (action) byReport.set(row.report_id, { reportId: row.report_id, projectId: row.project_id, action, closedReason: row.reports.closed_reason });
+  for (const row of (data ?? []) as unknown as LinkRow[]) {
+    const report = Array.isArray(row.reports) ? row.reports[0] : row.reports;
+    if (!/^\d+$/.test(row.external_id) || !report || byReport.has(row.report_id)) continue;
+    const action = reconcileAction(report.status, report.closed_reason);
+    if (action) byReport.set(row.report_id, { reportId: row.report_id, projectId: row.project_id, action, closedReason: report.closed_reason });
   }
   const pending = [...byReport.values()];
   const summary: ReconcileSummary = { pending: pending.length, reports: 0, resolved: 0, archived: 0, gone: 0, failed: 0 };
