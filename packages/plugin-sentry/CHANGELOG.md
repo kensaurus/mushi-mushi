@@ -1,5 +1,13 @@
 # @mushi-mushi/plugin-sentry
 
+## 0.2.15
+
+### Patch Changes
+
+- 184d4ea: The README and the npm description now use the full product name, Mushi Mushi, everywhere instead of a shortened "Mushi". In `@mushi-mushi/mcp`, `search_mushi_docs` and `get_mushi_doc` also return the updated docs pages and the corrected auto-fix-loop blog post.
+- Updated dependencies [184d4ea]
+  - @mushi-mushi/plugin-sdk@0.9.2
+
 ## 0.2.14
 
 ### Patch Changes

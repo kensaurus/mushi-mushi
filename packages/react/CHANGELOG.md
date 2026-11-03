@@ -1,5 +1,14 @@
 # @mushi-mushi/react
 
+## 1.33.6
+
+### Patch Changes
+
+- 184d4ea: The README and the npm description now use the full product name, Mushi Mushi, everywhere instead of a shortened "Mushi". In `@mushi-mushi/mcp`, `search_mushi_docs` and `get_mushi_doc` also return the updated docs pages and the corrected auto-fix-loop blog post.
+- Updated dependencies [184d4ea]
+  - @mushi-mushi/core@1.33.6
+  - @mushi-mushi/web@1.33.6
+
 ## 1.33.3
 
 ### Patch Changes
