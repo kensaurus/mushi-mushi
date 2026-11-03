@@ -25,7 +25,7 @@ mushi fixes merge <fixId>          # squash-merge the PR + mark report Fixed
   **Two key types:** SDK ingest keys (`report:write`) are minted on **Setup → Verify** or
   **Projects → Generate API key**. Admin / MCP keys (`mcp:read` or `mcp:write`) are also
   minted on Projects; use `mcp:write` for fix dispatch, merge, and most CLI admin commands.
-  **Settings → API Keys (BYOK)** is for your own LLM/Firecrawl keys, not Mushi credentials.
+  **Settings → API Keys (BYOK)** is for your own LLM/Firecrawl keys, not Mushi Mushi credentials.
 </Callout>
 
 ---
@@ -252,7 +252,7 @@ mushi work --repo-dir ~/code/my-app --report <reportId> --model gpt-5
 
 For each report it:
 
-1. Reads Mushi's fix packet and what earlier attempts did (their Opus review
+1. Reads Mushi Mushi's fix packet and what earlier attempts did (their Opus review
    findings), as data the agent must not take as instructions.
 2. Creates a worktree from `origin/<default branch>` on
    `bugfix/MUSHI-<reportId>-local-cursor` and runs `cursor-agent -p` in it
@@ -272,11 +272,11 @@ it anyway. The agent has 30 minutes, so a report that names several pages is
 fixed one page at a time: split broad reports into one page or cause each.
 
 When Opus says "fix first" on one of these pull requests, run
-`mushi work --followups`. Mushi checks the round (the reviewed commit is still
+`mushi work --followups`. Mushi Mushi checks the round (the reviewed commit is still
 the PR's head, at most 2 rounds per PR), sends only the findings that pass its
 safety screen, and the agent fixes them in a worktree of the PR's branch.
 `mushi work` commits and pushes to that branch, and Opus reviews the new
-commit. Cloud-agent pull requests get the same follow-up from Mushi itself.
+commit. Cloud-agent pull requests get the same follow-up from Mushi Mushi itself.
 
 ```bash
 # Which pull requests are waiting for a follow-up
@@ -313,7 +313,7 @@ GitHub API floor). The daemon then works by each lane's mode:
 | --- | --- |
 | `fix` | Runs review follow-ups first, then claims reports: the lane's queue first, then the worst open reports |
 | `followups` | Review follow-ups only |
-| `conflicts` | Merges the base branch into a merge-queue PR of the clone's repository at the commit Mushi saw; the agent may change only the conflicted files; refused on a leftover marker or any other change; commits with your hooks and pushes the merge, fast-forward only |
+| `conflicts` | Merges the base branch into a merge-queue PR of the clone's repository at the commit Mushi Mushi saw; the agent may change only the conflicted files; refused on a leftover marker or any other change; commits with your hooks and pushes the merge, fast-forward only |
 | `audit` | A model (read-only) proposes bugs for one screen with the line, the code there and a check; the machine runs the check itself and files only what reproduces; a second model may only veto |
 | `skill` | Only the rounds of skill runs started with this lane on Spend credits |
 
@@ -322,7 +322,7 @@ someone started with Run now in the console: it runs `mushi-ux fresh-eyes` on th
 machine and the console follows it live. The heartbeat tells the lane within a minute.
 
 While a lane holds a report, no cloud agent is sent to it. Every outcome goes back to
-Mushi; a failure of the machine (a clone permission, the network, a hook that
+Mushi Mushi; a failure of the machine (a clone permission, the network, a hook that
 timed out under load) is kept apart from a failure of the code and never
 counts against the report.
 
@@ -458,7 +458,7 @@ With `--steps` (on by default in `mushi ux ui`), the agent first plans each scre
 
 A run that stops for any reason (Stop, a closed terminal, a killed process) can be resumed with **Resume** in `mushi ux ui`, or with `mushi ux run --resume <runId>`: it carries on from the first unfinished screen with the settings it started with.
 
-A run first checks, in about a minute, that the agent can read a file, and tells you what to fix if it cannot (`--no-preflight` skips it). On Windows, start the Cursor agent from PowerShell or cmd: the Cursor CLI also runs your Claude Code hooks, which can fail under Git Bash. Pass `--ignore <selector>` (repeatable) for elements that are not your app's UI, such as a dev badge; dev overlays, build stamps and the Mushi widget are skipped already.
+A run first checks, in about a minute, that the agent can read a file, and tells you what to fix if it cannot (`--no-preflight` skips it). On Windows, start the Cursor agent from PowerShell or cmd: the Cursor CLI also runs your Claude Code hooks, which can fail under Git Bash. Pass `--ignore <selector>` (repeatable) for elements that are not your app's UI, such as a dev badge; dev overlays, build stamps and the Mushi Mushi widget are skipped already.
 
 To run it on your repo's GitHub Actions instead, add the [`mushi-ux.yml` workflow](https://github.com/kensaurus/mushi-mushi/blob/master/docs/templates/mushi-ux.yml) and use **Run in the cloud** on the console's [UX runs](/admin/ux-runs) page. It uses `cursor-cloud` and opens one draft PR.
 
@@ -489,7 +489,7 @@ mushi code-health stats
 
 ## Your repo
 
-These read the GitHub repo connected to the project. Mushi reads it through
+These read the GitHub repo connected to the project. Mushi Mushi reads it through
 the GitHub connection and does not clone it.
 
 ```bash
@@ -517,12 +517,12 @@ mushi repo cleanup request auto-delete --repo owner/app   # turn on GitHub's "Au
 mushi repo cleanup restore <itemId>…            # bring back a branch Mushi deleted, at the commit it kept
 ```
 
-Only branches and pull requests Mushi itself opened are listed: a branch whose
+Only branches and pull requests Mushi Mushi itself opened are listed: a branch whose
 pull request merged or closed and that still points at that pull request's last
 commit, or an open fix PR that a newer fix replaced, that the Opus review held,
 or that got no new commit for 14 days. The CLI only asks. A team owner or admin
 approves the exact list in the console (Repo → Clean up) within an hour, and
-Mushi checks every item again before it deletes or closes anything.
+Mushi Mushi checks every item again before it deletes or closes anything.
 
 ---
 
@@ -577,7 +577,7 @@ ships inside your app.
 ## Hole checks (radar)
 
 Checks that catch a problem before a user hits it. `scan` runs in your own CI
-job; Mushi never clones your repo.
+job; Mushi Mushi never clones your repo.
 
 ```bash
 mushi radar scan                     # storage deletes done in SQL, secret keys in the built app; lists the build files the store rules read
@@ -593,7 +593,7 @@ server code counts too; name the client folders with `--bundle-dir` to leave it
 out. With no build output, that check is left out and reads "Not checked",
 never a pass.
 Only the file, the line and the kind of key are sent, never the key itself.
-The Supabase anon key and the Mushi SDK key are public by design and are not
+The Supabase anon key and the Mushi Mushi SDK key are public by design and are not
 flagged.
 
 ### One CI step for both checks
@@ -635,7 +635,7 @@ and `radar scan` also reads the built app, so put the step after your build.
 |---|---|---|
 | `radar-scan` | `false` | Runs `mushi radar scan --push`. Findings do not fail the job; they show on the hole checks. |
 | `recipe-check` | `false` | Runs `mushi recipe check --push`. An invalid `mushi.recipe.json` (or none) fails the step. |
-| `fail-on-error` | `true` | `false` turns a failed check or an unreachable Mushi into a warning. |
+| `fail-on-error` | `true` | `false` turns a failed check or an unreachable Mushi Mushi into a warning. |
 | `working-directory` | `.` | The repo root both checks read. |
 | `upload-sourcemaps` | `true` | The action's original source-map upload. Uses `release`, `sourcemaps-dir`, `dry-run`. |
 
@@ -648,7 +648,7 @@ request the branch is the merge ref.
 ## Store listings
 
 Copy the live App Store and Google Play listings into the repo once, so the
-listing lives as code. It runs with your own keys and sends nothing to Mushi.
+listing lives as code. It runs with your own keys and sends nothing to Mushi Mushi.
 Your own CI publishes listing changes after that.
 
 ```bash
@@ -757,7 +757,7 @@ console.
 | `MUSHI_CONSOLE_URL` | Admin console base for CLI hints + browser opens |
 | `MUSHI_BYOK_KEY` | BYOK key value for `mushi keys add` (keeps key out of shell history) |
 | `MUSHI_NO_UPDATE_CHECK=1` | Skip npm registry version nudge in `mushi init` |
-| `MUSHI_ASC_KEY_ID`, `MUSHI_ASC_ISSUER_ID`, `MUSHI_ASC_KEY_PATH` | Your App Store Connect key for `mushi store pull` (read on your machine, never sent to Mushi) |
+| `MUSHI_ASC_KEY_ID`, `MUSHI_ASC_ISSUER_ID`, `MUSHI_ASC_KEY_PATH` | Your App Store Connect key for `mushi store pull` (read on your machine, never sent to Mushi Mushi) |
 
 ### Config file
 

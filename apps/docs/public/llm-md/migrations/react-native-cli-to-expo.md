@@ -48,7 +48,7 @@ npx eas-cli build --profile development --platform all
 
 # Only once every native change lives in a config plugin:
 # npx expo prebuild --clean  # DELETES and regenerates ios/ + android/`} },
-    { id: 'mushi', label: 'Mushi: no code changes needed', content: <>Your existing &lt;MushiProvider projectId apiKey /&gt; works as-is on Expo. Shake-to-report still needs the expo-sensors package and screenshots need react-native-view-shot; neither comes with the Expo SDK, so install them if you haven&apos;t: npx expo install expo-sensors react-native-view-shot.</> },
+    { id: 'mushi', label: 'Mushi Mushi: no code changes needed', content: <>Your existing &lt;MushiProvider projectId apiKey /&gt; works as-is on Expo. Shake-to-report still needs the expo-sensors package and screenshots need react-native-view-shot; neither comes with the Expo SDK, so install them if you haven&apos;t: npx expo install expo-sensors react-native-view-shot.</> },
     { id: 'eas-build', label: 'Move CI to EAS Build (optional)', content: <>If you want EAS to handle store submissions: npx eas-cli build:configure, then npx eas-cli build --platform all. Replaces your Fastlane setup.</> },
 
 />
@@ -70,7 +70,7 @@ Prebuild rewrites ios/ and android/. Commit first so you can diff.</> },
 # Generates ios/ and android/ from your app.json + Expo config plugins`} },
     { id: 'commit-native', label: 'Commit the generated native projects', content: <>You now own them. Running prebuild again would overwrite them, so stop running it once you edit the native projects by hand.</> },
     { id: 'remove-expo-cli', label: 'Optionally remove Expo CLI references', content: <>You can keep using Expo SDK packages (recommended) — just stop using npx expo commands and use react-native CLI instead. Update package.json scripts accordingly.</> },
-    { id: 'mushi', label: 'Mushi: no changes needed', content: <>Same provider, same API key. Shake-to-report keeps working as long as expo-sensors stays installed.</> },
+    { id: 'mushi', label: 'Mushi Mushi: no changes needed', content: <>Same provider, same API key. Shake-to-report keeps working as long as expo-sensors stays installed.</> },
     { id: 'ci', label: 'Wire your own CI', content: <>If you were on EAS Build, follow the GitHub Actions + Fastlane recipe in the Cap → RN plan.</> },
 
 />
@@ -87,7 +87,7 @@ cd ios && bundle exec pod install
 ```
 
 You get the Expo packages you picked, your CI stays on Fastlane + GitHub
-Actions, and Mushi runs the same way it does everywhere. The
+Actions, and Mushi Mushi runs the same way it does everywhere. The
 [Capacitor → React Native guide](/migrations/capacitor-to-react-native)
 uses this setup.
 
@@ -95,8 +95,8 @@ uses this setup.
 
 After either direction, smoke-test:
 
-1. App boots, opens, shows the Mushi widget on tap or shake.
-2. A test report appears on the Reports page of the Mushi admin console.
+1. App boots, opens, shows the Mushi Mushi widget on tap or shake.
+2. A test report appears on the Reports page of the Mushi Mushi admin console.
 3. Native modules (camera, secure storage, etc.) work on a real device.
 
 ## References

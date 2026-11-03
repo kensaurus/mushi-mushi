@@ -10,15 +10,15 @@ description: See where your tests run and why a Mushi Mushi fix waits. Tell a br
 # CI runners
 
 Your agent opened a fix. The check went red. Was the fix wrong, or did the test
-machine stop? This page covers how Mushi tells the two apart, how to see where
+machine stop? This page covers how Mushi Mushi tells the two apart, how to see where
 your tests run and why they wait, and how to add your own machine as a runner.
 
-Everything here is optional. Without it, Mushi still reads job times and
+Everything here is optional. Without it, Mushi Mushi still reads job times and
 runner names from GitHub.
 
 ## Your fix failed, or the test machine stopped
 
-Mushi reads every CI job of a fix's pull request and gives it one verdict:
+Mushi Mushi reads every CI job of a fix's pull request and gives it one verdict:
 
 | Verdict | What happened | Counts as |
 | --- | --- | --- |
@@ -59,9 +59,9 @@ mushi runner status --json
 | Actions: read | Jobs, their times, runner names and why a job was cancelled |
 | Administration: read (optional) | The runner list: online, offline, busy, labels |
 | Metadata: read | Whether a repo is public or private (read once a day): it decides what GitHub-hosted minutes cost |
-| Variables: read and write (optional) | Changing where CI runs: Mushi reads and writes only `LINUX_RUNNER`, `RUNNER_` and `CI_PROFILE`, with the GitHub token stored in the project's settings (or, without one, the organization's), else the Mushi GitHub App installation for that repo once you approve its "Variables: Read and write" permission. Never Mushi's own token |
+| Variables: read and write (optional) | Changing where CI runs: Mushi Mushi reads and writes only `LINUX_RUNNER`, `RUNNER_` and `CI_PROFILE`, with the GitHub token stored in the project's settings (or, without one, the organization's), else the Mushi Mushi GitHub App installation for that repo once you approve its "Variables: Read and write" permission. Never Mushi Mushi's own token |
 
-Without Administration: read, Mushi shows the runners it saw in jobs and says
+Without Administration: read, Mushi Mushi shows the runners it saw in jobs and says
 so.
 
 ## What CI costs, and where it should run
@@ -97,11 +97,11 @@ Money is always an estimate. GitHub's bill is the real figure.
 - **Every job bills at least one whole minute.** Twenty 7-second checks bill
   20 minutes; run them as steps of one job instead.
 - **macOS costs about 10× Linux** a minute (Linux $0.006, Windows $0.010,
-  macOS $0.062; Mushi shows the date it read GitHub's price list).
+  macOS $0.062; Mushi Mushi shows the date it read GitHub's price list).
 - **Re-runs bill again on GitHub**, and cost only electricity on your machine.
 - **Jobs pinned to GitHub stay there.** A job that names
   `runs-on: ubuntu-latest # pixel baselines are captured on hosted` does not
-  move with a runner variable; Mushi shows the comment as the reason.
+  move with a runner variable; Mushi Mushi shows the comment as the reason.
 - **Main-branch and Dependabot runs often always use GitHub**, when the
   workflow checks `github.ref` or `github.actor` before reading the variable.
 - **GitHub gives private repos smaller machines** (2 CPUs, 8 GB) than public
@@ -115,7 +115,7 @@ Money is always an estimate. GitHub's bill is the real figure.
 organization: your GitHub plan, the idle and under-load watts of your
 machines, your price per kWh and currency, an optional wear cost per busy
 hour, and which runners share one physical machine (`Alienware: aw-,
-alienware-`). Until you save them, Mushi uses example figures and says so.
+alienware-`). Until you save them, Mushi Mushi uses example figures and says so.
 On WSL2, `mushi runner heartbeat` sends a hash of the VM's boot id, so
 distros on one PC count as one machine without any setting.
 
@@ -140,7 +140,7 @@ runs-on: ${{ (github.actor != 'dependabot[bot]' && github.ref != 'refs/heads/mai
 The **Where CI runs** section of the CI page shows, for each repo, which jobs
 read `LINUX_RUNNER` (or a `RUNNER_` variable) and where they run
 now. You can move them between GitHub-hosted runners and one of your runner
-labels. Mushi changes only that variable: never runner labels, registrations,
+labels. Mushi Mushi changes only that variable: never runner labels, registrations,
 runner groups, or another tool's dispatcher.
 
 Every change goes through four steps:
@@ -155,15 +155,15 @@ Every change goes through four steps:
    machine.
 2. **Request.** Anyone who is not a viewer can ask, in the console, with
    `mushi runner placement request`, or with the MCP tool
-   `request_ci_placement_change`. Mushi builds the change itself from the
+   `request_ci_placement_change`. Mushi Mushi builds the change itself from the
    preview, including the variable's current value.
 3. **Approve.** A team owner or admin approves exactly that change in the
    console. An API key can never approve. The approval lasts an hour.
 4. **Run.** The owner or admin runs it from the console. If the variable
-   changed since the preview, Mushi refuses with `VARIABLE_MOVED` and you
+   changed since the preview, Mushi Mushi refuses with `VARIABLE_MOVED` and you
    preview again.
 
-After a change, Mushi watches the next 10 jobs that read the variable. It
+After a change, Mushi Mushi watches the next 10 jobs that read the variable. It
 raises an alert if one lands on another runner or waits more than 30
 minutes. **Ask to revert** requests the reverse change, which goes through the
 same approval.
@@ -180,10 +180,10 @@ mushi runner placement request --repo you/your-app --variable CI_PROFILE --value
 
 A move to GitHub-hosted runners can switch back on its own. In the console,
 **Switch back after** defaults to 4 hours (`--revert-after `,
-1–168). The time box is part of the change you approve. When it is up, Mushi
+1–168). The time box is part of the change you approve. When it is up, Mushi Mushi
 files the ordinary revert in the approver's name and runs it within 10
 minutes, with the same compare-and-set: if anyone changed the variable in the
-meantime, Mushi leaves it alone and records why. A move without a time box
+meantime, Mushi Mushi leaves it alone and records why. A move without a time box
 says so in its preview, because GitHub-hosted minutes on a private repo are
 billed until someone switches back.
 
@@ -193,7 +193,7 @@ If your workflows read `vars.CI_PROFILE`, the repo also shows **Checks on fix
 pull requests**:
 
 - **Economy** (recommended, and the default when the variable is unset): your
-  workflows may skip slow, billed checks on Mushi fix pull requests. Those
+  workflows may skip slow, billed checks on Mushi Mushi fix pull requests. Those
   checks still run on the release train and on main before a deploy.
 - **Thorough**: every check on every pull request, fix pull requests
   included. More GitHub-hosted minutes on a private repo.
@@ -209,13 +209,13 @@ if: ${{ vars.CI_PROFILE == 'thorough' || !(startsWith(github.head_ref, 'bugfix/M
 
 ### Your CI agreement
 
-**Settings → General → CI policy** records the rules Mushi checks at the
-request and again when the change runs. Mushi fills in nothing for you:
+**Settings → General → CI policy** records the rules Mushi Mushi checks at the
+request and again when the change runs. Mushi Mushi fills in nothing for you:
 
 - **No paid GitHub-hosted minutes on private repos**, with a list of repos
   allowed anyway. Only an owner can turn this rule off.
 - **External controllers**: another tool that decides where some repos run
-  (for example a dispatcher that flips runner labels). Mushi shows those
+  (for example a dispatcher that flips runner labels). Mushi Mushi shows those
   repos read-only and never competes with it.
 - **Standby runners**: runner names or labels that are only a fallback
   (`kensaurus-local-*`). They are never a target.
@@ -290,7 +290,7 @@ mushi runner add --repo you/your-app
 ```
 
 It prints every command before it runs, runs the ones that need root through
-`sudo`, and registers the runner with **your own** `gh` login. Mushi's GitHub
+`sudo`, and registers the runner with **your own** `gh` login. Mushi Mushi's GitHub
 App never registers runners.
 
 ### Is it worth it?
@@ -369,7 +369,7 @@ See [WSL configuration](https://learn.microsoft.com/en-us/windows/wsl/wsl-config
 
 ### macOS and Windows
 
-- **macOS**: Mushi prints the steps instead of running them. Use a separate
+- **macOS**: Mushi Mushi prints the steps instead of running them. Use a separate
   standard user and a user-session LaunchAgent (`./svc.sh install`), not a
   daemon, so jobs can reach the keychain and the iOS simulator.
 - **Windows**: use WSL2 (`wsl --install`) and run `mushi runner add` inside it.
@@ -401,7 +401,7 @@ mushi runner audit --repo you/your-app
 mushi runner audit --all
 ```
 
-It lists every self-hosted runner, flags the ones Mushi did not set up (no
+It lists every self-hosted runner, flags the ones Mushi Mushi did not set up (no
 `mushi-` label and no heartbeat) and any named like `SHA1HULUD`, and shows the
 fork approval setting and the `pull_request_target` workflows.
 

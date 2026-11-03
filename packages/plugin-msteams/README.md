@@ -6,9 +6,9 @@ For teams that work in Microsoft Teams. This posts a card to a Teams channel
 when Mushi Mushi triages a bug, proposes a fix, or applies it.
 
 **Do you need this package?** Not on Mushi Mushi Cloud: paste a Teams incoming
-webhook URL on the **Integrations** page of the console and Mushi posts to
+webhook URL on the **Integrations** page of the console and Mushi Mushi posts to
 the channel itself, on any plan. The console's Marketplace has no Teams
-listing (checked 2026-10-29), so this package only receives events from a Mushi server you
+listing (checked 2026-10-29), so this package only receives events from a Mushi Mushi server you
 run yourself, once you add a `plugin_registry` row for it.
 
 ```bash

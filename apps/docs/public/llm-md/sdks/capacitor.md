@@ -11,7 +11,7 @@ description: Reference for @mushi-mushi/capacitor, Mushi Mushi for Ionic and Cap
 
 The Mushi Mushi Capacitor plugin for Ionic and Capacitor apps (`@capacitor/core` 6 or later). The web fallback uses
 `@mushi-mushi/core` so the plugin works in WebView previews; native iOS and
-Android delegate to the standalone Mushi SDKs so a hybrid app gets the same
+Android delegate to the standalone Mushi Mushi SDKs so a hybrid app gets the same
 shake-to-report and screenshot UX as a pure-native app.
 
 ## Install

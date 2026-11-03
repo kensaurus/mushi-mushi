@@ -23,7 +23,7 @@ act on immediately.
 **Capture.** Users report bugs in your app — widget tap on web, shake on
 mobile. The report keeps the screenshot, the page, and the user's own words.
 
-**Diagnose.** Mushi reads the report against your repo and writes a
+**Diagnose.** Mushi Mushi reads the report against your repo and writes a
 plain-English explanation: what the user hit, the likely cause, which files
 are involved, how severe it is.
 
@@ -42,7 +42,7 @@ sprint.
 ## Where this fits with your existing tools
 
 Keep your error monitor for crashes and your test suite for regressions.
-Mushi covers the third category — the bugs only users find — and closes the
+Mushi Mushi covers the third category — the bugs only users find — and closes the
 loop back to your editor instead of a ticket queue.
 
 ## Start with one command

@@ -70,7 +70,7 @@ Other `init` flags: `--framework next`, `--cwd apps/web` (monorepos), `--endpoin
 | --- | --- |
 | `MUSHI_API_KEY` | API key. Prefer it over `--api-key`, which shows up in `ps` |
 | `MUSHI_PROJECT_ID` | Project UUID |
-| `MUSHI_API_ENDPOINT` | API base URL (defaults to Mushi Cloud) |
+| `MUSHI_API_ENDPOINT` | API base URL (defaults to Mushi Mushi Cloud) |
 | `MUSHI_CONSOLE_URL` | Console base for links and browser opens |
 | `MUSHI_PROFILE` | Named credential profile to use (same as `--profile`) |
 | `MUSHI_BYOK_KEY` | Key for `mushi keys add`, kept out of shell history |

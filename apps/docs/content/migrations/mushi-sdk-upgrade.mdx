@@ -56,7 +56,7 @@ If you build only against the documented public API (everything under
 <MigrationChecklist
   id="mushi-sdk-upgrade"
   steps={[
-    { id: 'read-changelog', label: 'Read the package changelog for every Mushi SDK you use', content: <>Each package ships its own CHANGELOG.md in the GitHub repo (e.g. <a href="https://github.com/kensaurus/mushi-mushi/blob/master/packages/web/CHANGELOG.md">@mushi-mushi/web</a>). Skim the latest entry for breaking changes.</> },
+    { id: 'read-changelog', label: 'Read the package changelog for every Mushi Mushi SDK you use', content: <>Each package ships its own CHANGELOG.md in the GitHub repo (e.g. <a href="https://github.com/kensaurus/mushi-mushi/blob/master/packages/web/CHANGELOG.md">@mushi-mushi/web</a>). Skim the latest entry for breaking changes.</> },
     { id: 'pin-current', label: 'Pin your current versions before upgrading', content: <>If you&apos;re on a range like <code>"@mushi-mushi/react": "^1.x.y"</code>, change to the exact pin first so your lockfile is clean.</> },
     { id: 'codemod', label: 'Bump the packages', content: <pre className="text-xs">{`npx mushi-mushi upgrade --dry-run   # show the install command
 npx mushi-mushi upgrade             # bump @mushi-mushi/* to the latest stable versions`}</pre> },

@@ -76,7 +76,7 @@ The artifact gallery is visible in the expanded fix detail when artifacts are pr
 ### Notes-only pull requests
 
 A cloud agent (Cursor or the GitHub Copilot agent) that cannot find the cause
-is told to finish without a pull request. If it opens one anyway, Mushi reads
+is told to finish without a pull request. If it opens one anyway, Mushi Mushi reads
 the PR's changed files before trusting it. A PR whose changes are only notes
 is not a fix. Notes are a `NEEDS_INVESTIGATION` file, a new markdown file, or
 TODO comments. Editing an existing doc page counts as a real change, and so
@@ -96,7 +96,7 @@ When the PR is not a fix:
 - the report keeps its status instead of moving to **Fixing**;
 - your team gets the usual "fix failed" notification.
 
-Mushi reads the files with the project's GitHub token. If it cannot read them
+Mushi Mushi reads the files with the project's GitHub token. If it cannot read them
 while the agent is still working (GitHub errors, rate limits, a missing
 token), the PR waits like an empty one and is read again when the agent
 finishes. If the files still cannot be read after the agent has finished, the
@@ -168,7 +168,7 @@ mushi fixes refresh-ci <fixId>
 ## Merging from the console
 
 After CI passes (or you've reviewed manually), merge the draft PR without leaving
-Mushi Mushi. This is **user-confirmed**: Mushi merges only what you merge or queue,
+Mushi Mushi. This is **user-confirmed**: Mushi Mushi merges only what you merge or queue,
 or what passes [verified merge](/admin/verified-merge) when you turned it on.
 
 ### Where merge appears
@@ -252,13 +252,13 @@ By default (ADR 0044) approved PRs do not merge one by one. Each merge to
 your main branch is a deploy and, for a mobile app, an OTA update, so the
 queue batches them into a **release train**:
 
-1. Once every 6 hours, or as soon as 15 PRs are approved, Mushi merges a
+1. Once every 6 hours, or as soon as 15 PRs are approved, Mushi Mushi merges a
    repo's approved PRs into one `mushi/train/…` branch and opens one train
    PR that lists them. A PR that conflicts waits for the next train.
-2. CI runs once, on the train. When it is green, Mushi checks each PR's
+2. CI runs once, on the train. When it is green, Mushi Mushi checks each PR's
    Opus review again and merges the train PR with a merge commit. GitHub
    marks every PR in it merged, and each report is marked Fixed.
-3. When the train's CI fails, Mushi retries its first half and holds back
+3. When the train's CI fails, Mushi Mushi retries its first half and holds back
    the rest, until it finds the PR that breaks CI. That PR is held, with the
    failing checks named.
 4. Fixes for known vulnerabilities and critical bugs skip the wait and merge
@@ -269,7 +269,7 @@ In the **Merge when ready** panel, **Release** switches between **Batch**
 repo shows its train on the way, or when the next one leaves.
 
 If your repo requires a linear history (or has merge commits turned off),
-Mushi squash-merges the train instead, then closes each PR in it as shipped
+Mushi Mushi squash-merges the train instead, then closes each PR in it as shipped
 and marks its report Fixed.
 
 **Merge now** (in the same dialog) tries each PR once. The PRs that did not
@@ -289,7 +289,7 @@ merge stay listed above the table with GitHub's reason and a
 
 ## See also
 
-- [Verified merge](/admin/verified-merge): the gates an agent's PR passes before Mushi merges it on its own.
+- [Verified merge](/admin/verified-merge): the gates an agent's PR passes before Mushi Mushi merges it on its own.
 - [Concepts → Fix drafts & PRs](/concepts/fix-orchestrator): how auto-fix works internally.
 - [Concepts → Multi-repo coordinated fixes](/concepts/multi-repo-fixes): coordinated multi-repo runs.
 - [Connecting your orchestrator](/concepts/orchestrator-interop): dispatch via MCP, A2A, or REST.

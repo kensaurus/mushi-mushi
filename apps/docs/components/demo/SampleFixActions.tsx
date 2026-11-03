@@ -68,7 +68,7 @@ export function SampleFixActions({ fixPrompt, urlFixPrompt }: SampleFixActionsPr
       </div>
       <p className="sample-dx__note">
         {(fixPrompt.length / 1000).toFixed(1)}k characters. Paste it into Claude Code, Cursor, Codex, Windsurf or
-        any other coding agent; it needs no Mushi setup. Open in Cursor carries a shorter copy, because a link can
+        any other coding agent; it needs no Mushi Mushi setup. Open in Cursor carries a shorter copy, because a link can
         only hold so much.
       </p>
       {claudeOpen ? (

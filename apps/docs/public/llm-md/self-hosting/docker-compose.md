@@ -9,7 +9,7 @@ description: Self-host the whole Mushi Mushi stack with one Docker Compose file.
 
 # Self-host in minutes
 
-The fastest way to run the whole Mushi stack on your own box. One Compose file
+The fastest way to run the whole Mushi Mushi stack on your own box. One Compose file
 brings up Postgres, Auth, REST, Storage, the edge functions, the admin console,
 and a Caddy reverse proxy — no managed Supabase project required.
 
@@ -88,7 +88,7 @@ Postgres locally? Skip Compose and follow the
 [Edge Functions deploy](/self-hosting/edge-functions), and
 [Admin SPA deploy](/self-hosting/admin-spa).
 
-  Same code, either way. Mushi Cloud runs this exact stack — there is no
+  Same code, either way. Mushi Mushi Cloud runs this exact stack — there is no
   closed-source plus-tier. The hosted service adds only its own tuning data
   (prompts and scoring weights kept as configuration); the repo's default
   prompts give you every feature. See [Open source & licensing](/concepts/open-source).

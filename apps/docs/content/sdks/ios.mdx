@@ -74,5 +74,5 @@ is `true`. Turn it off for flows that show sensitive data.
 ## Sentry
 
 There is no Sentry bridge in the Swift package. Keep initialising Sentry in the
-host app and pass context to Mushi with `setMetadata` or
+host app and pass context to Mushi Mushi with `setMetadata` or
 `report(..., metadata:)`.

@@ -1,21 +1,21 @@
-# Mushi Bounties: crowd-testing marketplace
+# Mushi Mushi Bounties: crowd-testing marketplace
 
 Source: https://kensaur.us/mushi-mushi/docs/concepts/bounty-marketplace
 
 ---
-title: "Mushi Bounties: crowd-testing marketplace"
-description: Mushi Bounties is the Mushi Mushi crowd-testing marketplace. Publish your app, and real testers file bug reports and earn points they can redeem for rewards.
+title: "Mushi Mushi Bounties: crowd-testing marketplace"
+description: Mushi Mushi Bounties is a crowd-testing marketplace. Publish your app, and real testers file bug reports and earn points they can redeem for rewards.
 ---
 
-# Mushi Bounties
+# Mushi Mushi Bounties [#mushi-bounties]
 
 > **The loop closes faster with paid testers in it.**
 
-Mushi Bounties is the crowd-testing marketplace built into the evolution loop.
+Mushi Mushi Bounties is the crowd-testing marketplace built into the evolution loop.
 Developers publish their app or website to a public listing. Testers — real humans
 who are not on the team — sign up, use the app, and earn **mushi-points** for every
 accepted bug report, accessibility finding, or localization note. Points can be
-redeemed at a 1.3× premium for Mushi Pro credit, or at base rate for 100+ gift
+redeemed at a 1.3× premium for Mushi Mushi Pro credit, or at base rate for 100+ gift
 card options via Tremendous (Amazon, Visa, App Store, and more).
 
 This is not a synthetic monitor, a survey, or a focus group. It is the same
@@ -28,19 +28,19 @@ a motivated human in the capture stage.
 
 ### Publish your app
 
-In the Mushi console, go to **Rewards → Bounties (Publishing tab)**. Set your
+In the Mushi Mushi console, go to **Rewards → Bounties (Publishing tab)**. Set your
 app name, description, hero image, and the platforms you want tested. Configure
 per-action bounties (e.g., 50 points for a reproduced bug, 200 points for an
 accessibility issue accepted by your team). Set a monthly budget ceiling and
 target audience (country, language, device type, minimum tester reputation).
 
 Flip visibility to **Public** when you are ready. Your app appears on the
-[Mushi Bounties marketplace](https://kensaur.us/mushi-mushi/testers/).
+[Mushi Mushi Bounties marketplace](https://kensaur.us/mushi-mushi/testers/).
 
 ### Testers find your app
 
 Testers browse the public marketplace without an account. When they click
-"Join to test", they sign in with a magic link. The only information Mushi
+"Join to test", they sign in with a magic link. The only information Mushi Mushi
 stores is their public handle, email hash (never plaintext), and the expertise
 tags they declare. No device recording, no video, no biometrics in v1.
 
@@ -49,7 +49,7 @@ tags they declare. No device recording, no video, no biometrics in v1.
 Inside the tester dashboard, each app has a built-in submission form. The
 submission runs through the same `ingestReport()` pipeline as host-SDK reports:
 screenshot upload, PII scrub, console log capture, environment metadata. It
-always lands in your Mushi reports queue tagged `mushi_tester:true`; if you've
+always lands in your Mushi Mushi reports queue tagged `mushi_tester:true`; if you've
 set a Sentry DSN for the published app it also forwards there so you can
 triage alongside your production errors — Sentry is optional, not required.
 
@@ -72,7 +72,7 @@ further payouts.
 
 Testers see their balance update in real time. Redemption options:
 
-- **Mushi Pro credit** — 1,000 mushi-points → $13 of Mushi Pro (the 1.3× premium
+- **Mushi Mushi Pro credit** — 1,000 mushi-points → $13 of Mushi Mushi Pro (the 1.3× premium
   is a platform coupon, not cash compensation; no 1099 event).
 - **Gift cards** — 1,000 mushi-points → $10 face value via Tremendous (taxable
   at FMV; KYC is required from $400 a year and gift cards are capped at $599 a year; Tremendous holds the money-transmitter
@@ -91,17 +91,17 @@ Testers see their balance update in real time. Redemption options:
 The rewards model is deliberately conservative:
 
 - **mushi-points are closed-loop platform currency.** They are redeemable only
-  for Mushi Pro features or (optionally) for third-party gift cards via Tremendous.
+  for Mushi Mushi Pro features or (optionally) for third-party gift cards via Tremendous.
   They have no exchange rate to USD and cannot be transferred between testers.
 - **The 1.3× Pro-upgrade premium is a coupon**, not compensation. It is funded
-  by Mushi (the platform discounts its own product). The IRS classifies
+  by Mushi Mushi (the platform discounts its own product). The IRS classifies
   issuer-funded discounts as price adjustments, not income (Anikeev safe harbor).
-  No 1099 event is triggered when a tester applies points toward Mushi Pro.
+  No 1099 event is triggered when a tester applies points toward Mushi Mushi Pro.
 - **Gift-card cash-out is a separate tax event.** When a tester redeems points
   for a Tremendous gift card, the face value is taxable income at FMV at the time
-  of redemption. Mushi requires KYC (W-9 for US, W-8BEN for international)
+  of redemption. Mushi Mushi requires KYC (W-9 for US, W-8BEN for international)
   once a tester's gift cards reach $400 in a calendar year, and caps gift
-  cards at $599 a year per tester. Tremendous files the 1099-MISC; Mushi
+  cards at $599 a year per tester. Tremendous files the 1099-MISC; Mushi Mushi
   does not.
 - **No crypto, no prize draws in v1.** Reddit Community Points sunset in November
   2023 citing "a tough regulatory environment for cryptocurrency projects." Prize

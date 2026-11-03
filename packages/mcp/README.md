@@ -13,7 +13,7 @@ Docs: [MCP guide](https://kensaur.us/mushi-mushi/docs/sdks/mcp) · [tool referen
 
 ```mermaid
 flowchart LR
-    A["Bug reports<br/>in Mushi"] --> B["This MCP server"] --> C["Your editor<br/>'what's broken in prod?'"] --> D["Fix: you, or a<br/>draft PR from an agent"]
+    A["Bug reports<br/>in Mushi Mushi"] --> B["This MCP server"] --> C["Your editor<br/>'what's broken in prod?'"] --> D["Fix: you, or a<br/>draft PR from an agent"]
 ```
 
 ## Quick start
@@ -78,7 +78,7 @@ A key without the needed scope gets a clear `INSUFFICIENT_SCOPE` error, never a 
 ## Troubleshooting
 
 - **No tools showing?** Check the MCP panel for a green dot, then fully restart the editor after any config change.
-- **Keep one config.** Put the Mushi entry in your global `~/.cursor/mcp.json` only; a second copy in a project file can cause connection storms.
+- **Keep one config.** Put the Mushi Mushi entry in your global `~/.cursor/mcp.json` only; a second copy in a project file can cause connection storms.
 - **Windows paths** in JSON need forward slashes (`C:/Users/...`) or escaped backslashes.
 - **Still stuck?** Ask your editor to run `diagnose_setup`, or run `mushi doctor --mcp`.
 

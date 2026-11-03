@@ -10,7 +10,7 @@ helpers, and a Slack app manifest.
 **Do you need this package?** Not on Mushi Mushi Cloud: open the **Integrations**
 page of the console and click **Add to Slack**. Report cards with buttons,
 threaded replies and `/mushi` then work with no code. This package is for
-people who run the Mushi backend themselves, or who want to host the Slack
+people who run the Mushi Mushi backend themselves, or who want to host the Slack
 endpoints on their own server.
 
 ```bash
@@ -26,15 +26,15 @@ Docs: https://kensaur.us/mushi-mushi/docs/plugins/slack
 Run standalone, `createSlackPlugin(...)` posts report and fix events to a
 Slack incoming webhook, and its `handleSlackInteraction` only verifies and
 acknowledges a button click; acting on it (dispatching a fix, say) is up to
-your server. On Mushi's own backend, clicks are handled by the
+your server. On Mushi Mushi's own backend, clicks are handled by the
 `slack-interactions` function.
 
-## One-time Slack app setup (self-hosted Mushi backend)
+## One-time Slack app setup (self-hosted Mushi Mushi backend)
 
 1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create from
    manifest**.
 2. Paste the contents of [`manifest.json`](./manifest.json). It targets the
-   hosted Mushi backend; self-hosters replace the
+   hosted Mushi Mushi backend; self-hosters replace the
    `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1` prefix with their
    own functions host:
    - slash command `/mushi` → `<functions>/api/v1/webhooks/slack/commands`
@@ -49,7 +49,7 @@ your server. On Mushi's own backend, clicks are handled by the
    `/slack/oauth/callback`.)
 3. Copy the signing secret + client ID / secret into the backend secrets
    (`SLACK_SIGNING_SECRET`, `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`).
-4. Install to the workspace from the Mushi console (**Integrations** page →
+4. Install to the workspace from the Mushi Mushi console (**Integrations** page →
    Slack → **Add to Slack**) so the bot token is vaulted per project, then
    invite the bot to the channels where clips will be dropped.
 

@@ -9,7 +9,7 @@ interface PillarsProps {
 
 export function Pillars({ items = LANDING_PILLARS }: PillarsProps) {
   return (
-    <ol className="docs-pillars not-prose" aria-label="The Mushi loop">
+    <ol className="docs-pillars not-prose" aria-label="The Mushi Mushi loop">
       {items.map((p, i) => (
         <li key={p.name} className="docs-pillar">
           <span className="docs-pillar__glyph" aria-hidden="true">

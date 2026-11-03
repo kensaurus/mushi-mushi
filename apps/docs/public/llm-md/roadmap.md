@@ -25,7 +25,7 @@ Mushi Mushi is built in the open. [VISION.md](https://github.com/kensaurus/mushi
 | **A** | Vision air-gap, MCP correctness, RAG, sandbox | ✅ Shipped |
 | **B** | WASM SLM classifier, real-time collab, AG-UI, fine-tuning pipeline | ✅ Shipped |
 | **C** | Mobile SDKs (React Native and Capacitor on npm; iOS, Android and Flutter as unpublished previews), A2A protocol, SOC 2 readiness, data residency pinning (one live region today), BYOK, BYO storage | ✅ Shipped, with the noted gaps |
-| **D** | Plugin marketplace GA, docs site, Mushi Cloud GA, multi-repo coordinated fixes, PDCA console enhancements, QA coverage stories, SDK install & upgrade one-click, Skill-driven triage, Codebase Atlas | ✅ Shipped |
+| **D** | Plugin marketplace GA, docs site, Mushi Mushi Cloud GA, multi-repo coordinated fixes, PDCA console enhancements, QA coverage stories, SDK install & upgrade one-click, Skill-driven triage, Codebase Atlas | ✅ Shipped |
 | **E** | v1.0.0 cross-platform stable API, Launch Week, frictionless onboarding, self-hosting one-click | 🔄 In-flight |
 
 ## Wave E details (in-flight)
@@ -41,13 +41,13 @@ Mushi Mushi is built in the open. [VISION.md](https://github.com/kensaurus/mushi
 
 | Feature | Status | Notes |
 | --- | --- | --- |
-| [Agent PR review](/concepts/agent-pr-review) | ✅ Shipped | Claude Opus reviews every cloud-agent pull request on your own key; a **hold** blocks merging from Mushi |
+| [Agent PR review](/concepts/agent-pr-review) | ✅ Shipped | Claude Opus reviews every cloud-agent pull request on your own key; a **hold** blocks merging from Mushi Mushi |
 | Review follow-ups | ✅ Shipped | A "fix first" pull request goes back to a new agent once, with the findings |
 | Spend-down safety stop | ✅ Shipped | Spend-down pauses an app whose agent pull requests review poorly; 7-day scoreboard per key |
 | All-apps AI keys | ✅ Shipped | One key you own serves every app in the organizations you own ([BYOK](/security/byok)) |
 | [CI runners](/operating/ci-runners) | ✅ Shipped | `/ci` shows where tests run and why a fix waits; a stopped test machine is never called a failed fix; `mushi runner add` |
 | Verified merge | 🔄 In progress | An agent pull request merges on its own only with proof: a test that fails without the fix and passes with it, no weakened tests, a small diff, and two AI reviews that can stop it. Off by default |
-| Run Mushi on your own machines | ⏭ Planned | A local-only mode with a self-test that proves nothing leaves your network (`mushi local verify`) |
+| Run Mushi Mushi on your own machines | ⏭ Planned | A local-only mode with a self-test that proves nothing leaves your network (`mushi local verify`) |
 
 ## Wave D highlights (shipped)
 
@@ -61,9 +61,9 @@ Mushi Mushi is built in the open. [VISION.md](https://github.com/kensaurus/mushi
 ## Completed highlights (Wave C, v0.8.0)
 
 - **Native SDKs** — iOS (Swift), Android (Kotlin) and Flutter implementations in the repo, plus the Capacitor plugin on npm. The three native SDKs are previews: publishing to CocoaPods / SwiftPM release tags, Maven Central and pub.dev is still open
-- **A2A discovery** — `a2a-push-notify` edge function; agents can subscribe to Mushi events as A2A peers
+- **A2A discovery** — `a2a-push-notify` edge function; agents can subscribe to Mushi Mushi events as A2A peers
 - **SOC 2 readiness module** — retention policies, data-subject request tracking and nightly snapshots of five controls (RLS coverage among them). Not a certification
-- **Data residency** — a region (US / EU / JP) is picked at project creation, but Mushi Cloud runs one production cluster in Tokyo today; EU and US clusters are reserved, not live ([details](/security/data-residency))
+- **Data residency** — a region (US / EU / JP) is picked at project creation, but Mushi Mushi Cloud runs one production cluster in Tokyo today; EU and US clusters are reserved, not live ([details](/security/data-residency))
 - **BYO storage** — S3, Cloudflare R2, GCS, MinIO, or Supabase Storage per project
 - **BYOK** — project-scoped Anthropic + OpenAI keys via Supabase Vault
 - **PDCA runner** — closed-loop iteration engine: fix → judge → promote, visible in the Iterate console page

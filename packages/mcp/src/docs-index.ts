@@ -273,7 +273,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/fullstack-audit",
     markdown: "admin/fullstack-audit.md",
     keywords: ["admin", "fullstack-audit", "fullstack", "audit", "full-stack"],
-    headings: ["Scorecard sections", "Open findings by check", "Mushi setup checks and \"Apply suggested caps\"", "Prerequisites", "CLI", "Related pages"],
+    headings: ["Scorecard sections", "Open findings by check", "Mushi Mushi setup checks and \"Apply suggested caps\"…", "Prerequisites", "CLI", "Related pages"],
     excerpt: "The Full-stack audit in Mushi Mushi runs one health check across RLS gaps, recent backend errors and API contract drift, and returns a readable scorecard.",
   },
   {
@@ -286,13 +286,13 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "The Bug clusters page in Mushi Mushi graphs your bug groups, components, pages and fixes, so you see which bugs share a cause and what one fix might touch.",
   },
   {
-    title: "Mushi health",
+    title: "Mushi Mushi health",
     url: docUrl("/admin/health"),
     route: "/admin/health",
     markdown: "admin/health.md",
     keywords: ["admin", "health"],
     headings: ["Time window", "LLM health summary", "Provider probes", "Cron job health", "Recent LLM calls log", "Recommended actions", "Related pages"],
-    excerpt: "The Mushi health page shows whether Mushi Mushi itself works (AI calls, background jobs, provider connections), so you catch a degraded integration early.",
+    excerpt: "The Mushi Mushi health page shows whether Mushi Mushi itself works (AI calls, background jobs, provider connections), so you catch a degraded integration early.",
   },
   {
     title: "To-do",
@@ -552,7 +552,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/sdk-upgrade-lockfile",
     markdown: "admin/sdk-upgrade-lockfile.md",
     keywords: ["admin", "sdk-upgrade-lockfile", "sdk", "upgrade", "lockfile", "helper"],
-    headings: ["How it works", "Add the workflow", "What the action does", "Private registries", "Pinning", "Why Mushi does not write the lockfile or the workflow", "Limits"],
+    headings: ["How it works", "Add the workflow", "What the action does", "Private registries", "Pinning", "Why Mushi Mushi does not write the lockfile or the workflow…", "Limits"],
     excerpt: "Add one workflow to your repo so Mushi Mushi's SDK upgrade PRs arrive with a refreshed lockfile and pass npm ci or pnpm install --frozen-lockfile.",
   },
   {
@@ -679,7 +679,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "blog/auto-fix-loop.md",
     keywords: ["blog", "auto-fix-loop", "auto", "fix", "loop", "this", "broken", "draft", "pr", "building"],
     headings: ["The loop", "Why we kept the human in the loop", "1. The judge is good. The judge is not infallible.", "2. The user's trust is the moat.", "What's actually open source", "Try it"],
-    excerpt: "How Mushi Mushi turns a one-sentence user complaint into a classified, deduped, AI-judged draft PR, and why the human stays in the loop the whole way.",
+    excerpt: "How Mushi Mushi turns a one-sentence user complaint into a diagnosis and a draft PR, and who decides whether that PR merges.",
   },
   {
     title: "Launch Week 1 — five features, five days",
@@ -732,7 +732,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/compare/jam-vs-mushi",
     markdown: "compare/jam-vs-mushi.md",
     keywords: ["compare", "jam-vs-mushi", "jam"],
-    headings: ["What each one is", "Side by side", "Where they overlap", "Where they do not", "Using both", "Pick Jam if", "Pick Mushi if", "Frequently asked questions"],
+    headings: ["What each one is", "Side by side", "Where they overlap", "Where they do not", "Using both", "Pick Jam if", "Pick Mushi Mushi if [#pick-mushi-if]", "Frequently asked questions"],
     excerpt: "Jam.dev vs Mushi Mushi in 2026. A teammate recording a bug in the Jam extension versus a user reporting from your app, MCP handoff and free tiers.",
   },
   {
@@ -741,7 +741,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/compare/posthog-session-replay-vs-mushi",
     markdown: "compare/posthog-session-replay-vs-mushi.md",
     keywords: ["compare", "posthog-session-replay-vs-mushi", "posthog", "session", "replay"],
-    headings: ["What each one is", "Side by side", "They work alongside each other", "Pick PostHog if", "Pick Mushi if", "Frequently asked questions"],
+    headings: ["What each one is", "Side by side", "They work alongside each other", "Pick PostHog if", "Pick Mushi Mushi if [#pick-mushi-if]", "Frequently asked questions"],
     excerpt: "PostHog session replay vs Mushi Mushi in 2026. Every session recorded versus the one a user flagged as broken, free tiers, and why teams run both.",
   },
   {
@@ -759,8 +759,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/compare/sentry-vs-mushi",
     markdown: "compare/sentry-vs-mushi.md",
     keywords: ["compare", "sentry-vs-mushi", "sentry"],
-    headings: ["What each one is", "Side by side", "Where they overlap, and where they do not", "Running Mushi alongside Sentry", "Pick Sentry if", "Pick Mushi if", "Frequently asked questions"],
-    excerpt: "Sentry vs Mushi Mushi in 2026. What each captures, Sentry's free tier and Seer pricing next to Mushi's free plan (1 app, 100 diagnoses), and running both.",
+    headings: ["What each one is", "Side by side", "Where they overlap, and where they do not", "Running Mushi Mushi alongside Sentry [#running-mushi-alongside-sentry]", "Pick Sentry if", "Pick Mushi Mushi if [#pick-mushi-if]", "Frequently asked questions"],
+    excerpt: "Sentry vs Mushi Mushi in 2026. What each captures, Sentry's free tier and Seer pricing next to Mushi Mushi's free plan (1 app, 100 diagnoses), and running both.",
   },
   {
     title: "Concepts",
@@ -777,7 +777,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/concepts/agent-contract",
     markdown: "concepts/agent-contract.md",
     keywords: ["concepts", "agent-contract", "agent", "contract"],
-    headings: ["The evolution loop (what you're plugging into)", "What the agent reads before opening a PR", "What the agent does after merging the PR", "What Mushi commits to in return", "Self-bootstrap (Claude Code and similar)", "Privacy contract", "Scopes"],
+    headings: ["The evolution loop (what you're plugging into)", "What the agent reads before opening a PR", "What the agent does after merging the PR", "What Mushi Mushi commits to in return [#what-mushi-commits-to-in-retur…", "Self-bootstrap (Claude Code and similar)", "Privacy contract", "Scopes"],
     excerpt: "What Mushi Mushi expects an agent to read before opening a PR, and what it promises in return.",
   },
   {
@@ -787,7 +787,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "concepts/agent-pr-review.md",
     keywords: ["concepts", "agent-pr-review", "agent", "review", "pr"],
     headings: ["What you see", "What the review checks", "Re-running a review", "When the review says \"fix first\"", "Spend-down and its safety stop", "Cost and keys", "For operators"],
-    excerpt: "In Mushi Mushi, Claude Opus 5.5 reviews every fix pull request a coding agent opens, and a \"hold\" stops Mushi from merging it until you choose to.",
+    excerpt: "A second AI reviews every fix pull request a coding agent opens, and a \"hold\" stops Mushi Mushi from merging it until you choose to.",
   },
   {
     title: "Anti-gaming & reputation",
@@ -817,13 +817,13 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "How Mushi Mushi is built. A Hono gateway in front of Supabase, the edge functions behind it, and the relational, vector and graph stores that hold each report.",
   },
   {
-    title: "Mushi Bounties: crowd-testing marketplace",
+    title: "Mushi Mushi Bounties: crowd-testing marketplace",
     url: docUrl("/concepts/bounty-marketplace"),
     route: "/concepts/bounty-marketplace",
     markdown: "concepts/bounty-marketplace.md",
     keywords: ["concepts", "bounty-marketplace", "bounty", "marketplace", "bounties", "crowd-testing"],
     headings: ["How it works", "Publish your app", "Testers find your app", "Testers submit bugs", "You review and grade", "Testers redeem", "Reward model and legal posture", "Anti-gaming and reputation"],
-    excerpt: "Mushi Bounties is the Mushi Mushi crowd-testing marketplace. Publish your app, and real testers file bug reports and earn points they can redeem for rewards.",
+    excerpt: "Mushi Mushi Bounties is a crowd-testing marketplace. Publish your app, and real testers file bug reports and earn points they can redeem for rewards.",
   },
   {
     title: "How Mushi Mushi reads a bug report",
@@ -912,7 +912,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/concepts/known-holes",
     markdown: "concepts/known-holes.md",
     keywords: ["concepts", "known-holes", "known", "holes", "dependencies"],
-    headings: ["What Mushi checks", "What becomes a report", "How bad is it", "The fix", "What leaves Mushi", "Where to see it", "Data sources"],
+    headings: ["What Mushi Mushi checks [#what-mushi-checks]", "What becomes a report", "How bad is it", "The fix", "What leaves Mushi Mushi [#what-leaves-mushi]", "Where to see it", "Data sources"],
     excerpt: "Mushi Mushi checks the exact versions in your lockfiles and runtime pins against published advisories, and files each fixable hole as a bug with the upgrade.",
   },
   {
@@ -966,7 +966,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/concepts/shared-login",
     markdown: "concepts/shared-login.md",
     keywords: ["concepts", "shared-login", "shared", "login", "one", "purchase", "across", "apps"],
-    headings: ["Signing in once", "What Mushi checks", "Keeping a purchase in every app", "Sending users between your apps", "Comparing apps"],
+    headings: ["Signing in once", "What Mushi Mushi checks [#what-mushi-checks]", "Keeping a purchase in every app", "Sending users between your apps", "Comparing apps"],
     excerpt: "How to let people sign in once and keep what they bought across several of your apps, and what Mushi Mushi checks so it keeps working.",
   },
   {
@@ -1038,7 +1038,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/legal/privacy",
     markdown: "legal/privacy.md",
     keywords: ["legal", "privacy", "policy"],
-    headings: ["1. Who is responsible", "2. What data we handle, in one table", "3. Data where Mushi is the controller", "4. Data where Mushi is the processor", "5. Sub-processors", "6. International transfers and residency", "7. Retention", "8. Your rights and how to use them"],
+    headings: ["1. Who is responsible", "2. What data we handle, in one table", "3. Data where Mushi Mushi is the controller…", "4. Data where Mushi Mushi is the processor [#4-data-where-mushi-is-the…", "5. Sub-processors", "6. International transfers and residency", "7. Retention", "8. Your rights and how to use them"],
     excerpt: "What Mushi Mushi collects, why, who processes it, how long it is kept, and how to exercise your rights under GDPR and Japan's APPI.",
   },
   {
@@ -1066,7 +1066,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "migrations/bugherd-to-mushi.md",
     keywords: ["migrations", "bugherd-to-mushi", "bugherd"],
     headings: ["Why switch", "API mapping", "Before / After", "Migration checklist", "Feature parity", "References"],
-    excerpt: "Move from BugHerd to Mushi Mushi. Map pin-to-element feedback to Mushi's element picker, screenshot markup and metadata capture, with an interactive checklist.",
+    excerpt: "Move from BugHerd to Mushi Mushi. Map pin-to-element feedback to its element picker, screenshot markup and metadata capture, with an interactive checklist.",
   },
   {
     title: "Migration: Capacitor → React Native",
@@ -1299,7 +1299,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/plugins/discord",
     markdown: "plugins/discord.md",
     keywords: ["plugins", "discord"],
-    headings: ["Setup (Mushi Cloud, no code)", "Self-hosted plugin"],
+    headings: ["Setup (Mushi Mushi Cloud, no code) [#setup-mushi-cloud-no-code]", "Self-hosted plugin"],
     excerpt: "Post Mushi Mushi report and fix events to a Discord channel. Paste a channel webhook on the Integrations page, or run the self-hosted Discord plugin.",
   },
   {
@@ -1317,7 +1317,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/plugins/github-issues",
     markdown: "plugins/github-issues.md",
     keywords: ["plugins", "github-issues", "github", "issues"],
-    headings: ["Setup (Mushi Cloud, no code)", "Self-hosted plugin"],
+    headings: ["Setup (Mushi Mushi Cloud, no code) [#setup-mushi-cloud-no-code]", "Self-hosted plugin"],
     excerpt: "Open a GitHub issue for every triaged Mushi Mushi report and close it when the fix lands. Set it up on the Integrations page, or self-host the plugin.",
   },
   {
@@ -1326,7 +1326,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/plugins/jira",
     markdown: "plugins/jira.md",
     keywords: ["plugins", "jira", "cloud"],
-    headings: ["Setup (Mushi Cloud, no code)", "Self-hosted plugin"],
+    headings: ["Setup (Mushi Mushi Cloud, no code) [#setup-mushi-cloud-no-code]", "Self-hosted plugin"],
     excerpt: "Open Jira Cloud issues from Mushi Mushi bug reports and keep their status in step. Set it up on the Integrations page, or self-host the Jira plugin.",
   },
   {
@@ -1344,7 +1344,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/plugins/msteams",
     markdown: "plugins/msteams.md",
     keywords: ["plugins", "msteams", "microsoft", "teams"],
-    headings: ["Setup (Mushi Cloud, no code)", "Self-hosted plugin"],
+    headings: ["Setup (Mushi Mushi Cloud, no code) [#setup-mushi-cloud-no-code]", "Self-hosted plugin"],
     excerpt: "Send cards to a Microsoft Teams channel when Mushi Mushi triages a report or a fix lands. Paste a Workflows webhook in Integrations, or self-host the plugin.",
   },
   {
@@ -1488,7 +1488,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart/lovable-mcp",
     markdown: "quickstart/lovable-mcp.md",
     keywords: ["quickstart", "lovable-mcp", "lovable", "mcp", "ask", "broke"],
-    headings: ["Add Mushi to Lovable", "Open the custom MCP form", "Fill in the form", "Sign in and approve", "Ask Lovable", "Claude Code: one paste", "Cursor: one click", "Bolt"],
+    headings: ["Add Mushi Mushi to Lovable [#add-mushi-to-lovable]", "Open the custom MCP form", "Fill in the form", "Sign in and approve", "Ask Lovable", "Claude Code: one paste", "Cursor: one click", "Bolt"],
     excerpt: "Add Mushi Mushi to Lovable as an MCP connector in three steps; Lovable reads the plain-English diagnosis and fixes the bug. Claude Code and Cursor in one paste.",
   },
   {
@@ -1497,7 +1497,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart/mcp",
     markdown: "quickstart/mcp.md",
     keywords: ["quickstart", "mcp", "server", "bug", "fixing", "cursor", "claude", "code"],
-    headings: ["Connect in three steps", "Add the Mushi server", "Sign in", "Ask your editor", "How sign-in works (OAuth, no keys to copy)", "One-liner setup (recommended)", "Claude Code plugin", "Smithery (hosted MCP)"],
+    headings: ["Connect in three steps", "Add the Mushi Mushi server [#add-the-mushi-server]", "Sign in", "Ask your editor", "How sign-in works (OAuth, no keys to copy)", "One-liner setup (recommended)", "Claude Code plugin", "Smithery (hosted MCP)"],
     excerpt: "Set up the Mushi Mushi MCP server with npx mushi-mushi setup. Read bug reports, get fix context, and dispatch fixes from Cursor, Claude Code or any MCP client.",
   },
   {
@@ -1750,7 +1750,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "sdks/mcp-tools.md",
     keywords: ["sdks", "mcp-tools", "mcp", "tools", "reference"],
     headings: ["Read tools (mcp:read)", "Write tools (mcp:write)", "Resources", "Prompts"],
-    excerpt: "Every tool, resource and prompt the Mushi MCP server exposes to Cursor, Claude Code and other editors, with its read or write scope, from the catalog.",
+    excerpt: "Every tool, resource and prompt the Mushi Mushi MCP server exposes to Cursor, Claude Code and other editors, with its read or write scope, from the catalog.",
   },
   {
     title: "Next.js App Router + CSP",
@@ -1822,7 +1822,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "sdks/sentry-replay-coexistence.md",
     keywords: ["sdks", "sentry-replay-coexistence", "sentry", "replay", "coexistence"],
     headings: [],
-    excerpt: "Run Mushi Mushi next to Sentry Session Replay. Initialise Sentry first so Mushi attaches the Sentry event and replay IDs to every bug report it sends.",
+    excerpt: "Run Mushi Mushi next to Sentry Session Replay. Initialise Sentry first so Mushi Mushi attaches the Sentry event and replay IDs to every bug report it sends.",
   },
   {
     title: "Agent skills",
@@ -1830,7 +1830,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/skills",
     markdown: "sdks/skills.md",
     keywords: ["sdks", "skills", "agent"],
-    headings: ["Install skills into your editor", "How skills connect to Mushi", "Console & MCP", "Related"],
+    headings: ["Install skills into your editor", "How skills connect to Mushi Mushi [#how-skills-connect-to-mushi]", "Console & MCP", "Related"],
     excerpt: "Install Mushi Mushi agent playbooks into Cursor and Claude Code, sync them into the console catalog, and attach skill chains to bug reports.",
   },
   {
@@ -1894,7 +1894,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "security/byo-storage.md",
     keywords: ["security", "byo-storage", "byo", "storage"],
     headings: ["Supported backends", "Setup", "What moves (and what doesn't)", "Health check", "Permissions required"],
-    excerpt: "Keep Mushi Mushi screenshots and crash dumps in your own storage bucket instead of Mushi's, with credentials in Vault and signed URLs.",
+    excerpt: "Keep Mushi Mushi screenshots and crash dumps in your own storage bucket instead of Mushi Mushi's, with credentials in Vault and signed URLs.",
   },
   {
     title: "Bring-your-own-key",

@@ -65,7 +65,7 @@ export function PublicDiagramClient() {
         {state.kind === 'not-found' && (
           <Message
             title={`${state.owner}/${state.repo}`}
-            body="This repo has no public diagram. Its owner can publish one from the Mushi console."
+            body="This repo has no public diagram. Its owner can publish one from the Mushi Mushi console."
           />
         )}
         {state.kind === 'error' && <Message title="Could not load the diagram" body="Try again in a minute." />}
@@ -255,7 +255,7 @@ function DiagramView({
 
       <footer className="space-y-2 border-t border-mushi-rule pt-4 text-sm text-mushi-ink-muted">
         <p>
-          Made with Mushi: when something in your app breaks, Mushi Mushi tells you why in plain English, with the fix ready
+          Made with Mushi Mushi: when something in your app breaks, Mushi Mushi tells you why in plain English, with the fix ready
           to go.
         </p>
         <SignupLink href={diagramSignupHref(diagram.owner, diagram.repo)} />

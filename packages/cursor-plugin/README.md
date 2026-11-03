@@ -26,11 +26,11 @@ npx mushi-mushi setup --ide cursor
 ```
 
 It adds the hosted `mushi` server to `.cursor/mcp.json`. No key is written to
-the file: Cursor opens a browser sign-in the first time the agent calls Mushi,
+the file: Cursor opens a browser sign-in the first time the agent calls Mushi Mushi,
 and the sign-in page shows what access Cursor asked for and which projects it
 can reach.
 
-**One click:** in the Mushi console, open **MCP** (or the **Connect** page) and
+**One click:** in the Mushi Mushi console, open **MCP** (or the **Connect** page) and
 click **Add to Cursor**. Cursor's "Install MCP server?" dialog opens; confirm
 it. There is a VS Code button on the same page.
 
@@ -69,7 +69,7 @@ Some of the tools the plugin uses (the server has many more; see the
 
 | Tool | What it does |
 |------|-------------|
-| `list_projects` | The Mushi projects your sign-in or key can reach |
+| `list_projects` | The Mushi Mushi projects your sign-in or key can reach |
 | `get_project_context` | Project health: SDK heartbeat, intake, auto-fix readiness |
 | `get_recent_reports` | The open bug queue |
 | `get_report_evidence` | Screenshot, console logs, network requests, the user's comment |
@@ -102,7 +102,7 @@ or your shell profile.
 ## Mushi Mushi and Sentry
 
 Sentry is built around what the code threw, with a User Feedback widget and
-replay alongside. Mushi starts from what the user reported, ingests Sentry's
+replay alongside. Mushi Mushi starts from what the user reported, ingests Sentry's
 errors too, explains each one in plain English, and hands your agent a fix
 prompt to start from. One queue, with or without Sentry.
 

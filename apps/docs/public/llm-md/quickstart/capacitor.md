@@ -45,7 +45,7 @@ await Mushi.report({
 
   **Coming from Cordova?** Migrate in place to Capacitor first. The
   [Cordova → Capacitor migration guide](/migrations/cordova-to-capacitor)
-  walks through the plugin map and the Mushi widget swap.
+  walks through the plugin map and the Mushi Mushi widget swap.
 
   Considering React Native? See the
   [Capacitor → React Native migration guide](/migrations/capacitor-to-react-native)

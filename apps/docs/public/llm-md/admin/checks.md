@@ -28,12 +28,12 @@ An Upgrade pill means the check needs a higher plan. AI prompts and CI runners a
 
 ### App checks
 
-Is the app itself sound: scheduled tests, user stories, audits, its blueprint, design tokens and content, a first-time user test, plus Mushi’s own health.
+Is the app itself sound: scheduled tests, user stories, audits, its blueprint, design tokens and content, a first-time user test, plus Mushi Mushi’s own health.
 
 | Card | Route | What it covers |
 | --- | --- | --- |
 | [Scheduled tests](/admin/qa-coverage) | `/qa-coverage` | Browser tests of your user stories that run on a schedule and alert when one breaks. |
-| [Mushi health](/admin/health) | `/health` | Is Mushi itself working: its AI calls and background jobs. Also your code size, schema changes and unusual spikes. |
+| [Mushi Mushi health](/admin/health) | `/health` | Is Mushi Mushi itself working: its AI calls and background jobs. Also your code size, schema changes and unusual spikes. |
 | [CI runners](/admin/ci) | `/ci` | Where your tests run, how long they wait for a machine, and what slows your fixes down. |
 | [Full-stack audit](/admin/fullstack-audit) | `/fullstack-audit` | An end-to-end audit across the frontend, the API and the database. |
 | [User stories](/admin/inventory) | `/inventory` | The things users can do in your app, found by crawling it, and which ones broke. |

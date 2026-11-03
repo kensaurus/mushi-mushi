@@ -9,7 +9,7 @@ description: Deploy the Mushi Mushi Supabase Edge Functions for a self-hosted in
 
 # Edge Functions deploy
 
-Mushi ships Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count). For a working self-host you only need the **minimal ingest + classification** set below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. Include **`healthz`** for unauthenticated monitoring probes. The repo root guide [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md) remains the authoritative step-by-step.
+Mushi Mushi ships Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count). For a working self-host you only need the **minimal ingest + classification** set below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. Include **`healthz`** for unauthenticated monitoring probes. The repo root guide [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md) remains the authoritative step-by-step.
 
 ## Minimal required (ingest + classify)
 
@@ -98,7 +98,7 @@ For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `r
 | `telegram-webhook` | Telegram Bot API | Voice-note inbox: secret-token auth, `/start ` project binding, transcript + inline-keyboard confirmation |
 | `cursor-webhook` | Cursor Cloud Agent (v0 callback) | Receives `statusChange` callbacks, writes `fix_attempts.pr_url`, notifies |
 | `agent-status-poll` | cron (`5-55/5`) | Polls open Cursor / GitHub cloud-agent runs and closes them (PR URL, failure) |
-| `agent-pr-review` | cron (`3-53/10`) + re-run route | Reviews each fix PR with Claude Opus 5.5 on the project's Anthropic key; a merge verdict readies the draft (with no review possible, a fix-worker draft falls back to its own self-check), and a "hold" blocks merging from Mushi without an override |
+| `agent-pr-review` | cron (`3-53/10`) + re-run route | Reviews each fix PR with Claude Opus 5.5 on the project's Anthropic key; a merge verdict readies the draft (with no review possible, a fix-worker draft falls back to its own self-check), and a "hold" blocks merging from Mushi Mushi without an override |
 | `review-followup` | cron (`6-56/10`) | Sends "fix first" findings back to a cloud agent on the same PR (off by default) |
 | `fix-verifier` | cron (`4-54/10`) + verify route | Checks the merge gates for a PR's head; merges only when verified auto-merge is on |
 | `merge-queue` | cron (`1-56/5`) + queue route | "Merge when ready" and release trains |

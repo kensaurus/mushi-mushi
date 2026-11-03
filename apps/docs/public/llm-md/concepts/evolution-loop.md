@@ -9,9 +9,9 @@ description: The five Mushi Mushi stages that turn a user-felt bug into a merged
 
 # The evolution loop
 
-> *Sentry sees what code throws. Mushi sees what users feel — and closes the loop with AI.*
+> *Sentry sees what code throws. Mushi Mushi sees what users feel — and closes the loop with AI.*
 
-The evolution loop is the core mechanic behind Mushi. It runs as five Supabase edge functions and closes the gap between "user felt a bug" and "the codebase can't make the same mistake again."
+The evolution loop is the core mechanic behind Mushi Mushi. It runs as five Supabase edge functions and closes the gap between "user felt a bug" and "the codebase can't make the same mistake again."
 
 ---
 
@@ -58,7 +58,7 @@ User feels a bug (shakes phone)
 
 ### ① Capture
 
-The SDK widget (`@mushi-mushi/web`, `@mushi-mushi/react`, etc.) lives in the corner of your app. When a user shakes their phone or taps "Report a problem," Mushi captures:
+The SDK widget (`@mushi-mushi/web`, `@mushi-mushi/react`, etc.) lives in the corner of your app. When a user shakes their phone or taps "Report a problem," Mushi Mushi captures:
 
 - A screenshot of the exact screen they were looking at
 - Their description in their own words
@@ -91,7 +91,7 @@ This runs in under 2 seconds. The same vocabulary your team already uses for tri
 
 You merge, request changes, or close. The agent does the first pass; you keep the final decision.
 
-**BYOK:** the fix agent uses your Anthropic key when BYOK is configured. Your code snippets never travel to Mushi's LLM account.
+**BYOK:** the fix agent uses your Anthropic key when BYOK is configured. Your code snippets never travel to Mushi Mushi's LLM account.
 
 ### ④ Verify
 
@@ -108,7 +108,7 @@ Fixes that score below the threshold are flagged for human review. High-confiden
 - Which component is affected
 - The judge's confidence score
 
-The next time an AI agent (Cursor, Claude Code) touches a related area, Mushi injects the relevant lessons into the PR review context — so the same class of mistake cannot recur silently.
+The next time an AI agent (Cursor, Claude Code) touches a related area, Mushi Mushi injects the relevant lessons into the PR review context — so the same class of mistake cannot recur silently.
 
 ---
 
@@ -128,5 +128,5 @@ The whole loop from capture to lesson typically runs in under 90 seconds on a wa
 
 - [Closed-loop thesis](/concepts/closed-loop) — the evolutionary biology argument (Black Box Thinking, Antifragile, cumulative selection)
 - [Security: no-leakage claim](/security/no-leakage-claim) — BYOK, RLS, signed URLs, PII scrubbing
-- [Agent contract](/concepts/agent-contract) — what Mushi expects from Cursor/Claude agents and what it promises in return
+- [Agent contract](/concepts/agent-contract) — what Mushi Mushi expects from Cursor/Claude agents and what it promises in return
 - [Evolution-loop manifesto](https://github.com/kensaurus/mushi-mushi/blob/master/docs/EVOLUTION-LOOP.md) — the one-page thesis for engineers

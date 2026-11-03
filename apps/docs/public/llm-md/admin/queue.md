@@ -23,7 +23,7 @@ items, and recover from outages.
 
 ## What "dead-letter" means
 
-An item reaches `dead_letter` status after exhausting all automatic retries. Mushi
+An item reaches `dead_letter` status after exhausting all automatic retries. Mushi Mushi
 won't touch it again until you manually retry it. This is intentional — automatic
 infinite retries can amplify a misconfiguration into a cost spiral.
 
@@ -67,7 +67,7 @@ Counts per pipeline stage, shown as **Fast filter** (`stage1`), **Classify** (`s
 bottleneck. Example:
 
 - **Fast filter has 200 pending** → new reports are not being read. Check the LLM key and
-  recent AI calls in [Mushi health](/admin/health), and the prompt in [AI prompts](/admin/prompt-lab).
+  recent AI calls in [Mushi Mushi health](/admin/health), and the prompt in [AI prompts](/admin/prompt-lab).
 
 ---
 
@@ -116,7 +116,7 @@ Use **Recover stranded** only when reports have genuinely been stuck for more th
 ### Monitoring after a deploy
 1. After deploying, open the queue and set a 5-minute mental timer.
 2. If the **Pending** tile rises and doesn't fall: your classify function may be
-   failing. Check recent AI calls in [Mushi health](/admin/health).
+   failing. Check recent AI calls in [Mushi Mushi health](/admin/health).
 
 ---
 
@@ -136,6 +136,6 @@ POST /v1/admin/queue/recover
 
 ## Related pages
 
-- [Mushi health](/admin/health): LLM provider errors are a common cause of failed jobs
+- [Mushi Mushi health](/admin/health): LLM provider errors are a common cause of failed jobs
 - [Settings](/admin/settings): the AI keys the diagnosis stages use
 - [Audit log](/admin/audit) — cross-reference queue failures with admin actions

@@ -49,7 +49,7 @@ npx sv create                     # SvelteKit`} },
     { id: 'routes', label: 'Migrate routes one at a time', content: <>For each SPA route, create the equivalent file-based route in the new framework. Keep the SPA running for any route not yet ported (proxy or redirect).</> },
     { id: 'data', label: 'Move data fetching to the server', content: <>SWR / react-query calls inside SPA components → Server Component fetches (Next.js) / asyncData (Nuxt) / load functions (SvelteKit). The SDK doesn't care; this is purely a perf win.</> },
     { id: 'env-prefix', label: 'Rename env vars per the table above', content: <>Run npx mushi-mushi init in the new project — it detects the framework and writes correct env-var names automatically.</> },
-    { id: 'mushi-provider', label: 'Mount Mushi at the root of the new framework', content: {`// Next.js App Router — app/providers.tsx (CLIENT component)
+    { id: 'mushi-provider', label: 'Mount Mushi Mushi at the root of the new framework', content: {`// Next.js App Router — app/providers.tsx (CLIENT component)
 'use client'
 
   return {children}
@@ -76,17 +76,17 @@ export default defineNuxtPlugin((nuxtApp) => {
       apiKey: import.meta.env.VITE_MUSHI_API_KEY,
 
 `} },
-    { id: 'hydration', label: 'Verify no hydration warnings', content: <>Mushi renders its widget into a Shadow DOM mounted on document.body on the client side only. It does NOT cause hydration mismatches because the widget is never present in server-rendered HTML. If you see hydration warnings, they're from your code, not Mushi.</> },
-    { id: 'dynamic-import', label: 'For Nuxt/Next, use a .client suffix or "use client" for Mushi code', content: <>Mushi&apos;s provider and hooks ({``}, useMushi(), useMushiReport()) run in the browser. Mark them client-only (a .client plugin in Nuxt, 'use client' in Next.js) so SSR doesn&apos;t try to run them.</> },
+    { id: 'hydration', label: 'Verify no hydration warnings', content: <>Mushi Mushi renders its widget into a Shadow DOM mounted on document.body on the client side only. It does NOT cause hydration mismatches because the widget is never present in server-rendered HTML. If you see hydration warnings, they're from your code, not Mushi Mushi.</> },
+    { id: 'dynamic-import', label: 'For Nuxt/Next, use a .client suffix or "use client" for Mushi Mushi code', content: <>Mushi Mushi&apos;s provider and hooks ({``}, useMushi(), useMushiReport()) run in the browser. Mark them client-only (a .client plugin in Nuxt, 'use client' in Next.js) so SSR doesn&apos;t try to run them.</> },
     { id: 'sitemap', label: 'Confirm SSR routes are crawlable', content: <>Run a Lighthouse SEO audit on a few key pages. If TTFB is slower than the old SPA, you've probably introduced an unnecessary serverside fetch — profile and remove it.</> },
     { id: 'redirect', label: 'Redirect old SPA routes to the new ones (when all migrated)', content: <>Either at the CDN layer (Cloudflare / S3 redirects) or via the new framework's redirects config.</> },
-    { id: 'verify', label: 'Smoke-test Mushi from a server-rendered page', content: <>Open a page that's rendered by the SSR pipeline. Open the floating widget, submit a report, and confirm the report shows the SSR-rendered route.</> },
+    { id: 'verify', label: 'Smoke-test Mushi Mushi from a server-rendered page', content: <>Open a page that's rendered by the SSR pipeline. Open the floating widget, submit a report, and confirm the report shows the SSR-rendered route.</> },
 
 />
 
 ## Where the Mushi Mushi widget lives across SSR vs CSR
 
-The Mushi visual widget mounts client-side, in a Shadow DOM child of
+The Mushi Mushi visual widget mounts client-side, in a Shadow DOM child of
 `document.body`, after `Mushi.init()` runs. Because it doesn't render in
 the server-side HTML, you'll see:
 

@@ -8,7 +8,7 @@ screenshot, the route and recent console and network events, explains the
 cause in plain English, and hands your editor a fix to start from.
 
 Add `provideMushi(config)` to your app's providers once. It also sends
-uncaught errors to Mushi through Angular's `ErrorHandler`. It pulls in
+uncaught errors to Mushi Mushi through Angular's `ErrorHandler`. It pulls in
 `@mushi-mushi/web` for the widget, so do not call `Mushi.init()` separately.
 
 ```bash

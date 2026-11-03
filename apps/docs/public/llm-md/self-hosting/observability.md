@@ -40,7 +40,7 @@ Replace `LANGFUSE_BASE_URL` with your self-hosted Langfuse URL if needed.
 
 ### Viewing traces
 
-In Langfuse: **Traces**, then filter by the project ID in the trace metadata. The **Health** page in the Mushi admin console lists recent LLM calls from `llm_invocations`, each with its Langfuse trace ID.
+In Langfuse: **Traces**, then filter by the project ID in the trace metadata. The **Health** page in the Mushi Mushi admin console lists recent LLM calls from `llm_invocations`, each with its Langfuse trace ID.
 
 ## Sentry (error tracking)
 
@@ -69,11 +69,11 @@ When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, `classify-report` exports an OTLP spa
 npx supabase secrets set OTEL_EXPORTER_OTLP_ENDPOINT=https://your-collector/v1/traces
 ```
 
-Spans carry `report.id` and `project.id` attributes so you can join them back to Mushi data.
+Spans carry `report.id` and `project.id` attributes so you can join them back to Mushi Mushi data.
 
 ## Health dashboard
 
-After deploying, open **Mushi health** (`/health`) in the admin console. It shows
+After deploying, open **Mushi Mushi health** (`/health`) in the admin console. It shows
 the AI calls behind diagnoses and fixes (count, error rate, fallback rate,
 latency and cost) and the background jobs' last runs. Integration probes
 (Anthropic, OpenAI, Langfuse, Sentry, GitHub) are on the **Integrations** page.

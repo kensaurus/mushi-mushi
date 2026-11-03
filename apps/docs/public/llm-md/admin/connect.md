@@ -69,7 +69,7 @@ and shows a fused verdict:
 **One-click sync:** `POST /v1/admin/projects/:id/sync-ci-secrets` mints a
 scoped ingest key and writes each required var via sealed-box encryption.
 
-The Mushi GitHub App can read Actions secrets but not write them. Auto-write
+The Mushi Mushi GitHub App can read Actions secrets but not write them. Auto-write
 works when a fine-grained token with **Secrets: Read and write** is stored in
 the project's settings. Otherwise the card shows the `gh secret set` commands
 to run and the `env:` block to add to your CI workflow.
@@ -101,7 +101,7 @@ CLI equivalent: see [SDK reference → CLI](/sdks/cli) (`mushi upgrade` for loca
 ### Connect GitHub
 Press **Connect GitHub**, sign in to GitHub and pick your repository. The list
 shows only repositories you can open, with the one named like your app first.
-If the Mushi GitHub App is not on your account yet, GitHub asks you to install
+If the Mushi Mushi GitHub App is not on your account yet, GitHub asks you to install
 it first.
 
 ### Install SDK

@@ -2,7 +2,7 @@
 
 > **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
-The React Native and Expo SDK for [Mushi Mushi](https://www.npmjs.com/package/mushi-mushi). It adds a bug button and a report sheet to your iOS and Android app. When a user reports a problem, Mushi gets a screenshot, the screen, device details and recent console and network entries, explains the cause in plain English, and hands your editor a fix to start from.
+The React Native and Expo SDK for [Mushi Mushi](https://www.npmjs.com/package/mushi-mushi). It adds a bug button and a report sheet to your iOS and Android app. When a user reports a problem, Mushi Mushi gets a screenshot, the screen, device details and recent console and network entries, explains the cause in plain English, and hands your editor a fix to start from.
 
 ## Quick start
 
@@ -33,7 +33,7 @@ On a phone, the bugs people feel often never crash: a button that won't tap, a s
 
 ## Using Sentry too (optional)
 
-Mushi does not need Sentry. If you already run **Sentry** in your React Native app, keep it; the two do different jobs:
+Mushi Mushi does not need Sentry. If you already run **Sentry** in your React Native app, keep it; the two do different jobs:
 
 ```tsx
 import * as Sentry from '@sentry/react-native'
@@ -172,7 +172,7 @@ mushi.identify(user.id, { email: user.email, name: user.displayName, provider: '
 mushi.setUser({ id: user.id, email: user.email, name: user.displayName, provider: 'supabase' })
 ```
 
-Mushi stores only a SHA-256 hash of the email (the host app owns the raw PII) and shows the `name` as the reporter's display name.
+Mushi Mushi stores only a SHA-256 hash of the email (the host app owns the raw PII) and shows the `name` as the reporter's display name.
 
 ## Peer dependencies
 

@@ -112,6 +112,6 @@ The chips above the grid filter the stories: **All**, **Failing**, **Passing**,
 
 ## Related pages
 
-- [Mushi health](/admin/health) — verify Firecrawl / Browserbase keys
+- [Mushi Mushi health](/admin/health) — verify Firecrawl / Browserbase keys
 - [Improvement runs](/admin/iterate) — producer and judge iteration loop
 - [Fixes](/admin/fixes) — act on test failures

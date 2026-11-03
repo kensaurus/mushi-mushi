@@ -294,7 +294,7 @@ Mushi.init({
 ```
 
 **Why the `/#/` prefix?** Hash fragments are not part of the pathname.
-When a hash route is present Mushi stores `'/#' + hashPath` (the pathname is
+When a hash route is present Mushi Mushi stores `'/#' + hashPath` (the pathname is
 dropped); otherwise it stores the plain pathname. History-based routes
 (`/article/[slug]`) and hash routes (`/#/article/[slug]`) therefore stay
 distinct in the Inventory and can be monitored independently.
@@ -307,4 +307,4 @@ For slug-heavy apps (articles, profiles, products) this inflates the Inventory;
 route templates collapse them to a manageable list.
 
 **`mushi doctor --host-app`** detects hash-router usage in your source files and
-warns when `/#/` route templates are missing from your Mushi init call.
+warns when `/#/` route templates are missing from your Mushi Mushi init call.

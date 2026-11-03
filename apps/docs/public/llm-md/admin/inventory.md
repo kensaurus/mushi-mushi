@@ -111,7 +111,7 @@ tab lists their findings under the names in the first column:
 
 ## Watch your live site
 
-**Discovery → Watch your live site** asks Firecrawl to crawl your live site once a day, following your site's own links from the address you enter. Mushi files a bug report, before a user finds the problem, for each page that:
+**Discovery → Watch your live site** asks Firecrawl to crawl your live site once a day, following your site's own links from the address you enter. Mushi Mushi files a bug report, before a user finds the problem, for each page that:
 
 - returns a server error (5xx);
 - returns a 404 or another 4xx from a link on your own site (sign-in walls and rate limits don't count);
@@ -120,9 +120,9 @@ tab lists their findings under the names in the first column:
 
 Pages your `robots.txt` blocks, links that only differ by `?utm_…` parameters, and pages you removed are not reported.
 
-A page has to fail twice before it becomes a report. When a check finds a broken page, Mushi loads that page again, waits about 10 seconds for it to finish loading, and files only if it is still broken. A page caught mid-load (a loading screen, only a "Skip to content" link, a status line waiting on a request) is not a broken page. A server error or a page that won't load also files when two checks in a row see it. If your whole site is down, Mushi files one report within the hour. Two cases file at low severity: a page Firecrawl's checker keeps calling broken that Mushi can't load again to confirm (marked "unconfirmed"), and a server error that keeps coming back but loads fine each time Mushi looks again (3 times in 7 days, marked "intermittent"). These second loads use your app's own Firecrawl key: at most 6 per hourly read, shared across your apps, 1 credit each.
+A page has to fail twice before it becomes a report. When a check finds a broken page, Mushi Mushi loads that page again, waits about 10 seconds for it to finish loading, and files only if it is still broken. A page caught mid-load (a loading screen, only a "Skip to content" link, a status line waiting on a request) is not a broken page. A server error or a page that won't load also files when two checks in a row see it. If your whole site is down, Mushi Mushi files one report within the hour. Two cases file at low severity: a page Firecrawl's checker keeps calling broken that Mushi Mushi can't load again to confirm (marked "unconfirmed"), and a server error that keeps coming back but loads fine each time Mushi Mushi looks again (3 times in 7 days, marked "intermittent"). These second loads use your app's own Firecrawl key: at most 6 per hourly read, shared across your apps, 1 credit each.
 
-Each broken page files one report. When 5 or more pages break at once (the site is down, or a deploy broke a shared layout), they file one report that lists them all. While a page stays broken, Mushi doesn't file again. When it is no longer broken, it leaves the "Broken right now" list; its report stays as it is for you to close. If it breaks again later, it has to fail twice again before it files.
+Each broken page files one report. When 5 or more pages break at once (the site is down, or a deploy broke a shared layout), they file one report that lists them all. While a page stays broken, Mushi Mushi doesn't file again. When it is no longer broken, it leaves the "Broken right now" list; its report stays as it is for you to close. If it breaks again later, it has to fail twice again before it files.
 
 **Check now** runs a check straight away, and results show in 1 to 3 minutes. Each app can run 6 checks an hour this way; the daily check always runs.
 
@@ -132,7 +132,7 @@ The crawler sends `MushiSiteWatch` in its `User-Agent` header (`MushiSiteWatch/1
 
 ## Synthetic monitor
 
-Mushi re-walks the inventory's `expected_outcome` checks against your
+Mushi Mushi re-walks the inventory's `expected_outcome` checks against your
 staging URL every 15 minutes once you enable it. The monitor is
 **fail-closed by default**: write paths (POST / PUT / DELETE actions)
 are skipped unless you turn on **Allow mutations** for the project in
