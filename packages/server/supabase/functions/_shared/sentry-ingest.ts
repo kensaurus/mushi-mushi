@@ -144,6 +144,8 @@ export interface SentryIngestResult {
   /** `linked`: an import found the issue already linked to a report. */
   outcome: 'created' | 'deduped' | 'reopened' | 'resolved' | 'ignored' | 'linked';
   reportId?: string;
+  /** Why an issue was ignored, when the caller can act on it in Sentry. */
+  reason?: 'platform_outage';
 }
 
 /** Render `extra` as `key: value` lines for the report description, each
@@ -265,7 +267,7 @@ export async function ingestSentryError(
   // the auto-import poll are filtered.
   if (intake !== 'import' && isTransientInfraSentryError(event, issue)) {
     log.info('Sentry issue is a transient database outage — not filed', { sentryIssueId, intake });
-    return { outcome: 'ignored' };
+    return { outcome: 'ignored', reason: 'platform_outage' };
   }
 
   // ── Dedup / regression on the Sentry issue id ─────────────────────────────

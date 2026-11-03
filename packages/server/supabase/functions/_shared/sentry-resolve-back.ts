@@ -27,6 +27,7 @@ import {
   commentOnSentryIssue,
   getSentryIssue,
   resolveSentryIssue,
+  SentryApiError,
   type FetchLike,
 } from './sentry-api.ts';
 
@@ -149,7 +150,23 @@ export async function sentryShortIdsForReport(
 export interface SentryResolveBackResult {
   resolved: string[];
   failed: Array<{ issueId: string; error: string }>;
+  /** Issues Sentry answered 404 for (deleted or merged away): stamped, not retried. */
+  gone?: string[];
   skipped?: 'no_links' | 'no_credentials';
+}
+
+/** Options shared by the resolve and archive calls. */
+export interface SentryBackDeps {
+  credentials?: (db: SupabaseClient, projectId: string) => Promise<SentryCredentials | null>;
+  fetchImpl?: FetchLike;
+  /** Log failures as warnings: the 15-minute catch-up retries them, and an
+   *  error per retry would fill the Sentry quota with Mushi's own failures. */
+  quiet?: boolean;
+}
+
+/** Sentry no longer has the issue (deleted, or merged into another one). */
+function isGoneInSentry(err: unknown): boolean {
+  return err instanceof SentryApiError && err.status === 404;
 }
 
 async function recordFixEvent(
@@ -202,10 +219,7 @@ export async function resolveLinkedSentryIssues(
     /** Sentry comment for a hand-marked fix (who marked it and why). */
     note?: string;
   },
-  deps: {
-    credentials?: (db: SupabaseClient, projectId: string) => Promise<SentryCredentials | null>;
-    fetchImpl?: FetchLike;
-  } = {},
+  deps: SentryBackDeps = {},
 ): Promise<SentryResolveBackResult> {
   const { projectId, reportId, fixAttemptId, prUrl } = input;
   const how = prUrl ? `after ${prUrl} merged` : 'after the report was marked fixed in Mushi';
@@ -269,8 +283,15 @@ export async function resolveLinkedSentryIssues(
       });
       result.resolved.push(link.external_id);
     } catch (err) {
+      if (isGoneInSentry(err)) {
+        // Nothing left to resolve; stamp it so no caller retries it forever.
+        await db.from('report_external_issues').update({ resolved_at: new Date().toISOString(), archived_at: null }).eq('id', link.id);
+        log.warn('Sentry issue no longer exists; link closed', { projectId, reportId, issueId: link.external_id });
+        (result.gone ??= []).push(link.external_id);
+        continue;
+      }
       const message = String(err instanceof Error ? err.message : err).slice(0, 300);
-      log.error('Sentry resolve-back failed', { projectId, reportId, issueId: link.external_id, err: message });
+      (deps.quiet ? log.warn : log.error)('Sentry resolve-back failed', { projectId, reportId, issueId: link.external_id, err: message });
       await recordFixEvent(db, {
         fixAttemptId,
         projectId,
@@ -319,6 +340,8 @@ export function sentryCloseAction(closedReason: string | null | undefined): 'arc
 export interface SentryArchiveResult {
   archived: string[];
   failed: Array<{ issueId: string; error: string }>;
+  /** Issues Sentry answered 404 for: stamped archived, not retried. */
+  gone?: string[];
   skipped?: 'not_archivable' | 'no_links' | 'no_credentials';
 }
 
@@ -338,10 +361,7 @@ export async function archiveLinkedSentryIssues(
     /** A person pressed "Archive in Sentry": any close reason may archive. */
     byPerson?: boolean;
   },
-  deps: {
-    credentials?: (db: SupabaseClient, projectId: string) => Promise<SentryCredentials | null>;
-    fetchImpl?: FetchLike;
-  } = {},
+  deps: SentryBackDeps = {},
 ): Promise<SentryArchiveResult> {
   if (!input.byPerson && !sentryCloseAction(input.closedReason)) return { archived: [], failed: [], skipped: 'not_archivable' };
   const label = ARCHIVE_ON_CLOSE[input.closedReason] ?? input.closedReason.replace(/_/g, ' ');
@@ -369,8 +389,14 @@ export async function archiveLinkedSentryIssues(
         .eq('id', link.id);
       if (stampErr) log.error('Sentry issue archived but archived_at stamp failed', { linkId: link.id, err: stampErr.message });
     } catch (err) {
+      if (isGoneInSentry(err)) {
+        await db.from('report_external_issues').update({ archived_at: new Date().toISOString() }).eq('id', link.id);
+        log.warn('Sentry issue no longer exists; link closed', { projectId: input.projectId, reportId: input.reportId, issueId: link.external_id });
+        (result.gone ??= []).push(link.external_id);
+        continue;
+      }
       const message = String(err instanceof Error ? err.message : err).slice(0, 300);
-      log.error('Sentry archive failed', { projectId: input.projectId, reportId: input.reportId, issueId: link.external_id, err: message });
+      (deps.quiet ? log.warn : log.error)('Sentry archive failed', { projectId: input.projectId, reportId: input.reportId, issueId: link.external_id, err: message });
       result.failed.push({ issueId: link.external_id, error: message });
       continue;
     }
