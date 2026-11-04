@@ -42,7 +42,7 @@ At the foot of the page are links to [Editor agents](/admin/mcp), [Agent skills]
 |-------|-------------|
 | **Repo URL** | The repo Mushi Mushi opens fix PRs against (SSH URLs are normalized) |
 | **Default branch** | Base branch for fix PRs; `main` when blank |
-| **Installation token** | A GitHub App installation token (preferred) or a fine-grained PAT with Contents: write and Pull requests: write |
+| **Installation token** | A GitHub App installation token (preferred) or a fine-grained PAT with Contents: Read and write, Pull requests: Read and write, and Actions: Read and write |
 | **Webhook secret** | Optional HMAC secret; set the same value on the repo's webhook (events: Check runs, Check suites) |
 
 The **Codebase index** card shows the indexing status for the active project's repo:

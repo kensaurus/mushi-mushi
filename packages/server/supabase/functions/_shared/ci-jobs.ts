@@ -34,8 +34,9 @@ type Db = { from: (table: string) => any }
 const API = 'https://api.github.com'
 /**
  * fix_events.dedupe_key prefix of a CI re-run GitHub refused because the
- * token lacks Actions write (api/routes/ci.ts writes it; the /pipeline read
- * stops offering Re-run CI for that app until its settings change).
+ * token lacks Actions write (api/routes/ci.ts writes it, with a fingerprint
+ * of that token; the /pipeline read stops offering Re-run CI while the same
+ * token is in use).
  */
 export const RERUN_REFUSED_DEDUPE_PREFIX = 'ci_rerun_refused:'
 /** Runs read per PR head in the fix loop. */

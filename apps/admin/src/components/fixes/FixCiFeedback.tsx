@@ -72,6 +72,8 @@ export function FixCiFeedback({
   const [notice, setNotice] = useState<string | null>(null)
   const [queue, setQueue] = useState<CiQueuePosition | null>(null)
   const [failingChecks, setFailingChecks] = useState<string[]>([])
+  const [rerunWhy, setRerunWhy] = useState<string | null>(null)
+  const [writeMissing, setWriteMissing] = useState(false)
   const [repairing, setRepairing] = useState(false)
   const [confirmRepair, setConfirmRepair] = useState(false)
 
@@ -93,24 +95,30 @@ export function FixCiFeedback({
     }
   }, [waiting, projectId, prNumber, repo])
 
-  // Live failing-check names for a red head. The report page's chip is
-  // compact, so the names have to sit on the chip itself.
+  // Live failing-check names for a red head, and the server's reason Re-run
+  // would 403 (Actions write missing on the token still in use). The report
+  // page's chip is compact, so the names have to sit on the chip itself.
   useEffect(() => {
-    if (!ciRed) {
+    const showRerunNow = reading.canRerun || reading.infra || ciRed
+    if (!showRerunNow) {
       setFailingChecks([])
+      setRerunWhy(null)
       return
     }
     let cancelled = false
     void loadPipelineFix(fixId).then((view) => {
       if (cancelled) return
-      setFailingChecks(view?.item?.failingChecks ?? [])
+      setFailingChecks(ciRed ? view?.item?.failingChecks ?? [] : [])
+      setRerunWhy(view?.item?.blocked?.rerun_ci ?? null)
     }).catch(() => {
-      if (!cancelled) setFailingChecks([])
+      if (cancelled) return
+      setFailingChecks([])
+      setRerunWhy(null)
     })
     return () => {
       cancelled = true
     }
-  }, [ciRed, fixId, updatedAt])
+  }, [reading.canRerun, reading.infra, ciRed, fixId, updatedAt])
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -148,8 +156,10 @@ export function FixCiFeedback({
     setRerunning(false)
     if (!res.ok) {
       setError(rerunErrorText(res.error?.code, res.error?.message))
+      setWriteMissing(res.error?.code === 'GITHUB_ACTIONS_WRITE_MISSING')
       return
     }
+    setWriteMissing(false)
     setInfra(null)
     setConclusion(null)
     setStatus('queued')
@@ -220,8 +230,8 @@ export function FixCiFeedback({
             <button
               type="button"
               onClick={() => void handleRerun()}
-              disabled={rerunning || rerunBlocked}
-              title={rerunBlocked ? 'Tests are still waiting or running; re-run once they stop.' : undefined}
+              disabled={rerunning || rerunBlocked || !!rerunWhy}
+              title={rerunWhy ?? (rerunBlocked ? 'Tests are still waiting or running; re-run once they stop.' : undefined)}
               className="font-medium text-accent hover:underline disabled:opacity-50"
             >
               {rerunning ? 'Re-running tests…' : 'Re-run tests'}
@@ -269,8 +279,24 @@ export function FixCiFeedback({
         )}
       </div>
 
+      {rerunWhy && (
+        <p className="text-2xs text-fg-muted" data-testid="fix-ci-rerun-why">
+          Re-run tests is off: {rerunWhy}{' '}
+          <Link to="/integrations/config#platform-card-github">GitHub connection →</Link>
+        </p>
+      )}
       {notice && <p className="text-2xs text-fg-secondary" role="status">{notice}</p>}
-      {error && <p className="text-2xs text-danger" role="alert">{error}</p>}
+      {error && (
+        <p className="text-2xs text-danger" role="alert">
+          {error}
+          {writeMissing && (
+            <>
+              {' '}
+              <Link to="/integrations/config#platform-card-github">GitHub connection →</Link>
+            </>
+          )}
+        </p>
+      )}
       {confirmRepair && (
         <PipelineActionDialog
           pending={{ action: 'ci_repair', fixIds: [fixId], target: prNumber ? `PR #${prNumber}` : 'this pull request' }}

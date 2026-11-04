@@ -28,6 +28,7 @@ const state = vi.hoisted(() => ({
   followupsOn: false,
   finalized: [] as string[],
   failingNames: null as Set<string> | null,
+  rerunAccess: null as null | { blocks: boolean; fingerprint: string | null; unreadable: boolean },
 }))
 
 const fakeLog = vi.hoisted(() => {
@@ -139,6 +140,11 @@ function setup() {
     },
     now: () => NOW,
     failingCheckNames: async () => state.failingNames,
+    rerunAccess: async (_db: unknown, ids: string[]) => {
+      const map = new Map<string, { blocks: boolean; fingerprint: string | null; unreadable: boolean }>()
+      if (state.rerunAccess) for (const id of ids) map.set(id, state.rerunAccess)
+      return map
+    },
   }
   const db: FakeDb = makeFakeDb({
     projects: [
@@ -195,6 +201,7 @@ function setup() {
   state.enqueue = { queued: false, reason: 'followups_off' }
   state.followupsOn = false
   state.failingNames = null
+  state.rerunAccess = null
   const app = new FakeApp()
   routes.registerPipelineRoutes(app as never, deps as never)
   return { app, db, calls }
@@ -455,19 +462,37 @@ describe('what /pipeline offers is what the action routes do', () => {
     )
   })
 
-  it('Re-run CI is blocked for an app whose token GitHub refused, until its settings change', async () => {
-    const read = async (settingsAt: string) => {
+  it('Re-run CI stays off for the token GitHub refused, and a settings save does not turn it back on (69fcafcb)', async () => {
+    const REASON = /^The GitHub token cannot re-run workflows: give it Actions: Read and write/
+    const read = async (opts: { at?: string; fingerprint?: string | null; access?: { blocks: boolean; fingerprint: string | null; unreadable: boolean } | null }) => {
       const { app, db } = setup()
-      db.table('fix_events').push({ fix_attempt_id: F1, project_id: P1, kind: 'ci_started', status: 'fail', at: '2026-10-26T10:00:00Z', label: 'Re-run refused', dedupe_key: `ci_rerun_refused:${F1}:2026-10-26T10:00:00Z` })
-      db.table('project_settings').find((r) => r.project_id === P1)!.updated_at = settingsAt
+      if (opts.at) {
+        db.table('fix_events').push({
+          fix_attempt_id: F1,
+          project_id: P1,
+          kind: 'ci_started',
+          status: 'fail',
+          at: opts.at,
+          label: 'Re-run refused',
+          dedupe_key: `ci_rerun_refused:${F1}:${opts.at}`,
+          payload: opts.fingerprint ? { rerunRefused: 'actions_write', tokenFingerprint: opts.fingerprint } : { rerunRefused: 'actions_write' },
+        })
+      }
+      // Saved after the refusal. An unrelated settings write is not a new token.
+      db.table('project_settings').find((r) => r.project_id === P1)!.updated_at = '2026-10-26T11:00:00Z'
+      state.rerunAccess = opts.access ?? null
       state.query = { projectId: P1 }
       const res = await app.call('GET', '/v1/admin/pipeline')
       const ci = (res.body.data as { stages: Array<{ id: string; groups: Group[] }> }).stages.find((s) => s.id === 'ci')!
       return ci.groups.find((g) => g.id === 'ci_red_queued')!.items[0].blocked.rerun_ci
     }
-    expect(await read('2026-10-01T00:00:00Z')).toMatch(/^The GitHub token cannot re-run workflows: give it Actions: Read and write/)
-    // A settings save after the refusal (a new token) offers it again.
-    expect(await read('2026-10-26T11:00:00Z')).toBeUndefined()
+    const fp = 'pat:' + 'ab'.repeat(16)
+    expect(await read({ at: '2026-10-26T10:00:00Z' })).toMatch(REASON)
+    expect(await read({ at: '2026-10-01T00:00:00Z' })).toBeUndefined()
+    expect(await read({ at: '2026-09-01T00:00:00Z', fingerprint: fp, access: { blocks: false, fingerprint: fp, unreadable: false } })).toMatch(REASON)
+    expect(await read({ at: '2026-10-26T10:00:00Z', fingerprint: fp, access: { blocks: false, fingerprint: 'pat:' + 'cd'.repeat(16), unreadable: false } })).toBeUndefined()
+    expect(await read({ at: '2026-10-26T10:00:00Z', access: { blocks: false, fingerprint: fp, unreadable: false } })).toBeUndefined()
+    expect(await read({ access: { blocks: true, fingerprint: 'app:42:read', unreadable: false } })).toMatch(REASON)
   })
 })
 

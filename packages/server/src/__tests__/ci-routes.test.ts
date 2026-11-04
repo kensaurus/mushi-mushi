@@ -20,6 +20,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { vi } from 'vitest'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
 import { hashApiKey, mintProjectApiKey } from '../../supabase/functions/_shared/api-key-mint.ts'
+import { patRerunFingerprint } from '../../supabase/functions/_shared/ci-rerun-permission.ts'
 
 const fakeLog = vi.hoisted(() => {
   const logger: Record<string, unknown> = {}
@@ -97,6 +98,7 @@ interface Setup {
   github: Record<string, { status: number; body: unknown }>
   audits: unknown[][]
   orgAudits: unknown[]
+  installationAccess: { current: { permissions: Record<string, string> | null } | null }
 }
 
 type DbOpts = Pick<NonNullable<Parameters<typeof makeFakeDb>[1]>, 'failRead' | 'rpcError'> & { rpc?: (fn: string, args: Record<string, unknown>) => unknown }
@@ -131,6 +133,7 @@ function setup(seed: Record<string, Array<Record<string, unknown>>> = {}, dbOpts
   const github: Setup['github'] = {}
   const audits: unknown[][] = []
   const orgAudits: unknown[] = []
+  const installationAccess: Setup['installationAccess'] = { current: null }
   const fetchImpl = async (url: string, init: RequestInit) => {
     calls.push(`${init.method ?? 'GET'} ${url}`)
     const hit = Object.entries(github).find(([k]) => url.includes(k))
@@ -150,6 +153,7 @@ function setup(seed: Record<string, Array<Record<string, unknown>>> = {}, dbOpts
     callerCanAccessProject: async () => ({ allowed: role.value != null, role: role.value }) as never,
     collector: { resolveToken: async () => 'ghp_test', now: () => clock },
     resolveAttemptToken: async () => 'ghp_test',
+    readInstallationAccess: async () => installationAccess.current,
     fetchPullRequest: (async () => ({ number: 152, draft: false, state: 'open', merged: false, headSha: 'head1' })) as never,
     mintKey: mintProjectApiKey,
     logAudit: (async (...args: unknown[]) => { audits.push(args) }) as never,
@@ -157,7 +161,7 @@ function setup(seed: Record<string, Array<Record<string, unknown>>> = {}, dbOpts
     fetchImpl,
     now: () => clock,
   })
-  return Object.assign({ db, app, calls, rate, role, github, audits, orgAudits }, { tick: (ms: number) => { clock = new Date(clock.getTime() + ms) } })
+  return Object.assign({ db, app, calls, rate, role, github, audits, orgAudits, installationAccess }, { tick: (ms: number) => { clock = new Date(clock.getTime() + ms) } })
 }
 
 const heartbeat = (over: Record<string, unknown> = {}) => ({
@@ -289,8 +293,31 @@ describe('POST /v1/admin/fixes/:id/ci/rerun', () => {
     expect(res.body.error?.code).toBe('GITHUB_ACTIONS_WRITE_MISSING')
     const events = s.db.table('fix_events')
     expect(events).toHaveLength(1)
-    expect(events[0]).toMatchObject({ fix_attempt_id: FIX, project_id: P1, kind: 'ci_started', status: 'fail', payload: { rerunRefused: 'actions_write' } })
+    expect(events[0]).toMatchObject({
+      fix_attempt_id: FIX,
+      project_id: P1,
+      kind: 'ci_started',
+      status: 'fail',
+      payload: { rerunRefused: 'actions_write', tokenFingerprint: await patRerunFingerprint('ghp_test') },
+    })
+    expect(JSON.stringify(events[0])).not.toContain('ghp_test')
     expect(String(events[0].dedupe_key)).toMatch(/^ci_rerun_refused:/)
+  })
+
+  it('refuses before calling GitHub when the App installation has Actions: read (69fcafcb)', async () => {
+    const s = setup({
+      fix_attempts: [fix],
+      project_repos: [{ project_id: P1, repo_url: 'https://github.com/kensaurus/glot.it', github_app_installation_id: 4242 }],
+    })
+    s.installationAccess.current = { permissions: { actions: 'read', contents: 'write', pull_requests: 'write' } }
+    s.rate.allowed = false
+    const res = await rerun(s)
+    expect(res.status).toBe(403)
+    expect(res.body.error?.code).toBe('GITHUB_ACTIONS_WRITE_MISSING')
+    expect(s.calls).toEqual([])
+    expect(s.db.table('fix_events')[0]).toMatchObject({
+      payload: { rerunRefused: 'actions_write', tokenFingerprint: 'app:4242:read' },
+    })
   })
 })
 

@@ -307,7 +307,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     fields: [
       { name: 'github_repo_url', label: 'Repo URL', placeholder: 'e.g. https://github.com/owner/repo', type: 'url', help: 'Full HTTPS URL to the repo Mushi should patch. SSH URLs are normalized server-side.', required: true, helpId: 'integrations.github.repo_url', validator: 'githubRepoUrl' },
       { name: 'github_default_branch', label: 'Default branch', placeholder: 'main', help: 'Defaults to "main" if blank. Change for repos that branch from "master" or "develop".', helpId: 'integrations.github.default_branch' },
-      { name: 'github_installation_token_ref', label: 'Installation token', placeholder: 'ghs_… or ghp_…', type: 'password', help: 'GitHub App installation token (preferred) or fine-grained PAT. Needs Contents:write + Pull requests:write.', required: true, helpId: 'integrations.github.installation_token', validator: 'token' },
+      { name: 'github_installation_token_ref', label: 'Installation token', placeholder: 'ghs_… or ghp_…', type: 'password', help: 'GitHub App installation token (preferred) or fine-grained PAT. Needs Contents: Read and write, Pull requests: Read and write, and Actions: Read and write so Mushi can re-run failed CI.', required: true, helpId: 'integrations.github.installation_token', validator: 'token' },
       { name: 'github_webhook_secret', label: 'Webhook secret', placeholder: 'Optional: a long random value', type: 'password', help: 'HMAC secret. Set the same value in GitHub repo Settings → Webhooks (events: Check runs, Check suites).', helpId: 'integrations.github.webhook_secret', validator: 'token' },
     ],
   },
