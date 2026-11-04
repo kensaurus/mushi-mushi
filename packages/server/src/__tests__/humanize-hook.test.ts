@@ -50,4 +50,24 @@ describe('humanizeFixError pre-push advice', () => {
       "Your repo's own checks failed at push.",
     )
   })
+
+  it('does not advise fixing local checks when a passing hook is followed by a remote rejection', () => {
+    const passedThenRemote = [
+      'git push failed: 🥊 lefthook v1.7.11  hook: pre-push',
+      '┃  test (1.20 seconds)',
+      '! [remote rejected] bugfix/saved -> bugfix/saved (protected branch hook declined)',
+      'error: failed to push some refs to github.com:o/r.git',
+    ].join('\n')
+    const remote = humanizeFixError(passedThenRemote)
+    expect(remote?.title).not.toBe("Your repo's own checks failed at push.")
+    expect(remote?.hint).not.toContain('Fix the failing check')
+    expect(remote?.hint).not.toContain('Failed checks:')
+
+    const passedThenBehind = humanizeFixError([
+      'git push failed: lefthook v1.7.11  hook: pre-push',
+      '┃  lint (0.40 seconds)',
+      'error: failed to push some refs to github.com:o/r.git',
+    ].join('\n'))
+    expect(passedThenBehind?.title).not.toBe("Your repo's own checks failed at push.")
+  })
 })

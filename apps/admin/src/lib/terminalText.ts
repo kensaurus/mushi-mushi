@@ -20,7 +20,12 @@ export interface PushHookAdvice {
   command: string | null
 }
 
-const HOOK_MARK = /hook steps failed:|pre-push hook|\blefthook\b|husky - pre-push|🥊/
+/**
+ * The local hook actually failed. A passing lefthook banner (the word
+ * "lefthook", or "hook: pre-push") is not this. `🥊` is lefthook's failed
+ * step; git says `pre-push hook declined`; husky prints `husky - pre-push`.
+ */
+const HOOK_FAILED = /hook steps failed:|pre-push hook|husky - pre-push|🥊/i
 /** The push itself failed. A lefthook mention in some other error is not this. */
 const PUSH_FAILED = /\bgit push failed\b|\bfailed to push some refs\b/i
 /**
@@ -50,7 +55,9 @@ export function stripTerminalCodes(text: string): string {
 export function gitRemoteRejection(text: string): boolean {
   return text.split(/\n|\s\/\s/).some((chunk) => {
     const s = chunk.trim()
-    if (/\[[rR]ejected\]|\bnon-fast-forward\b/.test(s)) return true
+    // `[rejected]` is non-fast-forward. `[remote rejected]` is the remote
+    // (a protected branch, a pre-receive hook) after local hooks passed.
+    if (/\[(?:remote\s+)?rejected\]/i.test(s) || /\bnon-fast-forward\b/.test(s)) return true
     if (/(?:^|\s)(?:remote:|fatal:).*(?:Authentication failed|Permission denied)/i.test(s)) return true
     return false
   })
@@ -63,9 +70,12 @@ export function gitRemoteRejection(text: string): boolean {
  */
 export function isPushHookFailure(text: string): boolean {
   const plain = stripTerminalCodes(text)
-  if (!PUSH_FAILED.test(plain) || !HOOK_MARK.test(plain)) return false
-  if (/hook steps failed:/i.test(plain)) return true
-  return !gitRemoteRejection(plain)
+  if (!PUSH_FAILED.test(plain)) return false
+  // A passing hook's log plus Git's `[remote rejected]` is the remote, not
+  // a local check. An explicit `hook steps failed:` summary still wins:
+  // that line is the local hook, even if a check printed those words.
+  if (gitRemoteRejection(plain) && !/hook steps failed:/i.test(plain)) return false
+  return HOOK_FAILED.test(plain)
 }
 
 /** Names lefthook printed as failed steps (`hook steps failed: test.unit, knip` or `🥊 test`). */

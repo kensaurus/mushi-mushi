@@ -30,8 +30,36 @@ import { MushiCliError } from '../errors.js'
 import type { WhoamiData } from '../cli-types.js'
 import { interruptedBy, onInterrupt } from '../signals.js'
 
-/** @internal Exported for tests only. The fix_attempts.agent value for a fix made outside Mushi's cloud agents (as submit_fix_result). */
+/**
+ * @internal Exported for tests only. The fix_attempts.agent value for a fix
+ * made outside Mushi's cloud agents (as submit_fix_result). The reaper and
+ * local follow-ups key on this word. It is not the Cursor model: that is
+ * `llm_model` (`localCursorModel`).
+ */
 export const WORK_AGENT_KIND = 'mcp'
+
+/**
+ * @internal Exported for tests only. The Cursor model a local run actually
+ * used (`cursor-agent --model`, or the lane's model). `mcp` is the attempt
+ * kind, never a model. Empty when the CLI left the model to the account default.
+ */
+export function localCursorModel(model: string | null | undefined): string | null {
+  const slug = (model ?? '').replace(/[\r\n\u0000]/g, '').trim()
+  if (!slug || slug.toLowerCase() === WORK_AGENT_KIND || slug.length > 200) return null
+  return slug
+}
+
+/** @internal Exported for tests only. POST /v1/admin/fixes body for one local Cursor run. */
+export function localAttemptCreateBody(reportId: string, model?: string | null): Record<string, unknown> {
+  const llm = localCursorModel(model)
+  return { reportId, agent: WORK_AGENT_KIND, ...(llm ? { llm_model: llm } : {}) }
+}
+
+/** @internal Exported for tests only. Adds the Cursor model to a fix PATCH when one was chosen. */
+export function withLocalCursorModel(payload: Record<string, unknown>, model?: string | null): Record<string, unknown> {
+  const llm = localCursorModel(model)
+  return llm ? { ...payload, llm_model: llm } : payload
+}
 const WORK_AGENT_TIMEOUT_MS = 30 * 60_000
 const PROMPT_MAX_CHARS = 40_000
 const SEVERITY_WEIGHT: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 }
@@ -757,10 +785,11 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
   let commitSha: string | null = null
   // The fix row is closed exactly once: by the run's own outcome, or by a stop.
   let closed = false
+  const recordedModel = localCursorModel(o.model)
   const close = async (payload: Record<string, unknown>): Promise<void> => {
     if (!fixId || closed) return
     closed = true
-    await api(`/v1/admin/fixes/${fixId}`, { method: 'PATCH', body: JSON.stringify(payload) })
+    await api(`/v1/admin/fixes/${fixId}`, { method: 'PATCH', body: JSON.stringify(withLocalCursorModel(payload, recordedModel)) })
   }
   const unregister = onInterrupt(async (signal) => {
     stopChildren()
@@ -787,12 +816,12 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
     const created = await api<{ fixId: string }>('/v1/admin/fixes', {
       method: 'POST',
       headers: { 'Idempotency-Key': stableKey(detail.id, branch, new Date().toISOString()) },
-      body: JSON.stringify({ reportId: detail.id, agent: WORK_AGENT_KIND }),
+      body: JSON.stringify(localAttemptCreateBody(detail.id, recordedModel)),
     })
     fixId = created.fixId
     // The row reads as in flight already while 'pending'; 'running' says the
     // agent started and lets the reaper close it if this process dies.
-    await api(`/v1/admin/fixes/${fixId}`, { method: 'PATCH', body: JSON.stringify(runningPayload(branch)) }).catch((err: unknown) =>
+    await api(`/v1/admin/fixes/${fixId}`, { method: 'PATCH', body: JSON.stringify(withLocalCursorModel(runningPayload(branch), recordedModel)) }).catch((err: unknown) =>
       o.log(`  fix ${fixId}: not marked running (${err instanceof Error ? err.message : String(err)})`),
     )
 
@@ -875,7 +904,7 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
     const failureKind = hookStop ? 'code' : classifyFailure(reason, stage)
     keep = true
     const payload = hookStop && savedSha
-      ? failedPushPayload({ branch, commitSha: savedSha, checkout: wt, reason })
+      ? failedPushPayload({ branch, commitSha: savedSha, checkout: wt, reason, model: recordedModel })
       : { status: 'failed', branch, error: `${failureKind === 'infra' ? WORK_INFRA_PREFIX : 'mushi work:'} ${reason}`.slice(0, 1000), completed_at: new Date().toISOString() }
     await close(payload).catch((patchErr: unknown) =>
       o.log(`  fix ${fixId}: not marked failed (${patchErr instanceof Error ? patchErr.message : String(patchErr)})`),
@@ -1037,7 +1066,9 @@ export async function commitWithHooks(wt: string, args: string[], log: (line: st
 function gitRemoteRejection(text: string): boolean {
   return text.split(/\n|\s\/\s/).some((chunk) => {
     const s = chunk.trim()
-    if (/\[[rR]ejected\]|\bnon-fast-forward\b/.test(s)) return true
+    // `[rejected]` is non-fast-forward. `[remote rejected]` is the remote
+    // (a protected branch) after a hook that already passed.
+    if (/\[(?:remote\s+)?rejected\]/i.test(s) || /\bnon-fast-forward\b/.test(s)) return true
     if (/(?:^|\s)(?:remote:|fatal:).*(?:Authentication failed|Permission denied)/i.test(s)) return true
     return false
   })
@@ -1074,7 +1105,7 @@ export function pushRecoveryCommand(checkout: string, branch: string): string | 
  * pre-push hook refused. Keeps the hook's own lines (colour codes removed)
  * and names the worker checkout the commit is still checked out in.
  */
-export function failedPushPayload(input: { branch: string; commitSha: string; checkout: string; reason: string }, now = new Date()): Record<string, unknown> {
+export function failedPushPayload(input: { branch: string; commitSha: string; checkout: string; reason: string; model?: string | null }, now = new Date()): Record<string, unknown> {
   const plain = stripHookText(input.reason).replace(/\s+/g, ' ').trim()
   const named = HOOK_SUMMARY.exec(plain)?.[1] ?? ''
   const checks = [...new Set(named.split(',').map((s) => s.trim()).filter((s) => CHECK_NAME.test(s)))].slice(0, 6)
@@ -1087,13 +1118,13 @@ export function failedPushPayload(input: { branch: string; commitSha: string; ch
     `Worker checkout: ${checkout}`,
     excerpt ? `| Hook output: ${excerpt}` : '',
   ].filter(Boolean).join(' ').slice(0, 1000)
-  return {
+  return withLocalCursorModel({
     status: 'failed',
     branch: input.branch,
     commit_sha: input.commitSha,
     error,
     completed_at: now.toISOString(),
-  }
+  }, input.model)
 }
 
 /**

@@ -13,6 +13,8 @@ import {
   isMissingModuleFailure,
   failureTail,
   failedPushPayload,
+  localAttemptCreateBody,
+  localCursorModel,
   hookFailureDetail,
   isHookRejection,
   pushRecoveryCommand,
@@ -579,6 +581,7 @@ describe('isHookRejection', () => {
     expect(isHookRejection('git push failed: pre-push hook declined / fatal: Authentication failed')).toBe(false)
     expect(isHookRejection('git push failed: pre-push hook declined. fatal: Authentication failed')).toBe(false)
     expect(isHookRejection('git push failed: pre-push hook declined. permission denied reading the fixture')).toBe(true)
+    expect(isHookRejection('git push failed: pre-push hook\n! [remote rejected] main -> main (protected branch hook declined)')).toBe(false)
   })
 })
 
@@ -592,12 +595,40 @@ describe('failedPushPayload', () => {
     })
     const error = String(payload.error)
     expect(payload).toMatchObject({ status: 'failed', branch: 'bugfix/saved', commit_sha: 'abc1234def567890' })
+    expect(payload.llm_model).toBeUndefined()
     expect(error).toContain("Your repo's own checks failed at push")
     expect(error).toContain('FAIL a.test.ts')
     expect(error).toContain('Permission denied reading the fixture')
     expect(error).toContain('Worker checkout: /tmp/mushi-wt/checkout')
     expect(error).not.toMatch(/\u001b/)
     expect(pushRecoveryCommand('/tmp/mushi-wt/checkout', 'bugfix/saved')).toBe('git -C /tmp/mushi-wt/checkout push -u origin bugfix/saved')
+  })
+
+  it('records the Cursor model on the attempt and never stores mcp as that model', () => {
+    expect(localCursorModel('mcp')).toBeNull()
+    expect(localCursorModel('  grok-4.7-xhigh-fast  ')).toBe('grok-4.7-xhigh-fast')
+    expect(localAttemptCreateBody(R1, 'grok-4.7-xhigh-fast')).toEqual({
+      reportId: R1,
+      agent: 'mcp',
+      llm_model: 'grok-4.7-xhigh-fast',
+    })
+    expect(localAttemptCreateBody(R1, 'mcp')).toEqual({ reportId: R1, agent: 'mcp' })
+    const failed = failedPushPayload({
+      branch: 'bugfix/MUSHI-1-local-cursor',
+      commitSha: 'abc1234def567890',
+      checkout: '/tmp/mushi-wt/checkout',
+      reason: 'git push failed: hook steps failed: test',
+      model: 'grok-4.7-xhigh-fast',
+    })
+    expect(failed.llm_model).toBe('grok-4.7-xhigh-fast')
+    expect(failed.llm_model).not.toBe('mcp')
+    expect(failedPushPayload({
+      branch: 'b',
+      commitSha: 'abc1234def',
+      checkout: '/tmp/wt',
+      reason: 'git push failed: hook steps failed: test',
+      model: 'mcp',
+    }).llm_model).toBeUndefined()
   })
 })
 

@@ -33,7 +33,8 @@ type Context = {
 };
 
 // Keep in sync with apps/admin/src/lib/terminalText.ts (the report page).
-const HOOK_MARK = /hook steps failed:|pre-push hook|\blefthook\b|husky - pre-push|🥊/;
+/** A passing lefthook banner is not a failed local hook. See terminalText.ts. */
+const HOOK_FAILED = /hook steps failed:|pre-push hook|husky - pre-push|🥊/i;
 /** The push itself failed. A lefthook mention in some other error is not this. */
 const PUSH_FAILED = /\bgit push failed\b|\bfailed to push some refs\b/i;
 /** Check names may contain dots (`test.unit`). The summary sentence ends after the list. */
@@ -54,7 +55,8 @@ function stripTerminalCodes(text: string): string {
 function gitRemoteRejection(text: string): boolean {
   return text.split(/\n|\s\/\s/).some((chunk) => {
     const s = chunk.trim();
-    if (/\[[rR]ejected\]|\bnon-fast-forward\b/.test(s)) return true;
+    // `[rejected]` is non-fast-forward. `[remote rejected]` is the remote.
+    if (/\[(?:remote\s+)?rejected\]/i.test(s) || /\bnon-fast-forward\b/.test(s)) return true;
     if (/(?:^|\s)(?:remote:|fatal:).*(?:Authentication failed|Permission denied)/i.test(s)) return true;
     return false;
   });
@@ -62,9 +64,11 @@ function gitRemoteRejection(text: string): boolean {
 
 function isPushHookFailure(text: string): boolean {
   const plain = stripTerminalCodes(text);
-  if (!PUSH_FAILED.test(plain) || !HOOK_MARK.test(plain)) return false;
-  if (/hook steps failed:/i.test(plain)) return true;
-  return !gitRemoteRejection(plain);
+  if (!PUSH_FAILED.test(plain)) return false;
+  // A passing hook's log plus Git's `[remote rejected]` is the remote.
+  // An explicit `hook steps failed:` summary still wins over that line.
+  if (gitRemoteRejection(plain) && !/hook steps failed:/i.test(plain)) return false;
+  return HOOK_FAILED.test(plain);
 }
 
 function failedHookChecks(text: string): string[] {

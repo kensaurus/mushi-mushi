@@ -34,6 +34,7 @@ import { isReportClassified } from '../../lib/reportDiagnosis'
 import { humanizeFixError } from '../../lib/humanizeFixError'
 import { stripTerminalCodes } from '../../lib/terminalText'
 import { reportHasCodeLocation } from '../../lib/reportCodeLocation'
+import { attemptVia } from '../../lib/fixAttemptLabel'
 import type { ReportDetail, ReportFixAttempt } from './types'
 
 type StoryState = StageStamp
@@ -264,7 +265,7 @@ export function buildStoryNodes(
     headline: doHeadline,
     at: fix?.completed_at ?? fix?.started_at ?? fix?.created_at ?? null,
     details: [
-      fix?.agent ? `via ${fix.agent}` : null,
+      fix ? attemptVia(fix) : null,
       fix?.branch || null,
       fix?.lines_changed != null ? `${fix.lines_changed} loc` : null,
     ],

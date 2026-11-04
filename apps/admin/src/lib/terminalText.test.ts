@@ -82,6 +82,30 @@ describe('pushHookAdvice', () => {
       "Your repo's own checks failed at push.",
     )
   })
+
+  it('does not tell you to fix local checks when a passing hook is followed by a remote rejection', () => {
+    const passedThenRemote = [
+      'git push failed: 🥊 lefthook v1.7.11  hook: pre-push',
+      '┃  test (1.20 seconds)',
+      '! [remote rejected] bugfix/saved -> bugfix/saved (protected branch hook declined)',
+      'error: failed to push some refs to github.com:o/r.git',
+    ].join('\n')
+    expect(pushHookAdvice(passedThenRemote)).toBeNull()
+    // A passing banner that only names lefthook is not a failed local check,
+    // even when the remote rejection is not the bracket form above.
+    const passedThenBehind = [
+      'git push failed: lefthook v1.7.11  hook: pre-push',
+      '┃  lint (0.40 seconds)',
+      'error: failed to push some refs to github.com:o/r.git',
+    ].join('\n')
+    expect(pushHookAdvice(passedThenBehind)).toBeNull()
+  })
+
+  it('keeps a hook summary when a check prints a remote-rejection line', () => {
+    const raw = 'git push failed: hook steps failed: test. test: saw ! [remote rejected] in the fixture log'
+    expect(pushHookAdvice(raw)?.checks).toEqual(['test'])
+    expect(pushHookAdvice(raw)?.title).toBe("Your repo's own checks failed at push.")
+  })
 })
 
 describe('pushRecoveryCommand', () => {

@@ -16,6 +16,7 @@ import {
   SignalChip,
 } from './ReportSurface'
 import type { ReportFixAttempt } from './types'
+import { reportAttemptLabels } from '../../lib/fixAttemptLabel'
 import { CHIP_TONE, prStateChipTone } from '../../lib/chipTone'
 
 interface Props {
@@ -165,6 +166,9 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
     })
   }
 
+  const named = reportAttemptLabels(fix)
+  const agentLine = [named.agent, named.model].filter(Boolean).join(' · ')
+
   const tone = ciTone(fix.check_run_conclusion, fix.check_run_status)
   const ciSignalTone =
     tone === 'ok' ? 'info' : tone === 'danger' ? 'danger' : tone === 'warn' ? 'warn' : 'neutral'
@@ -222,12 +226,12 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
           ),
         }
       : null,
-    fix.agent || fix.llm_model
+    agentLine
       ? {
           label: 'Agent',
           value: (
             <code className="font-mono text-2xs text-fg-secondary">
-              {fix.llm_model ?? fix.agent}
+              {agentLine}
             </code>
           ),
         }
@@ -310,7 +314,7 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
                   branchName={fix.branch}
                   baseBranch={baseBranch}
                   commitSha={fix.commit_sha}
-                  agentModel={fix.llm_model ?? fix.agent}
+                  agentModel={agentLine || null}
                   filesChanged={fix.files_changed}
                   linesChanged={fix.lines_changed}
                 />

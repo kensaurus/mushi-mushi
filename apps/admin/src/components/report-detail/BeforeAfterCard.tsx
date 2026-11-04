@@ -16,6 +16,7 @@ import { RelativeTime } from '../ui'
 import { ActionPill, InlineProof } from './ReportSurface'
 import type { ReportDetail, ReportFixAttempt } from './types'
 import { CHIP_TONE, prStateChipTone } from '../../lib/chipTone'
+import { attemptVia } from '../../lib/fixAttemptLabel'
 
 interface Props {
   report: ReportDetail
@@ -36,6 +37,7 @@ function Chip({ tone, children }: { tone?: string; children: React.ReactNode }) 
 
 export function BeforeAfterCard({ report, className = '' }: Props) {
   const fix: ReportFixAttempt | undefined = report.fix_attempts?.[0]
+  const via = fix ? attemptVia(fix) : null
   // Only render once there is an "after" to show — a PR, a finished attempt,
   // or a closed loop. A report that is still just classified has no after side.
   const status = report.status?.toLowerCase() ?? ''
@@ -132,9 +134,9 @@ export function BeforeAfterCard({ report, className = '' }: Props) {
               {fix.files_changed?.length
                 ? `${fix.files_changed.length} file${fix.files_changed.length === 1 ? '' : 's'} changed${
                     fix.lines_changed != null ? `, ${fix.lines_changed} lines` : ''
-                  }${fix.agent ? ` — via ${fix.agent}` : ''}`
-                : fix.agent
-                  ? `Fix drafted via ${fix.agent}`
+                  }${via ? ` — ${via}` : ''}`
+                : via
+                  ? `Fix drafted ${via}`
                   : 'Fix attempt recorded'}
             </InlineProof>
           </div>

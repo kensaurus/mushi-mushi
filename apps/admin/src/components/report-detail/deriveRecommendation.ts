@@ -7,6 +7,7 @@ import { KNOWN_ISSUES_SEARCH_HREF } from '../../lib/settingsTabs'
 import { NO_CODE_LOCATION_REASON } from '../../lib/reportCodeLocation'
 import { verdictFromError } from '../../lib/pdcaAct'
 import { pushHookAdvice, stripTerminalCodes } from '../../lib/terminalText'
+import { reportAttemptLabels } from '../../lib/fixAttemptLabel'
 
 /** The opt-in's name as the fix worker quotes it in a skip reason. */
 const WEB_SEARCH_SETTING_NAME = 'Search the web for known fixes'
@@ -77,8 +78,9 @@ function buildFixingMeta(
       tone: 'info',
     })
   }
-  if (latest?.llm_model) meta.push({ label: 'Model', value: latest.llm_model, tone: 'neutral' })
-  if (latest?.agent) meta.push({ label: 'Agent', value: latest.agent, tone: 'neutral' })
+  const named = latest ? reportAttemptLabels(latest) : { agent: null, model: null }
+  if (named.model) meta.push({ label: 'Model', value: named.model, tone: 'neutral' })
+  if (named.agent) meta.push({ label: 'Agent', value: named.agent, tone: 'neutral' })
   if (latest?.files_changed && latest.files_changed.length > 0) {
     const shown = latest.files_changed.slice(0, 1).join(', ')
     const more = latest.files_changed.length - 1
@@ -320,15 +322,20 @@ function recommendationFor(
   const isFailed = latest?.status === 'failed'
 
   if ((isSkipped || isFailed) && latest) {
-    const lastAttemptMeta: RecommendationMeta[] = latest.started_at
-      ? [
-          {
-            label: 'Last attempt',
-            value: new Date(latest.started_at).toLocaleString(),
-            tone: 'neutral' as const,
-          },
-        ]
-      : []
+    const named = reportAttemptLabels(latest)
+    const lastAttemptMeta: RecommendationMeta[] = [
+      ...(latest.started_at
+        ? [
+            {
+              label: 'Last attempt',
+              value: new Date(latest.started_at).toLocaleString(),
+              tone: 'neutral' as const,
+            },
+          ]
+        : []),
+      ...(named.agent ? [{ label: 'Agent', value: named.agent, tone: 'neutral' as const }] : []),
+      ...(named.model ? [{ label: 'Model', value: named.model, tone: 'neutral' as const }] : []),
+    ]
 
     // The agent's verdict (already fixed, nothing to change, another repo,
     // needs a person) is an answer, not a breakage: "Retry dispatch" was the

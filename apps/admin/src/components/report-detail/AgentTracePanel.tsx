@@ -4,6 +4,14 @@
 import { Card, Badge } from '../ui'
 import type { ReportDetail } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { reportAttemptLabels } from '../../lib/fixAttemptLabel'
+
+function latestAgentLabel(attempt: { agent?: string | null; llm_model?: string | null; branch?: string | null } | undefined): string {
+  if (!attempt) return '—'
+  const named = reportAttemptLabels(attempt)
+  if (named.agent && named.model) return `${named.agent} · ${named.model}`
+  return named.agent ?? named.model ?? '—'
+}
 
 interface LlmInvocationRow {
   id: string
@@ -74,7 +82,7 @@ export function AgentTracePanel({ report }: Props) {
       </div>
       {(report.fix_attempts?.length ?? 0) > 0 && (
         <p className="text-2xs text-fg-muted">
-          {report.fix_attempts!.length} fix attempt(s) · latest agent {report.fix_attempts![0]?.agent ?? '—'}
+          {report.fix_attempts!.length} fix attempt(s) · latest agent {latestAgentLabel(report.fix_attempts![0])}
         </p>
       )}
     </Card>
