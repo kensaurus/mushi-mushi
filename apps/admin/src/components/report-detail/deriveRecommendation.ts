@@ -6,6 +6,7 @@ import { isReportClassified } from '../../lib/reportDiagnosis'
 import { KNOWN_ISSUES_SEARCH_HREF } from '../../lib/settingsTabs'
 import { NO_CODE_LOCATION_REASON } from '../../lib/reportCodeLocation'
 import { verdictFromError } from '../../lib/pdcaAct'
+import { pushHookAdvice, stripTerminalCodes } from '../../lib/terminalText'
 
 /** The opt-in's name as the fix worker quotes it in a skip reason. */
 const WEB_SEARCH_SETTING_NAME = 'Search the web for known fixes'
@@ -483,12 +484,35 @@ function recommendationFor(
       }
     }
 
+    // A local run whose push the repo's pre-push hook refused. The stored
+    // error is the hook's own log, colour codes included; show the checks.
+    if (isFailed && !latest.failure_category && latest.error) {
+      const hook = pushHookAdvice(latest.error)
+      if (hook) {
+        const meta = [...lastAttemptMeta]
+        if (hook.checks.length) meta.push({ label: 'Checks', value: hook.checks.join(', '), tone: 'danger' })
+        if (latest.branch) meta.push({ label: 'Branch', value: latest.branch, tone: 'neutral' })
+        if (latest.commit_sha) meta.push({ label: 'Commit', value: latest.commit_sha.slice(0, 7), tone: 'neutral' })
+        return {
+          title: "Your repo's own checks failed at push",
+          description: hook.hint,
+          tone: 'urgent',
+          meta,
+          actions: [
+            { label: 'Open local workers', to: '/pipeline?tab=workers', tone: 'primary' },
+            { label: 'View pipeline log \u2192', to: '/fixes', tone: 'ghost' },
+            { label: 'Cloud dispatch anyway', onClick: onDispatch, tone: 'ghost' },
+          ],
+        }
+      }
+    }
+
     // Generic failed with unknown / null failure_category
     if (isFailed) {
+      const plain = latest.error ? stripTerminalCodes(latest.error).trim() : ''
       return {
         title: 'Fix attempt failed',
-        description:
-          latest.error ?? 'An unexpected error stopped the agent. Check the Fixes pipeline for details.',
+        description: plain || 'An unexpected error stopped the agent. Check the Fixes pipeline for details.',
         tone: 'urgent',
         meta: lastAttemptMeta,
         actions: [

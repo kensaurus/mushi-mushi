@@ -145,8 +145,18 @@ function cap(text: string | null | undefined, max: number): string {
  * hook prints its passing checks first and the failure last (a pre-commit
  * failure read as "✓ check-no-secrets … [cut]", 2026-10-24).
  */
+/**
+ * CSI / OSC sequences, plus the same codes stored as the six characters `\u001b`.
+ * Keep in sync with `apps/admin/src/lib/terminalText.ts` (`stripTerminalCodes`).
+ */
+function stripHookText(text: string): string {
+  return stripVTControlCharacters(text)
+    .replace(/\\u001b\[[0-9;?]*[ -/]*[@-~]/gi, '')
+    .replace(/\\x1b\[[0-9;?]*[ -/]*[@-~]/gi, '')
+}
+
 export function failureTail(r: { stdout: string; stderr: string }, max = 600): string {
-  const t = [r.stdout, r.stderr].map((x) => x.trim()).filter(Boolean).join('\n').replace(/[ \t]+/g, ' ')
+  const t = stripHookText([r.stdout, r.stderr].map((x) => x.trim()).filter(Boolean).join('\n')).replace(/[ \t]+/g, ' ')
   const lines = t.split('\n').map((l) => l.trim()).filter(Boolean)
   const kept: string[] = []
   let size = 0
@@ -167,8 +177,10 @@ export function failureTail(r: { stdout: string; stderr: string }, max = 600): s
  * Returns null when the output is not lefthook's.
  */
 export function hookFailureDetail(r: { stdout: string; stderr: string }, max = 900): string | null {
-  const text = stripVTControlCharacters([r.stdout, r.stderr].join('\n'))
-  const failed = [...text.matchAll(/^\s*🥊\s+([\w:.-]+)/gmu)].map((m) => m[1]!)
+  const text = stripHookText([r.stdout, r.stderr].join('\n'))
+  // Lefthook paints the summary line, so after the colour codes come off the
+  // failed step can sit behind a box glyph ("┃ 🥊 test") and used to be missed.
+  const failed = [...text.matchAll(/^\s*(?:[│┃]\s*)?🥊\s+([\w:.-]+)/gmu)].map((m) => m[1]!)
   if (!failed.length) return null
   const lines = text.split('\n')
   const HEADER = /^\s*┃\s+(\S+)\s+❯/u
@@ -741,6 +753,8 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
   let keep = o.keep ?? false
   let fixId: string | null = null
   let stage: WorkStage = 'prepare'
+  /** Set once the commit exists, so a refused push can store it. */
+  let commitSha: string | null = null
   // The fix row is closed exactly once: by the run's own outcome, or by a stop.
   let closed = false
   const close = async (payload: Record<string, unknown>): Promise<void> => {
@@ -822,6 +836,7 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
     const last = run.stdout.trim().split('\n').filter((l) => l.trim()).slice(-6).join(' ')
     await commitWithHooks(wt, ['--quiet', '-m', prTitle(detail.summary, detail.id), '-m', commitBody(`Mushi report: ${detail.id}`, 'Made by a local Cursor agent through `mushi work`.')], o.log)
     const sha = await git(wt, ['rev-parse', 'HEAD'])
+    commitSha = sha
     const numstat = await git(wt, ['diff', '--numstat', `origin/${base}`, 'HEAD'])
     const files: string[] = []
     let lines = 0
@@ -855,9 +870,14 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
     // with the reason instead of leaving it running. A failure of the
     // machine (infra) is closed so that it starts no cooldown.
     const reason = err instanceof Error ? err.message : String(err)
-    const failureKind = classifyFailure(reason, stage)
+    const savedSha = commitSha
+    const hookStop = stage === 'push' && savedSha !== null && isHookRejection(reason)
+    const failureKind = hookStop ? 'code' : classifyFailure(reason, stage)
     keep = true
-    await close({ status: 'failed', branch, error: `${failureKind === 'infra' ? WORK_INFRA_PREFIX : 'mushi work:'} ${reason}`.slice(0, 1000), completed_at: new Date().toISOString() }).catch((patchErr: unknown) =>
+    const payload = hookStop && savedSha
+      ? failedPushPayload({ branch, commitSha: savedSha, checkout: wt, reason })
+      : { status: 'failed', branch, error: `${failureKind === 'infra' ? WORK_INFRA_PREFIX : 'mushi work:'} ${reason}`.slice(0, 1000), completed_at: new Date().toISOString() }
+    await close(payload).catch((patchErr: unknown) =>
       o.log(`  fix ${fixId}: not marked failed (${patchErr instanceof Error ? patchErr.message : String(patchErr)})`),
     )
     return { reportId: detail.id, result: 'failed', failureKind, outcome: `failed (${failureKind}): ${reason} (the change is kept in ${wt})`, ...(fixId ? { fixId } : {}) }
@@ -1009,9 +1029,71 @@ export async function commitWithHooks(wt: string, args: string[], log: (line: st
   }
 }
 
-/** @internal Exported for tests only. A push the repo's own pre-push hook refused (not the remote, not auth). */
+/**
+ * Git's own remote-rejection lines. A failing check that prints
+ * "permission denied" or "Authentication failed" is not one of these.
+ * Keep in sync with `apps/admin/src/lib/terminalText.ts`.
+ */
+function gitRemoteRejection(text: string): boolean {
+  return text.split(/\n|\s\/\s/).some((chunk) => {
+    const s = chunk.trim()
+    if (/\[[rR]ejected\]|\bnon-fast-forward\b/.test(s)) return true
+    if (/(?:^|\s)(?:remote:|fatal:).*(?:Authentication failed|Permission denied)/i.test(s)) return true
+    return false
+  })
+}
+
+/**
+ * @internal Exported for tests only. A push the repo's own pre-push hook refused (not the remote, not auth).
+ * An explicit `hook steps failed:` summary wins over words the failing check printed.
+ */
 export function isHookRejection(message: string): boolean {
-  return /hook steps failed:|pre-push hook|husky - pre-push/i.test(message) && !/non-fast-forward|\[rejected\]|Authentication failed|permission denied/i.test(message)
+  if (!/hook steps failed:|pre-push hook|husky - pre-push/i.test(message)) return false
+  if (/hook steps failed:/i.test(message)) return true
+  return !gitRemoteRejection(message)
+}
+
+const HOOK_SUMMARY = /hook steps failed:\s*((?:[\w:-]+(?:\.[\w:-]+)*)(?:\s*,\s*(?:[\w:-]+(?:\.[\w:-]+)*))*)/i
+const CHECK_NAME = /^[\w:-]+(?:\.[\w:-]+)*$/
+const SAFE_ABS = /^\/(?:[\w.@+-]+\/)*[\w.@+-]+$/
+const GIT_REF = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,200}$/
+
+/**
+ * @internal Exported for tests only. Push that branch from the checkout Mushi
+ * kept. Null when the path or the branch is not safe to place in a command.
+ * `git -C` works from the normal repository; the branch stays checked out in the worktree.
+ */
+export function pushRecoveryCommand(checkout: string, branch: string): string | null {
+  if (!SAFE_ABS.test(checkout)) return null
+  if (!GIT_REF.test(branch) || branch.includes('..') || branch.startsWith('-')) return null
+  return `git -C ${checkout} push -u origin ${branch}`
+}
+
+/**
+ * @internal Exported for tests only. The PATCH that closes a push the repo's
+ * pre-push hook refused. Keeps the hook's own lines (colour codes removed)
+ * and names the worker checkout the commit is still checked out in.
+ */
+export function failedPushPayload(input: { branch: string; commitSha: string; checkout: string; reason: string }, now = new Date()): Record<string, unknown> {
+  const plain = stripHookText(input.reason).replace(/\s+/g, ' ').trim()
+  const named = HOOK_SUMMARY.exec(plain)?.[1] ?? ''
+  const checks = [...new Set(named.split(',').map((s) => s.trim()).filter((s) => CHECK_NAME.test(s)))].slice(0, 6)
+  const which = checks.length ? ` Failed checks: ${checks.join(', ')}.` : ''
+  const excerpt = plain.replace(/^git push failed:\s*/i, '').slice(0, 420)
+  const checkout = input.checkout.replace(/[\r\n]+/g, ' ').trim()
+  const error = [
+    `mushi work: git push failed: Your repo's own checks failed at push.`,
+    `The fix is committed on ${input.branch} (${input.commitSha}); nothing was pushed.${which}`,
+    `Worker checkout: ${checkout}`,
+    excerpt ? `| Hook output: ${excerpt}` : '',
+  ].filter(Boolean).join(' ').slice(0, 1000)
+  return {
+    status: 'failed',
+    branch: input.branch,
+    commit_sha: input.commitSha,
+    error,
+    completed_at: now.toISOString(),
+  }
 }
 
 /**

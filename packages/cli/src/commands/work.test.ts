@@ -12,8 +12,10 @@ import {
   freeBranchName,
   isMissingModuleFailure,
   failureTail,
+  failedPushPayload,
   hookFailureDetail,
   isHookRejection,
+  pushRecoveryCommand,
   pushWithHooks,
   agentEnv,
   branchNameFor,
@@ -203,6 +205,13 @@ describe('failureTail', () => {
   it('returns short output whole and an over-long last line cut from its start', () => {
     expect(failureTail({ stdout: '', stderr: 'fatal: not a git repository' })).toBe('fatal: not a git repository')
     expect(failureTail({ stdout: 'x'.repeat(50), stderr: '' }, 10)).toBe(`[…] ${'x'.repeat(10)}`)
+  })
+
+  it('drops lefthook truecolor codes, including when stored as the characters \\u001b', () => {
+    const painted = failureTail({ stdout: '\u001b[38;2;56;56;56m┃ lint failed\u001b[0m', stderr: '' })
+    expect(painted).toBe('┃ lint failed')
+    expect(painted).not.toMatch(/\u001b/)
+    expect(failureTail({ stdout: '\\u001b[38;2;56;56;56m┃ lint failed\\u001b[0m', stderr: '' })).toBe('┃ lint failed')
   })
 })
 
@@ -544,6 +553,18 @@ describe('hookFailureDetail', () => {
   it('is null for output that is not a lefthook run', () => {
     expect(hookFailureDetail({ stdout: '', stderr: 'fatal: not a git repository' })).toBeNull()
   })
+
+  it('reads a failed step painted behind lefthook\'s box glyph', () => {
+    const raw = [
+      '\u001b[38;2;56;56;56m┃\u001b[0m  test ❯ ',
+      ' FAIL  a.test.ts > breaks',
+      '\u001b[38;2;56;56;56m┃ 🥊 test (2 seconds)\u001b[0m',
+    ].join('\n')
+    const d = hookFailureDetail({ stdout: raw, stderr: '' })!
+    expect(d).toMatch(/^hook steps failed: test\./)
+    expect(d).toContain('FAIL a.test.ts > breaks')
+    expect(d).not.toMatch(/\u001b/)
+  })
 })
 
 describe('isHookRejection', () => {
@@ -553,6 +574,30 @@ describe('isHookRejection', () => {
     expect(isHookRejection('git push failed: ! [rejected] HEAD -> main (non-fast-forward)')).toBe(false)
     expect(isHookRejection('git push failed: remote: Permission denied to bot. fatal: Authentication failed')).toBe(false)
     expect(isHookRejection('git push failed: fatal: unable to access github.com')).toBe(false)
+    expect(isHookRejection('git push failed: hook steps failed: test. test: Permission denied reading the fixture')).toBe(true)
+    expect(isHookRejection('git push failed: hook steps failed: auth. auth: Authentication failed for the test user')).toBe(true)
+    expect(isHookRejection('git push failed: pre-push hook declined / fatal: Authentication failed')).toBe(false)
+    expect(isHookRejection('git push failed: pre-push hook declined. fatal: Authentication failed')).toBe(false)
+    expect(isHookRejection('git push failed: pre-push hook declined. permission denied reading the fixture')).toBe(true)
+  })
+})
+
+describe('failedPushPayload', () => {
+  it('keeps the hook excerpt and names the worker checkout', () => {
+    const payload = failedPushPayload({
+      branch: 'bugfix/saved',
+      commitSha: 'abc1234def567890',
+      checkout: '/tmp/mushi-wt/checkout',
+      reason: 'git push failed: \u001b[38;2;56;56;56mhook steps failed: test.\u001b[0m test: FAIL a.test.ts | Permission denied reading the fixture',
+    })
+    const error = String(payload.error)
+    expect(payload).toMatchObject({ status: 'failed', branch: 'bugfix/saved', commit_sha: 'abc1234def567890' })
+    expect(error).toContain("Your repo's own checks failed at push")
+    expect(error).toContain('FAIL a.test.ts')
+    expect(error).toContain('Permission denied reading the fixture')
+    expect(error).toContain('Worker checkout: /tmp/mushi-wt/checkout')
+    expect(error).not.toMatch(/\u001b/)
+    expect(pushRecoveryCommand('/tmp/mushi-wt/checkout', 'bugfix/saved')).toBe('git -C /tmp/mushi-wt/checkout push -u origin bugfix/saved')
   })
 })
 
@@ -591,6 +636,37 @@ describe('pushWithHooks', () => {
     try {
       await expect(pushWithHooks(clone, ['--quiet', 'origin', 'HEAD:refs/heads/fix'], () => {})).rejects.toThrow(/hook steps failed: test\. test: FAIL a\.test\.ts > breaks/)
       expect(sh(origin, 'branch', '--list', 'fix').trim()).toBe('')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it.skipIf(process.platform === 'win32')('pushes the saved worktree from the main checkout with git -C', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mushi-work-recover-'))
+    const sh = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, stdio: 'pipe' }).toString()
+    const origin = join(root, 'origin.git')
+    const clone = join(root, 'clone')
+    const wt = join(root, 'wt')
+    const branch = 'bugfix/saved'
+    try {
+      sh(root, 'init', '-q', '--bare', '-b', 'main', origin)
+      sh(root, 'clone', '-q', origin, clone)
+      sh(clone, 'config', 'user.email', 'w@example.com')
+      sh(clone, 'config', 'user.name', 'worker')
+      sh(clone, 'commit', '-q', '--allow-empty', '-m', 'first')
+      sh(clone, 'push', '-q', 'origin', 'HEAD:main')
+      sh(clone, 'worktree', 'add', '-q', '-B', branch, wt, 'HEAD')
+      writeFileSync(join(wt, 'a.txt'), 'fixed\n')
+      sh(wt, 'add', 'a.txt')
+      sh(wt, 'commit', '-q', '-m', 'fix')
+      writeFileSync(join(clone, '.git', 'hooks', 'pre-push'), '#!/bin/sh\necho FAIL a.test.ts\nexit 1\n', { mode: 0o755 })
+      expect(() => sh(wt, 'push', '--quiet', '-u', 'origin', branch)).toThrow()
+      expect(() => sh(clone, 'checkout', branch)).toThrow()
+      writeFileSync(join(clone, '.git', 'hooks', 'pre-push'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+      const command = pushRecoveryCommand(wt, branch)
+      expect(command).toBe(`git -C ${wt} push -u origin ${branch}`)
+      execFileSync('git', ['-C', wt, 'push', '-u', 'origin', branch], { cwd: clone, stdio: 'pipe' })
+      expect(sh(origin, 'branch', '--list', branch)).toContain(branch)
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

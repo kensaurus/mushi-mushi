@@ -46,6 +46,26 @@ describe('ReportPdcaStory plan stage', () => {
     expect(nodes.plan.state).toBe('done')
   })
 
+  it('a refused pre-push does not paste the colour codes into the loop line', () => {
+    const nodes = buildStoryNodes(
+      report({
+        status: 'classified',
+        fix_attempts: [{
+          id: 'a1',
+          status: 'failed',
+          agent: 'mcp',
+          error: 'mushi work: git push failed: \\u001b[38;2;56;56;56mhook steps failed: test.\\u001b[0m test: FAIL a.test.ts',
+          pr_url: null,
+          branch: 'bugfix/saved',
+        }],
+      } as Partial<ReportDetail>),
+      idle,
+    )
+    expect(nodes.act.headline).toBe("Loop blocked — Your repo's own checks failed at push.")
+    expect(nodes.act.headline).not.toContain('\\u001b')
+    expect(nodes.do.headline).toContain("Your repo's own checks failed at push.")
+  })
+
   it('a classifier error on an unclassified report is a failed plan', () => {
     expect(buildStoryNodes(report({ processing_error: 'schema mismatch' }), idle).plan.state).toBe('failed')
   })
