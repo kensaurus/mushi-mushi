@@ -52,10 +52,17 @@ import { COST_BOUNDS, COST_PLANS, costSettingsRow, normalizeCostSettings, type C
 import {
   fetchPullRequest,
   installationIdForAttempt,
+  mintInstallationAccess,
   parseGithubRepoUrl,
   prNumberFromUrl,
   resolveProjectGithubToken,
 } from '../../_shared/github.ts'
+import {
+  actionsLevel,
+  appRerunFingerprint,
+  installationBlocksRerun,
+  patRerunFingerprint,
+} from '../../_shared/ci-rerun-permission.ts'
 import { liveSyncProjects, type CollectorDeps } from '../../_shared/ci-collector.ts'
 import { buildCiOverview, loadCiOverviewRows } from '../../_shared/ci-overview.ts'
 import { ciGithub, listRunsForHeadSha, rerunFailedJobs, RERUN_REFUSED_DEDUPE_PREFIX, type CiGithub } from '../../_shared/ci-jobs.ts'
@@ -93,6 +100,11 @@ export interface CiRouteDeps {
   collector: CollectorDeps
   /** A GitHub token for a fix attempt's repository (App installation first, then the project's token). */
   resolveAttemptToken: (db: Db, attempt: { project_id: string; repo_id?: string | null; pr_url?: string | null }) => Promise<string | null>
+  /**
+   * The installation's permissions, from the token mint. Unset: mint for real.
+   * A map that lacks Actions write refuses the re-run before GitHub is asked.
+   */
+  readInstallationAccess?: (installationId: number) => Promise<{ permissions: Record<string, string> | null } | null>
   fetchPullRequest: typeof fetchPullRequest
   mintKey: typeof mintProjectApiKey
   logAudit: typeof logAudit
@@ -496,6 +508,47 @@ async function rerunFixCi(c: Context, deps: CiRouteDeps): Promise<Response> {
   const prNumber = a.pr_number ?? (a.pr_url ? prNumberFromUrl(a.pr_url) : null)
   if (!ref || !prNumber) return jsonError(c, 'NO_PR', 'This fix has no pull request to test.', 409)
 
+  const writeMissing = () =>
+    jsonError(c, 'GITHUB_ACTIONS_WRITE_MISSING', 'The GitHub token Mushi uses cannot re-run workflows. Give it Actions: Read and write (fine-grained token) or the workflow scope.', 403)
+  const rememberRerunRefusal = async (fingerprint: string | null) => {
+    const at = deps.now().toISOString()
+    const { error: refusedErr } = await db.from('fix_events').insert({
+      fix_attempt_id: a.id,
+      project_id: a.project_id,
+      kind: 'ci_started',
+      status: 'fail',
+      label: 'Re-run refused: the GitHub token cannot re-run workflows',
+      detail: 'Give the token Actions: Read and write (fine-grained token) or the workflow scope.',
+      at,
+      dedupe_key: `${RERUN_REFUSED_DEDUPE_PREFIX}${a.id}:${at}`,
+      payload: { rerunRefused: 'actions_write', by: userId, ...(fingerprint ? { tokenFingerprint: fingerprint } : {}) },
+    })
+    if (refusedErr) clog.warn('ci rerun refusal fix_event insert failed (non-fatal)', { fixId: a.id, err: refusedErr.message })
+  }
+
+  // The App states Actions: read or write when the installation token is
+  // minted. Read can list runs and still 403 on re-run, so refuse first and
+  // do not spend the hourly re-run allowance on a call that cannot succeed.
+  let installationId: number | null = null
+  let permissions: Record<string, unknown> | null = null
+  try {
+    installationId = await installationIdForAttempt(db, a)
+  } catch (err) {
+    clog.warn('ci rerun installation lookup failed', { fixId: a.id, err: err instanceof Error ? err.message : String(err) })
+  }
+  if (installationId) {
+    try {
+      const minted = await (deps.readInstallationAccess ?? ((id: number) => mintInstallationAccess(id).then((m) => ({ permissions: m.permissions }))))(installationId)
+      permissions = minted?.permissions ?? null
+    } catch (err) {
+      clog.warn('ci rerun installation permission read failed', { fixId: a.id, err: err instanceof Error ? err.message : String(err) })
+    }
+    if (permissions && installationBlocksRerun(permissions)) {
+      await rememberRerunRefusal(appRerunFingerprint(installationId, actionsLevel(permissions) ?? 'none'))
+      return writeMissing()
+    }
+  }
+
   const rate = await deps.claimRateLimit(db, `fix:${a.id}:ci_rerun`, CI_RERUNS_PER_HOUR, 3600)
   if (!rate.allowed) {
     c.header('Retry-After', String(rate.retryAfterSec ?? 3600))
@@ -532,21 +585,25 @@ async function rerunFixCi(c: Context, deps: CiRouteDeps): Promise<Response> {
     }
     if (status === 403) {
       if (rerun.length > 0) break
-      // Remembered so /pipeline stops offering Re-run CI for this app until its GitHub settings change (69fcafcb).
-      const at = deps.now().toISOString()
-      const { error: refusedErr } = await db.from('fix_events').insert({
-        fix_attempt_id: a.id,
-        project_id: a.project_id,
-        kind: 'ci_started',
-        status: 'fail',
-        label: 'Re-run refused: the GitHub token cannot re-run workflows',
-        detail: 'Give the token Actions: Read and write (fine-grained token) or the workflow scope.',
-        at,
-        dedupe_key: `${RERUN_REFUSED_DEDUPE_PREFIX}${a.id}:${at}`,
-        payload: { rerunRefused: 'actions_write', by: userId },
-      })
-      if (refusedErr) clog.warn('ci rerun refusal fix_event insert failed (non-fatal)', { fixId: a.id, err: refusedErr.message })
-      return jsonError(c, 'GITHUB_ACTIONS_WRITE_MISSING', 'The GitHub token Mushi uses cannot re-run workflows. Give it Actions: Read and write (fine-grained token) or the workflow scope.', 403)
+      // A token the App already says can write Actions is a different 403
+      // (ruleset, SSO). Remembering it would hide Re-run CI after the
+      // permission is fine. Anything else sticks to this token (69fcafcb).
+      const provenWrite = !!permissions && Object.keys(permissions).length > 0 && !installationBlocksRerun(permissions)
+      if (!provenWrite) {
+        let fingerprint: string | null = null
+        if (installationId) {
+          const level = permissions && Object.keys(permissions).length > 0 ? (actionsLevel(permissions) ?? 'none') : 'unproven'
+          fingerprint = appRerunFingerprint(installationId, level)
+        } else {
+          try {
+            fingerprint = await patRerunFingerprint(token)
+          } catch {
+            fingerprint = null
+          }
+        }
+        await rememberRerunRefusal(fingerprint)
+      }
+      return writeMissing()
     }
     if (status === 409) {
       if (rerun.length > 0) break

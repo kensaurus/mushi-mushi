@@ -147,7 +147,7 @@ export function rerunErrorText(code: string | null | undefined, message: string 
     case 'CI_RUNNING':
       return 'Tests are still running on GitHub. Wait for them to finish, then re-run.'
     case 'GITHUB_ACTIONS_WRITE_MISSING':
-      return "Mushi's GitHub access can't re-run tests. Give the GitHub token Actions: write, or re-run them from GitHub."
+      return "Mushi's GitHub access can't re-run tests. Give the GitHub token Actions: Read and write, or re-run them from GitHub."
     case 'GITHUB_ACTIONS_READ_MISSING':
       return "Mushi's GitHub access can't read Actions runs. Give the GitHub token Actions: read and write."
     case 'RATE_LIMITED':

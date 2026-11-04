@@ -50,12 +50,19 @@ import {
   fetchPullRequest,
   installationIdForAttempt,
   markPullRequestReady,
+  mintInstallationAccess,
   parseGithubRepoUrl,
   prNumberFromUrl,
   resolveProjectGithubToken,
   updatePullRequestBranch,
   type GithubRepoRef,
 } from '../../_shared/github.ts';
+import {
+  fingerprintFromPayload,
+  probeRerunAccess,
+  projectsRerunRefused,
+  type RerunAccess,
+} from '../../_shared/ci-rerun-permission.ts';
 import { ciJobsForHeads, enqueueReviewFollowup, followupsEnabledForProject } from '../../_shared/review-followup-db.ts';
 import { localCiRepairRequestDedupe, localHandoff, type LocalFollowupKind } from '../../_shared/local-followup.ts';
 import { roundHeadsFor } from './local-followups.ts';
@@ -124,6 +131,16 @@ export interface PipelineRouteDeps {
   now: () => Date;
   /** Live names of the checks that failed on a head. Null when the list cannot be read. */
   failingCheckNames: (token: string, ref: GithubRepoRef, sha: string) => Promise<Set<string> | null>;
+  /**
+   * Whether each app's re-run token can write Actions. Unset: the real probe
+   * (installation permissions, else a hash of a token GitHub already refused).
+   */
+  rerunAccess?: (
+    db: Db,
+    projectIds: string[],
+    attempts: AttemptRow[],
+    refusals: Array<{ project_id: string; fingerprint: string | null }>,
+  ) => Promise<Map<string, RerunAccess>>;
 }
 
 export const defaultPipelineDeps: PipelineRouteDeps = {
@@ -174,7 +191,7 @@ async function scopedProjectIds(c: Ctx, db: Db, userId: string, requested: strin
   return { ids: await enumerateAccessibleProjectIds(c, db, userId) };
 }
 
-export async function readPipeline(db: Db, projectIds: string[], now: Date) {
+export async function readPipeline(db: Db, projectIds: string[], now: Date, rerunAccess?: PipelineRouteDeps['rerunAccess']) {
   const since7 = new Date(now.getTime() - 7 * DAY).toISOString();
   const since14 = new Date(now.getTime() - 14 * DAY).toISOString();
   const since60 = new Date(now.getTime() - 60 * DAY).toISOString();
@@ -280,7 +297,7 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
     }),
   );
   const dispatchers = await readDispatchers(db, projectIds, (projectsRes.data ?? []) as DispatcherProject[], now);
-  const actionFacts = await readActionFacts(db, projectIds, attempts, followups, now);
+  const actionFacts = await readActionFacts(db, projectIds, attempts, followups, now, rerunAccess);
   const stages = buildPipeline({
     now,
     reports: [...reports, ...fixReports],
@@ -323,44 +340,103 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
 
 const ACTIVE_FOLLOWUP_STATUSES = new Set(['queued', 'dispatched', 'running']);
 
-/** A remembered refusal stops counting after this, in case the token changed somewhere Mushi does not see. */
+/**
+ * A refusal recorded before token fingerprints stopped counting after this,
+ * and only while Mushi cannot name the token it would use. A refusal for the
+ * token still in use does not expire: the same token would 403 again.
+ */
 const RERUN_REFUSED_TTL_MS = 7 * DAY;
+/** Cap on the installation mint and the token read. A slow answer is "could not tell", not a failed pipeline. */
+const RERUN_PROBE_MS = 1_200;
+
+function withinProbe<T>(work: Promise<T>): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), RERUN_PROBE_MS);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(null);
+      },
+    );
+  });
+}
+
+/** Installation permissions, else a hash of a token a re-run already refused. A failed probe does not throw. */
+export async function readRerunAccess(
+  db: Db,
+  projectIds: string[],
+  attempts: AttemptRow[],
+  refusals: Array<{ project_id: string; fingerprint: string | null }>,
+): Promise<Map<string, RerunAccess>> {
+  return probeRerunAccess(projectIds, attempts, refusals, {
+    repos: async (ids) => {
+      if (ids.length === 0) return [];
+      const { data, error } = await db
+        .from('project_repos')
+        .select('project_id, repo_url, is_primary, github_app_installation_id')
+        .in('project_id', ids);
+      if (error) throw new Error(error.message);
+      return (data ?? []) as Array<{ project_id: string; repo_url: string | null; is_primary?: boolean | null; github_app_installation_id: unknown }>;
+    },
+    mint: (id) => withinProbe(mintInstallationAccess(id).then((minted) => ({ permissions: minted.permissions }))),
+    pat: (id) => withinProbe(resolveProjectGithubToken(db, id, null, { allowEnvFallback: false })),
+  });
+}
 
 /**
  * What the action routes check before they act (pipeline-view ActionFacts),
  * read once: cloud follow-up readiness per app, earlier follow-up rounds per
- * PR, and apps whose GitHub token GitHub refused a re-run since the app's
- * settings last changed. null when any read fails: then every action stays
- * offered, as before.
+ * PR, and apps whose GitHub token cannot re-run workflows. null when any
+ * read fails: then every action stays offered, as before. A failed token
+ * probe does not: the other facts still apply, and a refusal whose token
+ * could not be read stays in force.
  */
-async function readActionFacts(db: Db, projectIds: string[], attempts: AttemptRow[], followups: FollowupRow[], now: Date): Promise<ActionFacts | null> {
+async function readActionFacts(
+  db: Db,
+  projectIds: string[],
+  attempts: AttemptRow[],
+  followups: FollowupRow[],
+  now: Date,
+  rerunAccess?: PipelineRouteDeps['rerunAccess'],
+): Promise<ActionFacts | null> {
   try {
     const prIds = attempts.filter((a) => a.pr_url && (a.pr_state === 'open' || a.pr_state === 'draft')).map((a) => a.id);
     const prProjects = [...new Set(attempts.filter((a) => prIds.includes(a.id)).map((a) => a.project_id))];
     const cache: CloudReadyCache = new Map();
-    const since = new Date(now.getTime() - RERUN_REFUSED_TTL_MS).toISOString();
-    const [cloudRows, heads, refusals, settings] = await Promise.all([
+    const [cloudRows, heads, refusals] = await Promise.all([
       Promise.all(prProjects.map(async (id) => [id, await cloudReady(db, id, cache)] as const)),
       roundHeadsFor(db, prIds),
       db
         .from('fix_events')
-        .select('project_id, at')
+        .select('project_id, at, payload')
         .in('project_id', projectIds)
         .eq('kind', 'ci_started')
         .eq('status', 'fail')
         .like('dedupe_key', `${RERUN_REFUSED_DEDUPE_PREFIX}%`)
-        .gte('at', since)
+        .order('at', { ascending: false })
         .limit(500),
-      db.from('project_settings').select('project_id, updated_at').in('project_id', projectIds),
     ]);
     if ('error' in heads) throw new Error(heads.error);
     if (refusals.error) throw new Error(refusals.error.message);
-    if (settings.error) throw new Error(settings.error.message);
-    const changedAt = new Map(((settings.data ?? []) as Array<{ project_id: string; updated_at: string | null }>).map((r) => [r.project_id, r.updated_at ?? '']));
-    const rerunRefused = new Set<string>();
-    for (const r of (refusals.data ?? []) as Array<{ project_id: string; at: string }>) {
-      if (Date.parse(r.at) > Date.parse(changedAt.get(r.project_id) || '1970-01-01T00:00:00Z')) rerunRefused.add(r.project_id);
+    const refusalRows = ((refusals.data ?? []) as Array<{ project_id: string; at: string; payload: unknown }>).map((row) => ({
+      project_id: row.project_id,
+      at: row.at,
+      fingerprint: fingerprintFromPayload(row.payload),
+    }));
+    let access = new Map<string, RerunAccess>();
+    try {
+      access = await (rerunAccess ?? readRerunAccess)(db, projectIds, attempts, refusalRows);
+    } catch (err) {
+      plog.warn('rerun access probe failed', { err: err instanceof Error ? err.message : String(err) });
+      for (const row of refusalRows) {
+        if (row.fingerprint) access.set(row.project_id, { blocks: false, fingerprint: null, unreadable: true });
+      }
     }
+    const rerunRefused = projectsRerunRefused(projectIds, access, refusalRows, now.getTime(), RERUN_REFUSED_TTL_MS);
     const prior = new Map<string, PriorFollowup[]>();
     for (const f of followups) {
       if (!f.head_sha_before) continue;
@@ -714,7 +790,7 @@ export function registerPipelineRoutes(app: Hono<{ Variables: Variables }>, deps
     if ('denied' in scope) return scope.denied;
     if (scope.ids.length === 0) return c.json({ ok: true, data: { generatedAt: deps.now().toISOString(), projects: [], stages: [], dispatchers: [], trains: [], intake: null, ciReadable: true } });
     try {
-      return c.json({ ok: true, data: await readPipeline(db, scope.ids, deps.now()) });
+      return c.json({ ok: true, data: await readPipeline(db, scope.ids, deps.now(), deps.rerunAccess) });
     } catch (err) {
       return dbError(c, { message: err instanceof Error ? err.message : String(err) });
     }
@@ -740,7 +816,7 @@ export function registerPipelineRoutes(app: Hono<{ Variables: Variables }>, deps
     const access = await userCanAccessProject(db, userId, row.project_id);
     if (!access.allowed) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404);
     try {
-      const view = await readPipeline(db, [row.project_id], deps.now());
+      const view = await readPipeline(db, [row.project_id], deps.now(), deps.rerunAccess);
       const found = findPipelineFix(view.stages, fixId);
       await overlayLiveFailingChecks(db, row, found.item, deps);
       return c.json({ ok: true, data: { generatedAt: view.generatedAt, ...found } });

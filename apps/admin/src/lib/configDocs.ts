@@ -887,7 +887,7 @@ const INTEGRATIONS: ConfigDoc[] = [
     summary:
       'GitHub App installation token (preferred) or fine-grained PAT used to push branches and open PRs.',
     howItWorks:
-      'Needs `Contents:write` + `Pull requests:write` on the target repo. Stored as a vault reference. App tokens are preferred — they auto-rotate and have a shorter blast radius than PATs.',
+      'Needs Contents: Read and write, Pull requests: Read and write, and Actions: Read and write (so failed CI can be re-run) on the target repo. Stored as a vault reference. App tokens are preferred — they auto-rotate and have a shorter blast radius than PATs.',
     default: { value: 'unset' },
     backend: {
       table: 'project_settings',

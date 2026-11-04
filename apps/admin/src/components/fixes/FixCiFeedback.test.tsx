@@ -159,6 +159,20 @@ describe('FixCiFeedback', () => {
     mocks.apiFetchMutate.mockResolvedValue({ ok: false, error: { code: 'GITHUB_ACTIONS_WRITE_MISSING', message: 'forbidden' } })
     await render({ ciConclusion: 'cancelled', ciInfra: verdict({}) })
     await act(async () => button('Re-run tests')!.click())
-    expect(host.querySelector('[role="alert"]')!.textContent).toMatch(/Actions: write/)
+    expect(host.querySelector('[role="alert"]')!.textContent).toMatch(/Actions: Read and write/)
+    expect(link('GitHub connection →')!.getAttribute('href')).toBe('/integrations/config#platform-card-github')
+  })
+
+  it('Re-run is off, with a link to the GitHub connection, when the server already knows the token cannot write Actions', async () => {
+    const why = 'The GitHub token cannot re-run workflows: give it Actions: Read and write (fine-grained token) or the workflow scope, in the GitHub connection.'
+    mocks.apiFetch.mockImplementation(async (path: string) => {
+      if (String(path).includes('/pipeline/fix/')) return { ok: true, data: { item: { blocked: { rerun_ci: why } } } }
+      return { ok: true, data: ciOverviewFixture() }
+    })
+    await render({ ciConclusion: 'failure' })
+    expect(button('Re-run tests')!.disabled).toBe(true)
+    expect(button('Send to CI repair')!.disabled).toBe(false)
+    expect(host.querySelector('[data-testid="fix-ci-rerun-why"]')!.textContent).toContain(why)
+    expect(link('GitHub connection →')!.getAttribute('href')).toBe('/integrations/config#platform-card-github')
   })
 })

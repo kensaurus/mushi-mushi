@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_120 configuration knobs across 19 sections · last regenerated 2026-10-28._
+_120 configuration knobs across 19 sections · last regenerated 2026-11-04._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -725,7 +725,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — GitHub App installation token (preferred) or fine-grained PAT used to push branches and open PRs.
 
-**How it works** — Needs `Contents:write` + `Pull requests:write` on the target repo. Stored as a vault reference. App tokens are preferred — they auto-rotate and have a shorter blast radius than PATs.
+**How it works** — Needs Contents: Read and write, Pull requests: Read and write, and Actions: Read and write (so failed CI can be re-run) on the target repo. Stored as a vault reference. App tokens are preferred — they auto-rotate and have a shorter blast radius than PATs.
 
 **Default** — `unset`
 

@@ -200,7 +200,7 @@ export interface ActionFacts {
   prior: Map<string, PriorFollowup[]>
   /** Per fix: the heads of earlier follow-up rounds, cloud and local (roundHeadsFor). */
   roundHeads: Map<string, string[]>
-  /** Apps whose GitHub token was refused a workflow re-run since the app's settings last changed. */
+  /** Apps whose GitHub token cannot re-run workflows (Actions write is missing, or a re-run was refused for the token still in use). */
   rerunRefused: Set<string>
 }
 
