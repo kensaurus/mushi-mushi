@@ -71,7 +71,7 @@ function policy(over: Partial<CiRunnerPolicy> = {}): CiRunnerPolicy {
   return {
     organizationId: ORG,
     noPaidHostedOnPrivate: true,
-    hostedAllowedRepos: ['AtPeak-Co-Ltd/pck', 'kensaurus/mushi-mushi'],
+    hostedAllowedRepos: ['acme-co/app', 'kensaurus/mushi-mushi'],
     externalControllers: [{ name: 'kci dispatcher', owner: 'sbc-visual', repos: ['kensaurus/solo-boss-cloud_backend', 'kensaurus/tsumagoi'], note: null }],
     standbyRunners: ['kensaurus-local-*'],
     sourceNote: 'CI-AGREEMENT.md, 2026-10-22',
@@ -133,7 +133,7 @@ describe('policy', () => {
     expect(v).toMatchObject({ allowed: false, code: 'POLICY_NO_PAID_HOSTED' })
     expect(v.reason).toContain('CI-AGREEMENT.md, 2026-10-22')
     expect(policyVerdict(policy(), { repo: 'kensaurus/yen-yen', visibility: 'unknown', target: { kind: 'github_hosted', label: null }, runners }).reason).toMatch(/counts as private/)
-    expect(policyVerdict(policy(), { repo: 'AtPeak-Co-Ltd/pck', visibility: 'private', target: { kind: 'github_hosted', label: 'ubuntu-latest' }, runners }).allowed).toBe(true)
+    expect(policyVerdict(policy(), { repo: 'acme-co/app', visibility: 'private', target: { kind: 'github_hosted', label: 'ubuntu-latest' }, runners }).allowed).toBe(true)
     expect(policyVerdict(policy(), { repo: 'kensaurus/glot.it', visibility: 'public', target: { kind: 'github_hosted', label: 'ubuntu-latest' }, runners }).allowed).toBe(true)
     expect(policyVerdict(policy({ noPaidHostedOnPrivate: false }), { repo: 'kensaurus/yen-yen', visibility: 'private', target: { kind: 'github_hosted', label: 'ubuntu-latest' }, runners }).allowed).toBe(true)
   })

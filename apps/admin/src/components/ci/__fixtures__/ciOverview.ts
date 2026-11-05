@@ -271,7 +271,7 @@ export function policyFixture(over: Partial<CiRunnerPolicy> = {}): CiRunnerPolic
   return {
     organizationId: PLACEMENT_ORG,
     noPaidHostedOnPrivate: true,
-    hostedAllowedRepos: ['AtPeak-Co-Ltd/pck', 'kensaurus/mushi-mushi'],
+    hostedAllowedRepos: ['acme-co/app', 'kensaurus/mushi-mushi'],
     externalControllers: [{ name: 'kci dispatcher', owner: 'sbc-visual', repos: ['kensaurus/tsumagoi'], note: null }],
     standbyRunners: ['kensaurus-local-*'],
     sourceNote: 'CI-AGREEMENT.md, 2026-10-22',

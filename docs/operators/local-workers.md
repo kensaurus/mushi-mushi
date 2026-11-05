@@ -259,8 +259,8 @@ on the server side; the daemon stops at its next heartbeat.
 The WSL machine ran the lanes as `mushi-lane@<name>` systemd units around
 `lane-v4.sh`, configured by `~/mushi-credits-handoff/lanes.conf`, with a queue
 file per lane in `state/<name>.queue`. lane-v4 also stopped at `STOP_AT`
-(2026-10-31T14:59:00Z) and spent only when `cursor-agent status` named suzu's
-account. To move them:
+(2026-10-31T14:59:00Z) and spent only when `cursor-agent status` named the
+worker account. To move them:
 
 1. As root, once: `loginctl enable-linger mushi-agent` (it was off on
    2026-10-27), so the user unit keeps running without a login session.
@@ -269,7 +269,7 @@ account. To move them:
 3. Copy each lane's queue somewhere: `cat ~/mushi-credits-handoff/state/*.queue`.
 4. Review the import without writing anything:
    ```bash
-   mushi worker install --lanes-conf ~/mushi-credits-handoff/lanes.conf      --clone-root ~/.cache/mushi-work      --stop-at 2026-10-31T14:59:00Z --cursor-account suzu.haruka1130@gmail.com      --no-service --dry-run
+   mushi worker install --lanes-conf ~/mushi-credits-handoff/lanes.conf      --clone-root ~/.cache/mushi-work      --stop-at 2026-10-31T14:59:00Z --cursor-account worker.account@example.com      --no-service --dry-run
    ```
    Each lane keeps its name, app and model; `queue` and `fix` become `fix`,
    `off` becomes paused; every lane gets the stop date. The profile column is

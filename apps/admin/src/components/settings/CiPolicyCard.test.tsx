@@ -85,7 +85,7 @@ describe('CiPolicyCard', () => {
     expect(host.textContent).toContain('Nothing recorded yet')
     expect(toggle().getAttribute('aria-checked')).toBe('false')
     await click(toggle())
-    await set('Repos allowed on GitHub-hosted anyway', 'AtPeak-Co-Ltd/pck\nkensaurus/mushi-mushi')
+    await set('Repos allowed on GitHub-hosted anyway', 'acme-co/app\nkensaurus/mushi-mushi')
     await set('One per line: name | owner', 'kci dispatcher | sbc-visual | kensaurus/solo-boss-cloud_backend, kensaurus/tsumagoi')
     await set('One runner name or label per line', 'kensaurus-local-*')
     await set('Source', 'CI-AGREEMENT.md, 2026-10-22')
@@ -96,7 +96,7 @@ describe('CiPolicyCard', () => {
     expect(JSON.parse(String((init as RequestInit).body))).toEqual({
       organizationId: ORG,
       noPaidHostedOnPrivate: true,
-      hostedAllowedRepos: ['AtPeak-Co-Ltd/pck', 'kensaurus/mushi-mushi'],
+      hostedAllowedRepos: ['acme-co/app', 'kensaurus/mushi-mushi'],
       externalControllers: [{ name: 'kci dispatcher', owner: 'sbc-visual', repos: ['kensaurus/solo-boss-cloud_backend', 'kensaurus/tsumagoi'], note: null }],
       standbyRunners: ['kensaurus-local-*'],
       sourceNote: 'CI-AGREEMENT.md, 2026-10-22',

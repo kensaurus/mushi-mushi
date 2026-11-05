@@ -9,7 +9,7 @@ describe('a log line the worker sends to the console', () => {
     expect(cleanLine('MUSHI key mushi_abcdefghijklmnopqrstuvwxyz0123 refused')).toBe('[a line was hidden: it looked like a key or token]')
     expect(cleanLine('Authorization: Bearer abc.def')).toBe('Authorization: Bearer [hidden]')
     expect(cleanLine('token=abc123 expired')).toBe('token=[hidden] expired')
-    expect(cleanLine('Logged in as suzu.haruka1130@gmail.com')).toBe('Logged in as s***@g***.com')
+    expect(cleanLine('Logged in as worker.account@example.com')).toBe('Logged in as w***@e***.com')
     expect(cleanLine('cd /home/mushi-agent/.cache/mushi/work/glot/abcd1234 && pnpm lint')).toBe('cd …/abcd1234 && pnpm lint')
     expect(cleanLine('C:\\Users\\kensa\\src\\glot\\file.ts failed')).toBe('…/file.ts failed')
     expect(cleanLine('  12 | const apiKey = load()')).toBeNull()
@@ -20,14 +20,14 @@ describe('a log line the worker sends to the console', () => {
   })
 
   it('masks an account to its first letters', () => {
-    expect(maskEmail('suzu@example.com')).toBe('s***@e***.com')
+    expect(maskEmail('worker.account@example.com')).toBe('w***@e***.com')
   })
 })
 
 describe('the account and gh checks as they really answered', () => {
-  const out = 'Logged in as suzu.haruka1130@gmail.com'
+  const out = 'Logged in as worker.account@example.com'
   it('tells another account, signed out, timed out and missing apart', () => {
-    expect(cursorCheckResult({ state: 'signed_in', detail: 'Logged in', output: out }, 'suzu.haruka1130@gmail.com')).toBe('expected')
+    expect(cursorCheckResult({ state: 'signed_in', detail: 'Logged in', output: out }, 'worker.account@example.com')).toBe('expected')
     expect(cursorCheckResult({ state: 'signed_in', detail: 'Logged in', output: out }, 'other@x.io')).toBe('other_account')
     expect(cursorCheckResult({ state: 'signed_out', detail: 'Not logged in', output: '' }, undefined)).toBe('signed_out')
     expect(cursorCheckResult({ state: 'unknown', detail: 'timed out after 90 s', output: '' }, undefined)).toBe('timed_out')

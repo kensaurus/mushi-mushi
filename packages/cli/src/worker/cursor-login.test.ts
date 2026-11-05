@@ -111,7 +111,7 @@ describe('switching the Cursor account from the console', () => {
   })
 
   it('ends wrong_account when the person approved as someone else; the lanes keep taking nothing', async () => {
-    const s = setup({ status: proc('✓ Logged in as suzu.haruka1130@gmail.com') })
+    const s = setup({ status: proc('✓ Logged in as worker.account@example.com') })
     s.cl.start(RID, 'kensaurus@gmail.com')
     await s.cl.settle()
     const r = s.cl.report()!

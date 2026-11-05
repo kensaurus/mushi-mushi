@@ -733,7 +733,7 @@ export function assertWorkerKey(key: string, cliKey: string | undefined): string
 /**
  * @internal Exported for tests only. The sign-in, narrowed to one account when the worker config names it: a
  * clear "signed in" as anyone else counts as signed out (lane-v4 spent only
- * suzu's credits this way). An unclear answer stays unclear.
+ * the worker account's credits this way). An unclear answer stays unclear.
  */
 export function cursorStateFor(s: { state: CursorSignIn; output: string }, account: string | undefined): CursorSignIn {
   if (!account || s.state !== 'signed_in') return s.state

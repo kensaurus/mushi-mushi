@@ -478,7 +478,7 @@ describe('Local workers on /credits', () => {
         laneName: null,
         projectId: null,
         title: 'Cursor credits idle for 7 h',
-        cause: 'Cursor key "suzu" expires in 24 h. What blocks the work: glot: a run has held an agent space for 4 h 10 min.',
+        cause: 'Cursor key "spare" expires in 24 h. What blocks the work: glot: a run has held an agent space for 4 h 10 min.',
         sinceSec: 7 * 3600,
         actions: [],
       },

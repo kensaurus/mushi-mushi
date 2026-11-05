@@ -161,7 +161,7 @@ const body = (over: Record<string, unknown> = {}) => ({ projectId: P1, repo: REP
 const policyBody = (over: Record<string, unknown> = {}) => ({
   organizationId: ORG,
   noPaidHostedOnPrivate: true,
-  hostedAllowedRepos: ['AtPeak-Co-Ltd/pck', 'kensaurus/mushi-mushi'],
+  hostedAllowedRepos: ['acme-co/app', 'kensaurus/mushi-mushi'],
   externalControllers: [{ name: 'kci dispatcher', owner: 'sbc-visual', repos: ['kensaurus/tsumagoi'] }],
   standbyRunners: ['kensaurus-local-*'],
   sourceNote: 'CI-AGREEMENT.md, 2026-10-22',
@@ -195,7 +195,7 @@ describe('GET/PUT /v1/admin/ci/policy', () => {
     const s = setup({ policy: null, orgRole: 'admin' })
     const res = await s.app.call('PUT', '/v1/admin/ci/policy', { body: policyBody() })
     expect(res.status).toBe(200)
-    expect(s.db.table('ci_runner_policies')[0]).toMatchObject({ organization_id: ORG, no_paid_hosted_on_private: true, hosted_allowed_repos: ['AtPeak-Co-Ltd/pck', 'kensaurus/mushi-mushi'], standby_runners: ['kensaurus-local-*'], updated_by: 'u1' })
+    expect(s.db.table('ci_runner_policies')[0]).toMatchObject({ organization_id: ORG, no_paid_hosted_on_private: true, hosted_allowed_repos: ['acme-co/app', 'kensaurus/mushi-mushi'], standby_runners: ['kensaurus-local-*'], updated_by: 'u1' })
     expect(s.audits[0]).toMatchObject({ action: 'settings.updated', resourceType: 'ci_runner_policy', metadata: { first_save: true, no_spend_lifted: false } })
   })
 

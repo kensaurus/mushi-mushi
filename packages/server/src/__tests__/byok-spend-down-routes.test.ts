@@ -273,7 +273,7 @@ describe('GET spend-down', () => {
 })
 
 describe('GET spend-down: two organization Cursor keys', () => {
-  const SUZU = '2000000e-0000-4000-8000-000000000000'
+  const SPARE = '2000000e-0000-4000-8000-000000000000'
   const OUTRANKED = 'ayako pays for these apps first (priority 10); this key takes over when ayako runs out or is removed'
 
   function twoOrgKeys(ayako: { status: string; test_status: string }) {
@@ -289,14 +289,14 @@ describe('GET spend-down: two organization Cursor keys', () => {
       credits_expire_at: expiry,
     })
     db.table('byok_keys').push({
-      id: SUZU,
+      id: SPARE,
       provider_slug: 'cursor',
       project_id: null,
       organization_id: ORG,
       status: 'active',
       test_status: 'ok',
       priority: 50,
-      label: 'suzu.haruka',
+      label: 'spare-key',
       credits_expire_at: expiry,
       spend_down_enabled: true,
       spend_down_model: null,
@@ -314,11 +314,11 @@ describe('GET spend-down: two organization Cursor keys', () => {
     expect(res.status).toBe(200)
     const keys = res.body.data?.keys as Array<Record<string, unknown>>
     const ayako = keys.find((k) => k.id === SHARED)!
-    const suzu = keys.find((k) => k.id === SUZU)!
+    const spare = keys.find((k) => k.id === SPARE)!
     expect(ayako.projects).toMatchObject([{ id: P1 }])
     expect(ayako.idleNote).toBeNull()
-    expect(suzu.projects).toEqual([])
-    expect(suzu.idleNote).toBe(OUTRANKED)
+    expect(spare.projects).toEqual([])
+    expect(spare.idleNote).toBe(OUTRANKED)
   })
 
   it('an active key whose last test was error_quota still pays for the apps', async () => {
@@ -328,10 +328,10 @@ describe('GET spend-down: two organization Cursor keys', () => {
     const res = await app.call('GET', '/v1/admin/byok/spend-down', {})
     const keys = res.body.data?.keys as Array<Record<string, unknown>>
     const ayako = keys.find((k) => k.id === SHARED)!
-    const suzu = keys.find((k) => k.id === SUZU)!
+    const spare = keys.find((k) => k.id === SPARE)!
     expect(ayako.projects).toMatchObject([{ id: P1 }])
-    expect(suzu.projects).toEqual([])
-    expect(suzu.idleNote).toBe(OUTRANKED)
+    expect(spare.projects).toEqual([])
+    expect(spare.idleNote).toBe(OUTRANKED)
   })
 
   it('a quota-exhausted higher-priority key hands the apps to the next one', async () => {
@@ -341,10 +341,10 @@ describe('GET spend-down: two organization Cursor keys', () => {
     const res = await app.call('GET', '/v1/admin/byok/spend-down', {})
     const keys = res.body.data?.keys as Array<Record<string, unknown>>
     const ayako = keys.find((k) => k.id === SHARED)!
-    const suzu = keys.find((k) => k.id === SUZU)!
+    const spare = keys.find((k) => k.id === SPARE)!
     expect(ayako).toMatchObject({ state: 'key_unusable', projects: [], idleNote: null })
-    expect(suzu.projects).toMatchObject([{ id: P1 }])
-    expect(suzu.idleNote).toBeNull()
+    expect(spare.projects).toMatchObject([{ id: P1 }])
+    expect(spare.idleNote).toBeNull()
   })
 })
 

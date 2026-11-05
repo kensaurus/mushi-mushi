@@ -159,14 +159,14 @@ describe('spendDownProjectIds: the apps where this key is the resolver\'s first 
 
   it('a quota hold is not a first pick, so the next org key pays', () => {
     const ayako = pool('ayako', { priority: 10 })
-    const suzu = pool('suzu', { priority: 50 })
+    const spare = pool('spare', { priority: 50 })
     const held = [
       { ...ayako, status: 'quota_exhausted', test_status: 'error_quota' },
       { ...ayako, status: 'quota_exhausted', test_status: 'ok' },
     ]
     for (const row of held) {
-      expect(firstCursorKeyFor(project(P1), [row, suzu])).toBe('suzu')
-      expect(spendDownProjectIds({ id: 'suzu' }, [project(P1)], [row, suzu])).toEqual([P1])
+      expect(firstCursorKeyFor(project(P1), [row, spare])).toBe('spare')
+      expect(spendDownProjectIds({ id: 'spare' }, [project(P1)], [row, spare])).toEqual([P1])
     }
   })
 
@@ -178,21 +178,21 @@ describe('spendDownProjectIds: the apps where this key is the resolver\'s first 
       test_status: 'error_quota',
       exhausted_until: '2026-10-24T12:00:00Z',
     })
-    const suzu = pool('suzu', { priority: 50 })
-    expect(firstCursorKeyFor(project(P1), [ayako, suzu], now)).toBe('suzu')
+    const spare = pool('spare', { priority: 50 })
+    expect(firstCursorKeyFor(project(P1), [ayako, spare], now)).toBe('spare')
     expect(spendDownWindow(key({ id: 'ayako', status: 'quota_exhausted' }), new Date(now)).state).toBe('key_unusable')
     const restored = { ...ayako, status: 'active', test_status: 'ok' }
-    expect(firstCursorKeyFor(project(P1), [restored, suzu], now)).toBe('ayako')
+    expect(firstCursorKeyFor(project(P1), [restored, spare], now)).toBe('ayako')
   })
 
   it('an active key whose last test was error_quota still pays; exhausted_until still hands the apps over', () => {
     const ayako = pool('ayako', { priority: 10, test_status: 'error_quota' })
-    const suzu = pool('suzu', { priority: 50 })
+    const spare = pool('spare', { priority: 50 })
     const now = Date.parse('2026-10-24T00:00:00Z')
-    expect(firstCursorKeyFor(project(P1), [ayako, suzu], now)).toBe('ayako')
-    expect(spendDownProjectIds({ id: 'ayako' }, [project(P1)], [ayako, suzu])).toEqual([P1])
+    expect(firstCursorKeyFor(project(P1), [ayako, spare], now)).toBe('ayako')
+    expect(spendDownProjectIds({ id: 'ayako' }, [project(P1)], [ayako, spare])).toEqual([P1])
     const usedUp = { ...ayako, exhausted_until: '2099-01-01T00:00:00Z' }
-    expect(firstCursorKeyFor(project(P1), [usedUp, suzu], now)).toBe('suzu')
+    expect(firstCursorKeyFor(project(P1), [usedUp, spare], now)).toBe('spare')
   })
 })
 
@@ -1315,8 +1315,8 @@ describe('spendDownOutrankNote', () => {
   })
 
   it('names the org key that pays first', () => {
-    const keys = [orgKey('ayako', 10, 'ayako'), orgKey('suzu', 50, 'suzu.haruka')]
-    expect(spendDownOutrankNote('suzu', [project], keys)).toBe(
+    const keys = [orgKey('ayako', 10, 'ayako'), orgKey('spare', 50, 'spare-key')]
+    expect(spendDownOutrankNote('spare', [project], keys)).toBe(
       'ayako pays for these apps first (priority 10); this key takes over when ayako runs out or is removed',
     )
     expect(spendDownOutrankNote('ayako', [project], keys)).toBeNull()
@@ -1330,26 +1330,26 @@ describe('spendDownOutrankNote', () => {
     const universal = (id: string, priority: number, owner: string | null, label: string) => ({
       id, label, project_id: null, organization_id: null, owner_user_id: owner, priority, status: 'active', test_status: 'ok',
     })
-    const same = [universal('ayako', 10, 'kenji', 'ayako'), universal('suzu', 50, 'kenji', 'suzu.haruka')]
-    expect(spendDownOutrankNote('suzu', [project], same)).toBe(
+    const same = [universal('ayako', 10, 'kenji', 'ayako'), universal('spare', 50, 'kenji', 'spare-key')]
+    expect(spendDownOutrankNote('spare', [project], same)).toBe(
       'ayako pays for these apps first (priority 10); this key takes over when ayako runs out or is removed',
     )
-    const otherOwner = [universal('ayako', 10, 'other', 'ayako'), universal('suzu', 50, 'kenji', 'suzu.haruka')]
-    expect(spendDownOutrankNote('suzu', [project], otherOwner)).toBeNull()
+    const otherOwner = [universal('ayako', 10, 'other', 'ayako'), universal('spare', 50, 'kenji', 'spare-key')]
+    expect(spendDownOutrankNote('spare', [project], otherOwner)).toBeNull()
     // The winner is selectable, but this key has no owner id: do not borrow the winner's label.
-    const noOwnerOnMine = [universal('ayako', 10, 'kenji', 'ayako'), universal('suzu', 50, null, 'suzu.haruka')]
-    expect(spendDownOutrankNote('suzu', [project], noOwnerOnMine)).toBeNull()
+    const noOwnerOnMine = [universal('ayako', 10, 'kenji', 'ayako'), universal('spare', 50, null, 'spare-key')]
+    expect(spendDownOutrankNote('spare', [project], noOwnerOnMine)).toBeNull()
   })
 
   it('stays quiet when an app key, a missing repo, or auto-fix off explains the idle key', () => {
     const keys = [
       orgKey('ayako', 10, 'ayako'),
-      orgKey('suzu', 50, 'suzu.haruka'),
+      orgKey('spare', 50, 'spare-key'),
       { id: 'own', label: 'hirose', project_id: P1, organization_id: null, priority: 10, status: 'active', test_status: 'ok' },
     ]
-    expect(spendDownOutrankNote('suzu', [project], keys)).toBeNull()
-    expect(spendDownOutrankNote('suzu', [{ ...project, has_repo: false }], keys.slice(0, 2))).toBeNull()
-    expect(spendDownOutrankNote('suzu', [{ ...project, autofix_enabled: false }], keys.slice(0, 2))).toBeNull()
+    expect(spendDownOutrankNote('spare', [project], keys)).toBeNull()
+    expect(spendDownOutrankNote('spare', [{ ...project, has_repo: false }], keys.slice(0, 2))).toBeNull()
+    expect(spendDownOutrankNote('spare', [{ ...project, autofix_enabled: false }], keys.slice(0, 2))).toBeNull()
   })
 })
 
@@ -1358,9 +1358,9 @@ describe('a used-up Cursor key hands its apps to the next one (2026-10-24)', () 
     const project = { id: 'p1', organization_id: 'o1', has_legacy_key: false, org_owner_ids: [] }
     const keys = [
       { id: 'ayako', project_id: null, organization_id: 'o1', priority: 10, status: 'active', test_status: 'ok', exhausted_until: '2026-10-24T12:00:00Z' },
-      { id: 'suzu', project_id: null, organization_id: 'o1', priority: 50, status: 'active', test_status: 'ok', exhausted_until: null },
+      { id: 'spare', project_id: null, organization_id: 'o1', priority: 50, status: 'active', test_status: 'ok', exhausted_until: null },
     ]
-    expect(firstCursorKeyFor(project, keys, Date.parse('2026-10-24T08:00:00Z'))).toBe('suzu')
+    expect(firstCursorKeyFor(project, keys, Date.parse('2026-10-24T08:00:00Z'))).toBe('spare')
     expect(firstCursorKeyFor(project, keys, Date.parse('2026-10-24T13:00:00Z'))).toBe('ayako')
   })
 })
@@ -1373,11 +1373,11 @@ describe('an app whose own keys are used up goes to its organization, then unive
     const keys = [
       { id: 'hirose', project_id: 'glot', organization_id: null, priority: 100, ...used },
       { id: 'ayako', project_id: null, organization_id: 'kenji', priority: 10, status: 'active', test_status: 'ok' },
-      { id: 'suzu', project_id: null, organization_id: null, owner_user_id: 'owner', priority: 50, status: 'active', test_status: 'ok' },
+      { id: 'spare', project_id: null, organization_id: null, owner_user_id: 'owner', priority: 50, status: 'active', test_status: 'ok' },
     ]
     expect(firstCursorKeyFor(glot, keys, now)).toBe('ayako')
     const mushi = { id: 'mushi', organization_id: 'mm', has_legacy_key: true, org_owner_ids: ['owner'] }
-    expect(firstCursorKeyFor(mushi, [{ id: 'hirose-shared', project_id: 'mushi', organization_id: null, priority: 100, ...used }, keys[2]], now)).toBe('suzu')
+    expect(firstCursorKeyFor(mushi, [{ id: 'hirose-shared', project_id: 'mushi', organization_id: null, priority: 100, ...used }, keys[2]], now)).toBe('spare')
     // No pool key of its own: the legacy key still comes first (ADR 0023).
     expect(firstCursorKeyFor({ ...mushi, id: 'other' }, [keys[2]], now)).toBe('legacy')
   })

@@ -85,7 +85,7 @@ describe('Switch account, on the daemon', () => {
     const set: string[] = []
     const { daemon, calls, logs } = harness({
       heartbeat: answer({ cursorAccount: 'kensaurus@gmail.com', cursorLogin: { requestId: RID } }),
-      extra: { cursorAccount: 'suzu.haruka1130@gmail.com', setCursorAccount: (a) => set.push(a), cursorLogin: sw.cl },
+      extra: { cursorAccount: 'worker.account@example.com', setCursorAccount: (a) => set.push(a), cursorLogin: sw.cl },
     })
     await daemon.tick()
     expect(set).toEqual(['kensaurus@gmail.com'])
@@ -101,7 +101,7 @@ describe('Switch account, on the daemon', () => {
   it('the readings expect the new account at once and check again', async () => {
     let checks = 0
     const r = createHostReadings({
-      cursorAccount: 'suzu.haruka1130@gmail.com',
+      cursorAccount: 'worker.account@example.com',
       now: () => 0,
       log: () => {},
       memGb: () => 20,
@@ -111,7 +111,7 @@ describe('Switch account, on the daemon', () => {
         return { state: 'signed_in', detail: 'Logged in', output: 'Logged in as kensaurus@gmail.com' }
       },
     })
-    expect((await r.read()).cursor).toBe('signed_out') // signed in, but not as suzu
+    expect((await r.read()).cursor).toBe('signed_out') // signed in, but not as spare
     r.setAccount('kensaurus@gmail.com')
     await r.read()
     await new Promise((res) => setTimeout(res, 0))

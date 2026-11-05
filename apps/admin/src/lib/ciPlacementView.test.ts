@@ -47,7 +47,7 @@ describe('the CI agreement form', () => {
     expect(d.externalControllers).toBe('kci dispatcher | sbc-visual | kensaurus/tsumagoi')
     const { body, errors } = parsePolicyDraft(d)
     expect(errors).toEqual({})
-    expect(body).toMatchObject({ noPaidHostedOnPrivate: true, hostedAllowedRepos: ['AtPeak-Co-Ltd/pck', 'kensaurus/mushi-mushi'], externalControllers: [{ name: 'kci dispatcher', owner: 'sbc-visual', repos: ['kensaurus/tsumagoi'] }], standbyRunners: ['kensaurus-local-*'], sourceNote: 'CI-AGREEMENT.md, 2026-10-22' })
+    expect(body).toMatchObject({ noPaidHostedOnPrivate: true, hostedAllowedRepos: ['acme-co/app', 'kensaurus/mushi-mushi'], externalControllers: [{ name: 'kci dispatcher', owner: 'sbc-visual', repos: ['kensaurus/tsumagoi'] }], standbyRunners: ['kensaurus-local-*'], sourceNote: 'CI-AGREEMENT.md, 2026-10-22' })
     expect(draftFromPolicy(null)).toMatchObject({ noPaidHostedOnPrivate: false, hostedAllowedRepos: '' })
   })
 

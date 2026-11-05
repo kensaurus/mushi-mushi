@@ -35,7 +35,7 @@ const NOW = new Date('2026-10-28T00:00:00Z')
 
 const KEY: SpendDownKeyStatus = {
   id: 'k1',
-  label: 'suzu.haruka',
+  label: 'spare-key',
   keyHint: 'crsr_a4c…ea3d',
   scope: 'universal',
   ownedByMe: false,

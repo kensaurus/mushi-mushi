@@ -57,7 +57,7 @@ describe('the worker config', () => {
     expect(validateWorkerConfig({ version: 1, lanes: [lane('a', '/home/u/a'), lane('b', '/home/u/b')] }).lanes).toHaveLength(2)
   })
   it('takes an optional Cursor account (an email), kept local', () => {
-    expect(validateWorkerConfig({ version: 1, cursorAccount: 'suzu@example.com', lanes: [lane('a', '/home/u/a')] }).cursorAccount).toBe('suzu@example.com')
+    expect(validateWorkerConfig({ version: 1, cursorAccount: 'worker.account@example.com', lanes: [lane('a', '/home/u/a')] }).cursorAccount).toBe('worker.account@example.com')
     expect(() => validateWorkerConfig({ version: 1, cursorAccount: '$(id)', lanes: [lane('a', '/home/u/a')] })).toThrow(/cursorAccount/)
   })
   it('needs absolute clone paths and app ids', () => {

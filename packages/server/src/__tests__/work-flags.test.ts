@@ -61,7 +61,7 @@ describe('the heartbeat keeps what the console needs (it dropped it before)', ()
         cpus: 16,
         stateSec: 3 * HOUR,
         waitWhy: '4 agents running, the host\'s cap is 4',
-        checks: { cursor: { result: 'timed_out', ageSec: 600, detail: 'timed out after 90 s', account: 's***@g***.com' }, gh: { result: 'signed_in', ageSec: 60, detail: 'signed in' }, bogus: 1 },
+        checks: { cursor: { result: 'timed_out', ageSec: 600, detail: 'timed out after 90 s', account: 'w***@e***.com' }, gh: { result: 'signed_in', ageSec: 60, detail: 'signed in' }, bogus: 1 },
         slots: [{ lane: 'glot', runId: C(1), kind: 'fix', ageSec: 4 * HOUR, stage: 'commit', stageSec: 4 * HOUR }, { lane: '../etc', runId: 'x', kind: 'fix', ageSec: 1 }],
       },
       lanes: [
@@ -82,7 +82,7 @@ describe('the heartbeat keeps what the console needs (it dropped it before)', ()
                 stage: 'commit',
                 stageSec: 4 * HOUR,
                 model: 'grok-4.7-xhigh-fast',
-                log: ['  12 | const k = process.env.KEY', 'push to https://x-access-token:ghs_abcdefghijklmnopqrstuvwxyz0123@github.com/o/r.git', 'as suzu.haruka1130@gmail.com in /home/mushi-agent/.cache/mushi/work/glot/2000000a'],
+                log: ['  12 | const k = process.env.KEY', 'push to https://x-access-token:ghs_abcdefghijklmnopqrstuvwxyz0123@github.com/o/r.git', 'as worker.account@example.com in /home/mushi-agent/.cache/mushi/work/glot/2000000a'],
               },
             ],
           },
@@ -98,18 +98,18 @@ describe('the heartbeat keeps what the console needs (it dropped it before)', ()
     if (!parsed.ok) return
     const s = parsed.value.status
     expect(s).toMatchObject({ state: 'slot-wait', load1: 37.2, cpus: 16, stateSec: 3 * HOUR, waitWhy: "4 agents running, the host's cap is 4" })
-    expect(s.checks).toEqual({ cursor: { result: 'timed_out', ageSec: 600, detail: 'timed out after 90 s', account: 's***@g***.com' }, gh: { result: 'signed_in', ageSec: 60, detail: 'signed in' } })
+    expect(s.checks).toEqual({ cursor: { result: 'timed_out', ageSec: 600, detail: 'timed out after 90 s', account: 'w***@e***.com' }, gh: { result: 'signed_in', ageSec: 60, detail: 'signed in' } })
     expect(s.slots).toEqual([{ lane: 'glot', runId: C(1), kind: 'fix', ageSec: 4 * HOUR, stage: 'commit', stageSec: 4 * HOUR }])
     expect(parsed.value.lanes[0]!.status.runs).toBe(4)
     const run = (parsed.value.lanes[0]!.status.inflight as Array<{ log: string[] }>)[0]!
     expect(run).toMatchObject({ runId: C(1), stage: 'commit', stageSec: 4 * HOUR, model: 'grok-4.7-xhigh-fast' })
-    expect(run.log).toEqual(['push to https://github.com/o/r.git', 'as s***@g***.com in …/2000000a'])
+    expect(run.log).toEqual(['push to https://github.com/o/r.git', 'as w***@e***.com in …/2000000a'])
   })
 
   it('refuses an unmasked account and caps every list', () => {
     const parsed = parseHeartbeat({
       host: { hostId: 'b'.repeat(64), hostname: 'x', platform: 'linux' },
-      status: { checks: { cursor: { result: 'expected', ageSec: 1, detail: '', account: 'suzu.haruka1130@gmail.com' } }, slots: Array.from({ length: 40 }, (_, i) => ({ lane: 'l', runId: C(1), kind: 'fix', ageSec: i })) },
+      status: { checks: { cursor: { result: 'expected', ageSec: 1, detail: '', account: 'worker.account@example.com' } }, slots: Array.from({ length: 40 }, (_, i) => ({ lane: 'l', runId: C(1), kind: 'fix', ageSec: i })) },
       lanes: [],
     })
     expect(parsed.ok && (parsed.value.status.checks as { cursor: { account: string | null } }).cursor.account).toBeNull()
@@ -147,7 +147,7 @@ describe('deriveWorkerFlags: the 2026-10-28 incident', () => {
     maxAgents: 4,
     load1: 37,
     cpus: 16,
-    checks: { cursor: { result: 'timed_out', ageSec: 900, detail: 'timed out after 90 s', account: 's***@g***.com' }, gh: { result: 'signed_in', ageSec: 60, detail: '' } },
+    checks: { cursor: { result: 'timed_out', ageSec: 900, detail: 'timed out after 90 s', account: 'w***@e***.com' }, gh: { result: 'signed_in', ageSec: 60, detail: '' } },
     slots: spaces.map((x) => ({ lane: `lane-${x.n}`, runId: C(x.n), kind: 'fix', ageSec: x.age, stage: x.stage, stageSec: x.stageSec })),
   })
   const flags = deriveWorkerFlags(
@@ -155,7 +155,7 @@ describe('deriveWorkerFlags: the 2026-10-28 incident', () => {
       hosts: [machine],
       lanes: [...busy, ...waiting, queuedWaiting],
       claims: spaces.map((x) => claim(x.n, { claimedAt: ago(x.age) })),
-      credits: [{ label: 'Cursor key "suzu"', expiresAt: '2026-10-31T00:00:00Z' }],
+      credits: [{ label: 'Cursor key "spare"', expiresAt: '2026-10-31T00:00:00Z' }],
     }),
   )
   const kinds = flags.map((f) => f.kind)
@@ -200,12 +200,12 @@ describe('deriveWorkerFlags: the 2026-10-28 incident', () => {
         hosts: [machine],
         lanes: [...busy.slice(0, 3), ...waiting],
         claims: [...spaces.slice(0, 3).map((x) => claim(x.n, { claimedAt: ago(x.age) })), claim(9, { status: 'done', outcome: 'pr_opened', finishedAt: ago(7 * HOUR), claimedAt: ago(7.5 * HOUR) })],
-        credits: [{ label: 'Cursor key "suzu"', expiresAt: '2026-10-29T12:00:00Z' }],
+        credits: [{ label: 'Cursor key "spare"', expiresAt: '2026-10-29T12:00:00Z' }],
       }),
     )
     const idle = blocked.find((f) => f.kind === 'credits_idle')!
     expect(idle).toMatchObject({ severity: 'danger', title: 'Cursor credits idle for 7 h' })
-    expect(idle.cause).toMatch(/^Cursor key "suzu" expires in 24 h\. What blocks the work: lane-\d: a run has held an agent space/)
+    expect(idle.cause).toMatch(/^Cursor key "spare" expires in 24 h\. What blocks the work: lane-\d: a run has held an agent space/)
   })
 
   it('puts danger first and counts the same for the badge', () => {
@@ -244,7 +244,7 @@ describe('deriveWorkerFlags: each other failure', () => {
             state: 'mem-wait',
             stateSec: 20 * 60,
             waitWhy: '2 GB free, under the 5 GB floor',
-            checks: { gh: { result: 'signed_out', ageSec: 30, detail: 'gh auth login' }, cursor: { result: 'other_account', ageSec: 60, detail: 'Logged in as o***@e***.com', account: 's***@g***.com' }, notReady: [{ lane: 'lane-1', problem: 'Its folder on this machine is not a git clone' }] },
+            checks: { gh: { result: 'signed_out', ageSec: 30, detail: 'gh auth login' }, cursor: { result: 'other_account', ageSec: 60, detail: 'Logged in as o***@e***.com', account: 'w***@e***.com' }, notReady: [{ lane: 'lane-1', problem: 'Its folder on this machine is not a git clone' }] },
           }),
         ],
         lanes: [lane(1, {})],
@@ -253,7 +253,7 @@ describe('deriveWorkerFlags: each other failure', () => {
     const by = Object.fromEntries(flags.map((f) => [f.kind, f]))
     expect(by.gh_signed_out).toMatchObject({ severity: 'danger', title: 'gh is not signed in on alienware' })
     expect(by.account_check).toMatchObject({ severity: 'danger', title: 'Cursor on alienware is signed in as another account' })
-    expect(by.account_check!.cause).toContain('they must run as s***@g***.com')
+    expect(by.account_check!.cause).toContain('they must run as w***@e***.com')
     expect(by.machine_not_ready).toMatchObject({ severity: 'danger', laneName: 'lane-1' })
     expect(by.machine_waiting!.cause).toMatch(/^2 GB free, under the 5 GB floor\./)
   })

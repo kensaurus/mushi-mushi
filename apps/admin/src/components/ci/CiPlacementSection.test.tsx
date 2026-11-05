@@ -92,7 +92,7 @@ describe('CiPlacementSection', () => {
   it('shows the agreement, greys out GitHub-hosted on a private repo with the reason, and hides standby labels', async () => {
     await render()
     expect(state.paths[0]).toBe(`/v1/admin/ci/placement?project_id=${PROJECT}`)
-    expect(host.textContent).toContain('No paid GitHub-hosted minutes on private repos (except AtPeak-Co-Ltd/pck, kensaurus/mushi-mushi)')
+    expect(host.textContent).toContain('No paid GitHub-hosted minutes on private repos (except acme-co/app, kensaurus/mushi-mushi)')
     const card = q('ci-placement-repo-kensaurus/yen-yen')
     expect(card.textContent).toContain('Now: GitHub-hosted (ubuntu-24.04): no variable set')
     expect(radio('GitHub-hosted', card).disabled).toBe(true)

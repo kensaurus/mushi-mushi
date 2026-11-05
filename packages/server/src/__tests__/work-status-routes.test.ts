@@ -201,7 +201,7 @@ describe('POST /v1/admin/work/hosts/:id/recheck', () => {
 const LINK = 'https://cursor.com/loginDeepControl?challenge=abcDEF123_-xyz&uuid=1f95da85-6fc6-4e9c-8795-0ef1b7913f90&mode=login&redirectTarget=cli'
 /** A heartbeat from a daemon that can switch (or an older one, can: undefined), with its switch report. */
 const hbSwitch = (cursorLogin?: Record<string, unknown>, can: string[] | null = ['cursor_login']) => {
-  const b = hb([], [], { cursor: { result: 'expected', ageSec: 30, detail: 'Logged in', account: 's***@g***.com' } }) as Record<string, any>
+  const b = hb([], [], { cursor: { result: 'expected', ageSec: 30, detail: 'Logged in', account: 'w***@e***.com' } }) as Record<string, any>
   return { ...b, host: { ...b.host, ...(can ? { can } : {}) }, status: { ...b.status, ...(cursorLogin ? { cursorLogin } : {}) } }
 }
 
@@ -312,13 +312,13 @@ describe('Switch the Cursor account from the console', () => {
     const requestId = (s.db.table('work_hosts')[0]!.cursor_login as { requestId: string }).requestId
     await s.app.call('POST', '/v1/worker/heartbeat', { body: hbSwitch({ requestId, state: 'link_ready', url: 'https://evil.example/login' }) })
     expect((await readSwitch(s)).body.data.login.state).toBe('requested')
-    await s.app.call('POST', '/v1/worker/heartbeat', { body: hbSwitch({ requestId, state: 'wrong_account', detail: 'Signed in as suzu.haruka1130@gmail.com, not kensaurus@gmail.com.' }) })
-    expect((await readSwitch(s)).body.data.login).toMatchObject({ state: 'wrong_account', detail: 'Signed in as s***@g***.com, not k***@g***.com.' })
+    await s.app.call('POST', '/v1/worker/heartbeat', { body: hbSwitch({ requestId, state: 'wrong_account', detail: 'Signed in as worker.account@example.com, not kensaurus@gmail.com.' }) })
+    expect((await readSwitch(s)).body.data.login).toMatchObject({ state: 'wrong_account', detail: 'Signed in as w***@e***.com, not k***@g***.com.' })
   })
 
   it('the account flag offers Switch account', async () => {
     const s = setup()
-    await s.app.call('POST', '/v1/worker/heartbeat', { body: hb([], [], { cursor: { result: 'other_account', ageSec: 60, detail: 'Logged in as suzu.haruka1130@gmail.com', account: 'k***@g***.com' } }) })
+    await s.app.call('POST', '/v1/worker/heartbeat', { body: hb([], [], { cursor: { result: 'other_account', ageSec: 60, detail: 'Logged in as worker.account@example.com', account: 'k***@g***.com' } }) })
     const lanes = await s.app.call('GET', '/v1/admin/work/lanes', console_('u1'))
     const flag = (lanes.body.data.flags as Array<{ kind: string; actions: Array<{ kind: string }> }>).find((f) => f.kind === 'account_check')!
     expect(flag.actions.map((a) => a.kind)).toEqual(['switch_account', 'recheck_account', 'copy_command'])
@@ -326,7 +326,7 @@ describe('Switch the Cursor account from the console', () => {
 
   it('stays quiet about another account while the machine is switching on purpose', async () => {
     const s = setup()
-    const body = hb([], [], { cursor: { result: 'other_account', ageSec: 60, detail: 'Logged in as suzu.haruka1130@gmail.com', account: 'k***@g***.com' } }) as Record<string, any>
+    const body = hb([], [], { cursor: { result: 'other_account', ageSec: 60, detail: 'Logged in as worker.account@example.com', account: 'k***@g***.com' } }) as Record<string, any>
     await s.app.call('POST', '/v1/worker/heartbeat', { body: { ...body, status: { ...body.status, state: 'switching-account' } } })
     const lanes = await s.app.call('GET', '/v1/admin/work/lanes', console_('u1'))
     expect((lanes.body.data.flags as Array<{ kind: string }>).some((f) => f.kind === 'account_check')).toBe(false)

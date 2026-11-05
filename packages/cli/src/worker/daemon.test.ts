@@ -253,9 +253,9 @@ describe('the worker key and host id', () => {
 })
 
 describe('the Cursor account a worker may spend', () => {
-  const out = 'Logged in as suzu.haruka1130@gmail.com'
+  const out = 'Logged in as worker.account@example.com'
   it('counts a sign-in as another account as signed out, and leaves unclear answers unclear', () => {
-    expect(cursorStateFor({ state: 'signed_in', output: out }, 'suzu.haruka1130@gmail.com')).toBe('signed_in')
+    expect(cursorStateFor({ state: 'signed_in', output: out }, 'worker.account@example.com')).toBe('signed_in')
     expect(cursorStateFor({ state: 'signed_in', output: out }, 'someone@else.com')).toBe('signed_out')
     expect(cursorStateFor({ state: 'unknown', output: '' }, 'someone@else.com')).toBe('unknown')
     expect(cursorStateFor({ state: 'signed_in', output: out }, undefined)).toBe('signed_in')
@@ -335,7 +335,7 @@ describe('what the console sees of a run (ADR 0048 amendment 2026-10-28)', () =>
         o.onStage?.('agent')
         clock += 20 * 60_000
         o.onStage?.('commit')
-        o.log('  git push https://x-access-token:ghs_abcdefghijklmnopqrstuvwxyz0123@github.com/kensaurus/glot.it.git as suzu.haruka1130@gmail.com')
+        o.log('  git push https://x-access-token:ghs_abcdefghijklmnopqrstuvwxyz0123@github.com/kensaurus/glot.it.git as worker.account@example.com')
         o.log('  12 | const secret = process.env.KEY')
         await new Promise<void>((r) => (release = r))
         return { reportId: R1, result: 'failed', failureKind: 'infra', outcome: 'failed (infra): git commit timed out after 25 min' }
@@ -352,8 +352,8 @@ describe('what the console sees of a run (ADR 0048 amendment 2026-10-28)', () =>
     expect(log).toContain('…/2000000a')
     expect(log).not.toContain('/home/mushi-agent')
     expect(log).not.toContain('ghs_')
-    expect(log).not.toContain('suzu.haruka1130')
-    expect(log).toContain('s***@g***.com')
+    expect(log).not.toContain('worker.account')
+    expect(log).toContain('w***@e***.com')
     expect(log).not.toContain('process.env.KEY')
     release()
     await daemon.settle()
@@ -383,7 +383,7 @@ describe('what the console sees of a run (ADR 0048 amendment 2026-10-28)', () =>
     const { daemon, calls } = harness({
       heartbeat: answer,
       claim: [claimReply],
-      extra: { recheck: () => rechecks++, notReady: new Map([['glot', 'Its folder on /home/u/glot is not a git clone']]), cursorAccount: 'suzu.haruka1130@gmail.com' },
+      extra: { recheck: () => rechecks++, notReady: new Map([['glot', 'Its folder on /home/u/glot is not a git clone']]), cursorAccount: 'worker.account@example.com' },
       readings: { checks: { cursor: { result: 'timed_out', at: Date.parse('2026-10-27T11:50:00Z'), detail: 'timed out after 90 s' } } },
     })
     await daemon.tick()
@@ -393,7 +393,7 @@ describe('what the console sees of a run (ADR 0048 amendment 2026-10-28)', () =>
     await daemon.tick()
     const hb = calls.filter((c) => c.path === '/v1/worker/heartbeat')[1]!.body as { status: { checks: Record<string, unknown> } }
     expect(hb.status.checks).toEqual({
-      cursor: { result: 'timed_out', ageSec: 600, detail: 'timed out after 90 s', account: 's***@g***.com' },
+      cursor: { result: 'timed_out', ageSec: 600, detail: 'timed out after 90 s', account: 'w***@e***.com' },
       notReady: [{ lane: 'glot', problem: 'Its folder on …/glot is not a git clone' }],
     })
   })
@@ -407,7 +407,7 @@ describe('the machine readings behind the gate', () => {
     let checks = 0
     let finish: (v: { state: 'unknown'; detail: string; output: string }) => void = () => {}
     const r = createHostReadings({
-      cursorAccount: 'suzu.haruka1130@gmail.com',
+      cursorAccount: 'worker.account@example.com',
       now: () => clock,
       log: () => {},
       memGb: () => 20,
