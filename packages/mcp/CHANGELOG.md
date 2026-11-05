@@ -1,5 +1,11 @@
 # @mushi-mushi/mcp
 
+## 0.30.4
+
+### Patch Changes
+
+- 7c4a90a: Refresh the bundled docs index after the MCP quickstart dropped a dead registry link.
+
 ## 0.30.3
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @mushi-mushi/cli
 
+## 0.35.7
+
+### Patch Changes
+
+- d7784c9: Remove a personal name and address from two source comments in the local worker. No behaviour change.
+
 ## 0.35.6
 
 ### Patch Changes
