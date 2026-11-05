@@ -25,17 +25,21 @@ export const metadata: Metadata = {
 
 export const PLACEHOLDER_SLUG = '_shell'
 
+// The shell is always emitted. The router rewrites EVERY /apps/<slug>/ to
+// `_shell/index.html`, so a build that emitted only the known slugs left the
+// rewrite target missing and every app-detail link 404'd.
 export async function generateStaticParams() {
+  const shell = { slug: PLACEHOLDER_SLUG }
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? ''
-  if (!apiUrl) return [{ slug: PLACEHOLDER_SLUG }]
+  if (!apiUrl) return [shell]
   try {
     const res = await fetch(`${apiUrl}/v1/public/marketplace/apps`, { cache: 'no-store' })
-    if (!res.ok) return [{ slug: PLACEHOLDER_SLUG }]
+    if (!res.ok) return [shell]
     const data = await res.json() as Array<{ slug: string }>
-    if (data.length === 0) return [{ slug: PLACEHOLDER_SLUG }]
-    return data.map(a => ({ slug: a.slug }))
+    const known = data.map(a => ({ slug: a.slug })).filter(p => p.slug !== PLACEHOLDER_SLUG)
+    return [shell, ...known]
   } catch {
-    return [{ slug: PLACEHOLDER_SLUG }]
+    return [shell]
   }
 }
 

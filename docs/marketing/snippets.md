@@ -422,7 +422,7 @@ months — *this is the post that keeps earning stars after the launch dies*.
 title: "I built the bug-reporting tool Sentry can't be (here's what I learned)"
 published: true
 tags: opensource, javascript, react, showdev
-cover_image: https://kensaur.us/mushi-mushi/og-cover.png
+cover_image: https://kensaur.us/mushi-mushi/docs/social-preview/og-card.png
 ---
 
 *Four sentences above the fold. This is what dev.to shows in the feed.*

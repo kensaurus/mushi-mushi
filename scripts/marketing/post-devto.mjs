@@ -14,7 +14,7 @@
 //   title: 60 seconds from "this is broken" to a draft PR
 //   tags: [ai, opensource, devtools, productivity]
 //   description: A 90-second walkthrough of the Mushi auto-fix loop.
-//   cover_image: https://kensaur.us/mushi-mushi/og-card.png   # optional
+//   cover_image: https://kensaur.us/mushi-mushi/docs/social-preview/og-card.png   # optional
 //   canonical_url: https://kensaur.us/mushi-mushi/blog/auto-fix-loop  # optional
 //   ---
 //

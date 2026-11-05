@@ -291,10 +291,10 @@ One command installs the hosted MCP hookup plus a `mushi-debugger` subagent
 Then: `/mcp` → pick `mushi` → sign in via the browser. Ask Claude to
 "use mushi-debugger to fix the top report".
 
-## Smithery (hosted MCP)
+## Hosted MCP
 
-Install from the [Smithery registry](https://smithery.ai/servers/kensaurus/mushi-mushi) with
-Streamable HTTP at `https://kensaur.us/mushi-mushi/hosted-mcp/`. The server card at
+The hosted server speaks Streamable HTTP at
+`https://kensaur.us/mushi-mushi/hosted-mcp/`. The server card at
 `https://kensaur.us/mushi-mushi/hosted-mcp/.well-known/mcp/server-card.json`
 lists every tool for directory scanners.
 
@@ -399,13 +399,6 @@ This writes a `.cursorrules` file that tells Cursor to call `get_fix_context`
 before writing a fix and `submit_fix_result` after, closing the loop from
 inside the editor. Download the template:
 [cursor.cursorrules](/integrations/cursor.cursorrules)
-
-## Smithery registry
-
-Hosted Streamable HTTP endpoint: `https://kensaur.us/mushi-mushi/hosted-mcp/`
-
-Install from the [Smithery server page](https://smithery.ai/servers/kensaurus/mushi-mushi).
-Tool metadata is also published at `https://kensaur.us/mushi-mushi/hosted-mcp/.well-known/mcp/server-card.json` for directory scanners.
 
 ## Troubleshooting
 
@@ -954,7 +947,7 @@ them with `GET /v1/sync/whoami` before reinstalling anything.
 | Environment | Admin console | Notes |
 | --- | --- | --- |
 | **Hosted (production)** | [kensaur.us/mushi-mushi/admin](https://kensaur.us/mushi-mushi/admin) | Default for external apps |
-| **Local monorepo dev** | [http://localhost:6464](http://localhost:6464) | Run `pnpm dev` from the mushi-mushi repo |
+| **Local monorepo dev** | `http://localhost:6464` | Run `pnpm dev` from the mushi-mushi repo |
 | **Override** | Set `MUSHI_CONSOLE_URL` | CLI hints + browser opens use this base when set |
 
 The CLI resolves the console in this order: `MUSHI_CONSOLE_URL` → `consoleUrl`
@@ -5871,7 +5864,7 @@ compose its own prompt around the same contract.
 - [Concepts → Fix drafts & PRs](/concepts/fix-orchestrator) —
   what the worker does between dispatch and PR.
 - [`@mushi-mushi/mcp`](/sdks/mcp) — the MCP server (both transports).
-- [`@mushi-mushi/agents`](https://www.npmjs.com/package/@mushi-mushi/agents)
+- [`@mushi-mushi/agents`](https://github.com/kensaurus/mushi-mushi/tree/master/packages/agents) (source; not published to npm)
   — TypeScript types + `registerSandboxProvider` + JSON Schemas.
 
 ---
