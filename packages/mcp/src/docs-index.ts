@@ -1497,7 +1497,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart/mcp",
     markdown: "quickstart/mcp.md",
     keywords: ["quickstart", "mcp", "server", "bug", "fixing", "cursor", "claude", "code"],
-    headings: ["Connect in three steps", "Add the Mushi Mushi server [#add-the-mushi-server]", "Sign in", "Ask your editor", "How sign-in works (OAuth, no keys to copy)", "One-liner setup (recommended)", "Claude Code plugin", "Smithery (hosted MCP)"],
+    headings: ["Connect in three steps", "Add the Mushi Mushi server [#add-the-mushi-server]", "Sign in", "Ask your editor", "How sign-in works (OAuth, no keys to copy)", "One-liner setup (recommended)", "Claude Code plugin", "Hosted MCP"],
     excerpt: "Set up the Mushi Mushi MCP server with npx mushi-mushi setup. Read bug reports, get fix context, and dispatch fixes from Cursor, Claude Code or any MCP client.",
   },
   {
