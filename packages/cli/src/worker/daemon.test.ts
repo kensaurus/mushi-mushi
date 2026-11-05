@@ -352,8 +352,8 @@ describe('what the console sees of a run (ADR 0048 amendment 2026-10-28)', () =>
     expect(log).toContain('…/2000000a')
     expect(log).not.toContain('/home/mushi-agent')
     expect(log).not.toContain('ghs_')
-    expect(log).not.toContain('spare-key')
-    expect(log).toContain('s***@g***.com')
+    expect(log).not.toContain('worker.account')
+    expect(log).toContain('w***@e***.com')
     expect(log).not.toContain('process.env.KEY')
     release()
     await daemon.settle()
@@ -393,7 +393,7 @@ describe('what the console sees of a run (ADR 0048 amendment 2026-10-28)', () =>
     await daemon.tick()
     const hb = calls.filter((c) => c.path === '/v1/worker/heartbeat')[1]!.body as { status: { checks: Record<string, unknown> } }
     expect(hb.status.checks).toEqual({
-      cursor: { result: 'timed_out', ageSec: 600, detail: 'timed out after 90 s', account: 's***@g***.com' },
+      cursor: { result: 'timed_out', ageSec: 600, detail: 'timed out after 90 s', account: 'w***@e***.com' },
       notReady: [{ lane: 'glot', problem: 'Its folder on …/glot is not a git clone' }],
     })
   })

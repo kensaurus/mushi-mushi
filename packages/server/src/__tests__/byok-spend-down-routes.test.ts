@@ -273,7 +273,7 @@ describe('GET spend-down', () => {
 })
 
 describe('GET spend-down: two organization Cursor keys', () => {
-  const spare = '2000000e-0000-4000-8000-000000000000'
+  const SPARE = '2000000e-0000-4000-8000-000000000000'
   const OUTRANKED = 'ayako pays for these apps first (priority 10); this key takes over when ayako runs out or is removed'
 
   function twoOrgKeys(ayako: { status: string; test_status: string }) {
@@ -289,7 +289,7 @@ describe('GET spend-down: two organization Cursor keys', () => {
       credits_expire_at: expiry,
     })
     db.table('byok_keys').push({
-      id: spare,
+      id: SPARE,
       provider_slug: 'cursor',
       project_id: null,
       organization_id: ORG,
@@ -314,7 +314,7 @@ describe('GET spend-down: two organization Cursor keys', () => {
     expect(res.status).toBe(200)
     const keys = res.body.data?.keys as Array<Record<string, unknown>>
     const ayako = keys.find((k) => k.id === SHARED)!
-    const spare = keys.find((k) => k.id === spare)!
+    const spare = keys.find((k) => k.id === SPARE)!
     expect(ayako.projects).toMatchObject([{ id: P1 }])
     expect(ayako.idleNote).toBeNull()
     expect(spare.projects).toEqual([])
@@ -328,7 +328,7 @@ describe('GET spend-down: two organization Cursor keys', () => {
     const res = await app.call('GET', '/v1/admin/byok/spend-down', {})
     const keys = res.body.data?.keys as Array<Record<string, unknown>>
     const ayako = keys.find((k) => k.id === SHARED)!
-    const spare = keys.find((k) => k.id === spare)!
+    const spare = keys.find((k) => k.id === SPARE)!
     expect(ayako.projects).toMatchObject([{ id: P1 }])
     expect(spare.projects).toEqual([])
     expect(spare.idleNote).toBe(OUTRANKED)
@@ -341,7 +341,7 @@ describe('GET spend-down: two organization Cursor keys', () => {
     const res = await app.call('GET', '/v1/admin/byok/spend-down', {})
     const keys = res.body.data?.keys as Array<Record<string, unknown>>
     const ayako = keys.find((k) => k.id === SHARED)!
-    const spare = keys.find((k) => k.id === spare)!
+    const spare = keys.find((k) => k.id === SPARE)!
     expect(ayako).toMatchObject({ state: 'key_unusable', projects: [], idleNote: null })
     expect(spare.projects).toMatchObject([{ id: P1 }])
     expect(spare.idleNote).toBeNull()

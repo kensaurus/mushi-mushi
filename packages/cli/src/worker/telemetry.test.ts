@@ -9,7 +9,7 @@ describe('a log line the worker sends to the console', () => {
     expect(cleanLine('MUSHI key mushi_abcdefghijklmnopqrstuvwxyz0123 refused')).toBe('[a line was hidden: it looked like a key or token]')
     expect(cleanLine('Authorization: Bearer abc.def')).toBe('Authorization: Bearer [hidden]')
     expect(cleanLine('token=abc123 expired')).toBe('token=[hidden] expired')
-    expect(cleanLine('Logged in as worker.account@example.com')).toBe('Logged in as s***@g***.com')
+    expect(cleanLine('Logged in as worker.account@example.com')).toBe('Logged in as w***@e***.com')
     expect(cleanLine('cd /home/mushi-agent/.cache/mushi/work/glot/abcd1234 && pnpm lint')).toBe('cd …/abcd1234 && pnpm lint')
     expect(cleanLine('C:\\Users\\kensa\\src\\glot\\file.ts failed')).toBe('…/file.ts failed')
     expect(cleanLine('  12 | const apiKey = load()')).toBeNull()
@@ -20,7 +20,7 @@ describe('a log line the worker sends to the console', () => {
   })
 
   it('masks an account to its first letters', () => {
-    expect(maskEmail('spare@example.com')).toBe('s***@e***.com')
+    expect(maskEmail('worker.account@example.com')).toBe('w***@e***.com')
   })
 })
 
