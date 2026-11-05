@@ -50,7 +50,7 @@ function plural(count: number, one: string, many = `${one}s`): string {
  * Who can switch on an idle key the viewer cannot: a universal key only by
  * the person who added it (ADR 0031), a shared key by an organization owner
  * or admin. "The key's owner or a team admin" was wrong for the first
- * (2026-10-31: a team admin could not change spare-key's key).
+ * (2026-10-31: a team admin could not change another member's key).
  */
 function whoCanTurnOn(idle: ReadonlyArray<SpendDownKeyStatus | undefined>): string {
   const universal = idle.filter((k) => k?.scope === 'universal').length

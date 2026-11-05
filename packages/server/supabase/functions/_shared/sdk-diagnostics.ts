@@ -68,7 +68,7 @@ export function inferStack(slug: string | null): SdkStack {
   if (!slug) return 'nextjs'
   const s = slug.toLowerCase()
   if (s === 'yen-yen') return 'expo'
-  if (s === 'mushi-mushi' || s === 'solo-boss-cloud' || s === 'acme-co') return 'vite'
+  if (s === 'mushi-mushi' || s === 'solo-boss-cloud') return 'vite'
   return 'nextjs'
 }
 

@@ -34,7 +34,7 @@ describe('Settings and Integrations placeholders', () => {
   })
 
   it("never shows the owner's own repos, machines or teams", () => {
-    const leaks = all.filter((p) => /kensaurus|acme-co|alienware|tsumagoi|solo-boss|sbc-visual/i.test(p.value))
+    const leaks = all.filter((p) => /kensaurus|alienware|tsumagoi|solo-boss|sbc-visual/i.test(p.value))
     expect(leaks).toEqual([])
   })
 

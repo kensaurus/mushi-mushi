@@ -35,7 +35,7 @@ const EMAIL = /\b([A-Za-z0-9])[A-Za-z0-9._%+-]*@([A-Za-z0-9])[A-Za-z0-9-]*(?:\.[
 const ABS_PATH = /(^|[\s'"(=,])((?:~|[A-Za-z]:)?(?:[\\/][^\s\\/'"()<>,;]+){2,})/g
 const LONG_TOKEN = /\b[A-Za-z0-9+/_-]{40,}={0,2}/g
 
-/** `spare@example.com` → `s***@e***.com`. */
+/** `worker.account@example.com` → `w***@e***.com`. */
 export function maskEmail(text: string): string {
   return text.replace(EMAIL, (_m, a: string, d: string, tld: string) => `${a}***@${d}***.${tld}`)
 }
