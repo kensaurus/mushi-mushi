@@ -109,19 +109,64 @@ async function render(url = '/ci') {
 const q = (id: string) => host.querySelector(`[data-testid="${id}"]`) as HTMLElement | null
 
 describe('CiPage', () => {
-  it('renders the header line, the summary, then every section, queue first', async () => {
+  const headings = () => Array.from(host.querySelectorAll('h2, h3')).map((h) => h.textContent ?? '')
+  const hasHeading = (t: string) => headings().some((h) => h.startsWith(t))
+
+  it('opens on Now: the header line, the summary, then the queue and the timeline, and nothing else', async () => {
     await render()
     expect(host.querySelector('h1')!.textContent).toBe('CI runners')
     expect(host.textContent).toContain('Where your tests run, how long they wait, and what slows them down.')
-    const headings = Array.from(host.querySelectorAll('h2, h3')).map((h) => h.textContent ?? '')
-    const order = ['Queue', 'Timeline', 'Runner map', 'Speed it up', 'Slow jobs', 'Stopped by the test machine'].map((t) =>
-      headings.findIndex((h) => h.startsWith(t)),
-    )
+    const order = ['Queue', 'Timeline'].map((t) => headings().findIndex((h) => h.startsWith(t)))
     expect(order.every((i) => i >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
     // The summary sits above the queue.
     const summary = q('ci-summary')!
     expect(summary.compareDocumentPosition(q('ci-queue')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // One long column was 50,000 px tall (2026-11-06): the other views are not on Now.
+    for (const t of ['Runner map', 'Speed it up', 'Slow jobs', 'Stopped by the test machine', 'Where CI runs']) expect(hasHeading(t)).toBe(false)
+  })
+
+  it('puts each section in its view, with a tab per view and the active one marked', async () => {
+    const views: Array<[string, string[]]> = [
+      ['machines', ['Runner map', 'Stopped by the test machine']],
+      ['cost', ['Speed it up', 'Slow jobs', 'Cost and speed']],
+      ['settings', ['Where CI runs']],
+    ]
+    for (const [view, titles] of views) {
+      act(() => root.unmount())
+      root = createRoot(host)
+      await render(`/ci?view=${view}`)
+      for (const t of titles) expect(hasHeading(t)).toBe(true)
+      expect(q('ci-queue')).toBeNull()
+      const active = host.querySelector('[role="tab"][aria-selected="true"]')!
+      expect(active.getAttribute('href')).toContain(`view=${view}`)
+    }
+    const tabs = Array.from(host.querySelectorAll('[role="tab"]')).map((t) => t.textContent ?? '')
+    expect(tabs.map((t) => t.replace(/\d+$/, ''))).toEqual(['Now', 'Machines', 'Speed and cost', 'Settings'])
+  })
+
+  it('keeps old section links working: the hash picks the view, then scrolls to it', async () => {
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll // jsdom has none
+    await render('/ci#ci-placement')
+    expect(hasHeading('Where CI runs')).toBe(true)
+    expect(q('ci-queue')).toBeNull()
+    expect(scroll).toHaveBeenCalled()
+  })
+
+  it('labels each tab count with what it counts', async () => {
+    await render()
+    const labels = Array.from(host.querySelectorAll('[role="tab"] [aria-label]')).map((b) => b.getAttribute('aria-label') ?? '')
+    expect(labels.some((l) => /jobs? waiting for a test machine$/.test(l))).toBe(true)
+    expect(labels.some((l) => /changes? that would speed CI up$/.test(l))).toBe(true)
+    expect(labels.every((l) => !l.endsWith(' items'))).toBe(true)
+  })
+
+  it('keeps the scope and the job in the tab links', async () => {
+    await render('/ci?job=j3')
+    const machines = Array.from(host.querySelectorAll('[role="tab"]')).find((t) => t.textContent?.startsWith('Machines'))!
+    expect(machines.getAttribute('href')).toMatch(/job=j3/)
+    expect(machines.getAttribute('href')).toMatch(/view=machines/)
   })
 
   it('paints from stored jobs, live-syncs with refresh=1 in the background, and shows when it was updated', async () => {
@@ -199,11 +244,15 @@ describe('CiPage', () => {
     expect(bar.getAttribute('aria-label')).toContain('memory peak 9.9 GB')
   })
 
-  it('lists advice with its evidence and a copyable fix, and the infra failures', async () => {
-    await render()
+  it('lists advice with its evidence and a copyable fix under Speed and cost', async () => {
+    await render('/ci?view=cost')
     expect(q('ci-advice')!.textContent).toContain('nuc-glot ran out of memory')
     expect(q('ci-advice')!.textContent).toContain('1 OOM kill in 7 days')
     expect(q('ci-advice')!.querySelector('button[aria-label="Copy the fix"]')).not.toBeNull()
+  })
+
+  it('shows the map and the infra failures under Machines', async () => {
+    await render('/ci?view=machines')
     expect(q('ci-infra-failures')!.textContent).toContain('lost communication')
     expect(q('ci-map-stub')!.textContent).toBe('2 hosts')
   })
@@ -221,7 +270,7 @@ describe('CiPage', () => {
     })
     const slow = { id: 'slow_steps', severity: 'low' as const, title: 'Where your CI spends its time', detail: 'd', evidence: `${T} · build · pnpm install: 3 min (12 runs); ${T} · e2e · playwright: 9 min (4 runs)`, fix: 'Cache it', repo: T }
     state.overview = ciOverviewFixture({ advice: [drafts('ci-pr.yml'), drafts('pricing-parity.yml'), drafts('mushi-freshness.yml'), slow] })
-    await render()
+    await render('/ci?view=cost')
     const advice = q('ci-advice')!
     expect(advice.querySelectorAll(':scope > li')).toHaveLength(2)
     expect(advice.textContent!.match(/Draft pull requests run the full CI/g)).toHaveLength(1)
@@ -232,7 +281,7 @@ describe('CiPage', () => {
   })
 
   it('shows slow jobs and steps in full, with the repo name and a bar against the slowest', async () => {
-    await render()
+    await render('/ci?view=cost')
     const jobs = q('ci-slow-jobs')!
     expect(jobs.textContent).toContain('build')
     expect(jobs.textContent).toContain('CI')
@@ -257,15 +306,18 @@ describe('CiPage', () => {
     expect(action?.getAttribute('href')).toMatch(/\/operating\/ci-runners$/)
   })
 
-  it('explains a missing runner permission', async () => {
+  it('explains a missing runner permission where the runners are, not on top of Now', async () => {
+    const text = 'Mushi sees runners only through jobs. Give the GitHub token Administration: read to see idle and offline runners.'
     state.overview = ciOverviewFixture({ permissions: { jobs: 'ok', runners: 'missing' } })
+    await render('/ci?view=machines')
+    expect(host.textContent).toContain(text)
+    act(() => root.unmount())
+    root = createRoot(host)
     await render()
-    expect(host.textContent).toContain(
-      'Mushi sees runners only through jobs. Give the GitHub token Administration: read to see idle and offline runners.',
-    )
+    expect(host.textContent).not.toContain(text)
   })
 
-  it('explains a missing jobs permission', async () => {
+  it('explains a missing jobs permission on every view, Now included', async () => {
     state.overview = ciOverviewFixture({ permissions: { jobs: 'missing', runners: 'unknown' } })
     await render()
     expect(host.textContent).toContain('Give the GitHub token Actions: read')

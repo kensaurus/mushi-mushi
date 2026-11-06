@@ -13,12 +13,13 @@
  *          overview).
  */
 
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { CiCompare } from '../../lib/ciCompareTypes'
 import { formatDelta, formatMinutes, formatMoney, formatPercent } from '../../lib/ciCompareView'
 import { formatSeconds } from '../../lib/ciView'
 import { usePageData } from '../../lib/usePageData'
-import { Callout, ErrorAlert, Loading } from '../ui'
+import { Btn, Callout, ErrorAlert, Loading } from '../ui'
 import { IconAlertTriangle, IconCost, IconServer } from '../icons'
 import { CiAdviceList } from './CiSections'
 import { CiCompareTable } from './CiCompareTable'
@@ -63,8 +64,15 @@ function Accounts({ data }: { data: CiCompare }) {
   )
 }
 
+/** Machines shown before "Show all": one-job runners that do not group each count as one (2026-11-06: 30+ lines). */
+const MACHINES_SHOWN = 6
+
 function Machines({ data }: { data: CiCompare }) {
+  const [all, setAll] = useState(false)
   if (data.machines.length === 0) return null
+  const busiest = [...data.machines].sort((a, b) => b.busyHours - a.busyHours)
+  const machines = all ? busiest : busiest.slice(0, MACHINES_SHOWN)
+  const hidden = busiest.length - machines.length
   return (
     <div>
       <h3 className="mb-1 text-xs font-semibold text-fg">Your machines</h3>
@@ -73,7 +81,7 @@ function Machines({ data }: { data: CiCompare }) {
         {data.settings.every((s) => s.source === 'default') ? 'example figures' : 'your figures'}: estimated.
       </p>
       <ul className="flex flex-col divide-y divide-edge-subtle" data-testid="ci-cost-machines">
-        {data.machines.map((m) => (
+        {machines.map((m) => (
           <li key={m.name} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 py-1.5 text-xs">
             <IconServer size={14} className="shrink-0 text-brand" />
             <span className="font-medium text-fg">{m.name}</span>
@@ -91,6 +99,11 @@ function Machines({ data }: { data: CiCompare }) {
           </li>
         ))}
       </ul>
+      {(hidden > 0 || all) && (
+        <Btn size="sm" variant="ghost" onClick={() => setAll((v) => !v)} aria-expanded={all} data-testid="ci-cost-machines-more">
+          {all ? 'Show the busiest only' : `Show all ${busiest.length} machines`}
+        </Btn>
+      )}
     </div>
   )
 }
@@ -223,18 +236,30 @@ export function CiCostSection({ projectId, scope }: { projectId: string | null; 
       <Accounts data={data} />
       <CiCompareTable data={data} />
       <Machines data={data} />
-      <Speed data={data} />
-      <WhatIfs data={data} />
-      <div>
-        <h3 className="mb-1 text-xs font-semibold text-fg">Why it costs what it costs</h3>
-        <CiCostExplainer data={data} />
-      </div>
+      {/* What to do sits next to the figures it acts on; the explanations follow, folded (2026-11-06). */}
       {data.advice.length > 0 && (
         <div>
           <h3 className="mb-1 text-xs font-semibold text-fg">Cost advice</h3>
           <CiAdviceList advice={data.advice} />
         </div>
       )}
+      {/* Reference, not action: about 3,500 px open. A native <details> keeps it in the page (find in page, screen readers) while folded. */}
+      <details className="group rounded-md border border-edge-subtle" data-testid="ci-cost-reference">
+        <summary className="cursor-pointer list-none px-3 py-2 text-xs font-semibold text-fg hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+          <span className="mr-1 inline-block motion-safe:transition-transform group-open:rotate-90" aria-hidden>
+            ›
+          </span>
+          How these figures work: speed on your machines, what-ifs, and GitHub’s billing rules
+        </summary>
+        <div className="flex flex-col gap-4 border-t border-edge-subtle px-3 pb-3 pt-3">
+          <Speed data={data} />
+          <WhatIfs data={data} />
+          <div>
+            <h3 className="mb-1 text-xs font-semibold text-fg">Why it costs what it costs</h3>
+            <CiCostExplainer data={data} />
+          </div>
+        </div>
+      </details>
     </div>
   )
 }

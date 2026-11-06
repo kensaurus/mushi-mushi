@@ -8,14 +8,66 @@
  *
  *          Wide screens: a table. Phones: one card per repo with the same
  *          figures as a list, so nothing scrolls sideways.
+ *
+ *          Capped by default (2026-11-06): with All apps and one-job runners
+ *          that do not group (`nuc12-oneoff-kus102-5`), every runner was its
+ *          own row: 251 rows, about 43,000 px of the page. A repo shows its
+ *          busiest few rows plus every row that needs attention (never picked
+ *          up, expired jobs); the rest open with "Show N more". The most
+ *          expensive repos show first; the others open the same way.
  */
 
+import { useState } from 'react'
 import type { CiCompare, CiCompareRow, Provenance } from '../../lib/ciCompareTypes'
 import { costText, formatMinutes, formatMoney, formatPercent, groupRowsByRepo, runsOnText, type RepoCostGroup } from '../../lib/ciCompareView'
 import { formatSeconds } from '../../lib/ciView'
-import { DataTableCell, DataTableHead } from '../ui'
+import { Btn, DataTableCell, DataTableHead } from '../ui'
 import { IconCloud, IconServer, IconServerOff } from '../icons'
 import { RepoVisibilityBadge } from './RepoVisibilityBadge'
+
+/** @internal Exported for the cap test. Rows a repo shows before "Show N more" (rows that need attention always show). */
+export const COMPARE_ROWS_PER_REPO = 4
+/** Repos shown before "Show N more repositories". */
+const COMPARE_REPOS_SHOWN = 8
+
+/** A row someone must act on: jobs nobody picked up, or jobs that expired unpicked. */
+function needsAttention(row: CiCompareRow): boolean {
+  return row.runnerClass === 'unknown' || row.expired > 0
+}
+
+/** @internal Exported for the cap test. The rows a collapsed repo shows, in their original order, and how many it hides. */
+export function visibleCompareRows(rows: CiCompareRow[], expanded: boolean, limit = COMPARE_ROWS_PER_REPO): { rows: CiCompareRow[]; hidden: number } {
+  if (expanded || rows.length <= limit) return { rows, hidden: 0 }
+  const keep = new Set<CiCompareRow>()
+  for (const r of rows) {
+    if (keep.size >= limit) break
+    if (!needsAttention(r)) keep.add(r)
+  }
+  for (const r of rows) if (needsAttention(r)) keep.add(r)
+  const shown = rows.filter((r) => keep.has(r))
+  return { rows: shown, hidden: rows.length - shown.length }
+}
+
+function useExpandedRepos() {
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set())
+  const toggle = (repo: string) =>
+    setOpen((cur) => {
+      const next = new Set(cur)
+      if (next.has(repo)) next.delete(repo)
+      else next.add(repo)
+      return next
+    })
+  return { open, toggle }
+}
+
+function MoreRowsButton({ hidden, expanded, onToggle }: { hidden: number; expanded: boolean; onToggle: () => void }) {
+  if (!expanded && hidden === 0) return null
+  return (
+    <Btn size="sm" variant="ghost" onClick={onToggle} aria-expanded={expanded}>
+      {expanded ? 'Show fewer runners' : `Show ${hidden} more runner${hidden === 1 ? '' : 's'}`}
+    </Btn>
+  )
+}
 
 const PROVENANCE: Record<Provenance, { short: string; title: string; className: string }> = {
   measured: { short: 'measured', title: 'Measured from the job times GitHub reported.', className: 'text-fg-muted' },
@@ -71,10 +123,10 @@ function RepoHeading({ group }: { group: RepoCostGroup }) {
   )
 }
 
-function WideTable({ groups, fields }: { groups: RepoCostGroup[]; fields: CiCompare['fields'] }) {
+function WideTable({ groups, fields, expanded }: { groups: RepoCostGroup[]; fields: CiCompare['fields']; expanded: ReturnType<typeof useExpandedRepos> }) {
   const prov = (k: string): Provenance => fields[k] ?? 'measured'
   return (
-    <div className="hidden overflow-x-auto md:block">
+    <div className="hidden overflow-x-auto lg:block">
       <table className="w-full text-xs" data-testid="ci-compare-table">
         <caption className="sr-only">CI cost and speed per repository and where its jobs ran</caption>
         <thead>
@@ -88,7 +140,10 @@ function WideTable({ groups, fields }: { groups: RepoCostGroup[]; fields: CiComp
             <DataTableHead align="right">Per month<Prov kind={prov('monthCost')} /></DataTableHead>
           </tr>
         </thead>
-        {groups.map((g) => (
+        {groups.map((g) => {
+          const isOpen = expanded.open.has(g.repo)
+          const view = visibleCompareRows(g.rows, isOpen)
+          return (
           <tbody key={g.repo} className="divide-y divide-edge-subtle border-b border-edge">
             <tr className="bg-surface-overlay/40">
               <th scope="rowgroup" colSpan={6} className="px-3 py-1.5 text-left font-normal">
@@ -96,7 +151,7 @@ function WideTable({ groups, fields }: { groups: RepoCostGroup[]; fields: CiComp
               </th>
               <td className="px-3 py-1.5 text-right text-2xs text-fg-muted tabular-nums">{formatMoney(g.monthCost, g.currency)}</td>
             </tr>
-            {g.rows.map((r) => (
+            {view.rows.map((r) => (
               <tr key={r.key} data-testid={`ci-compare-row-${r.key}`}>
                 <DataTableCell>
                   <RunsOn row={r} />
@@ -115,21 +170,32 @@ function WideTable({ groups, fields }: { groups: RepoCostGroup[]; fields: CiComp
                 </DataTableCell>
               </tr>
             ))}
+            {(view.hidden > 0 || isOpen) && (
+              <tr>
+                <td colSpan={7} className="px-3 py-1">
+                  <MoreRowsButton hidden={view.hidden} expanded={isOpen} onToggle={() => expanded.toggle(g.repo)} />
+                </td>
+              </tr>
+            )}
           </tbody>
-        ))}
+          )
+        })}
       </table>
     </div>
   )
 }
 
-function PhoneList({ groups }: { groups: RepoCostGroup[] }) {
+function PhoneList({ groups, expanded }: { groups: RepoCostGroup[]; expanded: ReturnType<typeof useExpandedRepos> }) {
   return (
-    <ul className="flex flex-col gap-3 md:hidden" data-testid="ci-compare-cards">
-      {groups.map((g) => (
+    <ul className="flex flex-col gap-3 lg:hidden" data-testid="ci-compare-cards">
+      {groups.map((g) => {
+        const isOpen = expanded.open.has(g.repo)
+        const view = visibleCompareRows(g.rows, isOpen)
+        return (
         <li key={g.repo} className="rounded-md border border-edge-subtle p-2.5">
           <RepoHeading group={g} />
           <ul className="mt-2 flex flex-col divide-y divide-edge-subtle">
-            {g.rows.map((r) => (
+            {view.rows.map((r) => (
               <li key={r.key} className="py-2">
                 <RunsOn row={r} />
                 <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-2xs">
@@ -151,19 +217,32 @@ function PhoneList({ groups }: { groups: RepoCostGroup[] }) {
               </li>
             ))}
           </ul>
+          <MoreRowsButton hidden={view.hidden} expanded={isOpen} onToggle={() => expanded.toggle(g.repo)} />
         </li>
-      ))}
+        )
+      })}
     </ul>
   )
 }
 
 export function CiCompareTable({ data }: { data: Pick<CiCompare, 'rows' | 'repos' | 'fields'> }) {
   const groups = groupRowsByRepo(data)
+  const expanded = useExpandedRepos()
+  const [allRepos, setAllRepos] = useState(false)
   if (groups.length === 0) return <p className="text-xs text-fg-muted">No CI jobs in this window, so there is nothing to compare yet.</p>
+  const shown = allRepos ? groups : groups.slice(0, COMPARE_REPOS_SHOWN)
+  const hiddenRepos = groups.length - shown.length
   return (
     <>
-      <WideTable groups={groups} fields={data.fields} />
-      <PhoneList groups={groups} />
+      <WideTable groups={shown} fields={data.fields} expanded={expanded} />
+      <PhoneList groups={shown} expanded={expanded} />
+      {(hiddenRepos > 0 || allRepos) && (
+        <div className="mt-2">
+          <Btn size="sm" variant="ghost" onClick={() => setAllRepos((v) => !v)} aria-expanded={allRepos} data-testid="ci-compare-more-repos">
+            {allRepos ? 'Show fewer repositories' : `Show ${hiddenRepos} more repositor${hiddenRepos === 1 ? 'y' : 'ies'}`}
+          </Btn>
+        </div>
+      )}
     </>
   )
 }

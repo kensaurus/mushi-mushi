@@ -4,11 +4,18 @@
  * Why a fix is slow to land: where its tests run, how long they wait for a
  * machine, and what slows them down. Bucket B under ADR 0016, never the hero.
  *
- * Top to bottom: the queue (Waiting → Running → Finished), a per-runner
- * timeline, stat tiles, the runner map (machines → runners → repos → live
- * jobs), "Speed it up" advice, slowest jobs and steps, and recent test
- * machine failures, then "Cost and speed" (Plan 022 Phase 7, ADR 0037:
- * GitHub-hosted vs your own machines, read-only, never the top of the page).
+ * Four views (`?view=`, 2026-11-06; one long column was 50,000 px tall with
+ * All apps, and its settings sat 49,000 px down):
+ *   - Now (default): the summary, the queue (Waiting → Running → Finished)
+ *     and the per-runner timeline. "Is CI healthy, and why does a job wait?"
+ *   - Machines: the runner map (machines → runners → repos → live jobs) and
+ *     the jobs the test machine stopped (re-run them).
+ *   - Speed and cost: "Speed it up" advice, the slowest jobs and steps, and
+ *     "Cost and speed" (Plan 022 Phase 7, ADR 0037: GitHub-hosted vs your own
+ *     machines, read-only).
+ *   - Settings: where CI runs (ADR 0037 placement).
+ * Old `/ci#ci-…` links still work: the hash picks the view, then
+ * useScrollToHash scrolls to the section.
  * Scope follows the header switcher (lib/projectScope.ts): one app, or
  * "All apps" for every project the caller can see. The toggle here mirrors
  * that choice. The page paints from the stored jobs first, then asks the
@@ -26,8 +33,9 @@
  */
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { TabbedSubNav } from '../components/TabbedSubNav'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
 import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
@@ -50,8 +58,9 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { docsUrl } from '../lib/docsUrl'
 import { useNow } from '../lib/useNow'
 import type { CiOverview } from '../lib/ciTypes'
+import { groupCiAdvice } from '../lib/ciAdvice'
 import type { FixAttempt } from '../components/fixes/types'
-import { buildFixLinks, formatSeconds, isCiOverviewEmpty, permissionsNotice } from '../lib/ciView'
+import { buildCiQueue, buildFixLinks, formatSeconds, isCiOverviewEmpty, permissionsNotice } from '../lib/ciView'
 import { useScrollToHash } from '../lib/useScrollToHash'
 
 const CiRunnerMap = lazy(() => import('../components/ci/CiRunnerMap').then((m) => ({ default: m.CiRunnerMap })))
@@ -63,6 +72,33 @@ const SCOPE_OPTIONS = [
   { id: 'project', label: 'This app' },
   { id: 'all', label: 'All apps' },
 ] as const
+
+export type CiView = 'now' | 'machines' | 'cost' | 'settings'
+const CI_VIEWS: ReadonlyArray<{ id: CiView; label: string }> = [
+  { id: 'now', label: 'Now' },
+  { id: 'machines', label: 'Machines' },
+  { id: 'cost', label: 'Speed and cost' },
+  { id: 'settings', label: 'Settings' },
+]
+/** Which view holds each section, so `/ci#ci-placement` and friends still land. */
+const SECTION_VIEW: Record<string, CiView> = {
+  'ci-summary': 'now',
+  'ci-queue': 'now',
+  'ci-timeline': 'now',
+  'ci-map': 'machines',
+  'ci-infra': 'machines',
+  'ci-advice': 'cost',
+  'ci-slow': 'cost',
+  'ci-cost': 'cost',
+  'ci-bill-title': 'cost',
+  'ci-placement': 'settings',
+}
+
+/** `?view=` wins; without it a section hash picks its view; otherwise Now. */
+export function resolveCiView(viewParam: string | null, hash: string): CiView {
+  if (CI_VIEWS.some((v) => v.id === viewParam)) return viewParam as CiView
+  return SECTION_VIEW[hash.replace(/^#/, '')] ?? 'now'
+}
 
 /** "Updated 12 s ago", ticking. */
 function UpdatedAgo({ at, validating }: { at: string | null; validating: boolean }) {
@@ -135,8 +171,27 @@ function useVisiblePolling(reload: () => void, ms: number): void {
 
 export function CiPage() {
   const projectId = useActiveProjectId()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const location = useLocation()
   const focusJobId = searchParams.get('job')
+  const view = resolveCiView(searchParams.get('view'), location.hash)
+  const viewHref = useCallback(
+    (id: CiView) => {
+      const next = new URLSearchParams(searchParams)
+      next.set('view', id)
+      return `${location.pathname}?${next.toString()}`
+    },
+    [searchParams, location.pathname],
+  )
+  const openView = useCallback(
+    (id: CiView) =>
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('view', id)
+        return next
+      }),
+    [setSearchParams],
+  )
   const scopeChoice: Scope = useProjectScope().mode
   const setScopeChoice = useSetProjectScopeMode()
   const scope: Scope = projectId ? scopeChoice : 'all'
@@ -176,8 +231,27 @@ export function CiPage() {
 
   const notice = data ? permissionsNotice(data.permissions) : null
   const empty = data ? isCiOverviewEmpty(data) : false
-  // /ci#ci-placement (Connect's "CI settings" link) opens the settings.
+  // /ci#ci-placement (Connect's "CI settings" link) opens Settings, then scrolls there.
   useScrollToHash(!!data && !empty)
+
+  // A count on a tab is the thing that view is for: jobs waiting now, jobs the
+  // test machine stopped, changes that would speed CI up.
+  // Counts match what the view shows: advice as its grouped cards, not raw items.
+  const waitingNow = useMemo(() => (data ? buildCiQueue(data.jobs, Date.now()).waiting.length : 0), [data])
+  const adviceCards = useMemo(() => (data ? groupCiAdvice(data.advice).length : 0), [data])
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+  const tabs = CI_VIEWS.map((v) => {
+    const stopped = data?.stats.infraFailures ?? 0
+    const [badge, badgeLabel] =
+      v.id === 'now'
+        ? [waitingNow, plural(waitingNow, 'job waiting for a test machine', 'jobs waiting for a test machine')]
+        : v.id === 'machines'
+          ? [stopped, plural(stopped, 'job the test machine stopped', 'jobs the test machine stopped')]
+          : v.id === 'cost'
+            ? [adviceCards, plural(adviceCards, 'change that would speed CI up', 'changes that would speed CI up')]
+            : [0, '']
+    return { to: viewHref(v.id), label: v.label, badge: badge > 0 ? badge : undefined, badgeLabel, match: () => view === v.id }
+  })
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-ci">
@@ -196,12 +270,12 @@ export function CiPage() {
         {projectId && (
           <SegmentedControl<Scope> value={scope} options={SCOPE_OPTIONS} onChange={setScopeChoice} ariaLabel="Which apps" size="sm" />
         )}
-        {/* The settings live low on the page (ADR 0037); one click gets there. */}
-        {data && !empty && (
+        {/* The settings are their own view (ADR 0037 keeps them off the first screen); one click gets there. */}
+        {data && !empty && view !== 'settings' && (
           <Btn
             size="sm"
             variant="ghost"
-            onClick={() => document.getElementById('ci-placement')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            onClick={() => openView('settings')}
             title="Where CI runs, checks on fix pull requests, and GitHub-hosted time limits"
             data-testid="ci-settings-jump"
           >
@@ -213,12 +287,19 @@ export function CiPage() {
       {page.error && <PageLoadError error={page.error} resource="CI runners" endpoint={path} onRetry={reload} />}
       {page.loading && !data && <Loading text="Reading your CI…" />}
 
+      {data && !empty && <TabbedSubNav ariaLabel="CI runners views" tabs={tabs} />}
+
       <PagePosture
         slots={[
           {
             id: 'ci-permissions',
             priority: POSTURE_PRIORITY.status,
-            show: notice != null,
+            // Without Actions: read nothing here works, so that one shows everywhere. Without
+            // Administration: read only idle and offline runners are missing, so it shows
+            // where runners are (Machines, Settings), not on top of Now (2026-11-06).
+            show:
+              notice != null &&
+              (empty || data?.permissions.jobs === 'missing' || view === 'machines' || view === 'settings'),
             children: (
               <Callout tone="warn" label="GitHub access">
                 <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -246,7 +327,7 @@ export function CiPage() {
         />
       )}
 
-      {data && !empty && (
+      {data && !empty && view === 'now' && (
         <>
           <CiSummary overview={data} />
 
@@ -259,7 +340,11 @@ export function CiPage() {
             <p className="mb-2 text-xs text-fg-muted">One row per test machine. Gaps are idle time; striped bars are jobs waiting for a machine.</p>
             <CiTimeline jobs={data.jobs} />
           </Section>
+        </>
+      )}
 
+      {data && !empty && view === 'machines' && (
+        <>
           <Section title="Runner map" id="ci-map" icon={<IconNetwork />}>
             <p className="mb-2 text-xs text-fg-muted">Your machines, the runners on them, the repositories they serve, and the jobs waiting or running now. Click any card for its health and recent jobs.</p>
             <PanelErrorBoundary label="Runner map">
@@ -269,6 +354,15 @@ export function CiPage() {
             </PanelErrorBoundary>
           </Section>
 
+          <Section title="Stopped by the test machine" id="ci-infra" icon={<IconServerOff />}>
+            <p className="mb-2 text-xs text-fg-muted">These jobs never finished testing. They are not code failures: re-run them.</p>
+            <CiInfraFailures jobs={data.jobs} />
+          </Section>
+        </>
+      )}
+
+      {data && !empty && view === 'cost' && (
+        <>
           <Section
             title="Speed it up"
             id="ci-advice"
@@ -279,31 +373,28 @@ export function CiPage() {
             <CiAdviceList advice={data.advice} />
           </Section>
 
+          <Section title="Slow jobs" id="ci-slow" icon={<IconGauge />}>
+            <CiSlowJobs jobs={data.jobs} slowSteps={data.stats.slowSteps} />
+          </Section>
+
           <Section title="Cost and speed" id="ci-cost" icon={<IconCost />}>
             <PanelErrorBoundary label="Cost and speed">
               <CiCostSection projectId={projectId} scope={scope} />
             </PanelErrorBoundary>
           </Section>
-
-          <Section title="Where CI runs" id="ci-placement" icon={<IconSliders />}>
-            <p className="mb-2 text-xs text-fg-muted">Move a repo's jobs between GitHub-hosted runners and your own machines through the one runner variable its workflows read. Every change is previewed, approved and watched.</p>
-            <PanelErrorBoundary label="Where CI runs">
-              <CiPlacementSection projectId={projectId} scope={scope} />
-            </PanelErrorBoundary>
-          </Section>
-
-          <Section title="Slow jobs" id="ci-slow" icon={<IconGauge />}>
-            <CiSlowJobs jobs={data.jobs} slowSteps={data.stats.slowSteps} />
-          </Section>
-
-          <Section title="Stopped by the test machine" id="ci-infra" icon={<IconServerOff />}>
-            <p className="mb-2 text-xs text-fg-muted">These jobs never finished testing. They are not code failures: re-run them.</p>
-            <CiInfraFailures jobs={data.jobs} />
-          </Section>
-
-          <CiNodeDrawer overview={data} nodeId={selected} onClose={() => setSelected(null)} onSelect={setSelected} />
         </>
       )}
+
+      {data && !empty && view === 'settings' && (
+        <Section title="Where CI runs" id="ci-placement" icon={<IconSliders />}>
+          <p className="mb-2 text-xs text-fg-muted">Move a repo's jobs between GitHub-hosted runners and your own machines through the one runner variable its workflows read. Every change is previewed, approved and watched.</p>
+          <PanelErrorBoundary label="Where CI runs">
+            <CiPlacementSection projectId={projectId} scope={scope} />
+          </PanelErrorBoundary>
+        </Section>
+      )}
+
+      {data && !empty && <CiNodeDrawer overview={data} nodeId={selected} onClose={() => setSelected(null)} onSelect={setSelected} />}
     </div>
   )
 }
