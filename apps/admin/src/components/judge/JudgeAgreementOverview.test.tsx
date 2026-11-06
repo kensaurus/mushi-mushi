@@ -28,6 +28,7 @@ vi.mock('../../lib/usePageData', () => ({
 import { JudgeAgreementOverview, agreementPoints } from './JudgeAgreementOverview'
 import { judgeStatusSentence } from './JudgeSnapshotStrip'
 import { EMPTY_JUDGE_STATS, type JudgeStats } from './JudgeStatsTypes'
+import { judgeDisagreementHint } from '../../lib/humanPageHints'
 
 let host: HTMLDivElement
 let root: Root
@@ -41,6 +42,14 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount())
   host.remove()
+})
+
+describe('judgeDisagreementHint', () => {
+  it('does not describe an unwindowed disagreement percentage as recent', () => {
+    expect(judgeDisagreementHint(53)).toBe(
+      'The judge disagreed with the classifier on 53% of grades. Review mismatches before merging fixes.',
+    )
+  })
 })
 
 describe('agreementPoints', () => {
