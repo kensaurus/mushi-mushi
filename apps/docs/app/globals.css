@@ -385,6 +385,22 @@ main :not(pre) > code {
   vertical-align: 1px;
 }
 
+/* "Beta" chip beside the navbar logo (owner, 2026-11-07). Outlined in the
+   text colour so it reads in both themes without a new colour token. */
+.docs-logo-beta {
+  font-family: var(--mushi-font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 1px 5px;
+  margin-left: 0.5rem;
+  opacity: 0.75;
+  vertical-align: 2px;
+}
+
 /* ---------------------------------------------------------------------------
  * 7. Editorial Hero (used by <EditorialHero /> on the index). The component
  *    is purely structural; all visual moves live here so the look stays in
