@@ -686,6 +686,7 @@ export function OnboardingPage() {
             Plan → Do → Check → Act (loops back)
           </span>
         </div>
+        {/* Keep every stage's label and description readable at full opacity, including CHECK and ACT. */}
         <PdcaFlow variant="onboarding" ariaLabel="Plan-Do-Check-Act loop explainer" />
 
         {/* Setup funnel panel — 7-day operator view of onboarding event counts */}
