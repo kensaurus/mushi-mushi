@@ -382,6 +382,23 @@ describe('loadReportDeployLive', () => {
     expect(out).toMatchObject({ state: 'not_live', merged_at: MERGED_AT, prod_commit: PRE, target_id: 'web' })
   })
 
+  it('recovers from a stale deploy observation when prod reports a known post-merge head', async () => {
+    const db = seed()
+    db.tables.deploy_observations = [
+      { target_id: 'web', project_id: PROJECT, ok: true, observed_commit: PRE, observed_at: '2026-10-01T03:34:00Z' },
+    ]
+    const stale = await loadReportDeployLive(db as unknown as SupabaseClient, FIXED, FRONT_MERGE)
+    expect(stale).toMatchObject({ state: 'unknown', merged_at: MERGED_AT, target_id: 'web' })
+    expect(stale?.reason).toMatch(/not been checked since/)
+
+    db.tables.deploy_observations.push({ target_id: 'web', project_id: PROJECT, ok: true, observed_commit: H1, observed_at: '2026-10-03T04:00:00Z' })
+    const fresh = await loadReportDeployLive(db as unknown as SupabaseClient, FIXED, FRONT_MERGE)
+    expect(fresh).toMatchObject({
+      state: 'live', merged_at: MERGED_AT, prod_commit: H1,
+      target_id: 'web', checked_at: '2026-10-03T04:00:00Z',
+    })
+  })
+
   it('reads as live once prod runs the post-merge head', async () => {
     const db = seed()
     db.tables.deploy_observations.push({ target_id: 'web', project_id: PROJECT, ok: true, observed_commit: H1, observed_at: '2026-10-03T04:00:00Z' })
