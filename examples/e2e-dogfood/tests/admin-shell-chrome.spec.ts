@@ -174,4 +174,26 @@ test.describe('Admin shell chrome', () => {
     })
     expect(dropdownAboveMain).toBe(true)
   })
+
+  test('anti-gaming counts and timestamps remain readable at desktop and mobile widths', async ({ page, request }) => {
+    await seedSession(page, 'advanced', request)
+    const base = await resolveAdminBase(request)
+    const devices = [20, 5].map((count, index) => ({
+      id: `device-${index}`, device_fingerprint: `fingerprint-${index}`, reporter_tokens: Array.from({ length: count }, (_, i) => `token-${i}`),
+      ip_addresses: [], report_count: count, distinct_user_count: 0,
+      flagged_as_suspicious: true, cross_account_flagged: false, flag_reason: 'Multi-account: 4 reporter tokens from same device',
+      created_at: '2026-10-22T09:50:00', updated_at: '2026-10-22T09:50:00',
+    }))
+    await page.route('**/v1/admin/anti-gaming/devices?*', (route) => route.fulfill({ json: { devices } }))
+    await page.route('**/v1/admin/anti-gaming/events?*', (route) => route.fulfill({ json: { events: [{ id: 'event-1', event_type: 'manual_flag', reason: 'Review requested', reporter_token_hash: 'token-1', ip_address: null, created_at: '2026-10-22T09:50:00' }] } }))
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto(`${base}/anti-gaming?project=${PROJECT_ID}`, { waitUntil: 'domcontentloaded' })
+      for (const count of [20, 5]) await expect(page.getByText(`Multi-account: ${count} reporter tokens from same device`, { exact: true })).toBeVisible()
+      await expect(page.getByRole('textbox', { name: 'Search devices by fingerprint, token, IP, or reason' })).toHaveAttribute('placeholder', 'Search devices…')
+      const time = page.locator('#anti-gaming-events').getByText('10/22/2026, 9:50:00 AM', { exact: true })
+      await expect(time).toBeVisible()
+      expect(await time.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+    }
+  })
 })
