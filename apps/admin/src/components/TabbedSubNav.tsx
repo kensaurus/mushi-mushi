@@ -31,7 +31,7 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
-export interface TabbedSubNavTab {
+interface TabbedSubNavTab {
   to: string
   label: string
   /** Optional counter rendered as a small chip after the label (e.g. "3"). */
@@ -116,13 +116,4 @@ function defaultMatch(to: string): (loc: { pathname: string; hash: string }) => 
     if (!hash) return !loc.hash
     return loc.hash === `#${hash}`
   }
-}
-
-/** True when Advanced IA v2 is enabled for this deploy. Read once and
- *  memoised implicitly by the Vite env system — safe to call inside
- *  render paths. */
-export function isAdvancedIaV2Enabled(): boolean {
-  const raw = import.meta.env.VITE_ADVANCED_IA_V2
-  if (raw === undefined || raw === null || raw === '') return false
-  return String(raw).toLowerCase() === 'true' || raw === '1'
 }
