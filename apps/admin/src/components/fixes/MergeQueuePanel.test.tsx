@@ -87,21 +87,39 @@ describe('MergeQueuePanel', () => {
     expect(window.localStorage.getItem('mushi:merge-queue-nonempty:p1')).toBe('0')
   })
 
-  it('lists queued rows in a box that scrolls inside the panel', async () => {
+  it('lists queued rows in a named list', async () => {
     await render()
     await answer([row()])
-    const list = host.querySelector('ul.max-h-40')
+    const list = host.querySelector('ul[aria-label="Pull requests to merge"]')
     expect(list?.textContent).toContain('o/r#7')
     expect(window.localStorage.getItem('mushi:merge-queue-nonempty:p1')).toBe('1')
+  })
+
+  it('shows all 15 active rows, including 13 approved, without an internal scroll limit', async () => {
+    await render()
+    await answer(Array.from({ length: 15 }, (_, i) => row({
+      id: `q${i}`,
+      pr_number: 100 + i,
+      state: i < 13 ? 'queued' : 'resolving',
+    })))
+    const list = host.querySelector('ul[aria-label="Pull requests to merge"]')!
+    expect(list.querySelectorAll('li')).toHaveLength(15)
+    for (let i = 0; i < 15; i++) {
+      expect(list.textContent).toContain(`o/r#${100 + i}`)
+    }
+    expect(host.textContent).toContain('15 to merge')
+    expect(host.textContent).toContain('13 approved')
+    expect(list.className).not.toContain('max-h-')
+    expect(list.className).not.toContain('overflow-y-auto')
   })
 
   it('lets a long ref break and gives the reason its own line on a phone', async () => {
     await render()
     await answer([row({ repo: 'kensaurus/solo-boss-cloud-documentation', pr_number: 789 })])
-    const link = host.querySelector('ul.max-h-40 a')!
+    const link = host.querySelector('ul[aria-label="Pull requests to merge"] a')!
     expect(link.className).toContain('wrap-anywhere')
     expect(link.textContent).toBe('kensaurus/solo-boss-cloud-documentation#789')
-    const reason = [...host.querySelectorAll('ul.max-h-40 span')].find((s) => s.textContent?.includes('Approved'))!
+    const reason = [...host.querySelectorAll('ul[aria-label="Pull requests to merge"] span')].find((s) => s.textContent?.includes('Approved'))!
     expect(reason.className).toContain('flex-auto')
     expect(reason.className).not.toContain('flex-1')
   })
