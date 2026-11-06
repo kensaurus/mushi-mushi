@@ -42,3 +42,19 @@ test.describe('Connect — SdkInstallCard live preview', () => {
     await expect(page.getByText('Report a bug').first()).toBeVisible()
   })
 })
+
+test.describe('Onboarding — completed setup', () => {
+  test('does not ask a configured project to connect fix agents', async ({ page }) => {
+    await page.goto(`${ADMIN_URL}/onboarding?project=${PROJECT_ID}`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 45_000,
+    })
+
+    // This regression requires a fully configured project, not an incomplete setup.
+    await expect(page.getByText('Your app is wired up', { exact: true })).toBeVisible({
+      timeout: 20_000,
+    })
+    await expect(page.getByRole('button', { name: 'Connect fix agents', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Connect fix agents', exact: true })).toHaveCount(0)
+  })
+})
