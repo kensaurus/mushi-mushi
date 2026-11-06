@@ -365,17 +365,17 @@ async function resolve(
     await set({ state: 'blocked', detail: `Merge conflict: ${MAX_CONFLICT_AGENTS} agent runs did not resolve it. Resolve it on GitHub.`, head_sha: head })
     return 'blocked'
   }
+  const key = await deps.cursorKey(db, row.project_id)
+  if (!key.ok) {
+    await set({ state: 'blocked', detail: `Merge conflict. Run \`mushi work --conflicts\` locally. ${key.reason}`, head_sha: head })
+    return 'blocked'
+  }
   // Stop the line: a conflict agent runs on the follow-up key; while a Health
   // check stops follow-ups for this app, the row waits instead of failing.
   const health = await (deps.healthGate ?? OFF_GATE).check(row.project_id, 'followups')
   if (health.withhold) {
     await set({ detail: `Merge conflict; waits for a conflict agent. ${pauseReason(health)}`.slice(0, 500), head_sha: head })
     return 'conflict_health_paused'
-  }
-  const key = await deps.cursorKey(db, row.project_id)
-  if (!key.ok) {
-    await set({ state: 'blocked', detail: `Merge conflict. ${key.reason}`, head_sha: head })
-    return 'blocked'
   }
   const prUrl = canonicalPrUrl(attempt.pr_url) ?? attempt.pr_url!
   const repoUrl = `https://github.com/${row.repo}`
