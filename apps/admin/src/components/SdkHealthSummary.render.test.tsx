@@ -38,7 +38,10 @@ afterEach(() => {
 })
 
 describe('SdkHealthSummary on a never-installed app (fe489587)', () => {
-  it('says not connected yet with install advice, not Cold or a removed deploy', () => {
+  it.each([
+    { scopes: ['mcp:read'] },
+    { scopes: ['report:write', 'mcp:read'] },
+  ])('says not connected yet with install advice, not Cold or a removed deploy ($scopes)', ({ scopes }) => {
     act(() => {
       root.render(
         createElement(
@@ -48,7 +51,7 @@ describe('SdkHealthSummary on a never-installed app (fe489587)', () => {
             projectId: 'p1',
             projectName: 'mushi-demo',
             projectSlug: 'mushi-demo',
-            apiKeys: keys,
+            apiKeys: keys.map((key) => key.id === 'mcp' ? { ...key, scopes } : key),
             lastReportAt: null,
             adminHost: 'dxptnwrhwsqckaftyymj.supabase.co',
             reportCount: 1,
