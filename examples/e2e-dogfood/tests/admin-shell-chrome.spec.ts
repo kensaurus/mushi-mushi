@@ -112,6 +112,29 @@ test.describe('Admin shell chrome', () => {
 
   test.use({ viewport: { width: 1280, height: 900 } })
 
+  test('integrations dry-run label fits on one line at 390px', async ({ page, request }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await seedSession(page, 'advanced', request)
+    const base = await resolveAdminBase(request)
+    await page.goto(`${base}/integrations?project=${PROJECT_ID}`, { waitUntil: 'domcontentloaded' })
+    await dismissBetaIfPresent(page)
+    const button = page.getByRole('button', { name: 'Run dry-run', exact: true })
+    await expect(button).toBeVisible()
+    await expect.poll(() => button.evaluate((el) => {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+      let node: Node | null
+      while ((node = walker.nextNode())) {
+        if (node.textContent?.trim() !== 'Run dry-run') continue
+        const range = document.createRange()
+        range.selectNodeContents(node)
+        const rects = Array.from(range.getClientRects())
+        const box = el.getBoundingClientRect()
+        return rects.length === 1 && rects[0].left >= box.left && rects[0].right <= box.right && box.left >= 0 && box.right <= window.innerWidth
+      }
+      return false
+    })).toBe(true)
+  })
+
   test('sidebar logo row aligns with desktop sub-header bottom edge', async ({ page, request }) => {
     await seedSession(page, 'advanced', request)
     const base = await resolveAdminBase(request)
