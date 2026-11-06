@@ -58,6 +58,25 @@ function tileText(label: string): string {
 }
 
 describe('FixSummaryRow failed subtitle', () => {
+  it('does not label four stopped reports as CI failures when only two failed CI', () => {
+    render(summary({
+      failureBreakdown: [
+        { category: 'ci_failed', count: 2 },
+        { category: 'pr_closed_unmerged', count: 1 },
+        { category: 'needs_human', count: 1 },
+      ],
+    }))
+    const stopped = tileText('Auto-fix stopped')
+    expect(stopped).toContain('4')
+    expect(stopped).toContain('reports still unfixed')
+    expect(stopped).not.toContain('CI failed')
+
+    const why = tileText('Why auto-fix stopped')
+    expect(why).toContain('4')
+    expect(why).toContain('several causes')
+    expect(why).not.toContain('CI failed')
+  })
+
   it('keeps the unfixed total when several causes exist, and does not show only the top cause', () => {
     render(summary({
       failed: 20,
