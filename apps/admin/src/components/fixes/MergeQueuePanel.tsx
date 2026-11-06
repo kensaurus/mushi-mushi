@@ -245,8 +245,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
       )}
       {shown.length === 0 && <p className="text-2xs text-fg-muted">Nothing in the merge queue.</p>}
       {listed.length > 0 && (
-        // A long queue scrolls inside the panel instead of pushing the list down.
-        <ul className="max-h-40 overflow-y-auto divide-y divide-edge-subtle">
+        <ul aria-label="Pull requests to merge" className="divide-y divide-edge-subtle">
           {listed.map((r) => (
             <li key={r.id} className="flex flex-wrap items-start gap-x-2 gap-y-1 py-1.5">
               <Badge tone={MERGE_QUEUE_STATE_TONE[r.state]} className="shrink-0">{MERGE_QUEUE_STATE_LABEL[r.state]}</Badge>
