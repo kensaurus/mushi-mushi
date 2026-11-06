@@ -208,7 +208,28 @@ test('a conflict without follow-ups on says why instead of starting an agent', a
     cursorKey: () => Promise.resolve({ ok: false, reason: 'Review follow-ups are off.' }),
   }))
   assertEquals(out, 'blocked')
-  assertEquals(lastState(writes)?.detail, 'Merge conflict. Review follow-ups are off.')
+  assertEquals(lastState(writes)?.detail, 'Merge conflict. Run `mushi work --conflicts` locally. Review follow-ups are off.')
+})
+
+test('keyless conflicts are blocked before a health pause, including unstarted resolving rows', async () => {
+  for (const state of ['queued', 'resolving']) {
+    const r = row({ state })
+    const { db, writes } = setup(r)
+    let created = 0
+    let healthChecks = 0
+    const out = await processRow(db, r, deps({
+      pull: () => Promise.resolve(pull({ mergeable: false, mergeableState: 'dirty' })),
+      cursorKey: () => Promise.resolve({ ok: false, reason: 'No Cursor key configured.' }),
+      healthGate: { check: () => (healthChecks++, Promise.resolve({ withhold: true })) } as never,
+      createAgent: () => (created++, Promise.resolve({ agentId: 'unexpected' })),
+    }))
+    assertEquals(out, 'blocked')
+    assertEquals(lastState(writes)?.state, 'blocked')
+    assertEquals(lastState(writes)?.head_sha, 'h1')
+    assertEquals(lastState(writes)?.detail, 'Merge conflict. Run `mushi work --conflicts` locally. No Cursor key configured.')
+    assertEquals('conflict_agents' in lastState(writes)!, false)
+    assertEquals([created, healthChecks], [0, 0])
+  }
 })
 
 test('a resolving row continues once the agent pushed a new head', async () => {
@@ -316,7 +337,7 @@ test('in a train app, a conflict no agent may take stays blocked with the reason
     return writes.slice(before).filter((w) => w.table === 'fix_merge_queue' && 'state' in w.value).map((w) => w.value.state)
   }
   assertEquals(await tick(0), ['resolving', 'blocked'])
-  assertEquals([rows[0].state, rows[0].detail], ['blocked', 'Merge conflict. Review follow-ups are off.'])
+  assertEquals([rows[0].state, rows[0].detail], ['blocked', 'Merge conflict. Run `mushi work --conflicts` locally. Review follow-ups are off.'])
   assertEquals(await tick(5), [])
   assertEquals(await tick(30), [])
   // An hour later it is offered again, in case follow-ups were turned on.
