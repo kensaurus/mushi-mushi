@@ -555,7 +555,8 @@ export function AntiGamingPage() {
               }}
             />
             <Input
-              placeholder="Search fingerprint, token, IP, reason…"
+              placeholder="Search devices…"
+              aria-label="Search devices by fingerprint, token, IP, or reason"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="max-w-xs"
@@ -690,8 +691,8 @@ export function AntiGamingPage() {
                     disabled={!isRecurring}
                     className="w-full min-w-0 flex flex-wrap items-center gap-2 justify-start px-2 py-1 text-left border-0 bg-transparent shadow-none hover:bg-transparent disabled:cursor-default"
                   >
-                    <span title={`First: ${new Date(g.first_at).toLocaleString()}\nLast: ${new Date(g.last_at).toLocaleString()}`}>
-                      <SignalChip tone="neutral" className="w-32 truncate font-mono tabular-nums">
+                    <span className="shrink-0" title={`First: ${new Date(g.first_at).toLocaleString()}\nLast: ${new Date(g.last_at).toLocaleString()}`}>
+                      <SignalChip tone="neutral" className="shrink-0 whitespace-nowrap font-mono tabular-nums">
                         {new Date(g.last_at).toLocaleString()}
                       </SignalChip>
                     </span>
@@ -737,8 +738,8 @@ export function AntiGamingPage() {
         ) : (
           <div className="space-y-0.5 font-mono text-2xs">
             {visibleEvents.map(e => (
-              <div key={e.id} className="flex items-center gap-2 px-2 py-1 rounded-sm hover:bg-surface-overlay/40">
-                <SignalChip tone="neutral" className="w-32 truncate font-mono tabular-nums">
+              <div key={e.id} className="flex flex-wrap items-center gap-2 px-2 py-1 rounded-sm hover:bg-surface-overlay/40">
+                <SignalChip tone="neutral" className="shrink-0 whitespace-nowrap font-mono tabular-nums">
                   {new Date(e.created_at).toLocaleString()}
                 </SignalChip>
                 <Badge className={EVENT_BADGE[e.event_type]}>{e.event_type}</Badge>
@@ -852,7 +853,12 @@ function DeviceCard({ device: d, isExpanded, isBusy, onToggleExpand, onFlag, onU
             </div>
             {d.flag_reason && (
               <ContainedBlock tone="warn" className="mt-2">
-                <p className="text-xs text-danger leading-relaxed max-w-prose wrap-break-word text-pretty">{d.flag_reason}</p>
+                <p className="text-xs text-danger leading-relaxed max-w-prose wrap-break-word text-pretty">
+                  {d.flag_reason.replace(
+                    /^Multi-account: \d+ reporter tokens from same device$/,
+                    `Multi-account: ${d.reporter_tokens.length} reporter tokens from same device`,
+                  )}
+                </p>
               </ContainedBlock>
             )}
             <InlineProof className="mt-2">
