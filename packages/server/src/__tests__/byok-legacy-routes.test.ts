@@ -118,6 +118,35 @@ const LEGACY_FIRECRAWL = {
 }
 
 describe('B1: legacy routes reach every legacy provider', () => {
+  it.each(['firecrawl', 'browserbase', 'anthropic', 'openai'])(
+    'DELETE %s clears the legacy reference before safe cleanup and never falls back on RPC failure',
+    async (provider) => {
+      const refColumn = `byok_${provider}_key_ref`
+      const secretName = `mushi/byok/${P}/${provider}`
+      seed({ [refColumn]: `vault://${secretName}` })
+      const calls: Array<{ fn: string; args: Record<string, unknown>; ref: unknown }> = []
+      ;(db as unknown as { rpc: unknown }).rpc = async (fn: string, args: Record<string, unknown>) => {
+        calls.push({ fn, args, ref: settingsRow()[refColumn] })
+        return {
+          data: null,
+          error: fn === 'vault_delete_secret_by_name_if_unused'
+            ? { code: 'PGRST202', message: 'Cleanup RPC unavailable' }
+            : null,
+        }
+      }
+
+      const { status, json } = await call('DELETE', `/v1/admin/byok/${provider}`)
+
+      expect(status).toBe(200)
+      expect(json.ok).toBe(true)
+      expect(settingsRow()[refColumn]).toBeNull()
+      expect(calls.filter((c) => c.fn === 'vault_delete_secret_by_name_if_unused')).toEqual([
+        { fn: 'vault_delete_secret_by_name_if_unused', args: { secret_name: secretName }, ref: null },
+      ])
+      expect(calls.filter((c) => c.fn === 'vault_delete_secret')).toHaveLength(0)
+    },
+  )
+
   it('DELETE /v1/admin/byok/firecrawl clears the legacy columns and deletes the Vault secret', async () => {
     seed(LEGACY_FIRECRAWL)
     vault[`mushi/byok/${P}/firecrawl`] = 'fc-FAKE-legacy-0001'
