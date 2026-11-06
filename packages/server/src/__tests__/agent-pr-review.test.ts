@@ -11,7 +11,7 @@
  *              a re-queue superseded stores nothing;
  *            - a model error retries later (10 min × tries), a refusal fails
  *              for good, a run that dies three times fails with an event;
- *            - one review per project per tick;
+ *            - one review per project first, spare slots round-robin (≤ 3 per project per tick);
  *            - backfill queues only open cloud-agent and fix-worker PRs with
  *              no review;
  *            - readying (ADR 0047): a draft only on merge at the reviewed
@@ -619,27 +619,40 @@ describe('failures, retries and races', () => {
 })
 
 describe('fairness', () => {
-  it('takes at most one review per project per tick, oldest first', () => {
+  it('gives every project one review first, then fills spare slots round-robin, oldest first', () => {
     const rows = [
       { id: 'a1', project_id: 'A' },
       { id: 'a2', project_id: 'A' },
       { id: 'a3', project_id: 'A' },
+      { id: 'a4', project_id: 'A' },
       { id: 'b1', project_id: 'B' },
+      { id: 'b2', project_id: 'B' },
       { id: 'c1', project_id: 'C' },
       { id: 'd1', project_id: 'D' },
     ]
-    expect(pickFairBatch(rows).map((r) => r.id)).toEqual(['a1', 'b1', 'c1', 'd1'])
+    // Round 1: one each. Round 2: A and B have more. Round 3: only A, capped at 3 per project.
+    expect(pickFairBatch(rows).map((r) => r.id)).toEqual(['a1', 'b1', 'c1', 'd1', 'a2', 'b2', 'a3'])
+    // A small batch is still one per project before anyone gets a second.
     expect(pickFairBatch(rows, 3).map((r) => r.id)).toEqual(['a1', 'b1', 'c1'])
+    // At one per project the old behaviour holds.
+    expect(pickFairBatch(rows, 8, 1).map((r) => r.id)).toEqual(['a1', 'b1', 'c1', 'd1'])
   })
 
-  it('reviews a re-queued PR before older first reviews, still one per project', async () => {
+  it('never lets one backlog push out another project, however long it is', () => {
+    const rows = [...Array.from({ length: 50 }, (_, i) => ({ id: `g${i}`, project_id: 'glot' })), { id: 'other', project_id: 'small' }]
+    const picked = pickFairBatch(rows).map((r) => r.id)
+    expect(picked).toContain('other')
+    expect(picked.filter((id) => id.startsWith('g'))).toHaveLength(3)
+  })
+
+  it('reviews a re-queued PR before older first reviews, then fills spare slots', async () => {
     const row = (id: string, project_id: string) => ({ ...QUEUE_ROW, id, project_id })
     const { db, queries } = scripted({
       rereviews: [row('again-a', 'A')],
       queue: [row('first-a', 'A'), row('first-b', 'B'), row('first-c', 'C'), row('first-d', 'D')],
     })
     const s = await runAgentPrReview(db, {}, deps())
-    expect(s.results.map((r) => r.reviewId)).toEqual(['again-a', 'first-b', 'first-c', 'first-d'])
+    expect(s.results.map((r) => r.reviewId)).toEqual(['again-a', 'first-b', 'first-c', 'first-d', 'first-a'])
     const reads = findQueries(queries, 'fix_reviews', 'select').filter((q) => hasFilter(q, 'eq', 'status'))
     expect(reads.some((q) => hasFilter(q, 'not', 'verdict'))).toBe(true)
     expect(reads.some((q) => hasFilter(q, 'is', 'verdict'))).toBe(true)

@@ -15,7 +15,8 @@
  *      cloud-agent PR that has none (newest first, at most `limit`);
  *   3. on `{ fixAttemptId, force }`, queues that attempt (again, with force)
  *      and reviews it now;
- *   4. claims up to 8 due reviews, at most one per project per tick, and runs
+ *   4. claims up to 8 due reviews, one per project first and then spare slots
+ *      round-robin (at most 3 per project per tick), and runs
  *      them side by side. A claim stamps a fresh `run_id`; every later write
  *      of that run is guarded on it, so a run that a re-queue or a newer run
  *      superseded can never overwrite the row.
@@ -115,8 +116,14 @@ const log = rootLog.child('agent-pr-review')
  * waited on re-reviews; one per app across 8 apps keeps every app moving.
  */
 export const REVIEW_BATCH = 8
-/** Fairness: one project's backlog cannot take every slot of a tick. */
-export const REVIEW_MAX_PER_PROJECT_PER_TICK = 1
+/**
+ * Fairness: one project's backlog cannot take every slot of a tick. Every
+ * project with a due review gets one slot first; slots left over then go
+ * round-robin, up to this many per project. At 1, three apps with large
+ * backlogs moved at 6 reviews an hour each while most of the 8 slots sat
+ * idle (2026-11-06: 163 glot, 56 tsumagoi, 52 sbc approvals waiting).
+ */
+export const REVIEW_MAX_PER_PROJECT_PER_TICK = 3
 /** Due rows read per tick to fill the batch fairly (one app's backlog can fill 30). */
 const QUEUE_SCAN = 120
 export const REVIEW_MAX_TRIES = 3
@@ -594,16 +601,27 @@ export async function enqueueBackfill(db: SupabaseClient, limit: number, now: Da
   return queued
 }
 
-/** In the order given (re-reviews, then oldest due), at most REVIEW_MAX_PER_PROJECT_PER_TICK per project. */
+/**
+ * Round-robin over projects in the order given (re-reviews, then oldest due):
+ * every project's first row, then every project's second, and so on, at most
+ * `perProject` each, until the batch is full. A project with one due review is
+ * never pushed out by another project's backlog; a backlog only uses the slots
+ * nobody else needs.
+ */
 export function pickFairBatch<T extends { project_id: string }>(rows: T[], batch = REVIEW_BATCH, perProject = REVIEW_MAX_PER_PROJECT_PER_TICK): T[] {
-  const taken = new Map<string, number>()
-  const out: T[] = []
+  const byProject = new Map<string, T[]>()
   for (const row of rows) {
-    if (out.length >= batch) break
-    const n = taken.get(row.project_id) ?? 0
-    if (n >= perProject) continue
-    taken.set(row.project_id, n + 1)
-    out.push(row)
+    const list = byProject.get(row.project_id)
+    if (list) list.push(row)
+    else byProject.set(row.project_id, [row])
+  }
+  const out: T[] = []
+  for (let round = 0; round < perProject && out.length < batch; round++) {
+    for (const list of byProject.values()) {
+      if (out.length >= batch) break
+      const row = list[round]
+      if (row) out.push(row)
+    }
   }
   return out
 }
