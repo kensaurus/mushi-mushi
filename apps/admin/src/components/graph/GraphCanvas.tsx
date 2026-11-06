@@ -164,16 +164,31 @@ export function GraphCanvas({
       // 600px) yields: 380 px at 920 px viewport, 540 px at 1080 px, and
       // caps at 600 px even on tall displays — leaving the panels visible
       // without scrolling on most desktop monitors.
-      className="border border-edge rounded-md bg-surface-root"
+      className="flex-col border border-edge rounded-md bg-surface-root"
       style={{
         height: 'clamp(380px, calc(100dvh - 540px), 600px)',
-        display: hidden ? 'none' : 'block',
+        display: hidden ? 'none' : 'flex',
       }}
       role="region"
       aria-label={`Knowledge graph visualization with ${filteredCount} nodes and ${filteredEdgeCount} edges. Switch to Table view for a screen-reader-friendly list.`}
       tabIndex={0}
     >
+      {!hintDismissed && (
+        <Card  className="flex shrink-0 min-w-0 items-center gap-2 px-3 py-1.5 text-2xs text-fg-secondary">
+          <span aria-hidden="true">🖱️</span>
+          <span className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap">Drag to pan · scroll to zoom · click a node for blast radius</span>
+          <button
+            type="button"
+            onClick={dismissHint}
+            className="ml-2 shrink-0 rounded-sm px-1 text-danger hover:bg-danger-muted/50 text-xs leading-none"
+            aria-label="Dismiss hint"
+          >
+            ✕
+          </button>
+        </Card>
+      )}
       <ReactFlow
+        style={{ flex: 1, minHeight: 0 }}
         nodes={flowNodes}
         edges={flowEdges}
         onNodeClick={onNodeClick}
@@ -197,22 +212,6 @@ export function GraphCanvas({
         <Panel position="bottom-right">
           <ZoomControls />
         </Panel>
-        {!hintDismissed && (
-          <Panel position="top-center">
-            <Card  className="flex items-center gap-2 backdrop-blur px-3 py-1.5 text-2xs text-fg-secondary">
-              <span aria-hidden="true">🖱️</span>
-              <span>Drag to pan · scroll to zoom · click a node for blast radius</span>
-              <button
-                type="button"
-                onClick={dismissHint}
-                className="ml-2 rounded-sm px-1 text-danger hover:bg-danger-muted/50 text-xs leading-none"
-                aria-label="Dismiss hint"
-              >
-                ✕
-              </button>
-            </Card>
-          </Panel>
-        )}
         <Panel position="bottom-left">
           <GraphLegend />
         </Panel>
