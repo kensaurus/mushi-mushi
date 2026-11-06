@@ -112,6 +112,18 @@ test.describe('Admin shell chrome', () => {
 
   test.use({ viewport: { width: 1280, height: 900 } })
 
+  test('query snapshot does not claim success with no recent runs', async ({ page, request }) => {
+    await seedSession(page, 'advanced', request)
+    const base = await resolveAdminBase(request)
+    await page.goto(`${base}/query?project=${PROJECT_ID}`, { waitUntil: 'domcontentloaded' })
+    await dismissBetaIfPresent(page)
+
+    await expect(page.getByText('Runs 24h', { exact: true })).toBeVisible()
+    const emptyRuns = page.getByText('0 NL · 0 raw', { exact: true })
+    test.skip(!(await emptyRuns.isVisible()), 'Requires a project with no runs in the last 24 hours')
+    await expect(page.getByText('All recent runs OK', { exact: true })).toHaveCount(0)
+  })
+
   test('sidebar logo row aligns with desktop sub-header bottom edge', async ({ page, request }) => {
     await seedSession(page, 'advanced', request)
     const base = await resolveAdminBase(request)
