@@ -1,13 +1,5 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "Unreleased",
-    "pending": true,
-    "versions": [],
-    "highlights": [],
-    "packages": []
-  },
-  {
     "majorMinor": "1.33",
     "headline": null,
     "pending": false,
@@ -1218,6 +1210,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.35.7",
       "0.35.6",
       "0.35.5",
       "0.35.4",
@@ -1243,7 +1236,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/cli",
-        "version": "0.35.6"
+        "version": "0.35.7"
       }
     ]
   },
@@ -1329,7 +1322,7 @@
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.30.3"
+        "version": "0.30.4"
       }
     ]
   },
