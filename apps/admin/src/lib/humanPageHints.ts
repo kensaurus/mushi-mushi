@@ -37,7 +37,7 @@ export function triageBacklogHint(count: number): string {
 }
 
 export function judgeDisagreementHint(ratePct: number): string {
-  return `The judge disagreed with the classifier on ${ratePct}% of recent grades. Review mismatches before merging fixes.`
+  return `The judge disagreed with the classifier on ${ratePct}% of grades. Review mismatches before merging fixes.`
 }
 
 export function llmErrorsHint(ratePct: number): string {
