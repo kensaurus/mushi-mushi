@@ -27,7 +27,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { log } from '../_shared/logger.ts'
-import { MISTAKE_EFFORT, MISTAKE_MODEL, OPENAI_PRIMARY } from '../_shared/models.ts'
+import { MISTAKE_EFFORT, MISTAKE_MODEL, OPENAI_MINI } from '../_shared/models.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { recordLlmUsage } from '../_shared/llm-usage.ts'
 import { projectLlmKey } from '../_shared/project-llm-key.ts'
@@ -283,7 +283,7 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
             const openaiUsage = {
               ...usageCtx,
               keySource: openaiResolved.source,
-              model: OPENAI_PRIMARY,
+              model: OPENAI_MINI,
               startedAt: Date.now(),
               fallbackReason: anthropicKey ? 'anthropic_failed' : 'no_anthropic_key',
             }
@@ -292,7 +292,7 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
               ...(openaiResolved.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
             })
             const generation = await generateObject({
-              model: openai(OPENAI_PRIMARY),
+              model: openai(OPENAI_MINI),
               schema: coherenceSchema,
               prompt,
             }).catch((err: unknown) => {
