@@ -58,13 +58,13 @@ describe('self organization guard', () => {
     expect(error).not.toHaveBeenCalled()
   })
 
-  it('logs an error when another project shares the self org', async () => {
+  it.each([2, 9])('logs an error when %i projects share the self org', async (projects) => {
     const resolveSelfEndUser = await loadResolver()
-    await expect(resolveSelfEndUser(fakeDb(2) as never, 'user-1')).resolves.toBe('eu-1')
+    await expect(resolveSelfEndUser(fakeDb(projects) as never, 'user-1')).resolves.toBe('eu-1')
     await flush()
     expect(error).toHaveBeenCalledWith('product-events: self organization holds more than one project', {
       orgId: 'org-self',
-      projects: 2,
+      projects,
     })
   })
 
