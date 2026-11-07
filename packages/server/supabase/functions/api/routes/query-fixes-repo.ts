@@ -117,6 +117,17 @@ async function movePrimaryRepo(
 /** Report statuses a newly opened fix PR moves to `fixing` (never fixed, resolved, verified or dismissed). */
 const OPEN_FOR_FIXING = ['new', 'pending', 'submitted', 'queued', 'classified', 'grouped', 'triaged', 'in_progress', 'reopened'];
 
+/**
+ * Model id a local agent may record on the attempt. `mcp` is the attempt
+ * kind (the reaper's local-run window), never a model.
+ */
+function storedLlmModel(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const slug = value.replace(/[\r\n\u0000]/g, '').trim();
+  if (!slug || slug.toLowerCase() === 'mcp' || slug.length > 200) return null;
+  return slug;
+}
+
 export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/admin/query/stats', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
@@ -763,6 +774,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const unclaimed = await workerClaimDenial(c, db, report.id);
     if (unclaimed) return unclaimed;
 
+    const llmModel = storedLlmModel(body.llm_model);
     const { data: fix, error } = await db
       .from('fix_attempts')
       .insert({
@@ -770,6 +782,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         project_id: report.project_id,
         agent: body.agent ?? 'claude_code',
         status: 'pending',
+        ...(llmModel ? { llm_model: llmModel } : {}),
       })
       .select('id')
       .single();
@@ -1866,10 +1879,16 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       review_reasoning: true,
       error: true,
       completed_at: true,
+      llm_model: true,
     };
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
       if (allowed[key]) updates[key] = value;
+    }
+    if ('llm_model' in updates) {
+      const model = storedLlmModel(updates.llm_model);
+      if (!model) delete updates.llm_model;
+      else updates.llm_model = model;
     }
     // `mushi work` sends its no-PR verdict only in `error` (2026-10-29).
     if (updates.status === 'failed') {

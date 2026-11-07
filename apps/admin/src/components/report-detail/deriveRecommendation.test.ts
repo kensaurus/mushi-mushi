@@ -54,6 +54,8 @@ function makeFixAttempt(
     llm_model?: string | null
     agent?: string | null
     files_changed?: string[]
+    branch?: string | null
+    commit_sha?: string | null
   } = {},
 ) {
   return {
@@ -515,6 +517,34 @@ describe('a report with no code location', () => {
       false,
     )
     expect(rec.actions?.find((a) => a.label === 'Dispatch anyway')?.disabled).toBe(true)
+  })
+
+  it('a pre-push refusal shows the checks, branch and a push from the worker checkout', () => {
+    const rec = deriveRecommendation(
+      makeReport({
+        fix_attempts: [makeFixAttempt({
+          status: 'failed',
+          failure_category: null,
+          agent: 'mcp',
+          branch: 'bugfix/saved',
+          commit_sha: 'abc1234def567890',
+          error: 'mushi work: git push failed: \\u001b[38;2;56;56;56mYour repo\'s own checks failed at push. The fix is committed on bugfix/saved (abc1234def567890); nothing was pushed. Failed checks: test. Worker checkout: /tmp/mushi-wt/checkout | Hook output: hook steps failed: test. test: FAIL a.test.ts\\u001b[0m',
+        })],
+      }),
+      makeDispatchState(),
+      0,
+      vi.fn(),
+    )
+    expect(rec.title).toBe("Your repo's own checks failed at push")
+    expect(rec.description).toContain('Failed checks: test.')
+    expect(rec.description).toContain('git -C /tmp/mushi-wt/checkout push -u origin bugfix/saved')
+    expect(rec.description).toContain('FAIL a.test.ts')
+    expect(rec.description).not.toContain('\\u001b')
+    expect(rec.meta?.find((m) => m.label === 'Checks')?.value).toBe('test')
+    expect(rec.meta?.find((m) => m.label === 'Branch')?.value).toBe('bugfix/saved')
+    expect(rec.meta?.find((m) => m.label === 'Commit')?.value).toBe('abc1234')
+    expect(rec.actions?.map((a) => a.label)).toEqual(['Open local workers', 'View pipeline log →', 'Cloud dispatch anyway'])
+    expect(rec.actions?.find((a) => a.label === 'Cloud dispatch anyway')?.tone).toBe('ghost')
   })
 
   it('a refused attempt does not offer "Retry dispatch" as the primary', () => {

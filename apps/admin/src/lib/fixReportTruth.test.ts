@@ -144,6 +144,12 @@ describe('failureHeadline', () => {
     expect(h.firstLine).toBe('review_failed: the fix model flagged its own change for human review.')
   })
 
+  it('drops colour codes from an unrecognised error', () => {
+    const h = failureHeadline(fix({ error: '\u001b[38;2;56;56;56mWorker exploded: ENOSPC on /tmp\u001b[0m' }))!
+    expect(h.title).toBe('Worker exploded: ENOSPC on /tmp')
+    expect(h.firstLine).not.toMatch(/\u001b/)
+  })
+
   it('shows the error itself when the code is unknown, not "The fix attempt failed."', () => {
     const h = failureHeadline(fix({ error: 'Worker exploded: ENOSPC on /tmp\nstack…' }))!
     expect(h.title).toBe('Worker exploded: ENOSPC on /tmp')

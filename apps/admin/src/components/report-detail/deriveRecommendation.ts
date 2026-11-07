@@ -6,6 +6,8 @@ import { isReportClassified } from '../../lib/reportDiagnosis'
 import { KNOWN_ISSUES_SEARCH_HREF } from '../../lib/settingsTabs'
 import { NO_CODE_LOCATION_REASON } from '../../lib/reportCodeLocation'
 import { verdictFromError } from '../../lib/pdcaAct'
+import { pushHookAdvice, stripTerminalCodes } from '../../lib/terminalText'
+import { reportAttemptLabels } from '../../lib/fixAttemptLabel'
 
 /** The opt-in's name as the fix worker quotes it in a skip reason. */
 const WEB_SEARCH_SETTING_NAME = 'Search the web for known fixes'
@@ -76,8 +78,9 @@ function buildFixingMeta(
       tone: 'info',
     })
   }
-  if (latest?.llm_model) meta.push({ label: 'Model', value: latest.llm_model, tone: 'neutral' })
-  if (latest?.agent) meta.push({ label: 'Agent', value: latest.agent, tone: 'neutral' })
+  const named = latest ? reportAttemptLabels(latest) : { agent: null, model: null }
+  if (named.model) meta.push({ label: 'Model', value: named.model, tone: 'neutral' })
+  if (named.agent) meta.push({ label: 'Agent', value: named.agent, tone: 'neutral' })
   if (latest?.files_changed && latest.files_changed.length > 0) {
     const shown = latest.files_changed.slice(0, 1).join(', ')
     const more = latest.files_changed.length - 1
@@ -319,15 +322,20 @@ function recommendationFor(
   const isFailed = latest?.status === 'failed'
 
   if ((isSkipped || isFailed) && latest) {
-    const lastAttemptMeta: RecommendationMeta[] = latest.started_at
-      ? [
-          {
-            label: 'Last attempt',
-            value: new Date(latest.started_at).toLocaleString(),
-            tone: 'neutral' as const,
-          },
-        ]
-      : []
+    const named = reportAttemptLabels(latest)
+    const lastAttemptMeta: RecommendationMeta[] = [
+      ...(latest.started_at
+        ? [
+            {
+              label: 'Last attempt',
+              value: new Date(latest.started_at).toLocaleString(),
+              tone: 'neutral' as const,
+            },
+          ]
+        : []),
+      ...(named.agent ? [{ label: 'Agent', value: named.agent, tone: 'neutral' as const }] : []),
+      ...(named.model ? [{ label: 'Model', value: named.model, tone: 'neutral' as const }] : []),
+    ]
 
     // The agent's verdict (already fixed, nothing to change, another repo,
     // needs a person) is an answer, not a breakage: "Retry dispatch" was the
@@ -483,12 +491,35 @@ function recommendationFor(
       }
     }
 
+    // A local run whose push the repo's pre-push hook refused. The stored
+    // error is the hook's own log, colour codes included; show the checks.
+    if (isFailed && !latest.failure_category && latest.error) {
+      const hook = pushHookAdvice(latest.error)
+      if (hook) {
+        const meta = [...lastAttemptMeta]
+        if (hook.checks.length) meta.push({ label: 'Checks', value: hook.checks.join(', '), tone: 'danger' })
+        if (latest.branch) meta.push({ label: 'Branch', value: latest.branch, tone: 'neutral' })
+        if (latest.commit_sha) meta.push({ label: 'Commit', value: latest.commit_sha.slice(0, 7), tone: 'neutral' })
+        return {
+          title: "Your repo's own checks failed at push",
+          description: hook.hint,
+          tone: 'urgent',
+          meta,
+          actions: [
+            { label: 'Open local workers', to: '/pipeline?tab=workers', tone: 'primary' },
+            { label: 'View pipeline log \u2192', to: '/fixes', tone: 'ghost' },
+            { label: 'Cloud dispatch anyway', onClick: onDispatch, tone: 'ghost' },
+          ],
+        }
+      }
+    }
+
     // Generic failed with unknown / null failure_category
     if (isFailed) {
+      const plain = latest.error ? stripTerminalCodes(latest.error).trim() : ''
       return {
         title: 'Fix attempt failed',
-        description:
-          latest.error ?? 'An unexpected error stopped the agent. Check the Fixes pipeline for details.',
+        description: plain || 'An unexpected error stopped the agent. Check the Fixes pipeline for details.',
         tone: 'urgent',
         meta: lastAttemptMeta,
         actions: [

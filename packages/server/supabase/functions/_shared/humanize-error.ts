@@ -32,12 +32,115 @@ type Context = {
   category?: string | null;
 };
 
+// Keep in sync with apps/admin/src/lib/terminalText.ts (the report page).
+/** A passing lefthook banner is not a failed local hook. See terminalText.ts. */
+const HOOK_FAILED = /hook steps failed:|pre-push hook|husky - pre-push|🥊/i;
+/** The push itself failed. A lefthook mention in some other error is not this. */
+const PUSH_FAILED = /\bgit push failed\b|\bfailed to push some refs\b/i;
+/** Check names may contain dots (`test.unit`). The summary sentence ends after the list. */
+const SUMMARY_CHECKS = /hook steps failed:\s*((?:[\w:-]+(?:\.[\w:-]+)*)(?:\s*,\s*(?:[\w:-]+(?:\.[\w:-]+)*))*)/i;
+const CHECK_NAME = /^[\w:-]+(?:\.[\w:-]+)*$/;
+const GIT_REF = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,200}$/;
+const SAFE_ABS = /^\/(?:[\w.@+-]+\/)*[\w.@+-]+$/;
+
+function stripTerminalCodes(text: string): string {
+  return text
+    .replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, '')
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/\\u001b\[[0-9;?]*[ -/]*[@-~]/gi, '')
+    .replace(/\\x1b\[[0-9;?]*[ -/]*[@-~]/gi, '');
+}
+
+/** Git's own remote-rejection lines, not a check's stdout. */
+function gitRemoteRejection(text: string): boolean {
+  return text.split(/\n|\s\/\s/).some((chunk) => {
+    const s = chunk.trim();
+    // `[rejected]` is non-fast-forward. `[remote rejected]` is the remote.
+    if (/\[(?:remote\s+)?rejected\]/i.test(s) || /\bnon-fast-forward\b/.test(s)) return true;
+    if (/(?:^|\s)(?:remote:|fatal:).*(?:Authentication failed|Permission denied)/i.test(s)) return true;
+    return false;
+  });
+}
+
+function isPushHookFailure(text: string): boolean {
+  const plain = stripTerminalCodes(text);
+  if (!PUSH_FAILED.test(plain)) return false;
+  // A passing hook's log plus Git's `[remote rejected]` is the remote.
+  // An explicit `hook steps failed:` summary still wins over that line.
+  if (gitRemoteRejection(plain) && !/hook steps failed:/i.test(plain)) return false;
+  return HOOK_FAILED.test(plain);
+}
+
+function failedHookChecks(text: string): string[] {
+  const plain = stripTerminalCodes(text);
+  const named = SUMMARY_CHECKS.exec(plain)?.[1];
+  const fromSummary = named
+    ? named.split(',').map((s) => s.trim()).filter((s) => CHECK_NAME.test(s))
+    : [];
+  const fromIcons = [...plain.matchAll(/🥊\s+([\w:.-]+)/g)].map((m) => m[1]!.replace(/\.+$/, ''));
+  return [...new Set([...fromSummary, ...fromIcons])].filter(Boolean).slice(0, 6);
+}
+
+function workerCheckout(text: string): string | null {
+  const m = /Worker checkout: (\S+)(?:\s+\||\s*$)/.exec(stripTerminalCodes(text).replace(/[ \t]+/g, ' ').trim());
+  return m?.[1] ?? null;
+}
+
+function pushRecoveryCommand(checkout: string, branch: string): string | null {
+  if (!SAFE_ABS.test(checkout)) return null;
+  if (!GIT_REF.test(branch) || branch.includes('..') || branch.startsWith('-')) return null;
+  return `git -C ${checkout} push -u origin ${branch}`;
+}
+
+function savedBranch(text: string): { branch: string; sha: string } | null {
+  const m = /committed on (\S+) \(([0-9a-f]{7,40})\)/i.exec(text);
+  if (!m) return null;
+  return { branch: m[1]!, sha: m[2]! };
+}
+
+function pushHookAdvice(text: string): { hint: string } | null {
+  const plain = stripTerminalCodes(text).replace(/[ \t]+/g, ' ').trim();
+  if (!isPushHookFailure(plain)) return null;
+  const checks = failedHookChecks(plain);
+  const checkout = workerCheckout(plain);
+  const saved = savedBranch(plain);
+  const command = checkout && saved ? pushRecoveryCommand(checkout, saved.branch) : null;
+  const which = checks.length ? ` Failed checks: ${checks.join(', ')}.` : '';
+  const fix = checks.length ? `Fix ${checks.join(', ')}` : 'Fix the failing check';
+  const where = saved
+    ? `The fix is committed on ${saved.branch} (${saved.sha.slice(0, 7)})`
+    : 'The fix is committed on its branch';
+  const place = command && checkout
+    ? ` in the worker checkout ${checkout}; nothing was pushed.${which} ${fix}, then from any directory run: ${command}.`
+    : `; nothing was pushed.${which} ${fix}, then open the worker checkout mushi work kept (the branch is still checked out there) and run git push from that directory.`;
+  const output = /Hook output: (.*)$/.exec(plain)?.[1]?.trim();
+  const detail = output
+    ? ` ${output.slice(0, 240)}`
+    : ` ${plain.replace(/\s+/g, ' ').slice(0, 240)}`;
+  return {
+    hint: `${where}${place} Sending the report to your local worker starts another run. A cloud dispatch hits the same checks.${detail}`,
+  };
+}
+
 export function humanizeFixError(
   rawError: string | null | undefined,
   context: Context = {},
 ): HumanizedFixError | null {
   if (!rawError) return null;
-  const raw = rawError;
+  const raw = stripTerminalCodes(rawError);
+  const hook = pushHookAdvice(raw);
+  // Before the substring rules: a lefthook log can contain "429" or "403"
+  // from the failing check, and those used to read as a provider rate limit.
+  // An explicit "hook steps failed:" summary also wins over "permission denied"
+  // or "Authentication failed" printed by that check.
+  if (hook) {
+    return {
+      title: "Your repo's own checks failed at push.",
+      hint: hook.hint,
+      severity: 'hard',
+      raw,
+    };
+  }
   const m = raw.toLowerCase();
   const { category } = context;
 

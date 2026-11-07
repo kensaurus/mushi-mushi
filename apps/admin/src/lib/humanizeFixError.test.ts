@@ -1,6 +1,32 @@
 import { describe, expect, it } from 'vitest'
 import { humanizeFixError } from './humanizeFixError'
 
+describe('humanizeFixError: pre-push hook', () => {
+  it('names the checks and drops colour codes, even when a check prints permission denied', () => {
+    const raw = [
+      'mushi work: git push failed: \\u001b[38;2;56;56;56m',
+      'Your repo\'s own checks failed at push. The fix is committed on bugfix/saved (abc1234def); nothing was pushed.',
+      'Failed checks: test.unit, mobile-test. Worker checkout: /tmp/mushi-wt/checkout | Hook output: hook steps failed: test.unit, mobile-test. test.unit: FAIL a.test.ts | Permission denied reading the fixture',
+    ].join(' ')
+    const h = humanizeFixError(raw)
+    expect(h?.title).toBe("Your repo's own checks failed at push.")
+    expect(h?.hint).toContain('Failed checks: test.unit, mobile-test.')
+    expect(h?.hint).toContain('git -C /tmp/mushi-wt/checkout push -u origin bugfix/saved')
+    expect(h?.hint).toContain('Permission denied reading the fixture')
+    expect(h?.hint).not.toContain('\\u001b')
+    expect(h?.raw).not.toMatch(/\u001b/)
+  })
+
+  it('does not treat a non-push error that mentions lefthook as a failed push', () => {
+    expect(humanizeFixError('cursor-agent failed: lefthook config is missing')?.title).not.toBe(
+      "Your repo's own checks failed at push.",
+    )
+    expect(humanizeFixError('git commit failed: hook steps failed: lint. lefthook')?.title).not.toBe(
+      "Your repo's own checks failed at push.",
+    )
+  })
+})
+
 describe('humanizeFixError: no relevant code', () => {
   it('points at the web search setting when the fix worker says it is off', () => {
     const h = humanizeFixError(

@@ -6,6 +6,7 @@
 
 import { reportDiagnosisView } from './reportDiagnosis'
 import { humanizeFixError } from './humanizeFixError'
+import { pushHookAdvice } from './terminalText'
 import { CLOSE_REASONS } from './closeReasons'
 import { verdictFromError } from './pdcaAct'
 import { DIAGNOSIS_ANCHORS, NEEDS_LOOK_BELOW, headline, type DiagnosisNode } from './reportDiagnosisModel'
@@ -404,7 +405,12 @@ export function fixNodes(report: ReportDetail, diagnosisReady: boolean): Diagnos
   else if (latest?.state === 'failed' && needsPerson) next = { title: 'A person decides this one', detail: 'next step', why: 'The agent said this needs a decision, not a code change. Decide it yourself, or close it as "Not a code bug" in the triage bar; a retry would stop the same way.', state: 'open' }
   else if (latest?.state === 'failed' && verdict === 'already_fixed') next = { title: 'Check it is fixed, then close it', detail: 'next step', why: 'The agent found the bug already fixed in the code. If your app agrees, close the report as fixed; if not, send it again with what you still see.', state: 'open' }
   else if (latest?.state === 'failed' && (verdict === 'not_actionable' || verdict === 'wrong_repo')) next = { title: verdict === 'wrong_repo' ? 'Connect the right repo, or close it' : 'Close it, or point at the code', detail: 'next step', why: verdict === 'wrong_repo' ? 'The agent says the code is in another repo. Connect that repo and send it again.' : 'The agent found nothing in the code to change: often config, an outage or expected behaviour. Close it as "Not a code bug", or send it again with the file or screen to look at.', state: 'open' }
-  else if (latest?.state === 'failed') next = { title: 'Check the weak spots, then retry', detail: 'next step', why: 'Look at the marked nodes first: a vague component or missing repro steps usually stop the agent. Fix those in the triage bar, then dispatch again or paste the fix prompt into your editor.', state: 'open' }
+  else if (latest?.state === 'failed') {
+    const hook = pushHookAdvice(attempts[0]?.error ?? '')
+    next = hook
+      ? { title: "Your repo's own checks failed at push", detail: 'next step', why: hook.hint, state: 'open' }
+      : { title: 'Check the weak spots, then retry', detail: 'next step', why: 'Look at the marked nodes first: a vague component or missing repro steps usually stop the agent. Fix those in the triage bar, then dispatch again or paste the fix prompt into your editor.', state: 'open' }
+  }
   else if (!latest && diagnosisReady && status !== 'dismissed') next = { title: 'Fix it: dispatch or paste the prompt', detail: 'next step', why: 'Copy the fix prompt into your coding agent, or dispatch a cloud agent from "Fix it with your coding agent".', state: 'open' }
   if (next) nodes.push({ id: 'next', lane: 'fix', confidence: null, needsLook: false, source: 'status · fix_attempts', anchor: DIAGNOSIS_ANCHORS.diagnosis, ...next })
   return nodes

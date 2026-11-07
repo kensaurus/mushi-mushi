@@ -32,7 +32,9 @@ import { ActionPill, InlineProof } from './ReportSurface'
 import type { DispatchState } from '../../lib/dispatchFix'
 import { isReportClassified } from '../../lib/reportDiagnosis'
 import { humanizeFixError } from '../../lib/humanizeFixError'
+import { stripTerminalCodes } from '../../lib/terminalText'
 import { reportHasCodeLocation } from '../../lib/reportCodeLocation'
+import { attemptVia } from '../../lib/fixAttemptLabel'
 import type { ReportDetail, ReportFixAttempt } from './types'
 
 type StoryState = StageStamp
@@ -263,7 +265,7 @@ export function buildStoryNodes(
     headline: doHeadline,
     at: fix?.completed_at ?? fix?.started_at ?? fix?.created_at ?? null,
     details: [
-      fix?.agent ? `via ${fix.agent}` : null,
+      fix ? attemptVia(fix) : null,
       fix?.branch || null,
       fix?.lines_changed != null ? `${fix.lines_changed} loc` : null,
     ],
@@ -309,7 +311,12 @@ export function buildStoryNodes(
   const actHeadline = (() => {
     if (status === 'fixed') return 'Loop closed — report marked fixed and routed back upstream'
     if (status === 'dismissed') return 'Loop closed — report dismissed (no fix needed)'
-    if (fixStatus === 'failed') return `Loop blocked — ${fix?.error ?? 'fix attempt failed'}`
+    if (fixStatus === 'failed') {
+      const human = humanizeFixError(fix?.error)
+      if (human && human.known !== false) return `Loop blocked — ${human.title}`
+      const plain = stripTerminalCodes(fix?.error ?? '').replace(/\s+/g, ' ').trim()
+      return `Loop blocked — ${plain ? plain.slice(0, 180) : 'fix attempt failed'}`
+    }
     if (blocker) return ACT_BLOCKER_COPY[blocker]
     if (actState === 'pending') return 'Awaiting merge: press Merge at the top of this page'
     return 'Not yet — needs Plan + Do + Check first'

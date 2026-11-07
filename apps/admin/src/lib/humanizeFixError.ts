@@ -8,6 +8,8 @@
  * Enforced by scripts/check-humanize-parity.mjs (part of check:drift).
  */
 
+import { pushHookAdvice, stripTerminalCodes } from './terminalText'
+
 export interface HumanizedFixError {
   /** ≤ 70 chars, sentence case, ends in a period. */
   title: string;
@@ -38,7 +40,20 @@ export function humanizeFixError(
   context: Context = {},
 ): HumanizedFixError | null {
   if (!rawError) return null;
-  const raw = rawError;
+  const raw = stripTerminalCodes(rawError);
+  const hook = pushHookAdvice(raw);
+  // Before the substring rules: a lefthook log can contain "429" or "403"
+  // from the failing check, and those used to read as a provider rate limit.
+  // An explicit "hook steps failed:" summary also wins over "permission denied"
+  // or "Authentication failed" printed by that check (pushHookAdvice).
+  if (hook) {
+    return {
+      title: "Your repo's own checks failed at push.",
+      hint: hook.hint,
+      severity: 'hard',
+      raw,
+    };
+  }
   const m = raw.toLowerCase();
   const { category } = context;
 

@@ -13,6 +13,7 @@ import { featureRequestDispatchBlock, shortRepoName } from '../../lib/dispatchCo
 import type { DispatchTargetRepo } from '../../lib/useDispatchTargetRepo'
 import { closeReasonSentryNotice, closeReasonsFor } from '../../lib/closeReasons'
 import { humanizeFixError } from '../../lib/humanizeFixError'
+import { stripTerminalCodes } from '../../lib/terminalText'
 import { trackAdHoc } from '../../lib/track'
 import { NO_CODE_LOCATION_REASON } from '../../lib/reportCodeLocation'
 
@@ -325,21 +326,21 @@ export function ReportTriageBar({
           {dispatchState.status === 'failed' && dispatchState.error && (
             <span
               className={`rounded-sm px-2 py-1 text-2xs max-w-xs text-right ${CHIP_TONE.dangerSubtle}`}
-              title={failure?.raw ?? dispatchState.error}
+              title={failure?.raw ?? stripTerminalCodes(dispatchState.error)}
             >
               {failure ? (
                 <>
                   <span className="font-medium">{failure.title}</span> {failure.hint}
                 </>
               ) : (
-                dispatchState.error
+                stripTerminalCodes(dispatchState.error)
               )}
             </span>
           )}
           {(dispatchState.status === 'skipped' || dispatchState.status === 'completed_no_pr') &&
             dispatchState.error && (
               <span className={`rounded-sm px-2 py-1 text-2xs max-w-xs text-right ${CHIP_TONE.warnSubtle}`}>
-                {dispatchState.error}
+                {stripTerminalCodes(dispatchState.error)}
               </span>
             )}
         </div>

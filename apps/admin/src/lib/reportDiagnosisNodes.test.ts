@@ -54,4 +54,16 @@ describe('fixNodes: the next step', () => {
     const step = nextStep(report('classified', failedAttempt({ failure_category: 'sandbox_timeout', error: 'timed out' })))
     expect(step?.title).toBe('Check the weak spots, then retry')
   })
+
+  it('a refused pre-push names the repo checks instead of the weak spots', () => {
+    const step = nextStep(report('classified', failedAttempt({
+      agent: 'mcp',
+      failure_category: null,
+      error: 'mushi work: git push failed: \\u001b[38;2;56;56;56mhook steps failed: test.\\u001b[0m test: FAIL a.test.ts',
+    })))
+    expect(step?.title).toBe("Your repo's own checks failed at push")
+    expect(step?.why).toContain('Failed checks: test.')
+    expect(step?.why).not.toContain('\\u001b')
+    expect(step?.why).not.toMatch(/\u001b/)
+  })
 })
