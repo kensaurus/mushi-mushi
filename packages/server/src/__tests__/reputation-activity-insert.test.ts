@@ -74,6 +74,24 @@ describe('awardPointsForEndUser when the activity insert fails', () => {
     expect(String(warn!.meta?.error)).not.toContain('<!DOCTYPE')
   })
 
+  it.each([502, 503, 504])('logs an HTML %i heartbeat failure with an empty code as a bounded warning', async (status) => {
+    const page =
+      '<!DOCTYPE html>\n' +
+      '<!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]-->\n' +
+      `<head><title>${status} Gateway error</title></head><body>${'x'.repeat(8000)}</body>`
+    const out = await reputation.awardPointsForEndUser(db({ message: page, code: '' }) as never, OPTS)
+    expect(out).toEqual({ pointsAwarded: 0, totalPoints: 0, rejectedReason: 'insert_error', tierChanged: false })
+    expect(logged.error).toEqual([])
+    const warnings = logged.warn.filter((w) => w.msg === 'activity_insert_failed')
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]!.meta).toMatchObject({ endUserId: OPTS.endUserId, action: 'session_minute' })
+    const message = String(warnings[0]!.meta?.error)
+    expect(message).toContain(`${status} Gateway error`)
+    expect(message).not.toContain('<')
+    expect(message.length).toBeLessThan(200)
+    expect(JSON.stringify(warnings)).not.toContain('x'.repeat(100))
+  })
+
   it('keeps a coded failure at error level', async () => {
     const out = await reputation.awardPointsForEndUser(
       db({ message: 'insert or update on table violates foreign key constraint', code: '23503' }) as never,
