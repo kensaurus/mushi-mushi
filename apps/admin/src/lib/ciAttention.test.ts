@@ -81,6 +81,12 @@ describe('recentFailed', () => {
     expect(out[0].reason).toContain('lost communication')
     expect(out[1].reason).toBe('Tests failed')
   })
+
+  it('calls a stop with no runner "waited", not a machine fault', () => {
+    const cancelled = job({ conclusion: 'cancelled', ciKind: 'queue_expired', infra: true, runnerName: null, infraDetail: 'Cancelled after 21 min waiting for a runner.', completedAt: ago(60) })
+    const [f] = recentFailed([cancelled], NOW)
+    expect(f).toMatchObject({ kind: 'waited', reason: 'Cancelled after 21 min waiting for a runner.' })
+  })
 })
 
 describe('waitingByRepo', () => {

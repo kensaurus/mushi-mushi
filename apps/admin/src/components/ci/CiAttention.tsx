@@ -95,11 +95,13 @@ export function CiAttention({ jobs, byJob }: { jobs: CiJob[]; byJob: CiJobType[]
               {shownFailed.map((f) => (
                 <li key={f.job.id} className="flex flex-col gap-0.5 text-xs">
                   <span className="flex flex-wrap items-center gap-1.5">
-                    <Badge tone={f.kind === 'code' ? 'dangerSubtle' : 'warnSubtle'}>{f.kind === 'code' ? 'Tests failed' : 'Machine stopped'}</Badge>
+                    <Badge tone={f.kind === 'code' ? 'dangerSubtle' : f.kind === 'machine' ? 'warnSubtle' : 'neutral'}>
+                      {f.kind === 'code' ? 'Tests failed' : f.kind === 'machine' ? 'Machine stopped' : 'Cancelled while waiting'}
+                    </Badge>
                     <RelativeTime value={new Date(f.at).toISOString()} className="text-2xs text-fg-faint" />
                   </span>
                   <JobLink job={f.job} />
-                  {f.kind === 'machine' && <span className="line-clamp-2 text-2xs text-fg-muted">{f.reason}</span>}
+                  {f.kind !== 'code' && <span className="line-clamp-2 text-2xs text-fg-muted">{f.reason}</span>}
                 </li>
               ))}
             </ul>
