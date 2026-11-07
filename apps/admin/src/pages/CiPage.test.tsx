@@ -10,7 +10,7 @@
 
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CiOverview } from '../lib/ciTypes'
 import { ciOverviewFixture, emptyCiOverview } from '../components/ci/__fixtures__/ciOverview'
@@ -352,14 +352,27 @@ describe('CiPage', () => {
     expect(state.paths).not.toContainEqual({ path: '/v1/admin/ci/overview?days=7', scope: 'enumeration' })
   })
 
-  it('offers the apps to pick on Settings with All apps, and picking one switches to it', async () => {
-    // "Pick one app to see and change where its CI runs." with nothing to pick was a dead end.
-    await render('/ci?apps=all&view=settings')
+  it('offers the apps to pick on Settings with All apps, and picking one switches to that app', async () => {
+    // "Pick one app to see and change where its CI runs." with nothing to pick was a dead end, and the
+    // first fix made two URL updates in one click, so picking glot.it opened the old app (yen-yen).
+    const base = ciOverviewFixture()
+    state.overview = { ...base, repos: [...base.repos, { ...base.repos[0], projectId: 'p2', projectName: 'yen-yen', repo: 'acme/yen-yen' }] }
+    let search = ''
+    const Probe = () => {
+      search = useLocation().search
+      return null
+    }
+    await act(async () => {
+      root.render(createElement(MemoryRouter, { initialEntries: ['/ci?apps=all&view=settings&project=p1'] }, createElement(CiPage), createElement(Probe)))
+    })
     const picker = host.querySelector('[data-testid="ci-placement-app-picker"]') as HTMLElement
-    expect(picker).not.toBeNull()
-    const first = picker.querySelector('button') as HTMLButtonElement
-    expect(first.textContent).toBeTruthy()
-    await act(async () => first.click())
+    expect(Array.from(picker.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['glot.it', 'yen-yen'])
+    const yen = Array.from(picker.querySelectorAll('button')).find((b) => b.textContent === 'yen-yen') as HTMLButtonElement
+    await act(async () => yen.click())
+    const params = new URLSearchParams(search)
+    expect(params.get('project')).toBe('p2')
+    expect(params.get('apps')).toBeNull()
+    expect(params.get('view')).toBe('settings')
     expect(getStoredProjectScopeMode()).toBe('project')
   })
 

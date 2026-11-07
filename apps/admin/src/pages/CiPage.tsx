@@ -42,8 +42,8 @@ import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
 import { Btn, Callout, EmptyState, Loading, Section, SegmentedControl } from '../components/ui'
 import { IconBolt, IconClock, IconCost, IconGauge, IconNetwork, IconQueue, IconServerOff, IconSliders } from '../components/icons'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { setActiveProjectIdSnapshot } from '../lib/activeProject'
-import { useProjectScope, useSetProjectScopeMode } from '../lib/projectScope'
+import { ACTIVE_PROJECT_QUERY_PARAM, setActiveProjectIdSnapshot } from '../lib/activeProject'
+import { PROJECT_SCOPE_QUERY_PARAM, setStoredProjectScopeMode, useProjectScope, useSetProjectScopeMode } from '../lib/projectScope'
 import { CiQueueBoard } from '../components/ci/CiQueueBoard'
 import { CiTimeline } from '../components/ci/CiTimeline'
 import { CiNodeDrawer } from '../components/ci/CiNodeDrawer'
@@ -197,17 +197,21 @@ export function CiPage() {
   const setScopeChoice = useSetProjectScopeMode()
   const scope: Scope = projectId ? scopeChoice : 'all'
   // Settings is per app: from All apps, pick one and the page switches to it.
+  // ONE navigation that sets the app and drops ?apps=all. Two setSearchParams calls in one click
+  // (this one, then setScopeChoice's) each start from the same old URL, so the second wrote the
+  // previous ?project= back: picking glot.it opened yen-yen (2026-11-07).
   const pickApp = useCallback(
     (id: string) => {
       setActiveProjectIdSnapshot(id)
+      setStoredProjectScopeMode('project')
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev)
-        next.set('project', id)
+        next.set(ACTIVE_PROJECT_QUERY_PARAM, id)
+        next.delete(PROJECT_SCOPE_QUERY_PARAM)
         return next
       })
-      setScopeChoice('project')
     },
-    [setSearchParams, setScopeChoice],
+    [setSearchParams],
   )
 
   const path =
