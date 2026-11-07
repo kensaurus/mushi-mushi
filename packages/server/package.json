@@ -16,6 +16,7 @@
     "db:push": "cd supabase && supabase db push",
     "db:reset": "cd supabase && supabase db reset",
     "test": "vitest run",
+    "test:integration": "MUSHI_SERVER_PG_INTEGRATION=1 vitest run src/__tests__/scoped-rate-limit-claim-concurrent.integration.test.ts",
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
