@@ -477,9 +477,17 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
   const now = deps.now ?? (() => new Date())
   const gate = deps.healthGate ?? OFF_GATE
   const nowIso = now().toISOString()
-  let q = db.from('fix_merge_queue').select(ROW_COLUMNS).in('state', ['queued', 'waiting', 'resolving', 'blocked'])
-  if (projectId) q = q.eq('project_id', projectId)
-  const { data, error } = await q.order('queued_at', { ascending: true }).limit(500)
+  const readQueue = () => {
+    let q = db.from('fix_merge_queue').select(ROW_COLUMNS).in('state', ['queued', 'waiting', 'resolving', 'blocked'])
+    if (projectId) q = q.eq('project_id', projectId)
+    return q.order('queued_at', { ascending: true }).limit(500)
+  }
+  let { data, error } = await readQueue()
+  // A gateway can return HTML instead of PostgREST data; retry only this read, once.
+  if (error && /^\s*(?:<!doctype\s+html\b|<html\b)/i.test(error.message)) {
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    ;({ data, error } = await readQueue())
+  }
   if (error) throw new Error(`merge-queue read failed: ${error.message}`)
   const all = (data ?? []) as Array<QueueRow & { claimed_until: string | null; queued_at: string; updated_at: string | null; train_id: string | null }>
   // A row leased by a tick still running holds its repo.
