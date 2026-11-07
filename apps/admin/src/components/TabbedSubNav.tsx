@@ -31,11 +31,13 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
-export interface TabbedSubNavTab {
+interface TabbedSubNavTab {
   to: string
   label: string
   /** Optional counter rendered as a small chip after the label (e.g. "3"). */
   badge?: number | string
+  /** What the counter counts, read aloud and shown on hover ("22 jobs the test machine stopped"). Defaults to "N items". */
+  badgeLabel?: string
   /** Optional custom match function — called with the react-router Location
    *  object. Defaults to exact pathname match + hash (if the `to` includes
    *  one); most consumers can leave it unset. */
@@ -58,7 +60,8 @@ export function TabbedSubNav({ ariaLabel, tabs, trailing }: TabbedSubNavProps) {
       data-tabbed-sub-nav
       className="mb-5 flex items-center justify-between gap-3 border-b border-edge"
     >
-      <ul className="flex items-center gap-1 overflow-x-auto" role="tablist">
+      {/* overflow-x-auto alone also lets the strip scroll a pixel vertically (the active tab's -mb-px), which drew a stray scrollbar (2026-11-06). */}
+      <ul className="flex items-center gap-1 overflow-x-auto overflow-y-hidden" role="tablist">
         {tabs.map((tab) => {
           const isActive = (tab.match ?? defaultMatch(tab.to))({
             pathname: location.pathname,
@@ -85,7 +88,8 @@ export function TabbedSubNav({ ariaLabel, tabs, trailing }: TabbedSubNavProps) {
                 {tab.label}
                 {tab.badge !== undefined && (
                   <span
-                    aria-label={`${tab.badge} items`}
+                    aria-label={tab.badgeLabel ?? `${tab.badge} items`}
+                    title={tab.badgeLabel}
                     className={[
                       'inline-flex items-center justify-center rounded-full text-2xs font-semibold',
                       'min-w-[1.25rem] h-5 px-1.5',
@@ -112,13 +116,4 @@ function defaultMatch(to: string): (loc: { pathname: string; hash: string }) => 
     if (!hash) return !loc.hash
     return loc.hash === `#${hash}`
   }
-}
-
-/** True when Advanced IA v2 is enabled for this deploy. Read once and
- *  memoised implicitly by the Vite env system — safe to call inside
- *  render paths. */
-export function isAdvancedIaV2Enabled(): boolean {
-  const raw = import.meta.env.VITE_ADVANCED_IA_V2
-  if (raw === undefined || raw === null || raw === '') return false
-  return String(raw).toLowerCase() === 'true' || raw === '1'
 }

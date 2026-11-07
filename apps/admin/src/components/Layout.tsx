@@ -31,7 +31,7 @@ import { NAV_ITEM_BY_PATH, buildOperatorNav, type BuiltNavItem, type BuiltNavSec
 import { CORE_NAV_PATHS } from '../lib/navRegistry'
 import { LAB_FEATURES, useLabs } from '../lib/labs'
 import { NAV_CHILDREN, activeParent, isNavPathActive, morePages } from '../lib/sidebarTree'
-import { Tooltip, Btn } from './ui'
+import { Tooltip, Btn, Badge } from './ui'
 import { RouteProgress } from './RouteProgress'
 import { PAGE_FOOT_SLOT_ID } from './readout/ReadoutPanel'
 import { ChromeBreadcrumb } from './ChromeBreadcrumb'
@@ -479,10 +479,23 @@ export function Layout({ children }: { children: ReactNode }) {
               <span className="text-fg-secondary">m</span>
             </h1>
           ) : (
-            <h1 className="text-sm font-bold tracking-tight leading-none">
-              <span className="text-brand">mushi</span>
-              <span className="text-fg-secondary">mushi</span>
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-bold tracking-tight leading-none">
+                <span className="text-brand">mushi</span>
+                <span className="text-fg-secondary">mushi</span>
+              </h1>
+              {/* Mushi Mushi is in beta (owner, 2026-11-07). The chip says so and
+                  asks for feedback in the same click: Help & support sends a bug
+                  to the dogfood widget and an idea to the team. */}
+              <Link
+                to="/feedback"
+                title="Mushi Mushi is in beta. Tell us what broke or what's missing."
+                aria-label="Beta: send feedback"
+                className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                <Badge tone="brandSubtle" className="hover:brightness-110">Beta</Badge>
+              </Link>
+            </div>
           )}
         </div>
       </div>

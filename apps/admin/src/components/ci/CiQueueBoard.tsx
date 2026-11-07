@@ -231,7 +231,10 @@ export function CiQueueBoard({ jobs, fixLinks, focusJobId }: Props) {
               {list.length === 0 ? (
                 <p className="px-0.5 text-2xs text-fg-muted">{all.length === 0 ? meta.empty : 'No finished jobs with this outcome.'}</p>
               ) : (
-                <ul className="flex max-h-112 flex-col gap-1.5 overflow-y-auto">
+                <ul className="relative flex max-h-112 flex-col gap-1.5 overflow-y-auto" data-testid={`ci-queue-list-${col}`}>
+                  {/* `relative` makes this list the containing block of the cards' sr-only (absolute) labels.
+                      Without it they anchored to <main> and escaped the scroll clip: 60 waiting jobs added
+                      about 12,000 px of empty page scroll under the queue (2026-11-06). */}
                   {list.map((job) => (
                     <JobCard key={job.id} job={job} column={col} now={now} fixLinks={fixLinks} focused={job.id === focusJobId} />
                   ))}

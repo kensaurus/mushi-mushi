@@ -7,10 +7,11 @@
  *          test machine failures with links to GitHub. Plain words throughout.
  */
 
+import { useState } from 'react'
 import type { CiAdvice, CiJob, CiOverview } from '../../lib/ciTypes'
 import { formatSeconds, jobOutcome, recentInfraFailures, repoShortName, runnerDisplayName, slowestJobs } from '../../lib/ciView'
 import { groupCiAdvice, type CiAdviceGroup } from '../../lib/ciAdvice'
-import { Badge, Card, CodeChip, CopyButton, DataTableCell, DataTableHead, MiniInlineBar, RelativeTime, type BadgeTone } from '../ui'
+import { Badge, Btn, Card, CodeChip, CopyButton, DataTableCell, DataTableHead, MiniInlineBar, RelativeTime, type BadgeTone } from '../ui'
 import { IconExternalLink, IconInfo } from '../icons'
 import { CiJobOutcomeChip } from './CiJobOutcomeChip'
 import { CI_OUTCOME_STYLE } from './ciOutcome'
@@ -23,8 +24,16 @@ const SEVERITY: Record<CiAdvice['severity'], { tone: BadgeTone; label: string }>
   low: { tone: 'neutral', label: 'Low' },
 }
 
+/** Cards a list shows before "Show N more" (most severe first; 2026-11-06: 65 cost advice cards were 16,000 px). */
+const ADVICE_CARDS_SHOWN = 5
+/** Evidence lines a card shows before "Show N more" (one card listed 28). */
+const ADVICE_EVIDENCE_SHOWN = 5
+
 function AdviceCard({ group, jobs }: { group: CiAdviceGroup; jobs: Map<string, CiCostFixJob> }) {
   const sev = SEVERITY[group.severity]
+  const [allEvidence, setAllEvidence] = useState(false)
+  const evidence = allEvidence ? group.evidence : group.evidence.slice(0, ADVICE_EVIDENCE_SHOWN)
+  const hiddenEvidence = group.evidence.length - evidence.length
   return (
     <Card className="flex flex-col gap-2 p-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -53,12 +62,17 @@ function AdviceCard({ group, jobs }: { group: CiAdviceGroup; jobs: Map<string, C
           <p className="mt-0.5 wrap-break-word pl-4">{group.evidence[0]}</p>
         ) : (
           <ul className="mt-0.5 flex list-disc flex-col gap-0.5 pl-8">
-            {group.evidence.map((line) => (
+            {evidence.map((line) => (
               <li key={line} className="wrap-break-word">
                 {line}
               </li>
             ))}
           </ul>
+        )}
+        {(hiddenEvidence > 0 || allEvidence) && (
+          <Btn size="sm" variant="ghost" className="mt-0.5 ml-4" onClick={() => setAllEvidence((v) => !v)} aria-expanded={allEvidence}>
+            {allEvidence ? 'Show less' : `Show ${hiddenEvidence} more`}
+          </Btn>
         )}
       </div>
       {group.fixes.map((fix) => (
@@ -81,17 +95,31 @@ function AdviceCard({ group, jobs }: { group: CiAdviceGroup; jobs: Map<string, C
 
 export function CiAdviceList({ advice }: { advice: CiAdvice[] }) {
   const jobs = useCostFixJobs(advice.flatMap((a) => (a.autofix ? [a.autofix.projectId] : [])))
+  const [all, setAll] = useState(false)
   if (advice.length === 0) {
     return <p className="text-xs text-fg-muted">Nothing to speed up right now: no rule found a slow spot in this window.</p>
   }
+  // groupCiAdvice sorts most severe first, so the first cards are the ones to act on.
+  const groups = groupCiAdvice(advice)
+  const shown = all ? groups : groups.slice(0, ADVICE_CARDS_SHOWN)
+  const hidden = groups.length - shown.length
   return (
-    <ul className="flex flex-col gap-2" data-testid="ci-advice">
-      {groupCiAdvice(advice).map((g) => (
-        <li key={g.key}>
-          <AdviceCard group={g} jobs={jobs} />
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-col gap-2">
+      <ul className="flex flex-col gap-2" data-testid="ci-advice">
+        {shown.map((g) => (
+          <li key={g.key}>
+            <AdviceCard group={g} jobs={jobs} />
+          </li>
+        ))}
+      </ul>
+      {(hidden > 0 || all) && (
+        <div>
+          <Btn size="sm" variant="ghost" onClick={() => setAll((v) => !v)} aria-expanded={all} data-testid="ci-advice-more">
+            {all ? 'Show the most important only' : `Show ${hidden} more`}
+          </Btn>
+        </div>
+      )}
+    </div>
   )
 }
 
