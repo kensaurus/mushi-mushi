@@ -20,6 +20,7 @@ import { safeFetch } from './inventory-guards.ts'
 import { isCodebaseIndexFailing } from './sweep-error-classifier.ts'
 import { dereferenceMaybeVault } from './settings-secrets.ts'
 import { resolveLlmKey } from './byok.ts'
+import { aiProviderForProject } from './ai-provider.ts'
 import { isSlackChannelUnusable } from './slack.ts'
 
 // Deno global — declared only where consumed (edge functions).
@@ -575,7 +576,40 @@ export async function probeIntegration(
   }
 
   // ── claude_code_agent ─────────────────────────────────────────────────────
-  if (kind === 'claude_code_agent') {
+  if (kind === 'claude_code_agent' && projectId && (await aiProviderForProject(db, projectId)) === 'openai') {
+    // The organization runs AI on OpenAI (ADR 0039 amendment): the fix-worker
+    // gets no Claude key and writes fixes with OpenAI models. Probe that key.
+    // Falling through to the Claude branch below tested the app's leftover
+    // legacy Claude field, so the card said "API key invalid or revoked" all
+    // day on 2026-11-07 while fixes ran fine on OpenAI.
+    const resolved = await resolveLlmKey(db, projectId, 'openai', { purpose: 'probe' }).catch(() => null)
+    if (!resolved?.key) {
+      status = 'unknown'
+      detail = 'Your organization runs AI on OpenAI, and no OpenAI key is set. Add one under Settings → API Keys.'
+    } else {
+      try {
+        const base = (resolved.baseUrl ?? 'https://api.openai.com/v1').replace(/\/$/, '')
+        const res = await fetch(`${base}/models`, {
+          headers: { Authorization: `Bearer ${resolved.key}`, 'User-Agent': 'mushi-mushi-health-probe/1.0' },
+          signal: AbortSignal.timeout(8_000),
+        })
+        httpStatus = res.status
+        if (res.ok) {
+          status = 'ok'
+          detail = 'Your organization runs AI on OpenAI: fixes are written with OpenAI models, and the OpenAI key works.'
+        } else if (res.status === 401 || res.status === 403) {
+          status = 'down'
+          detail = 'Your organization runs AI on OpenAI, and the OpenAI key was rejected. Replace it under Settings → API Keys.'
+        } else {
+          status = 'degraded'
+          detail = `HTTP ${res.status}`
+        }
+      } catch (err) {
+        status = 'down'
+        detail = String(err)
+      }
+    }
+  } else if (kind === 'claude_code_agent') {
     // claude_code fixes run on the Anthropic key pool (withAnthropicOrOpenAi); probe that key first.
     const apiKey =
       (await pooledKey(db, projectId, 'anthropic')) ||
