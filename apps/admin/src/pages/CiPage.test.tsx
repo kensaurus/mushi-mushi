@@ -352,6 +352,17 @@ describe('CiPage', () => {
     expect(state.paths).not.toContainEqual({ path: '/v1/admin/ci/overview?days=7', scope: 'enumeration' })
   })
 
+  it('offers the apps to pick on Settings with All apps, and picking one switches to it', async () => {
+    // "Pick one app to see and change where its CI runs." with nothing to pick was a dead end.
+    await render('/ci?apps=all&view=settings')
+    const picker = host.querySelector('[data-testid="ci-placement-app-picker"]') as HTMLElement
+    expect(picker).not.toBeNull()
+    const first = picker.querySelector('button') as HTMLButtonElement
+    expect(first.textContent).toBeTruthy()
+    await act(async () => first.click())
+    expect(getStoredProjectScopeMode()).toBe('project')
+  })
+
   it('says the page could not load, not that it is still loading, when the overview fails', async () => {
     state.overview = null
     state.error = 'HTTP_ERROR: 404 Not Found'

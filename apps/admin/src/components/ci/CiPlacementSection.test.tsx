@@ -86,7 +86,7 @@ const req = (over: Partial<PlacementRequestRow>): PlacementRequestRow => ({
 describe('CiPlacementSection', () => {
   it('asks for one app under All apps', async () => {
     await render('all')
-    expect(host.textContent).toContain('Pick one app')
+    expect(host.textContent).toContain('Where CI runs is set per app. Pick one')
   })
 
   it('shows the agreement, greys out GitHub-hosted on a private repo with the reason, and hides standby labels', async () => {

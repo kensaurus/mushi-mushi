@@ -562,10 +562,39 @@ function RequestRow({ r, data, onChanged }: { r: PlacementRequestRow; data: CiPl
   )
 }
 
-export function CiPlacementSection({ projectId, scope }: { projectId: string | null; scope: 'project' | 'all' }) {
+export function CiPlacementSection({
+  projectId,
+  scope,
+  apps = [],
+  onPickApp,
+}: {
+  projectId: string | null
+  scope: 'project' | 'all'
+  /** Apps to choose from when the page shows all apps (placement is per app). */
+  apps?: Array<{ id: string; name: string }>
+  onPickApp?: (projectId: string) => void
+}) {
   const path = scope === 'project' && projectId ? `/v1/admin/ci/placement?project_id=${encodeURIComponent(projectId)}` : null
   const page = usePageData<CiPlacement>(path)
-  if (!path || !projectId) return <p className="text-xs text-fg-muted">Pick one app to see and change where its CI runs.</p>
+  if (!path || !projectId) {
+    // "Pick one app" with nothing to pick was a dead end on All apps (2026-11-07).
+    return (
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-fg-muted">Where CI runs is set per app. Pick one:</p>
+        {apps.length > 0 && onPickApp ? (
+          <div className="flex flex-wrap gap-1.5" data-testid="ci-placement-app-picker">
+            {apps.map((a) => (
+              <Btn key={a.id} type="button" variant="ghost" size="sm" onClick={() => onPickApp(a.id)}>
+                {a.name}
+              </Btn>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-fg-muted">Choose an app in the app switcher at the top, then switch to This app.</p>
+        )}
+      </div>
+    )
+  }
   const data = page.data
   if (!data) {
     if (page.error) return <ErrorAlert title="Where CI runs" message={page.error} onRetry={page.reload} />

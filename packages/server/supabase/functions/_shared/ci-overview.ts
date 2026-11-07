@@ -24,6 +24,8 @@ import type { RepoPermissions } from './ci-collector.ts'
 type Db = { from: (table: string) => any }
 
 export const OVERVIEW_JOB_LIMIT = 200
+/** Newest test-machine stops sent on top of OVERVIEW_JOB_LIMIT, so the Machines list matches its count. */
+export const OVERVIEW_INFRA_JOBS = 10
 const FINISHED_READ_LIMIT = 1000
 /** Projects whose job windows are read at once. Each read is one index range. */
 const JOB_PROJECT_CONCURRENCY = 4
@@ -408,7 +410,12 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
     if (s.phase !== 'completed' || s.mem_peak_mb == null) continue
     peakOf.set(`${s.repo}|${s.run_id}|${s.run_attempt}|${s.runner_name}`, s.mem_peak_mb)
   }
-  const shown = [...rows.unfinished, ...rows.finished.slice(0, Math.max(0, OVERVIEW_JOB_LIMIT - rows.unfinished.length))]
+  const newest = [...rows.unfinished, ...rows.finished.slice(0, Math.max(0, OVERVIEW_JOB_LIMIT - rows.unfinished.length))]
+  // The newest test-machine stops always ride along (2026-11-07): the Machines tab badge counts
+  // every stop in the window, but its list read only the newest 200 jobs, so it said "No test
+  // machine stopped a job" under a badge of 121.
+  const newestIds = new Set(newest.map((j) => j.id))
+  const shown = [...newest, ...rows.finished.filter((j) => j.infra && !newestIds.has(j.id)).slice(0, OVERVIEW_INFRA_JOBS)]
   const jobs = shown.map((j) => ({
     id: j.id,
     projectId: j.project_id,

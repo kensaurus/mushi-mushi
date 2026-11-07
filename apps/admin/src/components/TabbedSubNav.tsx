@@ -61,14 +61,16 @@ export function TabbedSubNav({ ariaLabel, tabs, trailing }: TabbedSubNavProps) {
       className="mb-5 flex items-center justify-between gap-3 border-b border-edge"
     >
       {/* overflow-x-auto alone also lets the strip scroll a pixel vertically (the active tab's -mb-px), which drew a stray scrollbar (2026-11-06). */}
-      <ul className="flex items-center gap-1 overflow-x-auto overflow-y-hidden" role="tablist">
+      {/* At 390px "Speed and cost" wrapped to three lines, Settings was cut off and a native
+          scrollbar with arrows showed (2026-11-07): tabs stay one line, the strip still swipes. */}
+      <ul className="flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
         {tabs.map((tab) => {
           const isActive = (tab.match ?? defaultMatch(tab.to))({
             pathname: location.pathname,
             hash: location.hash,
           })
           return (
-            <li key={tab.to} role="presentation">
+            <li key={tab.to} role="presentation" className="shrink-0">
               <Link
                 to={tab.to}
                 role="tab"
@@ -77,7 +79,7 @@ export function TabbedSubNav({ ariaLabel, tabs, trailing }: TabbedSubNavProps) {
                 data-tabbed-sub-nav-tab={tab.to}
                 data-active={isActive || undefined}
                 className={[
-                  'inline-flex items-center gap-2 px-3 py-2 -mb-px text-xs font-medium',
+                  'inline-flex items-center gap-2 whitespace-nowrap px-3 py-2 -mb-px text-xs font-medium',
                   'motion-safe:transition-[transform,opacity] motion-safe:duration-[var(--duration-fast,200ms)]',
                   'border-b-2 rounded-t-sm',
                   isActive
