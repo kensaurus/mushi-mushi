@@ -35,7 +35,7 @@ const OPTIONS: Array<{ id: AiProvider; label: string }> = [
 /** The sentence under the switch: what runs where, in the user's words. */
 function aiProviderLine(provider: AiProvider): string {
   return provider === 'openai'
-    ? 'On OpenAI: bug triage, fix judging and pull request reviews use your OpenAI keys (GPT-6.1 Sol). No Claude key is used.'
+    ? 'On OpenAI: fixes and pull request reviews use GPT-6.1 Sol, bug triage and fix judging use GPT-6.1 Terra, and chat and summaries use GPT-6 Luna, all on your OpenAI keys. No Claude key is used.'
     : 'On Claude: Mushi uses your Claude keys first and your OpenAI keys only when Claude has no working key.';
 }
 
