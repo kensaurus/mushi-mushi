@@ -42,6 +42,7 @@ import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
 import { Btn, Callout, EmptyState, Loading, Section, SegmentedControl } from '../components/ui'
 import { IconBolt, IconClock, IconCost, IconGauge, IconNetwork, IconQueue, IconServerOff, IconSliders } from '../components/icons'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { setActiveProjectIdSnapshot } from '../lib/activeProject'
 import { useProjectScope, useSetProjectScopeMode } from '../lib/projectScope'
 import { CiQueueBoard } from '../components/ci/CiQueueBoard'
 import { CiTimeline } from '../components/ci/CiTimeline'
@@ -195,6 +196,19 @@ export function CiPage() {
   const scopeChoice: Scope = useProjectScope().mode
   const setScopeChoice = useSetProjectScopeMode()
   const scope: Scope = projectId ? scopeChoice : 'all'
+  // Settings is per app: from All apps, pick one and the page switches to it.
+  const pickApp = useCallback(
+    (id: string) => {
+      setActiveProjectIdSnapshot(id)
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('project', id)
+        return next
+      })
+      setScopeChoice('project')
+    },
+    [setSearchParams, setScopeChoice],
+  )
 
   const path =
     scope === 'project' && projectId
@@ -231,6 +245,11 @@ export function CiPage() {
 
   const notice = data ? permissionsNotice(data.permissions) : null
   const empty = data ? isCiOverviewEmpty(data) : false
+  const placementApps = useMemo(() => {
+    const byId = new Map<string, string>()
+    for (const r of data?.repos ?? []) if (!byId.has(r.projectId)) byId.set(r.projectId, r.projectName)
+    return [...byId].map(([id, name]) => ({ id, name })).sort((x, y) => x.name.localeCompare(y.name))
+  }, [data])
   // /ci#ci-placement (Connect's "CI settings" link) opens Settings, then scrolls there.
   useScrollToHash(!!data && !empty)
 
@@ -389,7 +408,7 @@ export function CiPage() {
         <Section title="Where CI runs" id="ci-placement" icon={<IconSliders />}>
           <p className="mb-2 text-xs text-fg-muted">Move a repo's jobs between GitHub-hosted runners and your own machines through the one runner variable its workflows read. Every change is previewed, approved and watched.</p>
           <PanelErrorBoundary label="Where CI runs">
-            <CiPlacementSection projectId={projectId} scope={scope} />
+            <CiPlacementSection projectId={projectId} scope={scope} apps={placementApps} onPickApp={pickApp} />
           </PanelErrorBoundary>
         </Section>
       )}

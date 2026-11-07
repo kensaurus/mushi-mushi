@@ -73,6 +73,18 @@ describe('adviseCi', () => {
     expect(a.evidence).toContain('2 of 10 finished jobs (20%)')
   })
 
+  it('tells jobs cancelled before any machine apart from machines that died', () => {
+    // 2026-11-07: 118 of 121 "machine stopped" jobs never reached a machine, yet the card said
+    // "look at the memory advice for that runner".
+    const cancelled = (n: number) => Array.from({ length: n }, () => job({ ciKind: 'runner_lost', infra: true, runnerName: null }))
+    const onlyCancelled = adviseCi(base({ jobs: [...Array.from({ length: 8 }, () => job()), ...cancelled(3)] }))
+    expect(onlyCancelled.find((x) => x.id === 'infra_share')).toBeUndefined()
+    expect(onlyCancelled.find((x) => x.id === 'infra_never_started')).toMatchObject({ severity: 'medium', runner: null, evidence: expect.stringContaining('3 jobs cancelled while waiting') })
+    const both = adviseCi(base({ jobs: [...Array.from({ length: 8 }, () => job()), ...cancelled(2), job({ ciKind: 'runner_lost', infra: true })] }))
+    expect(both.find((x) => x.id === 'infra_share')).toMatchObject({ runner: 'kensaurus-local-glot-1', evidence: expect.stringContaining('1 job on a machine that stopped mid-job') })
+    expect(both.find((x) => x.id === 'infra_never_started')).toBeDefined()
+  })
+
   it('flags an OOM kill (high) and memory near the cap (medium), and swap pressure', () => {
     const samples = [
       { hostId: 'h1', runnerName: 'kensaurus-local-glot-1', repo: REPO, at: ago(DAY), memPeakMb: 3900, memMaxMb: 4096, oomKills: 1 },
@@ -249,6 +261,17 @@ describe('buildCiOverview', () => {
     // More unfinished jobs than the limit: all of them still come back.
     const many = Array.from({ length: 230 }, () => row({ status: 'queued', conclusion: null, ci_kind: 'queued' }))
     expect(buildCiOverview(rows({ unfinished: many, finished }), opts).jobs).toHaveLength(230)
+  })
+
+  it('always sends the newest test-machine stops, even when 200 newer jobs come first', () => {
+    // 2026-11-07: the Machines tab counted 121 stops but its list read only the newest
+    // 200 jobs and said "No test machine stopped a job".
+    const newer = Array.from({ length: 250 }, () => row())
+    const stops = Array.from({ length: 12 }, () => row({ conclusion: 'failure', ci_kind: 'infra', infra: true }))
+    const o = buildCiOverview(rows({ finished: [...newer, ...stops] }), opts)
+    expect(o.jobs).toHaveLength(OVERVIEW_JOB_LIMIT + 10)
+    expect(o.jobs.filter((j) => j.infra)).toHaveLength(10)
+    expect(new Set(o.jobs.map((j) => j.id)).size).toBe(o.jobs.length)
   })
 
   it('shows a caller scoped to one project nothing of another project in the same org', () => {

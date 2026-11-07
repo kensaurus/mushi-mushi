@@ -371,16 +371,35 @@ export function adviseCi(input: AdvisorInput): CiOverviewAdvice[] {
 
   const infraJobs = finished.filter((j) => j.infra)
   if (finished.length >= 5 && infraJobs.length / finished.length > 0.1) {
-    const byRunner = [...groupBy(infraJobs, (j) => (j.runnerName ? runnerBaseName(j.runnerName) : 'no runner')).entries()].sort((a, b) => b[1].length - a[1].length)
-    advice.push({
-      id: 'infra_share',
-      severity: 'high',
-      title: 'Many jobs stop because of the machine, not the code',
-      detail: 'These jobs never finished testing: the runner died or no runner picked them up. Every one leaves a fix untested.',
-      evidence: `${infraJobs.length} of ${finished.length} finished jobs (${pct(infraJobs.length / finished.length)}); most on ${byRunner[0][0]} (${byRunner[0][1].length}).`,
-      fix: 'Look at the memory advice for that runner; re-run the affected jobs from the fix.',
-      runner: byRunner[0][0] === 'no runner' ? null : byRunner[0][0],
-    })
+    // Two different stories (2026-11-07): a machine that died mid-job is a machine problem, but a job
+    // cancelled before any machine took it was usually replaced by a newer push or cleared by hand.
+    // One card said "look at the memory advice" for 118 of 121 jobs that never reached a machine.
+    const died = infraJobs.filter((j) => j.runnerName)
+    const neverStarted = infraJobs.filter((j) => !j.runnerName)
+    const share = `${infraJobs.length} of ${finished.length} finished jobs (${pct(infraJobs.length / finished.length)})`
+    if (died.length > 0) {
+      const byRunner = [...groupBy(died, (j) => runnerBaseName(j.runnerName as string)).entries()].sort((a, b) => b[1].length - a[1].length)
+      advice.push({
+        id: 'infra_share',
+        severity: died.length / finished.length > 0.05 ? 'high' : 'medium',
+        title: 'Jobs stop because the test machine died, not the code',
+        detail: 'The runner took these jobs and then died or lost contact, so the fix was never tested.',
+        evidence: `${died.length} ${died.length === 1 ? 'job' : 'jobs'} on a machine that stopped mid-job (${share} never finished testing); most on ${byRunner[0][0]} (${byRunner[0][1].length}).`,
+        fix: 'Look at the memory advice for that runner; re-run the affected jobs from the fix.',
+        runner: byRunner[0][0],
+      })
+    }
+    if (neverStarted.length > 0) {
+      advice.push({
+        id: 'infra_never_started',
+        severity: 'medium',
+        title: 'Jobs were cancelled before a test machine took them',
+        detail: 'No machine broke: these jobs waited in the queue and were cancelled, usually because a newer push replaced them or someone cleared the queue. Long waits before the cancel mean too few machines.',
+        evidence: `${neverStarted.length} ${neverStarted.length === 1 ? 'job' : 'jobs'} cancelled while waiting (${share} never finished testing).`,
+        fix: 'If they waited long, add machine capacity (see the queue advice). Re-run only the ones whose fix still needs a result.',
+        runner: null,
+      })
+    }
   }
 
   for (const [repo, jobs] of groupBy(selfHosted, (j) => j.repo)) {
