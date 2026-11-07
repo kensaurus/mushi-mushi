@@ -508,6 +508,7 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
     permissions: {
       jobs: aggregatePermission(permissionValues.map((p) => p?.jobs)),
       runners: aggregatePermission(permissionValues.map((p) => p?.runners)),
+      jobsMissingRepos: [...scopedRepos].filter((r) => rows.permissions[r]?.jobs === 'missing').sort(),
     },
     hosts,
     runners,

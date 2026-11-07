@@ -244,7 +244,7 @@ describe('buildCiOverview', () => {
     expect(o.jobs[0]).toMatchObject({ runnerName: null, labels: ['self-hosted', 'glot'], ciKind: 'waiting_for_runner', infra: true })
     expect(o.repos[0]).toMatchObject({ projectName: 'glot.it', queued: 1, running: 1, jobs7d: 402 })
     expect(o.refreshedAt).toBe('2026-10-21T08:59:30Z')
-    expect(o.permissions).toEqual({ jobs: 'ok', runners: 'missing' })
+    expect(o.permissions).toEqual({ jobs: 'ok', runners: 'missing', jobsMissingRepos: [] })
 
     // More unfinished jobs than the limit: all of them still come back.
     const many = Array.from({ length: 230 }, () => row({ status: 'queued', conclusion: null, ci_kind: 'queued' }))
