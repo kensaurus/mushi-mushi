@@ -540,6 +540,13 @@ export function ciActivity(jobs: CiJob[], now: number, days = 7, coveredFrom: nu
 /** The permissions banner text, or null when Mushi can see everything it needs. */
 export function permissionsNotice(p: CiOverview['permissions']): string | null {
   if (p.jobs === 'missing') {
+    // One repo without Actions: read used to make this read as if no job could be
+    // read (2026-11-07: only solo-boss-cloud_backend, of ten repos). Name them.
+    const repos = (p.jobsMissingRepos ?? []).map((r) => r.split('/').pop() ?? r)
+    if (repos.length > 0) {
+      const list = repos.length > 3 ? `${repos.slice(0, 3).join(', ')} and ${repos.length - 3} more` : repos.join(', ')
+      return `Mushi cannot read GitHub Actions jobs for ${list}, so its jobs are missing below. Give that repo's GitHub token Actions: read.`
+    }
     return 'Mushi cannot read your GitHub Actions jobs. Give the GitHub token Actions: read so Mushi can see where tests run and why they wait.'
   }
   if (p.runners === 'missing') {

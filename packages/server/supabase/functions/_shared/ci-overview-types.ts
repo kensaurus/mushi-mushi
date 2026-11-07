@@ -28,7 +28,9 @@ export interface CiOverview {
    */
   refreshedAt: string | null
   window: { days: number; from: string }
-  permissions: { jobs: 'ok' | 'missing' | 'unknown'; runners: 'ok' | 'missing' | 'unknown' }
+  /** `jobs` is 'missing' when ANY scoped repo lacks Actions: read; `jobsMissingRepos`
+   *  names those repos so the console does not claim none can be read. */
+  permissions: { jobs: 'ok' | 'missing' | 'unknown'; runners: 'ok' | 'missing' | 'unknown'; jobsMissingRepos?: string[] }
   hosts: Array<{
     hostId: string
     hostname: string

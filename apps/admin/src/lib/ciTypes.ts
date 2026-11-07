@@ -165,7 +165,8 @@ export interface CiOverview {
    */
   refreshedAt: string | null
   window: { days: number; from: string }
-  permissions: { jobs: CiPermission; runners: CiPermission }
+  /** `jobsMissingRepos`: the repos without Actions: read (older servers omit it). */
+  permissions: { jobs: CiPermission; runners: CiPermission; jobsMissingRepos?: string[] }
   hosts: CiHost[]
   runners: CiRunner[]
   repos: CiRepo[]

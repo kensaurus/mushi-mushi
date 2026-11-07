@@ -202,6 +202,12 @@ describe('overview helpers', () => {
     expect(permissionsNotice({ jobs: 'ok', runners: 'ok' })).toBeNull()
     expect(permissionsNotice({ jobs: 'ok', runners: 'missing' })).toContain('Administration: read')
     expect(permissionsNotice({ jobs: 'missing', runners: 'missing' })).toContain('Actions: read')
+    // A single repo without access is named, not reported as "cannot read your jobs".
+    const one = permissionsNotice({ jobs: 'missing', runners: 'ok', jobsMissingRepos: ['kensaurus/solo-boss-cloud_backend'] })
+    expect(one).toContain('for solo-boss-cloud_backend')
+    expect(one).not.toContain('cannot read your GitHub Actions jobs')
+    const many = permissionsNotice({ jobs: 'missing', runners: 'ok', jobsMissingRepos: ['o/a', 'o/b', 'o/c', 'o/d', 'o/e'] })
+    expect(many).toContain('a, b, c and 2 more')
   })
 })
 
