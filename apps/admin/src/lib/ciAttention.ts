@@ -54,7 +54,8 @@ export function runningLong(jobs: CiJob[], byJob: CiJobType[] | undefined, now: 
 
 interface RecentFailure {
   job: CiJob
-  kind: 'code' | 'machine'
+  /** code: tests failed · machine: the machine died mid-job · waited: cancelled before any machine took it. */
+  kind: 'code' | 'machine' | 'waited'
   /** Plain reason: GitHub's message for a machine stop, else "Tests failed". */
   reason: string
   at: number
@@ -68,11 +69,15 @@ export function recentFailed(jobs: CiJob[], now: number, windowMs = RECENT_FAILE
     if (outcome !== 'code_failure' && outcome !== 'infra') continue
     const at = Date.parse(job.completedAt ?? job.startedAt ?? job.createdAt ?? '')
     if (!Number.isFinite(at) || now - at > windowMs) continue
-    const machine = outcome === 'infra'
+    // A stop with no runner never reached a machine (cancelled while waiting): not a machine fault.
+    const kind: RecentFailure['kind'] = outcome === 'code_failure' ? 'code' : job.runnerName ? 'machine' : 'waited'
     out.push({
       job,
-      kind: machine ? 'machine' : 'code',
-      reason: machine ? job.infraDetail?.trim() || 'The test machine stopped before the job finished.' : 'Tests failed',
+      kind,
+      reason:
+        kind === 'code'
+          ? 'Tests failed'
+          : job.infraDetail?.trim() || (kind === 'machine' ? 'The test machine stopped before the job finished.' : 'Cancelled before a machine took it.'),
       at,
     })
   }
