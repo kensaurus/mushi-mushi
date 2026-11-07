@@ -552,7 +552,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/sdk-upgrade-lockfile",
     markdown: "admin/sdk-upgrade-lockfile.md",
     keywords: ["admin", "sdk-upgrade-lockfile", "sdk", "upgrade", "lockfile", "helper"],
-    headings: ["How it works", "Add the workflow", "What the action does", "Private registries", "Pinning", "Why Mushi Mushi does not write the lockfile or the workflow…", "Limits"],
+    headings: ["How it works", "Add the workflow", "What the action does", "Private registries", "Pinning", "Why the workflow still exists for pnpm and yarn lockfiles…", "Limits"],
     excerpt: "Add one workflow to your repo so Mushi Mushi's SDK upgrade PRs arrive with a refreshed lockfile and pass npm ci or pnpm install --frozen-lockfile.",
   },
   {
