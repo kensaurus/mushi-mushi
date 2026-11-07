@@ -156,9 +156,13 @@ function dashboardReadFailed(
   c: Parameters<typeof dbError>[0],
   err: unknown,
 ): Response {
-  if (err instanceof DashboardReadError) return dbError(c, err.readError ?? { message: err.message });
+  if (err instanceof DashboardReadError || err instanceof DashboardChartReadError) {
+    return dbError(c, {
+      ...err.readError,
+      message: err.readError?.message?.trim() ? err.readError.message : err.message,
+    });
+  }
   if (err instanceof IntegrationHealthReadError) return dbError(c, { message: err.message, code: err.code });
-  if (err instanceof DashboardChartReadError) return dbError(c, err.readError ?? { message: err.message });
   throw err;
 }
 
