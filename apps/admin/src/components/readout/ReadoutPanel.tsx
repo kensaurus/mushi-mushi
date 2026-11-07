@@ -47,6 +47,9 @@ export function ReadoutPanel({
           Developer details{' '}
           <span className="font-normal text-fg-muted">
             · {title.replace(/\s*readout$/i, '')} endpoints and raw signals
+            {/* The source newline is not a text node, and CSS gap is not
+                one either, so the freshness word was glued on: "signalsnow". */}
+            {' '}
           </span>
         </span>
       }
