@@ -245,6 +245,10 @@ app.post('/sentry-seer-poll', async (c) => {
     .limit(50)
 
   if (error) {
+    if (/^\s*(?:<!doctype html\b|<html\b)/i.test(error.message)) {
+      log.warn('settings query failed, retrying next poll', { error: 'upstream returned HTML' })
+      return c.json({ ok: false, error: 'Settings temporarily unavailable' }, 503)
+    }
     log.error('settings query failed', { error: error.message })
     return c.json({ ok: false, error: error.message }, 500)
   }
