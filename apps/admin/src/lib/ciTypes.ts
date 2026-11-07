@@ -155,6 +155,25 @@ interface CiStats {
   byRunner: Array<{ runner: string; jobs: number; busySeconds: number; infraFailures: number; queueP95s: number | null }>
   byWorkflow: Array<{ repo: string; workflow: string; jobs: number; durationP50s: number | null; durationP95s: number | null; failRate: number | null }>
   slowSteps: Array<{ repo: string; job: string; step: string; p50s: number; runs: number }>
+  /** Per job type, slowest p90 first. Optional: older servers do not send it. */
+  byJob?: CiJobType[]
+}
+
+/** One job type (repo + workflow + job name) over the window. Skipped runs are left out. */
+export interface CiJobType {
+  repo: string
+  workflow: string
+  job: string
+  runs: number
+  durationP50s: number | null
+  durationP90s: number | null
+  durationMaxS: number | null
+  queueP50s: number | null
+  codeFailures: number
+  infraFailures: number
+  /** Code failures ÷ runs that finished testing. */
+  failRate: number | null
+  lastRunAt: string | null
 }
 
 export interface CiOverview {

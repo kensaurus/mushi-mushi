@@ -24,6 +24,13 @@ import type { RepoPermissions } from './ci-collector.ts'
 type Db = { from: (table: string) => any }
 
 export const OVERVIEW_JOB_LIMIT = 200
+/**
+ * Finished jobs always sent, however many are queued (2026-11-07: with 214 queued or running, the
+ * 200 limit left no room for finished jobs and the Now view said "Finished 3 in the last 2 hours").
+ */
+export const OVERVIEW_FINISHED_MIN = 100
+/** Job types in stats.byJob, slowest (p90) first. */
+export const OVERVIEW_JOB_TYPES = 60
 /** Newest test-machine stops sent on top of OVERVIEW_JOB_LIMIT, so the Machines list matches its count. */
 export const OVERVIEW_INFRA_JOBS = 10
 const FINISHED_READ_LIMIT = 1000
@@ -410,7 +417,7 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
     if (s.phase !== 'completed' || s.mem_peak_mb == null) continue
     peakOf.set(`${s.repo}|${s.run_id}|${s.run_attempt}|${s.runner_name}`, s.mem_peak_mb)
   }
-  const newest = [...rows.unfinished, ...rows.finished.slice(0, Math.max(0, OVERVIEW_JOB_LIMIT - rows.unfinished.length))]
+  const newest = [...rows.unfinished, ...rows.finished.slice(0, Math.max(OVERVIEW_FINISHED_MIN, OVERVIEW_JOB_LIMIT - rows.unfinished.length))]
   // The newest test-machine stops always ride along (2026-11-07): the Machines tab badge counts
   // every stop in the window, but its list read only the newest 200 jobs, so it said "No test
   // machine stopped a job" under a badge of 121.
@@ -469,6 +476,36 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
       failRate: tested.length ? Math.round((tested.filter((j) => j.ci_kind === 'code_failure').length / tested.length) * 1000) / 1000 : null,
     }
   }).sort((a, b) => b.jobs - a.jobs)
+
+  // Per job (repo + workflow + job name): run time, wait and failures, the way GitHub's Actions
+  // performance metrics and Buildkite's insights break a pipeline down. Skipped runs are left out
+  // (GitHub excludes them too); a run time needs a start, so only jobs a machine took count.
+  const jobKeys = new Map<string, JobRow[]>()
+  for (const j of finished) {
+    if (j.ci_kind === 'skipped') continue
+    const k = `${j.repo}|${j.workflow_name ?? '(unnamed)'}|${j.job_name}`
+    const list = jobKeys.get(k)
+    if (list) list.push(j)
+    else jobKeys.set(k, [j])
+  }
+  const byJob = [...jobKeys.values()].map((mine) => {
+    const tested = mine.filter((j) => FINISHED_TESTING.has(j.ci_kind))
+    const durations = nums(mine.filter((j) => j.started_at), 'duration_seconds')
+    return {
+      repo: mine[0].repo,
+      workflow: mine[0].workflow_name ?? '(unnamed)',
+      job: mine[0].job_name,
+      runs: mine.length,
+      durationP50s: percentile(durations, 50),
+      durationP90s: percentile(durations, 90),
+      durationMaxS: durations.length ? Math.max(...durations) : null,
+      queueP50s: percentile(nums(mine, 'queue_seconds'), 50),
+      codeFailures: mine.filter((j) => j.ci_kind === 'code_failure').length,
+      infraFailures: mine.filter((j) => j.infra).length,
+      failRate: tested.length ? Math.round((tested.filter((j) => j.ci_kind === 'code_failure').length / tested.length) * 1000) / 1000 : null,
+      lastRunAt: mine.map((j) => j.completed_at ?? j.gh_created_at).sort().at(-1) ?? null,
+    }
+  }).sort((a, b) => (b.durationP90s ?? 0) - (a.durationP90s ?? 0)).slice(0, OVERVIEW_JOB_TYPES)
 
   const advisorJobs: AdvisorJob[] = all.map((j) => ({
     repo: j.repo,
@@ -533,6 +570,7 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
       codeFailures: finished.filter((j) => j.ci_kind === 'code_failure').length,
       byRunner,
       byWorkflow,
+      byJob,
       slowSteps: slowSteps(advisorJobs),
     },
     advice,

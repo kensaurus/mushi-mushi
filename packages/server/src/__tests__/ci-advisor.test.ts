@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { adviseCi, percentile, slowSteps, type AdvisorInput, type AdvisorJob } from '../../supabase/functions/_shared/ci-advisor.ts'
-import { buildCiOverview, OVERVIEW_JOB_LIMIT, type JobRow, type OverviewRows } from '../../supabase/functions/_shared/ci-overview.ts'
+import { buildCiOverview, OVERVIEW_FINISHED_MIN, OVERVIEW_JOB_LIMIT, type JobRow, type OverviewRows } from '../../supabase/functions/_shared/ci-overview.ts'
 
 const NOW = new Date('2026-10-21T09:00:00Z')
 const ago = (min: number) => new Date(NOW.getTime() - min * 60_000).toISOString()
@@ -258,9 +258,32 @@ describe('buildCiOverview', () => {
     expect(o.refreshedAt).toBe('2026-10-21T08:59:30Z')
     expect(o.permissions).toEqual({ jobs: 'ok', runners: 'missing', jobsMissingRepos: [] })
 
-    // More unfinished jobs than the limit: all of them still come back.
+    // More unfinished jobs than the limit: all of them still come back, and so do the newest
+    // finished ones (2026-11-07: 214 queued left "Finished 3 in the last 2 hours").
     const many = Array.from({ length: 230 }, () => row({ status: 'queued', conclusion: null, ci_kind: 'queued' }))
-    expect(buildCiOverview(rows({ unfinished: many, finished }), opts).jobs).toHaveLength(230)
+    const deep = buildCiOverview(rows({ unfinished: many, finished }), opts).jobs
+    expect(deep).toHaveLength(230 + OVERVIEW_FINISHED_MIN)
+    expect(deep.filter((j) => j.status === 'completed')).toHaveLength(OVERVIEW_FINISHED_MIN)
+  })
+
+  it('breaks the window down per job type: run time, wait and failures, slowest first, skipped left out', () => {
+    const build = (d: number, over: Partial<JobRow> = {}) => row({ job_name: 'Lint & Build', duration_seconds: d, queue_seconds: 60, ...over })
+    const finished = [
+      ...[100, 200, 300, 400, 500, 600, 700, 800, 900, 1000].map((d) => build(d)),
+      build(50, { conclusion: 'failure', ci_kind: 'code_failure' }),
+      build(0, { conclusion: 'failure', ci_kind: 'runner_lost', infra: true, started_at: null }),
+      row({ job_name: 'gate', duration_seconds: 8 }),
+      row({ job_name: 'gate', duration_seconds: 0, conclusion: 'skipped', ci_kind: 'skipped' }),
+    ]
+    const byJob = buildCiOverview(rows({ finished }), opts).stats.byJob
+    expect(byJob.map((t) => t.job)).toEqual(['Lint & Build', 'gate'])
+    const lb = byJob[0]
+    expect(lb).toMatchObject({ repo: REPO, workflow: 'CI', runs: 12, codeFailures: 1, infraFailures: 1, durationMaxS: 1000, queueP50s: 60 })
+    expect(lb.failRate).toBeCloseTo(1 / 11, 3)
+    expect(lb.durationP50s).toBeGreaterThanOrEqual(400)
+    expect(lb.durationP90s).toBeGreaterThanOrEqual(900)
+    // The skipped gate run is not a run.
+    expect(byJob[1]).toMatchObject({ runs: 1, durationP50s: 8 })
   })
 
   it('always sends the newest test-machine stops, even when 200 newer jobs come first', () => {

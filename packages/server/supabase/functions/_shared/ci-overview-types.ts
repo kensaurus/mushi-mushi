@@ -123,6 +123,22 @@ export interface CiOverview {
     byRunner: Array<{ runner: string; jobs: number; busySeconds: number; infraFailures: number; queueP95s: number | null }>
     byWorkflow: Array<{ repo: string; workflow: string; jobs: number; durationP50s: number | null; durationP95s: number | null; failRate: number | null }>
     slowSteps: Array<{ repo: string; job: string; step: string; p50s: number; runs: number }>
+    /** Per job (repo + workflow + job name), slowest p90 first, up to 60. Skipped runs left out. */
+    byJob: Array<{
+      repo: string
+      workflow: string
+      job: string
+      runs: number
+      durationP50s: number | null
+      durationP90s: number | null
+      durationMaxS: number | null
+      queueP50s: number | null
+      codeFailures: number
+      infraFailures: number
+      /** Code failures ÷ runs that finished testing. */
+      failRate: number | null
+      lastRunAt: string | null
+    }>
   }
   advice: Array<{
     id: string

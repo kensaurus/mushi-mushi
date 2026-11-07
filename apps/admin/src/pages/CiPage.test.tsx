@@ -122,6 +122,12 @@ describe('CiPage', () => {
     // The summary sits above the queue.
     const summary = q('ci-summary')!
     expect(summary.compareDocumentPosition(q('ci-queue')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // "I can't debug anything from this page" (2026-11-07): what needs a person and how long each job
+    // takes sit on Now, between the summary and the timeline.
+    expect(hasHeading('Needs attention')).toBe(true)
+    expect(hasHeading('Job times')).toBe(true)
+    for (const id of ['ci-attention-long', 'ci-attention-failed', 'ci-attention-waiting']) expect(q(id)).not.toBeNull()
+    expect(summary.compareDocumentPosition(host.querySelector('#ci-attention')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     // One long column was 50,000 px tall (2026-11-06): the other views are not on Now.
     for (const t of ['Runner map', 'Speed it up', 'Slow jobs', 'Stopped by the test machine', 'Where CI runs']) expect(hasHeading(t)).toBe(false)
   })
@@ -138,6 +144,7 @@ describe('CiPage', () => {
       await render(`/ci?view=${view}`)
       for (const t of titles) expect(hasHeading(t)).toBe(true)
       expect(q('ci-queue')).toBeNull()
+      expect(hasHeading('Needs attention')).toBe(false)
       const active = host.querySelector('[role="tab"][aria-selected="true"]')!
       expect(active.getAttribute('href')).toContain(`view=${view}`)
     }
