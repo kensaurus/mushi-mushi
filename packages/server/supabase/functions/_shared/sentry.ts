@@ -17,11 +17,43 @@
 
 import * as Sentry from 'npm:@sentry/deno@^9'
 import type { Context } from 'npm:hono@4'
+import { isOperationalAnthropicQuota } from './claude-request.ts'
 import { dbDiagnosticMessage, isHtmlGatewayDbMessage, SAFE_DB_MESSAGE } from './error-codes.ts'
 
 const TOKEN_QUERY_RX = /([?&](?:api_key|apiKey|token|key|access_token|session)=)[^&]+/gi
 
 let inited = false
+
+/**
+ * A workspace usage cap is an account state, not an app bug. Log it for
+ * Supabase Logs and send one grouped Sentry warning (fixed fingerprint) so
+ * the cap is visible without paging as a malformed-request exception.
+ */
+const ANTHROPIC_QUOTA_FINGERPRINT = ['anthropic-workspace-usage-limit']
+
+function warnAnthropicQuota(err: unknown, where: string): void {
+  const errMessage = (err instanceof Error ? err.message : String(err)).slice(0, 500)
+  console.warn(
+    JSON.stringify({
+      ts: new Date().toISOString(),
+      level: 'warn',
+      scope: 'mushi:sentry',
+      event: 'llm_quota_exceeded',
+      msg: 'Anthropic workspace usage limit reached — not an app bug',
+      where,
+      err_message: errMessage,
+    }),
+  )
+  reportMessage('Anthropic workspace usage limit reached', 'warning', {
+    fingerprint: ANTHROPIC_QUOTA_FINGERPRINT,
+    extra: { where, err_message: errMessage },
+  })
+}
+
+/** Vitest keeps this module for the whole worker. Tests that init Sentry reset it. */
+export function resetSentryForTests(): void {
+  inited = false
+}
 
 export function ensureSentry(functionName?: string): void {
   if (inited) return
@@ -72,7 +104,12 @@ export function reportError(
 export function reportMessage(
   msg: string,
   level: 'info' | 'warning' | 'error' | 'fatal',
-  ctx?: { tags?: Record<string, string>; extra?: Record<string, unknown> },
+  ctx?: {
+    tags?: Record<string, string>
+    extra?: Record<string, unknown>
+    /** Replaces Sentry's default grouping. Quota warnings share one fingerprint. */
+    fingerprint?: string[]
+  },
 ): void {
   if (!inited) return
   Sentry.captureMessage(msg, { level, ...ctx })
@@ -203,6 +240,24 @@ export function sentryHonoErrorHandler(err: Error, c: Context): Response {
     )
   }
 
+  // Workspace usage cap (HTTP 400 "specified API usage limits"). Operational,
+  // already classified as quota by failover. One grouped warning, not an exception.
+  if (isOperationalAnthropicQuota(err)) {
+    warnAnthropicQuota(err, `${c.req.method} ${c.req.path}`)
+    return c.json(
+      {
+        ok: false,
+        error: {
+          code: 'LLM_QUOTA_EXCEEDED',
+          message:
+            'The AI provider has reached its usage limit. Try again after it resets, or switch to another key.',
+          ...(requestId ? { requestId } : {}),
+        },
+      },
+      503,
+    )
+  }
+
   // A gateway HTML page never becomes the Sentry exception text.
   const reported = isHtmlGatewayDbMessage(err.message)
     ? Object.assign(new Error(dbDiagnosticMessage(err.message)), { name: err.name, stack: err.stack, cause: err.cause })
@@ -255,10 +310,14 @@ export function withSentry(
     try {
       return await handler(req)
     } catch (err) {
-      reportError(err, {
-        tags: { function: functionName, method: req.method },
-        extra: { url: req.url.replace(TOKEN_QUERY_RX, '$1[redacted]') },
-      })
+      if (isOperationalAnthropicQuota(err)) {
+        warnAnthropicQuota(err, functionName)
+      } else {
+        reportError(err, {
+          tags: { function: functionName, method: req.method },
+          extra: { url: req.url.replace(TOKEN_QUERY_RX, '$1[redacted]') },
+        })
+      }
       throw err
     }
   }
