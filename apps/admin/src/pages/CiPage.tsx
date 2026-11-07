@@ -40,7 +40,9 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
 import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
 import { Btn, Callout, EmptyState, Loading, Section, SegmentedControl } from '../components/ui'
-import { IconBolt, IconClock, IconCost, IconGauge, IconNetwork, IconQueue, IconServerOff, IconSliders } from '../components/icons'
+import { IconAlertTriangle, IconBolt, IconClock, IconCost, IconGauge, IconNetwork, IconQueue, IconServerOff, IconSliders } from '../components/icons'
+import { CiAttention } from '../components/ci/CiAttention'
+import { CiJobTimes } from '../components/ci/CiJobTimes'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { ACTIVE_PROJECT_QUERY_PARAM, setActiveProjectIdSnapshot } from '../lib/activeProject'
 import { PROJECT_SCOPE_QUERY_PARAM, setStoredProjectScopeMode, useProjectScope, useSetProjectScopeMode } from '../lib/projectScope'
@@ -85,6 +87,8 @@ const CI_VIEWS: ReadonlyArray<{ id: CiView; label: string }> = [
 const SECTION_VIEW: Record<string, CiView> = {
   'ci-summary': 'now',
   'ci-queue': 'now',
+  'ci-attention': 'now',
+  'ci-job-times': 'now',
   'ci-timeline': 'now',
   'ci-map': 'machines',
   'ci-infra': 'machines',
@@ -354,9 +358,19 @@ export function CiPage() {
         <>
           <CiSummary overview={data} />
 
+          <Section title="Needs attention" id="ci-attention" icon={<IconAlertTriangle />}>
+            <p className="mb-2 text-xs text-fg-muted">Jobs running longer than they usually take, what failed in the last 2 hours and why, and how long each app's queue is.</p>
+            <CiAttention jobs={data.jobs} byJob={data.stats.byJob} />
+          </Section>
+
           <Section title="Queue" id="ci-queue" icon={<IconQueue />}>
             <p className="mb-2 text-xs text-fg-muted">Every job for your fixes, from waiting for a machine to finished. Re-run a job the test machine stopped; open the fix for one that failed.</p>
             <CiQueueBoard jobs={data.jobs} fixLinks={fixLinks} focusJobId={focusJobId} />
+          </Section>
+
+          <Section title="Job times" id="ci-job-times" icon={<IconGauge />}>
+            <p className="mb-2 text-xs text-fg-muted">Each job over the last {data.window.days} days, slowest first: how long it usually runs, its slow runs, the longest, how long it waits for a machine and how often it fails.</p>
+            <CiJobTimes byJob={data.stats.byJob} days={data.window.days} />
           </Section>
 
           <Section title="Timeline" id="ci-timeline" icon={<IconClock />}>
