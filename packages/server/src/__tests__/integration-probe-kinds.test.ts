@@ -134,3 +134,60 @@ describe('fix agent probes test the key a fix would use (2026-10-30)', () => {
     vi.doUnmock('../../supabase/functions/_shared/settings-secrets.ts')
   })
 })
+
+describe('Claude Code probe for an organization on OpenAI (2026-11-07)', () => {
+  // The fix-worker gets no Claude key when the organization runs AI on OpenAI,
+  // so the probe must test the OpenAI key, not the leftover legacy Claude field.
+  async function loadOnOpenAi(resolved: { key: string; baseUrl?: string } | null) {
+    vi.resetModules()
+    vi.stubGlobal('Deno', { env: { get: () => 'platform-anthropic' } })
+    const asked: string[] = []
+    vi.doMock('../../supabase/functions/_shared/ai-provider.ts', () => ({ aiProviderForProject: async () => 'openai' }))
+    vi.doMock('../../supabase/functions/_shared/byok.ts', () => ({
+      resolveLlmKey: async (_db: unknown, _p: string, provider: string) => {
+        asked.push(provider)
+        return provider === 'openai' ? resolved : { key: 'should-not-be-used' }
+      },
+    }))
+    vi.doMock('../../supabase/functions/_shared/settings-secrets.ts', () => ({ dereferenceMaybeVault: async () => 'dead-legacy-key' }))
+    const mod = await import('../../supabase/functions/_shared/integration-probes.ts')
+    return { ...mod, asked }
+  }
+
+  afterEach(() => {
+    vi.doUnmock('../../supabase/functions/_shared/ai-provider.ts')
+    vi.doUnmock('../../supabase/functions/_shared/byok.ts')
+    vi.doUnmock('../../supabase/functions/_shared/settings-secrets.ts')
+  })
+
+  it('probes the OpenAI key and reads ok, never sending the legacy Claude key', async () => {
+    const { probeIntegration, asked } = await loadOnOpenAi({ key: 'pooled-openai' })
+    const calls: Array<[string, string | undefined]> = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: { headers: Record<string, string> }) => {
+      calls.push([url, init.headers.Authorization ?? init.headers['x-api-key']])
+      return new Response('{}', { status: 200 })
+    }))
+    const r = await probeIntegration('claude_code_agent', {} as never, { claude_api_key_ref: 'vault://old' } as never, {}, 'p1')
+    expect(r.status).toBe('ok')
+    expect(r.detail).toMatch(/OpenAI/)
+    expect(asked).toEqual(['openai'])
+    expect(calls).toEqual([['https://api.openai.com/v1/models', 'Bearer pooled-openai']])
+  })
+
+  it('reads a rejected OpenAI key as down, and a missing one as unknown without a request', async () => {
+    let probe = await loadOnOpenAi({ key: 'k', baseUrl: 'https://openrouter.ai/api/v1/' })
+    const fetchSpy = vi.fn(async (_url: string) => new Response('{}', { status: 401 }))
+    vi.stubGlobal('fetch', fetchSpy)
+    const down = await probe.probeIntegration('claude_code_agent', {} as never, {} as never, {}, 'p1')
+    expect(down.status).toBe('down')
+    expect(down.detail).toMatch(/OpenAI key was rejected/)
+    expect(fetchSpy.mock.calls[0][0]).toBe('https://openrouter.ai/api/v1/models')
+
+    probe = await loadOnOpenAi(null)
+    const none = vi.fn()
+    vi.stubGlobal('fetch', none)
+    const missing = await probe.probeIntegration('claude_code_agent', {} as never, {} as never, {}, 'p1')
+    expect(missing.status).toBe('unknown')
+    expect(none).not.toHaveBeenCalled()
+  })
+})
