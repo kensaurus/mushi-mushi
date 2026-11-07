@@ -102,6 +102,12 @@ describe('hourly probe cron', () => {
     expect(cron).toContain('slack_bot_token_ref, slack_channel_id')
   })
 
+  it('checks the Claude Code card for an organization on OpenAI even with no Claude key saved', () => {
+    expect(cron).toContain("db.from('organizations').select('id, ai_provider').eq('ai_provider', 'openai')")
+    expect(cron).toContain('return !!s.claude_api_key_ref || orgOnOpenAi')
+    expect(cron).toContain("hasClaudeCodeAgent(s, openAiOrgs.has(projectOrgMap.get(s.project_id) ?? ''))")
+  })
+
   it('looks settings up by project from a map, not a scan per routing row', () => {
     expect(cron).toContain('settingsByProject.get(r.project_id)')
     expect(cron).not.toMatch(/allSettings\.find\(\(s\) => s\.project_id === /)
