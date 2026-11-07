@@ -8,6 +8,7 @@
  *   read error so the outage shows in Supabase Logs.
  * - dbError's transient-DB log line carries the requestId the 500 body has.
  */
+import { readFileSync } from 'node:fs'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { SAFE_INTERNAL_MESSAGE } from '../../supabase/functions/_shared/error-codes.ts'
 import { reportError } from '../../supabase/functions/_shared/sentry.ts'
@@ -49,6 +50,25 @@ const CF_HTML =
   '<!--[if IE 8]>    <html class="no-js ie8 oldie" lang="en-US"> <![endif]-->\n' +
   '<head><title>abc.supabase.co | 522: Connection timed out</title></head>' +
   `<body><div id="cf-wrapper">${'x'.repeat(8000)}</div></body>`
+
+describe('sentry-seer-poll settings HTML failure source guard', () => {
+  it('handles an HTML document before logging or returning the raw query error', () => {
+    const source = readFileSync(
+      new URL('../../supabase/functions/sentry-seer-poll/index.ts', import.meta.url),
+      'utf8',
+    )
+    expect(source).toContain(
+      "  if (error) {\n" +
+      "    if (/^\\s*(?:<!doctype html\\b|<html\\b)/i.test(error.message)) {\n" +
+      "      log.warn('settings query failed, retrying next poll', { error: 'upstream returned HTML' })\n" +
+      "      return c.json({ ok: false, error: 'Settings temporarily unavailable' }, 503)\n" +
+      "    }\n" +
+      "    log.error('settings query failed', { error: error.message })\n" +
+      "    return c.json({ ok: false, error: error.message }, 500)\n" +
+      "  }",
+    )
+  })
+})
 
 describe('userCanAccessProject on a failed read', () => {
   it('grants access normally', async () => {
