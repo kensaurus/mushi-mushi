@@ -401,6 +401,21 @@ main :not(pre) > code {
   vertical-align: 2px;
 }
 
+/* At 390px the inline chip pushed the logo 19px off the left edge (logo,
+   GitHub, Start free and the menu fill the row). On phones it floats above
+   the end of the wordmark and takes no width. */
+@media (max-width: 420px) {
+  .docs-logo-beta {
+    position: absolute;
+    top: -0.7rem;
+    right: 0;
+    margin-left: 0;
+    font-size: 0.5rem;
+    padding: 0 3px;
+    line-height: 1.3;
+  }
+}
+
 /* ---------------------------------------------------------------------------
  * 7. Editorial Hero (used by <EditorialHero /> on the index). The component
  *    is purely structural; all visual moves live here so the look stays in

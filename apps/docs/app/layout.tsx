@@ -104,7 +104,7 @@ const banner = latestRelease ? (
 const navbar = (
   <Navbar
     logo={
-      <span className="whitespace-nowrap font-semibold tracking-tight">
+      <span className="relative whitespace-nowrap font-semibold tracking-tight">
         {/* "— docs" drops on phones so the logo, GitHub, Console and Sign in fit one row at 390px. */}
         Mushi Mushi <span className="hidden opacity-60 sm:inline">— docs</span>
         <span className="docs-logo-beta" title="Mushi Mushi is in beta">Beta</span>
