@@ -16,9 +16,9 @@ import { defineConfig, devices } from '@playwright/test'
  *   - MUSHI_ADMIN_URL (default http://localhost:6464)
  *       Mushi Mushi admin console.
  *   - E2E_LIVE_GITHUB=1
- *       Unset = msw mocks the GitHub REST surface so Act stage runs
- *       hermetically. Set = real GitHub calls (requires GITHUB_TOKEN +
- *       a sacrificial repo — see tests/README.md).
+ *       Unset = no GitHub interception; Act only checks that the attempt
+ *       leaves `pending`. Set = assert a real GitHub PR URL (requires
+ *       GITHUB_TOKEN + a sacrificial repo — see tests/README.md).
  */
 export default defineConfig({
   testDir: './tests',
