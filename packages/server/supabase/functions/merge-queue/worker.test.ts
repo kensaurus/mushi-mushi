@@ -24,7 +24,7 @@ function assertEquals(actual: unknown, expected: unknown, msg = '') {
 type Row = Record<string, unknown>
 
 /** Just enough of the PostgREST builder for the worker: filters, update, insert, single reads. */
-function fakeDb(tables: Record<string, Row[]>) {
+function fakeDb(tables: Record<string, Row[]>, readErrors: Array<{ message: string; code?: string }> = []) {
   const writes: Array<{ table: string; op: string; value: Row }> = []
   const from = (table: string) => {
     let rows = [...(tables[table] ?? [])]
@@ -44,6 +44,9 @@ function fakeDb(tables: Record<string, Row[]>) {
     b.insert = (p: Row) => ((inserted = p), b)
     b.maybeSingle = () => Promise.resolve({ data: rows[0] ?? null, error: null })
     b.then = (ok: (v: unknown) => unknown) => {
+      if (table === 'fix_merge_queue' && !patch && !inserted && readErrors.length) {
+        return Promise.resolve({ data: null, error: readErrors.shift() }).then(ok)
+      }
       if (patch) {
         for (const r of rows) {
           Object.assign(r, patch)
@@ -217,6 +220,52 @@ test('a resolving row continues once the agent pushed a new head', async () => {
   const out = await processRow(db, r, deps({ pull: () => Promise.resolve(pull({ headSha: 'h2' })) }))
   assertEquals(out, 'resolved')
   assertEquals(lastState(writes)?.state, 'waiting')
+})
+
+test('a tick retries an HTML queue read and preserves the project filter', async () => {
+  const readErrors = [{ message: '<!DOCTYPE html>\n<html>Gateway unavailable</html>' }]
+  const rows = [
+    { ...row(), claimed_until: null },
+    { ...row({ id: 'q2', project_id: 'p2', repo: 'o/s' }), claimed_until: null },
+  ]
+  const { db } = fakeDb({ fix_attempts: [{ ...attempt }], fix_merge_queue: rows }, readErrors)
+  const seen: string[] = []
+  const out = await runMergeQueue(db, deps({
+    pull: (_t, ref) => (seen.push(ref.repo), Promise.resolve(pull({ state: 'closed' }))),
+  }), 'p1')
+  assertEquals(readErrors.length, 0)
+  assertEquals(seen, ['r'])
+  assertEquals(out, { removed: 1 })
+})
+
+test('a persistent HTML queue-read failure stops after one retry without writes', async () => {
+  const message = '<!DOCTYPE html>'
+  const readErrors = [{ message }, { message }, { message }]
+  const { db, writes } = fakeDb({ fix_merge_queue: [{ ...row() }] }, readErrors)
+  let caught: unknown
+  try {
+    await runMergeQueue(db, deps())
+  } catch (err) {
+    caught = err
+  }
+  assertEquals(caught instanceof Error ? caught.message : caught, `merge-queue read failed: ${message}`)
+  assertEquals(readErrors.length, 1)
+  assertEquals(writes, [])
+})
+
+test('a structured database queue-read error is not retried', async () => {
+  const message = 'permission denied for table fix_merge_queue'
+  const readErrors = [{ message, code: '42501' }, { message, code: '42501' }]
+  const { db, writes } = fakeDb({ fix_merge_queue: [{ ...row() }] }, readErrors)
+  let caught: unknown
+  try {
+    await runMergeQueue(db, deps())
+  } catch (err) {
+    caught = err
+  }
+  assertEquals(caught instanceof Error ? caught.message : caught, `merge-queue read failed: ${message}`)
+  assertEquals(readErrors.length, 1)
+  assertEquals(writes, [])
 })
 
 test('a tick takes one PR per repo, and a blocked row only where nothing else moves', async () => {
