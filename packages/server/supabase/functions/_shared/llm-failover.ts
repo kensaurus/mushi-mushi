@@ -5,6 +5,8 @@
  * `withLlmFailover(db, projectId, provider, fn)` iterates the ordered list
  * of active keys, calls `fn(resolvedKey)`, and on error:
  *   - 429 → marks key as `quota_exhausted` (1-hour cooldown), advances.
+ *   - Anthropic's 400 workspace usage cap → `quota_exhausted` until the
+ *     "regain access on …" time in the error (else 1 hour). Not retried.
  *   - 401/403 → marks key as `auth_failed`, advances.
  *   - Transient (5xx, timeout, ECONNRESET/ETIMEDOUT, "overloaded") → bounded
  *     exponential-backoff+jitter retry on the SAME key first (the key isn't
@@ -24,7 +26,7 @@
 
 import { isQuotaMessage } from './llm-quota.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
-import { isClaudeRefusal } from './claude-request.ts';
+import { anthropicUsageLimitDetail, isClaudeQuotaExceeded, isClaudeRefusal } from './claude-request.ts';
 import {
   enforceLlmBudget,
   resolveLlmKeys,
@@ -97,6 +99,13 @@ export function isStage1LlmUnavailable(err: unknown): boolean {
  * and the transient-retry decision are pure and worth testing in isolation.
  */
 export function classifyLlmError(err: unknown): 'quota' | 'auth' | 'transient' | 'other' {
+  // Workspace spend cap: Anthropic returns 400 invalid_request_error with
+  // "You have reached your specified API usage limits" — no "429" and no
+  // "quota". That must rotate keys and must not be retried or treated as a
+  // malformed request. Checked before the string scan so a reset date in the
+  // sentence cannot be read as an HTTP status.
+  if (isClaudeQuotaExceeded(err) || anthropicUsageLimitDetail(err)) return 'quota';
+
   const msg = String(err).toLowerCase();
 
   // HTTP status codes in the error message (Vercel AI SDK wraps them)

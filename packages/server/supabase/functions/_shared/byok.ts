@@ -38,6 +38,7 @@ import {
 } from './byok-scope.ts';
 import { assertLlmBudget, isBudgetedProvider, LlmBudgetUnavailableError } from './llm-budget.ts';
 import { aiProviderForProject } from './ai-provider.ts';
+import { anthropicUsageLimitCooldownUntil } from './claude-request.ts';
 
 const log = rootLog.child('byok');
 
@@ -642,7 +643,8 @@ function envCandidates(projectId: string, provider: LlmProvider): ResolvedKey[] 
 
 /**
  * Mark a byok_keys row with a new status (called by withLlmFailover on error).
- * Quota exhaustion sets a 1-hour cooldown so the key is tried again later.
+ * A 429 holds the key for one hour. Anthropic's workspace cap holds it until
+ * the "regain access on …" time in `reason`, when that sentence includes one.
  */
 export async function markKeyStatus(
   db: SupabaseClient,
@@ -650,8 +652,11 @@ export async function markKeyStatus(
   status: Extract<KeyStatus, 'quota_exhausted' | 'auth_failed'>,
   reason: string,
 ): Promise<void> {
+  const capUntil = status === 'quota_exhausted' ? anthropicUsageLimitCooldownUntil(reason) : null;
   const cooldownUntil =
-    status === 'quota_exhausted' ? new Date(Date.now() + 60 * 60 * 1000).toISOString() : null;
+    status === 'quota_exhausted'
+      ? (capUntil ?? new Date(Date.now() + 60 * 60 * 1000).toISOString())
+      : null;
 
   // PostgREST query builders are thenables (`then` only) — they have no
   // `.catch`, and they resolve with `{ error }` rather than rejecting. Await
