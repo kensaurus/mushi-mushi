@@ -87,7 +87,7 @@ function ProfileScreen() {
 
 ## Migration checklist
 
-Sign in to the Mushi Mushi admin console, create a project, mint an API key. Copy projectId + apiKey.</> },
+Create a free account (no card) or sign in to the Mushi Mushi admin console, create a project, mint an API key. Copy projectId + apiKey.</> },
     { id: 'install', label: 'Install the Mushi Mushi React Native SDK', content: {`npm install @mushi-mushi/react-native
 
 # Optional peers: shake-to-report and screenshots

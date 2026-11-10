@@ -505,6 +505,19 @@ detection, and an optional Sentry bridge.
   build the library from the repository and consume it from your local Maven
   repository, as below. `npx mushi-mushi` does not set up native Android projects.
 
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-android)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+They go into the config in the Initialize step below.
+
 ## Build from source
 
 The library lives in [`packages/android`](https://github.com/kensaurus/mushi-mushi/tree/master/packages/android)
@@ -604,18 +617,35 @@ Full API: [`dev.mushimushi:mushi-android`](/sdks/android).
 
 ---
 
-## Angular quickstart
+## Bug report widget for Angular
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/angular
 
 ---
-title: Angular quickstart
-description: "Add Mushi Mushi to an Angular 17+ app: one provideMushi() call registers the service and error handler, so uncaught errors and bug reports reach your queue."
+title: Bug report widget for Angular
+description: "Free, open-source bug report widget for Angular 17+: one provideMushi() call registers the service and error handler, so errors and reports reach your queue."
 ---
 
-# Angular quickstart
+# Bug report widget for Angular
 
-Same steps as the [React quickstart](/quickstart/react); only the install and the boot call differ.
+This quickstart adds the Mushi Mushi bug-report widget to an Angular 17+ app.
+The steps match the [React quickstart](/quickstart/react); only the install and
+the boot call differ.
+
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-angular)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+Angular keeps them in an environment file, shown below.
+
+## Install and register
 
 ```bash
 pnpm add @mushi-mushi/angular
@@ -693,21 +723,38 @@ API detail: [`@mushi-mushi/angular`](/sdks/angular). Widget behavior: [`@mushi-m
 
 ---
 
-## Capacitor quickstart
+## Bug report widget for Capacitor and Ionic
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/capacitor
 
 ---
-title: Capacitor quickstart
-description: Add Mushi Mushi to an Ionic or Capacitor app. Install @mushi-mushi/capacitor, set up shake-to-report and screenshots, and file your first bug report.
+title: Bug report widget for Capacitor and Ionic
+description: "Free, open-source bug report widget for Capacitor and Ionic apps: install @mushi-mushi/capacitor for shake-to-report and screenshots on iOS, Android and web."
 ---
 
-# Capacitor quickstart
+# Bug report widget for Capacitor and Ionic
 
-Ship the same bug-report widget on iOS, Android, and web from one Capacitor shell.
+This quickstart ships the same Mushi Mushi bug-report widget on iOS, Android,
+and web from one Capacitor shell.
 
 The Capacitor plugin delegates to the native iOS / Android SDKs at runtime
 and falls back to `@mushi-mushi/core` on the web.
+
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **Fastest:** run `npx mushi-mushi` in your app's folder. It signs you in
+  through the browser, creates or picks a project, installs the SDK and writes
+  both values to `.env.local`.
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-capacitor)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+They replace `YOUR_PROJECT_ID` and `YOUR_PUBLIC_API_KEY` in step 2.
 
 ## 1. Install
 
@@ -1022,21 +1069,37 @@ CLI and MCP; pass the ingest key separately with `MUSHI_SDK_KEY` or `--sdk-key`.
 
 ---
 
-## Flutter quickstart
+## Bug report widget for Flutter
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/flutter
 
 ---
-title: Flutter quickstart
-description: Add the Mushi Mushi Flutter SDK as a git dependency. Shake-to-report, a Material bottom sheet and an offline queue for iOS and Android. Not on pub.dev yet.
+title: Bug report widget for Flutter
+description: "Free, open-source bug report widget for Flutter (preview): shake-to-report, a Material bottom sheet and an offline queue. A git dependency, not on pub.dev yet."
 ---
 
-# Flutter quickstart
+# Bug report widget for Flutter
+
+This quickstart adds the Mushi Mushi shake-to-report widget to a Flutter app
+for iOS and Android.
 
   **Preview, not on pub.dev yet.** A plain version constraint for `mushi_mushi`
   will not resolve until the package is published. Until then, depend on it straight from the
   repository with a `git:` dependency, as below. `npx mushi-mushi` does not set
   up Flutter projects.
+
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-flutter)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+They go into the config in the Initialize step below.
 
 ## Install
 
@@ -1135,6 +1198,19 @@ queue, automatic device context, a breadcrumb ring buffer and PII scrubbing.
   tag yet, so a version rule like `from: "0.4.0"` cannot resolve. Install it
   from the repository's `master` branch as shown below. `npx mushi-mushi` does
   not set up native iOS projects.
+
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-ios)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+They go into the config in the Initialize step below.
 
 ## Install (Swift Package Manager)
 
@@ -1493,24 +1569,43 @@ pub.dev yet, so each page shows how to install from the GitHub repository.
 
 ---
 
-## React quickstart
+## Bug report widget for React
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/react
 
 ---
-title: React quickstart
-description: Add the Mushi Mushi React SDK in one command. npx mushi-mushi installs the bug-report widget, writes env vars, and offers to send a test report.
+title: Bug report widget for React
+description: "Free, open-source bug report widget for React and Next.js: install @mushi-mushi/react, add your project key, and get a plain-English diagnosis per report."
 ---
 
-# React quickstart
+# Bug report widget for React
 
-Add the Mushi Mushi bug-report widget to a React app.
+This quickstart adds the Mushi Mushi bug-report widget to a React app (Vite or
+Next.js). Users report from the widget; each report arrives with a screenshot
+and the console and network tail, followed by a plain-English diagnosis.
 
   **Coming from Create React App?** Migrate to Vite first: see
   the [CRA → Vite migration guide](/migrations/cra-to-vite). All Mushi Mushi React
   examples below assume Vite + React 19.
 
 ## Try it live
+
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **Fastest:** run `npx mushi-mushi` in your app's folder. It signs you in
+  through the browser, creates or picks a project, installs the SDK and writes
+  both values to `.env.local`.
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-react)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+Put them in `.env.local` as `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`
+(`NEXT_PUBLIC_MUSHI_PROJECT_ID` and `NEXT_PUBLIC_MUSHI_API_KEY` on Next.js).
 
 ## 1. Install
 
@@ -1628,23 +1723,40 @@ its AI diagnosis follows shortly after.
 
 ---
 
-## React Native quickstart
+## Bug report widget for React Native and Expo
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/react-native
 
 ---
-title: React Native quickstart
-description: Add Mushi Mushi shake-to-report to a React Native or Expo app with @mushi-mushi/react-native. Install, mount the provider, and check the first report.
+title: Bug report widget for React Native and Expo
+description: "Free, open-source bug report widget for React Native and Expo: shake to report, a floating bug button, then a plain-English diagnosis of each report."
 ---
 
-# React Native quickstart
+# Bug report widget for React Native and Expo
 
-Add Mushi Mushi's shake-to-report and floating bug button to your iOS or
-Android app.
+This quickstart adds Mushi Mushi's shake-to-report and floating bug button to
+your iOS or Android app.
 
 Works for **bare React Native CLI** apps and **Expo** apps (managed-with-dev-client
 or bare). Peer dependency is React Native **≥ 0.72**; this quickstart targets
 **0.82+** with the New Architecture as the recommended baseline.
+
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **Fastest:** run `npx mushi-mushi` in your app's folder. It signs you in
+  through the browser, creates or picks a project, installs the SDK and writes
+  both values to `.env.local`.
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-react-native)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+They replace `YOUR_PROJECT_ID` and `YOUR_PUBLIC_API_KEY` in step 2. On Expo the
+wizard names them `EXPO_PUBLIC_MUSHI_PROJECT_ID` and `EXPO_PUBLIC_MUSHI_API_KEY`.
 
 ## 1. Install
 
@@ -1759,18 +1871,38 @@ If nothing arrives:
 
 ---
 
-## Svelte quickstart
+## Bug report widget for Svelte and SvelteKit
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/svelte
 
 ---
-title: Svelte quickstart
-description: Add Mushi Mushi bug reporting to a Svelte or SvelteKit app. Install @mushi-mushi/svelte and call initMushi from hooks.client.ts or a root layout's onMount.
+title: Bug report widget for Svelte and SvelteKit
+description: "Free, open-source bug report widget for Svelte and SvelteKit: install @mushi-mushi/svelte and call initMushi from hooks.client.ts or a root layout."
 ---
 
-# Svelte quickstart
+# Bug report widget for Svelte and SvelteKit
 
-Same steps as the [React quickstart](/quickstart/react); only the install and the boot call differ.
+This quickstart adds the Mushi Mushi bug-report widget to a Svelte or SvelteKit
+app. The steps match the [React quickstart](/quickstart/react); only the install
+and the boot call differ.
+
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **Fastest:** run `npx mushi-mushi` in your app's folder. It signs you in
+  through the browser, creates or picks a project, installs the SDK and writes
+  both values to `.env.local`.
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-svelte)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+Put them in `.env.local` as `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`.
+
+## Install and initialize
 
 ```bash
 pnpm add @mushi-mushi/svelte
@@ -2084,18 +2216,38 @@ See [Security](/security) for the full summary.
 
 ---
 
-## Vue 3 quickstart
+## Bug report widget for Vue 3
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/vue
 
 ---
-title: Vue 3 quickstart
-description: Add Mushi Mushi bug reporting to a Vue 3 app. Install @mushi-mushi/vue and register MushiPlugin with your project ID and public API key in main.ts.
+title: Bug report widget for Vue 3
+description: "Free, open-source bug report widget for Vue 3: install @mushi-mushi/vue and register MushiPlugin with your project ID and public API key in main.ts."
 ---
 
-# Vue 3 quickstart
+# Bug report widget for Vue 3
 
-Same steps as the [React quickstart](/quickstart/react); only the install and the boot call differ.
+This quickstart adds the Mushi Mushi bug-report widget to a Vue 3 app. The
+steps match the [React quickstart](/quickstart/react); only the install and the
+boot call differ.
+
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **Fastest:** run `npx mushi-mushi` in your app's folder. It signs you in
+  through the browser, creates or picks a project, installs the SDK and writes
+  both values to `.env.local`.
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-vue)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+Put them in `.env.local` as `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`.
+
+## Install and register the plugin
 
 ```bash
 pnpm add @mushi-mushi/vue
@@ -2118,20 +2270,39 @@ API detail: [`@mushi-mushi/vue`](/sdks/vue). Widget behavior: [`@mushi-mushi/web
 
 ---
 
-## Vanilla JS quickstart
+## Bug report widget for vanilla JavaScript
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/web
 
 ---
-title: Vanilla JS quickstart
-description: Add the Mushi Mushi browser SDK to any site without a framework. Install @mushi-mushi/web, call Mushi.init, and file reports from your buttons or the widget.
+title: Bug report widget for vanilla JavaScript
+description: "Free, open-source bug report widget for any website, no framework needed: install @mushi-mushi/web or paste one script tag, then add your project key."
 ---
 
-# Vanilla JS quickstart
+# Bug report widget for vanilla JavaScript
 
-For non-React apps (or any framework you'd rather drive imperatively).
+This quickstart adds the Mushi Mushi bug-report widget to a site with no
+framework, or to any framework you'd rather drive imperatively. Without a
+bundler, use the [script tag](#no-bundler-script-tag).
 
 ## Try it live
+
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **Fastest:** run `npx mushi-mushi` in your app's folder. It signs you in
+  through the browser, creates or picks a project, installs the SDK and writes
+  both values to `.env.local`.
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-web)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+Put them in `.env.local` as `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`.
+With the script tag, they go in `data-project` and `data-key` instead.
 
 ## 1. Install
 
@@ -8150,6 +8321,11 @@ directly.
 pnpm add @mushi-mushi/core
 ```
 
+Every SDK needs a project ID and an API key.
+[Create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=sdk-core)
+(no card) and create a project to get both; [Project ID & API keys](/concepts/credentials)
+explains each one.
+
 ## API
 
 ### `Mushi.init(config)` (web) / `MushiProvider` (React Native)
@@ -10992,7 +11168,10 @@ report widget in a Shadow DOM so your CSS never leaks in or out.
   competitor's API to the Mushi Mushi equivalent and includes an interactive
   checklist.
 
-See [Quickstart → Vanilla JS](/quickstart/web) for setup. Notable extras:
+See [Quickstart → Vanilla JS](/quickstart/web) for setup. The project ID and
+API key come from a Mushi Mushi project:
+[create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=sdk-web)
+(no card) to get both. Notable extras:
 
 - **XHR + fetch network capture.** The SDK patches both `XMLHttpRequest` and
   `window.fetch` globally at `init()`. Every network request (including legacy
@@ -11388,7 +11567,7 @@ For React / Vue / Svelte / Next, use the framework-specific SDK instead.
 
 ## Migration checklist
 
-Sign in to the Mushi Mushi admin console; copy projectId + apiKey.</> },
+Create a free account (no card) or sign in to the Mushi Mushi admin console, and create a project. Copy projectId + apiKey from the panel that opens; the key is shown once.</> },
     { id: 'install', label: 'Install or script-tag Mushi Mushi', content: {`# CDN, for the same script-tag setup BugHerd had:
 
   import { Mushi } from 'https://esm.sh/@mushi-mushi/web'
@@ -11631,7 +11810,10 @@ this page is the Mushi-aware companion to it.
 - For Capacitor 8: Node 22+, Xcode 26+ for iOS, Android Studio 2025.2.1+
   for Android ([environment setup](https://capacitorjs.com/docs/getting-started/environment-setup)).
 - A Mushi Mushi project. If you already use `@mushi-mushi/web` in the Cordova
-  app, keep the same `projectId` and `apiKey`.
+  app, keep the same `projectId` and `apiKey`. If not,
+  [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=migration-cordova-to-capacitor) (no card) and a
+  project; the [Capacitor quickstart](/quickstart/capacitor#get-your-project-id-and-api-key)
+  shows where the two values come from.
 
 ## API mapping (Cordova plugins → Capacitor)
 
@@ -11856,6 +12038,11 @@ You'll touch the Mushi Mushi SDK exactly once per hop:
 - **Hop 2 (Capacitor → React Native):** swap that for
   [`@mushi-mushi/react-native`](/sdks/react-native) and mount
   `` at the app root.
+
+No Mushi Mushi project yet? [Create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=migration-cordova-to-react-native)
+(no card) and a project before hop 1, so both builds report to it from the
+start. The [Capacitor quickstart](/quickstart/capacitor#get-your-project-id-and-api-key)
+shows where the project ID and API key come from.
 
 ## Migration checklist (Path A)
 
@@ -12115,7 +12302,7 @@ function ProfileScreen() {
 
 ## Migration checklist
 
-Sign in to the Mushi Mushi admin console, create a project, mint an API key. Copy projectId + apiKey.</> },
+Create a free account (no card) or sign in to the Mushi Mushi admin console, create a project, mint an API key. Copy projectId + apiKey.</> },
     { id: 'install', label: 'Install the Mushi Mushi React Native SDK', content: {`npm install @mushi-mushi/react-native
 
 # Optional peers: shake-to-report and screenshots
@@ -12244,7 +12431,7 @@ Every Mushi Mushi report now carries the LogRocket session URL in its metadata.
 
 ## Migration checklist
 
-Sign in to the Mushi Mushi admin console; copy projectId + apiKey.</> },
+Create a free account (no card) or sign in to the Mushi Mushi admin console, and create a project. Copy projectId + apiKey from the panel that opens; the key is shown once.</> },
     { id: 'install', label: 'Install Mushi Mushi alongside LogRocket', content: {`npm install @mushi-mushi/web
 # Or @mushi-mushi/react if you're on React`} },
     { id: 'mount-mushi', label: 'Mount Mushi Mushi (LogRocket stays as-is)', content: {`import LogRocket from 'logrocket'
@@ -12708,7 +12895,7 @@ intake and triage.
 
 ## Migration checklist
 
-Sign in to the Mushi Mushi admin console; copy projectId + apiKey.</> },
+Create a free account (no card) or sign in to the Mushi Mushi admin console, and create a project. Copy projectId + apiKey from the panel that opens; the key is shown once.</> },
     { id: 'install', label: 'Install Mushi Mushi alongside Pendo', content: {`npm install @mushi-mushi/web
 # Or @mushi-mushi/react if you're on React`} },
     { id: 'mount-mushi', label: 'Initialise Mushi Mushi in your app entry', content: {`import { Mushi Mushi } from '@mushi-mushi/web'
@@ -12852,6 +13039,11 @@ After either direction, smoke-test:
 2. A test report appears on the Reports page of the Mushi Mushi admin console.
 3. Native modules (camera, secure storage, etc.) work on a real device.
 
+**Next step:** no Mushi Mushi project yet?
+[Create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=migration-react-native-cli-to-expo) (no card), then
+follow the [React Native and Expo quickstart](/quickstart/react-native) to add
+the widget.
+
 ## References
 
 - [Expo: Install Expo modules in an existing React Native project](https://docs.expo.dev/bare/installing-expo-modules/)
@@ -12969,7 +13161,7 @@ it (`const mushi = Mushi.init({...})`). In React, get it with
 
 ## Migration checklist
 
-Run npx mushi-mushi. It handles browser sign-in, project pick, SDK install, and env vars.</> },
+Run npx mushi-mushi. It handles browser sign-in, project pick, SDK install, and env vars. No account yet? Create a free one (no card) first.</> },
     { id: 'install', label: 'Install Mushi Mushi alongside Sentry (do not remove Sentry)', content: {`npm install @mushi-mushi/web
 # or @mushi-mushi/react on React. Sentry stays in package.json`} },
     { id: 'mount-both', label: 'Mount both SDKs, with Sentry linking on', content: {`Sentry.init({ dsn: 'YOUR_DSN' })
@@ -13117,7 +13309,7 @@ mushi.setUser({ id: 'user-42', email: 'jane@example.com', name: 'Jane Doe' })
 
 ## Migration checklist
 
-Sign in to the Mushi Mushi admin console; copy projectId + apiKey.</> },
+Create a free account (no card) or sign in to the Mushi Mushi admin console, and create a project. Copy projectId + apiKey from the panel that opens; the key is shown once.</> },
     { id: 'install', label: 'Install the right Mushi Mushi SDK', content: {`# Web:    npm install @mushi-mushi/web
 # React:  npm install @mushi-mushi/react
 # RN:     npm install @mushi-mushi/react-native

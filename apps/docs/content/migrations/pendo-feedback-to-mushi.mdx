@@ -75,7 +75,7 @@ intake and triage.
 <MigrationChecklist
   id="pendo-feedback-to-mushi"
   steps={[
-    { id: 'create-project', label: 'Create a Mushi Mushi project', content: <>Sign in to the Mushi Mushi admin console; copy <code>projectId</code> + <code>apiKey</code>.</> },
+    { id: 'create-project', label: 'Create a Mushi Mushi project', content: <><a href="https://kensaur.us/mushi-mushi/admin/signup?src=migration-pendo-feedback-to-mushi">Create a free account</a> (no card) or sign in to the Mushi Mushi admin console, and create a project. Copy <code>projectId</code> + <code>apiKey</code> from the panel that opens; the key is shown once.</> },
     { id: 'install', label: 'Install Mushi Mushi alongside Pendo', content: <pre className="text-xs">{`npm install @mushi-mushi/web
 # Or @mushi-mushi/react if you're on React`}</pre> },
     { id: 'mount-mushi', label: 'Initialise Mushi Mushi in your app entry', content: <pre className="text-xs">{`import { Mushi Mushi } from '@mushi-mushi/web'

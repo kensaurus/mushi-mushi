@@ -503,24 +503,43 @@ Run `npx mushi-mushi` to auto-detect your framework and write the correct prefix
 
 ---
 
-## React quickstart
+## Bug report widget for React
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/react
 
 ---
-title: React quickstart
-description: Add the Mushi Mushi React SDK in one command. npx mushi-mushi installs the bug-report widget, writes env vars, and offers to send a test report.
+title: Bug report widget for React
+description: "Free, open-source bug report widget for React and Next.js: install @mushi-mushi/react, add your project key, and get a plain-English diagnosis per report."
 ---
 
-# React quickstart
+# Bug report widget for React
 
-Add the Mushi Mushi bug-report widget to a React app.
+This quickstart adds the Mushi Mushi bug-report widget to a React app (Vite or
+Next.js). Users report from the widget; each report arrives with a screenshot
+and the console and network tail, followed by a plain-English diagnosis.
 
   **Coming from Create React App?** Migrate to Vite first: see
   the [CRA → Vite migration guide](/migrations/cra-to-vite). All Mushi Mushi React
   examples below assume Vite + React 19.
 
 ## Try it live
+
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **Fastest:** run `npx mushi-mushi` in your app's folder. It signs you in
+  through the browser, creates or picks a project, installs the SDK and writes
+  both values to `.env.local`.
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-react)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+Put them in `.env.local` as `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`
+(`NEXT_PUBLIC_MUSHI_PROJECT_ID` and `NEXT_PUBLIC_MUSHI_API_KEY` on Next.js).
 
 ## 1. Install
 
@@ -638,20 +657,39 @@ its AI diagnosis follows shortly after.
 
 ---
 
-## Vanilla JS quickstart
+## Bug report widget for vanilla JavaScript
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/web
 
 ---
-title: Vanilla JS quickstart
-description: Add the Mushi Mushi browser SDK to any site without a framework. Install @mushi-mushi/web, call Mushi.init, and file reports from your buttons or the widget.
+title: Bug report widget for vanilla JavaScript
+description: "Free, open-source bug report widget for any website, no framework needed: install @mushi-mushi/web or paste one script tag, then add your project key."
 ---
 
-# Vanilla JS quickstart
+# Bug report widget for vanilla JavaScript
 
-For non-React apps (or any framework you'd rather drive imperatively).
+This quickstart adds the Mushi Mushi bug-report widget to a site with no
+framework, or to any framework you'd rather drive imperatively. Without a
+bundler, use the [script tag](#no-bundler-script-tag).
 
 ## Try it live
+
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **Fastest:** run `npx mushi-mushi` in your app's folder. It signs you in
+  through the browser, creates or picks a project, installs the SDK and writes
+  both values to `.env.local`.
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-web)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+Put them in `.env.local` as `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`.
+With the script tag, they go in `data-project` and `data-key` instead.
 
 ## 1. Install
 

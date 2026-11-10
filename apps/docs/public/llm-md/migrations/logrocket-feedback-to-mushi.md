@@ -76,7 +76,7 @@ Every Mushi Mushi report now carries the LogRocket session URL in its metadata.
 
 ## Migration checklist
 
-Sign in to the Mushi Mushi admin console; copy projectId + apiKey.</> },
+Create a free account (no card) or sign in to the Mushi Mushi admin console, and create a project. Copy projectId + apiKey from the panel that opens; the key is shown once.</> },
     { id: 'install', label: 'Install Mushi Mushi alongside LogRocket', content: {`npm install @mushi-mushi/web
 # Or @mushi-mushi/react if you're on React`} },
     { id: 'mount-mushi', label: 'Mount Mushi Mushi (LogRocket stays as-is)', content: {`import LogRocket from 'logrocket'

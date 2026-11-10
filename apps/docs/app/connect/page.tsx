@@ -27,6 +27,8 @@ import {
 const MCP_TOOL_COUNT = TOOL_CATALOG.length + TDD_TOOL_CATALOG.length + CODEBASE_TOOL_CATALOG.length
 
 const CONSOLE_CONNECT_URL = 'https://kensaur.us/mushi-mushi/admin/connect'
+/** Signup for demo visitors with no account; `src` is read by the console's signup attribution. */
+const SIGNUP_URL = 'https://kensaur.us/mushi-mushi/admin/signup?src=connect-demo'
 const PLACEHOLDER_KEY = '<your-mushi-api-key>'
 const PLACEHOLDER_ENDPOINT = 'https://YOUR-PROJECT.supabase.co/functions/v1/api'
 const PLACEHOLDER_MCP_HTTP = 'https://YOUR-PROJECT.supabase.co/functions/v1/mcp'
@@ -128,7 +130,12 @@ function McpLane({ client, input, isDemo }: { client: McpClientDef; input: McpBu
           seeded Mushi Mushi project so you can try the tools right now.{' '}
           <a href={CONSOLE_CONNECT_URL} className="font-medium underline [@media(hover:hover)]:hover:opacity-80">
             Connect your own project →
+          </a>{' '}
+          No account yet?{' '}
+          <a href={SIGNUP_URL} className="font-medium underline [@media(hover:hover)]:hover:opacity-80">
+            Create a free one
           </a>
+          .
         </div>
       ) : oauth ? (
         <div className="mushi-connect-callout">

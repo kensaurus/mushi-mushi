@@ -90,7 +90,7 @@ function ProfileScreen() {
 <MigrationChecklist
   id="instabug-to-mushi"
   steps={[
-    { id: 'create-project', label: 'Create a Mushi Mushi project (or pick an existing one)', content: <>Sign in to the Mushi Mushi admin console, create a project, mint an API key. Copy <code>projectId</code> + <code>apiKey</code>.</> },
+    { id: 'create-project', label: 'Create a Mushi Mushi project (or pick an existing one)', content: <><a href="https://kensaur.us/mushi-mushi/admin/signup?src=migration-instabug-to-mushi">Create a free account</a> (no card) or sign in to the Mushi Mushi admin console, create a project, mint an API key. Copy <code>projectId</code> + <code>apiKey</code>.</> },
     { id: 'install', label: 'Install the Mushi Mushi React Native SDK', content: <pre className="text-xs">{`npm install @mushi-mushi/react-native
 
 # Optional peers: shake-to-report and screenshots

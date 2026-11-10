@@ -1,15 +1,32 @@
-# Angular quickstart
+# Bug report widget for Angular
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/angular
 
 ---
-title: Angular quickstart
-description: "Add Mushi Mushi to an Angular 17+ app: one provideMushi() call registers the service and error handler, so uncaught errors and bug reports reach your queue."
+title: Bug report widget for Angular
+description: "Free, open-source bug report widget for Angular 17+: one provideMushi() call registers the service and error handler, so errors and reports reach your queue."
 ---
 
-# Angular quickstart
+# Bug report widget for Angular
 
-Same steps as the [React quickstart](/quickstart/react); only the install and the boot call differ.
+This quickstart adds the Mushi Mushi bug-report widget to an Angular 17+ app.
+The steps match the [React quickstart](/quickstart/react); only the install and
+the boot call differ.
+
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-angular)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+Angular keeps them in an environment file, shown below.
+
+## Install and register
 
 ```bash
 pnpm add @mushi-mushi/angular

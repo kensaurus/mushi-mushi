@@ -21,7 +21,10 @@ report widget in a Shadow DOM so your CSS never leaks in or out.
   competitor's API to the Mushi Mushi equivalent and includes an interactive
   checklist.
 
-See [Quickstart → Vanilla JS](/quickstart/web) for setup. Notable extras:
+See [Quickstart → Vanilla JS](/quickstart/web) for setup. The project ID and
+API key come from a Mushi Mushi project:
+[create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=sdk-web)
+(no card) to get both. Notable extras:
 
 - **XHR + fetch network capture.** The SDK patches both `XMLHttpRequest` and
   `window.fetch` globally at `init()`. Every network request (including legacy

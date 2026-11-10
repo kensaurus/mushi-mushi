@@ -110,7 +110,7 @@ mushi.setUser({ id: 'user-42', email: 'jane@example.com', name: 'Jane Doe' })
 
 ## Migration checklist
 
-Sign in to the Mushi Mushi admin console; copy projectId + apiKey.</> },
+Create a free account (no card) or sign in to the Mushi Mushi admin console, and create a project. Copy projectId + apiKey from the panel that opens; the key is shown once.</> },
     { id: 'install', label: 'Install the right Mushi Mushi SDK', content: {`# Web:    npm install @mushi-mushi/web
 # React:  npm install @mushi-mushi/react
 # RN:     npm install @mushi-mushi/react-native

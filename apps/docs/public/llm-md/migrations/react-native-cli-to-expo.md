@@ -99,6 +99,11 @@ After either direction, smoke-test:
 2. A test report appears on the Reports page of the Mushi Mushi admin console.
 3. Native modules (camera, secure storage, etc.) work on a real device.
 
+**Next step:** no Mushi Mushi project yet?
+[Create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=migration-react-native-cli-to-expo) (no card), then
+follow the [React Native and Expo quickstart](/quickstart/react-native) to add
+the widget.
+
 ## References
 
 - [Expo: Install Expo modules in an existing React Native project](https://docs.expo.dev/bare/installing-expo-modules/)
