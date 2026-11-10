@@ -19,6 +19,11 @@ directly.
 pnpm add @mushi-mushi/core
 ```
 
+Every SDK needs a project ID and an API key.
+[Create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=sdk-core)
+(no card) and create a project to get both; [Project ID & API keys](/concepts/credentials)
+explains each one.
+
 ## API
 
 ### `Mushi.init(config)` (web) / `MushiProvider` (React Native)

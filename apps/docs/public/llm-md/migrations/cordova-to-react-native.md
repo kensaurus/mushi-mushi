@@ -86,6 +86,11 @@ You'll touch the Mushi Mushi SDK exactly once per hop:
   [`@mushi-mushi/react-native`](/sdks/react-native) and mount
   `` at the app root.
 
+No Mushi Mushi project yet? [Create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=migration-cordova-to-react-native)
+(no card) and a project before hop 1, so both builds report to it from the
+start. The [Capacitor quickstart](/quickstart/capacitor#get-your-project-id-and-api-key)
+shows where the project ID and API key come from.
+
 ## Migration checklist (Path A)
 
 Walk the plugin list once at the start. Anything without a Capacitor or RN equivalent is the long pole — budget time for a TurboModule wrapper.</> },

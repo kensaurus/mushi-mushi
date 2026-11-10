@@ -1,18 +1,35 @@
-# Capacitor quickstart
+# Bug report widget for Capacitor and Ionic
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/capacitor
 
 ---
-title: Capacitor quickstart
-description: Add Mushi Mushi to an Ionic or Capacitor app. Install @mushi-mushi/capacitor, set up shake-to-report and screenshots, and file your first bug report.
+title: Bug report widget for Capacitor and Ionic
+description: "Free, open-source bug report widget for Capacitor and Ionic apps: install @mushi-mushi/capacitor for shake-to-report and screenshots on iOS, Android and web."
 ---
 
-# Capacitor quickstart
+# Bug report widget for Capacitor and Ionic
 
-Ship the same bug-report widget on iOS, Android, and web from one Capacitor shell.
+This quickstart ships the same Mushi Mushi bug-report widget on iOS, Android,
+and web from one Capacitor shell.
 
 The Capacitor plugin delegates to the native iOS / Android SDKs at runtime
 and falls back to `@mushi-mushi/core` on the web.
+
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **Fastest:** run `npx mushi-mushi` in your app's folder. It signs you in
+  through the browser, creates or picks a project, installs the SDK and writes
+  both values to `.env.local`.
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-capacitor)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+They replace `YOUR_PROJECT_ID` and `YOUR_PUBLIC_API_KEY` in step 2.
 
 ## 1. Install
 

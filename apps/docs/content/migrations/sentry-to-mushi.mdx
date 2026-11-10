@@ -110,7 +110,7 @@ it (`const mushi = Mushi.init({...})`). In React, get it with
 <MigrationChecklist
   id="sentry-to-mushi"
   steps={[
-    { id: 'create-project', label: 'Create a Mushi Mushi project', content: <>Run <code>npx mushi-mushi</code>. It handles browser sign-in, project pick, SDK install, and env vars.</> },
+    { id: 'create-project', label: 'Create a Mushi Mushi project', content: <>Run <code>npx mushi-mushi</code>. It handles browser sign-in, project pick, SDK install, and env vars. No account yet? <a href="https://kensaur.us/mushi-mushi/admin/signup?src=migration-sentry-to-mushi">Create a free one</a> (no card) first.</> },
     { id: 'install', label: 'Install Mushi Mushi alongside Sentry (do not remove Sentry)', content: <pre className="text-xs">{`npm install @mushi-mushi/web
 # or @mushi-mushi/react on React. Sentry stays in package.json`}</pre> },
     { id: 'mount-both', label: 'Mount both SDKs, with Sentry linking on', content: <pre className="text-xs">{`Sentry.init({ dsn: 'YOUR_DSN' })

@@ -107,7 +107,7 @@ it (`const mushi = Mushi.init({...})`). In React, get it with
 
 ## Migration checklist
 
-Run npx mushi-mushi. It handles browser sign-in, project pick, SDK install, and env vars.</> },
+Run npx mushi-mushi. It handles browser sign-in, project pick, SDK install, and env vars. No account yet? Create a free one (no card) first.</> },
     { id: 'install', label: 'Install Mushi Mushi alongside Sentry (do not remove Sentry)', content: {`npm install @mushi-mushi/web
 # or @mushi-mushi/react on React. Sentry stays in package.json`} },
     { id: 'mount-both', label: 'Mount both SDKs, with Sentry linking on', content: {`Sentry.init({ dsn: 'YOUR_DSN' })

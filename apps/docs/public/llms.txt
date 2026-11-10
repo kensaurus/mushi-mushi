@@ -21,9 +21,9 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 
 ## SDK quickstarts
 
-- [React](https://kensaur.us/mushi-mushi/docs/quickstart/react): Add the Mushi Mushi React SDK in one command. npx mushi-mushi installs the bug-report widget, writes env vars, and offers to send a test report.
-- [Web / vanilla JS](https://kensaur.us/mushi-mushi/docs/quickstart/web): Add the Mushi Mushi browser SDK to any site without a framework. Install @mushi-mushi/web, call Mushi.init, and file reports from your buttons or the widget.
-- [React Native](https://kensaur.us/mushi-mushi/docs/quickstart/react-native): Add Mushi Mushi shake-to-report to a React Native or Expo app with @mushi-mushi/react-native. Install, mount the provider, and check the first report.
+- [React](https://kensaur.us/mushi-mushi/docs/quickstart/react): Free, open-source bug report widget for React and Next.js: install @mushi-mushi/react, add your project key, and get a plain-English diagnosis per report.
+- [Web / vanilla JS](https://kensaur.us/mushi-mushi/docs/quickstart/web): Free, open-source bug report widget for any website, no framework needed: install @mushi-mushi/web or paste one script tag, then add your project key.
+- [React Native](https://kensaur.us/mushi-mushi/docs/quickstart/react-native): Free, open-source bug report widget for React Native and Expo: shake to report, a floating bug button, then a plain-English diagnosis of each report.
 
 ## SDK reference
 
@@ -192,22 +192,22 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Pricing: Free, Builder, Studio and self-host](https://kensaur.us/mushi-mushi/docs/pricing): Mushi Mushi pricing. Free for one app and 100 AI bug diagnoses a month. Builder $29/mo for 3 apps, Studio $79/mo for 10. Free to self-host.
 - [Quickstart: install, first report, first fix](https://kensaur.us/mushi-mushi/docs/quickstart): Install Mushi Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.
 - [Android (Kotlin) quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/android): Try the Mushi Mushi Kotlin SDK on Android. Shake-to-report, a bottom-sheet widget and an offline queue; a preview built from source, not on Maven Central.
-- [Angular quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/angular): Add Mushi Mushi to an Angular 17+ app: one provideMushi() call registers the service and error handler, so uncaught errors and bug reports reach your queue.
-- [Capacitor quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/capacitor): Add Mushi Mushi to an Ionic or Capacitor app. Install @mushi-mushi/capacitor, set up shake-to-report and screenshots, and file your first bug report.
+- [Bug report widget for Angular](https://kensaur.us/mushi-mushi/docs/quickstart/angular): Free, open-source bug report widget for Angular 17+: one provideMushi() call registers the service and error handler, so errors and reports reach your queue.
+- [Bug report widget for Capacitor and Ionic](https://kensaur.us/mushi-mushi/docs/quickstart/capacitor): Free, open-source bug report widget for Capacitor and Ionic apps: install @mushi-mushi/capacitor for shake-to-report and screenshots on iOS, Android and web.
 - [CLI ↔ console setup loop](https://kensaur.us/mushi-mushi/docs/quickstart/cli-console-loop): How npx mushi-mushi creates a Mushi Mushi project, mints an SDK key and installs the SDK through browser sign-in, and how to recover when the setup loop fails.
-- [Flutter quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/flutter): Add the Mushi Mushi Flutter SDK as a git dependency. Shake-to-report, a Material bottom sheet and an offline queue for iOS and Android. Not on pub.dev yet.
+- [Bug report widget for Flutter](https://kensaur.us/mushi-mushi/docs/quickstart/flutter): Free, open-source bug report widget for Flutter (preview): shake-to-report, a Material bottom sheet and an offline queue. A git dependency, not on pub.dev yet.
 - [Incident loop: from bug report to fix prompt](https://kensaur.us/mushi-mushi/docs/quickstart/incident-loop): Run npx mushi-mushi, ship, and let Mushi Mushi turn your first user-reported bug into a plain-English diagnosis and a paste-ready fix for Cursor or Claude Code.
 - [iOS (Swift) quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/ios): Add the Mushi Mushi Swift SDK to an iOS app with Swift Package Manager. Shake-to-report, offline queue and device context. A preview, not on CocoaPods yet.
 - [Lovable or Bolt quickstart (no terminal)](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt): Add Mushi Mushi to a Lovable or Bolt app without a terminal. Paste one script tag through your prompt, then read each bug's plain-English cause and fix prompt.
 - [Ask Lovable why it broke](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-mcp): Add Mushi Mushi to Lovable as an MCP connector in three steps; Lovable reads the plain-English diagnosis and fixes the bug. Claude Code and Cursor in one paste.
 - [MCP server for bug fixing in Cursor & Claude Code](https://kensaur.us/mushi-mushi/docs/quickstart/mcp): Set up the Mushi Mushi MCP server with npx mushi-mushi setup. Read bug reports, get fix context, and dispatch fixes from Cursor, Claude Code or any MCP client.
 - [Mobile (overview)](https://kensaur.us/mushi-mushi/docs/quickstart/mobile): Mushi Mushi shake-to-report for mobile apps. React Native and Capacitor install from npm with npx mushi-mushi; iOS, Android and Flutter SDKs are previews.
-- [React quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/react): Add the Mushi Mushi React SDK in one command. npx mushi-mushi installs the bug-report widget, writes env vars, and offers to send a test report.
-- [React Native quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/react-native): Add Mushi Mushi shake-to-report to a React Native or Expo app with @mushi-mushi/react-native. Install, mount the provider, and check the first report.
-- [Svelte quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/svelte): Add Mushi Mushi bug reporting to a Svelte or SvelteKit app. Install @mushi-mushi/svelte and call initMushi from hooks.client.ts or a root layout's onMount.
+- [Bug report widget for React](https://kensaur.us/mushi-mushi/docs/quickstart/react): Free, open-source bug report widget for React and Next.js: install @mushi-mushi/react, add your project key, and get a plain-English diagnosis per report.
+- [Bug report widget for React Native and Expo](https://kensaur.us/mushi-mushi/docs/quickstart/react-native): Free, open-source bug report widget for React Native and Expo: shake to report, a floating bug button, then a plain-English diagnosis of each report.
+- [Bug report widget for Svelte and SvelteKit](https://kensaur.us/mushi-mushi/docs/quickstart/svelte): Free, open-source bug report widget for Svelte and SvelteKit: install @mushi-mushi/svelte and call initMushi from hooks.client.ts or a root layout.
 - [Set up Mushi Mushi for a team](https://kensaur.us/mushi-mushi/docs/quickstart/team-setup): A checklist for a small dev team adopting Mushi Mushi, from sign-up to a weekly routine. Each step says what to do, where, and how to check it.
-- [Vue 3 quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/vue): Add Mushi Mushi bug reporting to a Vue 3 app. Install @mushi-mushi/vue and register MushiPlugin with your project ID and public API key in main.ts.
-- [Vanilla JS quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/web): Add the Mushi Mushi browser SDK to any site without a framework. Install @mushi-mushi/web, call Mushi.init, and file reports from your buttons or the widget.
+- [Bug report widget for Vue 3](https://kensaur.us/mushi-mushi/docs/quickstart/vue): Free, open-source bug report widget for Vue 3: install @mushi-mushi/vue and register MushiPlugin with your project ID and public API key in main.ts.
+- [Bug report widget for vanilla JavaScript](https://kensaur.us/mushi-mushi/docs/quickstart/web): Free, open-source bug report widget for any website, no framework needed: install @mushi-mushi/web or paste one script tag, then add your project key.
 - [Roadmap](https://kensaur.us/mushi-mushi/docs/roadmap): Where Mushi Mushi is headed. Upcoming SDK platforms, agent-fix safety and console features, updated as work lands.
 - [SDK reference](https://kensaur.us/mushi-mushi/docs/sdks): Bug-reporting SDKs for React, Vue, Svelte, Angular, React Native, Capacitor and Node, installed by npx mushi-mushi, plus preview iOS, Android and Flutter SDKs.
 - [@mushi-mushi/adapters](https://kensaur.us/mushi-mushi/docs/sdks/adapters): Turn Sentry, Datadog, Bugsnag and other monitoring webhooks into Mushi Mushi reports with @mushi-mushi/adapters, in the same queue as user reports.

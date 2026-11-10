@@ -75,7 +75,7 @@ For React / Vue / Svelte / Next, use the framework-specific SDK instead.
 <MigrationChecklist
   id="bugherd-to-mushi"
   steps={[
-    { id: 'create-project', label: 'Create a Mushi Mushi project', content: <>Sign in to the Mushi Mushi admin console; copy <code>projectId</code> + <code>apiKey</code>.</> },
+    { id: 'create-project', label: 'Create a Mushi Mushi project', content: <><a href="https://kensaur.us/mushi-mushi/admin/signup?src=migration-bugherd-to-mushi">Create a free account</a> (no card) or sign in to the Mushi Mushi admin console, and create a project. Copy <code>projectId</code> + <code>apiKey</code> from the panel that opens; the key is shown once.</> },
     { id: 'install', label: 'Install or script-tag Mushi Mushi', content: <pre className="text-xs">{`# CDN, for the same script-tag setup BugHerd had:
 <script type="module">
   import { Mushi } from 'https://esm.sh/@mushi-mushi/web'
