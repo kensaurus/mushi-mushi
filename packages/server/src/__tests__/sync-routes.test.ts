@@ -61,6 +61,34 @@ describe('GET /v1/sync/whoami', () => {
     expect(res.status).toBe(500)
     expect(res.json.ok).toBe(false)
   })
+
+  it('answers 500 when the linked repos cannot be read', async () => {
+    failing = 'project_repos'
+    const res = await get('/v1/sync/whoami')
+    expect(res.status).toBe(500)
+    expect(res.json.ok).toBe(false)
+  })
+
+  it('returns the project linked repos, primary first, without blanks', async () => {
+    db = makeFakeDb({
+      reports: [],
+      project_repos: [
+        { project_id: P, repo_url: 'https://github.com/acme/web', is_primary: false, created_at: '2026-10-01' },
+        { project_id: P, repo_url: 'https://github.com/acme/app', is_primary: true, created_at: '2026-10-05' },
+        { project_id: P, repo_url: '  ', is_primary: false, created_at: '2026-10-06' },
+        { project_id: 'other-project', repo_url: 'https://github.com/acme/other', is_primary: true, created_at: '2026-10-01' },
+      ],
+    })
+    const res = await get('/v1/sync/whoami')
+    expect(res.status).toBe(200)
+    expect(res.json.data.repo_urls).toEqual(['https://github.com/acme/app', 'https://github.com/acme/web'])
+  })
+
+  it('returns an empty repo list when the project links none', async () => {
+    const res = await get('/v1/sync/whoami')
+    expect(res.status).toBe(200)
+    expect(res.json.data.repo_urls).toEqual([])
+  })
 })
 
 describe('GET /v1/sync/stats', () => {

@@ -40,6 +40,8 @@ import { detectPlatform, hashHostId, nodeHostIO, readMachineId, type HostIO } fr
 import { onInterrupt } from '../signals.js'
 import { MUSHI_CLI_VERSION } from '../version.js'
 import { AGENT_UNAVAILABLE, agentSpec, isClaudeModel, type LocalAgent } from '../commands/work-agents.js'
+import { wrongRepoMessage } from '../commands/work-repo.js'
+import type { WhoamiData } from '../cli-types.js'
 import {
   checkAgentSignIn,
   checkCursorSignIn,
@@ -871,7 +873,7 @@ export function createHostReadings(o: {
   }
 }
 
-export async function runDaemon(opts: { configPath?: string; agent?: LocalAgent } = {}): Promise<void> {
+export async function runDaemon(opts: { configPath?: string; agent?: LocalAgent; anyRepo?: boolean } = {}): Promise<void> {
   const cfg = loadWorkerConfig(opts.configPath)
   // `mushi work --daemon --agent` wins over worker.json's `agent`.
   const agent: LocalAgent = opts.agent ?? cfg.agent ?? 'cursor'
@@ -891,6 +893,7 @@ export async function runDaemon(opts: { configPath?: string; agent?: LocalAgent 
   if (gh.code !== 0) process.stdout.write('worker: gh is not signed in on this machine; lanes take nothing until it is (run: gh auth login).\n')
   const repos = new Map<string, string>()
   const notReady = new Map<string, string>()
+  const origins = new Map<string, string>()
   for (const lane of cfg.lanes) {
     const g = await runProc('git', ['rev-parse', '--git-dir'], { cwd: lane.repoDir, timeoutMs: 30_000 })
     if (g.code !== 0) {
@@ -902,9 +905,31 @@ export async function runDaemon(opts: { configPath?: string; agent?: LocalAgent 
     const origin = await runProc('git', ['remote', 'get-url', 'origin'], { cwd: lane.repoDir, timeoutMs: 30_000 })
     const repo = origin.code === 0 ? repoOfRemote(origin.stdout) : null
     if (repo) repos.set(lane.name, repo)
+    if (origin.code === 0 && origin.stdout.trim()) origins.set(lane.name, origin.stdout.trim())
   }
 
   const conf: CliConfig = { apiKey: key, endpoint }
+  // A lane whose clone is not a repo the key's project is linked to stays out:
+  // it would fix that project's reports in another app's repo (2026-11-11).
+  // whoami answers for the key's own project only, so other lanes are not checked.
+  if (!opts.anyRepo) {
+    const who = await apiCall<WhoamiData>('/v1/sync/whoami', conf, {}, { timeoutMs: 30_000 })
+    if (who.ok) {
+      for (const lane of cfg.lanes) {
+        if (notReady.has(lane.name) || lane.projectId !== who.data.project_id) continue
+        const problem = wrongRepoMessage({
+          projectName: who.data.project_name,
+          projectId: who.data.project_id,
+          repoUrls: who.data.repo_urls,
+          origin: origins.get(lane.name) ?? null,
+          repoDir: lane.repoDir,
+        })
+        if (!problem) continue
+        process.stdout.write(`worker: lane ${lane.name}: ${problem.message} The lane stays out until it is fixed (or restart with --any-repo).\n`)
+        notReady.set(lane.name, `Its clone is not a repo ${who.data.project_name || 'this project'} is linked to (${who.data.repo_urls!.join(', ')}); point the lane at a clone of one, or restart the worker with --any-repo`)
+      }
+    }
+  }
   let wake: () => void = () => undefined
   const readings = createHostReadings({
     ...(cursorAccount ? { cursorAccount } : {}),

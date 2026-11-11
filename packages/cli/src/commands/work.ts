@@ -30,6 +30,7 @@ import { MushiCliError } from '../errors.js'
 import type { WhoamiData } from '../cli-types.js'
 import { interruptedBy, onInterrupt } from '../signals.js'
 import { agentRun, agentSpec, agentUnavailable, cursorSignInState, parseLocalAgent, type AgentSignIn, type LocalAgent } from './work-agents.js'
+import { wrongRepoMessage } from './work-repo.js'
 
 export { cursorSignInState }
 
@@ -1147,10 +1148,40 @@ export function missingWriteScope(scopes: readonly string[] | undefined, project
   return `This CLI key has ${have}; mushi work also needs mcp:write to record the fix and queue its review. Run: mushi login --upgrade-scope${projectId ? ` --project-id ${projectId}` : ''}`
 }
 
-async function requireWriteScope(cfg: CliConfig): Promise<void> {
+/** whoami, read once per run: the repo guard and the write-scope check both use it. Undefined when it fails (the next call fails loudly anyway). */
+async function readWhoami(cfg: CliConfig): Promise<WhoamiData | undefined> {
   const res = await apiCall<WhoamiData>('/v1/sync/whoami', cfg)
-  const scopes = res.ok ? (res.data as { scopes?: string[] } | undefined)?.scopes : undefined
-  const problem = missingWriteScope(scopes, cfg.projectId)
+  return res.ok ? res.data : undefined
+}
+
+/** The clone's origin remote, or null when it has none (or the folder is not a clone). */
+async function originOf(repoDir: string): Promise<string | null> {
+  if (!existsSync(repoDir)) return null
+  const r = await runProc('git', ['remote', 'get-url', 'origin'], { cwd: repoDir, timeoutMs: 30_000 })
+  const url = r.code === 0 ? r.stdout.trim() : ''
+  return url || null
+}
+
+/**
+ * Stop before anything is listed, planned or claimed when the clone is not a
+ * repo the key's project is linked to (the key, not --project, decides whose
+ * reports come back). Skipped when the server names no repos (an older
+ * server, or a project with none linked).
+ */
+async function requireRightRepo(whoami: WhoamiData | undefined, repoDir: string): Promise<void> {
+  if (!whoami?.repo_urls?.length) return
+  const problem = wrongRepoMessage({
+    projectName: whoami.project_name,
+    projectId: whoami.project_id,
+    repoUrls: whoami.repo_urls,
+    origin: await originOf(repoDir),
+    repoDir,
+  })
+  if (problem) throw new MushiCliError('E_WRONG_REPO', problem.message, problem.hint)
+}
+
+function requireWriteScope(cfg: CliConfig, whoami: WhoamiData | undefined): void {
+  const problem = missingWriteScope(whoami?.scopes, cfg.projectId)
   if (problem) throw new MushiCliError('E_AUTH_MISSING', problem, `mushi login --upgrade-scope${cfg.projectId ? ` --project-id ${cfg.projectId}` : ''}`)
 }
 
@@ -1173,17 +1204,18 @@ export function registerWorkCommands(program: Command): void {
     .option('--followups', 'Instead of new reports: fix the Opus "fix first" findings on PRs mushi work opened, and push to them')
     .option('--keep', 'Keep the worktree after the run')
     .option('--dry-run', 'Show what would run; change nothing')
+    .option('--any-repo', 'Skip the check that the clone is a repo the key\'s project is linked to (a monorepo or a fork)')
     .option('--json', 'Machine-readable JSON output')
     .option('--daemon', 'Run as a local worker: register this machine, send a heartbeat every 60 s, take the console\'s lane settings and claim reports (set up with `mushi worker install`)')
     .option('--worker-config <path>', 'With --daemon: the lanes file (default ~/.config/mushi/worker.json)')
-    .action(async (opts: { repoDir?: string; project?: string; agent?: string; model?: string; max: string; report?: string; followups?: boolean; keep?: boolean; dryRun?: boolean; json?: boolean; daemon?: boolean; workerConfig?: string }) => {
+    .action(async (opts: { repoDir?: string; project?: string; agent?: string; model?: string; max: string; report?: string; followups?: boolean; keep?: boolean; dryRun?: boolean; anyRepo?: boolean; json?: boolean; daemon?: boolean; workerConfig?: string }) => {
       const agent = parseLocalAgent(opts.agent)
       if (opts.daemon) {
         if (opts.repoDir || opts.report || opts.followups) {
           throw new MushiCliError('E_INVALID_INPUT', '--daemon takes its lanes and clones from the worker config, not from --repo-dir, --report or --followups.', 'mushi worker install')
         }
         const { runDaemon } = await import('../worker/daemon.js')
-        await runDaemon({ configPath: opts.workerConfig, ...(opts.agent !== undefined ? { agent } : {}) })
+        await runDaemon({ configPath: opts.workerConfig, ...(opts.agent !== undefined ? { agent } : {}), ...(opts.anyRepo ? { anyRepo: true } : {}) })
         return
       }
       if (!opts.repoDir) throw new MushiCliError('E_INVALID_INPUT', 'mushi work needs --repo-dir <clone>.', 'mushi work --repo-dir ~/src/my-app')
@@ -1197,6 +1229,9 @@ export function registerWorkCommands(program: Command): void {
         if (!opts.json) process.stdout.write(`${l}\n`)
       }
       const warn = (l: string) => process.stderr.write(`${l}\n`)
+      // Before any listing, plan or claim (the dry run too): the key decides whose reports come back.
+      const whoami = await readWhoami(cfg)
+      if (!opts.anyRepo) await requireRightRepo(whoami, repoDir)
       if (opts.followups) {
         const listed = await api<{ fixes: LocalFollowupCandidate[] }>(`/v1/admin/projects/${cfg.projectId}/local-followups`)
         const due = listed.fixes.slice(0, max)
@@ -1207,7 +1242,7 @@ export function registerWorkCommands(program: Command): void {
           return
         }
         await preflight(repoDir, warn, agent)
-        await requireWriteScope(cfg)
+        requireWriteScope(cfg, whoami)
         const results = []
         for (const f of due) {
           if (interruptedBy()) break
@@ -1236,7 +1271,7 @@ export function registerWorkCommands(program: Command): void {
         return
       }
       await preflight(repoDir, warn, agent)
-      await requireWriteScope(cfg)
+      requireWriteScope(cfg, whoami)
       const results = []
       for (const d of picked) {
         if (interruptedBy()) break
