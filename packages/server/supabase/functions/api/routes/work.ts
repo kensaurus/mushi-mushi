@@ -62,12 +62,16 @@ import {
   laneClaimBlock,
   laneConfigFromRow,
   mayAutoRequeue,
+  meetsSeverityFloor,
+  MIN_SEVERITIES,
+  onePerGroup,
   parseClaimDone,
   parseHostGuards,
   parseLaneSettings,
   rankWorkCandidates,
   type AttemptLite,
   type LaneConfig,
+  type MinSeverity,
 } from '../../_shared/work-lanes.ts'
 import { callerCanAccessProject, callerProjectIds } from '../shared.ts'
 import { flagClaim, flagsFor, registerWorkStatusRoutes } from './work-status.ts'
@@ -284,7 +288,10 @@ interface CandidateReport {
   status: string
   source: string | null
   created_at: string
+  report_group_id: string | null
 }
+
+const CANDIDATE_COLUMNS = 'id, project_id, severity, status, source, created_at, report_group_id'
 
 /**
  * The reports a lane may claim now, in order: its queue (a person's order;
@@ -293,7 +300,10 @@ interface CandidateReport {
  * report with an active claim, an in-flight cloud dispatch, a live run or an
  * open PR; a ranked one also never in a local cooldown, nor one waiting in
  * another lane's queue. A `skill` lane takes only skill-run rounds from its
- * own queue (ADR 0042 amendment), never ranked bug reports.
+ * own queue (ADR 0042 amendment), never ranked bug reports. Ranked reports
+ * also stop at the lane's drain floor (min_severity), and a duplicate group is
+ * fixed once: never while another member is being fixed, and one member at a
+ * time (onePerGroup).
  */
 export async function claimCandidates(db: Db, lane: LaneRow, now: Date): Promise<Array<CandidateReport & { fromQueue: boolean }>> {
   const skillOnly = lane.mode === 'skill'
@@ -311,7 +321,7 @@ export async function claimCandidates(db: Db, lane: LaneRow, now: Date): Promise
     (skillOnly ? [] : ['classified', 'reopened']).map((status) =>
       db
         .from('reports')
-        .select('id, project_id, severity, status, source, created_at')
+        .select(CANDIDATE_COLUMNS)
         .eq('project_id', lane.project_id)
         .eq('status', status)
         .order('created_at', { ascending: false })
@@ -319,11 +329,12 @@ export async function claimCandidates(db: Db, lane: LaneRow, now: Date): Promise
     ),
   )
   for (const l of lists) if (l.error) throw new Error(`reports read failed: ${l.error.message}`)
-  const ranked = rankWorkCandidates(lists.flatMap((l) => (l.data ?? []) as CandidateReport[]))
+  const floor = (MIN_SEVERITIES as readonly string[]).includes(lane.min_severity ?? '') ? (lane.min_severity as MinSeverity) : null
+  const ranked = rankWorkCandidates(lists.flatMap((l) => (l.data ?? []) as CandidateReport[])).filter((r) => meetsSeverityFloor(r.severity, floor))
 
   let queuedReports: CandidateReport[] = []
   if (queued.length) {
-    const { data, error } = await db.from('reports').select('id, project_id, severity, status, source, created_at').in('id', queued)
+    const { data, error } = await db.from('reports').select(CANDIDATE_COLUMNS).in('id', queued)
     if (error) throw new Error(`queued reports read failed: ${error.message}`)
     const byId = new Map(((data ?? []) as CandidateReport[]).map((r) => [r.id, r]))
     const stale: string[] = []
@@ -369,8 +380,30 @@ export async function claimCandidates(db: Db, lane: LaneRow, now: Date): Promise
   // does not apply to it: a person put it there.
   queuedReports = queuedReports.filter((r) => free(r.id) && !hasLiveAttempt(attempts.get(r.id) ?? []))
   const queuedIds = new Set(queuedReports.map((r) => r.id))
-  const rest = ranked.filter((r) => !queuedIds.has(r.id) && !elsewhere.ids.has(r.id) && free(r.id) && !hasLiveAttempt(attempts.get(r.id) ?? []) && !inLocalCooldown(attempts.get(r.id) ?? [], now))
+  const busyGroups = await busyReportGroups(db, ranked, queuedReports, (id) => !free(id) || hasLiveAttempt(attempts.get(id) ?? []))
+  const rest = onePerGroup(
+    ranked.filter((r) => !queuedIds.has(r.id) && !elsewhere.ids.has(r.id) && free(r.id) && !hasLiveAttempt(attempts.get(r.id) ?? []) && !inLocalCooldown(attempts.get(r.id) ?? [], now)),
+    busyGroups,
+  )
   return [...queuedReports.map((r) => ({ ...r, fromQueue: true })), ...rest.map((r) => ({ ...r, fromQueue: false }))]
+}
+
+/**
+ * Duplicate groups with a member being fixed: one in 'fixing' (a fix in flight
+ * or an open PR), one this lane's candidates show as taken (`taken`), or one a
+ * person queued in this lane. A read error leaves no group busy: the cost is a
+ * second fix of a duplicate, never a lane that claims nothing.
+ */
+async function busyReportGroups(db: Db, ranked: readonly CandidateReport[], queued: readonly CandidateReport[], taken: (id: string) => boolean): Promise<Set<string>> {
+  const busy = new Set<string>()
+  for (const r of [...ranked, ...queued]) if (r.report_group_id && (taken(r.id) || queued.includes(r))) busy.add(r.report_group_id)
+  const groups = [...new Set(ranked.map((r) => r.report_group_id).filter((g): g is string => !!g))].filter((g) => !busy.has(g))
+  for (const part of chunks(groups)) {
+    const { data, error } = await db.from('reports').select('report_group_id').in('report_group_id', part).eq('status', 'fixing')
+    if (error) continue
+    for (const row of (data ?? []) as Array<{ report_group_id: string | null }>) if (row.report_group_id) busy.add(row.report_group_id)
+  }
+  return busy
 }
 
 /** What the agent needs, so the worker makes no admin reads: the report, its fix packet and what earlier attempts did. */
@@ -830,6 +863,7 @@ async function listLanes(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
             name: l.name,
             config: laneConfigFromRow(l),
             reviewModel: l.review_model,
+            minSeverity: l.min_severity,
             repo: l.repo,
             status: l.status ?? {},
             lastSeenAt: l.last_seen_at,
@@ -896,7 +930,7 @@ async function patchLane(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
     .single()
   if (error || !data) return err(c, 'DB_ERROR', 'The lane could not be changed.', 500)
   await deps.logAudit(db, lane.project_id, userId, 'settings.updated', 'work_lane', lane.id, { lane: lane.name, ...parsed.value }).catch(() => {})
-  return c.json({ ok: true, data: { id: lane.id, config: laneConfigFromRow(data as LaneRow), reviewModel: (data as LaneRow).review_model } })
+  return c.json({ ok: true, data: { id: lane.id, config: laneConfigFromRow(data as LaneRow), reviewModel: (data as LaneRow).review_model, minSeverity: (data as LaneRow).min_severity } })
 }
 
 async function putQueue(c: Ctx, deps: WorkRouteDeps): Promise<Response> {

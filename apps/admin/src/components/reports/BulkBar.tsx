@@ -5,6 +5,7 @@
  *          can be used repeatedly without manual state management upstream.
  */
 
+import type { ReactNode } from 'react'
 import { Btn } from '../ui'
 
 interface Props {
@@ -16,9 +17,11 @@ interface Props {
   onSetStatus: (v: string) => void
   onSetSeverity: (v: string) => void
   onDismiss: () => void
+  /** More actions for the same selection (e.g. send to a local worker); hidden while the bar is locked. */
+  extra?: ReactNode
 }
 
-export function BulkBar({ count, busy, disabledReason = null, onClear, onSetStatus, onSetSeverity, onDismiss }: Props) {
+export function BulkBar({ count, busy, disabledReason = null, onClear, onSetStatus, onSetSeverity, onDismiss, extra }: Props) {
   if (count === 0) return null
   const locked = Boolean(disabledReason)
   return (
@@ -49,6 +52,7 @@ export function BulkBar({ count, busy, disabledReason = null, onClear, onSetStat
       <Btn size="sm" variant="danger" onClick={onDismiss} disabled={busy || locked}>
         Dismiss
       </Btn>
+      {!locked && !busy ? extra : null}
       <button
         type="button"
         onClick={onClear}

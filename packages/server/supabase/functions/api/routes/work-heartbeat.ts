@@ -77,13 +77,15 @@ export interface LaneRow {
   drain: boolean
   prune_own: boolean
   review_model: string | null
+  /** The drain floor (MinSeverity); server-only, never in the heartbeat answer. */
+  min_severity: string | null
   repo: string | null
   status: Record<string, unknown> | null
   last_seen_at: string
 }
 
 export const HOST_COLUMNS = 'id, owner_user_id, api_key_id, host_id, hostname, platform, mushi_version, last_heartbeat_at, status, guards, revoked_at, takes'
-export const LANE_COLUMNS = 'id, host_id, project_id, name, model, mode, concurrency, paused, stop_at, drain, prune_own, review_model, repo, status, last_seen_at'
+export const LANE_COLUMNS = 'id, host_id, project_id, name, model, mode, concurrency, paused, stop_at, drain, prune_own, review_model, min_severity, repo, status, last_seen_at'
 
 /** What the heartbeat needs; WorkRouteDeps (work.ts) is a superset. */
 export interface WorkerHeartbeatDeps {
