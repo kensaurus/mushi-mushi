@@ -1,5 +1,12 @@
 # @mushi-mushi/mcp
 
+## 0.30.7
+
+### Patch Changes
+
+- 271d741: The bundled docs index (`search_mushi_docs`, `get_mushi_doc`) includes the new 特定商取引法に基づく表記 page (`/legal/tokushoho`) and the updated Terms, Privacy Policy and Japanese overview, which now give the operator's address and set Japanese law and the Tokyo District Court for disputes.
+- af44fd3: `get_usage` describes the team's quota: a plan belongs to the team, so its diagnoses, spend cap and plan are counted across every app in the team, not only the current project.
+
 ## 0.30.6
 
 ### Patch Changes
