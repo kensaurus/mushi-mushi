@@ -204,6 +204,13 @@ describe('failureTail', () => {
     expect(failureTail({ stdout: '', stderr: 'fatal: not a git repository' })).toBe('fatal: not a git repository')
     expect(failureTail({ stdout: 'x'.repeat(50), stderr: '' }, 10)).toBe(`[…] ${'x'.repeat(10)}`)
   })
+
+  it('drops terminal colour codes from a hook run', () => {
+    const stdout = '\u001b[38;2;56;56;56m│\u001b[0m \u001b[1;31mtypecheck\u001b[0m failed'
+    const out = failureTail({ stdout, stderr: '' })
+    expect(out).toBe('│ typecheck failed')
+    expect(out).not.toContain('\u001b')
+  })
 })
 
 describe('inLocalCooldown', () => {

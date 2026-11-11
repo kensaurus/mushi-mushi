@@ -149,7 +149,8 @@ function cap(text: string | null | undefined, max: number): string {
  * failure read as "✓ check-no-secrets … [cut]", 2026-10-24).
  */
 export function failureTail(r: { stdout: string; stderr: string }, max = 600): string {
-  const t = [r.stdout, r.stderr].map((x) => x.trim()).filter(Boolean).join('\n').replace(/[ \t]+/g, ' ')
+  // Hook runners (lefthook) colour their output; the escape codes would land in the stored error as text.
+  const t = stripVTControlCharacters([r.stdout, r.stderr].map((x) => x.trim()).filter(Boolean).join('\n')).replace(/[ \t]+/g, ' ')
   const lines = t.split('\n').map((l) => l.trim()).filter(Boolean)
   const kept: string[] = []
   let size = 0
