@@ -9,6 +9,7 @@ import {
   wrongAppReason,
   inLocalCooldown,
   installCommand,
+  windowsShim,
   freeBranchName,
   isMissingModuleFailure,
   failureTail,
@@ -204,6 +205,13 @@ describe('failureTail', () => {
     expect(failureTail({ stdout: '', stderr: 'fatal: not a git repository' })).toBe('fatal: not a git repository')
     expect(failureTail({ stdout: 'x'.repeat(50), stderr: '' }, 10)).toBe(`[…] ${'x'.repeat(10)}`)
   })
+
+  it('drops terminal colour codes from a hook run', () => {
+    const stdout = '\u001b[38;2;56;56;56m│\u001b[0m \u001b[1;31mtypecheck\u001b[0m failed'
+    const out = failureTail({ stdout, stderr: '' })
+    expect(out).toBe('│ typecheck failed')
+    expect(out).not.toContain('\u001b')
+  })
 })
 
 describe('inLocalCooldown', () => {
@@ -260,6 +268,18 @@ describe('installCommand', () => {
     expect(installCommand((f) => f === 'package-lock.json')?.[0]).toBe('npm')
     expect(installCommand((f) => f === 'yarn.lock')?.[0]).toBe('yarn')
     expect(installCommand(() => false)).toBeNull()
+  })
+})
+
+describe('windowsShim', () => {
+  it('runs the package manager through cmd.exe on Windows only, with the same arguments', () => {
+    const cmd: [string, string[]] = ['pnpm', ['install', '--frozen-lockfile', '--prefer-offline']]
+    expect(windowsShim(cmd, 'linux')).toEqual(cmd)
+    expect(windowsShim(cmd, 'darwin')).toEqual(cmd)
+    expect(windowsShim(cmd, 'win32')).toEqual([
+      'cmd.exe',
+      ['/d', '/s', '/c', 'pnpm', 'install', '--frozen-lockfile', '--prefer-offline'],
+    ])
   })
 })
 

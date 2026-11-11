@@ -149,7 +149,8 @@ function cap(text: string | null | undefined, max: number): string {
  * failure read as "✓ check-no-secrets … [cut]", 2026-10-24).
  */
 export function failureTail(r: { stdout: string; stderr: string }, max = 600): string {
-  const t = [r.stdout, r.stderr].map((x) => x.trim()).filter(Boolean).join('\n').replace(/[ \t]+/g, ' ')
+  // Hook runners (lefthook) colour their output; the escape codes would land in the stored error as text.
+  const t = stripVTControlCharacters([r.stdout, r.stderr].map((x) => x.trim()).filter(Boolean).join('\n')).replace(/[ \t]+/g, ' ')
   const lines = t.split('\n').map((l) => l.trim()).filter(Boolean)
   const kept: string[] = []
   let size = 0
@@ -1020,9 +1021,22 @@ export async function installDeps(wt: string, log: (line: string) => void): Prom
   const cmd = installCommand((f) => existsSync(join(wt, f)))
   if (!cmd) return
   log(`  deps: ${cmd[0]} ${cmd[1][0]} (so the agent can run tests and the commit hooks work)`)
-  let r = await runProc(cmd[0], cmd[1], { cwd: wt, timeoutMs: 10 * 60_000 })
-  if (r.code !== 0) r = await runProc(cmd[0], cmd[1], { cwd: wt, timeoutMs: 10 * 60_000 })
+  const [bin, args] = windowsShim(cmd, process.platform)
+  let r = await runProc(bin, args, { cwd: wt, timeoutMs: 10 * 60_000 })
+  if (r.code !== 0) r = await runProc(bin, args, { cwd: wt, timeoutMs: 10 * 60_000 })
   if (r.code !== 0) log(`  deps: install failed twice, the agent works without them (${failureTail(r, 300)})`)
+}
+
+/**
+ * @internal Exported for tests only. On Windows pnpm, npm and yarn are `.cmd`
+ * shims, which spawn() cannot start without a shell: every install failed
+ * with `spawn pnpm ENOENT` and the agent worked with no dependencies
+ * (2026-11-11). Run them through cmd.exe there. The arguments are the fixed
+ * ones from installCommand, never user input.
+ */
+export function windowsShim(cmd: [string, string[]], platform: NodeJS.Platform): [string, string[]] {
+  if (platform !== 'win32') return cmd
+  return ['cmd.exe', ['/d', '/s', '/c', cmd[0], ...cmd[1]]]
 }
 
 /** @internal Exported for tests only. Pure: a commit hook that failed because a package is not installed, not because of the change. */
