@@ -1,6 +1,11 @@
 /**
  * Smoke: cinematic landing still ships north-star copy from the SSOT.
  * Guards against accidental hero/CTA/nav drift when motion components wrap prose.
+ *
+ * ADR 0056 (2026-11-11) changed the locked hero pair, the install tab order and
+ * the section order: the free check's address box is the one primary action,
+ * the install box (Lovable or Bolt first) the one secondary action. The tests
+ * below hold that shape; changing it again needs a superseding ADR.
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -12,7 +17,9 @@ import {
   LANDING_HERO_START,
   LANDING_INSTALL,
   LANDING_INSTALL_LOVABLE,
-  LANDING_CHECK_LINK,
+  LANDING_CHECK,
+  LANDING_HOW_STEPS,
+  normalizeCheckUrl,
   LANDING_SAMPLE_LINK,
   LANDING_SETUP_PROMPT,
   LANDING_FIX_PROMPT,
@@ -27,6 +34,9 @@ import {
 } from './landing-copy'
 import { MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
 import { ADMIN_DEMO_BASE } from '../data/admin-screenshots'
+import { urlFromSearch } from './production-check'
+import { FEATURES, NEED_LABELS } from '../components/FeatureTour'
+import { LANDING_FEATURE_IDS } from '../components/landing/LandingFeatures'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DOCS = join(__dirname, '..')
@@ -48,9 +58,13 @@ describe('landing cinematic copy SSOT', () => {
     expect(landing).toContain(`\n${definition}\n`)
   })
 
-  it('keeps the free-plan pricing claim under the hero install box', () => {
+  it('keeps the free-plan claim and the setup facts in the hero facts row (ADR 0056)', () => {
     // Free since 2026-10-28: one app, 100 diagnoses a month (docs/plan-pricing.md).
-    expect(LANDING_HERO.reassure).toMatch(/one app: 100 diagnoses/i)
+    expect(LANDING_HERO.facts[0]).toMatch(/free for one app: 100 diagnoses/i)
+    expect(LANDING_HERO.facts).toContain('About 5 minutes to set up')
+    expect(LANDING_HERO.facts).toContain('No coding needed with Lovable or Bolt')
+    const hero = read('components', 'landing', 'CinematicEditorialHero.tsx')
+    expect(hero).toContain('LANDING_HERO.facts')
   })
 
   it('sells the pricing strip by apps watched, with no retired plan names', () => {
@@ -59,9 +73,33 @@ describe('landing cinematic copy SSOT', () => {
     expect(JSON.stringify(LANDING_FAQ)).not.toMatch(/\bIndie\b|50 diagnoses/)
   })
 
-  it('explains the one job in three steps: a user reports, Mushi Mushi explains, your AI fixes (ADR 0052)', () => {
+  it('explains how it works in four steps, each with what you do and what Mushi Mushi does (ADR 0056)', () => {
+    expect(LANDING_HOW_STEPS.map((p) => p.name)).toEqual([
+      'Add the button',
+      'A customer reports a problem',
+      'Read what went wrong',
+      'Let your AI fix it',
+    ])
+    expect(LANDING_HOW_STEPS.map((p) => p.glyph)).toEqual(['install', 'report', 'diagnose', 'ship'])
+    for (const step of LANDING_HOW_STEPS) {
+      expect(step.you.length).toBeGreaterThan(0)
+      expect(step.role.length).toBeGreaterThan(0)
+    }
+    expect(read('components', 'landing', 'DiagnosisScrollStage.tsx')).toContain('LANDING_HOW_STEPS.map')
+    // The docs sub-pages' <Pillars> keep the three-card version.
     expect(LANDING_PILLARS.map((p) => p.name)).toEqual(['A user reports it', 'Mushi Mushi explains it', 'Your AI fixes it'])
-    expect(LANDING_PILLARS.map((p) => p.glyph)).toEqual(['report', 'diagnose', 'ship'])
+  })
+
+  it('shows three extra checks, each tagged with what it needs, none promised as free (ADR 0056)', () => {
+    expect(LANDING_FEATURE_IDS).toHaveLength(3)
+    const shown = LANDING_FEATURE_IDS.map((id) => FEATURES.find((f) => f.id === id))
+    expect(shown.every(Boolean)).toBe(true)
+    // One of each need: an account to connect, a paid key, a computer of yours.
+    expect(new Set(shown.map((f) => f?.kind))).toEqual(new Set(['connect', 'paid-key', 'computer']))
+    const cards = read('components', 'landing', 'LandingFeatures.tsx')
+    expect(cards).toContain('NEED_LABELS[f.kind]')
+    expect(Object.values(NEED_LABELS).join(' ')).not.toMatch(/\bfree\b/i)
+    expect(cards.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/\bfree\b/i)
   })
 
   it('keeps a clear closing question and a tracked solo CTA to console signup', () => {
@@ -91,8 +129,10 @@ describe('landing cinematic copy SSOT', () => {
     expect(new Set([signup.id, cursor.id, npx.id, more.id]).size).toBe(4)
   })
 
-  it('installs from the hero: pick Claude Code, Cursor, Lovable or Bolt, or another editor, then three steps', () => {
-    expect(LANDING_INSTALL.tabs.map((t) => t.id)).toEqual(['claude-code', 'cursor', 'lovable', 'other'])
+  it('installs from the hero: Lovable or Bolt first, then Claude Code, Cursor or another editor, then three steps (ADR 0056)', () => {
+    expect(LANDING_INSTALL.tabs.map((t) => t.id)).toEqual(['lovable', 'claude-code', 'cursor', 'other'])
+    // The first tab is the one open on load.
+    expect(read('components', 'landing', 'LandingInstallStrip.tsx')).toContain('useState<TabId>(LANDING_INSTALL.tabs[0].id)')
     for (const tab of LANDING_INSTALL.tabs) expect(tab.connect.length).toBeGreaterThan(0)
     // ADR 0027's cycle: connect, a report comes in, a fix you review.
     expect(Object.values(LANDING_INSTALL.steps)).toEqual(['Connect your editor', 'Paste this prompt', 'Fix a real bug'])
@@ -127,34 +167,64 @@ describe('landing cinematic copy SSOT', () => {
     expect(read('components', 'landing', 'LandingInstallStrip.tsx')).toContain('LANDING_HERO_START.console.href')
   })
 
-  it('leads with one job: a user says it is broken, Mushi says why and hands the fix to the AI', () => {
-    expect(LANDING_HERO.lead).toMatch(/user says your app is broken/i)
-    expect(LANDING_HERO.lead).toMatch(/plain English/)
-    expect(LANDING_HERO.lead).toMatch(/Cursor, Claude Code or Lovable/)
-    expect(LANDING_HERO.lead).toMatch(/No Sentry/)
+  it('leads with the plain subline from the brand ladder: both ways in, then what every bug gets (ADR 0056)', () => {
+    expect(LANDING_HERO.lead).toBe(MUSHI_TAGLINE_V2.subHero)
+    expect(LANDING_HERO.lead).toMatch(/tap a button/)
+    expect(LANDING_HERO.lead).toMatch(/checks your live site/)
+    expect(LANDING_HERO.lead).toMatch(/plain-English/)
   })
 
-  it('has one primary action and one secondary link in the hero: the install box and the free check (ADR 0052 amendment)', () => {
+  it('has one primary and one secondary action in the hero: the free check box, then the install box (ADR 0056)', () => {
     const hero = read('components', 'landing', 'CinematicEditorialHero.tsx')
+    // Exactly one of each, the check box first.
+    expect(hero.match(/<LandingCheckBox \/>/g)).toHaveLength(1)
     expect(hero.match(/<LandingInstallStrip \/>/g)).toHaveLength(1)
-    expect(hero.match(/<Link /g)).toHaveLength(1)
-    expect(hero).toContain('LANDING_CHECK_LINK.href')
-    expect(LANDING_CHECK_LINK.href).toMatch(/^\/check\?src=/)
-    expect(LANDING_CHECK_LINK.note).toMatch(/nothing to install, no sign-up/)
+    expect(hero.indexOf('<LandingCheckBox />')).toBeLessThan(hero.indexOf('<LandingInstallStrip />'))
+    // No links of the hero's own compete with the two actions.
+    expect(hero).not.toMatch(/<Link\s/)
+    expect(hero).not.toMatch(/<a\s/)
+    expect(hero).not.toContain('LANDING_HERO_START')
+    // The check box: "Check your live app free", no sign-up, started on submit
+    // with the hero's funnel id, then the report opens on /check.
+    const box = read('components', 'landing', 'LandingCheckBox.tsx')
+    expect(LANDING_CHECK.heading).toBe('Check your live app free')
+    expect(LANDING_CHECK.note).toMatch(/No sign-up, nothing to install/)
+    expect(LANDING_CHECK.src).toBe('landing-hero')
+    expect(LANDING_CHECK.id).toBe('landing-check')
+    expect(box).toContain('startCheck({ url, src: LANDING_CHECK.src })')
+    expect(box).toContain('data-mushi-cta={LANDING_CHECK.id}')
+    expect(box).toContain('/check?id=')
+    // One form, one button; no link out of the box.
+    expect(box.match(/<form\s/g)).toHaveLength(1)
+    expect(box.match(/<button\s/g)).toHaveLength(1)
+    expect(box).not.toMatch(/<Link\s|<a\s/)
+    // A text input: type="url" would reject "my-app.com".
+    expect(box).toContain('inputMode="url"')
+    expect(box).not.toContain('type="url"')
     expect(existsSync(join(DOCS, 'app', 'check', 'page.tsx'))).toBe(true)
     // The sample stays one scroll down, in How it works.
     expect(read('components', 'landing', 'DiagnosisScrollStage.tsx')).toContain('LANDING_SAMPLE_LINK.href')
-    // No signup, star or other-editor links compete with the install box.
-    expect(hero).not.toMatch(/<a\s/)
-    expect(hero).not.toContain('LANDING_HERO_START')
     expect(LANDING_SAMPLE_LINK.href).toBe('/demo/diagnosis')
     expect(LANDING_SAMPLE_LINK.label).toMatch(/sample/i)
     expect(existsSync(join(DOCS, 'content', 'demo', 'diagnosis.mdx'))).toBe(true)
   })
 
-  it('orders the landing: hero, how it works, what it takes, FAQ, closing', () => {
+  it('turns what a visitor types into an address /check accepts', () => {
+    expect(normalizeCheckUrl('my-app.com')).toBe('https://my-app.com')
+    expect(normalizeCheckUrl('  https://my-app.lovable.app/  ')).toBe('https://my-app.lovable.app/')
+    expect(normalizeCheckUrl('http://my-app.com')).toBe('http://my-app.com')
+    expect(normalizeCheckUrl('')).toBeNull()
+    expect(normalizeCheckUrl('not a site')).toBeNull()
+    expect(normalizeCheckUrl('javascript:alert(1)')).toBeNull()
+    expect(normalizeCheckUrl('ftp://my-app.com')).toBeNull()
+    // Whatever it returns, the check page's own parser takes it.
+    const url = normalizeCheckUrl('my-app.com') ?? ''
+    expect(urlFromSearch(`?url=${encodeURIComponent(url)}`)).toBe(url)
+  })
+
+  it('orders the landing: hero, how it works, more than bug reports, what it takes, FAQ, closing (ADR 0056)', () => {
     const landing = read('content', 'index.mdx')
-    const order = ['<CinematicEditorialHero', '<DiagnosisScrollStage', '## What it takes', '<LandingFaq', '<ClosingCta']
+    const order = ['<CinematicEditorialHero', '<DiagnosisScrollStage', '<LandingFeatures', '## What it takes', '<LandingFaq', '<ClosingCta']
     const at = order.map((s) => landing.indexOf(s))
     expect(at.every((i) => i >= 0)).toBe(true)
     expect(at).toEqual([...at].sort((a, b) => a - b))

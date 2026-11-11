@@ -9,6 +9,8 @@ description: Sentry alternatives for solo founders in 2026. Bugsnag, Rollbar, hi
 
 # Sentry alternatives for solo founders
 
+> **Never used Sentry?** You don't need it, or any of the tools below, to use Mushi Mushi. [See what Mushi Mushi does](/what-is-mushi-mushi) instead.
+
 If you are one person shipping an app to real users, the question is not
 "which error tracker is best". It is "which one will I still be reading in
 month three". This page compares six tools on the four things that decide

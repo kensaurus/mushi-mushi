@@ -421,7 +421,9 @@ describe('local workers (ADR 0048): infra failures never count against a report'
     expect(env.MUSHI_WORKER_KEY).toBeUndefined()
     expect(env.MUSHI_API_KEY).toBeUndefined()
     expect(env.CREDENTIALS_DIRECTORY).toBeUndefined()
-    expect(Object.keys(env).filter((k) => /KEY|TOKEN|SECRET|CRED/i.test(k))).toEqual([])
+    // GIT_CONFIG_KEY_0 names a git setting (credential.helper, emptied), not a secret.
+    expect(Object.keys(env).filter((k) => /KEY|TOKEN|SECRET|CRED/i.test(k) && k !== 'GIT_CONFIG_KEY_0')).toEqual([])
+    expect(env.GIT_CONFIG_VALUE_0).toBe('')
   })
 })
 

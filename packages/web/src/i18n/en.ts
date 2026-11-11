@@ -174,6 +174,6 @@ export const en: MushiLocale = {
     changelog: {
       whatsNew: "What's new in {version}",
     },
-    poweredBy: 'Bug reports by Mushi',
+    poweredBy: 'Bug reports by Mushi Mushi',
   },
 };

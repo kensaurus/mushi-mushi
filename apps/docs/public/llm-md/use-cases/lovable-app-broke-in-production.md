@@ -17,6 +17,11 @@ This is a checklist for that afternoon. It assumes you can open the browser
 console and you have an AI editor. Most of it has nothing to do with Mushi Mushi;
 one step does.
 
+**Can't open the browser console, or not sure what it is?** Go straight to
+step 8 below. You add a report button to your app with one prompt in Lovable
+or Bolt, and Mushi Mushi collects the user's words, their screen, the page and
+the errors for you, then explains the bug in plain English.
+
 ## 1. Get the user's exact words and their screen
 
 "It's broken" is not a bug report. Ask for three things: what they were

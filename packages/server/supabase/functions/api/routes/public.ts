@@ -723,6 +723,13 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     }
 
     if (action === 'resolved' && pd?.issue?.id != null) {
+      // Only a person's, commit's, PR's or release's resolve closes the report;
+      // Sentry's auto-resolve by age means the bug went quiet, not that it was fixed.
+      const { webhookResolveCounts } = await import('../../_shared/sentry-reconcile.ts');
+      if (!(await webhookResolveCounts(db, projectId, String(pd.issue.id)))) {
+        await auditRow.resolve('accepted', 200, Date.now() - t0);
+        return c.json({ ok: true, data: { action: 'ignored_not_a_fix' } });
+      }
       const { resolveReportFromSentry } = await import('../../_shared/sentry-ingest.ts');
       const result = await resolveReportFromSentry(db, projectId, String(pd.issue.id));
       await auditRow.resolve('accepted', 200, Date.now() - t0);

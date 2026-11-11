@@ -35,6 +35,8 @@ import { ownerUserColumnReady, withOwnerUserColumn } from '../../_shared/byok-sc
 import { hostOnline, laneConfigFromRow } from '../../_shared/work-lanes.ts'
 import { currentCursorLogin, cursorLoginView, isFinal, newCursorLogin, parseCursorAccount, parseStoredCursorLogin } from '../../_shared/cursor-login.ts'
 import { maskEmail } from '../../_shared/work-telemetry.ts'
+import { loadAgentCredits } from '../../_shared/agent-credits-load.ts'
+import type { AgentCreditsState } from '../../_shared/agent-credits.ts'
 import { deriveWorkerFlags, durationText, flagSummary, type FlagClaim, type FlagCreditExpiry, type FlagHost, type FlagLane, type FlagLocalRun, type WorkerFlag } from '../../_shared/work-flags.ts'
 
 type Db = ReturnType<typeof getServiceClient>
@@ -133,9 +135,13 @@ async function readCreditExpiries(db: Db, userId: string, projectIds: readonly s
 }
 
 /** What GET /v1/admin/work/lanes already read, plus the two extra reads, as flags. */
-export async function flagsFor(db: Db, userId: string, projectIds: readonly string[], rows: { hosts: FlagHost[]; lanes: FlagLane[]; claims: FlagClaim[] }, now: Date): Promise<WorkerFlag[]> {
-  const [localRuns, credits] = await Promise.all([readLocalRuns(db, projectIds, now), readCreditExpiries(db, userId, projectIds, rows.lanes, now)])
-  return deriveWorkerFlags({ ...rows, localRuns, credits, now })
+export async function flagsFor(db: Db, userId: string, projectIds: readonly string[], rows: { hosts: FlagHost[]; lanes: FlagLane[]; claims: FlagClaim[] }, now: Date, agentCredits?: AgentCreditsState): Promise<WorkerFlag[]> {
+  const [localRuns, credits, outOfCredits] = await Promise.all([
+    readLocalRuns(db, projectIds, now),
+    readCreditExpiries(db, userId, projectIds, rows.lanes, now),
+    agentCredits ? Promise.resolve(agentCredits) : loadAgentCredits(db as never, userId, projectIds, now),
+  ])
+  return deriveWorkerFlags({ ...rows, localRuns, credits, agentCredits: outOfCredits, now })
 }
 
 interface HostRowLite {
@@ -158,7 +164,7 @@ export function flagClaim(x: { id: string; lane_id: string; report_id: string | 
  * the sidebar badge). Reads less than the Workers tab: no queues, no titles.
  * Missing tables (the migration not applied) read as no workers.
  */
-export async function readWorkerFlags(db: Db, userId: string, projectIds: readonly string[], now: Date): Promise<{ flags: WorkerFlag[]; lanes: FlagLane[] }> {
+export async function readWorkerFlags(db: Db, userId: string, projectIds: readonly string[], now: Date, agentCredits?: AgentCreditsState): Promise<{ flags: WorkerFlag[]; lanes: FlagLane[] }> {
   if (projectIds.length === 0) return { flags: [], lanes: [] }
   const laneRows: Array<Record<string, unknown>> = []
   for (const part of chunks(projectIds)) {
@@ -200,7 +206,7 @@ export async function readWorkerFlags(db: Db, userId: string, projectIds: readon
     queued: queued.get(l.id as string) ?? 0,
   }))
   const flagHosts: FlagHost[] = [...hosts.values()].map((h) => ({ id: h.id, hostname: h.hostname, platform: h.platform, lastHeartbeatAt: h.last_heartbeat_at, revoked: !!h.revoked_at, status: h.status ?? {} }))
-  const flags = await flagsFor(db, userId, projectIds, { hosts: flagHosts, lanes, claims }, now)
+  const flags = await flagsFor(db, userId, projectIds, { hosts: flagHosts, lanes, claims }, now, agentCredits)
   return { flags, lanes }
 }
 
@@ -209,8 +215,13 @@ async function stats(c: Ctx, deps: WorkStatusDeps): Promise<Response> {
   const userId = c.get('userId') as string
   const projectIds = await deps.projectIds(c, db, userId)
   try {
-    const { flags } = await readWorkerFlags(db, userId, projectIds, deps.now())
-    return c.json({ ok: true, data: flagSummary(flags) })
+    const now = deps.now()
+    // Read once: the flag and the console's "out of credits" card say the same thing.
+    const agentCredits = await loadAgentCredits(db as never, userId, projectIds, now)
+    const { flags, lanes } = await readWorkerFlags(db, userId, projectIds, now, agentCredits)
+    // hasWorker: the caller has a registered local worker (the report page's
+    // "Send to my local worker" shows only then).
+    return c.json({ ok: true, data: { ...flagSummary(flags), agentCredits, hasWorker: lanes.length > 0 } })
   } catch (e) {
     return err(c, 'DB_ERROR', e instanceof Error ? e.message : 'Could not read the workers.', 500)
   }

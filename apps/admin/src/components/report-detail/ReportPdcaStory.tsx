@@ -57,6 +57,17 @@ interface Props {
   dispatchState: DispatchState
 }
 
+/**
+ * Plain step names (console audit 2026-11-11): "Plan / Do / Check / Act" is
+ * Mushi Mushi's inside vocabulary; a builder reads what happened to the bug.
+ */
+const STEP_NAME: Partial<Record<PdcaStageId, string>> = {
+  plan: 'Explained',
+  do: 'Fix written',
+  check: 'Fix checked',
+  act: 'Fix live',
+}
+
 export function ReportPdcaStory({ report, dispatchState }: Props) {
   const nodes = buildStoryNodes(report, dispatchState)
   return (
@@ -67,7 +78,7 @@ export function ReportPdcaStory({ report, dispatchState }: Props) {
         <h3 className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">
           The story so far
         </h3>
-        <span className="text-3xs text-fg-faint">Plan → Do → Check → Act</span>
+        <span className="text-3xs text-fg-faint">Explained → Fix written → Fix checked → Fix live</span>
       </div>
       <ol aria-label="Progress of this report">
         {PDCA_ORDER.map((id, idx) => {
@@ -121,9 +132,9 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
           className={`inline-flex h-4 w-4 items-center justify-center rounded-sm font-semibold text-3xs ${meta.badgeBg} ${meta.badgeFg}`}
           aria-hidden="true"
         >
-          {meta.letter}
+          {PDCA_ORDER.indexOf(node.id) + 1}
         </span>
-        <span className={`text-xs font-semibold ${isIdle ? 'text-fg-muted' : 'text-fg'}`}>{meta.label}</span>
+        <span className={`text-xs font-semibold ${isIdle ? 'text-fg-muted' : 'text-fg'}`}>{STEP_NAME[node.id] ?? meta.label}</span>
         <span className={`text-2xs font-semibold ${v.copy}`} aria-label={`Status: ${v.label}`}>
           {v.glyph} {v.label}
         </span>
@@ -312,7 +323,7 @@ export function buildStoryNodes(
     if (fixStatus === 'failed') return `Loop blocked — ${fix?.error ?? 'fix attempt failed'}`
     if (blocker) return ACT_BLOCKER_COPY[blocker]
     if (actState === 'pending') return 'Awaiting merge: press Merge at the top of this page'
-    return 'Not yet — needs Plan + Do + Check first'
+    return 'Not yet: the fix has to be written and checked first'
   })()
   const actLink = fix?.pr_url && actState !== 'done'
     ? { href: fix.pr_url, label: blocker ? ACT_BLOCKER_LINK_LABEL[blocker] : 'View PR on GitHub' }

@@ -49,6 +49,6 @@ describe('time-to-first-diagnosis skips test and seed reports', () => {
     expect(lifecycle).toContain("import { NOT_FIRST_REPORT_SOURCES } from '../_shared/first-report.ts'")
     expect(lifecycle).toMatch(/const NON_REAL_REPORT_SOURCES: ReadonlySet<string> = NOT_FIRST_REPORT_SOURCES/)
     const { NOT_FIRST_REPORT_SOURCES } = await import('../../supabase/functions/_shared/first-report.ts')
-    expect([...NOT_FIRST_REPORT_SOURCES].sort()).toEqual(['admin_file', 'admin_test_report', 'mushi-marketing-seed'])
+    expect([...NOT_FIRST_REPORT_SOURCES].sort()).toEqual(['admin_file', 'admin_test_report', 'cli_wizard', 'mushi-marketing-seed'])
   })
 })

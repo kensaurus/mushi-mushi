@@ -719,7 +719,16 @@ export function ProjectsPage() {
         <div className="space-y-4">
           {stats.projectCount === 0 ? (
             <CliSetupGuide projectId={activeProjectId} />
-          ) : null}
+          ) : (
+            // Rename and delete live on the list; the default view never said so (audit 2026-11-11).
+            <p className="text-xs text-fg-muted" data-testid="projects-manage-hint">
+              To rename or delete an app, or get its key, open{' '}
+              <button type="button" className="text-brand underline underline-offset-2" onClick={() => setTab('list')}>
+                Your projects
+              </button>
+              .
+            </p>
+          )}
           {/* Advanced mode's hero already says it. */}
           {stats.topPriority === 'healthy' && !isAdvanced && (
             <RecommendedAction

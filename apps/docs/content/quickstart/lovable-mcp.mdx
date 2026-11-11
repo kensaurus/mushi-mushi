@@ -114,9 +114,24 @@ Cursor asks you to sign in the first time the agent calls Mushi Mushi. Leave out
 
 ## Bolt
 
-Bolt also accepts a custom MCP server under **Connectors (MCP) → Custom MCP
-server** ([Bolt docs](https://support.bolt.new/integrations/mcp)). Use the same
-URL. We have not tested Mushi Mushi in Bolt yet.
+We have not tested Mushi Mushi in Bolt yet. These steps follow Bolt's own help
+page ([Bolt docs](https://support.bolt.new/integrations/mcp)).
+
+In the Bolt chatbox, click **+** → **Connectors** → **Manage connectors**, then
+**Custom MCP server**:
+
+| Field | Value |
+| --- | --- |
+| **Name** | `Mushi Mushi` |
+| **URL** | `https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe` |
+| **Transport type** | **HTTP** |
+| **Authentication** | **MCP OAuth** |
+
+Click **Connect** and sign in on the Mushi Mushi page that opens. Then turn the
+connector on for your project (chatbox **+** → **Connectors** → the toggle next
+to Mushi Mushi), and ask the same questions as in Lovable. If you can't use
+OAuth, choose **API key** and paste a Mushi Mushi key with MCP access from the
+console.
 
 ## What `?features=vibe` gives you
 

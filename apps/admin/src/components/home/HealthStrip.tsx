@@ -29,7 +29,28 @@ export function HealthStrip({ section }: { section: HomeSection<HealthSignal[]> 
   )
 }
 
-function HealthTile({ signal: s }: { signal: HealthSignal }) {
+/**
+ * The lights in a builder's words (console audit 2026-11-11): the server
+ * names them "SDK sending" and "CI", and its connect buttons "Install the
+ * SDK" / "Set up the SDK". Unknown ids keep the server's words.
+ */
+const PLAIN_LABEL: Record<string, string> = {
+  site: 'Is my site up?',
+  errors: 'Bugs today',
+  sdk: 'Report button working',
+  ci: 'Tests on your code',
+}
+const PLAIN_CONNECT: Record<string, string> = {
+  'Install the SDK': 'Add the report button',
+  'Set up the SDK': 'Add the report button',
+}
+
+function HealthTile({ signal: server }: { signal: HealthSignal }) {
+  const s: HealthSignal = {
+    ...server,
+    label: PLAIN_LABEL[server.id] ?? server.label,
+    ...(server.connect ? { connect: { ...server.connect, label: PLAIN_CONNECT[server.connect.label] ?? server.connect.label } } : {}),
+  }
   return (
     <Card className="flex h-full min-w-0 flex-col gap-1 p-3" data-testid={`home-health-${s.id}`}>
       <PanelHeader

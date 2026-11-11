@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/how-it-works
 
 ---
 title: How Mushi Mushi works, shown on real screens
-description: "Watch a bug go from a user's report to a merged fix: the report button, the plain-English diagnosis, the fix prompt for your editor, and the pipeline."
+description: "Watch a bug go from a user's report to a fix: what you do at each step, what Mushi Mushi does, and the real screens from report button to fix prompt."
 ---
 
 # How Mushi Mushi works
@@ -17,40 +17,63 @@ The console clips use Mushi Mushi's own app, so every bug and pull request in
 them is real and public. The first clip uses a made-up shop, because it shows
 what *your* users see.
 
-## How a bug moves
+## The four steps
 
-## What it fixes about bug tracking today
+| Step | What you do | What Mushi Mushi does |
+| --- | --- | --- |
+| **1. Add the button** | Copy one line from Mushi Mushi and ask Lovable or Bolt to add it. In Cursor or Claude Code, it's one command. About 5 minutes. | Gives you the line with your app's details already filled in. |
+| **2. A customer reports a problem** | Nothing. | Your customer taps the button and types one sentence, like "the Pay button does nothing". Mushi Mushi adds a picture of their screen, the page they were on and what they tapped. |
+| **3. Read what went wrong** | Open the report. It's a short note in plain English. | Works out the likely cause, says how serious it is and how sure it is, and groups repeat reports of the same bug into one. |
+| **4. Let your AI fix it** | Copy the fix instructions into Lovable, Bolt, Cursor or Claude Code. Check the change, then publish. | Writes the fix instructions for your AI builder. When you mark the bug fixed, it can let the customer who reported it know. |
 
-| What hurts today | What Mushi Mushi does |
-| --- | --- |
-| A user writes "it's broken" and you don't know where to start. | Each report comes with the screen, the page and what they tapped, and a diagnosis that says why it broke. |
-| You didn't write the code line by line, so the stack trace means little. | The diagnosis is plain English: the cause, the fix and the steps to see it happen. |
-| You ask the AI to fix it, and it guesses, because it has no context. | The fix prompt carries the report, the evidence and the files involved. Your editor can also fetch it over MCP. |
-| Most people who hit a bug just leave. | A report button in the corner takes one sentence. Mushi Mushi also runs its own checks, so bugs nobody reports still show up. |
-| Reports are scattered across email, Slack, Sentry and app reviews. | They land in one list, duplicates merged, ranked by how bad they are and how many people they hit. |
-| Agent-written pull requests pile up, and each needs a careful read. | A second AI reads each one next to the original report and can refuse it. Approved fixes can ship together, in one CI run. |
-| You never close the loop with the person who told you. | When the fix merges, the bug is marked fixed and the reporter is told. |
+**You stay in charge.** Nothing changes in your app until you approve it.
 
-More on who feels which pain: [Who it's for](/who-its-for).
+**You don't need other tools.** If you already use an error tracker such as
+Sentry, you can connect it, but you don't have to.
 
 ## 1. Your user reports a bug
 
-To put the button in your app, run `npx mushi-mushi` in your app's folder, or
-paste one script tag. See the [Quickstart](/quickstart).
+To put the button in your app, paste one prompt into Lovable or Bolt (see
+[Lovable or Bolt](/quickstart/lovable-bolt)), or run `npx mushi-mushi` in your
+app's folder. See the [Quickstart](/quickstart).
 
 ## 2. From the report to a merged fix
 
 This is a real report: the app switcher in Mushi Mushi's own console said
 "All apps" on pages that only show one.
 [The pull request that fixed it](https://github.com/kensaurus/mushi-mushi/pull/689)
-is public.
+(a proposed code change you read before accepting it) is public.
 
-## 3. Connect your AI editor
+## What it fixes about bug tracking today
+
+| What hurts today | What Mushi Mushi does |
+| --- | --- |
+| A user writes "it's broken" and you don't know where to start. | Each report comes with the screen, the page and what they tapped, and a diagnosis that says why it broke. |
+| You didn't write the code line by line, so the error message means little. | The diagnosis is plain English: the cause, the fix and the steps to see it happen. |
+| You ask the AI to fix it, and it guesses, because it has no context. | The fix prompt carries the report, the evidence and the files involved. |
+| Most people who hit a bug just leave. | A report button in the corner takes one sentence. You can also [check your live site free](/check) and connect [deeper checks](/what-it-does) later. |
+| Reports are scattered across email, chat, error tools and app reviews. | They land in one list, duplicates merged, ranked by how bad they are and how many people they hit. |
+| You never close the loop with the person who told you. | When you mark the bug fixed, the person who reported it can be told. |
+
+More on who feels which pain: [Who it's for](/who-its-for).
+
+## For developers
+
+The rest of this page is for people who read their own code and run CI (a
+service that runs your tests on every change).
+
+### How a bug moves
+
+Agent-written pull requests can pile up. A second AI reads each one next to the
+original report and can refuse it, and approved fixes can ship together in one
+CI run.
+
+### Connect your AI editor
 
 The [Connect page guide](/admin/connect) covers each editor, and
 [MCP](/sdks/mcp) lists what your editor can ask Mushi Mushi for.
 
-## 4. Watch every fix ship
+### Watch every fix ship
 
 The numbers in this clip are real: on Mushi Mushi's own app, many fixes wait
 for a person's decision, and the page says so instead of hiding them.
@@ -58,6 +81,7 @@ for a person's decision, and the page says so instead of hiding them.
 
 ## Where to go next
 
+- [Lovable or Bolt](/quickstart/lovable-bolt): no terminal, about five minutes.
 - [Quickstart](/quickstart): install it on your app in a few minutes.
 - [Sample diagnosis](/demo/diagnosis): one bug, from report to fix prompt, no sign-up.
 - [How a bug moves, step by step](/concepts/closed-loop): the same loop, in detail.

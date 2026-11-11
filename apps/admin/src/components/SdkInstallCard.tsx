@@ -48,6 +48,7 @@ import { SdkInstallConfigurator } from './sdk-install/SdkInstallConfigurator'
 import { SdkInstallKeyPanel } from './sdk-install/SdkInstallKeyPanel'
 import { SdkInstallPreview } from './sdk-install/SdkInstallPreview'
 import { SdkInstallSnippetColumn } from './sdk-install/SdkInstallSnippetColumn'
+import { HostingGuide } from './sdk-install/HostingGuide'
 import type { AssistantPreviewState, RemoteSdkConfig, SdkInstallCardProps } from './sdk-install/sdk-install-types'
 
 export function SdkInstallCard({
@@ -346,6 +347,18 @@ export function SdkInstallCard({
           code={code}
           install={install}
         />
+        {!isServerFramework(framework) && (
+          <HostingGuide
+            projectId={projectId}
+            apiKey={snippetKey ?? 'YOUR_SDK_KEY'}
+            bundler={bundler}
+            scriptTag={framework === 'loader'}
+            onUseScriptTag={() => {
+              autoFrameworkApplied.current = true
+              setFramework('loader')
+            }}
+          />
+        )}
         </div>
       </div>
       </div>

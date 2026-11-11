@@ -50,9 +50,9 @@ import { platformAnthropicKey } from '../../_shared/ai-provider.ts';
 //   DELETE /v1/admin/ask-mushi/threads/:id      — purge a thread (RLS-scoped).
 //   GET    /v1/admin/ask-mushi/mentions         — typeahead for @ chips.
 //
-// Back-compat: the old /v1/admin/assist path 308-redirects to the new
-// /messages endpoint so deployed admin builds keep working until they
-// pull the renamed bundle.
+// The old /v1/admin/assist back-compat path was removed 2026-11-11: no
+// console build has called it since the rename, and it saw no traffic in
+// 11 sampled days of edge logs.
 
 // ── Shared helpers ────────────────────────────────────────────────────────
 
@@ -661,7 +661,6 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
       context?: AskMushiContext;
       messages?: AskMushiMessage[];
     },
-    options: { legacyResponse?: boolean } = {},
   ): Promise<Response> {
     const userId = c.get('userId') as string;
 
@@ -876,18 +875,6 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
         meta,
       };
 
-      if (options.legacyResponse) {
-        return c.json({
-          ok: true,
-          data: {
-            message: data.message,
-            model: data.model,
-            fallbackUsed: data.fallbackUsed,
-            latencyMs: data.latencyMs,
-          },
-        });
-      }
-
       return c.json({ ok: true, data });
     } catch (err) {
       const latencyMs = Date.now() - started;
@@ -909,10 +896,7 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
     }
   }
 
-  async function handleAskMushiMessage(
-    c: Context,
-    options: { legacyResponse?: boolean } = {},
-  ): Promise<Response> {
+  async function handleAskMushiMessage(c: Context): Promise<Response> {
     const userId = c.get('userId') as string;
     const body = (await c.req.json().catch(() => null)) as {
       threadId?: string;
@@ -930,7 +914,7 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
     }
     const rateBlocked = await claimAskMushiRateLimit(userId);
     if (rateBlocked) return rateBlocked;
-    return handleAskMushiMessageBody(c, body, options);
+    return handleAskMushiMessageBody(c, body);
   }
 
   app.post('/v1/admin/ask-mushi/messages', jwtAuth, (c) => handleAskMushiMessage(c));
@@ -1471,13 +1455,4 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
     );
     return c.json({ ok: true, data: { recorded: true } });
   });
-
-  // ── Back-compat: legacy /v1/admin/assist ─────────────────────────────────
-  //
-  // Deployed admin builds (and the live demo) still POST to /v1/admin/assist
-  // with the old `{ route, context, messages }` shape. Forward to the new
-  // /messages endpoint by wrapping the handler so we don't have to depend on
-  // browsers honouring 308 with a body — Edge Runtime fetch does, but
-  // EventSource does not.
-  app.post('/v1/admin/assist', jwtAuth, (c) => handleAskMushiMessage(c, { legacyResponse: true }));
 }

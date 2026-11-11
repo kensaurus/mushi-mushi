@@ -15,8 +15,8 @@ describe('resolveDefaultSdkFramework', () => {
     expect(resolveDefaultSdkFramework('my-app', pkg)).toBe('expo')
   })
 
-  it('falls back to react for unknown slug without package.json', () => {
-    expect(resolveDefaultSdkFramework('my-app')).toBe('react')
+  it('falls back to the Script tag for an unknown stack (audit 2026-11-11: works on every host, Lovable first)', () => {
+    expect(resolveDefaultSdkFramework('my-app')).toBe('loader')
   })
 
   it('picks a web framework the app’s package.json names', () => {

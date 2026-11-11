@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 227 pages, generated from llms.txt. */
+/** 233 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -39,7 +39,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/",
     markdown: "index.md",
     keywords: ["know", "ai-built", "app", "broke", "fix", "ready"],
-    headings: ["See it work, on a real bug", "What it takes", "Why I built it", "What this is (and is not)"],
+    headings: ["Will my customers actually report bugs?", "See it work, on a real bug", "What it takes", "Why I built it", "What this is (and is not)"],
     excerpt: "Your AI shipped it. Mushi Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional.",
   },
   {
@@ -979,6 +979,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "Choose where the Mushi Mushi bug-report button lives: corner stamp, edge tab, banner, your own button via attach, or fully manual, on web and mobile.",
   },
   {
+    title: "Samples you can read without signing up",
+    url: docUrl("/demo"),
+    route: "/demo",
+    markdown: "demo/index.md",
+    keywords: ["demo", "samples", "can", "read", "without", "signing"],
+    headings: [],
+    excerpt: "Try Mushi Mushi before you install anything. A sample diagnosis from a customer's words to the fix prompt, and a short clip of what your users see.",
+  },
+  {
     title: "Sample diagnosis: Pay now does nothing on a phone",
     url: docUrl("/demo/diagnosis"),
     route: "/demo/diagnosis",
@@ -988,13 +997,22 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "A sample Mushi Mushi diagnosis you can read without signing up. A user's complaint, what the widget captured, the plain-English cause and the fix prompt.",
   },
   {
+    title: "Glossary",
+    url: docUrl("/glossary"),
+    route: "/glossary",
+    markdown: "glossary.md",
+    keywords: ["glossary"],
+    headings: [],
+    excerpt: "The words you will see on Mushi Mushi's site and console, each explained in one or two plain sentences, from diagnosis and fix prompt to MCP and pull request.",
+  },
+  {
     title: "How Mushi Mushi works, shown on real screens",
     url: docUrl("/how-it-works"),
     route: "/how-it-works",
     markdown: "how-it-works.md",
     keywords: ["how-it-works", "works", "shown", "real", "screens"],
-    headings: ["How a bug moves", "What it fixes about bug tracking today", "1. Your user reports a bug", "2. From the report to a merged fix", "3. Connect your AI editor", "4. Watch every fix ship", "Where to go next"],
-    excerpt: "Watch a bug go from a user's report to a merged fix: the report button, the plain-English diagnosis, the fix prompt for your editor, and the pipeline.",
+    headings: ["The four steps", "1. Your user reports a bug", "2. From the report to a merged fix", "What it fixes about bug tracking today", "For developers", "How a bug moves", "Connect your AI editor", "Watch every fix ship"],
+    excerpt: "Watch a bug go from a user's report to a fix: what you do at each step, what Mushi Mushi does, and the real screens from report button to fix prompt.",
   },
   {
     title: "Cursor integration",
@@ -1398,7 +1416,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/pricing",
     markdown: "pricing.md",
     keywords: ["pricing", "free", "builder", "studio", "self-host"],
-    headings: ["Plans", "What counts as a diagnosis", "Pricing estimator", "Example bills", "Why apps, not reports?", "Why diagnoses, not events", "Your own AI key and the self-host path", "Compared to Sentry + Seer"],
+    headings: ["All plans", "What counts as a diagnosis", "Pricing estimator", "Example bills", "Why apps, not reports?", "Why diagnoses, not events", "Your own AI key and the self-host path", "Compared to Sentry + Seer"],
     excerpt: "Mushi Mushi pricing. Free for one app and 100 AI bug diagnoses a month. Builder $29/mo for 3 apps, Studio $79/mo for 10. Free to self-host.",
   },
   {
@@ -1501,13 +1519,13 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "Set up the Mushi Mushi MCP server with npx mushi-mushi setup. Read bug reports, get fix context, and dispatch fixes from Cursor, Claude Code or any MCP client.",
   },
   {
-    title: "Mobile (overview)",
+    title: "Your phone app: Expo, React Native or Capacitor",
     url: docUrl("/quickstart/mobile"),
     route: "/quickstart/mobile",
     markdown: "quickstart/mobile.md",
-    keywords: ["quickstart", "mobile", "overview"],
-    headings: [],
-    excerpt: "Mushi Mushi shake-to-report for mobile apps. React Native and Capacitor install from npm with npx mushi-mushi; iOS, Android and Flutter SDKs are previews.",
+    keywords: ["quickstart", "mobile", "phone", "app", "expo", "react", "native", "capacitor"],
+    headings: ["What your users do", "What you get", "Pick how your app is built", "Native iOS, Android and Flutter (previews)"],
+    excerpt: "Add a shake-to-report button to your Expo, React Native or Capacitor app. Reports wait for the phone to go back online, then get a plain-English diagnosis.",
   },
   {
     title: "Bug report widget for React",
@@ -2005,6 +2023,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "Where Mushi Mushi fits. An open-source Sentry alternative, a debugger for Cursor and Claude Code apps, and an MCP bug-fixing server for your editor.",
   },
   {
+    title: "You build apps for clients",
+    url: docUrl("/use-cases/agency-client-apps"),
+    route: "/use-cases/agency-client-apps",
+    markdown: "use-cases/agency-client-apps.md",
+    keywords: ["use-cases", "use", "cases", "agency-client-apps", "agency", "client", "apps", "build", "clients"],
+    headings: ["What goes wrong for you", "What Mushi Mushi does", "What you do", "How long it takes", "What it costs", "Next"],
+    excerpt: "For agencies and freelancers who run several client apps. One report button per app, one inbox with a plain-English cause per bug, and a plan sized by apps.",
+  },
+  {
     title: "AI code bug fixing: report to merged fix",
     url: docUrl("/use-cases/ai-code-bug-fixing"),
     route: "/use-cases/ai-code-bug-fixing",
@@ -2050,6 +2077,24 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "What an MCP bug-fixing server is and how the Mushi Mushi one works. Cursor, Claude Code or Codex read live bug reports, pull fix context, and dispatch fixes.",
   },
   {
+    title: "You have a phone app: Expo, React Native or Capacitor",
+    url: docUrl("/use-cases/mobile-app"),
+    route: "/use-cases/mobile-app",
+    markdown: "use-cases/mobile-app.md",
+    keywords: ["use-cases", "use", "cases", "mobile-app", "mobile", "app", "have", "phone", "expo", "react", "native", "capacitor"],
+    headings: ["What goes wrong for you", "What Mushi Mushi does", "What you do", "How long it takes", "What it costs", "Next"],
+    excerpt: "For people with a phone app built with Expo, React Native or Capacitor. Users shake to report, reports wait for signal, and you get the cause in plain English.",
+  },
+  {
+    title: "You built your app with Lovable or Bolt",
+    url: docUrl("/use-cases/no-code-founder"),
+    route: "/use-cases/no-code-founder",
+    markdown: "use-cases/no-code-founder.md",
+    keywords: ["use-cases", "use", "cases", "no-code-founder", "code", "founder", "built", "app", "lovable", "bolt"],
+    headings: ["What goes wrong for you", "What Mushi Mushi does", "What you do", "How long it takes", "What it costs", "Next"],
+    excerpt: "For founders who built their app with Lovable or Bolt and can't read the code. A report button, a plain-English cause and fix words to paste back. No terminal.",
+  },
+  {
     title: "Sentry alternative for AI-built apps",
     url: docUrl("/use-cases/sentry-alternative"),
     route: "/use-cases/sentry-alternative",
@@ -2057,6 +2102,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["use-cases", "use", "cases", "sentry-alternative", "sentry", "alternative", "ai-built", "apps"],
     headings: ["Instead of Sentry, or alongside it — your call", "Side by side", "What \"diagnosis\" means here", "Try it on your app"],
     excerpt: "Mushi Mushi, an open-source Sentry alternative for AI-built apps. Plain-English diagnoses and ready fixes, not raw stack traces. Works with or without Sentry.",
+  },
+  {
+    title: "What is Mushi Mushi?",
+    url: docUrl("/what-is-mushi-mushi"),
+    route: "/what-is-mushi-mushi",
+    markdown: "what-is-mushi-mushi.md",
+    keywords: ["what-is-mushi-mushi"],
+    headings: ["How Mushi Mushi works", "What it costs", "What about bugs nobody reports?", "Next"],
+    excerpt: "Mushi Mushi in one screen. What you do, what it does, how long setup takes and what it costs, in plain English, for people who build apps with AI.",
   },
   {
     title: "What else Mushi Mushi does",

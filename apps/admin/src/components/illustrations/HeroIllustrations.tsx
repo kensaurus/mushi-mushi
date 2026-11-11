@@ -34,19 +34,6 @@ const wrap = (children: JSX.Element, { className, size = 56, accent = 'text-bran
   </span>
 )
 
-export function HeroFixWrench(props: IllustrationProps = {}) {
-  return wrap(
-    (
-      <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M44 12a8 8 0 0 0-10 10l-22 22a3 3 0 0 0 4 4l22-22a8 8 0 0 0 10-10l-6 6-4-4 6-6Z" className="opacity-80" />
-        <circle cx="14" cy="50" r="2" fill="currentColor" className="opacity-60" />
-        <path d="M50 36l8 8M50 44l8-8" className="opacity-50" />
-      </svg>
-    ),
-    props,
-  )
-}
-
 export function HeroJudgeScale(props: IllustrationProps = {}) {
   return wrap(
     (

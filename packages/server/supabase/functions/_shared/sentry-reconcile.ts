@@ -277,3 +277,44 @@ export async function pullSentryResolves(
   log.info('Sentry pull', { ...summary });
   return summary;
 }
+
+/**
+ * Whether a `resolved` issue webhook should close its Mushi report. The pull
+ * above already ignores Sentry's own resolves (auto-resolve by age, a metric
+ * alert recovering); the webhook used to close the report on any resolve, so
+ * a bug that only went quiet was marked done. This applies the same rule:
+ * read the issue's activity and follow only a person's, a commit's, a pull
+ * request's or a release's resolve. No Sentry credentials (a webhook-only
+ * organization) keeps the old behaviour, since nothing else can check it.
+ * A failed read does not close the report: the pull checks it again within
+ * 15 minutes and closes it then if the resolve was a real one.
+ */
+export async function webhookResolveCounts(
+  db: SupabaseClient,
+  projectId: string,
+  issueId: string,
+  deps: {
+    credentials?: (db: SupabaseClient, projectId: string) => Promise<SentryCredentials | null>;
+    getIssue?: (token: string, org: string, issueId: string) => Promise<Parameters<typeof followsSentryResolve>[0]>;
+  } = {},
+): Promise<boolean> {
+  const creds = await (deps.credentials ?? loadSentryCredentials)(db, projectId);
+  if (!creds) return true;
+  try {
+    const issue = await (deps.getIssue ?? ((t, o, id) => getSentryIssue(t, o, id)))(creds.token, creds.orgSlug, issueId);
+    const { data } = await db
+      .from('report_external_issues')
+      .select('reports!inner(reopened_at, regressed_at)')
+      .eq('system', 'sentry')
+      .eq('project_id', projectId)
+      .eq('external_id', issueId)
+      .limit(1);
+    const row = (data ?? [])[0] as unknown as Pick<PullRow, 'reports'> | undefined;
+    const report = Array.isArray(row?.reports) ? row?.reports[0] : row?.reports;
+    const since = [report?.reopened_at, report?.regressed_at].filter((t): t is string => !!t).sort().at(-1) ?? null;
+    return followsSentryResolve(issue, since);
+  } catch (err) {
+    log.warn('Sentry webhook resolve not verified; the pull will check it', { issueId, err: String(err).slice(0, 200) });
+    return false;
+  }
+}

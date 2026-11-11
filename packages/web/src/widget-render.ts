@@ -242,7 +242,7 @@ export function renderOutdatedBanner(ctx: WidgetRenderCtx): string {
   return `<div class="mushi-outdated" role="status"><strong>Mushi SDK ${esc(current)}</strong> ${latest ? `latest is ${esc(latest)}.` : 'needs attention.'}${message ? ` <span>${esc(message)}</span>` : ''}</div>`;
 }
 
-/** "Bug reports by Mushi" mark (see MushiWidgetConfig.brandFooter); new-tab link, click wired via data-action. */
+/** "Bug reports by Mushi Mushi" mark (see MushiWidgetConfig.brandFooter); new-tab link, click wired via data-action. */
 export function renderBrandFooter(ctx: WidgetRenderCtx): string {
   if (ctx.config.brandFooter !== true) return '';
   return `<div class="mushi-brand-footer"><a class="mushi-brand-link" href="${esc(buildBrandFooterHref(ctx.brandRef))}" target="_blank" rel="noopener noreferrer" data-action="brand-footer">${esc(ctx.locale.flows.poweredBy)}<span aria-hidden="true"> ↗</span></a></div>`;

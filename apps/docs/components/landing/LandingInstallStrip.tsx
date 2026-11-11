@@ -1,7 +1,8 @@
 'use client'
 
 /**
- * The hero's install box: pick your editor (Claude Code, Cursor, other), then
+ * The hero's install box, its second action (ADR 0056): pick what you build
+ * with (Lovable or Bolt, Claude Code, Cursor, other), then
  * three numbered steps — connect the editor, paste one prompt that has the AI
  * set Mushi Mushi up and send a test report, ask it to fix a real bug. The steps are
  * the cycle of ADR 0027 (connect, bugs come in, a fix you review), and each one
@@ -106,7 +107,8 @@ function Check({ children }: { children: string }) {
 }
 
 export function LandingInstallStrip() {
-  const [tab, setTab] = useState<TabId>('claude-code')
+  // The first tab is open on load: Lovable or Bolt (ADR 0056).
+  const [tab, setTab] = useState<TabId>(LANDING_INSTALL.tabs[0].id)
   const baseId = useId()
   const tabs = LANDING_INSTALL.tabs
   const current = tabs.find((t) => t.id === tab) ?? tabs[0]

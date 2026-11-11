@@ -1,0 +1,20 @@
+# Samples you can read without signing up
+
+Source: https://kensaur.us/mushi-mushi/docs/demo
+
+---
+title: Samples you can read without signing up
+description: Try Mushi Mushi before you install anything. A sample diagnosis from a customer's words to the fix prompt, and a short clip of what your users see.
+---
+
+# Samples
+
+You can see what Mushi Mushi does before you sign up or install anything.
+
+- **[Sample diagnosis](/demo/diagnosis)**: a customer says the checkout button
+  does nothing on their phone. See what Mushi Mushi captured, the plain-English
+  cause and the fix prompt your AI can use.
+- **[How it works, on video](/how-it-works)**: short clips of a customer
+  reporting a bug and of the bug going from report to fix.
+- **[Check your live site](/check)**: a free check of your own site, with no
+  sign-up. It is separate from bug reports.

@@ -54,7 +54,9 @@ it.
 
 ### 1.5 The category we own
 
-**The bug mediator for AI-built apps.** One place every bug — a user tap on the
+**Bug fixing for AI-built apps.** (ADR 0056, 2026-11-11; it was "the bug
+mediator for AI-built apps", ADR 0004. "Mediator" still names how it works
+inside, below, but never leads a public surface.) One place every bug — a user tap on the
 widget, a Sentry alert, a Slack thread, a failing check — gets understood in
 plain English and comes out the other side as a ready-to-apply fix. Not "error
 monitoring" (that's Sentry's word, and it sounds like ops work). Not

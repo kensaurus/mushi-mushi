@@ -14,7 +14,7 @@ import {
   resolveOwnedProject,
   callerCanAccessProject,
 } from '../shared.ts';
-import { resolveLlmKey } from '../../_shared/byok.ts';
+import { loadFixAgentCheck } from '../../_shared/agent-credits-load.ts';
 import {
   buildTopPriority,
   deriveActivationPhase,
@@ -201,28 +201,34 @@ async function buildPreflightSummary(
   const access = await callerCanAccessProject(c, db, userId, projectId);
   if (!access.allowed) return null;
 
-  const [settingsRes, integrationSignals, anthropicKey] = await Promise.all([
+  const [settingsRes, integrationSignals] = await Promise.all([
     db
       .from('project_settings')
-      .select('codebase_index_enabled, autofix_enabled')
+      .select('codebase_index_enabled, autofix_enabled, autofix_agent')
       .eq('project_id', projectId)
       .maybeSingle(),
     loadIntegrationSignals(db, [projectId]),
-    // Is a key configured? A probe, not a generation: no budget check.
-    resolveLlmKey(db, projectId, 'anthropic', { purpose: 'probe' }),
   ]);
 
   const settings = settingsRes.data;
   // Same rule as the setup checklist: a repo AND a credential to open PRs with.
   const hasGithub = integrationSignals.get(projectId)?.hasGithub ?? false;
-  const hasAnthropic = Boolean(anthropicKey);
   const hasCodebase = Boolean(settings?.codebase_index_enabled);
   const hasAutofix = Boolean(settings?.autofix_enabled);
+  // The agent that runs the fix and its key, the same line as
+  // GET /v1/admin/projects/:id/preflight (it used to demand an Anthropic key
+  // even for a team on OpenAI).
+  const agent = await loadFixAgentCheck(
+    db,
+    projectId,
+    (settings as { autofix_agent?: string | null } | null)?.autofix_agent ?? null,
+    new Date(),
+  );
 
   const checks = [
     { key: 'github', ready: hasGithub, label: 'GitHub repo connected' },
     { key: 'codebase', ready: hasCodebase, label: 'Codebase indexed' },
-    { key: 'anthropic', ready: hasAnthropic, label: 'Anthropic key available' },
+    { key: 'agent', ready: agent.ready, label: agent.label },
     { key: 'autofix', ready: hasAutofix, label: 'Autofix enabled' },
   ];
 

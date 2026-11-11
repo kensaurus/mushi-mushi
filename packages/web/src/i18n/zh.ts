@@ -175,6 +175,6 @@ export const zh: MushiLocale = {
     changelog: {
       whatsNew: '{version} 新功能',
     },
-    poweredBy: '错误反馈由 Mushi 提供',
+    poweredBy: '错误反馈由 Mushi Mushi 提供',
   },
 };

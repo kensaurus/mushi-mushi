@@ -64,8 +64,12 @@ export interface MarketingUrls {
   repo: (path?: string) => string
   /** mailto: link with optional subject */
   contact: (subject?: string) => string
-  /** Public /screenshots/ asset resolver for landing-page GIF previews. */
-  screenshots: (filename: string) => string
+  /**
+   * Unused since the landing canvas (its only reader) was removed on
+   * 2026-11-11. Optional so hosts that still pass it keep compiling; drop it
+   * once apps/admin PublicIntegrationsPage stops setting it.
+   */
+  screenshots?: (filename: string) => string
 }
 
 export interface MarketingTheme {

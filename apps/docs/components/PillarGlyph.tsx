@@ -33,6 +33,16 @@ export function PillarGlyph({ glyph }: { glyph: LandingPillar['glyph'] }) {
   }
 
   switch (glyph) {
+    // Add the button: a page with a small button being added to it.
+    case 'install':
+      return (
+        <svg {...common}>
+          <rect x="3.5" y="4" width="17" height="14" rx="2" />
+          <path d="M3.5 8h17" />
+          <rect x="12.5" y="12" width="5.5" height="3.5" rx="1.2" />
+          <path d="M7 11.5v4M5 13.5h4" />
+        </svg>
+      )
     // A user speaks up: a report bubble with the note they left.
     case 'report':
       return (

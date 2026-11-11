@@ -19,7 +19,7 @@
 import { LAB_FEATURES } from './labs'
 import {
   CHECK_GROUPS,
-  CORE_NAV_PATHS,
+  coreNavPathsFor,
   NAV_REGISTRY,
   NAV_SECTION_META,
   type NavRegistryEntry,
@@ -76,7 +76,6 @@ export function activeParent(pathname: string, search: string): string | null {
 }
 
 const CHILD_PATHS: ReadonlySet<string> = new Set(Object.values(NAV_CHILDREN).flat())
-const CORE: ReadonlySet<string> = new Set(CORE_NAV_PATHS)
 
 export interface MorePagesGroup {
   sectionId: NavSectionId
@@ -93,10 +92,14 @@ export function morePages(viewer: SidebarViewer, pinnedLabIds: ReadonlySet<strin
   const pinned = new Set(
     LAB_FEATURES.filter((f) => pinnedLabIds.has(f.id)).map((f) => f.paths[0]),
   )
+  // A builder's core is shorter (coreNavPathsFor): Apps, Integrations, Checks
+  // and Team move here. Sub-pages stay with their page (Checks lists its
+  // checks), so the list does not grow by a dozen check pages.
+  const core = new Set(coreNavPathsFor(viewer))
   const hidden = NAV_REGISTRY.filter(
     (e) =>
       e.inSidebar !== false &&
-      !CORE.has(e.path) &&
+      !core.has(e.path) &&
       !CHILD_PATHS.has(e.path) &&
       !pinned.has(e.path) &&
       !FOOTER_NAV_PATHS.includes(e.path) &&

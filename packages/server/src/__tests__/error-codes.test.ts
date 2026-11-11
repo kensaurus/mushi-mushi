@@ -11,6 +11,10 @@ import {
   isTransientDbConnectionError,
   isTransientGatewayStatus,
   logDbFailure,
+  dbReadFailure,
+  isTransientDbFailure,
+  retryTransientRead,
+  TransientDbError,
 } from '../../supabase/functions/_shared/error-codes.ts'
 
 describe('isTransientGatewayStatus (MUSHI-MUSHI-SERVER-2R)', () => {
@@ -311,5 +315,73 @@ describe('logDbFailure', () => {
     expect(logDbFailure(logger, 'c', null)).toBe(false)
     expect(logger.calls.map((c) => c.level)).toEqual(['error', 'error', 'error'])
     expect(logger.calls[0].meta).toEqual({ k: 1 })
+  })
+})
+
+// Sentry 7821462678 / 7821508537 (2026-10-31 04:11 UTC): merge-queue and
+// sentry-seer-poll sent a whole Cloudflare 521 page to Sentry.
+describe('dbReadFailure / isTransientDbFailure / retryTransientRead', () => {
+  const CF_521 =
+    '<!DOCTYPE html>\n<head><title>supabase.co | 521: Web server is down</title></head>' +
+    `<body>${'z'.repeat(4000)}</body>`
+
+  it('a gateway page becomes a TransientDbError titled by the page', () => {
+    const err = dbReadFailure('merge-queue read failed', { message: CF_521 })
+    expect(err).toBeInstanceOf(TransientDbError)
+    expect(err.message).toBe('merge-queue read failed: [upstream gateway error] supabase.co | 521: Web server is down')
+    expect(isTransientDbFailure(err)).toBe(true)
+  })
+
+  it('a pooler reset and the "Project not specified." body are transient too', () => {
+    expect(isTransientDbFailure(dbReadFailure('x', { message: 'upstream connect error or disconnect/reset before headers' }))).toBe(true)
+    expect(isTransientDbFailure(dbReadFailure('x', { message: 'Project not specified.' }))).toBe(true)
+  })
+
+  it('a statement timeout stays a plain Error: it is a slow query, not an outage', () => {
+    const err = dbReadFailure('merge-queue read failed', {
+      message: 'canceling statement due to statement timeout',
+      code: '57014',
+    })
+    expect(err).not.toBeInstanceOf(TransientDbError)
+    expect(isTransientDbFailure(err)).toBe(false)
+    expect(err.message).toBe('merge-queue read failed: canceling statement due to statement timeout')
+  })
+
+  it('a coded error never becomes transient because its text quotes HTML', () => {
+    const err = dbReadFailure('x', { message: CF_521, code: '42703' })
+    expect(isTransientDbFailure(err)).toBe(false)
+    expect(err.message).not.toContain('<!DOCTYPE')
+  })
+
+  it('matches a ProjectAccessReadError only when it is flagged transient', () => {
+    const flagged = Object.assign(new Error('project access read failed'), { name: 'ProjectAccessReadError', transient: true })
+    const real = Object.assign(new Error('project access read failed'), { name: 'ProjectAccessReadError', transient: false })
+    expect(isTransientDbFailure(flagged)).toBe(true)
+    expect(isTransientDbFailure(real)).toBe(false)
+    expect(isTransientDbFailure(Object.assign(new Error(CF_521), { transient: true }))).toBe(false)
+  })
+
+  it('retries a read once after a gateway page, and returns the second answer', async () => {
+    let calls = 0
+    const out = await retryTransientRead(async () => {
+      calls++
+      return calls === 1 ? { data: null, error: { message: CF_521 } } : { data: [1], error: null }
+    }, 0)
+    expect(calls).toBe(2)
+    expect(out).toEqual({ data: [1], error: null })
+  })
+
+  it('does not retry a success or a real error, and stops after one retry', async () => {
+    let calls = 0
+    await retryTransientRead(async () => { calls++; return { data: [], error: null } }, 0)
+    expect(calls).toBe(1)
+    calls = 0
+    const coded = await retryTransientRead(async () => { calls++; return { data: null, error: { message: 'boom', code: '57014' } } }, 0)
+    expect(calls).toBe(1)
+    expect(coded.error?.code).toBe('57014')
+    calls = 0
+    const down = await retryTransientRead(async () => { calls++; return { data: null, error: { message: CF_521 } } }, 0)
+    expect(calls).toBe(2)
+    expect(down.error?.message).toBe(CF_521)
   })
 })

@@ -7,8 +7,24 @@ was deleted; every remaining finding is the A2 register or debt to pay down.
 
 | Mode | Command | Error-level issues | CI threshold |
 |---|---|---:|---|
-| production | `pnpm exec knip --production --reporter json` | **45** | `--max-issues 45` |
-| default | `pnpm exec knip --reporter json` | **31** | `--max-issues 31 --treat-config-hints-as-errors` |
+| production | `pnpm exec knip --production --reporter json` | **43** | `--max-issues 43` |
+| default | `pnpm exec knip --reporter json` | **29** | `--max-issues 29 --treat-config-hints-as-errors` |
+
+> **Re-measured 2026-11-11 (housekeeping pass): 43 production / 29 default**
+> (ceilings 45 → 43 and 31 → 29; 42 and 28 fail). This pass deleted the unimported
+> `packages/agents/src/drift-agent.ts` copy and the `react-dom` / `@types/react-dom`
+> devDependencies marketing-ui no longer uses. Since the 2026-10-23 measurement,
+> master had also dropped `TabbedSubNav.tsx` and `pageHelpPrefs.ts` from the
+> unused-file list and the unused `yaml` devDependency in packages/server, and added
+> unused exports owned by other lanes: `sentryQuerySettled`
+> (`apps/admin/src/lib/useSentryConnection.ts`, production) and `apiFor` /
+> `preflight` (`packages/cli/src/commands/work.ts`, default).
+> knip never sees unused exports from a private package's entry, so the
+> unmounted marketing-ui landing canvas (`Hero`, `MushiCanvas`, `ClosingCta`,
+> `SwitchingFromStrip`, `PersonaTrack`, `PrivacyPosture` and `canvas/*`, about
+> 2,600 lines) was found by an import-graph walk from the names apps import,
+> not by this count. Measured on a clean install of the branch, after
+> `pnpm typecheck` built every workspace dependency.
 
 > **Re-measured 2026-10-23: 45 production / 31 default** (44 and 30 fail).
 > `apps/admin` production exports fell 6 → 3. `bottleneckChipLabel` had no caller

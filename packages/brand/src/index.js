@@ -70,7 +70,7 @@ export const MUSHI_TAGLINE_LEGACY = {
 const PROMISE = 'Plain-English diagnosis + a ready fix, in your editor'
 
 /** The category we own (VISION.md §1.5) — shared by `category` and `pitch`. */
-const CATEGORY = 'The bug mediator for AI-built apps'
+const CATEGORY = 'Bug fixing for AI-built apps' // ADR 0056 (was "The bug mediator for AI-built apps", ADR 0004)
 
 /**
  * Primary tagline ladder (v2) — the comprehension layer for AI-built apps.
@@ -91,7 +91,7 @@ export const MUSHI_TAGLINE_V2 = {
    * description, npm `description`, og:description fallback. Keep these byte-for-
    * byte identical across surfaces (the consistency check enforces it).
    */
-  oneLiner: `Every bug in one queue — user reports, Sentry errors, Slack, coding agents. ${PROMISE}. Open source.`,
+  oneLiner: `Your users tap a button to report a bug, and Mushi Mushi checks your live site too. ${PROMISE}. Open source.`,
   /**
    * The per-bug promise, no trailing period. Package npm descriptions append
    * it to a role phrase and `category` (scripts/normalize-package-metadata.mjs).
@@ -108,7 +108,7 @@ export const MUSHI_TAGLINE_V2 = {
   heroOffer: '…and fixes it, with a reviewer that says no.',
   /** Lead paragraph directly under hero. */
   subHero:
-    'One queue between your users, your monitoring, and your coding agents — every bug lands with a plain-English diagnosis and a ready-to-apply fix, right inside Cursor and Claude Code.',
+    'Your users tap a button to tell you what broke, and Mushi Mushi checks your live site for you. Every bug gets a plain-English explanation and a fix that Lovable, Cursor or Claude Code can apply.',
   /** Eyebrow, npm category line, llms.txt. The category we own (VISION.md §1.5). */
   category: CATEGORY,
   /**

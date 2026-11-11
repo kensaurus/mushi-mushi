@@ -1,22 +1,20 @@
 /**
  * FILE: api/routes/report-agent-context.ts
- * PURPOSE: What an agent pulls about a report before it edits code, plus the
- *          repo files it keeps next to the code:
+ * PURPOSE: What an agent pulls about a report before it edits code:
  *
  *   GET  /v1/admin/reports/:id/fix-context       paste-ready fix packet + the fields behind it
  *   GET  /v1/admin/reports/:id/blast-radius      graph nodes a change for this report can reach
- *   POST /v1/admin/projects/:id/repo/bootstrap   .cursorrules, .mushi/lessons.json, MUSHI.md
  *
  * Why (2026-09-21): the MCP `triage_issue` tool (stdio and hosted) has called
- * the first two since it shipped and `setup_repo_for_mushi` the third, and
- * none of them existed. triage_issue swallowed the 404s and returned
- * fix_context: null, blast_radius: null with a recommendation to dispatch
- * anyway; setup_repo_for_mushi failed outright.
+ * both since it shipped, and neither existed. triage_issue swallowed the 404s
+ * and returned fix_context: null, blast_radius: null with a recommendation to
+ * dispatch anyway. (POST /v1/admin/projects/:id/repo/bootstrap, built for the
+ * removed setup_repo_for_mushi MCP tool, was dropped 2026-11-11: `mushi setup`
+ * writes those repo files.)
  *
  * Auth: adminOrApiKey (mcp:read) — console JWTs and MCP keys. Report routes
  * authorize the report's own project with canAccessReportProject (org-scoped
- * keys reach every project their owner can); the bootstrap route runs the
- * same check on the project in the URL.
+ * keys reach every project their owner can).
  */
 
 import type { Hono } from 'npm:hono@4';
@@ -28,7 +26,6 @@ import { getRelevantCode } from '../../_shared/rag.ts';
 import { getBlastRadius } from '../../_shared/knowledge-graph.ts';
 import { canAccessReportProject, dbError, parseUuidParam } from '../shared.ts';
 import {
-  buildRepoBootstrapFiles,
   inventoryAnchorOf,
   inventoryBlastRadiusNote,
   mergeAffected,
@@ -37,18 +34,12 @@ import {
   type BlastRadiusAnchor,
   type BlastRadiusAnchorKind,
   type InventoryAnchor,
-  type LessonRow,
 } from './report-agent-context-helpers.ts';
 
 type Db = ReturnType<typeof getServiceClient>;
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 const FIX_CONTEXT_COLUMNS =
   'id, project_id, status, severity, category, component, summary, confidence, stage2_analysis, reproduction_steps, bug_ontology_tags, screenshot_url';
-
-/** Lessons shipped in .mushi/lessons.json; `mushi sync-lessons` uses the same default. */
-const BOOTSTRAP_LESSON_LIMIT = 500;
 
 function notFound(message: string) {
   return { ok: false as const, error: { code: 'NOT_FOUND', message } };
@@ -228,60 +219,6 @@ export function registerReportAgentContextRoutes(app: Hono<{ Variables: Variable
         reason: anchors.length === 0 ? 'no_graph_node' : affected.length === 0 ? 'no_downstream_nodes' : null,
         anchors,
         affected,
-      },
-    });
-  });
-
-  // Repo bootstrap files (once fetched by the retired setup_repo_for_mushi
-  // MCP tool; `mushi setup` replaced it). The server cannot write
-  // into the caller's checkout; it returns the files and the agent writes
-  // them at the repository root. Read-only here, so mcp:read suffices.
-  app.post('/v1/admin/projects/:id/repo/bootstrap', adminOrApiKey(), async (c) => {
-    const projectId = c.req.param('id') ?? '';
-    if (!UUID_RE.test(projectId)) {
-      return c.json(
-        { ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } },
-        400,
-      );
-    }
-    const userId = c.get('userId') as string;
-    const db = getServiceClient();
-
-    if (!(await canAccessReportProject(c, db, userId, projectId))) {
-      return c.json(notFound('Project not found'), 404);
-    }
-    const [projectRes, lessonsRes] = await Promise.all([
-      db.from('projects').select('id, name').eq('id', projectId).maybeSingle(),
-      db
-        .from('lessons')
-        .select('id, rule_text, anti_pattern, severity, frequency, last_reinforced_at, cluster_id')
-        .eq('project_id', projectId)
-        .is('retired_at', null)
-        .order('frequency', { ascending: false })
-        .order('last_reinforced_at', { ascending: false })
-        .limit(BOOTSTRAP_LESSON_LIMIT),
-    ]);
-    if (projectRes.error) return dbError(c, projectRes.error);
-    if (!projectRes.data) return c.json(notFound('Project not found'), 404);
-    if (lessonsRes.error) return dbError(c, lessonsRes.error);
-
-    const lessons = (lessonsRes.data ?? []) as LessonRow[];
-    const files = buildRepoBootstrapFiles({
-      projectId,
-      projectName: (projectRes.data.name as string | null) ?? 'This project',
-      lessons,
-      generatedAt: new Date().toISOString(),
-    });
-
-    return c.json({
-      ok: true,
-      data: {
-        project_id: projectId,
-        lesson_count: lessons.length,
-        files,
-        instructions:
-          'Write each file at its path relative to the repository root, replacing any earlier Mushi copy. ' +
-          'Keep .mushi/lessons.json current with `npx @mushi-mushi/cli sync-lessons` in CI.',
       },
     });
   });

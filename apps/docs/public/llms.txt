@@ -1,6 +1,6 @@
 # Mushi Mushi
 
-> Every bug in one queue — user reports, Sentry errors, Slack, coding agents. Plain-English diagnosis + a ready fix, in your editor. Open source.
+> Your users tap a button to report a bug, and Mushi Mushi checks your live site too. Plain-English diagnosis + a ready fix, in your editor. Open source.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
 Product home: https://kensaur.us/mushi-mushi
@@ -143,8 +143,10 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Runtime config](https://kensaur.us/mushi-mushi/docs/concepts/runtime-config): How the Mushi Mushi SDK fetches widget and capture settings from the console at startup, how they merge with your init options, and when to turn it off.
 - [One login and one purchase across your apps](https://kensaur.us/mushi-mushi/docs/concepts/shared-login): How to let people sign in once and keep what they bought across several of your apps, and what Mushi Mushi checks so it keeps working.
 - [Where the report button lives](https://kensaur.us/mushi-mushi/docs/concepts/trigger-modes): Choose where the Mushi Mushi bug-report button lives: corner stamp, edge tab, banner, your own button via attach, or fully manual, on web and mobile.
+- [Samples you can read without signing up](https://kensaur.us/mushi-mushi/docs/demo): Try Mushi Mushi before you install anything. A sample diagnosis from a customer's words to the fix prompt, and a short clip of what your users see.
 - [Sample diagnosis: Pay now does nothing on a phone](https://kensaur.us/mushi-mushi/docs/demo/diagnosis): A sample Mushi Mushi diagnosis you can read without signing up. A user's complaint, what the widget captured, the plain-English cause and the fix prompt.
-- [How Mushi Mushi works, shown on real screens](https://kensaur.us/mushi-mushi/docs/how-it-works): Watch a bug go from a user's report to a merged fix: the report button, the plain-English diagnosis, the fix prompt for your editor, and the pipeline.
+- [Glossary](https://kensaur.us/mushi-mushi/docs/glossary): The words you will see on Mushi Mushi's site and console, each explained in one or two plain sentences, from diagnosis and fix prompt to MCP and pull request.
+- [How Mushi Mushi works, shown on real screens](https://kensaur.us/mushi-mushi/docs/how-it-works): Watch a bug go from a user's report to a fix: what you do at each step, what Mushi Mushi does, and the real screens from report button to fix prompt.
 - [Cursor integration](https://kensaur.us/mushi-mushi/docs/integrations/cursor): Wire Mushi Mushi into Cursor with one command. Get fix context, lessons and fix dispatch right from the editor.
 - [Voice intake](https://kensaur.us/mushi-mushi/docs/integrations/voice-intake): Say a bug on your phone and Mushi Mushi files it, or opens a draft PR after you confirm. Works from an iOS Shortcut, Telegram, Slack or the console.
 - [Launch Week](https://kensaur.us/mushi-mushi/docs/launch-week): How Mushi Mushi launches now. One public post per release (Show HN, then Product Hunt), the gate each release must pass, and what we publish after.
@@ -201,7 +203,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Lovable or Bolt quickstart (no terminal)](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt): Add Mushi Mushi to a Lovable or Bolt app without a terminal. Paste one script tag through your prompt, then read each bug's plain-English cause and fix prompt.
 - [Ask Lovable why it broke](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-mcp): Add Mushi Mushi to Lovable as an MCP connector in three steps; Lovable reads the plain-English diagnosis and fixes the bug. Claude Code and Cursor in one paste.
 - [MCP server for bug fixing in Cursor & Claude Code](https://kensaur.us/mushi-mushi/docs/quickstart/mcp): Set up the Mushi Mushi MCP server with npx mushi-mushi setup. Read bug reports, get fix context, and dispatch fixes from Cursor, Claude Code or any MCP client.
-- [Mobile (overview)](https://kensaur.us/mushi-mushi/docs/quickstart/mobile): Mushi Mushi shake-to-report for mobile apps. React Native and Capacitor install from npm with npx mushi-mushi; iOS, Android and Flutter SDKs are previews.
+- [Your phone app: Expo, React Native or Capacitor](https://kensaur.us/mushi-mushi/docs/quickstart/mobile): Add a shake-to-report button to your Expo, React Native or Capacitor app. Reports wait for the phone to go back online, then get a plain-English diagnosis.
 - [Bug report widget for React](https://kensaur.us/mushi-mushi/docs/quickstart/react): Free, open-source bug report widget for React and Next.js: install @mushi-mushi/react, add your project key, and get a plain-English diagnosis per report.
 - [Bug report widget for React Native and Expo](https://kensaur.us/mushi-mushi/docs/quickstart/react-native): Free, open-source bug report widget for React Native and Expo: shake to report, a floating bug button, then a plain-English diagnosis of each report.
 - [Bug report widget for Svelte and SvelteKit](https://kensaur.us/mushi-mushi/docs/quickstart/svelte): Free, open-source bug report widget for Svelte and SvelteKit: install @mushi-mushi/svelte and call initMushi from hooks.client.ts or a root layout.
@@ -257,12 +259,16 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Langfuse + Sentry](https://kensaur.us/mushi-mushi/docs/self-hosting/observability): Wire Langfuse LLM tracing and Sentry error tracking into a self-hosted Mushi Mushi server. The Edge Function secrets and what each trace records.
 - [Supabase setup](https://kensaur.us/mushi-mushi/docs/self-hosting/supabase): Set up a Supabase project for self-hosted Mushi Mushi. Link the CLI, push every migration, and check the Postgres extensions the server needs.
 - [Use cases & comparisons](https://kensaur.us/mushi-mushi/docs/use-cases): Where Mushi Mushi fits. An open-source Sentry alternative, a debugger for Cursor and Claude Code apps, and an MCP bug-fixing server for your editor.
+- [You build apps for clients](https://kensaur.us/mushi-mushi/docs/use-cases/agency-client-apps): For agencies and freelancers who run several client apps. One report button per app, one inbox with a plain-English cause per bug, and a plan sized by apps.
 - [AI code bug fixing: report to merged fix](https://kensaur.us/mushi-mushi/docs/use-cases/ai-code-bug-fixing): AI code bug fixing end to end with Mushi Mushi. User reports become plain-English diagnoses, fix prompts and optional draft PRs, with lessons that stop repeats.
 - [Debug apps built with Claude Code](https://kensaur.us/mushi-mushi/docs/use-cases/debug-claude-code-apps): How to debug an app Claude Code built. With Mushi Mushi, reports arrive as plain-English diagnoses Claude Code reads and fixes over MCP, fix prompt included.
 - [Debug apps built with Cursor](https://kensaur.us/mushi-mushi/docs/use-cases/debug-cursor-apps): How to debug an app Cursor wrote for you. With Mushi Mushi, user bug reports become plain-English diagnoses and fix prompts your Cursor agent applies over MCP.
 - [Your Lovable app broke in production](https://kensaur.us/mushi-mushi/docs/use-cases/lovable-app-broke-in-production): What to do when a Lovable, Bolt, Cursor or Claude Code app breaks for a real user. Reproduce it, read the first error, and ask the agent for the smallest fix.
 - [MCP server for bug fixing](https://kensaur.us/mushi-mushi/docs/use-cases/mcp-bug-fixing-server): What an MCP bug-fixing server is and how the Mushi Mushi one works. Cursor, Claude Code or Codex read live bug reports, pull fix context, and dispatch fixes.
+- [You have a phone app: Expo, React Native or Capacitor](https://kensaur.us/mushi-mushi/docs/use-cases/mobile-app): For people with a phone app built with Expo, React Native or Capacitor. Users shake to report, reports wait for signal, and you get the cause in plain English.
+- [You built your app with Lovable or Bolt](https://kensaur.us/mushi-mushi/docs/use-cases/no-code-founder): For founders who built their app with Lovable or Bolt and can't read the code. A report button, a plain-English cause and fix words to paste back. No terminal.
 - [Sentry alternative for AI-built apps](https://kensaur.us/mushi-mushi/docs/use-cases/sentry-alternative): Mushi Mushi, an open-source Sentry alternative for AI-built apps. Plain-English diagnoses and ready fixes, not raw stack traces. Works with or without Sentry.
+- [What is Mushi Mushi?](https://kensaur.us/mushi-mushi/docs/what-is-mushi-mushi): Mushi Mushi in one screen. What you do, what it does, how long setup takes and what it costs, in plain English, for people who build apps with AI.
 - [What else Mushi Mushi does](https://kensaur.us/mushi-mushi/docs/what-it-does): Bugs nobody reports: a first-time user test, live-site watch, site audit, security holes, a second AI on every fix, your CI bill, playbooks in rounds.
 - [Who Mushi Mushi is for](https://kensaur.us/mushi-mushi/docs/who-its-for): Solo builders who make apps with AI, developers who own their code, and teams: the pains each has and what Mushi Mushi does about them.
 

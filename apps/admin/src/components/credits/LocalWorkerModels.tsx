@@ -33,7 +33,8 @@ export function LocalWorkerModels() {
     )
   }
   const hosts = new Map(data.hosts.map((h) => [h.id, h]))
-  const idle = (data.flags ?? []).find((f) => f.kind === 'credits_idle')
+  // The out-of-credits flag (id credits_out) is shown at the top of the page with its remedy.
+  const idle = (data.flags ?? []).find((f) => f.kind === 'credits_idle' && f.id !== 'credits_out')
   return (
     <div className="space-y-2" data-testid="credits-worker-models">
       {idle && (

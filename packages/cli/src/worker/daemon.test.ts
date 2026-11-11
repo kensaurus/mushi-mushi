@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ApiResult } from '../cli-shared.js'
-import { assertWorkerKey, createDaemon, createHostReadings, cursorStateFor, infraBackoffMs, machineFailed, workerHostId, type DaemonDeps } from './daemon.js'
+import { assertWorkerKey, createDaemon, createHostReadings, cursorStateFor, infraBackoffMs, machineFailed, modelFor, workerHostId, type DaemonDeps } from './daemon.js'
 import type { WorkerConfig } from './protocol.js'
 import type { HostIO } from '../runner/host.js'
 
@@ -230,6 +230,70 @@ describe('backing off after machine-side failures (2026-10-31)', () => {
     expect(machineFailed('failed', 'code', 'tests failed')).toBe(false)
     expect(machineFailed('skipped', undefined, 'skipped: branch already exists on origin')).toBe(false)
     expect(machineFailed('pr_opened', undefined, 'pr opened')).toBe(false)
+  })
+
+  it('counts a spent Claude Code plan as the account failing', () => {
+    expect(machineFailed('failed', 'code', "claude exited 1: You've hit your limit · resets 3pm")).toBe(true)
+    expect(machineFailed('failed', 'code', 'claude exited 1: Not logged in · Run /login')).toBe(true)
+  })
+
+  it('a spent agent account stops every lane claiming for 30 minutes, instead of claiming report after report', async () => {
+    const spent = { reportId: R1, result: 'failed' as const, failureKind: 'infra' as const, agentUnavailable: true, outcome: "failed (infra): the Claude Code agent could not run (usage or sign-in): You've hit your limit", fixId: 'f1' }
+    let t = Date.parse('2026-10-27T12:00:00Z')
+    const { daemon, calls, logs } = harness({ claim: [claimReply, claimReply], workOne: async () => spent, extra: { now: () => t } })
+    await daemon.tick()
+    await daemon.settle()
+    t += 29 * 60_000
+    await daemon.tick()
+    await daemon.settle()
+    expect(calls.filter((c) => c.path === '/v1/worker/claim')).toHaveLength(1)
+    expect(logs.join('\n')).toMatch(/could not run \(out of usage or signed out\): no lane claims for 30 min/)
+    t += 2 * 60_000
+    await daemon.tick()
+    await daemon.settle()
+    expect(calls.filter((c) => c.path === '/v1/worker/claim')).toHaveLength(2)
+  })
+
+  it('a plain infra failure still retries at once (the server requeues it once)', async () => {
+    const { daemon, calls } = harness({ claim: [claimReply, claimReply] })
+    await daemon.tick()
+    await daemon.settle()
+    await daemon.tick()
+    await daemon.settle()
+    expect(calls.filter((c) => c.path === '/v1/worker/claim')).toHaveLength(2)
+  })
+})
+
+describe('a Claude Code worker (worker.json agent: claude)', () => {
+  it('runs claude with Claude models only: a Cursor lane model falls back to Claude Code\'s default', async () => {
+    const cursorModelClaim = ok({ claim: { id: CLAIM, laneId: LANE, model: null, report: { id: R1, summary: 'x', fix_attempts: [] }, earlier: [] } })
+    const { daemon, runs, logs } = harness({ claim: [cursorModelClaim], extra: { agent: 'claude' } })
+    await daemon.tick()
+    await daemon.settle()
+    expect(runs[0]![2]).toMatchObject({ agent: 'claude', model: undefined })
+    expect(logs.join('\n')).toMatch(/grok-4\.7-xhigh-fast is not a Claude Code model/)
+  })
+
+  it('drops a Cursor-style Claude id (claude-opus-5-5-medium), which Claude Code refuses', async () => {
+    const { daemon, runs } = harness({ claim: [claimReply], extra: { agent: 'claude' } })
+    await daemon.tick()
+    await daemon.settle()
+    expect(runs[0]![2]).toMatchObject({ agent: 'claude', model: undefined })
+  })
+
+  it('passes a Claude model through', async () => {
+    const opusClaim = ok({ claim: { id: CLAIM, laneId: LANE, model: 'opus', report: { id: R1, summary: 'x', fix_attempts: [] }, earlier: [] } })
+    const { daemon, runs } = harness({ claim: [opusClaim], extra: { agent: 'claude' } })
+    await daemon.tick()
+    await daemon.settle()
+    expect(runs[0]![2]).toMatchObject({ agent: 'claude', model: 'opus' })
+  })
+
+  it('modelFor leaves Cursor\'s models alone', () => {
+    expect(modelFor('cursor', 'grok-4.7-xhigh-fast')).toBe('grok-4.7-xhigh-fast')
+    expect(modelFor('claude', 'grok-4.7-xhigh-fast')).toBeUndefined()
+    expect(modelFor('claude', 'sonnet')).toBe('sonnet')
+    expect(modelFor('claude', null)).toBeUndefined()
   })
 })
 

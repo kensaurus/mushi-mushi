@@ -1,7 +1,7 @@
 {
   "name": "@mushi-mushi/core",
   "version": "1.33.6",
-  "description": "Mushi Mushi SDK types, API client, pre-filter. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
+  "description": "Mushi Mushi SDK types, API client, pre-filter. Bug fixing for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",

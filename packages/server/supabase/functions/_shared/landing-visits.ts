@@ -75,6 +75,46 @@ export function visitReferrerHost(raw: unknown): string {
   return host
 }
 
+/**
+ * Referrer-spam hosts: sites whose "visits" are a bot replaying a referrer,
+ * not people following a link. A view from one is not recorded at all (the
+ * route answers 204, as for a bot), so it never lands in the "no referrer"
+ * bucket either. A host matches itself and any subdomain (`aocr.org` covers
+ * `www.aocr.org`), never a look-alike (`notaocr.org`).
+ *
+ * Keep in step with public.is_spam_referrer_host() in the migration
+ * 20261111090000_landing_referrer_spam.sql, which drops the same hosts from
+ * rows stored before this list existed; landing-visits.test.ts compares them.
+ *
+ *   aocr.org  220 of 288 landing views 2026-10-28..11-11 and 444 of 531
+ *             GitHub repo views on 2026-11-05, all with no path pattern a
+ *             person makes (GTM research note 2026-11-11 §1.3).
+ */
+export const SPAM_REFERRER_HOSTS: readonly string[] = ['aocr.org']
+
+/** True when the referrer host is a listed spam host or a subdomain of one. */
+export function isSpamReferrerHost(host: string | null | undefined): boolean {
+  if (typeof host !== 'string') return false
+  const h = host.trim().toLowerCase().replace(/\.$/, '')
+  if (!h) return false
+  return SPAM_REFERRER_HOSTS.some((spam) => h === spam || h.endsWith(`.${spam}`))
+}
+
+/**
+ * The same test on a full referrer URL (the SDK's `$referrer` property is
+ * origin + path). Unparseable input is not spam.
+ */
+export function isSpamReferrerUrl(raw: unknown): boolean {
+  if (typeof raw !== 'string' || !raw.trim()) return false
+  const s = raw.trim()
+  if (!s.includes('/')) return isSpamReferrerHost(s)
+  try {
+    return isSpamReferrerHost(new URL(s).hostname)
+  } catch {
+    return false
+  }
+}
+
 export interface PageView {
   path: string
   src: string

@@ -10,6 +10,7 @@
  */
 
 import type { StageStamp } from './pdcaStamp'
+import { AGENT_OUT_OF_USAGE_BUCKET, isAgentOutOfUsageError } from './agentOutOfUsage'
 
 export type ActBlocker = 'pr_closed' | 'ci_failed' | 'ci_infra' | 'needs_review'
 
@@ -94,6 +95,9 @@ export function verdictFromError(error: string | null | undefined): string | nul
 
 /** Breakdown key for a counted failure. Mirrors `fixFailureBucket` on the server. */
 export function fixFailureBucket(fix: ActFixSignals & { failure_category?: string | null }): string {
+  // Out of credits first: Cursor Cloud's refusal is stored as cursor_api_error
+  // and local runs with no category; both read as a retryable API error.
+  if (isAgentOutOfUsageError(fix.error) && !verdictFromError(fix.error)) return AGENT_OUT_OF_USAGE_BUCKET
   if (fix.failure_category) return fix.failure_category
   const verdict = verdictFromError(fix.error)
   if (verdict) return verdict

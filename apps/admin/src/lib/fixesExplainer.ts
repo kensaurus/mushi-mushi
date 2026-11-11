@@ -12,20 +12,20 @@ export interface FixLifecycleStageDefinition {
 export const FIX_LIFECYCLE_STAGES: FixLifecycleStageDefinition[] = [
   {
     id: 'dispatch',
-    label: 'Dispatch',
-    plain: 'You (or auto-triage) send a classified report to the fix agent. It clones the repo and drafts a branch.',
+    label: 'Start the fix',
+    plain: 'You press Dispatch fix on a bug (or Mushi Mushi does it for you). A coding agent reads your code and writes the change.',
     clearsWhen: 'Job moves from queued → running.',
   },
   {
     id: 'draft_pr',
-    label: 'Draft PR',
-    plain: 'The agent opens a pull request with the proposed patch and marks it ready for review.',
+    label: 'Proposed change',
+    plain: 'The change is opened on GitHub as a pull request: a proposal you read before anything changes in your app.',
     clearsWhen: 'PR link appears on the fix row.',
   },
   {
     id: 'ci',
-    label: 'CI checks',
-    plain: 'GitHub Actions (or your CI) runs tests on the PR. Red checks mean the patch needs another attempt.',
+    label: 'Tests',
+    plain: 'Your automatic tests run on the change (on GitHub, called CI). Red means it needs another try.',
     clearsWhen: 'All required checks pass.',
   },
   {
@@ -37,7 +37,7 @@ export const FIX_LIFECYCLE_STAGES: FixLifecycleStageDefinition[] = [
 ]
 
 export const FIXES_EXPLAINER_SUMMARY =
-  'Fixes tracks every auto-fix attempt from dispatch through draft PR, CI, and merge. Failed runs stay visible until you retry or hand off to Cursor with fix context.'
+  'With GitHub connected, Mushi Mushi can make the change itself: it writes it, opens it as a pull request (a proposed change you review), runs your tests, and you merge it. Stopped runs stay here until you retry or copy the fix prompt into your editor.'
 
 export function isFixesGuideExpanded(topPriority: string | undefined): boolean {
   return (

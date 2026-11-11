@@ -92,15 +92,16 @@ export function ClientConnectButton({
   const [showBlock, setShowBlock] = useState(expanded)
   const [access, setAccess] = useState<McpAccess>('read_write')
   const accessId = useId()
-  const mints = !preMintedKey && Boolean(projectId)
+  // A keyless client (Lovable) signs in with OAuth on first use: no key is minted.
+  const mints = !preMintedKey && Boolean(projectId) && client.keyless !== true
   const mintScopes = scopes ?? scopesForAccess(access)
 
   async function handleConnect() {
     setLoading(true)
     try {
-      let apiKey = preMintedKey
+      let apiKey = preMintedKey ?? (client.keyless ? '' : undefined)
       const pinPromise = getPublishedMcpPinSpec()
-      if (!apiKey && projectId) {
+      if (!apiKey && projectId && !client.keyless) {
         try {
           apiKey = await getOrMintMcpKey({ projectId, clientId: client.id, clientLabel: client.label, scopes: mintScopes })
         } catch (err) {
@@ -109,7 +110,7 @@ export function ClientConnectButton({
           return
         }
       }
-      if (!apiKey) {
+      if (!apiKey && !client.keyless) {
         toast.error('No API key', 'Provide a projectId to mint a key, or pass apiKey directly.')
         return
       }
@@ -117,7 +118,7 @@ export function ClientConnectButton({
       const input: McpBuildInput = {
         projectId,
         projectName,
-        apiKey,
+        apiKey: apiKey ?? '',
         endpoint,
         mcpHttpUrl,
         pinSpec: await pinPromise,
@@ -145,7 +146,9 @@ export function ClientConnectButton({
       ? `Add to ${client.label}`
       : client.method === 'cli-command'
         ? `Show ${client.label} command`
-        : `Show ${client.label} config`
+        : client.keyless
+          ? `Add to ${client.label}`
+          : `Show ${client.label} config`
 
   return (
     <div>
@@ -208,8 +211,15 @@ export function ClientConnectButton({
           )}
           {result.kind === 'remote-url' && (
             <>
-              <ConfigCopySection label="MCP endpoint URL" text={result.url} />
-              <ConfigCopySection label="Required headers" text={result.headerSnippet} />
+              <ConfigCopySection label={client.keyless ? 'Server URL' : 'MCP endpoint URL'} text={result.url} />
+              {result.headerSnippet ? <ConfigCopySection label="Required headers" text={result.headerSnippet} /> : null}
+              {result.steps?.length ? (
+                <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-xs text-fg-secondary">
+                  {result.steps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              ) : null}
               <Btn
                 type="button"
                 size="sm"

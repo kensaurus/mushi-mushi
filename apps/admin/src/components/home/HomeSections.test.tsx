@@ -90,7 +90,8 @@ describe('HealthStrip', () => {
     expect(byTestId('home-health-site')!.textContent).toContain('Problem')
     expect(byTestId('home-health-site')!.textContent).toContain('2 pages broken')
     expect(byTestId('home-health-errors')!.textContent).toContain('Good')
-    expect(byTestId('home-health-sdk')!.textContent).toContain('Set up the SDK')
+    // Plain words over the server's "Set up the SDK" (audit 2026-11-11).
+    expect(byTestId('home-health-sdk')!.textContent).toContain('Add the report button')
     expect(byTestId('home-health-ci')!.textContent).toContain('Unknown')
     expect(hrefs()).toEqual(expect.arrayContaining(['/inventory?tab=discovery', '/reports?days=1', '/connect', '/ci']))
   })

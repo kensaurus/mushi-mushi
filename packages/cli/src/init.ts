@@ -1310,6 +1310,8 @@ async function maybeSendTestReport(
         projectId: credentials.projectId,
         description: 'Test report from the mushi-mushi setup wizard',
         category: 'other',
+        // Never the project's first real report or its activation (first-report.ts).
+        metadata: { source: 'cli_wizard' },
         reporterToken: `wizard-${randomUUID()}`,
         createdAt: new Date().toISOString(),
         environment: {

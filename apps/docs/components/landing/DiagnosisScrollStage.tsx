@@ -1,14 +1,15 @@
 'use client'
 
 /**
- * "How it works" — the landing's one job in three cards (ADR 0052), then a
- * link to the sample diagnosis that shows all three on one bug. Once-in-view
+ * "How it works" — four steps, each saying what you do and what Mushi Mushi
+ * does (ADR 0056), then a link to the sample diagnosis that shows them on one
+ * bug. Once-in-view
  * stagger (native scroll, no pin). The full six-stage loop (<LoopPipeline />)
  * lives on /concepts/closed-loop.
  */
 import Link from 'next/link'
 import { motion } from 'motion/react'
-import { LANDING_HOW_IT_WORKS, LANDING_PILLARS, LANDING_SAMPLE_LINK } from '@/lib/landing-copy'
+import { LANDING_HOW_IT_WORKS, LANDING_HOW_STEPS, LANDING_SAMPLE_LINK } from '@/lib/landing-copy'
 import { LandingStagger, LandingStaggerItem } from './landing-stagger'
 import { PillarGlyph } from '../PillarGlyph'
 import { usePrefersReducedMotion } from './use-prefers-reduced-motion'
@@ -44,18 +45,27 @@ export function DiagnosisScrollStage() {
         </LandingStaggerItem>
       )}
 
-      <div className="landing-diagnosis-track">
-        {LANDING_PILLARS.map((pillar) => (
-          <LandingStaggerItem key={pillar.name} className="landing-diagnosis-card">
+      <div className="landing-diagnosis-track landing-diagnosis-track--four">
+        {LANDING_HOW_STEPS.map((step) => (
+          <LandingStaggerItem key={step.name} className="landing-diagnosis-card">
             <span className="landing-diagnosis-glyph" aria-hidden="true">
-              <PillarGlyph glyph={pillar.glyph} />
+              <PillarGlyph glyph={step.glyph} />
             </span>
-            <span className="landing-diagnosis-step">{pillar.step}</span>
-            <h3 className="landing-diagnosis-name">{pillar.name}</h3>
-            <p className="landing-diagnosis-role">{pillar.role}</p>
+            <span className="landing-diagnosis-step">{step.step}</span>
+            <h3 className="landing-diagnosis-name">{step.name}</h3>
+            <p className="landing-diagnosis-role">
+              <strong>{LANDING_HOW_IT_WORKS.youLabel}</strong> {step.you}
+            </p>
+            <p className="landing-diagnosis-role">
+              <strong>{LANDING_HOW_IT_WORKS.mushiLabel}</strong> {step.role}
+            </p>
           </LandingStaggerItem>
         ))}
       </div>
+
+      <LandingStaggerItem>
+        <p className="landing-section-lead">{LANDING_HOW_IT_WORKS.stayInCharge}</p>
+      </LandingStaggerItem>
 
       <LandingStaggerItem>
         <p className="landing-section-lead landing-diagnosis-sample">

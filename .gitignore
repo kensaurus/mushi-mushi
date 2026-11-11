@@ -117,8 +117,9 @@ playwright-report/
 session-artifacts/
 screenshots/
 !docs/screenshots/
-!apps/admin/public/screenshots/
-!apps/docs/public/screenshots/
+# apps/docs/public/screenshots/ is a build artifact: the docs `prebuild` and
+# `predev` scripts copy docs/screenshots/ into it (scripts/sync-docs-screenshots.mjs).
+# Keep docs/screenshots/ as the only tracked copy.
 *.png
 !docs/**/*.png
 !apps/docs/public/**/*.png

@@ -1,5 +1,8 @@
-// Sidebar layout for kensaur.us/mushi-mushi/docs. Top-down represents the journey
-// from "what is Mushi" → "install" → "operate".
+// Sidebar layout for kensaur.us/mushi-mushi/docs. Top-down is the journey of a
+// first-time visitor (non-technical visitor audit, 2026-11-11): what it is and
+// what it costs → set it up → your situation → developer and self-host
+// reference. Keys are URL slugs other pages link to: reorder and retitle, never
+// rename a key.
 export default {
   index: {
     title: 'Welcome',
@@ -22,44 +25,50 @@ export default {
       timestamp: false,
       toc: false,
       sidebar: false,
+      // The landing is a product page; "Copy page" is a docs-article tool.
+      copyPage: false,
     },
   },
 
-  '-- Get started': { type: 'separator', title: 'Get started' },
-  'how-it-works': 'How it works (video)',
-  connect: { title: 'Connect your client', href: '/connect' },
+  '-- Start here': { type: 'separator', title: 'Start here' },
+  'what-is-mushi-mushi': 'What is Mushi Mushi?',
   // Readable without signup or install (owner, 2026-10-27; ADR 0052).
-  demo: 'Sample diagnosis',
+  demo: 'See a sample',
+  'how-it-works': 'How it works (video)',
   'who-its-for': 'Who it’s for',
-  'what-it-does': 'What else it does',
-  quickstart: 'Quickstart',
-  concepts: 'Concepts',
+  // Conversion surface — same sidebar-off treatment as the landing (see `index`).
+  pricing: { title: 'Pricing', theme: { sidebar: false } },
+  glossary: 'Glossary',
 
-  '-- SDKs': { type: 'separator', title: 'SDKs' },
+  '-- Set it up': { type: 'separator', title: 'Set it up' },
+  quickstart: 'Quickstart',
+  'what-it-does': 'What else it does',
+  cloud: 'Mushi Mushi Cloud',
+
+  '-- Your situation': { type: 'separator', title: 'Your situation' },
+  'use-cases': 'Use cases',
+
+  '-- Compare': { type: 'separator', title: 'Compare' },
+  compare: 'Compare with other tools',
+
+  '-- For developers': { type: 'separator', title: 'For developers' },
+  connect: { title: 'Connect your AI code editor', href: '/connect' },
+  concepts: 'Concepts',
   sdks: 'SDK reference',
   migrations: 'Migration guides',
-
-  '-- Operate': { type: 'separator', title: 'Operate Mushi' },
-  admin: 'Admin console',
-  cloud: 'Mushi Cloud',
-  operating: 'Operating (maintainers)',
-  'self-hosting': 'Self-hosting',
-  security: 'Security & compliance',
-
-  '-- Extend': { type: 'separator', title: 'Extend Mushi' },
   integrations: 'Integrations',
   plugins: 'Plugin marketplace',
+  admin: 'Admin console',
 
-  '-- Compare': { type: 'separator', title: 'Compare & use cases' },
-  'use-cases': 'Use cases',
-  compare: 'Compare',
+  '-- Advanced': { type: 'separator', title: 'Advanced: run it yourself' },
+  'self-hosting': 'Self-hosting',
+  operating: 'Operating (maintainers)',
+  security: 'Security & compliance',
 
   '-- Reference': { type: 'separator', title: 'Reference' },
   changelog: { title: 'Changelog', theme: { toc: false } },
   roadmap: 'Roadmap',
   open: { title: 'Open metrics', theme: { toc: false } },
-  // Conversion surface — same sidebar-off treatment as the landing (see `index`).
-  pricing: { title: 'Pricing', theme: { sidebar: false } },
   legal: 'Legal',
   'launch-week': { title: 'Launch Week', theme: { toc: false } },
   blog: { title: 'Blog', theme: { toc: false } },

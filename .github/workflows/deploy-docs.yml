@@ -41,6 +41,9 @@ on:
     branches: [master]
     paths:
       - 'apps/docs/**'
+      # The docs prebuild copies these into public/screenshots/, which is no
+      # longer tracked, so a re-recorded screenshot must redeploy on its own.
+      - 'docs/screenshots/**'
       # Packages whose output the docs pages render (brand tokens, the
       # marketing components, the MCP catalog and /connect clients). The
       # bundled core/web SDK is left out on purpose so every SDK change does

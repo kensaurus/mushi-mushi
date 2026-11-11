@@ -26,8 +26,6 @@ import { EmptySectionMessage } from '../components/report-detail/ReportClassific
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ActiveFiltersRail, type ActiveFilter } from '../components/ActiveFiltersRail'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { NextStep } from '../components/NextStep'
-import { HeroFixWrench } from '../components/illustrations/HeroIllustrations'
 import { useToast } from '../lib/toast'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -52,6 +50,9 @@ import type { FixAttempt, DispatchJob, FixSummary } from '../components/fixes/ty
 import { FixesStatusBanner } from '../components/fixes/FixesStatusBanner'
 import { reconcileFixesStats } from '../lib/fixesBannerReconcile'
 import { FixesPipelineGuide } from '../components/fixes/FixesPipelineGuide'
+import { FixesStartCard } from '../components/fixes/FixesStartCard'
+import { AgentCreditsOutCard } from '../components/AgentCreditsOutCard'
+import { useAgentCredits } from '../lib/agentCredits'
 import { FixesSnapshotStrip } from '../components/fixes/FixesSnapshotStrip'
 import { FixesFailedSummary } from '../components/fixes/FixesFailedSummary'
 import { EMPTY_FIXES_STATS, type FixesStats } from '../components/fixes/FixesStatsTypes'
@@ -374,7 +375,9 @@ export function FixesPage() {
 
   // One entry per still-unfixed report a retry can clear now — never an
   // attempt on a report a merged PR already fixed (server-derived flag).
-  const failedFixes = useMemo(() => retryCandidates(fixes), [fixes])
+  const agentCredits = useAgentCredits()
+  // Out of credits: nothing is retryable, every retry hits the same empty account.
+  const failedFixes = useMemo(() => (agentCredits.state?.out ? [] : retryCandidates(fixes)), [fixes, agentCredits.state?.out])
 
   // Pre-bucket every fix once so the segmented filter and the per-bucket
   // counts in the segmented control stay in sync without re-scanning the
@@ -652,7 +655,10 @@ export function FixesPage() {
     () => selectedFixes.filter((f) => canMergeFix(f) && f.pr_url),
     [selectedFixes],
   )
-  const selectedFailed = useMemo(() => retryCandidates(selectedFixes), [selectedFixes])
+  const selectedFailed = useMemo(
+    () => (agentCredits.state?.out ? [] : retryCandidates(selectedFixes)),
+    [selectedFixes, agentCredits.state?.out],
+  )
   const selectedMerged = useMemo(
     () => selectedFixes.filter((f) => isFixMerged(f)),
     [selectedFixes],
@@ -877,6 +883,17 @@ export function FixesPage() {
         </span>
       </PageHeaderBar>
 
+      {/* Before the first fix: the no-setup path first (copy the fix prompt), GitHub second (audit 2026-11-11). */}
+      {fixes.length === 0 && <FixesStartCard githubConnected={fixesStats.topPriority !== 'no_github'} />}
+
+      {/* Out of credits: say so, with the remedy, where Retry would have been (audit 2026-11-11). */}
+      {agentCredits.state?.out && (
+        <AgentCreditsOutCard
+          state={agentCredits.state}
+          note="Retry is not offered for these: it would send each one to the same empty account."
+        />
+      )}
+
       <PagePosture
         slots={[
           {
@@ -955,6 +972,7 @@ export function FixesPage() {
           onQueue={(list) => void queueFixes(list)}
           onShowCause={reviewFailedCause}
           onRetry={(list, label) => setRetryRequest({ kind: 'list', fixes: list, label, agent: commonRetryAgent(list.map((f) => f.agent)) })}
+          agentsOut={agentCredits.state?.out === true}
         />
       )}
 
@@ -995,20 +1013,7 @@ export function FixesPage() {
 
       <InflightDispatches dispatches={mergedDispatches} />
 
-      {fixes.length === 0 ? (
-        <NextStep
-          variant="inline"
-          requires={['github_connected', 'first_report_received', 'byok_anthropic']}
-          emptyTitle="No fix attempts yet"
-          emptyDescription="Open a classified report and click “Dispatch fix” to start the auto-fix loop. Mushi opens a draft PR you review and merge — nothing ships without you."
-          emptyIcon={<HeroFixWrench />}
-          blockedIcon={<HeroFixWrench accent="text-fg-faint" />}
-          emptyHints={[
-            'Each dispatch creates one branch + one draft PR per attempt.',
-            'The judge scores every attempt before it appears in green here.',
-          ]}
-        />
-      ) : (
+      {fixes.length === 0 ? null : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <SegmentedControl<StatusBucket>

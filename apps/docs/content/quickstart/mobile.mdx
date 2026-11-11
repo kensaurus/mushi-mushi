@@ -1,22 +1,51 @@
 ---
-title: Mobile (overview)
-description: Mushi Mushi shake-to-report for mobile apps. React Native and Capacitor install from npm with npx mushi-mushi; iOS, Android and Flutter SDKs are previews.
+title: "Your phone app: Expo, React Native or Capacitor"
+description: Add a shake-to-report button to your Expo, React Native or Capacitor app. Reports wait for the phone to go back online, then get a plain-English diagnosis.
 ---
 
-# Mobile
+# Your phone app (Expo, React Native or Capacitor)
 
-Pick the Mushi Mushi SDK that matches how you ship the app. React Native and Capacitor are
-published on npm and set up by `npx mushi-mushi`.
+On a phone, people rarely email you when something breaks. They close the app.
+Mushi Mushi gives them a quick way to tell you instead, and tells you why it
+broke in plain English.
+
+## What your users do
+
+- They **shake the phone**, or tap a small bug button, and type one sentence
+  about what went wrong.
+- The report can include a **screenshot** of the screen they were on.
+- No signal? The report **waits on the phone** and sends itself when the phone
+  is back online.
+
+## What you get
+
+Each report lands in your Mushi Mushi inbox with a short note: what broke, how
+serious it is, the likely cause, and a **fix prompt** you can paste into
+Cursor, Claude Code or another AI editor. [See a sample](/demo/diagnosis).
+
+## Pick how your app is built
 
 import { Cards } from 'nextra/components'
 
 <Cards>
-  <Cards.Card title="React Native" href="/quickstart/react-native" arrow />
-  <Cards.Card title="Capacitor" href="/quickstart/capacitor" arrow />
+  <Cards.Card title="Expo or React Native" href="/quickstart/react-native" arrow />
+  <Cards.Card title="Capacitor or Ionic" href="/quickstart/capacitor" arrow />
 </Cards>
 
-The native SDKs are previews: they are not on CocoaPods, Maven Central or
-pub.dev yet, so each page shows how to install from the GitHub repository.
+Both install from npm. The fastest way is to run `npx mushi-mushi` in your
+app's folder: it finds your setup, installs the right package and saves your
+project ID and key. On Expo and React Native, shake-to-report and screenshots
+each use one small extra package, which the setup page lists. On Capacitor
+they are settings. The setup takes a few minutes, then you make a new build of
+your app so the button ships with it.
+
+The free plan covers one app and 100 diagnoses a month, with no card and no AI
+key of your own. See [pricing](/pricing).
+
+## Native iOS, Android and Flutter (previews)
+
+These libraries are previews. They are not on CocoaPods, Maven Central or
+pub.dev yet, so each page shows how to install them from the GitHub repository.
 
 <Cards>
   <Cards.Card title="iOS (Swift), preview" href="/quickstart/ios" arrow />

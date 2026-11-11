@@ -338,3 +338,32 @@ describe('wiring (source shape)', () => {
     expect(src.indexOf('pullSentryResolves(')).toBeGreaterThan(src.indexOf('reconcileSentryLinks(db)'))
   })
 })
+
+describe('webhookResolveCounts (the resolved issue webhook follows the same rule as the pull)', () => {
+  const creds = async () => ({ token: 't', orgSlug: 'o' })
+  const db = makeDb([{ reports: { reopened_at: null, regressed_at: null } }])
+
+  it('ignores Sentry auto-resolve by age: the bug went quiet, it was not fixed', async () => {
+    const getIssue = async () => ({ status: 'resolved', activity: [{ type: 'set_resolved_by_age', dateCreated: '2026-11-10T00:00:00Z' }] })
+    expect(await rc.webhookResolveCounts(db, 'p1', '4501', { credentials: creds, getIssue })).toBe(false)
+  })
+
+  it('follows a person or a commit', async () => {
+    const byUser = async () => ({ status: 'resolved', activity: [{ type: 'set_resolved', user: { id: '1' }, dateCreated: '2026-11-10T00:00:00Z' }] })
+    const byCommit = async () => ({ status: 'resolved', activity: [{ type: 'set_resolved_in_commit', dateCreated: '2026-11-10T00:00:00Z' }] })
+    expect(await rc.webhookResolveCounts(db, 'p1', '4501', { credentials: creds, getIssue: byUser })).toBe(true)
+    expect(await rc.webhookResolveCounts(db, 'p1', '4501', { credentials: creds, getIssue: byCommit })).toBe(true)
+  })
+
+  it('keeps the old behaviour with no Sentry credentials, and leaves a failed read to the pull', async () => {
+    expect(await rc.webhookResolveCounts(db, 'p1', '4501', { credentials: async () => null })).toBe(true)
+    const boom = async () => { throw new Error('sentry down') }
+    expect(await rc.webhookResolveCounts(db, 'p1', '4501', { credentials: creds, getIssue: boom })).toBe(false)
+  })
+
+  it('is what the webhook route checks before closing a report', () => {
+    const src = readFileSync(resolve(fnDir, 'api/routes/public.ts'), 'utf8')
+    expect(src.indexOf('webhookResolveCounts')).toBeGreaterThan(-1)
+    expect(src.indexOf('webhookResolveCounts')).toBeLessThan(src.indexOf("resolveReportFromSentry(db, projectId, String(pd.issue.id))"))
+  })
+})

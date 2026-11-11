@@ -18,6 +18,11 @@ export function ProjectScopeNotice() {
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   if (mode !== 'all' || allAppsSupportFor(pathname) !== 'single') return null
+  // A team with no app yet, or the first-run screens: there is no app to name.
+  // It read "This page shows one app at a time: ." (audit 2026-11-11), and
+  // during project creation it named another team's app for a few seconds.
+  if (pathname.startsWith('/onboarding')) return null
+  if (!setup.loading && setup.data && setup.data.projects.length === 0) return null
   // Whether the line shows is known from the URL and the path, so it renders
   // at first paint; the app's name fills in when setup loads. Returning null
   // until then inserted the line late and pushed the page down 28px

@@ -120,7 +120,7 @@ export function DiagnosisFixHero({
           </div>
         )}
 
-        {!stage2 && <Stage2AbsentNote view={view} />}
+        {!stage2 && <Stage2AbsentNote view={view} stage1Model={report.stage1_model ?? null} />}
 
         <CodeContextBadge report={report} />
 
@@ -216,14 +216,38 @@ function DiagnosisField({ label, children }: { label: string; children: ReactNod
 /**
  * Honest note when Stage 2 did not produce a diagnosis. There is no server
  * route that re-runs Stage 2 for a classified report, so no button is offered.
+ *
+ * It says why the full explanation is missing and how to get it (console
+ * audit 2026-11-11, a Sentry import that read "Quick summary only"). The
+ * first check skips the full explanation in two cases (fast-filter):
+ *   - it was confident (above Settings → General → Quick check confidence);
+ *   - the AI was not available, so a rule-based sort ran (`stage1_model`
+ *     'heuristic'); "the first check was sure" was not true then.
  */
-function Stage2AbsentNote({ view }: { view: ReturnType<typeof reportDiagnosisView> }) {
+function Stage2AbsentNote({ view, stage1Model }: { view: ReturnType<typeof reportDiagnosisView>; stage1Model: string | null }) {
   if (view.kind === 'stage1_only') {
+    const heuristic = stage1Model === 'heuristic'
     return (
-      <p className="mt-1.5 text-2xs text-fg-faint">
-        Quick summary only. The first check was sure what kind of bug this is, so the full diagnosis (why it broke
-        and how to fix it) did not run. The fix prompt below still gives your agent everything Mushi Mushi knows.
-      </p>
+      <div className="mt-1.5 space-y-1 text-2xs text-fg-faint" data-testid="stage2-absent">
+        <p>
+          {heuristic
+            ? 'Quick summary only. The AI that explains bugs was not available when this one arrived (its key was out of credits or rejected), so only a rule-based sort ran and the full diagnosis (why it broke and how to fix it) is missing.'
+            : 'Quick summary only. The first check was sure what kind of bug this is, so the full diagnosis (why it broke and how to fix it) did not run.'}
+        </p>
+        <p>
+          For this bug: copy the fix prompt below; your editor&apos;s AI reads the evidence and works out the cause.{' '}
+          {heuristic ? (
+            <>
+              For new bugs: check the AI key under <strong className="font-medium">Settings → AI keys</strong>.
+            </>
+          ) : (
+            <>
+              For new bugs: set <strong className="font-medium">Settings → General → Quick check confidence</strong> to
+              100% and every bug gets the full diagnosis (each one uses a diagnosis from your plan).
+            </>
+          )}
+        </p>
+      </div>
     )
   }
   if (view.kind === 'failed') {

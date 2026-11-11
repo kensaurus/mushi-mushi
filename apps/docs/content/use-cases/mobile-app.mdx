@@ -1,0 +1,47 @@
+---
+title: "You have a phone app: Expo, React Native or Capacitor"
+description: For people with a phone app built with Expo, React Native or Capacitor. Users shake to report, reports wait for signal, and you get the cause in plain English.
+---
+
+# You have a phone app (Expo, React Native or Capacitor)
+
+## What goes wrong for you
+
+On a phone, people don't email you when something breaks. They close the app,
+and sometimes they leave a one-star review a week later. By then you can't
+tell which screen, which phone or which version it was.
+
+## What Mushi Mushi does
+
+- Your users **shake the phone**, or tap a small bug button, and type one
+  sentence. The report can include a screenshot of the screen they were on.
+- No signal? The report **waits on the phone** and sends itself once the phone
+  is back online.
+- You get a **plain-English diagnosis** (what broke, how serious it is, the
+  likely cause) and a **fix prompt** for Cursor, Claude Code or another AI
+  editor.
+
+Native iOS, Android and Flutter libraries are previews.
+
+## What you do
+
+1. Run `npx mushi-mushi` in your app's folder. It finds Expo, React Native or
+   Capacitor, installs the right package and saves your project ID and key.
+2. Make a new build of your app, so the button ships with it.
+3. When a report comes in, read the diagnosis, paste the fix prompt into your AI
+   editor, check the change and ship an update.
+
+## How long it takes
+
+A few minutes for the setup, plus the time your app takes to build.
+
+## What it costs
+
+Free for one app: 100 diagnoses a month, no card and no AI key of your own.
+More apps are on [Builder and Studio](/pricing).
+
+## Next
+
+- [See a sample report](/demo/diagnosis), no sign-up.
+- [Set up your phone app](/quickstart/mobile): Expo, React Native, Capacitor and
+  the native previews.

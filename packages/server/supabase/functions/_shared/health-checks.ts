@@ -164,11 +164,19 @@ const GAP_FIX_LABEL: Record<string, string> = {
   llm_budget: 'Raise the budget',
 }
 
+const GAP_GUIDED_LABEL: Record<string, string> = {
+  autofix_agent_key: 'See credits',
+  review_followup_key: 'See credits',
+}
+
 /** A setup gap as a registry row. `gap` is a problem; the rest keep their meaning. */
 export function fromSetupGap(gap: SetupGap, checkedAt: string | null): HealthCheck {
   const status: HealthStatus = gap.status === 'gap' ? 'problem' : gap.status
   const id = checkIdOf(gap.id)
-  const fix: HealthFix = { kind: 'one_click', label: GAP_FIX_LABEL[id] ?? 'Fix it', to: gap.fixHref }
+  // A gap with steps (a command to run on your own computer) is guided, with its page beside it.
+  const fix: HealthFix = gap.steps?.length
+    ? { kind: 'guided', label: GAP_GUIDED_LABEL[id] ?? 'Open', steps: [...gap.steps], to: gap.fixHref }
+    : { kind: 'one_click', label: GAP_FIX_LABEL[id] ?? 'Fix it', to: gap.fixHref }
   return {
     ...make(gap.id, gap.projectId, 'setup_gaps', status, gap.title, gap.summary, fix, checkedAt),
     audience: gap.audience,

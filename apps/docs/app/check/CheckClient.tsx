@@ -23,11 +23,31 @@ import {
   type Severity,
 } from '@/lib/production-check'
 
+/**
+ * The report as the API sends it since 2026-11-11 (ADR 0056): a site no page
+ * of which could be read is `failed` with `failure: 'unreachable'`, a short
+ * `error`, `advice` (what to try) and `summary.unreachable.reason`.
+ */
+type CheckApiReport = CheckReport & {
+  failure?: 'unreachable' | 'error' | null
+  advice?: string | null
+  summary: CheckReport['summary'] & { imagesChecked?: number; unreachable?: { reason?: string } }
+}
+
+/**
+ * Could not reach the site. Also true for a report an older API stored as
+ * "done" with no page read and no finding: that was never a pass.
+ */
+function isUnreachable(report: CheckApiReport): boolean {
+  if (report.failure === 'unreachable' || report.summary?.unreachable) return true
+  return report.status === 'done' && Array.isArray(report.summary?.pages) && report.summary.pages.length === 0 && (report.findings ?? []).length === 0
+}
+
 type View =
   | { kind: 'form'; error?: string }
   | { kind: 'loading' }
   | { kind: 'running'; id: string; host: string }
-  | { kind: 'report'; report: CheckReport }
+  | { kind: 'report'; report: CheckApiReport }
   | { kind: 'missing'; message: string }
 
 const POLL_MS = 2_500
@@ -50,7 +70,7 @@ export function CheckClient() {
     const tick = async () => {
       const r = await loadCheck(id)
       if (r.ok && r.data.status !== 'running') {
-        setView({ kind: 'report', report: r.data })
+        setView({ kind: 'report', report: r.data as CheckApiReport })
         return
       }
       if (!r.ok && r.status === 404) {
@@ -116,9 +136,9 @@ function CheckForm({ error, onSubmit, defaultUrl }: { error?: string; onSubmit: 
         <p className="text-xs font-semibold uppercase tracking-wide text-mushi-vermillion">Free Production Check</p>
         <h1 className="text-3xl font-bold tracking-tight text-mushi-ink sm:text-4xl">Is your live app broken for new visitors?</h1>
         <p className="text-base text-mushi-ink-muted">
-          Paste your address. In about 30 seconds Mushi Mushi reads your home page and three pages it links to, the way a first
-          visitor sees them, and tells you in plain English what to fix: error pages, dead links, missing security
-          headers, published source maps.
+          Paste your address. In about 30 seconds Mushi Mushi opens your home page and three pages it links to, the way a
+          first visitor sees them, and tells you in plain English what to fix: pages that error or show nothing, dead
+          links and images, a title still saying “Lovable App” or “Vite + React”, then security headers.
         </p>
       </header>
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
@@ -197,7 +217,35 @@ function Missing({ message }: { message: string }) {
   )
 }
 
-function Report({ report }: { report: CheckReport }) {
+function Unreachable({ report, host }: { report: CheckApiReport; host: string }) {
+  return (
+    <div className="space-y-4" role="alert">
+      <p className="text-xs font-semibold uppercase tracking-wide text-mushi-danger">Production Check failed</p>
+      <h1 className="text-2xl font-bold tracking-tight text-mushi-ink sm:text-3xl">We could not reach {host}</h1>
+      <p className="text-base text-mushi-ink">
+        This is not a pass. Mushi Mushi tried to open your site the way a first-time visitor would, and no page loaded, so
+        nothing on it could be checked.
+      </p>
+      <p className="rounded-md border border-mushi-danger bg-mushi-paper-wash px-3 py-2 text-sm text-mushi-ink">
+        {report.error ?? 'Nothing answered at this address.'}
+      </p>
+      <p className="text-sm text-mushi-ink">
+        <span className="font-medium">What to try: </span>
+        {report.advice ?? 'Open the address yourself in a private window. If it works for you, check again in a few minutes.'}
+      </p>
+      <a
+        href={`${CHECK_PAGE_URL}?url=${encodeURIComponent(report.url)}`}
+        data-mushi-cta="production_check_retry"
+        data-mushi-location="check_unreachable"
+        className="inline-block rounded-md bg-mushi-vermillion px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+      >
+        Check again
+      </a>
+    </div>
+  )
+}
+
+function Report({ report }: { report: CheckApiReport }) {
   const [copied, setCopied] = useState(false)
   const host = hostOf(report.url)
   const checkedOn = new Date(report.finished_at ?? report.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
@@ -213,6 +261,8 @@ function Report({ report }: { report: CheckReport }) {
       window.prompt('Copy this link', reportShareUrl(report.id))
     }
   }
+
+  if (isUnreachable(report)) return <Unreachable report={report} host={host} />
 
   if (report.status === 'failed') {
     return (
@@ -234,7 +284,8 @@ function Report({ report }: { report: CheckReport }) {
         <p className="text-base text-mushi-ink">{countLine(report.findings ?? [])}.</p>
         <p className="text-xs text-mushi-ink-muted">
           Checked {checkedOn}: {pages.length ? `${pages.length} ${pages.length === 1 ? 'page' : 'pages'}` : 'the home page'}
-          {report.summary?.linksChecked ? `, ${report.summary.linksChecked} links` : ''}. Public pages only.
+          {report.summary?.linksChecked ? `, ${report.summary.linksChecked} links` : ''}
+          {report.summary?.imagesChecked ? `, ${report.summary.imagesChecked} images` : ''}. Public pages only.
           {report.summary?.incomplete?.length ? ` Could not check: ${report.summary.incomplete.join(', ')}.` : ''}
         </p>
         <button type="button" onClick={share} className="text-sm font-medium text-mushi-vermillion underline underline-offset-2">

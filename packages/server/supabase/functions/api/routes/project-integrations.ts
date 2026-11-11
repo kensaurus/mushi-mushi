@@ -3,6 +3,7 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { resolveLlmKey } from '../../_shared/byok.ts';
+import { loadFixAgentCheck } from '../../_shared/agent-credits-load.ts';
 import { dbError, callerCanAccessProject } from '../shared.ts';
 import { ingestReport, triggerClassification } from '../helpers.ts';
 import { emitFunnelEvent } from '../../_shared/setup-funnel.ts';
@@ -39,7 +40,7 @@ export async function loadDispatchReadiness(
     db
       .from('project_settings')
       .select(
-        'github_repo_url, byok_anthropic_key_ref, codebase_index_enabled, autofix_enabled, codebase_repo_url',
+        'github_repo_url, byok_anthropic_key_ref, codebase_index_enabled, autofix_enabled, codebase_repo_url, autofix_agent',
       )
       .eq('project_id', projectId)
       .maybeSingle(),
@@ -54,9 +55,17 @@ export async function loadDispatchReadiness(
     settings?.github_repo_url ??
     settings?.codebase_repo_url ??
     (repos.length > 0 ? (repos[0] as { repo_url?: string | null }).repo_url ?? null : null);
+  // Same agent line as GET /preflight; a failed read keeps the old Anthropic rule.
+  const agent = await loadFixAgentCheck(
+    db,
+    projectId,
+    (settings as { autofix_agent?: string | null } | null)?.autofix_agent ?? null,
+    new Date(),
+  ).catch(() => null);
 
   return {
     repoUrl,
+    agent: agent ? { ready: agent.ready, label: agent.label, hint: agent.hint } : null,
     hasGithub: Boolean(settings?.github_repo_url) || repos.length > 0,
     hasAnthropic: Boolean(anthropicKey),
     anthropicSource: anthropicKey?.source ?? null,
@@ -104,11 +113,11 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
     }
 
-    const [settingsRes, reposRes, anthropicKey, integrationSignals] = await Promise.all([
+    const [settingsRes, reposRes, integrationSignals] = await Promise.all([
       db
         .from('project_settings')
         .select(
-          'github_repo_url, byok_anthropic_key_ref, codebase_index_enabled, autofix_enabled, codebase_repo_url',
+          'github_repo_url, codebase_index_enabled, autofix_enabled, codebase_repo_url, autofix_agent',
         )
         .eq('project_id', projectId)
         .maybeSingle(),
@@ -120,11 +129,19 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
         .eq('project_id', projectId)
         .order('is_primary', { ascending: false })
         .limit(1),
-      resolveLlmKey(db, projectId, 'anthropic', { purpose: 'probe' }),
       loadIntegrationSignals(db, [projectId]),
     ]);
 
     const settings = settingsRes.data;
+    // The agent that runs the fix (autofix_agent) and its key: the line used
+    // to demand an Anthropic key for every app, also for a team on OpenAI,
+    // where no Claude key is ever handed out (console audit 2026-11-11).
+    const agentCheck = await loadFixAgentCheck(
+      db,
+      projectId,
+      (settings as { autofix_agent?: string | null } | null)?.autofix_agent ?? null,
+      new Date(),
+    );
     const repos = reposRes.data ?? [];
     const baseBranch = (repos[0] as { default_branch?: string | null } | undefined)?.default_branch ?? null;
 
@@ -136,13 +153,11 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
     // Same rule as the setup checklist: a repo to patch AND a credential
     // (project, org default, GitHub App install, or platform token).
     const hasGithub = integrationSignals.get(projectId)?.hasGithub ?? false;
-    const hasAnthropic = Boolean(anthropicKey);
-    const anthropicSource = anthropicKey?.source ?? null;
     const hasCodebase = Boolean(settings?.codebase_index_enabled);
     const hasAutofix = Boolean(settings?.autofix_enabled);
 
     type Check = {
-      key: 'github' | 'codebase' | 'anthropic' | 'autofix';
+      key: 'github' | 'codebase' | 'agent' | 'autofix';
       ready: boolean;
       label: string;
       hint: string;
@@ -167,17 +182,11 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
         fixHref: '/integrations/config#integrations-codebase',
       },
       {
-        key: 'anthropic',
-        ready: hasAnthropic,
-        label: anthropicSource === 'env'
-          ? 'Anthropic key available (platform)'
-          : anthropicSource === 'byok'
-            ? 'Anthropic API key set'
-            : 'Anthropic API key set',
-        hint: anthropicSource === 'env'
-          ? 'Using the platform Anthropic key — add your own in Settings → API Keys to isolate usage.'
-          : 'Add your Anthropic API key (BYOK) to power the fix-generation model.',
-        fixHref: '/settings?tab=byok',
+        key: 'agent',
+        ready: agentCheck.ready,
+        label: agentCheck.label,
+        hint: agentCheck.hint,
+        fixHref: agentCheck.fixHref,
       },
       {
         key: 'autofix',

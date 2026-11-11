@@ -45,11 +45,12 @@ const appSource = read('App.tsx')
 
 /**
  * `<Route path="/reports" element={<ReportsPage />} />` → { '/reports': 'ReportsPage' }.
- * A page wrapped in FirstRunGate (no-app accounts open setup) maps to the page.
+ * A page wrapped in FirstRunGate (no-app accounts open setup) or OperatorRoute
+ * (the operator cockpit, 2026-11-11) maps to the page.
  */
 function parseRoutes(source: string): Map<string, string> {
   const routes = new Map<string, string>()
-  const re = /<Route\s+path="([^"]+)"\s+element=\{(?:<FirstRunGate>)?<(\w+)[^>]*\/?>(?:<\/FirstRunGate>)?\}/g
+  const re = /<Route\s+path="([^"]+)"\s+element=\{(?:<(?:FirstRunGate|OperatorRoute)>)?<(\w+)[^>]*\/?>(?:<\/(?:FirstRunGate|OperatorRoute)>)?\}/g
   for (const m of source.matchAll(re)) routes.set(m[1], m[2])
   return routes
 }

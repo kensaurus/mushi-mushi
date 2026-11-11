@@ -1,9 +1,9 @@
 # Mushi Mushi — full documentation dump
 
-> The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
+> Bug fixing for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Pages: 227
+Pages: 233
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -27,6 +27,23 @@ Your AI wrote it. Mushi Mushi tells you why it broke.</>}
   lead={LANDING_HERO.lead}
 />
 
+Words you will see on this page
+
+- **Diagnosis**: Mushi Mushi's written explanation of one bug: how serious it is, the likely cause and a suggested fix.
+- **Fix prompt**: the diagnosis plus the evidence, written as instructions you paste into your AI builder (Lovable, Bolt, Cursor or Claude Code).
+- **Script tag** or **SDK**: the small piece of code you add to your app. It shows the report button and sends reports to Mushi Mushi.
+- **Sentry**: a popular service that records errors when code crashes. You don't need it.
+- **Pull request (PR)**: a proposed change to your code that you can read before you accept it.
+- **MCP**: the standard way AI code editors such as Cursor and Claude Code connect to outside tools. It is how your editor reads Mushi Mushi's reports.
+
+More words, in plain English: [the glossary](/glossary).
+
+## Will my customers actually report bugs?
+
+Most won't. Most people who hit a bug just leave. So reporting takes one tap for the people who do speak up, and Mushi Mushi can also look for bugs itself: [check your live site free](/check?src=landing-customers), with no sign-up, or connect the [deeper checks](/what-it-does) when you want them.
+
+On my own 9 apps, about 98% of the bugs in the 60 days to 2026-11-11 came from checks, code reviews, error alerts and my own notes, not from people's reports. [See the live numbers](/proof).
+
 ## See it work, on a real bug
 
 A real bug from Mushi Mushi's own app, from the report to the merged fix.
@@ -39,9 +56,9 @@ A real bug from Mushi Mushi's own app, from the report to the merged fix.
 
 ## Why I built it
 
-I build apps with Cursor and Claude Code, mostly on my own, and eight of them have real users. When one broke, I often didn't know where to start, because I hadn't written the code line by line.
+I build apps with Cursor and Claude Code, mostly on my own, and they have real users. When one broke, I often didn't know where to start, because I hadn't written the code line by line.
 
-So I built Mushi Mushi and ran it on all eight. In the 60 days to 2026-10-29, people sent 32 bug reports, and some of those were my own testing. My own checks (code audits, Sentry, the site watch, the first-time user test) found more than 1,000. Of the 234 fixes merged, one started from a user's report. [The live numbers are here](/proof).
+So I built Mushi Mushi and ran it on 9 of my apps. In the 60 days to 2026-11-11, people sent 34 bug reports, and some of those were my own testing. My own checks (code audits, Sentry, the site watch, the first-time user test) found 2,031. Of the 523 fixes merged, two started from a person's report. [The live numbers are here](/proof).
 
 That is why Mushi Mushi doesn't wait for reports: most people who hit a bug just leave.
 
@@ -49,18 +66,11 @@ It is early, and I'm still its main user. If something confuses you, [open an is
 
 ## What this is (and is not)
 
-Mushi Mushi is the bug mediator for AI-built apps, an open-source tool that gives every bug your users report a plain-English diagnosis + a ready fix, in your editor.
+Mushi Mushi is an open-source tool for bug fixing for AI-built apps: every bug your users report gets a plain-English diagnosis + a ready fix, in your editor.
 
 **Who it is for.** {LANDING_WHAT_THIS_IS.who} {LANDING_WHAT_THIS_IS.boundary}
 
-**Where it stands.** Live and free to try: hosted service, npm packages and public source. Built by Kenji Sakuramoto, a solo developer in Japan ([kensaur.us](https://kensaur.us), [X](https://x.com/sakuramotokenji), [GitHub](https://github.com/kensaurus)), who runs it on his own 8 live apps; [the numbers are public](/proof), with bugs his own checks found counted apart from bugs people reported. Native iOS, Android and Flutter libraries are previews.
-
-Words you will see on this page
-
-- **Diagnosis**: Mushi Mushi's written explanation of one bug, with how serious it is, the likely cause and a suggested fix.
-- **Fix prompt**: the diagnosis plus the evidence, written as instructions you paste into your AI editor.
-- **SDK** or **script tag**: the small piece of code you add to your app. It shows the report button and sends reports to Mushi Mushi.
-- **MCP**: the standard way AI code editors such as Cursor and Claude Code connect to outside tools. It is how your editor reads Mushi Mushi's reports.
+**Where it stands.** Live and free to try: hosted service, npm packages and public source. Built by one developer in Japan (Kensaurus 合同会社): Kenji Sakuramoto ([kensaur.us](https://kensaur.us), [X](https://x.com/sakuramotokenji), [GitHub](https://github.com/kensaurus)), who runs it on his own 9 live apps; [the numbers are public](/proof), with bugs his own checks found counted apart from bugs people reported. Native iOS, Android and Flutter libraries are previews.
 
 More: [How it works, on video](/how-it-works) · [Who it’s for](/who-its-for) · [What else it does](/what-it-does) · [How a bug moves, step by step](/concepts/closed-loop) ·
 [Sentry, Linear, Slack and other tools](/plugins) ·
@@ -414,6 +424,11 @@ description: Install Mushi Mushi with npx mushi-mushi, connect Cursor or Claude 
 ---
 
 # Quickstart
+
+  **Built with Lovable or Bolt? No terminal needed.** Skip this page and use
+  [Mushi Mushi in Lovable or Bolt](/quickstart/lovable-bolt): you paste one
+  prompt, and it takes about five minutes. Building a phone app with Expo,
+  React Native or Capacitor? Go to [your phone app](/quickstart/mobile).
 
 - One command, `npx mushi-mushi`, adds a report button to your app.
 - When a user reports a bug, Mushi Mushi writes a plain-English diagnosis.
@@ -1500,9 +1515,24 @@ Cursor asks you to sign in the first time the agent calls Mushi Mushi. Leave out
 
 ## Bolt
 
-Bolt also accepts a custom MCP server under **Connectors (MCP) → Custom MCP
-server** ([Bolt docs](https://support.bolt.new/integrations/mcp)). Use the same
-URL. We have not tested Mushi Mushi in Bolt yet.
+We have not tested Mushi Mushi in Bolt yet. These steps follow Bolt's own help
+page ([Bolt docs](https://support.bolt.new/integrations/mcp)).
+
+In the Bolt chatbox, click **+** → **Connectors** → **Manage connectors**, then
+**Custom MCP server**:
+
+| Field | Value |
+| --- | --- |
+| **Name** | `Mushi Mushi` |
+| **URL** | `https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe` |
+| **Transport type** | **HTTP** |
+| **Authentication** | **MCP OAuth** |
+
+Click **Connect** and sign in on the Mushi Mushi page that opens. Then turn the
+connector on for your project (chatbox **+** → **Connectors** → the toggle next
+to Mushi Mushi), and ask the same questions as in Lovable. If you can't use
+OAuth, choose **API key** and paste a Mushi Mushi key with MCP access from the
+console.
 
 ## What `?features=vibe` gives you
 
@@ -1547,25 +1577,54 @@ combine them, for example `?features=vibe,qa`.
 
 ---
 
-## Mobile (overview)
+## Your phone app: Expo, React Native or Capacitor
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/mobile
 
 ---
-title: Mobile (overview)
-description: Mushi Mushi shake-to-report for mobile apps. React Native and Capacitor install from npm with npx mushi-mushi; iOS, Android and Flutter SDKs are previews.
+title: "Your phone app: Expo, React Native or Capacitor"
+description: Add a shake-to-report button to your Expo, React Native or Capacitor app. Reports wait for the phone to go back online, then get a plain-English diagnosis.
 ---
 
-# Mobile
+# Your phone app (Expo, React Native or Capacitor)
 
-Pick the Mushi Mushi SDK that matches how you ship the app. React Native and Capacitor are
-published on npm and set up by `npx mushi-mushi`.
+On a phone, people rarely email you when something breaks. They close the app.
+Mushi Mushi gives them a quick way to tell you instead, and tells you why it
+broke in plain English.
+
+## What your users do
+
+- They **shake the phone**, or tap a small bug button, and type one sentence
+  about what went wrong.
+- The report can include a **screenshot** of the screen they were on.
+- No signal? The report **waits on the phone** and sends itself when the phone
+  is back online.
+
+## What you get
+
+Each report lands in your Mushi Mushi inbox with a short note: what broke, how
+serious it is, the likely cause, and a **fix prompt** you can paste into
+Cursor, Claude Code or another AI editor. [See a sample](/demo/diagnosis).
+
+## Pick how your app is built
 
   
   
 
-The native SDKs are previews: they are not on CocoaPods, Maven Central or
-pub.dev yet, so each page shows how to install from the GitHub repository.
+Both install from npm. The fastest way is to run `npx mushi-mushi` in your
+app's folder: it finds your setup, installs the right package and saves your
+project ID and key. On Expo and React Native, shake-to-report and screenshots
+each use one small extra package, which the setup page lists. On Capacitor
+they are settings. The setup takes a few minutes, then you make a new build of
+your app so the button ships with it.
+
+The free plan covers one app and 100 diagnoses a month, with no card and no AI
+key of your own. See [pricing](/pricing).
+
+## Native iOS, Android and Flutter (previews)
+
+These libraries are previews. They are not on CocoaPods, Maven Central or
+pub.dev yet, so each page shows how to install them from the GitHub repository.
 
 ---
 
@@ -2394,11 +2453,19 @@ description: Mushi Mushi pricing. Free for one app and 100 AI bug diagnoses a mo
 
 # Pricing
 
-## Plans
+Free for one app. You pay only when you want Mushi Mushi on more apps. A
+**diagnosis** is one bug explained in plain English, and repeat reports of the
+same bug count once.
+
+Every plan includes the report button, the plain-English diagnosis and the fix
+prompt. You don't need an AI key of your own, and the integrations (Sentry,
+Slack, GitHub, Linear, Jira) work on every plan.
+
+## All plans
 
 A plan is the number of **apps** Mushi Mushi watches for your team: one on Free, three on Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
 
-Installing plugins from the Marketplace (PagerDuty, Zapier, the Cursor and Claude Code agents, Linear Sync, Sentry Mirror) needs Builder or above. The Integrations page (Sentry, Slack, GitHub, Linear) works on every plan.
+Installing plugins from the Marketplace (PagerDuty, Zapier, the Cursor and Claude Code agents, Linear Sync, Sentry Mirror) needs Builder or above. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on every plan. Team invites need Studio.
 
   **Annual billing saves two months.** Pay for 10 months, get 12: Builder is $290 a year, Studio $790. Annual plans have no pay-as-you-go overage: they include the plan's diagnoses each month and pause new diagnoses at that limit. Pick annual at checkout, or switch an existing plan with **Change plan** on the Billing page. For Enterprise commits, contact us.
 
@@ -2546,6 +2613,8 @@ description: Honest, dated comparisons of Mushi Mushi with Sentry, Jam and PostH
 
 # Compare Mushi Mushi with the tools you already know
 
+> **Never used Sentry, Jam or PostHog?** You don't need any of them to use Mushi Mushi, so you can skip these pages. [See what Mushi Mushi does](/what-is-mushi-mushi) instead.
+
 These pages exist because "is this a Sentry replacement?" is the first
 question almost everyone asks, and a fair answer needs the other tool's
 numbers next to ours. Each page states what the other product is for in its
@@ -2588,6 +2657,8 @@ description: Jam.dev vs Mushi Mushi in 2026. A teammate recording a bug in the J
 ---
 
 # Jam vs Mushi Mushi
+
+> **Never used Jam?** You don't need it to use Mushi Mushi, so you can skip this page. [See what Mushi Mushi does](/what-is-mushi-mushi) instead.
 
 Jam and Mushi Mushi both put console and network logs next to a bug so nobody has
 to ask "can you reproduce that?". The difference is who presses the button.
@@ -2658,6 +2729,8 @@ description: PostHog session replay vs Mushi Mushi in 2026. Every session record
 
 # PostHog session replay vs Mushi Mushi
 
+> **Never used PostHog?** You don't need it to use Mushi Mushi, so you can skip this page. [See what Mushi Mushi does](/what-is-mushi-mushi) instead.
+
 PostHog records every session and every exception, and gives you product
 analytics on top. Mushi Mushi records the moment a user says something is wrong,
 attaches the screen they were looking at and the console/network tail, and
@@ -2724,6 +2797,8 @@ description: Sentry alternatives for solo founders in 2026. Bugsnag, Rollbar, hi
 ---
 
 # Sentry alternatives for solo founders
+
+> **Never used Sentry?** You don't need it, or any of the tools below, to use Mushi Mushi. [See what Mushi Mushi does](/what-is-mushi-mushi) instead.
 
 If you are one person shipping an app to real users, the question is not
 "which error tracker is best". It is "which one will I still be reading in
@@ -2808,6 +2883,8 @@ description: Sentry vs Mushi Mushi in 2026. What each captures, Sentry's free ti
 
 # Sentry vs Mushi Mushi
 
+> **Never used Sentry?** You don't need it to use Mushi Mushi, so you can skip this page. [See what Mushi Mushi does](/what-is-mushi-mushi) instead.
+
 Sentry is built around what the code threw, with a User Feedback widget and
 Session Replay alongside. Mushi Mushi starts from what the user reported, ingests
 Sentry's errors too, explains each one in plain English, and hands your agent
@@ -2890,9 +2967,24 @@ description: Where Mushi Mushi fits. An open-source Sentry alternative, a debugg
 
 # Use cases & comparisons
 
-Mushi Mushi is the bug mediator for AI-built apps: user bug reports and Sentry errors in,
-plain-English diagnoses and ready fixes out. These pages map that loop onto
-the situations people actually search for.
+Mushi Mushi is bug fixing for AI-built apps: your users tap a button to tell
+you what broke, Mushi Mushi checks your live site too, and every bug gets a
+plain-English explanation and a fix your AI can apply. These pages map that
+onto the situations people actually search for.
+
+**Your situation**
+
+- **[You built your app with Lovable or Bolt](/use-cases/no-code-founder)**:
+  a report button, a plain-English cause and fix words to paste back, with no
+  terminal.
+- **[You build apps for clients](/use-cases/agency-client-apps)**: one report
+  button per client app and one console for all of them.
+- **[You have a phone app](/use-cases/mobile-app)**: shake to report, for
+  Expo, React Native and Capacitor.
+- **[Your Lovable app broke in production](/use-cases/lovable-app-broke-in-production)**:
+  a checklist for the afternoon it happens.
+
+**For developers**
 
 - **[Sentry alternative for AI-built apps](/use-cases/sentry-alternative)** —
   what Mushi Mushi replaces, what it complements, and a side-by-side table.
@@ -2912,7 +3004,75 @@ first report:
 npx mushi-mushi
 ```
 
-Start with the [incident-loop quickstart](/quickstart/incident-loop).
+Start with the [incident-loop quickstart](/quickstart/incident-loop). No
+terminal? Use the [Lovable or Bolt guide](/quickstart/lovable-bolt) instead.
+
+---
+
+## You build apps for clients
+
+Source: https://kensaur.us/mushi-mushi/docs/use-cases/agency-client-apps
+
+---
+title: You build apps for clients
+description: For agencies and freelancers who run several client apps. One report button per app, one inbox with a plain-English cause per bug, and a plan sized by apps.
+---
+
+# You build apps for clients
+
+## What goes wrong for you
+
+Your clients send bugs by email, chat messages and screenshots, often days
+after they happened. "The form is broken" can cost you an hour just to work out
+which app, which page and which form. Their customers, who saw the bug first,
+usually tell nobody.
+
+## What Mushi Mushi does
+
+- Each client app gets a **report button**. Anyone using the app can tap it and
+  type one sentence. Mushi Mushi adds a picture of the screen, the page and what
+  they tapped.
+- Reports from every app land in **one console**, sorted by app, with repeat
+  reports of the same bug grouped into one.
+- Each bug gets a **plain-English diagnosis** (the likely cause, how serious it
+  is and how sure Mushi Mushi is) and a **fix prompt** for Cursor, Claude Code,
+  Lovable or Bolt.
+- When you mark a bug fixed, Mushi Mushi can let the person who reported it
+  know.
+
+## What you do
+
+1. Create one project per client app and add the button: one command in Cursor
+   or Claude Code, or one prompt in Lovable or Bolt.
+2. Invite your team. On Studio you can also invite a client with the read-only
+   **Viewer** role, so they see their app's reports without changing anything.
+3. When a report comes in, read the diagnosis, paste the fix prompt into your AI
+   editor, check the change and ship it.
+
+The [team setup checklist](/quickstart/team-setup) walks through roles,
+integrations and reviews.
+
+## How long it takes
+
+A few minutes per app. A test report gets its diagnosis in about 10 seconds.
+
+## What it costs
+
+| Plan | Apps | People | Diagnoses a month | Price |
+| --- | --- | --- | --- | --- |
+| Free | 1 | 1 | 100 | $0 |
+| Builder | 3 | 1 | 1,000 | $29 / mo |
+| Studio | 10 | 5 | 3,000 | $79 / mo |
+
+Team invites need Studio, and every invited person, a client viewer included,
+takes one of its five seats. On monthly plans, each diagnosis past the included ones is
+$0.03, up to a monthly cap you set. Details on [pricing](/pricing).
+
+## Next
+
+- [See a sample report](/demo/diagnosis), no sign-up.
+- [Team setup checklist](/quickstart/team-setup).
+- [Pricing](/pricing).
 
 ---
 
@@ -2932,9 +3092,9 @@ having written the module; every investigation starts cold. The fix itself is
 cheap — an agent can write it in seconds — but only once someone has worked
 out **what actually broke and where**.
 
-Mushi Mushi is built around that bottleneck. It's the bug mediator for
-AI-built apps: it turns raw user reports into diagnoses an agent (or you) can
-act on immediately.
+Mushi Mushi is built around that bottleneck. It's bug fixing for AI-built
+apps: it turns raw user reports into diagnoses an agent (or you) can act on
+right away.
 
 ## The pipeline
 
@@ -3114,6 +3274,11 @@ This is a checklist for that afternoon. It assumes you can open the browser
 console and you have an AI editor. Most of it has nothing to do with Mushi Mushi;
 one step does.
 
+**Can't open the browser console, or not sure what it is?** Go straight to
+step 8 below. You add a report button to your app with one prompt in Lovable
+or Bolt, and Mushi Mushi collects the user's words, their screen, the page and
+the errors for you, then explains the bug in plain English.
+
 ## 1. Get the user's exact words and their screen
 
 "It's broken" is not a bug report. Ask for three things: what they were
@@ -3251,6 +3416,122 @@ npx mushi-mushi
 **Next:** [MCP server quickstart](/quickstart/mcp) ·
 [Connect your editor](/connect) ·
 [Debug Claude Code apps](/use-cases/debug-claude-code-apps)
+
+---
+
+## You have a phone app: Expo, React Native or Capacitor
+
+Source: https://kensaur.us/mushi-mushi/docs/use-cases/mobile-app
+
+---
+title: "You have a phone app: Expo, React Native or Capacitor"
+description: For people with a phone app built with Expo, React Native or Capacitor. Users shake to report, reports wait for signal, and you get the cause in plain English.
+---
+
+# You have a phone app (Expo, React Native or Capacitor)
+
+## What goes wrong for you
+
+On a phone, people don't email you when something breaks. They close the app,
+and sometimes they leave a one-star review a week later. By then you can't
+tell which screen, which phone or which version it was.
+
+## What Mushi Mushi does
+
+- Your users **shake the phone**, or tap a small bug button, and type one
+  sentence. The report can include a screenshot of the screen they were on.
+- No signal? The report **waits on the phone** and sends itself once the phone
+  is back online.
+- You get a **plain-English diagnosis** (what broke, how serious it is, the
+  likely cause) and a **fix prompt** for Cursor, Claude Code or another AI
+  editor.
+
+Native iOS, Android and Flutter libraries are previews.
+
+## What you do
+
+1. Run `npx mushi-mushi` in your app's folder. It finds Expo, React Native or
+   Capacitor, installs the right package and saves your project ID and key.
+2. Make a new build of your app, so the button ships with it.
+3. When a report comes in, read the diagnosis, paste the fix prompt into your AI
+   editor, check the change and ship an update.
+
+## How long it takes
+
+A few minutes for the setup, plus the time your app takes to build.
+
+## What it costs
+
+Free for one app: 100 diagnoses a month, no card and no AI key of your own.
+More apps are on [Builder and Studio](/pricing).
+
+## Next
+
+- [See a sample report](/demo/diagnosis), no sign-up.
+- [Set up your phone app](/quickstart/mobile): Expo, React Native, Capacitor and
+  the native previews.
+
+---
+
+## You built your app with Lovable or Bolt
+
+Source: https://kensaur.us/mushi-mushi/docs/use-cases/no-code-founder
+
+---
+title: You built your app with Lovable or Bolt
+description: For founders who built their app with Lovable or Bolt and can't read the code. A report button, a plain-English cause and fix words to paste back. No terminal.
+---
+
+# You built your app with Lovable or Bolt
+
+## What goes wrong for you
+
+You described your app in a chat and Lovable (or Bolt) built it. Now real
+people use it, and sometimes something breaks. You can't read the code, and a
+customer saying "it doesn't work" doesn't tell you where to look. Most people
+who hit a bug don't even say that. They just leave.
+
+## What Mushi Mushi does
+
+- It adds a **"Report a problem" button** to your app. A customer taps it and
+  types one sentence. Mushi Mushi adds a picture of their screen, the page they
+  were on and what they tapped.
+- You get a **short note in plain English**: what broke, how serious it is and
+  the likely cause.
+- It writes the **fix instructions** for you: the exact words to paste back
+  into Lovable or Bolt.
+- If you want, [check your live site free](/check), with no sign-up, to catch
+  problems nobody has reported yet.
+
+## What you do
+
+1. Sign up free and create a project.
+2. Copy the line Mushi Mushi gives you (your app's details are already in it)
+   and ask Lovable or Bolt to add it. You paste a prompt; there is no terminal.
+3. Publish your app. When a report comes in, read the note, paste the fix
+   instructions into Lovable or Bolt, check the change and publish again.
+
+Nothing changes in your app until you approve it.
+
+## How long it takes
+
+About five minutes to set up. A test report gets its plain-English diagnosis in
+about 10 seconds.
+
+## What it costs
+
+Free for one app: 100 diagnoses a month, no card and no AI key of your own. A
+diagnosis is one bug explained, and repeat reports of the same bug count once.
+More apps are on [Builder and Studio](/pricing).
+
+## Next
+
+- [See a sample report](/demo/diagnosis): one bug from the customer's words to
+  the fix instructions, no sign-up.
+- [Set it up in Lovable or Bolt](/quickstart/lovable-bolt): the step-by-step
+  guide.
+- [Your app broke today?](/use-cases/lovable-app-broke-in-production) A
+  checklist for that afternoon.
 
 ---
 
@@ -7749,10 +8030,16 @@ When merge succeeds, the report moves to **Fixed**, the reporter gets notified, 
 ### `mushi work`
 
 Fix reports with a coding agent on your own machine instead of a cloud agent.
-The agent (the Cursor CLI, `cursor-agent`, signed in to any Cursor account)
-only edits a worktree of your repo; `mushi work` commits, pushes and opens the
-draft pull request with **your** local credentials. So you can spend a Cursor
-account's allowance without that account's GitHub ever touching your repo.
+The agent only edits a worktree of your repo; `mushi work` commits, pushes and
+opens the draft pull request with **your** local credentials. Two agents work:
+
+- `--agent cursor` (the default): the Cursor CLI, `cursor-agent`, signed in to
+  any Cursor account. You spend that account's allowance without its GitHub
+  ever touching your repo.
+- `--agent claude`: Claude Code, `claude -p`, on the claude.ai plan it is
+  signed in to (`claude auth login`). The prompt goes on stdin. Only your
+  repo's own Claude Code settings load, and no MCP server: your personal hooks
+  and MCP servers never reach an agent that reads report text.
 
 ```bash
 # Show which reports it would take (worst first, none with a run or PR already live)
@@ -7763,6 +8050,9 @@ mushi work --repo-dir ~/code/my-app --max 3
 
 # One report, a chosen model
 mushi work --repo-dir ~/code/my-app --report <reportId> --model gpt-5
+
+# The same with Claude Code
+mushi work --agent claude --repo-dir ~/code/my-app --max 3 --model sonnet
 ```
 
 For each report it:
@@ -7770,8 +8060,9 @@ For each report it:
 1. Reads Mushi Mushi's fix packet and what earlier attempts did (their Opus review
    findings), as data the agent must not take as instructions.
 2. Creates a worktree from `origin/` on
-   `bugfix/MUSHI--local-cursor` and runs `cursor-agent -p` in it
-   (30 minutes at most), after installing the worktree's dependencies from
+   `bugfix/MUSHI--local-cursor` (`-local-claude` with Claude Code)
+   and runs `cursor-agent -p` or `claude -p` in it (30 minutes at most),
+   after installing the worktree's dependencies from
    its lockfile (pnpm, npm or yarn) so the agent can run the tests and your
    commit hooks work. The agent's environment has no credentials, and
    version control inside it cannot reach the remote.
@@ -7783,7 +8074,9 @@ For each report it:
 
 A report whose local run ended without a pull request in the last 7 days
 (a timeout, no change, or a verdict) is skipped; pass `--report ` to run
-it anyway. The agent has 30 minutes, so a report that names several pages is
+it anyway. When the agent cannot run at all (its plan is out of usage, or it
+is signed out), `mushi work` closes that run without a cooldown, commits
+nothing and stops, so the rest of the batch is left for later. The agent has 30 minutes, so a report that names several pages is
 fixed one page at a time: split broad reports into one page or cause each.
 
 When Opus says "fix first" on one of these pull requests, run
@@ -7806,12 +8099,14 @@ mushi work --repo-dir ~/code/my-app --followups --model grok-4.7-xhigh
 | `--repo-dir ` | A clone of the app repo; only worktrees are created in it |
 | `--max ` | Reports per run (default 3, at most 10) |
 | `--report ` | Work on this report only |
+| `--agent ` | `cursor` (default) or `claude` |
 | `--followups` | Fix the Opus "fix first" findings on pull requests `mushi work` opened, and push to them |
-| `--model ` | Model for the agent (`cursor-agent --list-models`) |
+| `--model ` | Model for the agent: `cursor-agent --list-models`, or for Claude Code an alias (`opus`, `sonnet`, `haiku`) or a full `claude-…` id |
 | `--keep` | Keep the worktree afterwards |
 | `--dry-run` | Show the plan; change nothing |
 
-Needs `cursor-agent` and `gh` signed in, and an API key with `mcp:write`.
+Needs the agent (`cursor-agent status` or `claude auth status` says signed in)
+and `gh` signed in, and an API key with `mcp:write`.
 
 ### `mushi worker`
 
@@ -7891,8 +8186,8 @@ before anything leaves the machine.
 
 | Command | Flags |
 | --- | --- |
-| `mushi work --daemon` | `--worker-config ` (default `~/.config/mushi/worker.json`) |
-| `mushi worker install` | `--lanes-conf `, `--clone-root `, or one lane: `--lane`, `--project`, `--repo-dir`, `--model`; `--stop-at ` (every lane's stop date on first registration), `--cursor-account ` (spend only that Cursor account), `--endpoint`, `--key-stdin`, `--no-service`, `--yes`, `--dry-run` |
+| `mushi work --daemon` | `--worker-config ` (default `~/.config/mushi/worker.json`), `--agent ` (overrides the config's `agent`) |
+| `mushi worker install` | `--lanes-conf `, `--clone-root `, or one lane: `--lane`, `--project`, `--repo-dir`, `--model`; `--stop-at ` (every lane's stop date on first registration), `--cursor-account ` (spend only that Cursor account), `--agent cursor\|claude` (the agent every lane runs, stored as `agent` in `worker.json`; with `claude`, lane models that are not Claude ids fall back to Claude Code's default and Switch account does not apply), `--endpoint`, `--key-stdin`, `--no-service`, `--yes`, `--dry-run` |
 | `mushi worker status` | `--project `, `--json` |
 | `mushi worker revoke` | `--yes` |
 
@@ -15045,6 +15340,12 @@ description: Hosted Mushi Mushi. Bug reports, plain-English diagnoses, and fix d
 
 ## Plans
 
+No plan needs an AI key of your own: Mushi Mushi's AI writes the diagnosis.
+You can add your own Anthropic, OpenAI or Cursor key on any plan, Free
+included. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on
+every plan; installing plugins from the Marketplace needs Builder or above, and
+team invites need Studio. Full details are on [pricing](/pricing).
+
 ## Sign-up flow
 
 1. `kensaur.us/mushi-mushi/admin`: email and password, or a GitHub account when that sign-in is offered.
@@ -17807,6 +18108,29 @@ For security incidents, use `kensaurus@gmail.com` instead (see
 
 ---
 
+## Samples you can read without signing up
+
+Source: https://kensaur.us/mushi-mushi/docs/demo
+
+---
+title: Samples you can read without signing up
+description: Try Mushi Mushi before you install anything. A sample diagnosis from a customer's words to the fix prompt, and a short clip of what your users see.
+---
+
+# Samples
+
+You can see what Mushi Mushi does before you sign up or install anything.
+
+- **[Sample diagnosis](/demo/diagnosis)**: a customer says the checkout button
+  does nothing on their phone. See what Mushi Mushi captured, the plain-English
+  cause and the fix prompt your AI can use.
+- **[How it works, on video](/how-it-works)**: short clips of a customer
+  reporting a bug and of the bug going from report to fix.
+- **[Check your live site](/check)**: a free check of your own site, with no
+  sign-up. It is separate from bug reports.
+
+---
+
 ## Sample diagnosis: Pay now does nothing on a phone
 
 Source: https://kensaur.us/mushi-mushi/docs/demo/diagnosis
@@ -17841,13 +18165,47 @@ an ellipsis marks it:
 
 ---
 
+## Glossary
+
+Source: https://kensaur.us/mushi-mushi/docs/glossary
+
+---
+title: Glossary
+description: The words you will see on Mushi Mushi's site and console, each explained in one or two plain sentences, from diagnosis and fix prompt to MCP and pull request.
+---
+
+# Glossary
+
+The words you will see on this site and in the Mushi Mushi console, in plain
+English. New to all of it? Start with [What is Mushi Mushi?](/what-is-mushi-mushi)
+
+- **AI builder or AI editor**: The tool that writes your app's code for you, such as Lovable, Bolt, Cursor or Claude Code.
+- **API key**: A long password that lets your app or your tools talk to Mushi Mushi. Mushi Mushi keys start with `mushi_`. Keep the ones that can read reports private.
+- **Bug mediator**: A word the integrations pages use for how Mushi Mushi works inside: one list that sits between your users, your other tools and your AI, so every bug is explained once, wherever it came from.
+- **CI (continuous integration)**: A service, such as GitHub Actions, that runs your app's tests every time the code changes. You don't need it to use Mushi Mushi.
+- **Console**: The Mushi Mushi website where you read your reports, see each diagnosis and change your settings.
+- **Diagnosis**: Mushi Mushi's short written explanation of one bug: how serious it is, the likely cause, how sure it is, and a suggested fix. Your plan counts these.
+- **Duplicate reports**: When several people report the same bug, Mushi Mushi groups them into one item, and they count as one diagnosis.
+- **Fix prompt**: The diagnosis plus the evidence, written as instructions you paste into your AI builder so it can fix the bug.
+- **MCP (Model Context Protocol)**: The standard way AI code editors such as Cursor and Claude Code connect to outside tools. It lets your editor read Mushi Mushi's reports itself. In Lovable or Bolt you don't need it.
+- **Project ID**: The name tag that tells Mushi Mushi which of your apps a report came from. Your setup page fills it in for you.
+- **Pull request (PR)**: A proposed change to your code that you can read before you accept it. An AI agent can open one with a fix, and nothing changes until you merge it, unless you turn on automatic merging.
+- **Report button (widget)**: The small button Mushi Mushi adds to your app. People tap it, or shake their phone, to tell you something is wrong.
+- **Script tag**: One line of code you add to your web page, usually by asking Lovable or Bolt to paste it. It shows the report button.
+- **SDK**: A ready-made package of code for your kind of app (React, Expo and so on). It does the same job as the script tag, for apps that are set up with a terminal.
+- **Self-host**: Running Mushi Mushi on your own server instead of using the hosted version. It is free, but you supply your own AI key and look after the server.
+- **Sentry**: A popular service that records errors when code crashes. Mushi Mushi can read its errors if you use it, but you don't need it.
+- **Severity**: How bad a bug is, from low to critical, so you know what to fix first.
+
+---
+
 ## How Mushi Mushi works, shown on real screens
 
 Source: https://kensaur.us/mushi-mushi/docs/how-it-works
 
 ---
 title: How Mushi Mushi works, shown on real screens
-description: "Watch a bug go from a user's report to a merged fix: the report button, the plain-English diagnosis, the fix prompt for your editor, and the pipeline."
+description: "Watch a bug go from a user's report to a fix: what you do at each step, what Mushi Mushi does, and the real screens from report button to fix prompt."
 ---
 
 # How Mushi Mushi works
@@ -17860,40 +18218,63 @@ The console clips use Mushi Mushi's own app, so every bug and pull request in
 them is real and public. The first clip uses a made-up shop, because it shows
 what *your* users see.
 
-## How a bug moves
+## The four steps
 
-## What it fixes about bug tracking today
+| Step | What you do | What Mushi Mushi does |
+| --- | --- | --- |
+| **1. Add the button** | Copy one line from Mushi Mushi and ask Lovable or Bolt to add it. In Cursor or Claude Code, it's one command. About 5 minutes. | Gives you the line with your app's details already filled in. |
+| **2. A customer reports a problem** | Nothing. | Your customer taps the button and types one sentence, like "the Pay button does nothing". Mushi Mushi adds a picture of their screen, the page they were on and what they tapped. |
+| **3. Read what went wrong** | Open the report. It's a short note in plain English. | Works out the likely cause, says how serious it is and how sure it is, and groups repeat reports of the same bug into one. |
+| **4. Let your AI fix it** | Copy the fix instructions into Lovable, Bolt, Cursor or Claude Code. Check the change, then publish. | Writes the fix instructions for your AI builder. When you mark the bug fixed, it can let the customer who reported it know. |
 
-| What hurts today | What Mushi Mushi does |
-| --- | --- |
-| A user writes "it's broken" and you don't know where to start. | Each report comes with the screen, the page and what they tapped, and a diagnosis that says why it broke. |
-| You didn't write the code line by line, so the stack trace means little. | The diagnosis is plain English: the cause, the fix and the steps to see it happen. |
-| You ask the AI to fix it, and it guesses, because it has no context. | The fix prompt carries the report, the evidence and the files involved. Your editor can also fetch it over MCP. |
-| Most people who hit a bug just leave. | A report button in the corner takes one sentence. Mushi Mushi also runs its own checks, so bugs nobody reports still show up. |
-| Reports are scattered across email, Slack, Sentry and app reviews. | They land in one list, duplicates merged, ranked by how bad they are and how many people they hit. |
-| Agent-written pull requests pile up, and each needs a careful read. | A second AI reads each one next to the original report and can refuse it. Approved fixes can ship together, in one CI run. |
-| You never close the loop with the person who told you. | When the fix merges, the bug is marked fixed and the reporter is told. |
+**You stay in charge.** Nothing changes in your app until you approve it.
 
-More on who feels which pain: [Who it's for](/who-its-for).
+**You don't need other tools.** If you already use an error tracker such as
+Sentry, you can connect it, but you don't have to.
 
 ## 1. Your user reports a bug
 
-To put the button in your app, run `npx mushi-mushi` in your app's folder, or
-paste one script tag. See the [Quickstart](/quickstart).
+To put the button in your app, paste one prompt into Lovable or Bolt (see
+[Lovable or Bolt](/quickstart/lovable-bolt)), or run `npx mushi-mushi` in your
+app's folder. See the [Quickstart](/quickstart).
 
 ## 2. From the report to a merged fix
 
 This is a real report: the app switcher in Mushi Mushi's own console said
 "All apps" on pages that only show one.
 [The pull request that fixed it](https://github.com/kensaurus/mushi-mushi/pull/689)
-is public.
+(a proposed code change you read before accepting it) is public.
 
-## 3. Connect your AI editor
+## What it fixes about bug tracking today
+
+| What hurts today | What Mushi Mushi does |
+| --- | --- |
+| A user writes "it's broken" and you don't know where to start. | Each report comes with the screen, the page and what they tapped, and a diagnosis that says why it broke. |
+| You didn't write the code line by line, so the error message means little. | The diagnosis is plain English: the cause, the fix and the steps to see it happen. |
+| You ask the AI to fix it, and it guesses, because it has no context. | The fix prompt carries the report, the evidence and the files involved. |
+| Most people who hit a bug just leave. | A report button in the corner takes one sentence. You can also [check your live site free](/check) and connect [deeper checks](/what-it-does) later. |
+| Reports are scattered across email, chat, error tools and app reviews. | They land in one list, duplicates merged, ranked by how bad they are and how many people they hit. |
+| You never close the loop with the person who told you. | When you mark the bug fixed, the person who reported it can be told. |
+
+More on who feels which pain: [Who it's for](/who-its-for).
+
+## For developers
+
+The rest of this page is for people who read their own code and run CI (a
+service that runs your tests on every change).
+
+### How a bug moves
+
+Agent-written pull requests can pile up. A second AI reads each one next to the
+original report and can refuse it, and approved fixes can ship together in one
+CI run.
+
+### Connect your AI editor
 
 The [Connect page guide](/admin/connect) covers each editor, and
 [MCP](/sdks/mcp) lists what your editor can ask Mushi Mushi for.
 
-## 4. Watch every fix ship
+### Watch every fix ship
 
 The numbers in this clip are real: on Mushi Mushi's own app, many fixes wait
 for a person's decision, and the page says so instead of hiding them.
@@ -17901,6 +18282,7 @@ for a person's decision, and the page says so instead of hiding them.
 
 ## Where to go next
 
+- [Lovable or Bolt](/quickstart/lovable-bolt): no terminal, about five minutes.
 - [Quickstart](/quickstart): install it on your app in a few minutes.
 - [Sample diagnosis](/demo/diagnosis): one bug, from report to fix prompt, no sign-up.
 - [How a bug moves, step by step](/concepts/closed-loop): the same loop, in detail.
@@ -17948,6 +18330,61 @@ Everything that ships is also in the [changelog](/changelog).
 
 ---
 
+## What is Mushi Mushi?
+
+Source: https://kensaur.us/mushi-mushi/docs/what-is-mushi-mushi
+
+---
+title: What is Mushi Mushi?
+description: Mushi Mushi in one screen. What you do, what it does, how long setup takes and what it costs, in plain English, for people who build apps with AI.
+---
+
+# What is Mushi Mushi?
+
+Mushi Mushi adds a small "Report a problem" button to your app. When a customer
+taps it, Mushi Mushi explains what went wrong in plain English and writes the
+fix instructions for your AI builder: Lovable, Bolt, Cursor or Claude Code.
+
+It is for people who build apps with AI tools and have real users. You don't
+need to know how to code, and you don't need any other tools.
+
+## How Mushi Mushi works
+
+| Step | What you do | What Mushi Mushi does |
+| --- | --- | --- |
+| **1. Add the button** | Copy one line from Mushi Mushi and ask Lovable or Bolt to add it. In Cursor or Claude Code, it's one command. About 5 minutes. | Gives you the line with your app's details already filled in. |
+| **2. A customer reports a problem** | Nothing. | Your customer taps the button and types one sentence, like "the Pay button does nothing". Mushi Mushi adds a picture of their screen, the page they were on and what they tapped. |
+| **3. Read what went wrong** | Open the report. It's a short note in plain English. | Works out the likely cause, says how serious it is and how sure it is, and groups repeat reports of the same bug into one. |
+| **4. Let your AI fix it** | Copy the fix instructions into Lovable, Bolt, Cursor or Claude Code. Check the change, then publish. | Writes the fix instructions for your AI builder. When you mark the bug fixed, it can let the customer who reported it know. |
+
+**You stay in charge.** Nothing changes in your app until you approve it.
+
+**You don't need other tools.** If you already use an error tracker such as
+Sentry, you can connect it, but you don't have to.
+
+## What it costs
+
+The free plan covers one app and 100 diagnoses a month, with no card and no AI
+key of your own. A diagnosis is one bug explained, and repeat reports of the
+same bug count once. Paid plans are for more apps. See [pricing](/pricing).
+
+## What about bugs nobody reports?
+
+Most people who hit a bug just leave without telling you. You can
+[check your live site free](/check), with no sign-up, and connect
+[deeper checks](/what-it-does) later. The page says what each one needs.
+
+## Next
+
+- [See a sample report](/demo/diagnosis): one bug from the customer's words to
+  the fix instructions, no sign-up.
+- [Set it up in Lovable or Bolt](/quickstart/lovable-bolt): no terminal, about
+  five minutes.
+- [Who it's for](/who-its-for): which situation sounds like yours.
+- Words you don't know? Try the [glossary](/glossary).
+
+---
+
 ## What else Mushi Mushi does
 
 Source: https://kensaur.us/mushi-mushi/docs/what-it-does
@@ -17963,14 +18400,21 @@ The main job is simple: a user says your app is broken, and Mushi Mushi tells yo
 why and hands your AI editor the fix. But most bugs never get reported. People
 just leave.
 
-On my own apps that is exactly what happened. In 60 days people reported 32 bugs.
-More than a thousand came from my own side: checks like the ones below, AI code
-audits, Sentry errors and bugs I filed myself. Only one of the fixes that merged
-started from a user's report. The [live numbers](/proof) count the two separately.
+On my own 9 apps that is exactly what happened. In the 60 days to 2026-11-11,
+people reported 34 bugs. 2,031 came from my own side: checks like the ones
+below, AI code audits, Sentry errors and bugs I filed myself. Of the 523 fixes
+that merged, two started from a person's report. The [live numbers](/proof)
+count the two separately.
 
-Each card says the problem it solves, what it does, and what it needs. Most are
-off until you switch them on, and some need your own key (Firecrawl, Cursor or
-Anthropic) or a paid plan; the console tells you before you switch one on.
+**The main job needs none of this.** The report button, the plain-English
+diagnosis and the fix prompt work on the free plan with no key of your own.
+So does a one-time [free check of your live site](/check).
+
+Everything below is extra. Each card says the problem it solves, what it does,
+and what it needs. The tag on each card says the kind of thing you need:
+connecting an account you already have, a paid key from another service, or a
+computer of yours that stays on. Most are off until you switch them on, and the
+console tells you before you switch one on.
 
 ## Where to go next
 
@@ -17996,6 +18440,11 @@ description: "Solo builders who make apps with AI, developers who own their code
 Mushi Mushi was built for one person first: someone who makes apps with AI tools
 and then has to deal with the bugs. Two other groups get just as much from it.
 Find yours below.
+
+Short pages for a few common situations:
+[you built your app with Lovable or Bolt](/use-cases/no-code-founder),
+[you build apps for clients](/use-cases/agency-client-apps), and
+[you have a phone app](/use-cases/mobile-app) (Expo, React Native or Capacitor).
 
 ## You build apps with AI, mostly on your own
 

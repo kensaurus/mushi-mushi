@@ -4,20 +4,25 @@
 
 **Your AI wrote it. Mushi Mushi tells you why it broke.**
 
-A user says your app is broken. Mushi Mushi tells you why in plain English and hands the fix to Cursor, Claude Code or Lovable. No Sentry or monitoring needed.
+Your users tap a button to tell you what broke, and Mushi Mushi checks your live site for you. Every bug gets a plain-English explanation and a fix that Lovable, Cursor or Claude Code can apply.
+
+**[Check your live app free →](https://kensaur.us/mushi-mushi/docs/check?src=github-readme)** No sign-up, nothing to install.
+
+**[Add it to Lovable or Bolt with one prompt →](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt)** No terminal, about five minutes, free for one app.
+
+Or, in your app's folder:
 
 ```bash
 npx mushi-mushi
 ```
 
-**[See a sample diagnosis →](https://kensaur.us/mushi-mushi/docs/demo/diagnosis)** No signup, nothing to install.
-
-<sub>Built for the vibe coder who ships fast with Cursor, Claude Code, Lovable or Bolt. No terminal? [Add it to Lovable or Bolt with one prompt](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt).</sub>
+<sub>Built for the vibe coder who ships fast with Cursor, Claude Code, Lovable or Bolt.</sub>
 
 [![npm](https://img.shields.io/npm/v/@mushi-mushi/react?label=%40mushi-mushi%2Freact&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react)
 [![Server](https://img.shields.io/badge/server-AGPL--3.0-brightgreen.svg)](./packages/server/LICENSE)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/kensaurus/mushi-mushi/badge)](https://scorecard.dev/viewer/?uri=github.com/kensaurus/mushi-mushi)
 [![npm provenance](https://img.shields.io/badge/npm-provenance-2ea44f?logo=npm)](./SECURITY.md#verifying-a-mushi-mushi-tarball-before-installing)
+[![skills.sh](https://skills.sh/b/kensaurus/mushi-mushi)](https://skills.sh/kensaurus/mushi-mushi)
 
 [Quick start](#quick-start) · [How it works](#how-it-works) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Sample diagnosis](https://kensaur.us/mushi-mushi/docs/demo/diagnosis) · [Why not Sentry?](#why-not-just-sentry) · [Self-host](#self-host) · [Vision](./VISION.md)
 
@@ -179,7 +184,7 @@ Walkthroughs: [`SELF_HOSTED.md`](./SELF_HOSTED.md) and [Docker Compose guide](ht
 | Inventory and QA gates | Behind the `inventory_v2` plan flag; reachable from Checks |
 | Multi-region | Region pinning works. Active/active write replication is not automated |
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~620K TS lines · ~2,700 source files · 45 workspace / 37 npm packages · 77 edge functions · 547 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~620K TS lines · ~2,700 source files · 45 workspace / 37 npm packages · 77 edge functions · 550 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ## Community and contributing
 

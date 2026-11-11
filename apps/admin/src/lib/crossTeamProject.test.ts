@@ -159,3 +159,55 @@ describe('claimStaleLinkRecovery', () => {
     expect(claimStaleLinkRecovery(id)).toBe(false)
   })
 })
+
+/**
+ * Console audit 2026-11-11, finding 4 (reproduced on the owner's console):
+ * in "All apps", switch to an empty team, create its first project, delete it,
+ * then pick another team. The switch reverted and links bounced to /onboarding
+ * because the browser had filed the other team's apps under the empty team.
+ */
+describe('a wrong project→team memory heals from the server', () => {
+  const PERSONAL = ORG_A
+  const KENJI = ORG_B
+  const KENJI_APP = '66666666-6666-4666-8666-666666666666'
+  const DELETED = '77777777-7777-4777-8777-777777777777'
+
+  beforeEach(() => {
+    apiFetch.mockReset()
+    window.localStorage.clear()
+  })
+
+  it('a weaker source never overwrites what the browser already knows', () => {
+    rememberProjectTeams([{ id: KENJI_APP, organizationId: KENJI }])
+    // The old tagging: a list stamped with the ACTIVE team (the empty one).
+    rememberProjectTeams([{ id: KENJI_APP, organizationId: PERSONAL }], { onlyUnknown: true })
+    expect(knownProjectTeam(KENJI_APP)).toBe(KENJI)
+  })
+
+  it('the directory read overwrites a poisoned entry and forgets deleted projects, so the switch sticks', async () => {
+    // The state the owner's browser was left in.
+    rememberProjectTeams([
+      { id: KENJI_APP, organizationId: PERSONAL },
+      { id: DELETED, organizationId: PERSONAL },
+    ])
+    expect(listBelongsToTeam([KENJI_APP], KENJI)).toBe(false)
+    expect(urlProjectNeedsTeamCheck(KENJI_APP, KENJI)).toBe(true)
+
+    apiFetch.mockResolvedValue({
+      ok: true,
+      data: {
+        teams: [
+          { id: PERSONAL, name: 'Personal workspace', role: 'owner', isPersonal: true },
+          { id: KENJI, name: 'kenji', role: 'owner', isPersonal: false },
+        ],
+        projects: [{ id: KENJI_APP, name: 'glot.it', organizationId: KENJI }],
+      },
+    })
+    // Picking kenji with its app in the URL: the server says the app is kenji's.
+    await expect(resolveTeamForProject(KENJI_APP)).resolves.toBe('switched')
+    expect(knownProjectTeam(KENJI_APP)).toBe(KENJI)
+    expect(knownProjectTeam(DELETED)).toBeNull()
+    expect(listBelongsToTeam([KENJI_APP], KENJI)).toBe(true)
+    expect(urlProjectNeedsTeamCheck(KENJI_APP, KENJI)).toBe(false)
+  })
+})

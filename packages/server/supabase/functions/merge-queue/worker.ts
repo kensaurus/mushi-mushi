@@ -26,6 +26,7 @@ import {
 import { isCursorKeyLimitError } from '../_shared/spend-down.ts'
 import { conflictRowAfterRun, conflictSlotBack } from '../_shared/work-modes.ts'
 import { OFF_GATE, pauseReason, type HealthGate } from '../_shared/health-gate.ts'
+import { dbReadFailure, retryTransientRead } from '../_shared/error-codes.ts'
 
 const log = rootLog.child('merge-queue')
 const LEASE_MS = 4 * 60_000
@@ -477,10 +478,15 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
   const now = deps.now ?? (() => new Date())
   const gate = deps.healthGate ?? OFF_GATE
   const nowIso = now().toISOString()
-  let q = db.from('fix_merge_queue').select(ROW_COLUMNS).in('state', ['queued', 'waiting', 'resolving', 'blocked'])
-  if (projectId) q = q.eq('project_id', projectId)
-  const { data, error } = await q.order('queued_at', { ascending: true }).limit(500)
-  if (error) throw new Error(`merge-queue read failed: ${error.message}`)
+  // A read, so one retry on a gateway page is safe. A second outage answer
+  // throws TransientDbError: withSentry logs a warn and answers 503, and the
+  // next tick tries again (Sentry 7821462678, Cloudflare 521, 2026-10-31).
+  const { data, error } = await retryTransientRead(() => {
+    let q = db.from('fix_merge_queue').select(ROW_COLUMNS).in('state', ['queued', 'waiting', 'resolving', 'blocked'])
+    if (projectId) q = q.eq('project_id', projectId)
+    return q.order('queued_at', { ascending: true }).limit(500)
+  })
+  if (error) throw dbReadFailure('merge-queue read failed', error)
   const all = (data ?? []) as Array<QueueRow & { claimed_until: string | null; queued_at: string; updated_at: string | null; train_id: string | null }>
   // A row leased by a tick still running holds its repo.
   const repos = new Set<string>(all.filter((r) => r.claimed_until && r.claimed_until >= nowIso).map((r) => r.repo))

@@ -94,6 +94,9 @@ import { CodeFramePanel } from '../components/report-detail/CodeFramePanel'
 import { deriveRecommendation } from '../components/report-detail/deriveRecommendation'
 import type { ReportDetail } from '../components/report-detail/types'
 import { DispatchPreflightBanner } from '../components/reports/DispatchPreflightBanner'
+import { AgentCreditsOutCard } from '../components/AgentCreditsOutCard'
+import { useAgentCredits } from '../lib/agentCredits'
+import { isAgentOutOfUsageError } from '../lib/agentOutOfUsage'
 import { useDispatchPreflight, type PreflightState } from '../lib/useDispatchPreflight'
 import { canMergeFix, pickPrimaryFixAttempt } from '../lib/mergeFix'
 import { MergeFixPreflight } from '../components/fixes/MergeFixPreflight'
@@ -480,6 +483,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
   const commentThread = useReportComments({ reportId: report.id, projectId: report.project_id })
   const commentCount = commentThread.comments.length
   const platform = usePlatformIntegrations()
+  const agentCredits = useAgentCredits()
   const latestFix = pickPrimaryFixAttempt(report.fix_attempts)
 
   // Tick the clock every second only while the agent is actively running so
@@ -579,7 +583,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           {
             id: 'report-detail-ops',
             priority: POSTURE_PRIORITY.status,
-            show: Boolean(latestFix?.pr_url || isDispatchEligible),
+            show: Boolean(latestFix?.pr_url),
             children: (
               <div className="flex flex-wrap items-center gap-2">
                 {latestFix?.pr_url ? (
@@ -594,9 +598,6 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
                     projectId={report.project_id}
                     compact
                   />
-                ) : null}
-                {isDispatchEligible ? (
-                  <DispatchPreflightBanner preflight={preflight} className="min-w-0 flex-1" />
                 ) : null}
               </div>
             ),
@@ -638,6 +639,14 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           Delivers the brand sub-promise as one surface at the top; the
           detailed classification + evidence sections stay below. */}
       <DiagnosisFixHero report={report} />
+
+      {/* Optional and below the answer (audit 2026-11-11): "Auto-fix is paused" sat above the title
+          on a brand-new account's test report that never asked for auto-fix. */}
+      {/* The last automatic run stopped on an empty account: the remedy here, where the bug is. */}
+      {agentCredits.state?.out && latestFix?.status === 'failed' && isAgentOutOfUsageError(latestFix.error) ? (
+        <AgentCreditsOutCard state={agentCredits.state} withFollowups={false} className="mb-3" />
+      ) : null}
+      {isDispatchEligible ? <DispatchPreflightBanner preflight={preflight} className="mb-3" /> : null}
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <GenerateTestButton report={report} />

@@ -19,6 +19,14 @@
  * The check runs after the response; the page polls the GET. With an email,
  * one plain-text email with the report link goes out and the address is
  * cleared. Events: production_check_started / production_check_finished.
+ *
+ * A site no page of which could be read is a failed check, never a pass
+ * (ADR 0056): stored as status 'failed' with a short `error` and
+ * `summary.unreachable.reason`; the GET adds `failure: 'unreachable'` and
+ * `advice` (what to try), the email says "we could not reach", and the event
+ * carries outcome 'failed' with failure 'unreachable' and the reason. Reports
+ * stored before this rule ("done" with no page read and no findings) read the
+ * same way.
  */
 
 import type { Hono } from 'npm:hono@4'
@@ -33,7 +41,7 @@ import { renderEmailHtml, renderEmailText, type EmailDoc } from '../../_shared/e
 import { hmacSha256Hex } from '../../_shared/connectors/jwt.ts'
 import { clientIpOf, verifiedClientIp } from '../../_shared/edge-proxy.ts'
 import { checkPublicUrl, resolvesPublic, runtimeResolver, sameAddressVariants } from '../../_shared/public-url-guard.ts'
-import { runProductionCheck, severityCounts, type CheckResult } from '../../_shared/production-check.ts'
+import { UNREACHABLE_TEXT, runProductionCheck, severityCounts, type CheckResult, type UnreachableReason } from '../../_shared/production-check.ts'
 
 const plog = log.child('production-check')
 
@@ -98,17 +106,66 @@ function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`
 }
 
+const UNREACHABLE_REASONS = new Set<string>(Object.keys(UNREACHABLE_TEXT))
+
+/**
+ * Why a stored or fresh result read no page at all, or null when it read one.
+ * A result with no page and no finding is unreachable even without the
+ * reason (reports stored before 2026-11-11 ended "done" that way).
+ */
+export function unreachableOf(findings: unknown, summary: unknown): UnreachableReason | null {
+  const s = summary && typeof summary === 'object' ? (summary as { pages?: unknown; unreachable?: { reason?: unknown } }) : null
+  const reason = s?.unreachable?.reason
+  if (typeof reason === 'string') return UNREACHABLE_REASONS.has(reason) ? (reason as UnreachableReason) : 'no_answer'
+  if (Array.isArray(s?.pages) && s.pages.length === 0 && (!Array.isArray(findings) || findings.length === 0)) return 'no_answer'
+  return null
+}
+
 /** What passed, in plain words, for a report with nothing to fix. */
 function passedChecks(summary: CheckResult['summary']): string[] {
   const out: string[] = []
   const ok = summary.pages.filter((p) => p.status !== null && p.status < 400).length
   if (summary.pages.length) out.push(`${plural(ok, 'page', 'pages')} of ${summary.pages.length} opened without an error`)
+  if (summary.linksChecked) out.push(`${plural(summary.linksChecked, 'link', 'links')} checked, none broken`)
+  if (summary.imagesChecked) out.push(`${plural(summary.imagesChecked, 'image', 'images')} checked, all load`)
+  if (summary.https === 'ok') out.push('http:// sends visitors to https://')
   const headers = Object.values(summary.headers)
   if (headers.length && headers.every(Boolean)) out.push(`All ${headers.length} security headers are sent`)
-  if (summary.https === 'ok') out.push('http:// sends visitors to https://')
-  if (summary.linksChecked) out.push(`${plural(summary.linksChecked, 'link', 'links')} checked, none broken`)
   if (summary.scriptsChecked && summary.scriptsWithSourceMaps === 0) out.push('No source maps published')
   return out
+}
+
+/** The pasted address pre-filled on the check page, so "check again" is one press. */
+export function rerunUrl(url: string): string {
+  return `${REPORT_PAGE}?url=${encodeURIComponent(url)}`
+}
+
+/** The email for a site no page of which could be read: a failed check, said plainly. */
+export function buildUnreachableEmail(host: string, id: string, url: string, reason: UnreachableReason): { subject: string; text: string; html: string } {
+  const t = UNREACHABLE_TEXT[reason]
+  const doc: EmailDoc = {
+    preheader: 'This is not a pass: the check could not open your site.',
+    heading: `We could not reach ${host}`,
+    blocks: [
+      {
+        kind: 'p',
+        text: `Mushi Mushi tried to open ${host} the way a first-time visitor would, and could not. ${t.error} ${
+          t.certain ? 'This is not a pass: if we could not open it, your visitors most likely cannot either.' : 'This is not a pass, but it may only have been slow at that moment, so check again before you change anything.'
+        }`,
+      },
+      { kind: 'p', text: `What to try: ${t.tryThis}` },
+      { kind: 'button', label: 'Check again', url: rerunUrl(url) },
+      { kind: 'link', label: 'Open the report', url: reportUrl(id) },
+    ],
+    footer: [
+      'You asked for this email on the Mushi Mushi Production Check page. It is the only one you will get about this check: your address is not on any mailing list, and it was deleted after this email was sent.',
+    ],
+  }
+  return {
+    subject: `We could not reach ${host} (Production Check)`,
+    text: renderEmailText(doc),
+    html: renderEmailHtml(doc),
+  }
 }
 
 /**
@@ -189,7 +246,8 @@ async function sendReportEmail(
   result: Pick<CheckResult, 'findings'> & { summary?: CheckResult['summary'] },
   send: typeof sendTransactionalEmail = sendTransactionalEmail,
 ): Promise<boolean> {
-  const mail = buildReportEmail(addressLabel(url), id, result)
+  const unreachable = unreachableOf(result.findings, result.summary)
+  const mail = unreachable ? buildUnreachableEmail(addressLabel(url), id, url, unreachable) : buildReportEmail(addressLabel(url), id, result)
   const sent = await send({ to, subject: mail.subject, text: mail.text, html: mail.html, tags: { kind: 'production_check' } })
   if (!sent.ok) plog.warn('report email not sent', { checkId: id, reason: sent.reason })
   return sent.ok
@@ -215,12 +273,17 @@ export async function runAndStore(
       : 'The check could not finish. Try again in a few minutes.'
   }
   const finishedAt = new Date().toISOString()
+  // No page read at all: a failed check that says why, never an empty pass.
+  const unreachable = result ? unreachableOf(result.findings, result.summary) : null
+  if (result && unreachable) result = { findings: [], summary: { ...result.summary, unreachable: { reason: unreachable } } }
   const { error } = await db
     .from('production_checks')
     .update(
-      result
+      result && !unreachable
         ? { status: 'done', findings: result.findings, summary: result.summary, finished_at: finishedAt }
-        : { status: 'failed', error: failure, finished_at: finishedAt },
+        : result && unreachable
+          ? { status: 'failed', error: UNREACHABLE_TEXT[unreachable].error, findings: [], summary: result.summary, finished_at: finishedAt }
+          : { status: 'failed', error: failure, finished_at: finishedAt },
     )
     .eq('id', row.id)
   if (error) plog.warn('could not store the check', { checkId: row.id, err: error.message })
@@ -241,7 +304,10 @@ export async function runAndStore(
     dedupKey: `production_check_finished:${row.id}`,
     properties: {
       project_id: deps.selfProjectId,
-      outcome: result ? 'done' : 'failed',
+      outcome: result && !unreachable ? 'done' : 'failed',
+      // Why a check failed: the site could not be reached (with the reason),
+      // or the check itself broke (out of capacity, crashed).
+      ...(unreachable ? { failure: 'unreachable', reason: unreachable } : result ? {} : { failure: 'error' }),
       // false when Firecrawl could not render the home page (the report then
       // rests on the plain fetch only), so a broken key or API shows in the funnel.
       rendered: result ? result.summary.rendered : false,
@@ -403,7 +469,24 @@ export function registerProductionCheckRoutes(app: Hono<{ Variables: Variables }
       row.error = 'The check ran out of time. Try again in a few minutes.'
       await db.from('production_checks').update({ status: 'failed', error: row.error, finished_at: new Date().toISOString() }).eq('id', id).eq('status', 'running')
     }
+    // Could not reach the site (also a report stored before 2026-11-11 as
+    // "done" with no page read): a failed check, in the response only.
+    const reason = row.status === 'running' ? null : unreachableOf(row.findings, row.summary)
+    let failure: 'unreachable' | 'error' | null = null
+    let advice: string | null = null
+    if (reason) {
+      failure = 'unreachable'
+      advice = UNREACHABLE_TEXT[reason].tryThis
+      if (row.status === 'done') {
+        row.status = 'failed'
+        row.error = UNREACHABLE_TEXT[reason].error
+        row.findings = []
+        row.summary = { ...(row.summary as Record<string, unknown>), unreachable: { reason } }
+      }
+    } else if (row.status === 'failed') {
+      failure = 'error'
+    }
     c.header('Cache-Control', row.status === 'running' ? 'no-store' : 'public, max-age=300')
-    return c.json({ ok: true, data: row })
+    return c.json({ ok: true, data: { ...row, failure, advice } })
   })
 }

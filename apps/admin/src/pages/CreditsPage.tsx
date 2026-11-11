@@ -22,6 +22,8 @@ import { FirecrawlLevers, type FirecrawlBalance } from '../components/credits/Fi
 import { SkillRunsCard } from '../components/credits/SkillRunsCard'
 import { LocalWorkerModels } from '../components/credits/LocalWorkerModels'
 import { usePageData } from '../lib/usePageData'
+import { useAgentCredits } from '../lib/agentCredits'
+import { AgentCreditsOutCard } from '../components/AgentCreditsOutCard'
 import { usePublishPageContext } from '../lib/pageContext'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -59,6 +61,7 @@ export function CreditsPage() {
   const followups = usePageData<ReviewFollowupsResponse | null>('/v1/admin/byok/review-followups')
   const projects = usePageData<{ projects?: Array<{ id: string; name: string }> }>('/v1/admin/projects')
 
+  const agentCredits = useAgentCredits()
   const balance = firecrawlBalance(credits.data)
   const cursorKeys = spendDown.data?.keys ?? []
   usePublishPageContext({
@@ -88,6 +91,7 @@ export function CreditsPage() {
             show: !spendDown.error,
             children: (
               <CreditCountdowns
+                outOfCredits={agentCredits.state}
                 keys={spendDown.data ? cursorKeys : null}
                 balance={balance}
                 canManageOrg={followups.data?.canManage === true}
@@ -98,6 +102,7 @@ export function CreditsPage() {
           },
         ]}
       />
+      {agentCredits.state?.out && <AgentCreditsOutCard state={agentCredits.state} />}
       {error && <PageLoadError error={error} resource="credit settings" endpoint="/v1/admin/byok/spend-down" onRetry={() => { spendDown.reload(); credits.reload() }} />}
 
       <Section title="Cursor: fix bugs" id="cursor-fix-bugs">

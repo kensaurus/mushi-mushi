@@ -2,15 +2,15 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-30 · **809** routes.
+> Generated: 2026-11-11 · **807** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 219 |
+| `adminOrApiKey` | 218 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 412 |
+| `jwtAuth` | 411 |
 | `jwtOrApiKey` | 2 |
 | `public` | 66 |
 | `unknown` | 51 |
@@ -43,7 +43,6 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/ask-mushi/threads` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ask-mushi.ts` |
 | DELETE | `/v1/admin/ask-mushi/threads/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ask-mushi.ts` |
 | GET | `/v1/admin/ask-mushi/threads/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ask-mushi.ts` |
-| POST | `/v1/admin/assist` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ask-mushi.ts` |
 | GET | `/v1/admin/audit` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sso-audit.ts` |
 | GET | `/v1/admin/audit/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sso-audit.ts` |
 | GET | `/v1/admin/auth/manifest` | `public` | `packages/server/supabase/functions/api/routes/discovery.ts` |
@@ -418,7 +417,6 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/projects/:id/repo-cleanup/requests/:actionId/execute` | `jwtAuth` | `packages/server/supabase/functions/api/routes/repo-housekeeping.ts` |
 | POST | `/v1/admin/projects/:id/repo-cleanup/requests/:actionId/reject` | `jwtAuth` | `packages/server/supabase/functions/api/routes/repo-housekeeping.ts` |
 | POST | `/v1/admin/projects/:id/repo-cleanup/restore` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/repo-housekeeping.ts` |
-| POST | `/v1/admin/projects/:id/repo/bootstrap` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/report-agent-context.ts` |
 | GET | `/v1/admin/projects/:id/reporter-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reporter-admin.ts` |
 | PUT | `/v1/admin/projects/:id/reporter-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reporter-admin.ts` |
 | POST | `/v1/admin/projects/:id/reports` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/report-file.ts` |

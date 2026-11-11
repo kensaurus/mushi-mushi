@@ -32,6 +32,7 @@ const state = vi.hoisted(() => ({
   events: [] as Array<{ eventName: string; properties?: Record<string, unknown> }>,
   runs: [] as string[],
   emailOk: true,
+  result: null as null | Record<string, unknown>,
 }))
 
 const fakeLog = vi.hoisted(() => {
@@ -68,6 +69,7 @@ vi.mock('../../supabase/functions/_shared/production-check.ts', async (importOri
     ...actual,
     runProductionCheck: async (url: string) => {
       state.runs.push(url)
+      if (state.result) return state.result
       return {
         findings: [
           { rule: 'missing_csp', severity: 'medium', title: 'No Content-Security-Policy header', why: 'w', fix: 'f' },
@@ -85,6 +87,7 @@ import {
   RUNNING_STALE_MS,
   EMAIL_MAX_FINDINGS,
   buildReportEmail,
+  buildUnreachableEmail,
   callerIp,
   registerProductionCheckRoutes,
 } from '../../supabase/functions/api/routes/production-check.ts'
@@ -145,6 +148,7 @@ beforeEach(() => {
   state.events = []
   state.runs = []
   state.emailOk = true
+  state.result = null
   claimFails = false
   globalUsed = 0
   counts.clear()
@@ -303,6 +307,51 @@ describe('POST /v1/public/production-check', () => {
     expect(over.data).toMatchObject({ id, cached: true, emailed: false })
   })
 
+  it('a site that could not be reached is stored as failed, emailed as "could not reach", never as a pass', async () => {
+    state.result = {
+      findings: [],
+      summary: { pages: [], headers: {}, https: 'unknown', linksChecked: 0, imagesChecked: 0, scriptsChecked: 0, scriptsWithSourceMaps: 0, rendered: false, incomplete: ['the plain fetch of the home page', 'the rendered home page'], unreachable: { reason: 'dns' } },
+    }
+    const res = await post({ url: 'https://glot.example.com', email: 'founder@acme.app', src: 'landing' })
+    const { data } = (await res.json()) as { data: { id: string } }
+    await Promise.all(state.tasks)
+    const row = db.table('production_checks')[0] as Row
+    expect(row.status).toBe('failed')
+    expect(row.error).toBe('Your address does not lead to any server: its domain name did not resolve.')
+    expect(String(row.error).length).toBeLessThanOrEqual(300)
+    expect((row.summary as { unreachable: unknown }).unreachable).toEqual({ reason: 'dns' })
+    expect(row.findings).toEqual([])
+    expect(state.emails).toHaveLength(1)
+    expect(state.emails[0].subject).toBe('We could not reach glot.example.com (Production Check)')
+    expect(state.emails[0].text).toContain('This is not a pass')
+    expect(state.emails[0].text).not.toMatch(/passed|nothing to fix/i)
+    expect(state.emails[0].text).toContain(`check?id=${data.id}`)
+    expect(state.emails[0].text).toContain('check?url=https%3A%2F%2Fglot.example.com%2F')
+    const finished = state.events.find((e) => e.eventName === 'production_check_finished')
+    expect(finished?.properties).toMatchObject({ outcome: 'failed', failure: 'unreachable', reason: 'dns', rendered: false, high: 0, medium: 0, low: 0 })
+
+    const got = (await (await app().request(`/v1/public/production-check/${data.id}`)).json()) as { data: Record<string, unknown> }
+    expect(got.data).toMatchObject({ status: 'failed', failure: 'unreachable', error: row.error })
+    expect(String(got.data.advice)).toContain('domain provider')
+  })
+
+  it('a result with no page read and no reason is still a failed check (defence in depth)', async () => {
+    state.result = { findings: [], summary: { pages: [], headers: {}, https: 'unknown', linksChecked: 0, scriptsChecked: 0, scriptsWithSourceMaps: 0, rendered: false, incomplete: [] } }
+    await post({ url: 'https://acme.app' })
+    await Promise.all(state.tasks)
+    const row = db.table('production_checks')[0] as Row
+    expect(row.status).toBe('failed')
+    expect((row.summary as { unreachable: unknown }).unreachable).toEqual({ reason: 'no_answer' })
+  })
+
+  it('a report stored before the rule ("done", no page, no finding) is emailed as "could not reach" from the cache', async () => {
+    const id = '66666666-6666-4666-8666-666666666666'
+    db.table('production_checks').push({ id, origin: 'https://glot.example.com', url: 'https://glot.example.com/', status: 'done', findings: [], summary: { pages: [], headers: {}, https: 'unknown', linksChecked: 0, scriptsChecked: 0, scriptsWithSourceMaps: 0, rendered: false, incomplete: ['the rendered home page'] }, created_at: new Date().toISOString() })
+    await post({ url: 'https://glot.example.com', email: 'second@acme.app' })
+    await Promise.all(state.tasks)
+    expect(state.emails.map((e) => e.subject)).toEqual(['We could not reach glot.example.com (Production Check)'])
+  })
+
   it('a site whose check is still running: no email, and the address is not stored', async () => {
     db.table('production_checks').push({ id: '55555555-5555-4555-8555-555555555555', origin: 'https://acme.app', url: 'https://acme.app/', status: 'running', findings: [], summary: {}, created_at: new Date().toISOString() })
     const body = (await (await post({ url: 'https://acme.app', email: 'third@acme.app' })).json()) as { data: Record<string, unknown> }
@@ -333,9 +382,26 @@ describe('GET /v1/public/production-check/:id', () => {
   it('a check whose run died reads as failed', async () => {
     const id = '33333333-3333-4333-8333-333333333333'
     db.table('production_checks').push({ id, origin: 'https://acme.app', url: 'https://acme.app/', status: 'running', findings: [], summary: {}, created_at: new Date(Date.now() - RUNNING_STALE_MS - 1000).toISOString() })
-    const body = (await (await app().request(`/v1/public/production-check/${id}`)).json()) as { data: { status: string } }
+    const body = (await (await app().request(`/v1/public/production-check/${id}`)).json()) as { data: { status: string; failure: string | null } }
     expect(body.data.status).toBe('failed')
+    expect(body.data.failure).toBe('error')
     expect(db.table('production_checks')[0].status).toBe('failed')
+  })
+
+  it('a report stored as "done" with no page read reads as could not reach, without rewriting the row', async () => {
+    const id = '77777777-7777-4777-8777-777777777777'
+    db.table('production_checks').push({ id, origin: 'https://glot.example.com', url: 'https://glot.example.com/', status: 'done', findings: [], summary: { pages: [], headers: {}, https: 'unknown', linksChecked: 0, incomplete: ['the plain fetch of the home page', 'the rendered home page'] }, created_at: new Date().toISOString() })
+    const body = (await (await app().request(`/v1/public/production-check/${id}`)).json()) as { data: Record<string, unknown> }
+    expect(body.data).toMatchObject({ status: 'failed', failure: 'unreachable', summary: { unreachable: { reason: 'no_answer' } } })
+    expect(typeof body.data.advice).toBe('string')
+    expect(db.table('production_checks')[0].status).toBe('done')
+  })
+
+  it('a normal report carries failure: null', async () => {
+    const id = '88888888-8888-4888-8888-888888888888'
+    db.table('production_checks').push({ id, origin: 'https://acme.app', url: 'https://acme.app/', status: 'done', findings: [], summary: { pages: [{ path: '/', status: 200 }], headers: {}, https: 'ok', linksChecked: 3, incomplete: [] }, created_at: new Date().toISOString() })
+    const body = (await (await app().request(`/v1/public/production-check/${id}`)).json()) as { data: Record<string, unknown> }
+    expect(body.data).toMatchObject({ status: 'done', failure: null, advice: null })
   })
 })
 
@@ -408,6 +474,15 @@ describe('buildReportEmail', () => {
     expect(mail.text).toContain('- All 4 security headers are sent')
     expect(mail.text).toContain('- 20 links checked, none broken')
     expect(mail.text).toContain('- No source maps published')
+  })
+
+  it('the "could not reach" email does not claim the site is down when it may only have been slow', () => {
+    const slow = buildUnreachableEmail('slow.app', 'id-4', 'https://slow.app/', 'timeout')
+    expect(slow.subject).toBe('We could not reach slow.app (Production Check)')
+    expect(slow.text).toContain('may only have been slow')
+    expect(slow.text).not.toContain('your visitors most likely cannot either')
+    expect(slow.html).toContain('Check again')
+    expect(buildUnreachableEmail('gone.app', 'id-5', 'https://gone.app/', 'dns').text).toContain('your visitors most likely cannot either')
   })
 
   it('escapes what a site controls (finding titles) in the HTML', () => {

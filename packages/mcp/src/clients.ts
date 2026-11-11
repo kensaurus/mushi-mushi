@@ -31,6 +31,8 @@
  * - claude-desktop                     — copy-config to claude_desktop_config.json
  * - zed                                — copy-config to ~/.config/zed/settings.json
  * - any                                — hosted Streamable HTTP URL + Bearer key
+ * - lovable                            — custom MCP connector in Lovable: the hosted
+ *                                        URL with OAuth sign-in, no key (keyless)
  * - buildOAuthInstall()                — keyless variant of cursor / vscode(-insiders) /
  *                                        claude-code / windsurf / any for public pages
  *                                        (URL only, the client's OAuth sign-in runs)
@@ -102,6 +104,7 @@ export type McpClientId =
   | 'claude-desktop'
   | 'zed'
   | 'any'
+  | 'lovable'
 
 /** The install method determines which UI treatment the console/docs page renders. */
 export type McpInstallMethod = 'deeplink' | 'config-json' | 'cli-command' | 'remote-url'
@@ -141,7 +144,7 @@ export type McpBuildResult =
   | { kind: 'deeplink'; url: string }
   | { kind: 'config'; filePath: string; json: string }
   | { kind: 'command'; text: string }
-  | { kind: 'remote-url'; url: string; headerSnippet: string }
+  | { kind: 'remote-url'; url: string; headerSnippet: string; steps?: string[] }
 
 export interface McpClientDef {
   id: McpClientId
@@ -152,8 +155,20 @@ export interface McpClientDef {
   transport: 'stdio' | 'http'
   /** Drives `mushi setup --ide <cliIde>` in the CLI lane. */
   cliIde?: 'cursor' | 'claude' | 'continue' | 'zed'
+  /**
+   * The client signs in with OAuth on first use, so no key is minted or
+   * written (Lovable's custom connector). `build` ignores `apiKey`.
+   */
+  keyless?: boolean
   build(input: McpBuildInput): McpBuildResult
 }
+
+/**
+ * Lovable's custom connector needs the kensaur.us hosted MCP URL: its host
+ * root serves the OAuth metadata (a supabase.co URL does not). `vibe` keeps
+ * the tool list to what a builder uses (docs quickstart/lovable-mcp).
+ */
+export const LOVABLE_MCP_URL = 'https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe'
 
 // ─── Shared low-level helpers ─────────────────────────────────────────────────
 
@@ -461,6 +476,31 @@ export const MCP_CLIENTS: McpClientDef[] = [
         .filter(Boolean)
         .join('\n')
       return { kind: 'remote-url', url, headerSnippet }
+    },
+  },
+
+  // ── Lovable ──────────────────────────────────────────────────────────────────
+  // A custom MCP server in Lovable's Connectors, with OAuth: no key to copy.
+  // Steps from docs quickstart/lovable-mcp (Lovable docs: integrations/custom-mcp).
+  {
+    id: 'lovable',
+    label: 'Lovable',
+    description: 'Add Mushi Mushi as a custom connector, then ask Lovable "what did my users report?"',
+    method: 'remote-url',
+    transport: 'http',
+    keyless: true,
+    build() {
+      return {
+        kind: 'remote-url',
+        url: LOVABLE_MCP_URL,
+        headerSnippet: '',
+        steps: [
+          'In Lovable, open Connectors, select Add custom, then MCP server.',
+          'Server name: Mushi. Server URL: the URL above. Authentication: OAuth (the default). Click Add & authorize.',
+          'Sign in to Mushi Mushi, choose the projects Lovable may see, and click Approve. You never copy a key.',
+          'In a project chat, ask: "Using the Mushi connector, what did my users report this week?"',
+        ],
+      }
     },
   },
 ]

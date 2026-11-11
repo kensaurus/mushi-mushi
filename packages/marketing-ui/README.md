@@ -8,8 +8,8 @@ Shared landing and connect-page React components.
 Shared editorial marketing components used by `apps/docs` (Next.js docs site) and
 `apps/admin` (Vite + react-router public pages). Components are framework-agnostic: they
 get their `Link` component and URL helpers from a `<MarketingProvider>` so
-the same `<Hero />`, `<MushiCanvas />`, `<ClosingCta />`, and
-`<MarketingFooter />` render identically in either host.
+the same `<MarketingFooter />`, `<LoopPipeline />` and Connect lane picker
+render identically in either host.
 
 ## Setup
 
@@ -39,7 +39,7 @@ the same `<Hero />`, `<MushiCanvas />`, `<ClosingCta />`, and
 4. Wrap the marketing surface and render:
 
    ```tsx
-   import { MarketingProvider, Hero, MushiCanvas, ClosingCta, MarketingFooter } from '@mushi-mushi/marketing-ui'
+   import { MarketingProvider, LoopPipeline, MarketingFooter } from '@mushi-mushi/marketing-ui'
    import NextLink from 'next/link'   // or react-router-dom Link
 
    const theme = {
@@ -60,9 +60,7 @@ the same `<Hero />`, `<MushiCanvas />`, `<ClosingCta />`, and
    }
 
    <MarketingProvider value={theme}>
-     <Hero />
-     <MushiCanvas />
-     <ClosingCta />
+     <LoopPipeline />
      <MarketingFooter apiBaseUrl={process.env.NEXT_PUBLIC_API_BASE_URL} />
    </MarketingProvider>
    ```
@@ -73,15 +71,15 @@ the same `<Hero />`, `<MushiCanvas />`, `<ClosingCta />`, and
 | ------------------ | ---------------------------------------------------------------- |
 | `MarketingProvider`| Provides `Link` + `urls` to the components below                 |
 | `useMarketing()`   | Hook for custom marketing components in the host app             |
-| `Hero`             | Landing hero with serif H1, CTA buttons, and a sample report     |
-| `MushiCanvas`      | Interactive 5-stage React Flow canvas with auto-cycle + drawer   |
-| `ClosingCta`       | Bottom-of-page deploy/source CTA with bilingual kicker           |
 | `MarketingFooter`  | Footer with `<StatusPill />` and standard nav                    |
 | `StatusPill`       | Standalone gateway-health probe                                  |
-| `SwitchingFromStrip` | "Switching from X?" row of 5 competitor chips, each linking to its docs migration guide (`/migrations/<competitor>-to-mushi`). Drop into a landing page between hero and CTA |
+| `LoopPipeline`     | The bug loop in one row (docs `/concepts/closed-loop`)           |
+| `ConnectLanePicker`, `useConnectSelection`, `renderConnectClientIcon` | The "pick your client, connect in one click" picker on admin and docs `/connect` |
+| `KensaurusPortfolioTable`, `KENSAURUS_FAMILY` | The sibling-app table in the docs footer |
 
-Plus all stage / edge / log data and TypeScript types so consumers can
-extend the canvas without re-declaring them.
+The landing canvas (`Hero`, `MushiCanvas`, `ClosingCta`, `SwitchingFromStrip`,
+`PersonaTrack`, `PrivacyPosture`) was removed on 2026-11-11: no host had
+mounted it since the admin public homepage was removed.
 
 ## Why this package exists
 
@@ -93,9 +91,6 @@ zero framework lock-in.
 
 ## Caveats
 
-- `MushiCanvas` lazy-loads `@xyflow/react` + `framer-motion` via React.lazy
-  so first-paint stays light. The fallback (`StaticStageStrip`) is also the
-  no-JS / `prefers-reduced-motion` shape — render it as-is, no extra wiring.
 - The component-driven `Link` contract is intentionally narrow: `href`,
   `className`, `children`, `aria-label`, `lang`, `onClick`. If the host needs
   something exotic (prefetch hints, scroll restoration), wrap that in the

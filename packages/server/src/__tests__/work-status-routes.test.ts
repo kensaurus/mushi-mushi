@@ -146,7 +146,16 @@ describe('GET /v1/admin/work/lanes and /stats carry the same flags', () => {
     expect(stuck.actions[0]).toMatchObject({ kind: 'stop_run', claimId: CLAIM })
     expect(flags.map((f) => f.kind)).toEqual(expect.arrayContaining(['run_stuck', 'account_check', 'machine_busy']))
     const stats = await s.app.call('GET', '/v1/admin/work/stats', console_('u1'))
-    expect(stats.body.data).toEqual({ flags: flags.length, danger: flags.filter((f) => (f as { severity?: string }).severity === 'danger').length, top: (flags[0] as { title: string }).title })
+    // Since 2026-11-11 /stats also says whether the fix agents have credits and
+    // whether the caller has a worker (the console's out-of-credits card and the
+    // report page's "Send to my local worker" read them).
+    expect(stats.body.data).toEqual({
+      flags: flags.length,
+      danger: flags.filter((f) => (f as { severity?: string }).severity === 'danger').length,
+      top: (flags[0] as { title: string }).title,
+      agentCredits: { out: false, since: null, refused: 0, backAt: null, backLabel: null },
+      hasWorker: true,
+    })
   })
 })
 

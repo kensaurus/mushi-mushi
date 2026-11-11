@@ -24,6 +24,7 @@
  *       /v1/admin/fixes/:id/ci/rerun, /v1/admin/merge-queue (lib/pipeline.ts)
  */
 
+import { agentCreditsTitle, useAgentCredits } from '../lib/agentCredits'
 import { useCallback, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
@@ -134,6 +135,16 @@ export function PipelinePage() {
   // The biggest stuck group and the first of its actions the server would take.
   const top = useMemo(() => topStuck(stages.flatMap((s) => s.groups)), [stages])
   const openers = useMemo(() => (data?.dispatchers ? openerSummary(data.dispatchers) : null), [data])
+  // "Nothing is stuck" was false while no agent could open a fix (audit
+  // 2026-11-11: next to "Who opens fixes: nobody" and "credits idle").
+  const agentCredits = useAgentCredits()
+  // Only when bugs wait for a fix: a quiet app with no bugs opens nothing, and that is fine.
+  const autofixApps = (data?.dispatchers ?? []).filter((d) => d.autofixOn)
+  const waitingForFix = (data?.stages ?? []).find((s) => s.id === 'triaged')?.count ?? 0
+  const nothingOpens =
+    waitingForFix > 0 &&
+    (agentCredits.state?.out === true ||
+      (autofixApps.length > 0 && autofixApps.every((d) => d.server.dispatches24h === 0 && d.local.runs24h === 0)))
 
   usePublishPageContext({
     route: '/pipeline',
@@ -230,11 +241,15 @@ export function PipelinePage() {
         <>
           <PageStatus
             ariaLabel="Pipeline status"
-            tone={stuckTotal > 0 ? 'danger' : 'ok'}
+            tone={stuckTotal > 0 || nothingOpens ? 'danger' : 'ok'}
             sentence={
               top
                 ? <>{stuckTotal} {pluralize(stuckTotal, 'item')} stuck. The biggest: <span className="font-medium">{top.group.label}</span>.</>
-                : 'Nothing is stuck. Every fix is moving.'
+                : nothingOpens
+                  ? agentCredits.state?.out
+                    ? `${agentCreditsTitle(agentCredits.state)}, so nothing opens fixes. Nothing already open is stuck.`
+                    : 'Nothing already open is stuck, but nothing opened a fix in the last day.'
+                  : 'Nothing is stuck. Every fix is moving.'
             }
             metrics={[
               { label: 'Stuck', value: stuckTotal, tone: stuckTotal > 0 ? 'danger' : 'ok', hint: COUNT_HINTS.stuck },
@@ -294,7 +309,9 @@ export function PipelinePage() {
             }
           >
             {!stage && stuckTotal === 0 ? (
-              <p className="text-xs text-ok-foreground" data-testid="pipeline-none-stuck">Nothing is stuck. Every item is moving.</p>
+              <p className="text-xs text-ok-foreground" data-testid="pipeline-none-stuck">
+                {nothingOpens ? 'Nothing already open is stuck.' : 'Nothing is stuck. Every item is moving.'}
+              </p>
             ) : (
               <PipelineGroups
                 groups={groups}

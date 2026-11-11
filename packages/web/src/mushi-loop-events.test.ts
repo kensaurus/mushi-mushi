@@ -1,7 +1,7 @@
 /**
  * FILE: packages/web/src/mushi-loop-events.test.ts
  * PURPOSE: End-to-end (SDK → tracker → wire) check of the growth-loop events
- *          behind the "Bug reports by Mushi" mark: `loop_impression` is sent
+ *          behind the "Bug reports by Mushi Mushi" mark: `loop_impression` is sent
  *          once per page session with the hashed project ref, `loop_click`
  *          flushes immediately, and both stay silent when the mark is off.
  */

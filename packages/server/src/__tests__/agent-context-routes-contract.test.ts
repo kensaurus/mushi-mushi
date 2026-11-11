@@ -6,7 +6,8 @@
  * /v1/admin/reports/:id/fix-context and /blast-radius, and
  * setup_repo_for_mushi called POST /v1/admin/projects/:id/repo/bootstrap,
  * since they shipped. None was registered: triage swallowed the 404s into
- * `null`, setup_repo_for_mushi failed outright.
+ * `null`, setup_repo_for_mushi failed outright. The MCP tool was removed,
+ * and the bootstrap route went with it on 2026-11-11, so nothing may call it.
  *
  * Reads sources verbatim (no Deno runtime), like sync-route-scope-contract.
  */
@@ -43,7 +44,6 @@ function findRoute(method: string, path: string): Registration | undefined {
 const AGENT_ROUTES = [
   { method: 'GET', path: '/v1/admin/reports/:id/fix-context', mcpSuffix: /\/v1\/admin\/reports\/\$\{[^}]+\}\/fix-context/ },
   { method: 'GET', path: '/v1/admin/reports/:id/blast-radius', mcpSuffix: /\/v1\/admin\/reports\/\$\{[^}]+\}\/blast-radius/ },
-  { method: 'POST', path: '/v1/admin/projects/:id/repo/bootstrap', mcpSuffix: /\/v1\/admin\/projects\/(?:\$\{[^}]+\}|\{projectId\})\/repo\/bootstrap/ },
 ] as const
 
 describe('agent context routes', () => {
@@ -68,6 +68,18 @@ describe('agent context routes', () => {
         if (!route.mcpSuffix.test(src)) continue
         expect(findRoute(route.method, route.path), `${file} calls ${route.path}`).toBeTruthy()
       }
+    }
+  })
+
+  it('no MCP source calls the removed repo bootstrap route', () => {
+    expect(findRoute('POST', '/v1/admin/projects/:id/repo/bootstrap')).toBeUndefined()
+    const sources = [
+      join(functionsDir, 'mcp/index.ts'),
+      join(functionsDir, '_shared/mcp-hosted-tool-manifest.json'),
+      mcpStdioSource,
+    ].filter((p) => existsSync(p))
+    for (const file of sources) {
+      expect(readFileSync(file, 'utf-8'), file).not.toMatch(/\/repo\/bootstrap/)
     }
   })
 

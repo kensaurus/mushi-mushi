@@ -184,7 +184,7 @@ export function formatRelativeTime(iso: string): string {
   return new Date(then).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-/** "Bug reports by Mushi" mark: landing URL + channel UTM; `ref` = SHA-256 prefix of the project id. */
+/** "Bug reports by Mushi Mushi" mark: landing URL + channel UTM; `ref` = SHA-256 prefix of the project id. */
 const BRAND_FOOTER_URL = 'https://kensaur.us/mushi-mushi/';
 const BRAND_FOOTER_UTM = 'utm_source=widget&utm_medium=powered-by';
 
@@ -342,7 +342,7 @@ export interface WidgetCallbacks {
   ): void | Promise<WidgetSubmitOutcome | void>;
   onOpen(): void;
   onClose(): void;
-  /** "Bug reports by Mushi" mark: impression once per widget instance, click per activation → loop_* events. */
+  /** "Bug reports by Mushi Mushi" mark: impression once per widget instance, click per activation → loop_* events. */
   onBrandFooterImpression?(): void;
   onBrandFooterClick?(): void;
   onScreenshotRequest(): void;

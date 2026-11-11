@@ -11,6 +11,23 @@ Your AI wrote it. Mushi Mushi tells you why it broke.</>}
   lead={LANDING_HERO.lead}
 />
 
+Words you will see on this page
+
+- **Diagnosis**: Mushi Mushi's written explanation of one bug: how serious it is, the likely cause and a suggested fix.
+- **Fix prompt**: the diagnosis plus the evidence, written as instructions you paste into your AI builder (Lovable, Bolt, Cursor or Claude Code).
+- **Script tag** or **SDK**: the small piece of code you add to your app. It shows the report button and sends reports to Mushi Mushi.
+- **Sentry**: a popular service that records errors when code crashes. You don't need it.
+- **Pull request (PR)**: a proposed change to your code that you can read before you accept it.
+- **MCP**: the standard way AI code editors such as Cursor and Claude Code connect to outside tools. It is how your editor reads Mushi Mushi's reports.
+
+More words, in plain English: [the glossary](/glossary).
+
+## Will my customers actually report bugs?
+
+Most won't. Most people who hit a bug just leave. So reporting takes one tap for the people who do speak up, and Mushi Mushi can also look for bugs itself: [check your live site free](/check?src=landing-customers), with no sign-up, or connect the [deeper checks](/what-it-does) when you want them.
+
+On my own 9 apps, about 98% of the bugs in the 60 days to 2026-11-11 came from checks, code reviews, error alerts and my own notes, not from people's reports. [See the live numbers](/proof).
+
 ## See it work, on a real bug
 
 A real bug from Mushi Mushi's own app, from the report to the merged fix.
@@ -23,9 +40,9 @@ A real bug from Mushi Mushi's own app, from the report to the merged fix.
 
 ## Why I built it
 
-I build apps with Cursor and Claude Code, mostly on my own, and eight of them have real users. When one broke, I often didn't know where to start, because I hadn't written the code line by line.
+I build apps with Cursor and Claude Code, mostly on my own, and they have real users. When one broke, I often didn't know where to start, because I hadn't written the code line by line.
 
-So I built Mushi Mushi and ran it on all eight. In the 60 days to 2026-10-29, people sent 32 bug reports, and some of those were my own testing. My own checks (code audits, Sentry, the site watch, the first-time user test) found more than 1,000. Of the 234 fixes merged, one started from a user's report. [The live numbers are here](/proof).
+So I built Mushi Mushi and ran it on 9 of my apps. In the 60 days to 2026-11-11, people sent 34 bug reports, and some of those were my own testing. My own checks (code audits, Sentry, the site watch, the first-time user test) found 2,031. Of the 523 fixes merged, two started from a person's report. [The live numbers are here](/proof).
 
 That is why Mushi Mushi doesn't wait for reports: most people who hit a bug just leave.
 
@@ -33,18 +50,11 @@ It is early, and I'm still its main user. If something confuses you, [open an is
 
 ## What this is (and is not)
 
-Mushi Mushi is the bug mediator for AI-built apps, an open-source tool that gives every bug your users report a plain-English diagnosis + a ready fix, in your editor.
+Mushi Mushi is an open-source tool for bug fixing for AI-built apps: every bug your users report gets a plain-English diagnosis + a ready fix, in your editor.
 
 **Who it is for.** {LANDING_WHAT_THIS_IS.who} {LANDING_WHAT_THIS_IS.boundary}
 
-**Where it stands.** Live and free to try: hosted service, npm packages and public source. Built by Kenji Sakuramoto, a solo developer in Japan ([kensaur.us](https://kensaur.us), [X](https://x.com/sakuramotokenji), [GitHub](https://github.com/kensaurus)), who runs it on his own 8 live apps; [the numbers are public](/proof), with bugs his own checks found counted apart from bugs people reported. Native iOS, Android and Flutter libraries are previews.
-
-Words you will see on this page
-
-- **Diagnosis**: Mushi Mushi's written explanation of one bug, with how serious it is, the likely cause and a suggested fix.
-- **Fix prompt**: the diagnosis plus the evidence, written as instructions you paste into your AI editor.
-- **SDK** or **script tag**: the small piece of code you add to your app. It shows the report button and sends reports to Mushi Mushi.
-- **MCP**: the standard way AI code editors such as Cursor and Claude Code connect to outside tools. It is how your editor reads Mushi Mushi's reports.
+**Where it stands.** Live and free to try: hosted service, npm packages and public source. Built by one developer in Japan (Kensaurus 合同会社): Kenji Sakuramoto ([kensaur.us](https://kensaur.us), [X](https://x.com/sakuramotokenji), [GitHub](https://github.com/kensaurus)), who runs it on his own 9 live apps; [the numbers are public](/proof), with bugs his own checks found counted apart from bugs people reported. Native iOS, Android and Flutter libraries are previews.
 
 More: [How it works, on video](/how-it-works) · [Who it’s for](/who-its-for) · [What else it does](/what-it-does) · [How a bug moves, step by step](/concepts/closed-loop) ·
 [Sentry, Linear, Slack and other tools](/plugins) ·

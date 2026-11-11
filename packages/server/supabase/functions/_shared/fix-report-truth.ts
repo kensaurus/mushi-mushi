@@ -19,11 +19,13 @@
  *               unmerged / went red (isFixCountedFailed)
  *   none      — nothing to act on
  *
- * Only `fix-loop-status.ts` is imported, so the Deno CI test runs without
- * permissions and the vitest suite imports this file directly.
+ * Only `fix-loop-status.ts` and `agent-out-of-usage.ts` (both pure) are
+ * imported, so the Deno CI test runs without permissions and the vitest suite
+ * imports this file directly.
  */
 
 import { fixFailureBucket, isFixCountedFailed } from './fix-loop-status.ts'
+import { AGENT_OUT_OF_USAGE_BUCKET, isAgentOutOfUsageError } from './agent-out-of-usage.ts'
 
 export const RESOLVED_REPORT_STATUSES: ReadonlySet<string> = new Set([
   'fixed',
@@ -181,8 +183,15 @@ export function deriveReportFixTruth(input: {
   // fixed already, is in another repo, or is not code): the same run gives
   // the same answer, so a retry only spends credits. Skipped runs, closed
   // PRs and red CI need a person to decide first.
+  //
+  // A run the agent's account refused for lack of credits (2026-11-07: 274
+  // local runs, "You're out of usage") gets its own bucket, so the console
+  // names it. It stays retryable here: whether a retry can work depends on
+  // whether the credits are back now, which the console reads live
+  // (GET /v1/admin/work/stats `agentCredits`) and hides Retry while they are not.
   const latestStatus = (latest.status ?? '').toLowerCase()
   const agentVerdict = AGENT_VERDICT_CATEGORIES.has((latest.failure_category ?? '').toLowerCase())
+  const outOfUsage = !credential && !agentVerdict && isAgentOutOfUsageError(latest.error)
   const retryable = credential ? credential.keyHealthy === true : latestStatus === 'failed' && !agentVerdict
 
   return {
@@ -190,7 +199,11 @@ export function deriveReportFixTruth(input: {
     state: 'failed',
     retryable,
     credential,
-    failureBucket: credential ? `${credential.provider}_key_rejected` : fixFailureBucket(latest),
+    failureBucket: credential
+      ? `${credential.provider}_key_rejected`
+      : outOfUsage
+        ? AGENT_OUT_OF_USAGE_BUCKET
+        : fixFailureBucket(latest),
   }
 }
 

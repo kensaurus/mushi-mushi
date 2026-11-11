@@ -146,6 +146,8 @@ export interface PricingTierRow {
   highlights: string
   /** Shorter notes column on /cloud */
   cloudNotes?: string
+  /** One plain sentence for the plan cards at the top of /pricing (self-serve plans only). */
+  plain?: string
 }
 
 /** Single source of truth for plan rows on /pricing and /cloud. */
@@ -170,7 +172,16 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
     retention: '14 days',
     seats: '1',
     highlights: 'One app, the whole loop once: plain-English diagnosis and a fix packet in your editor; agent fix PRs once you connect GitHub. Hard stop at the limit',
-    cloudNotes: 'All SDKs, hosted console, your own AI and Cursor keys, community support in GitHub Discussions'
+    // No AI or Cursor key is needed: diagnoses run on Mushi Mushi's key when the
+    // app has none (_shared/byok.ts resolves the platform key last). Your own
+    // key is optional (pricing_plans.feature_flags.byok is true on Free).
+    // Caveat: classify-report is on the debited list in
+    // _shared/hosted-llm-billing.README.md, so with MUSHI_HOSTED_LLM_BILLING=on
+    // an empty wallet could refuse a platform-key diagnosis. Keep this claim in
+    // step with that flag.
+    cloudNotes:
+      'All SDKs and the hosted console. No AI key needed; add your own AI or Cursor key if you want. Community support in GitHub Discussions',
+    plain: 'One app. Up to 100 bugs explained a month. No card, no AI key.',
   },
   {
     id: 'indie',
@@ -185,7 +196,8 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
     highlights:
       'Three apps, plugins from the marketplace, usage alerts and an audit log; then $0.03/diagnosis with a $50 overage cap you set',
     cloudNotes:
-      'Three apps, plugin marketplace, usage alerts, email support; $0.03 per extra diagnosis'
+      'Three apps, plugin marketplace, usage alerts, email support; $0.03 per extra diagnosis',
+    plain: 'Up to 3 apps and 1,000 bugs explained a month. Adds plugins, usage alerts and email support.',
   },
   {
     id: 'pro',
@@ -199,8 +211,12 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
     seats: '5',
     highlights:
       'A portfolio of apps: 5 seats, the weekly report across your apps, longer history; then $0.03/diagnosis up to a $200 cap',
+    // Integrations (Sentry, Linear, Jira, Slack, GitHub) are on every plan:
+    // api/routes/integrations.ts has no plan gate. Studio's own flags are
+    // teams, shared_views and intelligence_reports (the weekly report).
     cloudNotes:
-      'Ten apps, 5 seats, weekly report, shared views, Sentry / Linear / Jira — $0.03 / extra diagnosis'
+      'Ten apps, 5 seats, weekly report, shared views; $0.03 per extra diagnosis',
+    plain: 'Up to 10 apps, 5 people on your team and 3,000 bugs explained a month, with a weekly report.',
   },
   {
     id: 'enterprise',

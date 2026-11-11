@@ -11,7 +11,8 @@
  *                               and signs the hop with the internal secret.
  *                               Increments one landing_page_views_daily row;
  *                               stores no IP, id, user agent or fingerprint.
- *   GET  /v1/admin/growth/daily  operator-only: page views, signups and
+ *   GET  /v1/admin/growth/daily  operator-only: page views (referrer spam
+ *                               left out), signups, sdk_seen_live and
  *                               activated organizations per UTC day and by
  *                               `?src=` / signup source (gtm_daily_scorecard).
  *                               Same auth as GET /v1/admin/growth/funnel.
@@ -28,6 +29,7 @@ import {
   PAGE_VIEWS_PER_MINUTE,
   VISITOR_BUCKET_HEADER,
   isBotUserAgent,
+  isSpamReferrerHost,
   parsePageViewBody,
 } from '../../_shared/landing-visits.ts'
 
@@ -46,6 +48,10 @@ export function registerLandingVisitRoutes(app: Hono<{ Variables: Variables }>):
     if (isBotUserAgent(c.req.header('user-agent'))) return c.body(null, 204)
     const view = parsePageViewBody(await c.req.text())
     if (!view) return c.body(null, 400)
+    // Referrer spam is dropped before it is stored, and answered like a bot
+    // (accepted, nothing learned). Blanking only the referrer would move the
+    // view into the "no referrer" bucket and keep the count inflated.
+    if (isSpamReferrerHost(view.referrerHost)) return c.body(null, 204)
 
     const db = getServiceClient()
     const { error: limitErr } = await db.rpc('scoped_rate_limit_claim', {
@@ -133,6 +139,8 @@ export function registerLandingVisitRoutes(app: Hono<{ Variables: Variables }>):
         by_src: Array.isArray(payload.by_src) ? payload.by_src : [],
         window_start: typeof payload.window_start === 'string' ? payload.window_start : null,
         self_project_configured: payload.self_project_configured === true,
+        // Views from referrer-spam hosts left out of page_views (rows kept).
+        spam_views_excluded: typeof payload.spam_views_excluded === 'number' ? payload.spam_views_excluded : 0,
         generated_at: new Date().toISOString(),
       },
     })

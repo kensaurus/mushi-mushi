@@ -328,9 +328,10 @@ export function FirstDiagnosisScreen({
           <h2 className="mt-1.5 text-base font-semibold text-fg">See your first diagnosis</h2>
           <ContainedBlock tone="muted" className="mt-2">
             <p className="text-xs leading-relaxed text-fg-muted">
-              Send one synthetic bug report to <span className="font-mono text-fg-secondary">{projectName}</span>.
-              Mushi turns what a user felt into a plain-English diagnosis in about a minute — no SDK
-              install needed for this step.
+              See what Mushi Mushi gives you for each bug: a sample report for{' '}
+              <span className="font-mono text-fg-secondary">{projectName}</span> with its plain-English
+              explanation and fix prompt, shown in a few seconds. The explanation is pre-written; your real
+              bugs get one written for them. Nothing to install for this step.
             </p>
           </ContainedBlock>
         </div>
@@ -386,10 +387,11 @@ export function FirstDiagnosisScreen({
           <Card className="p-4 space-y-3">
             <div>
               <h3 className="text-sm font-semibold text-fg">
-                {diagnosed ? 'Now get this for real bugs' : 'Install the SDK'}
+                {diagnosed ? 'Now get this for real bugs' : 'Put the report button in your app'}
               </h3>
               <p className="mt-0.5 text-xs text-fg-muted">
-                Drop the widget into your app and every report your users file gets the same read.
+                Add the report button to your live app, and every bug your users report gets the same explanation.
+                Built with Lovable or Bolt? Pick it under &ldquo;Where does your app run?&rdquo; for one line to paste.
               </p>
             </div>
             <SdkInstallCard
@@ -460,8 +462,8 @@ export function FirstDiagnosisInline({
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-fg">No reports yet — see your first diagnosis</h3>
           <p className="mt-0.5 text-xs leading-relaxed text-fg-muted">
-            Send a synthetic bug to <span className="font-mono text-fg-secondary">{projectName}</span> and
-            watch it come back classified. Takes about a minute.
+            Open a sample bug for <span className="font-mono text-fg-secondary">{projectName}</span> with a
+            pre-written explanation and fix prompt, so you see what a real report gets. Takes a few seconds.
           </p>
         </div>
         {!diagnosed && (

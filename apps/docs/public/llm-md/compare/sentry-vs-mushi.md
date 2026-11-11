@@ -9,6 +9,8 @@ description: Sentry vs Mushi Mushi in 2026. What each captures, Sentry's free ti
 
 # Sentry vs Mushi Mushi
 
+> **Never used Sentry?** You don't need it to use Mushi Mushi, so you can skip this page. [See what Mushi Mushi does](/what-is-mushi-mushi) instead.
+
 Sentry is built around what the code threw, with a User Feedback widget and
 Session Replay alongside. Mushi Mushi starts from what the user reported, ingests
 Sentry's errors too, explains each one in plain English, and hands your agent

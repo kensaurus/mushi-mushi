@@ -25,7 +25,13 @@ lanes' settings. Mushi never sends a command or a path.
 
 Prerequisites on the machine: Node 20+, the Mushi CLI, `cursor-agent` signed
 in (`cursor-agent login`), `gh` signed in (`gh auth login`), and one clone per
-lane.
+lane. To run Claude Code instead of Cursor, install with `--agent claude`
+(stored as `"agent": "claude"` in `worker.json`) and sign Claude Code in
+(`claude auth login`). The account check then runs `claude auth status`;
+lane models that are not Claude ids fall back to Claude Code's default, and
+the Cursor account settings and Switch account do not apply. When the agent's
+plan is out of usage or signed out, every lane on the machine waits 30
+minutes before it claims again, and the run counts against no report.
 
 ```bash
 # Review first: prints the lanes, where the key goes and the service file

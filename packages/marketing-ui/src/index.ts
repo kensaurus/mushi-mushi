@@ -9,7 +9,11 @@
  * Setup:
  *   1. import '@mushi-mushi/marketing-ui/styles.css' in the host app's CSS
  *   2. wrap the marketing surface in <MarketingProvider value={{ Link, urls }}>
- *   3. render <Hero />, <MushiCanvas />, <ClosingCta />, <MarketingFooter />
+ *   3. render <MarketingFooter />, <LoopPipeline />, the Connect lane picker or
+ *      the Kensaurus portfolio table
+ *
+ * The landing canvas (<Hero />, <MushiCanvas />, <ClosingCta /> and friends)
+ * was removed 2026-11-11: nothing has mounted it since PublicHomePage left in #380.
  *
  * See the package README for a worked example.
  */
@@ -22,18 +26,12 @@ export type {
   MarketingUrls,
 } from './context'
 
-export { Hero } from './Hero'
-export { ClosingCta } from './ClosingCta'
 export { MarketingFooter } from './MarketingFooter'
 export { KensaurusPortfolioTable } from './KensaurusPortfolioTable'
 export { KENSAURUS_FAMILY, familyPagesFor } from './kensaurus/family'
 export type { KensaurusFamily, KensaurusFamilyApp, KensaurusFamilyPage } from './kensaurus/family'
 export { StatusPill } from './StatusPill'
 export type { StatusPillProps } from './StatusPill'
-export { SwitchingFromStrip } from './SwitchingFromStrip'
-export { PersonaTrack } from './PersonaTrack'
-export type { PersonaCard } from './PersonaTrack'
-export { PrivacyPosture } from './PrivacyPosture'
 
 export { ConnectLanePicker } from './connect/ConnectLanePicker'
 export type { ConnectLanePickerProps } from './connect/ConnectLanePicker'
@@ -46,21 +44,3 @@ export { ConnectClientIcon, renderConnectClientIcon } from './connect/clientIcon
 export type { ConnectClientIconProps } from './connect/clientIcons'
 
 export { LoopPipeline } from './pipeline/LoopPipeline'
-
-export { MushiCanvas } from './canvas/MushiCanvas'
-export {
-  reportSample,
-  stages,
-  stageEdges,
-  logEvents,
-} from './canvas/data'
-export type {
-  MushiStage,
-  MushiStageId,
-  MushiEdge,
-  ReportSample,
-  StageHandleId,
-  StageNodeData,
-  StageTone,
-  PaperEdgeData,
-} from './canvas/data'
