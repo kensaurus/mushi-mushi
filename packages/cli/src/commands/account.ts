@@ -13,6 +13,8 @@ import type { FrameworkId } from '../detect.js';
 import { assertEndpoint } from '../endpoint.js';
 import { apiCall, die, requireConfig, pad, probeEndpointHealth } from '../cli-shared.js';
 import type { WhoamiData, StatsData, ActivationData } from '../cli-types.js';
+import { envKeyOverrideLines } from '../env-key-override.js';
+import { tryLoadKeyFromKeychain } from '../keychain.js';
 
 export function registerAccountCommands(program: Command): void {
 // ─── init ────────────────────────────────────────────────────────────────────
@@ -114,6 +116,7 @@ Useful after 'mushi login' to confirm credentials are correct.`)
           console.log('    Mint one on the console MCP page, or run `mushi login`.')
         }
       }
+      for (const line of envKeyOverrideLines(process.env, tryLoadKeyFromKeychain() ?? undefined)) console.log(`  ${line}`)
     }
   })
 

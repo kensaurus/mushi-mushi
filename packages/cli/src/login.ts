@@ -19,6 +19,7 @@ import {
 } from './device-auth.js'
 import { printAuthApproved, printAuthBanner, printAuthFailed } from './auth-ui.js'
 import { CLI_KEY_SCOPES, FULL_CLI_KEY_SCOPES } from './key-scopes.js'
+import { envKeyOverrideLines } from './env-key-override.js'
 
 export type RunLoginOptions = {
   apiKey?: string
@@ -395,8 +396,10 @@ export async function runLogin(opts: RunLoginOptions = {}): Promise<void> {
     if (opts.upgradeScope) {
       console.log(`  ✓ Full-scope CLI key saved (${apiKey.slice(0, 12)}…)`)
       console.log(`    Scopes: report:write · mcp:read · mcp:write — SDK + MCP + admin CLI (incl. writes) all work with this key`)
+      for (const line of envKeyOverrideLines(process.env, apiKey)) console.log(`  ${line}`)
     } else {
       console.log(`  ✓ CLI key saved (${apiKey.slice(0, 12)}…)`)
+      for (const line of envKeyOverrideLines(process.env, apiKey)) console.log(`  ${line}`)
       console.log(`    Scopes: report:write · mcp:read — SDK ingest + MCP read tools.`)
       console.log(`    Admin writes (mushi work, fix merge, billing cap, pipeline start) need: mushi login --upgrade-scope${chosenProjectId ? ` --project-id ${chosenProjectId}` : ''}`)
     }

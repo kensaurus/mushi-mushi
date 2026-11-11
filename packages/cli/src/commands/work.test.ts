@@ -9,6 +9,7 @@ import {
   wrongAppReason,
   inLocalCooldown,
   installCommand,
+  windowsShim,
   freeBranchName,
   isMissingModuleFailure,
   failureTail,
@@ -260,6 +261,19 @@ describe('installCommand', () => {
     expect(installCommand((f) => f === 'package-lock.json')?.[0]).toBe('npm')
     expect(installCommand((f) => f === 'yarn.lock')?.[0]).toBe('yarn')
     expect(installCommand(() => false)).toBeNull()
+  })
+})
+
+describe('windowsShim', () => {
+  it('runs the package manager through cmd.exe on Windows only, with the same arguments', () => {
+    const cmd: [string, string[]] = ['pnpm', ['install', '--frozen-lockfile', '--prefer-offline']]
+    expect(windowsShim(cmd, 'linux', undefined)).toEqual(cmd)
+    expect(windowsShim(cmd, 'darwin', 'ignored')).toEqual(cmd)
+    expect(windowsShim(cmd, 'win32', 'C:\Windows\system32\cmd.exe')).toEqual([
+      'C:\Windows\system32\cmd.exe',
+      ['/d', '/s', '/c', 'pnpm', 'install', '--frozen-lockfile', '--prefer-offline'],
+    ])
+    expect(windowsShim(cmd, 'win32', undefined)[0]).toBe('cmd.exe')
   })
 })
 
