@@ -8417,6 +8417,10 @@ mushi work --repo-dir ~/code/my-app --report <reportId> --model gpt-5
 mushi work --agent claude --repo-dir ~/code/my-app --max 3 --model sonnet
 ```
 
+Before it lists or claims anything (`--dry-run` too), `mushi work` checks that
+the `--repo-dir` clone's `origin` is a repo your key's project is linked to,
+and stops with `E_WRONG_REPO` if not; pass `--any-repo` for a monorepo or a fork.
+
 For each report it:
 
 1. Reads Mushi Mushi's fix packet and what earlier attempts did (their Opus review
