@@ -155,6 +155,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Legal](https://kensaur.us/mushi-mushi/docs/legal): Privacy policy and terms of service for Mushi Mushi Cloud, the SDKs, and the tester program.
 - [Privacy Policy](https://kensaur.us/mushi-mushi/docs/legal/privacy): What Mushi Mushi collects, why, who processes it, how long it is kept, and how to exercise your rights under GDPR and Japan's APPI.
 - [Terms of Service](https://kensaur.us/mushi-mushi/docs/legal/terms): The terms for Mushi Mushi Cloud, the admin console, the SDKs and the Bounties tester marketplace. Plans, limits, AI-output disclaimer, licenses and liability.
+- [特定商取引法に基づく表記](https://kensaur.us/mushi-mushi/docs/legal/tokushoho): Mushi Mushi Cloud の特定商取引法に基づく表記。販売事業者、所在地、連絡先、料金（米ドル建て）、支払時期、自動更新と解約の方法、返金の扱いを記載しています。
 - [Migration guides](https://kensaur.us/mushi-mushi/docs/migrations): Step-by-step guides for moving an app onto Mushi Mushi from Sentry, Instabug, Shake, LogRocket, BugHerd or Pendo, or between React, Vue and mobile runtimes.
 - [BugHerd → Mushi Mushi](https://kensaur.us/mushi-mushi/docs/migrations/bugherd-to-mushi): Move from BugHerd to Mushi Mushi. Map pin-to-element feedback to its element picker, screenshot markup and metadata capture, with an interactive checklist.
 - [Migration: Capacitor → React Native](https://kensaur.us/mushi-mushi/docs/migrations/capacitor-to-react-native): Port an Ionic or Capacitor app to React Native. A full plan with a Mushi Mushi API map and CI/CD recipes for Expo EAS or React Native CLI with Fastlane.

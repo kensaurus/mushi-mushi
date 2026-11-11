@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 235 pages, generated from llms.txt. */
+/** 236 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -1047,7 +1047,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/ja",
     markdown: "ja.md",
     keywords: ["ja"],
-    headings: ["まず無料で試す：公開中のサイトをチェック", "できること", "報告ボタンは日本語で表示されます", "始め方：Lovable・Bolt の場合", "始め方：Cursor・Claude Code の場合", "運営者", "英語のドキュメント"],
+    headings: ["まず無料で試す：公開中のサイトをチェック", "できること", "報告ボタンは日本語で表示されます", "始め方：Lovable・Bolt の場合", "始め方：Cursor・Claude Code の場合", "運営者情報", "英語のドキュメント"],
     excerpt: "Mushi Mushi は、アプリに「問題を報告」ボタンを追加し、届いた不具合の原因と直し方を AI が説明するオープンソースのツールです。無料プランはアプリ 1 本・月 100 件の診断まで。",
   },
   {
@@ -1085,6 +1085,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["legal", "terms", "service"],
     headings: ["1. Acceptance", "2. The Service", "3. Software licenses", "4. Accounts", "5. Acceptable use", "6. Your data and the license you give us", "7. Free tier", "8. Paid plans and billing"],
     excerpt: "The terms for Mushi Mushi Cloud, the admin console, the SDKs and the Bounties tester marketplace. Plans, limits, AI-output disclaimer, licenses and liability.",
+  },
+  {
+    title: "特定商取引法に基づく表記",
+    url: docUrl("/legal/tokushoho"),
+    route: "/legal/tokushoho",
+    markdown: "legal/tokushoho.md",
+    keywords: ["legal", "tokushoho"],
+    headings: [],
+    excerpt: "Mushi Mushi Cloud の特定商取引法に基づく表記。販売事業者、所在地、連絡先、料金（米ドル建て）、支払時期、自動更新と解約の方法、返金の扱いを記載しています。",
   },
   {
     title: "Migration guides",
