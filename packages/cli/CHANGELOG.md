@@ -1,5 +1,12 @@
 # @mushi-mushi/cli
 
+## 0.36.1
+
+### Patch Changes
+
+- 30b23a0: `mushi work` strips terminal colour codes from a git hook's output before it stores the failure, so the report page shows the hook's words instead of raw escape codes.
+- 30b23a0: `mushi work` installs dependencies on Windows again (pnpm, npm and yarn are `.cmd` shims there, so every install failed and the agent ran without tests). `mushi login` and `mushi whoami` now say when a `MUSHI_API_KEY` in your environment overrides the key you just saved, and how to remove it.
+
 ## 0.36.0
 
 ### Minor Changes
