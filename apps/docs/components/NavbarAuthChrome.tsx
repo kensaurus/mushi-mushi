@@ -45,6 +45,7 @@
  * MigrationChecklist.tsx's button and pill patterns.
  */
 
+import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import {
   ADMIN_CONSOLE_URL as ADMIN_CONSOLE,
@@ -98,16 +99,11 @@ export function NavbarAuthChrome() {
     }
   }, [])
 
-  // Render anonymous shell while SSR / pre-hydration to avoid layout shift
-  if (!hydrated) {
-    return (
-      <div className="flex items-center gap-1">
-        <ConsoleLink />
-      </div>
-    )
-  }
-
-  if (session) {
+  // The static export (and every visitor before hydration) renders the
+  // signed-out chrome below. It used to render a bare "Console" link to the
+  // auth-gated console root, so a first-time visitor landed on /admin/login
+  // with nothing to try (MUSHI-f2ccc05f).
+  if (hydrated && session) {
     const initial = getInitial(session)
     const label = getDisplayLabel(session)
 
@@ -156,10 +152,12 @@ export function NavbarAuthChrome() {
     )
   }
 
-  // Signed-out state. A first-time visitor needs an account, not the
-  // checklist-sync consent the docs bridge asks for (BL-173): "Start free"
-  // opens the console's sign-up form and "Sign in" its login. Checklist sync
-  // keeps its own sign-in on the checklist (MigrationChecklist).
+  // Signed-out state. A first-time visitor needs something to try before an
+  // account: "Free check" runs the no-account Production Check (/check).
+  // "Start free" opens the console's sign-up form and "Sign in" its login
+  // (BL-173). Checklist sync keeps its own sign-in on the checklist
+  // (MigrationChecklist). Below sm only "Free check" shows, so the row fits
+  // at 390px.
   return (
     <div className="flex items-center gap-1">
       <a
@@ -170,25 +168,16 @@ export function NavbarAuthChrome() {
       </a>
       <a
         href={`${ADMIN_CONSOLE}/signup?src=docs-nav`}
-        className="whitespace-nowrap rounded-full border border-[var(--mushi-ink)] bg-[var(--mushi-ink)] px-2.5 py-1 font-mono text-2xs font-medium uppercase tracking-[0.16em] text-[var(--mushi-paper)] transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
+        className="hidden whitespace-nowrap rounded-full px-2.5 py-1 font-mono text-2xs uppercase sm:inline-block tracking-[0.16em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-paper-wash)] hover:text-[var(--mushi-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
       >
         Start free
       </a>
+      <Link
+        href="/check"
+        className="whitespace-nowrap rounded-full border border-[var(--mushi-ink)] bg-[var(--mushi-ink)] px-2.5 py-1 font-mono text-2xs font-medium uppercase tracking-[0.16em] text-[var(--mushi-paper)] transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
+      >
+        Free check
+      </Link>
     </div>
-  )
-}
-
-/** Static "Console" link — used in both signed-in and signed-out states. */
-// Hidden below sm: at 390px the logo, GitHub icon, this link, Sign in and the
-// menu button did not fit one row, so "Sign in" wrapped onto two lines. Sign in
-// opens the console too, so phones lose no destination.
-function ConsoleLink() {
-  return (
-    <a
-      href={`${ADMIN_CONSOLE}/`}
-      className="hidden whitespace-nowrap rounded-full px-2.5 py-1 font-mono text-2xs uppercase sm:inline-block tracking-[0.16em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-paper-wash)] hover:text-[var(--mushi-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
-    >
-      Console
-    </a>
   )
 }
