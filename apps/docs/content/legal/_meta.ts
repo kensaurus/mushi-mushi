@@ -4,4 +4,5 @@
 export default {
   privacy: 'Privacy Policy',
   terms: 'Terms of Service',
+  tokushoho: '特定商取引法に基づく表記',
 }

@@ -39,6 +39,7 @@ function shouldShowPortfolio(pathname: string | null): boolean {
 const FOOTER_LINKS: ReadonlyArray<{ label: string; href: string; external?: true }> = [
   { label: 'Privacy', href: '/legal/privacy' },
   { label: 'Terms', href: '/legal/terms' },
+  { label: '特定商取引法に基づく表記', href: '/legal/tokushoho' },
   { label: 'Security', href: '/security' },
   { label: 'Status', href: STATUS_PAGE_URL, external: true },
   { label: 'Open metrics', href: '/open' },

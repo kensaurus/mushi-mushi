@@ -11,5 +11,6 @@ description: Privacy policy and terms of service for Mushi Mushi Cloud, the SDKs
 
 - [Privacy policy](/legal/privacy) — what Mushi Mushi collects, why, who processes it, how long it is kept, and how to exercise your rights (GDPR and Japan APPI).
 - [Terms of service](/legal/terms) — the agreement for Mushi Mushi Cloud, the MIT SDKs, the AGPLv3 server, and the Mushi Mushi Bounties tester program.
+- [特定商取引法に基づく表記](/legal/tokushoho) — the operator, address, contact, prices, renewal, cancellation and refunds, as Japan's Act on Specified Commercial Transactions requires (in Japanese).
 
 Questions: kensaurus@gmail.com. Security posture and vulnerability reporting: [Security](/security).
