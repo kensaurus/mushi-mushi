@@ -116,6 +116,13 @@ describe('routes', () => {
     expect(state({ ...base, openFindings: 1 })).toBe('drift')
     expect(state(base)).toBe('ok')
   })
+  it('points to the User stories page, never the retired Inventory page name', () => {
+    for (const over of [{ validationErrors: 1 }, { lastGateRunAt: null }, { lastGateRunAt: '2026-09-01T00:00:00Z' }, { openFindings: 1 }]) {
+      const reason = deriveElementState({ ...base, ...over }, NOW).reason
+      expect(reason).toContain('User stories page')
+      expect(reason).not.toMatch(/Inventory page/)
+    }
+  })
 })
 
 describe('gates', () => {

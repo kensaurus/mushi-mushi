@@ -180,10 +180,10 @@ export function deriveElementState(input: ElementInput, now: Date = new Date()):
       if (!input.hasInventory && input.graphNodes === 0) {
         return { state: 'not_connected', reason: 'Not set up. Install the Mushi SDK in your app, or add an inventory.yaml, so Mushi learns your pages.' }
       }
-      if (input.validationErrors > 0) return { state: 'drift', reason: `Your inventory.yaml has ${plural(input.validationErrors, 'error')}. Fix them on the Inventory page.` }
-      if (!input.lastGateRunAt) return { state: 'unknown', reason: 'Not checked yet. Mushi knows your pages, but no check has tested them. Run the checks from the Inventory page.' }
-      if (isStale(input.lastGateRunAt, now, STALE_DAYS.routes)) return { state: 'unknown', reason: 'The last page check is more than two weeks old. Run the checks again from the Inventory page.' }
-      if (input.openFindings > 0) return { state: 'drift', reason: `${plural(input.openFindings, 'page problem')} to fix. Open the Inventory page for each one.` }
+      if (input.validationErrors > 0) return { state: 'drift', reason: `Your inventory.yaml has ${plural(input.validationErrors, 'error')}. Fix them on the User stories page.` }
+      if (!input.lastGateRunAt) return { state: 'unknown', reason: 'Not checked yet. Mushi knows your pages, but no check has tested them. Run the checks from the User stories page.' }
+      if (isStale(input.lastGateRunAt, now, STALE_DAYS.routes)) return { state: 'unknown', reason: 'The last page check is more than two weeks old. Run the checks again from the User stories page.' }
+      if (input.openFindings > 0) return { state: 'drift', reason: `${plural(input.openFindings, 'page problem')} to fix. Open the User stories page for each one.` }
       return { state: 'ok', reason: 'Your pages work the way the checks expect.' }
     }
 
