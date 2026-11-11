@@ -140,8 +140,8 @@ describe('the Realtime publication carries only tables a client listens to', () 
 })
 
 describe('the legacy 1536-d codebase embedding is neither written nor read', () => {
-  const only768 = migration('20261111120000_codebase_embedding_768_only.sql')
-  const drop = migration('20261111120100_drop_legacy_codebase_embedding.sql')
+  const only768 = migration('20261111134117_codebase_embedding_768_only.sql')
+  const drop = migration('20261111134118_drop_legacy_codebase_embedding.sql')
 
   it('upsert_codebase_chunks writes embedding_768 from the same payload and never `embedding`', () => {
     const insertCols = /insert into public\.project_codebase_files as existing \(([\s\S]*?)\)\s*select/.exec(only768)
@@ -182,5 +182,24 @@ describe('the legacy 1536-d codebase embedding is neither written nor read', () 
       expect(src, rel).toContain('upsertCodebaseChunks(db, [')
       expect(src, rel).toContain('extractRelativeImports(safeSource)')
     }
+  })
+})
+
+describe('telemetry retention (owner-approved 2026-11-11)', () => {
+  const sql = migration('20261111100647_telemetry_retention_30d.sql')
+
+  it('never keeps less than 30 days, deletes in batches, and runs daily', () => {
+    expect(sql).toContain('make_interval(days => greatest(p_days, 30))')
+    for (const [table, col] of [
+      ['integration_health_history', 'checked_at'],
+      ['webhook_audit_log', 'created_at'],
+      ['pipeline_runs', 'started_at'],
+    ]) {
+      const batched = String.raw`delete from public\.${table}\s+where id in \(\s*select id from public\.${table}\s+where ${col} < v_cutoff\s+limit p_batch`
+      expect(sql).toMatch(new RegExp(batched))
+    }
+    expect(sql).toContain("cron.schedule('mushi-telemetry-retention', '53 5 * * *', $cmd$select mushi.prune_telemetry();$cmd$)")
+    expect(sql).toContain('revoke all on function mushi.prune_telemetry(integer, integer, integer) from public, anon, authenticated;')
+    expect(sql).not.toMatch(/vacuum\s+full/i)
   })
 })

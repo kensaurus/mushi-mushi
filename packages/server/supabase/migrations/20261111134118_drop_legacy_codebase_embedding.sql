@@ -1,6 +1,6 @@
 -- Drop the legacy 1536-d codebase embedding (2026-11-11 cost audit).
 --
--- Apply only after 20261111120000_codebase_embedding_768_only is live and the
+-- Apply only after 20261111134117_codebase_embedding_768_only is live and the
 -- edge functions that read `embedding` (webhooks-github-indexer,
 -- api's project-codebase stats) or wrote it (api's codebase and sync uploads)
 -- are deployed without it. Search reads embedding_768 only
