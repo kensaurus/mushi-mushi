@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { interpretClaimPoll } from './cliAuthPoll'
+import { afterApproveNotFound, interpretClaimPoll } from './cliAuthPoll'
 
 // QA bug 268: a poll blip after approval showed "Couldn't approve" + "Retry approve".
 describe('interpretClaimPoll', () => {
@@ -18,5 +18,20 @@ describe('interpretClaimPoll', () => {
     expect(interpretClaimPoll({ ok: true, data: { status: 'expired' } }).kind).toBe('ended')
     expect(interpretClaimPoll({ ok: true, data: { status: 'rejected' } }).kind).toBe('ended')
     expect(interpretClaimPoll({ ok: false, error: { code: 'NOT_FOUND' } }).kind).toBe('ended')
+  })
+})
+
+describe('afterApproveNotFound (approve said "no pending request")', () => {
+  it('shows connected when the code was already approved and the terminal has its key (2026-11-11)', () => {
+    expect(afterApproveNotFound({ ok: true, data: { status: 'approved', claimed: true } })).toBe('connected')
+  })
+  it('waits for the terminal when the code was approved but not picked up yet', () => {
+    expect(afterApproveNotFound({ ok: true, data: { status: 'approved', claimed: false } })).toBe('waiting')
+  })
+  it('keeps the error for an expired, denied or unknown code, or when the status read fails', () => {
+    expect(afterApproveNotFound({ ok: true, data: { status: 'expired', claimed: false } })).toBe('error')
+    expect(afterApproveNotFound({ ok: true, data: { status: 'rejected', claimed: false } })).toBe('error')
+    expect(afterApproveNotFound({ ok: false, data: null })).toBe('error')
+    expect(afterApproveNotFound(null)).toBe('error')
   })
 })

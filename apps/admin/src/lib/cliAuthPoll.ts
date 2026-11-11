@@ -15,6 +15,25 @@ export type ClaimPollOutcome =
   | { kind: 'keep-waiting'; transient: boolean }
   | { kind: 'ended'; message: string }
 
+/**
+ * What to show when approve answered NOT_FOUND ("no pending request"). The
+ * code is often not gone at all: it was approved already, in another tab or
+ * by an earlier click, and the terminal has its key (2026-11-11: the owner
+ * saw "Couldn't approve" while `mushi login` printed "Approved!"). Ask the
+ * status of the same code before showing an error.
+ * - claimed: the terminal is connected, so say so;
+ * - approved, not claimed yet: wait for the terminal like after a click;
+ * - anything else (expired, rejected, unknown): the original error stands.
+ */
+export function afterApproveNotFound(
+  status: { ok: boolean; data?: { status?: string; claimed?: boolean } | null } | null,
+): 'connected' | 'waiting' | 'error' {
+  if (!status?.ok) return 'error'
+  if (status.data?.claimed) return 'connected'
+  if (status.data?.status === 'approved') return 'waiting'
+  return 'error'
+}
+
 export function interpretClaimPoll(
   res: { ok: boolean; data?: { status?: string; claimed?: boolean } | null; error?: { code?: string } | null } | null,
 ): ClaimPollOutcome {

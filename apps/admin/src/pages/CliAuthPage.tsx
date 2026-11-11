@@ -29,7 +29,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { interpretClaimPoll } from '../lib/cliAuthPoll'
+import { afterApproveNotFound, interpretClaimPoll } from '../lib/cliAuthPoll'
 import { describeActionError } from '../lib/actionError'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
@@ -170,7 +170,20 @@ export function CliAuthPage() {
 
     if (res.ok) {
       setApproveState('waiting')
-    } else {
+      return
+    }
+    if (res.error?.code === 'NOT_FOUND') {
+      const status = await apiFetch<{ status: string; claimed: boolean }>(
+        `/v1/cli/auth/device/status?user_code=${encodeURIComponent(userCode)}`,
+        { cache: 'no-store', scope: 'none' },
+      ).catch(() => null)
+      const next = afterApproveNotFound(status)
+      if (next !== 'error') {
+        setApproveState(next)
+        return
+      }
+    }
+    {
       setApproveState('error')
       // humanizeApiError's catch-all reads "Could not load this page", wrong
       // for a button; this keeps the server's sentence when it is readable.
@@ -386,15 +399,9 @@ export function CliAuthPage() {
           Never approve a request you didn't initiate.
         </p>
 
-        {/* Operator endpoint dump — collapsed so it never steals the CTA */}
-        <details className="mt-8 rounded-lg border border-edge-subtle bg-surface-raised px-4 py-3">
-          <summary className="cursor-pointer text-xs font-medium text-fg-muted hover:text-fg">
-            Technical details
-          </summary>
-          <div className="mt-3">
-            <CliAuthReadout userCode={userCode || null} />
-          </div>
-        </details>
+        {/* Endpoint readout: renders as the "Developer details" bar at the
+            page foot (ReadoutPanel portals there), so no wrapper of its own. */}
+        <CliAuthReadout userCode={userCode || null} />
       </div>
     </div>
   )
