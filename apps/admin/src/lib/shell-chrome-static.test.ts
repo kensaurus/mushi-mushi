@@ -75,7 +75,6 @@ describe('shell chrome static contract', () => {
     }
   })
 
-  // QA item 227: the DAV evidence note linked a repo and section that do not exist.
   it('sticky lead table columns unpin on phones so sort headers stay reachable', () => {
     const css = readFileSync(resolve(root, 'styles/components.css'), 'utf8')
     // Report 4e0c495a: a 34rem pinned summary covered Status/Severity/Conf./Action at 390px.
@@ -84,6 +83,7 @@ describe('shell chrome static contract', () => {
     )
   })
 
+  // QA item 227: the DAV evidence note linked a repo and section that do not exist.
   it('hero detail panel links no unknown GitHub org', () => {
     const panel = readFileSync(resolve(root, 'components/hero-flow/HeroDetailPanel.tsx'), 'utf8')
     expect(panel).not.toContain('github.com/kensa-dev')
