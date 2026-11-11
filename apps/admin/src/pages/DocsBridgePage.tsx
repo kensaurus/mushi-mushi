@@ -205,7 +205,7 @@ export function DocsBridgePage() {
           <>
             <SignalChip tone="brand">Docs bridge</SignalChip>
             <ContainedBlock tone="muted">
-              <p className="text-sm text-fg-muted">Connecting your Mushi account to the docs…</p>
+              <p className="text-sm text-fg-muted">Connecting your Mushi Mushi account to the docs…</p>
             </ContainedBlock>
           </>
         )}
@@ -213,13 +213,13 @@ export function DocsBridgePage() {
           <>
             <SignalChip tone="brand">Docs sign-in</SignalChip>
             <p className="text-base font-medium text-fg">
-              Sign in to the docs as {session?.user?.email ?? 'your Mushi account'}?
+              Sign in to the docs as {session?.user?.email ?? 'your Mushi Mushi account'}?
             </p>
             <ContainedBlock tone="muted">
               <p className="text-sm text-fg-muted">
-                <span className="font-mono text-fg">{returnOrigin}</span> is asking to use your Mushi
+                <span className="font-mono text-fg">{returnOrigin}</span> is asking to use your Mushi Mushi
                 sign-in so it can sync your migration checklist. Only allow this if you opened it from
-                the Mushi docs.
+                the Mushi Mushi docs.
               </p>
             </ContainedBlock>
             <div className="flex justify-center gap-2">
@@ -253,7 +253,7 @@ export function DocsBridgePage() {
         {status === 'no_session' && (
           <ContainedBlock tone="warn">
             <p className="text-sm text-fg">
-              Sign in to your Mushi account in this browser, then re-open this window from the docs.
+              Sign in to your Mushi Mushi account in this browser, then re-open this window from the docs.
             </p>
           </ContainedBlock>
         )}

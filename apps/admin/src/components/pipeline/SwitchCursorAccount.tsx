@@ -103,7 +103,7 @@ export function SwitchCursorAccountDialog({ hostId, hostname, onClose, onChanged
         {status && !status.canSwitch && (
           <div className="space-y-2" data-testid="cursor-switch-too-old">
             <p>
-              This machine's Mushi CLI is too old to switch accounts from here. Update it there, then restart the worker:
+              This machine's Mushi Mushi CLI is too old to switch accounts from here. Update it there, then restart the worker:
             </p>
             <CodeValue value={UPDATE_COMMAND} />
             <p>Or sign in on the machine itself: <code>cursor-agent login</code>.</p>

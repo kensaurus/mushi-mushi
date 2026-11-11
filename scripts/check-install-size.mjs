@@ -105,7 +105,9 @@ export const BUDGETS = [
   // 2026-11-11: 985 → 995 kB unpacked: the docs index gained the beginner pages
   // (what it is, glossary, three persona pages) and the client registry gained
   // Lovable (ADR 0056). Text only, no dependency change; measured 986.2 kB.
-  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 250_000, unpacked: 995_000 },
+  // 2026-11-11 (round 2): packed 250 → 255 kB: the docs index gained the agency
+  // compare page and the Japanese page. Text only; measured 250.2 kB packed.
+  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 255_000, unpacked: 995_000 },
   // 2026-10-28: packed 262 → 270 kB: release 5's version bump adds its CHANGELOG
   // entries (the changelog ships in the tarball), measured 265.4 kB packed.
   // 2026-10-29: 990 → 995 kB unpacked: `mushi doctor` reads the Health check

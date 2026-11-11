@@ -292,7 +292,7 @@ export function PipelinePage() {
 
           {!data.ciReadable && (
             <Callout tone="warn" label="CI jobs">
-              Mushi could not read the CI jobs just now, so PRs are judged by their check summary only. Refresh in a minute.
+              Mushi Mushi could not read the CI jobs just now, so PRs are judged by their check summary only. Refresh in a minute.
             </Callout>
           )}
 
@@ -413,7 +413,7 @@ export function PipelinePage() {
       {trainAsk && (
         <ConfirmDialog
           title="Run the merge queue now"
-          body="Mushi checks this app's queue now: a release train leaves if its interval is up and approved, green PRs are ready. Otherwise it says when the next one may leave."
+          body="Mushi Mushi checks this app's queue now: a release train leaves if its interval is up and approved, green PRs are ready. Otherwise it says when the next one may leave."
           details={<span className="font-mono">{trainAsk.repo}</span>}
           confirmLabel="Run now"
           loading={trainBusy != null}

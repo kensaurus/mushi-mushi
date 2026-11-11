@@ -9,7 +9,7 @@ import { Callout } from 'nextra/components'
 
 > **Scenario:** Your company policy requires that all LLM calls use an API key that belongs to your own Anthropic / OpenAI account so usage appears in your own billing dashboard and never routes through a third party.
 
-Mushi Mushi supports project-scoped BYOK. When set, the classifier, judge, fix, review and intelligence-report runs for that project use your key, so usage shows up in your provider console, not Mushi Mushi's.
+Mushi Mushi supports project-scoped BYOK. When set, the classifier, judge, fix, review and intelligence-report runs for that project use your key first, so usage shows up in your provider console, not Mushi Mushi's. This works on every plan, Free included. A diagnosis written on your own key still counts toward your plan's diagnoses: your key moves the AI vendor's bill to you, it does not add diagnoses.
 
 ## Setup
 
@@ -43,7 +43,7 @@ A new key is used by **All my apps** by default: every app in every organization
 | `fix-worker` (fix drafts) | Claude Sonnet 5.5, then GPT-5.4 |
 | `judge-batch` (fix grading) | Claude Sonnet 5.5, then GPT-5.4 |
 | `intelligence-report` (weekly summary) | Claude Haiku 5.5, then GPT-5.4 |
-| `agent-pr-review` (review of each fix PR) | Claude Opus 5.5, on your own Anthropic key only (skipped without one) |
+| `agent-pr-review` (review of each fix PR) | Claude Opus 5.5 on your own Anthropic key, or GPT on your own OpenAI key when there is no Anthropic key. Never on the Mushi Mushi platform key: skipped when you have added neither |
 | Search, similar bugs, codebase index | OpenAI `text-embedding-3-small` |
 | Voice reports | OpenAI `gpt-transcribe` |
 

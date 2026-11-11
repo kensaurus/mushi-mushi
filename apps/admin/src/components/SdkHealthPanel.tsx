@@ -15,11 +15,13 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { IconCheck, IconExternalLink, IconRefresh } from './icons'
 import { usePageData } from '../lib/usePageData'
 import { LINK_ACCENT } from '../lib/chipTone'
+import { detectWebBundler } from '../lib/sdkInstallDefaults'
 import {
   FIX_ACTION_TEXT,
   fixAllPlan,
   fixBusy,
   fixStarted,
+  presentSdkHealthProblems,
   taskStateFor,
   useSdkHealthFixes,
   type SdkHealthFixKind,
@@ -64,9 +66,15 @@ interface SdkHealthPanelProps {
   projectId: string
   /** Inline use (setup checklist): no outer card. */
   bare?: boolean
+  /**
+   * Known to be an Expo, React Native or Capacitor app: its store builds run
+   * in CI, so missing GitHub Actions secrets are a real fault. Unknown or a
+   * web app: asked as a question (see presentSdkHealthProblems).
+   */
+  nativeApp?: boolean
 }
 
-export function SdkHealthPanel({ projectId, bare }: SdkHealthPanelProps) {
+export function SdkHealthPanel({ projectId, bare, nativeApp = false }: SdkHealthPanelProps) {
   const health = usePageData<SdkHealthPayload>(`/v1/admin/projects/${projectId}/sdk-health`)
   const { reload } = health
   // After every fix SDK health is read again, so a fixed problem leaves the list.
@@ -79,7 +87,11 @@ export function SdkHealthPanel({ projectId, bare }: SdkHealthPanelProps) {
     if (upgradeOpened) reload()
   }, [upgradeOpened, reload])
 
-  const problems = health.data?.problems ?? []
+  const rawProblems = health.data?.problems ?? []
+  const asksAboutCi = !nativeApp && rawProblems.some((p) => p.id === 'ci_secrets_missing')
+  // The app's own package.json names its bundler, so the values are named the way its build reads them.
+  const stack = usePageData<{ packageJson: string | null }>(asksAboutCi ? `/v1/admin/projects/${projectId}/github/stack` : null)
+  const problems = presentSdkHealthProblems(rawProblems, { nativeApp, bundler: detectWebBundler(stack.data?.packageJson) })
   const notes = health.data?.notes ?? []
   // Never checked in and only setup steps listed: steps left, not something broken.
   const settingUp = Boolean(health.data) && !health.data?.lastSeenAt && problems.every((p) => SETUP_STEPS.has(p.id))
@@ -334,7 +346,7 @@ function FixResult({ kind, fixes }: { kind: SdkHealthFixKind; fixes: SdkHealthFi
     <div className="mt-1.5 space-y-1.5">
       <Line tone="warn">
         {s.status === 'forbidden'
-          ? "GitHub didn't let Mushi write secrets (the token lacks Secrets: write). Run these commands instead."
+          ? "GitHub didn't let Mushi Mushi write secrets (the token lacks Secrets: write). Run these commands instead."
           : s.status === 'no-repo'
             ? 'No GitHub repo or token is connected. Run these commands instead.'
             : s.status === 'partial'

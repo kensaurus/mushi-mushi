@@ -229,7 +229,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     consoleLabel: 'Create Sentry auth token',
     setupSteps: [
       'Open Sentry → Settings → Account → Auth Tokens → Create New Token.',
-      'Grant project:read, event:read and event:write (event:write lets a merged Mushi fix resolve the Sentry issue).',
+      'Grant project:read, event:read and event:write (event:write lets a merged Mushi Mushi fix resolve the Sentry issue).',
       'Copy the org slug from your Sentry URL: sentry.io/organizations/{org-slug}/.',
       'Paste org slug + token below, then Save → Test connection.',
       'To route errors INTO Mushi: Sentry → Settings → Developer Settings → create an internal integration with the receive URL below as its webhook URL (resources: issue, event_alert), then paste its Client Secret as the webhook secret here. Existing issues: use Import below.',
@@ -240,7 +240,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Each bug gets the matching Sentry stack trace and breadcrumbs',
       "Sentry's own root-cause hints (Seer) help sort the bug",
       'Sentry user feedback becomes bugs here too',
-      'Merging a Mushi fix resolves the Sentry issue, and resolving it in Sentry closes the bug here',
+      'Merging a Mushi Mushi fix resolves the Sentry issue, and resolving it in Sentry closes the bug here',
     ],
     webhookPath: '/v1/webhooks/sentry?projectId={projectId}',
     fields: [
@@ -248,7 +248,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       { name: 'sentry_project_slug', label: 'Project slug', placeholder: 'e.g. web-app', help: 'Optional — narrows event search to one project (faster enrichment).', helpId: 'integrations.sentry.project_slug', validator: 'slug' },
       { name: 'sentry_extra_project_slugs', label: 'More Sentry projects', placeholder: 'e.g. api, worker', help: 'Optional — other Sentry projects this app reports to (say a backend), comma-separated, up to 10. Import can pull from any of them.', validator: 'sentrySlugList', list: true },
       { name: 'sentry_auth_token_ref', label: 'Auth token', placeholder: 'sntrys_… or sntryu_…', type: 'password', help: 'Auth token with project:read + event:read (import, enrichment) and event:write (resolve on merge). Create at sentry.io/settings/account/api/auth-tokens/.', required: true, helpId: 'integrations.sentry.auth_token', validator: 'token' },
-      { name: 'sentry_dsn', label: 'DSN (optional)', placeholder: 'e.g. https://<key>@o0.ingest.sentry.io/<project-id>', help: 'DSN for the SDK to send events. Only needed if you want Mushi reports forwarded as Sentry events.', helpId: 'settings.general.sentry_dsn', validator: 'sentryDsn' },
+      { name: 'sentry_dsn', label: 'DSN (optional)', placeholder: 'e.g. https://<key>@o0.ingest.sentry.io/<project-id>', help: 'DSN for the SDK to send events. Only needed if you want Mushi Mushi reports forwarded as Sentry events.', helpId: 'settings.general.sentry_dsn', validator: 'sentryDsn' },
       { name: 'sentry_webhook_secret', label: 'Webhook secret', placeholder: 'Paste the Client Secret from Sentry', type: 'password', help: 'The Client Secret of the Sentry internal integration whose webhook URL is the receive URL on this card. Sentry signs every delivery with it.', helpId: 'settings.general.sentry_webhook_secret', validator: 'token' },
     ],
   },
@@ -269,7 +269,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Copy the public key (pk-lf-…) and secret key (sk-lf-…).',
       'Paste host + both keys below. US cloud host: https://us.cloud.langfuse.com',
     ],
-    whyItMatters: 'Optional. Sends a trace of every AI call Mushi makes for this app (the diagnosis, the screenshot read, the fix) to your own Langfuse, with the exact prompt, answer and cost.',
+    whyItMatters: 'Optional. Sends a trace of every AI call Mushi Mushi makes for this app (the diagnosis, the screenshot read, the fix) to your own Langfuse, with the exact prompt, answer and cost.',
     capabilitiesOnceConnected: [
       'One-click trace links on every classification, judge run, and fix attempt',
       'Per-call cost + latency surfaced in /health and /billing',
@@ -294,18 +294,18 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     consoleLabel: 'Create GitHub PAT',
     setupSteps: [
       'Create a fine-grained PAT at github.com/settings/tokens?type=beta.',
-      'Grant Contents: Read and write + Pull requests: Read and write on the target repo, and Actions: Read and write so Mushi can re-run failed CI.',
+      'Grant Contents: Read and write + Pull requests: Read and write on the target repo, and Actions: Read and write so Mushi Mushi can re-run failed CI.',
       'Paste the full repo URL (https://github.com/owner/repo) and the token below.',
       'Optional: add a webhook secret so CI check-runs sync back to Fix cards.',
     ],
-    whyItMatters: 'Mushi opens each fix as a draft pull request on this repo. Add a webhook secret and every fix shows whether its checks passed, without leaving Mushi.',
+    whyItMatters: 'Mushi Mushi opens each fix as a draft pull request on this repo. Add a webhook secret and every fix shows whether its checks passed, without leaving Mushi Mushi.',
     capabilitiesOnceConnected: [
       'Dispatch auto-fix attempts that open draft PRs on a feature branch',
       'CI check-run conclusions sync back into the Fix card (PR open / CI passing / failing)',
       'Pre-emptive code-context retrieval so the fix prompt has the surrounding lines',
     ],
     fields: [
-      { name: 'github_repo_url', label: 'Repo URL', placeholder: 'e.g. https://github.com/owner/repo', type: 'url', help: 'Full HTTPS URL to the repo Mushi should patch. SSH URLs are normalized server-side.', required: true, helpId: 'integrations.github.repo_url', validator: 'githubRepoUrl' },
+      { name: 'github_repo_url', label: 'Repo URL', placeholder: 'e.g. https://github.com/owner/repo', type: 'url', help: 'Full HTTPS URL to the repo Mushi Mushi should patch. SSH URLs are normalized server-side.', required: true, helpId: 'integrations.github.repo_url', validator: 'githubRepoUrl' },
       { name: 'github_default_branch', label: 'Default branch', placeholder: 'main', help: 'Defaults to "main" if blank. Change for repos that branch from "master" or "develop".', helpId: 'integrations.github.default_branch' },
       { name: 'github_installation_token_ref', label: 'Installation token', placeholder: 'ghs_… or ghp_…', type: 'password', help: 'GitHub App installation token (preferred) or fine-grained PAT. Needs Contents:write + Pull requests:write.', required: true, helpId: 'integrations.github.installation_token', validator: 'token' },
       { name: 'github_webhook_secret', label: 'Webhook secret', placeholder: 'Optional: a long random value', type: 'password', help: 'HMAC secret. Set the same value in GitHub repo Settings → Webhooks (events: Check runs, Check suites).', helpId: 'integrations.github.webhook_secret', validator: 'token' },
@@ -329,11 +329,11 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Connect GitHub in the GitHub card first — Cursor agents need a repo URL + token.',
       'Click Save → Test connection. Then use ◆ Send to Cursor on any report.',
     ],
-    whyItMatters: 'When a critical bug comes in, Mushi starts a Cursor cloud agent that writes the fix and opens a draft pull request on your repo.',
+    whyItMatters: 'When a critical bug comes in, Mushi Mushi starts a Cursor cloud agent that writes the fix and opens a draft pull request on your repo.',
     capabilitiesOnceConnected: [
       'Auto-dispatch a Cursor agent when severity ≥ critical',
       'Cursor opens a signed draft PR — visible in the Fix card timeline',
-      'Agent screenshots, logs, and run artifacts surfaced directly in Mushi',
+      'Agent screenshots, logs, and run artifacts surfaced directly in Mushi Mushi',
       'Use "Send to Cursor" from any report to trigger on-demand',
     ],
     fields: [
@@ -355,17 +355,17 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     consoleUrl: 'https://console.anthropic.com/settings/keys',
     consoleLabel: 'Create Anthropic key',
     setupSteps: [
-      'Save an Anthropic API key below (used for Mushi health probes only).',
+      'Save an Anthropic API key below (used for Mushi Mushi health probes only).',
       'Copy the mushi-claude-fix workflow into your repo via the checklist below.',
       'Add ANTHROPIC_API_KEY as a GitHub Actions secret in your repo.',
-      'Run the workflow yourself with a repository_dispatch event. Mushi does not send it yet: to have Mushi open fix PRs, use Cursor Cloud or the GitHub cloud agent.',
+      'Run the workflow yourself with a repository_dispatch event. Mushi Mushi does not send it yet: to have Mushi Mushi open fix PRs, use Cursor Cloud or the GitHub cloud agent.',
     ],
     whyItMatters:
-      'A GitHub Actions workflow for your repo that runs the Claude Code CLI on a fix prompt, commits a fix branch and opens a draft PR. Keys stay in your GitHub secrets (BYOK). Mushi checks the key and hands you the workflow; it does not trigger the workflow yet.',
+      'A GitHub Actions workflow for your repo that runs the Claude Code CLI on a fix prompt, commits a fix branch and opens a draft PR. Keys stay in your GitHub secrets (BYOK). Mushi Mushi checks the key and hands you the workflow; it does not trigger the workflow yet.',
     capabilitiesOnceConnected: [
       'A health check on your Anthropic key',
       'A ready-made workflow file that listens for your repository_dispatch event',
-      'Draft PRs the workflow opens are tagged with the Mushi fix id',
+      'Draft PRs the workflow opens are tagged with the Mushi Mushi fix id',
     ],
     fields: [
       {
@@ -374,7 +374,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
         placeholder: 'sk-ant-…',
         type: 'password',
         help:
-          'Stored in Mushi vault for health probes only. The actual fix run uses ANTHROPIC_API_KEY in your GitHub repo secrets.',
+          'Stored in Mushi Mushi vault for health probes only. The actual fix run uses ANTHROPIC_API_KEY in your GitHub repo secrets.',
         required: true,
         helpId: 'integrations.claude_code_agent.api_key',
         validator: 'token',
@@ -409,8 +409,8 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
     whyItMatters: 'Triaged reports become Jira tickets in the project of your choice. Severity maps to Jira priority.',
     capabilitiesOnceConnected: [
       'Auto-create Jira issues for high-severity reports',
-      'Map Mushi severity to Jira priority + status transitions',
-      'Two-way link: closing the Jira issue resolves the Mushi report',
+      'Map Mushi Mushi severity to Jira priority + status transitions',
+      'Two-way link: closing the Jira issue resolves the Mushi Mushi report',
     ],
     fields: [
       { name: 'baseUrl', label: 'Base URL', placeholder: 'e.g. https://your-team.atlassian.net', type: 'url', help: 'Your Atlassian Cloud or Server base URL.', required: true, helpId: 'integrations.routing.jira.base_url', validator: 'httpsUrl' },
@@ -457,7 +457,7 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
       'In PagerDuty: Services → (your service) → Integrations → Add integration → Events API v2.',
       'Copy the 32-character Integration key.',
       'Paste it in the Routing key field below.',
-      'Click Save → Test connection. Mushi will page on-call when severity reaches critical.',
+      'Click Save → Test connection. Mushi Mushi will page on-call when severity reaches critical.',
     ],
     whyItMatters: 'Page on-call when severity ≥ critical. Routes through Events API v2.',
     capabilitiesOnceConnected: [

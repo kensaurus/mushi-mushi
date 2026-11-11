@@ -120,7 +120,7 @@ export function credentialAdvice(fix: FixAttempt): CredentialAdvice | null {
   }
   return {
     provider: block.provider,
-    message: `${name} rejected the key, and Mushi has not checked a newer one yet. Check the key, then retry.`,
+    message: `${name} rejected the key, and Mushi Mushi has not checked a newer one yet. Check the key, then retry.`,
     retryNow: false,
     to,
     linkLabel,
@@ -152,7 +152,7 @@ export function failureHeadline(fix: FixAttempt): FailureHeadline | null {
   if (h.known === false) {
     return {
       title: firstLine ?? h.title,
-      hint: 'Mushi does not recognise this error yet. Read the details, then retry or fix it in your editor.',
+      hint: 'Mushi Mushi does not recognise this error yet. Read the details, then retry or fix it in your editor.',
       firstLine,
     }
   }

@@ -44,9 +44,9 @@ export const HOME_HUB: PageHub = {
 
 export const HEALTH_HUB: PageHub = {
   path: '/health',
-  title: 'Mushi health view',
+  title: 'Mushi Mushi health view',
   views: [
-    { id: 'integrations', label: 'Mushi’s AI & jobs', legacyPath: null },
+    { id: 'integrations', label: 'Mushi Mushi’s AI & jobs', legacyPath: null },
     { id: 'code', label: 'Code size', legacyPath: '/code-health' },
     { id: 'schema', label: 'Schema changes', legacyPath: '/drift' },
     { id: 'spikes', label: 'Unusual spikes', legacyPath: '/anomalies' },

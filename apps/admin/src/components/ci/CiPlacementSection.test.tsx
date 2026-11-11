@@ -141,7 +141,7 @@ describe('CiPlacementSection', () => {
       ['/v1/admin/ci/placement/requests/r9/execute', null],
     ])
     expect(state.reload).toHaveBeenCalled()
-    expect(card.textContent).toContain('Set LINUX_RUNNER to “kensaurus-local” on kensaurus/yen-yen. Mushi watches the next jobs.')
+    expect(card.textContent).toContain('Set LINUX_RUNNER to “kensaurus-local” on kensaurus/yen-yen. Mushi Mushi watches the next jobs.')
   })
 
   it('Apply now that GitHub refuses for the App permission says where to approve it, and keeps the request', async () => {
@@ -227,7 +227,7 @@ describe('CiPlacementSection', () => {
     await render()
     const link = Array.from(host.querySelectorAll('a')).find((a) => a.textContent?.includes('Import from your CI agreement'))!
     expect(link.getAttribute('href')).toBe('/settings?tab=ci-policy')
-    expect(host.textContent).toContain('Mushi has no GitHub access for this app’s repositories')
+    expect(host.textContent).toContain('Mushi Mushi has no GitHub access for this app’s repositories')
     expect(radio('GitHub-hosted', q('ci-placement-repo-kensaurus/yen-yen')).disabled).toBe(false)
   })
 

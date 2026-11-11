@@ -64,7 +64,7 @@ export function DashboardPage() {
 
   // The first merged fix is the proof the loop closed on this app.
   const onFirstMergedFix = useCallback(() => {
-    toast.success('Your first auto-fix was merged 🎉', 'Mushi fixed a bug end to end. Want to see the merged PR?', {
+    toast.success('Your first auto-fix was merged 🎉', 'Mushi Mushi fixed a bug end to end. Want to see the merged PR?', {
       label: 'View merged fixes',
       onClick: () => navigate('/fixes'),
     })

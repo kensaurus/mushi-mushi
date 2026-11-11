@@ -28,9 +28,9 @@ broken buttons, dead flows, confusing states, plus the thrown errors the SDK
 captures along the way. Run Mushi Mushi **alongside** Sentry to keep crash-level
 telemetry, performance tracing, and release health where they are — and point
 a Sentry issue-alert webhook at Mushi Mushi so every error still lands in the one
-queue, deduped and diagnosed. With the outbound Sentry plugin (Builder and
-above, or self-hosted), the fix also resolves the Sentry issue when it
-merges ([3-step setup](/plugins/sentry)). Both paths are first-class; neither
+queue, deduped and diagnosed. Once you add a Sentry auth token under
+**Integrations → Sentry** (every plan, Free included), the fix also resolves
+the Sentry issue when it merges ([3-step setup](/plugins/sentry)). Both paths are first-class; neither
 asks you to rip anything out.
 
 ## Side by side

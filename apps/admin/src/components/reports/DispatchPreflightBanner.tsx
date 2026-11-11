@@ -46,7 +46,7 @@ const CHECK_FIX_LABELS: Record<string, string> = {
 const CHECK_PLAIN: Record<string, string> = {
   github: 'Your code on GitHub, so the change can be opened as a pull request.',
   codebase: 'Mushi Mushi reads your code to write a change that fits it.',
-  autofix: 'You say yes to Mushi Mushi opening changes for this app.',
+  autofix: 'You say yes to Mushi Mushi dispatching fixes for this app.',
 }
 
 export function DispatchPreflightBanner({ preflight, className = '' }: Props) {
@@ -62,12 +62,12 @@ export function DispatchPreflightBanner({ preflight, className = '' }: Props) {
 
   return (
     <details
-      aria-label="Let Mushi Mushi open the change for you"
+      aria-label="Let Mushi Mushi dispatch the fix for you"
       className={`rounded-lg border border-edge-subtle bg-surface-raised px-3 py-2 ${className}`}
       data-testid="dispatch-preflight"
     >
       <summary className="cursor-pointer text-xs font-semibold text-fg">
-        Optional: let Mushi Mushi open the change for you{' '}
+        Optional: let Mushi Mushi dispatch the fix for you{' '}
         <span className="font-normal text-fg-muted">
           ({failing.length === 1 ? '1 step left' : `${failing.length} steps left`})
         </span>

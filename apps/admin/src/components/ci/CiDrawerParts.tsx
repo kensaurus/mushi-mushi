@@ -111,7 +111,7 @@ export function ActivityBars({ activity }: { activity: CiActivity }) {
         {activity.days.map((d) => {
           const total = d.passed + d.failed + d.infra + d.other
           if (!d.covered) {
-            const none = `${weekday(d.day)} ${d.day}: no data (older than the jobs Mushi holds)`
+            const none = `${weekday(d.day)} ${d.day}: no data (older than the jobs Mushi Mushi holds)`
             return (
               <li key={d.day} className="flex h-full min-w-0 flex-1 flex-col items-center gap-1" title={none} aria-label={none}>
                 <span className="text-3xs text-fg-faint">–</span>

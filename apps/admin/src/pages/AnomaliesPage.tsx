@@ -279,7 +279,7 @@ export function AnomaliesPage() {
 
         contextChip={<PdcaContextHint stage="check" />}
         helpTitle={copy?.help?.title ?? 'Anomaly detection'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Send any number your app tracks (error rate, latency, sign-ups) from the Metrics tab or the SDK. Mushi checks them every hour, draws each one with your releases on it, and opens a bug report when a spike starts right after a release.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Send any number your app tracks (error rate, latency, sign-ups) from the Metrics tab or the SDK. Mushi Mushi checks them every hour, draws each one with your releases on it, and opens a bug report when a spike starts right after a release.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Detect crash-rate spikes after a release',
           'Flag latency regressions against rolling baseline',
@@ -459,7 +459,7 @@ function AnomaliesTab({
           hint={
             noMetrics
               ? 'Send some numbers on the Metrics tab first.'
-              : 'Mushi checks every hour. No spikes is good news.'
+              : 'Mushi Mushi checks every hour. No spikes is good news.'
           }
         />
         {/* Check now is the card right above, so the only pill left is adding numbers. */}

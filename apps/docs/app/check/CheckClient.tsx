@@ -6,10 +6,14 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import Link from 'next/link'
 import {
+  CHECK_NEXT,
   CHECK_PAGE_URL,
-  CHECK_SIGNUP_HREF,
+  allFindingsPrompt,
+  cachedFromSearch,
   cachedNotice,
+  findingPrompt,
   checkIdFromLocation,
   countLine,
   groupBySeverity,
@@ -88,8 +92,11 @@ export function CheckClient() {
 
   useEffect(() => {
     const id = checkIdFromLocation(window.location.pathname, window.location.search)
-    if (id) follow(id, '')
-    else setView({ kind: 'form' })
+    if (id) {
+      // The landing's address box landed on a report that already existed.
+      if (cachedFromSearch(window.location.search)) setNotice(cachedNotice(true, false, false))
+      follow(id, '')
+    } else setView({ kind: 'form' })
     return () => {
       if (pollTimer.current) clearTimeout(pollTimer.current)
     }
@@ -100,13 +107,14 @@ export function CheckClient() {
     const form = new FormData(e.currentTarget)
     const url = String(form.get('url') ?? '').trim()
     const email = String(form.get('email') ?? '').trim()
-    if (!url) return setView({ kind: 'form', error: 'Enter your site’s address.' })
+    if (!url) return setView({ kind: 'form', error: 'Enter your app’s address, like https://my-app.lovable.app.' })
     setView({ kind: 'loading' })
     const r = await startCheck({ url, email: email || undefined, src: srcFromSearch(window.location.search) })
     if (!r.ok) return setView({ kind: 'form', error: r.message })
     setNotice(cachedNotice(r.data.cached, Boolean(email), r.data.emailed === true))
     const next = new URL(window.location.href)
     next.searchParams.set('id', r.data.id)
+    next.searchParams.delete('cached')
     window.history.replaceState(null, '', next)
     follow(r.data.id, hostOf(url.includes('://') ? url : `https://${url}`))
   }
@@ -245,11 +253,35 @@ function Unreachable({ report, host }: { report: CheckApiReport; host: string })
   )
 }
 
+/** Copies `text`; the label flips to "Copied" for two seconds. Falls back to a prompt box. */
+function CopyButton({ text, label, ctaId, className }: { text: string; label: string; ctaId: string; className: string }) {
+  const [copied, setCopied] = useState(false)
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      window.prompt('Copy this text', text)
+    }
+  }
+  return (
+    <button type="button" onClick={copy} data-mushi-cta={ctaId} data-mushi-location="check_report" className={className}>
+      <span aria-live="polite">{copied ? 'Copied' : label}</span>
+    </button>
+  )
+}
+
+const COPY_PRIMARY = 'min-h-11 rounded-md bg-mushi-vermillion px-4 py-2 text-sm font-semibold text-white hover:opacity-90'
+const COPY_QUIET = 'min-h-11 rounded-md border border-mushi-rule bg-mushi-paper px-3 py-2 text-sm font-semibold text-mushi-ink hover:bg-mushi-paper-wash'
+
 function Report({ report }: { report: CheckApiReport }) {
   const [copied, setCopied] = useState(false)
   const host = hostOf(report.url)
   const checkedOn = new Date(report.finished_at ?? report.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
-  const groups = groupBySeverity(report.findings ?? [])
+  const findings = report.findings ?? []
+  const groups = groupBySeverity(findings)
+  const allPrompt = allFindingsPrompt(report.url, findings)
   const pages = report.summary?.pages ?? []
 
   async function share() {
@@ -293,6 +325,17 @@ function Report({ report }: { report: CheckApiReport }) {
         </button>
       </header>
 
+      {allPrompt ? (
+        <section className="space-y-2 rounded-md border border-mushi-rule bg-mushi-paper-wash p-4" aria-label="Fix everything with your AI builder">
+          <p className="text-sm text-mushi-ink">
+            <span className="font-medium">No coding needed. </span>
+            Each problem below comes with a short prompt. Paste it into Lovable, Bolt or your AI editor and it makes the
+            fix.
+          </p>
+          <CopyButton text={allPrompt} label={findings.length === 1 ? 'Copy the prompt' : 'Copy all as one prompt'} ctaId="check_copy_all_prompts" className={COPY_PRIMARY} />
+        </section>
+      ) : null}
+
       {groups.map((g) => (
         <section key={g.severity} className="space-y-3">
           <h2 className={`border-l-4 pl-3 text-lg font-semibold ${SEVERITY_TONE[g.severity]}`}>
@@ -315,10 +358,20 @@ function Report({ report }: { report: CheckApiReport }) {
                   <span className="font-medium">Why it matters: </span>
                   {f.why}
                 </p>
-                <p className="mt-1 text-sm text-mushi-ink">
-                  <span className="font-medium">How to fix: </span>
-                  {f.fix}
-                </p>
+                <div className="mt-3 space-y-2">
+                  <p className="text-sm font-medium text-mushi-ink">Paste this into Lovable, Bolt or your AI editor</p>
+                  <p className="whitespace-pre-wrap rounded-md border border-mushi-rule bg-mushi-paper px-3 py-2 text-sm text-mushi-ink">
+                    {findingPrompt(f)}
+                  </p>
+                  <CopyButton text={findingPrompt(f)} label="Copy" ctaId="check_copy_prompt" className={COPY_QUIET} />
+                </div>
+                {/* Reports stored before prompts existed show the fix text above already. */}
+                {f.prompt?.trim() ? (
+                  <details className="mt-3 text-sm text-mushi-ink">
+                    <summary className="cursor-pointer py-1 font-medium text-mushi-ink-muted">If you use a code editor</summary>
+                    <p className="mt-1">{f.fix}</p>
+                  </details>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -326,19 +379,26 @@ function Report({ report }: { report: CheckApiReport }) {
       ))}
 
       <section className="space-y-3 rounded-md border border-mushi-rule p-5">
-        <h2 className="text-lg font-semibold text-mushi-ink">This checked what a visitor sees today. Your users find the rest.</h2>
-        <p className="text-sm text-mushi-ink-muted">
-          Mushi Mushi sits in your app, takes the bug reports your users send, explains each one in plain English and hands
-          Cursor, Claude Code or Lovable the fix.
-        </p>
-        <a
-          href={CHECK_SIGNUP_HREF}
-          data-mushi-cta="check_signup"
-          data-mushi-location="check_report"
-          className="inline-block rounded-md bg-mushi-vermillion px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
-        >
-          Install Mushi Mushi free (1 app)
-        </a>
+        <h2 className="text-lg font-semibold text-mushi-ink">{CHECK_NEXT.heading}</h2>
+        <p className="text-sm text-mushi-ink-muted">{CHECK_NEXT.body}</p>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+          <Link
+            href={CHECK_NEXT.primary.href}
+            data-mushi-cta={CHECK_NEXT.primary.ctaId}
+            data-mushi-location="check_report"
+            className="inline-block rounded-md bg-mushi-vermillion px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+          >
+            {CHECK_NEXT.primary.label}
+          </Link>
+          <Link
+            href={CHECK_NEXT.secondary.href}
+            data-mushi-cta={CHECK_NEXT.secondary.ctaId}
+            data-mushi-location="check_report"
+            className="text-sm font-medium text-mushi-vermillion underline underline-offset-2"
+          >
+            {CHECK_NEXT.secondary.label}
+          </Link>
+        </div>
       </section>
     </div>
   )

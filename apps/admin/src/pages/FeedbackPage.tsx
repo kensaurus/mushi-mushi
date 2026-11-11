@@ -260,7 +260,7 @@ export function FeedbackPage() {
         helpTitle={copy?.help?.title ?? 'About Help & support'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
-          'A personal inbox for bugs and feature requests you file to the Mushi team. When we ship your idea, the release version appears on the row.'
+          'A personal inbox for bugs and feature requests you file to the Mushi Mushi team. When we ship your idea, the release version appears on the row.'
         }
         helpUseCases={
           copy?.help?.useCases ?? [

@@ -66,7 +66,7 @@ const UNKNOWN: ElementStateMeta = {
   label: 'Not checked yet',
   tone: 'neutral',
   glyph: 'question',
-  description: 'Mushi has not checked this yet, so it is not a pass.',
+  description: 'Mushi Mushi has not checked this yet, so it is not a pass.',
   cardEdge: 'border-2 border-dashed border-edge',
 }
 
@@ -91,7 +91,7 @@ const ERROR: ElementStateMeta = {
   label: 'Check failed',
   tone: 'dangerSubtle',
   glyph: 'cross',
-  description: 'The last check could not finish, so Mushi cannot say if this works.',
+  description: 'The last check could not finish, so Mushi Mushi cannot say if this works.',
   cardEdge: 'border-2 border-danger/60',
 }
 
@@ -214,7 +214,7 @@ export function orderedRecipeElements(
       label: FALLBACK_LABEL[key],
       lane: ELEMENT_LANE[key],
       state: 'unknown',
-      reason: 'Mushi could not load this part of the recipe. Press Refresh to try again.',
+      reason: 'Mushi Mushi could not load this part of the recipe. Press Refresh to try again.',
       lastCheckedAt: null,
       facts: {},
       findingsCount: 0,

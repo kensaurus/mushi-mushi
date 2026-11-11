@@ -21,7 +21,7 @@ export function targetLabel(t: PlacementTarget): string {
 
 /** Where jobs that follow a variable run now. */
 export function currentPlacement(v: PlacementRepo['variables'][number]): { text: string; kind: 'github_hosted' | 'self_hosted' | 'unknown' } {
-  if (!v.current) return { text: 'Unknown: Mushi could not read the variable', kind: 'unknown' }
+  if (!v.current) return { text: 'Unknown: Mushi Mushi could not read the variable', kind: 'unknown' }
   if (!v.current.exists || !v.current.value) {
     const fb = v.fallbacks[0] ?? null
     if (fb && !isHostedLabel(fb)) return { text: `Self-hosted: ${fb} (no variable set)`, kind: 'self_hosted' }

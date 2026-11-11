@@ -148,7 +148,7 @@ describe('worker flags and the health gap say "out of credits", with the remedy'
     expect(gap.summary).toContain("your team's own AI key")
     const check = fromSetupGap(gap, null)
     expect(check.fix?.kind).toBe('guided')
-    expect(check.fix && 'steps' in check.fix ? check.fix.steps.join(' ') : '').toContain('mushi work --agent claude')
+    expect(check.fix && 'steps' in check.fix ? check.fix.steps.join(' ') : '').toContain('work --agent claude')
   })
   it('turns "follow-ups are on and their key is active" into a gap while out of credits', () => {
     const ok = { id: 'review_followup_key', projectId: 'p1', audience: 'app_owner' as const, status: 'ok' as const, title: 'Review follow-up key', summary: 'Review follow-ups are on and their Cursor key is active.', fixHref: '/settings' }

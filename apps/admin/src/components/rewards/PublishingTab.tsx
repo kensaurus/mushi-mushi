@@ -372,7 +372,7 @@ export function PublishingTab() {
       return (
         <EmptyState
           title="Marketplace publishing needs Studio"
-          description="Upgrade your workspace to publish apps to the Mushi Bounties marketplace and start rewarding testers."
+          description="Upgrade your workspace to publish apps to the Mushi Mushi Bounties marketplace and start rewarding testers."
           action={<Btn variant="primary" onClick={() => navigate('/billing')}>Upgrade to Studio</Btn>}
         />
       )
@@ -397,7 +397,7 @@ export function PublishingTab() {
             {app && statusBadge(visibility)}
           </div>
           <p className="text-sm text-fg-muted mt-0.5">
-            Publish this project to the Mushi Bounties marketplace so public testers can find and test it.
+            Publish this project to the Mushi Mushi Bounties marketplace so public testers can find and test it.
           </p>
           {marketplaceUrl && isLive && (
             <a
@@ -551,7 +551,7 @@ export function PublishingTab() {
                   placeholder="0 = no cap"
                 />
                 <p className="mt-1 text-2xs text-fg-faint">
-                  Mushi funds redemptions; this caps per-project Tremendous spend.
+                  Mushi Mushi funds redemptions; this caps per-project Tremendous spend.
                 </p>
               </div>
               <div>
@@ -647,7 +647,7 @@ export function PublishingTab() {
             </table>
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-edge-subtle/40 px-4 py-3">
               <p className="text-xs text-fg-muted">
-                1,000 pts ≈ $10 gift card or $13 Mushi Pro credit (1.3×). Points are stamped at submit time.
+                1,000 pts ≈ $10 gift card or $13 Mushi Mushi Pro credit (1.3×). Points are stamped at submit time.
               </p>
               <Btn variant="primary" size="sm" loading={savingBounties} onClick={handleSaveBounties}>
                 Save bounties

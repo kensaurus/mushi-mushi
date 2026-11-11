@@ -103,7 +103,7 @@ describe('McpOverviewPanel', () => {
 
   it('offers Connect an editor when none has called', () => {
     render([key({ id: 'x' })])
-    expect(host.textContent).toContain('No editor has called Mushi from this app yet.')
+    expect(host.textContent).toContain('No editor has called Mushi Mushi from this app yet.')
     expect(Array.from(host.querySelectorAll('a')).some((a) => a.textContent === 'Connect an editor')).toBe(true)
   })
 })

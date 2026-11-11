@@ -1,0 +1,119 @@
+---
+title: Marker.io, BugHerd and Userback vs Mushi Mushi for agencies
+description: "Marker.io, BugHerd, Userback and Mushi Mushi for agencies: client seats, per-project access, boards, logs, AI diagnosis and price, with sources."
+---
+
+import { ComparisonTable } from '../../components/ComparisonTable'
+import { FactsChecked, FactsTable, FaqList, StartFree } from '../../components/CompareFacts'
+import {
+  MARKER,
+  BUGHERD,
+  USERBACK,
+  MUSHI_FOR_AGENCIES,
+  AGENCY_ROWS,
+  AGENCY_FAQ,
+  AGENCY_FACTS_REVIEWED_AT,
+  AGENCY_NEXT_REVIEW_DUE,
+  signupUrl,
+} from './_facts'
+
+# Marker.io, BugHerd and Userback vs Mushi Mushi for agencies
+
+> **Never used any of these?** You don't need them to use Mushi Mushi. [See what Mushi Mushi does for client apps](/use-cases/agency-client-apps) instead.
+
+If you build sites or apps for clients, you have probably looked at Marker.io,
+BugHerd or Userback. They are built for one job: a client reviews what you
+built, clicks on the page and leaves a comment, and you work through the list.
+
+Mushi Mushi is built for a different moment. The app is live, and the people
+using it hit bugs your client never sees. They tap a report button, and you get
+the likely cause in plain English with a prompt that fixes it.
+
+So this is not a like-for-like comparison, and on several things an agency
+cares about, the other three are ahead. This page says where.
+
+<FactsChecked reviewedAt={AGENCY_FACTS_REVIEWED_AT} nextReviewDue={AGENCY_NEXT_REVIEW_DUE} />
+
+## Side by side
+
+<ComparisonTable foil="Marker.io, BugHerd and Userback" rows={AGENCY_ROWS} />
+
+## What the other three have that Mushi Mushi does not
+
+- **Free seats for clients.** All three let any number of clients send and
+  follow feedback without a paid seat. In Mushi Mushi a client who signs in
+  takes a seat.
+- **Access to one project only.** Marker.io and BugHerd invite a guest to a
+  project, and Userback roles can grant access to specific projects. In
+  Mushi Mushi a member of a team can read every app in that team, so a client
+  needs [a team of their own](/use-cases/agency-client-apps#who-can-see-what).
+- **A board the client can follow.** BugHerd has a guest task board and
+  Userback a kanban board. Mushi Mushi has a list with filters.
+- **Comments the client cannot see.** Marker.io, BugHerd and Userback each have
+  them on some plan. Mushi Mushi does not.
+- **Video.** BugHerd takes video feedback, and Marker.io and Userback attach a
+  session replay on their higher plans. A Mushi Mushi report is a screenshot
+  and a timeline of what the person did.
+- **A SOC 2 report.** Marker.io lists SOC 2 Type II on every plan. Mushi Mushi
+  has no SOC 2 report.
+
+If collecting client feedback during a build is the job, pick one of them.
+
+## What Mushi Mushi has that they do not
+
+- **A written cause for each bug.** Every report comes with a plain-English
+  diagnosis and a fix prompt for Cursor, Claude Code, Lovable or Bolt. The
+  other three hand an AI agent the feedback over MCP; none of their pricing
+  pages lists a written diagnosis. A diagnosis is an AI's reading and can be
+  wrong, so check it before you ship.
+- **Console and network logs on the free plan.** Marker.io includes them from
+  its Team plan and Userback from Business.
+- **Phone apps on the free plan.** React Native and Capacitor SDKs, on every
+  plan. Userback's mobile SDK is on Business Plus.
+- **No vendor mark from $29.** Builder and Studio show no Mushi Mushi mark on
+  the widget.
+- **You can run it yourself.** The SDKs are MIT and the server is AGPLv3.
+
+## What each one is
+
+<FactsTable vendor={MARKER} />
+
+<FactsTable vendor={BUGHERD} />
+
+<FactsTable vendor={USERBACK} />
+
+<FactsTable vendor={MUSHI_FOR_AGENCIES} />
+
+## Using both
+
+This is the common case. Keep Marker.io, BugHerd or Userback for client review
+while you build. Add Mushi Mushi when the app goes live, for the bugs real
+users hit and for the fix loop in your AI editor. Both widgets can sit on the
+same site, and there is no integration between them today.
+
+Moving off BugHerd completely? There is a
+[BugHerd migration guide](/migrations/bugherd-to-mushi).
+
+## Pick one of the other three if
+
+- Your clients are the ones reporting, and they should not cost a seat.
+- Each client must see only their own project, with no extra setup.
+- You need a client-facing board, internal comments or video.
+- A buyer asks for a SOC 2 report (Marker.io).
+
+## Pick Mushi Mushi if [#pick-mushi-if]
+
+- The reports come from the people using a live app, including phone apps.
+- You want to read the likely cause first, then paste a fix prompt.
+- You want console and network logs without moving up a plan.
+- You want open source you can run yourself.
+
+<StartFree href={signupUrl('agency-feedback-tools')} />
+
+## Frequently asked questions
+
+<FaqList items={AGENCY_FAQ} />
+
+**Related:** [You build apps for clients](/use-cases/agency-client-apps) ·
+[BugHerd → Mushi Mushi](/migrations/bugherd-to-mushi) ·
+[Pricing](/pricing)

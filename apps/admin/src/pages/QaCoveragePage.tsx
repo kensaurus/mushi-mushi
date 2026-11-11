@@ -1055,7 +1055,7 @@ export function QaCoveragePage() {
           <span className={`text-2xs ${CHIP_TONE.warnSubtle} px-1.5 py-0.5 rounded-full`}>{pendingReview.length}</span>
         </div>
         <p className="text-2xs text-fg-muted">
-          Mushi wrote these tests from your user stories or from a failing test. Approve to add one to the schedule, or reject to turn it off.
+          Mushi Mushi wrote these tests from your user stories or from a failing test. Approve to add one to the schedule, or reject to turn it off.
         </p>
           <div className="space-y-2">
             {pendingReview.map((story) => (

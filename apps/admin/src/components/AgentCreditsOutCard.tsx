@@ -13,6 +13,7 @@ import {
   agentCreditsTitle,
   CLAUDE_FOLLOWUPS_COMMAND,
   CLAUDE_WORK_COMMAND,
+  CLAUDE_WORK_NEEDS,
   creditsBackLine,
   type AgentCreditsState,
 } from '../lib/agentCredits'
@@ -45,6 +46,16 @@ export function AgentCreditsOutCard({ state, withFollowups = true, note, classNa
               Fix the waiting bugs now with Claude Code on your own computer. Run this in your app's folder:
             </p>
             <CodeValue value={CLAUDE_WORK_COMMAND} multiline />
+            <p className="text-2xs text-fg-muted" data-testid="agent-credits-needs">
+              Needs:{' '}
+              {CLAUDE_WORK_NEEDS.map((n, i) => (
+                <span key={n.command}>
+                  {i === 0 ? '' : i === CLAUDE_WORK_NEEDS.length - 1 ? ', and ' : ', '}
+                  {n.what} (<code className="mushi-code-inline font-mono">{n.command}</code>)
+                </span>
+              ))}
+              .
+            </p>
           </div>
           {withFollowups && (
             <div className="space-y-0.5">

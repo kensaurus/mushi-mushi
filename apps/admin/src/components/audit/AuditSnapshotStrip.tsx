@@ -28,7 +28,7 @@ export function auditSentence(stats: AuditStats): string {
   const who = [
     stats.humanCount24h > 0 ? pluralizeWithCount(stats.humanCount24h, 'by a person', 'by people') : null,
     stats.agentCount24h > 0 ? pluralizeWithCount(stats.agentCount24h, 'by an agent', 'by agents') : null,
-    stats.systemCount24h > 0 ? `${stats.systemCount24h} by Mushi itself` : null,
+    stats.systemCount24h > 0 ? `${stats.systemCount24h} by Mushi Mushi itself` : null,
   ].filter(Boolean)
   const failures = stats.failCount24h > 0 ? ` ${pluralizeWithCount(stats.failCount24h, 'failure')} to look at.` : ' No failures.'
   return `${pluralizeWithCount(stats.events24h, 'change')} in the last 24 hours${who.length ? ` (${who.join(', ')})` : ''}.${failures}`

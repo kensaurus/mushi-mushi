@@ -28,6 +28,9 @@
  *                                        (uses `serverUrl`, NOT `url` — common footgun)
  * - cline                              — copy-config to cline_mcp_settings.json
  * - claude-code                        — CLI command: claude mcp add --transport http …
+ *                                        (`oauthDefault`: consoles show the keyless
+ *                                        buildOAuthInstall() command first; build()
+ *                                        is the key variant for CI or headless use)
  * - claude-desktop                     — copy-config to claude_desktop_config.json
  * - zed                                — copy-config to ~/.config/zed/settings.json
  * - any                                — hosted Streamable HTTP URL + Bearer key
@@ -160,6 +163,13 @@ export interface McpClientDef {
    * written (Lovable's custom connector). `build` ignores `apiKey`.
    */
   keyless?: boolean
+  /**
+   * The client can sign in with OAuth, and that is the install a signed-in
+   * surface should lead with: `buildOAuthInstall(id, …)`, no key minted, no
+   * header. `build` stays the key variant, for CI or headless use where no
+   * browser can open. Only set on ids in MCP_OAUTH_CLIENT_IDS.
+   */
+  oauthDefault?: boolean
   build(input: McpBuildInput): McpBuildResult
 }
 
@@ -370,10 +380,14 @@ export const MCP_CLIENTS: McpClientDef[] = [
   {
     id: 'claude-code',
     label: 'Claude Code',
-    description: 'Add via claude CLI command (HTTP transport)',
+    description: 'One terminal command, then sign in from Claude Code. No key to copy',
     method: 'cli-command',
     transport: 'http',
     cliIde: 'claude',
+    // The docs install is URL-only and OAuth. A static Authorization header
+    // tells Claude Code that sign-in is not needed, and puts a key in shell
+    // history: that variant is for CI or headless use only.
+    oauthDefault: true,
     build({ projectId, projectName, apiKey, mcpHttpUrl, features, readOnly }) {
       const name = projectId
         ? projectServerName(projectId, projectName)

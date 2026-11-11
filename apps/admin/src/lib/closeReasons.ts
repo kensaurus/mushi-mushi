@@ -32,7 +32,7 @@ export const CLOSE_REASONS: readonly CloseReason[] = [
   { value: 'working_as_intended', label: 'Works as intended' },
   { value: 'duplicate', label: 'Same as another report', needsGroup: true },
   { value: 'spam', label: 'Spam (reporter is not told)' },
-  { value: 'false_alarm', label: "False alarm (Mushi's check was wrong)", ownCheck: true },
+  { value: 'false_alarm', label: "False alarm (Mushi Mushi's check was wrong)", ownCheck: true },
 ]
 
 /** Reasons a list or bulk close can offer without looking at each report. */
@@ -75,7 +75,7 @@ export function closeReasonSentryNotice(reason: string): string {
 /** What closing tells the reporter(s), for the confirm dialog. */
 export function closeReasonNotice(reason: string, count = 1): string {
   if (reason === 'spam') return count === 1 ? 'Closed as spam: the reporter is not told.' : 'Closed as spam: reporters are not told.'
-  if (reason === 'false_alarm') return "Closed as a false alarm: nobody is told. Mushi's check was wrong."
+  if (reason === 'false_alarm') return "Closed as a false alarm: nobody is told. Mushi Mushi's check was wrong."
   const who = count === 1 ? 'The reporter sees' : 'Each reporter sees'
   return `${who} “${REPORTER_SEES[reason] ?? 'Closed.'}”`
 }

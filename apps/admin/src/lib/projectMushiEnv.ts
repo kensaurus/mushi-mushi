@@ -82,7 +82,7 @@ export function mushiEnvVarsForProjectSlug(
       apiKeyVar: 'VITE_MUSHI_SELF_API_KEY',
       endpointVar: 'VITE_MUSHI_SELF_API_ENDPOINT',
       envFileHint: 'apps/admin/.env.local',
-      stackLabel: 'Mushi admin console (Vite dogfood)',
+      stackLabel: 'Mushi Mushi admin console (Vite dogfood)',
     }
   }
   if (s === 'yen-yen' || s === 'yenyen') {

@@ -121,7 +121,7 @@ const SKILL_CATEGORY_META: Record<string, SkillCategoryMeta> = {
     accentClass: 'border-l-edge-subtle',
   },
   mushi: {
-    label: 'Mushi',
+    label: 'Mushi Mushi',
     hint: 'Health checks, setup, and integration smoke tests',
     Icon: IconSkills,
     badgeClass: 'bg-brand-subtle text-brand-foreground',

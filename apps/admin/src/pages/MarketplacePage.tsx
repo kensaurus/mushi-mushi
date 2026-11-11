@@ -69,7 +69,7 @@ const TABS: Array<{ id: MarketplaceTabId; label: string; description: string }> 
   {
     id: 'browse',
     label: 'Browse',
-    description: 'Webhook plugins send Mushi events to your own endpoint or a no-code tool. Sentry, Linear, Jira and PagerDuty have native cards on Integrations.',
+    description: 'Webhook plugins send Mushi Mushi events to your own endpoint or a no-code tool. Sentry, Linear, Jira and PagerDuty have native cards on Integrations.',
   },
   {
     id: 'installed',
@@ -300,7 +300,7 @@ export function MarketplacePage() {
     if (draftWebhookSecret.trim().length < PLUGIN_SECRET_MIN_LENGTH) {
       toast.error(
         'Signing secret too short',
-        `Use at least ${PLUGIN_SECRET_MIN_LENGTH} characters, or keep the one Mushi generated.`,
+        `Use at least ${PLUGIN_SECRET_MIN_LENGTH} characters, or keep the one Mushi Mushi generated.`,
       )
       return
     }
@@ -332,7 +332,7 @@ export function MarketplacePage() {
       reloadAll()
       setTab('installed')
     } catch {
-      toast.error(`Could not install ${installTarget.name}`, 'Could not reach Mushi. Check your connection and retry.')
+      toast.error(`Could not install ${installTarget.name}`, 'Could not reach Mushi Mushi. Check your connection and retry.')
     } finally {
       setInstalling(null)
     }
@@ -355,7 +355,7 @@ export function MarketplacePage() {
       reloadAll()
       setUninstallTarget(null)
     } catch {
-      toast.error(`Could not remove ${name}`, 'Could not reach Mushi. Check your connection and retry.')
+      toast.error(`Could not remove ${name}`, 'Could not reach Mushi Mushi. Check your connection and retry.')
     } finally {
       setInstalling(null)
     }
@@ -391,7 +391,7 @@ export function MarketplacePage() {
         }
         reloadAll()
       } catch {
-        toast.error('Could not send the test event', 'Could not reach Mushi. Check your connection and retry.')
+        toast.error('Could not send the test event', 'Could not reach Mushi Mushi. Check your connection and retry.')
       } finally {
         setInstalling(null)
       }
@@ -415,7 +415,7 @@ export function MarketplacePage() {
         toast.success(currentlyActive ? 'Plugin paused' : 'Plugin resumed')
         reloadAll()
       } catch {
-        toast.error('Could not update the plugin', 'Could not reach Mushi. Check your connection and retry.')
+        toast.error('Could not update the plugin', 'Could not reach Mushi Mushi. Check your connection and retry.')
       } finally {
         setInstalling(null)
       }
@@ -476,7 +476,7 @@ export function MarketplacePage() {
           helpTitle={copy?.help?.title ?? 'About plugins'}
           helpWhatIsIt={
             copy?.help?.whatIsIt ??
-            'Mushi plugins are HTTPS webhook receivers that subscribe to lifecycle events. Every payload is HMAC-SHA256 signed so your receiver can verify it came from your project.'
+            'Mushi Mushi plugins are HTTPS webhook receivers that subscribe to lifecycle events. Every payload is HMAC-SHA256 signed so your receiver can verify it came from your project.'
           }
           helpUseCases={
             copy?.help?.useCases ?? [
@@ -487,7 +487,7 @@ export function MarketplacePage() {
           }
           helpHowToUse={
             copy?.help?.howToUse ??
-            'Pick a plugin on Browse, paste your HTTPS webhook URL, and Mushi stores the signing secret in Vault. Send a test event from Installed to verify delivery.'
+            'Pick a plugin on Browse, paste your HTTPS webhook URL, and Mushi Mushi stores the signing secret in Vault. Send a test event from Installed to verify delivery.'
           }
         />
         <NextStep
@@ -559,7 +559,7 @@ export function MarketplacePage() {
         helpTitle={copy?.help?.title ?? 'About plugins'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
-          'Mushi plugins are HTTPS webhook receivers that subscribe to lifecycle events. Every payload is HMAC-SHA256 signed so your receiver can verify it came from your project.'
+          'Mushi Mushi plugins are HTTPS webhook receivers that subscribe to lifecycle events. Every payload is HMAC-SHA256 signed so your receiver can verify it came from your project.'
         }
         helpUseCases={
           copy?.help?.useCases ?? [
@@ -570,7 +570,7 @@ export function MarketplacePage() {
         }
         helpHowToUse={
           copy?.help?.howToUse ??
-          'Pick a plugin on Browse, paste your HTTPS webhook URL, and Mushi stores the signing secret in Vault. Send a test event from Installed to verify delivery.'
+          'Pick a plugin on Browse, paste your HTTPS webhook URL, and Mushi Mushi stores the signing secret in Vault. Send a test event from Installed to verify delivery.'
         }
       >
         {!ux.hideOverviewChrome && (
@@ -653,7 +653,7 @@ export function MarketplacePage() {
         <div className="space-y-3">
           <EmptyState
             title="No plugins installed yet"
-            description="A plugin sends Mushi events (new report, fix merged) to your own HTTPS endpoint or a no-code tool like Zapier, signed so you can verify them. Pick one below."
+            description="A plugin sends Mushi Mushi events (new report, fix merged) to your own HTTPS endpoint or a no-code tool like Zapier, signed so you can verify them. Pick one below."
           />
           {catalogGrid}
         </div>

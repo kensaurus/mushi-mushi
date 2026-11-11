@@ -61,19 +61,19 @@ export function gatesSummary(gates: ReadonlyArray<Pick<VerifyGate, 'status'>>): 
 const AUTO_MERGE_META: Record<AutoMergeState, StatusMeta & { sentence: string }> = {
   none: {
     glyph: '–',
-    word: 'Not merged by Mushi',
+    word: 'Not merged by Mushi Mushi',
     tone: 'neutral',
-    sentence: 'Mushi merges on its own only when every check passes and automatic merge is on.',
+    sentence: 'Mushi Mushi merges on its own only when every check passes and automatic merge is on.',
   },
   eligible: {
     glyph: '◷',
     word: 'Ready to merge',
     tone: 'info',
-    sentence: 'Every check passed. Mushi merges it on its next run.',
+    sentence: 'Every check passed. Mushi Mushi merges it on its next run.',
   },
-  merged: { glyph: '✓', word: 'Merged by Mushi', tone: 'ok', sentence: 'Every check passed and Mushi merged it.' },
-  skipped: { glyph: '⊘', word: 'Not merged', tone: 'warn', sentence: 'Every check passed, but Mushi did not merge it.' },
-  failed: { glyph: '✕', word: 'Merge failed', tone: 'danger', sentence: 'Mushi tried to merge it and GitHub refused.' },
+  merged: { glyph: '✓', word: 'Merged by Mushi Mushi', tone: 'ok', sentence: 'Every check passed and Mushi Mushi merged it.' },
+  skipped: { glyph: '⊘', word: 'Not merged', tone: 'warn', sentence: 'Every check passed, but Mushi Mushi did not merge it.' },
+  failed: { glyph: '✕', word: 'Merge failed', tone: 'danger', sentence: 'Mushi Mushi tried to merge it and GitHub refused.' },
 }
 
 export function autoMergeView(state: string, detail: string | null | undefined): StatusMeta & { sentence: string } {
@@ -96,13 +96,13 @@ export function regressionLabel(signal: string): string {
 export function revertLine(state: RevertState | string): string | null {
   switch (state) {
     case 'pr_opened':
-      return 'Mushi opened a revert PR. Merge it yourself if the fix caused this.'
+      return 'Mushi Mushi opened a revert PR. Merge it yourself if the fix caused this.'
     case 'not_safe':
       return 'No revert PR: later commits changed the same files, so revert by hand.'
     case 'off':
       return 'Revert PRs are off for this app.'
     case 'failed':
-      return 'Mushi could not open a revert PR.'
+      return 'Mushi Mushi could not open a revert PR.'
     default:
       return null
   }
@@ -170,7 +170,7 @@ export const SECOND_JUDGE_CHOICES: ReadonlyArray<{ value: SecondJudgeChoice; lab
   { value: 'auto', label: 'Automatic: OpenAI, then OpenRouter' },
   { value: 'openai', label: 'OpenAI' },
   { value: 'openrouter', label: 'OpenRouter' },
-  { value: 'off', label: 'Off (Mushi never merges on its own)' },
+  { value: 'off', label: 'Off (Mushi Mushi never merges on its own)' },
 ]
 
 export const AUTO_REVERT_CHOICES: ReadonlyArray<{ value: AutoRevertChoice; label: string }> = [

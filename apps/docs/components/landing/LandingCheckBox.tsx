@@ -36,7 +36,8 @@ export function LandingCheckBox() {
       return
     }
     // A full load: /check reads the report id from the address on mount.
-    window.location.assign(publicAssetPath(`/check?id=${encodeURIComponent(r.data.id)}`))
+    // `cached=1` has it say the site was already checked in the last 24 hours.
+    window.location.assign(publicAssetPath(`/check?id=${encodeURIComponent(r.data.id)}${r.data.cached ? '&cached=1' : ''}`))
   }
 
   return (

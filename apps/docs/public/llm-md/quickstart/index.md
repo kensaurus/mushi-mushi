@@ -38,6 +38,37 @@ wizard offers to send a test report.
 
 **You'll see:** the report in the console with a title, severity and likely cause, in about 10 seconds.
 
+A test report is one made-up sentence, so its diagnosis has little to say. The
+console's **Send test report** button goes one step further and shows a
+pre-written sample diagnosis, so you can see the shape of one. For a real
+diagnosis of your own code, see
+[Already have Sentry issues?](#already-have-sentry-issues-bring-them-in) below.
+
+### Add your keys where your site is hosted
+
+The wizard writes your settings to `.env.local`. That file stays on your
+computer: it never reaches Vercel, Netlify or any other host, so without this
+step the report button does not appear on your live site.
+
+Add the same two settings where your site is built, then redeploy:
+
+| Your app | Setting names |
+| --- | --- |
+| Next.js | `NEXT_PUBLIC_MUSHI_PROJECT_ID` and `NEXT_PUBLIC_MUSHI_API_KEY` |
+| Vite (React, Vue, Svelte, Angular, Capacitor) | `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY` |
+| Nuxt | `NUXT_PUBLIC_MUSHI_PROJECT_ID` and `NUXT_PUBLIC_MUSHI_API_KEY` |
+| Astro | `PUBLIC_MUSHI_PROJECT_ID` and `PUBLIC_MUSHI_API_KEY` |
+| Create React App | `REACT_APP_MUSHI_PROJECT_ID` and `REACT_APP_MUSHI_API_KEY` |
+
+- **Vercel:** Project → Settings → Environment Variables (Production), then redeploy.
+- **Netlify:** Project configuration → Environment variables, then redeploy.
+
+Copy the values from `.env.local`. These settings are read when the site is
+built, so a change only shows after the next deploy. The wizard prints the
+exact names for your app when it finishes.
+
+**You'll see:** the report button on your live site after the redeploy.
+
 ### Get your first fix
 
 Connect your AI editor. One click on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect), or:
@@ -49,6 +80,28 @@ npx mushi-mushi setup --ide cursor
 Then ask your editor: *"Get the latest Mushi Mushi report and fix it."*
 
 **You'll see:** a fix brief in your editor: the cause, the files to change and how to check it. You review the change before it ships.
+
+## Already have Sentry issues? Bring them in
+
+The fastest way to a real diagnosis of your own code is a bug you already
+know about.
+
+```bash
+# Import your newest unresolved Sentry issues as reports (up to 10 at a time)
+npx mushi-mushi sentry import --limit 5
+
+# Or write one up yourself
+npx mushi-mushi reports file --title "Checkout button does nothing on mobile"   --description "Tapping Pay on iPhone Safari does nothing. No error is shown."
+```
+
+- `sentry import` needs Sentry connected first: in the console, open
+  **Integrations → Sentry** and add your organization slug, project slug and
+  an auth token that can read events and projects.
+- Both commands need a key that can write (`mcp:write`). If the CLI says your
+  key cannot, run `npx mushi-mushi login --upgrade-scope`.
+- **Connect GitHub for a diagnosis that knows your code.** Without it, Mushi
+  Mushi still explains the bug from the error and the report, but it cannot
+  name your files. Connect your repository on the console's **Connect** page.
 
 ## Pick your framework
 

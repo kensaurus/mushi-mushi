@@ -314,7 +314,7 @@ export function DiscordIntegrationCard({
       {confirmRemove && (
         <ConfirmDialog
           title="Remove the Discord webhook?"
-          body="Mushi stops posting to this Discord channel. The URL can't be shown again, so you'll need to copy it from Discord to reconnect."
+          body="Mushi Mushi stops posting to this Discord channel. The URL can't be shown again, so you'll need to copy it from Discord to reconnect."
           confirmLabel="Remove webhook"
           cancelLabel="Keep it"
           tone="danger"

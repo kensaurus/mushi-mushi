@@ -141,7 +141,7 @@ export function SettingsStatusBanner({
         <StatusBannerShell
           tone="info"
           title={`${plural(n, 'key')} not checked yet`}
-          subtitle="Mushi won't use a key until the provider accepts it. Press Test on each one."
+          subtitle="Mushi Mushi won't use a key until the provider accepts it. Press Test on each one."
           action={go('byok', actions.test ?? 'Test keys')}
         />
       )
@@ -151,7 +151,7 @@ export function SettingsStatusBanner({
         <StatusBannerShell
           tone="warn"
           title="Slack alerts cannot be sent yet"
-          subtitle="A Slack setting is saved, but nothing can post. Add Mushi to Slack and pick a channel, or paste a webhook."
+          subtitle="A Slack setting is saved, but nothing can post. Add Mushi Mushi to Slack and pick a channel, or paste a webhook."
           action={go('general', 'Finish Slack setup')}
         />
       )

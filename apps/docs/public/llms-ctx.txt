@@ -250,7 +250,6 @@ Add to `.cursor/mcp.json` in your repo root:
       "command": "npx",
       "args": ["-y", "@mushi-mushi/mcp@0.30.5"],
       "env": {
-        "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
         "MUSHI_API_KEY": "mushi_..."
       }
@@ -260,10 +259,16 @@ Add to `.cursor/mcp.json` in your repo root:
 ```
 
   
-    Mint a key on **Manage apps → Generate API key** (preset **MCP read-only** or
-    **MCP read + write**), or use **Connect → Add to Cursor**. The card that shows
-    a new key once also offers a ready-made `.cursor/mcp.json` snippet.
+    This local setup is the one that needs a key. Mint it on **Manage apps →
+    Generate API key** (preset **MCP read-only** or **MCP read + write**), or use
+    **Connect → Add to Cursor**. The card that shows a new key once also offers a
+    ready-made `.cursor/mcp.json` snippet. If you signed in through the browser
+    (the three steps at the top), you need no key at all.
   
+
+Self-hosting? Add one more line to `env`, pointing at your own server:
+`"MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api"`.
+On Mushi Mushi Cloud, leave it out.
 
 ## Manual setup: Claude Desktop
 
@@ -277,7 +282,6 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
       "command": "npx",
       "args": ["-y", "@mushi-mushi/mcp@0.30.5"],
       "env": {
-        "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
         "MUSHI_API_KEY": "mushi_..."
       }
@@ -285,6 +289,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   }
 }
 ```
+
+As above, add `MUSHI_API_ENDPOINT` only when you self-host.
 
 ## Hosted Streamable HTTP transport (no subprocess)
 
@@ -297,7 +303,7 @@ one place a static API key header is the right tool:
 {
   "mcpServers": {
     "mushi-hosted": {
-      "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
+      "url": "https://kensaur.us/mushi-mushi/hosted-mcp/",
       "headers": {
         "X-Mushi-Api-Key": "mushi_…",
         "X-Mushi-Project-Id": "YOUR_PROJECT_ID"
@@ -382,6 +388,37 @@ wizard offers to send a test report.
 
 **You'll see:** the report in the console with a title, severity and likely cause, in about 10 seconds.
 
+A test report is one made-up sentence, so its diagnosis has little to say. The
+console's **Send test report** button goes one step further and shows a
+pre-written sample diagnosis, so you can see the shape of one. For a real
+diagnosis of your own code, see
+[Already have Sentry issues?](#already-have-sentry-issues-bring-them-in) below.
+
+### Add your keys where your site is hosted
+
+The wizard writes your settings to `.env.local`. That file stays on your
+computer: it never reaches Vercel, Netlify or any other host, so without this
+step the report button does not appear on your live site.
+
+Add the same two settings where your site is built, then redeploy:
+
+| Your app | Setting names |
+| --- | --- |
+| Next.js | `NEXT_PUBLIC_MUSHI_PROJECT_ID` and `NEXT_PUBLIC_MUSHI_API_KEY` |
+| Vite (React, Vue, Svelte, Angular, Capacitor) | `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY` |
+| Nuxt | `NUXT_PUBLIC_MUSHI_PROJECT_ID` and `NUXT_PUBLIC_MUSHI_API_KEY` |
+| Astro | `PUBLIC_MUSHI_PROJECT_ID` and `PUBLIC_MUSHI_API_KEY` |
+| Create React App | `REACT_APP_MUSHI_PROJECT_ID` and `REACT_APP_MUSHI_API_KEY` |
+
+- **Vercel:** Project → Settings → Environment Variables (Production), then redeploy.
+- **Netlify:** Project configuration → Environment variables, then redeploy.
+
+Copy the values from `.env.local`. These settings are read when the site is
+built, so a change only shows after the next deploy. The wizard prints the
+exact names for your app when it finishes.
+
+**You'll see:** the report button on your live site after the redeploy.
+
 ### Get your first fix
 
 Connect your AI editor. One click on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect), or:
@@ -393,6 +430,28 @@ npx mushi-mushi setup --ide cursor
 Then ask your editor: *"Get the latest Mushi Mushi report and fix it."*
 
 **You'll see:** a fix brief in your editor: the cause, the files to change and how to check it. You review the change before it ships.
+
+## Already have Sentry issues? Bring them in
+
+The fastest way to a real diagnosis of your own code is a bug you already
+know about.
+
+```bash
+# Import your newest unresolved Sentry issues as reports (up to 10 at a time)
+npx mushi-mushi sentry import --limit 5
+
+# Or write one up yourself
+npx mushi-mushi reports file --title "Checkout button does nothing on mobile"   --description "Tapping Pay on iPhone Safari does nothing. No error is shown."
+```
+
+- `sentry import` needs Sentry connected first: in the console, open
+  **Integrations → Sentry** and add your organization slug, project slug and
+  an auth token that can read events and projects.
+- Both commands need a key that can write (`mcp:write`). If the CLI says your
+  key cannot, run `npx mushi-mushi login --upgrade-scope`.
+- **Connect GitHub for a diagnosis that knows your code.** Without it, Mushi
+  Mushi still explains the bug from the error and the report, but it cannot
+  name your files. Connect your repository on the console's **Connect** page.
 
 ## Pick your framework
 
@@ -546,6 +605,12 @@ The SDK needs two values from a Mushi Mushi project.
 Put them in `.env.local` as `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`
 (`NEXT_PUBLIC_MUSHI_PROJECT_ID` and `NEXT_PUBLIC_MUSHI_API_KEY` on Next.js).
 
+  **`.env.local` never reaches your host.** Before you deploy, add the same two
+  settings where your site is built: in Vercel, Project → Settings →
+  Environment Variables (Production); in Netlify, Project configuration →
+  Environment variables. Then redeploy. They are read at build time, so
+  without them the report button does not appear on your live site.
+
 ## 1. Install
 
 ```bash
@@ -653,6 +718,12 @@ soon as `` initialises.
 Open your admin console at [kensaur.us/mushi-mushi/admin](https://kensaur.us/mushi-mushi/admin) (or your self-hosted
 instance). Your first report appears on the **Bugs** page within seconds, and
 its AI diagnosis follows shortly after.
+
+A one-sentence test report gets a thin diagnosis. For a real one, bring in a
+bug you already know about: see
+[Already have Sentry issues?](/quickstart#already-have-sentry-issues-bring-them-in)
+A diagnosis that names your files needs your GitHub repository connected on
+the console's **Connect** page.
 
 ## Next steps
 
@@ -794,17 +865,24 @@ Every plan includes the report button, the plain-English diagnosis and the fix
 prompt. You don't need an AI key of your own, and the integrations (Sentry,
 Slack, GitHub, Linear, Jira) work on every plan.
 
+That is all most people need. The plan table, the limits and the details for
+developers are below.
+
 ## All plans
 
-A plan is the number of **apps** Mushi Mushi watches for your team: one on Free, three on Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
+A plan sets how many **apps** your team can have: one on Free, three on Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
 
-Installing plugins from the Marketplace (PagerDuty, Zapier, the Cursor and Claude Code agents, Linear Sync, Sentry Mirror) needs Builder or above. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on every plan. Team invites need Studio.
+**More than one app? Read this.** You upgrade from one app's card on the Billing page, and the subscription is attached to that app. The plan's diagnoses, its overage and its spend cap belong to that app. Every other app in the team keeps 100 diagnoses a month, with a hard stop, until you upgrade that app as well. The app limit, seats, history, plugins and the widget without a Mushi Mushi mark apply to the whole team.
+
+**What Free can fix.** On Free you can ask for a fix pull request from the built-in fixer once GitHub is connected, send a bug to a Cursor cloud agent with your own Cursor key, and run fixes on your own computer with `mushi work`. Installing plugins from the Marketplace (PagerDuty, Zapier, Linear Sync, Sentry Mirror, and the Cursor plugin that starts a fix by itself on each new bug) needs Builder or above. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on every plan. Team invites need Studio.
 
   **Annual billing saves two months.** Pay for 10 months, get 12: Builder is $290 a year, Studio $790. Annual plans have no pay-as-you-go overage: they include the plan's diagnoses each month and pause new diagnoses at that limit. Pick annual at checkout, or switch an existing plan with **Change plan** on the Billing page. For Enterprise commits, contact us.
 
   **Overage is capped.** Builder and Studio include a default cap on overage spend ($50 and $200 a month, on top of the base fee). You can lower or raise it in the console. At the cap, Mushi Mushi pauses new diagnoses and says so, instead of sending a bigger invoice. Email alerts fire at **50%, 80%, and 100%** of your included diagnoses.
 
   **Free has a hard stop**, not a soft limit. At 100 diagnoses Mushi Mushi stops diagnosing new reports until the next calendar month. No card, no charge, no bill shock.
+
+**Details for developers**: what counts as a diagnosis, an estimator, example bills, your own AI key, and a comparison with Sentry
 
 ## What counts as a diagnosis
 
@@ -814,7 +892,7 @@ One diagnosis = one completed classification pass. Specifically:
 - It is not a duplicate of an existing group already classified this period.
 - The classifier finishes and writes a plain-English root cause + severity + fix hint.
 
-Under the hood that is a two-stage pipeline (Haiku fast-filter → Sonnet structured output). Classification, deduplication, knowledge-graph writes, and MCP tool calls are **not** counted separately: they are included in the per-diagnosis price. Fix PRs and agent runs are not counted as diagnoses; with your own AI key (see [below](#your-own-ai-key-and-the-self-host-path)), their tokens are billed by that vendor.
+Under the hood that is a two-stage pipeline (Haiku fast-filter → Sonnet structured output). Classification, deduplication, knowledge-graph writes, and MCP tool calls are **not** counted separately: they are included in the per-diagnosis price. Fix PRs and agent runs are not counted as diagnoses. A diagnosis counts whichever key wrote it: adding your own AI key (see [below](#your-own-ai-key-and-the-self-host-path)) moves the AI vendor's bill to you, but does not add diagnoses to your plan.
 
 **What does NOT count:**
 
@@ -859,7 +937,14 @@ Sentry meters errors. We meter diagnoses: one per plain-English root cause and p
 
 ## Your own AI key and the self-host path
 
-On every Cloud plan, Free included, you can add your own Anthropic, OpenAI or Cursor key under **Settings → API keys**. Mushi Mushi then uses it for fix PRs and agent work; you pay those vendors directly at list rate, and we never mark up tokens.
+No plan needs a key of your own. On every Cloud plan, Free included, you can add one under **Settings → AI keys**, and the rule is the same everywhere:
+
+- **An Anthropic or OpenAI key** is used first for that app's AI work: the diagnosis, fix drafts, fix grading and the weekly summary. Mushi Mushi's own key is the fallback when you have added none. You pay the vendor directly at list rate, and we never mark up tokens.
+- **A diagnosis written on your own key still counts** against your plan's diagnoses.
+- **The second AI that reviews each fix pull request** runs only on your own Anthropic or OpenAI key. Without one, that review is skipped.
+- **A Cursor key** is what lets a Cursor cloud agent write fixes.
+
+The full table is on [Bring-your-own-key](/security/byok).
 
 When self-hosting, Mushi Mushi uses **your** keys for everything. For a sense of scale: on Mushi Mushi's own key, a diagnosis cost about $0.017–0.022 in LLM tokens over the 30 days to 2026-10-28, so 1,000 diagnoses is roughly $20. Fix PRs and reviews are extra and depend on the model you pick.
 
@@ -895,7 +980,7 @@ The console says how many apps your plan watches and how many your team has, and
 
 ### Can I use my own AI key on Free?
 
-Yes. Bring-your-own-key works on every plan, Free included. Add an Anthropic, OpenAI or Cursor key under **Settings → API keys** and Mushi Mushi can open fix PRs with it, so you see the whole loop on your first app before paying anything.
+Yes. Bring-your-own-key works on every plan, Free included. Add an Anthropic, OpenAI or Cursor key under **Settings → AI keys**. Mushi Mushi then uses your Anthropic or OpenAI key first for the diagnosis and for fix drafts, and a Cursor key lets a Cursor cloud agent write fixes. A diagnosis on your own key still counts toward the 100 a month.
 
 ### When does my quota reset?
 
@@ -903,7 +988,7 @@ Diagnoses are counted per calendar month (UTC) on every plan, so the count start
 
 ### Can I change my spend cap?
 
-Yes. Open **Billing → Spending cap** on your project card. Set any USD cap on overage from $0–100,000 or clear it to use the plan default ($50 Builder, $200 Studio).
+Yes. Open **Billing → Spending cap** on the app's card. Set any USD cap on overage from $0–100,000 or clear it to use the plan default ($50 Builder, $200 Studio). The cap belongs to that app. Set it to **$0** for a fixed bill: diagnoses then pause at the included amount until the 1st, and the app never costs more than its base fee.
 
 ### Who receives usage alert emails?
 
@@ -911,11 +996,11 @@ By default, the **project owner**. Override the address under **Usage alert emai
 
 ### Is usage per app or per team?
 
-**Diagnoses are per app; the app limit is per team.** Each app you connect has its own diagnosis counter and spend cap, and the plan's app limit counts the apps in your team.
+**Diagnoses and the spend cap are per app; the app limit is per team.** Each app has its own diagnosis counter. The plan's diagnoses and its spend cap belong to the app you upgraded: another app in the same team keeps 100 diagnoses a month until you upgrade it too. So the most one upgraded app can cost in a calendar month is its base fee plus its cap ($29 + $50 on Builder, $79 + $200 on Studio, at the default caps), and an app you have not upgraded is never billed. The plan's app limit counts the apps in your team.
 
 ### Can I downgrade mid-cycle?
 
-Change plans in the console with **Change plan** on the Billing page (Builder ↔ Studio, monthly ↔ annual). The change applies immediately and is pro-rated: unused time is credited and the new plan is charged for the rest of the period. Moving between monthly and annual starts a new billing period that day. Stripe's customer portal (**Manage**) handles your card, invoices and cancellation.
+Yes. Change plans in the console with **Change plan** on the Billing page (Builder ↔ Studio, monthly ↔ annual). An upgrade and a downgrade work the same way: the change applies immediately and is pro-rated, so unused time is credited and the new plan is charged for the rest of the period. Moving between monthly and annual starts a new billing period that day. To go back to Free, cancel: Stripe's customer portal (**Manage**) handles your card, invoices and cancellation.
 
 ### Do annual plans include overage?
 
@@ -923,7 +1008,7 @@ No. Annual plans include the plan's diagnoses every month (1,000 on Builder, 3,0
 
 ### What does Enterprise cost?
 
-From $499 a month, billed annually: unlimited apps, SAML SSO, the SOC 2 readiness pack, self-host support and up to 365 days of history. [Contact us](mailto:kensaurus@gmail.com?subject=Mushi Mushi%20Enterprise%20inquiry) for a quote.
+From $499 a month, billed annually: unlimited apps, SAML SSO, the SOC 2 readiness pack, self-host support and up to 365 days of history. [Contact us](mailto:kensaurus@gmail.com?subject=Mushi%20Mushi%20Enterprise%20inquiry) for a quote.
 
 ### How do I estimate before signing up?
 

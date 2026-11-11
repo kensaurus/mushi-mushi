@@ -267,7 +267,7 @@ export function ExperimentsPage() {
         projectScope={stats.projectName ?? projectName ?? undefined}
 
         helpTitle={copy?.help?.title ?? 'A/B experiments'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Compare two or more versions of a screen and see which one more users finish. The SDK splits your users between the versions, and Mushi tells you when one is clearly ahead.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Compare two or more versions of a screen and see which one more users finish. The SDK splits your users between the versions, and Mushi Mushi tells you when one is clearly ahead.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Test button copy, colour, or layout variants',
           'Measure impact of a new feature on report rate',

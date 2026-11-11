@@ -1499,7 +1499,7 @@ function SourcesTab({
       {removeTarget ? (
         <ConfirmDialog
           title={`Remove ${removeTarget.repo_slug}?`}
-          body={`Mushi stops syncing this repo and takes its ${removeTarget.catalog_count ?? 0} skills out of the catalog. Pipeline runs that already used them keep their history. You can add the repo again later.`}
+          body={`Mushi Mushi stops syncing this repo and takes its ${removeTarget.catalog_count ?? 0} skills out of the catalog. Pipeline runs that already used them keep their history. You can add the repo again later.`}
           confirmLabel="Remove source"
           tone="danger"
           loading={removing}

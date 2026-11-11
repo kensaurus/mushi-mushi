@@ -20,11 +20,11 @@ interface Props {
 function mcpSentence(stats: McpStats): string {
   if (stats.connectedKeyCount === 0) {
     return stats.activeKeyCount > 0
-      ? 'No editor has called Mushi yet. Connect one from Setup.'
+      ? 'No editor has called Mushi Mushi yet. Connect one from Setup.'
       : 'No editor is connected yet.'
   }
   const last = stats.lastSeenAt ? `, last call ${formatRelative(stats.lastSeenAt)}` : ''
-  const mismatch = stats.endpointMismatch ? ' Your editor is calling a different Mushi address than this console.' : ''
+  const mismatch = stats.endpointMismatch ? ' Your editor is calling a different Mushi Mushi address than this console.' : ''
   return `${pluralizeWithCount(stats.connectedKeyCount, 'editor')} connected${last}; ${pluralizeWithCount(stats.toolCount, 'tool')} available.${mismatch}`
 }
 
@@ -40,7 +40,7 @@ export function McpSnapshotStrip({ stats, statsFetchedAt, statsValidating, statL
           label: statLabels?.connected ?? 'Editors connected',
           value: stats.connectedKeyCount,
           tone: stats.connectedKeyCount > 0 ? 'ok' : 'neutral',
-          hint: 'Editor keys that have called Mushi at least once.',
+          hint: 'Editor keys that have called Mushi Mushi at least once.',
           to: mcpLinks.connected,
         },
         {
@@ -52,7 +52,7 @@ export function McpSnapshotStrip({ stats, statsFetchedAt, statsValidating, statL
         {
           label: statLabels?.tools ?? 'Tools',
           value: stats.toolCount,
-          hint: 'Things your editor’s agent can ask Mushi to do, like read a bug or start a fix.',
+          hint: 'Things your editor’s agent can ask Mushi Mushi to do, like read a bug or start a fix.',
           to: mcpLinks.tools,
         },
       ]}

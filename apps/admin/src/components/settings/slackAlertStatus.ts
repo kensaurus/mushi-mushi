@@ -84,7 +84,7 @@ export function slackAlertStatus(input: SlackAlertInput): RowStatusValue {
   if (input.tested) {
     return {
       state: 'attention',
-      detail: "The test message didn't arrive. Check the channel ID and that the Mushi bot is in the channel.",
+      detail: "The test message didn't arrive. Check the channel ID and that the Mushi Mushi bot is in the channel.",
     }
   }
   if (!canPost && !channel && !webhook && !bot) {
@@ -94,7 +94,7 @@ export function slackAlertStatus(input: SlackAlertInput): RowStatusValue {
     return {
       state: 'attention',
       detail:
-        'This channel is saved, but nothing can post to it yet. Add Mushi to Slack on Integrations, or paste a webhook below.',
+        'This channel is saved, but nothing can post to it yet. Add Mushi Mushi to Slack on Integrations, or paste a webhook below.',
     }
   }
   if (!canPost && bot && !channel) {

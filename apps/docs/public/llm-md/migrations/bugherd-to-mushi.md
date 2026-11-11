@@ -12,7 +12,7 @@ description: Move from BugHerd to Mushi Mushi. Map pin-to-element feedback to it
  
 
 BugHerd's signature feature is **pixel-pin annotations**: clients click
-on a part of a web page to attach a comment to that exact element. Mushi Mushi
+on a part of a web page to attach a comment to that exact element.
 Mushi Mushi gives similar element-level context: in the web widget the reporter
 can pick an element, and the report records its tag, id / class, XPath
 and position, next to a screenshot they can mark up.

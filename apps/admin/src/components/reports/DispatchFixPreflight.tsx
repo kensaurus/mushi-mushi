@@ -213,7 +213,7 @@ export function DispatchFixPreflight({
             })()}
           </div>
           <p className="text-2xs text-fg-muted leading-relaxed">
-            We&apos;ll queue a Mushi fix-worker that reads your repo, picks the
+            We&apos;ll queue a Mushi Mushi fix-worker that reads your repo, picks the
             file it thinks owns this bug, and drafts a pull request on a new
             feature branch.{' '}
             <span className="text-fg-faint">

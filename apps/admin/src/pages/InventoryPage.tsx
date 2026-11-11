@@ -520,7 +520,7 @@ export function InventoryPage() {
       ) : tab === 'stories' ? (
         <PageFirstStep
           title="No user stories yet"
-          sentence="Mushi crawls your live site and drafts your user stories for you to accept. Nothing to write by hand, and no SDK change. Later, turn on discovery in the SDK to learn from real visits too."
+          sentence="Mushi Mushi crawls your live site and drafts your user stories for you to accept. Nothing to write by hand, and no SDK change. Later, turn on discovery in the SDK to learn from real visits too."
           action={{ label: 'Map my live site', to: '/inventory?tab=discovery&map=1#map-live' }}
           learnMore={{ label: 'Or write the map file yourself', to: '/inventory?tab=yaml' }}
           data-testid="inventory-first-step"

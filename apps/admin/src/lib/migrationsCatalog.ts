@@ -28,13 +28,13 @@ const MIGRATIONS_CATALOG: readonly AdminMigrationGuideMeta[] = [
     slug: 'capacitor-to-react-native',
     title: 'Capacitor → React Native',
     summary:
-      'Full porting plan with EAS Build / Fastlane CI recipes, plugin map, and the Mushi SDK swap.',
+      'Full porting plan with EAS Build / Fastlane CI recipes, plugin map, and the Mushi Mushi SDK swap.',
   },
   {
     slug: 'cordova-to-capacitor',
     title: 'Cordova → Capacitor',
     summary:
-      'Replace Cordova in place. Plugin map, build pipeline swap, splash regen, Mushi widget reconfig.',
+      'Replace Cordova in place. Plugin map, build pipeline swap, splash regen, Mushi Mushi widget reconfig.',
   },
   {
     slug: 'cordova-to-react-native',
@@ -73,32 +73,32 @@ const MIGRATIONS_CATALOG: readonly AdminMigrationGuideMeta[] = [
   },
   {
     slug: 'sentry-to-mushi',
-    title: 'Sentry + Mushi (enrich or standalone)',
-    summary: 'Keep Sentry — Mushi adds plain-English diagnosis + paste-ready fixes alongside it.',
+    title: 'Sentry + Mushi Mushi (enrich or standalone)',
+    summary: 'Keep Sentry — Mushi Mushi adds plain-English diagnosis + paste-ready fixes alongside it.',
   },
   {
     slug: 'instabug-to-mushi',
-    title: 'Instabug (Luciq) → Mushi',
+    title: 'Instabug (Luciq) → Mushi Mushi',
     summary: 'Rebrand-aware API mapping: Luciq.init → Mushi.init, identifyUser → setUser.',
   },
   {
     slug: 'shake-to-mushi',
-    title: 'Shake → Mushi',
+    title: 'Shake → Mushi Mushi',
     summary: 'Shake.start(apiKey) → Mushi.init, addEventKey → setMetadata.',
   },
   {
     slug: 'logrocket-feedback-to-mushi',
-    title: 'LogRocket Feedback → Mushi',
+    title: 'LogRocket Feedback → Mushi Mushi',
     summary: 'Move bug-feedback off LogRocket without losing session replay.',
   },
   {
     slug: 'bugherd-to-mushi',
-    title: 'BugHerd → Mushi',
-    summary: 'Sidebar feedback widget → Mushi shake/button widget with element selector + screenshot.',
+    title: 'BugHerd → Mushi Mushi',
+    summary: 'Sidebar feedback widget → Mushi Mushi shake/button widget with element selector + screenshot.',
   },
   {
     slug: 'pendo-feedback-to-mushi',
-    title: 'Pendo Feedback → Mushi',
+    title: 'Pendo Feedback → Mushi Mushi',
     summary: 'pendo.identify → Mushi.setUser, route-tracking → Mushi.setScreen.',
   },
   {

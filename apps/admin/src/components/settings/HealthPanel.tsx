@@ -41,13 +41,13 @@ export function HealthPanel({ projectId, projectName }: HealthPanelProps) {
     <>
       <SettingsList
         title="Check the connection"
-        description={`Check that bug reports from ${project.name} reach Mushi and come out the other end.`}
+        description={`Check that bug reports from ${project.name} reach Mushi Mushi and come out the other end.`}
       >
         <QuickTestRow project={project} />
 
         <SettingsRow
           icon={<IconHealth size={16} />}
-          title="Connection to Mushi"
+          title="Connection to Mushi Mushi"
           purpose="Checks that this browser can reach the database, sign-in and report services."
           status={<BackendDiagnostics compact />}
           action={
@@ -62,7 +62,7 @@ export function HealthPanel({ projectId, projectName }: HealthPanelProps) {
         <SettingsRow
           icon={<IconStorage size={16} />}
           title="Where your data lives"
-          purpose={`Now: ${currentBackendLabel()}. Change it only if you run your own Mushi backend.`}
+          purpose={`Now: ${currentBackendLabel()}. Change it only if you run your own Mushi Mushi backend.`}
           action={
             <Btn size="sm" variant="ghost" aria-expanded={showBackend} onClick={() => setShowBackend(!showBackend)}>
               {showBackend ? 'Cancel' : 'Change'}

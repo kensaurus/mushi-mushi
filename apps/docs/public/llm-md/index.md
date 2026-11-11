@@ -42,9 +42,11 @@ A real bug from Mushi Mushi's own app, from the report to the merged fix.
 
 I build apps with Cursor and Claude Code, mostly on my own, and they have real users. When one broke, I often didn't know where to start, because I hadn't written the code line by line.
 
-So I built Mushi Mushi and ran it on 9 of my apps. In the 60 days to 2026-11-11, people sent 34 bug reports, and some of those were my own testing. My own checks (code audits, Sentry, the site watch, the first-time user test) found 2,031. Of the 523 fixes merged, two started from a person's report. [The live numbers are here](/proof).
+So I built Mushi Mushi and ran it on 9 of my apps. In the 60 days to 2026-11-11, people sent 34 bug reports, and some of those were my own testing. My own checks (code audits, Sentry, the site watch, the first-time user test) found 2,031. [The live numbers are here](/proof).
 
-That is why Mushi Mushi doesn't wait for reports: most people who hit a bug just leave.
+Most people never report: they hit a bug and leave. So Mushi Mushi doesn't only wait for the button. It also checks your app itself. Of the 523 fixes merged in those 60 days, two started from a person's report. The rest started from those checks, error alerts and my own notes.
+
+The button still matters: a report tells you what a real person was trying to do when it broke.
 
 It is early, and I'm still its main user. If something confuses you, [open an issue](https://github.com/kensaurus/mushi-mushi/issues) and I'll read it. — Kenji
 

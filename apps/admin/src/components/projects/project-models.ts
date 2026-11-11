@@ -12,7 +12,7 @@ export const SCOPE_PRESETS: Array<{ id: ScopePresetId; label: string; scopes: st
     id: 'sdk',
     label: 'SDK ingest',
     scopes: ['report:write'],
-    hint: "For your app's Mushi SDK — submit reports, nothing else.",
+    hint: "For your app's Mushi Mushi SDK — submit reports, nothing else.",
   },
   {
     id: 'mcp-read',

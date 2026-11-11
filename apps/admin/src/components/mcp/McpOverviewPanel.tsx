@@ -35,7 +35,7 @@ export function McpOverviewPanel({ stats, keys, lastFetchedAt, isValidating, onO
           <p className="px-3 py-3 text-xs text-fg-muted">Reading your keys…</p>
         ) : editors.length === 0 ? (
           <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-3">
-            <p className="text-xs text-fg-muted">No editor has called Mushi from this app yet.</p>
+            <p className="text-xs text-fg-muted">No editor has called Mushi Mushi from this app yet.</p>
             <Btn size="sm" variant="primary" to="/connect">
               Connect an editor
             </Btn>

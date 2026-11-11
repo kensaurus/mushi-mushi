@@ -22,8 +22,8 @@ export function FirstUserTestPage() {
       <PageHeaderBar
         title="First-time user test"
         helpTitle="What is a first-time user test?"
-        helpWhatIsIt="An AI that has never seen your app opens your start page and tries to do one thing, like signing up and using the main feature. It reads only what is on screen, as a new user would. Mushi times how long your app makes it wait and read, and shows where it got stuck: an error, a dead end, a sign-up it could not pass, or a step that needs an inbox, a key or a terminal."
-        helpHowToUse="Check the start page and the goal, then press Run now. The test runs on your own computer (Mushi starts it there), so set up Mushi on your computer once if this page asks you to. Look around only files nothing. File what stops them turns each problem into a bug report. Open a test to see every step with its screenshot."
+        helpWhatIsIt="An AI that has never seen your app opens your start page and tries to do one thing, like signing up and using the main feature. It reads only what is on screen, as a new user would. Mushi Mushi times how long your app makes it wait and read, and shows where it got stuck: an error, a dead end, a sign-up it could not pass, or a step that needs an inbox, a key or a terminal."
+        helpHowToUse="Check the start page and the goal, then press Run now. The test runs on your own computer (Mushi Mushi starts it there), so set up Mushi Mushi on your computer once if this page asks you to. Look around only files nothing. File what stops them turns each problem into a bug report. Open a test to see every step with its screenshot."
         helpFlowPath="/first-user-test"
       />
       {projectId ? (

@@ -20,7 +20,7 @@ export const MCP_PAGE_TABS: Array<{ id: McpTabId; label: string; description: st
   {
     id: 'setup',
     label: 'Setup',
-    description: 'Mint a key, copy the snippet, and confirm your IDE sees all Mushi tools.',
+    description: 'Mint a key, copy the snippet, and confirm your IDE sees all Mushi Mushi tools.',
   },
   {
     id: 'catalog',
@@ -123,7 +123,7 @@ export function buildSdkInstallSnippet(pkgManager: 'npm' | 'yarn' | 'pnpm'): str
 }
 
 export function buildSdkInitSnippet(projectId: string): string {
-  return `import Mushi from '@mushi-mushi/web';
+  return `import Mushi Mushi from '@mushi-mushi/web';
 
 // Call once at app startup (e.g. in _app.tsx / main.tsx).
 // Use a report:write key — NOT your MCP key.
@@ -164,7 +164,7 @@ export function buildHttpCursorJson(projectId: string, projectName: string): str
 
 export function buildEnvBlock(projectId: string): string {
   return [
-    '# Mushi MCP — paste into .env.local (gitignored).',
+    '# Mushi Mushi MCP — paste into .env.local (gitignored).',
     `MUSHI_API_ENDPOINT=${MUSHI_MCP_API}`,
     'MUSHI_API_KEY=paste-your-mushi-api-key-here',
     `MUSHI_PROJECT_ID=${projectId}`,
@@ -228,7 +228,7 @@ export function validateMcpJsonSyntax(raw: string): McpJsonCheck {
   if (mushiEntries.length === 0) {
     return {
       ok: false,
-      title: 'No Mushi server entry found.',
+      title: 'No Mushi Mushi server entry found.',
       details: ['Add a server named like "mushi-my-app" or paste the generated snippet.'],
     }
   }
@@ -316,7 +316,7 @@ export function mcpTestFailureMessage(error: { code?: string; message?: string }
     case 'MCP_PROBE_FAILED':
       return 'The hosted MCP server did not answer the test. If it was just deployed, wait 30 seconds and test again.'
     case 'MISCONFIGURED':
-      return 'This Mushi backend is missing its SUPABASE_URL setting, so the test cannot reach the MCP server.'
+      return 'This Mushi Mushi backend is missing its SUPABASE_URL setting, so the test cannot reach the MCP server.'
     default:
       return describeActionError(error, 'The connection test failed. Try again in a moment.')
   }

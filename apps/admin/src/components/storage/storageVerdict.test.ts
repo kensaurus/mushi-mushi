@@ -14,7 +14,7 @@ describe('storageVerdict', () => {
   it('says the built-in storage needs no check, and names other apps failing separately', () => {
     const v = storageVerdict(stats({ activeProjectConfigured: false, activeProjectHealthStatus: 'unknown', configuredCount: 1, failingCount: 1 }))
     expect(v).toMatchObject({ tone: 'ok', chip: 'Built-in storage', action: 'configure' })
-    expect(v.sentence).toBe("yen-yen stores screenshots in Mushi's built-in storage. There's nothing to check. 1 other app's own bucket is failing.")
+    expect(v.sentence).toBe("yen-yen stores screenshots in Mushi Mushi's built-in storage. There's nothing to check. 1 other app's own bucket is failing.")
     expect(v.sentence).not.toMatch(/not checked/)
   })
 

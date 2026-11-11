@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 233 pages, generated from llms.txt. */
+/** 235 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -724,7 +724,16 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "compare/index.md",
     keywords: ["compare", "sentry", "jam", "posthog"],
     headings: ["How these pages are written"],
-    excerpt: "Honest, dated comparisons of Mushi Mushi with Sentry, Jam and PostHog, plus Sentry alternatives for solo founders. Every number links to its source.",
+    excerpt: "Honest, dated comparisons of Mushi Mushi with Sentry, Jam, PostHog and agency feedback tools. Every number links to its source.",
+  },
+  {
+    title: "Marker.io, BugHerd and Userback vs Mushi Mushi for agencies",
+    url: docUrl("/compare/agency-feedback-tools"),
+    route: "/compare/agency-feedback-tools",
+    markdown: "compare/agency-feedback-tools.md",
+    keywords: ["compare", "agency-feedback-tools", "agency", "feedback", "tools", "marker.io", "bugherd", "userback", "agencies"],
+    headings: ["Side by side", "What the other three have that Mushi Mushi does not", "What Mushi Mushi has that they do not", "What each one is", "Using both", "Pick one of the other three if", "Pick Mushi Mushi if [#pick-mushi-if]", "Frequently asked questions"],
+    excerpt: "Marker.io, BugHerd, Userback and Mushi Mushi for agencies: client seats, per-project access, boards, logs, AI diagnosis and price, with sources.",
   },
   {
     title: "Jam vs Mushi Mushi",
@@ -1031,6 +1040,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["integrations", "voice-intake", "voice", "intake"],
     headings: ["Enable it", "Turn it on", "Mint a voice:write key", "Make sure Automatic fixes is on", "iOS Shortcut", "Telegram (the Android inbox)", "Create a bot", "Connect it"],
     excerpt: "Say a bug on your phone and Mushi Mushi files it, or opens a draft PR after you confirm. Works from an iOS Shortcut, Telegram, Slack or the console.",
+  },
+  {
+    title: "Mushi Mushi とは（日本語）",
+    url: docUrl("/ja"),
+    route: "/ja",
+    markdown: "ja.md",
+    keywords: ["ja"],
+    headings: ["まず無料で試す：公開中のサイトをチェック", "できること", "報告ボタンは日本語で表示されます", "始め方：Lovable・Bolt の場合", "始め方：Cursor・Claude Code の場合", "運営者", "英語のドキュメント"],
+    excerpt: "Mushi Mushi は、アプリに「問題を報告」ボタンを追加し、届いた不具合の原因と直し方を AI が説明するオープンソースのツールです。無料プランはアプリ 1 本・月 100 件の診断まで。",
   },
   {
     title: "Launch Week",
@@ -1425,7 +1443,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart",
     markdown: "quickstart/index.md",
     keywords: ["quickstart", "install", "first", "report", "fix", "choose", "stack"],
-    headings: ["Install", "Send your first report", "Get your first fix", "Pick your framework", "Where to start", "Keys and settings", "Troubleshooting"],
+    headings: ["Install", "Send your first report", "Add your keys where your site is hosted", "Get your first fix", "Already have Sentry issues? Bring them in", "Pick your framework", "Where to start", "Keys and settings"],
     excerpt: "Install Mushi Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.",
   },
   {
@@ -1497,8 +1515,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart/lovable-bolt",
     markdown: "quickstart/lovable-bolt.md",
     keywords: ["quickstart", "lovable-bolt", "lovable", "bolt", "no", "terminal"],
-    headings: ["Get your script tag", "Paste it into Lovable or Bolt", "Publish and send a test report", "Fix a real bug", "Read reports inside Lovable", "Where the key goes, and is it safe?", "Change how the button looks", "If nothing shows up"],
-    excerpt: "Add Mushi Mushi to a Lovable or Bolt app without a terminal. Paste one script tag through your prompt, then read each bug's plain-English cause and fix prompt.",
+    headings: ["Copy your line", "Paste it into Lovable or Bolt", "Publish and send a test report", "Fix a real bug", "What your users will see", "What it collects from your users", "How to remove it", "Read reports inside Lovable"],
+    excerpt: "Add a Mushi Mushi report button to a Lovable or Bolt app with one prompt and no terminal. What your users see, what it collects from them, and how to remove it.",
   },
   {
     title: "Ask Lovable why it broke",
@@ -2028,8 +2046,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/use-cases/agency-client-apps",
     markdown: "use-cases/agency-client-apps.md",
     keywords: ["use-cases", "use", "cases", "agency-client-apps", "agency", "client", "apps", "build", "clients"],
-    headings: ["What goes wrong for you", "What Mushi Mushi does", "What you do", "How long it takes", "What it costs", "Next"],
-    excerpt: "For agencies and freelancers who run several client apps. One report button per app, one inbox with a plain-English cause per bug, and a plan sized by apps.",
+    headings: ["What goes wrong for you", "What Mushi Mushi does", "What you do", "Who can see what", "What the people using the app see", "How long it takes", "What it costs", "What to tell your client"],
+    excerpt: "For agencies and freelancers who run several client apps: a report button per app, a plain-English cause per bug, and what it costs and who sees what.",
   },
   {
     title: "AI code bug fixing: report to merged fix",

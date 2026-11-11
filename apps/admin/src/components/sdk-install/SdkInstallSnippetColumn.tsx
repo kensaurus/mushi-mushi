@@ -33,12 +33,15 @@ export function SdkInstallSnippetColumn({
   autoFrameworkApplied,
   code,
   install,
+  belowTabs,
 }: {
   framework: Framework
   onFrameworkChange: (fw: Framework) => void
   autoFrameworkApplied: React.MutableRefObject<boolean>
   code: string
   install: string
+  /** A choice that belongs to the picked tab (the React setup), above the code it changes. */
+  belowTabs?: React.ReactNode
 }) {
   const [snippetCopied, setSnippetCopied] = useState(false)
   const [installCopied, setInstallCopied] = useState(false)
@@ -80,6 +83,8 @@ export function SdkInstallSnippetColumn({
         />
         <ConfigHelp helpId="sdk-install.framework" />
       </div>
+
+      {belowTabs}
 
       <CodePanel
         label="Install"

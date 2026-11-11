@@ -101,8 +101,8 @@ export function ReviewFollowupsSection({ keysToken }: Props) {
     <section id="review-followups" aria-label="Review follow-ups" className="space-y-2 scroll-mt-20 border-t border-edge-subtle pt-3">
       <h4 className="text-sm font-medium text-fg">Review follow-ups</h4>
       <p className="text-xs text-fg-muted">
-        When Opus says an agent&apos;s pull request needs fixes first, Mushi sends it back to a new Cursor agent once,
-        with exactly those findings, and Opus reviews the push. Only pull requests a Mushi cloud agent opened, at most
+        When Opus says an agent&apos;s pull request needs fixes first, Mushi Mushi sends it back to a new Cursor agent once,
+        with exactly those findings, and Opus reviews the push. Only pull requests a Mushi Mushi cloud agent opened, at most
         two per pull request, never on a hold, inside each app&apos;s auto-fix limits. Off until you turn it on; turning
         it on also picks up the last 3 days of fix-first pull requests.
       </p>

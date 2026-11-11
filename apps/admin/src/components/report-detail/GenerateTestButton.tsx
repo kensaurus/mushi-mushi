@@ -75,7 +75,7 @@ export function GenerateTestButton({ report }: GenerateTestButtonProps) {
       {confirming && (
         <ConfirmDialog
           title="Generate a regression test?"
-          body="Mushi writes a Playwright test for this bug with your LLM budget and opens a draft PR on the connected repo. Nothing merges until you review it."
+          body="Mushi Mushi writes a Playwright test for this bug with your LLM budget and opens a draft PR on the connected repo. Nothing merges until you review it."
           confirmLabel="Generate test"
           onCancel={() => setConfirming(false)}
           onConfirm={handleGenerate}

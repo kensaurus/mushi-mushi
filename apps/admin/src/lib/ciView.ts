@@ -545,12 +545,12 @@ export function permissionsNotice(p: CiOverview['permissions']): string | null {
     const repos = (p.jobsMissingRepos ?? []).map((r) => r.split('/').pop() ?? r)
     if (repos.length > 0) {
       const list = repos.length > 3 ? `${repos.slice(0, 3).join(', ')} and ${repos.length - 3} more` : repos.join(', ')
-      return `Mushi cannot read GitHub Actions jobs for ${list}, so its jobs are missing below. Give that repo's GitHub token Actions: read.`
+      return `Mushi Mushi cannot read GitHub Actions jobs for ${list}, so its jobs are missing below. Give that repo's GitHub token Actions: read.`
     }
-    return 'Mushi cannot read your GitHub Actions jobs. Give the GitHub token Actions: read so Mushi can see where tests run and why they wait.'
+    return 'Mushi Mushi cannot read your GitHub Actions jobs. Give the GitHub token Actions: read so Mushi Mushi can see where tests run and why they wait.'
   }
   if (p.runners === 'missing') {
-    return 'Mushi sees runners only through jobs. Give the GitHub token Administration: read to see idle and offline runners.'
+    return 'Mushi Mushi sees runners only through jobs. Give the GitHub token Administration: read to see idle and offline runners.'
   }
   return null
 }

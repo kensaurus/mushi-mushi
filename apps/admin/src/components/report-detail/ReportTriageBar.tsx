@@ -241,7 +241,7 @@ export function ReportTriageBar({
           variant="ghost"
           onClick={() => void onTriage({ category: report.category, category_confirmed_at: new Date().toISOString() })}
           disabled={saving}
-          title="The reporter filed this as a feature request. Confirming the category sends it to auto-fix like any bug."
+          title="The reporter filed this as a feature request. Confirming the category lets you dispatch a fix for it like any bug."
         >
           It&apos;s a bug: confirm {CATEGORY_LABELS[report.category] ?? report.category}
         </Btn>

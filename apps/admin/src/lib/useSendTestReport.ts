@@ -50,7 +50,7 @@ export function useSendTestReport(): (projectId: string) => Promise<SendTestRepo
       invalidateSetupStatus()
       toast.success(
         projectName ? `Test report sent to ${projectName}` : 'Test report sent',
-        'Mushi is writing the diagnosis now, usually in under 30 seconds.',
+        'Mushi Mushi is writing the diagnosis now, usually in under 30 seconds.',
         { label: 'View diagnosis →', onClick: () => navigate(testReportHref(reportId, projectId)) },
       )
       return { ok: true, reportId, projectName }

@@ -107,7 +107,7 @@ export function keyStatusView(
     return {
       state: 'not_connected',
       label: 'Turned off',
-      detail: "You turned this key off, so Mushi won't use it.",
+      detail: "You turned this key off, so Mushi Mushi won't use it.",
       action: key.test_status === 'ok' ? 'enable' : 'test',
     }
   }
@@ -194,7 +194,7 @@ export function keyStatusView(
   if (key.test_status === 'error_network') {
     return {
       state: 'attention',
-      detail: `Mushi couldn't reach ${provider} to check this key. Test it again in a minute.`,
+      detail: `Mushi Mushi couldn't reach ${provider} to check this key. Test it again in a minute.`,
       action: 'test',
     }
   }
@@ -202,7 +202,7 @@ export function keyStatusView(
   if (key.test_status !== 'ok' && key.test_status !== 'error_quota') {
     return {
       state: 'checking',
-      detail: "Mushi hasn't confirmed this key works yet. Test it.",
+      detail: "Mushi Mushi hasn't confirmed this key works yet. Test it.",
       action: 'test',
     }
   }

@@ -302,7 +302,7 @@ export function BillingPage() {
           copy?.help?.useCases ?? [
             'Move to Builder for a second app, or when this month\'s diagnoses run out',
             'Open the Stripe Billing Portal to update your card, download invoices, or cancel',
-            'Cross-check usage between Mushi (reports/fixes/tokens) and Stripe (line items)',
+            'Cross-check usage between Mushi Mushi (reports/fixes/tokens) and Stripe (line items)',
           ]
         }
         helpHowToUse={

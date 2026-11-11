@@ -42,7 +42,7 @@ export function LessonsSnapshotStrip({ stats, statsFetchedAt, statsValidating, s
         {
           label: statLabels?.activeLessons ?? 'Lessons in use',
           value: stats.activeLessons,
-          hint: 'Rules Mushi applies when it diagnoses a new report.',
+          hint: 'Rules Mushi Mushi applies when it diagnoses a new report.',
           to: lessonsLinks.activeLessons,
         },
         {

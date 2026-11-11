@@ -423,6 +423,11 @@ export function ReportsPage() {
   // red dot when there's unresolved severity=critical work. Inline here
   // because `criticalQueuedCount` further down is filtered by status.
   const criticalOnPage = reports.filter((r) => r.severity === 'critical').length
+  const hasFilters = Boolean(status || category || userCategory || severity || platform || sdkPackage || origin || component || reporter || endUser || session || area || days || q)
+  // A project with no reports at all and nothing filtered: the page is the
+  // "get your first report" state, so the filter rails and the second and
+  // third "Send test report" buttons stay out of it (re-audit 2026-11-11).
+  const emptyProject = !loading && !error && total === 0 && !hasFilters
 
   usePublishPageContext({
     route: '/reports',
@@ -430,7 +435,9 @@ export function ReportsPage() {
     summary: loading
       ? 'Loading reports…'
       : total === 0
-        ? 'No reports match the current filters'
+        ? hasFilters
+          ? 'No reports match the current filters'
+          : 'No reports yet'
         : `${pluralizeWithCount(total, 'report')}${criticalOnPage > 0 ? ` · ${criticalOnPage} critical` : ''}${selected.size > 0 ? ` · ${selected.size} selected` : ''}`,
     criticalCount: criticalOnPage,
     filters: {
@@ -641,7 +648,6 @@ export function ReportsPage() {
     contextChips.push({ key: 'session', label: 'Session', value: `${session.slice(0, 12)}…` })
   if (area) contextChips.push({ key: 'area', label: 'Area', value: area })
 
-  const hasFilters = Boolean(status || category || userCategory || severity || platform || sdkPackage || origin || component || reporter || endUser || session || area || days || q)
   const queuedCount = reports.filter((r) => r.status === 'queued' || r.status === 'new').length
   const criticalQueuedCount = reports.filter(
     (r) => (r.status === 'queued' || r.status === 'new') && r.severity === 'critical',
@@ -835,7 +841,9 @@ export function ReportsPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
-            show: !reportsStatsLoading && isReportsBannerVisible(reportsStats),
+            // On an empty project the first-diagnosis card below has the one
+            // "Send test report" button; this banner would repeat it.
+            show: !reportsStatsLoading && isReportsBannerVisible(reportsStats) && !(emptyProject && setup.activeProject),
             children: (
               <ReportsStatusBanner
                 stats={reportsStats}
@@ -884,8 +892,11 @@ export function ReportsPage() {
         />
       )}
 
-      <ReportsQuickFilters status={status} severity={severity} scope={fetchScope} onSetFilter={setFilter} />
+      {!emptyProject && (
+        <ReportsQuickFilters status={status} severity={severity} scope={fetchScope} onSetFilter={setFilter} />
+      )}
 
+      {!emptyProject && (
       <ReportsFilterBar
         searchInput={searchInput}
         onSearchInputChange={setSearchInput}
@@ -916,6 +927,7 @@ export function ReportsPage() {
           />
         }
       />
+      )}
 
       <BulkBar
         count={selected.size}
@@ -1019,6 +1031,8 @@ export function ReportsPage() {
               lastReportAt={null}
               diagnostic={setup.getStep('sdk_installed')?.diagnostic ?? null}
               adminHost={setup.data?.admin_endpoint_host ?? null}
+              // The card above has the page's one "Send test report" button.
+              hideTestCta={!hasFilters}
               onTestReportSent={() => {
                 setup.reload()
                 reload()

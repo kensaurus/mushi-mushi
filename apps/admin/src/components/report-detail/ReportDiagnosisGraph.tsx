@@ -177,7 +177,7 @@ function WhyMushiBelieves({ why }: { why: string }) {
       ref={ref}
       tabIndex={overflows ? 0 : undefined}
       role={overflows ? 'region' : undefined}
-      aria-label={overflows ? 'Why Mushi believes this' : undefined}
+      aria-label={overflows ? 'Why Mushi Mushi believes this' : undefined}
       className="max-h-64 overflow-y-auto rounded-md border border-edge-subtle bg-surface-overlay/40 px-2.5 py-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
     >
       <p className="whitespace-pre-line text-xs leading-relaxed text-fg-secondary">{why}</p>
@@ -189,12 +189,14 @@ function NodePanel({
   node,
   graph,
   onSelect,
+  showInternals,
 }: {
   node: DiagnosisNode | null
   graph: DiagnosisGraph
   onSelect: (id: string) => void
+  showInternals: boolean
 }) {
-  if (!node) return <p className="text-xs text-fg-muted">Pick a node to see why Mushi believes it.</p>
+  if (!node) return <p className="text-xs text-fg-muted">Pick a node to see why Mushi Mushi believes it.</p>
   const byId = new Map(graph.nodes.map((n) => [n.id, n]))
   const from = graph.edges.filter(([, b]) => b === node.id).map(([a]) => byId.get(a)!)
   const to = graph.edges.filter(([a]) => a === node.id).map(([, b]) => byId.get(b)!)
@@ -243,12 +245,13 @@ function NodePanel({
           </a>
         )}
       </div>
-      <p className="font-mono text-3xs text-fg-faint">from {node.source}</p>
+      {/* The stored field a claim was read from: for operator accounts. */}
+      {showInternals && <p className="font-mono text-3xs text-fg-faint">from {node.source}</p>}
     </div>
   )
 }
 
-export function ReportDiagnosisGraph({ report }: { report: ReportDetail }) {
+export function ReportDiagnosisGraph({ report, showInternals = false }: { report: ReportDetail; showInternals?: boolean }) {
   const graph = useMemo(() => buildDiagnosisGraph(report), [report])
   const [selected, setSelected] = useState<string | null>(() => initialDiagnosisSelection(graph))
   useEffect(() => {
@@ -274,7 +277,7 @@ export function ReportDiagnosisGraph({ report }: { report: ReportDetail }) {
     <Card className="mb-3 p-3 motion-safe:animate-mushi-fade-in" data-testid="report-diagnosis-graph">
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <IconGraph className="h-4 w-4 text-fg-muted" aria-hidden />
-        <h3 className="text-sm font-semibold text-fg">How Mushi reached this diagnosis</h3>
+        <h3 className="text-sm font-semibold text-fg">How Mushi Mushi reached this diagnosis</h3>
         <Badge className={`${VERDICT_TONE[graph.verdict.tone]} text-3xs`}>{graph.verdict.label}</Badge>
         {marks > 0 && (
           <span className="text-2xs text-fg-muted">
@@ -350,7 +353,7 @@ export function ReportDiagnosisGraph({ report }: { report: ReportDetail }) {
         </div>
         <aside ref={panel} className="min-w-0 scroll-mt-16 lg:sticky lg:top-3 lg:self-start" aria-label="Selected node">
           <Card variant="flat" className="p-3">
-            <NodePanel node={node} graph={graph} onSelect={select} />
+            <NodePanel node={node} graph={graph} onSelect={select} showInternals={showInternals} />
           </Card>
         </aside>
       </div>

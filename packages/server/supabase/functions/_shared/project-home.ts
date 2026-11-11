@@ -82,7 +82,7 @@ export const SDK_QUIET_MS = DAY
 export const SDK_SILENT_MS = 7 * DAY
 
 export const SITE_WATCH_HREF = '/inventory?tab=discovery'
-export const SITE_WATCH_CONNECT: ConnectHint = { label: 'Turn on the live-site watch', to: '/credits' }
+export const SITE_WATCH_CONNECT: ConnectHint = { label: 'Turn on the live-site watch', to: '/inventory?tab=discovery#site-watch' }
 
 export function errorSignal(id: HealthId, label: string, href: string, err: unknown): HealthSignal {
   const message = err instanceof Error ? err.message : String(err)

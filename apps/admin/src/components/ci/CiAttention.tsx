@@ -68,7 +68,7 @@ export function CiAttention({ jobs, byJob }: { jobs: CiJob[]; byJob: CiJobType[]
       <Block title="Running longer than usual" count={long.length} testId="ci-attention-long">
         {long.length === 0 ? (
           <p className="text-xs text-fg-muted">
-            {byJob ? 'Every running job is within its usual time.' : 'Usual times appear once Mushi has a few runs of each job.'}
+            {byJob ? 'Every running job is within its usual time.' : 'Usual times appear once Mushi Mushi has a few runs of each job.'}
           </p>
         ) : (
           <ul className="flex flex-col gap-2">

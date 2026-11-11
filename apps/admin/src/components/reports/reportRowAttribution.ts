@@ -114,7 +114,7 @@ export function captureMode(
     return {
       label: 'mushi',
       tone: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
-      tooltip: `Filed by Mushi's scheduled ${job.label} (${job.job}), not by a user.`,
+      tooltip: `Filed by Mushi Mushi's scheduled ${job.label} (${job.job}), not by a user.`,
     }
   }
   if (row?.source === 'sentry') {
@@ -161,7 +161,7 @@ export function captureMode(
 
 export function reporterWho(row: ReportRow): { label: string; tooltip: string; verified?: boolean } {
   const job = mushiJobFiler(row)
-  if (job) return { label: job.label, tooltip: `Mushi's ${job.label} (${job.job}) filed this report.` }
+  if (job) return { label: job.label, tooltip: `Mushi Mushi's ${job.label} (${job.job}) filed this report.` }
   if (row.reporter_display_name) {
     return {
       label: row.reporter_display_name,

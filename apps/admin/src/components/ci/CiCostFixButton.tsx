@@ -180,7 +180,7 @@ export function CiCostFixButton({ fixable, initialJob = null }: { fixable: CiAdv
           body={CI_COST_FIX_CHANGE[autofix.kind]}
           details={
             <p className="wrap-break-word">
-              Mushi changes one file, <code className="font-mono">{autofix.workflowPath}</code> in{' '}
+              Mushi Mushi changes one file, <code className="font-mono">{autofix.workflowPath}</code> in{' '}
               <code className="font-mono">{autofix.repo}</code>, and opens it as a <strong>draft</strong> pull request.
               Nothing changes until you review it, mark it ready and merge it.
             </p>

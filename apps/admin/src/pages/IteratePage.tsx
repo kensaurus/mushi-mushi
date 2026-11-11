@@ -453,7 +453,7 @@ export function IteratePage() {
       {abortTarget && (
         <ConfirmDialog
           title="Stop this improvement run?"
-          body={`Mushi stops the run on ${abortTarget.target_url} after the current step. Iterations already scored stay in history. An aborted run cannot be resumed: queue a new one to try again.`}
+          body={`Mushi Mushi stops the run on ${abortTarget.target_url} after the current step. Iterations already scored stay in history. An aborted run cannot be resumed: queue a new one to try again.`}
           confirmLabel="Abort run"
           cancelLabel="Keep running"
           tone="danger"

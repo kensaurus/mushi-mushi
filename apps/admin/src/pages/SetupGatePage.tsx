@@ -182,7 +182,7 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
                 size="sm"
                 onClick={() => saveAndApplyInstanceConfig({ mode: 'cloud' })}
               >
-                Use Mushi Cloud instead
+                Use Mushi Mushi Cloud instead
               </Btn>
               <Btn variant="primary" onClick={() => window.location.reload()}>
                 Refresh

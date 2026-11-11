@@ -12,6 +12,16 @@ description: Reference for @mushi-mushi/cli, the Mushi Mushi CLI. Log in, connec
 The Mushi Mushi CLI: project setup, report triage, agentic fix dispatch, QA
 coverage, skill pipelines, and headless merge from the terminal.
 
+Start with one command in your app's folder. It needs no install: it signs
+you in through your browser, adds the SDK and writes your settings.
+
+```bash
+npx mushi-mushi
+```
+
+Every command on this page also runs as `npx mushi-mushi `. If you
+use the CLI often, install it once and type `mushi` instead:
+
 ```bash
 npm install -g @mushi-mushi/cli
 
@@ -23,10 +33,11 @@ mushi fix <reportId> --agent cursor_cloud --wait
 mushi fixes merge <fixId>          # squash-merge the PR + mark report Fixed
 ```
 
-  **Two key types:** SDK ingest keys (`report:write`) are minted on **Setup → Verify** or
-  **Projects → Generate API key**. Admin / MCP keys (`mcp:read` or `mcp:write`) are also
-  minted on Projects; use `mcp:write` for fix dispatch, merge, and most CLI admin commands.
-  **Settings → API Keys (BYOK)** is for your own LLM/Firecrawl keys, not Mushi Mushi credentials.
+  **Two key types:** SDK ingest keys (`report:write`) are minted in the console on
+  **Set up → Test it → Generate API key** or **Manage apps → Generate API key**. Admin / MCP
+  keys (`mcp:read` or `mcp:write`) are also minted on **Manage apps**; use `mcp:write` for fix
+  dispatch, merge, and most CLI admin commands. **Settings → AI keys** is for your own
+  LLM and Firecrawl keys, not Mushi Mushi credentials.
 
 ---
 
@@ -36,9 +47,9 @@ See the full walkthrough: [CLI ↔ console loop](/quickstart/cli-console-loop).
 
 | Step | Console | CLI |
 | --- | --- | --- |
-| Create project | Setup → Steps or Projects → New project | Wizard opens `?setup=cli` |
+| Create project | **Set up**, or **Manage apps** → New project | Wizard opens `?setup=cli` |
 | Copy Project ID | Success panel UUID chip | `mushi init --project-id ` |
-| Mint ingest key | Setup → Verify → Generate API key | Paste at prompt or `MUSHI_API_KEY=…` |
+| Mint ingest key | **Set up → Test it → Generate API key** | Paste at prompt or `MUSHI_API_KEY=…` |
 | Wire repo | SDK install configurator | `mushi init` or `mushi connect --wait` |
 
 Console URL resolution: `MUSHI_CONSOLE_URL` → saved config → localhost `:6464` probe → hosted default.
@@ -179,7 +190,7 @@ mushi outbox discard <messageId> --yes
 Dispatch an agentic fix for a classified report.
 
 ```bash
-# Default agent (from project settings)
+# Default agent: claude_code, the built-in fixer
 mushi fix 00000000-0000-0000-0000-000000000123
 
 # Cursor Cloud Agent — wait for PR
@@ -303,14 +314,24 @@ mushi work --repo-dir ~/code/my-app --followups --model grok-4.7-xhigh
 | `--repo-dir ` | A clone of the app repo; only worktrees are created in it |
 | `--max ` | Reports per run (default 3, at most 10) |
 | `--report ` | Work on this report only |
-| `--agent ` | `cursor` (default) or `claude` |
+| `--agent ` | `cursor` (default) or `claude`. `claude` needs CLI 0.36.0 or later |
+| `--project ` | Project ID (overrides `MUSHI_PROJECT_ID`) |
 | `--followups` | Fix the Opus "fix first" findings on pull requests `mushi work` opened, and push to them |
 | `--model ` | Model for the agent: `cursor-agent --list-models`, or for Claude Code an alias (`opus`, `sonnet`, `haiku`) or a full `claude-…` id |
 | `--keep` | Keep the worktree afterwards |
 | `--dry-run` | Show the plan; change nothing |
+| `--json` | Machine-readable JSON output |
 
-Needs the agent (`cursor-agent status` or `claude auth status` says signed in)
-and `gh` signed in, and an API key with `mcp:write`.
+**Before you run it:**
+
+- The agent is installed and signed in: `cursor-agent status`, or
+  `claude auth status` for Claude Code (sign in with `claude auth login`).
+- The GitHub CLI is signed in: `gh auth status` (sign in with `gh auth login`).
+  `mushi work` pushes the branch and opens the pull request with it.
+- Your Mushi Mushi key can write (`mcp:write`). If it cannot, run
+  `mushi login --upgrade-scope`.
+- `--agent claude` needs `@mushi-mushi/cli` 0.36.0 or later. Check with
+  `mushi --version`, and update with `npm install -g @mushi-mushi/cli@latest`.
 
 ### `mushi worker`
 
@@ -524,11 +545,11 @@ refused. A private repo can only be published from the console.
 ### Clean up branches and pull requests
 
 ```bash
-mushi repo cleanup show [--stale-days 14]       # branches and fix PRs Mushi opened that can go, with why and the commit
+mushi repo cleanup show [--stale-days 14]       # branches and fix PRs Mushi Mushi opened that can go, with why and the commit
 mushi repo cleanup request delete-branches --repo owner/app [--keys branch:a,branch:b]
 mushi repo cleanup request close-prs --repo owner/app [--keys pr:12]
 mushi repo cleanup request auto-delete --repo owner/app   # turn on GitHub's "Automatically delete head branches"
-mushi repo cleanup restore <itemId>…            # bring back a branch Mushi deleted, at the commit it kept
+mushi repo cleanup restore <itemId>…            # bring back a branch Mushi Mushi deleted, at the commit it kept
 ```
 
 Only branches and pull requests Mushi Mushi itself opened are listed: a branch whose
@@ -575,7 +596,7 @@ session, not an API key.
 
 ```bash
 mushi recipe init                    # write a starter mushi.recipe.json from what the repo shows
-mushi recipe check                   # validate it and its token files; run Mushi's deviance rules and print the 0–100 score
+mushi recipe check                   # validate it and its token files; run Mushi Mushi's deviance rules and print the 0–100 score
 mushi recipe check --max-score 30    # also fail when the score is above 30
 mushi recipe check --push            # send the recipe and the scan from your existing CI job; fails above the project's limit when that gate is on
 mushi recipe show                    # each part of the recipe and its state
@@ -595,7 +616,7 @@ job; Mushi Mushi never clones your repo.
 
 ```bash
 mushi radar scan                     # storage deletes done in SQL, secret keys in the built app; lists the build files the store rules read
-mushi radar scan --push              # send results to Mushi (one extra step in your existing CI job, after the build step)
+mushi radar scan --push              # send results to Mushi Mushi (one extra step in your existing CI job, after the build step)
 mushi radar scan --bundle-dir web/dist   # scan only these built client folders (repeatable), e.g. to leave out a server dist
 mushi radar show                     # every hole check for this project and what it found
 ```

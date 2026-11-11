@@ -78,7 +78,7 @@ function HostNodeInner({ id, data }: NodeProps) {
   const platform = d.platform ? PLATFORM_LABEL[d.platform] : null
   const sub =
     d.variant === 'github'
-      ? 'GitHub runs these machines; Mushi sees their jobs only.'
+      ? 'GitHub runs these machines; Mushi Mushi sees their jobs only.'
       : d.variant === 'unknown'
         ? 'Runners with no heartbeat. Run mushi runner key on the machine to set one up.'
         : `${platform ?? 'Machine'}${d.cpuCount ? ` · ${d.cpuCount} CPUs` : ''}${d.load1 != null ? ` · load ${d.load1.toFixed(1)}` : ''}`

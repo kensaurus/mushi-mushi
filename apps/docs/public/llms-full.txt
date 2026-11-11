@@ -3,7 +3,7 @@
 > Bug fixing for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Pages: 233
+Pages: 235
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -58,9 +58,11 @@ A real bug from Mushi Mushi's own app, from the report to the merged fix.
 
 I build apps with Cursor and Claude Code, mostly on my own, and they have real users. When one broke, I often didn't know where to start, because I hadn't written the code line by line.
 
-So I built Mushi Mushi and ran it on 9 of my apps. In the 60 days to 2026-11-11, people sent 34 bug reports, and some of those were my own testing. My own checks (code audits, Sentry, the site watch, the first-time user test) found 2,031. Of the 523 fixes merged, two started from a person's report. [The live numbers are here](/proof).
+So I built Mushi Mushi and ran it on 9 of my apps. In the 60 days to 2026-11-11, people sent 34 bug reports, and some of those were my own testing. My own checks (code audits, Sentry, the site watch, the first-time user test) found 2,031. [The live numbers are here](/proof).
 
-That is why Mushi Mushi doesn't wait for reports: most people who hit a bug just leave.
+Most people never report: they hit a bug and leave. So Mushi Mushi doesn't only wait for the button. It also checks your app itself. Of the 523 fixes merged in those 60 days, two started from a person's report. The rest started from those checks, error alerts and my own notes.
+
+The button still matters: a report tells you what a real person was trying to do when it broke.
 
 It is early, and I'm still its main user. If something confuses you, [open an issue](https://github.com/kensaurus/mushi-mushi/issues) and I'll read it. — Kenji
 
@@ -322,7 +324,6 @@ Add to `.cursor/mcp.json` in your repo root:
       "command": "npx",
       "args": ["-y", "@mushi-mushi/mcp@0.30.5"],
       "env": {
-        "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
         "MUSHI_API_KEY": "mushi_..."
       }
@@ -332,10 +333,16 @@ Add to `.cursor/mcp.json` in your repo root:
 ```
 
   
-    Mint a key on **Manage apps → Generate API key** (preset **MCP read-only** or
-    **MCP read + write**), or use **Connect → Add to Cursor**. The card that shows
-    a new key once also offers a ready-made `.cursor/mcp.json` snippet.
+    This local setup is the one that needs a key. Mint it on **Manage apps →
+    Generate API key** (preset **MCP read-only** or **MCP read + write**), or use
+    **Connect → Add to Cursor**. The card that shows a new key once also offers a
+    ready-made `.cursor/mcp.json` snippet. If you signed in through the browser
+    (the three steps at the top), you need no key at all.
   
+
+Self-hosting? Add one more line to `env`, pointing at your own server:
+`"MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api"`.
+On Mushi Mushi Cloud, leave it out.
 
 ## Manual setup: Claude Desktop
 
@@ -349,7 +356,6 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
       "command": "npx",
       "args": ["-y", "@mushi-mushi/mcp@0.30.5"],
       "env": {
-        "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
         "MUSHI_API_KEY": "mushi_..."
       }
@@ -357,6 +363,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   }
 }
 ```
+
+As above, add `MUSHI_API_ENDPOINT` only when you self-host.
 
 ## Hosted Streamable HTTP transport (no subprocess)
 
@@ -369,7 +377,7 @@ one place a static API key header is the right tool:
 {
   "mcpServers": {
     "mushi-hosted": {
-      "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
+      "url": "https://kensaur.us/mushi-mushi/hosted-mcp/",
       "headers": {
         "X-Mushi-Api-Key": "mushi_…",
         "X-Mushi-Project-Id": "YOUR_PROJECT_ID"
@@ -454,6 +462,37 @@ wizard offers to send a test report.
 
 **You'll see:** the report in the console with a title, severity and likely cause, in about 10 seconds.
 
+A test report is one made-up sentence, so its diagnosis has little to say. The
+console's **Send test report** button goes one step further and shows a
+pre-written sample diagnosis, so you can see the shape of one. For a real
+diagnosis of your own code, see
+[Already have Sentry issues?](#already-have-sentry-issues-bring-them-in) below.
+
+### Add your keys where your site is hosted
+
+The wizard writes your settings to `.env.local`. That file stays on your
+computer: it never reaches Vercel, Netlify or any other host, so without this
+step the report button does not appear on your live site.
+
+Add the same two settings where your site is built, then redeploy:
+
+| Your app | Setting names |
+| --- | --- |
+| Next.js | `NEXT_PUBLIC_MUSHI_PROJECT_ID` and `NEXT_PUBLIC_MUSHI_API_KEY` |
+| Vite (React, Vue, Svelte, Angular, Capacitor) | `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY` |
+| Nuxt | `NUXT_PUBLIC_MUSHI_PROJECT_ID` and `NUXT_PUBLIC_MUSHI_API_KEY` |
+| Astro | `PUBLIC_MUSHI_PROJECT_ID` and `PUBLIC_MUSHI_API_KEY` |
+| Create React App | `REACT_APP_MUSHI_PROJECT_ID` and `REACT_APP_MUSHI_API_KEY` |
+
+- **Vercel:** Project → Settings → Environment Variables (Production), then redeploy.
+- **Netlify:** Project configuration → Environment variables, then redeploy.
+
+Copy the values from `.env.local`. These settings are read when the site is
+built, so a change only shows after the next deploy. The wizard prints the
+exact names for your app when it finishes.
+
+**You'll see:** the report button on your live site after the redeploy.
+
 ### Get your first fix
 
 Connect your AI editor. One click on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect), or:
@@ -465,6 +504,28 @@ npx mushi-mushi setup --ide cursor
 Then ask your editor: *"Get the latest Mushi Mushi report and fix it."*
 
 **You'll see:** a fix brief in your editor: the cause, the files to change and how to check it. You review the change before it ships.
+
+## Already have Sentry issues? Bring them in
+
+The fastest way to a real diagnosis of your own code is a bug you already
+know about.
+
+```bash
+# Import your newest unresolved Sentry issues as reports (up to 10 at a time)
+npx mushi-mushi sentry import --limit 5
+
+# Or write one up yourself
+npx mushi-mushi reports file --title "Checkout button does nothing on mobile"   --description "Tapping Pay on iPhone Safari does nothing. No error is shown."
+```
+
+- `sentry import` needs Sentry connected first: in the console, open
+  **Integrations → Sentry** and add your organization slug, project slug and
+  an auth token that can read events and projects.
+- Both commands need a key that can write (`mcp:write`). If the CLI says your
+  key cannot, run `npx mushi-mushi login --upgrade-scope`.
+- **Connect GitHub for a diagnosis that knows your code.** Without it, Mushi
+  Mushi still explains the bug from the error and the report, but it cannot
+  name your files. Connect your repository on the console's **Connect** page.
 
 ## Pick your framework
 
@@ -1309,64 +1370,110 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt
 
 ---
 title: Lovable or Bolt quickstart (no terminal)
-description: Add Mushi Mushi to a Lovable or Bolt app without a terminal. Paste one script tag through your prompt, then read each bug's plain-English cause and fix prompt.
+description: Add a Mushi Mushi report button to a Lovable or Bolt app with one prompt and no terminal. What your users see, what it collects from them, and how to remove it.
 ---
 
 # Mushi Mushi in Lovable or Bolt
 
-Lovable and Bolt build your app from a chat, with no terminal, so `npx` is
-not an option. You add Mushi Mushi the way you change anything else there: with a
-prompt. It takes about five minutes.
+You add Mushi Mushi the way you change anything else in Lovable or Bolt: with
+a prompt. There is nothing to download. It takes about five minutes.
 
-- Sign up free and copy your script tag.
+- Sign up free and copy one line.
 - Ask Lovable or Bolt to add it to your app.
-- When a user reports a bug, Mushi Mushi tells you why and gives you a prompt that fixes it.
+- Your app gets a report button. When a user reports a bug, Mushi Mushi tells you why it broke and gives you a prompt that fixes it.
 
-### Get your script tag
+### Copy your line
 
-[Sign up free](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-lovable-bolt)
-and create a project. On the setup page (**Set up** in the sidebar), open the
-**Install widget** tab and, in **Configure & install the SDK**, pick the
-**Script tag** tab. Your project ID is already in the tag. If the key still
-reads `YOUR_SDK_KEY`, click **Generate API key** in the **Mint your API key**
-box above it and the real key fills in. If there is no such box (a key was
-already made for you and is no longer shown), click **Rotate** next to your key
-in the same card: the new key fills in. Then copy the tag.
+1. [Sign up free](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-lovable-bolt) and create a project. Name it after your app.
+2. Click **Set up** in the sidebar.
+3. Open the **Install widget** tab.
+4. Pick the **Script tag** tab.
+5. Copy the line it shows.
 
-**You'll see:** a tag that starts with `
+**You'll see:** a line that starts with `
 
 ### Paste it into Lovable or Bolt
 
-Send this prompt in your project's chat, with your tag from the step above in
-place of the example tag:
+Send this prompt in your project's chat. Put your own line from step 1 in
+place of the example line.
 
 ```text
 Add this script tag inside the <head> of index.html exactly as written, and change nothing else:
-<script async src="https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js" data-project="YOUR_PROJECT_ID" data-key="YOUR_API_KEY"></script>
+<script async src="https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js" data-project="YOUR_PROJECT_ID" data-key="YOUR_SDK_KEY"></script>
 ```
 
-If your project has no `index.html` (a Next.js app, for example), ask it to
-add the same tag to the page `` of the root layout instead.
+The line above is an example. Yours has your own project ID and key where
+the capital letters are.
 
 **You'll see:** a small report button in the corner of your app after it rebuilds.
 
 ### Publish and send a test report
 
-Publish the app, open the live site, tap the report button and write one
-sentence, for example "Testing Mushi Mushi".
+1. Publish your app.
+2. Open the live site.
+3. Tap the report button.
+4. Type one sentence, for example "Testing Mushi Mushi", and send it.
 
 **You'll see:** the report in your [Mushi Mushi console](https://kensaur.us/mushi-mushi/admin/reports) within seconds, with a title, how serious it is and the likely cause.
 
 ### Fix a real bug
 
-When a user reports something, open the report in the console and click
-**Copy fix prompt**. Paste it into Lovable or Bolt. The prompt says what
-broke, why, where, and how to check the fix.
+1. When a user reports something, open the report in the console.
+2. Click **Copy fix prompt**.
+3. Paste it into Lovable or Bolt.
+
+The prompt says what broke, why, where, and how to check the fix.
 
 **You'll see:** Lovable or Bolt make a change aimed at the cause. Check it in the preview before you publish.
 
 Not sure what a diagnosis looks like? [Read a sample](/demo/diagnosis): a
-user's complaint, what the widget captured, the cause and the fix prompt.
+user's complaint, what the report button captured, the cause and the fix prompt.
+
+## What your users will see
+
+- **A small button** in the corner of your app.
+- **A short form** when they tap it. They pick what kind of problem it is and type one sentence. They need no account.
+- **A Screenshot button.** It attaches a picture of the page. They see the picture before they send it, and they can remove it.
+- **A Send button.** After that they are done.
+
+This clip shows it on a small demo shop:
+
+## What it collects from your users
+
+When someone sends a report, Mushi Mushi gets:
+
+- **What they typed.**
+- **A picture of the screen,** if they attached one. Password boxes and card-number boxes are blacked out in the picture. Anything else on the screen is in it, so the form asks them to check the preview first.
+- **Where they were:** the page address, their browser, and the size of their screen.
+- **What the app was doing just before:** up to 50 recent error messages and log lines, the address and result of up to 30 recent requests the page made (not what was in them), and their recent taps and page changes.
+- **Two IDs with no name in them:** a random ID kept in their browser, so repeat reports from one person group together, and a scrambled code made from their browser and screen details, used to spot abuse.
+
+It does not ask for a name or an email address. If your app prints private
+details in its own error messages, those lines can be in a report.
+
+When someone only visits and sends nothing, the script tag still counts the
+visit: which pages were opened and when, with a random ID. It skips browsers
+that ask not to be tracked (Do Not Track or Global Privacy Control). The
+button also checks in with Mushi Mushi when a page loads, which records your
+site's address (not the page) and the browser type.
+
+**How long it is kept.** On the free plan, reports and everything attached to
+them are deleted after 14 days. Paid plans keep them longer:
+[the privacy policy](/legal/privacy#7-retention) has the table.
+
+**Tell your users.** You must tell them that reports can include a
+screenshot and error logs. If your app has a privacy note, add this sentence:
+
+```text
+This app uses Mushi Mushi to collect bug reports. When you send a report, it includes what you write, a screenshot you can remove before sending, the page address, your browser type and recent error logs. It also counts page visits with a random ID.
+```
+
+## How to remove it
+
+1. Ask Lovable or Bolt: "Remove the Mushi Mushi script tag from index.html."
+2. Publish your app. The report button is gone and nothing more is sent.
+3. To delete what was already collected, open **Manage apps** in the console's sidebar and click the bin icon next to your project. You type the project's short name to confirm, and you have 8 seconds to undo. This deletes its reports and keys.
+4. To delete your whole account, email [kensaurus@gmail.com](mailto:kensaurus@gmail.com) from the address you signed up with.
 
 ## Read reports inside Lovable
 
@@ -1374,30 +1481,33 @@ You can also connect Mushi Mushi to Lovable's chat, so you can ask "what did use
 report today?" and get the diagnosis without opening the console. See
 [Mushi Mushi as a Lovable connector](/quickstart/lovable-mcp).
 
-## Where the key goes, and is it safe?
+## Is the key safe in my page?
 
-The key in the tag is an SDK key. It can only send reports to your project
-(`report:write`); it cannot read reports, change settings or see other
-projects. That is why it can sit in your page's HTML, like any analytics or
-chat-widget key.
+Yes. The key in your line can only send reports to your project. It cannot
+read reports, change settings or see other projects. That is why it can sit
+in your page, like the key of any chat or analytics tool.
 
-  Paste only the tag from the **Script tag** tab. Every Mushi Mushi key starts with
-  `mushi_`, so the prefix does not tell them apart: never put a key you made
-  for an editor or the MCP server into your app, because those keys can read
-  your reports.
+  Paste only the line from the **Script tag** tab. Every Mushi Mushi key starts with
+  `mushi_`, so the start does not tell them apart. Never put a key you made
+  for an editor into your app, because those keys can read your reports.
 
 ## Change how the button looks
 
-The tag takes a few `data-*` settings, such as `data-position` and
-`data-theme`. The full list is on the
-[script-tag reference](/quickstart/web#no-bundler-script-tag).
+The line takes a few settings, such as `data-position` and `data-theme`. The
+full list is on the [script-tag reference](/quickstart/web#no-bundler-script-tag).
 
 ## If nothing shows up
 
+- **Your line says `YOUR_SDK_KEY`:** the key is not filled in yet. On the
+  **Script tag** tab, click **Generate API key** in the **Mint your API key**
+  box above the line. If there is no such box, click **Rotate** next to your
+  key in the same card. The real key fills in. Copy the line again.
 - **No button:** ask Lovable or Bolt to show you the `` of
-  `index.html` and check the tag is there, unchanged. Then publish again.
+  `index.html` and check the line is there, unchanged. Then publish again.
+- **Your project has no `index.html`** (a Next.js app, for example): ask it to
+  add the same line to the page `` of the root layout instead.
 - **Button, but no report in the console:** check that `data-project` and
-  `data-key` match the Script tag tab exactly, with no spaces.
+  `data-key` in your app match the Script tag tab exactly, with no spaces.
 - **Still stuck:** the [troubleshooting list](/quickstart#troubleshooting)
   covers the other cases.
 
@@ -1666,6 +1776,12 @@ The SDK needs two values from a Mushi Mushi project.
 Put them in `.env.local` as `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`
 (`NEXT_PUBLIC_MUSHI_PROJECT_ID` and `NEXT_PUBLIC_MUSHI_API_KEY` on Next.js).
 
+  **`.env.local` never reaches your host.** Before you deploy, add the same two
+  settings where your site is built: in Vercel, Project → Settings →
+  Environment Variables (Production); in Netlify, Project configuration →
+  Environment variables. Then redeploy. They are read at build time, so
+  without them the report button does not appear on your live site.
+
 ## 1. Install
 
 ```bash
@@ -1773,6 +1889,12 @@ soon as `` initialises.
 Open your admin console at [kensaur.us/mushi-mushi/admin](https://kensaur.us/mushi-mushi/admin) (or your self-hosted
 instance). Your first report appears on the **Bugs** page within seconds, and
 its AI diagnosis follows shortly after.
+
+A one-sentence test report gets a thin diagnosis. For a real one, bring in a
+bug you already know about: see
+[Already have Sentry issues?](/quickstart#already-have-sentry-issues-bring-them-in)
+A diagnosis that names your files needs your GitHub repository connected on
+the console's **Connect** page.
 
 ## Next steps
 
@@ -2028,6 +2150,11 @@ Plan on an hour for steps 1 to 6, and a day of real traffic before step 8.
 Only admins can edit integrations. A viewer cannot override a review hold
 (see step 7).
 
+A role applies to the whole team: every member, a Viewer included, can read
+every app in it. An invitation cannot be limited to one app. If someone should
+see only one app (a client, for example), put that app in its own team. See
+[You build apps for clients](/use-cases/agency-client-apps#who-can-see-what).
+
 **Check it worked:** each invitee opens the invite email, signs in, and sees
 the app. **Team → Members** lists them with the right role and no pending
 invitation.
@@ -2150,19 +2277,24 @@ overage. Reports are always kept, even when diagnoses pause. See
 **Do this:**
 
 1. Decide whether to bring your own AI key. Under **Settings → AI keys**, add
-   an Anthropic, OpenAI or Cursor key. Mushi Mushi then uses it for fix pull
-   requests and agent work, and you pay that vendor directly. A Cursor key is
-   what lets a cloud agent write fixes.
+   an Anthropic, OpenAI or Cursor key. Mushi Mushi then uses your Anthropic or
+   OpenAI key first for that app's AI work (the diagnosis, fix drafts and fix
+   grading), and you pay that vendor directly. A diagnosis on your own key
+   still counts toward your plan. The second AI that reviews each fix pull
+   request runs only on your own Anthropic or OpenAI key. A Cursor key is
+   what lets a Cursor cloud agent write fixes.
 2. Set spend limits under **Settings → General → Spend limits**:
    - **Monthly AI budget**: all AI calls for the app stop at this amount until
      the 1st of next month.
-   - **Auto-fix spend limit** and **Automatic fixes per day**: cap fixes Mushi Mushi
+   - **Auto-fix spend limit** and **Automatic fixes per day**: cap fixes
      Mushi Mushi starts on its own. New projects start at $2 per 30 days and 3
      automatic fixes a day.
    - **Ask me before fixes that may cost more than**: expensive fixes wait for
      approval.
 3. On a paid plan, check the **Monthly spend cap** under **Team → Billing**.
    This caps overage on your bill. It is separate from the AI budget above.
+   The plan's diagnoses and this cap belong to the app you upgraded; another
+   app in the team keeps 100 diagnoses a month until you upgrade it too.
 
 **Check it worked:** after the first few reports, open **Team → AI spend**.
 You should see each call with its model, cost and which key paid. See
@@ -2461,17 +2593,24 @@ Every plan includes the report button, the plain-English diagnosis and the fix
 prompt. You don't need an AI key of your own, and the integrations (Sentry,
 Slack, GitHub, Linear, Jira) work on every plan.
 
+That is all most people need. The plan table, the limits and the details for
+developers are below.
+
 ## All plans
 
-A plan is the number of **apps** Mushi Mushi watches for your team: one on Free, three on Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
+A plan sets how many **apps** your team can have: one on Free, three on Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
 
-Installing plugins from the Marketplace (PagerDuty, Zapier, the Cursor and Claude Code agents, Linear Sync, Sentry Mirror) needs Builder or above. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on every plan. Team invites need Studio.
+**More than one app? Read this.** You upgrade from one app's card on the Billing page, and the subscription is attached to that app. The plan's diagnoses, its overage and its spend cap belong to that app. Every other app in the team keeps 100 diagnoses a month, with a hard stop, until you upgrade that app as well. The app limit, seats, history, plugins and the widget without a Mushi Mushi mark apply to the whole team.
+
+**What Free can fix.** On Free you can ask for a fix pull request from the built-in fixer once GitHub is connected, send a bug to a Cursor cloud agent with your own Cursor key, and run fixes on your own computer with `mushi work`. Installing plugins from the Marketplace (PagerDuty, Zapier, Linear Sync, Sentry Mirror, and the Cursor plugin that starts a fix by itself on each new bug) needs Builder or above. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on every plan. Team invites need Studio.
 
   **Annual billing saves two months.** Pay for 10 months, get 12: Builder is $290 a year, Studio $790. Annual plans have no pay-as-you-go overage: they include the plan's diagnoses each month and pause new diagnoses at that limit. Pick annual at checkout, or switch an existing plan with **Change plan** on the Billing page. For Enterprise commits, contact us.
 
   **Overage is capped.** Builder and Studio include a default cap on overage spend ($50 and $200 a month, on top of the base fee). You can lower or raise it in the console. At the cap, Mushi Mushi pauses new diagnoses and says so, instead of sending a bigger invoice. Email alerts fire at **50%, 80%, and 100%** of your included diagnoses.
 
   **Free has a hard stop**, not a soft limit. At 100 diagnoses Mushi Mushi stops diagnosing new reports until the next calendar month. No card, no charge, no bill shock.
+
+**Details for developers**: what counts as a diagnosis, an estimator, example bills, your own AI key, and a comparison with Sentry
 
 ## What counts as a diagnosis
 
@@ -2481,7 +2620,7 @@ One diagnosis = one completed classification pass. Specifically:
 - It is not a duplicate of an existing group already classified this period.
 - The classifier finishes and writes a plain-English root cause + severity + fix hint.
 
-Under the hood that is a two-stage pipeline (Haiku fast-filter → Sonnet structured output). Classification, deduplication, knowledge-graph writes, and MCP tool calls are **not** counted separately: they are included in the per-diagnosis price. Fix PRs and agent runs are not counted as diagnoses; with your own AI key (see [below](#your-own-ai-key-and-the-self-host-path)), their tokens are billed by that vendor.
+Under the hood that is a two-stage pipeline (Haiku fast-filter → Sonnet structured output). Classification, deduplication, knowledge-graph writes, and MCP tool calls are **not** counted separately: they are included in the per-diagnosis price. Fix PRs and agent runs are not counted as diagnoses. A diagnosis counts whichever key wrote it: adding your own AI key (see [below](#your-own-ai-key-and-the-self-host-path)) moves the AI vendor's bill to you, but does not add diagnoses to your plan.
 
 **What does NOT count:**
 
@@ -2526,7 +2665,14 @@ Sentry meters errors. We meter diagnoses: one per plain-English root cause and p
 
 ## Your own AI key and the self-host path
 
-On every Cloud plan, Free included, you can add your own Anthropic, OpenAI or Cursor key under **Settings → API keys**. Mushi Mushi then uses it for fix PRs and agent work; you pay those vendors directly at list rate, and we never mark up tokens.
+No plan needs a key of your own. On every Cloud plan, Free included, you can add one under **Settings → AI keys**, and the rule is the same everywhere:
+
+- **An Anthropic or OpenAI key** is used first for that app's AI work: the diagnosis, fix drafts, fix grading and the weekly summary. Mushi Mushi's own key is the fallback when you have added none. You pay the vendor directly at list rate, and we never mark up tokens.
+- **A diagnosis written on your own key still counts** against your plan's diagnoses.
+- **The second AI that reviews each fix pull request** runs only on your own Anthropic or OpenAI key. Without one, that review is skipped.
+- **A Cursor key** is what lets a Cursor cloud agent write fixes.
+
+The full table is on [Bring-your-own-key](/security/byok).
 
 When self-hosting, Mushi Mushi uses **your** keys for everything. For a sense of scale: on Mushi Mushi's own key, a diagnosis cost about $0.017–0.022 in LLM tokens over the 30 days to 2026-10-28, so 1,000 diagnoses is roughly $20. Fix PRs and reviews are extra and depend on the model you pick.
 
@@ -2562,7 +2708,7 @@ The console says how many apps your plan watches and how many your team has, and
 
 ### Can I use my own AI key on Free?
 
-Yes. Bring-your-own-key works on every plan, Free included. Add an Anthropic, OpenAI or Cursor key under **Settings → API keys** and Mushi Mushi can open fix PRs with it, so you see the whole loop on your first app before paying anything.
+Yes. Bring-your-own-key works on every plan, Free included. Add an Anthropic, OpenAI or Cursor key under **Settings → AI keys**. Mushi Mushi then uses your Anthropic or OpenAI key first for the diagnosis and for fix drafts, and a Cursor key lets a Cursor cloud agent write fixes. A diagnosis on your own key still counts toward the 100 a month.
 
 ### When does my quota reset?
 
@@ -2570,7 +2716,7 @@ Diagnoses are counted per calendar month (UTC) on every plan, so the count start
 
 ### Can I change my spend cap?
 
-Yes. Open **Billing → Spending cap** on your project card. Set any USD cap on overage from $0–100,000 or clear it to use the plan default ($50 Builder, $200 Studio).
+Yes. Open **Billing → Spending cap** on the app's card. Set any USD cap on overage from $0–100,000 or clear it to use the plan default ($50 Builder, $200 Studio). The cap belongs to that app. Set it to **$0** for a fixed bill: diagnoses then pause at the included amount until the 1st, and the app never costs more than its base fee.
 
 ### Who receives usage alert emails?
 
@@ -2578,11 +2724,11 @@ By default, the **project owner**. Override the address under **Usage alert emai
 
 ### Is usage per app or per team?
 
-**Diagnoses are per app; the app limit is per team.** Each app you connect has its own diagnosis counter and spend cap, and the plan's app limit counts the apps in your team.
+**Diagnoses and the spend cap are per app; the app limit is per team.** Each app has its own diagnosis counter. The plan's diagnoses and its spend cap belong to the app you upgraded: another app in the same team keeps 100 diagnoses a month until you upgrade it too. So the most one upgraded app can cost in a calendar month is its base fee plus its cap ($29 + $50 on Builder, $79 + $200 on Studio, at the default caps), and an app you have not upgraded is never billed. The plan's app limit counts the apps in your team.
 
 ### Can I downgrade mid-cycle?
 
-Change plans in the console with **Change plan** on the Billing page (Builder ↔ Studio, monthly ↔ annual). The change applies immediately and is pro-rated: unused time is credited and the new plan is charged for the rest of the period. Moving between monthly and annual starts a new billing period that day. Stripe's customer portal (**Manage**) handles your card, invoices and cancellation.
+Yes. Change plans in the console with **Change plan** on the Billing page (Builder ↔ Studio, monthly ↔ annual). An upgrade and a downgrade work the same way: the change applies immediately and is pro-rated, so unused time is credited and the new plan is charged for the rest of the period. Moving between monthly and annual starts a new billing period that day. To go back to Free, cancel: Stripe's customer portal (**Manage**) handles your card, invoices and cancellation.
 
 ### Do annual plans include overage?
 
@@ -2590,7 +2736,7 @@ No. Annual plans include the plan's diagnoses every month (1,000 on Builder, 3,0
 
 ### What does Enterprise cost?
 
-From $499 a month, billed annually: unlimited apps, SAML SSO, the SOC 2 readiness pack, self-host support and up to 365 days of history. [Contact us](mailto:kensaurus@gmail.com?subject=Mushi Mushi%20Enterprise%20inquiry) for a quote.
+From $499 a month, billed annually: unlimited apps, SAML SSO, the SOC 2 readiness pack, self-host support and up to 365 days of history. [Contact us](mailto:kensaurus@gmail.com?subject=Mushi%20Mushi%20Enterprise%20inquiry) for a quote.
 
 ### How do I estimate before signing up?
 
@@ -2608,7 +2754,7 @@ Source: https://kensaur.us/mushi-mushi/docs/compare
 
 ---
 title: Compare
-description: Honest, dated comparisons of Mushi Mushi with Sentry, Jam and PostHog, plus Sentry alternatives for solo founders. Every number links to its source.
+description: Honest, dated comparisons of Mushi Mushi with Sentry, Jam, PostHog and agency feedback tools. Every number links to its source.
 ---
 
 # Compare Mushi Mushi with the tools you already know
@@ -2630,6 +2776,10 @@ together.
 - **[Sentry alternatives for solo founders](/compare/sentry-alternatives-for-solo-founders)** —
   Sentry, Bugsnag, Rollbar, highlight.io, PostHog and Mushi Mushi: free caps,
   self-host, AI fixes, and a "pick this if" for each.
+- **[Marker.io, BugHerd and Userback vs Mushi Mushi for agencies](/compare/agency-feedback-tools)** —
+  client seats, per-project access, boards and video, where those three are
+  ahead, next to what Mushi Mushi adds once the app is live. Facts read on
+  2026-11-11.
 - **[Your Lovable app broke in production](/use-cases/lovable-app-broke-in-production)** —
   not a comparison: a debugging checklist for code you did not write.
 
@@ -2644,6 +2794,102 @@ re-read quarterly; the date below is the last full pass.
 
 If a number here is wrong, [open an issue](https://github.com/kensaurus/mushi-mushi/issues)
 with the link and we will fix the row, not argue about it.
+
+---
+
+## Marker.io, BugHerd and Userback vs Mushi Mushi for agencies
+
+Source: https://kensaur.us/mushi-mushi/docs/compare/agency-feedback-tools
+
+---
+title: Marker.io, BugHerd and Userback vs Mushi Mushi for agencies
+description: "Marker.io, BugHerd, Userback and Mushi Mushi for agencies: client seats, per-project access, boards, logs, AI diagnosis and price, with sources."
+---
+
+# Marker.io, BugHerd and Userback vs Mushi Mushi for agencies
+
+> **Never used any of these?** You don't need them to use Mushi Mushi. [See what Mushi Mushi does for client apps](/use-cases/agency-client-apps) instead.
+
+If you build sites or apps for clients, you have probably looked at Marker.io,
+BugHerd or Userback. They are built for one job: a client reviews what you
+built, clicks on the page and leaves a comment, and you work through the list.
+
+Mushi Mushi is built for a different moment. The app is live, and the people
+using it hit bugs your client never sees. They tap a report button, and you get
+the likely cause in plain English with a prompt that fixes it.
+
+So this is not a like-for-like comparison, and on several things an agency
+cares about, the other three are ahead. This page says where.
+
+## Side by side
+
+## What the other three have that Mushi Mushi does not
+
+- **Free seats for clients.** All three let any number of clients send and
+  follow feedback without a paid seat. In Mushi Mushi a client who signs in
+  takes a seat.
+- **Access to one project only.** Marker.io and BugHerd invite a guest to a
+  project, and Userback roles can grant access to specific projects. In
+  Mushi Mushi a member of a team can read every app in that team, so a client
+  needs [a team of their own](/use-cases/agency-client-apps#who-can-see-what).
+- **A board the client can follow.** BugHerd has a guest task board and
+  Userback a kanban board. Mushi Mushi has a list with filters.
+- **Comments the client cannot see.** Marker.io, BugHerd and Userback each have
+  them on some plan. Mushi Mushi does not.
+- **Video.** BugHerd takes video feedback, and Marker.io and Userback attach a
+  session replay on their higher plans. A Mushi Mushi report is a screenshot
+  and a timeline of what the person did.
+- **A SOC 2 report.** Marker.io lists SOC 2 Type II on every plan. Mushi Mushi
+  has no SOC 2 report.
+
+If collecting client feedback during a build is the job, pick one of them.
+
+## What Mushi Mushi has that they do not
+
+- **A written cause for each bug.** Every report comes with a plain-English
+  diagnosis and a fix prompt for Cursor, Claude Code, Lovable or Bolt. The
+  other three hand an AI agent the feedback over MCP; none of their pricing
+  pages lists a written diagnosis. A diagnosis is an AI's reading and can be
+  wrong, so check it before you ship.
+- **Console and network logs on the free plan.** Marker.io includes them from
+  its Team plan and Userback from Business.
+- **Phone apps on the free plan.** React Native and Capacitor SDKs, on every
+  plan. Userback's mobile SDK is on Business Plus.
+- **No vendor mark from $29.** Builder and Studio show no Mushi Mushi mark on
+  the widget.
+- **You can run it yourself.** The SDKs are MIT and the server is AGPLv3.
+
+## What each one is
+
+## Using both
+
+This is the common case. Keep Marker.io, BugHerd or Userback for client review
+while you build. Add Mushi Mushi when the app goes live, for the bugs real
+users hit and for the fix loop in your AI editor. Both widgets can sit on the
+same site, and there is no integration between them today.
+
+Moving off BugHerd completely? There is a
+[BugHerd migration guide](/migrations/bugherd-to-mushi).
+
+## Pick one of the other three if
+
+- Your clients are the ones reporting, and they should not cost a seat.
+- Each client must see only their own project, with no extra setup.
+- You need a client-facing board, internal comments or video.
+- A buyer asks for a SOC 2 report (Marker.io).
+
+## Pick Mushi Mushi if [#pick-mushi-if]
+
+- The reports come from the people using a live app, including phone apps.
+- You want to read the likely cause first, then paste a fix prompt.
+- You want console and network logs without moving up a plan.
+- You want open source you can run yourself.
+
+## Frequently asked questions
+
+**Related:** [You build apps for clients](/use-cases/agency-client-apps) ·
+[BugHerd → Mushi Mushi](/migrations/bugherd-to-mushi) ·
+[Pricing](/pricing)
 
 ---
 
@@ -2706,7 +2952,7 @@ if you want a Jam link on a Mushi Mushi report, put it in the report's metadata.
 ## Pick Mushi Mushi if [#pick-mushi-if]
 
 - Your bugs are found by end users on devices you do not control, including
-  mobile (React Native, Capacitor, Flutter, iOS, Android).
+  mobile (React Native, Capacitor; Flutter, iOS and Android as previews).
 - You want the first thing you read to be the diagnosis, not the recording.
 - You want the report and fix context inside Cursor or Claude Code.
 
@@ -2860,9 +3106,9 @@ bugs from users; the output is the diagnosis and the fix, in the editor.
 It does not claim Mushi Mushi is cheaper at scale, and it does not claim feature
 parity with Sentry on tracing, profiling or platform coverage. If you need
 those, Sentry is the right answer and Mushi Mushi runs alongside it: a Sentry
-issue-alert webhook sends errors into Mushi Mushi's queue, and with the outbound
-Sentry plugin (Builder and above, or self-hosted) merging the fix resolves the
-Sentry issue. See [Sentry vs Mushi Mushi](/compare/sentry-vs-mushi).
+issue-alert webhook sends errors into Mushi Mushi's queue, and once you add a
+Sentry auth token under **Integrations → Sentry**, merging the fix resolves the
+Sentry issue. Both work on every plan. See [Sentry vs Mushi Mushi](/compare/sentry-vs-mushi).
 
 ## Frequently asked questions
 
@@ -2915,9 +3161,10 @@ case for an app built with Cursor, Claude Code or Lovable.
 ## Running Mushi Mushi alongside Sentry [#running-mushi-alongside-sentry]
 
 Keep Sentry where it is. Point a Sentry issue-alert webhook at Mushi Mushi and every
-error lands in the same queue as user reports, deduped and diagnosed; with the
-outbound Sentry plugin (Builder and above, or self-hosted), Mushi Mushi resolves the
-linked Sentry issue when the fix merges. The setup is three steps
+error lands in the same queue as user reports, deduped and diagnosed. Once you
+add a Sentry auth token under **Integrations → Sentry**, Mushi Mushi also resolves
+the linked Sentry issue when the fix merges. Both work on every plan, Free
+included. The setup is three steps
 on the [Sentry plugin page](/plugins/sentry), and there is a
 [migration guide](/migrations/sentry-to-mushi) for the enrich-or-standalone
 decision.
@@ -3015,7 +3262,7 @@ Source: https://kensaur.us/mushi-mushi/docs/use-cases/agency-client-apps
 
 ---
 title: You build apps for clients
-description: For agencies and freelancers who run several client apps. One report button per app, one inbox with a plain-English cause per bug, and a plan sized by apps.
+description: "For agencies and freelancers who run several client apps: a report button per app, a plain-English cause per bug, and what it costs and who sees what."
 ---
 
 # You build apps for clients
@@ -3037,20 +3284,52 @@ usually tell nobody.
 - Each bug gets a **plain-English diagnosis** (the likely cause, how serious it
   is and how sure Mushi Mushi is) and a **fix prompt** for Cursor, Claude Code,
   Lovable or Bolt.
-- When you mark a bug fixed, Mushi Mushi can let the person who reported it
-  know.
+- When you mark a bug fixed, the person who reported it sees that in the
+  widget.
 
 ## What you do
 
-1. Create one project per client app and add the button: one command in Cursor
-   or Claude Code, or one prompt in Lovable or Bolt.
-2. Invite your team. On Studio you can also invite a client with the read-only
-   **Viewer** role, so they see their app's reports without changing anything.
+1. Create one app (the console also calls it a project) per client app and add
+   the button: one command in Cursor or Claude Code, or one prompt in Lovable
+   or Bolt.
+2. Decide who may see what **before** you invite anyone. See the next section.
 3. When a report comes in, read the diagnosis, paste the fix prompt into your AI
    editor, check the change and ship it.
 
 The [team setup checklist](/quickstart/team-setup) walks through roles,
 integrations and reviews.
+
+## Who can see what
+
+  **A member of a team can read every app in that team.** That includes the
+  read-only **Viewer** role. An invitation is to the team, not to one app. So
+  never invite a client into a team that also holds another client's app: they
+  would see the other client's bug reports.
+
+To let a client see only their own app, put that app in **its own team**:
+
+1. In the console's team switcher, choose **Create team** and name it after the
+   client. One account can own several teams.
+2. Create the client's app inside that team.
+3. Upgrade that app to Studio, then invite the client as a **Viewer** under
+   **Team → Team members**. Invitations need Studio; a team on Free or Builder
+   has one seat, yours.
+
+A new team starts on the Free plan (one app, 100 diagnoses a month). Plans are
+bought per app (see [What it costs](#what-it-costs)), so a separate team for a
+client costs the same as keeping their app in your main team.
+
+If the client does not need the console at all, skip the invitation. Forward
+them the report or connect a shared Slack channel, and keep every app in one
+team.
+
+### What the people using the app see
+
+They never see your console. In the widget, a person who reported a bug gets a
+**Your reports** list with each report's status in plain words ("Looking into
+it", "Fix in progress", "Fixed"), your replies, and a box to answer you. They
+need no account: the list belongs to that browser. They do not see the
+diagnosis, the severity, your code or the pull request.
 
 ## How long it takes
 
@@ -3058,19 +3337,97 @@ A few minutes per app. A test report gets its diagnosis in about 10 seconds.
 
 ## What it costs
 
-| Plan | Apps | People | Diagnoses a month | Price |
+| Plan | Apps in a team | People | Diagnoses a month | Price |
 | --- | --- | --- | --- | --- |
 | Free | 1 | 1 | 100 | $0 |
-| Builder | 3 | 1 | 1,000 | $29 / mo |
-| Studio | 10 | 5 | 3,000 | $79 / mo |
+| Builder | 3 | 1 | 1,000 | $29 a month, or $290 a year |
+| Studio | 10 | 5 | 3,000 | $79 a month, or $790 a year |
 
-Team invites need Studio, and every invited person, a client viewer included,
-takes one of its five seats. On monthly plans, each diagnosis past the included ones is
-$0.03, up to a monthly cap you set. Details on [pricing](/pricing).
+**Eight client apps fit in one Studio team**: Studio allows 10 apps, for $79 a
+month or $790 a year. Read the next part before you budget.
+
+**The plan's diagnoses go to the app you upgrade, not to the whole team.** You
+upgrade from one app's card on the Billing page, and the subscription is
+attached to that app. That app gets 3,000 diagnoses a month. Every other app in
+the team keeps 100 diagnoses a month and stops there until the 1st (its reports
+are still kept) unless you upgrade that app too.
+
+| What you want | Per month |
+| --- | --- |
+| 8 apps: one busy app with 3,000 diagnoses, seven quiet apps with 100 each | $79 |
+| 8 apps, each with 3,000 diagnoses | 8 × $79 = $632 |
+
+What the whole team gets from one Studio subscription: room for 10 apps, the 5
+seats, 180 days of history on every app, plugins, and no Mushi Mushi mark on
+any app's widget.
+
+**Seats.** Studio has 5 seats and you are one of them. Every member takes a
+seat, a client Viewer included. So does every invitation that has not been
+accepted yet, until it is accepted, revoked or expires after 7 days.
+
+**The most you can be billed.** On a monthly plan, each diagnosis past the
+included ones costs $0.03, up to a spend cap. The cap belongs to the upgraded
+app: $50 a month by default on Builder, $200 on Studio.
+
+- Worst case for one Studio app in a calendar month, at the default cap:
+  $79 + $200 = **$279**, plus any tax.
+- Want a fixed bill? Open **Team → Billing**, find the app's card and set its
+  **Spending cap** to **$0**. Diagnoses then pause at 3,000 until the 1st, and
+  that app never costs more than $79 a month.
+- Annual plans have no overage at all: they pause at the included diagnoses.
+- An app you have not upgraded is never billed.
+
+**The brand mark.** On Builder and Studio the widget carries no Mushi Mushi
+mark. On Free it shows a small "Bug reports by Mushi Mushi" link at the foot of
+the widget. You can turn it off under **Settings → General**, or with
+`brandFooter: false` in the widget settings in your code.
+
+Details on [pricing](/pricing).
+
+## What to tell your client
+
+- **Where the data is kept.** In Tokyo, Japan (Supabase on AWS
+  `ap-northeast-1`). There is no other region today.
+  See [Data residency](/security/data-residency).
+- **Which AI companies see it.** To write the diagnosis, Mushi Mushi sends the
+  report's text and logs to Anthropic, OpenAI or OpenRouter in the United
+  States, after removing personal details it can recognise, along with the
+  screenshot and code snippets. Mushi Mushi does not train models on reports or
+  code. The full list of companies is in the
+  [Privacy Policy, section 5](/legal/privacy#5-sub-processors).
+- **How long it is kept.** Reports are deleted after 14 days on Free, 90 on
+  Builder and 180 on Studio. You can set a shorter time per app under
+  **Team → Compliance**.
+- **Who is responsible.** For the reports from a client's app, you or your
+  client decide what is collected; Mushi Mushi only processes it for you. The
+  data-processing terms are summarised in the
+  [Privacy Policy, section 4](/legal/privacy#4-data-where-mushi-is-the-processor).
+  There is no separate data-processing agreement page yet; if a client needs a
+  signed one, email kensaurus@gmail.com.
+- **What their own privacy notice must say.** That a bug report can include a
+  screenshot, console and network log lines and the page address. This duty is
+  in the [Terms, section 5](/legal/terms#5-acceptable-use).
+
+The Terms and the Privacy Policy are plain-English drafts that a lawyer has not
+reviewed yet. Tell a client who asks.
+
+## Leaving
+
+1. **Remove the button.** Delete the script tag or the SDK from the app and
+   deploy. No new reports are sent.
+2. **Cancel the subscription** for that app: **Team → Billing → Manage** opens
+   Stripe's customer portal. Do this before you delete the app.
+3. **Delete the app** under **Manage apps**. An owner or admin can do it. Its
+   reports are deleted with it.
+
+If you only remove the button, the reports already collected are deleted when
+they pass your plan's retention time. Backups roll off after 7 days.
 
 ## Next
 
 - [See a sample report](/demo/diagnosis), no sign-up.
+- [Agency feedback tools compared](/compare/agency-feedback-tools): Marker.io,
+  BugHerd, Userback and Mushi Mushi.
 - [Team setup checklist](/quickstart/team-setup).
 - [Pricing](/pricing).
 
@@ -3565,9 +3922,9 @@ broken buttons, dead flows, confusing states, plus the thrown errors the SDK
 captures along the way. Run Mushi Mushi **alongside** Sentry to keep crash-level
 telemetry, performance tracing, and release health where they are — and point
 a Sentry issue-alert webhook at Mushi Mushi so every error still lands in the one
-queue, deduped and diagnosed. With the outbound Sentry plugin (Builder and
-above, or self-hosted), the fix also resolves the Sentry issue when it
-merges ([3-step setup](/plugins/sentry)). Both paths are first-class; neither
+queue, deduped and diagnosed. Once you add a Sentry auth token under
+**Integrations → Sentry** (every plan, Free included), the fix also resolves
+the Sentry issue when it merges ([3-step setup](/plugins/sentry)). Both paths are first-class; neither
 asks you to rip anything out.
 
 ## Side by side
@@ -7808,6 +8165,16 @@ description: Reference for @mushi-mushi/cli, the Mushi Mushi CLI. Log in, connec
 The Mushi Mushi CLI: project setup, report triage, agentic fix dispatch, QA
 coverage, skill pipelines, and headless merge from the terminal.
 
+Start with one command in your app's folder. It needs no install: it signs
+you in through your browser, adds the SDK and writes your settings.
+
+```bash
+npx mushi-mushi
+```
+
+Every command on this page also runs as `npx mushi-mushi `. If you
+use the CLI often, install it once and type `mushi` instead:
+
 ```bash
 npm install -g @mushi-mushi/cli
 
@@ -7819,10 +8186,11 @@ mushi fix <reportId> --agent cursor_cloud --wait
 mushi fixes merge <fixId>          # squash-merge the PR + mark report Fixed
 ```
 
-  **Two key types:** SDK ingest keys (`report:write`) are minted on **Setup → Verify** or
-  **Projects → Generate API key**. Admin / MCP keys (`mcp:read` or `mcp:write`) are also
-  minted on Projects; use `mcp:write` for fix dispatch, merge, and most CLI admin commands.
-  **Settings → API Keys (BYOK)** is for your own LLM/Firecrawl keys, not Mushi Mushi credentials.
+  **Two key types:** SDK ingest keys (`report:write`) are minted in the console on
+  **Set up → Test it → Generate API key** or **Manage apps → Generate API key**. Admin / MCP
+  keys (`mcp:read` or `mcp:write`) are also minted on **Manage apps**; use `mcp:write` for fix
+  dispatch, merge, and most CLI admin commands. **Settings → AI keys** is for your own
+  LLM and Firecrawl keys, not Mushi Mushi credentials.
 
 ---
 
@@ -7832,9 +8200,9 @@ See the full walkthrough: [CLI ↔ console loop](/quickstart/cli-console-loop).
 
 | Step | Console | CLI |
 | --- | --- | --- |
-| Create project | Setup → Steps or Projects → New project | Wizard opens `?setup=cli` |
+| Create project | **Set up**, or **Manage apps** → New project | Wizard opens `?setup=cli` |
 | Copy Project ID | Success panel UUID chip | `mushi init --project-id ` |
-| Mint ingest key | Setup → Verify → Generate API key | Paste at prompt or `MUSHI_API_KEY=…` |
+| Mint ingest key | **Set up → Test it → Generate API key** | Paste at prompt or `MUSHI_API_KEY=…` |
 | Wire repo | SDK install configurator | `mushi init` or `mushi connect --wait` |
 
 Console URL resolution: `MUSHI_CONSOLE_URL` → saved config → localhost `:6464` probe → hosted default.
@@ -7975,7 +8343,7 @@ mushi outbox discard <messageId> --yes
 Dispatch an agentic fix for a classified report.
 
 ```bash
-# Default agent (from project settings)
+# Default agent: claude_code, the built-in fixer
 mushi fix 00000000-0000-0000-0000-000000000123
 
 # Cursor Cloud Agent — wait for PR
@@ -8099,14 +8467,24 @@ mushi work --repo-dir ~/code/my-app --followups --model grok-4.7-xhigh
 | `--repo-dir ` | A clone of the app repo; only worktrees are created in it |
 | `--max ` | Reports per run (default 3, at most 10) |
 | `--report ` | Work on this report only |
-| `--agent ` | `cursor` (default) or `claude` |
+| `--agent ` | `cursor` (default) or `claude`. `claude` needs CLI 0.36.0 or later |
+| `--project ` | Project ID (overrides `MUSHI_PROJECT_ID`) |
 | `--followups` | Fix the Opus "fix first" findings on pull requests `mushi work` opened, and push to them |
 | `--model ` | Model for the agent: `cursor-agent --list-models`, or for Claude Code an alias (`opus`, `sonnet`, `haiku`) or a full `claude-…` id |
 | `--keep` | Keep the worktree afterwards |
 | `--dry-run` | Show the plan; change nothing |
+| `--json` | Machine-readable JSON output |
 
-Needs the agent (`cursor-agent status` or `claude auth status` says signed in)
-and `gh` signed in, and an API key with `mcp:write`.
+**Before you run it:**
+
+- The agent is installed and signed in: `cursor-agent status`, or
+  `claude auth status` for Claude Code (sign in with `claude auth login`).
+- The GitHub CLI is signed in: `gh auth status` (sign in with `gh auth login`).
+  `mushi work` pushes the branch and opens the pull request with it.
+- Your Mushi Mushi key can write (`mcp:write`). If it cannot, run
+  `mushi login --upgrade-scope`.
+- `--agent claude` needs `@mushi-mushi/cli` 0.36.0 or later. Check with
+  `mushi --version`, and update with `npm install -g @mushi-mushi/cli@latest`.
 
 ### `mushi worker`
 
@@ -8320,11 +8698,11 @@ refused. A private repo can only be published from the console.
 ### Clean up branches and pull requests
 
 ```bash
-mushi repo cleanup show [--stale-days 14]       # branches and fix PRs Mushi opened that can go, with why and the commit
+mushi repo cleanup show [--stale-days 14]       # branches and fix PRs Mushi Mushi opened that can go, with why and the commit
 mushi repo cleanup request delete-branches --repo owner/app [--keys branch:a,branch:b]
 mushi repo cleanup request close-prs --repo owner/app [--keys pr:12]
 mushi repo cleanup request auto-delete --repo owner/app   # turn on GitHub's "Automatically delete head branches"
-mushi repo cleanup restore <itemId>…            # bring back a branch Mushi deleted, at the commit it kept
+mushi repo cleanup restore <itemId>…            # bring back a branch Mushi Mushi deleted, at the commit it kept
 ```
 
 Only branches and pull requests Mushi Mushi itself opened are listed: a branch whose
@@ -8371,7 +8749,7 @@ session, not an API key.
 
 ```bash
 mushi recipe init                    # write a starter mushi.recipe.json from what the repo shows
-mushi recipe check                   # validate it and its token files; run Mushi's deviance rules and print the 0–100 score
+mushi recipe check                   # validate it and its token files; run Mushi Mushi's deviance rules and print the 0–100 score
 mushi recipe check --max-score 30    # also fail when the score is above 30
 mushi recipe check --push            # send the recipe and the scan from your existing CI job; fails above the project's limit when that gate is on
 mushi recipe show                    # each part of the recipe and its state
@@ -8391,7 +8769,7 @@ job; Mushi Mushi never clones your repo.
 
 ```bash
 mushi radar scan                     # storage deletes done in SQL, secret keys in the built app; lists the build files the store rules read
-mushi radar scan --push              # send results to Mushi (one extra step in your existing CI job, after the build step)
+mushi radar scan --push              # send results to Mushi Mushi (one extra step in your existing CI job, after the build step)
 mushi radar scan --bundle-dir web/dist   # scan only these built client folders (repeatable), e.g. to leave out a server dist
 mushi radar show                     # every hole check for this project and what it found
 ```
@@ -11802,7 +12180,7 @@ description: Move from BugHerd to Mushi Mushi. Map pin-to-element feedback to it
  
 
 BugHerd's signature feature is **pixel-pin annotations**: clients click
-on a part of a web page to attach a comment to that exact element. Mushi Mushi
+on a part of a web page to attach a comment to that exact element.
 Mushi Mushi gives similar element-level context: in the web widget the reporter
 can pick an element, and the report records its tag, id / class, XPath
 and position, next to a screenshot they can mark up.
@@ -12012,8 +12390,8 @@ export default function App() {
 
 ### Get the snippet from the admin console
 
-The **Install SDK** card in the admin console (Onboarding, Projects → your
-project, Settings → SDK & connection) has **React Native**, **Expo**, and
+The **Install SDK** card in the admin console (**Set up**, **Manage apps** → your
+app, Settings → SDK & connection) has **React Native**, **Expo**, and
 **Capacitor** tabs alongside React / Vue / Svelte / Vanilla. The snippets
 are populated with your real project ID and (right after a key mint) your
 real API key.
@@ -15340,9 +15718,16 @@ description: Hosted Mushi Mushi. Bug reports, plain-English diagnoses, and fix d
 
 ## Plans
 
+Diagnoses are counted per app. A paid plan is attached to the app you upgrade:
+that app gets the plan's diagnoses, and every other app in the team keeps 100
+a month until you upgrade it too. The app limit, seats, history and plugins
+apply to the whole team. [Pricing](/pricing) has the details.
+
 No plan needs an AI key of your own: Mushi Mushi's AI writes the diagnosis.
 You can add your own Anthropic, OpenAI or Cursor key on any plan, Free
-included. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on
+included. Mushi Mushi then uses your Anthropic or OpenAI key first for the
+diagnosis and for fix drafts; a diagnosis on your own key still counts toward
+your plan. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on
 every plan; installing plugins from the Marketplace needs Builder or above, and
 team invites need Studio. Full details are on [pricing](/pricing).
 
@@ -15350,7 +15735,7 @@ team invites need Studio. Full details are on [pricing](/pricing).
 
 1. `kensaur.us/mushi-mushi/admin`: email and password, or a GitHub account when that sign-in is offered.
 2. Email confirmation (for email sign-up) → sign in → `/onboarding` wizard.
-3. Create your first project, mint an API key, run `npx mushi-mushi` to install the SDK.
+3. Create your first app, then run `npx mushi-mushi` in its folder to install the SDK. The wizard makes the key for you.
 4. The Billing page in the console shows diagnoses used / limit per app, with an **Upgrade** button
    (**Change plan** once you pay).
 5. Stripe Checkout → on success, your subscription becomes active. Overage on monthly plans bills through Stripe meter events.
@@ -15359,7 +15744,7 @@ team invites need Studio. Full details are on [pricing](/pricing).
 
 ## Spend controls
 
-Every monthly paid plan has a **hard cap on overage spend** ($50 Builder, $200 Studio by default), set in the console under Billing → Spending Cap. When the cap is reached, Mushi Mushi pauses new diagnoses for the rest of the calendar month with an upgrade prompt. Annual plans have no overage and stop at the included diagnoses. You also receive email alerts at 50%, 80% and 100% of your included diagnoses.
+Every monthly paid plan has a **hard cap on overage spend** ($50 Builder, $200 Studio by default). The cap belongs to the upgraded app and is set in the console under Billing → Spending cap; set it to $0 for a fixed bill. When the cap is reached, Mushi Mushi pauses new diagnoses for the rest of the calendar month with an upgrade prompt. Annual plans have no overage and stop at the included diagnoses. You also receive email alerts at 50%, 80% and 100% of your included diagnoses.
 
 ## Self-hosting
 
@@ -15386,7 +15771,7 @@ description: Run the whole Mushi Mushi stack yourself with Docker Compose. Your 
 
 Mushi Mushi is **OSS-first**. Mushi Mushi Cloud at `kensaur.us/mushi-mushi/admin` runs the same code as this repo — there is no closed-source plus-tier. Every edge function, migration, and admin SPA you see here is what powers Mushi Mushi Cloud. The one difference is data: the hosted service keeps its own tuning (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. The repo ships working default prompts, so your stack has every feature. See [Open source & licensing](/concepts/open-source#what-the-hosted-service-keeps).
 
-  **Prerequisite:** Node ≥ 22, a [Supabase](https://supabase.com) project, and the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started).
+  **What you need** depends on the path. **Docker Compose** (below) needs only Docker and an Anthropic key: it runs the open-source Supabase services (Postgres, Auth, REST, Storage) in containers on your own machine, so you do not need a Supabase account. The **managed-Supabase path** needs Node ≥ 22, a [Supabase](https://supabase.com) project, and the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started).
 
 ## What you'll deploy
 
@@ -15406,7 +15791,7 @@ in one command, no managed Supabase project required:
 ```bash
 git clone https://github.com/kensaurus/mushi-mushi.git
 cd mushi-mushi/deploy
-cp .env.example .env   # set ANTHROPIC_API_KEY + Supabase creds
+cp .env.example .env   # set ANTHROPIC_API_KEY and the keys for the local stack
 docker compose up -d
 ```
 
@@ -16042,7 +16427,7 @@ description: Use your own Anthropic, OpenAI or OpenRouter key for a Mushi Mushi 
 
 > **Scenario:** Your company policy requires that all LLM calls use an API key that belongs to your own Anthropic / OpenAI account so usage appears in your own billing dashboard and never routes through a third party.
 
-Mushi Mushi supports project-scoped BYOK. When set, the classifier, judge, fix, review and intelligence-report runs for that project use your key, so usage shows up in your provider console, not Mushi Mushi's.
+Mushi Mushi supports project-scoped BYOK. When set, the classifier, judge, fix, review and intelligence-report runs for that project use your key first, so usage shows up in your provider console, not Mushi Mushi's. This works on every plan, Free included. A diagnosis written on your own key still counts toward your plan's diagnoses: your key moves the AI vendor's bill to you, it does not add diagnoses.
 
 ## Setup
 
@@ -16074,7 +16459,7 @@ A new key is used by **All my apps** by default: every app in every organization
 | `fix-worker` (fix drafts) | Claude Sonnet 5.5, then GPT-5.4 |
 | `judge-batch` (fix grading) | Claude Sonnet 5.5, then GPT-5.4 |
 | `intelligence-report` (weekly summary) | Claude Haiku 5.5, then GPT-5.4 |
-| `agent-pr-review` (review of each fix PR) | Claude Opus 5.5, on your own Anthropic key only (skipped without one) |
+| `agent-pr-review` (review of each fix PR) | Claude Opus 5.5 on your own Anthropic key, or GPT on your own OpenAI key when there is no Anthropic key. Never on the Mushi Mushi platform key: skipped when you have added neither |
 | Search, similar bugs, codebase index | OpenAI `text-embedding-3-small` |
 | Voice reports | OpenAI `gpt-transcribe` |
 
@@ -16558,7 +16943,7 @@ cannot reach them, email us and we will forward the request.
 | Sub-processor | What they process | Location | Notes |
 | --- | --- | --- | --- |
 | **Supabase** (on AWS) | Database, auth, storage, edge functions — everything at rest | AWS `ap-northeast-1` (Tokyo) today. Dedicated US and EU clusters are planned; when they ship, a project's data stays in the [region chosen at creation](/security/data-residency) | Row-level security, nightly RLS check |
-| **Anthropic**, **OpenAI**, **OpenRouter** | Report text and logs (after PII scrubbing), screenshots, and code snippets sent for diagnosis, fixes and reviews; audio clips for voice transcription (OpenAI only) | US | **BYOK:** if you add your own model key, calls run against *your* provider account. Nothing is billed to or stored by Mushi Mushi's provider account. Hosted keys are used only when you have not added your own |
+| **Anthropic**, **OpenAI**, **OpenRouter** | Report text and logs (after PII scrubbing), screenshots, and code snippets sent for diagnosis, fixes and reviews; audio clips for voice transcription (OpenAI only) | US | **BYOK:** if you add your own model key, calls run against *your* provider account. Nothing is billed to or stored by Mushi Mushi's provider account. A diagnosis, fix or review call uses Mushi Mushi's own keys only when you have not added your own; the console's built-in assistant can run on Mushi Mushi's key even when you have added your own |
 | **Resend** | Email address and the content of transactional email (verification, usage alerts, invitations, lifecycle nudges) | US | No marketing list, no tracking pixels |
 | **AWS S3 + CloudFront** | Static docs and console files; screenshots when you pick S3 as [BYO storage](/security/byo-storage) | US / your bucket's region | Public assets only, unless you bring your own bucket |
 | **Sentry** | Console error telemetry (section 2), and error reports from Mushi Mushi's own edge functions (stack traces with project and report IDs) | US | The SDK in your app never reports to our Sentry |
@@ -16580,9 +16965,10 @@ Transfers to the US sub-processors above rely on the provider's **EU-US Data
 Privacy Framework** certification where it exists, and otherwise on **Standard
 Contractual Clauses** in the provider's data-processing terms.
 
-You can pick a residency region at project creation; see
-[Data residency](/security/data-residency) for what is live today and what is
-reserved.
+You can pick a region when you create a project, but today the choice is only
+recorded: every project's data is stored in Tokyo, whatever region it picked.
+Dedicated US and EU clusters are planned, not live. See
+[Data residency](/security/data-residency).
 
 ## 7. Retention
 
@@ -16823,14 +17209,17 @@ on Free. We may change Free limits with 30 days' notice on the pricing page.
   through **Stripe**; we never see your full card number.
 - Plans bill **monthly** or **annually** in advance, in US dollars, plus any
   tax we must collect.
-- **Overage** on Builder and Studio is metered per diagnosis at the rate shown on
-  the pricing page and capped by a **spend cap** ($50 on Builder, $200 on Studio).
+- **Overage** on monthly Builder and Studio plans is metered per diagnosis at the rate shown on
+  the pricing page and capped by a **spend cap** ($50 on Builder, $200 on Studio
+  by default, set per subscribed app). Annual plans have no overage.
   When the cap is reached the pipeline stops, like Free, until the next period
   or until you raise the cap in **Billing**. You get email alerts at 50 %,
   80 %, and 100 % of your included diagnoses.
-- **Upgrades** take effect immediately and are prorated. **Downgrades** and
-  cancellations take effect at the end of the current period; you keep the
-  higher plan until then.
+- **Plan changes** made with **Change plan** (Builder ↔ Studio, monthly ↔
+  annual), upgrades and downgrades alike, take effect immediately and are
+  prorated: unused time is credited and the new plan is charged for the rest
+  of the period. **Cancellations** take effect at the end of the current
+  period; you keep the plan until then.
 - **No refunds** for partial months or years except where the law requires
   one. If we terminate your paid plan under section 12 for a reason that is
   not your breach, we refund the unused portion.
@@ -16860,7 +17249,7 @@ agree that:
 - **Fix output is yours** to the extent we can grant it, with no attribution
   required. The same output may be produced for other users because models are
   not exclusive.
-- **Mushi Mushi's marks** — the names "Mushi Mushi", "Mushi Mushi", "Mushi Mushi Bounties", the
+- **Mushi Mushi's marks** — the names "Mushi Mushi" and "Mushi Mushi Bounties", the
   logo, and the 虫々 mark — are ours. Open-source use of the code does not
   include the marks; the "Bug reports by Mushi Mushi" widget mark may be shown only
   as the SDK renders it.
@@ -16925,12 +17314,12 @@ If you join Bounties as a tester, this section also applies:
   reports. Developer decisions on acceptance are final; use the feedback to
   improve your next report.
 - **Redemption.** 1,000 points redeem for US$10 in gift cards (delivered by
-  Tremendous) or US$13 in Mushi Mushi Pro credit. Redemption thresholds and
+  Tremendous) or US$13 in Mushi Mushi plan credit. Redemption thresholds and
   catalogue are shown in your wallet.
 - **KYC.** Once your gift-card redemptions reach **US$400 in a calendar
   year**, further redemptions are held until you complete a
   tax-identification form (W-9 or W-8BEN). Gift-card redemptions are capped
-  at **US$599 per calendar year**. Pro credit is not subject to this gate.
+  at **US$599 per calendar year**. Plan credit is not subject to this gate.
 - **Sanctions.** Bounties is not available in jurisdictions under US OFAC
   sanctions. We may cancel redemptions we cannot lawfully pay.
 - **Testing rules.** Test only apps listed on the marketplace, stay within
@@ -18152,10 +18541,10 @@ When a real user reports a bug, Mushi Mushi writes a diagnosis like this one. It
 needs no Sentry and no AI key of yours: the free plan covers one app and 100 diagnoses a
 month.
 
-- **Claude Code or Cursor:** [install in three steps](/#install), then ask your AI
-  "Get the latest Mushi Mushi report and fix it."
-- **Lovable or Bolt:** paste one script tag through your prompt.
-  [Mushi Mushi in Lovable or Bolt](/quickstart/lovable-bolt).
+- **Lovable or Bolt:** sign up, copy one line and ask your builder to add it. No
+  terminal, about 5 minutes. [Mushi Mushi in Lovable or Bolt](/quickstart/lovable-bolt).
+- **Claude Code or Cursor:** [connect your editor, paste one prompt](/#install), then
+  ask your AI "Get the latest Mushi Mushi report and fix it."
 
 ## One the model wrote
 
@@ -18181,9 +18570,9 @@ English. New to all of it? Start with [What is Mushi Mushi?](/what-is-mushi-mush
 
 - **AI builder or AI editor**: The tool that writes your app's code for you, such as Lovable, Bolt, Cursor or Claude Code.
 - **API key**: A long password that lets your app or your tools talk to Mushi Mushi. Mushi Mushi keys start with `mushi_`. Keep the ones that can read reports private.
-- **Bug mediator**: A word the integrations pages use for how Mushi Mushi works inside: one list that sits between your users, your other tools and your AI, so every bug is explained once, wherever it came from.
+- **Bug mediator**: A name some pages here use for Mushi Mushi's job as the go-between. Bugs come in from your users and from other tools you may use. Mushi Mushi puts them in one list, explains each one once, and passes the fix to your AI builder.
 - **CI (continuous integration)**: A service, such as GitHub Actions, that runs your app's tests every time the code changes. You don't need it to use Mushi Mushi.
-- **Console**: The Mushi Mushi website where you read your reports, see each diagnosis and change your settings.
+- **Console**: Your Mushi Mushi account on the web. You sign in there to copy your script tag, read your bug reports and each diagnosis, copy fix prompts and change your settings. It is not the "console" inside a browser's developer tools.
 - **Diagnosis**: Mushi Mushi's short written explanation of one bug: how serious it is, the likely cause, how sure it is, and a suggested fix. Your plan counts these.
 - **Duplicate reports**: When several people report the same bug, Mushi Mushi groups them into one item, and they count as one diagnosis.
 - **Fix prompt**: The diagnosis plus the evidence, written as instructions you paste into your AI builder so it can fix the bug.
@@ -18286,6 +18675,105 @@ for a person's decision, and the page says so instead of hiding them.
 - [Quickstart](/quickstart): install it on your app in a few minutes.
 - [Sample diagnosis](/demo/diagnosis): one bug, from report to fix prompt, no sign-up.
 - [How a bug moves, step by step](/concepts/closed-loop): the same loop, in detail.
+
+---
+
+## Mushi Mushi とは（日本語）
+
+Source: https://kensaur.us/mushi-mushi/docs/ja
+
+---
+title: Mushi Mushi とは（日本語）
+description: Mushi Mushi は、アプリに「問題を報告」ボタンを追加し、届いた不具合の原因と直し方を AI が説明するオープンソースのツールです。無料プランはアプリ 1 本・月 100 件の診断まで。
+---
+
+# Mushi Mushi とは
+
+Mushi Mushi は、アプリに「問題を報告」ボタンを追加し、届いた不具合の原因と直し方を AI が説明するオープンソースのツールです。
+
+Lovable、Bolt、Cursor、Claude Code などの AI でアプリを作り、公開している個人開発者のために作りました。困ったユーザーの多くは、何も言わずに離れていきます。Mushi Mushi は、声を上げてくれた人の報告を逃さず、直すところまでを短くします。
+
+  このページ以外のドキュメント、管理画面、AI による診断は、現在すべて英語です。
+  報告ボタン（ウィジェット）は日本語で表示されます。
+
+## まず無料で試す：公開中のサイトをチェック
+
+登録は不要です。公開中のアプリの URL を貼ると、リンク切れ、表示されない画像、開けないページ、テンプレートのままのタイトル、読み込み時のエラーを調べます。
+
+[公開中のサイトを無料でチェックする](/check?src=ja-page)
+
+チェックの画面は英語ですが、指摘は短い文です。そのまま Lovable や Cursor のチャットに貼って、修正を頼めます。
+
+## できること
+
+1. **報告ボタンを追加する。** アプリの隅に小さなボタンが表示されます。使っている人は、ひと言書いて送るだけです。画面のスクリーンショット、開いていたページ、直前の操作が一緒に届きます。
+2. **原因を説明する。** 届いた報告ごとに、AI が「何が起きたか」「どのくらい深刻か」「考えられる原因」を平易な英語で書きます。同じ不具合の報告は 1 件にまとめます。
+3. **直し方を渡す。** 報告ごとに、修正用のプロンプトが付きます。Lovable や Bolt にはそのまま貼り付け、Cursor や Claude Code からは直接読み込めます。
+
+AI の診断は間違うことがあります。変更内容は、公開する前に必ず確認してください。
+
+## 報告ボタンは日本語で表示されます
+
+ボタンと報告画面は、使う人のブラウザの言語に合わせて表示されます。日本語のブラウザでは、設定なしで日本語になります。対応している言語は、日本語、英語、スペイン語、タイ語、中国語（簡体字）です。それ以外の言語では英語で表示されます。
+
+管理画面（コンソール）と AI の診断は、現在は英語のみです。
+
+## 料金
+
+| プラン | アプリ数 | 診断（月・アプリごと） | 料金 |
+| --- | --- | --- | --- |
+| Free | 1 本 | 100 件 | 無料 |
+| Builder | 3 本 | 1,000 件 | 月額 29 ドル |
+| Studio | 10 本 | 3,000 件 | 月額 79 ドル |
+
+- **無料プランはアプリ 1 本・月 100 件の診断までです。カード登録は不要です。** AI の利用料は Mushi Mushi 側が負担するため、自分の AI キーも要りません。
+- 月 100 件に達すると、その月の診断は止まります。報告そのものは引き続き保存され、請求は発生しません。
+- 料金は米ドル建てです（Builder 月額 29 ドル、Studio 月額 79 ドル）。Stripe でカード決済され、円換算額はカード会社のレートで決まります。
+- サーバーを自分で運用する場合（セルフホスト）は無料です。
+
+詳しくは[料金ページ（英語）](/pricing)をご覧ください。
+
+## 始め方：Lovable・Bolt の場合
+
+ターミナルは使いません。5 分ほどで終わります。
+
+1. **無料登録して、スクリプトタグをコピーする。** [無料登録](https://kensaur.us/mushi-mushi/admin/signup?src=ja-page)してプロジェクトを作ります。サイドバーの **Set up** を開き、**Install widget** タブの **Script tag** を選びます。プロジェクト ID は最初から入っています。キーが `YOUR_SDK_KEY` のままなら、**Generate API key** を押すと本物のキーが入ります。
+2. **Lovable または Bolt のチャットに送る。** 次の文に続けて、コピーした自分のタグをそのまま貼ってください。
+
+   ```text
+   Add this script tag inside the <head> of index.html exactly as written, and change nothing else:
+   ```
+
+3. **公開して、テスト報告を送る。** 公開したサイトを開き、報告ボタンを押して「テストです」と送ります。数秒で管理画面に届き、深刻度と考えられる原因が表示されます。
+4. **届いた報告を直す。** 管理画面で報告を開き、**Copy fix prompt** を押して、Lovable または Bolt のチャットに貼ります。
+
+画面つきの手順は [Lovable・Bolt 向けクイックスタート（英語）](/quickstart/lovable-bolt)にあります。
+
+## 始め方：Cursor・Claude Code の場合
+
+アプリのフォルダで次のコマンドを実行します。
+
+```bash
+npx mushi-mushi
+```
+
+ブラウザでサインインし、SDK のインストールと設定の書き込みまで自動で行います。詳しくは[クイックスタート（英語）](/quickstart)をご覧ください。
+
+## 運営者
+
+Mushi Mushi は、日本の Kensaurus 合同会社が開発・運営しています。データは東京のサーバーに保存されます。AI による診断の際は、個人情報を取り除く処理をしたうえで、報告の内容を米国の AI 事業者に送信します。詳しくは[プライバシーポリシー（英語）](/legal/privacy)をご覧ください。
+
+お問い合わせ：[kensaurus@gmail.com](mailto:kensaurus@gmail.com)（日本語で大丈夫です）
+
+ソースコードは [GitHub](https://github.com/kensaurus/mushi-mushi) で公開しています。
+
+## 英語のドキュメント
+
+- [Mushi Mushi とは](/what-is-mushi-mushi)
+- [診断のサンプル（登録不要）](/demo/diagnosis)
+- [料金](/pricing)
+- [クイックスタート](/quickstart)
+- [Lovable・Bolt 向けクイックスタート](/quickstart/lovable-bolt)
 
 ---
 
@@ -18439,7 +18927,7 @@ description: "Solo builders who make apps with AI, developers who own their code
 
 Mushi Mushi was built for one person first: someone who makes apps with AI tools
 and then has to deal with the bugs. Two other groups get just as much from it.
-Find yours below.
+Find yours below. 日本語の概要は[こちら](/ja)。
 
 Short pages for a few common situations:
 [you built your app with Lovable or Bolt](/use-cases/no-code-founder),

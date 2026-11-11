@@ -17,7 +17,7 @@ interface Props {
 }
 
 function feedbackSentence(stats: FeedbackStats): string {
-  if (stats.totalTickets === 0) return 'You have not sent the Mushi team a bug or a request yet.'
+  if (stats.totalTickets === 0) return 'You have not sent the Mushi Mushi team a bug or a request yet.'
   const open = `${pluralizeWithCount(stats.activeTickets, 'ticket')} open`
   const reply = stats.awaitingReply > 0 ? `, ${stats.awaitingReply} waiting for your reply` : ''
   const shipped = stats.shippedTickets > 0 ? `; ${stats.shippedTickets} shipped` : ''

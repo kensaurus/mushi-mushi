@@ -142,7 +142,7 @@ function Migrations({ b }: { b: RepoBatch }) {
       {m.files.length > 0 ? (
         <div className={`mt-1 rounded-sm px-2.5 py-2 ${CHIP_TONE.warnSubtle}`}>
           <p className="text-xs">
-            This batch changes the database: {m.files.length} migration file{m.files.length === 1 ? '' : 's'}. Mushi does not run them; apply them when you deploy.
+            This batch changes the database: {m.files.length} migration file{m.files.length === 1 ? '' : 's'}. Mushi Mushi does not run them; apply them when you deploy.
           </p>
           <ul className="mt-1 space-y-0.5">
             {m.files.map((f) => (
@@ -157,7 +157,7 @@ function Migrations({ b }: { b: RepoBatch }) {
       )}
       {!m.complete ? (
         <p className="mt-1 text-2xs text-warn-foreground">
-          {m.unread.length ? `Mushi could not read the changes of ${m.unread.map((n) => `#${n}`).join(', ')}, so this list may be incomplete.` : 'A change was too large to read in full, so this list may be incomplete.'}
+          {m.unread.length ? `Mushi Mushi could not read the changes of ${m.unread.map((n) => `#${n}`).join(', ')}, so this list may be incomplete.` : 'A change was too large to read in full, so this list may be incomplete.'}
         </p>
       ) : null}
     </div>
@@ -187,7 +187,7 @@ function Deploy({ b }: { b: RepoBatch }) {
       </p>
       {d.setupGapHref ? (
         <p className="mt-1 text-2xs text-warn-foreground">
-          Mushi has seen no deploy of this app in 14 days, so reporters are not told when their fix is live.{' '}
+          Mushi Mushi has seen no deploy of this app in 14 days, so reporters are not told when their fix is live.{' '}
           <Link to={d.setupGapHref} className={LINK_ACCENT}>
             See the setup gap
           </Link>
@@ -239,7 +239,7 @@ export function ReleaseBatchTab({ projectId }: { projectId: string | null }) {
     return (
       <PageFirstStep
         title="No repo to batch yet"
-        sentence="Release trains collect your approved fix pull requests and merge them together, once per repo. Connect GitHub so Mushi can open fixes."
+        sentence="Release trains collect your approved fix pull requests and merge them together, once per repo. Connect GitHub so Mushi Mushi can open fixes."
         action={{ label: 'Connect GitHub', to: '/connect#connect-github' }}
         marksPageEmpty={false}
         data-testid="batch-empty"
@@ -266,7 +266,7 @@ export function ReleaseBatchTab({ projectId }: { projectId: string | null }) {
       />
       {partial.length ? (
         <p className="text-2xs text-warn-foreground" data-testid="batch-partial">
-          Mushi could not read {partial.map((p) => PARTIAL_WORDS[p] ?? p).join(', ')}; what depends on it may be incomplete.
+          Mushi Mushi could not read {partial.map((p) => PARTIAL_WORDS[p] ?? p).join(', ')}; what depends on it may be incomplete.
         </p>
       ) : null}
       {repos.map((b) => (

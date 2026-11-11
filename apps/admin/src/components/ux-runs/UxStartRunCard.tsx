@@ -76,7 +76,7 @@ export function UxStartRunCard({ hasRuns, projectId }: { hasRuns: boolean; proje
           ))}
         </ol>
         <p className="text-fg-secondary">
-          Tick <span className="font-medium">Mirror to the Mushi console</span> and the run shows here as it goes. Kept changes land on a
+          Tick <span className="font-medium">Mirror to the Mushi Mushi console</span> and the run shows here as it goes. Kept changes land on a
           branch; you open the draft PR.
         </p>
         <div className="rounded-md bg-surface-overlay p-2 text-fg-secondary">
@@ -85,7 +85,7 @@ export function UxStartRunCard({ hasRuns, projectId }: { hasRuns: boolean; proje
             A run spends your agent account’s usage at the model’s rate, for example Grok 4.7 at $2 in and $6 out per million tokens ($4 and
             $12 on the Fast tier, the default on Cursor Pro and above). No agent reports how much credit is left, so check your provider’s
             usage page. To use another Cursor account, sign in with it (<code className="font-mono">agent login</code>) before starting the
-            studio. If an account runs out, the run stops and can be resumed later; Mushi never switches accounts for you, because Cursor’s
+            studio. If an account runs out, the run stops and can be resumed later; Mushi Mushi never switches accounts for you, because Cursor’s
             usage policy forbids getting around its limits.
           </p>
         </div>

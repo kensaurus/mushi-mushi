@@ -23,7 +23,14 @@ export interface ReporterLabel {
   title: string | null
 }
 
-export function reporterLabel(report: ReporterFields, reporterShort: string): ReporterLabel {
+/**
+ * `showIds` (operator accounts): keep the short id after the label, to tell
+ * two nameless reporters apart. Everyone else reads "A user": a piece of a
+ * UUID or of a token hash is not a name (re-audit 2026-11-11). The app's own
+ * user id stays in the tooltip either way.
+ */
+export function reporterLabel(report: ReporterFields, reporterShort: string, opts: { showIds?: boolean } = {}): ReporterLabel {
+  const showIds = opts.showIds === true
   const externalId = report.reporter_identity?.external_user_id ?? null
   const candidates = [report.reporter_identity?.display_name, report.reporter_display_name]
   for (const raw of candidates) {
@@ -36,7 +43,9 @@ export function reporterLabel(report: ReporterFields, reporterShort: string): Re
   const appUserId =
     externalId ?? candidates.map((c) => c?.trim()).find((c): c is string => Boolean(c && UUID_RE.test(c))) ?? null
   if (appUserId) {
-    return { text: 'Signed-in user', shortId: appUserId.slice(0, 8), title: `App user id ${appUserId}` }
+    return showIds
+      ? { text: 'Signed-in user', shortId: appUserId.slice(0, 8), title: `App user id ${appUserId}` }
+      : { text: 'A signed-in user', shortId: null, title: `App user id ${appUserId}` }
   }
-  return { text: 'Anonymous reporter', shortId: reporterShort, title: null }
+  return showIds ? { text: 'Anonymous reporter', shortId: reporterShort, title: null } : { text: 'A user', shortId: null, title: null }
 }

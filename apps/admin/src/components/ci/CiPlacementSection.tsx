@@ -154,7 +154,7 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
     setBusy(null)
     if (!res.ok || !res.data) {
       setPreview(null)
-      setError({ message: res.error?.message ?? 'Mushi could not build the preview.', code: res.error?.code ?? null })
+      setError({ message: res.error?.message ?? 'Mushi Mushi could not build the preview.', code: res.error?.code ?? null })
       return
     }
     setPreview(res.data)
@@ -172,7 +172,7 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
     }
     setPreview(null)
     setChoice(null)
-    setNotice(`${r.detail} Mushi watches the next jobs.`)
+    setNotice(`${r.detail} Mushi Mushi watches the next jobs.`)
     onChanged()
   }
 
@@ -182,7 +182,7 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
     const res = await apiFetch<{ id: string }>('/v1/admin/ci/placement/requests', { method: 'POST', body: JSON.stringify(body()) })
     setBusy(null)
     if (!res.ok) {
-      setError({ message: res.error?.message ?? 'Mushi could not save the request.', code: res.error?.code ?? null })
+      setError({ message: res.error?.message ?? 'Mushi Mushi could not save the request.', code: res.error?.code ?? null })
       return
     }
     setPreview(null)
@@ -200,10 +200,10 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
       {repo.controller ? (
         <Callout tone="neutral" label="Read-only" icon={<IconLock size={14} />}>
           Managed by {repo.controller.name}
-          {repo.controller.owner ? ` (${repo.controller.owner})` : ''}. Mushi shows where its CI runs and does not change it.
+          {repo.controller.owner ? ` (${repo.controller.owner})` : ''}. Mushi Mushi shows where its CI runs and does not change it.
         </Callout>
       ) : !repo.workflowsRead ? (
-        <p className="text-xs text-fg-muted">Mushi has not read this repo’s workflow files yet (they come with the daily GitHub snapshot).</p>
+        <p className="text-xs text-fg-muted">Mushi Mushi has not read this repo’s workflow files yet (they come with the daily GitHub snapshot).</p>
       ) : allowed.length === 0 && repo.profile ? (
         <ProfileControl projectId={projectId} repo={repo} data={data} onChanged={onChanged} />
       ) : allowed.length === 0 ? (
@@ -305,7 +305,7 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
                       </option>
                     ))}
                   </SelectField>
-                  <p className="mt-1 text-2xs text-fg-muted">GitHub-hosted minutes are billed on private repos. Mushi puts the current runner back when the time is up.</p>
+                  <p className="mt-1 text-2xs text-fg-muted">GitHub-hosted minutes are billed on private repos. Mushi Mushi puts the current runner back when the time is up.</p>
                 </div>
               )}
               <p id={`${groupId}-hint`} className="text-2xs text-fg-muted">
@@ -360,7 +360,7 @@ function applyFailure(r: Extract<ApplyResult, { ok: false }>): { message: string
 }
 
 const PROFILE_CHOICES = [
-  { value: 'economy', label: 'Economy (recommended, default)', note: 'Mushi fix pull requests skip the checks their workflows mark as skippable; those still run on the release train and on main before a deploy.' },
+  { value: 'economy', label: 'Economy (recommended, default)', note: 'Mushi Mushi fix pull requests skip the checks their workflows mark as skippable; those still run on the release train and on main before a deploy.' },
   { value: 'thorough', label: 'Thorough (more expensive)', note: 'Every check on every pull request, fix pull requests included: more billed GitHub-hosted minutes on a private repo.' },
 ] as const
 
@@ -384,7 +384,7 @@ function ProfileControl({ projectId, repo, data, onChanged }: { projectId: strin
     const res = await apiFetch<PlacementPreview & { id?: string }>(path, { method: 'POST', body: JSON.stringify(body()) })
     setBusy(null)
     if (!res.ok || !res.data) {
-      setError({ message: res.error?.message ?? (kind === 'preview' ? 'Mushi could not build the preview.' : 'Mushi could not save the request.'), code: res.error?.code ?? null })
+      setError({ message: res.error?.message ?? (kind === 'preview' ? 'Mushi Mushi could not build the preview.' : 'Mushi Mushi could not save the request.'), code: res.error?.code ?? null })
       return
     }
     if (kind === 'preview') {
@@ -506,7 +506,7 @@ function RequestRow({ r, data, onChanged }: { r: PlacementRequestRow; data: CiPl
     })
     setBusy(false)
     if (!res.ok) {
-      setError(res.error?.message ?? 'Mushi could not do that.')
+      setError(res.error?.message ?? 'Mushi Mushi could not do that.')
       return
     }
     onChanged()
@@ -622,7 +622,7 @@ export function CiPlacementSection({
       ) : (
         <Callout tone="neutral" label="No CI agreement recorded" icon={<IconShield size={14} />}>
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>Mushi checks changes against your rules once you record them: paid minutes, other tools that manage some repos, standby runners.</span>
+            <span>Mushi Mushi checks changes against your rules once you record them: paid minutes, other tools that manage some repos, standby runners.</span>
             <Link to={CI_POLICY_SETTINGS_HREF} className="font-medium text-brand hover:underline">
               Import from your CI agreement
             </Link>
@@ -631,7 +631,7 @@ export function CiPlacementSection({
       )}
       {!data.tokenStored && (
         <Callout tone="warn" label="GitHub access">
-          Mushi has no GitHub access for this app’s repositories, so it cannot read or change runner variables. Connect them with the Mushi GitHub App (Connect → GitHub), or store a fine-grained token with “Variables: Read and write”.
+          Mushi Mushi has no GitHub access for this app’s repositories, so it cannot read or change runner variables. Connect them with the Mushi Mushi GitHub App (Connect → GitHub), or store a fine-grained token with “Variables: Read and write”.
         </Callout>
       )}
       <ul className="grid gap-3 xl:grid-cols-2">

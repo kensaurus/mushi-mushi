@@ -26,7 +26,7 @@ export function findingFixPrompt(f: PromptFinding): string {
   const rule = f.rule_id ? ` Rule: ${ruleLabel(f.rule_id)}.` : ''
   const about = f.gate ? gateInfo(f.gate)?.checks : undefined
   return [
-    `Mushi's "${check}" check found a problem${where}: ${f.message.trim()}${/[.!?]$/.test(f.message.trim()) ? '' : '.'}${rule}`,
+    `Mushi Mushi's "${check}" check found a problem${where}: ${f.message.trim()}${/[.!?]$/.test(f.message.trim()) ? '' : '.'}${rule}`,
     about ? `What this check looks for: ${about}` : null,
     'Find the cause and fix it with the smallest change that makes the check pass. Keep the existing behaviour, then run the tests.',
   ]

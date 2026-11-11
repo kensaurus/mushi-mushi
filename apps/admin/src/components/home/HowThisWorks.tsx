@@ -9,10 +9,10 @@ import { Link } from 'react-router-dom'
 import { DisclosurePanel } from '../ui'
 
 const STEPS = [
-  { title: 'A bug comes in', body: 'A user reports it from your app, or Mushi spots it on your live site or in your monitoring.', to: '/reports', link: 'Bug reports' },
-  { title: 'Mushi explains it', body: 'You get a plain-English diagnosis: what broke, where, and how bad it is.', to: '/reports?status=open', link: 'Open bugs' },
+  { title: 'A bug comes in', body: 'A user reports it from your app, or Mushi Mushi spots it on your live site or in your monitoring.', to: '/reports', link: 'Bug reports' },
+  { title: 'Mushi Mushi explains it', body: 'You get a plain-English diagnosis: what broke, where, and how bad it is.', to: '/reports?status=open', link: 'Open bugs' },
   { title: 'An AI agent drafts the fix', body: 'A coding agent opens a pull request; a second model reviews it before anything merges.', to: '/fixes', link: 'Fixes' },
-  { title: 'You ship it', body: 'Approved fixes ride a release train to your main branch, and Mushi checks the deploy went live.', to: '/pipeline', link: 'Pipeline' },
+  { title: 'You ship it', body: 'Approved fixes ride a release train to your main branch, and Mushi Mushi checks the deploy went live.', to: '/pipeline', link: 'Pipeline' },
 ] as const
 
 export function HowThisWorks({ defaultOpen }: { defaultOpen: boolean }) {

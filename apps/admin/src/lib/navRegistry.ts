@@ -125,7 +125,7 @@ export const CHECK_SUB_GROUPS: Record<
 > = {
   'system-health': {
     title: 'App checks',
-    hint: 'Is the app itself sound: scheduled tests, user stories, audits, its blueprint, design tokens and content, a first-time user test, plus Mushi’s own health.',
+    hint: 'Is the app itself sound: scheduled tests, user stories, audits, its blueprint, design tokens and content, a first-time user test, plus Mushi Mushi’s own health.',
   },
   'quality-gates': {
     title: 'AI quality',
@@ -153,7 +153,7 @@ export const NAV_SECTION_META: Record<
   start: {
     title: 'Connect',
     step: 1,
-    hint: 'Install Mushi in your app and connect your editor, your tools and your coding agents.',
+    hint: 'Install Mushi Mushi in your app and connect your editor, your tools and your coding agents.',
     defaultCollapsed: true,
   },
   plan: {
@@ -172,7 +172,7 @@ export const NAV_SECTION_META: Record<
     title: 'Verify',
     step: 4,
     stage: 'C',
-    hint: 'Prove the app works before you ship: scheduled tests, audits, Mushi’s own health, and how good the AI’s triage is.',
+    hint: 'Prove the app works before you ship: scheduled tests, audits, Mushi Mushi’s own health, and how good the AI’s triage is.',
   },
   act: {
     title: 'Ship & watch',
@@ -426,7 +426,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     pdcaStage: 'check',
     checkSubGroup: 'system-health',
     iconKey: 'shield-check',
-    paletteDescription: 'Every automatic check on this app in one place: scheduled tests, audits, user stories, design, content, AI triage quality and Mushi’s own health.',
+    paletteDescription: 'Every automatic check on this app in one place: scheduled tests, audits, user stories, design, content, AI triage quality and Mushi Mushi’s own health.',
     paletteKeywords: ['checks', 'verify', 'quality', 'health', 'audit', 'tests', 'qa'],
     paletteGroup: 'Check',
   },
@@ -475,12 +475,12 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     // Mushi's own AI calls and background jobs, not the user's app (pattern
     // P6, console journeys 2026-10-27). The app's uptime and errors are on
     // Home. "app health" stays a keyword: every former label must.
-    label: 'Mushi health',
+    label: 'Mushi Mushi health',
     sectionId: 'check',
     pdcaStage: 'check',
     checkSubGroup: 'system-health',
     iconKey: 'health',
-    paletteDescription: 'Is Mushi itself working: its AI calls and background jobs. Also your code size, schema changes and unusual spikes.',
+    paletteDescription: 'Is Mushi Mushi itself working: its AI calls and background jobs. Also your code size, schema changes and unusual spikes.',
     paletteKeywords: ['app health', 'health', 'mushi health', 'status', 'ai calls', 'llm', 'cron', 'background jobs', 'verification hub'],
     paletteGroup: 'Check',
   },
@@ -612,7 +612,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     label: 'Spend credits',
     sectionId: 'workspace',
     iconKey: 'cost',
-    paletteDescription: 'Expiring Cursor and Firecrawl credits, and a switch for every way Mushi can spend them finding and fixing bugs.',
+    paletteDescription: 'Expiring Cursor and Firecrawl credits, and a switch for every way Mushi Mushi can spend them finding and fixing bugs.',
     paletteKeywords: ['credits', 'spend credits', 'spend down', 'spend-down', 'expiring credits', 'cursor credits', 'firecrawl credits', 'usage', 'site watch', 'follow-ups', 'budget'],
     paletteGroup: 'Workspace',
   },
@@ -705,7 +705,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     label: 'Help & support',
     sectionId: 'workspace',
     iconKey: 'chat',
-    paletteDescription: 'Ask the Mushi team for help and read their replies to feedback you sent.',
+    paletteDescription: 'Ask the Mushi Mushi team for help and read their replies to feedback you sent.',
     paletteKeywords: ['support', 'feedback', 'help', 'contact', 'bug', 'request'],
     paletteGroup: 'Workspace',
   },
@@ -939,7 +939,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     sectionId: 'start',
     iconKey: 'key',
     inSidebar: false,
-    paletteDescription: 'Approve the Mushi CLI sign-in from your terminal.',
+    paletteDescription: 'Approve the Mushi Mushi CLI sign-in from your terminal.',
     paletteKeywords: ['cli auth', 'cli', 'oauth', 'auth', 'terminal', 'login'],
     paletteGroup: 'Start',
   },

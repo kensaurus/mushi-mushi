@@ -94,8 +94,15 @@ type Tracker = { track: (name: string, props: EventProps, reserved?: ReservedPro
 /** Bounded like the SDK's own pre-consent buffer. */
 const QUEUE_MAX = 50
 
-const SITE_ANALYTICS_CONSENT_COPY =
-  'Mushi Mushi measures its own funnel with its own SDK — first-party, no ads, no cross-site tracking.'
+/** Plain words (2026-11-12): what is counted, and that it goes nowhere else. */
+const SITE_ANALYTICS_CONSENT_COPY = 'Can we count which pages people visit? No ads, nothing shared.'
+
+/**
+ * The bar waits for the first scroll, so it never sits on the landing's
+ * address box, facts row or install tabs when the page opens (it covered them
+ * at 390 px). A page too short to scroll shows it at once.
+ */
+const CONSENT_BAR_SCROLL_PX = 120
 
 /**
  * Module singleton: survives React StrictMode double-mount and client
@@ -179,6 +186,21 @@ export function MushiSiteAnalytics() {
   // so landing_view never fired (lib/site-pathname.ts).
   const pathname = toSitePathname(usePathname())
   const [showBar, setShowBar] = useState(false)
+  // Consent is still undecided: show the bar once the visitor has scrolled.
+  const [barPending, setBarPending] = useState(false)
+
+  useEffect(() => {
+    if (!barPending) return
+    const reveal = () => {
+      const canScroll = document.documentElement.scrollHeight > window.innerHeight + CONSENT_BAR_SCROLL_PX
+      if (canScroll && window.scrollY < CONSENT_BAR_SCROLL_PX) return
+      setShowBar(true)
+      setBarPending(false)
+    }
+    reveal()
+    window.addEventListener('scroll', reveal, { passive: true })
+    return () => window.removeEventListener('scroll', reveal)
+  }, [barPending])
 
   const consentRef = useRef<StoredConsent | 'pending' | 'blocked'>('pending')
   const trackerRef = useRef<Tracker | null>(null)
@@ -248,6 +270,7 @@ export function MushiSiteAnalytics() {
       writeStoredConsent(window.localStorage, CONFIG.projectId, state)
       consentRef.current = state
       setShowBar(false)
+      setBarPending(false)
       if (state === 'granted') {
         persistFirstTouch(state)
         activate()
@@ -286,7 +309,7 @@ export function MushiSiteAnalytics() {
       consentRef.current = 'denied'
     } else {
       consentRef.current = 'pending'
-      setShowBar(true)
+      setBarPending(true)
     }
     // `pathname` is deliberately not a dependency: it is only read for the
     // first-touch landing path, and re-running on navigation must not

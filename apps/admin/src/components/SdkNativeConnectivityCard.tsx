@@ -282,7 +282,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
               <p className="mt-1 text-fg-muted">
                 Auto-write requires a fine-grained PAT with{' '}
                 <strong className="font-medium">Actions secrets: Read and write</strong> stored in
-                project Settings → GitHub. The Mushi GitHub App only has{' '}
+                project Settings → GitHub. The Mushi Mushi GitHub App only has{' '}
                 <code className="font-mono">Contents: write</code> and{' '}
                 <code className="font-mono">Pull requests: write</code> — it does not have{' '}
                 <code className="font-mono">Secrets: write</code>. To enable true auto-write, either
@@ -464,7 +464,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
           <ConfirmDialog
             title="Write new CI secrets to GitHub?"
             body={
-              'Mushi creates a new SDK key and writes it to GitHub Actions. Only after GitHub accepts it does Mushi ' +
+              'Mushi Mushi creates a new SDK key and writes it to GitHub Actions. Only after GitHub accepts it does Mushi Mushi ' +
               'revoke the previous CI key. Store builds already installed with the old key stop sending bug reports ' +
               'until you ship a new build.'
             }

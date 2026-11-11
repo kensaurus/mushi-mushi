@@ -448,19 +448,19 @@ export function OnboardingPage() {
       setup.error.includes('NetworkError')
     return (
       <ErrorAlert
-        title={isNetwork ? 'Cannot reach the Mushi backend' : undefined}
+        title={isNetwork ? 'Cannot reach the Mushi Mushi backend' : undefined}
         message={setup.error}
         onRetry={reloadAll}
         actions={
           isNetwork
-            ? [{ label: 'Reset to Mushi Cloud', onClick: () => clearStoredInstanceConfig() }]
+            ? [{ label: 'Reset to Mushi Mushi Cloud', onClick: () => clearStoredInstanceConfig() }]
             : undefined
         }
       >
         {isNetwork && (
           <p className="text-xs text-danger/80 mt-2">
             A saved self-hosted URL may be wrong. Resetting clears local overrides and reloads
-            against Mushi Cloud.
+            against Mushi Mushi Cloud.
           </p>
         )}
       </ErrorAlert>
@@ -847,7 +847,7 @@ export function OnboardingPage() {
             <h3 className="text-sm font-semibold text-fg">Test your connection</h3>
             <ContainedBlock tone="muted" className="mt-2">
               <p className="text-xs text-fg-muted">
-                Check that Mushi is reachable, then send a test bug and watch it get a plain-English read.
+                Check that Mushi Mushi is reachable, then send a test bug and watch it get a plain-English read.
               </p>
             </ContainedBlock>
           </div>
@@ -871,7 +871,7 @@ export function OnboardingPage() {
                   at={testStatus === 'pass' || testStatus === 'fail' ? testRanAt : null}
                 >
                   {testStatus === 'running' && 'Submitting test report…'}
-                  {testStatus === 'pass' && 'Mushi got it. It is on the Bugs page.'}
+                  {testStatus === 'pass' && 'Mushi Mushi got it. It is on the Bugs page.'}
                   {testStatus === 'fail' && (error || 'Submission failed')}
                 </ResultChip>
               )}
@@ -924,7 +924,7 @@ export function OnboardingPage() {
               </span>
             </div>
             <p className="text-xs text-fg-muted mt-1">
-              Mushi is working on your test bug. Follow it from report to diagnosis
+              Mushi Mushi is working on your test bug. Follow it from report to diagnosis
               to fix to see what happens to a real user's bug.
             </p>
           </div>
@@ -1111,7 +1111,7 @@ function TimeToFirstDiagnosisCard({ hasApiKey, onOpenSdk }: { hasApiKey: boolean
     return (
       <Card className="p-5 border border-ok/25 bg-ok/5" data-testid="ttfd-test-only">
         <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report from your app</p>
-        <p className="mt-0.5 text-sm text-fg-secondary">Your test bug got its plain-English read, so Mushi works for this app.</p>
+        <p className="mt-0.5 text-sm text-fg-secondary">Your test bug got its plain-English read, so Mushi Mushi works for this app.</p>
         <p className="mt-1 text-xs text-fg-muted leading-relaxed">
           The 2-minute clock starts with the first report from your app. Install the SDK, then report a bug from your
           app with its bug button.

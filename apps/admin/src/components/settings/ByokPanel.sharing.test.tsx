@@ -135,7 +135,7 @@ describe('ByokPanel key scope', () => {
       expect(radio('All my apps', firecrawlRow()).getAttribute('aria-checked')).toBe('true')
       expect(firecrawlRow().textContent).toContain('all 12 apps you own in your 2 organizations')
       expect(firecrawlRow().textContent).toContain(
-        "Each app tries its own key first, then its organization's, then an all-apps key, then Mushi's own.",
+        "Each app tries its own key first, then its organization's, then an all-apps key, then Mushi Mushi's own.",
       )
     })
 

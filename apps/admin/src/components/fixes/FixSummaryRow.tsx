@@ -69,7 +69,7 @@ export function FixSummaryRow({ summary, successRate }: Props) {
         series={totals}
         delta={pctDelta(totals)}
         seriesAriaLabel="Daily fix attempts, last 30 days"
-        meaning="Every time Mushi handed a report to the auto-fix agent. Includes successes, failures, and runs still in flight."
+        meaning="Every time Mushi Mushi handed a report to the auto-fix agent. Includes successes, failures, and runs still in flight."
       />
       <KpiTile
         label="Reports fixed"

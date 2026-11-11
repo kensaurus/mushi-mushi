@@ -205,7 +205,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
           )}
           <Toggle
             label="Decide for me"
-            ariaLabel="Let Mushi merge approved fixes and close held ones"
+            ariaLabel="Let Mushi Mushi merge approved fixes and close held ones"
             checked={release.autoDecide === true}
             disabled={saving}
             onChange={(autoDecide) => void saveRelease({ autoDecide })}
@@ -214,7 +214,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
       )}
       {release?.autoDecide && (
         <p className="text-2xs text-fg-muted" data-testid="auto-decide-note">
-          Mushi decides each fix with Opus’s review: approved ones go to the merge queue, ones Opus will not merge are closed and fixed
+          Mushi Mushi decides each fix with Opus’s review: approved ones go to the merge queue, ones Opus will not merge are closed and fixed
           again with its findings, up to 3 tries per bug. Closed pull requests can be reopened.
         </p>
       )}
@@ -222,7 +222,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
         <p className="text-2xs text-fg-muted">
           {batching
             ? `Approved pull requests ride one release train ${intervalLabel(release?.intervalMinutes ?? 360)}: one branch, one CI run, one merge, so they ship as one release. Security fixes and critical bugs skip the wait.`
-            : 'Mushi updates each branch, waits for CI and an Opus “merge” on the final commit, then merges, one pull request per repo at a time.'}{' '}
+            : 'Mushi Mushi updates each branch, waits for CI and an Opus “merge” on the final commit, then merges, one pull request per repo at a time.'}{' '}
           You can leave this page.
         </p>
       )}

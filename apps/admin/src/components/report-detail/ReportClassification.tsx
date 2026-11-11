@@ -18,8 +18,9 @@ import {
 import { IconCamera, IconIntelligence } from '../icons'
 import { ContainedBlock } from './ReportSurface'
 import type { ReportDetail } from './types'
+import { isSampleModel, SAMPLE_EXPLANATION_LABEL } from '../../lib/reportInternals'
 
-export function ClassificationFields({ report }: { report: ReportDetail }) {
+export function ClassificationFields({ report, showInternals = false }: { report: ReportDetail; showInternals?: boolean }) {
   const reproductionHint = (report.stage1_classification as { reproductionHint?: string } | null)?.reproductionHint
   const categoryLabel = CATEGORY_LABELS[report.category] ?? report.category
   const severityText = report.severity ? severityLabel(report.severity) : 'Unset'
@@ -103,12 +104,21 @@ export function ClassificationFields({ report }: { report: ReportDetail }) {
           <ProseBlock value={reproductionHint} mode="auto" tone="muted" maxWidth="max-w-none" />
         </ContainedBlock>
       )}
-      <ModelFooter model={report.stage1_model} latency={report.stage1_latency_ms} />
+      <ModelFooter model={report.stage1_model} latency={report.stage1_latency_ms} showInternals={showInternals} />
     </>
   )
 }
 
-function ModelFooter({ model, latency }: { model: string | null; latency: number | null }) {
+/**
+ * Which model sorted the bug and how long it took: pipeline detail, for
+ * operator accounts. Everyone else sees nothing here, except on the sample
+ * report, which says plainly that its explanation was written in advance.
+ */
+function ModelFooter({ model, latency, showInternals }: { model: string | null; latency: number | null; showInternals: boolean }) {
+  if (isSampleModel(model)) {
+    return <p className="mt-2 border-t border-edge-subtle pt-2 text-2xs text-fg-muted">{SAMPLE_EXPLANATION_LABEL}</p>
+  }
+  if (!showInternals) return null
   if (!model && latency == null) return null
   return (
     <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-edge-subtle pt-2">

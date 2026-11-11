@@ -88,7 +88,7 @@ export function SpendLedgerCard({ orgId, projects }: { orgId: string; projects: 
   return (
     <Section title="Spend per app (30 days)">
       <p className="mb-3 text-xs text-fg-muted">
-        What each app costs: Mushi's own AI, your AI provider bill, CI minutes and the cloud bills you import. CI is estimated from job times at ${data?.ciUsdPerLinuxMinute ?? 0.006} per Linux minute, macOS counted 10×.
+        What each app costs: Mushi Mushi's own AI, your AI provider bill, CI minutes and the cloud bills you import. CI is estimated from job times at ${data?.ciUsdPerLinuxMinute ?? 0.006} per Linux minute, macOS counted 10×.
       </p>
       {error && <PageLoadError error={error} resource="spend per app" endpoint={path} onRetry={reload} />}
       {loading && !data && <Loading text="Adding up what each app costs…" />}
@@ -112,7 +112,7 @@ export function SpendLedgerCard({ orgId, projects }: { orgId: string; projects: 
                 <thead>
                   <tr className="border-b border-edge text-fg-muted">
                     <th className="px-2 py-1.5 text-left font-medium">App</th>
-                    <th className="px-2 py-1.5 text-right font-medium">Mushi AI</th>
+                    <th className="px-2 py-1.5 text-right font-medium">Mushi Mushi AI</th>
                     <th className="px-2 py-1.5 text-right font-medium">AI provider</th>
                     <th className="px-2 py-1.5 text-right font-medium">CI (est.)</th>
                     <th className="px-2 py-1.5 text-right font-medium">Supabase</th>

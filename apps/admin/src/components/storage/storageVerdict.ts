@@ -36,7 +36,7 @@ export function storageVerdict(stats: StorageStats): StorageVerdict {
     return {
       tone: 'ok',
       chip: 'Built-in storage',
-      sentence: `${app} stores screenshots in Mushi's built-in storage. There's nothing to check.${others(stats)}`,
+      sentence: `${app} stores screenshots in Mushi Mushi's built-in storage. There's nothing to check.${others(stats)}`,
       action: 'configure',
     }
   }

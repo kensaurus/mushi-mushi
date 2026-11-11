@@ -98,7 +98,7 @@ const NUDGE_COPY: Record<FeatureFlag, { tagline: string; pillLabel: string }> = 
     pillLabel: 'ENT',
   },
   marketplace_publish: {
-    tagline: 'Publishing to the Mushi Marketplace requires Pro.',
+    tagline: 'Publishing to the Mushi Mushi Marketplace requires Pro.',
     pillLabel: 'PRO',
   },
 }

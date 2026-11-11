@@ -198,7 +198,7 @@ export function connectionGridSentence(tiles: readonly GridTile[]): { sentence: 
     return { sentence: `${list} ${broken.length === 1 ? 'needs' : 'need'} you.`, tone: 'warn' }
   }
   if (connected.length === 0) {
-    return { sentence: 'Nothing is connected yet. Start with GitHub so Mushi can open fix PRs.', tone: 'neutral' }
+    return { sentence: 'Nothing is connected yet. Start with GitHub so Mushi Mushi can open fix PRs.', tone: 'neutral' }
   }
   // Count each tool once: "1 connected, 1 not tested yet" was one tool, set
   // up and never tested, read as two (integrator's new-user walk, 2026-10-28).

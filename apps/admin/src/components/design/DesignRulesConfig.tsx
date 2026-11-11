@@ -170,7 +170,7 @@ export function DesignRulesConfig({ rules, editable, change, onPreview, onConfir
                       />
                     </DataTableCell>
                     <DataTableCell>
-                      {rule.fromManifest ? <Badge tone="info">mushi.recipe.json</Badge> : <Badge tone="neutral">Mushi default</Badge>}
+                      {rule.fromManifest ? <Badge tone="info">mushi.recipe.json</Badge> : <Badge tone="neutral">Mushi Mushi default</Badge>}
                     </DataTableCell>
                   </tr>
                 )

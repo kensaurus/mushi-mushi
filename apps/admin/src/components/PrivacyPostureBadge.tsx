@@ -1,14 +1,17 @@
 /**
  * FILE: apps/admin/src/components/PrivacyPostureBadge.tsx
- * PURPOSE: Tiny sidebar chip that shows the project's current privacy posture.
- *          Green = "All systems BYOK" (every LLM call runs under the project's
- *          own API key). Yellow = "Platform key in use" (at least one LLM
- *          pipeline is using the Mushi-platform Anthropic/OpenAI key).
- *          Grey = the key check failed, so the chip does not guess.
+ * PURPOSE: Tiny sidebar chip that says whose AI key this app's diagnoses run
+ *          on, in plain words (re-audit 2026-11-11: "All LLM calls run under
+ *          your own API key ... All systems BYOK" was jargon, and an account
+ *          with no key of its own is the normal free state, not a warning).
+ *          Green = "AI runs on your own key" (a key saved for this app or its
+ *          team). Blue = "AI runs on Mushi Mushi's key" (the hosted default,
+ *          no key of your own). Grey = the key check failed, so the chip does
+ *          not guess. The state is the server's (GET /privacy-status).
  *
- *          Clicking the chip opens a small popover with the full posture detail
- *          (storage host, LLM provider, region, retention window, last audit).
- *          The popover CTA links to Settings → BYOK to resolve the issue.
+ *          Clicking the chip opens a small popover with the detail (AI key,
+ *          storage host, region, retention window, last audit). Its link
+ *          goes to Settings → AI keys.
  */
 
 import { useId, useRef } from 'react';
@@ -67,38 +70,39 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
     data != null && (data.llm_provider === 'unknown' || data.byok_configured === null);
   const isByok = data?.byok_configured === true;
   const label = error
-    ? 'Privacy unavailable'
+    ? 'AI key not checked'
     : unknown
-      ? 'Key unknown'
+      ? 'AI key unknown'
       : isByok
-        ? 'BYOK'
-        : 'Platform key';
+        ? 'Your own AI key'
+        : "Mushi Mushi's AI key";
   const labelLong = error
-    ? 'Privacy status unavailable'
+    ? 'Could not check the AI key'
     : unknown
-      ? 'Key status unknown'
+      ? 'AI key unknown'
       : isByok
-        ? 'All systems BYOK'
-        : 'Platform key in use';
-  const dotClass = error ? 'bg-danger' : unknown ? 'bg-fg-faint' : isByok ? 'bg-ok' : 'bg-warn';
+        ? 'AI runs on your own key'
+        : "AI runs on Mushi Mushi's key";
+  // Mushi Mushi's key is the hosted default, so it is information, not a warning.
+  const dotClass = error ? 'bg-danger' : unknown ? 'bg-fg-faint' : isByok ? 'bg-ok' : 'bg-info';
   const textClass = error
     ? CHIP_TONE.dangerSubtle
     : unknown
       ? CHIP_TONE.neutral
       : isByok
         ? CHIP_TONE.okSubtle
-        : CHIP_TONE.warnSubtle;
+        : CHIP_TONE.infoSubtle;
 
   // Base explanation, free of any click affordance — the two variants do
   // different things on click (the expanded badge opens a popover, the rail
   // item navigates to Settings), so each appends its own call to action.
   const postureExplanation = error
-    ? 'Could not load privacy posture. Open BYOK settings or retry.'
+    ? 'Could not check which AI key this app uses. Retry, or open the AI key settings.'
     : unknown
-      ? 'Could not check which API key this app uses. Retry, or open BYOK settings.'
+      ? 'Could not check which AI key this app uses. Retry, or open the AI key settings.'
       : isByok
-        ? 'All LLM calls run under your own API key — your data never transits the Mushi platform account.'
-        : 'At least one pipeline is using the Mushi platform API key. Configure BYOK in Settings to keep your data in your own LLM account.';
+        ? "The AI that explains this app's bugs runs on an AI key saved for the app or its team, not on Mushi Mushi's key."
+        : "The AI that explains this app's bugs runs on Mushi Mushi's key, at no cost to you. To run it on your own account instead, add your own AI key in Settings.";
 
   const tooltipContent =
     error || isByok ? postureExplanation : `${postureExplanation} Click for details.`;
@@ -110,17 +114,18 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
     // on hover.
     const railDescription = error
       ? postureExplanation
-      : `${postureExplanation} Opens BYOK settings.`;
+      : `${postureExplanation} Opens the AI key settings.`;
     return (
       <Tooltip
         side="right"
         portal
         content={
           <NavRailFlyout
-            title="Privacy posture"
+            title="AI key"
             description={railDescription}
             status={{
-              tone: error ? 'danger' : unknown ? 'idle' : isByok ? 'ok' : 'warn',
+              // Mushi Mushi's key is the hosted default: no warning dot for it.
+              tone: error ? 'danger' : isByok ? 'ok' : 'idle',
               label: labelLong,
             }}
           />
@@ -129,7 +134,7 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
         <Link
           to="/settings?tab=byok"
           className="nav-rail-item"
-          aria-label={`Privacy posture: ${label}`}
+          aria-label={`AI key: ${label}`}
           aria-describedby={railDescId}
         >
           <span className={`inline-block w-2 h-2 rounded-full ${dotClass}`} />
@@ -150,7 +155,7 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
           ref={badgeRef}
           type="button"
           className="flex items-center gap-1.5 w-full px-2 py-1 rounded-sm hover:bg-surface-raised transition-opacity"
-          aria-label={`${labelLong} — click for privacy details`}
+          aria-label={`${labelLong} — click for details`}
           title={labelLong}
           onClick={() => setPopoverOpen((v) => !v)}
         >
@@ -167,7 +172,7 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
         <div
           className="absolute bottom-full left-0 mb-1 w-60 bg-surface-raised border border-edge rounded-md shadow-lg p-3 space-y-2 z-50 text-2xs"
           role="dialog"
-          aria-label="Privacy posture details"
+          aria-label="AI key and data details"
         >
           <button
             type="button"
@@ -177,28 +182,28 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
           >
             ✕
           </button>
-          <p className="font-semibold text-fg text-xs">Privacy posture</p>
+          <p className="font-semibold text-fg text-xs">{labelLong}</p>
 
           {error ? (
             <p className="text-danger-foreground leading-snug">{error}</p>
           ) : (
             <div className="space-y-1 text-fg-muted">
               <div className="flex justify-between">
-                <span>LLM provider</span>
+                <span>AI key</span>
                 <span
                   className={`font-mono ${
                     unknown
                       ? 'text-fg-secondary'
                       : isByok
                         ? 'text-ok-foreground'
-                        : 'text-warn-foreground'
+                        : 'text-fg-secondary'
                   }`}
                 >
                   {unknown
                     ? 'unknown'
                     : data?.llm_provider === 'byok' || isByok
-                      ? 'BYOK'
-                      : 'platform'}
+                      ? 'your own'
+                      : "Mushi Mushi's"}
                 </span>
               </div>
               {data?.storage_provider && (
@@ -228,7 +233,7 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
               className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity hover:no-underline"
               onClick={() => setPopoverOpen(false)}
             >
-              {isByok || unknown ? 'View BYOK settings →' : 'Configure BYOK →'}
+              {isByok || unknown ? 'Open AI key settings →' : 'Use your own AI key →'}
             </Link>
             {(error || unknown) && (
               <button

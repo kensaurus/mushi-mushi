@@ -342,7 +342,7 @@ function HealthPageContent() {
       toast.success(`Ran ${job}`, 'Its result shows in the job card below.')
       reloadAll()
     } catch {
-      toast.error(`Could not run ${job}`, 'Could not reach Mushi. Check your connection and retry.')
+      toast.error(`Could not run ${job}`, 'Could not reach Mushi Mushi. Check your connection and retry.')
     } finally {
       setTriggering(null)
     }
@@ -525,11 +525,11 @@ function HealthPageContent() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-health">
       <PageHeaderBar
-        title={copy?.title ?? 'Mushi health'}
+        title={copy?.title ?? 'Mushi Mushi health'}
         projectScope={stats.projectName ?? projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
 
-        helpTitle={copy?.help?.title ?? 'About Mushi health'}
+        helpTitle={copy?.help?.title ?? 'About Mushi Mushi health'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Live operational dashboard showing every LLM call routed by Mushi Mushi (Anthropic primary, OpenAI fallback) and every scheduled job (judge, intelligence, retention). Each event is written to a telemetry table and streamed here via Supabase Realtime.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Catch when Anthropic rate-limits cause a fallback storm',
@@ -621,7 +621,7 @@ function HealthPageContent() {
         <>
           <PageHero
             scope="health"
-            title={copy?.title ?? 'Mushi health'}
+            title={copy?.title ?? 'Mushi Mushi health'}
             kicker="Pipeline vitals"
             decide={{
               label: stats.redCount > 0
@@ -928,7 +928,7 @@ function HealthPageContent() {
                 title={recentFilter || fnFilter ? 'No calls match these filters' : 'No recent calls'}
                 description={recentFilter || fnFilter
                   ? 'Try clearing filters or widening the time window.'
-                  : 'Once Mushi processes a report, every model call lands here with the full trace one click away in Langfuse.'}
+                  : 'Once Mushi Mushi processes a report, every model call lands here with the full trace one click away in Langfuse.'}
               />
             ) : (
               <div className="space-y-0.5 font-mono text-2xs">

@@ -50,7 +50,7 @@ export function ReportRelatedFooter({ report, dispatchState }: { report: ReportD
     } else {
       links.push({
         to: '/fixes',
-        label: 'Auto-fix pipeline',
+        label: 'All fixes',
         description: 'Track the agentic fix attempts for this and other reports.',
       })
     }

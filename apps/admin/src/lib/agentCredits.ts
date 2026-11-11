@@ -32,9 +32,18 @@ interface WorkStatsResponse {
   hasWorker?: boolean
 }
 
-/** Same words as the server (agent-credits.ts). */
-export const CLAUDE_WORK_COMMAND = 'mushi work --agent claude --repo-dir .'
-export const CLAUDE_FOLLOWUPS_COMMAND = 'mushi work --agent claude --followups --repo-dir .'
+/**
+ * Through npx, so they run with no global install (re-audit 2026-11-11: a
+ * bare `mushi` is "command not found" on a computer that never installed it).
+ */
+export const CLAUDE_WORK_COMMAND = 'npx @mushi-mushi/cli@latest work --agent claude --repo-dir .'
+export const CLAUDE_FOLLOWUPS_COMMAND = 'npx @mushi-mushi/cli@latest work --agent claude --followups --repo-dir .'
+/** What must already be signed in for either command to do anything. */
+export const CLAUDE_WORK_NEEDS = [
+  { what: 'Claude Code signed in', command: 'claude auth login' },
+  { what: 'GitHub CLI signed in', command: 'gh auth login' },
+  { what: 'you signed in to Mushi Mushi', command: 'npx @mushi-mushi/cli@latest login' },
+] as const
 
 /** "Nov 19" */
 function creditsDay(iso: string): string {

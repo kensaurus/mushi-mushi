@@ -34,6 +34,20 @@ describe('ReportPdcaStory plan stage', () => {
     expect(nodes.plan.headline).toBe('Login button does nothing on iPad Safari')
   })
 
+  // Re-audit 2026-11-11: "precomputed", "0ms" and "No judge or CI signal yet" on a builder's sample report.
+  it('keeps the model, its latency and the judge wording for operator accounts', () => {
+    const r = report({ status: 'classified', stage1_classification: { category: 'bug' }, stage1_model: 'precomputed', stage1_latency_ms: 0 })
+    const outside = buildStoryNodes(r, idle)
+    expect(outside.plan.details).toContain('Sample explanation (written in advance)')
+    expect(outside.plan.details?.join(' ')).not.toMatch(/precomputed|0ms/)
+    expect(outside.check.headline).toBe('Not checked yet. The checks run once a fix is dispatched.')
+    const real = report({ status: 'classified', stage1_classification: { category: 'bug' }, stage1_model: 'claude-haiku-5-5', stage1_latency_ms: 812 })
+    expect(buildStoryNodes(real, idle).plan.details?.join(' ')).not.toMatch(/claude-haiku|812ms/)
+    const operator = buildStoryNodes(real, idle, true)
+    expect(operator.plan.details).toEqual(expect.arrayContaining(['claude-haiku-5-5', '812ms']))
+    expect(operator.check.headline).toContain('No judge or CI signal yet')
+  })
+
   it('a report nobody classified yet is pending', () => {
     expect(buildStoryNodes(report({}), idle).plan.state).toBe('pending')
   })

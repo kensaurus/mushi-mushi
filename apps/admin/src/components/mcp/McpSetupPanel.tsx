@@ -415,7 +415,7 @@ export function McpSetupPanel({
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <SignalChip tone="neutral" className="uppercase tracking-wider font-medium">
               {snippetMode === 'cursor'
-                ? 'Stdio — drop into IDE settings (recommended — shows Mushi icon in Cursor)'
+                ? 'Stdio — drop into IDE settings (recommended — shows Mushi Mushi icon in Cursor)'
                 : snippetMode === 'http'
                   ? 'Hosted HTTP — no subprocess (URL host may show Supabase icon in Cursor; use stdio for branding)'
                   : 'Drop into your repo root'}
@@ -463,7 +463,7 @@ export function McpSetupPanel({
             <div>
               <h3 className="text-sm font-semibold text-fg">mcp.json syntax helper</h3>
               <p className="text-xs text-fg-muted">
-                Paste the block Cursor is using. We check JSON shape, stdio/HTTP fields, and Mushi env names.
+                Paste the block Cursor is using. We check JSON shape, stdio/HTTP fields, and Mushi Mushi env names.
               </p>
             </div>
             <Btn
@@ -505,7 +505,7 @@ export function McpSetupPanel({
             </div>
             <ContainedBlock tone="muted" className="mt-2">
               <p className="text-xs text-fg-muted leading-relaxed">
-                Each Mushi project uses its own API key and gets a uniquely-named MCP server entry
+                Each Mushi Mushi project uses its own API key and gets a uniquely-named MCP server entry
                 (<span className="font-mono text-fg-secondary">mushi-{'{'}name{'}'}-{'{'}id{'}'}</span>).
                 Click <strong>Add to Cursor</strong> for each project below — all of them will appear
                 simultaneously in your IDE so you can triage bugs across all your apps in one session.
@@ -601,12 +601,12 @@ export function McpSetupPanel({
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-sm font-semibold text-fg">Wire your app (SDK)</h3>
               <Badge className="bg-surface-overlay text-fg-muted border border-edge-subtle text-2xs">
-                end users → Mushi
+                end users → Mushi Mushi
               </Badge>
             </div>
             <ContainedBlock tone="muted" className="mt-2">
               <p className="text-xs text-fg-muted leading-relaxed">
-                The MCP connects <em>your coding agent</em> to Mushi. The SDK connects
+                The MCP connects <em>your coding agent</em> to Mushi Mushi. The SDK connects
                 <em> real users in your app</em> so their bug reports flow into your reports inbox.
                 Use a <strong>report:write</strong> key for the SDK — never your MCP key.
               </p>

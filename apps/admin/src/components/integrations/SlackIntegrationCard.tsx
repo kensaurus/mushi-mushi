@@ -350,7 +350,7 @@ export function SlackIntegrationCard({
             size="sm"
             onClick={() => void handleAddToSlack()}
             disabled={!projectId || connectingSlack}
-            title={slackConfigured ? 'Reinstall Mushi Slack bot to refresh scopes or reconnect' : 'Install Mushi Slack bot'}
+            title={slackConfigured ? 'Reinstall Mushi Mushi Slack bot to refresh scopes or reconnect' : 'Install Mushi Mushi Slack bot'}
             leadingIcon={(
               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" className={slackConfigured ? 'opacity-60' : 'opacity-90'}>
                 <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z"/>
@@ -387,7 +387,7 @@ export function SlackIntegrationCard({
                 <span className="text-fg-muted">your saved channel…</span>
               ) : (
                 <span title={`Channel ID ${channelId}`}>
-                  a channel Mushi can&apos;t list (private, or the bot isn&apos;t in it){' '}
+                  a channel Mushi Mushi can&apos;t list (private, or the bot isn&apos;t in it){' '}
                   <code className="font-mono text-2xs text-fg-faint">{channelId}</code>
                 </span>
               )}
@@ -488,7 +488,7 @@ export function SlackIntegrationCard({
               </div>
             ) : (
               <p className={`rounded-sm px-2.5 py-2 text-xs ${CHIP_TONE.warnSubtle}`}>
-                No channels found — invite the Mushi bot to at least one Slack channel first, then retry.
+                No channels found — invite the Mushi Mushi bot to at least one Slack channel first, then retry.
               </p>
             )}
           </div>

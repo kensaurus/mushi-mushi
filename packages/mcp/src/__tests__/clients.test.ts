@@ -222,6 +222,20 @@ describe('Claude Code builder', () => {
     if (result.kind !== 'command') throw new Error('expected command')
     expect(result.text).toContain(SAMPLE_INPUT.apiKey)
   })
+
+  it('leads with the keyless OAuth install; the key command is the CI variant', () => {
+    const cc = getMcpClient('claude-code')
+    expect(cc.oauthDefault).toBe(true)
+    expect(MCP_OAUTH_CLIENT_IDS).toContain(cc.id)
+    const oauth = buildOAuthInstall('claude-code', { mcpOAuthUrl: 'https://kensaur.us/mushi-mushi/hosted-mcp/' })
+    if (oauth.kind !== 'command') throw new Error('expected command')
+    expect(oauth.text).toBe('claude mcp add --transport http mushi https://kensaur.us/mushi-mushi/hosted-mcp/')
+    expect(oauth.text).not.toMatch(/--header|Authorization|Bearer/)
+    // No other client claims it without a URL-only install to back it.
+    for (const c of MCP_CLIENTS) {
+      if (c.oauthDefault) expect(MCP_OAUTH_CLIENT_IDS as readonly string[]).toContain(c.id)
+    }
+  })
 })
 
 describe('Claude Desktop builder', () => {

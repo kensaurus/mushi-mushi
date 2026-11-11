@@ -67,7 +67,13 @@ Then connect your editor so it can read diagnoses: one click on the [Connect pag
 
 Building in Lovable or Bolt, with no terminal? Paste one script tag through your prompt instead: [Mushi Mushi in Lovable or Bolt](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt).
 
-The SDK needs two env vars (`VITE_MUSHI_PROJECT_ID` / `VITE_MUSHI_API_KEY`, or `NEXT_PUBLIC_MUSHI_*`; see [`examples/sdk.env.example`](./examples/sdk.env.example)). No Sentry, no LLM key, no monitoring stack. The hosted free plan covers one app and 100 diagnoses a month, with no card and no AI key of your own ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Or you can [self-host](#self-host).
+The SDK needs two env vars (`VITE_MUSHI_PROJECT_ID` / `VITE_MUSHI_API_KEY`, or `NEXT_PUBLIC_MUSHI_*`; see [`examples/sdk.env.example`](./examples/sdk.env.example)). No Sentry, no LLM key, no monitoring stack.
+
+**Before you deploy.** The wizard writes those two variables to `.env.local`, which never reaches your host. Add them where your site is built (Vercel: Project → Settings → Environment Variables, Production; Netlify: Project configuration → Environment variables), then redeploy. Without them the report button does not appear on the live site.
+
+**Want a real diagnosis of your own code right away?** A test report is one made-up sentence, so its diagnosis is thin. Bring in a bug you already know about: `npx mushi-mushi sentry import` (your newest unresolved Sentry issues, once Sentry is connected under Integrations in the console) or `npx mushi-mushi reports file --title "…" --description "…"`. Connect your GitHub repository so the diagnosis can name your files.
+
+The hosted free plan covers one app and 100 diagnoses a month, with no card and no AI key of your own ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Or you can [self-host](#self-host).
 
 <details>
 <summary><b>Let your AI editor do the setup</b></summary>
@@ -137,7 +143,7 @@ Most bugs never get reported. People just leave. So beyond the reports people se
 | Feature | What it does | Needs |
 | --- | --- | --- |
 | [First-time user test](https://kensaur.us/mushi-mushi/docs/what-it-does#first-user-test) | An AI that has never seen your app tries one goal, such as signing up, and files the places it got stuck, with screenshots | The Mushi Mushi worker on a computer of yours, or one run of `mushi ux fresh-eyes` |
-| [A second AI reviews every fix](https://kensaur.us/mushi-mushi/docs/what-it-does#ai-review) | Reads each agent PR next to the original report and says merge, fix first or hold, with its reasons | Your GitHub repo and your own Anthropic key |
+| [A second AI reviews every fix](https://kensaur.us/mushi-mushi/docs/what-it-does#ai-review) | Reads each agent PR next to the original report and says merge, fix first or hold, with its reasons | Your GitHub repo and your own Anthropic or OpenAI key |
 | [Live-site watch](https://kensaur.us/mushi-mushi/docs/what-it-does#site-watch) | Checks your live pages every hour. A broken page is filed only after a second check confirms it | Your own Firecrawl key |
 | [Weekly site audit](https://kensaur.us/mushi-mushi/docs/what-it-does#site-audit) | Reads every page once a week and files dead links, missing titles, text in the wrong language and images without a text description | Your own Firecrawl key |
 | [Known security holes](https://kensaur.us/mushi-mushi/docs/what-it-does#vulnerabilities) | Checks your lockfiles daily against the public vulnerability database and says which package to update | Your GitHub repo |
@@ -162,7 +168,7 @@ A "fix first" review can go back to the agent with its findings, at most twice p
 | Auto-fix | Optional: an agent opens a draft PR, with the built-in fixer, your Cursor key, or the worker on your computer | Seer add-on (paid) |
 | Setup | One command that signs you in through the browser; the sample diagnosis needs no account | SDK + DSN + dashboard |
 
-**It works with what you already run.** Point a Sentry alert webhook at `/v1/webhooks/sentry?projectId=<id>` and errors land in the same queue. Merging a Mushi Mushi fix resolves the Sentry issue, and the reverse. Adapters also bring in Datadog, Bugsnag, Rollbar, Crashlytics and others. Plugins keep Linear, Jira, GitHub Issues, Slack, Discord, Teams and PagerDuty in sync. Nothing gets ripped out. Details: [Sentry vs Mushi Mushi](https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi).
+**It works with what you already run.** Point a Sentry alert webhook at `/v1/webhooks/sentry?projectId=<id>` and errors land in the same queue. Once you add a Sentry auth token under Integrations → Sentry, merging a Mushi Mushi fix resolves the Sentry issue, and the reverse. Both work on every plan. Adapters also bring in Datadog, Bugsnag, Rollbar, Crashlytics and others. Plugins keep Linear, Jira, GitHub Issues, Slack, Discord, Teams and PagerDuty in sync. Nothing gets ripped out. Details: [Sentry vs Mushi Mushi](https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi).
 
 ## Self-host
 

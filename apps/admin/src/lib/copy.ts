@@ -145,7 +145,7 @@ const COPY: CopyRegistry = {
     },
     '/fixes': {
       title: 'Fixes',
-      description: 'Pull requests Mushi drafted from your real bugs. Review the diff and click "Open PR" to merge.',
+      description: 'Pull requests Mushi Mushi drafted from your real bugs. Review the diff and click "Open PR" to merge.',
       help: {
         title: 'About drafted fixes',
         whatIsIt:
@@ -228,7 +228,7 @@ const COPY: CopyRegistry = {
     },
     '/feedback': {
       title: 'Help & support',
-      description: 'Your support tickets to the Mushi team — banner and FEEDBACK SNAPSHOT before Overview, Active, Shipped, or All tabs.',
+      description: 'Your support tickets to the Mushi Mushi team — banner and FEEDBACK SNAPSHOT before Overview, Active, Shipped, or All tabs.',
       help: {
         title: 'About Help & support',
         whatIsIt:
@@ -247,7 +247,7 @@ const COPY: CopyRegistry = {
       description: 'Banner shows what needs you — then Overview for the big picture, Your projects to create apps and copy keys.',
       help: {
         title: 'About managing apps',
-        whatIsIt: 'A project is a container for one app or environment. Everything in Mushi — bugs, fixes, reports, integrations — belongs to a project.',
+        whatIsIt: 'A project is a container for one app or environment. Everything in Mushi Mushi — bugs, fixes, reports, integrations — belongs to a project.',
         useCases: [
           'Create a project for your main app (takes 30 seconds)',
           'Add a separate project for staging so test bugs don\'t mix with real ones',
@@ -397,7 +397,7 @@ const COPY: CopyRegistry = {
       },
       help: {
         title: 'About pull requests',
-        whatIsIt: 'Link your GitHub repo here once, and every auto-fix Mushi drafts will appear as a pull request in the right branch.',
+        whatIsIt: 'Link your GitHub repo here once, and every auto-fix Mushi Mushi drafts will appear as a pull request in the right branch.',
         useCases: [
           'Connect your repo so the auto-fix agent has somewhere to open PRs',
           'Check connection health if PRs stopped appearing',
@@ -546,7 +546,7 @@ const COPY: CopyRegistry = {
       },
       help: {
         title: 'About plugins',
-        whatIsIt: 'Webhook plugins subscribe to Mushi lifecycle events. Every POST is signed so your receiver can verify authenticity before acting.',
+        whatIsIt: 'Webhook plugins subscribe to Mushi Mushi lifecycle events. Every POST is signed so your receiver can verify authenticity before acting.',
         useCases: [
           'Page on-call via PagerDuty when a critical bug is reported',
           'Mirror classified reports to Linear or Jira automatically',
@@ -583,7 +583,7 @@ const COPY: CopyRegistry = {
       },
       help: {
         title: 'About editor agents',
-        whatIsIt: 'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.',
+        whatIsIt: 'MCP lets your coding assistant call Mushi Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.',
         useCases: [
           'Ask Cursor "what should I fix next?" and get an answer from your real bugs',
           'Have the agent draft a fix for a specific report in one command',
@@ -662,7 +662,7 @@ const COPY: CopyRegistry = {
     '/lessons': {
       title: 'Lessons',
       description:
-        'Bugs that keep coming back, how many reports each has, and the rule Mushi suggests for it.',
+        'Bugs that keep coming back, how many reports each has, and the rule Mushi Mushi suggests for it.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         activeLessons: 'Rules in use',
@@ -688,7 +688,7 @@ const COPY: CopyRegistry = {
       },
       help: {
         title: 'About lessons',
-        whatIsIt: 'Rules automatically extracted from recurring bugs. Once a pattern appears enough times, Mushi names it and uses it to catch the next one early.',
+        whatIsIt: 'Rules automatically extracted from recurring bugs. Once a pattern appears enough times, Mushi Mushi names it and uses it to catch the next one early.',
         useCases: [
           'See what classes of bugs keep coming back in your project',
           'Use these rules in AI code review so the agent knows your history',
@@ -809,7 +809,7 @@ const COPY: CopyRegistry = {
           'Catch a database column the frontend reads that was dropped',
           'Turn a serious change into a lesson so it is not repeated',
         ],
-        howToUse: 'Run a scan from the Run a scan tab, then review the changes. Dismiss the ones that are fine; Mushi checks those routes less often.',
+        howToUse: 'Run a scan from the Run a scan tab, then review the changes. Dismiss the ones that are fine; Mushi Mushi checks those routes less often.',
       },
     },
     '/experiments': {
@@ -841,7 +841,7 @@ const COPY: CopyRegistry = {
       },
       help: {
         title: 'About experiments',
-        whatIsIt: 'Compare two or more versions of a screen and see which one more users finish. Mushi splits your users through the SDK and tells you when one version is clearly ahead.',
+        whatIsIt: 'Compare two or more versions of a screen and see which one more users finish. Mushi Mushi splits your users through the SDK and tells you when one version is clearly ahead.',
         useCases: [
           'Test button copy, colour, or layout variants',
           'Measure impact of a new feature on conversion rate',
@@ -878,7 +878,7 @@ const COPY: CopyRegistry = {
       },
       help: {
         title: 'About unusual spikes',
-        whatIsIt: 'Send any number your app tracks (error rate, latency, sign-ups). Mushi checks them every hour, draws each one with your releases on it, and opens a bug report when a spike starts right after a release.',
+        whatIsIt: 'Send any number your app tracks (error rate, latency, sign-ups). Mushi Mushi checks them every hour, draws each one with your releases on it, and opens a bug report when a spike starts right after a release.',
         useCases: [
           'See a crash-rate jump that started with a release',
           'Notice latency creeping up after a deploy',
@@ -992,7 +992,7 @@ const COPY: CopyRegistry = {
         useCases: [
           'See reports used vs quota before new reports start returning HTTP 402',
           'Upgrade via Stripe Checkout or manage card/invoices in the Billing Portal',
-          'Cross-check Mushi usage (reports, fixes, LLM COGS) against Stripe line items',
+          'Cross-check Mushi Mushi usage (reports, fixes, LLM COGS) against Stripe line items',
         ],
         howToUse: 'Overview shows your project card with usage bar and invoices. Plans compares tiers. Support opens a ticket. Status banner explains quota and payment health at a glance.',
       },
@@ -1135,7 +1135,7 @@ const COPY: CopyRegistry = {
       description: 'Operator-only view of all signups, plans, and activity. Useful for support and growth tracking.',
       help: {
         title: 'About all users',
-        whatIsIt: 'A full list of every Mushi account — visible only to operators — showing signup date, plan, and recent activity.',
+        whatIsIt: 'A full list of every Mushi Mushi account — visible only to operators — showing signup date, plan, and recent activity.',
         useCases: [
           'Look up a specific user to check their plan or recent activity',
           'See how many new users signed up this week',
@@ -1180,7 +1180,7 @@ const COPY: CopyRegistry = {
           'Compare this week with last week',
         ],
         howToUse:
-          'Every number opens the list it counts. A grey light is not connected yet; its button says how to connect it. "How this works" at the bottom explains what Mushi does with a bug.',
+          'Every number opens the list it counts. A grey light is not connected yet; its button says how to connect it. "How this works" at the bottom explains what Mushi Mushi does with a bug.',
       },
     },
     '/reports': {
@@ -1288,7 +1288,7 @@ const COPY: CopyRegistry = {
       help: {
         title: 'About fix drafts',
         whatIsIt:
-          'When you send a bug to auto-fix, Mushi opens a draft pull request on your repo. Each one comes with a one-paragraph rationale and a screenshot diff.',
+          'When you send a bug to auto-fix, Mushi Mushi opens a draft pull request on your repo. Each one comes with a one-paragraph rationale and a screenshot diff.',
         useCases: [
           'Review draft PRs before they land — like a junior engineer\u2019s first attempt',
           'See quality scores so you know which fixes are confidence-worthy',
@@ -1301,7 +1301,7 @@ const COPY: CopyRegistry = {
     '/judge': {
       title: 'Triage grading',
       description:
-        'Whether you can trust Mushi’s diagnoses: how often a second AI agrees with them, and the worst recent disagreements.',
+        'Whether you can trust Mushi Mushi’s diagnoses: how often a second AI agrees with them, and the worst recent disagreements.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         week: 'This week',
@@ -1329,7 +1329,7 @@ const COPY: CopyRegistry = {
       help: {
         title: 'About triage grading',
         whatIsIt:
-          "A second AI grades each diagnosis Mushi makes: was the category right, the severity, the part of the app, and were the steps to reproduce usable. The chart shows how often it agrees, week by week, so you can tell whether to trust a diagnosis before you merge its fix.",
+          "A second AI grades each diagnosis Mushi Mushi makes: was the category right, the severity, the part of the app, and were the steps to reproduce usable. The chart shows how often it agrees, week by week, so you can tell whether to trust a diagnosis before you merge its fix.",
         useCases: [
           'See whether the diagnoses are getting better or worse week by week',
           'Read the worst recent disagreements before merging their fixes',
@@ -1340,9 +1340,9 @@ const COPY: CopyRegistry = {
       },
     },
     '/health': {
-      title: 'Mushi health',
+      title: 'Mushi Mushi health',
       description:
-        'Whether Mushi itself is working: the AI calls behind your diagnoses and fixes, and its background jobs.',
+        'Whether Mushi Mushi itself is working: the AI calls behind your diagnoses and fixes, and its background jobs.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         calls: 'AI calls',
@@ -1367,9 +1367,9 @@ const COPY: CopyRegistry = {
         activity: 'Recent traces',
       },
       help: {
-        title: 'About Mushi health',
+        title: 'About Mushi Mushi health',
         whatIsIt:
-          'Real-time vitals for every LLM call Mushi makes — how fast it responds, how often it fails, and how much each call costs you.',
+          'Real-time vitals for every LLM call Mushi Mushi makes — how fast it responds, how often it fails, and how much each call costs you.',
         useCases: [
           'Catch a slow-down before users notice (average / p95 latency trend)',
           'Spot a model outage early (error rate spike)',
@@ -1381,7 +1381,7 @@ const COPY: CopyRegistry = {
     },
     '/integrations': {
       title: 'Integrations',
-      description: 'Connect Sentry, Langfuse, GitHub, and routing destinations so Mushi closes the loop in tools your team already uses.',
+      description: 'Connect Sentry, Langfuse, GitHub, and routing destinations so Mushi Mushi closes the loop in tools your team already uses.',
       sections: {
         platforms: 'Connected services',
         routing: 'Where bugs should land',
@@ -1389,7 +1389,7 @@ const COPY: CopyRegistry = {
       help: {
         title: 'About integrations',
         whatIsIt:
-          'Mushi catches bugs and drafts fixes — but you still want them in Sentry, your repo, and your tracker. Wire platform credentials here, then add routing destinations.',
+          'Mushi Mushi catches bugs and drafts fixes — but you still want them in Sentry, your repo, and your tracker. Wire platform credentials here, then add routing destinations.',
         useCases: [
           'Give the AI Sentry context when classifying user reports',
           'Let auto-fix open draft PRs on your GitHub repo',
@@ -1424,7 +1424,7 @@ const COPY: CopyRegistry = {
       help: {
         title: 'About integrations',
         whatIsIt:
-          'Mushi uses your existing observability and code tools. Platform cards feed the AI steps; routing forwards reviewed reports; Repo & index grounds auto-fix in your codebase.',
+          'Mushi Mushi uses your existing observability and code tools. Platform cards feed the AI steps; routing forwards reviewed reports; Repo & index grounds auto-fix in your codebase.',
         useCases: [
           'Give the AI Sentry context when classifying user reports',
           'Let auto-fix open draft PRs on your GitHub repo',
@@ -1558,7 +1558,7 @@ const COPY: CopyRegistry = {
     },
     '/mcp': {
       title: 'Editor agents',
-      description: 'Connect your editor’s agent to this app and check that it is talking to Mushi.',
+      description: 'Connect your editor’s agent to this app and check that it is talking to Mushi Mushi.',
     },
     '/qa-coverage': {
       title: 'Scheduled tests',
@@ -1645,8 +1645,8 @@ const COPY: CopyRegistry = {
       description: 'How well the AI triages bugs (severity, category, diagnosis), graded over time.',
     },
     '/health': {
-      title: 'Mushi health',
-      description: 'Whether Mushi itself is working: its AI calls and background jobs. Your app’s uptime and errors are on Home.',
+      title: 'Mushi Mushi health',
+      description: 'Whether Mushi Mushi itself is working: its AI calls and background jobs. Your app’s uptime and errors are on Home.',
     },
     '/integrations': {
       title: 'Integrations',
@@ -1734,5 +1734,5 @@ export function renderDogfoodNarrative(params: {
     const drafted = draftedFixes === 1 ? '1 fix drafted' : `${draftedFixes} fixes drafted`
     return `${headline} ${drafted} — ready for your review.`
   }
-  return `${headline} No fixes drafted yet — open one and let Mushi try.`
+  return `${headline} No fixes drafted yet — open one and let Mushi Mushi try.`
 }

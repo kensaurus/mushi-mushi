@@ -330,7 +330,7 @@ export function ConnectPage() {
                 Problems that stop bug reports from arriving, each with a fix.
               </SectionDescription>
               {project ? (
-                <SdkHealthPanel projectId={project.id} />
+                <SdkHealthPanel projectId={project.id} nativeApp={isNativeProject(project)} />
               ) : (
                 <ProjectFallbackNote
                   card
@@ -345,7 +345,7 @@ export function ConnectPage() {
           <div id="connect-sdk" className="scroll-mt-chrome">
             <Section title="Bug capture SDK">
               <SectionDescription when={showSectionDescriptions}>
-                Add the Mushi SDK to your app so users can report bugs in one tap.
+                Add the Mushi Mushi SDK to your app so users can report bugs in one tap.
               </SectionDescription>
               {project && isExpoReporterNeverConnected(project) ? (
                 <HelpBanner
@@ -394,7 +394,7 @@ export function ConnectPage() {
           <div id="connect-update" className="scroll-mt-chrome">
             <Section title="Update center">
               <SectionDescription when={showSectionDescriptions}>
-                Keep the Mushi SDK up to date in your connected repository. A one-click PR bumps only
+                Keep the Mushi Mushi SDK up to date in your connected repository. A one-click PR bumps only
                 @mushi-mushi/* version strings — you review and merge.
               </SectionDescription>
               {project ? (

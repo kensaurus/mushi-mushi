@@ -225,7 +225,7 @@ function ProjectDesign({ projectId }: { projectId: string }) {
         title="Design system"
         helpTitle="What is the design system page?"
         helpWhatIsIt="Your app's design: its colours, contrast, type, spacing, radius and motion, read from your token files, plus how far the code has drifted from it. Diagnoses use these so a fix stays in your design."
-        helpHowToUse="Check your colours and the drift line at the top, then run a drift check. To change a token or a rule, queue the edit, preview the diff and confirm: Mushi opens a draft PR and never writes to your repo directly."
+        helpHowToUse="Check your colours and the drift line at the top, then run a drift check. To change a token or a rule, queue the edit, preview the diff and confirm: Mushi Mushi opens a draft PR and never writes to your repo directly."
         helpFlowPath="/design"
       >
         {/* One control, one tab stop (QA 293); named as the sidebar names the page. */}
@@ -247,7 +247,7 @@ function ProjectDesign({ projectId }: { projectId: string }) {
       {empty ? (
         <PageFirstStep
           title="No design files yet"
-          sentence="Point Mushi at the files where your colours, spacing and fonts live (a tokens.json, your Tailwind theme or a CSS file). It then shows them here and tells you when code drifts from them."
+          sentence="Point Mushi Mushi at the files where your colours, spacing and fonts live (a tokens.json, your Tailwind theme or a CSS file). It then shows them here and tells you when code drifts from them."
           action={{ label: 'Show me how', href: docsUrl('/concepts/app-recipe#mushirecipejson') }}
           learnMore={{ label: 'What the design page shows', href: docsUrl('/concepts/app-recipe#the-design-system-page') }}
           data-testid="design-first-step"
@@ -289,7 +289,7 @@ function ProjectDesign({ projectId }: { projectId: string }) {
         {view === 'tokens' && data && !data.editable.enabled && (
           <p className="text-xs text-fg-muted">
             <span className="font-medium text-fg-secondary">Changing tokens from here is off.</span>{' '}
-            <span title={data.editable.reason ?? undefined}>Mushi can show your tokens but not open a PR that edits them for this app.</span>
+            <span title={data.editable.reason ?? undefined}>Mushi Mushi can show your tokens but not open a PR that edits them for this app.</span>
           </p>
         )}
 

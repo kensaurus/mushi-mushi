@@ -16,7 +16,7 @@ describe('actionErrorText', () => {
 
   it('turns a bare code into plain English', () => {
     expect(actionErrorText({ code: 'NETWORK_ERROR', message: 'NETWORK_ERROR' })).toBe(
-      'Could not reach the Mushi API. Check your network connection. If you are online, the API may be briefly down — retry in a moment.',
+      'Could not reach the Mushi Mushi API. Check your network connection. If you are online, the API may be briefly down — retry in a moment.',
     )
   })
 

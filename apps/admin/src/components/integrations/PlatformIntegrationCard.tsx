@@ -333,9 +333,9 @@ export function PlatformIntegrationCard({
               {/* Only once it works: "Via environment" beside "Not connected" read
                   as a contradiction (first-time user test, 2026-10-28). */}
               {envFields > 0 && projectFields === 0 && orgFields === 0 && requiredOk && (
-                <Tooltip content="This card uses a key from Mushi's server. Add your own to replace it.">
+                <Tooltip content="This card uses a key from Mushi Mushi's server. Add your own to replace it.">
                   <Badge className="bg-fg-faint/20 text-fg-muted border border-edge cursor-default">
-                    Mushi's default
+                    Mushi Mushi's default
                   </Badge>
                 </Tooltip>
               )}

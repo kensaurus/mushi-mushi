@@ -16,15 +16,15 @@ export const PUBLIC_FAQ: readonly PublicFaqItem[] = [
   },
   {
     q: 'Reports return 401 or never show up',
-    a: 'Check that your project ID and ingest key match the console. Run mushi ping and Send test report on Projects. Use the SDK ingest key — not your editor MCP key.',
+    a: 'Check that your project ID and SDK key match the console. Run mushi ping, then press Send test report on the Set up page (Test it tab). Use the SDK key, not the key your editor uses.',
   },
   {
     q: 'MCP tools list is empty in Cursor',
-    a: 'Restart Cursor after editing .cursor/mcp.json. Pass MUSHI_PROJECT_ID in env. Mint an MCP read key in the console if you have not already.',
+    a: 'Restart Cursor after editing .cursor/mcp.json. If you signed in through the browser, you need no key: open Cursor\'s MCP settings and sign in to mushi again. Only the local setup (a command with MUSHI_API_KEY) needs a key and MUSHI_PROJECT_ID in env; mint that key on Manage apps.',
   },
   {
     q: 'Widget shows but classification stays pending',
-    a: 'Add your Anthropic or OpenAI key under Settings → API Keys. Self-hosters: confirm migrations are applied and the classify worker is deployed.',
+    a: 'On Mushi Mushi Cloud you need no AI key: open Billing and check whether this app has reached its diagnoses for the month. Self-hosters: add your Anthropic or OpenAI key under Settings → AI keys, and confirm migrations are applied and the classify worker is deployed.',
   },
 ] as const
 
@@ -32,7 +32,7 @@ export const PUBLIC_FAQ_MCP: readonly PublicFaqItem[] = [
   ...PUBLIC_FAQ,
   {
     q: 'Cursor says it cannot reach the Mushi Mushi server',
-    a: 'Check the MCP endpoint URL and that your API key is active. Run npx mushi-mushi setup --ide cursor again to rewrite the config.',
+    a: 'Run npx mushi-mushi setup --ide cursor again to rewrite the config, then restart Cursor and sign in when the browser opens. If you use the local setup with a key instead, check on Manage apps that the key is still active.',
   },
   {
     q: 'Claude Code says "HTTP 404 dialing" the Mushi Mushi server',
@@ -87,17 +87,17 @@ export const PRICING_TIER_CTAS: Readonly<Record<string, PricingTierCta>> = {
   // sales-led (owner decision 2026-10-10): no self-serve checkout.
   enterprise: {
     label: 'From $499/mo — contact us',
-    href: 'mailto:kensaurus@gmail.com?subject=Mushi%20Enterprise%20inquiry',
+    href: 'mailto:kensaurus@gmail.com?subject=Mushi%20Mushi%20Enterprise%20inquiry',
     external: true,
   },
 }
 
 export const CLOUD_INTRO = {
-  lead: 'Mushi Cloud at kensaur.us/mushi-mushi is the hosted version of Mushi Mushi. It runs the same code as the public repo, including the source-available enterprise folder; we run it, and you pay per diagnosis.',
+  lead: 'Mushi Mushi Cloud at kensaur.us/mushi-mushi is the hosted version. It runs the same code as the public repo, including the source-available enterprise folder. We run it; you pay by the number of apps, with a diagnosis allowance for each app you upgrade.',
   diagnosisNote:
     'A diagnosis = one finished plain-English root cause written to your queue. Filtered noise and deduplicated groups do not count.',
   meteredWhy:
-    'A plan is the number of apps you watch; diagnoses are the allowance under it. Free covers one app and 100 diagnoses a month, Builder three apps, Studio ten. Bug signals are bursty, so past the allowance each diagnosis is a few cents, with a monthly overage cap you set. Duplicate reports collapse, so you pay once per root cause.',
+    'A plan sets how many apps your team can have; diagnoses are the allowance under it. Free covers one app and 100 diagnoses a month, Builder three apps, Studio ten. Bug signals are bursty, so past the allowance each diagnosis is a few cents, with a monthly overage cap you set for each upgraded app. Duplicate reports collapse, so you pay once per root cause.',
 } as const
 
 export const CONNECT_SKILLS = {
@@ -197,7 +197,7 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
       'Three apps, plugins from the marketplace, usage alerts and an audit log; then $0.03/diagnosis with a $50 overage cap you set',
     cloudNotes:
       'Three apps, plugin marketplace, usage alerts, email support; $0.03 per extra diagnosis',
-    plain: 'Up to 3 apps and 1,000 bugs explained a month. Adds plugins, usage alerts and email support.',
+    plain: 'Up to 3 apps. 1,000 bugs explained a month on the app you upgrade. Adds plugins, usage alerts and email support.',
   },
   {
     id: 'pro',
@@ -214,9 +214,15 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
     // Integrations (Sentry, Linear, Jira, Slack, GitHub) are on every plan:
     // api/routes/integrations.ts has no plan gate. Studio's own flags are
     // teams, shared_views and intelligence_reports (the weekly report).
+    // Your own AI key is on every plan (pricing_plans.feature_flags.byok,
+    // migration 20261028180000), so no row lists it as a plan feature.
+    // A subscription is attached to one app (billing_subscriptions.project_id;
+    // _shared/quota.ts resolves the diagnosis allowance from that app's own
+    // row), so the plan's diagnoses belong to the upgraded app. The app limit,
+    // seats, retention and plugins resolve per organization.
     cloudNotes:
       'Ten apps, 5 seats, weekly report, shared views; $0.03 per extra diagnosis',
-    plain: 'Up to 10 apps, 5 people on your team and 3,000 bugs explained a month, with a weekly report.',
+    plain: 'Up to 10 apps and 5 people on your team. 3,000 bugs explained a month on the app you upgrade, with a weekly report.',
   },
   {
     id: 'enterprise',
@@ -235,6 +241,6 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
     // here. SCIM is omitted: no provisioning endpoint exists yet.
     highlights: 'SAML SSO, SOC 2 evidence collection (not a certification), priority support',
     cloudNotes:
-      'SAML SSO, SOC 2 evidence collection, your own LLM keys, 365-day retention, help running it on your own servers',
+      'SAML SSO, SOC 2 evidence collection, 365-day retention, help running it on your own servers',
   },
 ] as const

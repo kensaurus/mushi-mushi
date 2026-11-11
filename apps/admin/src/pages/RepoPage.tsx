@@ -506,7 +506,7 @@ export function RepoPage() {
       description={
         hasRepo
           ? "Dispatch a fix on a classified report and its branch will land here the moment the agent pushes."
-          : "Install the Mushi GitHub App on the repo you want auto-fix PRs opened against."
+          : "Install the Mushi Mushi GitHub App on the repo you want auto-fix PRs opened against."
       }
       action={
         <Btn to={hasRepo ? '/reports' : '/integrations/config'} variant="primary" size="sm">
@@ -523,7 +523,7 @@ export function RepoPage() {
         projectScope={projectName}
 
         helpTitle={copy?.help?.title ?? 'About pull requests'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? "A repo-level view of Mushi's fix pipeline: every draft PR, its branch, and its CI conclusion in one place. Multi-repo projects (e.g. frontend + backend) can have multiple repos linked — each gets its own fix worker run."}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? "A repo-level view of Mushi Mushi's fix pipeline: every draft PR, its branch, and its CI conclusion in one place. Multi-repo projects (e.g. frontend + backend) can have multiple repos linked — each gets its own fix worker run."}
         helpUseCases={copy?.help?.useCases ?? [
           'Spot stuck PRs (dispatched but never opened) so auth or agent issues surface fast',
           'Verify that CI is green across the board before scaling dispatch volume',

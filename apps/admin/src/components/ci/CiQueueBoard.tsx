@@ -164,7 +164,7 @@ function JobCard({ job, column, now, fixLinks, focused }: { job: CiJob; column: 
           {column === 'finished' && outcome === 'infra' && fix?.fixId && <RerunButton fixId={fix.fixId} />}
           {fix && (
             <Link to={`/reports/${fix.reportId}`} className="inline-flex items-center gap-1 font-medium text-accent hover:underline">
-              Open the fix in Mushi
+              Open the fix in Mushi Mushi
               <IconArrowRight size={11} />
             </Link>
           )}

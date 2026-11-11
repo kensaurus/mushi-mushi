@@ -440,21 +440,21 @@ export function IntegrationsPage() {
         helpTitle={copy?.help?.title ?? 'About Integrations'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
-          'Mushi uses your existing observability + code tools instead of replacing them. Wire Sentry for error context, Langfuse for LLM traces, and GitHub for PRs — then add Jira/Linear/PagerDuty to fan out triaged reports.'
+          'Mushi Mushi uses your existing observability + code tools instead of replacing them. Wire Sentry for error context, Langfuse for LLM traces, and GitHub for PRs — then add Jira/Linear/PagerDuty to fan out triaged reports.'
         }
         helpUseCases={
           copy?.help?.useCases ?? [
             'Give the LLM Sentry context so it cross-references real production errors when classifying user reports',
-            'Let auto-fix attempts open draft PRs against your repo and report CI status back into Mushi',
+            'Let auto-fix attempts open draft PRs against your repo and report CI status back into Mushi Mushi',
             'Mirror Langfuse traces onto every report and fix attempt so cost + prompt are auditable',
           ]
         }
         helpHowToUse={
           copy?.help?.howToUse ?? [
-            'Step 1 — GitHub: paste your repo URL (e.g. https://github.com/org/repo) and install the Mushi GitHub App so fix-worker can push draft PRs. No App = fix generated but never pushed.',
+            'Step 1 — GitHub: paste your repo URL (e.g. https://github.com/org/repo) and install the Mushi Mushi GitHub App so fix-worker can push draft PRs. No App = fix generated but never pushed.',
             'Step 2 — Second repo: if your project has a frontend + backend (e.g. solo-boss-cloud), go to Repo → + Add repo and set role=backend with path_globs so fixes target the right codebase.',
             'Step 3 — Verified identity: in your app call Mushi.identify({ userId, name, email }) and pass a signed JWT if you want the ✓ verified badge on reports.',
-            'Step 4 — Sentry: paste your DSN and auth token. Mushi links Sentry issues to reports and surfaces them on the fix PR.',
+            'Step 4 — Sentry: paste your DSN and auth token. Mushi Mushi links Sentry issues to reports and surfaces them on the fix PR.',
             'Step 5 — Test each card with the "Test" button — the health sparkline should turn green within a few seconds.',
           ].join('\n')
         }
@@ -505,7 +505,7 @@ export function IntegrationsPage() {
       <Panel className="mb-6" data-dav-anchor="integrations:decide">
         <div className="p-4">
           <p className="text-2xs text-fg-muted mb-2 pl-2 border-l-2 border-brand/30 leading-snug" data-testid="integrations-core-lede">
-            GitHub is the one Mushi needs: fixes arrive as pull requests on your repo.
+            GitHub is the one Mushi Mushi needs: fixes arrive as pull requests on your repo.
           </p>
           <div className="space-y-2" id="integrations-required">
             {/* Links to #platform-card-github land on Connect GitHub first. */}
@@ -562,7 +562,7 @@ export function IntegrationsPage() {
       <PanelSectionLabel>Alerts</PanelSectionLabel>
       <Panel className="mb-6">
         <p className="px-4 pt-3 pb-2 text-xs text-fg-muted border-b border-panel-border">
-          Where Mushi tells you about a new bug, a failing test or a merged fix. One channel is enough.
+          Where Mushi Mushi tells you about a new bug, a failing test or a merged fix. One channel is enough.
         </p>
         {!canManage && (
           <p className="px-4 py-2 text-xs text-fg-muted border-b border-panel-border">{ADMIN_ONLY_HINT}</p>
@@ -675,7 +675,7 @@ export function IntegrationsPage() {
       <Panel className="mb-6">
         <p className="px-4 pt-3 pb-2 text-2xs text-fg-secondary border-b border-panel-border leading-snug">
           Send triaged reports to the tracker or pager your team already uses. Linear also syncs status
-          back and can run Mushi as an agent inside Linear.
+          back and can run Mushi Mushi as an agent inside Linear.
         </p>
         <div className="p-4">
           <LinearIntegrationCard
@@ -734,7 +734,7 @@ export function IntegrationsPage() {
       <Panel className="mb-6">
         <div className="p-4">
           <p className="text-2xs text-fg-muted mb-2 pl-2 border-l-2 border-brand/30 leading-snug" data-testid="integrations-monitoring-lede">
-            Mushi works without a monitoring tool. If you already use Sentry, the errors it catches can become bugs here too.
+            Mushi Mushi works without a monitoring tool. If you already use Sentry, the errors it catches can become bugs here too.
           </p>
           <div className="space-y-2" id="integrations-monitoring">
             {PLATFORM_DEFS.filter((d) => d.group === 'required' && d.kind !== 'github')
@@ -773,7 +773,7 @@ export function IntegrationsPage() {
           {/* Open when the user connected their own, so its grid tile's Fix lands on a visible card. */}
           <DisclosurePanel
             key={langfuseOwn ? 'langfuse-own' : 'langfuse-default'}
-            title="Advanced: trace Mushi's AI calls in your own Langfuse"
+            title="Advanced: trace Mushi Mushi's AI calls in your own Langfuse"
             defaultOpen={langfuseOwn}
           >
             <div className="space-y-2" id="integrations-advanced">

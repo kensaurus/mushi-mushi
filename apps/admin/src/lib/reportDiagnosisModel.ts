@@ -10,7 +10,7 @@ export type DiagnosisLane = 'evidence' | 'signal' | 'diagnosis' | 'check' | 'fix
 export const DIAGNOSIS_LANES: ReadonlyArray<{ id: DiagnosisLane; label: string; hint: string }> = [
   { id: 'evidence', label: 'Evidence', hint: 'What came in' },
   { id: 'signal', label: 'Signals', hint: 'What the fast filter read' },
-  { id: 'diagnosis', label: 'Diagnosis', hint: 'What Mushi concluded' },
+  { id: 'diagnosis', label: 'Diagnosis', hint: 'What Mushi Mushi concluded' },
   { id: 'check', label: 'Checks', hint: 'How sure it is' },
   { id: 'fix', label: 'Fix', hint: 'What was tried, what is next' },
 ]

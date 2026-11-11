@@ -1,8 +1,8 @@
 Lovableで作ったアプリの壊れた箇所を無料で見つける
 
-Lovable や Bolt で作ったアプリを公開すると、ある日「動かない」と言われます。けれど、実際にそう言ってくれる人はほとんどいません。
+Lovable や Bolt で作ったアプリを公開すると、いつかどこかが壊れます。ただ、それを教えてくれる人はほとんどいません。
 
-私は AI で作ったアプリを 9 本運用しています。2026年11月11日までの 60 日間で、アプリ内の「問題を報告」ボタンから届いた報告は 34 件でした（18 人分で、私自身のテストも含みます）。同じ期間に、自動チェックや私が手で登録したものなど、ほかの経路からは 2,031 件の報告が届いています。マージした修正 523 件のうち、ユーザーの報告がきっかけだったものは 2 件だけでした。
+私は AI で作ったアプリを 9 本運用しています。2026年11月11日までの 60 日間で、アプリ内の「問題を報告」ボタンから届いた報告は 34 件でした（18 人分で、私自身のテストも含みます）。同じ期間に、自動チェックや私が手動で登録したものなど、ほかの経路からは 2,031 件の報告が届いています。マージした修正 523 件のうち、ユーザーの報告がきっかけだったものは 2 件だけでした。
 
 つまり、何も言われていないことは「動いている」という意味ではありません。困った人の多くは、何も言わずに離れていきます。
 
@@ -26,7 +26,7 @@ https://kensaur.us/mushi-mushi/docs/check?src=zenn.lovable-check
 - タイトルが「Lovable App」や「Vite + React」のままのページ
 - 開いたときに出るエラー
 
-セキュリティ関連のヘッダーは、その後にまとめて表示されます。サイトに届かなかった場合は「届かなかった」と表示されます。問題なしの扱いにはなりません。
+セキュリティ関連のヘッダーは、その後にまとめて表示されます。サイトにアクセスできなかった場合は、その旨が表示されます。「問題なし」の扱いにはなりません。
 
 画面は英語ですが、指摘内容は短い文なので、そのまま Lovable のチャットに貼って「これを直して」と頼めます。
 
@@ -43,16 +43,16 @@ https://kensaur.us/mushi-mushi/docs/check?src=zenn.lovable-check
 
 声を上げてくれる少数の人のために、報告の入り口を作っておきます。
 
-まず https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt?src=zenn.lovable-check の手順で無料登録し、自分のアプリ用のスクリプトタグをコピーします。プロジェクト ID は最初から入っています。キーが `YOUR_SDK_KEY` のままなら、同じ画面の「Generate API key」を押すと本物のキーが入ります。
+まず https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt?src=zenn.lovable-check の手順で無料登録し、自分のアプリ用のスクリプトタグをコピーします（日本語の概要は https://kensaur.us/mushi-mushi/docs/ja?src=zenn.lovable-check にあります）。プロジェクト ID は最初から入っています。キーが `YOUR_SDK_KEY` のままなら、同じ画面の「Generate API key」を押すと本物のキーが入ります。
 
 次に、Lovable（または Bolt）のチャットにこう送ります。
 
 ```text
 Add this script tag inside the <head> of index.html exactly as written, and change nothing else:
-<script async src="https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js" data-project="YOUR_PROJECT_ID" data-key="YOUR_API_KEY"></script>
+<script async src="https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js" data-project="YOUR_PROJECT_ID" data-key="YOUR_SDK_KEY"></script>
 ```
 
-`YOUR_PROJECT_ID` と `YOUR_API_KEY` は、コピーしたタグの値に置き換えてください。
+上のタグは例です。実際には、コピーした自分のタグをそのまま貼ってください。
 
 アプリが再ビルドされると、画面の隅に小さな報告ボタンが出ます。ボタンはブラウザの言語に合わせて表示されるので、日本語の環境では日本語になります。
 
@@ -66,13 +66,13 @@ Add this script tag inside the <head> of index.html exactly as written, and chan
 
 ## 無料でできること、できないこと
 
-無料（アプリ 1 本、カード登録なし）で使えるのは次の 3 つです。
+無料プランはアプリ 1 本・月 100 件の診断までです（カード登録不要）。その範囲で使えるのは次の 3 つです。
 
-- 報告ボタンと、報告ごとの説明・修正プロンプト（AI の費用は Mushi Mushi 持ちです）
+- 報告ボタンと、報告ごとの説明・修正プロンプト（AI の利用料は Mushi Mushi 側が負担します）
 - 1 回ごとのサイトチェック
-- GitHub をつなげば、既知のセキュリティ問題がある依存パッケージのスキャン
+- GitHub を連携すると使える、既知のセキュリティ問題がある依存パッケージのスキャン
 
-1 時間ごとのサイト監視には、Web を読み取るサービスの自分のキーが必要です。コードの自動レビューは、自分のマシンで動かすエージェントが必要です。冒頭の 2,031 件の多くは、こうした新規アカウントにはまだない仕組みから来ています。
+自分のキーや自分のパソコンが必要なものもあります。1 時間ごとのサイト監視には、Web を読み取るサービス（Firecrawl）の自分のキーが必要です。修正のプルリクエストを別の AI がレビューする機能には、自分の Anthropic または OpenAI のキーが必要です。初めて使う人の目線で試す自動テストは、自分のパソコンで動かします。冒頭の 2,031 件の多くは、こうした新規アカウントにはまだない仕組みから来ています。
 
 最新の数字はここで公開しています。
 

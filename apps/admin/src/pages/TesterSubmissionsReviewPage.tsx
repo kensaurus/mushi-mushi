@@ -121,7 +121,7 @@ export function TesterSubmissionsReviewPage() {
         title="Tester submissions"
 
         helpTitle="About tester submissions"
-        helpWhatIsIt="Org-scoped reviewer queue for bug reports submitted via Mushi Bounties — accept, mark informative, duplicate, or spam, and award points."
+        helpWhatIsIt="Org-scoped reviewer queue for bug reports submitted via Mushi Mushi Bounties — accept, mark informative, duplicate, or spam, and award points."
         helpUseCases={[
           'Review pending tester bug reports before points are awarded',
           'Filter by pending, accepted, or all submissions',

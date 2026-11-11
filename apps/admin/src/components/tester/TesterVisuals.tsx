@@ -53,7 +53,7 @@ export function TesterPointsEconomyStrip({ className = '' }: { className?: strin
         </div>
       </div>
       <div className={`${TESTER_PANEL} border-brand/30 bg-brand-subtle/40 p-4 text-center`}>
-        <p className="text-2xs font-medium uppercase tracking-wide text-brand">Mushi Pro</p>
+        <p className="text-2xs font-medium uppercase tracking-wide text-brand">Mushi Mushi Pro</p>
         <p className="mt-1 text-2xl font-bold tabular-nums text-fg">1,000</p>
         <p className="text-xs text-fg-muted">pts → $13 credit</p>
         <div className="mt-3 flex justify-center">

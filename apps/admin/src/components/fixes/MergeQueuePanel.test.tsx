@@ -110,7 +110,7 @@ describe('MergeQueuePanel', () => {
     mocks.saved = []
     await render()
     await answer([], [{ projectId: 'p1', mode: 'train', intervalMinutes: 360, maxMembers: 15, autoDecide: false }])
-    const sw = host.querySelector('button[role="switch"][aria-label="Let Mushi merge approved fixes and close held ones"]') as HTMLButtonElement
+    const sw = host.querySelector('button[role="switch"][aria-label="Let Mushi Mushi merge approved fixes and close held ones"]') as HTMLButtonElement
     expect(sw.getAttribute('aria-checked')).toBe('false')
     expect(host.querySelector('[data-testid="auto-decide-note"]')).toBeNull()
     await act(async () => sw.click())

@@ -13,7 +13,7 @@ export interface RewardsTabMeta {
 
 export const REWARDS_TABS: RewardsTabMeta[] = [
   { id: 'overview', label: 'Overview', description: 'KPIs, tier distribution, and pending payouts at a glance.' },
-  { id: 'publishing', label: 'Bounties', description: 'Publish this app to the Mushi Bounties marketplace and reward testers for finding bugs.' },
+  { id: 'publishing', label: 'Bounties', description: 'Publish this app to the Mushi Mushi Bounties marketplace and reward testers for finding bugs.' },
   { id: 'rules', label: 'Activity rules', description: 'Points awarded per SDK action, daily caps, and lifetime limits.' },
   { id: 'tiers', label: 'Tier ladder', description: 'Tier names, point thresholds, and monetary reward amounts.' },
   { id: 'contributors', label: 'Contributors', description: 'Leaderboard of identified users by points and tier.' },

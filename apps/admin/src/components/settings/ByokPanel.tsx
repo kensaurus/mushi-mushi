@@ -68,14 +68,14 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     purpose: 'Reads each bug report, writes the diagnosis, and drafts the fix.',
     placeholder: 'sk-ant-api03-…',
     consoleUrl: 'https://console.anthropic.com/settings/keys',
-    emptyDetail: "Using Mushi's shared key. Add yours to bill your own Anthropic account.",
+    emptyDetail: "Using Mushi Mushi's shared key. Add yours to bill your own Anthropic account.",
   },
   openai: {
     name: 'OpenAI',
     purpose: 'Backup when Anthropic is unavailable, search embeddings, and speech-to-text for voice reports.',
     placeholder: 'sk-proj-…',
     consoleUrl: 'https://platform.openai.com/api-keys',
-    emptyDetail: "No backup key of your own. Mushi's shared backup is used when the server has one.",
+    emptyDetail: "No backup key of your own. Mushi Mushi's shared backup is used when the server has one.",
   },
   openrouter: {
     name: 'OpenRouter',
@@ -86,7 +86,7 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
   },
   cursor: {
     name: 'Cursor cloud agent',
-    purpose: 'Lets Mushi hand a fix to a Cursor cloud agent, which opens a pull request.',
+    purpose: 'Lets Mushi Mushi hand a fix to a Cursor cloud agent, which opens a pull request.',
     placeholder: 'crsr_…',
     consoleUrl: 'https://cursor.com/dashboard/integrations',
     emptyDetail: 'Add a key to send fixes to Cursor.',
@@ -96,18 +96,18 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     purpose: 'Reads public web pages, such as library docs, while diagnosing and mapping your app.',
     placeholder: 'fc-…',
     consoleUrl: 'https://www.firecrawl.dev/app/api-keys',
-    emptyDetail: "No key of your own. Web tools use Mushi's shared key when the server has one.",
+    emptyDetail: "No key of your own. Web tools use Mushi Mushi's shared key when the server has one.",
   },
   browserbase: {
     name: 'Browserbase',
     purpose: 'Runs your scheduled browser tests in a cloud browser on your own account.',
     placeholder: 'bb-…',
     consoleUrl: 'https://www.browserbase.com/settings',
-    emptyDetail: "No key of your own. Scheduled browser tests use Mushi's shared account when the server has one.",
+    emptyDetail: "No key of your own. Scheduled browser tests use Mushi Mushi's shared account when the server has one.",
   },
   supabase: {
     name: 'Supabase (read-only)',
-    purpose: "Lets diagnoses read your app's database structure, advisors, functions and logs. Mushi never writes to it.",
+    purpose: "Lets diagnoses read your app's database structure, advisors, functions and logs. Mushi Mushi never writes to it.",
     placeholder: 'sbp_…',
     consoleUrl: 'https://supabase.com/dashboard/account/tokens',
     emptyDetail: 'Not linked. Diagnoses work without it, but miss your database.',
@@ -184,7 +184,7 @@ function scopeReach(scope: KeyScope, sharing: KeySharing | null, universal: KeyU
 
 /** The one line under the scope picker: the order each app tries its keys in (ADR 0031). */
 const RESOLUTION_ORDER_HINT =
-  "Each app tries its own key first, then its organization's, then an all-apps key, then Mushi's own.";
+  "Each app tries its own key first, then its organization's, then an all-apps key, then Mushi Mushi's own.";
 
 /**
  * The scopes this user can pick for a key here: "All my apps" when they own
@@ -321,7 +321,7 @@ export function ByokPanel() {
           : data?.legacySuperseded
             ? 'Key checked and in use. Your old key is no longer needed; remove it below.'
             : 'Key checked and in use.'
-        : quarantinedMessage(data, "Key saved, but the provider didn't accept it, so Mushi won't use it yet.");
+        : quarantinedMessage(data, "Key saved, but the provider didn't accept it, so Mushi Mushi won't use it yet.");
       const where = scope !== 'project' && validated ? ` ${scopeReach(scope, sharing, universal)}` : '';
       setNotice({
         scope: `provider:${provider}`,
@@ -414,7 +414,7 @@ export function ByokPanel() {
       setNotice({
         scope: key.id,
         ok: true,
-        message: value ? 'Expiry date saved. Mushi will warn you a week before.' : 'Expiry date removed.',
+        message: value ? 'Expiry date saved. Mushi Mushi will warn you a week before.' : 'Expiry date removed.',
       });
       reload();
     } else {
@@ -468,7 +468,7 @@ export function ByokPanel() {
         // A failed test takes the key out of rotation (auth_failed,
         // quota_exhausted or pending_validation), so say so.
         message: !described.ok
-          ? `${described.message} Mushi won't use this key until a test passes.`
+          ? `${described.message} Mushi Mushi won't use this key until a test passes.`
           : data?.legacySuperseded
             ? `${described.message} Your old key is no longer needed; remove it below.`
             : described.message,
@@ -693,7 +693,7 @@ export function ByokPanel() {
     <>
       <SettingsList
         title="AI keys"
-        description={`Keys for the AI and web services Mushi uses for this project. They are stored encrypted and billed to your own accounts. Add more than one key for a service and Mushi switches to the next when one runs out.${
+        description={`Keys for the AI and web services Mushi Mushi uses for this project. They are stored encrypted and billed to your own accounts. Add more than one key for a service and Mushi Mushi switches to the next when one runs out.${
           universal?.canAdd
             ? ' A key for "All my apps" is added once and used by every app you own.'
             : sharing
@@ -825,7 +825,7 @@ export function ByokPanel() {
                       type="date"
                       value={newExpiry}
                       onChange={(e) => setNewExpiry(e.target.value)}
-                      tooltip="If the provider gave the key an expiry date, enter it and Mushi warns you a week before."
+                      tooltip="If the provider gave the key an expiry date, enter it and Mushi Mushi warns you a week before."
                     />
                     {provider === 'openai' && (
                       <div className="space-y-1">
@@ -872,7 +872,7 @@ export function ByokPanel() {
                     {formError && <ResultChip tone="error">{formError}</ResultChip>}
                   </div>
                   <p className="text-xs text-fg-muted">
-                    Mushi checks the key with {meta.name} before using it.
+                    Mushi Mushi checks the key with {meta.name} before using it.
                     {keyCount > 0 && ' A new key is tried after your existing ones.'}
                   </p>
                 </form>
@@ -896,7 +896,7 @@ export function ByokPanel() {
               ? `${myAppsPhrase(universal).replace(/^./, (c) => c.toUpperCase())} can use the key ending in ${moveTarget.key.key_hint ?? '****'}. An app's own key and its organization's key are still tried first. Only you can change or remove it.`
               : moveTarget.scope === 'organization'
                 ? `Every app in ${sharing?.organizationName ?? 'this organization'} can use the key ending in ${moveTarget.key.key_hint ?? '****'}. Apps with no key of their own for this service start billing to it; an app's own key is still tried first.${isUniversalKey(moveTarget.key) ? ' Your apps in other organizations stop using it.' : ''}`
-                : `Only this app keeps the key ending in ${moveTarget.key.key_hint ?? '****'}. ${isUniversalKey(moveTarget.key) ? 'Your other apps stop using it' : `The other apps in ${sharing?.organizationName ?? 'the organization'} stop using it`} and fall back to their own keys, or Mushi's own key where there is one.`
+                : `Only this app keeps the key ending in ${moveTarget.key.key_hint ?? '****'}. ${isUniversalKey(moveTarget.key) ? 'Your other apps stop using it' : `The other apps in ${sharing?.organizationName ?? 'the organization'} stop using it`} and fall back to their own keys, or Mushi Mushi's own key where there is one.`
           }
           confirmLabel={
             moveTarget.scope === 'universal'
@@ -920,7 +920,7 @@ export function ByokPanel() {
       {disableTarget && (
         <ConfirmDialog
           title={`Turn off this ${PROVIDER_META[disableTarget.provider_slug]?.name ?? disableTarget.provider_slug} key?`}
-          body={`${isUniversalKey(disableTarget) ? 'This key is used by all your apps: every one stops using it. ' : isSharedKey(disableTarget) ? 'This key is shared: every app in your organization stops using it. ' : ''}Mushi stops using the key ending in ${disableTarget.key_hint ?? '****'} and switches to your next key for this service, or Mushi's own key where there is one. To turn it back on later, press Test and then Turn on.`}
+          body={`${isUniversalKey(disableTarget) ? 'This key is used by all your apps: every one stops using it. ' : isSharedKey(disableTarget) ? 'This key is shared: every app in your organization stops using it. ' : ''}Mushi Mushi stops using the key ending in ${disableTarget.key_hint ?? '****'} and switches to your next key for this service, or Mushi Mushi's own key where there is one. To turn it back on later, press Test and then Turn on.`}
           confirmLabel="Turn off key"
           cancelLabel="Keep it on"
           tone="danger"
@@ -938,7 +938,7 @@ export function ByokPanel() {
       {removeTarget && (
         <ConfirmDialog
           title={`Remove this ${PROVIDER_META[removeTarget.provider_slug]?.name ?? removeTarget.provider_slug} key?`}
-          body={`${!isLegacyKey(removeTarget) && isUniversalKey(removeTarget as PoolKey) ? 'This key is used by all your apps: every one loses it. ' : !isLegacyKey(removeTarget) && isSharedKey(removeTarget as PoolKey) ? 'This key is shared: every app in your organization loses it. ' : ''}The ${isLegacyKey(removeTarget) ? 'old key' : 'key'} ending in ${removeTarget.key_hint ?? '****'} is deleted for good. Mushi then uses your other keys for this service, or Mushi's own key where there is one.`}
+          body={`${!isLegacyKey(removeTarget) && isUniversalKey(removeTarget as PoolKey) ? 'This key is used by all your apps: every one loses it. ' : !isLegacyKey(removeTarget) && isSharedKey(removeTarget as PoolKey) ? 'This key is shared: every app in your organization loses it. ' : ''}The ${isLegacyKey(removeTarget) ? 'old key' : 'key'} ending in ${removeTarget.key_hint ?? '****'} is deleted for good. Mushi Mushi then uses your other keys for this service, or Mushi Mushi's own key where there is one.`}
           confirmLabel="Remove key"
           cancelLabel="Keep key"
           tone="danger"

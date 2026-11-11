@@ -119,7 +119,7 @@ export function CostStatusBanner({ stats, onTab, onViewFailures, plainBanner = f
         tone="warn"
         title={
           plainBanner
-            ? 'Using Mushi platform keys'
+            ? 'Using Mushi Mushi platform keys'
             : `Using platform keys — ${stats.platformKeyCalls24h} call${stats.platformKeyCalls24h === 1 ? '' : 's'} in 24h`
         }
         subtitle={`${fmtUsd(stats.spend24hUsd)} in 24h on platform keys — add your own Anthropic key in Settings to control billing.`}

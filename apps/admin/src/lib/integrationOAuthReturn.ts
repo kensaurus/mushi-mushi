@@ -33,9 +33,9 @@ function slackErrorText(reason: string): string {
     case 'missing_params':
       return 'Slack sent us back without an install code. Click "Add to Slack" again.'
     case 'server_misconfigured':
-      return "Slack sign-in isn't set up on this Mushi server yet. Ask whoever runs it to add the Slack app credentials, or paste an incoming webhook URL below instead."
+      return "Slack sign-in isn't set up on this Mushi Mushi server yet. Ask whoever runs it to add the Slack app credentials, or paste an incoming webhook URL below instead."
     case 'token_not_saved':
-      return 'Slack approved the install, but Mushi could not save the bot token. Click "Add to Slack" again; if it keeps failing, paste an incoming webhook URL below instead.'
+      return 'Slack approved the install, but Mushi Mushi could not save the bot token. Click "Add to Slack" again; if it keeps failing, paste an incoming webhook URL below instead.'
     case 'invalid_code':
     case 'code_already_used':
     case 'bad_redirect_uri':
@@ -57,10 +57,10 @@ function linearErrorText(reason: string): string {
   }
   if (/state|expired/i.test(reason)) return 'The connect link expired. Click "Connect workspace" again from this page.'
   if (/misconfiguration|credentials missing/i.test(reason)) {
-    return "Linear sign-in isn't set up on this Mushi server yet. Use a Linear API key below instead."
+    return "Linear sign-in isn't set up on this Mushi Mushi server yet. Use a Linear API key below instead."
   }
   if (/store|save/i.test(reason)) {
-    return 'Linear approved the connection, but Mushi could not save it. Click "Connect workspace" again.'
+    return 'Linear approved the connection, but Mushi Mushi could not save it. Click "Connect workspace" again.'
   }
   return 'Linear did not finish connecting. Click "Connect workspace" again, or use a Linear API key below.'
 }
@@ -119,7 +119,7 @@ export function readIntegrationOAuthReturn(search: string): OAuthReturn | null {
       toast: {
         tone: 'success',
         title: 'Slack connected',
-        description: 'Pick the channel Mushi should post to, then send a test.',
+        description: 'Pick the channel Mushi Mushi should post to, then send a test.',
       },
       consumedKeys: ['slack_connected'],
     }

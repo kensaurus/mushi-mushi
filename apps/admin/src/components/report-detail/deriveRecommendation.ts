@@ -175,7 +175,7 @@ function verdictRecommendation(
   onDispatch: () => void,
   onClose?: (patch: ReportClosePatch) => void,
 ): Recommendation | null {
-  const said = (latest.error ?? '').replace(/^[^:]{0,60}:\s*/, '').replace(/^\**\s*Mushi verdict:\s*\w+\s*\**\s*/i, '').trim()
+  const said = (latest.error ?? '').replace(/^[^:]{0,60}:\s*/, '').replace(/^\**\s*(?:Mushi )?Mushi verdict:\s*\w+\s*\**\s*/i, '').trim()
   const detail = said ? ` The agent wrote: “${said.slice(0, 400)}${said.length > 400 ? '…' : ''}”` : ''
   const sendAgain: RecommendationAction = { label: 'Still broken: send again', onClick: onDispatch, tone: 'ghost' }
   if (verdict === 'already_fixed') {
@@ -550,7 +550,7 @@ function recommendationFor(
   if (report.status === 'classified' && commentCount === 0) {
     return triage({
       title: 'Triage this report',
-      description: 'Add a triage note for context, or dispatch an autofix attempt.',
+      description: 'Add a triage note for context, or dispatch a fix.',
       cta: { label: 'Dispatch fix', onClick: onDispatch },
       tone: 'info',
     })

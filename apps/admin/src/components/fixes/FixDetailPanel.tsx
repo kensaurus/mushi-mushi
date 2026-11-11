@@ -165,7 +165,7 @@ export function FixDetailPanel({
             target="_blank"
             rel="noreferrer noopener"
             className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
-            title="Mushi resolves this Sentry issue when the fix merges."
+            title="Mushi Mushi resolves this Sentry issue when the fix merges."
           >
             Sentry issue ↗
           </a>

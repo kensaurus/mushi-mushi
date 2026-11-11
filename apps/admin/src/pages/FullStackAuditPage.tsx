@@ -141,7 +141,7 @@ function AuditResultCard({ result }: { result: AuditResult }) {
  */
 export function auditStatus(stats: FullstackAuditStats): { tone: PageStatusTone; sentence: string } {
   if (stats.topPriority === 'unknown') {
-    return { tone: 'warn', sentence: `Mushi could not count the open findings${stats.readError ? `: ${stats.readError.replace(/\.$/, '')}.` : '.'} The list below may still load.` }
+    return { tone: 'warn', sentence: `Mushi Mushi could not count the open findings${stats.readError ? `: ${stats.readError.replace(/\.$/, '')}.` : '.'} The list below may still load.` }
   }
   const { errorCount: errors, warnCount: warnings, failedGateCount: failed } = stats
   const stuck = failed > 0 ? ` ${pluralizeWithCount(failed, 'check')} could not finish, so ${failed === 1 ? 'its' : 'their'} result is unknown.` : ''
@@ -215,7 +215,7 @@ export function FullStackAuditPage() {
         title="Full-stack audit"
 
         helpTitle="Full-stack audit"
-        helpWhatIsIt="Every check Mushi runs on this app (API contract, unused endpoints, schema drift, design tokens, setup and hole checks) with its open findings, plus a one-click read of your linked Supabase backend."
+        helpWhatIsIt="Every check Mushi Mushi runs on this app (API contract, unused endpoints, schema drift, design tokens, setup and hole checks) with its open findings, plus a one-click read of your linked Supabase backend."
         helpUseCases={[
           'Spot broken API contracts before users hit them',
           'Identify backend endpoints never called by the frontend (orphan features)',

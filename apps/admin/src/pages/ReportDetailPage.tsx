@@ -10,6 +10,7 @@
  */
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useNow } from '../lib/useNow'
+import { useEntitlements } from '../lib/useEntitlements'
 import { useParams, useNavigate, useSearchParams as useReactSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { isValidProjectId, setActiveProjectIdSnapshot } from '../lib/activeProject'
@@ -379,7 +380,7 @@ export function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
       addToast({ type: 'success', message: `Pipeline started — track it in Skill Pipelines` })
       navigate('/skills?tab=pipelines')
     } catch {
-      addToast({ type: 'error', message: "Couldn't reach Mushi, so the pipeline did not start. Check your connection and try again." })
+      addToast({ type: 'error', message: "Couldn't reach Mushi Mushi, so the pipeline did not start. Check your connection and try again." })
     } finally {
       setStartingSlug(null)
     }
@@ -537,6 +538,10 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
     dispatchState.status !== 'completed'
 
   const reporterShort = report.reporter_token_hash ? shortReporterKey(report.reporter_token_hash) : 'unknown'
+  // Pipeline internals (model names, latency, stored field names, reporter
+  // ids) are for the team running Mushi Mushi; a builder gets plain words.
+  const entitlements = useEntitlements()
+  const showInternals = entitlements.isOperator || entitlements.isSuperAdmin
 
   const handleMerged = useCallback(
     (reportStatus: string | null) => {
@@ -562,7 +567,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         helpUseCases={[
           'Decide if this report is real, a duplicate, or noise',
           'Set status and severity to drive routing and notifications',
-          'Dispatch an autofix attempt, or reply to the reporter directly',
+          'Dispatch a fix, or reply to the reporter directly',
         ]}
         helpHowToUse="Use the Recommended action below for the fastest path. Otherwise set Status / Severity manually, dispatch a fix, push to your tracker, or reply in the triage thread."
       />
@@ -631,14 +636,14 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         </div>
       ) : null}
 
-      <ReportDetailHeader report={report} reporterShort={reporterShort} />
+      <ReportDetailHeader report={report} reporterShort={reporterShort} showInternals={showInternals} />
 
       <RegressionChain report={report} className="mb-3" />
 
       {/* The answer first: plain-English diagnosis + paste-ready fix prompt.
           Delivers the brand sub-promise as one surface at the top; the
           detailed classification + evidence sections stay below. */}
-      <DiagnosisFixHero report={report} />
+      <DiagnosisFixHero report={report} showInternals={showInternals} />
 
       {/* Optional and below the answer (audit 2026-11-11): "Auto-fix is paused" sat above the title
           on a brand-new account's test report that never asked for auto-fix. */}
@@ -656,11 +661,11 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
 
       {/* The one Plan → Do → Check → Act progress display (REPORT D): the
           page used to repeat it as a flow graph and a receipt strip too. */}
-      <ReportPdcaStory report={report} dispatchState={dispatchState} />
+      <ReportPdcaStory report={report} dispatchState={dispatchState} showInternals={showInternals} />
 
       {/* Why Mushi believes the diagnosis, claim by claim, with the weak ones
           marked (console audit 2026-10-20). */}
-      <ReportDiagnosisGraph report={report} />
+      <ReportDiagnosisGraph report={report} showInternals={showInternals} />
 
       <BeforeAfterCard report={report} />
 
@@ -702,7 +707,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
       {confirmed.dialog}
 
       {report.tester_submission && (
-        <Section title="Mushi Bounties" className="mb-3">
+        <Section title="Mushi Mushi Bounties" className="mb-3">
           <TesterSubmissionCard
             submission={report.tester_submission}
             onReviewed={() => {
@@ -754,7 +759,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
               (REPORT A2): a Stage-2 diagnosis without a Stage-1 object is
               classified, not "pending". */}
           {isReportClassified(report) ? (
-            <ClassificationFields report={report} />
+            <ClassificationFields report={report} showInternals={showInternals} />
           ) : report.processing_error ? (
             <Callout tone="danger" label="Classification failed">
               {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}

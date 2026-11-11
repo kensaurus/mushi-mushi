@@ -13,7 +13,7 @@ import type { RepoVisibility } from '../../lib/ciCompareTypes'
 const META: Record<RepoVisibility, { label: string; title: string; tone: 'okSubtle' | 'neutral' }> = {
   public: { label: 'Public', title: 'Public repository: GitHub-hosted minutes are free. A pull request from a fork can run code on a self-hosted runner.', tone: 'okSubtle' },
   private: { label: 'Private', title: 'Private repository: GitHub-hosted minutes are billed after your plan’s included minutes.', tone: 'neutral' },
-  unknown: { label: 'Not checked', title: 'Mushi has not read this repository’s visibility yet (it does once a day). Costs assume private.', tone: 'neutral' },
+  unknown: { label: 'Not checked', title: 'Mushi Mushi has not read this repository’s visibility yet (it does once a day). Costs assume private.', tone: 'neutral' },
 }
 
 export function RepoVisibilityBadge({ visibility }: { visibility: RepoVisibility }) {

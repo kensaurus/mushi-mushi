@@ -30,7 +30,7 @@ describe('renderDogfoodNarrative', () => {
       mergedFixes: 0,
     })
     expect(sentence).toBe(
-      'Checkout is your most fragile area — 95 reports in the last 14 days. No fixes drafted yet — open one and let Mushi try.',
+      'Checkout is your most fragile area — 95 reports in the last 14 days. No fixes drafted yet — open one and let Mushi Mushi try.',
     )
     expect(sentence).not.toContain('more drafted')
   })

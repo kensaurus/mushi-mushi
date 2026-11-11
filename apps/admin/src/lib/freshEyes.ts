@@ -156,7 +156,7 @@ export const RUN_STATUS_META: Record<FreshEyesRunStatus, { label: string; tone: 
  */
 export function runnerMessage(r: FreshEyesRunner | null | undefined, now: number = Date.now()): { tone: 'ok' | 'info' | 'warn'; text: string; canRun: boolean; setup: 'install' | 'workers' | 'update' | null } {
   const host = r?.hostname ? r.hostname : 'your computer'
-  if (r == null) return { tone: 'info', text: 'Mushi could not check your computers just now. You can still press Run now.', canRun: true, setup: null }
+  if (r == null) return { tone: 'info', text: 'Mushi Mushi could not check your computers just now. You can still press Run now.', canRun: true, setup: null }
   switch (r.state) {
     case 'ready':
       return { tone: 'ok', text: `${host} runs it. It takes about 10 to 30 minutes, and this page updates by itself.`, canRun: true, setup: null }
@@ -165,11 +165,11 @@ export function runnerMessage(r: FreshEyesRunner | null | undefined, now: number
     case 'paused':
       return { tone: 'warn', text: `Every lane for this app on ${host} is paused or only fixes review findings. Turn one back on to run the test.`, canRun: false, setup: 'workers' }
     case 'outdated':
-      return { tone: 'warn', text: `The Mushi on ${host} is too old to run this test. Update it with npm i -g @mushi-mushi/cli@latest, then restart the worker.`, canRun: false, setup: 'update' }
+      return { tone: 'warn', text: `The Mushi Mushi on ${host} is too old to run this test. Update it with npm i -g @mushi-mushi/cli@latest, then restart the worker.`, canRun: false, setup: 'update' }
     case 'offline':
       return { tone: 'warn', text: `${host} is offline${r.lastSeenAt ? ` (last seen ${agoText(r.lastSeenAt, now)})` : ''}. Turn it on, or start the worker on it, to run the test.`, canRun: false, setup: 'workers' }
     case 'none':
-      return { tone: 'warn', text: 'The test runs on your computer, where its browser and AI run. Set up Mushi on your computer once, then press Run now.', canRun: false, setup: 'install' }
+      return { tone: 'warn', text: 'The test runs on your computer, where its browser and AI run. Set up Mushi Mushi on your computer once, then press Run now.', canRun: false, setup: 'install' }
   }
 }
 

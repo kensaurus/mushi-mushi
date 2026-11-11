@@ -15,6 +15,23 @@ const MOBILE_FRAMEWORKS = new Set<Framework>(['react-native', 'expo', 'capacitor
  * Slug wins for known Expo reporter projects; otherwise high-confidence
  * detection from package.json (expo / react-native / capacitor).
  */
+/**
+ * How a React app is built, which decides the env var names. `other` is the
+ * user saying "neither": the snippet then keeps its values inline.
+ */
+export type ReactSetup = 'next' | 'vite' | 'other'
+
+export const REACT_SETUP_OPTIONS: ReadonlyArray<{ id: ReactSetup; label: string }> = [
+  { id: 'next', label: 'Next.js' },
+  { id: 'vite', label: 'Vite' },
+  { id: 'other', label: 'Something else' },
+]
+
+/** The bundler a snippet is rendered for: only React has the choice, and only Next or Vite read env vars. */
+export function snippetBundler(framework: Framework, setup: ReactSetup | null): 'vite' | 'next' | null {
+  return framework === 'react' && (setup === 'next' || setup === 'vite') ? setup : null
+}
+
 /** The web bundler a package.json declares, for env-var snippets. */
 export function detectWebBundler(packageJsonText: string | null | undefined): 'vite' | 'next' | null {
   if (!packageJsonText?.trim()) return null

@@ -204,7 +204,7 @@ export function UsersPage() {
         title="All users"
 
         helpTitle={copy?.help?.title ?? 'About all users'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'A full list of every Mushi account — visible only to operators — showing signup date, plan, and recent activity.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'A full list of every Mushi Mushi account — visible only to operators — showing signup date, plan, and recent activity.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Look up a specific user to check their plan or recent activity',
           'See how many new users signed up this week',

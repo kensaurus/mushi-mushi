@@ -196,8 +196,11 @@ function BannerChecklist({
         </div>
       </div>
 
-      <ol className="space-y-1 p-3">
-        {project.steps.map(step => (
+      {/* The count above is of the required steps, so those are the rows
+          under it. "2 of 4 done" over ten rows did not add up (re-audit
+          2026-11-11); the optional ones sit apart, named as not counted. */}
+      <ol className="space-y-1 p-3" data-testid="setup-required-steps">
+        {requiredSteps(project).map(step => (
           <ChecklistRow
             key={step.id}
             step={step}
@@ -207,8 +210,42 @@ function BannerChecklist({
           />
         ))}
       </ol>
+      {optionalSteps(project).length > 0 && (
+        <details className="border-t border-edge-subtle px-3 py-2" open={requiredDone} data-testid="setup-optional-steps">
+          <summary className="cursor-pointer select-none text-2xs text-fg-muted hover:text-fg-secondary">
+            {optionalLabel(project)}
+          </summary>
+          <ol className="mt-1 space-y-1">
+            {optionalSteps(project).map(step => (
+              <ChecklistRow
+                key={step.id}
+                step={step}
+                current={step.id === nextRequiredId}
+                adminEndpointHost={adminEndpointHost}
+                projectId={project.project_id}
+              />
+            ))}
+          </ol>
+        </details>
+      )}
     </div>
   )
+}
+
+/** The steps the "N of M done" count is about. An older API with no `required` flags counts every step. */
+function requiredSteps(project: SetupProject): SetupStep[] {
+  const required = project.steps.filter((s) => s.required)
+  return required.length > 0 ? required : project.steps
+}
+
+function optionalSteps(project: SetupProject): SetupStep[] {
+  return project.steps.some((s) => s.required) ? project.steps.filter((s) => !s.required) : []
+}
+
+function optionalLabel(project: SetupProject): string {
+  const extras = optionalSteps(project)
+  const done = extras.filter((s) => s.complete).length
+  return `${extras.length} optional ${extras.length === 1 ? 'extra' : 'extras'}, not counted above${done > 0 ? ` (${done} on)` : ''}`
 }
 
 function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndpointHost, extrasOnly }: InternalProps) {
@@ -253,8 +290,8 @@ function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndp
         </div>
       </Card>
 
-      <ol className="space-y-2">
-        {project.steps.map(step => (
+      <ol className="space-y-2" data-testid="setup-required-steps">
+        {requiredSteps(project).map(step => (
           <li key={step.id}>
             <ChecklistCard
               step={step}
@@ -265,6 +302,23 @@ function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndp
           </li>
         ))}
       </ol>
+      {optionalSteps(project).length > 0 && (
+        <div className="space-y-2" data-testid="setup-optional-steps">
+          <p className="text-2xs text-fg-muted">{optionalLabel(project)}</p>
+          <ol className="space-y-2">
+            {optionalSteps(project).map(step => (
+              <li key={step.id}>
+                <ChecklistCard
+                  step={step}
+                  current={step.id === nextRequiredId}
+                  adminEndpointHost={adminEndpointHost}
+                  projectId={project.project_id}
+                />
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
     </div>
   )
 }

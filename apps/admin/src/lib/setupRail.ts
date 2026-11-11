@@ -171,7 +171,7 @@ export function buildSetupRail(input: {
 
 /** One plain line about when the app last checked in: when, which key, from where. "Heartbeat" was jargon (2026-10-28). */
 export function heartbeatSentence(heartbeat: SdkHeartbeatView | null): string {
-  if (!heartbeat) return 'Mushi has not heard from your app yet. It does within a minute of the SDK loading in a browser or on a device.'
+  if (!heartbeat) return 'Mushi Mushi has not heard from your app yet. It does within a minute of the SDK loading in a browser or on a device.'
   const parts = [`Your app last checked in ${heartbeat.ago ?? 'recently'}`]
   if (heartbeat.keyLabel) parts.push(`key “${heartbeat.keyLabel}”`)
   if (heartbeat.origin) parts.push(`from ${heartbeat.origin}`)

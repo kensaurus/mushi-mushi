@@ -43,6 +43,14 @@ The SDK needs two values from a Mushi Mushi project.
 Put them in `.env.local` as `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`
 (`NEXT_PUBLIC_MUSHI_PROJECT_ID` and `NEXT_PUBLIC_MUSHI_API_KEY` on Next.js).
 
+<Callout type="warning">
+  **`.env.local` never reaches your host.** Before you deploy, add the same two
+  settings where your site is built: in Vercel, Project → Settings →
+  Environment Variables (Production); in Netlify, Project configuration →
+  Environment variables. Then redeploy. They are read at build time, so
+  without them the report button does not appear on your live site.
+</Callout>
+
 ## 1. Install
 
 ```bash
@@ -152,6 +160,12 @@ soon as `<MushiProvider>` initialises.
 Open your admin console at [kensaur.us/mushi-mushi/admin](https://kensaur.us/mushi-mushi/admin) (or your self-hosted
 instance). Your first report appears on the **Bugs** page within seconds, and
 its AI diagnosis follows shortly after.
+
+A one-sentence test report gets a thin diagnosis. For a real one, bring in a
+bug you already know about: see
+[Already have Sentry issues?](/quickstart#already-have-sentry-issues-bring-them-in)
+A diagnosis that names your files needs your GitHub repository connected on
+the console's **Connect** page.
 
 ## Next steps
 

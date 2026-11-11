@@ -152,14 +152,14 @@ interface ActionMeta {
 export const ACTION_META: Record<PipelineAction, ActionMeta> = {
   ci_repair: {
     label: 'Send to CI repair',
-    confirm: 'Sends each PR to an agent that makes its CI green without weakening tests: Mushi’s cloud agent when review follow-ups can run, otherwise your local mushi work lanes on their next mushi work --followups run.',
+    confirm: 'Sends each PR to an agent that makes its CI green without weakening tests: Mushi Mushi’s cloud agent when review follow-ups can run, otherwise your local mushi work lanes on their next mushi work --followups run.',
     needsConfirm: true,
     needsReason: false,
     variant: 'success',
   },
   followup: {
     label: 'Send to follow-up',
-    confirm: 'Sends each PR’s Opus findings to an agent that fixes them on the same branch: Mushi’s cloud agent when review follow-ups can run, otherwise your local mushi work lanes on their next mushi work --followups run.',
+    confirm: 'Sends each PR’s Opus findings to an agent that fixes them on the same branch: Mushi Mushi’s cloud agent when review follow-ups can run, otherwise your local mushi work lanes on their next mushi work --followups run.',
     needsConfirm: true,
     needsReason: false,
     variant: 'success',

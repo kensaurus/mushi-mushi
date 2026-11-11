@@ -53,7 +53,7 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
     return (
       <p className="text-sm text-fg-muted">
         No Cursor key yet. <Link className="text-brand underline underline-offset-2" to="/settings?tab=byok">Add one in Settings → AI keys</Link>{' '}
-        and Mushi can send open bugs to Cursor before its credits expire.
+        and Mushi Mushi can send open bugs to Cursor before its credits expire.
       </p>
     )
   }

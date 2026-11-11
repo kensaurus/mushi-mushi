@@ -39,10 +39,10 @@ export function radarLabel(r: PortfolioRadarColumn, unreadable: readonly Portfol
 /** @internal Exported for unit tests only; cards render it through cardStatusChips. */
 export function sdkLabel(entries: readonly SdkSkewEntry[], unreadable: readonly PortfolioReadPart[] = []): { text: string; tone: BadgeTone; hint: string } {
   if (unreadable.includes('sdk')) {
-    return { text: 'SDK: could not read', tone: 'dangerSubtle', hint: 'The Mushi SDK versions could not be read. Refresh in a minute.' }
+    return { text: 'SDK: could not read', tone: 'dangerSubtle', hint: 'The Mushi Mushi SDK versions could not be read. Refresh in a minute.' }
   }
   if (entries.length === 0 || entries.every((e) => e.status === 'unknown')) {
-    return { text: 'SDK unknown', tone: 'neutral', hint: entries[0]?.reason ?? 'No Mushi SDK has reported from this project yet.' }
+    return { text: 'SDK unknown', tone: 'neutral', hint: entries[0]?.reason ?? 'No Mushi Mushi SDK has reported from this project yet.' }
   }
   const behind = entries.filter((e) => e.status === 'behind')
   if (behind.length > 0) {
@@ -198,7 +198,8 @@ export function cardStatusChips(card: PortfolioCard): CardStatusChip[] {
  * card as an "Automated checks" problem whose only open gate is the setup
  * check. That is a chore, never an app's top problem.
  */
-const SETUP_ONLY_REASON = /^\d+ problems? to fix: Mushi setup checks? \(\d+\)\./
+// The server's sentence. It may say the product's full name once it is renamed there too.
+const SETUP_ONLY_REASON = /^\d+ problems? to fix: (?:Mushi )?Mushi setup checks? \(\d+\)\./
 
 function isMushiSetupChore(p: Pick<PortfolioCardProblem, 'element' | 'reason'>): boolean {
   return p.element === 'gates' && SETUP_ONLY_REASON.test(p.reason)
@@ -288,7 +289,7 @@ export function appUrgency(card: PortfolioCard): AppUrgency {
       level: 'behind',
       chip: { text: 'SDK update', tone: 'infoSubtle' },
       short: `SDK ${behind.version} → ${behind.latest}`,
-      next: { text: `Update the Mushi SDK from ${behind.version} to ${behind.latest}`, to: '/connect', more: others(0) },
+      next: { text: `Update the Mushi Mushi SDK from ${behind.version} to ${behind.latest}`, to: '/connect', more: others(0) },
     }
   }
   const stale = appProblems[0]
@@ -296,9 +297,9 @@ export function appUrgency(card: PortfolioCard): AppUrgency {
     const first = stale ?? chores[0]
     return {
       level: 'chores',
-      chip: { text: stale ? 'Re-run checks' : 'Mushi setup', tone: 'neutral' },
-      short: stale ? 'checks to re-run' : 'Mushi setup to finish',
-      next: { text: stale ? `${stale.label}: ${stale.reason}` : `Mushi setup: ${plural(chores.length, 'small fix', 'small fixes')} on the App blueprint page`, to: stale ? pageFor(first) : '/recipe', more: others(1) },
+      chip: { text: stale ? 'Re-run checks' : 'Mushi Mushi setup', tone: 'neutral' },
+      short: stale ? 'checks to re-run' : 'Mushi Mushi setup to finish',
+      next: { text: stale ? `${stale.label}: ${stale.reason}` : `Mushi Mushi setup: ${plural(chores.length, 'small fix', 'small fixes')} on the App blueprint page`, to: stale ? pageFor(first) : '/recipe', more: others(1) },
     }
   }
   if (!card.radar.checkedAt) {

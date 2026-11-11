@@ -11,7 +11,7 @@ description: "Solo builders who make apps with AI, developers who own their code
 
 Mushi Mushi was built for one person first: someone who makes apps with AI tools
 and then has to deal with the bugs. Two other groups get just as much from it.
-Find yours below.
+Find yours below. 日本語の概要は[こちら](/ja)。
 
 Short pages for a few common situations:
 [you built your app with Lovable or Bolt](/use-cases/no-code-founder),

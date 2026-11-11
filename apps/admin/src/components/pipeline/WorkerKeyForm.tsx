@@ -39,7 +39,7 @@ export function WorkerKeyForm({ projects, onCreated }: Props) {
     return (
       <div className="space-y-2" data-testid="worker-key-created">
         <Callout tone="warn" label="Shown once">
-          Copy this key now. Mushi keeps only its hash, so it cannot show it again.
+          Copy this key now. Mushi Mushi keeps only its hash, so it cannot show it again.
         </Callout>
         <CodeValue value={key} />
         <p className="text-xs text-fg-muted">On the machine, paste it into the install (it is read from stdin, so it stays out of your shell history):</p>

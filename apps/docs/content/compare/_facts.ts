@@ -25,6 +25,9 @@ export const FACTS_REVIEWED_AT = '2026-10-29'
 /** Mushi's own facts follow its pricing page (Free / Builder / Studio, 2026-10-28); competitor facts keep FACTS_REVIEWED_AT. */
 const MUSHI_FACTS_REVIEWED_AT = '2026-10-29'
 export const NEXT_REVIEW_DUE = '2027-01-29'
+/** The agency feedback tools page (Marker.io, BugHerd, Userback) was read on its own day. */
+export const AGENCY_FACTS_REVIEWED_AT = '2026-11-11'
+export const AGENCY_NEXT_REVIEW_DUE = '2027-02-11'
 
 interface Fact {
   /** Short label, e.g. "Free tier". */
@@ -33,7 +36,7 @@ interface Fact {
   value: string
   /** The page the fact was read from on `reviewedAt`. */
   sourceUrl: string
-  reviewedAt: typeof FACTS_REVIEWED_AT | typeof MUSHI_FACTS_REVIEWED_AT
+  reviewedAt: typeof FACTS_REVIEWED_AT | typeof MUSHI_FACTS_REVIEWED_AT | typeof AGENCY_FACTS_REVIEWED_AT
   /** True when the source page did not confirm the value on `reviewedAt`. */
   unverified?: boolean
 }
@@ -62,7 +65,7 @@ export const MUSHI: Vendor = {
   name: 'Mushi Mushi',
   url: 'https://kensaur.us/mushi-mushi/',
   whatItIs:
-    'An in-app bug reporter for production apps: a user reports from the widget, Mushi attaches the screenshot and console/network tail, writes a plain-English diagnosis, and hands a fix prompt to Cursor or Claude Code over MCP.',
+    'An in-app bug reporter for production apps: a user reports from the widget, Mushi Mushi attaches the screenshot and console/network tail, writes a plain-English diagnosis, and hands a fix prompt to Cursor or Claude Code over MCP.',
   facts: [
     { claim: 'Free tier', value: 'Free: 1 app, 100 diagnoses per month (hard stop; later reports are kept, not diagnosed), 1 seat, 14-day retention, your own AI key allowed, no card', sourceUrl: MUSHI_PRICING, reviewedAt: MUSHI_FACTS_REVIEWED_AT },
     { claim: 'Paid tiers', value: 'Builder $29/mo (3 apps, 1,000 diagnoses) · Studio $79/mo (10 apps, 3,000 diagnoses) · Enterprise from $499/mo', sourceUrl: MUSHI_PRICING, reviewedAt: MUSHI_FACTS_REVIEWED_AT },
@@ -123,19 +126,19 @@ export const SENTRY_PRICING_ROWS: readonly LandingComparisonRow[] = [
 
 export const SENTRY_FAQ: readonly FaqEntry[] = [
   {
-    q: 'Is Mushi a replacement for Sentry?',
-    a: 'It can be, or it can run alongside Sentry. Sentry is built around what the code threw, with a User Feedback widget and Session Replay alongside. Mushi starts from what the user reported, ingests Sentry\'s errors too, explains each one in plain English, and hands your agent a fix prompt to start from. One queue, with or without Sentry.',
+    q: 'Is Mushi Mushi a replacement for Sentry?',
+    a: 'It can be, or it can run alongside Sentry. Sentry is built around what the code threw, with a User Feedback widget and Session Replay alongside. Mushi Mushi starts from what the user reported, ingests Sentry\'s errors too, explains each one in plain English, and hands your agent a fix prompt to start from. One queue, with or without Sentry.',
   },
   {
-    q: 'Can I run Mushi alongside Sentry?',
-    a: 'Yes. Point a Sentry issue-alert webhook at Mushi and errors land in the same queue as user reports, deduped and diagnosed; that inbound path works on every plan. Resolving the Sentry issue when the Mushi fix merges needs the outbound Sentry plugin, which is on Builder and above or self-hosted. Setup is on the Sentry plugin page.',
+    q: 'Can I run Mushi Mushi alongside Sentry?',
+    a: 'Yes. Point a Sentry issue-alert webhook at Mushi Mushi and errors land in the same queue as user reports, deduped and diagnosed; that inbound path works on every plan. Resolving the Sentry issue when the Mushi Mushi fix merges also works on every plan, once you add a Sentry auth token under Integrations → Sentry. Setup is on the Sentry plugin page.',
   },
   {
     q: 'Does Sentry have an AI fix loop?',
     a: 'Seer is Sentry\'s AI debugging agent. Sentry sells it as an add-on to the Team or Business plan at $40 per active contributor per month, where an active contributor is anyone who opens two or more pull requests in a month to a Seer-enabled repo. It is billed as its own monthly charge, separate from pay-as-you-go, and it is not available in self-hosted Sentry.',
   },
   {
-    q: 'What does Mushi cost?',
+    q: 'What does Mushi Mushi cost?',
     a: 'Free covers one app and 100 diagnoses a month with no card. Builder is $29 a month for 3 apps, Studio $79 a month for 10. Self-hosting the AGPLv3 server is free.',
   },
 ]
@@ -204,19 +207,19 @@ export const JAM_ROWS: readonly LandingComparisonRow[] = [
 export const JAM_FAQ: readonly FaqEntry[] = [
   {
     q: 'Is Jam a bug reporter for end users?',
-    a: 'Mostly for people on or near the team. Jam is a Chrome extension a teammate, tester or support agent uses to record a bug; Recording Links let someone outside the workspace record too. Mushi is an SDK inside your production app, so the person who hit the bug reports it without installing anything.',
+    a: 'Mostly for people on or near the team. Jam is a Chrome extension a teammate, tester or support agent uses to record a bug; Recording Links let someone outside the workspace record too. Mushi Mushi is an SDK inside your production app, so the person who hit the bug reports it without installing anything.',
   },
   {
-    q: 'Can I use Jam and Mushi together?',
-    a: 'Yes, and it is a sensible split: Jam for internal QA and support recordings, Mushi for reports from real users in production and for the diagnosis-to-fix loop in your editor. There is no direct integration between the two today.',
+    q: 'Can I use Jam and Mushi Mushi together?',
+    a: 'Yes, and it is a sensible split: Jam for internal QA and support recordings, Mushi Mushi for reports from real users in production and for the diagnosis-to-fix loop in your editor. There is no direct integration between the two today.',
   },
   {
     q: 'Which one gives my coding agent more?',
-    a: 'Both have MCP. Jam\'s MCP hands the recording\'s console and network logs to your agent. Mushi\'s MCP hands over the plain-English diagnosis, the fix context scoped to files, past lessons, and can dispatch a draft PR.',
+    a: 'Both have MCP. Jam\'s MCP hands the recording\'s console and network logs to your agent. Mushi Mushi\'s MCP hands over the plain-English diagnosis, the fix context scoped to files, past lessons, and can dispatch a draft PR.',
   },
   {
     q: 'What do the free tiers cover?',
-    a: 'Jam Free (2026-10-29): 30 Jams a month, recordings up to 5 minutes, 5 Recording Links, 5 creator seats. Mushi Free: one app, 100 diagnoses a month, no card, unlimited reports.',
+    a: 'Jam Free (2026-10-29): 30 Jams a month, recordings up to 5 minutes, 5 Recording Links, 5 creator seats. Mushi Mushi Free: one app, 100 diagnoses a month, no card, unlimited reports.',
   },
 ]
 
@@ -262,7 +265,7 @@ export const POSTHOG_ROWS: readonly LandingComparisonRow[] = [
   {
     label: 'Where the bug is found',
     foil: 'You read the exception and the replay, or ask PostHog AI to find the root cause',
-    mushi: 'Mushi writes the diagnosis: what broke, why, which files',
+    mushi: 'Mushi Mushi writes the diagnosis: what broke, why, which files',
   },
   {
     label: 'Bugs that never throw',
@@ -298,24 +301,24 @@ export const POSTHOG_ROWS: readonly LandingComparisonRow[] = [
 
 export const POSTHOG_FAQ: readonly FaqEntry[] = [
   {
-    q: 'Does Mushi replace PostHog session replay?',
-    a: 'No. PostHog records every session; Mushi records the moment a user reports a bug, with the screenshot and console/network tail, and then writes the diagnosis. Keep PostHog for replay and product analytics; add Mushi when you want the report to arrive already explained.',
+    q: 'Does Mushi Mushi replace PostHog session replay?',
+    a: 'No. PostHog records every session; Mushi Mushi records the moment a user reports a bug, with the screenshot and console/network tail, and then writes the diagnosis. Keep PostHog for replay and product analytics; add Mushi Mushi when you want the report to arrive already explained.',
   },
   {
     q: 'Does PostHog fix errors with AI?',
-    a: 'Yes, in two ways. Every error-tracking issue has a "Fix with AI" button that writes a fix or explain prompt for PostHog AI or a coding assistant, and PostHog AI can search errors and find their root cause. Self-driving, in open beta, turns recurring high-impact errors into Inbox reports and opens a draft pull request when a code fix is possible: 3 a month free, then $15 per PR. Both are on PostHog\'s free plan (500 AI credits and 3 PRs a month). The difference with Mushi is where it starts: PostHog works from the exceptions it captured; Mushi starts from what a user reported, with their screenshot, writes a plain-English diagnosis (100 a month on Free, unlimited self-hosted with your own key), and pulls the fix context into Cursor or Claude Code over MCP.',
+    a: 'Yes, in two ways. Every error-tracking issue has a "Fix with AI" button that writes a fix or explain prompt for PostHog AI or a coding assistant, and PostHog AI can search errors and find their root cause. Self-driving, in open beta, turns recurring high-impact errors into Inbox reports and opens a draft pull request when a code fix is possible: 3 a month free, then $15 per PR. Both are on PostHog\'s free plan (500 AI credits and 3 PRs a month). The difference with Mushi Mushi is where it starts: PostHog works from the exceptions it captured; Mushi Mushi starts from what a user reported, with their screenshot, writes a plain-English diagnosis (100 a month on Free, unlimited self-hosted with your own key), and pulls the fix context into Cursor or Claude Code over MCP.',
   },
   {
-    q: 'Can I run PostHog and Mushi together?',
-    a: 'Yes. They do not conflict in the browser. There is no PostHog plugin for Mushi today, so a report will not deep-link to the PostHog replay; you can add the PostHog session id to Mushi metadata yourself.',
+    q: 'Can I run PostHog and Mushi Mushi together?',
+    a: 'Yes. They do not conflict in the browser. There is no PostHog plugin for Mushi Mushi today, so a report will not deep-link to the PostHog replay; you can add the PostHog session id to Mushi Mushi metadata yourself.',
   },
   {
-    q: 'Does Mushi do product analytics?',
-    a: 'A basic version: Mushi.track() with funnels, paths, people and retention in the same console, 90-day retention by default. PostHog is the fuller analytics product; Mushi\'s is there so a solo builder does not need a second tool to see a funnel.',
+    q: 'Does Mushi Mushi do product analytics?',
+    a: 'A basic version: Mushi.track() with funnels, paths, people and retention in the same console, 90-day retention by default. PostHog is the fuller analytics product; Mushi Mushi\'s is there so a solo builder does not need a second tool to see a funnel.',
   },
   {
     q: 'What do the free tiers cover?',
-    a: 'PostHog (2026-10-29): 5K session recordings, 100K exceptions and 1M analytics events a month, 500 PostHog AI credits (worth $5) and 3 Inbox pull requests a month, no card, one project, one-year retention. Mushi: one app and 100 diagnoses a month, no card; self-hosting is free.',
+    a: 'PostHog (2026-10-29): 5K session recordings, 100K exceptions and 1M analytics events a month, 500 PostHog AI credits (worth $5) and 3 Inbox pull requests a month, no card, one project, one-year retention. Mushi Mushi: one app and 100 diagnoses a month, no card; self-hosting is free.',
   },
 ]
 
@@ -425,19 +428,194 @@ export const ALTERNATIVES: readonly AlternativeRow[] = [
 export const ALTERNATIVES_FAQ: readonly FaqEntry[] = [
   {
     q: 'What is the cheapest way to get error tracking as a solo founder?',
-    a: 'Every tool on this page has a $0 plan: Sentry Developer, Bugsnag Free, Rollbar Free, LaunchDarkly Developer (where hosted highlight.io went), PostHog and Mushi Free. Sentry, PostHog and Mushi can also be self-hosted for free, and highlight.io\'s open-source repo documents a free hobby install. Bugsnag offers on-premises deployment on its Preferred plan, and Rollbar is cloud-only. The real cost is the afternoon you spend reading what they collected.',
+    a: 'Every tool on this page has a $0 plan: Sentry Developer, Bugsnag Free, Rollbar Free, LaunchDarkly Developer (where hosted highlight.io went), PostHog and Mushi Mushi Free. Sentry, PostHog and Mushi Mushi can also be self-hosted for free, and highlight.io\'s open-source repo documents a free hobby install. Bugsnag offers on-premises deployment on its Preferred plan, and Rollbar is cloud-only. The real cost is the afternoon you spend reading what they collected.',
   },
   {
     q: 'Which of these explain the bug instead of showing a stack trace?',
-    a: 'Most now have something. Sentry\'s Seer is an add-on to Team or Business at $40 per active contributor per month. Rollbar Resolve works out what is wrong, writes a fix, runs your tests in an isolated environment and opens a pull request, using credits the Free plan does not include. PostHog has a "Fix with AI" prompt on every error issue and, in open beta, draft pull requests for recurring errors: 3 a month free, then $15 each. Bugsnag\'s pricing page lists no AI feature; SmartBear\'s MCP server offers AI fix suggestions in the IDE. Mushi writes a plain-English diagnosis on every plan: up to 100 a month on Free (a hard stop; later reports are kept but not diagnosed until next month), 1,000 included on Builder, and unlimited self-hosted with your own LLM key. Like the others, it is an AI reading and can be wrong. The report it starts from is what a user said and saw, not only what threw.',
+    a: 'Most now have something. Sentry\'s Seer is an add-on to Team or Business at $40 per active contributor per month. Rollbar Resolve works out what is wrong, writes a fix, runs your tests in an isolated environment and opens a pull request, using credits the Free plan does not include. PostHog has a "Fix with AI" prompt on every error issue and, in open beta, draft pull requests for recurring errors: 3 a month free, then $15 each. Bugsnag\'s pricing page lists no AI feature; SmartBear\'s MCP server offers AI fix suggestions in the IDE. Mushi Mushi writes a plain-English diagnosis on every plan: up to 100 a month on Free (a hard stop; later reports are kept but not diagnosed until next month), 1,000 included on Builder, and unlimited self-hosted with your own LLM key. Like the others, it is an AI reading and can be wrong. The report it starts from is what a user said and saw, not only what threw.',
   },
   {
-    q: 'Do I have to rip out Sentry to try Mushi?',
-    a: 'No. Mushi runs standalone or alongside Sentry: a Sentry issue-alert webhook sends errors into Mushi\'s queue on every plan, and with the outbound Sentry plugin (Builder and above, or self-hosted) merging the fix resolves the Sentry issue.',
+    q: 'Do I have to rip out Sentry to try Mushi Mushi?',
+    a: 'No. Mushi Mushi runs standalone or alongside Sentry: a Sentry issue-alert webhook sends errors into Mushi Mushi\'s queue on every plan, and once you add a Sentry auth token under Integrations → Sentry, merging the fix resolves the Sentry issue.',
   },
   {
     q: 'How current is this page?',
     a: 'Every number was read on 2026-10-29 from the vendor\'s own pages, linked under each tool\'s name. A value that cannot be confirmed on a review date is marked unverified or removed instead of guessed. The next scheduled review is 2027-01-29.',
+  },
+]
+
+// ── Agency feedback tools: Marker.io, BugHerd, Userback ───────────────────
+// Read on AGENCY_FACTS_REVIEWED_AT from each vendor's own pricing and help
+// pages. This page keeps its own review date: the other pages were not
+// re-read on that day, so FACTS_REVIEWED_AT stays where it is.
+
+const A = AGENCY_FACTS_REVIEWED_AT
+
+const MARKER_PRICING = 'https://marker.io/pricing'
+const MARKER_GUEST_ACCESS = 'https://help.marker.io/en/articles/9617051-issue-page-access'
+const BUGHERD_PRICING = 'https://bugherd.com/pricing'
+const BUGHERD_CLIENT_INVITES = 'https://support.bugherd.com/en/articles/11424313-get-feedback-from-clients-on-websites-and-files'
+const USERBACK_PRICING = 'https://userback.io/pricing/'
+const MUSHI_AGENCY_PAGE = 'https://kensaur.us/mushi-mushi/docs/use-cases/agency-client-apps'
+
+export const MARKER: Vendor = {
+  name: 'Marker.io',
+  url: 'https://marker.io/',
+  whatItIs:
+    'A website feedback and issue tracking tool for teams that build sites for clients: a widget and browser extension for annotated reports, sent on to the tracker the team already uses.',
+  facts: [
+    { claim: 'Price', value: 'Starter $39/mo billed annually ($59 monthly) · Team $149/mo billed annually ($199 monthly) · Business custom. No free plan; a 15-day free trial with no card.', sourceUrl: MARKER_PRICING, reviewedAt: A },
+    { claim: 'Team seats and projects', value: 'Starter: 3 members, up to 10 projects. Team: 15 members, up to 50 projects. Extra members $4 each on Starter and $6 on Team per month, billed annually.', sourceUrl: MARKER_PRICING, reviewedAt: A },
+    { claim: 'Clients', value: 'Guests and reporters are free and unlimited on every plan, with no paid seat. A guest sees issues only on the projects they are invited to.', sourceUrl: MARKER_GUEST_ACCESS, reviewedAt: A },
+    { claim: 'Internal comments', value: 'On every plan: comments clients and reporters never see.', sourceUrl: MARKER_PRICING, reviewedAt: A },
+    { claim: 'Session replay, console logs and network requests', value: 'Team and Business only; not on Starter.', sourceUrl: MARKER_PRICING, reviewedAt: A },
+    { claim: 'Custom branding', value: 'Team and Business only.', sourceUrl: MARKER_PRICING, reviewedAt: A },
+    { claim: 'Security', value: 'SOC 2 Type II on every plan. SAML single sign-on on Business.', sourceUrl: MARKER_PRICING, reviewedAt: A },
+    { claim: 'AI', value: 'AI translation, rewrite and automatic issue titles on every plan, and an MCP server so an AI agent can read the feedback and fix issues.', sourceUrl: MARKER_PRICING, reviewedAt: A },
+  ],
+}
+
+export const BUGHERD: Vendor = {
+  name: 'BugHerd',
+  url: 'https://bugherd.com/',
+  whatItIs:
+    'A website feedback tool built around pinning comments to the page and a task board, for agencies collecting feedback from clients.',
+  facts: [
+    { claim: 'Price', value: 'Standard $50/mo ($42 billed annually) · Studio $80/mo ($67) · Premium $150/mo ($125) · Custom on request. No free plan; a 7-day free trial with no card.', sourceUrl: BUGHERD_PRICING, reviewedAt: A },
+    { claim: 'Team seats and projects', value: 'Standard 5 members, Studio 10, Premium 25. Unlimited projects on every plan. Extra members $8 each per month.', sourceUrl: BUGHERD_PRICING, reviewedAt: A },
+    { claim: 'Clients', value: 'Unlimited guests (clients and stakeholders) on every plan. Guests are invited to a project.', sourceUrl: BUGHERD_CLIENT_INVITES, reviewedAt: A },
+    { claim: 'Client task board and member-only comments', value: 'Premium and above: a guest task board, member-only commenting, and a choice of whether guests see member feedback.', sourceUrl: BUGHERD_PRICING, reviewedAt: A },
+    { claim: 'Video feedback', value: 'On every plan.', sourceUrl: BUGHERD_PRICING, reviewedAt: A },
+    { claim: 'Custom branding', value: 'Premium and above.', sourceUrl: BUGHERD_PRICING, reviewedAt: A },
+    { claim: 'Security', value: 'Single sign-on and a 99.9% uptime SLA on the Custom plan. The pricing page does not mention SOC 2.', sourceUrl: BUGHERD_PRICING, reviewedAt: A },
+    { claim: 'AI', value: 'MCP and automatic titles on every plan (beta); automatic tagging and similar-task detection on Premium (beta).', sourceUrl: BUGHERD_PRICING, reviewedAt: A },
+  ],
+}
+
+export const USERBACK: Vendor = {
+  name: 'Userback',
+  url: 'https://userback.io/',
+  whatItIs:
+    'A user feedback platform: a widget and browser extension for annotated feedback and bug reports, a kanban board to manage them, and surveys and a feature portal on higher plans.',
+  facts: [
+    { claim: 'Price', value: 'Free forever $0 · Team $39/mo billed annually ($49 monthly) · Business $89/mo ($119) · Business Plus $159/mo ($199).', sourceUrl: USERBACK_PRICING, reviewedAt: A },
+    { claim: 'Free plan', value: '2 sites, 2 seats, unlimited feedback, but feedback can be viewed for 7 days only.', sourceUrl: USERBACK_PRICING, reviewedAt: A },
+    { claim: 'Team seats and sites', value: 'Team: 5 sites, 5 seats. Business: 25 sites, 15 seats. Business Plus: 50 sites, 25 seats. Extra seats $7 each per month billed annually, on Business and above.', sourceUrl: USERBACK_PRICING, reviewedAt: A },
+    { claim: 'Clients', value: 'Unlimited reporters on every plan, with no seat. Team member roles can grant access to specific projects.', sourceUrl: USERBACK_PRICING, reviewedAt: A },
+    { claim: 'Session replay, console logs and network requests', value: 'Business and above; not on Free or Team.', sourceUrl: USERBACK_PRICING, reviewedAt: A },
+    { claim: 'Mobile SDK', value: 'Business Plus only.', sourceUrl: USERBACK_PRICING, reviewedAt: A },
+    { claim: 'Remove the Userback logo', value: 'Business Plus only.', sourceUrl: USERBACK_PRICING, reviewedAt: A },
+    { claim: 'Board and internal comments', value: 'A kanban board on every plan. Team comment controls (internal-only comments for some members) on Business and above.', sourceUrl: USERBACK_PRICING, reviewedAt: A },
+    { claim: 'AI', value: 'MCP connectors from Team; AI insights (patterns, sentiment) on Business and above.', sourceUrl: USERBACK_PRICING, reviewedAt: A },
+  ],
+}
+
+/** Mushi Mushi's own facts for the agency page, from the code and the pages linked. */
+export const MUSHI_FOR_AGENCIES: Vendor = {
+  name: 'Mushi Mushi',
+  url: 'https://kensaur.us/mushi-mushi/',
+  whatItIs:
+    'An in-app bug reporter: the person using the app reports from a widget, and Mushi Mushi writes the likely cause in plain English with a fix prompt for Cursor, Claude Code, Lovable or Bolt.',
+  facts: [
+    { claim: 'Price', value: 'Free $0 (1 app, 100 diagnoses a month, no card) · Builder $29/mo (3 apps) · Studio $79/mo (10 apps, 5 seats). A paid plan is attached to one app: that app gets the plan\'s diagnoses (1,000 on Builder, 3,000 on Studio) and the other apps in the team keep 100 a month until they are upgraded too.', sourceUrl: MUSHI_PRICING, reviewedAt: A },
+    { claim: 'Clients', value: 'No free guest seats. A client who signs in takes one of the 5 Studio seats, and every member of a team, a read-only Viewer included, can read every app in that team. To show a client only their own app, give it its own team.', sourceUrl: MUSHI_AGENCY_PAGE, reviewedAt: A },
+    { claim: 'Task board, internal comments, video', value: 'None of these. Reports sit in a list with filters, and can be sent on to Linear, Jira or GitHub Issues. No video feedback; the web SDK has an optional session replay setting that is off unless you turn it on.', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/migrations/bugherd-to-mushi', reviewedAt: A },
+    { claim: 'Console and network logs', value: 'On every plan, Free included: the last console and network events arrive with each report.', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/sdks/web', reviewedAt: A },
+    { claim: 'A written cause and a fix prompt', value: 'On every plan: each bug gets a plain-English diagnosis and a prompt to paste into an AI editor. It is an AI\'s reading and can be wrong; check it before you ship.', sourceUrl: MUSHI_PRICING, reviewedAt: A },
+    { claim: 'Mobile SDKs', value: 'React Native and Capacitor SDKs on every plan, Free included. Native iOS, Android and Flutter libraries are previews.', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/quickstart/mobile', reviewedAt: A },
+    { claim: 'Brand mark on the widget', value: 'None on Builder and Studio. On Free, a small "Bug reports by Mushi Mushi" link that you can turn off in Settings.', sourceUrl: MUSHI_AGENCY_PAGE, reviewedAt: A },
+    { claim: 'Security', value: 'No SOC 2 report. Mushi Mushi collects evidence toward one; that is not a certification. SAML single sign-on on Enterprise.', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/security/soc2', reviewedAt: A },
+    { claim: 'Self-host', value: 'Yes, free: MIT SDKs and an AGPLv3 server you can run yourself.', sourceUrl: `${MUSHI_REPO}/blob/master/SELF_HOSTED.md`, reviewedAt: A },
+  ],
+}
+
+export const AGENCY_ROWS: readonly LandingComparisonRow[] = [
+  {
+    label: 'Who presses the button',
+    foil: 'Mostly your client and your own team, reviewing a site you are building or maintaining',
+    mushi: 'The people using the finished app, in production',
+  },
+  {
+    label: 'Free client access',
+    foil: 'Yes, on all three: unlimited guests or reporters without a paid seat',
+    mushi: 'No. A client who signs in takes a seat',
+  },
+  {
+    label: 'A client sees only their own project',
+    foil: 'Yes: guests are invited per project (Marker.io, BugHerd); roles can grant access to specific projects (Userback)',
+    mushi: 'Only if that client\'s app is in its own team. A member reads every app in a team',
+  },
+  {
+    label: 'Task board for the client',
+    foil: 'BugHerd (guest task board on Premium) and Userback (kanban board) have one; Marker.io has its own issue list with statuses and sends issues to your tracker',
+    mushi: 'No board. A list with filters, and sync to Linear, Jira or GitHub Issues',
+  },
+  {
+    label: 'Comments the client cannot see',
+    foil: 'Marker.io on every plan; BugHerd on Premium; Userback on Business',
+    mushi: 'No',
+  },
+  {
+    label: 'Video or session replay',
+    foil: 'BugHerd: video feedback on every plan. Marker.io: session replay from Team. Userback: session replay from Business',
+    mushi: 'No video. An optional replay setting in the web SDK, off by default',
+  },
+  {
+    label: 'Console and network logs',
+    foil: 'Marker.io from Team; Userback from Business. BugHerd lists "technical data" (browser, OS, screen size) on every plan',
+    mushi: 'On every plan, Free included',
+  },
+  {
+    label: 'What you read first',
+    foil: 'The client\'s comment, pinned to the page with a screenshot',
+    mushi: 'The likely cause in plain English, with a fix prompt for your AI editor',
+  },
+  {
+    label: 'Phone apps',
+    foil: 'Userback has a mobile SDK on Business Plus. The Marker.io and BugHerd pricing pages list none',
+    mushi: 'React Native and Capacitor SDKs on every plan',
+  },
+  {
+    label: 'Your own brand, no vendor mark',
+    foil: 'Marker.io from Team; BugHerd on Premium; Userback removes its logo on Business Plus',
+    mushi: 'No Mushi Mushi mark from Builder; on Free you can turn it off',
+  },
+  {
+    label: 'SOC 2',
+    foil: 'Marker.io: SOC 2 Type II on every plan',
+    mushi: 'No SOC 2 report',
+  },
+  {
+    label: 'Run it yourself',
+    foil: 'None of the three pricing pages offers it',
+    mushi: 'Yes, free (AGPLv3 server)',
+  },
+]
+
+export const AGENCY_FAQ: readonly FaqEntry[] = [
+  {
+    q: 'Can my clients use Mushi Mushi for free, the way guests work in Marker.io or BugHerd?',
+    a: 'Not as signed-in guests. Marker.io, BugHerd and Userback all let unlimited clients send and follow feedback without a paid seat. In Mushi Mushi anyone can send a report from the widget for free and follow it there, but a client who signs in to the console takes one of the 5 seats on Studio.',
+  },
+  {
+    q: 'Can a client see only their own project in Mushi Mushi?',
+    a: 'Only if their app is in its own team. An invitation is to a team, and every member, a read-only Viewer included, can read every app in it. Marker.io and BugHerd invite guests per project, and Userback roles can grant access to specific projects.',
+  },
+  {
+    q: 'Which is cheaper for eight client sites?',
+    a: 'It depends on what you count. On 2026-11-11, BugHerd Standard was $50 a month with unlimited projects and 5 members, and Marker.io Starter was $39 a month billed annually for up to 10 projects and 3 members. Mushi Mushi Studio is $79 a month for a team of up to 10 apps and 5 seats, but its 3,000 diagnoses belong to the one app you upgrade; the other apps keep 100 a month each unless you upgrade them too.',
+  },
+  {
+    q: 'What does Mushi Mushi do that these three do not?',
+    a: 'It is built for the people using the finished app rather than for a client reviewing a build, and it writes the likely cause of each bug in plain English with a fix prompt for Cursor, Claude Code, Lovable or Bolt. Console and network logs and the React Native and Capacitor SDKs are on the free plan, and you can run the whole thing yourself.',
+  },
+  {
+    q: 'When should I pick one of the others?',
+    a: 'When the job is collecting feedback from a client during a build: free guest seats, a board the client can follow, comments they cannot see, video, and, with Marker.io, a SOC 2 Type II report. Mushi Mushi has none of those.',
+  },
+  {
+    q: 'How current is this page?',
+    a: 'Every number was read on 2026-11-11 from the vendor\'s own pricing or help page, linked in each row. A value that cannot be confirmed on a review date is marked unverified or removed.',
   },
 ]
 

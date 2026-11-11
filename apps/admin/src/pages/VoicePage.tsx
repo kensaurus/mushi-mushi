@@ -49,7 +49,7 @@ import { PageLoadError } from '../components/PageLoadError'
 const HELP = {
   title: 'About voice intake',
   whatIsIt:
-    'Talk a bug or a fix request into your phone. Mushi transcribes it server-side, shows you the exact words and the action it inferred, and only after you confirm does it create the report and send an agent to open a draft PR — never merged automatically.',
+    'Talk a bug or a fix request into your phone. Mushi Mushi transcribes it server-side, shows you the exact words and the action it inferred, and only after you confirm does it create the report and send an agent to open a draft PR — never merged automatically.',
   useCases: [
     'Dictate a bug you just hit on your phone without typing a ticket',
     'Ask for a small fix from the couch and get the draft PR link pushed back',
@@ -272,7 +272,7 @@ function VoiceSessionResult({ session, pending, onConfirm, onCancel }: { session
   const status = effectiveVoiceStatus(session)
   const refused = session.status === 'refused'
   return (
-    <Section title="What Mushi heard" action={<Badge tone={voiceStatusTone(status)}>{voiceStatusLabel(status)}</Badge>}>
+    <Section title="What Mushi Mushi heard" action={<Badge tone={voiceStatusTone(status)}>{voiceStatusLabel(status)}</Badge>}>
       <div className="space-y-3" data-testid="voice-session-result">
         <Card variant="flat" className="p-3">
           <p className="mb-1 text-2xs font-semibold uppercase tracking-wide text-fg-muted">Transcript (verbatim)</p>

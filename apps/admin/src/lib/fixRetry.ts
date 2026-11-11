@@ -14,7 +14,7 @@
 /** Agents a console retry can request (a subset of ALLOWED_AGENT_OVERRIDES). */
 export const RETRY_AGENT_OPTIONS = [
   { value: 'auto', label: 'Project default agent' },
-  { value: 'claude_code', label: 'Mushi fix worker (Claude)' },
+  { value: 'claude_code', label: 'Mushi Mushi fix worker (Claude)' },
   { value: 'cursor_cloud', label: 'Cursor Cloud agent' },
   { value: 'github_cloud_agent', label: 'GitHub Copilot coding agent' },
 ] as const

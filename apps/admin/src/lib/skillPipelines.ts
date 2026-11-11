@@ -69,9 +69,9 @@ export function describePipelineCancel(result: PipelineCancelResult | null | und
 /** Body of the Cancel confirm dialog, honest about what Mushi can stop. */
 export function pipelineCancelBody(mode: string | null | undefined): string {
   if (mode === 'cloud') {
-    return 'Mushi stops the pipeline and asks Cursor Cloud to stop the agent working on the current step. Steps that have not started are skipped. Work an agent already pushed stays on its branch. This cannot be undone.'
+    return 'Mushi Mushi stops the pipeline and asks Cursor Cloud to stop the agent working on the current step. Steps that have not started are skipped. Work an agent already pushed stays on its branch. This cannot be undone.'
   }
-  return 'Mushi stops the pipeline and skips the steps that have not finished. Your local agent is not stopped: close it in your editor. This cannot be undone.'
+  return 'Mushi Mushi stops the pipeline and skips the steps that have not finished. Your local agent is not stopped: close it in your editor. This cannot be undone.'
 }
 
 export interface CheckinStep {

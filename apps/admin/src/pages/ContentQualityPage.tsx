@@ -361,7 +361,7 @@ export function ContentQualityPage() {
               needle
                 ? 'No content key on this page contains that text. Clear the search or change page.'
                 : status === 'open'
-                ? 'No open issues. Mushi looks for new ones every 15 minutes.'
+                ? 'No open issues. Mushi Mushi looks for new ones every 15 minutes.'
                 : `No issues with status "${status}".`
             }
             action={

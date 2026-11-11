@@ -17,6 +17,7 @@ import { CHIP_TONE } from '../../lib/chipTone'
 import { useToast } from '../../lib/toast'
 import { usePageData } from '../../lib/usePageData'
 import { relativeTime } from '../../lib/setupGuideSteps'
+import { SITE_WATCH_ANCHOR } from '../../lib/homeConnectHref'
 
 interface SiteWatch {
   id: string
@@ -148,7 +149,7 @@ export function SiteWatchCard({ projectId }: { projectId: string }) {
   const openCount = data?.openPages.length ?? 0
 
   return (
-    <Card className="p-4 space-y-3" data-testid="mushi-site-watch-card">
+    <Card id={SITE_WATCH_ANCHOR} className="scroll-mt-chrome p-4 space-y-3" data-testid="mushi-site-watch-card">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
@@ -291,7 +292,7 @@ export function SiteWatchCard({ projectId }: { projectId: string }) {
       {confirmOff && (
         <ConfirmDialog
           title="Turn off the live-site watch?"
-          body="Firecrawl stops crawling this site, and Mushi stops filing broken pages. Reports already filed stay. You can turn it on again any time."
+          body="Firecrawl stops crawling this site, and Mushi Mushi stops filing broken pages. Reports already filed stay. You can turn it on again any time."
           confirmLabel="Turn off"
           cancelLabel="Keep watching"
           tone="danger"

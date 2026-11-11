@@ -91,7 +91,7 @@ const SOURCE_DOT: Record<UnifiedCrumb['source'], string> = {
 }
 
 const SOURCE_LABEL: Record<UnifiedCrumb['source'], string> = {
-  mushi: 'Mushi',
+  mushi: 'Mushi Mushi',
   sentry: 'Sentry',
 }
 
@@ -414,7 +414,7 @@ export function SentryContextPanel({
             <div className="flex items-center gap-3 text-2xs text-fg-faint">
               <span className="inline-flex items-center gap-1">
                 <span className={`size-2 rounded-full ${SOURCE_DOT.mushi}`} aria-hidden />
-                Mushi
+                Mushi Mushi
               </span>
               <span className="inline-flex items-center gap-1">
                 <span className={`size-2 rounded-full ${SOURCE_DOT.sentry}`} aria-hidden />

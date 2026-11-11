@@ -391,7 +391,8 @@ export function FirstDiagnosisScreen({
               </h3>
               <p className="mt-0.5 text-xs text-fg-muted">
                 Add the report button to your live app, and every bug your users report gets the same explanation.
-                Built with Lovable or Bolt? Pick it under &ldquo;Where does your app run?&rdquo; for one line to paste.
+                The quickest ways are listed first: one line to paste for Lovable or Bolt, one command if you have a
+                terminal.
               </p>
             </div>
             <SdkInstallCard

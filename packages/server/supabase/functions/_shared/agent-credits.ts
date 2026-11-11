@@ -29,9 +29,9 @@ import { isAgentOutOfUsageError } from './agent-out-of-usage.ts'
 export const OUT_OF_USAGE_STREAK_MIN = 3
 
 /** The command that fixes reports with Claude Code on the user's own computer (`mushi work --agent claude`). */
-export const CLAUDE_WORK_COMMAND = 'mushi work --agent claude --repo-dir .'
+export const CLAUDE_WORK_COMMAND = 'npx @mushi-mushi/cli@latest work --agent claude --repo-dir .'
 /** The same, for the review findings on PRs `mushi work` opened (the held PRs wait on these). */
-export const CLAUDE_FOLLOWUPS_COMMAND = 'mushi work --agent claude --followups --repo-dir .'
+export const CLAUDE_FOLLOWUPS_COMMAND = 'npx @mushi-mushi/cli@latest work --agent claude --followups --repo-dir .'
 
 export interface CreditKeyRow {
   label: string | null

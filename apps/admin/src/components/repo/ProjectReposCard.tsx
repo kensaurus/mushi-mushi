@@ -285,7 +285,7 @@ export function ProjectReposCard({ projectId }: Props) {
       {removeTarget ? (
         <ConfirmDialog
           title="Remove this repo?"
-          body={`Mushi stops sending fixes to ${removeTarget.repo_url} and drops its index settings here. Pull requests already opened on it stay on GitHub.${removeTarget.is_primary ? ' It is the primary repo, so mark another one as primary afterwards.' : ''}`}
+          body={`Mushi Mushi stops sending fixes to ${removeTarget.repo_url} and drops its index settings here. Pull requests already opened on it stay on GitHub.${removeTarget.is_primary ? ' It is the primary repo, so mark another one as primary afterwards.' : ''}`}
           confirmLabel="Remove repo"
           tone="danger"
           loading={removing}

@@ -41,7 +41,7 @@ export function IterateSnapshotStrip({ stats, statsFetchedAt, statsValidating, s
       ]}
       empty={{
         title: 'No improvement runs yet',
-        sentence: 'Give Mushi one page of your app: an AI drafts a change and a second AI critiques it until it passes.',
+        sentence: 'Give Mushi Mushi one page of your app: an AI drafts a change and a second AI critiques it until it passes.',
         action: { label: 'Start a run', to: '/iterate?tab=new' },
       }}
     />

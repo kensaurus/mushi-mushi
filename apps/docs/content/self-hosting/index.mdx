@@ -10,7 +10,7 @@ import { Callout } from 'nextra/components'
 Mushi Mushi is **OSS-first**. Mushi Mushi Cloud at `kensaur.us/mushi-mushi/admin` runs the same code as this repo — there is no closed-source plus-tier. Every edge function, migration, and admin SPA you see here is what powers Mushi Mushi Cloud. The one difference is data: the hosted service keeps its own tuning (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. The repo ships working default prompts, so your stack has every feature. See [Open source & licensing](/concepts/open-source#what-the-hosted-service-keeps).
 
 <Callout type="info">
-  **Prerequisite:** Node ≥ 22, a [Supabase](https://supabase.com) project, and the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started).
+  **What you need** depends on the path. **Docker Compose** (below) needs only Docker and an Anthropic key: it runs the open-source Supabase services (Postgres, Auth, REST, Storage) in containers on your own machine, so you do not need a Supabase account. The **managed-Supabase path** needs Node ≥ 22, a [Supabase](https://supabase.com) project, and the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started).
 </Callout>
 
 ## What you'll deploy
@@ -31,7 +31,7 @@ in one command, no managed Supabase project required:
 ```bash
 git clone https://github.com/kensaurus/mushi-mushi.git
 cd mushi-mushi/deploy
-cp .env.example .env   # set ANTHROPIC_API_KEY + Supabase creds
+cp .env.example .env   # set ANTHROPIC_API_KEY and the keys for the local stack
 docker compose up -d
 ```
 

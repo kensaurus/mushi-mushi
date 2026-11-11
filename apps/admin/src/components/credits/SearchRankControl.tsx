@@ -83,7 +83,7 @@ export function SearchRankControl({ projectId, name, keywords, target, firecrawl
           )}
         </div>
       </div>
-      {!target && <p className="text-xs text-fg-muted">Watch or audit the live site first, so Mushi knows which address to look for.</p>}
+      {!target && <p className="text-xs text-fg-muted">Watch or audit the live site first, so Mushi Mushi knows which address to look for.</p>}
       {keywords.length > 0 && draft == null && (
         <ul className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-fg-secondary" aria-label={`Search ranks for ${name}`}>
           {keywords.map((k) => (

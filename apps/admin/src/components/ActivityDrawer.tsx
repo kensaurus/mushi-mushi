@@ -482,7 +482,7 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
         {!loading && !error && events.length === 0 && (
           <EmptyState
             title="No recent activity"
-            description="Connected and listening. The feed lights up the moment Mushi dispatches a fix, opens a PR, or resolves CI."
+            description="Connected and listening. The feed lights up the moment Mushi Mushi dispatches a fix, opens a PR, or resolves CI."
           />
         )}
 

@@ -55,7 +55,7 @@ function Connect({ bill }: { bill: CiBill }) {
       <ol className="flex list-decimal flex-col gap-1.5 pl-5 text-xs text-fg-secondary">
         <li>
           In this project&apos;s GitHub settings, save a fine-grained token that can read billing: <span className="font-medium text-fg">Plan: read</span> for a
-          personal account, <span className="font-medium text-fg">Administration: read</span> for an organization. Mushi reads the bill once a day.
+          personal account, <span className="font-medium text-fg">Administration: read</span> for an organization. Mushi Mushi reads the bill once a day.
         </li>
         <li className="min-w-0">
           Or, on a machine where <code className="mushi-code-inline">gh</code> is signed in as the account that pays, give that login billing access
@@ -122,7 +122,7 @@ export function CiBillCard({ projectId, scope }: { projectId: string | null; sco
               </p>
             )}
             {!bill.windowComplete && (
-              <p className="mt-0.5 text-2xs text-fg-muted">Mushi holds part of this window so far; the totals grow as earlier days are read.</p>
+              <p className="mt-0.5 text-2xs text-fg-muted">Mushi Mushi holds part of this window so far; the totals grow as earlier days are read.</p>
             )}
           </div>
 
@@ -148,10 +148,10 @@ export function CiBillCard({ projectId, scope }: { projectId: string | null; sco
       )}
 
       {bill.agentShare && (
-        <Callout tone="neutral" label="Mushi agent pull requests">
+        <Callout tone="neutral" label="Mushi Mushi agent pull requests">
           <p className="text-xs text-fg-secondary" data-testid="ci-bill-agent-share">
-            <span className="font-semibold text-fg">{formatPercent(bill.agentShare.share)}</span> of the paid GitHub-hosted minutes ran on Mushi&apos;s agent branches (
-            {formatMinutes(bill.agentShare.agentBilledMinutes)} of {formatMinutes(bill.agentShare.billedMinutes)}, private repos, estimated from the jobs Mushi
+            <span className="font-semibold text-fg">{formatPercent(bill.agentShare.share)}</span> of the paid GitHub-hosted minutes ran on Mushi Mushi&apos;s agent branches (
+            {formatMinutes(bill.agentShare.agentBilledMinutes)} of {formatMinutes(bill.agentShare.billedMinutes)}, private repos, estimated from the jobs Mushi Mushi
             recorded).
           </p>
         </Callout>

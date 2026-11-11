@@ -14,9 +14,9 @@ English. New to all of it? Start with [What is Mushi Mushi?](/what-is-mushi-mush
 
 - **AI builder or AI editor**: The tool that writes your app's code for you, such as Lovable, Bolt, Cursor or Claude Code.
 - **API key**: A long password that lets your app or your tools talk to Mushi Mushi. Mushi Mushi keys start with `mushi_`. Keep the ones that can read reports private.
-- **Bug mediator**: A word the integrations pages use for how Mushi Mushi works inside: one list that sits between your users, your other tools and your AI, so every bug is explained once, wherever it came from.
+- **Bug mediator**: A name some pages here use for Mushi Mushi's job as the go-between. Bugs come in from your users and from other tools you may use. Mushi Mushi puts them in one list, explains each one once, and passes the fix to your AI builder.
 - **CI (continuous integration)**: A service, such as GitHub Actions, that runs your app's tests every time the code changes. You don't need it to use Mushi Mushi.
-- **Console**: The Mushi Mushi website where you read your reports, see each diagnosis and change your settings.
+- **Console**: Your Mushi Mushi account on the web. You sign in there to copy your script tag, read your bug reports and each diagnosis, copy fix prompts and change your settings. It is not the "console" inside a browser's developer tools.
 - **Diagnosis**: Mushi Mushi's short written explanation of one bug: how serious it is, the likely cause, how sure it is, and a suggested fix. Your plan counts these.
 - **Duplicate reports**: When several people report the same bug, Mushi Mushi groups them into one item, and they count as one diagnosis.
 - **Fix prompt**: The diagnosis plus the evidence, written as instructions you paste into your AI builder so it can fix the bug.

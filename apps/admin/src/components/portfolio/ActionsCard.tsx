@@ -143,7 +143,7 @@ export function ActionsCard({ orgId, connectors }: { orgId: string; connectors: 
           title={confirm.kind === 'execute' ? `Run "${confirm.row.action}" now?` : `Reject "${confirm.row.action}"?`}
           body={
             confirm.kind === 'execute'
-              ? 'This sends the approved payload to the store once. It changes the live listing or rollout and cannot be undone from Mushi.'
+              ? 'This sends the approved payload to the store once. It changes the live listing or rollout and cannot be undone from Mushi Mushi.'
               : 'The request closes and cannot be approved later. Ask again if you change your mind.'
           }
           confirmLabel={confirm.kind === 'execute' ? 'Run now' : 'Reject'}

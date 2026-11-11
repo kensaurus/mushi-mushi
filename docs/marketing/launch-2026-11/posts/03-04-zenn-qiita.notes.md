@@ -78,6 +78,23 @@ published: true
   英語".
 - **The four example bugs:** from the owner's lead research, on public pages,
   with no app named.
+- **Free limit, stated in full** (re-audit 2026-11-11): "アプリ 1 本・月 100 件の
+  診断まで（カード登録不要）". Source: plans migration `20261028180000`
+  (`free_cloud`: `max_projects = 1`, `included_diagnoses_per_month = 100`).
+- **What needs your own key or your own computer** (Zenn, last section):
+  - hourly site watch: your own Firecrawl key (`README.md`, "Live-site watch");
+  - the second AI that reviews a fix pull request: your own Anthropic key, or
+    your own OpenAI key when there is no Anthropic key, never the platform key
+    (`agent-pr-review/index.ts`, `resolveReviewKey`);
+  - the first-time user test: runs on your own computer
+    (`apps/docs/content/admin/ux-runs.mdx`).
+- **"診断と管理画面は英語です"** (Qiita): the console and the diagnosis have no
+  Japanese locale today; only the widget does.
+- **The Japanese page** `https://kensaur.us/mushi-mushi/docs/ja?src=<tag>` is
+  linked from both articles with the article's own tag (`links.md`). It is new
+  in this batch: confirm it returns HTTP 200 after the deploy, before posting.
+- **The tag example** in the Zenn prompt keeps the docs placeholders. The line
+  under it now says the tag is an example and to paste your own copied tag.
 
 ## Kill switch
 

@@ -89,7 +89,7 @@ export function CiCostSettingsCard({ projectId }: { projectId: string | null }) 
     })
     setSaving(false)
     if (!res.ok || !res.data) {
-      setSaveError(res.error?.message ?? 'Mushi did not save the CI cost settings. Try again in a moment.')
+      setSaveError(res.error?.message ?? 'Mushi Mushi did not save the CI cost settings. Try again in a moment.')
       return
     }
     setSaved(res.data)
@@ -175,7 +175,7 @@ export function CiCostSettingsCard({ projectId }: { projectId: string | null }) 
                 disabled={readOnly || !data.writable}
                 error={errors.fxPerUsd}
                 onChange={(e) => change('fxPerUsd', e.target.value)}
-                tooltip="GitHub prices are in US dollars; Mushi converts them with this rate."
+                tooltip="GitHub prices are in US dollars; Mushi Mushi converts them with this rate."
               />
             )}
             <Input

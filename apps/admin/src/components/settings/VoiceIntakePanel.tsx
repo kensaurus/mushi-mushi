@@ -180,7 +180,7 @@ export function VoiceIntakePanel() {
     <>
       <SettingsList
         title="Voice reports"
-        description="Say a bug out loud and Mushi turns it into a report. Off until you turn it on; recordings are deleted after transcription unless you keep them, and you confirm every transcript before anything is sent to a coding agent."
+        description="Say a bug out loud and Mushi Mushi turns it into a report. Off until you turn it on; recordings are deleted after transcription unless you keep them, and you confirm every transcript before anything is sent to a coding agent."
       >
         <SettingsRow
           icon={<IconMic size={16} />}
@@ -330,11 +330,11 @@ export function VoiceIntakePanel() {
         </SettingsRow>
       </SettingsList>
 
-      <SettingsList title="Coding agents" description="Accounts Mushi uses when you send a voice fix request to an agent.">
+      <SettingsList title="Coding agents" description="Accounts Mushi Mushi uses when you send a voice fix request to an agent.">
         <SettingsRow
           icon={<BrandIcon brand="github" size={18} decorative />}
           title="GitHub cloud agent"
-          purpose="Lets Mushi hand a fix to GitHub's cloud coding agent. GitHub only accepts a personal token here, not the app connection used for your code."
+          purpose="Lets Mushi Mushi hand a fix to GitHub's cloud coding agent. GitHub only accepts a personal token here, not the app connection used for your code."
           status={
             githubConfigured
               ? { state: 'checking', detail: 'Saved. It is checked the first time a fix goes to GitHub.' }

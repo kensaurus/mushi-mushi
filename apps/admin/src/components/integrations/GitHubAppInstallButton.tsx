@@ -65,7 +65,7 @@ export function GitHubAppInstallButton({ projectId, hasInstallation = false, cla
       )}
       {!hasInstallation && (
         <p className="text-2xs text-fg-muted">
-          You sign in to GitHub, then pick the repository Mushi opens PRs on.
+          You sign in to GitHub, then pick the repository Mushi Mushi opens PRs on.
         </p>
       )}
     </div>

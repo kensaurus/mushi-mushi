@@ -28,7 +28,7 @@ export function totalLoggedTooltip(stats: CostStats): MetricTooltipData {
       {
         label: 'Counted from',
         kind: 'counted',
-        body: 'Sums cost_usd on every llm_invocations row (one row per edge-function LLM call). When cost_usd is missing, Mushi estimates from input/output tokens and the model price table. Legacy llm_cost_usd rows are merged into the same total.',
+        body: 'Sums cost_usd on every llm_invocations row (one row per edge-function LLM call). When cost_usd is missing, Mushi Mushi estimates from input/output tokens and the model price table. Legacy llm_cost_usd rows are merged into the same total.',
       },
       {
         label: 'Takeaway',
@@ -226,13 +226,13 @@ export function keySourceTooltip(stats: CostStats): MetricTooltipData {
 
   const takeaway = configured
     ? `Anthropic BYOK is configured. Last 24h: ${byok.toLocaleString()} BYOK call${byok === 1 ? '' : 's'}, ${platform.toLocaleString()} platform call${platform === 1 ? '' : 's'}.`
-    : `No Anthropic BYOK key on file. ${platform.toLocaleString()} recent call${platform === 1 ? '' : 's'} used Mushi platform keys (${fmtUsd(stats.spend24hUsd)} in 24h). Add your key in Settings → LLM keys to control billing.`
+    : `No Anthropic BYOK key on file. ${platform.toLocaleString()} recent call${platform === 1 ? '' : 's'} used Mushi Mushi platform keys (${fmtUsd(stats.spend24hUsd)} in 24h). Add your key in Settings → LLM keys to control billing.`
 
   let callout: MetricTooltipData['callout']
   if (platform > 0 && !configured) {
     callout = {
       tone: 'warn',
-      text: 'Platform-key spend hits Mushi metering, not your Anthropic invoice directly.',
+      text: 'Platform-key spend hits Mushi Mushi metering, not your Anthropic invoice directly.',
     }
   } else if (byok > 0) {
     callout = {
@@ -245,7 +245,7 @@ export function keySourceTooltip(stats: CostStats): MetricTooltipData {
     sections: [
       {
         label: 'Shows',
-        body: 'Which API keys billed your LLM calls in the last 24 hours — your own (BYOK) or Mushi platform keys.',
+        body: 'Which API keys billed your LLM calls in the last 24 hours — your own (BYOK) or Mushi Mushi platform keys.',
       },
       {
         label: 'Counted from',
