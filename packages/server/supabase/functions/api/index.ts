@@ -11,7 +11,6 @@ import { registerSdkAssistantRoutes } from './routes/sdk-assistant.ts';
 import { registerConsoleKnowledgeRoutes } from './routes/console-knowledge.ts';
 import { registerAdminOpsRoutes } from './routes/admin-ops.ts';
 import { registerSiteWatchRoutes } from './routes/site-watch.ts';
-import { registerBillingChangePlanRoutes } from './routes/billing-change-plan.ts';
 import { registerBillingProjectsQueueGraphRoutes } from './routes/billing-projects-queue-graph.ts';
 import { registerCodebaseRoutes } from './routes/codebase.ts';
 import { registerRepoDigestRoutes } from './routes/repo-digest.ts';
@@ -672,8 +671,12 @@ forwardToApiExt([
   '/v1/webhooks/github/app-authorize',
 ]);
 
-// In-app plan change (Indie ↔ Pro, monthly ↔ annual) for paying projects.
-registerBillingChangePlanRoutes(app);
+// In-app plan change (Builder ↔ Studio, monthly ↔ annual) for paying teams:
+// served by api-ext (api size budget, 2026-11-11 team billing).
+forwardToApiExt([
+  '/v1/admin/billing/change-plan/preview',
+  '/v1/admin/billing/change-plan',
+]);
 
 // Server doctor: served by api-ext with the Health check that reuses its checks (ADR 0054).
 forwardToApiExt(['/v1/admin/doctor']);
