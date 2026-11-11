@@ -17113,7 +17113,7 @@ description: The terms for Mushi Mushi Cloud, the admin console, the SDKs and th
   draft. Operator details and governing law are set; a lawyer's review is
   pending. Questions: kensaurus@gmail.com.
 
-**Effective date:** 2026-11-11 · **Version:** 3 (version 1, 2026-09-21, described the Indie and Pro plans; version 2, 2026-10-28, described Free, Builder, Studio and Enterprise, each limited by apps watched and diagnoses a month, and lengthened Free history from 7 to 14 days; version 3 sets the governing law and court in section 14 and adds the operator's address and responsible person in section 17)
+**Effective date:** 2026-11-11 · **Version:** 3 (version 1, 2026-09-21, described the Indie and Pro plans; version 2, 2026-10-28, described Free, Builder, Studio and Enterprise, each limited by apps watched and diagnoses a month, and lengthened Free history from 7 to 14 days; version 3 sets the governing law and court in section 14 and adds the operator's address and responsible person in section 17). For accounts that existed before 2026-11-11, the section 14 change takes effect on 2026-12-11, 30 days after notice, as section 16 promises; everything else in version 3 takes effect on 2026-11-11.
 
 These terms are between you and **Kensaurus 合同会社** (Japan,
 "Mushi Mushi", "we") and cover **Mushi Mushi Cloud** at `kensaur.us/mushi-mushi`,
